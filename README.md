@@ -137,7 +137,7 @@ claude plugin update crosscheck@crosscheck   # qualified name required
 |---|---|---|---|
 | 1 — structure | Spec lint + security scan | `python evals/tools/skill_lint.py skills/multi-model-verify --strict` · `python evals/tools/skill_scanner.py skills` | CI + local |
 | 2 — routing | Trigger/routing evals | `python evals/tools/run_trigger_evals.py` | CI + local |
-| 2.5 — contract | 48 structural pytest checks (hook e2e under pwsh, pinned superpowers template fixture, transport/fallback/status-field pins) | `python -m pytest evals -q` | CI + local |
+| 2.5 — contract | Structural pytest suite (hook e2e under pwsh, pinned superpowers template fixture, transport/fallback/status-field pins) | `python -m pytest evals -q` | CI + local |
 | 3 — behavior | Real headless `claude -p` executor runs each case in a throwaway workspace (synthetic `References/DemoWidget` fixture; codex stripped from PATH for degraded cases), graded expectation-by-expectation by Sol — the executor's vendor never grades itself | `python evals/tools/run_behavioral_evals.py` | local only |
 
 Tier 3 tests the **installed** plugin, not the checkout — run the dev-loop
