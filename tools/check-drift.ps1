@@ -403,7 +403,11 @@ $guide
                             if (Wait-Job $job -Timeout 900) {
                                 $jexit = Receive-Job $job
                                 if (($jexit -eq 0) -and (Test-Path $reviewOut)) {
-                                    $rv = @(Select-String -Path $reviewOut -Pattern '^REVIEW: (.+)$')
+                                    # Strict grammar: anything but PASS or
+                                    # FIX <reason> stays UNAVAILABLE (an
+                                    # injected free-text line must not read
+                                    # as a completed review).
+                                    $rv = @(Select-String -Path $reviewOut -Pattern '^REVIEW: (PASS|FIX .+)$')
                                     if ($rv.Count -eq 1) {
                                         $reviewNote = "Sol review: " + $rv[0].Matches[0].Groups[1].Value.Trim()
                                     }

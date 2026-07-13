@@ -186,7 +186,10 @@ so the only interruptions are actionable ones:
 A `FIXES-APPLIED` diff also gets a **script-side Sol cross-review**
 (read-only, bounded) before the toast — the reviewer stays in the loop even
 unattended, and a failed review reads "cross-review UNAVAILABLE", never
-implied-reviewed. You remain the final adjudication at merge.
+implied-reviewed. The final reviewer is still Fable, deferred to pickup:
+the merge happens in a session that adjudicates Sol's verdict and the diff
+first (debate-protocol.md, Final adjudication), with the user's approval —
+nothing merges on the external reviewer's word alone.
 
 | Outcome | Toast |
 |---|---|

@@ -573,6 +573,10 @@ class TestDriftProtection:
         assert re.search(r"Start-Job[\s\S]{0,400}codex exec --sandbox read-only", text), (
             "the cross-review must run script-side, bounded, read-only"
         )
+        assert r"'^REVIEW: (PASS|FIX .+)$'" in text, (
+            "the review verdict grammar must be strict - any other payload"
+            " stays UNAVAILABLE (Sol round-5 finding)"
+        )
         assert "worktree add" in text, "agent must work in a disposable worktree"
         assert "WaitForExit" in text, "headless run must have a hard timeout"
         assert "python -m pytest evals -q" in text, (
