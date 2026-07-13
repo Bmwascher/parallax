@@ -46,6 +46,12 @@ $ChangelogUrl = "https://raw.githubusercontent.com/anthropics/claude-code/main/C
 $ChangelogKeywords = 'hook|plugin|matcher|\bskills?\b|allowed-?tools|marketplace|headless|--print|renam|\btools?\b'
 
 function Show-Toast($title, $body) {
+    # Test seam: the state-machine harness (evals/tools/
+    # drift_statemachine_tests.ps1) captures toasts instead of firing them.
+    if ($env:CROSSCHECK_DRIFT_TOAST_LOG) {
+        Add-Content -Path $env:CROSSCHECK_DRIFT_TOAST_LOG -Value "TOAST: $title | $body"
+        return
+    }
     try {
         [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null
         $xml = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent(
@@ -415,10 +421,17 @@ $guide
         # Cache the handle NOW: without it, .ExitCode reads null after the
         # process exits (PS 5.1 Start-Process quirk, probed 2026-07-12).
         $null = $proc.Handle
-        $finished = $proc.WaitForExit(1800000)  # 30 min hard cap
+        $triageTimeoutMs = 1800000  # 30 min hard cap
+        if ($env:CROSSCHECK_DRIFT_TRIAGE_TIMEOUT_MS) {
+            # Test seam: the state-machine harness shrinks the cap to
+            # exercise the kill path in seconds, not minutes.
+            $triageTimeoutMs = [int]$env:CROSSCHECK_DRIFT_TRIAGE_TIMEOUT_MS
+        }
+        $finished = $proc.WaitForExit($triageTimeoutMs)
         if (-not $finished) {
             try { $proc.Kill() } catch {}
-            Add-Content -Path $ReportFile -Value "`r`nAuto-triage TIMED OUT after 30 min - killed (transcript: $Stamp-autotriage.txt)"
+            $triageTimeoutMin = [Math]::Round($triageTimeoutMs / 60000.0, 1)
+            Add-Content -Path $ReportFile -Value "`r`nAuto-triage TIMED OUT after $triageTimeoutMin min - killed (transcript: $Stamp-autotriage.txt)"
         } else {
             # No-arg WaitForExit flushes process state; without it,
             # .ExitCode reads null after the timed overload (PS 5.1).

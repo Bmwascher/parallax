@@ -17,14 +17,14 @@
     },
     {
       "id": "diff-mode-spec-fidelity",
-      "setup": { "manual": "needs an implemented branch plus a frozen plan - state a fixture cannot fake" },
-      "prompt": "The frozen plan is implemented on this branch. Run the diff-mode verification.",
-      "expected_output": "A debate verdict on the diff covering spec fidelity against the frozen plan and port fidelity against References/, ending in PASS, FIX with specifics, or ESCALATE.",
+      "setup": { "with_reference": true, "diff_state": true },
+      "prompt": "The frozen plan at {PLAN_PATH} is implemented on this branch. The superpowers code review just ran on base {BASE_SHA} head {HEAD_SHA}. Run the multi-model-verify diff-mode verification on that same range.",
+      "expected_output": "A debate verdict on the diff covering spec fidelity against the frozen plan and port fidelity against References/DemoWidget, catching the planted OnUpdate-throttle deviation (0.5 in the implementation vs the plan's and reference's verbatim 0.2) and ending FIX with specifics from each side.",
       "expectations": [
-        "Reads the frozen plan's Verification status field before reviewing",
-        "Uses the same base/head SHAs as the superpowers code review",
-        "Checks the diff against the frozen plan for drift, not just correctness",
-        "Ends with an explicit PASS / FIX / ESCALATE verdict from each side"
+        "Reads the frozen plan's debate record and reports its Verification status (FULL) before reviewing",
+        "Reviews the diff on the exact base/head SHAs given in the request",
+        "Catches the planted throttle deviation - the implementation's 0.5 OnUpdate threshold vs the 0.2 the frozen plan pins verbatim from References/DemoWidget/Core.lua - as drift, citing Widgets/DemoWidget.lua",
+        "Ends with an explicit per-side verdict where at least one side says FIX (not PASS) naming that deviation"
       ]
     },
     {

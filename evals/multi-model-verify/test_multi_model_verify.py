@@ -6,6 +6,7 @@ CI before it misleads a live debate.
 """
 
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -347,7 +348,7 @@ class TestEvalFixtures:
         # The prompt must travel via stdin: on Windows a multi-line argv
         # through cmd.exe is truncated at the first newline, silently
         # dropping the request and all flags after it.
-        assert 'input=HARNESS_PREAMBLE + case["prompt"]' in runner
+        assert "input=HARNESS_PREAMBLE + prompt" in runner
         assert re.search(r"shutil\.which\(.claude.\)", runner), (
             "executor must resolve the claude exe and run shell-free"
         )
@@ -740,6 +741,99 @@ class TestDriftProtection:
             "the command must locate the checkout via the scheduled task,"
             " not assume the session cwd"
         )
+
+    def test_state_machine_seams(self):
+        # The two env-var seams the offline state-machine harness depends
+        # on: toast capture and a shrinkable triage timeout. The production
+        # default cap must stay 30 min.
+        text = self.drift()
+        assert "CROSSCHECK_DRIFT_TOAST_LOG" in text
+        assert "CROSSCHECK_DRIFT_TRIAGE_TIMEOUT_MS" in text
+        assert "1800000" in text, "default triage cap must remain 30 min"
+
+
+class TestDoctorCommand:
+    """commands/doctor.md is the operational health check - pin the six
+    checks so an edit cannot quietly drop one."""
+
+    DOCTOR = REPO_ROOT / "commands" / "doctor.md"
+
+    def test_covers_all_six_checks(self):
+        body = read(self.DOCTOR)
+        for anchor in (
+            "installed_plugins.json",          # 1: checkout vs installed
+            "hooks/hooks.json",                # 2: hook registration
+            "code-reviewer.md",                # 3: fingerprint
+            "codex login status",              # 4: transport
+            'schtasks /Query /TN "crosscheck drift watch"',  # 5: drift task
+            "drift-pending.json",              # 5: pending entries
+            "--plugin-dir",                    # 6: eval target head-vs-cache
+        ):
+            assert anchor in body, f"doctor check anchor missing: {anchor}"
+        assert "PostToolUseFailure" in body, (
+            "hook check must verify BOTH events, not just PostToolUse"
+        )
+
+    def test_probe_uses_canonical_reviewer_model(self):
+        # The doctor's transport probe must never drift from the canonical
+        # reviewer model id declared in the prompting notes.
+        notes = read(REPO_ROOT / "skills" / "multi-model-verify"
+                     / "references" / "model-prompting-notes.md")
+        canonical = re.search(r"Canonical model id: `(gpt-[\w.\-]+)`", notes)
+        assert canonical
+        body = read(self.DOCTOR)
+        args = set(re.findall(r"-m (gpt-[\w.\-]+)", body))
+        assert args == {canonical.group(1)}
+
+    def test_is_report_only(self):
+        body = read(self.DOCTOR)
+        assert re.search(r"[Rr]eport only", body), (
+            "doctor must diagnose, never mutate, without being asked"
+        )
+
+
+class TestDriftStateMachine:
+    """evals/tools/drift_statemachine_tests.ps1 drives the REAL
+    check-drift.ps1 through its full state machine offline (stub CLIs,
+    fake profile, throwaway clone). The live run is slow (two nested
+    pytest gates) and opt-in; the structural pins always run."""
+
+    HARNESS = (REPO_ROOT / "evals" / "tools"
+               / "drift_statemachine_tests.ps1")
+
+    def test_harness_is_pure_ascii(self):
+        # Same PS 5.1 encoding rule as the script under test.
+        raw = self.HARNESS.read_bytes()
+        bad = [i for i, b in enumerate(raw) if b > 127]
+        assert not bad, f"non-ASCII byte at offset {bad[0]} breaks PS 5.1"
+
+    def test_scenarios_cover_the_state_machine(self):
+        text = read(self.HARNESS)
+        for scenario in ("carry-forward", "blocked-verdict", "no-verdict",
+                         "critical-dismissal", "pending-auto-clear",
+                         "fixes-applied", "commit-failure",
+                         "triage-timeout"):
+            assert f"SCENARIO {scenario}" in text or \
+                f'"{scenario}"' in text, f"scenario missing: {scenario}"
+        # The harness must test the WORKING-TREE script, not the last
+        # committed one, and guard against recursive nested-gate runs.
+        assert "Copy-Item" in text and "check-drift.ps1" in text
+        assert "CROSSCHECK_DRIFT_STATEMACHINE" in text
+
+    def test_run_state_machine(self):
+        if os.name != "nt":
+            pytest.skip("Windows-only (drives powershell.exe)")
+        if os.environ.get("CROSSCHECK_DRIFT_STATEMACHINE"):
+            pytest.skip("recursion guard: already inside a state-machine run")
+        if not os.environ.get("CROSSCHECK_STATEMACHINE"):
+            pytest.skip("slow live suite - set CROSSCHECK_STATEMACHINE=1"
+                        " (run when tools/check-drift.ps1 changes)")
+        proc = subprocess.run(
+            ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass",
+             "-File", str(self.HARNESS)],
+            capture_output=True, text=True, timeout=1200)
+        assert proc.returncode == 0, (
+            f"state-machine failures:\n{proc.stdout}\n{proc.stderr}")
 
 
 if __name__ == "__main__":

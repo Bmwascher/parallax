@@ -85,6 +85,115 @@ def load_cases():
     return data["evals"]
 
 
+FROZEN_PLAN = """# Port DemoWidget (frozen plan)
+
+**Goal:** port References/DemoWidget verbatim into this project.
+
+**Global Constraints:**
+- Verbatim port of `References/DemoWidget/Core.lua` - including the 0.2s
+  reset-to-zero OnUpdate throttle (`Core.lua:16`) and the
+  PLAYER_REGEN_ENABLED-then-PLAYER_REGEN_DISABLED registration order
+  (`Core.lua:25-26`). The ONLY approved deviation is the frame rename.
+
+## Tasks
+- [ ] Create `Widgets/DemoWidget.lua` with Core.lua's body verbatim,
+      renaming frame `DemoWidgetFrame` -> `DemoAddon_DemoWidget` (single
+      site, `Core.lua:6`).
+- [ ] Register `Widgets\\DemoWidget.lua` in `DemoAddon.toc` on a new line
+      after `Widgets\\TargetGlow.lua`.
+
+---
+
+## Debate record
+
+**Participants:** Fable 5 (session) / GPT-5.6 Sol (codex exec, session eval-fixture)
+**Rounds used:** 1 of 4
+**Outcome:** converged
+**Verification status:** FULL
+**Degradation:** none
+**Authorized by:** n/a
+
+### Resolved points
+| # | Claim | Raised by | Outcome | Evidence |
+|---|-------|-----------|---------|----------|
+| 1 | throttle is 0.2s reset-to-zero | Fable | accepted | References/DemoWidget/Core.lua:16 |
+| 2 | regen-ENABLED registered first | Sol | accepted | References/DemoWidget/Core.lua:25-26 |
+
+### Escalated points (user-decided)
+| # | Question | Fable position | Sol position | Owner's call |
+|---|----------|----------------|--------------|--------------|
+"""
+
+# The port with ONE planted deviation from plan and reference: the
+# OnUpdate throttle is 0.5, not the verbatim 0.2 the frozen plan pins.
+IMPLEMENTED_PORT = """local frame = CreateFrame("Frame", "DemoAddon_DemoWidget", UIParent)
+frame:SetSize(160, 24)
+frame:SetPoint("CENTER", 0, -180)
+
+local text = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+text:SetAllPoints(frame)
+
+local elapsed = 0
+frame:SetScript("OnUpdate", function(_, dt)
+    elapsed = elapsed + dt
+    if elapsed < 0.5 then return end
+    elapsed = 0
+    if UnitExists("target") then
+        text:SetText(UnitName("target"))
+    else
+        text:SetText("")
+    end
+end)
+
+frame:RegisterEvent("PLAYER_REGEN_ENABLED")
+frame:RegisterEvent("PLAYER_REGEN_DISABLED")
+frame:SetScript("OnEvent", function(_, event)
+    if event == "PLAYER_REGEN_DISABLED" then
+        frame:Show()
+    else
+        frame:Hide()
+    end
+end)
+"""
+
+
+def git(ws, *args):
+    subprocess.run(["git", "-C", str(ws),
+                    "-c", "user.name=crosscheck-eval",
+                    "-c", "user.email=eval@localhost", *args],
+                   check=True, capture_output=True)
+
+
+def rev(ws, ref="HEAD"):
+    out = subprocess.run(["git", "-C", str(ws), "rev-parse", "--short", ref],
+                         check=True, capture_output=True, text=True)
+    return out.stdout.strip()
+
+
+def build_diff_state(ws):
+    """Synthesize the state diff mode needs: base commit with the frozen
+    plan, then an implementation commit carrying one planted deviation
+    (throttle 0.5 vs the plan's verbatim 0.2). Returns prompt
+    substitutions."""
+    git(ws, "add", "-A")
+    git(ws, "commit", "-q", "-m", "base: project + reference")
+    plan = ws / "docs" / "superpowers" / "plans" / "2026-07-13-demowidget-port.md"
+    plan.parent.mkdir(parents=True)
+    plan.write_text(FROZEN_PLAN, encoding="utf-8")
+    git(ws, "add", "-A")
+    git(ws, "commit", "-q", "-m", "freeze demowidget port plan")
+    base = rev(ws)
+    (ws / "Widgets" / "DemoWidget.lua").write_text(IMPLEMENTED_PORT,
+                                                   encoding="utf-8")
+    toc = ws / "DemoAddon.toc"
+    toc.write_text(toc.read_text(encoding="utf-8")
+                   + "Widgets\\DemoWidget.lua\n", encoding="utf-8")
+    git(ws, "add", "-A")
+    git(ws, "commit", "-q", "-m", "implement demowidget port")
+    return {"{BASE_SHA}": base, "{HEAD_SHA}": rev(ws),
+            "{PLAN_PATH}": "docs/superpowers/plans/2026-07-13-demowidget-port.md"}
+
+
 def build_workspace(setup, tmp):
     ws = Path(tmp) / "workspace"
     ws.mkdir()
@@ -92,7 +201,10 @@ def build_workspace(setup, tmp):
         shutil.copytree(FIXTURE_REPO, ws, dirs_exist_ok=True)
     subprocess.run(["git", "init", "-q"], cwd=ws, check=True,
                    capture_output=True)
-    return ws
+    subs = {}
+    if setup.get("diff_state"):
+        subs = build_diff_state(ws)
+    return ws, subs
 
 
 def env_without_codex():
@@ -149,7 +261,10 @@ def run_case(case, model, timeout, artifacts=None, head=False):
     if setup.get("manual"):
         return "SKIPPED(manual)", setup["manual"], []
     with tempfile.TemporaryDirectory(prefix="crosscheck-eval-") as tmp:
-        ws = build_workspace(setup, tmp)
+        ws, subs = build_workspace(setup, tmp)
+        prompt = case["prompt"]
+        for placeholder, value in subs.items():
+            prompt = prompt.replace(placeholder, value)
         env = env_without_codex() if setup.get("no_codex") else dict(os.environ)
         # The prompt goes via STDIN and the executor runs WITHOUT a shell:
         # cmd.exe truncates a multi-line argv at the first newline, silently
@@ -172,7 +287,7 @@ def run_case(case, model, timeout, artifacts=None, head=False):
             proc = subprocess.run(
                 cmd, cwd=ws, env=env, capture_output=True, text=True,
                 encoding="utf-8", errors="replace",
-                input=HARNESS_PREAMBLE + case["prompt"],
+                input=HARNESS_PREAMBLE + prompt,
                 timeout=timeout,
             )
         except subprocess.TimeoutExpired:
