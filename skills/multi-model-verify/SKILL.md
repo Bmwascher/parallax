@@ -48,8 +48,10 @@ toggled on, its stop-time review overlaps mode `diff` — expected, not a bug.
 
 1. Draft the Fable position: chosen approach, port-fidelity claims, and the
    API/behavior risk register. Every reference claim cites a
-   `References/<name>/<file>:<line>` actually read this session; every API
-   claim cites authoritative local docs (WoW projects:
+   `References/<name>/<file>:<line>` actually read this session — anchor
+   EVERY file with its full path the first time you cite it, manifests and
+   secondary files included (shorthand only once that file is anchored);
+   every API claim cites authoritative local docs (WoW projects:
    `.wow-api-reference/` or a dated in-game probe result) — never memory.
    The position has no separate artifact — it IS the claims section of the
    step-2 brief.

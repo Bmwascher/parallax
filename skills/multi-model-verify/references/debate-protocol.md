@@ -14,6 +14,14 @@ only evidence does.
   `References/<name>/<file>:<line>`; WoW 12.0 API claims cite
   `.wow-api-reference/` or a dated in-game probe result; library or platform
   claims cite the vendored source or official docs.
+- **Anchor every file the first time you cite it** — full repo-relative path
+  with line, `References/DemoWidget/DemoWidget.toc:1`, not `DemoWidget.toc:1`.
+  This holds for EVERY file, including one-line manifests and secondary
+  files, not just the main source. Once a file is anchored, shorthand
+  (`Core.lua:19`) is fine for later citations of that same file. A bare
+  filename does not locate anything for the other side: the project has its
+  own `DemoAddon.toc` and the reference has `DemoWidget.toc`, and an
+  unanchored `.toc:1` could be either.
 - A claim with no citation is **struck, not debated**. Note it as struck and
   move on — arguing against an ungrounded claim launders it into the record.
 - Reports are claims requiring evidence. "The reference handles this" without
