@@ -19,7 +19,7 @@ and the plugin shape of
 |---|---|
 | `skills/multi-model-verify/` | The debate skill: mode `plan` (before implementation) and mode `diff` (before merge), debate protocol, frozen-plan format, model prompting notes, fallbacks |
 | `hooks/` | PostToolUse/Task hook: fingerprints the superpowers code-reviewer dispatch and injects the mode-`diff` reminder with the same base/head SHAs (fails open — inert everywhere else) |
-| `agents/implementer.md` | Zero-judgment executor for frozen-plan tasks, pinned to the cheap lane (currently `model: sonnet`). **Swap the implementer model by editing the one `model:` frontmatter line** — the role contract stays identical |
+| `agents/implementer.md` | Zero-judgment executor for frozen-plan tasks, pinned to the cheap lane (currently `model: sonnet`). Claude-tier swaps are one `model:` frontmatter line; cross-vendor lanes use the supervisor pattern documented in the file — the role contract stays identical either way |
 | `evals/` | Deterministic gates for the skill itself: spec lint, security scan, trigger/routing evals, structural pytest (vendored tools — see `evals/tools/LICENSE-THIRD-PARTY.md`) |
 
 ## Requirements

@@ -35,7 +35,15 @@ carry none.
 
 ## Lane note
 
-This agent pins the cheap implementation lane (currently Sonnet 5). To swap
-the lane — e.g. to a different vendor's model later — edit the `model:`
-line in this file's frontmatter; nothing else in the plugin references the
-implementer's model.
+This agent pins the cheap implementation lane (currently Sonnet 5). Nothing
+else in the plugin references the implementer's model. Two swap paths:
+
+- **Another Claude tier** (sonnet/haiku/opus): edit the `model:` line in
+  this file's frontmatter — done.
+- **Another vendor's model** (a Grok or Codex lane, fable-advisor style):
+  the `model:` frontmatter only takes Claude models, so keep a cheap Claude
+  tier here as the SUPERVISOR and change the body to delegate the typing to
+  that vendor's CLI — spec to a temp file, pipe to the CLI in a
+  workspace-write sandbox, then re-run the task's verification yourself
+  before reporting (never trust the external model's completion claim).
+  The report format above stays the contract either way.
