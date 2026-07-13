@@ -1,0 +1,70 @@
+---
+description: Operational health check for the crosscheck plugin - versions, hook, fingerprint, transport, drift state
+---
+
+Run the crosscheck operational checks below and present ONE table:
+check | state | verdict (OK / STALE / BROKEN) | fix. End with a one-line
+overall summary. Report only - fix nothing without being asked.
+
+## 1. Checkout vs installed version
+
+Two different files, and mixing them up is the whole point of this check:
+
+- CHECKOUT: `~/.claude/plugins/known_marketplaces.json` -> the `crosscheck`
+  marketplace's `source.path` (a local directory source). Read
+  `.claude-plugin/plugin.json` `version` there.
+- INSTALLED: `~/.claude/plugins/installed_plugins.json` -> the
+  `crosscheck@crosscheck` entry's `version` (its `installPath` is the
+  VERSIONED CACHE COPY, never the checkout).
+
+Mismatch = STALE, and everything running right now is the cached version:
+the dev loop is bump -> `claude plugin update crosscheck@crosscheck` ->
+restart the session.
+
+## 2. Hook registration and matcher
+
+Read the INSTALLED copy's `hooks/hooks.json`. Verify both `PostToolUse`
+and `PostToolUseFailure` are registered and their matchers match the tool
+name `Agent` (regex-match the literal string). A bare `Task` matcher is
+BROKEN (tool renamed in Claude Code 2.1.63).
+
+## 3. Superpowers fingerprint
+
+From `installed_plugins.json`, find superpowers' installPath and read
+`skills/requesting-code-review/code-reviewer.md`. Both literals "Senior
+Code Reviewer" and "Git Range to Review" present = OK; one = BROKEN (hook
+warns but cannot extract); none = BROKEN (diff gate inert). Also confirm
+`**Base:**`/`**Head:**` placeholders still appear.
+
+## 4. codex transport
+
+`codex --version`, then `codex login status`. If both succeed, run the
+cheapest possible round-trip probe. DELETE the output file first: a stale
+`TRANSPORT-OK` from an earlier run would read as a pass over a failed probe.
+
+```powershell
+$probe = "$env:TEMP\crosscheck-doctor-$(Get-Random).txt"
+"Reply with exactly: TRANSPORT-OK" | codex exec --sandbox read-only -m gpt-5.6-sol -c model_reasoning_effort=low --output-last-message $probe -
+# OK only if the command exited 0 AND $probe now contains exactly TRANSPORT-OK
+```
+
+OK requires BOTH a zero exit and fresh `TRANSPORT-OK` content; anything else
+is BROKEN. The model id must match the canonical id in
+`skills/multi-model-verify/references/model-prompting-notes.md` - if they
+differ, that is itself a BROKEN finding.
+
+## 5. Drift watch
+
+`schtasks /Query /TN "crosscheck drift watch" /V /FO LIST` - task exists,
+next run time sane, and the "Task To Run" path points at an existing
+`check-drift.ps1`. Then check `tools\drift-pending.json` next to it:
+entries present = list each (status, stamp) and point at
+/crosscheck:drift-triage.
+
+## 6. Behavioral eval target
+
+Note (informational): `evals/tools/run_behavioral_evals.py` tests the
+INSTALLED plugin by default; `--head` tests the checkout via `--plugin-dir`.
+If check 1 found a version mismatch, say so here: any behavioral run made
+WITHOUT `--head` tested the stale cache, not the checkout. A `--head` run is
+unaffected by the mismatch.

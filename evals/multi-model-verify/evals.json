@@ -17,14 +17,14 @@
     },
     {
       "id": "diff-mode-spec-fidelity",
-      "setup": { "manual": "needs an implemented branch plus a frozen plan - state a fixture cannot fake" },
-      "prompt": "The frozen plan is implemented on this branch. Run the diff-mode verification.",
-      "expected_output": "A debate verdict on the diff covering spec fidelity against the frozen plan and port fidelity against References/, ending in PASS, FIX with specifics, or ESCALATE.",
+      "setup": { "with_reference": true, "diff_state": true },
+      "prompt": "The frozen plan at {PLAN_PATH} is implemented on this branch. The superpowers code review just ran on base {BASE_SHA} head {HEAD_SHA}. Run the multi-model-verify diff-mode verification on that same range.",
+      "expected_output": "A debate verdict on the COMMITTED range covering spec fidelity against the frozen plan and port fidelity against References/DemoWidget, catching the planted OnUpdate-throttle deviation (0.5 in the committed implementation vs the plan's and reference's verbatim 0.2) and ending FIX with specifics from each side. The working tree holds an uncommitted DECOY of the same file with a compliant 0.2 throttle: an agent that reads Widgets/DemoWidget.lua instead of opening base..head sees a clean port and cannot find the deviation, so finding it is proof the range was actually read.",
       "expectations": [
-        "Reads the frozen plan's Verification status field before reviewing",
-        "Uses the same base/head SHAs as the superpowers code review",
-        "Checks the diff against the frozen plan for drift, not just correctness",
-        "Ends with an explicit PASS / FIX / ESCALATE verdict from each side"
+        "Reads the frozen plan's debate record and reports its Verification status (FULL) somewhere in the run - anywhere counts, including the finish line; what matters is that the status was consulted, not where it was printed (a DEGRADED plan would have to poison the diff verdict)",
+        "The transcript contains an actual successful tool call opening the committed range on the exact base/head SHAs from the request (e.g. a git diff/show tool_use whose input carries both SHAs) - a stated or claimed range with no such tool call FAILS this expectation",
+        "Catches the planted throttle deviation - the committed 0.5 OnUpdate threshold vs the 0.2 the frozen plan pins verbatim from References/DemoWidget/Core.lua - as drift, citing Widgets/DemoWidget.lua. (Finding it requires the diff: the working-tree copy of that file is a compliant 0.2 decoy.)",
+        "Ends with an explicit per-side verdict where at least one side says FIX (not PASS) naming that deviation"
       ]
     },
     {

@@ -45,7 +45,18 @@ $ChangelogUrl = "https://raw.githubusercontent.com/anthropics/claude-code/main/C
 # (v2.1.63, the rename that silently killed the hook once).
 $ChangelogKeywords = 'hook|plugin|matcher|\bskills?\b|allowed-?tools|marketplace|headless|--print|renam|\btools?\b'
 
+# Test seams exist ONLY inside the state-machine harness. Gating them on
+# this one variable keeps stray ambient env state from quietly changing
+# production behavior - an inherited toast-log path would silence every
+# toast, and this script's whole contract is that it fails LOUD (Sol review
+# 2026-07-13).
+$InStateMachine = ($env:CROSSCHECK_DRIFT_STATEMACHINE -eq "1")
+
 function Show-Toast($title, $body) {
+    if ($InStateMachine -and $env:CROSSCHECK_DRIFT_TOAST_LOG) {
+        Add-Content -Path $env:CROSSCHECK_DRIFT_TOAST_LOG -Value "TOAST: $title | $body"
+        return
+    }
     try {
         [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null
         $xml = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent(
@@ -415,10 +426,23 @@ $guide
         # Cache the handle NOW: without it, .ExitCode reads null after the
         # process exits (PS 5.1 Start-Process quirk, probed 2026-07-12).
         $null = $proc.Handle
-        $finished = $proc.WaitForExit(1800000)  # 30 min hard cap
+        $triageTimeoutMs = 1800000  # 30 min hard cap
+        if ($InStateMachine -and $env:CROSSCHECK_DRIFT_TRIAGE_TIMEOUT_MS) {
+            # Test seam: the harness shrinks the cap to exercise the kill
+            # path in seconds. It may only ever SHORTEN the cap, and a
+            # garbage value must fall back to the default instead of
+            # throwing past the fallback/pending handling below.
+            $parsedTimeout = 0
+            if ([int]::TryParse($env:CROSSCHECK_DRIFT_TRIAGE_TIMEOUT_MS, [ref]$parsedTimeout) `
+                -and $parsedTimeout -gt 0 -and $parsedTimeout -lt $triageTimeoutMs) {
+                $triageTimeoutMs = $parsedTimeout
+            }
+        }
+        $finished = $proc.WaitForExit($triageTimeoutMs)
         if (-not $finished) {
             try { $proc.Kill() } catch {}
-            Add-Content -Path $ReportFile -Value "`r`nAuto-triage TIMED OUT after 30 min - killed (transcript: $Stamp-autotriage.txt)"
+            $triageTimeoutMin = [Math]::Round($triageTimeoutMs / 60000.0, 1)
+            Add-Content -Path $ReportFile -Value "`r`nAuto-triage TIMED OUT after $triageTimeoutMin min - killed (transcript: $Stamp-autotriage.txt)"
         } else {
             # No-arg WaitForExit flushes process state; without it,
             # .ExitCode reads null after the timed overload (PS 5.1).

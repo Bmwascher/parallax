@@ -63,6 +63,7 @@ The debate rules that keep this honest
 | `hooks/` | PostToolUse + PostToolUseFailure hook (matcher `Task\|Agent`): fingerprints the superpowers code-reviewer dispatch, injects the mode-`diff` reminder with matching SHAs; inert everywhere else |
 | `agents/implementer.md` | Zero-judgment executor for frozen-plan tasks, pinned to the cheap lane (currently `model: sonnet`) |
 | `commands/drift-triage.md` | `/crosscheck:drift-triage` — reads the newest drift report, verifies each finding against the live contract surfaces, repairs on a branch |
+| `commands/doctor.md` | `/crosscheck:doctor` — operational health check: checkout-vs-installed version, hook registration, superpowers fingerprint, codex transport round-trip, drift task + pending entries. Reports, never fixes |
 | `evals/` | Four gate tiers for the skill itself — see [Verify](#verify) |
 | `tools/check-drift.ps1` | Weekly drift watch over the three upstreams the contract depends on — see [Drift protection](#drift-protection) |
 
@@ -146,6 +147,11 @@ claude plugin update crosscheck@crosscheck   # qualified name required
 # restart the Claude Code session to re-register hooks/skills
 ```
 
+Forgetting a step here is the failure mode that looks like a plugin bug: a
+stale cache runs yesterday's skill, a missed restart leaves the hook
+unregistered. `/crosscheck:doctor` reports both, plus the fingerprint, the
+codex transport, and any unresolved drift — in one table.
+
 ## Verify
 
 | Tier | Gate | Command | Runs |
@@ -157,6 +163,28 @@ claude plugin update crosscheck@crosscheck   # qualified name required
 
 Tier 3 tests the **installed** plugin, not the checkout — run the dev-loop
 re-sync first. Lint/scan/trigger/pytest run in CI on every push.
+
+Both modes are executed, not just described: the diff-mode case builds a real
+two-commit git history in the workspace (frozen plan → implementation with a
+planted throttle deviation from the reference) and hands the run the actual
+base/head SHAs, so a pass means the debate found the drift in a real diff.
+
+The drift script has its own offline state machine —
+`evals/tools/drift_statemachine_tests.ps1` drives the **real**
+`tools/check-drift.ps1` through eleven scenarios against stub CLIs and a
+throwaway clone: probe-failure carry-forward, the verdict trust matrix
+(`BLOCKED`, no verdict, trusted `NO-ACTION`), both halves of the toast
+matrix (CRITICAL dismissal toasts VERIFY, WARN-only dismissal toasts
+nothing), the pytest gate (a stub fix that *breaks the suite* must never
+commit), commit failure, off-grammar cross-review, pending lifecycle, and
+the hung-agent kill. Slow and opt-in — run it whenever `check-drift.ps1`
+changes:
+
+```powershell
+.\evals\tools\drift_statemachine_tests.ps1
+# or through pytest:
+$env:CROSSCHECK_STATEMACHINE = "1"; python -m pytest evals -q
+```
 
 ## Drift protection
 

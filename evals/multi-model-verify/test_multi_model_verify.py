@@ -6,6 +6,7 @@ CI before it misleads a live debate.
 """
 
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -347,9 +348,44 @@ class TestEvalFixtures:
         # The prompt must travel via stdin: on Windows a multi-line argv
         # through cmd.exe is truncated at the first newline, silently
         # dropping the request and all flags after it.
-        assert 'input=HARNESS_PREAMBLE + case["prompt"]' in runner
+        assert "input=HARNESS_PREAMBLE + prompt" in runner
         assert re.search(r"shutil\.which\(.claude.\)", runner), (
             "executor must resolve the claude exe and run shell-free"
+        )
+
+    def test_diff_mode_case_is_falsifiable(self):
+        # Diff mode is only gradable if a "reviewed base..head" CLAIM can be
+        # told apart from an actual range read. Two mechanisms, both
+        # required (Sol review 2026-07-13):
+        #   1. read-only git is APPROVED, so the executor can open the range
+        #      (without it, no run could ever produce range evidence);
+        #   2. the working tree carries a COMPLIANT decoy of the changed
+        #      file, so an agent that reads it instead of the diff sees a
+        #      clean port and cannot find the planted defect.
+        runner = read(REPO_ROOT / "evals" / "tools" / "run_behavioral_evals.py")
+        # Anchor on the closing paren at line start: [^)]* would stop inside
+        # the first "Bash(codex:*)" and read only a fragment of the list.
+        allowlist = re.search(r"ALLOWED_TOOLS = \((.*?)\n\)", runner, re.S)
+        assert allowlist and "Bash(git diff:*)" in allowlist.group(1), (
+            "read-only git diff must be approved or diff mode is ungradable"
+        )
+        for verb in ("Bash(git commit", "Bash(git add", "Bash(git push"):
+            assert verb not in allowlist.group(1), (
+                "only READ-ONLY git verbs may be approved"
+            )
+        assert re.search(r'IMPLEMENTED_PORT\.replace\(\s*"elapsed < 0\.5",'
+                         r'\s*"elapsed < 0\.2"\s*\)', runner), (
+            "the decoy must rewrite the planted throttle in the working tree"
+        )
+        assert re.search(r"decoy != IMPLEMENTED_PORT", runner), (
+            "a decoy that silently fails to differ would re-open the hole"
+        )
+        case = next(c for c in json.loads(read(EVALS_DIR / "evals.json"))["evals"]
+                    if c["id"] == "diff-mode-spec-fidelity")
+        joined = " ".join(case["expectations"]).lower()
+        assert "tool call" in joined and "claim" in joined, (
+            "an expectation must demand tool evidence of the range read, not"
+            " a claimed one"
         )
 
     def test_behavioral_runner_self_test(self):
@@ -740,6 +776,137 @@ class TestDriftProtection:
             "the command must locate the checkout via the scheduled task,"
             " not assume the session cwd"
         )
+
+    def test_state_machine_seams_are_inert_in_production(self):
+        # The seams must never change production behavior through ambient
+        # env state: an inherited toast-log path would silence every toast,
+        # and this script's contract is that it fails LOUD. Both are gated
+        # on the harness guard, the timeout may only SHORTEN the cap, and a
+        # garbage value falls back instead of throwing past the pending
+        # handling (Sol review 2026-07-13).
+        text = self.drift()
+        assert re.search(r'\$InStateMachine = \(\$env:CROSSCHECK_DRIFT_STATEMACHINE -eq "1"\)',
+                         text), "seams must be gated on one explicit guard"
+        assert re.search(r"\$InStateMachine -and \$env:CROSSCHECK_DRIFT_TOAST_LOG", text)
+        assert re.search(r"\$InStateMachine -and \$env:CROSSCHECK_DRIFT_TRIAGE_TIMEOUT_MS", text)
+        assert "[int]::TryParse" in text, (
+            "a non-numeric seam value must not throw past the fallback path"
+        )
+        assert re.search(r"-lt \$triageTimeoutMs", text), (
+            "the seam may only shorten the cap, never extend it"
+        )
+        assert "1800000" in text, "default triage cap must remain 30 min"
+
+
+class TestDoctorCommand:
+    """commands/doctor.md is the operational health check - pin the six
+    checks so an edit cannot quietly drop one."""
+
+    DOCTOR = REPO_ROOT / "commands" / "doctor.md"
+
+    def test_covers_all_six_checks(self):
+        body = read(self.DOCTOR)
+        for anchor in (
+            "installed_plugins.json",          # 1: checkout vs installed
+            "hooks/hooks.json",                # 2: hook registration
+            "code-reviewer.md",                # 3: fingerprint
+            "codex login status",              # 4: transport
+            'schtasks /Query /TN "crosscheck drift watch"',  # 5: drift task
+            "drift-pending.json",              # 5: pending entries
+            "--plugin-dir",                    # 6: eval target head-vs-cache
+        ):
+            assert anchor in body, f"doctor check anchor missing: {anchor}"
+        assert "PostToolUseFailure" in body, (
+            "hook check must verify BOTH events, not just PostToolUse"
+        )
+
+    def test_probe_uses_canonical_reviewer_model(self):
+        # The doctor's transport probe must never drift from the canonical
+        # reviewer model id declared in the prompting notes.
+        notes = read(REPO_ROOT / "skills" / "multi-model-verify"
+                     / "references" / "model-prompting-notes.md")
+        canonical = re.search(r"Canonical model id: `(gpt-[\w.\-]+)`", notes)
+        assert canonical
+        body = read(self.DOCTOR)
+        args = set(re.findall(r"-m (gpt-[\w.\-]+)", body))
+        assert args == {canonical.group(1)}
+
+    def test_is_report_only(self):
+        body = read(self.DOCTOR)
+        assert re.search(r"[Rr]eport only", body), (
+            "doctor must diagnose, never mutate, without being asked"
+        )
+
+
+class TestDriftStateMachine:
+    """evals/tools/drift_statemachine_tests.ps1 drives the REAL
+    check-drift.ps1 through its full state machine offline (stub CLIs,
+    fake profile, throwaway clone). The live run is slow (two nested
+    pytest gates) and opt-in; the structural pins always run."""
+
+    HARNESS = (REPO_ROOT / "evals" / "tools"
+               / "drift_statemachine_tests.ps1")
+
+    def test_harness_is_pure_ascii(self):
+        # Same PS 5.1 encoding rule as the script under test.
+        raw = self.HARNESS.read_bytes()
+        bad = [i for i, b in enumerate(raw) if b > 127]
+        assert not bad, f"non-ASCII byte at offset {bad[0]} breaks PS 5.1"
+
+    def test_scenarios_cover_the_state_machine(self):
+        text = read(self.HARNESS)
+        for scenario in ("carry-forward", "blocked-verdict", "no-verdict",
+                         "critical-dismissal", "warn-only-silence",
+                         "pending-auto-clear", "fixes-applied",
+                         "gate-failure", "malformed-review",
+                         "commit-failure", "triage-timeout"):
+            assert f'"{scenario}"' in text, f"scenario missing: {scenario}"
+        # The gate scenario is the load-bearing one: a stub "fix" that
+        # BREAKS the suite must be caught by the script's own pytest re-run,
+        # not by a cooperative stub. Without a genuinely failing test
+        # planted in the worktree, the happy path proves nothing (Sol
+        # review 2026-07-13).
+        assert re.search(r"assert False", text), (
+            "gate-failure must plant a real failing test"
+        )
+        # The harness must test the WORKING-TREE script, not the last
+        # committed one, and guard against recursive nested-gate runs.
+        assert "Copy-Item" in text and "check-drift.ps1" in text
+        assert 'CROSSCHECK_DRIFT_STATEMACHINE = "1"' in text
+
+    def test_harness_is_hermetic(self):
+        # Two containment rules. (1) Every env var it changes is restored -
+        # this is runnable from an interactive shell, and leaving a fake
+        # USERPROFILE behind is worse than any test it runs. (2) It owns
+        # TEMP, so the worktrees the script creates land in its sandbox: a
+        # cleanup that swept $TEMP\crosscheck-drift-* by name could delete a
+        # concurrent PRODUCTION run's worktree (Sol review 2026-07-13).
+        text = read(self.HARNESS)
+        assert "finally {" in text and re.search(
+            r"SetEnvironmentVariable\(\$name, \$savedEnv\[\$name\]", text), (
+            "every modified environment variable must be restored"
+        )
+        assert re.search(r"\$env:TEMP = \$FakeTemp", text), (
+            "the harness must own TEMP so script worktrees stay in-sandbox"
+        )
+        assert 'Filter "crosscheck-drift-*"' not in text, (
+            "name-sweep cleanup can delete a concurrent production worktree"
+        )
+
+    def test_run_state_machine(self):
+        if os.name != "nt":
+            pytest.skip("Windows-only (drives powershell.exe)")
+        if os.environ.get("CROSSCHECK_DRIFT_STATEMACHINE"):
+            pytest.skip("recursion guard: already inside a state-machine run")
+        if not os.environ.get("CROSSCHECK_STATEMACHINE"):
+            pytest.skip("slow live suite - set CROSSCHECK_STATEMACHINE=1"
+                        " (run when tools/check-drift.ps1 changes)")
+        proc = subprocess.run(
+            ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass",
+             "-File", str(self.HARNESS)],
+            capture_output=True, text=True, timeout=1200)
+        assert proc.returncode == 0, (
+            f"state-machine failures:\n{proc.stdout}\n{proc.stderr}")
 
 
 if __name__ == "__main__":
