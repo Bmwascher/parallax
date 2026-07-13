@@ -11,7 +11,7 @@
       "expectations": [
         "Invokes codex exec with -m gpt-5.6-sol and --sandbox read-only",
         "Captures the codex session id from round 1",
-        "Every claim about the reference cites a References/DemoWidget file and line that exists",
+        "Reference claims are grounded in files that exist under References/DemoWidget, cited with the full References/DemoWidget/<file>:<line> form at least on each file's first citation (later shorthand like Core.lua:10 is acceptable once anchored)",
         "Ends with the skill's finish line naming models, rounds, outcome, and verification status FULL"
       ]
     },

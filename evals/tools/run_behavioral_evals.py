@@ -43,7 +43,8 @@ HARNESS_PREAMBLE = (
     "TEST HARNESS RUN. Follow the multi-model-verify skill exactly as"
     " written for the request below, with these test constraints: cap any"
     " debate at ONE exchange; do not create or modify files outside this"
-    " workspace; report-only (no frozen plan file). End with the skill's"
+    " workspace; report-only (no frozen plan file). This run is UNATTENDED:"
+    " no user can answer questions during or after it. End with the skill's"
     " finish line.\n\nRequest: "
 )
 
@@ -240,6 +241,10 @@ def grade(case, transcript):
 
 
 def main(argv=None):
+    # Grader evidence may contain non-cp1252 chars (arrows, quotes); the
+    # Windows console must not be able to crash the suite mid-run.
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     ap = argparse.ArgumentParser(description="Behavioral (Tier 3) evals runner.")
     ap.add_argument("--case", action="append", help="run only these case ids")
     ap.add_argument("--list", action="store_true", help="list cases and exit (CI self-test)")
