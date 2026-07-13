@@ -263,6 +263,30 @@ $newSnapshot = @{
 }
 $newSnapshot | ConvertTo-Json | Set-Content -Path $SnapshotFile
 
+# --- unresolved prior run (pending disposition) --------------------------------
+# Changelog findings exist only during a version transition, and the
+# snapshot advances regardless of triage outcome - without this record, a
+# BLOCKED/timed-out week or an unmerged fix branch would fall out of the
+# pickup lifecycle the moment a later clean report becomes "newest" (Sol
+# holistic MAJOR, 2026-07-13). Single slot: the newest unresolved run wins;
+# the archived reports record the rest.
+$PendingFile = Join-Path $PSScriptRoot "drift-pending.json"
+if (Test-Path $PendingFile) {
+    $pending = Get-Content $PendingFile -Raw | ConvertFrom-Json
+    $cleared = $false
+    if ($pending.status -eq "fix-branch-open") {
+        git -C $RepoRoot rev-parse --verify --quiet $pending.branch > $null 2>&1
+        if ($LASTEXITCODE -ne 0) { $cleared = $true }
+    }
+    if ($cleared) {
+        Remove-Item $PendingFile -Force
+        Add-Content -Path $ReportFile -Value "`r`nPrior fix branch $($pending.branch) is gone (merged or discarded) - pending disposition cleared."
+    } else {
+        Add-Content -Path $ReportFile -Value "`r`nUNRESOLVED prior drift ($($pending.status), run $($pending.stamp), report $($pending.report)) - run /crosscheck:drift-triage"
+        Show-Toast "crosscheck drift: UNRESOLVED prior run" "$($pending.status) from $($pending.stamp) still needs a disposition - run /crosscheck:drift-triage"
+    }
+}
+
 if ($findings.Count -eq 0) { exit 0 }
 
 $critical = @($findings | Where-Object { $_ -like "*CRITICAL*" }).Count
@@ -329,11 +353,19 @@ VERDICT: BLOCKED <one-line reason>
 $guide
 "@
         $prompt | Set-Content -Path $promptFile
-        # No shell of ANY kind: Bash(python:*) is arbitrary execution
-        # (python -c can invoke git/codex/network) and would defeat the
-        # injection boundary (Sol round-3 CRITICAL). The script runs the
-        # pytest gate itself after the agent finishes.
-        $claudeArgs = @("-p", "--allowedTools", "Read,Glob,Grep,Edit,Write")
+        # Two distinct layers (Sol holistic CRITICAL, 2026-07-13):
+        # --tools is AVAILABILITY - unlisted tools (Bash, PowerShell,
+        # WebFetch, Agent, ...) do not exist for this agent at all, so
+        # ambient user-scope allow rules cannot resurrect them;
+        # --allowedTools is APPROVAL - Edit/Write approvals are scoped to
+        # the worktree (cwd-relative **); an absolute-path write outside it
+        # falls to a permission prompt, which a headless run denies.
+        # Read stays unscoped: the triage guide legitimately reads the
+        # installed superpowers template, and with no shell/network
+        # available there is no egress channel.
+        $claudeArgs = @("-p",
+            "--tools", "Read,Glob,Grep,Edit,Write",
+            "--allowedTools", "Read,Glob,Grep,Edit(**),Write(**)")
         $proc = Start-Process -FilePath $claudeCmd.Source -ArgumentList $claudeArgs `
             -WorkingDirectory $worktree -NoNewWindow -PassThru `
             -RedirectStandardInput $promptFile `
@@ -450,5 +482,17 @@ if ($manualToast) {
     } else {
         Show-Toast "crosscheck drift watch" "$($findings.Count) finding(s). Triage with /crosscheck:drift-triage (report: tools\drift-reports\$Stamp.txt)"
     }
+}
+
+# Record what still needs a human so next week's run can re-surface it
+# even if this toast is missed and next week is clean.
+if ($manualToast) {
+    @{ status = "manual-triage-needed"; stamp = $Stamp
+       report = "tools\drift-reports\$Stamp.txt"; branch = "" } |
+        ConvertTo-Json | Set-Content -Path $PendingFile
+} elseif ($committed) {
+    @{ status = "fix-branch-open"; stamp = $Stamp
+       report = "tools\drift-reports\$Stamp.txt"; branch = $branch } |
+        ConvertTo-Json | Set-Content -Path $PendingFile
 }
 exit 1

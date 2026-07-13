@@ -15,10 +15,13 @@ for real work, lowercase imperative commits, no AI attribution).
 CI runs all four on every push (.github/workflows/skill-evals.yml).
 
 ## Dev loop
-The plugin is installed from this working copy via a LOCAL marketplace, so
-edits are live after `/plugin` update or session restart — plus the GitHub
-remote (Bmwascher/crosscheck, private) for stable installs on other
-machines. Bump `.claude-plugin/plugin.json` version on user-visible changes.
+The plugin is installed user-scope from a LOCAL marketplace pointing at
+this working copy, but installs are VERSIONED CACHE COPIES — checkout
+edits are NOT live until you: bump `.claude-plugin/plugin.json`, run
+`claude plugin update crosscheck@crosscheck` (qualified name required),
+and restart the session when hooks/ or skills/ changed. A restart alone
+only reloads the cached version. GitHub remote (Bmwascher/crosscheck,
+private) serves stable installs on other machines.
 
 ## Skill editing rules
 The multi-model-verify skill's transport commands (codex exec flags, resume

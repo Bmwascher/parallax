@@ -185,11 +185,13 @@ Findings don't wait for a human: on a findings-week the script feeds the
 report and the triage guide into a **headless Claude Code run**. Because
 the report embeds raw upstream text (changelog lines), that agent is
 treated as untrusted: it works in a **disposable git worktree** the script
-creates, holds **no shell at all** (read/edit tools only — even
-`python -c` would be arbitrary execution), and is killed after 30 minutes.
-The script then inspects the diff itself, re-runs the pytest gate, and
-only commits (on a `drift/<runid>` branch, never merged) when the gate is
-green and the commit verifiably landed. The toast reflects the verified outcome,
+creates, and its isolation is two-layer — `--tools` makes shell, network,
+and subagent tools **unavailable** (so ambient settings can't resurrect
+them; even `python -c` would be arbitrary execution), while `--allowedTools`
+scopes write **approvals** to the worktree — and it is killed after 30
+minutes. The script then inspects the diff itself, re-runs the pytest
+gate, and only commits (on a `drift/<runid>` branch, never merged) when
+the gate is green and the commit verifiably landed. The toast reflects the verified outcome,
 so the only interruptions are actionable ones:
 
 A `FIXES-APPLIED` diff also gets a **script-side Sol cross-review**
@@ -210,6 +212,12 @@ user's approval — nothing merges on the external reviewer's word alone.
 `-NoAutoTriage` disables the headless run (detection + manual toast only).
 `/crosscheck:drift-triage` remains available interactively — same guide the
 headless run follows.
+
+Unresolved weeks can't fall out of the lifecycle: any run that ends in the
+manual toast or an open fix branch writes `tools/drift-pending.json`, and
+every later run re-toasts it until the branch is merged/discarded
+(auto-clears) or `/crosscheck:drift-triage` records a disposition —
+findings never depend on one noticed toast.
 
 ## Pattern lineage
 

@@ -18,7 +18,15 @@ The "Task To Run" line contains the absolute path to `check-drift.ps1`;
 reports are in `drift-reports\` next to it (newest file by name). If the
 task does not exist, ask the user where the crosscheck checkout lives.
 
-Read the newest report. If it says "No findings.", report that and stop.
+**Check `drift-pending.json` (next to check-drift.ps1) FIRST.** If it
+exists, an earlier run is still unresolved — it names the report and, for
+`fix-branch-open`, the branch awaiting review/merge. Triage THAT (the
+newest report may be a later clean week). When its disposition is recorded
+— findings dismissed with reasons, or the branch merged/discarded — delete
+`drift-pending.json`.
+
+Otherwise read the newest report. If it says "No findings.", report that
+and stop.
 
 ## Triage each finding
 

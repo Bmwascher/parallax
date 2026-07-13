@@ -321,6 +321,15 @@ class TestEvalFixtures:
         assert "Skill," in allowlist.group(1), (
             "executor allowlist must include the Skill tool"
         )
+        # Availability layer: without --tools, ambient user settings can
+        # widen the harness beyond the approval list (Sol holistic).
+        avail = re.search(r'AVAILABLE_TOOLS = "([^"]+)"', runner)
+        assert avail and "Skill" in avail.group(1)
+        for tool in ("Write", "Edit", "Agent", "WebFetch"):
+            assert tool not in avail.group(1), (
+                f"{tool} must not be AVAILABLE to the eval executor"
+            )
+        assert '"--tools", AVAILABLE_TOOLS' in runner
 
     def test_behavioral_runner_grades_tool_evidence(self):
         # Plain claude -p prints only the final message: the grader then
@@ -414,6 +423,44 @@ class TestHook:
         out, rc = self.run_hook(payload)
         assert rc == 0
         assert out == ""
+
+    def test_failure_event_name_is_echoed(self):
+        # The script serves both events; hookSpecificOutput must name the
+        # ACTUAL event or the failure-path context violates the hook
+        # contract (Sol holistic MAJOR, 2026-07-13).
+        payload = {
+            "hook_event_name": "PostToolUseFailure",
+            "tool_name": "Agent",
+            "tool_input": {
+                "description": "Review code changes",
+                "prompt": ("You are a Senior Code Reviewer.\n"
+                           "## Git Range to Review\n"
+                           "**Base:** abc1234\n**Head:** def5678\n"),
+            },
+        }
+        out, rc = self.run_hook(payload)
+        assert rc == 0
+        data = json.loads(out)
+        assert data["hookSpecificOutput"]["hookEventName"] == "PostToolUseFailure"
+
+    def test_partial_fingerprint_warns_instead_of_failing_open(self):
+        # A template change that drops ONE literal used to make the hook
+        # exit silently until the weekly drift check - up to a week of
+        # missed gates (Sol holistic improvement 3).
+        payload = {
+            "hook_event_name": "PostToolUse",
+            "tool_name": "Agent",
+            "tool_input": {
+                "description": "Review code changes",
+                "prompt": ("You are a Senior Code Reviewer checking this"
+                           " branch.\n**Base:** abc1234\n"),
+            },
+        }
+        out, rc = self.run_hook(payload)
+        assert rc == 0
+        data = json.loads(out)
+        ctx = data["hookSpecificOutput"]["additionalContext"]
+        assert "fingerprint" in ctx and "check-drift" in ctx
 
     def test_failure_event_also_registered(self):
         # A failed review dispatch must also surface the gate reminder -
@@ -555,13 +602,22 @@ class TestDriftProtection:
         # worktree, run under a hard timeout, and the SCRIPT must re-run
         # the gate and own the commit.
         text = self.drift()
-        args = re.search(r'\$claudeArgs = @\("-p", "--allowedTools",\s*\r?\n?\s*"([^"]+)"', text)
-        assert args, "auto-triage agent allowlist not found"
-        for tool in ("git", "codex", "python", "Bash", "PowerShell"):
-            assert tool not in args.group(1), (
-                f"the unattended agent must never hold {tool} - any shell"
-                " is arbitrary execution (Sol round-3 CRITICAL)"
+        # Availability layer: --allowedTools only PRE-APPROVES; without
+        # --tools, unlisted built-ins stay available and ambient user
+        # settings can authorize them (Sol holistic CRITICAL).
+        avail = re.search(r'"--tools", "([^"]+)"', text)
+        assert avail, "auto-triage agent must restrict tool AVAILABILITY"
+        for tool in ("git", "codex", "python", "Bash", "PowerShell",
+                     "WebFetch", "Agent", "Task"):
+            assert tool not in avail.group(1), (
+                f"the unattended agent must never have {tool} available -"
+                " any shell is arbitrary execution (Sol rounds 3+final)"
             )
+        allowed = re.search(r'"--allowedTools", "([^"]+)"\)', text)
+        assert allowed, "auto-triage agent approval list not found"
+        assert "Edit(**)" in allowed.group(1) and "Write(**)" in allowed.group(1), (
+            "write approvals must be scoped to the worktree (cwd-relative)"
+        )
         assert re.search(r"commitOk.*ahead|ahead.*commitOk", text, re.DOTALL), (
             "a commit must be verified (exit + branch ahead) before the"
             " success toast"
@@ -595,6 +651,46 @@ class TestDriftProtection:
                          text)
         assert re.search(r"-not \$codexVersionToSave -and \$snapshot\.codex",
                          text)
+
+    def test_pending_disposition_lifecycle(self):
+        # An unresolved findings-week (BLOCKED, timeout, or an unmerged fix
+        # branch) must be re-surfaced on later runs - the snapshot advances
+        # regardless of triage outcome, so without this record a later
+        # clean week buries it (Sol holistic MAJOR).
+        text = self.drift()
+        assert "drift-pending.json" in text
+        for status in ("manual-triage-needed", "fix-branch-open"):
+            assert status in text
+        assert re.search(r"UNRESOLVED prior", text)
+        assert re.search(r"rev-parse --verify", text), (
+            "a merged/deleted fix branch must auto-clear the pending record"
+        )
+        command = read(REPO_ROOT / "commands" / "drift-triage.md")
+        assert "drift-pending.json" in command, (
+            "the triage command must check the pending record before the"
+            " newest report"
+        )
+        ignore = read(REPO_ROOT / ".gitignore")
+        assert "tools/drift-pending.json" in ignore
+
+    def test_reviewer_model_pinned_consistently(self):
+        # "Roles are plugs" only holds if a model swap can't be partial:
+        # every executable surface must pin the SAME reviewer model string
+        # (Sol holistic improvement 2, implemented as a consistency gate).
+        sources = [
+            read(REPO_ROOT / "skills" / "multi-model-verify" / "SKILL.md"),
+            read(REPO_ROOT / "skills" / "multi-model-verify" / "references"
+                 / "model-prompting-notes.md"),
+            read(REPO_ROOT / "evals" / "tools" / "run_behavioral_evals.py"),
+            self.drift(),
+        ]
+        models = set()
+        for text in sources:
+            models.update(re.findall(r'-m"?,?\s+"?(gpt-[\w.\-]+)', text))
+        assert len(models) == 1, (
+            f"reviewer model differs across surfaces: {sorted(models)} -"
+            " a partial migration leaves some lanes on the old model"
+        )
 
     def test_findings_route_to_triage_command(self):
         # A toast that only names a file is a report that rots unread: the
