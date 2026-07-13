@@ -29,7 +29,8 @@
 
 param(
     [switch]$Register,
-    [switch]$TestNotify
+    [switch]$TestNotify,
+    [switch]$NoAutoTriage
 )
 
 $RepoRoot = Split-Path $PSScriptRoot
@@ -64,9 +65,10 @@ function Show-Toast($title, $body) {
 function Get-NormalizedHash($text) {
     # CRLF/LF differences between the git checkout and the plugin cache must
     # not read as template drift; neither may the fixture's leading
-    # attribution comment (<!-- [pinned fixture ...] -->), which the
-    # installed template does not carry.
-    $normalized = $text -replace '(?s)^\s*<!--.*?-->\s*', ''
+    # attribution comment. Only OUR marker is stripped - a generic
+    # leading-comment strip would hide an upstream template gaining a
+    # meaningful comment of its own (Sol review 2026-07-12).
+    $normalized = $text -replace '(?s)^\s*<!--\s*\[pinned fixture.*?-->\s*', ''
     $normalized = $normalized -replace "`r`n", "`n"
     $sha = [System.Security.Cryptography.SHA256]::Create()
     $bytes = [System.Text.Encoding]::UTF8.GetBytes($normalized)
@@ -128,12 +130,12 @@ if (-not $spInstall) {
 if ($spInstall) {
     $template = Join-Path $spInstall "skills\requesting-code-review\code-reviewer.md"
     if (-not (Test-Path $template)) {
-        $findings += "[CRITICAL] superpowers $spVersion layout changed - skills\requesting-code-review\code-reviewer.md is gone; re-fingerprint hooks/superpowers-review-companion.ps1"
+        $findings += "[CRITICAL] superpowers $spVersion layout changed - $template is gone; re-fingerprint hooks/superpowers-review-companion.ps1"
     } else {
         $installedText = Get-Content $template -Raw
         foreach ($literal in @("Senior Code Reviewer", "Git Range to Review")) {
             if ($installedText.IndexOf($literal) -lt 0) {
-                $findings += "[CRITICAL] fingerprint literal '$literal' is gone from the installed superpowers template - the diff-gate hook is INERT NOW; re-fingerprint hooks/superpowers-review-companion.ps1"
+                $findings += "[CRITICAL] fingerprint literal '$literal' is gone from the installed superpowers template ($template) - the diff-gate hook is INERT NOW; re-fingerprint hooks/superpowers-review-companion.ps1"
             }
         }
         if (Test-Path $FixtureFile) {
@@ -172,7 +174,20 @@ if (Test-Path $SnapshotFile) {
     $snapshot = Get-Content $SnapshotFile -Raw | ConvertFrom-Json
 }
 
+# A transient probe failure must never clobber the last known-good value -
+# an empty snapshot field would also disable next week's change detection,
+# silently skipping the version interval (Sol review 2026-07-12). The
+# failure itself is already a CRITICAL finding above, so carrying the old
+# value forward here is not a quiet path.
 $claudeVersionToSave = $claudeVersion
+$codexVersionToSave = $codexVersion
+$spVersionToSave = $spVersion
+if ($snapshot) {
+    if (-not $claudeVersionToSave -and $snapshot.claude) { $claudeVersionToSave = $snapshot.claude }
+    if (-not $codexVersionToSave -and $snapshot.codex) { $codexVersionToSave = $snapshot.codex }
+    if (-not $spVersionToSave -and $snapshot.superpowers) { $spVersionToSave = $snapshot.superpowers }
+}
+
 if ($snapshot -and $claudeVersion -and $snapshot.claude -and ($snapshot.claude -ne $claudeVersion)) {
     $changelog = ""
     try {
@@ -242,19 +257,93 @@ $report | Write-Output
 
 $newSnapshot = @{
     claude      = $claudeVersionToSave
-    codex       = $codexVersion
-    superpowers = $spVersion
+    codex       = $codexVersionToSave
+    superpowers = $spVersionToSave
     updated     = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss")
 }
 $newSnapshot | ConvertTo-Json | Set-Content -Path $SnapshotFile
 
-if ($findings.Count -gt 0) {
-    $critical = @($findings | Where-Object { $_ -like "*CRITICAL*" }).Count
+if ($findings.Count -eq 0) { exit 0 }
+
+$critical = @($findings | Where-Object { $_ -like "*CRITICAL*" }).Count
+$manualToast = $true
+
+# --- headless auto-triage (findings-weeks only) --------------------------------
+# The weekly loop must not depend on a human running /crosscheck:drift-triage:
+# pipe the report plus the triage guide into a headless Claude Code run that
+# classifies each finding and repairs real drift on a drift/<stamp> branch.
+# It never merges. WARN-only noise dismissed by triage is silent (verdict
+# archived in the report); a CRITICAL finding is never silently dismissed;
+# any auto-triage failure falls back to the manual toast. Disable with
+# -NoAutoTriage. No hard timeout here - the scheduler's own stop-after
+# limit is the backstop if a headless run hangs.
+$claudeCmd = Get-Command claude -ErrorAction SilentlyContinue
+if (-not $NoAutoTriage -and $claudeCmd) {
+    $guide = Get-Content (Join-Path $RepoRoot "commands\drift-triage.md") -Raw
+    $branch = "drift/$Stamp"
+    $prompt = @"
+Headless drift auto-triage for the crosscheck plugin. No user is available -
+never wait for input. You are in the crosscheck checkout: $RepoRoot.
+
+Today's drift report:
+--- REPORT ---
+$((Get-Content $ReportFile -Raw))
+--- END REPORT ---
+
+Follow the triage guide below, EXCEPT: skip its report-locating step (the
+report is above) and skip its Finish section (no merging, no pushing, no
+plugin update in headless mode). Hard constraints:
+- NEVER commit to main and NEVER merge; all edits go on a new branch $branch.
+- Run 'python -m pytest evals -q' before committing; do not commit red.
+- If a fix also needs interactive state (plugin cache re-sync, session
+  restart, codex login), still commit the code fix and list the follow-up
+  steps in your reply.
+- If the report is noise (no crosscheck surface actually affected), change
+  nothing and say why, per finding.
+End your reply with EXACTLY one line:
+VERDICT: NO-ACTION
+or
+VERDICT: FIXED-ON-BRANCH $branch
+or
+VERDICT: BLOCKED <one-line reason>
+
+--- TRIAGE GUIDE ---
+$guide
+"@
+    $triageFile = Join-Path $ReportDir "$Stamp-autotriage.txt"
+    $promptFile = Join-Path $ReportDir "$Stamp-autotriage-prompt.txt"
+    $prompt | Set-Content -Path $promptFile
+    Push-Location $RepoRoot
+    Get-Content -Raw $promptFile | & claude -p --allowedTools "Read,Glob,Grep,Edit,Write,Bash(git:*),Bash(python:*),Bash(codex:*),PowerShell(git:*),PowerShell(python:*),PowerShell(codex:*)" > $triageFile 2>&1
+    $triageExit = $LASTEXITCODE
+    Pop-Location
+    $verdictLine = ""
+    if (Test-Path $triageFile) {
+        $verdictMatch = Select-String -Path $triageFile -Pattern '^VERDICT: (.+)$' | Select-Object -Last 1
+        if ($verdictMatch) { $verdictLine = $verdictMatch.Matches[0].Groups[1].Value.Trim() }
+    }
+    if ($verdictLine) {
+        Add-Content -Path $ReportFile -Value "`r`nAuto-triage verdict: $verdictLine (transcript: $Stamp-autotriage.txt)"
+    } else {
+        Add-Content -Path $ReportFile -Value "`r`nAuto-triage FAILED (exit $triageExit, no verdict line - transcript: $Stamp-autotriage.txt)"
+    }
+    if ($triageExit -eq 0 -and $verdictLine -like "FIXED-ON-BRANCH*") {
+        Show-Toast "crosscheck drift: fix ready" "Auto-triage committed a fix on $branch - review and merge. Report: tools\drift-reports\$Stamp.txt"
+        $manualToast = $false
+    } elseif ($triageExit -eq 0 -and $verdictLine -eq "NO-ACTION") {
+        if ($critical -gt 0) {
+            Show-Toast "crosscheck drift: VERIFY dismissal" "$critical CRITICAL finding(s) auto-triaged as no-action - verify by hand. Report: tools\drift-reports\$Stamp.txt"
+        }
+        $manualToast = $false
+    }
+    # BLOCKED, no verdict line, or nonzero exit: fall through to manual toast.
+}
+
+if ($manualToast) {
     if ($critical -gt 0) {
         Show-Toast "crosscheck drift: $critical CRITICAL" "Contract-breaking drift found. Triage with /crosscheck:drift-triage (report: tools\drift-reports\$Stamp.txt)"
     } else {
         Show-Toast "crosscheck drift watch" "$($findings.Count) finding(s). Triage with /crosscheck:drift-triage (report: tools\drift-reports\$Stamp.txt)"
     }
-    exit 1
 }
-exit 0
+exit 1

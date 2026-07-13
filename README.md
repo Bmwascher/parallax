@@ -36,7 +36,8 @@ flowchart LR
   reviews always look at the same range. Verdicts are PASS / FIX / ESCALATE
   from *each* side.
 
-The debate rules that keep this honest (`references/debate-protocol.md`):
+The debate rules that keep this honest
+(`skills/multi-model-verify/references/debate-protocol.md`):
 
 - **Strike rule** — every externally checkable claim carries a citation the
   other side can read (`References/<addon>/<file>:<line>`, API docs, a dated
@@ -62,7 +63,8 @@ The debate rules that keep this honest (`references/debate-protocol.md`):
 
 ## Fails loud, never silent
 
-The governing rule (`references/fallbacks.md`): **no transition that reduces
+The governing rule
+(`skills/multi-model-verify/references/fallbacks.md`): **no transition that reduces
 vendor diversity, evidence quality, or conversation continuity happens
 without explicit user consent.**
 
@@ -146,9 +148,9 @@ re-sync first. Lint/scan/trigger/pytest run in CI on every push.
 ## Drift protection
 
 crosscheck's contract points at three moving targets it does not control.
-`tools/check-drift.ps1` watches all three; a clean run is silent, findings
-raise a Windows toast and archive a report under `tools/drift-reports/`
-(gitignored, machine-local).
+`tools/check-drift.ps1` watches all three; a clean run raises no toast
+(the report is still archived under `tools/drift-reports/` — gitignored,
+machine-local).
 
 | Upstream | Risk | Check |
 |---|---|---|
@@ -166,11 +168,22 @@ An unfetchable or not-yet-published changelog never advances the version
 snapshot — the watch retries next run rather than skipping past a version it
 could not inspect.
 
-Findings don't just sit in the report file: the toast names the follow-up —
-run `/crosscheck:drift-triage` in a Claude Code session and it locates the
-newest report (via the scheduled task's registered path), verifies each
-finding against the live install, and repairs what actually broke on a
-feature branch, gated like any other change.
+Findings don't wait for a human: on a findings-week the script pipes the
+report and the triage guide into a **headless Claude Code run** that
+classifies each finding against the live install and repairs real drift on
+a `drift/<stamp>` branch (gates run, never merged). The toast then reflects
+the outcome, so the only interruptions are actionable ones:
+
+| Auto-triage verdict | Toast |
+|---|---|
+| `FIXED-ON-BRANCH` | "fix ready on `drift/<stamp>` — review and merge" |
+| `NO-ACTION`, WARN-only noise | none (verdict archived in the report) |
+| `NO-ACTION` but a CRITICAL finding | "verify dismissal by hand" — a CRITICAL is never silently dismissed |
+| `BLOCKED` / auto-triage failed | falls back to the manual toast: run `/crosscheck:drift-triage` yourself |
+
+`-NoAutoTriage` disables the headless run (detection + manual toast only).
+`/crosscheck:drift-triage` remains available interactively — same guide the
+headless run follows.
 
 ## Pattern lineage
 

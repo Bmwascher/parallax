@@ -26,10 +26,12 @@ Options: [fix codex] [run degraded] [abort]
 
 ## Bounded recovery (automatic, consent-free)
 
-Exactly one retry with the SAME model, sandbox, effort, and session
-parameters is allowed per failure — it reduces nothing, so it needs no
-consent. A failed retry goes to the consent gate. This covers timeouts and
-transient transport errors.
+One retry with the SAME model, sandbox, effort, and session parameters is
+the DEFAULT recovery for any failure that has no named immediate-gate rule
+below (codex-missing, model-rejected, auth-expired, and quota-exhausted go
+straight to the gate — retrying those changes nothing). The retry reduces
+nothing, so it needs no consent. A failed retry goes to the consent gate.
+This covers timeouts and transient transport errors.
 
 **Catch-all: any codex failure not named in this file — nonzero exit, empty
 reply file, malformed output, network loss, resume failure —

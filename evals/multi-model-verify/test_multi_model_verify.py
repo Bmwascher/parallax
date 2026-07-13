@@ -307,6 +307,16 @@ class TestEvalFixtures:
             "executor allowlist must include the Skill tool"
         )
 
+    def test_behavioral_runner_grades_tool_evidence(self):
+        # Plain claude -p prints only the final message: the grader then
+        # marks real tool work (the codex exec round) as absent. The
+        # executor must stream events and the transcript must carry
+        # tool_use evidence (first full-suite run, 2026-07-12).
+        runner = read(REPO_ROOT / "evals" / "tools" / "run_behavioral_evals.py")
+        assert "stream-json" in runner and "--verbose" in runner
+        assert "tool_use" in runner, "transcript must include tool calls"
+        assert "STDERR" in runner, "harness stderr must be labeled"
+
     def test_behavioral_runner_self_test(self):
         # CI-safe: --list parses cases and checks the fixture, no model calls.
         proc = subprocess.run(
@@ -501,6 +511,31 @@ class TestDriftProtection:
         ignore = read(REPO_ROOT / ".gitignore")
         assert "tools/drift-snapshot.json" in ignore
         assert "tools/drift-reports/" in ignore
+
+    def test_auto_triage_contract(self):
+        # Findings-weeks self-triage headless; the loud-failure doctrine
+        # still holds: CRITICALs are never silently dismissed, and a failed
+        # auto-triage falls back to the manual toast, never to silence.
+        text = self.drift()
+        assert "$NoAutoTriage" in text, "escape hatch missing"
+        for verdict in ("NO-ACTION", "FIXED-ON-BRANCH", "BLOCKED"):
+            assert verdict in text
+        assert "NEVER commit to main" in text
+        assert "VERIFY dismissal" in text, (
+            "a CRITICAL auto-dismissed as no-action must still toast"
+        )
+        assert re.search(r"fall(s)? (through|back) to (the )?manual toast",
+                         text, re.IGNORECASE)
+
+    def test_snapshot_survives_probe_failure(self):
+        # A transient claude/codex probe failure must carry the last
+        # known-good version forward, or next week's change detection is
+        # disabled and the interval is never inspected (Sol finding 5).
+        text = self.drift()
+        assert re.search(r"-not \$claudeVersionToSave -and \$snapshot\.claude",
+                         text)
+        assert re.search(r"-not \$codexVersionToSave -and \$snapshot\.codex",
+                         text)
 
     def test_findings_route_to_triage_command(self):
         # A toast that only names a file is a report that rots unread: the
