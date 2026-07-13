@@ -659,12 +659,22 @@ class TestDriftProtection:
         # clean week buries it (Sol holistic MAJOR).
         text = self.drift()
         assert "drift-pending.json" in text
-        for status in ("manual-triage-needed", "fix-branch-open"):
+        for status in ("manual-triage-needed", "fix-branch-open",
+                       "critical-dismissal-needs-verification"):
             assert status in text
         assert re.search(r"UNRESOLVED prior", text)
         assert re.search(r"rev-parse --verify", text), (
-            "a merged/deleted fix branch must auto-clear the pending record"
+            "a merged/deleted fix branch must auto-clear its pending entry"
         )
+        # Append-only list: a new unresolved run must never overwrite an
+        # older one, and single-element arrays must survive PS 5.1 JSON
+        # round-trips (Sol holistic round 2).
+        assert re.search(r"\$pendingList \+= ,", text)
+        assert "ConvertTo-Json -InputObject @($pendingList)" in text
+        # Assign-then-wrap on parse: @(pipeline) collects a JSON array as
+        # ONE element and foreach member-enumerates a mega-entry, silently
+        # dropping every real one (probed live 2026-07-13).
+        assert "$pendingList = @($parsed)" in text
         command = read(REPO_ROOT / "commands" / "drift-triage.md")
         assert "drift-pending.json" in command, (
             "the triage command must check the pending record before the"
@@ -675,22 +685,28 @@ class TestDriftProtection:
 
     def test_reviewer_model_pinned_consistently(self):
         # "Roles are plugs" only holds if a model swap can't be partial:
-        # every executable surface must pin the SAME reviewer model string
-        # (Sol holistic improvement 2, implemented as a consistency gate).
-        sources = [
-            read(REPO_ROOT / "skills" / "multi-model-verify" / "SKILL.md"),
-            read(REPO_ROOT / "skills" / "multi-model-verify" / "references"
-                 / "model-prompting-notes.md"),
-            read(REPO_ROOT / "evals" / "tools" / "run_behavioral_evals.py"),
-            self.drift(),
-        ]
-        models = set()
-        for text in sources:
-            models.update(re.findall(r'-m"?,?\s+"?(gpt-[\w.\-]+)', text))
-        assert len(models) == 1, (
-            f"reviewer model differs across surfaces: {sorted(models)} -"
-            " a partial migration leaves some lanes on the old model"
-        )
+        # every surface must carry the SAME reviewer model id, and every
+        # executable surface must pin it in its -m args (Sol holistic
+        # improvement 2; round-2 fix: each source must CONTRIBUTE a match,
+        # not just avoid contradicting).
+        notes = read(REPO_ROOT / "skills" / "multi-model-verify"
+                     / "references" / "model-prompting-notes.md")
+        canonical = re.search(r"Canonical model id: `(gpt-[\w.\-]+)`", notes)
+        assert canonical, "prompting notes must declare the canonical id"
+        canonical = canonical.group(1)
+        executable = {
+            "SKILL.md": read(REPO_ROOT / "skills" / "multi-model-verify"
+                             / "SKILL.md"),
+            "run_behavioral_evals.py": read(
+                REPO_ROOT / "evals" / "tools" / "run_behavioral_evals.py"),
+            "check-drift.ps1": self.drift(),
+        }
+        for name, text in executable.items():
+            args = set(re.findall(r'-m"?,?\s+"?(gpt-[\w.\-]+)', text))
+            assert args == {canonical}, (
+                f"{name} pins {sorted(args)} - every executable surface"
+                f" must pin exactly {canonical}"
+            )
 
     def test_findings_route_to_triage_command(self):
         # A toast that only names a file is a report that rots unread: the
