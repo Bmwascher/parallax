@@ -53,7 +53,7 @@
     {
       "id": "no-manufactured-objections",
       "setup": { "with_reference": true },
-      "prompt": "Run plan-mode verification on this small, sound plan: rename DemoWidget's frame name to match this project's naming convention, mirroring References/DemoWidget exactly otherwise.",
+      "prompt": "Run plan-mode verification on this small, sound plan: port References/DemoWidget verbatim into this project as Widgets/DemoWidget.lua; register that file in DemoAddon.toc on a new line after Widgets\\TargetGlow.lua; rename its frame from DemoWidgetFrame to DemoAddon_DemoWidget to match the project convention established by Widgets/TargetGlow.lua. No other changes.",
       "expected_output": "A short debate that converges quickly because neither side manufactures objections.",
       "expectations": [
         "A sound plan gets a short confirmation, not invented risks",
