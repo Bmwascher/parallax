@@ -9,6 +9,7 @@ import json
 import re
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -161,6 +162,21 @@ class TestDebateProtocol:
         text = read(REFERENCES / "debate-protocol.md")
         assert re.search(r"converged with amendments", text, re.IGNORECASE)
 
+    def test_session_final_adjudication(self):
+        # The chain never terminates on the external reviewer's verdict:
+        # the session verifies the final round and emits the terminal
+        # verdict itself (user directive, 2026-07-12).
+        text = read(REFERENCES / "debate-protocol.md")
+        assert re.search(r"final adjudication", text, re.IGNORECASE)
+        assert re.search(r"session.{0,60}(final say|last step)",
+                         text, re.IGNORECASE | re.DOTALL)
+        assert re.search(r"(input|never).{0,40}(to this step|the decision)",
+                         text, re.IGNORECASE)
+        skill = read(SKILL_MD)
+        assert re.search(r"final.adjudication", skill, re.IGNORECASE), (
+            "the finish line must route through the adjudication step"
+        )
+
 
 class TestFallbacks:
     """Loud-degradation contract (Sol round-2 audit, 2026-07-12): degraded
@@ -211,6 +227,17 @@ class TestFallbacks:
             r"(session|continuity).{0,120}(consent gate|not automatic)",
             text, re.IGNORECASE | re.DOTALL,
         ), "losing session continuity must route through the consent gate"
+
+    def test_quota_limit_is_named_class(self):
+        # Session/weekly usage limits are not transport blips: no retry
+        # (the window will not clear in seconds), straight to the consent
+        # gate with codex's reset time surfaced.
+        text = self.fallbacks()
+        assert "quota-exhausted" in text
+        assert re.search(r"(session|weekly).{0,60}(limit|quota|cap)",
+                         text, re.IGNORECASE)
+        assert re.search(r"skip the retry", text, re.IGNORECASE)
+        assert re.search(r"reset time", text, re.IGNORECASE)
 
     def test_stale_evidence_is_struck(self):
         text = self.fallbacks()
@@ -277,6 +304,51 @@ class TestEvalFixtures:
             assert entry["prompt"].strip()
             assert entry["expected_output"].strip()
             assert len(entry["expectations"]) >= 3
+            # Every case must be executable or explicitly manual - the
+            # runner refuses to guess (Sol audit: dead-data finding).
+            setup = entry.get("setup", {})
+            assert setup.get("manual") or "with_reference" in setup, (
+                f"case {entry['id']} needs a setup config for the runner"
+            )
+
+    def test_behavioral_runner_allows_skill_tool(self):
+        # Without Skill in the executor allowlist the agent can never load
+        # the plugin skill, so every behavioral case grades an agent flying
+        # blind (root cause of the 2026-07-12 missing-reference regression).
+        runner = read(REPO_ROOT / "evals" / "tools" / "run_behavioral_evals.py")
+        allowlist = re.search(r"ALLOWED_TOOLS = \(([^)]*)\)", runner, re.S)
+        assert allowlist, "ALLOWED_TOOLS block not found in runner"
+        assert "Skill," in allowlist.group(1), (
+            "executor allowlist must include the Skill tool"
+        )
+
+    def test_behavioral_runner_grades_tool_evidence(self):
+        # Plain claude -p prints only the final message: the grader then
+        # marks real tool work (the codex exec round) as absent. The
+        # executor must stream events and the transcript must carry
+        # tool_use evidence (first full-suite run, 2026-07-12).
+        runner = read(REPO_ROOT / "evals" / "tools" / "run_behavioral_evals.py")
+        assert "stream-json" in runner and "--verbose" in runner
+        assert "tool_use" in runner, "transcript must include tool calls"
+        assert "STDERR" in runner, "harness stderr must be labeled"
+        # The prompt must travel via stdin: on Windows a multi-line argv
+        # through cmd.exe is truncated at the first newline, silently
+        # dropping the request and all flags after it.
+        assert 'input=HARNESS_PREAMBLE + case["prompt"]' in runner
+        assert re.search(r"shutil\.which\(.claude.\)", runner), (
+            "executor must resolve the claude exe and run shell-free"
+        )
+
+    def test_behavioral_runner_self_test(self):
+        # CI-safe: --list parses cases and checks the fixture, no model calls.
+        proc = subprocess.run(
+            [sys.executable, str(REPO_ROOT / "evals" / "tools" / "run_behavioral_evals.py"),
+             "--list"],
+            capture_output=True, text=True, timeout=60,
+        )
+        assert proc.returncode == 0, proc.stderr
+        assert "degraded-consent-gate" in proc.stdout
+        assert "fixture repo: True" in proc.stdout
 
 
 class TestHook:
@@ -402,6 +474,141 @@ class TestHook:
                 " superpowers code-reviewer template - the hook is now inert;"
                 " re-fingerprint hooks/superpowers-review-companion.ps1"
             )
+
+
+class TestDriftProtection:
+    """tools/check-drift.ps1 watches the three upstreams crosscheck's
+    contract depends on (superpowers template, Claude Code surface, codex
+    exec flags). These pin its own contract so edits cannot quietly hollow
+    it out."""
+
+    DRIFT = REPO_ROOT / "tools" / "check-drift.ps1"
+
+    def drift(self):
+        return read(self.DRIFT)
+
+    def test_is_pure_ascii(self):
+        # The scheduled task runs Windows PowerShell 5.1, which reads
+        # BOM-less files as ANSI: a UTF-8 em dash decodes into a smart
+        # quote that silently terminates strings.
+        raw = self.DRIFT.read_bytes()
+        bad = [i for i, b in enumerate(raw) if b > 127]
+        assert not bad, f"non-ASCII byte at offset {bad[0]} breaks PS 5.1"
+
+    def test_superpowers_canary_contract(self):
+        text = self.drift()
+        for literal in ("Senior Code Reviewer", "Git Range to Review"):
+            assert literal in text, "canary must check the hook fingerprints"
+        assert "superpowers-code-reviewer-6.1.1.md" in text, (
+            "canary must hash against the pinned fixture"
+        )
+        assert "installed_plugins.json" in text
+
+    def test_codex_transport_probe(self):
+        text = self.drift()
+        for flag in ("--sandbox", "--output-last-message"):
+            assert flag in text, f"transport probe must cover {flag}"
+        assert "exec resume" in text, "resume subcommand must be probed"
+
+    def test_changelog_watch(self):
+        text = self.drift()
+        assert "anthropics/claude-code" in text and "CHANGELOG.md" in text
+        keywords = re.search(r"\$ChangelogKeywords = '([^']+)'", text)
+        assert keywords, "keyword regex missing"
+        for kw in ("hook", "plugin", "matcher", "renam"):
+            assert kw in keywords.group(1)
+        assert r"\bagents?\b" not in keywords.group(1), (
+            "bare 'agent' keyword drowns findings in background-agent UI"
+            " churn (48 hits vs 17 on the 2.1.202->207 slice)"
+        )
+
+    def test_fails_loud_not_silent(self):
+        text = self.drift()
+        assert "CRITICAL" in text and "Show-Toast" in text
+        # Unfetchable/unsliceable changelog must retry next run, never
+        # silently advance past a version we could not inspect.
+        assert text.count("do not advance") >= 2
+
+    def test_local_state_is_gitignored(self):
+        ignore = read(REPO_ROOT / ".gitignore")
+        assert "tools/drift-snapshot.json" in ignore
+        assert "tools/drift-reports/" in ignore
+
+    def test_auto_triage_contract(self):
+        # Findings-weeks self-triage headless; the loud-failure doctrine
+        # still holds: CRITICALs are never silently dismissed, and a failed
+        # auto-triage falls back to the manual toast, never to silence.
+        text = self.drift()
+        assert "$NoAutoTriage" in text, "escape hatch missing"
+        for verdict in ("NO-ACTION", "FIXES-APPLIED", "BLOCKED"):
+            assert verdict in text
+        assert "VERIFY dismissal" in text, (
+            "a CRITICAL auto-dismissed as no-action must still toast"
+        )
+        assert re.search(r"fall(s)? (through|back) to (the )?manual toast",
+                         text, re.IGNORECASE)
+
+    def test_auto_triage_agent_is_untrusted(self):
+        # The drift report embeds raw upstream changelog text, so the
+        # headless agent is a prompt-injection target (Sol round-2
+        # CRITICAL): it must have no git/codex, work in a disposable
+        # worktree, run under a hard timeout, and the SCRIPT must re-run
+        # the gate and own the commit.
+        text = self.drift()
+        args = re.search(r'\$claudeArgs = @\("-p", "--allowedTools",\s*\r?\n?\s*"([^"]+)"', text)
+        assert args, "auto-triage agent allowlist not found"
+        for tool in ("git", "codex", "python", "Bash", "PowerShell"):
+            assert tool not in args.group(1), (
+                f"the unattended agent must never hold {tool} - any shell"
+                " is arbitrary execution (Sol round-3 CRITICAL)"
+            )
+        assert re.search(r"commitOk.*ahead|ahead.*commitOk", text, re.DOTALL), (
+            "a commit must be verified (exit + branch ahead) before the"
+            " success toast"
+        )
+        # Reviewer-in-the-loop: the SCRIPT cross-reviews the auto-fix diff
+        # via Sol before toasting; a missing/failed review is labeled
+        # UNAVAILABLE, never implied-reviewed.
+        assert "REVIEW: PASS" in text and "cross-review UNAVAILABLE" in text
+        assert re.search(r"Start-Job[\s\S]{0,400}codex exec --sandbox read-only", text), (
+            "the cross-review must run script-side, bounded, read-only"
+        )
+        assert r"'^REVIEW: (PASS|FIX .+)$'" in text, (
+            "the review verdict grammar must be strict - any other payload"
+            " stays UNAVAILABLE (Sol round-5 finding)"
+        )
+        assert "worktree add" in text, "agent must work in a disposable worktree"
+        assert "WaitForExit" in text, "headless run must have a hard timeout"
+        assert "python -m pytest evals -q" in text, (
+            "the script must re-run the gate itself before committing"
+        )
+        assert re.search(r"Count -eq 1.*\$verdictLine", text, re.DOTALL), (
+            "exactly one strict verdict line must be required"
+        )
+
+    def test_snapshot_survives_probe_failure(self):
+        # A transient claude/codex probe failure must carry the last
+        # known-good version forward, or next week's change detection is
+        # disabled and the interval is never inspected (Sol finding 5).
+        text = self.drift()
+        assert re.search(r"-not \$claudeVersionToSave -and \$snapshot\.claude",
+                         text)
+        assert re.search(r"-not \$codexVersionToSave -and \$snapshot\.codex",
+                         text)
+
+    def test_findings_route_to_triage_command(self):
+        # A toast that only names a file is a report that rots unread: the
+        # toast must point at the triage command, and the command must exist
+        # in the plugin.
+        assert "/crosscheck:drift-triage" in self.drift()
+        command = REPO_ROOT / "commands" / "drift-triage.md"
+        assert command.is_file(), "drift-triage plugin command missing"
+        body = read(command)
+        assert "drift-reports" in body
+        assert re.search(r"schtasks /Query", body), (
+            "the command must locate the checkout via the scheduled task,"
+            " not assume the session cwd"
+        )
 
 
 if __name__ == "__main__":

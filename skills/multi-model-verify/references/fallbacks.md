@@ -26,13 +26,15 @@ Options: [fix codex] [run degraded] [abort]
 
 ## Bounded recovery (automatic, consent-free)
 
-Exactly one retry with the SAME model, sandbox, effort, and session
-parameters is allowed per failure — it reduces nothing, so it needs no
-consent. A failed retry goes to the consent gate. This covers timeouts and
-transient transport errors.
+One retry with the SAME model, sandbox, effort, and session parameters is
+the DEFAULT recovery for any failure that has no named immediate-gate rule
+below (codex-missing, model-rejected, auth-expired, and quota-exhausted go
+straight to the gate — retrying those changes nothing). The retry reduces
+nothing, so it needs no consent. A failed retry goes to the consent gate.
+This covers timeouts and transient transport errors.
 
 **Catch-all: any codex failure not named in this file — nonzero exit, empty
-reply file, malformed output, rate limiting, network loss, resume failure —
+reply file, malformed output, network loss, resume failure —
 gets the same treatment: one same-parameters retry, then the consent gate.**
 No failure class is ever an implicit license to degrade.
 
@@ -53,6 +55,17 @@ above get Sol). Do NOT silently substitute another model — Sol is a user
 directive. Consent gate: fix subscription / run degraded / abort.
 (`gpt-5.6-terra` responding while `gpt-5.6-sol` 400s confirms tier-gating,
 not a CLI problem — probed 2026-07-12.)
+
+### Usage limit reached (session or weekly quota) — class `quota-exhausted`
+The ChatGPT account's usage quota is exhausted; codex's error names which
+limit was hit (the ~5-hour session window vs the weekly cap) and when it
+resets. **Skip the retry** — nothing about a quota window is transient, and
+a retry only burns another attempt against it. Go straight to the consent
+gate with codex's reset time quoted verbatim in the `What failed:` line;
+here the "fix codex" option means *wait for the reset* or *upgrade the
+tier* — record which. If a debate is mid-flight, also note the codex
+session id in the debate record so the debate resumes after the reset
+instead of restarting from round 1.
 
 ### codex auth expired
 `codex login status` fails → the fix needs the user anyway (`codex login`

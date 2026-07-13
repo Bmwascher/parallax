@@ -41,7 +41,7 @@ Every frozen plan ends with:
 **Rounds used:** N of CAP
 **Outcome:** converged | converged with amendments | escalated
 **Verification status:** FULL | DEGRADED
-**Degradation:** none | codex-missing | model-rejected | auth-expired | continuity-lost | <class>
+**Degradation:** none | codex-missing | model-rejected | auth-expired | quota-exhausted | continuity-lost | <class>
 **Authorized by:** n/a | user at round N | not-authorized
 
 ### Resolved points

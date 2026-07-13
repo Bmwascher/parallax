@@ -1,0 +1,5 @@
+## Interface: 120000
+## Title: DemoAddon
+## Notes: Project-side fixture for crosscheck behavioral evals.
+
+Widgets\TargetGlow.lua

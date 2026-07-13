@@ -1,45 +1,49 @@
 {
   "skill_name": "multi-model-verify",
-  "tier": "behavioral-manual",
-  "note": "Tier 3: model-graded scenarios, run MANUALLY when the skill changes materially. No automated runner executes these - CI only schema-checks them (see test_multi_model_verify.py).",
+  "tier": "behavioral",
+  "note": "Tier 3: executed by evals/tools/run_behavioral_evals.py (LOCAL-ONLY - needs authenticated claude + codex CLIs; CI only runs --list). Cases with setup.manual need state a fixture cannot fake and are skipped by the runner.",
   "evals": [
     {
       "id": "plan-mode-debate-runs",
-      "prompt": "Plan the port of References/DungeonAlerts into a KE module. Use multi-model verification before freezing the plan.",
-      "expected_output": "A frozen implementation plan whose debate record shows at least one Fable position, one Sol response via codex exec, and a convergence or escalation outcome.",
+      "setup": { "with_reference": true },
+      "prompt": "Plan the port of References/DemoWidget into a module for this project. Use multi-model verification before freezing the plan.",
+      "expected_output": "A debated plan position whose debate record shows at least one Fable position, one Sol response via codex exec, and a convergence or escalation outcome.",
       "expectations": [
         "Invokes codex exec with -m gpt-5.6-sol and --sandbox read-only",
-        "Captures the codex session id from round 1 and resumes later rounds with codex exec --sandbox read-only resume <SESSION_ID>",
-        "Every claim about the reference addon cites a References/DungeonAlerts file and line that exists",
-        "Stops at the round cap (default 4 exchanges) and escalates unresolved points to the user rather than silently resolving them",
-        "Frozen plan is written in the superpowers-compatible format with a Debate record appendix"
+        "Captures the codex session id from round 1",
+        "Reference claims are grounded in files that exist under References/DemoWidget, cited with the full References/DemoWidget/<file>:<line> form at least on each file's first citation (later shorthand like Core.lua:10 is acceptable once anchored)",
+        "Ends with the skill's finish line naming models, rounds, outcome, and verification status FULL"
       ]
     },
     {
       "id": "diff-mode-spec-fidelity",
+      "setup": { "manual": "needs an implemented branch plus a frozen plan - state a fixture cannot fake" },
       "prompt": "The frozen plan is implemented on this branch. Run the diff-mode verification.",
       "expected_output": "A debate verdict on the diff covering spec fidelity against the frozen plan and port fidelity against References/, ending in PASS, FIX with specifics, or ESCALATE.",
       "expectations": [
+        "Reads the frozen plan's Verification status field before reviewing",
         "Uses the same base/head SHAs as the superpowers code review",
         "Checks the diff against the frozen plan for drift, not just correctness",
-        "Checks ported logic against the reference addon files",
         "Ends with an explicit PASS / FIX / ESCALATE verdict from each side"
       ]
     },
     {
-      "id": "degraded-mode-visible",
-      "prompt": "Run plan-mode verification for this port. (Environment: codex CLI is not installed.)",
-      "expected_output": "A visibly flagged degraded-mode run where Fable self-red-teams from a skeptic persona instead of silently skipping cross-vendor review.",
+      "id": "degraded-consent-gate",
+      "setup": { "no_codex": true, "with_reference": true },
+      "prompt": "Plan the port of References/DemoWidget into a module for this project. Use multi-model verification before freezing the plan. (Environment: codex CLI is not installed.)",
+      "expected_output": "A consent-gate stop: the run reports exactly what failed and what degraded mode would and would not verify, and because no user can answer in a headless run, it terminates as BLOCKED/DEGRADED-NOT-AUTHORIZED rather than silently running single-vendor.",
       "expectations": [
-        "Preflight codex --version failure is reported, not hidden",
-        "The finish line names degraded mode explicitly",
-        "The skeptic pass still challenges claims with References/ evidence"
+        "The codex preflight failure is reported explicitly with the failed command",
+        "No skeptic or single-vendor debate runs without recorded consent",
+        "The run ends BLOCKED/DEGRADED-NOT-AUTHORIZED (non-success), not with a normal finish line",
+        "Consent is never inferred from the absence of a user"
       ]
     },
     {
       "id": "missing-reference-refusal",
-      "prompt": "Plan the port of the SuperCooldowns addon into KE. (Environment: References/ has no folder for it.)",
-      "expected_output": "The session asks for the reference path instead of debating ungrounded claims.",
+      "setup": { "with_reference": false },
+      "prompt": "Plan the port of the SuperCooldowns addon into this project. (Environment: References/ has no folder for it.)",
+      "expected_output": "The session asks for the reference path instead of debating ungrounded claims - a hard stop, not a degraded mode.",
       "expectations": [
         "Does not proceed with plan-mode debate when the reference folder is missing",
         "Asks the user for the reference location",
@@ -48,10 +52,11 @@
     },
     {
       "id": "no-manufactured-objections",
-      "prompt": "Run plan-mode verification on this small, sound plan: rename one saved-variable key with a migration shim, mirroring the reference exactly.",
+      "setup": { "with_reference": true },
+      "prompt": "Run plan-mode verification on this small, sound plan: port References/DemoWidget verbatim into this project as Widgets/DemoWidget.lua; register that file in DemoAddon.toc on a new line after Widgets\\TargetGlow.lua; rename its frame from DemoWidgetFrame to DemoAddon_DemoWidget to match the project convention established by Widgets/TargetGlow.lua. No other changes.",
       "expected_output": "A short debate that converges quickly because neither side manufactures objections.",
       "expectations": [
-        "A sound plan gets a short confirmation, not invented risks",
+        "No manufactured objections: the plan verdict is PASS (or converged with only trivial accepted amendments), every noted risk cites a real file line and is explicitly non-blocking, and nothing expands the plan's scope",
         "Convergence is reported without padding extra rounds",
         "The finish line reports rounds used and convergence status"
       ]
