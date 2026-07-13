@@ -1,0 +1,17 @@
+{
+  "name": "crosscheck",
+  "metadata": {
+    "description": "Cross-model verification patterns for Claude Code: equal-weight Fable 5 / GPT-5.6 Sol debates at plan time and diff time, with a deterministic eval harness for the skills themselves."
+  },
+  "owner": {
+    "name": "Brandon Wascher",
+    "url": "https://github.com/Bmwascher"
+  },
+  "plugins": [
+    {
+      "name": "crosscheck",
+      "source": "./",
+      "description": "Evidence-grounded two-model debate gates: mode plan before implementation, mode diff before merge (auto-triggered alongside superpowers code review)."
+    }
+  ]
+}

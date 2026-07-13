@@ -1,0 +1,44 @@
+name: Skill Evals
+
+# Deterministic gates for the plugin's skills: Tier 1 lint (agentskills.io
+# spec), Tier 1b security scan, Tier 2 trigger/routing evals, Tier 2b pytest
+# structural tests. No model calls.
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: skill-evals-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  skill-evals:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Tier 1 - skill lint (strict)
+        run: |
+          set -e
+          for skill in skills/*/; do
+            [ -f "$skill/SKILL.md" ] || continue
+            python evals/tools/skill_lint.py "$skill" --strict
+          done
+
+      - name: Tier 1b - security scan
+        run: python evals/tools/skill_scanner.py skills
+
+      - name: Tier 2 - trigger and routing evals
+        run: python evals/tools/run_trigger_evals.py
+
+      - name: Tier 2b - structural pytest
+        run: |
+          python -m pip install --quiet pytest
+          python -m pytest evals -q
