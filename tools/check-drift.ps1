@@ -385,19 +385,26 @@ VERDICT: BLOCKED <one-line reason>
 $guide
 "@
         $prompt | Set-Content -Path $promptFile
-        # Two distinct layers (Sol holistic CRITICAL, 2026-07-13):
-        # --tools is AVAILABILITY - unlisted tools (Bash, PowerShell,
-        # WebFetch, Agent, ...) do not exist for this agent at all, so
-        # ambient user-scope allow rules cannot resurrect them;
-        # --allowedTools is APPROVAL - Read/Edit/Write approvals are
-        # scoped to the worktree (cwd-relative **); an out-of-tree path
-        # falls to a permission prompt, which a headless run denies. The
-        # superpowers template is copied into .drift-context\ above so no
-        # out-of-tree read is ever legitimate. Residual: Grep approval is
-        # unscoped (path-scoped Grep rules are not a documented form) -
-        # out-of-tree grep matches could surface line contents, but they
-        # land only in the local transcript and the human-reviewed branch.
-        $claudeArgs = @("-p",
+        # Isolation stack (Sol holistic rounds, 2026-07-13):
+        # --strict-mcp-config with no --mcp-config loads ZERO MCP servers,
+        # including plugin-provided ones (--tools restricts BUILT-INS only
+        # - configured MCP connectors would otherwise still load in -p).
+        # NO --bare: it also skips OAuth credential loading, so a
+        # subscription-auth headless run dies with "Not logged in" (probed
+        # live 2026-07-13); the plugin/CLAUDE.md context it would have
+        # stripped is the user's own trusted content, not the attacker
+        # channel. --tools is
+        # AVAILABILITY - unlisted built-ins do not exist for this agent, so
+        # ambient allow rules cannot resurrect them; --allowedTools is
+        # APPROVAL - Read/Edit/Write scoped to the worktree (cwd-relative
+        # **); out-of-tree paths fall to a permission prompt, which a
+        # headless run denies. The superpowers template is copied into
+        # .drift-context\ above so no out-of-tree read is ever legitimate.
+        # Residual (accepted on the record): Grep approval is unscoped -
+        # out-of-tree matches pass through the model provider, which is the
+        # trust baseline of every Claude session, and land only in the
+        # local transcript and the human-reviewed branch.
+        $claudeArgs = @("-p", "--strict-mcp-config",
             "--tools", "Read,Glob,Grep,Edit,Write",
             "--allowedTools", "Read(**),Glob,Grep,Edit(**),Write(**)")
         $proc = Start-Process -FilePath $claudeCmd.Source -ArgumentList $claudeArgs `
@@ -420,6 +427,11 @@ $guide
             $verdicts = @(Select-String -Path $triageFile -Pattern '^VERDICT: (NO-ACTION|FIXES-APPLIED.*|BLOCKED.*)$')
             $verdictLine = ""
             if ($verdicts.Count -eq 1) { $verdictLine = $verdicts[0].Matches[0].Groups[1].Value.Trim() }
+            # The harness-provided context copy must never be staged: left
+            # in place, git add -A makes every NO-ACTION look dirty and
+            # every fix commit carry the upstream template (Sol holistic
+            # round 3).
+            Remove-Item -Recurse -Force (Join-Path $worktree ".drift-context") -ErrorAction SilentlyContinue
             git -C $worktree add -A 2>&1 | Out-Null
             $diffStat = (git -C $worktree diff --cached --stat 2>&1 | Out-String).Trim()
             if ($proc.ExitCode -eq 0 -and $verdictLine -eq "NO-ACTION" -and -not $diffStat) {

@@ -330,6 +330,10 @@ class TestEvalFixtures:
                 f"{tool} must not be AVAILABLE to the eval executor"
             )
         assert '"--tools", AVAILABLE_TOOLS' in runner
+        assert '"--strict-mcp-config"' in runner, (
+            "--tools restricts built-ins only; MCP connectors must be"
+            " excluded explicitly"
+        )
 
     def test_behavioral_runner_grades_tool_evidence(self):
         # Plain claude -p prints only the final message: the grader then
@@ -617,6 +621,21 @@ class TestDriftProtection:
         assert allowed, "auto-triage agent approval list not found"
         assert "Edit(**)" in allowed.group(1) and "Write(**)" in allowed.group(1), (
             "write approvals must be scoped to the worktree (cwd-relative)"
+        )
+        assert "Read(**)" in allowed.group(1), (
+            "unscoped Read is an out-of-tree egress path - the template is"
+            " copied into the worktree instead (Sol holistic round 2)"
+        )
+        # --tools restricts BUILT-INS only: without this, configured MCP
+        # connectors still load in -p (Sol holistic round 3). --bare is
+        # deliberately ABSENT: it skips OAuth loading and kills
+        # subscription-auth headless runs (probed live 2026-07-13).
+        assert '"--strict-mcp-config"' in text
+        assert '"--bare"' not in text
+        assert ".drift-context" in text
+        assert re.search(r"Remove-Item[^\n]*drift-context[\s\S]{0,600}git -C \$worktree add -A", text), (
+            "the harness context copy must be removed BEFORE staging or"
+            " every NO-ACTION looks dirty and fixes commit the template"
         )
         assert re.search(r"commitOk.*ahead|ahead.*commitOk", text, re.DOTALL), (
             "a commit must be verified (exit + branch ahead) before the"

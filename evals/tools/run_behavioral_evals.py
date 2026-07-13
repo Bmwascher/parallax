@@ -155,9 +155,13 @@ def run_case(case, model, timeout, artifacts=None, head=False):
         # cmd.exe truncates a multi-line argv at the first newline, silently
         # eating the request AND every flag after it (--model, --allowedTools,
         # --output-format) - all early graded runs were invalid (2026-07-12).
+        # --strict-mcp-config with no --mcp-config: zero MCP servers reach
+        # the executor (--tools restricts built-ins only). No --bare here -
+        # the executor must load the installed plugin's skill.
         cmd = [
             shutil.which("claude"), "-p",
             "--model", model,
+            "--strict-mcp-config",
             "--tools", AVAILABLE_TOOLS,
             "--allowedTools", ALLOWED_TOOLS,
             "--output-format", "stream-json", "--verbose",
