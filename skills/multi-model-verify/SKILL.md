@@ -35,10 +35,12 @@ toggled on, its stop-time review overlaps mode `diff` — expected, not a bug.
    (degraded mode, visibly flagged; never silently skip cross-vendor review).
 2. For port work: the reference source must exist under `References/`
    (quote paths — some contain spaces, e.g. `References/M+ Timer`). Missing
-   → ask the user for the path. Never debate reference behavior from
-   memory. If the folder holds version subdirectories (e.g. a `v1.4/` next
-   to a `v1.1_old/`), use the newest unless the user names one, and cite
-   the versioned path: `References/<name>/<version>/<file>:<line>`.
+   → **HARD STOP before any debate round runs**: ask the user for the path
+   and go no further — do not run a codex exchange about the absence, do
+   not debate from memory, do not start a degraded mode. If the folder
+   holds version subdirectories (e.g. a `v1.4/` next to a `v1.1_old/`), use
+   the newest unless the user names one, and cite the versioned path:
+   `References/<name>/<version>/<file>:<line>`.
    For non-port work there is no reference folder — claims ground in the
    project's own source, specs, or upstream docs instead, same strike rule.
 
