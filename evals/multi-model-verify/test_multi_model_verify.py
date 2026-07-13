@@ -525,14 +525,34 @@ class TestDriftProtection:
         # auto-triage falls back to the manual toast, never to silence.
         text = self.drift()
         assert "$NoAutoTriage" in text, "escape hatch missing"
-        for verdict in ("NO-ACTION", "FIXED-ON-BRANCH", "BLOCKED"):
+        for verdict in ("NO-ACTION", "FIXES-APPLIED", "BLOCKED"):
             assert verdict in text
-        assert "NEVER commit to main" in text
         assert "VERIFY dismissal" in text, (
             "a CRITICAL auto-dismissed as no-action must still toast"
         )
         assert re.search(r"fall(s)? (through|back) to (the )?manual toast",
                          text, re.IGNORECASE)
+
+    def test_auto_triage_agent_is_untrusted(self):
+        # The drift report embeds raw upstream changelog text, so the
+        # headless agent is a prompt-injection target (Sol round-2
+        # CRITICAL): it must have no git/codex, work in a disposable
+        # worktree, run under a hard timeout, and the SCRIPT must re-run
+        # the gate and own the commit.
+        text = self.drift()
+        args = re.search(r'\$claudeArgs = @\("-p", "--allowedTools",\s*\r?\n?\s*"([^"]+)"', text)
+        assert args, "auto-triage agent allowlist not found"
+        assert "git" not in args.group(1) and "codex" not in args.group(1), (
+            "the unattended agent must never hold git or codex"
+        )
+        assert "worktree add" in text, "agent must work in a disposable worktree"
+        assert "WaitForExit" in text, "headless run must have a hard timeout"
+        assert "python -m pytest evals -q" in text, (
+            "the script must re-run the gate itself before committing"
+        )
+        assert re.search(r"Count -eq 1.*\$verdictLine", text, re.DOTALL), (
+            "exactly one strict verdict line must be required"
+        )
 
     def test_snapshot_survives_probe_failure(self):
         # A transient claude/codex probe failure must carry the last

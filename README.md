@@ -168,18 +168,22 @@ An unfetchable or not-yet-published changelog never advances the version
 snapshot — the watch retries next run rather than skipping past a version it
 could not inspect.
 
-Findings don't wait for a human: on a findings-week the script pipes the
-report and the triage guide into a **headless Claude Code run** that
-classifies each finding against the live install and repairs real drift on
-a `drift/<stamp>` branch (gates run, never merged). The toast then reflects
-the outcome, so the only interruptions are actionable ones:
+Findings don't wait for a human: on a findings-week the script feeds the
+report and the triage guide into a **headless Claude Code run**. Because
+the report embeds raw upstream text (changelog lines), that agent is
+treated as untrusted: it works in a **disposable git worktree** the script
+creates, holds **no git and no codex** (only read/edit/pytest), and is
+killed after 30 minutes. The script then inspects the diff itself, re-runs
+the pytest gate, and only commits (on a `drift/<runid>` branch, never
+merged) when the gate is green. The toast reflects the verified outcome,
+so the only interruptions are actionable ones:
 
-| Auto-triage verdict | Toast |
+| Outcome | Toast |
 |---|---|
-| `FIXED-ON-BRANCH` | "fix ready on `drift/<stamp>` — review and merge" |
-| `NO-ACTION`, WARN-only noise | none (verdict archived in the report) |
+| `FIXES-APPLIED` + non-empty diff + gates green | "fix ready on `drift/<runid>` (gates green) — review and merge" |
+| `NO-ACTION`, WARN-only noise, no diff | none (verdict archived in the report) |
 | `NO-ACTION` but a CRITICAL finding | "verify dismissal by hand" — a CRITICAL is never silently dismissed |
-| `BLOCKED` / auto-triage failed | falls back to the manual toast: run `/crosscheck:drift-triage` yourself |
+| Gate failed, verdict/diff mismatch, timeout, `BLOCKED` | falls back to the manual toast: run `/crosscheck:drift-triage` yourself |
 
 `-NoAutoTriage` disables the headless run (detection + manual toast only).
 `/crosscheck:drift-triage` remains available interactively — same guide the

@@ -47,14 +47,14 @@ HARNESS_PREAMBLE = (
     " finish line.\n\nRequest: "
 )
 
-# Minimal by design (Sol review 2026-07-12): no git/write shell families -
-# an executor that can mutate the throwaway workspace can alter the fixture
-# before citing it. cat/ls/Get-Content stay because the skill's transport
-# pipes a brief file into codex exec.
+# Minimal by design (Sol reviews 2026-07-12): no git and no cat/ls/
+# Get-Content either - `cat x > fixture` redirection can overwrite the
+# evidence the agent then cites. With only direct codex invocations
+# allowed, the executor passes the debate brief inline instead of piping a
+# scratch file; Read/Glob/Grep cover all inspection.
 ALLOWED_TOOLS = (
     "Skill,Read,Glob,Grep,"
-    "Bash(codex:*),Bash(ls:*),Bash(cat:*),"
-    "PowerShell(codex:*),PowerShell(Get-Content:*)"
+    "Bash(codex:*),PowerShell(codex:*)"
 )
 
 GRADER_PROMPT = """<role>Independent grader in a two-model verification
@@ -187,6 +187,13 @@ def run_case(case, model, timeout, artifacts=None):
     if len(verdicts) != len(case["expectations"]):
         return "FAIL", (f"grader verdict count mismatch: {len(verdicts)} verdicts"
                         f" for {len(case['expectations'])} expectations"), verdicts
+    if any(not isinstance(v, dict) for v in verdicts):
+        return "FAIL", "grader verdict entry is not an object", []
+    # Positional numbering also rejects duplicates (four copies of
+    # expectation 1 must not pass a four-expectation case).
+    if [v.get("expectation") for v in verdicts] != list(
+            range(1, len(verdicts) + 1)):
+        return "FAIL", "grader verdict numbering mismatch", verdicts
     if any(not isinstance(v.get("met"), bool) for v in verdicts):
         return "FAIL", "grader verdict missing boolean 'met'", verdicts
     misses = [v for v in verdicts if not v["met"]]
@@ -196,9 +203,15 @@ def run_case(case, model, timeout, artifacts=None):
 
 def grade(case, transcript):
     numbered = "\n".join(f"{i}. {e}" for i, e in enumerate(case["expectations"], 1))
+    # Head+tail truncation: a tail-only cut discards the early tool calls
+    # (the codex round-1 invocation) that expectations grade on.
+    if len(transcript) > 40000:
+        transcript = (transcript[:15000]
+                      + "\n...[transcript middle elided by harness]...\n"
+                      + transcript[-25000:])
     prompt = GRADER_PROMPT.format(
         expectations=numbered, expected=case["expected_output"],
-        transcript=transcript[-40000:],
+        transcript=transcript,
     )
     with tempfile.TemporaryDirectory(prefix="crosscheck-grade-") as tmp:
         reply_file = Path(tmp) / "reply.txt"

@@ -55,7 +55,8 @@ the runner surface is implicated) and fix what actually broke.
 Run `codex exec --help` and `codex exec resume --help` yourself and read
 what changed. Update the transport commands in
 `skills/multi-model-verify/SKILL.md` and
-`references/model-prompting-notes.md`, keep the structural transport pins
+`skills/multi-model-verify/references/model-prompting-notes.md`, keep the
+structural transport pins
 in the tests in sync, and live-probe one round-trip
 (`codex exec --sandbox read-only -m gpt-5.6-sol ...`) before declaring it
 fixed.
