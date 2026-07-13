@@ -49,10 +49,11 @@ The debate rules that keep this honest
   protocol violation, not diligence.
 - **Session continuity** — Sol keeps debate state across rounds via
   `codex exec … resume <SESSION_ID>`; the full context is sent once.
-- **Final adjudication** — the session (Fable) always has the last step:
-  it verifies the reviewer's final round against the repo and emits the
+- **Final adjudication** — the session always has the last step: it
+  verifies the reviewer's final round against the repo and emits the
   terminal verdict itself. A reviewer PASS/FIX is input, never the
-  decision; genuine deadlocks escalate to the user.
+  decision; genuine deadlocks escalate to the user. The rule attaches to
+  the *role*, not the model — it holds whoever fills the session seat.
 
 ## What's in the box
 
@@ -96,18 +97,26 @@ flowchart TD
   never a degraded mode — a debate about remembered code is two models
   fabricating at each other.
 
-## Swapping the implementer lane
+## Swapping lanes
 
-The implementer role is deliberately a plug: the contract (zero judgment
-calls, INPUT GAP rule, structured report) stays identical whoever fills it.
+Every role is a plug — the contracts attach to roles, not models. Today's
+lineup (Fable session / Sol reviewer / Sonnet implementer) is one
+configuration:
 
-- **Claude tier** — edit one line: `model:` in `agents/implementer.md`
-  frontmatter (`sonnet` today; `haiku`/`opus` are drop-ins).
-- **Cross-vendor** (the fable-advisor v3 Grok pattern) — agent frontmatter
-  only accepts Claude tiers, so a vendor swap uses the supervisor pattern
-  documented in `agents/implementer.md`: a cheap Claude model supervises,
-  delegates the body of work to the vendor CLI, and re-runs verification
-  itself.
+- **Implementer, Claude tier** — edit one line: `model:` in
+  `agents/implementer.md` frontmatter (`sonnet` today; `haiku`/`opus` are
+  drop-ins). The contract (zero judgment calls, INPUT GAP rule, structured
+  report) stays identical whoever fills it.
+- **Implementer, cross-vendor** (the fable-advisor v3 Grok pattern) —
+  agent frontmatter only accepts Claude tiers, so a vendor swap uses the
+  supervisor pattern documented in `agents/implementer.md`: a cheap Claude
+  model supervises, delegates the body of work to the vendor CLI, and
+  re-runs verification itself.
+- **Cross-vendor reviewer** — pinned in the skill's transport commands
+  (`-m gpt-5.6-sol` in SKILL.md / model-prompting-notes.md) and the drift
+  watch's review calls; swap the model flag there.
+- **Session** — whatever model runs the session; the debate rules and
+  final adjudication follow the seat automatically.
 
 ## Requirements
 
@@ -186,10 +195,10 @@ so the only interruptions are actionable ones:
 A `FIXES-APPLIED` diff also gets a **script-side Sol cross-review**
 (read-only, bounded) before the toast — the reviewer stays in the loop even
 unattended, and a failed review reads "cross-review UNAVAILABLE", never
-implied-reviewed. The final reviewer is still Fable, deferred to pickup:
-the merge happens in a session that adjudicates Sol's verdict and the diff
-first (debate-protocol.md, Final adjudication), with the user's approval —
-nothing merges on the external reviewer's word alone.
+implied-reviewed. The final reviewer is the session, deferred to pickup:
+the merge happens in a session that adjudicates the cross-review verdict
+and the diff first (debate-protocol.md, Final adjudication), with the
+user's approval — nothing merges on the external reviewer's word alone.
 
 | Outcome | Toast |
 |---|---|
