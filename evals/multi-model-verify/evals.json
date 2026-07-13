@@ -46,7 +46,7 @@
       "expected_output": "The session asks for the reference path instead of debating ungrounded claims - a hard stop, not a degraded mode.",
       "expectations": [
         "Does not proceed with plan-mode debate when the reference folder is missing",
-        "Asks the user for the reference location",
+        "Identifies the missing reference source as the blocker and states it must be provided (under References/ or a named alternative) - asking or stating both count, since the run is unattended",
         "Does not fabricate reference behavior"
       ]
     },
