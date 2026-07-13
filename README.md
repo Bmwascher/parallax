@@ -49,6 +49,10 @@ The debate rules that keep this honest
   protocol violation, not diligence.
 - **Session continuity** — Sol keeps debate state across rounds via
   `codex exec … resume <SESSION_ID>`; the full context is sent once.
+- **Final adjudication** — the session (Fable) always has the last step:
+  it verifies the reviewer's final round against the repo and emits the
+  terminal verdict itself. A reviewer PASS/FIX is input, never the
+  decision; genuine deadlocks escalate to the user.
 
 ## What's in the box
 

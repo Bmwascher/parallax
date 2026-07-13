@@ -162,6 +162,21 @@ class TestDebateProtocol:
         text = read(REFERENCES / "debate-protocol.md")
         assert re.search(r"converged with amendments", text, re.IGNORECASE)
 
+    def test_session_final_adjudication(self):
+        # The chain never terminates on the external reviewer's verdict:
+        # the session verifies the final round and emits the terminal
+        # verdict itself (user directive, 2026-07-12).
+        text = read(REFERENCES / "debate-protocol.md")
+        assert re.search(r"final adjudication", text, re.IGNORECASE)
+        assert re.search(r"session.{0,60}(final say|last step)",
+                         text, re.IGNORECASE | re.DOTALL)
+        assert re.search(r"(input|never).{0,40}(to this step|the decision)",
+                         text, re.IGNORECASE)
+        skill = read(SKILL_MD)
+        assert re.search(r"final.adjudication", skill, re.IGNORECASE), (
+            "the finish line must route through the adjudication step"
+        )
+
 
 class TestFallbacks:
     """Loud-degradation contract (Sol round-2 audit, 2026-07-12): degraded

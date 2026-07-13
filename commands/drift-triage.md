@@ -68,7 +68,10 @@ moved checkout) and fix the machine, not the repo.
 ## Finish
 
 Per the repo's standing rules: run all gates, get the cross-vendor (Sol)
-review of the diff, merge and push, bump the plugin version, and
+review of the diff, then adjudicate it yourself — verify each finding
+against the repo before acting; the reviewer's verdict is input, not the
+decision (debate-protocol.md, Final adjudication). Then merge and push,
+bump the plugin version, and
 `claude plugin update crosscheck@crosscheck`. Remind the user to restart
 sessions if hooks/ or skills/ changed. If a finding needs no code change,
 record the disposition in your reply — the report file stays as the

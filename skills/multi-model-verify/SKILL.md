@@ -99,6 +99,10 @@ then requires the user's explicitly recorded risk acceptance, never a PASS.
 
 ## Finish line
 
+Before it: the session's final-adjudication step (debate-protocol.md) —
+verify the last round's findings against the repo and issue the terminal
+verdict; a reviewer's PASS/FIX is never terminal by itself.
+
 End with one status line: participating models, rounds used, converged vs
 escalated points, and the verification status — `FULL`, or
 `DEGRADED (<class>, authorized by user at round N)` per fallbacks.md. The
