@@ -316,6 +316,13 @@ class TestEvalFixtures:
         assert "stream-json" in runner and "--verbose" in runner
         assert "tool_use" in runner, "transcript must include tool calls"
         assert "STDERR" in runner, "harness stderr must be labeled"
+        # The prompt must travel via stdin: on Windows a multi-line argv
+        # through cmd.exe is truncated at the first newline, silently
+        # dropping the request and all flags after it.
+        assert 'input=HARNESS_PREAMBLE + case["prompt"]' in runner
+        assert re.search(r"shutil\.which\(.claude.\)", runner), (
+            "executor must resolve the claude exe and run shell-free"
+        )
 
     def test_behavioral_runner_self_test(self):
         # CI-safe: --list parses cases and checks the fixture, no model calls.

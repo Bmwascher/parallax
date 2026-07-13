@@ -145,8 +145,12 @@ def run_case(case, model, timeout, artifacts=None):
     with tempfile.TemporaryDirectory(prefix="crosscheck-eval-") as tmp:
         ws = build_workspace(setup, tmp)
         env = env_without_codex() if setup.get("no_codex") else dict(os.environ)
+        # The prompt goes via STDIN and the executor runs WITHOUT a shell:
+        # cmd.exe truncates a multi-line argv at the first newline, silently
+        # eating the request AND every flag after it (--model, --allowedTools,
+        # --output-format) - all early graded runs were invalid (2026-07-12).
         cmd = [
-            "claude", "-p", HARNESS_PREAMBLE + case["prompt"],
+            shutil.which("claude"), "-p",
             "--model", model,
             "--allowedTools", ALLOWED_TOOLS,
             "--output-format", "stream-json", "--verbose",
@@ -154,7 +158,9 @@ def run_case(case, model, timeout, artifacts=None):
         try:
             proc = subprocess.run(
                 cmd, cwd=ws, env=env, capture_output=True, text=True,
-                timeout=timeout, shell=(os.name == "nt"),
+                encoding="utf-8", errors="replace",
+                input=HARNESS_PREAMBLE + case["prompt"],
+                timeout=timeout,
             )
         except subprocess.TimeoutExpired:
             return "FAIL", "executor timed out", []
@@ -202,6 +208,7 @@ def grade(case, transcript):
                  "-m", "gpt-5.6-sol", "-c", "model_reasoning_effort=high",
                  "--output-last-message", str(reply_file), "-"],
                 input=prompt, capture_output=True, text=True, timeout=600,
+                encoding="utf-8", errors="replace",
                 shell=(os.name == "nt"),
             )
         except (subprocess.TimeoutExpired, OSError):
