@@ -336,6 +336,9 @@ $guide
             -RedirectStandardInput $promptFile `
             -RedirectStandardOutput $triageFile `
             -RedirectStandardError $errFile
+        # Cache the handle NOW: without it, .ExitCode reads null after the
+        # process exits (PS 5.1 Start-Process quirk, probed 2026-07-12).
+        $null = $proc.Handle
         $finished = $proc.WaitForExit(1800000)  # 30 min hard cap
         if (-not $finished) {
             try { $proc.Kill() } catch {}
