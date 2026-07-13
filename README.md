@@ -183,9 +183,14 @@ only commits (on a `drift/<runid>` branch, never merged) when the gate is
 green and the commit verifiably landed. The toast reflects the verified outcome,
 so the only interruptions are actionable ones:
 
+A `FIXES-APPLIED` diff also gets a **script-side Sol cross-review**
+(read-only, bounded) before the toast — the reviewer stays in the loop even
+unattended, and a failed review reads "cross-review UNAVAILABLE", never
+implied-reviewed. You remain the final adjudication at merge.
+
 | Outcome | Toast |
 |---|---|
-| `FIXES-APPLIED` + non-empty diff + gates green | "fix ready on `drift/<runid>` (gates green) — review and merge" |
+| `FIXES-APPLIED` + non-empty diff + gates green | "fix ready on `drift/<runid>` (gates green; Sol review: …) — review and merge" |
 | `NO-ACTION`, WARN-only noise, no diff | none (verdict archived in the report) |
 | `NO-ACTION` but a CRITICAL finding | "verify dismissal by hand" — a CRITICAL is never silently dismissed |
 | Gate failed, verdict/diff mismatch, timeout, `BLOCKED` | falls back to the manual toast: run `/crosscheck:drift-triage` yourself |

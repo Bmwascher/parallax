@@ -566,6 +566,13 @@ class TestDriftProtection:
             "a commit must be verified (exit + branch ahead) before the"
             " success toast"
         )
+        # Reviewer-in-the-loop: the SCRIPT cross-reviews the auto-fix diff
+        # via Sol before toasting; a missing/failed review is labeled
+        # UNAVAILABLE, never implied-reviewed.
+        assert "REVIEW: PASS" in text and "cross-review UNAVAILABLE" in text
+        assert re.search(r"Start-Job[\s\S]{0,400}codex exec --sandbox read-only", text), (
+            "the cross-review must run script-side, bounded, read-only"
+        )
         assert "worktree add" in text, "agent must work in a disposable worktree"
         assert "WaitForExit" in text, "headless run must have a hard timeout"
         assert "python -m pytest evals -q" in text, (
