@@ -8,12 +8,18 @@ overall summary. Report only - fix nothing without being asked.
 
 ## 1. Checkout vs installed version
 
-Read `.claude-plugin/plugin.json` `version` in the checkout (locate it via
-the marketplace entry in `~/.claude/plugins/installed_plugins.json` -
-crosscheck's marketplace points at the local working copy - or ask if
-unresolvable). Compare against the installed entry's `version` in
-`installed_plugins.json`. Mismatch = STALE: the dev loop is bump ->
-`claude plugin update crosscheck@crosscheck` -> restart.
+Two different files, and mixing them up is the whole point of this check:
+
+- CHECKOUT: `~/.claude/plugins/known_marketplaces.json` -> the `crosscheck`
+  marketplace's `source.path` (a local directory source). Read
+  `.claude-plugin/plugin.json` `version` there.
+- INSTALLED: `~/.claude/plugins/installed_plugins.json` -> the
+  `crosscheck@crosscheck` entry's `version` (its `installPath` is the
+  VERSIONED CACHE COPY, never the checkout).
+
+Mismatch = STALE, and everything running right now is the cached version:
+the dev loop is bump -> `claude plugin update crosscheck@crosscheck` ->
+restart the session.
 
 ## 2. Hook registration and matcher
 
@@ -33,15 +39,19 @@ warns but cannot extract); none = BROKEN (diff gate inert). Also confirm
 ## 4. codex transport
 
 `codex --version`, then `codex login status`. If both succeed, run the
-cheapest possible round-trip probe and report its outcome:
+cheapest possible round-trip probe. DELETE the output file first: a stale
+`TRANSPORT-OK` from an earlier run would read as a pass over a failed probe.
 
 ```powershell
-"Reply with exactly: TRANSPORT-OK" | codex exec --sandbox read-only -m gpt-5.6-sol -c model_reasoning_effort=low --output-last-message "$env:TEMP\crosscheck-doctor.txt" -
+$probe = "$env:TEMP\crosscheck-doctor-$(Get-Random).txt"
+"Reply with exactly: TRANSPORT-OK" | codex exec --sandbox read-only -m gpt-5.6-sol -c model_reasoning_effort=low --output-last-message $probe -
+# OK only if the command exited 0 AND $probe now contains exactly TRANSPORT-OK
 ```
 
-(Model id must match the canonical id in
+OK requires BOTH a zero exit and fresh `TRANSPORT-OK` content; anything else
+is BROKEN. The model id must match the canonical id in
 `skills/multi-model-verify/references/model-prompting-notes.md` - if they
-differ, that is itself a BROKEN finding.)
+differ, that is itself a BROKEN finding.
 
 ## 5. Drift watch
 
@@ -54,6 +64,7 @@ entries present = list each (status, stamp) and point at
 ## 6. Behavioral eval target
 
 Note (informational): `evals/tools/run_behavioral_evals.py` tests the
-INSTALLED plugin by default; `--head` tests the checkout via --plugin-dir.
-If check 1 found a version mismatch, any recent behavioral results tested
-the stale cache - flag that explicitly.
+INSTALLED plugin by default; `--head` tests the checkout via `--plugin-dir`.
+If check 1 found a version mismatch, say so here: any behavioral run made
+WITHOUT `--head` tested the stale cache, not the checkout. A `--head` run is
+unaffected by the mismatch.

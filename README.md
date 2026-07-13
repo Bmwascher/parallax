@@ -171,11 +171,20 @@ base/head SHAs, so a pass means the debate found the drift in a real diff.
 
 The drift script has its own offline state machine —
 `evals/tools/drift_statemachine_tests.ps1` drives the **real**
-`tools/check-drift.ps1` through every path (probe failure, verdict trust
-matrix, gate, commit, cross-review, toast matrix, pending lifecycle) against
-stub CLIs and a throwaway clone. It is slow and opt-in:
-`CROSSCHECK_STATEMACHINE=1 python -m pytest evals -q`, or run the `.ps1`
-directly. Run it whenever `check-drift.ps1` changes.
+`tools/check-drift.ps1` through eleven scenarios against stub CLIs and a
+throwaway clone: probe-failure carry-forward, the verdict trust matrix
+(`BLOCKED`, no verdict, trusted `NO-ACTION`), both halves of the toast
+matrix (CRITICAL dismissal toasts VERIFY, WARN-only dismissal toasts
+nothing), the pytest gate (a stub fix that *breaks the suite* must never
+commit), commit failure, off-grammar cross-review, pending lifecycle, and
+the hung-agent kill. Slow and opt-in — run it whenever `check-drift.ps1`
+changes:
+
+```powershell
+.\evals\tools\drift_statemachine_tests.ps1
+# or through pytest:
+$env:CROSSCHECK_STATEMACHINE = "1"; python -m pytest evals -q
+```
 
 ## Drift protection
 

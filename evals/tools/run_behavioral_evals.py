@@ -53,14 +53,20 @@ HARNESS_PREAMBLE = (
 # availability: tools not listed (Write, Edit, Agent, WebFetch, ...) do
 # not exist for the executor, so ambient user-scope allow rules cannot
 # widen the harness. ALLOWED_TOOLS (--allowedTools) is approval within
-# that set: only direct codex invocations are pre-approved - no git, no
+# that set: direct codex invocations plus READ-ONLY git inspection - no
 # cat/ls redirection (`cat x > fixture` could overwrite the evidence the
-# agent then cites); anything else falls to a permission prompt, which a
-# headless run denies.
+# agent then cites), no git write verbs; anything else falls to a
+# permission prompt, which a headless run denies.
+#
+# The read-only git verbs are what make diff mode gradable AT ALL: without
+# them the executor cannot open base..head, so a "reviewed the diff" claim
+# could never be distinguished from a working-tree read (Sol review
+# 2026-07-13). The diff case plants a decoy to force the distinction.
 AVAILABLE_TOOLS = "Skill,Read,Glob,Grep,Bash,PowerShell"
 ALLOWED_TOOLS = (
     "Skill,Read,Glob,Grep,"
-    "Bash(codex:*),PowerShell(codex:*)"
+    "Bash(codex:*),PowerShell(codex:*),"
+    "Bash(git diff:*),Bash(git log:*),Bash(git show:*)"
 )
 
 GRADER_PROMPT = """<role>Independent grader in a two-model verification
@@ -126,6 +132,7 @@ FROZEN_PLAN = """# Port DemoWidget (frozen plan)
 
 # The port with ONE planted deviation from plan and reference: the
 # OnUpdate throttle is 0.5, not the verbatim 0.2 the frozen plan pins.
+# THROTTLE_TOKEN marks the single line the decoy rewrites.
 IMPLEMENTED_PORT = """local frame = CreateFrame("Frame", "DemoAddon_DemoWidget", UIParent)
 frame:SetSize(160, 24)
 frame:SetPoint("CENTER", 0, -180)
@@ -173,8 +180,15 @@ def rev(ws, ref="HEAD"):
 def build_diff_state(ws):
     """Synthesize the state diff mode needs: base commit with the frozen
     plan, then an implementation commit carrying one planted deviation
-    (throttle 0.5 vs the plan's verbatim 0.2). Returns prompt
-    substitutions."""
+    (throttle 0.5 vs the plan's verbatim 0.2).
+
+    Then plant a DECOY: the working tree gets the compliant 0.2 version,
+    uncommitted. Reading Widgets/DemoWidget.lua now shows a clean port -
+    the planted defect exists ONLY in the committed base..head range. An
+    agent that skips the diff and reads the file cannot find the drift, so
+    a pass proves it actually opened the range (Sol review 2026-07-13:
+    without this, 'reviewed the diff' was an ungradable claim).
+    """
     git(ws, "add", "-A")
     git(ws, "commit", "-q", "-m", "base: project + reference")
     plan = ws / "docs" / "superpowers" / "plans" / "2026-07-13-demowidget-port.md"
@@ -183,14 +197,18 @@ def build_diff_state(ws):
     git(ws, "add", "-A")
     git(ws, "commit", "-q", "-m", "freeze demowidget port plan")
     base = rev(ws)
-    (ws / "Widgets" / "DemoWidget.lua").write_text(IMPLEMENTED_PORT,
-                                                   encoding="utf-8")
+    widget = ws / "Widgets" / "DemoWidget.lua"
+    widget.write_text(IMPLEMENTED_PORT, encoding="utf-8")
     toc = ws / "DemoAddon.toc"
     toc.write_text(toc.read_text(encoding="utf-8")
                    + "Widgets\\DemoWidget.lua\n", encoding="utf-8")
     git(ws, "add", "-A")
     git(ws, "commit", "-q", "-m", "implement demowidget port")
-    return {"{BASE_SHA}": base, "{HEAD_SHA}": rev(ws),
+    head = rev(ws)
+    decoy = IMPLEMENTED_PORT.replace("elapsed < 0.5", "elapsed < 0.2")
+    assert decoy != IMPLEMENTED_PORT, "decoy must actually rewrite the throttle"
+    widget.write_text(decoy, encoding="utf-8")
+    return {"{BASE_SHA}": base, "{HEAD_SHA}": head,
             "{PLAN_PATH}": "docs/superpowers/plans/2026-07-13-demowidget-port.md"}
 
 

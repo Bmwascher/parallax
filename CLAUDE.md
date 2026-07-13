@@ -19,10 +19,12 @@ what they cover:
 - skill/prompt changes -> `python evals/tools/run_behavioral_evals.py`
   (real headless runs, graded by Sol; `--head` tests the checkout instead
   of the installed cache).
-- `tools/check-drift.ps1` changes -> `CROSSCHECK_STATEMACHINE=1 python -m
-  pytest evals -q` (or run `evals/tools/drift_statemachine_tests.ps1`
-  directly): drives the real script through its whole state machine offline
-  against stub CLIs. Slow - it re-runs pytest inside its own worktree twice.
+- `tools/check-drift.ps1` changes -> run
+  `evals/tools/drift_statemachine_tests.ps1` (or, to go through pytest:
+  `$env:CROSSCHECK_STATEMACHINE = "1"; python -m pytest evals -q` — it is
+  PowerShell, so no `VAR=1 cmd` prefix). Drives the real script through its
+  whole state machine offline against stub CLIs. Slow: four scenarios
+  re-run the full pytest suite inside a disposable worktree.
 
 ## Dev loop
 The plugin is installed user-scope from a LOCAL marketplace pointing at
