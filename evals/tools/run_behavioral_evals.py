@@ -12,7 +12,7 @@ never grades itself).
 
     python run_behavioral_evals.py --list                 # CI self-test
     python run_behavioral_evals.py                        # run all
-    python run_behavioral_evals.py --case degraded-mode-visible
+    python run_behavioral_evals.py --case degraded-consent-gate
     python run_behavioral_evals.py --model fable          # full-realism run
 
 Cases with setup.manual are reported SKIPPED(manual) - they need state a
@@ -47,10 +47,14 @@ HARNESS_PREAMBLE = (
     " finish line.\n\nRequest: "
 )
 
+# Minimal by design (Sol review 2026-07-12): no git/write shell families -
+# an executor that can mutate the throwaway workspace can alter the fixture
+# before citing it. cat/ls/Get-Content stay because the skill's transport
+# pipes a brief file into codex exec.
 ALLOWED_TOOLS = (
     "Skill,Read,Glob,Grep,"
-    "Bash(codex:*),Bash(git:*),Bash(ls:*),Bash(cat:*),"
-    "PowerShell(codex:*),PowerShell(git:*)"
+    "Bash(codex:*),Bash(ls:*),Bash(cat:*),"
+    "PowerShell(codex:*),PowerShell(Get-Content:*)"
 )
 
 GRADER_PROMPT = """<role>Independent grader in a two-model verification
@@ -97,7 +101,44 @@ def env_without_codex():
     return env
 
 
-def run_case(case, model, timeout):
+def compact_stream(stdout):
+    """Flatten claude -p stream-json events into a graded transcript: the
+    agent's text verbatim, tool calls with their inputs (the evidence that
+    e.g. codex exec actually ran), tool results truncated - without this
+    the grader only sees the final message and marks real tool work as
+    absent (first full-suite run, 2026-07-12)."""
+    lines = []
+    for raw in stdout.splitlines():
+        raw = raw.strip()
+        if not raw:
+            continue
+        try:
+            event = json.loads(raw)
+        except json.JSONDecodeError:
+            lines.append(raw)
+            continue
+        etype = event.get("type")
+        if etype == "result":
+            lines.append("[final result]\n" + str(event.get("result", "")))
+            continue
+        for block in (event.get("message") or {}).get("content") or []:
+            if not isinstance(block, dict):
+                continue
+            if block.get("type") == "text":
+                lines.append(block["text"])
+            elif block.get("type") == "tool_use":
+                args = json.dumps(block.get("input", {}))
+                lines.append(f"[tool_use] {block.get('name')} {args[:600]}")
+            elif block.get("type") == "tool_result":
+                content = block.get("content")
+                if isinstance(content, list):
+                    content = " ".join(c.get("text", "") for c in content
+                                       if isinstance(c, dict))
+                lines.append(f"[tool_result] {str(content)[:700]}")
+    return "\n".join(lines)
+
+
+def run_case(case, model, timeout, artifacts=None):
     setup = case.get("setup", {})
     if setup.get("manual"):
         return "SKIPPED(manual)", setup["manual"], []
@@ -108,6 +149,7 @@ def run_case(case, model, timeout):
             "claude", "-p", HARNESS_PREAMBLE + case["prompt"],
             "--model", model,
             "--allowedTools", ALLOWED_TOOLS,
+            "--output-format", "stream-json", "--verbose",
         ]
         try:
             proc = subprocess.run(
@@ -116,13 +158,32 @@ def run_case(case, model, timeout):
             )
         except subprocess.TimeoutExpired:
             return "FAIL", "executor timed out", []
-        transcript = (proc.stdout or "") + ("\n" + proc.stderr if proc.stderr else "")
-        if proc.returncode != 0 and not proc.stdout:
+        transcript = compact_stream(proc.stdout or "")
+        if proc.stderr:
+            # Labeled so the grader never mistakes harness noise for the
+            # agent ending its run mid-thought.
+            transcript += "\n=== EXECUTOR STDERR (harness, not agent output) ===\n" + proc.stderr
+        if artifacts:
+            artifacts.mkdir(parents=True, exist_ok=True)
+            (artifacts / f"{case['id']}.transcript.txt").write_text(
+                transcript, encoding="utf-8")
+        # Any nonzero executor exit fails the case outright - a partial
+        # transcript from a crashed run must never be graded into a PASS
+        # (Sol review 2026-07-12).
+        if proc.returncode != 0:
             return "FAIL", f"executor exit {proc.returncode}: {transcript[:400]}", []
     verdicts = grade(case, transcript)
+    if artifacts:
+        (artifacts / f"{case['id']}.verdicts.json").write_text(
+            json.dumps(verdicts, indent=2), encoding="utf-8")
     if not verdicts:
         return "FAIL", "grader returned no parseable verdicts", []
-    misses = [v for v in verdicts if not v.get("met")]
+    if len(verdicts) != len(case["expectations"]):
+        return "FAIL", (f"grader verdict count mismatch: {len(verdicts)} verdicts"
+                        f" for {len(case['expectations'])} expectations"), verdicts
+    if any(not isinstance(v.get("met"), bool) for v in verdicts):
+        return "FAIL", "grader verdict missing boolean 'met'", verdicts
+    misses = [v for v in verdicts if not v["met"]]
     status = "PASS" if not misses else "FAIL"
     return status, f"{len(verdicts) - len(misses)}/{len(verdicts)} expectations met", verdicts
 
@@ -131,25 +192,31 @@ def grade(case, transcript):
     numbered = "\n".join(f"{i}. {e}" for i, e in enumerate(case["expectations"], 1))
     prompt = GRADER_PROMPT.format(
         expectations=numbered, expected=case["expected_output"],
-        transcript=transcript[-24000:],
+        transcript=transcript[-40000:],
     )
     with tempfile.TemporaryDirectory(prefix="crosscheck-grade-") as tmp:
         reply_file = Path(tmp) / "reply.txt"
-        proc = subprocess.run(
-            ["codex", "exec", "--sandbox", "read-only",
-             "-m", "gpt-5.6-sol", "-c", "model_reasoning_effort=high",
-             "--output-last-message", str(reply_file), "-"],
-            input=prompt, capture_output=True, text=True, timeout=600,
-            shell=(os.name == "nt"),
-        )
+        try:
+            proc = subprocess.run(
+                ["codex", "exec", "--sandbox", "read-only",
+                 "-m", "gpt-5.6-sol", "-c", "model_reasoning_effort=high",
+                 "--output-last-message", str(reply_file), "-"],
+                input=prompt, capture_output=True, text=True, timeout=600,
+                shell=(os.name == "nt"),
+            )
+        except (subprocess.TimeoutExpired, OSError):
+            return []
+        if proc.returncode != 0:
+            return []
         raw = reply_file.read_text(encoding="utf-8") if reply_file.is_file() else proc.stdout
     start, end = raw.find("["), raw.rfind("]")
     if start == -1 or end == -1:
         return []
     try:
-        return json.loads(raw[start:end + 1])
+        parsed = json.loads(raw[start:end + 1])
     except json.JSONDecodeError:
         return []
+    return parsed if isinstance(parsed, list) else []
 
 
 def main(argv=None):
@@ -160,6 +227,9 @@ def main(argv=None):
                     help="executor model (default sonnet; use fable for full realism)")
     ap.add_argument("--timeout", type=int, default=900,
                     help="seconds per case executor run (default 900)")
+    ap.add_argument("--artifacts", type=Path,
+                    help="persist per-case transcript + verdicts here"
+                         " (debugging and grading disputes)")
     args = ap.parse_args(argv)
 
     cases = load_cases()
@@ -184,7 +254,8 @@ def main(argv=None):
 
     failures = 0
     for c in cases:
-        status, summary, verdicts = run_case(c, args.model, args.timeout)
+        status, summary, verdicts = run_case(c, args.model, args.timeout,
+                                             artifacts=args.artifacts)
         print(f"{status:16} {c['id']} - {summary}")
         for v in verdicts:
             mark = "ok " if v.get("met") else "MISS"
