@@ -38,11 +38,15 @@ claude plugin marketplace add Bmwascher/crosscheck
 claude plugin install crosscheck@crosscheck
 ```
 
-Dev loop (this working copy, edits live):
+Dev loop (this working copy as a local marketplace — note Claude Code
+copies installs into a versioned cache, so edits are NOT live until you
+re-sync):
 
 ```
 claude plugin marketplace add <path-to-this-checkout>
 claude plugin install crosscheck@crosscheck
+# after edits: bump .claude-plugin/plugin.json version, then
+claude plugin update crosscheck
 ```
 
 ## Verify

@@ -1,5 +1,7 @@
 {
   "skill_name": "multi-model-verify",
+  "tier": "behavioral-manual",
+  "note": "Tier 3: model-graded scenarios, run MANUALLY when the skill changes materially. No automated runner executes these - CI only schema-checks them (see test_multi_model_verify.py).",
   "evals": [
     {
       "id": "plan-mode-debate-runs",

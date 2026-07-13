@@ -1,9 +1,21 @@
 {
-  "description": "Cross-model review companion: when a superpowers code-review subagent completes, inject a reminder to run multi-model-verify mode diff on the same commit range.",
+  "description": "Cross-model review companion: when a superpowers code-review subagent completes (or fails), inject a reminder to run multi-model-verify mode diff on the same commit range.",
   "hooks": {
     "PostToolUse": [
       {
-        "matcher": "Task",
+        "matcher": "Task|Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "pwsh -NoProfile -NonInteractive -File \"${CLAUDE_PLUGIN_ROOT}/hooks/superpowers-review-companion.ps1\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "matcher": "Task|Agent",
         "hooks": [
           {
             "type": "command",

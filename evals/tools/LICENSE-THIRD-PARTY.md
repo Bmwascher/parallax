@@ -9,7 +9,9 @@ The three Python tools in this directory are vendored from
 - `skill_lint.py` — unmodified except the provenance header.
 - `skill_scanner.py` — unmodified except the provenance header.
 - `run_trigger_evals.py` — provenance header + explicit `utf-8` encoding on
-  both `open()` calls (Windows defaults to cp1252).
+  both `open()` calls (Windows defaults to cp1252) + `SKILLS_ROOT` pointed
+  at this repo's `skills/` directory (upstream keeps skills at the tree
+  root).
 
 The rest of this repository is under its own license (see the repo root);
 these files remain under Apache-2.0. Changes are stated per file above, per

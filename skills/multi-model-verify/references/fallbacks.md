@@ -1,70 +1,114 @@
 # Fallbacks and degraded modes
 
-Every fallback is VISIBLE: the finish line names the degradation. Silently
-skipping cross-vendor review defeats the skill's purpose.
+**Governing rule: no transition that reduces vendor diversity, evidence
+quality, or conversation continuity happens without explicit user consent.**
+The skill never enters degraded mode automatically. Degradation that is not
+consented to is a stop, not a mode.
 
-## Preflight failures
+## The consent gate
+
+When a failure survives bounded recovery (below), STOP and present a banner
+to the user — before any degraded work happens:
+
+```text
+== CROSS-VENDOR VERIFICATION UNAVAILABLE ==
+What failed:      <exact command + error>
+What degraded mode would verify:     <e.g. claims via a fresh Fable skeptic>
+What it would NOT verify:            <cross-vendor independence>
+Options: [fix codex] [run degraded] [abort]
+```
+
+- The user's choice is recorded in the debate record (`Authorized by:` field
+  — see frozen-plan-format.md).
+- **Unattended runs fail closed**: if no user can answer, terminate as
+  `BLOCKED/DEGRADED-NOT-AUTHORIZED` with a non-success status. Never wait
+  indefinitely, never infer consent.
+
+## Bounded recovery (automatic, consent-free)
+
+Exactly one retry with the SAME model, sandbox, effort, and session
+parameters is allowed per failure — it reduces nothing, so it needs no
+consent. A failed retry goes to the consent gate. This covers timeouts and
+transient transport errors.
+
+**Catch-all: any codex failure not named in this file — nonzero exit, empty
+reply file, malformed output, rate limiting, network loss, resume failure —
+gets the same treatment: one same-parameters retry, then the consent gate.**
+No failure class is ever an implicit license to degrade.
+
+## Failure classes
 
 ### codex CLI missing or broken
-
-`codex --version` fails → **degraded mode**:
-
-1. Report it: "codex unavailable — running degraded (single-vendor) mode."
-2. Replace each Sol round with a FRESH-context skeptic subagent (Fable,
-   read-only tools). Fresh context is mandatory — same-context self-critique
-   rubber-stamps (see model-prompting-notes.md). Brief the skeptic with the
-   same XML-style brief Sol would have received, including the strike rule
-   and the anti-manufactured-objection rule.
-3. The debate record's Participants line reads
-   `Fable 5 (session) / Fable 5 skeptic subagent (DEGRADED - codex missing)`.
-4. Finish line carries `DEGRADED`.
+`codex --version` fails → consent gate immediately (there is nothing to
+retry). If the user chooses degraded mode: replace each Sol round with a
+FRESH-context skeptic subagent (Fable, read-only tools) — fresh context is
+mandatory; same-context self-critique rubber-stamps (see
+model-prompting-notes.md). Brief the skeptic with the same XML-style brief
+Sol would have received, including the strike rule and the
+anti-manufactured-objection rule.
 
 ### Sol model rejected (400 "not supported when using Codex with a ChatGPT account")
-
 The account tier lost Sol access (free/Go tiers get Terra only; Plus and
 above get Sol). Do NOT silently substitute another model — Sol is a user
-directive. Tell the user, then either wait for them to fix the subscription
-or run degraded mode at their choice. Note: `gpt-5.6-terra` responding while
-`gpt-5.6-sol` 400s confirms tier-gating, not a CLI problem (probed
-2026-07-12).
+directive. Consent gate: fix subscription / run degraded / abort.
+(`gpt-5.6-terra` responding while `gpt-5.6-sol` 400s confirms tier-gating,
+not a CLI problem — probed 2026-07-12.)
 
 ### codex auth expired
+`codex login status` fails → the fix needs the user anyway (`codex login`
+is an interactive browser sign-in): consent gate.
 
-`codex login status` fails → ask the user to run `codex login` interactively
-(browser sign-in; cannot be done headless). Degraded mode meanwhile, at
-their choice.
+### Session id lost or resume fails
+Losing the resumed session degrades conversation continuity — an advertised
+protocol property — so it is NOT automatic: one retry, then the consent
+gate with the specific option "continue with fresh per-round Sol calls
+(full brief re-sent each round; costs tokens, loses Sol's debate memory)".
 
-## Reference failures
+### Stale API evidence
+If the project's API-reference drift check reports the build changed under
+a claim, that claim is **struck until re-verified** — the strike rule does
+not weaken to a flag. Re-verify against the updated reference (or an
+in-game/runtime probe) before the claim re-enters the debate.
 
-### References/<addon>/ missing
+## Degraded-mode output requirements (after consent)
 
+- The SUPERVISING SESSION emits the banner — never delegate the banner to
+  the skeptic subagent's output, or a formatting miss becomes a quiet path.
+- Every round after the transition starts with
+  `== DEGRADED (single-vendor) ==`.
+- The finish line and the frozen plan carry the structured fields
+  (`Verification status: DEGRADED`, `Degradation: <class>`,
+  `Authorized by: user at round N`) per frozen-plan-format.md.
+- The debate record's Participants line must name the actual participants
+  (e.g. `Fable 5 (session) / Fable 5 skeptic subagent (DEGRADED -
+  codex-missing)`), never the default Sol template line.
+- A DEGRADED-frozen plan poisons downstream PASSes — see SKILL.md mode
+  `diff` for the enforcement rule.
+
+## Reference failures (not degraded modes — hard stops)
+
+### Reference source missing for a port
 Ask the user for the path. NEVER proceed with an ungrounded debate — a
-debate about remembered reference behavior is two models fabricating at each
-other. This is a hard stop, not a degraded mode.
+debate about remembered reference behavior is two models fabricating at
+each other. This is a hard stop, not a degraded mode.
 
-### .wow-api-reference/ stale
+## Known limits (documented, not silent)
 
-If the drift check (`lua dev/scripts/update-api-reference.lua`) reports the
-build changed under a claim, re-verify that claim before relying on it;
-otherwise flag the staleness in the debate record.
-
-## Transport notes
-
-- Session id not found in round-1 output: the header prints
-  `session id: <uuid>` — if parsing fails, fall back to fresh
-  `codex exec` calls per round with the full brief re-sent (works, costs
-  more tokens) and note it in the debate record. Never reach for
-  `resume --last` (see model-prompting-notes.md).
-- Round timeout: give `codex exec` calls a generous timeout (5-10 min at
-  effort high). On timeout, retry once, then degraded mode for the
-  remaining rounds.
+- The review-companion hook is ADVISORY: it injects the diff-mode reminder;
+  it cannot block a merge. The enforcement backstop is the finish rule and
+  the user. It is also registered for failed review dispatches
+  (PostToolUseFailure), so a crashed code review still surfaces the gate.
+- Hook fingerprint rot is detected by the eval suite (pinned template
+  fixture in CI + installed-template canary locally), not at runtime.
 
 ## Alternative transport (documented, rejected for v1)
 
-CLIProxyAPI (the Theo/Tibo setup) can run Sol as a native Claude Code
-subagent by proxying the backend with the same Codex ChatGPT OAuth. Revisit
-only if codex exec proves limiting (e.g. Sol needs tool-use inside OUR
-harness). It does NOT bypass the subscription tier gate — same auth, same
-400 on free accounts. Costs: an always-on local proxy in front of ALL
-Claude traffic, Windows service setup, untested cross-vendor hook and
-permission semantics.
+CLIProxyAPI (the Theo/Tibo "claudex" setup) runs a SEPARATE Claude Code
+process pointed at a local proxy that translates to the Codex backend
+(same ChatGPT OAuth), with env vars like `CLAUDE_CODE_SUBAGENT_MODEL`
+selecting Sol — it does not touch the existing Fable session's traffic.
+Revisit only if codex exec proves limiting (e.g. a cross-vendor implementer
+lane needs Claude Code's own tool harness). It does NOT bypass the
+subscription tier gate — same auth, same 400 on free accounts. Costs: a
+local proxy service to run and keep patched, a second configured process,
+and untested cross-vendor hook and permission semantics.

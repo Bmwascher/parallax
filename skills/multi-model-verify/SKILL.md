@@ -78,17 +78,29 @@ toggled on, its stop-time review overlaps mode `diff` — expected, not a bug.
 
 ## Mode diff
 
-Same transport and protocol. The brief carries the frozen plan path, the
-base/head SHAs superpowers code review used, and the `git diff base..head`
-output. Both sides check **spec fidelity** (drift from the frozen plan — the
-implementer makes zero judgment calls, so any drift is a finding) and, for
-port work, **port fidelity** (drift from the reference source), ending
-PASS / FIX / ESCALATE.
+Same transport and protocol. First read the frozen plan's debate record and
+its **Verification status** field. Then the brief carries the frozen plan
+path, the base/head SHAs superpowers code review used, and the
+`git diff base..head` output. Both sides check **spec fidelity** (drift from
+the frozen plan — the implementer makes zero judgment calls, so any drift is
+a finding) and, for port work, **port fidelity** (drift from the reference
+source), ending PASS / FIX / ESCALATE.
+
+**Degraded-plan poisoning rule:** a plan whose Verification status is
+DEGRADED cannot produce an ordinary diff PASS. Mode diff must first reopen
+and cross-verify the plan's claims and approved deviations (the
+retrospective pass the plan never got), and only then verify the
+implementation against it — confirming a diff matches an unsound plan
+verifies nothing. If cross-vendor verification is STILL unavailable, the
+only terminal state is `ESCALATE — CROSS-VENDOR GATE UNSATISFIED`: merging
+then requires the user's explicitly recorded risk acceptance, never a PASS.
 
 ## Finish line
 
 End with one status line: participating models, rounds used, converged vs
-escalated points, and DEGRADED if fallbacks.md was in effect.
+escalated points, and the verification status — `FULL`, or
+`DEGRADED (<class>, authorized by user at round N)` per fallbacks.md. The
+session emits this line itself; never delegate it to a subagent.
 
 ## Common mistakes
 

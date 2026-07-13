@@ -7,11 +7,16 @@ CI before it misleads a live debate.
 
 import json
 import re
+import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
 
-SKILL_DIR = Path(__file__).resolve().parents[2] / "skills" / "multi-model-verify"
+REPO_ROOT = Path(__file__).resolve().parents[2]
+SKILL_DIR = REPO_ROOT / "skills" / "multi-model-verify"
+HOOKS_JSON = REPO_ROOT / "hooks" / "hooks.json"
+HOOK_SCRIPT = REPO_ROOT / "hooks" / "superpowers-review-companion.ps1"
 SKILL_MD = SKILL_DIR / "SKILL.md"
 REFERENCES = SKILL_DIR / "references"
 EVALS_DIR = Path(__file__).resolve().parent
@@ -158,19 +163,94 @@ class TestDebateProtocol:
 
 
 class TestFallbacks:
-    def test_preflight_documented(self):
-        text = read(REFERENCES / "fallbacks.md")
-        assert "codex --version" in text
+    """Loud-degradation contract (Sol round-2 audit, 2026-07-12): degraded
+    mode is consent-gated, structured, and poisons downstream PASSes. These
+    pin the specific rules, not word presence."""
 
-    def test_degraded_mode_visible(self):
-        text = read(REFERENCES / "fallbacks.md")
-        assert re.search(r"degraded", text, re.IGNORECASE)
-        assert re.search(r"skeptic", text, re.IGNORECASE)
+    def fallbacks(self):
+        return read(REFERENCES / "fallbacks.md")
+
+    def test_preflight_documented(self):
+        assert "codex --version" in self.fallbacks()
+
+    def test_consent_gate_principle(self):
+        text = self.fallbacks()
+        assert re.search(
+            r"no transition that reduces vendor diversity,\s+evidence"
+            r"\s+quality,\s+or\s+(conversation\s+)?continuity\s+.*?without"
+            r"\s+explicit\s+.*?consent",
+            text, re.IGNORECASE | re.DOTALL,
+        ), "the governing consent-gate principle is missing"
+
+    def test_no_automatic_degraded_entry(self):
+        text = self.fallbacks()
+        assert re.search(r"never enters? degraded mode (automatically|on its own)",
+                         text, re.IGNORECASE)
+        assert re.search(r"fix codex|run degraded|abort", text, re.IGNORECASE)
+
+    def test_bounded_recovery_before_gate(self):
+        text = self.fallbacks()
+        assert re.search(r"one (automatic )?retry.*same (model|parameters)",
+                         text, re.IGNORECASE)
+
+    def test_unattended_fails_closed(self):
+        text = self.fallbacks()
+        assert "BLOCKED/DEGRADED-NOT-AUTHORIZED" in text
+        assert re.search(r"never infer consent", text, re.IGNORECASE)
+
+    def test_failure_class_catch_all(self):
+        text = self.fallbacks()
+        assert re.search(
+            r"any (codex|transport) failure not (listed|named).*consent gate",
+            text, re.IGNORECASE | re.DOTALL,
+        ), "unlisted codex failure classes need the catch-all rule"
+
+    def test_session_loss_is_gated(self):
+        text = self.fallbacks()
+        assert re.search(
+            r"(session|continuity).{0,120}(consent gate|not automatic)",
+            text, re.IGNORECASE | re.DOTALL,
+        ), "losing session continuity must route through the consent gate"
+
+    def test_stale_evidence_is_struck(self):
+        text = self.fallbacks()
+        assert re.search(r"struck until re-verified", text, re.IGNORECASE)
 
     def test_missing_reference_refusal(self):
-        joined = read(REFERENCES / "fallbacks.md") + read(SKILL_MD)
+        joined = self.fallbacks() + read(SKILL_MD)
         assert re.search(r"References/", joined)
-        assert re.search(r"ask", joined, re.IGNORECASE)
+        assert re.search(r"hard stop", joined, re.IGNORECASE)
+
+
+class TestDegradedStatusFields:
+    """Structured degraded status (Sol round-2 fix B): parseable fields, not
+    prose, so mode diff can enforce the poisoning rule."""
+
+    def test_frozen_plan_has_verification_status_field(self):
+        text = read(REFERENCES / "frozen-plan-format.md")
+        assert "**Verification status:** FULL | DEGRADED" in text
+        assert "**Degradation:**" in text
+        assert "**Authorized by:**" in text
+
+    def test_participants_not_hardcoded_when_degraded(self):
+        text = read(REFERENCES / "frozen-plan-format.md")
+        assert re.search(r"participants line must name\s+the actual",
+                         text, re.IGNORECASE)
+
+    def test_diff_mode_poisoning_rule(self):
+        text = read(SKILL_MD)
+        assert re.search(r"Verification status", text)
+        assert re.search(
+            r"DEGRADED.{0,400}(cannot|must not).{0,80}PASS",
+            text, re.IGNORECASE | re.DOTALL,
+        ), "a degraded-frozen plan must not produce an ordinary diff PASS"
+        assert "CROSS-VENDOR GATE UNSATISFIED" in text
+        assert re.search(r"re-?(open|verif).{0,120}plan.{0,240}"
+                         r"(before|only then).{0,80}(implementation|diff)",
+                         text, re.IGNORECASE | re.DOTALL), (
+            "diff mode must retrospectively re-verify a degraded plan's"
+            " claims before checking the implementation"
+        )
 
 
 class TestEvalFixtures:
@@ -197,6 +277,131 @@ class TestEvalFixtures:
             assert entry["prompt"].strip()
             assert entry["expected_output"].strip()
             assert len(entry["expectations"]) >= 3
+
+
+class TestHook:
+    """The auto diff-gate lives or dies on these. Claude Code renamed the
+    Task tool to Agent in v2.1.63 - a bare "Task" matcher never fires and
+    CI cannot see it without these tests (Sol cross-review finding,
+    2026-07-12)."""
+
+    def hook_entries(self):
+        data = json.loads(read(HOOKS_JSON))
+        return data["hooks"]["PostToolUse"]
+
+    def test_matcher_covers_agent_tool(self):
+        matchers = [e.get("matcher", "") for e in self.hook_entries()]
+        assert any(re.fullmatch(m, "Agent") for m in matchers), (
+            "no PostToolUse matcher matches the Agent tool - the diff gate"
+            " is inert on current Claude Code"
+        )
+
+    def test_command_references_existing_script(self):
+        cmd = self.hook_entries()[0]["hooks"][0]["command"]
+        assert "${CLAUDE_PLUGIN_ROOT}" in cmd
+        assert "superpowers-review-companion.ps1" in cmd
+        assert HOOK_SCRIPT.is_file()
+
+    def run_hook(self, payload):
+        pwsh = shutil.which("pwsh")
+        if not pwsh:
+            pytest.skip("pwsh not on PATH")
+        proc = subprocess.run(
+            [pwsh, "-NoProfile", "-NonInteractive", "-File", str(HOOK_SCRIPT)],
+            input=json.dumps(payload), capture_output=True, text=True,
+            timeout=60,
+        )
+        return proc.stdout.strip(), proc.returncode
+
+    def test_emits_context_on_review_dispatch(self):
+        payload = {
+            "tool_name": "Agent",
+            "tool_input": {
+                "description": "Review code changes",
+                "prompt": (
+                    "You are a Senior Code Reviewer with expertise in"
+                    " software architecture.\n## Git Range to Review\n"
+                    "**Base:** abc1234\n**Head:** def5678\n"
+                ),
+            },
+        }
+        out, rc = self.run_hook(payload)
+        assert rc == 0
+        data = json.loads(out)
+        assert data["hookSpecificOutput"]["hookEventName"] == "PostToolUse"
+        ctx = data["hookSpecificOutput"]["additionalContext"]
+        assert "abc1234" in ctx and "def5678" in ctx
+        assert "multi-model-verify" in ctx
+
+    def test_silent_on_other_dispatch(self):
+        payload = {
+            "tool_name": "Agent",
+            "tool_input": {"description": "Explore",
+                           "prompt": "Find all uses of FramePool."},
+        }
+        out, rc = self.run_hook(payload)
+        assert rc == 0
+        assert out == ""
+
+    def test_failure_event_also_registered(self):
+        # A failed review dispatch must also surface the gate reminder -
+        # PostToolUse alone covers only successful calls (Sol round-2
+        # additional finding #3).
+        data = json.loads(read(HOOKS_JSON))
+        assert "PostToolUseFailure" in data["hooks"], (
+            "register the companion for PostToolUseFailure too"
+        )
+        matchers = [e.get("matcher", "")
+                    for e in data["hooks"]["PostToolUseFailure"]]
+        assert any(re.fullmatch(m, "Agent") for m in matchers)
+
+    def test_pinned_template_fixture_end_to_end(self):
+        """Layer-2 rot detection (Sol round-2 fix D): a pinned copy of the
+        superpowers template, rendered with real SHAs and fed through the
+        actual script - hermetic, runs in CI."""
+        fixture = EVALS_DIR / "fixtures" / "superpowers-code-reviewer-6.1.1.md"
+        assert fixture.is_file(), "pinned superpowers template fixture missing"
+        template = fixture.read_text(encoding="utf-8")
+        for literal in ("Senior Code Reviewer", "Git Range to Review"):
+            assert literal in template
+        rendered = (template
+                    .replace("[DESCRIPTION]", "Ported the widget module")
+                    .replace("[PLAN_OR_REQUIREMENTS]", "plan.md")
+                    .replace("[BASE_SHA]", "abc1234")
+                    .replace("[HEAD_SHA]", "def5678"))
+        out, rc = self.run_hook({
+            "tool_name": "Agent",
+            "tool_input": {"description": "Review code changes",
+                           "prompt": rendered},
+        })
+        assert rc == 0
+        ctx = json.loads(out)["hookSpecificOutput"]["additionalContext"]
+        assert "abc1234" in ctx and "def5678" in ctx
+
+    def test_superpowers_fingerprint_canary(self):
+        """Fails loudly when a superpowers update rots the fingerprint -
+        otherwise the diff gate dies with zero signal. Skips where
+        superpowers is not installed (CI)."""
+        registry = Path.home() / ".claude" / "plugins" / "installed_plugins.json"
+        if not registry.is_file():
+            pytest.skip("no plugin registry on this machine")
+        data = json.loads(registry.read_text(encoding="utf-8"))
+        entries = [v for k, v in data.get("plugins", {}).items()
+                   if k.startswith("superpowers@")]
+        if not entries:
+            pytest.skip("superpowers not installed")
+        install = Path(entries[0][0]["installPath"])
+        template = install / "skills" / "requesting-code-review" / "code-reviewer.md"
+        assert template.is_file(), (
+            "superpowers layout changed - re-fingerprint the hook"
+        )
+        text = template.read_text(encoding="utf-8")
+        for literal in ("Senior Code Reviewer", "Git Range to Review"):
+            assert literal in text, (
+                f"fingerprint literal {literal!r} is gone from the installed"
+                " superpowers code-reviewer template - the hook is now inert;"
+                " re-fingerprint hooks/superpowers-review-companion.ps1"
+            )
 
 
 if __name__ == "__main__":

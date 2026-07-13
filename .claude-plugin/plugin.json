@@ -1,6 +1,6 @@
 {
   "name": "crosscheck",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Cross-model verification for Claude Code: an evidence-grounded Fable 5 / GPT-5.6 Sol adversarial debate gates plans before implementation and diffs before merge, hooked into the superpowers workflow.",
   "author": {
     "name": "Brandon Wascher",

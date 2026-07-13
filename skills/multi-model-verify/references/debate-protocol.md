@@ -5,12 +5,15 @@ only evidence does.
 
 ## Evidence grounding (the strike rule)
 
-- Any claim about reference-addon behavior must cite
-  `References/<addon>/<file>:<line>` that the citing side actually read
-  (Fable: read this session; Sol: read inside its sandboxed run — its quoted
-  excerpt counts as reading).
-- Any claim about WoW 12.0 API behavior must cite `.wow-api-reference/` or a
-  dated in-game probe result.
+- **Every externally checkable claim must carry a citation to a source the
+  other side can read**: a file:line in the repo or reference material the
+  citing side actually read (Fable: read this session; Sol: read inside its
+  sandboxed run — its quoted excerpt counts as reading), authoritative local
+  docs, or a fetched URL.
+- Source-specific examples: reference-port claims cite
+  `References/<name>/<file>:<line>`; WoW 12.0 API claims cite
+  `.wow-api-reference/` or a dated in-game probe result; library or platform
+  claims cite the vendored source or official docs.
 - A claim with no citation is **struck, not debated**. Note it as struck and
   move on — arguing against an ungrounded claim launders it into the record.
 - Reports are claims requiring evidence. "The reference handles this" without
@@ -43,11 +46,11 @@ Each exchange (one Fable position or rebuttal + one Sol reply) is a round.
   Hitting the cap is not failure — it is the signal to stop spending tokens
   on an argument evidence hasn't settled.
 - At the cap or on ESCALATE, for points that remain genuinely contested:
-  stop, present BOTH positions to the user with their evidence, and let
-  Brandon decide. Never silently pick a side.
+  stop, present BOTH positions to the user with their evidence, and let the
+  user decide. Never silently pick a side.
 - Questions only runtime testing can answer always escalate — neither model
-  can run the live application (WoW projects: /reload + BugSack is always
-  Brandon's step).
+  can run the live application (in WoW projects, /reload + BugSack is always
+  the user's step).
 
 ## Anti-sycophancy, anti-theater
 
