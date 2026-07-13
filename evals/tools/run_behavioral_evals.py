@@ -35,6 +35,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 EVALS_ROOT = HERE.parent
+PLUGIN_ROOT = EVALS_ROOT.parent
 SKILL = "multi-model-verify"
 CASES_FILE = EVALS_ROOT / SKILL / "evals.json"
 FIXTURE_REPO = EVALS_ROOT / SKILL / "fixtures" / "fixture-repo"
@@ -48,11 +49,15 @@ HARNESS_PREAMBLE = (
     " finish line.\n\nRequest: "
 )
 
-# Minimal by design (Sol reviews 2026-07-12): no git and no cat/ls/
-# Get-Content either - `cat x > fixture` redirection can overwrite the
-# evidence the agent then cites. With only direct codex invocations
-# allowed, the executor passes the debate brief inline instead of piping a
-# scratch file; Read/Glob/Grep cover all inspection.
+# Two layers (Sol reviews 2026-07-12/13). AVAILABLE_TOOLS (--tools) is
+# availability: tools not listed (Write, Edit, Agent, WebFetch, ...) do
+# not exist for the executor, so ambient user-scope allow rules cannot
+# widen the harness. ALLOWED_TOOLS (--allowedTools) is approval within
+# that set: only direct codex invocations are pre-approved - no git, no
+# cat/ls redirection (`cat x > fixture` could overwrite the evidence the
+# agent then cites); anything else falls to a permission prompt, which a
+# headless run denies.
+AVAILABLE_TOOLS = "Skill,Read,Glob,Grep,Bash,PowerShell"
 ALLOWED_TOOLS = (
     "Skill,Read,Glob,Grep,"
     "Bash(codex:*),PowerShell(codex:*)"
@@ -139,7 +144,7 @@ def compact_stream(stdout):
     return "\n".join(lines)
 
 
-def run_case(case, model, timeout, artifacts=None):
+def run_case(case, model, timeout, artifacts=None, head=False):
     setup = case.get("setup", {})
     if setup.get("manual"):
         return "SKIPPED(manual)", setup["manual"], []
@@ -150,12 +155,19 @@ def run_case(case, model, timeout, artifacts=None):
         # cmd.exe truncates a multi-line argv at the first newline, silently
         # eating the request AND every flag after it (--model, --allowedTools,
         # --output-format) - all early graded runs were invalid (2026-07-12).
+        # --strict-mcp-config with no --mcp-config: zero MCP servers reach
+        # the executor (--tools restricts built-ins only). No --bare here -
+        # the executor must load the installed plugin's skill.
         cmd = [
             shutil.which("claude"), "-p",
             "--model", model,
+            "--strict-mcp-config",
+            "--tools", AVAILABLE_TOOLS,
             "--allowedTools", ALLOWED_TOOLS,
             "--output-format", "stream-json", "--verbose",
         ]
+        if head:
+            cmd += ["--plugin-dir", str(PLUGIN_ROOT)]
         try:
             proc = subprocess.run(
                 cmd, cwd=ws, env=env, capture_output=True, text=True,
@@ -255,6 +267,13 @@ def main(argv=None):
     ap.add_argument("--artifacts", type=Path,
                     help="persist per-case transcript + verdicts here"
                          " (debugging and grading disputes)")
+    ap.add_argument("--head", action="store_true",
+                    help="load the plugin from THIS checkout via"
+                         " --plugin-dir instead of the installed cache -"
+                         " skips the bump+update dance while iterating."
+                         " Caveat: shadowing vs the installed copy of the"
+                         " same plugin is unverified; the pre-merge run"
+                         " should still use the installed cache")
     args = ap.parse_args(argv)
 
     cases = load_cases()
@@ -280,7 +299,8 @@ def main(argv=None):
     failures = 0
     for c in cases:
         status, summary, verdicts = run_case(c, args.model, args.timeout,
-                                             artifacts=args.artifacts)
+                                             artifacts=args.artifacts,
+                                             head=args.head)
         print(f"{status:16} {c['id']} - {summary}")
         for v in verdicts:
             mark = "ok " if v.get("met") else "MISS"

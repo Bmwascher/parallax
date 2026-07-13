@@ -19,6 +19,11 @@ guide when it updates):
 
 ## GPT-5.6 Sol (the codex side)
 
+Canonical model id: `gpt-5.6-sol` — every executable surface (SKILL.md
+transport commands, the behavioral runner's grader, the drift watch's
+cross-review) must pin this exact id; the consistency test fails on any
+partial migration.
+
 - **Outcome-oriented briefs**: tell Sol the outcome to verify, not the steps
   to take. Its codex harness plans its own file reads. OpenAI's guide
   (learn.chatgpt.com/docs/prompting): "Start with the result, not a detailed

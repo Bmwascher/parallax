@@ -18,8 +18,36 @@ try {
 $prompt = $payload.tool_input.prompt
 if (-not $prompt) { exit 0 }
 
-if ($prompt -notmatch 'Senior Code Reviewer') { exit 0 }
-if ($prompt -notmatch 'Git Range to Review') { exit 0 }
+# Echo the INCOMING event name: this script serves PostToolUse and
+# PostToolUseFailure, and the output contract requires hookSpecificOutput
+# to name the actual event (Sol holistic MAJOR, 2026-07-13).
+$eventName = $payload.hook_event_name
+if (-not $eventName) { $eventName = 'PostToolUse' }
+
+$hasReviewer = $prompt -match 'Senior Code Reviewer'
+$hasRange = $prompt -match 'Git Range to Review'
+if (-not $hasReviewer -and -not $hasRange) { exit 0 }
+
+if ($hasReviewer -ne $hasRange) {
+    # Exactly one fingerprint literal matched: this looks like the
+    # superpowers code-reviewer dispatch after a template change - the
+    # diff gate may be rotting. Warn NOW instead of failing open until
+    # the weekly drift check notices (Sol holistic improvement 3).
+    $warn = @{
+        hookSpecificOutput = @{
+            hookEventName     = $eventName
+            additionalContext = ("crosscheck: this dispatch matches only PART of the " +
+                "superpowers code-reviewer fingerprint - the template may have " +
+                "changed and the multi-model-verify diff gate may be inert. Run " +
+                "tools/check-drift.ps1 and re-fingerprint " +
+                "hooks/superpowers-review-companion.ps1. If this was a final " +
+                "pre-merge code review, run multi-model-verify mode diff manually " +
+                "on the review's base/head range.")
+        }
+    }
+    $warn | ConvertTo-Json -Compress -Depth 5
+    exit 0
+}
 
 $base = ''
 $head = ''
@@ -37,7 +65,7 @@ $context = "A superpowers code review just ran on this branch ($range). " +
 
 $out = @{
     hookSpecificOutput = @{
-        hookEventName     = 'PostToolUse'
+        hookEventName     = $eventName
         additionalContext = $context
     }
 }

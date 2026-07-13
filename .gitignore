@@ -4,4 +4,5 @@ __pycache__/
 # drift watch local state (tools/check-drift.ps1) - reports are the only
 # copy of a week's findings, but they are machine-local, not project history
 tools/drift-snapshot.json
+tools/drift-pending.json
 tools/drift-reports/

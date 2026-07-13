@@ -18,7 +18,18 @@ The "Task To Run" line contains the absolute path to `check-drift.ps1`;
 reports are in `drift-reports\` next to it (newest file by name). If the
 task does not exist, ask the user where the crosscheck checkout lives.
 
-Read the newest report. If it says "No findings.", report that and stop.
+**Check `drift-pending.json` (next to check-drift.ps1) FIRST.** If it
+exists, earlier runs are still unresolved — it is a LIST of entries, each
+naming its report and status (`manual-triage-needed`, `fix-branch-open`
+with the branch awaiting review/merge, or
+`critical-dismissal-needs-verification` — a CRITICAL finding the headless
+triage dismissed that still needs human eyes). Triage EACH entry (the
+newest report may be a later clean week). Resolve entries individually:
+rewrite the file without the resolved ones, and delete it when none
+remain.
+
+Otherwise read the newest report. If it says "No findings.", report that
+and stop.
 
 ## Triage each finding
 
