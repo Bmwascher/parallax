@@ -557,8 +557,14 @@ class TestDriftProtection:
         text = self.drift()
         args = re.search(r'\$claudeArgs = @\("-p", "--allowedTools",\s*\r?\n?\s*"([^"]+)"', text)
         assert args, "auto-triage agent allowlist not found"
-        assert "git" not in args.group(1) and "codex" not in args.group(1), (
-            "the unattended agent must never hold git or codex"
+        for tool in ("git", "codex", "python", "Bash", "PowerShell"):
+            assert tool not in args.group(1), (
+                f"the unattended agent must never hold {tool} - any shell"
+                " is arbitrary execution (Sol round-3 CRITICAL)"
+            )
+        assert re.search(r"commitOk.*ahead|ahead.*commitOk", text, re.DOTALL), (
+            "a commit must be verified (exit + branch ahead) before the"
+            " success toast"
         )
         assert "worktree add" in text, "agent must work in a disposable worktree"
         assert "WaitForExit" in text, "headless run must have a hard timeout"

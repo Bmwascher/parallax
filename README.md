@@ -176,10 +176,11 @@ Findings don't wait for a human: on a findings-week the script feeds the
 report and the triage guide into a **headless Claude Code run**. Because
 the report embeds raw upstream text (changelog lines), that agent is
 treated as untrusted: it works in a **disposable git worktree** the script
-creates, holds **no git and no codex** (only read/edit/pytest), and is
-killed after 30 minutes. The script then inspects the diff itself, re-runs
-the pytest gate, and only commits (on a `drift/<runid>` branch, never
-merged) when the gate is green. The toast reflects the verified outcome,
+creates, holds **no shell at all** (read/edit tools only — even
+`python -c` would be arbitrary execution), and is killed after 30 minutes.
+The script then inspects the diff itself, re-runs the pytest gate, and
+only commits (on a `drift/<runid>` branch, never merged) when the gate is
+green and the commit verifiably landed. The toast reflects the verified outcome,
 so the only interruptions are actionable ones:
 
 | Outcome | Toast |
