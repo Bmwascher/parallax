@@ -9,6 +9,7 @@ import json
 import re
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -212,6 +213,17 @@ class TestFallbacks:
             text, re.IGNORECASE | re.DOTALL,
         ), "losing session continuity must route through the consent gate"
 
+    def test_quota_limit_is_named_class(self):
+        # Session/weekly usage limits are not transport blips: no retry
+        # (the window will not clear in seconds), straight to the consent
+        # gate with codex's reset time surfaced.
+        text = self.fallbacks()
+        assert "quota-exhausted" in text
+        assert re.search(r"(session|weekly).{0,60}(limit|quota|cap)",
+                         text, re.IGNORECASE)
+        assert re.search(r"skip the retry", text, re.IGNORECASE)
+        assert re.search(r"reset time", text, re.IGNORECASE)
+
     def test_stale_evidence_is_struck(self):
         text = self.fallbacks()
         assert re.search(r"struck until re-verified", text, re.IGNORECASE)
@@ -277,6 +289,34 @@ class TestEvalFixtures:
             assert entry["prompt"].strip()
             assert entry["expected_output"].strip()
             assert len(entry["expectations"]) >= 3
+            # Every case must be executable or explicitly manual - the
+            # runner refuses to guess (Sol audit: dead-data finding).
+            setup = entry.get("setup", {})
+            assert setup.get("manual") or "with_reference" in setup, (
+                f"case {entry['id']} needs a setup config for the runner"
+            )
+
+    def test_behavioral_runner_allows_skill_tool(self):
+        # Without Skill in the executor allowlist the agent can never load
+        # the plugin skill, so every behavioral case grades an agent flying
+        # blind (root cause of the 2026-07-12 missing-reference regression).
+        runner = read(REPO_ROOT / "evals" / "tools" / "run_behavioral_evals.py")
+        allowlist = re.search(r"ALLOWED_TOOLS = \(([^)]*)\)", runner, re.S)
+        assert allowlist, "ALLOWED_TOOLS block not found in runner"
+        assert "Skill," in allowlist.group(1), (
+            "executor allowlist must include the Skill tool"
+        )
+
+    def test_behavioral_runner_self_test(self):
+        # CI-safe: --list parses cases and checks the fixture, no model calls.
+        proc = subprocess.run(
+            [sys.executable, str(REPO_ROOT / "evals" / "tools" / "run_behavioral_evals.py"),
+             "--list"],
+            capture_output=True, text=True, timeout=60,
+        )
+        assert proc.returncode == 0, proc.stderr
+        assert "degraded-consent-gate" in proc.stdout
+        assert "fixture repo: True" in proc.stdout
 
 
 class TestHook:
@@ -402,6 +442,79 @@ class TestHook:
                 " superpowers code-reviewer template - the hook is now inert;"
                 " re-fingerprint hooks/superpowers-review-companion.ps1"
             )
+
+
+class TestDriftProtection:
+    """tools/check-drift.ps1 watches the three upstreams crosscheck's
+    contract depends on (superpowers template, Claude Code surface, codex
+    exec flags). These pin its own contract so edits cannot quietly hollow
+    it out."""
+
+    DRIFT = REPO_ROOT / "tools" / "check-drift.ps1"
+
+    def drift(self):
+        return read(self.DRIFT)
+
+    def test_is_pure_ascii(self):
+        # The scheduled task runs Windows PowerShell 5.1, which reads
+        # BOM-less files as ANSI: a UTF-8 em dash decodes into a smart
+        # quote that silently terminates strings.
+        raw = self.DRIFT.read_bytes()
+        bad = [i for i, b in enumerate(raw) if b > 127]
+        assert not bad, f"non-ASCII byte at offset {bad[0]} breaks PS 5.1"
+
+    def test_superpowers_canary_contract(self):
+        text = self.drift()
+        for literal in ("Senior Code Reviewer", "Git Range to Review"):
+            assert literal in text, "canary must check the hook fingerprints"
+        assert "superpowers-code-reviewer-6.1.1.md" in text, (
+            "canary must hash against the pinned fixture"
+        )
+        assert "installed_plugins.json" in text
+
+    def test_codex_transport_probe(self):
+        text = self.drift()
+        for flag in ("--sandbox", "--output-last-message"):
+            assert flag in text, f"transport probe must cover {flag}"
+        assert "exec resume" in text, "resume subcommand must be probed"
+
+    def test_changelog_watch(self):
+        text = self.drift()
+        assert "anthropics/claude-code" in text and "CHANGELOG.md" in text
+        keywords = re.search(r"\$ChangelogKeywords = '([^']+)'", text)
+        assert keywords, "keyword regex missing"
+        for kw in ("hook", "plugin", "matcher", "renam"):
+            assert kw in keywords.group(1)
+        assert r"\bagents?\b" not in keywords.group(1), (
+            "bare 'agent' keyword drowns findings in background-agent UI"
+            " churn (48 hits vs 17 on the 2.1.202->207 slice)"
+        )
+
+    def test_fails_loud_not_silent(self):
+        text = self.drift()
+        assert "CRITICAL" in text and "Show-Toast" in text
+        # Unfetchable/unsliceable changelog must retry next run, never
+        # silently advance past a version we could not inspect.
+        assert text.count("do not advance") >= 2
+
+    def test_local_state_is_gitignored(self):
+        ignore = read(REPO_ROOT / ".gitignore")
+        assert "tools/drift-snapshot.json" in ignore
+        assert "tools/drift-reports/" in ignore
+
+    def test_findings_route_to_triage_command(self):
+        # A toast that only names a file is a report that rots unread: the
+        # toast must point at the triage command, and the command must exist
+        # in the plugin.
+        assert "/crosscheck:drift-triage" in self.drift()
+        command = REPO_ROOT / "commands" / "drift-triage.md"
+        assert command.is_file(), "drift-triage plugin command missing"
+        body = read(command)
+        assert "drift-reports" in body
+        assert re.search(r"schtasks /Query", body), (
+            "the command must locate the checkout via the scheduled task,"
+            " not assume the session cwd"
+        )
 
 
 if __name__ == "__main__":
