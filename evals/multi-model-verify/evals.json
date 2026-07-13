@@ -56,7 +56,7 @@
       "prompt": "Run plan-mode verification on this small, sound plan: port References/DemoWidget verbatim into this project as Widgets/DemoWidget.lua; register that file in DemoAddon.toc on a new line after Widgets\\TargetGlow.lua; rename its frame from DemoWidgetFrame to DemoAddon_DemoWidget to match the project convention established by Widgets/TargetGlow.lua. No other changes.",
       "expected_output": "A short debate that converges quickly because neither side manufactures objections.",
       "expectations": [
-        "A sound plan gets a short confirmation, not invented risks",
+        "No manufactured objections: the plan verdict is PASS (or converged with only trivial accepted amendments), every noted risk cites a real file line and is explicitly non-blocking, and nothing expands the plan's scope",
         "Convergence is reported without padding extra rounds",
         "The finish line reports rounds used and convergence status"
       ]
