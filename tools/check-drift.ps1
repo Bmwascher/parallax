@@ -341,6 +341,9 @@ $guide
             try { $proc.Kill() } catch {}
             Add-Content -Path $ReportFile -Value "`r`nAuto-triage TIMED OUT after 30 min - killed (transcript: $Stamp-autotriage.txt)"
         } else {
+            # No-arg WaitForExit flushes process state; without it,
+            # .ExitCode reads null after the timed overload (PS 5.1).
+            $proc.WaitForExit()
             # Exactly ONE strict verdict line, or the run is not trusted.
             $verdicts = @(Select-String -Path $triageFile -Pattern '^VERDICT: (NO-ACTION|FIXES-APPLIED.*|BLOCKED.*)$')
             $verdictLine = ""
