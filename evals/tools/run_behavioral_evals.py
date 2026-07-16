@@ -275,17 +275,26 @@ def compact_stream(stdout):
                 lines.append(block["text"])
             elif block.get("type") == "tool_use":
                 args = json.dumps(block.get("input", {}))
-                lines.append(f"[tool_use] {block.get('name')} {args[:600]}")
+                # The id is what binds a result to ITS call: without it the
+                # grader can only infer by adjacency, and with parallel tool
+                # calls (or an unscoped-Grep result sitting next to a git
+                # tool_use) adjacency lies (Sol review 2026-07-16).
+                lines.append(
+                    f"[tool_use {block.get('id')}] {block.get('name')} {args[:600]}")
             elif block.get("type") == "tool_result":
                 content = block.get("content")
                 if isinstance(content, list):
                     content = " ".join(c.get("text", "") for c in content
                                        if isinstance(c, dict))
-                # 1200, not 700: the diff case's grading requires the range
-                # read's RESULT to visibly carry the planted throttle line,
-                # which sits ~600 chars into a whole-range diff (toc hunk
-                # first) - a 700 cap made that evidence a coin flip.
-                lines.append(f"[tool_result] {str(content)[:1200]}")
+                # Carry provenance AND success state: a permission-denied
+                # call must never read as evidence. 1200, not 700: the diff
+                # case's grading requires the range read's RESULT to visibly
+                # carry the planted throttle line, which sits ~600 chars
+                # into a whole-range diff (toc hunk first).
+                status = "ERROR" if block.get("is_error") else "ok"
+                lines.append(
+                    f"[tool_result for={block.get('tool_use_id')} {status}]"
+                    f" {str(content)[:1200]}")
     return "\n".join(lines)
 
 
@@ -365,10 +374,21 @@ def run_case(case, model, timeout, artifacts=None, head=False):
 def grade(case, transcript):
     numbered = "\n".join(f"{i}. {e}" for i, e in enumerate(case["expectations"], 1))
     # Head+tail truncation: a tail-only cut discards the early tool calls
-    # (the codex round-1 invocation) that expectations grade on.
+    # (the codex round-1 invocation) that expectations grade on. The elided
+    # MIDDLE keeps its tool_use/tool_result lines (already per-line capped
+    # by compact_stream): dropping them could erase the very evidence pair
+    # an expectation demands - a false FAIL - or leave an orphan result no
+    # id can bind (Sol review 2026-07-16). Only free text is elided.
     if len(transcript) > 40000:
+        middle = transcript[15000:-25000]
+        kept = [ln for ln in middle.splitlines()
+                if ln.startswith("[tool_use ") or ln.startswith("[tool_result ")]
+        evidence = "\n".join(kept)[:16000]
         transcript = (transcript[:15000]
-                      + "\n...[transcript middle elided by harness]...\n"
+                      + "\n...[transcript middle elided by harness;"
+                      + " its tool evidence retained below]...\n"
+                      + evidence
+                      + "\n...[end of retained middle tool evidence]...\n"
                       + transcript[-25000:])
     prompt = GRADER_PROMPT.format(
         expectations=numbered, expected=case["expected_output"],

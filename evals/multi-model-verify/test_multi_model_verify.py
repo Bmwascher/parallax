@@ -404,6 +404,45 @@ class TestEvalFixtures:
             "the range-read expectation must demand a content-bearing tool"
             " RESULT, not just a call that touched both SHAs"
         )
+        # ...and the result must be BOUND to the range call: adjacency lies
+        # under parallel tool calls, so the grader needs the tool_use id and
+        # the ok/ERROR state to verify provenance (Sol review 2026-07-16).
+        assert "tool_use id" in joined and "error" in joined, (
+            "the range-read expectation must demand id-bound, non-error"
+            " result evidence"
+        )
+        # The elision path must never drop the evidence pair: middle
+        # tool_use/tool_result lines are retained when the transcript is cut.
+        assert 'ln.startswith("[tool_use ")' in runner, (
+            "grader elision must preserve middle tool evidence lines"
+        )
+
+    def test_compact_stream_binds_results_to_calls(self):
+        # The graded transcript is the ONLY thing the grader sees, so a
+        # result must carry which call produced it and whether it
+        # succeeded: an unbound or ERROR result is not evidence.
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "bhv_runner",
+            REPO_ROOT / "evals" / "tools" / "run_behavioral_evals.py")
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        events = "\n".join([
+            json.dumps({"type": "assistant", "message": {"content": [
+                {"type": "tool_use", "id": "toolu_A", "name": "Bash",
+                 "input": {"command": "git diff aaa..bbb"}}]}}),
+            json.dumps({"type": "user", "message": {"content": [
+                {"type": "tool_result", "tool_use_id": "toolu_A",
+                 "content": [{"type": "text",
+                              "text": "if elapsed < 0.5 then return end"}]}]}}),
+            json.dumps({"type": "user", "message": {"content": [
+                {"type": "tool_result", "tool_use_id": "toolu_B",
+                 "is_error": True, "content": "permission denied"}]}}),
+        ])
+        out = mod.compact_stream(events)
+        assert "[tool_use toolu_A] Bash" in out
+        assert "[tool_result for=toolu_A ok] if elapsed < 0.5" in out
+        assert "[tool_result for=toolu_B ERROR] permission denied" in out
 
     def test_behavioral_runner_self_test(self):
         # CI-safe: --list parses cases and checks the fixture, no model calls.
