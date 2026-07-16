@@ -62,9 +62,19 @@ HARNESS_PREAMBLE = (
 # them the executor cannot open base..head, so a "reviewed the diff" claim
 # could never be distinguished from a working-tree read (Sol review
 # 2026-07-13). The diff case plants a decoy to force the distinction.
+#
+# Read is cwd-scoped with Read(**), mirroring the drift triage agent
+# (tools/check-drift.ps1): THIS file ships in the installed plugin cache
+# and contains the frozen plan and the planted implementation, so an
+# unscoped Read let an executor learn the diff case's answer from the
+# harness source instead of the committed range (Sol review 2026-07-16).
+# Residual (accepted on the record, same as the drift agent): Grep approval
+# is unscoped - the load-bearing counter is the diff case's expectation,
+# which demands a range-read tool RESULT showing the planted line, so
+# out-of-tree knowledge alone can no longer satisfy the grader.
 AVAILABLE_TOOLS = "Skill,Read,Glob,Grep,Bash,PowerShell"
 ALLOWED_TOOLS = (
-    "Skill,Read,Glob,Grep,"
+    "Skill,Read(**),Glob,Grep,"
     "Bash(codex:*),PowerShell(codex:*),"
     "Bash(git diff:*),Bash(git log:*),Bash(git show:*)"
 )
@@ -132,7 +142,8 @@ FROZEN_PLAN = """# Port DemoWidget (frozen plan)
 
 # The port with ONE planted deviation from plan and reference: the
 # OnUpdate throttle is 0.5, not the verbatim 0.2 the frozen plan pins.
-# THROTTLE_TOKEN marks the single line the decoy rewrites.
+# The `elapsed < 0.5` line is the single site build_diff_state's decoy
+# rewrites with a literal .replace - keep the two in sync.
 IMPLEMENTED_PORT = """local frame = CreateFrame("Frame", "DemoAddon_DemoWidget", UIParent)
 frame:SetSize(160, 24)
 frame:SetPoint("CENTER", 0, -180)
@@ -192,7 +203,7 @@ def build_diff_state(ws):
     git(ws, "add", "-A")
     git(ws, "commit", "-q", "-m", "base: project + reference")
     plan = ws / "docs" / "superpowers" / "plans" / "2026-07-13-demowidget-port.md"
-    plan.parent.mkdir(parents=True)
+    plan.parent.mkdir(parents=True, exist_ok=True)
     plan.write_text(FROZEN_PLAN, encoding="utf-8")
     git(ws, "add", "-A")
     git(ws, "commit", "-q", "-m", "freeze demowidget port plan")
@@ -270,7 +281,11 @@ def compact_stream(stdout):
                 if isinstance(content, list):
                     content = " ".join(c.get("text", "") for c in content
                                        if isinstance(c, dict))
-                lines.append(f"[tool_result] {str(content)[:700]}")
+                # 1200, not 700: the diff case's grading requires the range
+                # read's RESULT to visibly carry the planted throttle line,
+                # which sits ~600 chars into a whole-range diff (toc hunk
+                # first) - a 700 cap made that evidence a coin flip.
+                lines.append(f"[tool_result] {str(content)[:1200]}")
     return "\n".join(lines)
 
 

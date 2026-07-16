@@ -373,6 +373,16 @@ class TestEvalFixtures:
             assert verb not in allowlist.group(1), (
                 "only READ-ONLY git verbs may be approved"
             )
+        # Read must be cwd-scoped: this runner ships in the installed plugin
+        # cache WITH the frozen plan and the planted implementation, so an
+        # unscoped Read approval lets the executor learn the diff case's
+        # answer from the harness source (Sol review 2026-07-16).
+        assert "Read(**)" in allowlist.group(1), (
+            "Read approval must be workspace-scoped, not bare"
+        )
+        assert not re.search(r"\bRead,", allowlist.group(1)), (
+            "a bare Read approval must not coexist with the scoped one"
+        )
         assert re.search(r'IMPLEMENTED_PORT\.replace\(\s*"elapsed < 0\.5",'
                          r'\s*"elapsed < 0\.2"\s*\)', runner), (
             "the decoy must rewrite the planted throttle in the working tree"
@@ -386,6 +396,13 @@ class TestEvalFixtures:
         assert "tool call" in joined and "claim" in joined, (
             "an expectation must demand tool evidence of the range read, not"
             " a claimed one"
+        )
+        # ...and the evidence must be CONTENT-bearing: a name-only diff plus
+        # out-of-tree knowledge (Grep approval is an accepted unscoped
+        # residual) would otherwise still satisfy the grader.
+        assert "tool_result" in joined and "name-only" in joined, (
+            "the range-read expectation must demand a content-bearing tool"
+            " RESULT, not just a call that touched both SHAs"
         )
 
     def test_behavioral_runner_self_test(self):
@@ -814,6 +831,8 @@ class TestDoctorCommand:
             'schtasks /Query /TN "crosscheck drift watch"',  # 5: drift task
             "drift-pending.json",              # 5: pending entries
             "--plugin-dir",                    # 6: eval target head-vs-cache
+            "GitHub install",                  # 1: stable installs have no
+                                               #    checkout - N/A, not BROKEN
         ):
             assert anchor in body, f"doctor check anchor missing: {anchor}"
         assert "PostToolUseFailure" in body, (
