@@ -7,9 +7,11 @@ description: Use when planning a reference port, an API-sensitive module, or any
 
 ## Overview
 
-Two equal-weight advisors — Fable 5 (this session) and GPT-5.6 Sol (via the
-codex CLI) — verify and refute each other's claims before the cheap
-implementer touches code. Sol's documented fabrication risk (METR) is
+Two equal-weight advisors — this session and a cross-vendor reviewer driven
+through the codex CLI (canonical reviewer model:
+references/model-prompting-notes.md) — verify and refute each other's
+claims before the cheap implementer touches code. The reviewer lane's
+documented fabrication risk (METR; see model-prompting-notes.md) is
 mitigated by the debate structure — evidence grounding plus mutual
 refutation — not by down-weighting either side.
 
@@ -46,7 +48,7 @@ toggled on, its stop-time review overlaps mode `diff` — expected, not a bug.
 
 ## Mode plan
 
-1. Draft the Fable position: chosen approach, port-fidelity claims, and the
+1. Draft the session position: chosen approach, port-fidelity claims, and the
    API/behavior risk register. Every reference claim cites a
    `References/<name>/<file>:<line>` actually read this session — anchor
    EVERY file with its full path the first time you cite it, manifests and
@@ -55,22 +57,27 @@ toggled on, its stop-time review overlaps mode `diff` — expected, not a bug.
    `.wow-api-reference/` or a dated in-game probe result) — never memory.
    The position has no separate artifact — it IS the claims section of the
    step-2 brief.
-2. Compose Sol's debate brief per references/model-prompting-notes.md, write
+2. Compose the reviewer's debate brief per references/model-prompting-notes.md, write
    it to a scratchpad file, then run round 1:
 
    ```powershell
-   Get-Content -Raw <brief-file> | codex exec --sandbox read-only -m gpt-5.6-sol -c model_reasoning_effort=high --output-last-message <reply-file> -
+   Get-Content -Raw <brief-file> | codex exec --sandbox read-only -m <canonical-model-id> -c model_reasoning_effort=<canonical-effort> --output-last-message <reply-file> -
    ```
 
+   `<canonical-model-id>` and `<canonical-effort>` are the two declarations
+   in references/model-prompting-notes.md — read the literal values from
+   there, never from memory (the reviewer swaps by editing that one file,
+   and a remembered id silently defeats the swap).
+
    Capture the `session id:` line printed in the run header (top of output);
-   read Sol's reply from `<reply-file>` — the stdout transcript logs every
-   file Sol reads and can run tens of KB, with the reply buried at the
-   bottom.
-3. Later rounds keep Sol's state by resuming that session — flags MUST
+   read the reviewer's reply from `<reply-file>` — the stdout transcript
+   logs every file the reviewer reads and can run tens of KB, with the
+   reply buried at the bottom.
+3. Later rounds keep the reviewer's state by resuming that session — flags MUST
    precede the resume subcommand (flags after it are a usage error):
 
    ```powershell
-   codex exec --sandbox read-only -m gpt-5.6-sol -c model_reasoning_effort=high --output-last-message <reply-file> resume <SESSION_ID> "<rebuttal-brief>"
+   codex exec --sandbox read-only -m <canonical-model-id> -c model_reasoning_effort=<canonical-effort> --output-last-message <reply-file> resume <SESSION_ID> "<rebuttal-brief>"
    ```
 
 4. Iterate per debate-protocol.md until convergence or the round cap, then
@@ -112,7 +119,7 @@ session emits this line itself; never delegate it to a subagent.
 
 ## Common mistakes
 
-- Accepting Sol's claims about reference code without the cited lines —
+- Accepting the reviewer's claims about reference code without the cited lines —
   strike the claim per protocol; do not argue against it.
 - Re-sending the full debate context each round instead of resuming the
   codex session.

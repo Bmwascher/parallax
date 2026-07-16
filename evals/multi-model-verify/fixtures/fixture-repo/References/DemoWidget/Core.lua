@@ -1,4 +1,4 @@
--- DemoWidget: synthetic reference addon for crosscheck behavioral evals.
+-- DemoWidget: synthetic reference addon for parallax behavioral evals.
 -- Deliberately small and boring: a frame that shows the player's target
 -- name and hides out of combat. Contains one quirk on purpose (the
 -- OnUpdate runs unconditionally) so debates have something real to find.

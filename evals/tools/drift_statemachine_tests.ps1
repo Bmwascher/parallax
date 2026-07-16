@@ -16,8 +16,8 @@
 #     this run's sandbox and can never collide with (or be cleaned up out
 #     from under) a real weekly run
 #   - the script's two test seams, both gated in production on
-#     CROSSCHECK_DRIFT_STATEMACHINE=1: CROSSCHECK_DRIFT_TOAST_LOG captures
-#     toasts, CROSSCHECK_DRIFT_TRIAGE_TIMEOUT_MS shortens the 30-min cap
+#     PARALLAX_DRIFT_STATEMACHINE=1: PARALLAX_DRIFT_TOAST_LOG captures
+#     toasts, PARALLAX_DRIFT_TRIAGE_TIMEOUT_MS shortens the 30-min cap
 #
 # Every environment variable this harness changes is restored in a finally
 # block: running it from an interactive shell must not leave that shell with
@@ -31,7 +31,7 @@
 #   critical-dismissal trusted NO-ACTION on a CRITICAL toasts VERIFY
 #   warn-only-silence  WARN-only noise dismissed by triage toasts NOTHING
 #   pending-auto-clear a vanished fix branch clears its pending entry
-#   fixes-applied      diff -> pytest gate -> commit -> Sol review -> toast
+#   fixes-applied      diff -> pytest gate -> commit -> cross-review -> toast
 #   gate-failure       a fix that BREAKS the suite is never committed
 #   malformed-review   an off-grammar cross-review reads as UNAVAILABLE
 #   commit-failure     failed commit discards changes, keeps no branch
@@ -39,7 +39,7 @@
 #
 # Runtime: several minutes - four scenarios re-run the full pytest suite
 # inside the disposable worktree, exactly as production does. Run directly,
-# or via pytest with CROSSCHECK_STATEMACHINE=1 set
+# or via pytest with PARALLAX_STATEMACHINE=1 set
 # (test_multi_model_verify.py::TestDriftStateMachine::test_run_state_machine).
 #
 # Windows PowerShell 5.1, ASCII ONLY (same rules as the script under test).
@@ -51,16 +51,16 @@ param(
 
 $HarnessRoot = $PSScriptRoot                      # evals\tools
 $RepoRoot = Split-Path (Split-Path $HarnessRoot)  # repo root
-$Root = Join-Path $env:TEMP ("crosscheck-sm-" + (Get-Date -Format "HHmmss") + "-" + (Get-Random -Maximum 9999))
+$Root = Join-Path $env:TEMP ("parallax-sm-" + (Get-Date -Format "HHmmss") + "-" + (Get-Random -Maximum 9999))
 New-Item -ItemType Directory -Force -Path $Root | Out-Null
 
 # Save EVERY variable we touch; restored in the finally block at the bottom.
 $savedEnv = @{}
 foreach ($name in @("PATH", "USERPROFILE", "HOME", "TEMP", "TMP",
                     "CLAUDE_STUB_MODE", "CODEX_STUB_MODE",
-                    "CROSSCHECK_DRIFT_STATEMACHINE",
-                    "CROSSCHECK_DRIFT_TOAST_LOG",
-                    "CROSSCHECK_DRIFT_TRIAGE_TIMEOUT_MS")) {
+                    "PARALLAX_DRIFT_STATEMACHINE",
+                    "PARALLAX_DRIFT_TOAST_LOG",
+                    "PARALLAX_DRIFT_TRIAGE_TIMEOUT_MS")) {
     $savedEnv[$name] = [Environment]::GetEnvironmentVariable($name, "Process")
 }
 
@@ -187,7 +187,7 @@ $env:PATH = "$StubDir;" + $env:PATH
 
 # Harness-owned TEMP: the script derives its worktree path from $env:TEMP,
 # so this keeps every worktree inside $Root. Cleanup then never has to guess
-# which crosscheck-drift-* directories are ours - a sweep by name could
+# which parallax-drift-* directories are ours - a sweep by name could
 # delete a concurrent production run's worktree (Sol review 2026-07-13).
 $FakeTemp = Join-Path $Root "temp"
 New-Item -ItemType Directory -Force -Path $FakeTemp | Out-Null
@@ -226,7 +226,7 @@ $env:HOME = $FakeProfile
 # Unlocks the script's test seams (they are inert in production without it)
 # AND guards the pytest wrapper for this harness against recursing when the
 # script re-runs the suite inside its worktree.
-$env:CROSSCHECK_DRIFT_STATEMACHINE = "1"
+$env:PARALLAX_DRIFT_STATEMACHINE = "1"
 
 # --- helpers ------------------------------------------------------------------
 
@@ -251,8 +251,8 @@ function Invoke-Drift($scenario, $claudeMode, $codexMode, $timeoutMs) {
     Write-Output "SCENARIO $scenario"
     $toastLog = Join-Path $Root "$scenario-toasts.txt"
     if (Test-Path $toastLog) { Remove-Item $toastLog -Force }
-    $env:CROSSCHECK_DRIFT_TOAST_LOG = $toastLog
-    $env:CROSSCHECK_DRIFT_TRIAGE_TIMEOUT_MS = "$timeoutMs"
+    $env:PARALLAX_DRIFT_TOAST_LOG = $toastLog
+    $env:PARALLAX_DRIFT_TRIAGE_TIMEOUT_MS = "$timeoutMs"
     $env:CLAUDE_STUB_MODE = $claudeMode
     $env:CODEX_STUB_MODE = $codexMode
     $script:LastToastLog = $toastLog
@@ -397,7 +397,7 @@ Complete-Scenario $b
 
 # --- scenario: fixes-applied ------------------------------------------------------
 # The full happy path: agent edits the worktree, script re-runs the pytest
-# gate itself, commits, verifies the commit landed, gets the stub Sol
+# gate itself, commits, verifies the commit landed, gets the stub
 # cross-review, toasts fix-ready, records fix-branch-open. SLOW (real
 # pytest run inside the worktree).
 
@@ -405,7 +405,7 @@ $b = $script:failCount
 Reset-State
 Invoke-Drift "fixes-applied" "fixes" "drop-config" 120000
 Assert-True ($script:LastReport -match 'committed on drift/') "fix committed on a drift branch"
-Assert-True ($script:LastReport -match 'Sol review: PASS') "script-side cross-review verdict recorded"
+Assert-True ($script:LastReport -match 'cross-review: PASS') "script-side cross-review verdict recorded"
 Assert-True ((Get-Toasts) -match 'fix ready') "fix-ready toast fired"
 $pend = Get-Pending
 Assert-True ($pend.Count -eq 1 -and $pend[0].status -eq "fix-branch-open") "pending: fix-branch-open"
@@ -448,7 +448,7 @@ Add-Content -Path $SpTemplate -Value "`nAn upstream edit that keeps both fingerp
 Invoke-Drift "malformed-review" "fixes" "bad-review" 120000
 Assert-True ($script:LastReport -match 'committed on drift/') "the verified fix still commits"
 Assert-True ($script:LastReport -match 'cross-review UNAVAILABLE') "off-grammar review reads as UNAVAILABLE"
-Assert-True (-not ($script:LastReport -match 'Sol review:')) "an off-grammar answer is never reported as a Sol verdict"
+Assert-True (-not ($script:LastReport -match 'cross-review: ')) "an off-grammar answer is never reported as a reviewer verdict"
 Assert-True ((Get-Toasts) -match 'cross-review UNAVAILABLE') "the toast carries the UNAVAILABLE state, not silence"
 $pend = Get-Pending
 if ($pend.Count -ge 1 -and $pend[0].branch) { git -C $Clone branch -D $pend[0].branch 2>&1 | Out-Null }

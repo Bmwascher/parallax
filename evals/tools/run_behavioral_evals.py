@@ -7,8 +7,8 @@ Each case in evals/<skill>/evals.json runs in a throwaway workspace built
 from its `setup` config (synthetic References/ fixture in, codex stripped
 from PATH for degraded cases), executes headless via `claude -p` with a
 scoped tool allowlist, and is then graded expectation-by-expectation by an
-independent model (GPT-5.6 Sol via codex by default - the executor's vendor
-never grades itself).
+independent model (the canonical cross-vendor reviewer via codex - the
+executor's vendor never grades itself).
 
     python run_behavioral_evals.py --list                 # CI self-test
     python run_behavioral_evals.py                        # run all
@@ -20,7 +20,7 @@ fixture cannot fake (e.g. an implemented branch with a frozen plan).
 
 IMPORTANT: the executor loads the INSTALLED plugin, not this checkout -
 after editing the skill, bump .claude-plugin/plugin.json and run
-`claude plugin update crosscheck@crosscheck` before re-running, or you will
+`claude plugin update parallax@parallax` before re-running, or you will
 behaviorally test the stale cached copy.
 """
 
@@ -178,7 +178,7 @@ end)
 
 def git(ws, *args):
     subprocess.run(["git", "-C", str(ws),
-                    "-c", "user.name=crosscheck-eval",
+                    "-c", "user.name=parallax-eval",
                     "-c", "user.email=eval@localhost", *args],
                    check=True, capture_output=True)
 
@@ -318,7 +318,7 @@ def run_case(case, model, timeout, artifacts=None, head=False):
     setup = case.get("setup", {})
     if setup.get("manual"):
         return "SKIPPED(manual)", setup["manual"], []
-    with tempfile.TemporaryDirectory(prefix="crosscheck-eval-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="parallax-eval-") as tmp:
         ws, subs = build_workspace(setup, tmp)
         prompt = case["prompt"]
         for placeholder, value in subs.items():
@@ -431,19 +431,46 @@ def elide_transcript(transcript, limit=40000, head_budget=15000,
         + lines[j:])
 
 
+_REVIEWER = None
+
+
+def reviewer_config():
+    """(model id, reasoning effort) from THE canonical source - the skill's
+    model-prompting-notes.md. Parsed at runtime so a reviewer swap is a
+    one-line edit there; a missing declaration aborts LOUDLY rather than
+    falling back to a stale hardcoded id (Sol holistic C2)."""
+    global _REVIEWER
+    if _REVIEWER is None:
+        notes = (PLUGIN_ROOT / "skills" / SKILL / "references"
+                 / "model-prompting-notes.md").read_text(encoding="utf-8")
+        model = re.search(r"Canonical model id: `([^`]+)`", notes)
+        effort = re.search(r"Canonical reasoning effort: `([^`]+)`", notes)
+        if not (model and effort):
+            raise SystemExit("canonical reviewer declaration missing from"
+                             " model-prompting-notes.md - cannot grade")
+        _REVIEWER = (model.group(1), effort.group(1))
+    return _REVIEWER
+
+
 def grade(case, transcript):
-    numbered = "\n".join(f"{i}. {e}" for i, e in enumerate(case["expectations"], 1))
+    model, effort = reviewer_config()
+    # {REVIEWER_MODEL} lets an expectation reference the canonical id
+    # without hardcoding it (the grader cannot read files, so the harness
+    # substitutes the parsed value).
+    numbered = "\n".join(
+        f"{i}. {e.replace('{REVIEWER_MODEL}', model)}"
+        for i, e in enumerate(case["expectations"], 1))
     transcript = elide_transcript(transcript)
     prompt = GRADER_PROMPT.format(
         expectations=numbered, expected=case["expected_output"],
         transcript=transcript,
     )
-    with tempfile.TemporaryDirectory(prefix="crosscheck-grade-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="parallax-grade-") as tmp:
         reply_file = Path(tmp) / "reply.txt"
         try:
             proc = subprocess.run(
                 ["codex", "exec", "--sandbox", "read-only",
-                 "-m", "gpt-5.6-sol", "-c", "model_reasoning_effort=high",
+                 "-m", model, "-c", f"model_reasoning_effort={effort}",
                  "--output-last-message", str(reply_file), "-"],
                 input=prompt, capture_output=True, text=True, timeout=600,
                 encoding="utf-8", errors="replace",

@@ -36,7 +36,7 @@ if ($hasReviewer -ne $hasRange) {
     $warn = @{
         hookSpecificOutput = @{
             hookEventName     = $eventName
-            additionalContext = ("crosscheck: this dispatch matches only PART of the " +
+            additionalContext = ("parallax: this dispatch matches only PART of the " +
                 "superpowers code-reviewer fingerprint - the template may have " +
                 "changed and the multi-model-verify diff gate may be inert. Run " +
                 "tools/check-drift.ps1 and re-fingerprint " +

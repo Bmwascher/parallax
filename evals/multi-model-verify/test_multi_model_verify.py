@@ -87,18 +87,34 @@ class TestTransportContract:
     on the wrong model, with write access, or lose cross-round state.
     """
 
-    def test_model_pinned(self):
+    def test_model_pinned_via_canonical_source(self):
+        # The reviewer model is a ONE-LINE swap: SKILL.md carries the
+        # canonical placeholder, and the declaration lives solely in
+        # model-prompting-notes.md (Sol holistic C2, built 0.5.0).
+        # These regexes mirror the executables' parse EXACTLY and assert
+        # parseability only - constraining the id to a vendor prefix or the
+        # effort to a fixed vocabulary here would make this test a second
+        # authority over the declaration, the very defect the canonical
+        # source exists to kill (Sol review round 1, 0.5.0).
         text = read(SKILL_MD)
-        assert "-m gpt-5.6-sol" in text
+        assert "-m <canonical-model-id>" in text
+        assert "model-prompting-notes.md" in text
+        notes = read(REFERENCES / "model-prompting-notes.md")
+        assert re.search(r"Canonical model id: `[^`\n]+`", notes), (
+            "the canonical model declaration must exist and be parseable"
+        )
+        assert re.search(r"Canonical reasoning effort: `[^`\n]+`",
+                         notes), (
+            "the canonical effort declaration must exist and be parseable"
+        )
 
     def test_sandbox_read_only(self):
         text = read(SKILL_MD)
         assert "--sandbox read-only" in text
 
-    def test_effort_pinned_high(self):
-        joined = read(SKILL_MD) + read(REFERENCES / "model-prompting-notes.md")
-        assert "model_reasoning_effort" in joined
-        assert '"high"' in joined or "=high" in joined or "effort high" in joined
+    def test_effort_pinned(self):
+        text = read(SKILL_MD)
+        assert "model_reasoning_effort=<canonical-effort>" in text
 
     def test_resume_flags_before_subcommand(self):
         text = read(SKILL_MD)
@@ -106,14 +122,60 @@ class TestTransportContract:
         # a resume that falls back to config defaults silently changes the
         # debate's model (cross-review finding, 2026-07-12).
         assert re.search(
-            r"codex exec --sandbox read-only -m gpt-5\.6-sol"
-            r" -c model_reasoning_effort=high [^\n]*resume <SESSION_ID>", text
+            r"codex exec --sandbox read-only -m <canonical-model-id>"
+            r" -c model_reasoning_effort=<canonical-effort>"
+            r" [^\n]*resume <SESSION_ID>", text
         ), "resume must re-pin model and effort, flags BEFORE the subcommand"
         assert "resume --last" not in text, (
             "resume --last is fragile under concurrent codex sessions and"
             " must not appear in SKILL.md (prohibition lives in"
             " model-prompting-notes.md)"
         )
+
+    def test_reviewer_id_has_single_source(self):
+        # A hardcoded reviewer model literal anywhere but the canonical
+        # declaration file re-opens the partial-migration hole: that surface
+        # keeps calling the OLD reviewer after a swap. The executables parse
+        # the declarations at runtime instead.
+        # Two markers: the contiguous flag form, and the canonical id
+        # literal itself (parsed from the notes) - the literal catches
+        # argument-list syntax like '"-m", "<id>"' that the flag form
+        # misses (Sol review round 1, 0.5.0).
+        notes = read(REFERENCES / "model-prompting-notes.md")
+        declared = re.search(r"Canonical model id: `([^`\n]+)`", notes)
+        assert declared, "canonical declaration missing - cannot sweep"
+        markers = ("-m gpt" + "-", declared.group(1))
+        # ...and a syntax-aware shape check: ANY literal that looks like a
+        # model id (vendor-dash-digit) following -m, in flag, quoted, or
+        # argument-list form, is forbidden regardless of the CURRENT
+        # declaration - after a swap, a stale OLD id matches neither
+        # marker above (Sol review round 2, 0.5.0). Placeholders
+        # (-m <canonical-model-id>) and variables (-m $model / "-m", model)
+        # do not match the shape.
+        id_after_m = re.compile(r'-m[\s",]+["\x27]?[A-Za-z][A-Za-z0-9.]*-\d')
+        notes_name = "model-prompting-notes.md"
+        offenders = []
+        for pattern in ("skills/**/*.md", "commands/*.md", "tools/*.ps1",
+                        "evals/**/*.py", "evals/**/*.json", "evals/**/*.ps1",
+                        "README.md", "CLAUDE.md", "hooks/*"):
+            for f in REPO_ROOT.glob(pattern):
+                if f.is_file() and f.name != notes_name:
+                    text = read(f)
+                    if any(mk in text for mk in markers) or id_after_m.search(text):
+                        offenders.append(str(f.relative_to(REPO_ROOT)))
+        assert not offenders, (
+            f"hardcoded reviewer model literal outside {notes_name}:"
+            f" {offenders}"
+        )
+        # ...and both executables actually parse the canonical source.
+        runner = read(REPO_ROOT / "evals" / "tools" / "run_behavioral_evals.py")
+        drift = read(REPO_ROOT / "tools" / "check-drift.ps1")
+        for src in (runner, drift):
+            assert "Canonical model id" in src and \
+                "Canonical reasoning effort" in src, (
+                    "executable surfaces must parse the canonical"
+                    " declarations, not hardcode them"
+                )
 
     def test_session_id_capture_documented(self):
         text = read(SKILL_MD)
@@ -691,7 +753,7 @@ class TestHook:
 
 
 class TestDriftProtection:
-    """tools/check-drift.ps1 watches the three upstreams crosscheck's
+    """tools/check-drift.ps1 watches the three upstreams parallax's
     contract depends on (superpowers template, Claude Code surface, codex
     exec flags). These pin its own contract so edits cannot quietly hollow
     it out."""
@@ -865,36 +927,32 @@ class TestDriftProtection:
         ignore = read(REPO_ROOT / ".gitignore")
         assert "tools/drift-pending.json" in ignore
 
-    def test_reviewer_model_pinned_consistently(self):
-        # "Roles are plugs" only holds if a model swap can't be partial:
-        # every surface must carry the SAME reviewer model id, and every
-        # executable surface must pin it in its -m args (Sol holistic
-        # improvement 2; round-2 fix: each source must CONTRIBUTE a match,
-        # not just avoid contradicting).
-        notes = read(REPO_ROOT / "skills" / "multi-model-verify"
-                     / "references" / "model-prompting-notes.md")
-        canonical = re.search(r"Canonical model id: `(gpt-[\w.\-]+)`", notes)
-        assert canonical, "prompting notes must declare the canonical id"
-        canonical = canonical.group(1)
-        executable = {
-            "SKILL.md": read(REPO_ROOT / "skills" / "multi-model-verify"
-                             / "SKILL.md"),
-            "run_behavioral_evals.py": read(
-                REPO_ROOT / "evals" / "tools" / "run_behavioral_evals.py"),
-            "check-drift.ps1": self.drift(),
-        }
-        for name, text in executable.items():
-            args = set(re.findall(r'-m"?,?\s+"?(gpt-[\w.\-]+)', text))
-            assert args == {canonical}, (
-                f"{name} pins {sorted(args)} - every executable surface"
-                f" must pin exactly {canonical}"
+    def test_reviewer_model_derives_from_canonical_source(self):
+        # "Roles are plugs" v2 (0.5.0): no surface carries its own copy of
+        # the reviewer id at all. The runtime surfaces must build their
+        # codex invocation from the PARSED canonical values, and the
+        # instruction surfaces must direct the agent to the declaration
+        # (single-source sweep: test_reviewer_id_has_single_source).
+        runner = read(REPO_ROOT / "evals" / "tools" / "run_behavioral_evals.py")
+        assert '"-m", model' in runner and \
+            'f"model_reasoning_effort={effort}"' in runner, (
+                "the grader invocation must use the parsed canonical values"
             )
+        drift = self.drift()
+        assert re.search(r"-m \$model -c model_reasoning_effort=\$effort",
+                         drift), (
+            "the drift cross-review must use the parsed canonical values"
+        )
+        assert "canonical reviewer declaration missing" in drift, (
+            "a missing declaration must degrade LOUDLY, never fall back to"
+            " a stale hardcoded id"
+        )
 
     def test_findings_route_to_triage_command(self):
         # A toast that only names a file is a report that rots unread: the
         # toast must point at the triage command, and the command must exist
         # in the plugin.
-        assert "/crosscheck:drift-triage" in self.drift()
+        assert "/parallax:drift-triage" in self.drift()
         command = REPO_ROOT / "commands" / "drift-triage.md"
         assert command.is_file(), "drift-triage plugin command missing"
         body = read(command)
@@ -912,10 +970,10 @@ class TestDriftProtection:
         # garbage value falls back instead of throwing past the pending
         # handling (Sol review 2026-07-13).
         text = self.drift()
-        assert re.search(r'\$InStateMachine = \(\$env:CROSSCHECK_DRIFT_STATEMACHINE -eq "1"\)',
+        assert re.search(r'\$InStateMachine = \(\$env:PARALLAX_DRIFT_STATEMACHINE -eq "1"\)',
                          text), "seams must be gated on one explicit guard"
-        assert re.search(r"\$InStateMachine -and \$env:CROSSCHECK_DRIFT_TOAST_LOG", text)
-        assert re.search(r"\$InStateMachine -and \$env:CROSSCHECK_DRIFT_TRIAGE_TIMEOUT_MS", text)
+        assert re.search(r"\$InStateMachine -and \$env:PARALLAX_DRIFT_TOAST_LOG", text)
+        assert re.search(r"\$InStateMachine -and \$env:PARALLAX_DRIFT_TRIAGE_TIMEOUT_MS", text)
         assert "[int]::TryParse" in text, (
             "a non-numeric seam value must not throw past the fallback path"
         )
@@ -938,7 +996,7 @@ class TestDoctorCommand:
             "hooks/hooks.json",                # 2: hook registration
             "code-reviewer.md",                # 3: fingerprint
             "codex login status",              # 4: transport
-            'schtasks /Query /TN "crosscheck drift watch"',  # 5: drift task
+            'schtasks /Query /TN "parallax drift watch"',  # 5: drift task
             "drift-pending.json",              # 5: pending entries
             "--plugin-dir",                    # 6: eval target head-vs-cache
             "GitHub install",                  # 1: stable installs have no
@@ -950,15 +1008,18 @@ class TestDoctorCommand:
         )
 
     def test_probe_uses_canonical_reviewer_model(self):
-        # The doctor's transport probe must never drift from the canonical
-        # reviewer model id declared in the prompting notes.
-        notes = read(REPO_ROOT / "skills" / "multi-model-verify"
-                     / "references" / "model-prompting-notes.md")
-        canonical = re.search(r"Canonical model id: `(gpt-[\w.\-]+)`", notes)
-        assert canonical
+        # The doctor's transport probe reads the canonical id at run time
+        # instead of hardcoding it (0.5.0 seam) - it must point at the
+        # declaration and carry no literal of its own.
         body = read(self.DOCTOR)
-        args = set(re.findall(r"-m (gpt-[\w.\-]+)", body))
-        assert args == {canonical.group(1)}
+        assert "Canonical model id" in body and \
+            "model-prompting-notes.md" in body, (
+                "the probe must direct the agent to the canonical source"
+            )
+        assert "-m <id>" in body, "the probe command must be parameterized"
+        assert not re.search(r"-m (gpt-[\w.\-]+)", body), (
+            "no hardcoded reviewer id may survive in the doctor"
+        )
 
     def test_is_report_only(self):
         body = read(self.DOCTOR)
@@ -1001,14 +1062,14 @@ class TestDriftStateMachine:
         # The harness must test the WORKING-TREE script, not the last
         # committed one, and guard against recursive nested-gate runs.
         assert "Copy-Item" in text and "check-drift.ps1" in text
-        assert 'CROSSCHECK_DRIFT_STATEMACHINE = "1"' in text
+        assert 'PARALLAX_DRIFT_STATEMACHINE = "1"' in text
 
     def test_harness_is_hermetic(self):
         # Two containment rules. (1) Every env var it changes is restored -
         # this is runnable from an interactive shell, and leaving a fake
         # USERPROFILE behind is worse than any test it runs. (2) It owns
         # TEMP, so the worktrees the script creates land in its sandbox: a
-        # cleanup that swept $TEMP\crosscheck-drift-* by name could delete a
+        # cleanup that swept $TEMP\parallax-drift-* by name could delete a
         # concurrent PRODUCTION run's worktree (Sol review 2026-07-13).
         text = read(self.HARNESS)
         assert "finally {" in text and re.search(
@@ -1018,17 +1079,17 @@ class TestDriftStateMachine:
         assert re.search(r"\$env:TEMP = \$FakeTemp", text), (
             "the harness must own TEMP so script worktrees stay in-sandbox"
         )
-        assert 'Filter "crosscheck-drift-*"' not in text, (
+        assert 'Filter "parallax-drift-*"' not in text, (
             "name-sweep cleanup can delete a concurrent production worktree"
         )
 
     def test_run_state_machine(self):
         if os.name != "nt":
             pytest.skip("Windows-only (drives powershell.exe)")
-        if os.environ.get("CROSSCHECK_DRIFT_STATEMACHINE"):
+        if os.environ.get("PARALLAX_DRIFT_STATEMACHINE"):
             pytest.skip("recursion guard: already inside a state-machine run")
-        if not os.environ.get("CROSSCHECK_STATEMACHINE"):
-            pytest.skip("slow live suite - set CROSSCHECK_STATEMACHINE=1"
+        if not os.environ.get("PARALLAX_STATEMACHINE"):
+            pytest.skip("slow live suite - set PARALLAX_STATEMACHINE=1"
                         " (run when tools/check-drift.ps1 changes)")
         proc = subprocess.run(
             ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass",

@@ -1,6 +1,6 @@
 ## Interface: 120000
 ## Title: DemoWidget
-## Notes: Synthetic reference addon for crosscheck behavioral evals.
+## Notes: Synthetic reference addon for parallax behavioral evals.
 ## Version: 1.2
 
 Core.lua

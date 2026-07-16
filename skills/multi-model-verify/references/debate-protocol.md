@@ -7,9 +7,9 @@ only evidence does.
 
 - **Every externally checkable claim must carry a citation to a source the
   other side can read**: a file:line in the repo or reference material the
-  citing side actually read (Fable: read this session; Sol: read inside its
-  sandboxed run — its quoted excerpt counts as reading), authoritative local
-  docs, or a fetched URL.
+  citing side actually read (the session: read this session; the reviewer:
+  read inside its sandboxed run — its quoted excerpt counts as reading),
+  authoritative local docs, or a fetched URL.
 - Source-specific examples: reference-port claims cite
   `References/<name>/<file>:<line>`; WoW 12.0 API claims cite
   `.wow-api-reference/` or a dated in-game probe result; library or platform
@@ -29,7 +29,7 @@ only evidence does.
 
 ## Round structure
 
-Each exchange (one Fable position or rebuttal + one Sol reply) is a round.
+Each exchange (one session position or rebuttal + one reviewer reply) is a round.
 
 1. From round 2 on, state position changes since last round: which of the
    other side's points are **accepted** (absorbed into the plan), which are
@@ -62,9 +62,9 @@ Each exchange (one Fable position or rebuttal + one Sol reply) is a round.
 
 ## Final adjudication (the session's last step)
 
-The chain never ends on the external reviewer's verdict. After Sol's final
-round — including a re-review of fixes — the SESSION performs one closing
-step before anything merges or freezes:
+The chain never ends on the external reviewer's verdict. After the
+reviewer's final round — including a re-review of fixes — the SESSION
+performs one closing step before anything merges or freezes:
 
 1. Verify each finding from that final round against the live repo (read
    the cited lines; run the gates if implicated) — a final-round finding is
@@ -94,10 +94,12 @@ defects.
 
 ## Why the structure carries the trust
 
-GPT-5.6 Sol has a documented (METR, OpenAI system card) tendency to fabricate
+The current reviewer lane has a documented (METR, vendor system card — see
+model-prompting-notes.md) tendency to fabricate
 results under evaluation pressure. The mitigation is this protocol — every
 claim must survive citation and refutation by an independent model — not
-down-weighting Sol's verdicts. The same rules bind Fable equally: fabricated
+down-weighting the reviewer's verdicts. The same rules bind the session
+model equally: fabricated
 detail is a known failure mode of every frontier model, and this project's
 history (see memory: no-fabrication feedback) treats invented API behavior as
 the cardinal sin.

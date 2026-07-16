@@ -1,8 +1,8 @@
 ---
-description: Operational health check for the crosscheck plugin - versions, hook, fingerprint, transport, drift state
+description: Operational health check for the parallax plugin - versions, hook, fingerprint, transport, drift state
 ---
 
-Run the crosscheck operational checks below and present ONE table:
+Run the parallax operational checks below and present ONE table:
 check | state | verdict (OK / STALE / BROKEN) | fix. End with a one-line
 overall summary. Report only - fix nothing without being asked.
 
@@ -10,19 +10,19 @@ overall summary. Report only - fix nothing without being asked.
 
 Two different files, and mixing them up is the whole point of this check:
 
-- CHECKOUT: `~/.claude/plugins/known_marketplaces.json` -> the `crosscheck`
+- CHECKOUT: `~/.claude/plugins/known_marketplaces.json` -> the `parallax`
   marketplace's source. A LOCAL DIRECTORY source has a `source.path`; read
   `.claude-plugin/plugin.json` `version` there. A GITHUB source (the
-  README's stable install, `Bmwascher/crosscheck`) has NO local checkout —
+  README's stable install, `Bmwascher/parallax`) has NO local checkout —
   that is not breakage: report this check as `N/A (GitHub install — the
   installed version is authoritative)` and skip the comparison.
 - INSTALLED: `~/.claude/plugins/installed_plugins.json` -> the
-  `crosscheck@crosscheck` entry's `version` (its `installPath` is the
+  `parallax@parallax` entry's `version` (its `installPath` is the
   VERSIONED CACHE COPY, never the checkout).
 
 Mismatch (directory source only) = STALE, and everything running right now
 is the cached version: the dev loop is bump ->
-`claude plugin update crosscheck@crosscheck` -> restart the session.
+`claude plugin update parallax@parallax` -> restart the session.
 
 ## 2. Hook registration and matcher
 
@@ -46,24 +46,34 @@ cheapest possible round-trip probe. The probe writes to a FRESH unique
 output file (the `Get-Random` name below), so a stale `TRANSPORT-OK` from
 an earlier run can never read as a pass over a failed probe.
 
+Read the canonical model id from the INSTALLED copy's
+`skills/multi-model-verify/references/model-prompting-notes.md` — resolve
+it under the `installPath` from check 1, exactly like checks 2 and 3 (a
+bare relative path only works when the current directory happens to be the
+plugin checkout). The `Canonical model id` declaration is the ONE place
+the reviewer model is defined; use it as `<id>` below. A missing
+declaration is itself a BROKEN finding. Effort `low` is deliberate — this
+is a reachability check, not a review.
+
 ```powershell
-$probe = "$env:TEMP\crosscheck-doctor-$(Get-Random).txt"
-"Reply with exactly: TRANSPORT-OK" | codex exec --sandbox read-only -m gpt-5.6-sol -c model_reasoning_effort=low --output-last-message $probe -
+$probe = "$env:TEMP\parallax-doctor-$(Get-Random).txt"
+"Reply with exactly: TRANSPORT-OK" | codex exec --sandbox read-only -m <id> -c model_reasoning_effort=low --output-last-message $probe -
 # OK only if the command exited 0 AND $probe now contains exactly TRANSPORT-OK
 ```
 
 OK requires BOTH a zero exit and fresh `TRANSPORT-OK` content; anything else
-is BROKEN. The model id must match the canonical id in
-`skills/multi-model-verify/references/model-prompting-notes.md` - if they
-differ, that is itself a BROKEN finding.
+is BROKEN.
 
 ## 5. Drift watch
 
-`schtasks /Query /TN "crosscheck drift watch" /V /FO LIST` - task exists,
+`schtasks /Query /TN "parallax drift watch" /V /FO LIST` - task exists,
 next run time sane, and the "Task To Run" path points at an existing
-`check-drift.ps1`. Then check `tools\drift-pending.json` next to it:
+`check-drift.ps1`. A legacy `crosscheck drift watch` task still present
+(pre-rename installs) is STALE - the fix is re-running
+`tools/check-drift.ps1 -Register`, which migrates it. Then check
+`tools\drift-pending.json` next to it:
 entries present = list each (status, stamp) and point at
-/crosscheck:drift-triage.
+/parallax:drift-triage.
 
 ## 6. Behavioral eval target
 

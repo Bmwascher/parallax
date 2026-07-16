@@ -13,7 +13,7 @@ to the user — before any degraded work happens:
 ```text
 == CROSS-VENDOR VERIFICATION UNAVAILABLE ==
 What failed:      <exact command + error>
-What degraded mode would verify:     <e.g. claims via a fresh Fable skeptic>
+What degraded mode would verify:     <e.g. claims via a fresh same-vendor skeptic>
 What it would NOT verify:            <cross-vendor independence>
 Options: [fix codex] [run degraded] [abort]
 ```
@@ -42,19 +42,21 @@ No failure class is ever an implicit license to degrade.
 
 ### codex CLI missing or broken
 `codex --version` fails → consent gate immediately (there is nothing to
-retry). If the user chooses degraded mode: replace each Sol round with a
-FRESH-context skeptic subagent (Fable, read-only tools) — fresh context is
+retry). If the user chooses degraded mode: replace each reviewer round with
+a FRESH-context skeptic subagent (the session model's vendor, read-only
+tools) — fresh context is
 mandatory; same-context self-critique rubber-stamps (see
 model-prompting-notes.md). Brief the skeptic with the same XML-style brief
-Sol would have received, including the strike rule and the
+the reviewer would have received, including the strike rule and the
 anti-manufactured-objection rule.
 
-### Sol model rejected (400 "not supported when using Codex with a ChatGPT account")
-The account tier lost Sol access (free/Go tiers get Terra only; Plus and
-above get Sol). Do NOT silently substitute another model — Sol is a user
-directive. Consent gate: fix subscription / run degraded / abort.
-(`gpt-5.6-terra` responding while `gpt-5.6-sol` 400s confirms tier-gating,
-not a CLI problem — probed 2026-07-12.)
+### Reviewer model rejected (400 "not supported when using Codex with a ChatGPT account")
+The account tier lost access to the canonical reviewer model (the id is
+declared ONLY in model-prompting-notes.md). Do NOT silently substitute
+another model — the reviewer model is a user directive. Consent gate: fix
+subscription / run degraded / abort. Tier-gating diagnostics for the
+current lane (which sibling model confirms gating vs a CLI problem) live
+in model-prompting-notes.md's Lane diagnostics bullet.
 
 ### Usage limit reached (session or weekly quota) — class `quota-exhausted`
 The ChatGPT account's usage quota is exhausted; codex's error names which
@@ -74,8 +76,9 @@ is an interactive browser sign-in): consent gate.
 ### Session id lost or resume fails
 Losing the resumed session degrades conversation continuity — an advertised
 protocol property — so it is NOT automatic: one retry, then the consent
-gate with the specific option "continue with fresh per-round Sol calls
-(full brief re-sent each round; costs tokens, loses Sol's debate memory)".
+gate with the specific option "continue with fresh per-round reviewer calls
+(full brief re-sent each round; costs tokens, loses the reviewer's debate
+memory)".
 
 ### Stale API evidence
 If the project's API-reference drift check reports the build changed under
@@ -93,8 +96,8 @@ in-game/runtime probe) before the claim re-enters the debate.
   (`Verification status: DEGRADED`, `Degradation: <class>`,
   `Authorized by: user at round N`) per frozen-plan-format.md.
 - The debate record's Participants line must name the actual participants
-  (e.g. `Fable 5 (session) / Fable 5 skeptic subagent (DEGRADED -
-  codex-missing)`), never the default Sol template line.
+  (e.g. `<session model> (session) / <session model> skeptic subagent
+  (DEGRADED - codex-missing)`), never the cross-vendor template line.
 - A DEGRADED-frozen plan poisons downstream PASSes — see SKILL.md mode
   `diff` for the enforcement rule.
 
@@ -119,7 +122,8 @@ each other. This is a hard stop, not a degraded mode.
 CLIProxyAPI (the Theo/Tibo "claudex" setup) runs a SEPARATE Claude Code
 process pointed at a local proxy that translates to the Codex backend
 (same ChatGPT OAuth), with env vars like `CLAUDE_CODE_SUBAGENT_MODEL`
-selecting Sol — it does not touch the existing Fable session's traffic.
+selecting the reviewer model — it does not touch the existing session's
+traffic.
 Revisit only if codex exec proves limiting (e.g. a cross-vendor implementer
 lane needs Claude Code's own tool harness). It does NOT bypass the
 subscription tier gate — same auth, same 400 on free accounts. Costs: a
