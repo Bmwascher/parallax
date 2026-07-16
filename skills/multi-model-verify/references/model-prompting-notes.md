@@ -35,7 +35,7 @@ Canonical reasoning effort: `high`
 - **Outcome-oriented briefs**: tell Sol the outcome to verify, not the steps
   to take. Its codex harness plans its own file reads. OpenAI's GPT-5.6
   guidance (developers.openai.com/api/docs/guides/prompt-guidance,
-  published 2026-07-09; the review example also appears on
+  fetched 2026-07-16; the review example also appears on
   /api/docs/guides/latest-model): "state the goal, relevant context, constraints, required
   evidence, success criteria, and output format." Its own review-task
   example maps directly onto our debate briefs: "Review this database
