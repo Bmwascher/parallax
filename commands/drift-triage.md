@@ -69,8 +69,8 @@ what changed. Update the transport commands in
 `skills/multi-model-verify/references/model-prompting-notes.md`, keep the
 structural transport pins
 in the tests in sync, and live-probe one round-trip
-(`codex exec --sandbox read-only -m gpt-5.6-sol ...`) before declaring it
-fixed.
+(`codex exec --sandbox read-only -m <canonical model id from
+model-prompting-notes.md> ...`) before declaring it fixed.
 
 **`[CRITICAL] claude/codex --version failed` or registry/fixture missing**
 Environment breakage, not drift: diagnose locally (PATH, reinstall,

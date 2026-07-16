@@ -59,8 +59,13 @@ toggled on, its stop-time review overlaps mode `diff` — expected, not a bug.
    it to a scratchpad file, then run round 1:
 
    ```powershell
-   Get-Content -Raw <brief-file> | codex exec --sandbox read-only -m gpt-5.6-sol -c model_reasoning_effort=high --output-last-message <reply-file> -
+   Get-Content -Raw <brief-file> | codex exec --sandbox read-only -m <canonical-model-id> -c model_reasoning_effort=<canonical-effort> --output-last-message <reply-file> -
    ```
+
+   `<canonical-model-id>` and `<canonical-effort>` are the two declarations
+   in references/model-prompting-notes.md — read the literal values from
+   there, never from memory (the reviewer swaps by editing that one file,
+   and a remembered id silently defeats the swap).
 
    Capture the `session id:` line printed in the run header (top of output);
    read Sol's reply from `<reply-file>` — the stdout transcript logs every
@@ -70,7 +75,7 @@ toggled on, its stop-time review overlaps mode `diff` — expected, not a bug.
    precede the resume subcommand (flags after it are a usage error):
 
    ```powershell
-   codex exec --sandbox read-only -m gpt-5.6-sol -c model_reasoning_effort=high --output-last-message <reply-file> resume <SESSION_ID> "<rebuttal-brief>"
+   codex exec --sandbox read-only -m <canonical-model-id> -c model_reasoning_effort=<canonical-effort> --output-last-message <reply-file> resume <SESSION_ID> "<rebuttal-brief>"
    ```
 
 4. Iterate per debate-protocol.md until convergence or the round cap, then

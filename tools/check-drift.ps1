@@ -484,7 +484,22 @@ $guide
                         # read-only; the toast carries the verdict. The
                         # human merge decision stays the final adjudication.
                         $reviewNote = "cross-review UNAVAILABLE - review by hand"
-                        if (Get-Command codex -ErrorAction SilentlyContinue) {
+                        # Reviewer transport comes from the ONE canonical
+                        # source (model-prompting-notes.md) so a model swap
+                        # is a one-line edit there. A missing declaration
+                        # degrades to UNAVAILABLE with the reason recorded -
+                        # never a silent fall-back to a stale hardcoded id.
+                        $reviewerModel = ""
+                        $reviewerEffort = ""
+                        $notesPath = Join-Path $RepoRoot "skills\multi-model-verify\references\model-prompting-notes.md"
+                        if (Test-Path $notesPath) {
+                            $notesText = Get-Content -Raw $notesPath
+                            if ($notesText -match 'Canonical model id: `([^`]+)`') { $reviewerModel = $Matches[1] }
+                            if ($notesText -match 'Canonical reasoning effort: `([^`]+)`') { $reviewerEffort = $Matches[1] }
+                        }
+                        if (-not ($reviewerModel -and $reviewerEffort)) {
+                            $reviewNote = "cross-review UNAVAILABLE - canonical reviewer declaration missing from model-prompting-notes.md"
+                        } elseif (Get-Command codex -ErrorAction SilentlyContinue) {
                             $reviewBrief = Join-Path $ReportDir "$Stamp-autofix-review-brief.txt"
                             $reviewOut = Join-Path $ReportDir "$Stamp-autofix-review.txt"
                             $briefLines = @(
@@ -499,10 +514,10 @@ $guide
                             $briefLines += (git -C $worktree diff "main..HEAD" 2>&1 | Out-String)
                             $briefLines | Set-Content -Path $reviewBrief
                             $job = Start-Job -ScriptBlock {
-                                param($briefPath, $outPath)
-                                Get-Content -Raw $briefPath | codex exec --sandbox read-only -m gpt-5.6-sol -c model_reasoning_effort=high --output-last-message $outPath - > $null 2>&1
+                                param($briefPath, $outPath, $model, $effort)
+                                Get-Content -Raw $briefPath | codex exec --sandbox read-only -m $model -c model_reasoning_effort=$effort --output-last-message $outPath - > $null 2>&1
                                 return $LASTEXITCODE
-                            } -ArgumentList $reviewBrief, $reviewOut
+                            } -ArgumentList $reviewBrief, $reviewOut, $reviewerModel, $reviewerEffort
                             if (Wait-Job $job -Timeout 900) {
                                 $jexit = Receive-Job $job
                                 if (($jexit -eq 0) -and (Test-Path $reviewOut)) {

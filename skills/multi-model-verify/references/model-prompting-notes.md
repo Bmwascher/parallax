@@ -17,23 +17,45 @@ guide when it updates):
   this loop — and the reason degraded mode (fallbacks.md) must run the
   skeptic pass in a FRESH subagent, not inline.
 
-## GPT-5.6 Sol (the codex side)
+## The reviewer lane (currently GPT-5.6 Sol via the codex CLI)
 
-Canonical model id: `gpt-5.6-sol` — every executable surface (SKILL.md
-transport commands, the behavioral runner's grader, the drift watch's
-cross-review) must pin this exact id; the consistency test fails on any
-partial migration.
+THE single source for the reviewer transport. Swapping the reviewer model
+is a one-line edit HERE and nowhere else: the executable surfaces (the
+behavioral runner's grader, the drift watch's cross-review) PARSE these
+two declarations at runtime and fail loud when they are missing, and the
+instruction surfaces (SKILL.md transport commands, /crosscheck:doctor's
+probe, /crosscheck:drift-triage's example) direct the agent to read the
+values from this file rather than type a remembered id. The consistency
+test forbids a hardcoded `-m` model literal anywhere else in the repo.
+
+Canonical model id: `gpt-5.6-sol`
+
+Canonical reasoning effort: `high`
 
 - **Outcome-oriented briefs**: tell Sol the outcome to verify, not the steps
-  to take. Its codex harness plans its own file reads. OpenAI's guide
-  (learn.chatgpt.com/docs/prompting): "Start with the result, not a detailed
-  list of steps", and for Codex specifically a useful prompt "names the
-  behavior you want, points to the relevant code or reproduction steps,
-  preserves important constraints, and says how to verify the change."
-- **Four-part shape — Goal, Context, Output, Boundaries** (OpenAI's
-  recommended structure; "use only the parts that help"). The XML-style tags
-  below map onto it: task=Goal, claims=Context, rules=Output,
-  boundaries=Boundaries.
+  to take. Its codex harness plans its own file reads. OpenAI's GPT-5.6
+  guidance (developers.openai.com/api/docs/guides/prompt-guidance-gpt-5p6,
+  2026-07-09): "state the goal, relevant context, constraints, required
+  evidence, success criteria, and output format." Its own review-task
+  example maps directly onto our debate briefs: "Review this database
+  migration plan for failure modes... For each finding, cite the relevant
+  step, estimate impact and likelihood, and recommend a specific
+  mitigation."
+- **Six-element shape — goal, context, constraints, required evidence,
+  success criteria, output format** (the 5.6 framing; use only the parts
+  that help). The XML-style tags below map onto it: task=goal,
+  claims=context+evidence, rules=success criteria+output format,
+  boundaries=constraints. The tags themselves are OUR convention, not
+  OpenAI's — 5.6 prescribes no tags for review tasks — kept because the
+  strike rule needs addressable sections to strike against.
+- **Lean briefs, rules stated ONCE** (5.6 guidance; leaner prompts scored
+  10-15% better in OpenAI's own coding-agent evals): state the evidence
+  rules and verdict grammar in full in round 1; later rounds REFERENCE
+  them ("evidence rules and verdict grammar as before"), never restate.
+  Avoid repeated negations ("do not mutate" three ways) — 5.6 reads
+  repetition as noise and it can trigger needless approval requests.
+  Prefer decision rules over ALWAYS/NEVER except for true invariants
+  (read-only sandbox, the strike rule, the verdict grammar).
 - **Final check** (from the guide's review-task pattern): every brief ends by
   asking Sol to flag information it could NOT verify — those flags feed the
   strike rule instead of masquerading as findings.
@@ -52,15 +74,22 @@ partial migration.
   as UNVERIFIED — do not fold unverified material into your verdict.</final-check>
   ```
 
-- **Effort**: pin `-c model_reasoning_effort=high` per call. Do not use
-  ultra/xhigh for debate rounds — Sol propagates its effort to every subagent
-  it spawns, which burns tokens without changing verdicts. `high` is also
-  set in `~/.codex/config.toml`, but pin it per call anyway so the debate is
-  config-independent.
+- **Effort**: pin `-c model_reasoning_effort=<canonical effort above>` per
+  call. Do not raise it to ultra/xhigh for debate rounds — Sol propagates
+  its effort to every subagent it spawns, which burns tokens without
+  changing verdicts. The same value is set in `~/.codex/config.toml`, but
+  pin it per call anyway so the debate is config-independent. (The doctor's
+  transport probe deliberately uses `low` — it is a reachability check, not
+  a review.) 5.6 migration advice: "preserve your current reasoning effort
+  as the baseline, then compare one level lower" — `medium` is a tuning
+  candidate, but only via a full behavioral-suite pass at both levels;
+  never silently downgrade the review lane.
 - **Session resume, not context re-send**: capture the `session id:` from
-  round 1 and resume it (flags before the subcommand). NEVER `resume --last`
-  — it grabs whatever codex session ran most recently, which may be a
-  concurrent /codex:review, not your debate.
+  round 1 and resume it (flags before the subcommand). 5.6 persists its
+  reasoning state across turns of a resumed session — re-sending the full
+  context each round both wastes tokens and discards that state. NEVER
+  `resume --last` — it grabs whatever codex session ran most recently,
+  which may be a concurrent /codex:review, not your debate.
 - **Fabrication counter**: Sol's METR/system-card record means "I verified X"
   claims from Sol get the same strike rule as everything else — quoted
   file:line or it did not happen.

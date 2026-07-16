@@ -9,7 +9,7 @@
       "prompt": "Plan the port of References/DemoWidget into a module for this project. Use multi-model verification before freezing the plan.",
       "expected_output": "A debated plan position whose debate record shows at least one Fable position, one Sol response via codex exec, and a convergence or escalation outcome.",
       "expectations": [
-        "Invokes codex exec with -m gpt-5.6-sol and --sandbox read-only",
+        "Invokes codex exec with -m {REVIEWER_MODEL} and --sandbox read-only",
         "Captures the codex session id from round 1",
         "Reference claims are grounded in files that exist under References/DemoWidget, cited with the full References/DemoWidget/<file>:<line> form at least on each file's first citation (later shorthand like Core.lua:10 is acceptable once anchored)",
         "Ends with the skill's finish line naming models, rounds, outcome, and verification status FULL"

@@ -113,9 +113,14 @@ configuration:
   supervisor pattern documented in `agents/implementer.md`: a cheap Claude
   model supervises, delegates the body of work to the vendor CLI, and
   re-runs verification itself.
-- **Cross-vendor reviewer** — pinned in the skill's transport commands
-  (`-m gpt-5.6-sol` in SKILL.md / model-prompting-notes.md) and the drift
-  watch's review calls; swap the model flag there.
+- **Cross-vendor reviewer** — a ONE-LINE swap: the canonical model id and
+  reasoning effort live solely in
+  `skills/multi-model-verify/references/model-prompting-notes.md`. The
+  behavioral runner and the drift watch parse those declarations at
+  runtime (failing loud if they vanish), and every instruction surface
+  (SKILL.md transport commands, doctor, drift-triage) reads them from
+  there; a consistency test forbids a hardcoded `-m` literal anywhere
+  else.
 - **Session** — whatever model runs the session; the debate rules and
   final adjudication follow the seat automatically.
 

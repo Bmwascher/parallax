@@ -46,16 +46,21 @@ cheapest possible round-trip probe. The probe writes to a FRESH unique
 output file (the `Get-Random` name below), so a stale `TRANSPORT-OK` from
 an earlier run can never read as a pass over a failed probe.
 
+Read the canonical model id from
+`skills/multi-model-verify/references/model-prompting-notes.md` (the
+`Canonical model id` declaration — the ONE place the reviewer model is
+defined) and use it as `<id>` below. A missing declaration is itself a
+BROKEN finding. Effort `low` is deliberate — this is a reachability check,
+not a review.
+
 ```powershell
 $probe = "$env:TEMP\crosscheck-doctor-$(Get-Random).txt"
-"Reply with exactly: TRANSPORT-OK" | codex exec --sandbox read-only -m gpt-5.6-sol -c model_reasoning_effort=low --output-last-message $probe -
+"Reply with exactly: TRANSPORT-OK" | codex exec --sandbox read-only -m <id> -c model_reasoning_effort=low --output-last-message $probe -
 # OK only if the command exited 0 AND $probe now contains exactly TRANSPORT-OK
 ```
 
 OK requires BOTH a zero exit and fresh `TRANSPORT-OK` content; anything else
-is BROKEN. The model id must match the canonical id in
-`skills/multi-model-verify/references/model-prompting-notes.md` - if they
-differ, that is itself a BROKEN finding.
+is BROKEN.
 
 ## 5. Drift watch
 
