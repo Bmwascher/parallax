@@ -418,14 +418,32 @@ $guide
         $claudeArgs = @("-p", "--strict-mcp-config",
             "--tools", "Read,Glob,Grep,Edit,Write",
             "--allowedTools", "Read(**),Glob,Grep,Edit(**),Write(**)")
-        $proc = Start-Process -FilePath $claudeCmd.Source -ArgumentList $claudeArgs `
+        # The agent runs via a generated wrapper .cmd that writes
+        # %errorlevel% to a sidecar file, because PS 5.1's Start-Process
+        # (file-redirect form) never retains a native process handle:
+        # $proc.ExitCode silently reads null whenever the child exits
+        # before the next statement touches .Handle. Real agents run for
+        # minutes and always win that race; the state machine's instant
+        # stubs lose it (probed 2026-07-16 - the 2026-07-12 handle-cache
+        # trick only narrows the window). The sidecar survives the race
+        # by construction. `call` is load-bearing: a .cmd invoked from a
+        # .cmd without it CHAINS and the errorlevel line never runs. The
+        # redirect-first echo form avoids `echo 0>` parsing the exit code
+        # as a file-handle number.
+        $exitFile = Join-Path $ReportDir "$Stamp-autotriage-exit.txt"
+        $wrapperFile = Join-Path $ReportDir "$Stamp-autotriage-wrapper.cmd"
+        $argLine = ($claudeArgs | ForEach-Object {
+            if ($_ -match '[\s(),]') { '"' + $_ + '"' } else { $_ }
+        }) -join " "
+        @("@echo off",
+            "call `"$($claudeCmd.Source)`" $argLine",
+            "> `"$exitFile`" echo %errorlevel%"
+        ) | Set-Content -Path $wrapperFile -Encoding ASCII
+        $proc = Start-Process -FilePath $wrapperFile `
             -WorkingDirectory $worktree -NoNewWindow -PassThru `
             -RedirectStandardInput $promptFile `
             -RedirectStandardOutput $triageFile `
             -RedirectStandardError $errFile
-        # Cache the handle NOW: without it, .ExitCode reads null after the
-        # process exits (PS 5.1 Start-Process quirk, probed 2026-07-12).
-        $null = $proc.Handle
         $triageTimeoutMs = 1800000  # 30 min hard cap
         if ($InStateMachine -and $env:CROSSCHECK_DRIFT_TRIAGE_TIMEOUT_MS) {
             # Test seam: the harness shrinks the cap to exercise the kill
@@ -440,13 +458,25 @@ $guide
         }
         $finished = $proc.WaitForExit($triageTimeoutMs)
         if (-not $finished) {
+            # taskkill /T fells the whole tree (wrapper cmd -> agent ->
+            # node); $proc.Kill() alone would stop only the wrapper and
+            # leave the hung agent running.
+            taskkill /PID $proc.Id /T /F 2>&1 | Out-Null
             try { $proc.Kill() } catch {}
             $triageTimeoutMin = [Math]::Round($triageTimeoutMs / 60000.0, 1)
             Add-Content -Path $ReportFile -Value "`r`nAuto-triage TIMED OUT after $triageTimeoutMin min - killed (transcript: $Stamp-autotriage.txt)"
         } else {
-            # No-arg WaitForExit flushes process state; without it,
-            # .ExitCode reads null after the timed overload (PS 5.1).
-            $proc.WaitForExit()
+            # Exit code comes from the wrapper's sidecar, never from
+            # $proc.ExitCode (see the launch above). A missing or garbled
+            # sidecar reads as $null - never trusted, manual path.
+            $agentExit = $null
+            if (Test-Path $exitFile) {
+                $rawExit = Get-Content $exitFile -First 1
+                $parsedExit = 0
+                if ($null -ne $rawExit -and [int]::TryParse($rawExit.Trim(), [ref]$parsedExit)) {
+                    $agentExit = $parsedExit
+                }
+            }
             # Exactly ONE strict verdict line, or the run is not trusted.
             $verdicts = @(Select-String -Path $triageFile -Pattern '^VERDICT: (NO-ACTION|FIXES-APPLIED.*|BLOCKED.*)$')
             $verdictLine = ""
@@ -458,14 +488,14 @@ $guide
             Remove-Item -Recurse -Force (Join-Path $worktree ".drift-context") -ErrorAction SilentlyContinue
             git -C $worktree add -A 2>&1 | Out-Null
             $diffStat = (git -C $worktree diff --cached --stat 2>&1 | Out-String).Trim()
-            if ($proc.ExitCode -eq 0 -and $verdictLine -eq "NO-ACTION" -and -not $diffStat) {
+            if ($agentExit -eq 0 -and $verdictLine -eq "NO-ACTION" -and -not $diffStat) {
                 Add-Content -Path $ReportFile -Value "`r`nAuto-triage verdict: NO-ACTION (transcript: $Stamp-autotriage.txt)"
                 if ($critical -gt 0) {
                     Show-Toast "crosscheck drift: VERIFY dismissal" "$critical CRITICAL finding(s) auto-triaged as no-action - verify by hand. Report: tools\drift-reports\$Stamp.txt"
                     $criticalDismissed = $true
                 }
                 $manualToast = $false
-            } elseif ($proc.ExitCode -eq 0 -and $verdictLine -like "FIXES-APPLIED*" -and $diffStat) {
+            } elseif ($agentExit -eq 0 -and $verdictLine -like "FIXES-APPLIED*" -and $diffStat) {
                 # Trust nothing: the SCRIPT re-runs the gate on the diff.
                 Push-Location $worktree
                 python -m pytest evals -q > $null 2>&1
@@ -550,7 +580,7 @@ $guide
             } else {
                 # BLOCKED, verdict/diff mismatch, multiple or missing verdict
                 # lines, nonzero exit: record and fall back to manual.
-                Add-Content -Path $ReportFile -Value "`r`nAuto-triage not trusted (exit $($proc.ExitCode); verdict '$verdictLine'; diff: $(if ($diffStat) { 'yes' } else { 'no' })) - transcript: $Stamp-autotriage.txt"
+                Add-Content -Path $ReportFile -Value "`r`nAuto-triage not trusted (exit $agentExit; verdict '$verdictLine'; diff: $(if ($diffStat) { 'yes' } else { 'no' })) - transcript: $Stamp-autotriage.txt"
             }
         }
     } else {
