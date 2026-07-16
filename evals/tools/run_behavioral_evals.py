@@ -27,6 +27,7 @@ behaviorally test the stale cached copy.
 import argparse
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -62,9 +63,19 @@ HARNESS_PREAMBLE = (
 # them the executor cannot open base..head, so a "reviewed the diff" claim
 # could never be distinguished from a working-tree read (Sol review
 # 2026-07-13). The diff case plants a decoy to force the distinction.
+#
+# Read is cwd-scoped with Read(**), mirroring the drift triage agent
+# (tools/check-drift.ps1): THIS file ships in the installed plugin cache
+# and contains the frozen plan and the planted implementation, so an
+# unscoped Read let an executor learn the diff case's answer from the
+# harness source instead of the committed range (Sol review 2026-07-16).
+# Residual (accepted on the record, same as the drift agent): Grep approval
+# is unscoped - the load-bearing counter is the diff case's expectation,
+# which demands a range-read tool RESULT showing the planted line, so
+# out-of-tree knowledge alone can no longer satisfy the grader.
 AVAILABLE_TOOLS = "Skill,Read,Glob,Grep,Bash,PowerShell"
 ALLOWED_TOOLS = (
-    "Skill,Read,Glob,Grep,"
+    "Skill,Read(**),Glob,Grep,"
     "Bash(codex:*),PowerShell(codex:*),"
     "Bash(git diff:*),Bash(git log:*),Bash(git show:*)"
 )
@@ -132,7 +143,8 @@ FROZEN_PLAN = """# Port DemoWidget (frozen plan)
 
 # The port with ONE planted deviation from plan and reference: the
 # OnUpdate throttle is 0.5, not the verbatim 0.2 the frozen plan pins.
-# THROTTLE_TOKEN marks the single line the decoy rewrites.
+# The `elapsed < 0.5` line is the single site build_diff_state's decoy
+# rewrites with a literal .replace - keep the two in sync.
 IMPLEMENTED_PORT = """local frame = CreateFrame("Frame", "DemoAddon_DemoWidget", UIParent)
 frame:SetSize(160, 24)
 frame:SetPoint("CENTER", 0, -180)
@@ -192,7 +204,7 @@ def build_diff_state(ws):
     git(ws, "add", "-A")
     git(ws, "commit", "-q", "-m", "base: project + reference")
     plan = ws / "docs" / "superpowers" / "plans" / "2026-07-13-demowidget-port.md"
-    plan.parent.mkdir(parents=True)
+    plan.parent.mkdir(parents=True, exist_ok=True)
     plan.write_text(FROZEN_PLAN, encoding="utf-8")
     git(ws, "add", "-A")
     git(ws, "commit", "-q", "-m", "freeze demowidget port plan")
@@ -237,12 +249,23 @@ def env_without_codex():
     return env
 
 
+def _neutralize(text):
+    # Agent-authored text must never occupy the tool-evidence namespace:
+    # only genuine structured events may produce a line starting with a
+    # [tool_use ...]/[tool_result ...] marker, or the executor could SPOOF
+    # evidence by printing marker-shaped prose (Sol review 2026-07-16).
+    # A lookalike line start gets a visible prefix instead of deletion, so
+    # the grader still sees what the agent claimed - as prose.
+    return re.sub(r"(?m)^(\[tool_(?:use|result) )",
+                  r"[agent-text, not a tool event] \1", text)
+
+
 def compact_stream(stdout):
     """Flatten claude -p stream-json events into a graded transcript: the
-    agent's text verbatim, tool calls with their inputs (the evidence that
-    e.g. codex exec actually ran), tool results truncated - without this
-    the grader only sees the final message and marks real tool work as
-    absent (first full-suite run, 2026-07-12)."""
+    agent's text (neutralized - see _neutralize), tool calls with their
+    inputs (the evidence that e.g. codex exec actually ran), tool results
+    truncated - without this the grader only sees the final message and
+    marks real tool work as absent (first full-suite run, 2026-07-12)."""
     lines = []
     for raw in stdout.splitlines():
         raw = raw.strip()
@@ -251,26 +274,43 @@ def compact_stream(stdout):
         try:
             event = json.loads(raw)
         except json.JSONDecodeError:
-            lines.append(raw)
+            lines.append(_neutralize(raw))
             continue
         etype = event.get("type")
         if etype == "result":
-            lines.append("[final result]\n" + str(event.get("result", "")))
+            lines.append("[final result]\n"
+                         + _neutralize(str(event.get("result", ""))))
             continue
         for block in (event.get("message") or {}).get("content") or []:
             if not isinstance(block, dict):
                 continue
             if block.get("type") == "text":
-                lines.append(block["text"])
+                lines.append(_neutralize(block["text"]))
             elif block.get("type") == "tool_use":
                 args = json.dumps(block.get("input", {}))
-                lines.append(f"[tool_use] {block.get('name')} {args[:600]}")
+                # The id is what binds a result to ITS call: without it the
+                # grader can only infer by adjacency, and with parallel tool
+                # calls (or an unscoped-Grep result sitting next to a git
+                # tool_use) adjacency lies (Sol review 2026-07-16).
+                lines.append(
+                    f"[tool_use {block.get('id')}] {block.get('name')} {args[:600]}")
             elif block.get("type") == "tool_result":
                 content = block.get("content")
                 if isinstance(content, list):
                     content = " ".join(c.get("text", "") for c in content
                                        if isinstance(c, dict))
-                lines.append(f"[tool_result] {str(content)[:700]}")
+                # Carry provenance AND success state: a permission-denied
+                # call must never read as evidence. 1200, not 700: the diff
+                # case's grading requires the range read's RESULT to visibly
+                # carry the planted throttle line, which sits ~600 chars
+                # into a whole-range diff (toc hunk first). The record is
+                # kept to ONE physical line (newlines escaped) so the
+                # line-aligned elision below can never bisect it.
+                status = "ERROR" if block.get("is_error") else "ok"
+                body = str(content)[:1200].replace("\r", "").replace("\n", "\\n")
+                lines.append(
+                    f"[tool_result for={block.get('tool_use_id')} {status}]"
+                    f" {body}")
     return "\n".join(lines)
 
 
@@ -314,7 +354,8 @@ def run_case(case, model, timeout, artifacts=None, head=False):
         if proc.stderr:
             # Labeled so the grader never mistakes harness noise for the
             # agent ending its run mid-thought.
-            transcript += "\n=== EXECUTOR STDERR (harness, not agent output) ===\n" + proc.stderr
+            transcript += ("\n=== EXECUTOR STDERR (harness, not agent output) ===\n"
+                           + _neutralize(proc.stderr))
         if artifacts:
             artifacts.mkdir(parents=True, exist_ok=True)
             (artifacts / f"{case['id']}.transcript.txt").write_text(
@@ -347,14 +388,52 @@ def run_case(case, model, timeout, artifacts=None, head=False):
     return status, f"{len(verdicts) - len(misses)}/{len(verdicts)} expectations met", verdicts
 
 
+def elide_transcript(transcript, limit=40000, head_budget=15000,
+                     tail_budget=25000, evidence_budget=16000):
+    """Line-aligned head+tail elision that keeps middle tool evidence whole.
+
+    Head+tail, not tail-only: a tail-only cut discards the early tool calls
+    (the codex round-1 invocation) that expectations grade on. Every budget
+    is applied to WHOLE LINES - character-offset slicing fragmented records
+    at the boundaries, and re-slicing the retained evidence could bisect a
+    record or silently drop a later required pair (Sol review 2026-07-16).
+    compact_stream keeps each tool record on one physical line, so keeping
+    lines whole keeps records (and therefore call/result pairs) whole; if
+    the evidence budget runs out, an explicit marker says evidence was
+    dropped rather than letting absence read as 'never happened'.
+    """
+    if len(transcript) <= limit:
+        return transcript
+    lines = transcript.splitlines()
+    i, used = 0, 0
+    while i < len(lines) and used + len(lines[i]) + 1 <= head_budget:
+        used += len(lines[i]) + 1
+        i += 1
+    j, used = len(lines), 0
+    while j > i and used + len(lines[j - 1]) + 1 <= tail_budget:
+        used += len(lines[j - 1]) + 1
+        j -= 1
+    kept, used = [], 0
+    for ln in lines[i:j]:
+        if ln.startswith("[tool_use ") or ln.startswith("[tool_result "):
+            if used + len(ln) + 1 > evidence_budget:
+                kept.append("...[retained-evidence budget exhausted;"
+                            " later middle tool evidence dropped]...")
+                break
+            kept.append(ln)
+            used += len(ln) + 1
+    return "\n".join(
+        lines[:i]
+        + ["...[transcript middle elided by harness;"
+           " its tool evidence retained below]..."]
+        + kept
+        + ["...[end of retained middle tool evidence]..."]
+        + lines[j:])
+
+
 def grade(case, transcript):
     numbered = "\n".join(f"{i}. {e}" for i, e in enumerate(case["expectations"], 1))
-    # Head+tail truncation: a tail-only cut discards the early tool calls
-    # (the codex round-1 invocation) that expectations grade on.
-    if len(transcript) > 40000:
-        transcript = (transcript[:15000]
-                      + "\n...[transcript middle elided by harness]...\n"
-                      + transcript[-25000:])
+    transcript = elide_transcript(transcript)
     prompt = GRADER_PROMPT.format(
         expectations=numbered, expected=case["expected_output"],
         transcript=transcript,

@@ -11,15 +11,18 @@ overall summary. Report only - fix nothing without being asked.
 Two different files, and mixing them up is the whole point of this check:
 
 - CHECKOUT: `~/.claude/plugins/known_marketplaces.json` -> the `crosscheck`
-  marketplace's `source.path` (a local directory source). Read
-  `.claude-plugin/plugin.json` `version` there.
+  marketplace's source. A LOCAL DIRECTORY source has a `source.path`; read
+  `.claude-plugin/plugin.json` `version` there. A GITHUB source (the
+  README's stable install, `Bmwascher/crosscheck`) has NO local checkout —
+  that is not breakage: report this check as `N/A (GitHub install — the
+  installed version is authoritative)` and skip the comparison.
 - INSTALLED: `~/.claude/plugins/installed_plugins.json` -> the
   `crosscheck@crosscheck` entry's `version` (its `installPath` is the
   VERSIONED CACHE COPY, never the checkout).
 
-Mismatch = STALE, and everything running right now is the cached version:
-the dev loop is bump -> `claude plugin update crosscheck@crosscheck` ->
-restart the session.
+Mismatch (directory source only) = STALE, and everything running right now
+is the cached version: the dev loop is bump ->
+`claude plugin update crosscheck@crosscheck` -> restart the session.
 
 ## 2. Hook registration and matcher
 
@@ -39,8 +42,9 @@ warns but cannot extract); none = BROKEN (diff gate inert). Also confirm
 ## 4. codex transport
 
 `codex --version`, then `codex login status`. If both succeed, run the
-cheapest possible round-trip probe. DELETE the output file first: a stale
-`TRANSPORT-OK` from an earlier run would read as a pass over a failed probe.
+cheapest possible round-trip probe. The probe writes to a FRESH unique
+output file (the `Get-Random` name below), so a stale `TRANSPORT-OK` from
+an earlier run can never read as a pass over a failed probe.
 
 ```powershell
 $probe = "$env:TEMP\crosscheck-doctor-$(Get-Random).txt"
