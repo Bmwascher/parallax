@@ -417,16 +417,23 @@ class TestEvalFixtures:
             "grader elision must preserve middle tool evidence lines"
         )
 
-    def test_compact_stream_binds_results_to_calls(self):
-        # The graded transcript is the ONLY thing the grader sees, so a
-        # result must carry which call produced it and whether it
-        # succeeded: an unbound or ERROR result is not evidence.
+    @staticmethod
+    def _load_runner():
         import importlib.util
         spec = importlib.util.spec_from_file_location(
             "bhv_runner",
             REPO_ROOT / "evals" / "tools" / "run_behavioral_evals.py")
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
+        return mod
+
+    def test_compact_stream_binds_results_to_calls(self):
+        # The graded transcript is the ONLY thing the grader sees, so a
+        # result must carry which call produced it and whether it
+        # succeeded: an unbound or ERROR result is not evidence. Records
+        # stay on ONE physical line (newlines escaped) so line-aligned
+        # elision can never bisect them.
+        mod = self._load_runner()
         events = "\n".join([
             json.dumps({"type": "assistant", "message": {"content": [
                 {"type": "tool_use", "id": "toolu_A", "name": "Bash",
@@ -434,15 +441,54 @@ class TestEvalFixtures:
             json.dumps({"type": "user", "message": {"content": [
                 {"type": "tool_result", "tool_use_id": "toolu_A",
                  "content": [{"type": "text",
-                              "text": "if elapsed < 0.5 then return end"}]}]}}),
+                              "text": "diff --git\nif elapsed < 0.5 then"}]}]}}),
             json.dumps({"type": "user", "message": {"content": [
                 {"type": "tool_result", "tool_use_id": "toolu_B",
                  "is_error": True, "content": "permission denied"}]}}),
         ])
         out = mod.compact_stream(events)
         assert "[tool_use toolu_A] Bash" in out
-        assert "[tool_result for=toolu_A ok] if elapsed < 0.5" in out
+        assert ("[tool_result for=toolu_A ok] diff --git\\n"
+                "if elapsed < 0.5 then") in out, (
+            "result content must be one line with newlines escaped"
+        )
         assert "[tool_result for=toolu_B ERROR] permission denied" in out
+
+    def test_elision_keeps_boundary_and_middle_evidence_pairs(self):
+        # A record straddling the head boundary and a pair deep in the
+        # elided middle must both survive INTACT (Sol review 2026-07-16:
+        # character-offset slicing fragmented boundary records).
+        mod = self._load_runner()
+        filler = "x" * 99
+        pair1 = ['[tool_use toolu_P1] Bash {"command": "git diff aaa..bbb"}',
+                 "[tool_result for=toolu_P1 ok] diff --git a/W.lua"
+                 " b/W.lua\\n+if elapsed < 0.5 then"]
+        pair2 = ['[tool_use toolu_P2] Read {"file_path": "plan.md"}',
+                 "[tool_result for=toolu_P2 ok] Verification status: FULL"]
+        transcript = "\n".join([filler] * 149 + pair1 + [filler] * 300
+                               + pair2 + [filler] * 100)
+        assert len(transcript) > 40000
+        out = mod.elide_transcript(transcript)
+        for ln in pair1 + pair2:
+            assert ln in out, "a whole evidence record must survive elision"
+        for line in out.splitlines():
+            for marker in ("[tool_use ", "[tool_result "):
+                assert line.find(marker) <= 0, (
+                    "elision must never bisect a tool record"
+                )
+
+    def test_elision_declares_exhausted_evidence_budget(self):
+        # When middle evidence exceeds its budget, the grader must SEE that
+        # evidence was dropped - silence would read as 'never happened'.
+        mod = self._load_runner()
+        filler = "x" * 99
+        evidence = [f"[tool_result for=toolu_{n} ok] " + "y" * 1150
+                    for n in range(40)]
+        transcript = "\n".join([filler] * 160 + evidence + [filler] * 260)
+        out = mod.elide_transcript(transcript)
+        assert "budget exhausted" in out, (
+            "dropped evidence must be declared, not silent"
+        )
 
     def test_behavioral_runner_self_test(self):
         # CI-safe: --list parses cases and checks the fixture, no model calls.

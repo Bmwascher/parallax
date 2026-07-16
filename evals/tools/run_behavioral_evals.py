@@ -290,11 +290,14 @@ def compact_stream(stdout):
                 # call must never read as evidence. 1200, not 700: the diff
                 # case's grading requires the range read's RESULT to visibly
                 # carry the planted throttle line, which sits ~600 chars
-                # into a whole-range diff (toc hunk first).
+                # into a whole-range diff (toc hunk first). The record is
+                # kept to ONE physical line (newlines escaped) so the
+                # line-aligned elision below can never bisect it.
                 status = "ERROR" if block.get("is_error") else "ok"
+                body = str(content)[:1200].replace("\r", "").replace("\n", "\\n")
                 lines.append(
                     f"[tool_result for={block.get('tool_use_id')} {status}]"
-                    f" {str(content)[:1200]}")
+                    f" {body}")
     return "\n".join(lines)
 
 
@@ -371,25 +374,52 @@ def run_case(case, model, timeout, artifacts=None, head=False):
     return status, f"{len(verdicts) - len(misses)}/{len(verdicts)} expectations met", verdicts
 
 
+def elide_transcript(transcript, limit=40000, head_budget=15000,
+                     tail_budget=25000, evidence_budget=16000):
+    """Line-aligned head+tail elision that keeps middle tool evidence whole.
+
+    Head+tail, not tail-only: a tail-only cut discards the early tool calls
+    (the codex round-1 invocation) that expectations grade on. Every budget
+    is applied to WHOLE LINES - character-offset slicing fragmented records
+    at the boundaries, and re-slicing the retained evidence could bisect a
+    record or silently drop a later required pair (Sol review 2026-07-16).
+    compact_stream keeps each tool record on one physical line, so keeping
+    lines whole keeps records (and therefore call/result pairs) whole; if
+    the evidence budget runs out, an explicit marker says evidence was
+    dropped rather than letting absence read as 'never happened'.
+    """
+    if len(transcript) <= limit:
+        return transcript
+    lines = transcript.splitlines()
+    i, used = 0, 0
+    while i < len(lines) and used + len(lines[i]) + 1 <= head_budget:
+        used += len(lines[i]) + 1
+        i += 1
+    j, used = len(lines), 0
+    while j > i and used + len(lines[j - 1]) + 1 <= tail_budget:
+        used += len(lines[j - 1]) + 1
+        j -= 1
+    kept, used = [], 0
+    for ln in lines[i:j]:
+        if ln.startswith("[tool_use ") or ln.startswith("[tool_result "):
+            if used + len(ln) + 1 > evidence_budget:
+                kept.append("...[retained-evidence budget exhausted;"
+                            " later middle tool evidence dropped]...")
+                break
+            kept.append(ln)
+            used += len(ln) + 1
+    return "\n".join(
+        lines[:i]
+        + ["...[transcript middle elided by harness;"
+           " its tool evidence retained below]..."]
+        + kept
+        + ["...[end of retained middle tool evidence]..."]
+        + lines[j:])
+
+
 def grade(case, transcript):
     numbered = "\n".join(f"{i}. {e}" for i, e in enumerate(case["expectations"], 1))
-    # Head+tail truncation: a tail-only cut discards the early tool calls
-    # (the codex round-1 invocation) that expectations grade on. The elided
-    # MIDDLE keeps its tool_use/tool_result lines (already per-line capped
-    # by compact_stream): dropping them could erase the very evidence pair
-    # an expectation demands - a false FAIL - or leave an orphan result no
-    # id can bind (Sol review 2026-07-16). Only free text is elided.
-    if len(transcript) > 40000:
-        middle = transcript[15000:-25000]
-        kept = [ln for ln in middle.splitlines()
-                if ln.startswith("[tool_use ") or ln.startswith("[tool_result ")]
-        evidence = "\n".join(kept)[:16000]
-        transcript = (transcript[:15000]
-                      + "\n...[transcript middle elided by harness;"
-                      + " its tool evidence retained below]...\n"
-                      + evidence
-                      + "\n...[end of retained middle tool evidence]...\n"
-                      + transcript[-25000:])
+    transcript = elide_transcript(transcript)
     prompt = GRADER_PROMPT.format(
         expectations=numbered, expected=case["expected_output"],
         transcript=transcript,

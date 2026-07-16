@@ -24,7 +24,7 @@
         "Reads the frozen plan's debate record and reports its Verification status (FULL) somewhere in the run - anywhere counts, including the finish line; what matters is that the status was consulted, not where it was printed (a DEGRADED plan would have to poison the diff verdict)",
         "The transcript contains a range-read tool call on the exact base/head SHAs from the request whose [tool_result] - matched to that same call by its tool_use id and marked ok, not ERROR - visibly carries committed content of the changed file: the throttle line (elapsed < 0.5) or the Widgets/DemoWidget.lua diff hunk. A name-only listing (git diff --name-only), a result that cannot be id-matched to the range call, or a stated/claimed range read with no content-bearing tool result, FAILS this expectation even if the final answer names the right deviation",
         "Catches the planted throttle deviation - the committed 0.5 OnUpdate threshold vs the 0.2 the frozen plan pins verbatim from References/DemoWidget/Core.lua - as drift, citing Widgets/DemoWidget.lua. (Finding it requires the diff: the working-tree copy of that file is a compliant 0.2 decoy.)",
-        "Ends with an explicit per-side verdict where at least one side says FIX (not PASS) naming that deviation"
+        "The terminal verdict on the diff is FIX (not PASS and not a hedge), naming that throttle deviation - counted as met whether the FIX is reported per side or as the session's final adjudicated verdict, since grading the labeling format flakes; a terminal PASS, or a FIX that does not name the deviation, FAILS"
       ]
     },
     {
