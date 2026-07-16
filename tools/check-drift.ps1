@@ -94,6 +94,11 @@ if ($TestNotify) {
 if ($Register) {
     $self = Join-Path $PSScriptRoot "check-drift.ps1"
     $action = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$self`""
+    # One-time upgrade migration: the plugin shipped as "crosscheck"
+    # through 0.4.3 and registered the task under that name - a leftover
+    # legacy task keeps firing weekly against a path that no longer
+    # exists. Silent no-op when absent.
+    schtasks /Delete /TN "crosscheck drift watch" /F 2>&1 | Out-Null
     schtasks /Create /TN "parallax drift watch" /SC WEEKLY /D TUE /ST 13:17 /TR $action /F
     exit $LASTEXITCODE
 }

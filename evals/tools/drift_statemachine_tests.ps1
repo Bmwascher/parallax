@@ -31,7 +31,7 @@
 #   critical-dismissal trusted NO-ACTION on a CRITICAL toasts VERIFY
 #   warn-only-silence  WARN-only noise dismissed by triage toasts NOTHING
 #   pending-auto-clear a vanished fix branch clears its pending entry
-#   fixes-applied      diff -> pytest gate -> commit -> Sol review -> toast
+#   fixes-applied      diff -> pytest gate -> commit -> cross-review -> toast
 #   gate-failure       a fix that BREAKS the suite is never committed
 #   malformed-review   an off-grammar cross-review reads as UNAVAILABLE
 #   commit-failure     failed commit discards changes, keeps no branch

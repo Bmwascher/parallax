@@ -68,7 +68,10 @@ is BROKEN.
 
 `schtasks /Query /TN "parallax drift watch" /V /FO LIST` - task exists,
 next run time sane, and the "Task To Run" path points at an existing
-`check-drift.ps1`. Then check `tools\drift-pending.json` next to it:
+`check-drift.ps1`. A legacy `crosscheck drift watch` task still present
+(pre-rename installs) is STALE - the fix is re-running
+`tools/check-drift.ps1 -Register`, which migrates it. Then check
+`tools\drift-pending.json` next to it:
 entries present = list each (status, stamp) and point at
 /parallax:drift-triage.
 

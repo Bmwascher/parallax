@@ -145,15 +145,23 @@ class TestTransportContract:
         declared = re.search(r"Canonical model id: `([^`\n]+)`", notes)
         assert declared, "canonical declaration missing - cannot sweep"
         markers = ("-m gpt" + "-", declared.group(1))
+        # ...and a syntax-aware shape check: ANY literal that looks like a
+        # model id (vendor-dash-digit) following -m, in flag, quoted, or
+        # argument-list form, is forbidden regardless of the CURRENT
+        # declaration - after a swap, a stale OLD id matches neither
+        # marker above (Sol review round 2, 0.5.0). Placeholders
+        # (-m <canonical-model-id>) and variables (-m $model / "-m", model)
+        # do not match the shape.
+        id_after_m = re.compile(r'-m[\s",]+["\x27]?[A-Za-z][A-Za-z0-9.]*-\d')
         notes_name = "model-prompting-notes.md"
         offenders = []
         for pattern in ("skills/**/*.md", "commands/*.md", "tools/*.ps1",
-                        "evals/**/*.py", "evals/**/*.json", "README.md",
-                        "CLAUDE.md", "hooks/*"):
+                        "evals/**/*.py", "evals/**/*.json", "evals/**/*.ps1",
+                        "README.md", "CLAUDE.md", "hooks/*"):
             for f in REPO_ROOT.glob(pattern):
                 if f.is_file() and f.name != notes_name:
                     text = read(f)
-                    if any(mk in text for mk in markers):
+                    if any(mk in text for mk in markers) or id_after_m.search(text):
                         offenders.append(str(f.relative_to(REPO_ROOT)))
         assert not offenders, (
             f"hardcoded reviewer model literal outside {notes_name}:"
