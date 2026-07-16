@@ -27,6 +27,7 @@ behaviorally test the stale cached copy.
 import argparse
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -248,12 +249,23 @@ def env_without_codex():
     return env
 
 
+def _neutralize(text):
+    # Agent-authored text must never occupy the tool-evidence namespace:
+    # only genuine structured events may produce a line starting with a
+    # [tool_use ...]/[tool_result ...] marker, or the executor could SPOOF
+    # evidence by printing marker-shaped prose (Sol review 2026-07-16).
+    # A lookalike line start gets a visible prefix instead of deletion, so
+    # the grader still sees what the agent claimed - as prose.
+    return re.sub(r"(?m)^(\[tool_(?:use|result) )",
+                  r"[agent-text, not a tool event] \1", text)
+
+
 def compact_stream(stdout):
     """Flatten claude -p stream-json events into a graded transcript: the
-    agent's text verbatim, tool calls with their inputs (the evidence that
-    e.g. codex exec actually ran), tool results truncated - without this
-    the grader only sees the final message and marks real tool work as
-    absent (first full-suite run, 2026-07-12)."""
+    agent's text (neutralized - see _neutralize), tool calls with their
+    inputs (the evidence that e.g. codex exec actually ran), tool results
+    truncated - without this the grader only sees the final message and
+    marks real tool work as absent (first full-suite run, 2026-07-12)."""
     lines = []
     for raw in stdout.splitlines():
         raw = raw.strip()
@@ -262,17 +274,18 @@ def compact_stream(stdout):
         try:
             event = json.loads(raw)
         except json.JSONDecodeError:
-            lines.append(raw)
+            lines.append(_neutralize(raw))
             continue
         etype = event.get("type")
         if etype == "result":
-            lines.append("[final result]\n" + str(event.get("result", "")))
+            lines.append("[final result]\n"
+                         + _neutralize(str(event.get("result", ""))))
             continue
         for block in (event.get("message") or {}).get("content") or []:
             if not isinstance(block, dict):
                 continue
             if block.get("type") == "text":
-                lines.append(block["text"])
+                lines.append(_neutralize(block["text"]))
             elif block.get("type") == "tool_use":
                 args = json.dumps(block.get("input", {}))
                 # The id is what binds a result to ITS call: without it the
@@ -341,7 +354,8 @@ def run_case(case, model, timeout, artifacts=None, head=False):
         if proc.stderr:
             # Labeled so the grader never mistakes harness noise for the
             # agent ending its run mid-thought.
-            transcript += "\n=== EXECUTOR STDERR (harness, not agent output) ===\n" + proc.stderr
+            transcript += ("\n=== EXECUTOR STDERR (harness, not agent output) ===\n"
+                           + _neutralize(proc.stderr))
         if artifacts:
             artifacts.mkdir(parents=True, exist_ok=True)
             (artifacts / f"{case['id']}.transcript.txt").write_text(
