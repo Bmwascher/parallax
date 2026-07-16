@@ -7,8 +7,8 @@ Each case in evals/<skill>/evals.json runs in a throwaway workspace built
 from its `setup` config (synthetic References/ fixture in, codex stripped
 from PATH for degraded cases), executes headless via `claude -p` with a
 scoped tool allowlist, and is then graded expectation-by-expectation by an
-independent model (GPT-5.6 Sol via codex by default - the executor's vendor
-never grades itself).
+independent model (the canonical cross-vendor reviewer via codex - the
+executor's vendor never grades itself).
 
     python run_behavioral_evals.py --list                 # CI self-test
     python run_behavioral_evals.py                        # run all
@@ -20,7 +20,7 @@ fixture cannot fake (e.g. an implemented branch with a frozen plan).
 
 IMPORTANT: the executor loads the INSTALLED plugin, not this checkout -
 after editing the skill, bump .claude-plugin/plugin.json and run
-`claude plugin update crosscheck@crosscheck` before re-running, or you will
+`claude plugin update parallax@parallax` before re-running, or you will
 behaviorally test the stale cached copy.
 """
 
@@ -178,7 +178,7 @@ end)
 
 def git(ws, *args):
     subprocess.run(["git", "-C", str(ws),
-                    "-c", "user.name=crosscheck-eval",
+                    "-c", "user.name=parallax-eval",
                     "-c", "user.email=eval@localhost", *args],
                    check=True, capture_output=True)
 
@@ -318,7 +318,7 @@ def run_case(case, model, timeout, artifacts=None, head=False):
     setup = case.get("setup", {})
     if setup.get("manual"):
         return "SKIPPED(manual)", setup["manual"], []
-    with tempfile.TemporaryDirectory(prefix="crosscheck-eval-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="parallax-eval-") as tmp:
         ws, subs = build_workspace(setup, tmp)
         prompt = case["prompt"]
         for placeholder, value in subs.items():
@@ -465,7 +465,7 @@ def grade(case, transcript):
         expectations=numbered, expected=case["expected_output"],
         transcript=transcript,
     )
-    with tempfile.TemporaryDirectory(prefix="crosscheck-grade-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="parallax-grade-") as tmp:
         reply_file = Path(tmp) / "reply.txt"
         try:
             proc = subprocess.run(

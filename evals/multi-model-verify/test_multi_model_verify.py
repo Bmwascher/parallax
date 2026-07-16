@@ -745,7 +745,7 @@ class TestHook:
 
 
 class TestDriftProtection:
-    """tools/check-drift.ps1 watches the three upstreams crosscheck's
+    """tools/check-drift.ps1 watches the three upstreams parallax's
     contract depends on (superpowers template, Claude Code surface, codex
     exec flags). These pin its own contract so edits cannot quietly hollow
     it out."""
@@ -944,7 +944,7 @@ class TestDriftProtection:
         # A toast that only names a file is a report that rots unread: the
         # toast must point at the triage command, and the command must exist
         # in the plugin.
-        assert "/crosscheck:drift-triage" in self.drift()
+        assert "/parallax:drift-triage" in self.drift()
         command = REPO_ROOT / "commands" / "drift-triage.md"
         assert command.is_file(), "drift-triage plugin command missing"
         body = read(command)
@@ -962,10 +962,10 @@ class TestDriftProtection:
         # garbage value falls back instead of throwing past the pending
         # handling (Sol review 2026-07-13).
         text = self.drift()
-        assert re.search(r'\$InStateMachine = \(\$env:CROSSCHECK_DRIFT_STATEMACHINE -eq "1"\)',
+        assert re.search(r'\$InStateMachine = \(\$env:PARALLAX_DRIFT_STATEMACHINE -eq "1"\)',
                          text), "seams must be gated on one explicit guard"
-        assert re.search(r"\$InStateMachine -and \$env:CROSSCHECK_DRIFT_TOAST_LOG", text)
-        assert re.search(r"\$InStateMachine -and \$env:CROSSCHECK_DRIFT_TRIAGE_TIMEOUT_MS", text)
+        assert re.search(r"\$InStateMachine -and \$env:PARALLAX_DRIFT_TOAST_LOG", text)
+        assert re.search(r"\$InStateMachine -and \$env:PARALLAX_DRIFT_TRIAGE_TIMEOUT_MS", text)
         assert "[int]::TryParse" in text, (
             "a non-numeric seam value must not throw past the fallback path"
         )
@@ -988,7 +988,7 @@ class TestDoctorCommand:
             "hooks/hooks.json",                # 2: hook registration
             "code-reviewer.md",                # 3: fingerprint
             "codex login status",              # 4: transport
-            'schtasks /Query /TN "crosscheck drift watch"',  # 5: drift task
+            'schtasks /Query /TN "parallax drift watch"',  # 5: drift task
             "drift-pending.json",              # 5: pending entries
             "--plugin-dir",                    # 6: eval target head-vs-cache
             "GitHub install",                  # 1: stable installs have no
@@ -1054,14 +1054,14 @@ class TestDriftStateMachine:
         # The harness must test the WORKING-TREE script, not the last
         # committed one, and guard against recursive nested-gate runs.
         assert "Copy-Item" in text and "check-drift.ps1" in text
-        assert 'CROSSCHECK_DRIFT_STATEMACHINE = "1"' in text
+        assert 'PARALLAX_DRIFT_STATEMACHINE = "1"' in text
 
     def test_harness_is_hermetic(self):
         # Two containment rules. (1) Every env var it changes is restored -
         # this is runnable from an interactive shell, and leaving a fake
         # USERPROFILE behind is worse than any test it runs. (2) It owns
         # TEMP, so the worktrees the script creates land in its sandbox: a
-        # cleanup that swept $TEMP\crosscheck-drift-* by name could delete a
+        # cleanup that swept $TEMP\parallax-drift-* by name could delete a
         # concurrent PRODUCTION run's worktree (Sol review 2026-07-13).
         text = read(self.HARNESS)
         assert "finally {" in text and re.search(
@@ -1071,17 +1071,17 @@ class TestDriftStateMachine:
         assert re.search(r"\$env:TEMP = \$FakeTemp", text), (
             "the harness must own TEMP so script worktrees stay in-sandbox"
         )
-        assert 'Filter "crosscheck-drift-*"' not in text, (
+        assert 'Filter "parallax-drift-*"' not in text, (
             "name-sweep cleanup can delete a concurrent production worktree"
         )
 
     def test_run_state_machine(self):
         if os.name != "nt":
             pytest.skip("Windows-only (drives powershell.exe)")
-        if os.environ.get("CROSSCHECK_DRIFT_STATEMACHINE"):
+        if os.environ.get("PARALLAX_DRIFT_STATEMACHINE"):
             pytest.skip("recursion guard: already inside a state-machine run")
-        if not os.environ.get("CROSSCHECK_STATEMACHINE"):
-            pytest.skip("slow live suite - set CROSSCHECK_STATEMACHINE=1"
+        if not os.environ.get("PARALLAX_STATEMACHINE"):
+            pytest.skip("slow live suite - set PARALLAX_STATEMACHINE=1"
                         " (run when tools/check-drift.ps1 changes)")
         proc = subprocess.run(
             ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass",

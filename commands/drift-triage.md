@@ -1,9 +1,9 @@
 ---
-description: Triage the latest crosscheck drift-watch report and repair what broke
+description: Triage the latest parallax drift-watch report and repair what broke
 ---
 
 Triage the newest drift-watch report produced by `tools/check-drift.ps1`
-(the weekly "crosscheck drift watch" toast points here).
+(the weekly "parallax drift watch" toast points here).
 
 ## Locate the report
 
@@ -11,12 +11,12 @@ The reports live in the CHECKOUT the scheduled task runs from, not the
 plugin cache. Resolve it:
 
 ```powershell
-schtasks /Query /TN "crosscheck drift watch" /V /FO LIST
+schtasks /Query /TN "parallax drift watch" /V /FO LIST
 ```
 
 The "Task To Run" line contains the absolute path to `check-drift.ps1`;
 reports are in `drift-reports\` next to it (newest file by name). If the
-task does not exist, ask the user where the crosscheck checkout lives.
+task does not exist, ask the user where the parallax checkout lives.
 
 **Check `drift-pending.json` (next to check-drift.ps1) FIRST.** If it
 exists, earlier runs are still unresolved — it is a LIST of entries, each
@@ -33,7 +33,7 @@ and stop.
 
 ## Triage each finding
 
-Work in the crosscheck checkout, on a feature branch (repo rule: behavior
+Work in the parallax checkout, on a feature branch (repo rule: behavior
 changes never go directly on main). For each finding class:
 
 **`[CRITICAL] fingerprint literal ... gone` (superpowers template)**
@@ -53,7 +53,7 @@ regexes in the hook script (run the hook e2e tests), then re-pin the
 fixture as above.
 
 **`[WARN] Claude Code X -> Y changelog mentions ...`**
-Evaluate each quoted changelog line against crosscheck's four exposure
+Evaluate each quoted changelog line against parallax's four exposure
 surfaces: the hook matcher and hook JSON schema (`hooks/hooks.json`), the
 plugin cache/install layout (dev loop in README), Skill loading, and the
 behavioral runner's `claude -p` / `--allowedTools` invocation
@@ -78,12 +78,12 @@ moved checkout) and fix the machine, not the repo.
 
 ## Finish
 
-Per the repo's standing rules: run all gates, get the cross-vendor (Sol)
+Per the repo's standing rules: run all gates, get the cross-vendor
 review of the diff, then adjudicate it yourself — verify each finding
 against the repo before acting; the reviewer's verdict is input, not the
 decision (debate-protocol.md, Final adjudication). Then merge and push,
 bump the plugin version, and
-`claude plugin update crosscheck@crosscheck`. Remind the user to restart
+`claude plugin update parallax@parallax`. Remind the user to restart
 sessions if hooks/ or skills/ changed. If a finding needs no code change,
 record the disposition in your reply — the report file stays as the
 archive.

@@ -37,7 +37,7 @@ Every frozen plan ends with:
 
 ## Debate record
 
-**Participants:** Fable 5 (session) / GPT-5.6 Sol (codex exec, session <id>)
+**Participants:** <session model> (session) / <reviewer model> (codex exec, session <id>)
 **Rounds used:** N of CAP
 **Outcome:** converged | converged with amendments | escalated
 **Verification status:** FULL | DEGRADED
@@ -47,18 +47,18 @@ Every frozen plan ends with:
 ### Resolved points
 | # | Claim | Raised by | Outcome | Evidence |
 |---|-------|-----------|---------|----------|
-| 1 | ...   | Sol       | accepted into Task 3 | References/<addon>/<file>:<line> |
-| 2 | ...   | Fable     | refuted  | .wow-api-reference/<file> |
-| 3 | ...   | Sol       | struck (no citation) | — |
+| 1 | ...   | reviewer  | accepted into Task 3 | References/<addon>/<file>:<line> |
+| 2 | ...   | session   | refuted  | .wow-api-reference/<file> |
+| 3 | ...   | reviewer  | struck (no citation) | — |
 
 ### Escalated points (user-decided)
-| # | Question | Fable position | Sol position | Owner's call |
-|---|----------|----------------|--------------|--------------|
+| # | Question | Session position | Reviewer position | Owner's call |
+|---|----------|------------------|-------------------|--------------|
 
 ### Degraded-mode note
 (required whenever Verification status is DEGRADED — name what was skipped,
 why, and the recorded user authorization. The Participants line must name
-the actual participants, never the default Sol line.)
+the actual participants, never the placeholder template line.)
 ```
 
 The three status fields are structured on purpose: mode `diff` parses

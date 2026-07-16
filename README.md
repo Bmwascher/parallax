@@ -1,7 +1,9 @@
-# crosscheck
+# parallax
 
 **Cross-model verification for Claude Code.** Two equal-weight frontier
-models — Fable 5 (the session) and GPT-5.6 Sol (via the OpenAI codex CLI) —
+models — the session model and a cross-vendor reviewer (via the OpenAI
+codex CLI; the current reviewer lane is declared in the skill's
+model-prompting-notes.md) —
 verify and refute each other's claims with file:line evidence *before* a
 cheaper implementer touches code, and again *before* the result merges.
 Neither vendor grades its own homework.
@@ -14,7 +16,7 @@ scope.
 
 ```mermaid
 flowchart LR
-    A[superpowers<br/>brainstorm] --> B{{"mode plan debate<br/>Fable 5 ⇄ GPT-5.6 Sol"}}
+    A[superpowers<br/>brainstorm] --> B{{"mode plan debate<br/>session ⇄ reviewer"}}
     B -->|converged| C["frozen plan<br/>+ debate record"]
     B -->|escalated| U[user decides]
     C --> D["implementer subagent<br/>(zero judgment calls)"]
@@ -47,7 +49,7 @@ The debate rules that keep this honest
 - **Round cap** — 4 exchanges by default; convergence in one round on a
   sound plan is the system working, and manufactured objections are a
   protocol violation, not diligence.
-- **Session continuity** — Sol keeps debate state across rounds via
+- **Session continuity** — the reviewer keeps debate state across rounds via
   `codex exec … resume <SESSION_ID>`; the full context is sent once.
 - **Final adjudication** — the session always has the last step: it
   verifies the reviewer's final round against the repo and emits the
@@ -62,8 +64,8 @@ The debate rules that keep this honest
 | `skills/multi-model-verify/` | The debate skill: both modes, debate protocol, frozen-plan format, model prompting notes, fallbacks/consent gate |
 | `hooks/` | PostToolUse + PostToolUseFailure hook (matcher `Task\|Agent`): fingerprints the superpowers code-reviewer dispatch, injects the mode-`diff` reminder with matching SHAs; inert everywhere else |
 | `agents/implementer.md` | Zero-judgment executor for frozen-plan tasks, pinned to the cheap lane (currently `model: sonnet`) |
-| `commands/drift-triage.md` | `/crosscheck:drift-triage` — reads the newest drift report, verifies each finding against the live contract surfaces, repairs on a branch |
-| `commands/doctor.md` | `/crosscheck:doctor` — operational health check: checkout-vs-installed version, hook registration, superpowers fingerprint, codex transport round-trip, drift task + pending entries. Reports, never fixes |
+| `commands/drift-triage.md` | `/parallax:drift-triage` — reads the newest drift report, verifies each finding against the live contract surfaces, repairs on a branch |
+| `commands/doctor.md` | `/parallax:doctor` — operational health check: checkout-vs-installed version, hook registration, superpowers fingerprint, codex transport round-trip, drift task + pending entries. Reports, never fixes |
 | `evals/` | Four gate tiers for the skill itself — see [Verify](#verify) |
 | `tools/check-drift.ps1` | Weekly drift watch over the three upstreams the contract depends on — see [Drift protection](#drift-protection) |
 
@@ -101,7 +103,7 @@ flowchart TD
 ## Swapping lanes
 
 Every role is a plug — the contracts attach to roles, not models. Today's
-lineup (Fable session / Sol reviewer / Sonnet implementer) is one
+lineup (session / cross-vendor reviewer / cheap implementer) is one
 configuration:
 
 - **Implementer, Claude tier** — edit one line: `model:` in
@@ -126,9 +128,10 @@ configuration:
 
 ## Requirements
 
-- Claude Code with Fable 5 access; superpowers plugin enabled
+- Claude Code on a current frontier model; superpowers plugin enabled
 - OpenAI codex CLI 0.144+ authenticated via ChatGPT sign-in, on a plan with
-  GPT-5.6 Sol access (Plus or higher — free tier is Terra-only)
+  access to the canonical reviewer model (id, effort, and tier notes:
+  `skills/multi-model-verify/references/model-prompting-notes.md`)
 - `pwsh` (PowerShell 7) for the hook; Windows PowerShell 5.1 for the drift
   watch scheduled task; Python 3.10+ for the evals
 
@@ -137,8 +140,8 @@ configuration:
 Stable (any machine with git auth for this private repo):
 
 ```
-claude plugin marketplace add Bmwascher/crosscheck
-claude plugin install crosscheck@crosscheck
+claude plugin marketplace add Bmwascher/parallax
+claude plugin install parallax@parallax
 ```
 
 Dev loop — Claude Code copies installs into a **versioned cache**, so
@@ -146,15 +149,15 @@ checkout edits are NOT live until re-synced:
 
 ```
 claude plugin marketplace add <path-to-this-checkout>
-claude plugin install crosscheck@crosscheck
+claude plugin install parallax@parallax
 # after edits: bump .claude-plugin/plugin.json version, then
-claude plugin update crosscheck@crosscheck   # qualified name required
+claude plugin update parallax@parallax   # qualified name required
 # restart the Claude Code session to re-register hooks/skills
 ```
 
 Forgetting a step here is the failure mode that looks like a plugin bug: a
 stale cache runs yesterday's skill, a missed restart leaves the hook
-unregistered. `/crosscheck:doctor` reports both, plus the fingerprint, the
+unregistered. `/parallax:doctor` reports both, plus the fingerprint, the
 codex transport, and any unresolved drift — in one table.
 
 ## Verify
@@ -164,7 +167,7 @@ codex transport, and any unresolved drift — in one table.
 | 1 — structure | Spec lint + security scan | `python evals/tools/skill_lint.py skills/multi-model-verify --strict` · `python evals/tools/skill_scanner.py skills` | CI + local |
 | 2 — routing | Trigger/routing evals | `python evals/tools/run_trigger_evals.py` | CI + local |
 | 2.5 — contract | Structural pytest suite (hook e2e under pwsh, pinned superpowers template fixture, transport/fallback/status-field pins) | `python -m pytest evals -q` | CI + local |
-| 3 — behavior | Real headless `claude -p` executor runs each case in a throwaway workspace (synthetic `References/DemoWidget` fixture; codex stripped from PATH for degraded cases), graded expectation-by-expectation by Sol — the executor's vendor never grades itself | `python evals/tools/run_behavioral_evals.py` | local only |
+| 3 — behavior | Real headless `claude -p` executor runs each case in a throwaway workspace (synthetic `References/DemoWidget` fixture; codex stripped from PATH for degraded cases), graded expectation-by-expectation by the cross-vendor reviewer — the executor's vendor never grades itself | `python evals/tools/run_behavioral_evals.py` | local only |
 
 Tier 3 tests the **installed** plugin, not the checkout — run the dev-loop
 re-sync first. Lint/scan/trigger/pytest run in CI on every push.
@@ -188,12 +191,12 @@ changes:
 ```powershell
 .\evals\tools\drift_statemachine_tests.ps1
 # or through pytest:
-$env:CROSSCHECK_STATEMACHINE = "1"; python -m pytest evals -q
+$env:PARALLAX_STATEMACHINE = "1"; python -m pytest evals -q
 ```
 
 ## Drift protection
 
-crosscheck's contract points at three moving targets it does not control.
+parallax's contract points at three moving targets it does not control.
 `tools/check-drift.ps1` watches all three; a clean run raises no toast
 (the report is still archived under `tools/drift-reports/` — gitignored,
 machine-local).
@@ -227,7 +230,7 @@ gate, and only commits (on a `drift/<runid>` branch, never merged) when
 the gate is green and the commit verifiably landed. The toast reflects the verified outcome,
 so the only interruptions are actionable ones:
 
-A `FIXES-APPLIED` diff also gets a **script-side Sol cross-review**
+A `FIXES-APPLIED` diff also gets a **script-side cross-vendor review**
 (read-only, bounded) before the toast — the reviewer stays in the loop even
 unattended, and a failed review reads "cross-review UNAVAILABLE", never
 implied-reviewed. The final reviewer is the session, deferred to pickup:
@@ -237,19 +240,19 @@ user's approval — nothing merges on the external reviewer's word alone.
 
 | Outcome | Toast |
 |---|---|
-| `FIXES-APPLIED` + non-empty diff + gates green | "fix ready on `drift/<runid>` (gates green; Sol review: …) — review and merge" |
+| `FIXES-APPLIED` + non-empty diff + gates green | "fix ready on `drift/<runid>` (gates green; cross-review: …) — review and merge" |
 | `NO-ACTION`, WARN-only noise, no diff | none (verdict archived in the report) |
 | `NO-ACTION` but a CRITICAL finding | "verify dismissal by hand" — a CRITICAL is never silently dismissed |
-| Gate failed, verdict/diff mismatch, timeout, `BLOCKED` | falls back to the manual toast: run `/crosscheck:drift-triage` yourself |
+| Gate failed, verdict/diff mismatch, timeout, `BLOCKED` | falls back to the manual toast: run `/parallax:drift-triage` yourself |
 
 `-NoAutoTriage` disables the headless run (detection + manual toast only).
-`/crosscheck:drift-triage` remains available interactively — same guide the
+`/parallax:drift-triage` remains available interactively — same guide the
 headless run follows.
 
 Unresolved weeks can't fall out of the lifecycle: any run that ends in the
 manual toast or an open fix branch writes `tools/drift-pending.json`, and
 every later run re-toasts it until the branch is merged/discarded
-(auto-clears) or `/crosscheck:drift-triage` records a disposition —
+(auto-clears) or `/parallax:drift-triage` records a disposition —
 findings never depend on one noticed toast.
 
 ## Pattern lineage

@@ -23,8 +23,8 @@ THE single source for the reviewer transport. Swapping the reviewer model
 is a one-line edit HERE and nowhere else: the executable surfaces (the
 behavioral runner's grader, the drift watch's cross-review) PARSE these
 two declarations at runtime and fail loud when they are missing, and the
-instruction surfaces (SKILL.md transport commands, /crosscheck:doctor's
-probe, /crosscheck:drift-triage's example) direct the agent to read the
+instruction surfaces (SKILL.md transport commands, /parallax:doctor's
+probe, /parallax:drift-triage's example) direct the agent to read the
 values from this file rather than type a remembered id. The consistency
 test forbids a hardcoded `-m` model literal anywhere else in the repo.
 
