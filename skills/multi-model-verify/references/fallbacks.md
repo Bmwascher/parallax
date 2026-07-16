@@ -49,12 +49,13 @@ model-prompting-notes.md). Brief the skeptic with the same XML-style brief
 Sol would have received, including the strike rule and the
 anti-manufactured-objection rule.
 
-### Sol model rejected (400 "not supported when using Codex with a ChatGPT account")
-The account tier lost Sol access (free/Go tiers get Terra only; Plus and
-above get Sol). Do NOT silently substitute another model — Sol is a user
-directive. Consent gate: fix subscription / run degraded / abort.
-(`gpt-5.6-terra` responding while `gpt-5.6-sol` 400s confirms tier-gating,
-not a CLI problem — probed 2026-07-12.)
+### Reviewer model rejected (400 "not supported when using Codex with a ChatGPT account")
+The account tier lost access to the canonical reviewer model (the id is
+declared ONLY in model-prompting-notes.md). Do NOT silently substitute
+another model — the reviewer model is a user directive. Consent gate: fix
+subscription / run degraded / abort. Tier-gating diagnostics for the
+current lane (which sibling model confirms gating vs a CLI problem) live
+in model-prompting-notes.md's Lane diagnostics bullet.
 
 ### Usage limit reached (session or weekly quota) — class `quota-exhausted`
 The ChatGPT account's usage quota is exhausted; codex's error names which

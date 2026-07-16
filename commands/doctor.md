@@ -46,12 +46,14 @@ cheapest possible round-trip probe. The probe writes to a FRESH unique
 output file (the `Get-Random` name below), so a stale `TRANSPORT-OK` from
 an earlier run can never read as a pass over a failed probe.
 
-Read the canonical model id from
-`skills/multi-model-verify/references/model-prompting-notes.md` (the
-`Canonical model id` declaration — the ONE place the reviewer model is
-defined) and use it as `<id>` below. A missing declaration is itself a
-BROKEN finding. Effort `low` is deliberate — this is a reachability check,
-not a review.
+Read the canonical model id from the INSTALLED copy's
+`skills/multi-model-verify/references/model-prompting-notes.md` — resolve
+it under the `installPath` from check 1, exactly like checks 2 and 3 (a
+bare relative path only works when the current directory happens to be the
+plugin checkout). The `Canonical model id` declaration is the ONE place
+the reviewer model is defined; use it as `<id>` below. A missing
+declaration is itself a BROKEN finding. Effort `low` is deliberate — this
+is a reachability check, not a review.
 
 ```powershell
 $probe = "$env:TEMP\crosscheck-doctor-$(Get-Random).txt"

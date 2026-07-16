@@ -56,9 +56,11 @@ Canonical reasoning effort: `high`
   repetition as noise and it can trigger needless approval requests.
   Prefer decision rules over ALWAYS/NEVER except for true invariants
   (read-only sandbox, the strike rule, the verdict grammar).
-- **Final check** (from the guide's review-task pattern): every brief ends by
-  asking Sol to flag information it could NOT verify — those flags feed the
-  strike rule instead of masquerading as findings.
+- **Final check** (OUR convention, not OpenAI's — the guide's review
+  example asks for impact/likelihood/mitigation per finding, not an
+  unverified-information pass): every brief ends by asking Sol to flag
+  information it could NOT verify — those flags feed the strike rule
+  instead of masquerading as findings.
 - **Structure the brief with XML-style tags**:
 
   ```text
@@ -85,14 +87,22 @@ Canonical reasoning effort: `high`
   candidate, but only via a full behavioral-suite pass at both levels;
   never silently downgrade the review lane.
 - **Session resume, not context re-send**: capture the `session id:` from
-  round 1 and resume it (flags before the subcommand). 5.6 persists its
-  reasoning state across turns of a resumed session — re-sending the full
-  context each round both wastes tokens and discards that state. NEVER
-  `resume --last` — it grabs whatever codex session ran most recently,
-  which may be a concurrent /codex:review, not your debate.
+  round 1 and resume it (flags before the subcommand). OpenAI documents
+  5.6 reasoning reuse across turns as CONDITIONAL (carried through
+  previous_response_id-style continuation); whether `codex exec resume`
+  engages it is not documented — the resume rule stands on token cost and
+  preserved debate memory either way. NEVER `resume --last` — it grabs
+  whatever codex session ran most recently, which may be a concurrent
+  /codex:review, not your debate.
 - **Fabrication counter**: Sol's METR/system-card record means "I verified X"
   claims from Sol get the same strike rule as everything else — quoted
   file:line or it did not happen.
+- **Lane diagnostics (tier gating)**: a 400 "not supported when using
+  Codex with a ChatGPT account" on the canonical id while `gpt-5.6-terra`
+  responds confirms subscription tier-gating, not a CLI problem (free/Go
+  tiers get Terra only; Plus and above get Sol — probed 2026-07-12). This
+  feeds the consent gate in fallbacks.md; the ids live HERE because
+  fallbacks.md never names models.
 
 ## Reusable recipes
 

@@ -91,14 +91,19 @@ class TestTransportContract:
         # The reviewer model is a ONE-LINE swap: SKILL.md carries the
         # canonical placeholder, and the declaration lives solely in
         # model-prompting-notes.md (Sol holistic C2, built 0.5.0).
+        # These regexes mirror the executables' parse EXACTLY and assert
+        # parseability only - constraining the id to a vendor prefix or the
+        # effort to a fixed vocabulary here would make this test a second
+        # authority over the declaration, the very defect the canonical
+        # source exists to kill (Sol review round 1, 0.5.0).
         text = read(SKILL_MD)
         assert "-m <canonical-model-id>" in text
         assert "model-prompting-notes.md" in text
         notes = read(REFERENCES / "model-prompting-notes.md")
-        assert re.search(r"Canonical model id: `gpt-[\w.\-]+`", notes), (
+        assert re.search(r"Canonical model id: `[^`\n]+`", notes), (
             "the canonical model declaration must exist and be parseable"
         )
-        assert re.search(r"Canonical reasoning effort: `(low|medium|high)`",
+        assert re.search(r"Canonical reasoning effort: `[^`\n]+`",
                          notes), (
             "the canonical effort declaration must exist and be parseable"
         )
@@ -132,7 +137,14 @@ class TestTransportContract:
         # declaration file re-opens the partial-migration hole: that surface
         # keeps calling the OLD reviewer after a swap. The executables parse
         # the declarations at runtime instead.
-        marker = "-m gpt" + "-"  # keep this test out of its own sweep
+        # Two markers: the contiguous flag form, and the canonical id
+        # literal itself (parsed from the notes) - the literal catches
+        # argument-list syntax like '"-m", "<id>"' that the flag form
+        # misses (Sol review round 1, 0.5.0).
+        notes = read(REFERENCES / "model-prompting-notes.md")
+        declared = re.search(r"Canonical model id: `([^`\n]+)`", notes)
+        assert declared, "canonical declaration missing - cannot sweep"
+        markers = ("-m gpt" + "-", declared.group(1))
         notes_name = "model-prompting-notes.md"
         offenders = []
         for pattern in ("skills/**/*.md", "commands/*.md", "tools/*.ps1",
@@ -140,7 +152,8 @@ class TestTransportContract:
                         "CLAUDE.md", "hooks/*"):
             for f in REPO_ROOT.glob(pattern):
                 if f.is_file() and f.name != notes_name:
-                    if marker in read(f):
+                    text = read(f)
+                    if any(mk in text for mk in markers):
                         offenders.append(str(f.relative_to(REPO_ROOT)))
         assert not offenders, (
             f"hardcoded reviewer model literal outside {notes_name}:"
