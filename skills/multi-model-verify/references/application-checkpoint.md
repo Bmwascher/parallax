@@ -63,9 +63,10 @@ worse than none.
 `applied` is not the terminal state. After the last planned edit, EXECUTE
 the verification plan and append its results to the artifact
 (`gate | result`, plus any deviations); an unexecuted verification plan
-is a plan, not a state transition. A re-review of the fixed range
-follows (mode diff: the fix re-review exchange), and the terminal PASS —
-and its attestation — come only after that.
+is a plan, not a state transition, and the artifact update carrying those
+results is the LAST write of the application phase. A re-review of the
+fixed range follows (mode diff: the fix re-review exchange), and the
+terminal PASS — and its attestation — come only after that.
 
 ## The artifact
 

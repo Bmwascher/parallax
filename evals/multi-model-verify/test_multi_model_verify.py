@@ -711,6 +711,10 @@ class TestApplicationCheckpoint:
         assert re.search(r"append its results", text)
         assert re.search(r"unexecuted verification plan\s+is a plan, not a"
                          r" state transition", text)
+        assert re.search(r"LAST write of the application phase", text), (
+            "the results-carrying artifact update closes the application"
+            " phase (Sol round 2, R-F2)"
+        )
 
     def test_attestation_binding_surfaces(self):
         writer = read(REPO_ROOT / "tools" / "write-attestation.ps1")
@@ -751,6 +755,20 @@ class TestApplicationCheckpoint:
         assert "path separator" in verifier, (
             "checkpoint_file must be a leaf name - a separator escapes the"
             " canonical directory"
+        )
+        # Sol round 2, R-F3: the emitter DECLARES the binding state
+        # (schema 2), so deleting every binding field cannot downgrade a
+        # bound record to legacy-unbound; schema 1 stays accepted.
+        assert re.search(r"schema\s+= 2", writer) and \
+            "checkpoint_binding" in writer, (
+                "every new record must carry the emitter-authored"
+                " binding-state discriminator"
+            )
+        assert "checkpoint_binding=bound but binding fields missing" in verifier
+        assert "checkpoint_binding=none but binding fields present" in verifier
+        assert re.search(r"schema -ne 1\) -and \(\$att\.schema -ne 2",
+                         verifier), (
+            "schema 2 must be accepted alongside legacy schema 1"
         )
 
     def test_mutation_lane_composition(self):
@@ -814,6 +832,10 @@ class TestApplicationCheckpoint:
         assert "read-back" in joined, (
             "applied is not reverified: post-edit read-back evidence is"
             " required (Sol diff review round 1, F2)"
+        )
+        assert "appending the verification results" in joined, (
+            "the artifact update carrying the results is the last write of"
+            " the application phase (Sol round 2, R-F2)"
         )
         runner = read(REPO_ROOT / "evals" / "tools"
                       / "run_behavioral_evals.py")

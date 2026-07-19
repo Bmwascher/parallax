@@ -33,7 +33,7 @@ function Read-Attestation($attDir, $sha, $repoName) {
     # Strict shape: wrong schema, wrong mode, wrong repo, or a head_sha
     # that does not match its own filename is a stale or hand-edited
     # record - never a pass.
-    if ($att.schema -ne 1) { return $null }
+    if (($att.schema -ne 1) -and ($att.schema -ne 2)) { return $null }
     if ($att.mode -ne "diff") { return $null }
     if ($att.head_sha -ne $sha) { return $null }
     if ($att.repo -ne $repoName) { return $null }
@@ -66,9 +66,32 @@ function Get-CheckpointBindingFailure($att, $repo, $commonDir) {
     $fields = @("checkpoint_file", "checkpoint_hash", "changed_paths")
     $names = $att.PSObject.Properties.Name
     $present = @($fields | Where-Object { $names -contains $_ })
-    if ($present.Count -eq 0) { return $null }
-    if ($present.Count -ne 3) {
-        return "partial checkpoint metadata ($($present -join ', ')) - binding is all-or-none; stale or tampered, re-review"
+    if ($att.schema -ge 2) {
+        # Schema 2: the emitter DECLARES the binding state, so deleting
+        # the binding fields cannot downgrade a bound record to
+        # legacy-unbound (Sol round 2, R-F3). The declaration must exist
+        # and agree with the fields actually present.
+        if (-not ($names -contains "checkpoint_binding")) {
+            return "schema 2 record without checkpoint_binding - stale or tampered; re-review"
+        }
+        if ($att.checkpoint_binding -eq "none") {
+            if ($present.Count -ne 0) {
+                return "checkpoint_binding=none but binding fields present - stale or tampered; re-review"
+            }
+            return $null
+        }
+        if ($att.checkpoint_binding -cne "bound") {
+            return "unknown checkpoint_binding '$($att.checkpoint_binding)' - stale or tampered; re-review"
+        }
+        if ($present.Count -ne 3) {
+            return "checkpoint_binding=bound but binding fields missing - stale or tampered; re-review"
+        }
+    } else {
+        # Schema 1 (legacy, pre-0.7.0): binding presence is inferred.
+        if ($present.Count -eq 0) { return $null }
+        if ($present.Count -ne 3) {
+            return "partial checkpoint metadata ($($present -join ', ')) - binding is all-or-none; stale or tampered, re-review"
+        }
     }
     # Re-locate and re-hash the artifact at its canonical location: a
     # checkpoint modified, deleted, or substituted after attestation must

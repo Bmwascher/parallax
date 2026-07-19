@@ -72,8 +72,12 @@ if ($baseFull -eq $headFull) {
 $attDir = Join-Path (Join-Path $commonDir "parallax") "attestations"
 New-Item -ItemType Directory -Force -Path $attDir | Out-Null
 
+# Schema 2 (0.7.0): checkpoint_binding is the emitter-authored
+# DECLARATION of whether this record carries checkpoint metadata -
+# without it, deleting the binding fields would downgrade a bound record
+# to legacy-unbound and the verifier could not tell (Sol round 2).
 $att = [ordered]@{
-    schema              = 1
+    schema              = 2
     repo                = (Split-Path $toplevel -Leaf)
     mode                = $Mode
     base_sha            = $baseFull
@@ -83,6 +87,7 @@ $att = [ordered]@{
     rounds              = $Rounds
     participants        = $Participants
     route_note          = $RouteNote
+    checkpoint_binding  = "none"
     stamp               = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss")
 }
 if ($CheckpointFile) {
@@ -105,6 +110,7 @@ if ($CheckpointFile) {
         Write-Output "ERROR: could not compute the changed-path set for $baseFull..$headFull"
         exit 2
     }
+    $att["checkpoint_binding"] = "bound"
     $att["checkpoint_file"] = (Split-Path $CheckpointFile -Leaf)
     $att["checkpoint_hash"] = $cpHash
     $att["changed_paths"] = $changed

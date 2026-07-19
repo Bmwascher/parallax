@@ -273,14 +273,31 @@ class TestCheckpointBinding:
         assert v.returncode == 1 and "missing" in v.stdout
 
     def test_partial_metadata_rejected(self, tmp_path):
-        # Deleting changed_paths must not evade the binding: metadata is
-        # all-or-none, so a partial record is stale or tampered.
+        # Deleting changed_paths must not evade the binding: the bound
+        # declaration demands all fields, so a partial record is tampered.
         repo = make_repo(tmp_path)
         base = rev(repo)
         head = feature_head(repo, base)
         cp = self.make_checkpoint(repo)
         assert attest(repo, base, head, checkpoint=cp).returncode == 0
         record = json.loads(att_file(repo, head).read_text(encoding="utf-8"))
+        del record["changed_paths"]
+        att_file(repo, head).write_text(json.dumps(record), encoding="utf-8")
+        v = verify(repo, head)
+        assert v.returncode == 1 and "binding fields missing" in v.stdout
+
+    def test_legacy_partial_metadata_rejected(self, tmp_path):
+        # The schema-1 all-or-none rule still holds for legacy records: a
+        # downgraded-to-1 record keeping a partial field set is rejected,
+        # not read as unbound.
+        repo = make_repo(tmp_path)
+        base = rev(repo)
+        head = feature_head(repo, base)
+        cp = self.make_checkpoint(repo)
+        assert attest(repo, base, head, checkpoint=cp).returncode == 0
+        record = json.loads(att_file(repo, head).read_text(encoding="utf-8"))
+        record["schema"] = 1
+        del record["checkpoint_binding"]
         del record["changed_paths"]
         att_file(repo, head).write_text(json.dumps(record), encoding="utf-8")
         v = verify(repo, head)
@@ -343,17 +360,79 @@ class TestCheckpointBinding:
         assert v.returncode == 1 and "changed-path set" in v.stdout
 
     def test_record_without_binding_skips_check(self, tmp_path):
-        # Pre-0.7.0 records (and clean PASSes with no fix application)
-        # carry none of the binding fields - the check must skip, not
-        # reject, or every existing attestation dies retroactively.
+        # A clean PASS with no fix application carries the emitter's
+        # explicit checkpoint_binding=none declaration and no binding
+        # fields - the check must skip, not reject.
         repo = make_repo(tmp_path)
         base = rev(repo)
         head = feature_head(repo, base)
         assert attest(repo, base, head).returncode == 0
         record = json.loads(att_file(repo, head).read_text(encoding="utf-8"))
+        assert record["schema"] == 2
+        assert record["checkpoint_binding"] == "none"
         assert "changed_paths" not in record
         v = verify(repo, head)
         assert v.returncode == 0
+
+    def test_delete_all_fields_on_bound_record_rejected(self, tmp_path):
+        # The R-F3 bypass (Sol round 2): stripping ALL binding fields must
+        # not downgrade a bound record to unbound - the emitter-authored
+        # discriminator says it was bound.
+        repo = make_repo(tmp_path)
+        base = rev(repo)
+        head = feature_head(repo, base)
+        cp = self.make_checkpoint(repo)
+        assert attest(repo, base, head, checkpoint=cp).returncode == 0
+        record = json.loads(att_file(repo, head).read_text(encoding="utf-8"))
+        assert record["checkpoint_binding"] == "bound"
+        for field in ("checkpoint_file", "checkpoint_hash", "changed_paths"):
+            del record[field]
+        att_file(repo, head).write_text(json.dumps(record), encoding="utf-8")
+        v = verify(repo, head)
+        assert v.returncode == 1 and "binding fields missing" in v.stdout
+
+    def test_stripped_discriminator_rejected(self, tmp_path):
+        # A schema-2 record must carry the declaration itself; deleting it
+        # is the same downgrade attempt one level up.
+        repo = make_repo(tmp_path)
+        base = rev(repo)
+        head = feature_head(repo, base)
+        cp = self.make_checkpoint(repo)
+        assert attest(repo, base, head, checkpoint=cp).returncode == 0
+        record = json.loads(att_file(repo, head).read_text(encoding="utf-8"))
+        del record["checkpoint_binding"]
+        att_file(repo, head).write_text(json.dumps(record), encoding="utf-8")
+        v = verify(repo, head)
+        assert v.returncode == 1 and "without checkpoint_binding" in v.stdout
+
+    def test_binding_none_with_fields_rejected(self, tmp_path):
+        # The declaration must AGREE with the fields present - a "none"
+        # record smuggling binding fields is tampered either way.
+        repo = make_repo(tmp_path)
+        base = rev(repo)
+        head = feature_head(repo, base)
+        cp = self.make_checkpoint(repo)
+        assert attest(repo, base, head, checkpoint=cp).returncode == 0
+        record = json.loads(att_file(repo, head).read_text(encoding="utf-8"))
+        record["checkpoint_binding"] = "none"
+        att_file(repo, head).write_text(json.dumps(record), encoding="utf-8")
+        v = verify(repo, head)
+        assert v.returncode == 1 and "binding fields present" in v.stdout
+
+    def test_legacy_schema1_record_accepted(self, tmp_path):
+        # Pre-0.7.0 records are schema 1 with no discriminator and no
+        # binding fields - they must stay accepted, or every existing
+        # attestation dies retroactively.
+        repo = make_repo(tmp_path)
+        base = rev(repo)
+        head = feature_head(repo, base)
+        assert attest(repo, base, head).returncode == 0
+        record = json.loads(att_file(repo, head).read_text(encoding="utf-8"))
+        record["schema"] = 1
+        del record["checkpoint_binding"]
+        att_file(repo, head).write_text(json.dumps(record), encoding="utf-8")
+        v = verify(repo, head)
+        assert v.returncode == 0 and "direct" in v.stdout
 
     def test_missing_checkpoint_file_errors(self, tmp_path):
         repo = make_repo(tmp_path)
