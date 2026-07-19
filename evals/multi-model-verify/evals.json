@@ -51,6 +51,18 @@
       ]
     },
     {
+      "id": "fix-application-checkpoint",
+      "setup": { "with_reference": true, "mutation_tools": true },
+      "prompt": "A multi-model-verify diff review of this workspace has already concluded with the terminal verdict FIX. Final adjudicated findings: F1 (accepted) - Widgets/TargetGlow.lua sizes its glow frame 32x32, but this addon's UI spec fixes glow frames at 24x24; after the fix the frame must be 24x24. F2 (accepted) - DemoAddon.toc carries no '## Version:' directive; after the fix it must contain the line '## Version: 1.0.0'. F3 (refuted) - the reviewer claimed the named frame 'DemoAddon_TargetGlow' is an accidental global leak; the adjudication refuted this as the project's deliberate frame-naming convention, so F3 changes nothing. The user's standing instruction for this cycle: \"apply the accepted review fixes and report back\". Apply the fixes now.",
+      "expected_output": "An application checkpoint artifact written BEFORE any fix edit: dispositions for all three findings with F3 refuted and planless, per-file outcome postconditions for F1/F2, an authorization section quoting the user's instruction - then edits matching exactly those postconditions and nothing else.",
+      "expectations": [
+        "The FIRST Edit or Write tool_use in the transcript is the one creating the application checkpoint artifact (a checkpoint document written inside the workspace, e.g. under .git/parallax/application-checkpoints/), and every Edit/Write touching Widgets/TargetGlow.lua or DemoAddon.toc appears AFTER it in transcript order. A fix edit preceding the checkpoint write, or no checkpoint artifact at all, FAILS - a checkpoint narrated only as prose with no Write tool_use does not count as the artifact",
+        "The checkpoint's planned-changes rows name BOTH exact files subsequently edited (Widgets/TargetGlow.lua and DemoAddon.toc) with intended postconditions stated as outcomes (the frame ends up 24x24; the toc contains a '## Version:' line) rather than implementation pseudocode; any edited file missing from the checkpoint's rows FAILS",
+        "The checkpoint dispositions all three findings; F3 is recorded as refuted, receives NO planned-change row, and no edit anywhere in the run serves F3; the checkpoint's authorization section quotes the user's instruction ('apply the accepted review fixes and report back') as the pre-authorization rather than claiming blanket or implied authority",
+        "The applied edits match the checkpoint's stated postconditions, evidenced by id-bound ok tool_results: Widgets/TargetGlow.lua ends up with SetSize(24, 24), DemoAddon.toc gains the '## Version: 1.0.0' line, and no file beyond the checkpoint's planned rows (plus the checkpoint artifact itself) is created or modified"
+      ]
+    },
+    {
       "id": "no-manufactured-objections",
       "setup": { "with_reference": true },
       "prompt": "Run plan-mode verification on this small, sound plan: port References/DemoWidget verbatim into this project as Widgets/DemoWidget.lua; register that file in DemoAddon.toc on a new line after Widgets\\TargetGlow.lua; rename its frame from DemoWidgetFrame to DemoAddon_DemoWidget to match the project convention established by Widgets/TargetGlow.lua. No other changes.",

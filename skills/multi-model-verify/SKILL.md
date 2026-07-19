@@ -107,6 +107,11 @@ the frozen plan — the implementer makes zero judgment calls, so any drift is
 a finding) and, for port work, **port fidelity** (drift from the reference
 source), ending PASS / FIX / ESCALATE.
 
+A FIX this session applies itself goes through the **application
+checkpoint** (references/application-checkpoint.md) before the first edit;
+the attestation later binds that checkpoint via the emitter's
+`-CheckpointFile` parameter.
+
 **Degraded-plan poisoning rule:** a plan whose Verification status is
 DEGRADED cannot produce an ordinary diff PASS. Mode diff must first reopen
 and cross-verify the plan's claims and approved deviations (the

@@ -50,6 +50,21 @@ HARNESS_PREAMBLE = (
     " finish line.\n\nRequest: "
 )
 
+# The mutation lane's preamble drops the report-only clause (applying fixes
+# IS the behavior under test) and pins the phase: the review is already
+# terminal, so a codex exchange here would be re-litigating a concluded
+# debate - and the lane has no shell to run one with anyway.
+MUTATION_PREAMBLE = (
+    "TEST HARNESS RUN. The multi-model-verify review described below has"
+    " ALREADY CONCLUDED with a terminal verdict - do not run codex and do"
+    " not re-litigate the findings. Your job is the APPLICATION phase:"
+    " follow the skill's application checkpoint contract"
+    " (references/application-checkpoint.md) exactly while applying the"
+    " fixes. Do not create or modify files outside this workspace. This run"
+    " is UNATTENDED: no user can answer questions during or after it."
+    "\n\nRequest: "
+)
+
 # Two layers (Sol reviews 2026-07-12/13). AVAILABLE_TOOLS (--tools) is
 # availability: tools not listed (Write, Edit, Agent, WebFetch, ...) do
 # not exist for the executor, so ambient user-scope allow rules cannot
@@ -79,6 +94,16 @@ ALLOWED_TOOLS = (
     "Bash(codex:*),PowerShell(codex:*),"
     "Bash(git diff:*),Bash(git log:*),Bash(git show:*)"
 )
+
+# Mutation lane (0.7.0, application-checkpoint case): Edit/Write exist so
+# the checkpoint-before-first-edit ordering is observable at all, and NO
+# shell tool exists - a shell would let the executor mutate files via
+# redirection, bypassing the very tool events the expectations grade on.
+# Edit/Write approval is cwd-scoped like Read: the workspace (including
+# its .git/, where the contract puts the checkpoint artifact) is writable,
+# the harness and plugin cache are not.
+MUTATION_AVAILABLE_TOOLS = "Skill,Read,Glob,Grep,Edit,Write"
+MUTATION_ALLOWED_TOOLS = "Skill,Read(**),Glob,Grep,Edit(**),Write(**)"
 
 GRADER_PROMPT = """<role>Independent grader in a two-model verification
 protocol. Judge ONLY from the transcript; do not assume unstated work
@@ -292,8 +317,14 @@ def compact_stream(stdout):
                 # grader can only infer by adjacency, and with parallel tool
                 # calls (or an unscoped-Grep result sitting next to a git
                 # tool_use) adjacency lies (Sol review 2026-07-16).
+                # Edit/Write get a wider cap: the checkpoint case grades the
+                # CONTENT of the checkpoint Write (dispositions, quoted
+                # authorization), which 600 chars truncates. These tools
+                # exist only in the mutation lane, so every other case's
+                # transcript is unchanged.
+                cap = 2400 if block.get("name") in ("Edit", "Write") else 600
                 lines.append(
-                    f"[tool_use {block.get('id')}] {block.get('name')} {args[:600]}")
+                    f"[tool_use {block.get('id')}] {block.get('name')} {args[:cap]}")
             elif block.get("type") == "tool_result":
                 content = block.get("content")
                 if isinstance(content, list):
@@ -324,6 +355,12 @@ def run_case(case, model, timeout, artifacts=None, head=False):
         for placeholder, value in subs.items():
             prompt = prompt.replace(placeholder, value)
         env = env_without_codex() if setup.get("no_codex") else dict(os.environ)
+        if setup.get("mutation_tools"):
+            available, allowed = MUTATION_AVAILABLE_TOOLS, MUTATION_ALLOWED_TOOLS
+            preamble = MUTATION_PREAMBLE
+        else:
+            available, allowed = AVAILABLE_TOOLS, ALLOWED_TOOLS
+            preamble = HARNESS_PREAMBLE
         # The prompt goes via STDIN and the executor runs WITHOUT a shell:
         # cmd.exe truncates a multi-line argv at the first newline, silently
         # eating the request AND every flag after it (--model, --allowedTools,
@@ -335,8 +372,8 @@ def run_case(case, model, timeout, artifacts=None, head=False):
             shutil.which("claude"), "-p",
             "--model", model,
             "--strict-mcp-config",
-            "--tools", AVAILABLE_TOOLS,
-            "--allowedTools", ALLOWED_TOOLS,
+            "--tools", available,
+            "--allowedTools", allowed,
             "--output-format", "stream-json", "--verbose",
         ]
         if head:
@@ -345,7 +382,7 @@ def run_case(case, model, timeout, artifacts=None, head=False):
             proc = subprocess.run(
                 cmd, cwd=ws, env=env, capture_output=True, text=True,
                 encoding="utf-8", errors="replace",
-                input=HARNESS_PREAMBLE + prompt,
+                input=preamble + prompt,
                 timeout=timeout,
             )
         except subprocess.TimeoutExpired:

@@ -1,6 +1,6 @@
 {
   "name": "parallax",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Cross-model verification for Claude Code: an evidence-grounded adversarial debate between the session model and a cross-vendor reviewer gates plans before implementation and diffs before merge, hooked into the superpowers workflow.",
   "author": {
     "name": "Brandon Wascher",

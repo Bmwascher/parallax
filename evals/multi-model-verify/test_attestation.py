@@ -11,6 +11,7 @@ Runs wherever a PowerShell host exists: Windows powershell.exe or pwsh
 (GitHub ubuntu runners ship pwsh); skipped otherwise.
 """
 
+import hashlib
 import json
 import shutil
 import subprocess
@@ -67,11 +68,14 @@ def feature_head(repo, base, branch="feat", filename="f.txt"):
 
 
 def attest(repo, base, head, verdict="PASS", status="FULL",
-           route="effective route confirmed"):
-    return run_ps(WRITE, "-RepoRoot", str(repo), "-BaseSha", base,
-                  "-HeadSha", head, "-Verdict", verdict,
-                  "-VerificationStatus", status, "-RouteNote", route,
-                  "-Rounds", "1", "-Participants", "session/reviewer")
+           route="effective route confirmed", checkpoint=None):
+    args = [WRITE, "-RepoRoot", str(repo), "-BaseSha", base,
+            "-HeadSha", head, "-Verdict", verdict,
+            "-VerificationStatus", status, "-RouteNote", route,
+            "-Rounds", "1", "-Participants", "session/reviewer"]
+    if checkpoint is not None:
+        args += ["-CheckpointFile", str(checkpoint)]
+    return run_ps(*args)
 
 
 def verify(repo, sha):
@@ -198,3 +202,80 @@ class TestAttestationLane:
         repo = make_repo(tmp_path)
         v = verify(repo, rev(repo))
         assert v.returncode == 1 and "no attestations" in v.stdout
+
+
+class TestCheckpointBinding:
+    """0.7.0: -CheckpointFile binds the application checkpoint's hash and
+    the EMITTER-computed changed-path set into the record; the verifier
+    rejects a record whose path set no longer matches its base..head."""
+
+    def make_checkpoint(self, tmp_path):
+        cp = tmp_path / "checkpoint.md"
+        cp.write_text("# Application checkpoint\nf.txt | x present | F1\n",
+                      encoding="utf-8")
+        return cp
+
+    def test_checkpoint_recorded_and_verifies(self, tmp_path):
+        repo = make_repo(tmp_path)
+        base = rev(repo)
+        head = feature_head(repo, base)
+        cp = self.make_checkpoint(tmp_path)
+        emitted = attest(repo, base, head, checkpoint=cp)
+        assert emitted.returncode == 0, emitted.stdout + emitted.stderr
+        record = json.loads(att_file(repo, head).read_text(encoding="utf-8"))
+        assert record["checkpoint_file"] == "checkpoint.md"
+        # Hash is of the checkpoint file's bytes, computed by the emitter.
+        expected = hashlib.sha256(cp.read_bytes()).hexdigest()
+        assert record["checkpoint_hash"] == expected
+        # Path set is emitter-computed from base..head, never caller input.
+        assert record["changed_paths"] == ["f.txt"]
+        v = verify(repo, head)
+        assert v.returncode == 0 and "direct" in v.stdout
+
+    def test_tampered_changed_paths_rejected(self, tmp_path):
+        repo = make_repo(tmp_path)
+        base = rev(repo)
+        head = feature_head(repo, base)
+        cp = self.make_checkpoint(tmp_path)
+        assert attest(repo, base, head, checkpoint=cp).returncode == 0
+        record = json.loads(att_file(repo, head).read_text(encoding="utf-8"))
+        record["changed_paths"] = ["f.txt", "unreviewed-extra.lua"]
+        att_file(repo, head).write_text(json.dumps(record), encoding="utf-8")
+        v = verify(repo, head)
+        assert v.returncode == 1 and "changed-path set" in v.stdout
+
+    def test_tampered_changed_paths_rejected_on_merge(self, tmp_path):
+        # The merge acceptance branch applies the same binding.
+        repo = make_repo(tmp_path)
+        base = rev(repo)
+        head = feature_head(repo, base)
+        cp = self.make_checkpoint(tmp_path)
+        assert attest(repo, base, head, checkpoint=cp).returncode == 0
+        record = json.loads(att_file(repo, head).read_text(encoding="utf-8"))
+        record["changed_paths"] = ["something-else.lua"]
+        att_file(repo, head).write_text(json.dumps(record), encoding="utf-8")
+        git(repo, "checkout", "-q", "-b", "trunk", base)
+        git(repo, "merge", "-q", "--no-ff", "feat", "-m", "merge")
+        v = verify(repo, rev(repo))
+        assert v.returncode == 1 and "changed-path set" in v.stdout
+
+    def test_record_without_paths_skips_binding(self, tmp_path):
+        # Pre-0.7.0 records (and clean PASSes with no fix application)
+        # carry no changed_paths field - the binding check must skip, not
+        # reject, or every existing attestation dies retroactively.
+        repo = make_repo(tmp_path)
+        base = rev(repo)
+        head = feature_head(repo, base)
+        assert attest(repo, base, head).returncode == 0
+        record = json.loads(att_file(repo, head).read_text(encoding="utf-8"))
+        assert "changed_paths" not in record
+        v = verify(repo, head)
+        assert v.returncode == 0
+
+    def test_missing_checkpoint_file_errors(self, tmp_path):
+        repo = make_repo(tmp_path)
+        base = rev(repo)
+        head = feature_head(repo, base)
+        p = attest(repo, base, head,
+                   checkpoint=tmp_path / "no-such-checkpoint.md")
+        assert p.returncode == 2 and "not found" in p.stdout

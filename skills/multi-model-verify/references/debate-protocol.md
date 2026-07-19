@@ -75,6 +75,10 @@ performs one closing step before anything merges or freezes:
    the verdict mechanically via the attestation emitter — see SKILL.md's
    finish-line section). A reviewer PASS/FIX is input to this step, never
    the decision itself.
+4. If the verdict requires changes this session will apply itself: the
+   application checkpoint (references/application-checkpoint.md) precedes
+   the FIRST file edit — the checkpoint, not the verdict, is what
+   authorizes touching files.
 
 Equal weight governs claims during the debate; adjudication is procedural,
 not a rank: the session is the accountable party with live-repo access, so

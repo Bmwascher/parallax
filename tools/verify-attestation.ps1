@@ -55,6 +55,22 @@ function Get-AttestationRejectReason($att, $label) {
         " - a FULL, confirmed-route PASS is required")
 }
 
+function Test-ChangedPathsMatch($att, $repo) {
+    # 0.7.0 checkpoint binding: records that carry a changed-path set must
+    # still match the actual base..head - an attestation minted for a
+    # different change set is stale or tampered. Records without the field
+    # (pre-0.7.0, or a clean PASS with no fix application) skip this.
+    if (-not ($att.PSObject.Properties.Name -contains "changed_paths")) { return $true }
+    $recorded = @($att.changed_paths | Where-Object { $_ } | Sort-Object)
+    $actual = @(& git -C $repo diff --name-only ($att.base_sha + ".." + $att.head_sha) 2>$null | Where-Object { $_ } | Sort-Object)
+    if ($LASTEXITCODE -ne 0) { return $false }
+    if ($recorded.Count -ne $actual.Count) { return $false }
+    for ($i = 0; $i -lt $recorded.Count; $i++) {
+        if ($recorded[$i] -ne $actual[$i]) { return $false }
+    }
+    return $true
+}
+
 $toplevel = (& git -C $RepoRoot rev-parse --show-toplevel 2>$null | Out-String).Trim()
 if (($LASTEXITCODE -ne 0) -or -not $toplevel) {
     Write-Output "ERROR: $RepoRoot is not a git repository"
@@ -86,6 +102,10 @@ if (-not (Test-Path $attDir)) {
 $att = Read-Attestation $attDir $local $repoName
 if ($att) {
     if (Test-AttestationPasses $att) {
+        if (-not (Test-ChangedPathsMatch $att $RepoRoot)) {
+            Write-Output "attestation for $local records a changed-path set that no longer matches its base..head - stale or tampered; re-review"
+            exit 1
+        }
         Write-Output "attested: $local (direct, $($att.stamp), $($att.participants))"
         exit 0
     }
@@ -100,6 +120,10 @@ $p2 = (& git -C $RepoRoot rev-parse --verify --quiet ($local + "^2") 2>$null | O
 if ($p2) {
     $att2 = Read-Attestation $attDir $p2 $repoName
     if ($att2 -and (Test-AttestationPasses $att2) -and ($att2.base_sha -eq $p1)) {
+        if (-not (Test-ChangedPathsMatch $att2 $RepoRoot)) {
+            Write-Output "attestation for merge parent2 $p2 records a changed-path set that no longer matches its base..head - stale or tampered; re-review"
+            exit 1
+        }
         Write-Output "attested: merge $local (parent2 $p2 reviewed against base $p1, $($att2.stamp))"
         exit 0
     }

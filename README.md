@@ -299,6 +299,32 @@ carrier (git note, PR metadata, or an uploaded artifact) — deferred until
 a PR-based merge flow exists; today both repos merge locally, so pre-push
 IS the integration boundary.
 
+## Application checkpoint
+
+The debate has a hard contract; without one, the **application phase**
+reverts to act-immediately bias — a verdict lands and the session starts
+editing with no record between "review concluded" and "diffs happening"
+(0.7.0, from a live failure observed in a distilled-skill setting). The
+checkpoint (`skills/multi-model-verify/references/application-checkpoint.md`)
+makes the missing transitions explicit —
+`reviewed → dispositioned → authorized → applied → reverified` — and is
+what authorizes touching files, not the verdict.
+
+Before the first fix edit the session writes a checkpoint artifact under
+the reviewed repo's `.git/parallax/application-checkpoints/`: the reviewed
+range and outcome, a disposition per finding, one row per exact file with
+its intended **postcondition** (outcomes, never pseudocode), the
+verification plan, and an authorization line that either stops for the
+user or **quotes the pre-authorizing instruction verbatim**. Scope growth
+invalidates the authorization until the checkpoint is amended. At
+attestation time `-CheckpointFile` binds the artifact's hash plus the
+emitter-computed changed-path set into the record, and the verifier
+rejects a record whose path set no longer matches its range. The
+behavioral suite grades the contract end-to-end: a mutation-enabled eval
+lane (Edit/Write, deliberately no shell) checks the checkpoint precedes
+the first edit, refuted findings get no file plan, and the applied edits
+match the stated postconditions.
+
 ## Pattern lineage
 
 Advisor/evals ideas from
