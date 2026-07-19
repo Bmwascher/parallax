@@ -439,11 +439,26 @@ CODEX_ENV_DENYLIST = ("CODEX_API_KEY", "OPENAI_API_KEY", "OPENAI_BASE_URL")
 def codex_env():
     """The grader rides the first-party ChatGPT login: strip env overrides
     that could silently reroute the call (API-key auth or a redirected base
-    URL) - mirror of the drift watch's job-scoped hygiene."""
+    URL) - mirror of the drift watch's script-scoped hygiene."""
     env = dict(os.environ)
     for name in CODEX_ENV_DENYLIST:
         env.pop(name, None)
     return env
+
+
+def codex_login_ok(env):
+    """ChatGPT-state preflight in the SAME env as the dispatch that
+    follows: exit 0 alone also passes an API-key login. Runs immediately
+    before every billable call, not just at startup - auth can expire
+    mid-suite while a 900s executor case runs (Sol diff review round 2)."""
+    try:
+        login = subprocess.run(["codex", "login", "status"],
+                               capture_output=True, text=True, timeout=30,
+                               shell=(os.name == "nt"), env=env)
+    except (subprocess.TimeoutExpired, OSError):
+        return False
+    text = (login.stdout or "") + (login.stderr or "")
+    return login.returncode == 0 and "Logged in using ChatGPT" in text
 
 
 def effective_route_ok(output, model, effort):
@@ -484,6 +499,13 @@ def reviewer_config():
 
 def grade(case, transcript):
     model, effort = reviewer_config()
+    # One sanitized environment object for preflight AND dispatch, built
+    # here so the two commands cannot diverge.
+    env = codex_env()
+    if not codex_login_ok(env):
+        print("    grader auth not ready: codex login status did not report"
+              " the first-party ChatGPT state")
+        return []
     # {REVIEWER_MODEL} lets an expectation reference the canonical id
     # without hardcoding it (the grader cannot read files, so the harness
     # substitutes the parsed value).
@@ -505,7 +527,7 @@ def grade(case, transcript):
                 input=prompt, stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT, text=True, timeout=600,
                 encoding="utf-8", errors="replace",
-                shell=(os.name == "nt"), env=codex_env(),
+                shell=(os.name == "nt"), env=env,
             )
         except (subprocess.TimeoutExpired, OSError):
             return []
@@ -575,15 +597,12 @@ def main(argv=None):
             print(f"error: {tool} CLI not on PATH - this runner is local-only")
             return 2
 
-    # Billable-lane preflight in the SAME sanitized env the dispatches use
-    # (Sol diff review, 0.6.0): require the first-party ChatGPT state -
-    # exit 0 alone also passes an API-key login.
-    login = subprocess.run(["codex", "login", "status"],
-                           capture_output=True, text=True,
-                           shell=(os.name == "nt"), env=codex_env())
-    login_text = (login.stdout or "") + (login.stderr or "")
-    if login.returncode != 0 or "Logged in using ChatGPT" not in login_text:
-        print(f"error: codex auth not ready: {login_text.strip()[:200]}")
+    # Early loud failure before any 900s executor run burns for nothing;
+    # grade() repeats this preflight immediately before each billable call
+    # (auth can expire mid-suite).
+    if not codex_login_ok(codex_env()):
+        print("error: codex auth not ready - login status must report the"
+              " first-party ChatGPT state")
         return 2
 
     failures = 0

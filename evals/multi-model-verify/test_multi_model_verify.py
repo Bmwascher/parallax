@@ -976,11 +976,19 @@ class TestDriftProtection:
             'f"model_reasoning_effort={effort}"' in runner, (
                 "the grader invocation must use the parsed canonical values"
             )
-        assert "env=codex_env()" in runner and "CODEX_ENV_DENYLIST" in runner, (
+        assert "CODEX_ENV_DENYLIST" in runner, (
             "the grader spawn must strip reroute-capable env overrides"
         )
         assert "effective_route_ok" in runner, (
             "verdicts from an unverified grader route must be discarded"
+        )
+        # The preflight lives IN grade(), sharing one sanitized env object
+        # with the dispatch - a startup-only check goes stale while a 900s
+        # executor case runs (Sol diff review round 2).
+        grade_src = runner[runner.index("def grade("):runner.index("def main(")]
+        assert "codex_login_ok(" in grade_src and "env=env" in grade_src, (
+            "grade() must preflight auth in the SAME env immediately before"
+            " its codex dispatch"
         )
         drift = self.drift()
         assert re.search(r"-m \$model -c model_reasoning_effort=\$effort",
