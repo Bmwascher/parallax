@@ -34,6 +34,8 @@ itself. Required content — specificity is the contract, never length:
    `file | intended postcondition | finding id(s)`. Postconditions state
    the outcome ("threshold equals 0.2"), never implementation pseudocode —
    the reviewer catches a plausible-but-wrong fix by comparing outcomes.
+   A code literal is implementation even when correct: write "the frame
+   is 24x24", not `frame:SetSize(24, 24)`.
 4. **Verification plan** — `gate | what passing proves`.
 5. **Authorization** — `awaiting user` or
    `pre-authorized by: "<the instruction, quoted>"`.
