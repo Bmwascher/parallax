@@ -87,6 +87,25 @@ Canonical reasoning effort: `high`
   as the baseline, then compare one level lower" — `medium` is a tuning
   candidate, but only via a full behavioral-suite pass at both levels;
   never silently downgrade the review lane.
+- **Effective route confirmation (every call, fresh or resume)**: codex
+  echoes the RESOLVED config in its startup header — capture stdout and
+  check the first `model: `, `provider: `, and `reasoning effort: ` lines
+  against the canonical declarations above (provider must be `openai`),
+  and on a resume that `session id: ` equals the id you resumed. A
+  mismatch is a TRANSPORT failure (fallbacks.md consent gate), never a
+  review result — a config.toml override or profile can silently swap the
+  reviewer, and the header is where that surfaces. Vocabulary discipline:
+  the header is CLIENT-RESOLVED metadata, so report "effective route
+  confirmed", never "used and confirmed" (codex exposes no server-attested
+  runtime identity); the reviewer's prose claiming a model name is never
+  identity evidence. Probed 2026-07-19 (codex v0.144.1): fresh and resumed
+  calls both emit the full header block.
+- **Env hygiene for the call**: clear `CODEX_API_KEY`, `OPENAI_API_KEY`,
+  and `OPENAI_BASE_URL` for the codex invocation — the first two can flip
+  auth to API-key billing, the base URL can reroute even
+  ChatGPT-authenticated traffic. The review lane always rides the
+  first-party login (`codex login status` must report `Logged in using
+  ChatGPT` — exit 0 alone also passes an API-key login).
 - **Session resume, not context re-send**: capture the `session id:` from
   round 1 and resume it (flags before the subcommand). OpenAI documents
   5.6 reasoning reuse across turns as CONDITIONAL (carried through

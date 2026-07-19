@@ -433,6 +433,36 @@ def elide_transcript(transcript, limit=40000, head_budget=15000,
 
 _REVIEWER = None
 
+CODEX_ENV_DENYLIST = ("CODEX_API_KEY", "OPENAI_API_KEY", "OPENAI_BASE_URL")
+
+
+def codex_env():
+    """The grader rides the first-party ChatGPT login: strip env overrides
+    that could silently reroute the call (API-key auth or a redirected base
+    URL) - mirror of the drift watch's job-scoped hygiene."""
+    env = dict(os.environ)
+    for name in CODEX_ENV_DENYLIST:
+        env.pop(name, None)
+    return env
+
+
+def effective_route_ok(output, model, effort):
+    """codex echoes the RESOLVED config in its startup header, so a
+    config.toml override or profile silently swapping the grader surfaces
+    here. First match wins - the header precedes any body text that could
+    quote such lines. Client-resolved metadata: this confirms the
+    EFFECTIVE ROUTE, never server-attested runtime identity."""
+    header = {}
+    for key in ("model", "provider", "reasoning effort"):
+        m = re.search(rf"(?m)^{key}: (.+)$", output or "")
+        header[key] = m.group(1).strip() if m else ""
+    ok = (header["model"] == model and header["provider"] == "openai"
+          and header["reasoning effort"] == effort)
+    if not ok:
+        print(f"    grader route mismatch: header={header};"
+              f" expected model={model} effort={effort} provider=openai")
+    return ok
+
 
 def reviewer_config():
     """(model id, reasoning effort) from THE canonical source - the skill's
@@ -474,11 +504,18 @@ def grade(case, transcript):
                  "--output-last-message", str(reply_file), "-"],
                 input=prompt, capture_output=True, text=True, timeout=600,
                 encoding="utf-8", errors="replace",
-                shell=(os.name == "nt"),
+                shell=(os.name == "nt"), env=codex_env(),
             )
         except (subprocess.TimeoutExpired, OSError):
             return []
         if proc.returncode != 0:
+            return []
+        # Scan stdout+stderr combined for the header - which stream codex
+        # prints it to is undocumented, and the drift watch's 2>&1 capture
+        # is stream-agnostic the same way. Fail closed: a mismatched route
+        # means these verdicts came from an unverified grader.
+        if not effective_route_ok((proc.stdout or "") + "\n" + (proc.stderr or ""),
+                                  model, effort):
             return []
         raw = reply_file.read_text(encoding="utf-8") if reply_file.is_file() else proc.stdout
     start, end = raw.find("["), raw.rfind("]")

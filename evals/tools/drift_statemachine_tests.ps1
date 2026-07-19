@@ -35,6 +35,8 @@
 #   gate-failure       a fix that BREAKS the suite is never committed
 #   malformed-review   an off-grammar cross-review reads as UNAVAILABLE
 #   commit-failure     failed commit discards changes, keeps no branch
+#   route-mismatch     wrong header model reads as UNAVAILABLE, fix still lands
+#   auth-preflight-fail failed login status skips the review call entirely
 #   triage-timeout     hung agent is killed at the cap
 #
 # Runtime: several minutes - four scenarios re-run the full pytest suite
@@ -164,6 +166,11 @@ exit /b 0
 $null = @($input)
 $argList = @($args)
 if ($argList -contains "--version") { Write-Output "codex-cli 7.7.7"; exit 0 }
+if ($argList.Count -ge 2 -and $argList[0] -eq "login" -and $argList[1] -eq "status") {
+    if ($env:CODEX_STUB_MODE -eq "auth-fail") { Write-Output "Not logged in"; exit 1 }
+    Write-Output "Logged in using ChatGPT"
+    exit 0
+}
 if ($argList.Count -ge 1 -and $argList[0] -eq "exec" -and ($argList -contains "--help")) {
     $flags = "--sandbox --output-last-message --model --config"
     if ($env:CODEX_STUB_MODE -eq "drop-config") {
@@ -174,6 +181,21 @@ if ($argList.Count -ge 1 -and $argList[0] -eq "exec" -and ($argList -contains "-
 }
 $idx = [Array]::IndexOf($argList, "--output-last-message")
 if ($idx -ge 0 -and ($idx + 1) -lt $argList.Count) {
+    # Echo the startup header the way the real CLI does - the script's
+    # effective-route check parses these lines from captured stdout. The
+    # healthy stub reflects the requested route back; wrong-model simulates
+    # a config override swapping the model out from under the -m flag.
+    $reqModel = ""
+    $mIdx = [Array]::IndexOf($argList, "-m")
+    if ($mIdx -ge 0 -and ($mIdx + 1) -lt $argList.Count) { $reqModel = $argList[$mIdx + 1] }
+    $reqEffort = ""
+    foreach ($a in $argList) {
+        if ("$a" -like "model_reasoning_effort=*") { $reqEffort = "$a".Split("=")[1] }
+    }
+    if ($env:CODEX_STUB_MODE -eq "wrong-model") { $reqModel = "stub-swapped-model" }
+    Write-Output "model: $reqModel"
+    Write-Output "provider: openai"
+    Write-Output "reasoning effort: $reqEffort"
     $verdict = "REVIEW: PASS"
     if ($env:CODEX_STUB_MODE -eq "bad-review") {
         $verdict = "Looks good to me, ship it."
@@ -469,6 +491,41 @@ Assert-True ((Get-Toasts) -match 'CRITICAL') "manual toast on commit failure"
 $pend = Get-Pending
 Assert-True ($pend.Count -eq 1 -and $pend[0].status -eq "manual-triage-needed") "pending: manual-triage-needed"
 Assert-True (-not (Get-DriftBranches)) "no orphan drift branch survives a failed commit"
+Complete-Scenario $b
+
+# --- scenario: route-mismatch ------------------------------------------------------
+# The effective-route check: a header model that differs from the canonical
+# declaration reads as UNAVAILABLE - the reviewer reply is never trusted,
+# however well-formed (it came over an unverified route). The fix still
+# lands; the human merge decision is the real gate. SLOW (real pytest run).
+
+$b = $script:failCount
+Reset-State
+# wrong-model keeps codex's flag surface healthy (no finding of its own) -
+# drive the run with the template WARN, same as malformed-review.
+Add-Content -Path $SpTemplate -Value "`nAn upstream edit that keeps both fingerprint literals.`n"
+Invoke-Drift "route-mismatch" "fixes" "wrong-model" 120000
+Assert-True ($script:LastReport -match 'committed on drift/') "the verified fix still commits"
+Assert-True ($script:LastReport -match 'effective route mismatch') "header/canonical disagreement is reported as a route mismatch"
+Assert-True ($script:LastReport -match 'cross-review UNAVAILABLE') "route mismatch reads as UNAVAILABLE"
+Assert-True (-not ($script:LastReport -match 'cross-review: ')) "a mismatched route is never reported as a reviewer verdict"
+$pend = Get-Pending
+if ($pend.Count -ge 1 -and $pend[0].branch) { git -C $Clone branch -D $pend[0].branch 2>&1 | Out-Null }
+Complete-Scenario $b
+
+# --- scenario: auth-preflight-fail -------------------------------------------------
+# A failed `codex login status` preflight skips the billable review call
+# entirely and records the crisp auth reason. SLOW (real pytest run).
+
+$b = $script:failCount
+Reset-State
+Add-Content -Path $SpTemplate -Value "`nAn upstream edit that keeps both fingerprint literals.`n"
+Invoke-Drift "auth-preflight-fail" "fixes" "auth-fail" 120000
+Assert-True ($script:LastReport -match 'committed on drift/') "the verified fix still commits"
+Assert-True ($script:LastReport -match 'cross-review UNAVAILABLE - codex auth not ready') "failed preflight records the auth reason"
+Assert-True (-not ($script:LastReport -match 'cross-review: ')) "no reviewer verdict without a passed preflight"
+$pend = Get-Pending
+if ($pend.Count -ge 1 -and $pend[0].branch) { git -C $Clone branch -D $pend[0].branch 2>&1 | Out-Null }
 Complete-Scenario $b
 
 # --- scenario: triage-timeout (LAST - see header) ----------------------------------

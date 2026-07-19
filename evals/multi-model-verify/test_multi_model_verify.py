@@ -306,6 +306,19 @@ class TestFallbacks:
         text = self.fallbacks()
         assert re.search(r"struck until re-verified", text, re.IGNORECASE)
 
+    def test_route_mismatch_is_named_class(self):
+        # The effective-route check (0.6.0): a header/canonical mismatch is
+        # not transient - skip the retry, straight to the gate - and the
+        # reply from the mismatched call never enters the debate.
+        text = self.fallbacks()
+        assert "route-mismatch" in text
+        assert "DISCARDED" in text, (
+            "the mismatched call's reply must be discarded unread"
+        )
+        assert re.search(r"Logged in using\s+ChatGPT", text), (
+            "the auth class must pin the first-party STATE, not exit-0"
+        )
+
     def test_missing_reference_refusal(self):
         joined = self.fallbacks() + read(SKILL_MD)
         assert re.search(r"References/", joined)
@@ -870,7 +883,9 @@ class TestDriftProtection:
         # via Sol before toasting; a missing/failed review is labeled
         # UNAVAILABLE, never implied-reviewed.
         assert "REVIEW: PASS" in text and "cross-review UNAVAILABLE" in text
-        assert re.search(r"Start-Job[\s\S]{0,400}codex exec --sandbox read-only", text), (
+        # 900-char window: the job scriptblock now carries the env-hygiene
+        # denylist (0.6.0) between Start-Job and the codex call.
+        assert re.search(r"Start-Job[\s\S]{0,900}codex exec --sandbox read-only", text), (
             "the cross-review must run script-side, bounded, read-only"
         )
         assert r"'^REVIEW: (PASS|FIX .+)$'" in text, (
@@ -927,6 +942,29 @@ class TestDriftProtection:
         ignore = read(REPO_ROOT / ".gitignore")
         assert "tools/drift-pending.json" in ignore
 
+    def test_cross_review_route_and_auth_hardening(self):
+        # 0.6.0 transport hardening: ChatGPT-state preflight immediately
+        # before the billable call, env denylist inside the job, the
+        # effective-route header check, and the verdict line closing the
+        # reply (a quoted grammar line mid-prose is not a verdict).
+        text = self.drift()
+        assert "codex login status" in text
+        assert "Logged in using ChatGPT" in text, (
+            "preflight must require the first-party auth STATE - exit 0"
+            " alone also passes an API-key login"
+        )
+        for var in ("CODEX_API_KEY", "OPENAI_API_KEY", "OPENAI_BASE_URL"):
+            assert var in text, f"env denylist must cover {var}"
+        assert "effective route mismatch" in text, (
+            "a header/canonical mismatch must be reported, never a verdict"
+        )
+        for key in ("'^model: (.+)$'", "'^reasoning effort: (.+)$'",
+                    "'^provider: (.+)$'"):
+            assert key in text, f"header parse missing {key}"
+        assert re.search(r"rv\[0\]\.Line\.Trim\(\) -eq \$lastLine", text), (
+            "the REVIEW line must be the LAST non-empty line of the reply"
+        )
+
     def test_reviewer_model_derives_from_canonical_source(self):
         # "Roles are plugs" v2 (0.5.0): no surface carries its own copy of
         # the reviewer id at all. The runtime surfaces must build their
@@ -938,6 +976,12 @@ class TestDriftProtection:
             'f"model_reasoning_effort={effort}"' in runner, (
                 "the grader invocation must use the parsed canonical values"
             )
+        assert "env=codex_env()" in runner and "CODEX_ENV_DENYLIST" in runner, (
+            "the grader spawn must strip reroute-capable env overrides"
+        )
+        assert "effective_route_ok" in runner, (
+            "verdicts from an unverified grader route must be discarded"
+        )
         drift = self.drift()
         assert re.search(r"-m \$model -c model_reasoning_effort=\$effort",
                          drift), (
@@ -998,9 +1042,12 @@ class TestDoctorCommand:
             "codex login status",              # 4: transport
             'schtasks /Query /TN "parallax drift watch"',  # 5: drift task
             "drift-pending.json",              # 5: pending entries
+            "drift-snapshot.json",             # 5: codex-version-change note
             "--plugin-dir",                    # 6: eval target head-vs-cache
             "GitHub install",                  # 1: stable installs have no
                                                #    checkout - N/A, not BROKEN
+            "Logged in using ChatGPT",         # 4: auth STATE, not exit-0
+            "effective route",                 # 4: header echo check (0.6.0)
         ):
             assert anchor in body, f"doctor check anchor missing: {anchor}"
         assert "PostToolUseFailure" in body, (
@@ -1049,7 +1096,8 @@ class TestDriftStateMachine:
                          "critical-dismissal", "warn-only-silence",
                          "pending-auto-clear", "fixes-applied",
                          "gate-failure", "malformed-review",
-                         "commit-failure", "triage-timeout"):
+                         "commit-failure", "route-mismatch",
+                         "auth-preflight-fail", "triage-timeout"):
             assert f'"{scenario}"' in text, f"scenario missing: {scenario}"
         # The gate scenario is the load-bearing one: a stub "fix" that
         # BREAKS the suite must be caught by the script's own pytest re-run,

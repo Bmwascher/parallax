@@ -70,7 +70,9 @@ what changed. Update the transport commands in
 structural transport pins
 in the tests in sync, and live-probe one round-trip
 (`codex exec --sandbox read-only -m <canonical model id from
-model-prompting-notes.md> ...`) before declaring it fixed.
+model-prompting-notes.md> ...`) before declaring it fixed — including the
+effective-route check: the probe's startup header must echo the canonical
+model/provider/effort (model-prompting-notes.md documents the check).
 
 **`[CRITICAL] claude/codex --version failed` or registry/fixture missing**
 Environment breakage, not drift: diagnose locally (PATH, reinstall,

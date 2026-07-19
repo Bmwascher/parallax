@@ -41,8 +41,11 @@ warns but cannot extract); none = BROKEN (diff gate inert). Also confirm
 
 ## 4. codex transport
 
-`codex --version`, then `codex login status`. If both succeed, run the
-cheapest possible round-trip probe. The probe writes to a FRESH unique
+`codex --version`, then `codex login status`. The login check must report
+the first-party auth STATE — output matching `Logged in using ChatGPT` —
+not merely exit 0 (an API-key login also exits 0 but rides different
+billing; report that as BROKEN with the actual output). If both pass, run
+the cheapest possible round-trip probe. The probe writes to a FRESH unique
 output file (the `Get-Random` name below), so a stale `TRANSPORT-OK` from
 an earlier run can never read as a pass over a failed probe.
 
@@ -57,12 +60,19 @@ is a reachability check, not a review.
 
 ```powershell
 $probe = "$env:TEMP\parallax-doctor-$(Get-Random).txt"
-"Reply with exactly: TRANSPORT-OK" | codex exec --sandbox read-only -m <id> -c model_reasoning_effort=low --output-last-message $probe -
-# OK only if the command exited 0 AND $probe now contains exactly TRANSPORT-OK
+$hdr = "$env:TEMP\parallax-doctor-hdr-$(Get-Random).txt"
+"Reply with exactly: TRANSPORT-OK" | codex exec --sandbox read-only -m <id> -c model_reasoning_effort=low --output-last-message $probe - > $hdr 2>&1
+# OK requires ALL of: exit 0; $probe contains exactly TRANSPORT-OK; and the
+# captured header ($hdr) echoes the EFFECTIVE ROUTE - first `model: ` line
+# equals <id>, first `provider: ` line `openai`, first `reasoning effort: `
+# line `low` (the probe pins low). codex prints the RESOLVED config there,
+# so a config.toml override or profile silently swapping the reviewer
+# surfaces as a mismatch = BROKEN (report header value vs canonical).
 ```
 
-OK requires BOTH a zero exit and fresh `TRANSPORT-OK` content; anything else
-is BROKEN.
+OK requires the zero exit, fresh `TRANSPORT-OK` content, AND the header
+match; anything else is BROKEN. The header is client-resolved metadata —
+report it as `effective route confirmed`, never "used and confirmed".
 
 ## 5. Drift watch
 
@@ -74,6 +84,12 @@ next run time sane, and the "Task To Run" path points at an existing
 `tools\drift-pending.json` next to it:
 entries present = list each (status, stamp) and point at
 /parallax:drift-triage.
+
+Also read `tools\drift-snapshot.json` next to that `check-drift.ps1`: if
+its `codex` field differs from the live `codex --version` from check 4,
+note it (STALE, informational) — the codex CLI changed since the last
+weekly run, so the transport flag surface was last probed against the OLD
+version; the next drift run re-probes it.
 
 ## 6. Behavioral eval target
 

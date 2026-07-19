@@ -28,10 +28,17 @@ Options: [fix codex] [run degraded] [abort]
 
 One retry with the SAME model, sandbox, effort, and session parameters is
 the DEFAULT recovery for any failure that has no named immediate-gate rule
-below (codex-missing, model-rejected, auth-expired, and quota-exhausted go
-straight to the gate — retrying those changes nothing). The retry reduces
-nothing, so it needs no consent. A failed retry goes to the consent gate.
-This covers timeouts and transient transport errors.
+below (codex-missing, model-rejected, auth-expired, route-mismatch, and
+quota-exhausted go straight to the gate — retrying those changes nothing).
+The retry reduces nothing, so it needs no consent. A failed retry goes to
+the consent gate. This covers timeouts and transient transport errors.
+
+Cost framing (why exactly ONE): a pre-dispatch failure (spawn error, auth
+preflight, missing CLI) never reached the provider, so its retry is free; a
+post-dispatch failure (timeout, empty reply, malformed output) may have
+already incurred quota cost, so the single automatic retry is the bounded
+re-spend — anything beyond it is the user's call at the consent gate, never
+a silent loop.
 
 **Catch-all: any codex failure not named in this file — nonzero exit, empty
 reply file, malformed output, network loss, resume failure —
@@ -69,9 +76,20 @@ tier* — record which. If a debate is mid-flight, also note the codex
 session id in the debate record so the debate resumes after the reset
 instead of restarting from round 1.
 
-### codex auth expired
-`codex login status` fails → the fix needs the user anyway (`codex login`
-is an interactive browser sign-in): consent gate.
+### codex auth expired or wrong auth mode
+`codex login status` fails, or succeeds without reporting `Logged in using
+ChatGPT` (an API-key login also exits 0 but rides different billing) → the
+fix needs the user anyway (`codex login` is an interactive browser
+sign-in): consent gate.
+
+### Effective route mismatch — class `route-mismatch`
+The codex startup header (client-resolved `model:` / `provider:` /
+`reasoning effort:` — see model-prompting-notes.md) disagrees with the
+canonical declarations, or a resume's `session id:` is not the one
+requested. Nothing here is transient — a config.toml override, a profile,
+or a dropped session does not fix itself: **skip the retry**, consent gate.
+The reviewer reply from the mismatched call is DISCARDED unread — it came
+over an unverified route and never enters the debate record.
 
 ### Session id lost or resume fails
 Losing the resumed session degrades conversation continuity — an advertised
