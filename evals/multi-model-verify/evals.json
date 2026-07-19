@@ -12,7 +12,7 @@
         "Invokes codex exec with -m {REVIEWER_MODEL} and --sandbox read-only",
         "Captures the codex session id from round 1",
         "Reference claims are grounded in files that exist under References/DemoWidget, cited with the full References/DemoWidget/<file>:<line> form at least on each file's first citation (later shorthand like Core.lua:10 is acceptable once anchored)",
-        "Ends with the skill's finish line naming models, rounds, outcome, and verification status FULL"
+        "Ends with the skill's finish line naming models, rounds, outcome, verification status FULL, and the route note (effective route confirmed) - AND the transcript carries id-bound tool evidence that the header was actually read: a tool_result (matched to its call by tool_use id, ok not ERROR) containing the round-1 startup header lines (model:/provider:/reasoning effort: and the session id). A narrated route note with no header-bearing tool result FAILS this expectation - narration is not evidence"
       ]
     },
     {

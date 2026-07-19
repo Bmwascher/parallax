@@ -33,7 +33,9 @@ toggled on, its stop-time review overlaps mode `diff` — expected, not a bug.
 
 ## Preflight (both modes)
 
-1. `codex --version` must succeed — on failure follow references/fallbacks.md
+1. `codex --version` must succeed, and `codex login status` must report
+   `Logged in using ChatGPT` — exit 0 alone also passes an API-key login,
+   which rides different billing. On failure follow references/fallbacks.md
    (degraded mode, visibly flagged; never silently skip cross-vendor review).
 2. For port work: the reference source must exist under `References/`
    (quote paths — some contain spaces, e.g. `References/M+ Timer`). Missing
@@ -61,24 +63,32 @@ toggled on, its stop-time review overlaps mode `diff` — expected, not a bug.
    it to a scratchpad file, then run round 1:
 
    ```powershell
-   Get-Content -Raw <brief-file> | codex exec --sandbox read-only -m <canonical-model-id> -c model_reasoning_effort=<canonical-effort> --output-last-message <reply-file> -
+   Get-Content -Raw <brief-file> | codex exec --sandbox read-only -m <canonical-model-id> -c model_reasoning_effort=<canonical-effort> --output-last-message <reply-file> - > <transcript-file> 2>&1
    ```
 
    `<canonical-model-id>` and `<canonical-effort>` are the two declarations
    in references/model-prompting-notes.md — read the literal values from
    there, never from memory (the reviewer swaps by editing that one file,
-   and a remembered id silently defeats the swap).
+   and a remembered id silently defeats the swap). Apply that file's env
+   hygiene to the invocation.
 
-   Capture the `session id:` line printed in the run header (top of output);
-   read the reviewer's reply from `<reply-file>` — the stdout transcript
-   logs every file the reviewer reads and can run tens of KB, with the
-   reply buried at the bottom.
+   From `<transcript-file>`: verify the effective route — the header's
+   `model:`, `provider:`, and `reasoning effort:` lines against the
+   canonical declarations, per model-prompting-notes.md; a mismatch is a
+   transport failure (fallbacks.md), never a review result — and capture
+   the `session id:` line. Read the reviewer's reply from `<reply-file>` —
+   the transcript logs every file the reviewer reads and can run tens of
+   KB, with the reply buried at the bottom.
 3. Later rounds keep the reviewer's state by resuming that session — flags MUST
    precede the resume subcommand (flags after it are a usage error):
 
    ```powershell
-   codex exec --sandbox read-only -m <canonical-model-id> -c model_reasoning_effort=<canonical-effort> --output-last-message <reply-file> resume <SESSION_ID> "<rebuttal-brief>"
+   codex exec --sandbox read-only -m <canonical-model-id> -c model_reasoning_effort=<canonical-effort> --output-last-message <reply-file> resume <SESSION_ID> "<rebuttal-brief>" > <transcript-file> 2>&1
    ```
+
+   Each resume's header must echo the resumed `session id:` and the same
+   effective route — the round-1 check repeated (a resume that silently
+   started a fresh session has dropped the reviewer's debate state).
 
 4. Iterate per debate-protocol.md until convergence or the round cap, then
    escalate any unresolved points to the user with both positions stated.
@@ -112,10 +122,28 @@ Before it: the session's final-adjudication step (debate-protocol.md) —
 verify the last round's findings against the repo and issue the terminal
 verdict; a reviewer's PASS/FIX is never terminal by itself.
 
+**Mode diff only — record the verdict mechanically.** After the terminal
+verdict, run the attestation emitter from this plugin's checkout:
+
+```powershell
+powershell -NoProfile -File <plugin-root>/tools/write-attestation.ps1 -RepoRoot <reviewed-repo> -BaseSha <base> -HeadSha <head> -Verdict <PASS|FIX|ESCALATE> -VerificationStatus <FULL|DEGRADED> -RouteNote "<effective route confirmed | the transport-failure class>" -Rounds <n> -Participants "<session-model> (session) / <reviewer-model> (reviewer)"
+```
+
+It writes `.git/parallax/attestations/<head-sha>.json` inside the reviewed
+repo — untracked by design, so recording the verdict cannot move HEAD out
+from under its own SHA. The pre-push lane (`tools/verify-attestation.ps1`)
+later warns when a `main` push has no matching attestation for the pushed
+head (fast-forward: pushed sha == attested head; merge commit: parent1 ==
+attested base, parent2 == attested head — a squash changes the sha and
+correctly forces re-review).
+
 End with one status line: participating models, rounds used, converged vs
-escalated points, and the verification status — `FULL`, or
-`DEGRADED (<class>, authorized by user at round N)` per fallbacks.md. The
-session emits this line itself; never delegate it to a subagent.
+escalated points, the verification status — `FULL`, or
+`DEGRADED (<class>, authorized by user at round N)` per fallbacks.md — and
+the route note: `effective route confirmed` when every round's header
+matched the canonical declarations, else the transport-failure class that
+fallbacks.md handled. The session emits this line itself; never delegate it
+to a subagent.
 
 ## Common mistakes
 

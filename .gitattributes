@@ -1,0 +1,2 @@
+# bash hooks must stay LF - CRLF breaks the shebang under git-bash
+.githooks/* text eol=lf

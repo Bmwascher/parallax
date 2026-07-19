@@ -433,6 +433,51 @@ def elide_transcript(transcript, limit=40000, head_budget=15000,
 
 _REVIEWER = None
 
+CODEX_ENV_DENYLIST = ("CODEX_API_KEY", "OPENAI_API_KEY", "OPENAI_BASE_URL")
+
+
+def codex_env():
+    """The grader rides the first-party ChatGPT login: strip env overrides
+    that could silently reroute the call (API-key auth or a redirected base
+    URL) - mirror of the drift watch's script-scoped hygiene."""
+    env = dict(os.environ)
+    for name in CODEX_ENV_DENYLIST:
+        env.pop(name, None)
+    return env
+
+
+def codex_login_ok(env):
+    """ChatGPT-state preflight in the SAME env as the dispatch that
+    follows: exit 0 alone also passes an API-key login. Runs immediately
+    before every billable call, not just at startup - auth can expire
+    mid-suite while a 900s executor case runs (Sol diff review round 2)."""
+    try:
+        login = subprocess.run(["codex", "login", "status"],
+                               capture_output=True, text=True, timeout=30,
+                               shell=(os.name == "nt"), env=env)
+    except (subprocess.TimeoutExpired, OSError):
+        return False
+    text = (login.stdout or "") + (login.stderr or "")
+    return login.returncode == 0 and "Logged in using ChatGPT" in text
+
+
+def effective_route_ok(output, model, effort):
+    """codex echoes the RESOLVED config in its startup header, so a
+    config.toml override or profile silently swapping the grader surfaces
+    here. First match wins - the header precedes any body text that could
+    quote such lines. Client-resolved metadata: this confirms the
+    EFFECTIVE ROUTE, never server-attested runtime identity."""
+    header = {}
+    for key in ("model", "provider", "reasoning effort"):
+        m = re.search(rf"(?m)^{key}: (.+)$", output or "")
+        header[key] = m.group(1).strip() if m else ""
+    ok = (header["model"] == model and header["provider"] == "openai"
+          and header["reasoning effort"] == effort)
+    if not ok:
+        print(f"    grader route mismatch: header={header};"
+              f" expected model={model} effort={effort} provider=openai")
+    return ok
+
 
 def reviewer_config():
     """(model id, reasoning effort) from THE canonical source - the skill's
@@ -454,6 +499,13 @@ def reviewer_config():
 
 def grade(case, transcript):
     model, effort = reviewer_config()
+    # One sanitized environment object for preflight AND dispatch, built
+    # here so the two commands cannot diverge.
+    env = codex_env()
+    if not codex_login_ok(env):
+        print("    grader auth not ready: codex login status did not report"
+              " the first-party ChatGPT state")
+        return []
     # {REVIEWER_MODEL} lets an expectation reference the canonical id
     # without hardcoding it (the grader cannot read files, so the harness
     # substitutes the parsed value).
@@ -472,13 +524,23 @@ def grade(case, transcript):
                 ["codex", "exec", "--sandbox", "read-only",
                  "-m", model, "-c", f"model_reasoning_effort={effort}",
                  "--output-last-message", str(reply_file), "-"],
-                input=prompt, capture_output=True, text=True, timeout=600,
+                input=prompt, stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT, text=True, timeout=600,
                 encoding="utf-8", errors="replace",
-                shell=(os.name == "nt"),
+                shell=(os.name == "nt"), env=env,
             )
         except (subprocess.TimeoutExpired, OSError):
             return []
         if proc.returncode != 0:
+            return []
+        # ONE ordered stream (stderr merged into stdout, same as the drift
+        # watch's 2>&1 capture): the startup header always precedes the
+        # prompt echo, so first-match cannot be shadowed by header-shaped
+        # text quoted later in the echoed transcript. Separate captures
+        # concatenated would break that ordering (Sol diff review, 0.6.0).
+        # Fail closed: a mismatched route means these verdicts came from an
+        # unverified grader.
+        if not effective_route_ok(proc.stdout or "", model, effort):
             return []
         raw = reply_file.read_text(encoding="utf-8") if reply_file.is_file() else proc.stdout
     start, end = raw.find("["), raw.rfind("]")
@@ -534,6 +596,14 @@ def main(argv=None):
         if not shutil.which(tool):
             print(f"error: {tool} CLI not on PATH - this runner is local-only")
             return 2
+
+    # Early loud failure before any 900s executor run burns for nothing;
+    # grade() repeats this preflight immediately before each billable call
+    # (auth can expire mid-suite).
+    if not codex_login_ok(codex_env()):
+        print("error: codex auth not ready - login status must report the"
+              " first-party ChatGPT state")
+        return 2
 
     failures = 0
     for c in cases:

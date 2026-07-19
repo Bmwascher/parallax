@@ -68,6 +68,8 @@ The debate rules that keep this honest
 | `commands/doctor.md` | `/parallax:doctor` — operational health check: checkout-vs-installed version, hook registration, superpowers fingerprint, codex transport round-trip, drift task + pending entries. Reports, never fixes |
 | `evals/` | Four gate tiers for the skill itself — see [Verify](#verify) |
 | `tools/check-drift.ps1` | Weekly drift watch over the three upstreams the contract depends on — see [Drift protection](#drift-protection) |
+| `tools/write-attestation.ps1` · `tools/verify-attestation.ps1` | SHA-bound review attestations — see [Attestation lane](#attestation-lane) |
+| `.githooks/pre-push` | Non-blocking attestation check on `main` pushes (`git config core.hooksPath .githooks` to enable) |
 
 ## Fails loud, never silent
 
@@ -89,9 +91,20 @@ flowchart TD
 
 - One same-parameters retry is the **only** automatic recovery; every other
   transition stops at the consent gate. Unattended runs fail closed.
+  (Pre-dispatch failures retry free; a post-dispatch retry is the bounded
+  re-spend — never a loop.)
 - Session/weekly usage limits get a dedicated `quota-exhausted` class: no
   retry (quota windows don't clear in seconds), and the banner quotes
   codex's reset time verbatim.
+- **Effective-route check (0.6.0)**: every codex call's startup header
+  (`model:` / `provider:` / `reasoning effort:`, plus the `session id:` on
+  resume) is verified against the canonical declarations — a config.toml
+  override or profile silently swapping the reviewer is a named
+  `route-mismatch` class: no retry, reply discarded, consent gate. The
+  call itself runs with reroute-capable env vars stripped
+  (`CODEX_API_KEY`, `OPENAI_API_KEY`, `OPENAI_BASE_URL`) after a
+  `codex login status` preflight that requires the first-party ChatGPT
+  state, not merely exit 0.
 - A DEGRADED-frozen plan cannot produce an ordinary diff PASS: mode `diff`
   must first retrospectively cross-verify the plan's claims, and if
   cross-vendor is *still* unavailable the only terminal state is
@@ -179,14 +192,15 @@ base/head SHAs, so a pass means the debate found the drift in a real diff.
 
 The drift script has its own offline state machine —
 `evals/tools/drift_statemachine_tests.ps1` drives the **real**
-`tools/check-drift.ps1` through eleven scenarios against stub CLIs and a
+`tools/check-drift.ps1` through thirteen scenarios against stub CLIs and a
 throwaway clone: probe-failure carry-forward, the verdict trust matrix
 (`BLOCKED`, no verdict, trusted `NO-ACTION`), both halves of the toast
 matrix (CRITICAL dismissal toasts VERIFY, WARN-only dismissal toasts
 nothing), the pytest gate (a stub fix that *breaks the suite* must never
-commit), commit failure, off-grammar cross-review, pending lifecycle, and
-the hung-agent kill. Slow and opt-in — run it whenever `check-drift.ps1`
-changes:
+commit), commit failure, off-grammar cross-review, an effective-route
+mismatch and a failed auth preflight (both read UNAVAILABLE, never a
+verdict), pending lifecycle, and the hung-agent kill. Slow and opt-in —
+run it whenever `check-drift.ps1` changes:
 
 ```powershell
 .\evals\tools\drift_statemachine_tests.ps1
@@ -231,9 +245,11 @@ the gate is green and the commit verifiably landed. The toast reflects the verif
 so the only interruptions are actionable ones:
 
 A `FIXES-APPLIED` diff also gets a **script-side cross-vendor review**
-(read-only, bounded) before the toast — the reviewer stays in the loop even
-unattended, and a failed review reads "cross-review UNAVAILABLE", never
-implied-reviewed. The final reviewer is the session, deferred to pickup:
+(read-only, bounded) before the toast — preceded by the auth preflight,
+run with the env denylist, and accepted only when the codex header echoes
+the canonical route and the strict `REVIEW:` line closes the reply; the
+reviewer stays in the loop even unattended, and a failed review reads
+"cross-review UNAVAILABLE", never implied-reviewed. The final reviewer is the session, deferred to pickup:
 the merge happens in a session that adjudicates the cross-review verdict
 and the diff first (debate-protocol.md, Final adjudication), with the
 user's approval — nothing merges on the external reviewer's word alone.
@@ -254,6 +270,34 @@ manual toast or an open fix branch writes `tools/drift-pending.json`, and
 every later run re-toasts it until the branch is merged/discarded
 (auto-clears) or `/parallax:drift-triage` records a disposition —
 findings never depend on one noticed toast.
+
+## Attestation lane
+
+A mode-`diff` terminal verdict is also recorded mechanically (0.6.0):
+after the session's final adjudication — never from the reviewer's reply
+alone — `tools/write-attestation.ps1` writes a SHA-bound JSON record
+(repo, base/head SHAs, verdict, rounds, participants, route note) under
+the reviewed repo's `.git/parallax/attestations/`. The git dir, not the
+working tree: recording the verdict cannot move HEAD out from under its
+own SHA, and the record never ships in a commit.
+
+`tools/verify-attestation.ps1` is the consumer: a `main` push is attested
+when the pushed sha carries a gate-satisfying record (fast-forward), or
+when a merge commit's parent2 carries one **against parent1 as its base**
+— extra commits, a rebase, or a squash after the review all break the
+match and correctly force re-review. Gate-satisfying means verdict PASS
+**and** `verification_status: FULL` **and** the confirmed route note — a
+DEGRADED or unconfirmed-route PASS is rejected mechanically, not just in
+skill prose. The pre-push hooks (this repo's `.githooks/pre-push`;
+adapters in consuming repos) call it and **warn, never block** in v1 —
+the warning stream is how the lane earns a blocking future.
+
+Enforcement is deliberately **local pre-push lanes only** (re-adjudicated
+2026-07-19 after the reviewer flagged the gap): the records live under
+`.git` and never ship, so a GitHub-CI check would need an attestation
+carrier (git note, PR metadata, or an uploaded artifact) — deferred until
+a PR-based merge flow exists; today both repos merge locally, so pre-push
+IS the integration boundary.
 
 ## Pattern lineage
 

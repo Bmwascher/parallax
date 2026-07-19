@@ -536,8 +536,32 @@ $guide
                         if (-not ($reviewerModel -and $reviewerEffort)) {
                             $reviewNote = "cross-review UNAVAILABLE - canonical reviewer declaration missing from model-prompting-notes.md"
                         } elseif (Get-Command codex -ErrorAction SilentlyContinue) {
+                            # Env hygiene FIRST, script scope: preflight and
+                            # dispatch must see the SAME sanitized
+                            # environment (Sol diff review 0.6.0) - the two
+                            # keys can flip auth to API-key billing and the
+                            # base URL can reroute ChatGPT-authenticated
+                            # traffic. The review job below inherits this
+                            # process env.
+                            foreach ($v in @("CODEX_API_KEY", "OPENAI_API_KEY", "OPENAI_BASE_URL")) {
+                                Remove-Item "Env:$v" -ErrorAction SilentlyContinue
+                            }
+                            # Auth preflight, immediately before the one
+                            # billable call: require the exact ChatGPT auth
+                            # state, not merely exit 0 - an API-key login
+                            # also exits 0 but rides different billing.
+                            $authOut = ""
+                            $authOk = $false
+                            try {
+                                $authOut = (& codex login status 2>&1 | Out-String).Trim()
+                                $authOk = (($LASTEXITCODE -eq 0) -and ($authOut -match 'Logged in using ChatGPT'))
+                            } catch {}
+                            if (-not $authOk) {
+                                $reviewNote = "cross-review UNAVAILABLE - codex auth not ready: $authOut"
+                            } else {
                             $reviewBrief = Join-Path $ReportDir "$Stamp-autofix-review-brief.txt"
                             $reviewOut = Join-Path $ReportDir "$Stamp-autofix-review.txt"
+                            $reviewHdr = Join-Path $ReportDir "$Stamp-autofix-review-header.txt"
                             $briefLines = @(
                                 "You are the cross-vendor reviewer. An automated drift-triage agent",
                                 "made the fix below in the parallax plugin repo; the pytest gate",
@@ -550,26 +574,61 @@ $guide
                             $briefLines += (git -C $worktree diff "main..HEAD" 2>&1 | Out-String)
                             $briefLines | Set-Content -Path $reviewBrief
                             $job = Start-Job -ScriptBlock {
-                                param($briefPath, $outPath, $model, $effort)
-                                Get-Content -Raw $briefPath | codex exec --sandbox read-only -m $model -c model_reasoning_effort=$effort --output-last-message $outPath - > $null 2>&1
+                                param($briefPath, $outPath, $hdrPath, $model, $effort)
+                                # Env already sanitized at script scope
+                                # BEFORE the preflight (the job inherits
+                                # this process env) - preflight and
+                                # dispatch see the same environment.
+                                Get-Content -Raw $briefPath | codex exec --sandbox read-only -m $model -c model_reasoning_effort=$effort --output-last-message $outPath - > $hdrPath 2>&1
                                 return $LASTEXITCODE
-                            } -ArgumentList $reviewBrief, $reviewOut, $reviewerModel, $reviewerEffort
+                            } -ArgumentList $reviewBrief, $reviewOut, $reviewHdr, $reviewerModel, $reviewerEffort
                             if (Wait-Job $job -Timeout 900) {
                                 $jexit = Receive-Job $job
                                 if (($jexit -eq 0) -and (Test-Path $reviewOut)) {
-                                    # Strict grammar: anything but PASS or
-                                    # FIX <reason> stays UNAVAILABLE (an
-                                    # injected free-text line must not read
-                                    # as a completed review).
-                                    $rv = @(Select-String -Path $reviewOut -Pattern '^REVIEW: (PASS|FIX .+)$')
-                                    if ($rv.Count -eq 1) {
-                                        $reviewNote = "cross-review: " + $rv[0].Matches[0].Groups[1].Value.Trim()
+                                    # Effective-route check: codex echoes the
+                                    # RESOLVED config in its startup header,
+                                    # so a config.toml override or profile
+                                    # swapping the reviewer surfaces here.
+                                    # First match wins - the header precedes
+                                    # any body text that could quote such
+                                    # lines. Client-resolved metadata, not
+                                    # server-attested: this confirms the
+                                    # effective route, never "used and
+                                    # confirmed" runtime identity.
+                                    $hdrModel = ""
+                                    $hdrEffort = ""
+                                    $hdrProvider = ""
+                                    if (Test-Path $reviewHdr) {
+                                        $mm = @(Select-String -Path $reviewHdr -Pattern '^model: (.+)$')
+                                        if ($mm.Count -gt 0) { $hdrModel = $mm[0].Matches[0].Groups[1].Value.Trim() }
+                                        $me = @(Select-String -Path $reviewHdr -Pattern '^reasoning effort: (.+)$')
+                                        if ($me.Count -gt 0) { $hdrEffort = $me[0].Matches[0].Groups[1].Value.Trim() }
+                                        $mp = @(Select-String -Path $reviewHdr -Pattern '^provider: (.+)$')
+                                        if ($mp.Count -gt 0) { $hdrProvider = $mp[0].Matches[0].Groups[1].Value.Trim() }
+                                    }
+                                    if (($hdrModel -ne $reviewerModel) -or ($hdrEffort -ne $reviewerEffort) -or ($hdrProvider -ne "openai")) {
+                                        $reviewNote = "cross-review UNAVAILABLE - effective route mismatch (header model='$hdrModel' effort='$hdrEffort' provider='$hdrProvider'; expected $reviewerModel/$reviewerEffort/openai)"
+                                    } else {
+                                        # Strict grammar AND position:
+                                        # exactly one REVIEW: line and it
+                                        # must be the LAST non-empty line -
+                                        # a quoted grammar line mid-prose
+                                        # must not read as the verdict.
+                                        $rv = @(Select-String -Path $reviewOut -Pattern '^REVIEW: (PASS|FIX .+)$')
+                                        $lastLine = ""
+                                        foreach ($ln in @(Get-Content $reviewOut)) {
+                                            if ($ln.Trim()) { $lastLine = $ln.Trim() }
+                                        }
+                                        if (($rv.Count -eq 1) -and ($rv[0].Line.Trim() -eq $lastLine)) {
+                                            $reviewNote = "cross-review: " + $rv[0].Matches[0].Groups[1].Value.Trim()
+                                        }
                                     }
                                 }
                             } else {
                                 Stop-Job $job
                             }
                             Remove-Job $job -Force
+                            }
                         }
                         Add-Content -Path $ReportFile -Value "`r`nAuto-triage verdict: $verdictLine - committed on $branch, gates green; $reviewNote (transcript: $Stamp-autotriage.txt)"
                         Show-Toast "parallax drift: fix ready" "Fix on $branch (gates green; $reviewNote) - review and merge. Report: tools\drift-reports\$Stamp.txt"
