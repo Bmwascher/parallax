@@ -28,6 +28,9 @@ param(
     [string]$Mode = "diff",
     # Optional (0.7.0): the application checkpoint that authorized the fix
     # edits inside the attested range (references/application-checkpoint.md).
+    # Must live in the canonical <git-common-dir>/parallax/
+    # application-checkpoints/ directory - the verifier re-locates and
+    # re-hashes it there, so an artifact anywhere else is unverifiable.
     # When present, the record binds the checkpoint hash AND the
     # emitter-computed changed-path set - never caller-supplied - so an
     # attestation minted for a different change set fails verification.
@@ -87,8 +90,15 @@ if ($CheckpointFile) {
         Write-Output "ERROR: checkpoint file not found: $CheckpointFile"
         exit 2
     }
+    $cpFull = (Resolve-Path $CheckpointFile).Path
+    $cpDir = Join-Path (Join-Path $commonDir "parallax") "application-checkpoints"
+    $cpDirFull = if (Test-Path $cpDir) { (Resolve-Path $cpDir).Path } else { $null }
+    if ((-not $cpDirFull) -or ((Split-Path $cpFull -Parent) -ne $cpDirFull)) {
+        Write-Output "ERROR: checkpoint must live under $cpDir - the verifier re-hashes it there"
+        exit 2
+    }
     $sha = [System.Security.Cryptography.SHA256]::Create()
-    $bytes = [System.IO.File]::ReadAllBytes((Resolve-Path $CheckpointFile).Path)
+    $bytes = [System.IO.File]::ReadAllBytes($cpFull)
     $cpHash = ([System.BitConverter]::ToString($sha.ComputeHash($bytes)) -replace '-', '').ToLower()
     $changed = @(& git -C $RepoRoot diff --name-only ($baseFull + ".." + $headFull) 2>$null | Where-Object { $_ })
     if ($LASTEXITCODE -ne 0) {

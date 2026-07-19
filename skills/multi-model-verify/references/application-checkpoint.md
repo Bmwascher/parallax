@@ -58,6 +58,15 @@ worse than none.
   anything beyond it stops and asks. Pre-authorization changes STOP to
   CONTINUE — it never relaxes content, path, or amendment rules.
 
+## After application (applied -> reverified)
+
+`applied` is not the terminal state. After the last planned edit, EXECUTE
+the verification plan and append its results to the artifact
+(`gate | result`, plus any deviations); an unexecuted verification plan
+is a plan, not a state transition. A re-review of the fixed range
+follows (mode diff: the fix re-review exchange), and the terminal PASS —
+and its attestation — come only after that.
+
 ## The artifact
 
 Write the checkpoint to the reviewed repo's git dir — untracked, same
@@ -70,9 +79,12 @@ in a commit, worktrees share it):
 
 At attestation time, pass it to the emitter via `-CheckpointFile`: the
 attestation then records the checkpoint's hash and the emitter-computed
-changed-path set of the attested range, and the verifier rejects a record
-whose path set no longer matches the range — an attestation minted for a
-different change set fails mechanically.
+changed-path set of the attested range. The emitter refuses an artifact
+outside the canonical directory above, and the verifier re-locates and
+re-hashes the artifact — a record whose artifact is missing or modified,
+or whose path set no longer matches the range, is rejected. Binding
+metadata is all-or-none: stripping one field cannot evade the rest. An
+attestation minted for a different change set fails mechanically.
 
 ## Standalone contexts (no parallax machinery)
 

@@ -207,10 +207,16 @@ class TestAttestationLane:
 class TestCheckpointBinding:
     """0.7.0: -CheckpointFile binds the application checkpoint's hash and
     the EMITTER-computed changed-path set into the record; the verifier
-    rejects a record whose path set no longer matches its base..head."""
+    re-locates and re-hashes the artifact at its canonical git-common-dir
+    location and rejects a record whose binding no longer holds. Binding
+    metadata is all-or-none (Sol diff review round 1)."""
 
-    def make_checkpoint(self, tmp_path):
-        cp = tmp_path / "checkpoint.md"
+    def make_checkpoint(self, repo, name="checkpoint.md"):
+        # The canonical location is the contract: the emitter refuses
+        # anything else, because the verifier re-hashes it there.
+        cp_dir = repo / ".git" / "parallax" / "application-checkpoints"
+        cp_dir.mkdir(parents=True, exist_ok=True)
+        cp = cp_dir / name
         cp.write_text("# Application checkpoint\nf.txt | x present | F1\n",
                       encoding="utf-8")
         return cp
@@ -219,7 +225,7 @@ class TestCheckpointBinding:
         repo = make_repo(tmp_path)
         base = rev(repo)
         head = feature_head(repo, base)
-        cp = self.make_checkpoint(tmp_path)
+        cp = self.make_checkpoint(repo)
         emitted = attest(repo, base, head, checkpoint=cp)
         assert emitted.returncode == 0, emitted.stdout + emitted.stderr
         record = json.loads(att_file(repo, head).read_text(encoding="utf-8"))
@@ -232,14 +238,91 @@ class TestCheckpointBinding:
         v = verify(repo, head)
         assert v.returncode == 0 and "direct" in v.stdout
 
+    def test_emitter_rejects_noncanonical_location(self, tmp_path):
+        # An artifact outside the canonical directory is unverifiable
+        # (the verifier could never re-locate it) - refuse at emit time.
+        repo = make_repo(tmp_path)
+        base = rev(repo)
+        head = feature_head(repo, base)
+        stray = tmp_path / "checkpoint.md"
+        stray.write_text("# checkpoint\n", encoding="utf-8")
+        p = attest(repo, base, head, checkpoint=stray)
+        assert p.returncode == 2 and "must live under" in p.stdout
+
+    def test_tampered_artifact_rejected(self, tmp_path):
+        # Modifying the checkpoint after attestation invalidates the
+        # record: the verifier re-hashes, it does not trust the field.
+        repo = make_repo(tmp_path)
+        base = rev(repo)
+        head = feature_head(repo, base)
+        cp = self.make_checkpoint(repo)
+        assert attest(repo, base, head, checkpoint=cp).returncode == 0
+        cp.write_text(cp.read_text(encoding="utf-8")
+                      + "quietly widened scope\n", encoding="utf-8")
+        v = verify(repo, head)
+        assert v.returncode == 1 and "hash mismatch" in v.stdout
+
+    def test_deleted_artifact_rejected(self, tmp_path):
+        repo = make_repo(tmp_path)
+        base = rev(repo)
+        head = feature_head(repo, base)
+        cp = self.make_checkpoint(repo)
+        assert attest(repo, base, head, checkpoint=cp).returncode == 0
+        cp.unlink()
+        v = verify(repo, head)
+        assert v.returncode == 1 and "missing" in v.stdout
+
+    def test_partial_metadata_rejected(self, tmp_path):
+        # Deleting changed_paths must not evade the binding: metadata is
+        # all-or-none, so a partial record is stale or tampered.
+        repo = make_repo(tmp_path)
+        base = rev(repo)
+        head = feature_head(repo, base)
+        cp = self.make_checkpoint(repo)
+        assert attest(repo, base, head, checkpoint=cp).returncode == 0
+        record = json.loads(att_file(repo, head).read_text(encoding="utf-8"))
+        del record["changed_paths"]
+        att_file(repo, head).write_text(json.dumps(record), encoding="utf-8")
+        v = verify(repo, head)
+        assert v.returncode == 1 and "all-or-none" in v.stdout
+
+    def test_separator_in_checkpoint_file_rejected(self, tmp_path):
+        # checkpoint_file is a leaf name: a separator would let a record
+        # point the re-hash at a file outside the canonical directory.
+        repo = make_repo(tmp_path)
+        base = rev(repo)
+        head = feature_head(repo, base)
+        cp = self.make_checkpoint(repo)
+        assert attest(repo, base, head, checkpoint=cp).returncode == 0
+        record = json.loads(att_file(repo, head).read_text(encoding="utf-8"))
+        record["checkpoint_file"] = "../../../evil.md"
+        att_file(repo, head).write_text(json.dumps(record), encoding="utf-8")
+        v = verify(repo, head)
+        assert v.returncode == 1 and "separator" in v.stdout
+
     def test_tampered_changed_paths_rejected(self, tmp_path):
         repo = make_repo(tmp_path)
         base = rev(repo)
         head = feature_head(repo, base)
-        cp = self.make_checkpoint(tmp_path)
+        cp = self.make_checkpoint(repo)
         assert attest(repo, base, head, checkpoint=cp).returncode == 0
         record = json.loads(att_file(repo, head).read_text(encoding="utf-8"))
         record["changed_paths"] = ["f.txt", "unreviewed-extra.lua"]
+        att_file(repo, head).write_text(json.dumps(record), encoding="utf-8")
+        v = verify(repo, head)
+        assert v.returncode == 1 and "changed-path set" in v.stdout
+
+    def test_case_only_path_tamper_rejected(self, tmp_path):
+        # PS Sort-Object/-ne are case-insensitive by default: without the
+        # ordinal comparison a case-only alteration compares equal (Sol
+        # diff review round 1, F4).
+        repo = make_repo(tmp_path)
+        base = rev(repo)
+        head = feature_head(repo, base)
+        cp = self.make_checkpoint(repo)
+        assert attest(repo, base, head, checkpoint=cp).returncode == 0
+        record = json.loads(att_file(repo, head).read_text(encoding="utf-8"))
+        record["changed_paths"] = ["F.txt"]
         att_file(repo, head).write_text(json.dumps(record), encoding="utf-8")
         v = verify(repo, head)
         assert v.returncode == 1 and "changed-path set" in v.stdout
@@ -249,7 +332,7 @@ class TestCheckpointBinding:
         repo = make_repo(tmp_path)
         base = rev(repo)
         head = feature_head(repo, base)
-        cp = self.make_checkpoint(tmp_path)
+        cp = self.make_checkpoint(repo)
         assert attest(repo, base, head, checkpoint=cp).returncode == 0
         record = json.loads(att_file(repo, head).read_text(encoding="utf-8"))
         record["changed_paths"] = ["something-else.lua"]
@@ -259,9 +342,9 @@ class TestCheckpointBinding:
         v = verify(repo, rev(repo))
         assert v.returncode == 1 and "changed-path set" in v.stdout
 
-    def test_record_without_paths_skips_binding(self, tmp_path):
+    def test_record_without_binding_skips_check(self, tmp_path):
         # Pre-0.7.0 records (and clean PASSes with no fix application)
-        # carry no changed_paths field - the binding check must skip, not
+        # carry none of the binding fields - the check must skip, not
         # reject, or every existing attestation dies retroactively.
         repo = make_repo(tmp_path)
         base = rev(repo)

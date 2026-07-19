@@ -71,14 +71,20 @@ performs one closing step before anything merges or freezes:
    itself an unverified claim until checked.
 2. Accept with evidence, refute with evidence, or ESCALATE to the user.
    Nothing is adopted or dismissed on authority.
-3. Emit the terminal verdict and the finish line (mode diff: then record
-   the verdict mechanically via the attestation emitter — see SKILL.md's
-   finish-line section). A reviewer PASS/FIX is input to this step, never
-   the decision itself.
-4. If the verdict requires changes this session will apply itself: the
-   application checkpoint (references/application-checkpoint.md) precedes
-   the FIRST file edit — the checkpoint, not the verdict, is what
-   authorizes touching files.
+3. Emit the terminal verdict. A reviewer PASS/FIX is input to this step,
+   never the decision itself.
+4. If that verdict requires changes this session will apply itself, the
+   chain is NOT over: the application checkpoint
+   (references/application-checkpoint.md) precedes the FIRST file edit —
+   the checkpoint, not the verdict, is what authorizes touching files.
+   After applying, execute the checkpoint's verification plan and
+   re-review the fixed range; only the post-re-review terminal PASS
+   closes the chain.
+5. Close with the finish line (mode diff: first record the closing
+   verdict mechanically via the attestation emitter — see SKILL.md's
+   finish-line section; when a checkpoint governed the fixes, bind it
+   with `-CheckpointFile`). The attestation always records the FINAL
+   adjudicated range — never a verdict whose fixes are still unapplied.
 
 Equal weight governs claims during the debate; adjudication is procedural,
 not a rank: the session is the accountable party with live-repo access, so

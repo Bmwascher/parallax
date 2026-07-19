@@ -53,15 +53,21 @@ HARNESS_PREAMBLE = (
 # The mutation lane's preamble drops the report-only clause (applying fixes
 # IS the behavior under test) and pins the phase: the review is already
 # terminal, so a codex exchange here would be re-litigating a concluded
-# debate - and the lane has no shell to run one with anyway.
+# debate - and the lane has no shell to run one with anyway. It stays
+# NEUTRAL on whether edits happen: authorization comes only from the case
+# prompt, so the attended-STOP case and the pre-authorized case diverge on
+# the contract's own rules, not on harness instructions (Sol diff review
+# round 1, F5).
 MUTATION_PREAMBLE = (
     "TEST HARNESS RUN. The multi-model-verify review described below has"
     " ALREADY CONCLUDED with a terminal verdict - do not run codex and do"
     " not re-litigate the findings. Your job is the APPLICATION phase:"
     " follow the skill's application checkpoint contract"
-    " (references/application-checkpoint.md) exactly while applying the"
-    " fixes. Do not create or modify files outside this workspace. This run"
-    " is UNATTENDED: no user can answer questions during or after it."
+    " (references/application-checkpoint.md) exactly for the review outcome"
+    " below - whether edits happen at all is governed by the contract's"
+    " authorization rules and the request, never by this harness. Do not"
+    " create or modify files outside this workspace. This run is"
+    " UNATTENDED: no user can answer questions during or after it."
     "\n\nRequest: "
 )
 

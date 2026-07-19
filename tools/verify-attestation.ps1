@@ -55,20 +55,57 @@ function Get-AttestationRejectReason($att, $label) {
         " - a FULL, confirmed-route PASS is required")
 }
 
-function Test-ChangedPathsMatch($att, $repo) {
-    # 0.7.0 checkpoint binding: records that carry a changed-path set must
-    # still match the actual base..head - an attestation minted for a
-    # different change set is stale or tampered. Records without the field
-    # (pre-0.7.0, or a clean PASS with no fix application) skip this.
-    if (-not ($att.PSObject.Properties.Name -contains "changed_paths")) { return $true }
-    $recorded = @($att.changed_paths | Where-Object { $_ } | Sort-Object)
-    $actual = @(& git -C $repo diff --name-only ($att.base_sha + ".." + $att.head_sha) 2>$null | Where-Object { $_ } | Sort-Object)
-    if ($LASTEXITCODE -ne 0) { return $false }
-    if ($recorded.Count -ne $actual.Count) { return $false }
-    for ($i = 0; $i -lt $recorded.Count; $i++) {
-        if ($recorded[$i] -ne $actual[$i]) { return $false }
+function Get-CheckpointBindingFailure($att, $repo, $commonDir) {
+    # 0.7.0 checkpoint binding. Returns $null when the binding holds (or
+    # the record is genuinely unbound), else the rejection reason.
+    # Binding metadata is ALL-OR-NONE: a record carrying any of the three
+    # fields must carry and satisfy all of them, or stripping one field
+    # (e.g. deleting changed_paths) would evade the rest. Records with
+    # none of the fields (pre-0.7.0, or a clean PASS with no fix
+    # application) skip the whole check.
+    $fields = @("checkpoint_file", "checkpoint_hash", "changed_paths")
+    $names = $att.PSObject.Properties.Name
+    $present = @($fields | Where-Object { $names -contains $_ })
+    if ($present.Count -eq 0) { return $null }
+    if ($present.Count -ne 3) {
+        return "partial checkpoint metadata ($($present -join ', ')) - binding is all-or-none; stale or tampered, re-review"
     }
-    return $true
+    # Re-locate and re-hash the artifact at its canonical location: a
+    # checkpoint modified, deleted, or substituted after attestation must
+    # invalidate the record. checkpoint_file is a leaf name only - a
+    # separator would escape the canonical directory.
+    if ($att.checkpoint_file -match '[\\/]') {
+        return "checkpoint_file carries a path separator - not a canonical leaf name; re-review"
+    }
+    $cpPath = Join-Path (Join-Path (Join-Path $commonDir "parallax") "application-checkpoints") $att.checkpoint_file
+    if (-not (Test-Path $cpPath)) {
+        return "checkpoint artifact missing ($($att.checkpoint_file)) - the attested checkpoint no longer exists; re-review"
+    }
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    $bytes = [System.IO.File]::ReadAllBytes((Resolve-Path $cpPath).Path)
+    $hash = ([System.BitConverter]::ToString($sha.ComputeHash($bytes)) -replace '-', '').ToLower()
+    if ($hash -cne $att.checkpoint_hash) {
+        return "checkpoint artifact hash mismatch ($($att.checkpoint_file)) - modified after attestation; re-review"
+    }
+    # Ordinal, case-sensitive path comparison: PS Sort-Object and -ne are
+    # case-insensitive by default, so a case-only tamper compares equal.
+    $recorded = [string[]]@($att.changed_paths | Where-Object { $_ })
+    $actual = [string[]]@(& git -C $repo diff --name-only ($att.base_sha + ".." + $att.head_sha) 2>$null | Where-Object { $_ })
+    if ($LASTEXITCODE -ne 0) {
+        return "could not compute the changed-path set for the attested range; re-review"
+    }
+    [Array]::Sort($recorded, [System.StringComparer]::Ordinal)
+    [Array]::Sort($actual, [System.StringComparer]::Ordinal)
+    $mismatch = ($recorded.Count -ne $actual.Count)
+    if (-not $mismatch) {
+        for ($i = 0; $i -lt $recorded.Count; $i++) {
+            if ($recorded[$i] -cne $actual[$i]) { $mismatch = $true; break }
+        }
+    }
+    if ($mismatch) {
+        return "changed-path set no longer matches the attested range - stale or tampered; re-review"
+    }
+    return $null
 }
 
 $toplevel = (& git -C $RepoRoot rev-parse --show-toplevel 2>$null | Out-String).Trim()
@@ -102,8 +139,9 @@ if (-not (Test-Path $attDir)) {
 $att = Read-Attestation $attDir $local $repoName
 if ($att) {
     if (Test-AttestationPasses $att) {
-        if (-not (Test-ChangedPathsMatch $att $RepoRoot)) {
-            Write-Output "attestation for $local records a changed-path set that no longer matches its base..head - stale or tampered; re-review"
+        $bindFail = Get-CheckpointBindingFailure $att $RepoRoot $commonDir
+        if ($bindFail) {
+            Write-Output "attestation for $local rejected: $bindFail"
             exit 1
         }
         Write-Output "attested: $local (direct, $($att.stamp), $($att.participants))"
@@ -120,8 +158,9 @@ $p2 = (& git -C $RepoRoot rev-parse --verify --quiet ($local + "^2") 2>$null | O
 if ($p2) {
     $att2 = Read-Attestation $attDir $p2 $repoName
     if ($att2 -and (Test-AttestationPasses $att2) -and ($att2.base_sha -eq $p1)) {
-        if (-not (Test-ChangedPathsMatch $att2 $RepoRoot)) {
-            Write-Output "attestation for merge parent2 $p2 records a changed-path set that no longer matches its base..head - stale or tampered; re-review"
+        $bindFail = Get-CheckpointBindingFailure $att2 $RepoRoot $commonDir
+        if ($bindFail) {
+            Write-Output "attestation for merge parent2 $p2 rejected: $bindFail"
             exit 1
         }
         Write-Output "attested: merge $local (parent2 $p2 reviewed against base $p1, $($att2.stamp))"

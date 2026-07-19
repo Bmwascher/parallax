@@ -108,9 +108,11 @@ a finding) and, for port work, **port fidelity** (drift from the reference
 source), ending PASS / FIX / ESCALATE.
 
 A FIX this session applies itself goes through the **application
-checkpoint** (references/application-checkpoint.md) before the first edit;
-the attestation later binds that checkpoint via the emitter's
-`-CheckpointFile` parameter.
+checkpoint** (references/application-checkpoint.md) before the first edit.
+The fixed range is then re-reviewed, and only the post-re-review terminal
+PASS is attested — with the emitter's `-CheckpointFile` binding the
+checkpoint; a FIX verdict whose fixes are still unapplied is never the
+attested verdict.
 
 **Degraded-plan poisoning rule:** a plan whose Verification status is
 DEGRADED cannot produce an ordinary diff PASS. Mode diff must first reopen
@@ -131,8 +133,15 @@ verdict; a reviewer's PASS/FIX is never terminal by itself.
 verdict, run the attestation emitter from this plugin's checkout:
 
 ```powershell
-powershell -NoProfile -File <plugin-root>/tools/write-attestation.ps1 -RepoRoot <reviewed-repo> -BaseSha <base> -HeadSha <head> -Verdict <PASS|FIX|ESCALATE> -VerificationStatus <FULL|DEGRADED> -RouteNote "<effective route confirmed | the transport-failure class>" -Rounds <n> -Participants "<session-model> (session) / <reviewer-model> (reviewer)"
+powershell -NoProfile -File <plugin-root>/tools/write-attestation.ps1 -RepoRoot <reviewed-repo> -BaseSha <base> -HeadSha <head> -Verdict <PASS|FIX|ESCALATE> -VerificationStatus <FULL|DEGRADED> -RouteNote "<effective route confirmed | the transport-failure class>" -Rounds <n> -Participants "<session-model> (session) / <reviewer-model> (reviewer)" [-CheckpointFile <application-checkpoint-artifact>]
 ```
+
+When an application checkpoint governed fix application, pass it via
+`-CheckpointFile`: the record then also binds the checkpoint's hash and
+the emitter-computed changed-path set, `<head>` is the POST-fix,
+re-reviewed head — never the head the FIX verdict was issued on — and
+the artifact must already carry its appended verification results (the
+recorded hash covers the final artifact).
 
 It writes `.git/parallax/attestations/<head-sha>.json` inside the reviewed
 repo — untracked by design, so recording the verdict cannot move HEAD out

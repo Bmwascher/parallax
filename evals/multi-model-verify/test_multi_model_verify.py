@@ -686,11 +686,31 @@ class TestApplicationCheckpoint:
         assert re.search(r"precedes\s+the FIRST file edit", protocol), (
             "adjudication must hand off to the checkpoint, not to editing"
         )
+        # Lifecycle order (Sol diff review round 1, F1): the attestation
+        # closes the chain AFTER checkpoint -> apply -> verify -> re-review,
+        # never at the FIX verdict that still has unapplied fixes.
+        assert "post-re-review terminal PASS" in protocol
+        assert "never a verdict whose fixes are still unapplied" in protocol
         skill = read(SKILL_MD)
         assert "application-checkpoint.md" in skill
         assert "-CheckpointFile" in skill, (
             "mode diff must name the attestation binding parameter"
         )
+        assert re.search(r"post-re-review terminal\s+PASS", skill), (
+            "the finish line must attest the post-fix, re-reviewed range"
+        )
+        assert re.search(r"fixes are still unapplied", skill)
+
+    def test_reverified_is_contractual(self):
+        # Sol diff review round 1, F2: the state machine's last transition
+        # must be executable, not declarative - the verification plan is
+        # RUN and its results appended before the attestation.
+        text = self.checkpoint()
+        assert re.search(r"applied -> reverified", text)
+        assert re.search(r"EXECUTE\s+the verification plan", text)
+        assert re.search(r"append its results", text)
+        assert re.search(r"unexecuted verification plan\s+is a plan, not a"
+                         r" state transition", text)
 
     def test_attestation_binding_surfaces(self):
         writer = read(REPO_ROOT / "tools" / "write-attestation.ps1")
@@ -701,14 +721,36 @@ class TestApplicationCheckpoint:
                 "the changed-path set is computed by the emitter from"
                 " base..head - a caller-supplied list could lie"
             )
+        assert "must live under" in writer, (
+            "the emitter must refuse an artifact outside the canonical"
+            " directory - the verifier could never re-locate it"
+        )
         verifier = read(REPO_ROOT / "tools" / "verify-attestation.ps1")
-        assert verifier.count("Test-ChangedPathsMatch") >= 3, (
+        assert verifier.count("Get-CheckpointBindingFailure") >= 3, (
             "the binding check must be defined AND wired into both the"
             " direct and merge acceptance branches"
         )
-        assert re.search(r"changed_paths.{0,40}\)\s*\{ return \$true \}",
-                         verifier, re.DOTALL), (
-            "records without the field (pre-0.7.0) must skip, not reject"
+        assert "Count -eq 0) { return $null }" in verifier, (
+            "records with NO binding fields (pre-0.7.0) must skip, not"
+            " reject"
+        )
+        # Sol diff review round 1, F3+F4: the artifact is re-hashed at its
+        # canonical location, metadata is all-or-none, and the path
+        # comparison is ordinal + case-sensitive.
+        assert "all-or-none" in verifier
+        assert "hash mismatch" in verifier and \
+            "[System.Security.Cryptography.SHA256]" in verifier, (
+                "the verifier must RE-HASH the artifact, not trust the"
+                " recorded field"
+            )
+        assert "[System.StringComparer]::Ordinal" in verifier and \
+            "-cne" in verifier, (
+                "PS default sort/compare are case-insensitive - a"
+                " case-only tamper would pass"
+            )
+        assert "path separator" in verifier, (
+            "checkpoint_file must be a leaf name - a separator escapes the"
+            " canonical directory"
         )
 
     def test_mutation_lane_composition(self):
@@ -744,6 +786,11 @@ class TestApplicationCheckpoint:
         )
         assert "UNATTENDED" in pre.group(1)
         assert "application checkpoint" in pre.group(1)
+        assert "never by this harness" in pre.group(1), (
+            "the preamble must stay neutral on whether edits happen -"
+            " authorization comes only from the case prompt, or the"
+            " attended-STOP case is contaminated"
+        )
 
     def test_checkpoint_case_is_falsifiable(self):
         case = next(c for c in json.loads(read(EVALS_DIR / "evals.json"))["evals"]
@@ -764,11 +811,39 @@ class TestApplicationCheckpoint:
         assert "quotes the user's instruction" in joined, (
             "pre-authorization must be quoted, not claimed"
         )
+        assert "read-back" in joined, (
+            "applied is not reverified: post-edit read-back evidence is"
+            " required (Sol diff review round 1, F2)"
+        )
         runner = read(REPO_ROOT / "evals" / "tools"
                       / "run_behavioral_evals.py")
         assert 'in ("Edit", "Write")' in runner and "2400" in runner, (
             "the checkpoint Write's CONTENT is graded evidence - the"
             " default 600-char args cap truncates it"
+        )
+
+    def test_attended_stop_case_is_falsifiable(self):
+        # Sol diff review round 1, F5: the ORIGINAL observed failure is
+        # editing without authorization - the stop path needs behavioral
+        # coverage, not just prose pins.
+        case = next(c for c in json.loads(read(EVALS_DIR / "evals.json"))["evals"]
+                    if c["id"] == "fix-checkpoint-attended-stop")
+        assert case["setup"].get("mutation_tools") and \
+            case["setup"].get("with_reference")
+        prompt = case["prompt"]
+        assert "No application instruction has been given" in prompt, (
+            "the stop case must carry NO pre-authorization"
+        )
+        joined = " ".join(case["expectations"])
+        assert "NO Edit" in joined and "FAILS" in joined, (
+            "any fix edit must fail the case outright"
+        )
+        assert "awaiting" in joined, (
+            "the checkpoint must record awaiting-user authorization"
+        )
+        assert "manufacture consent" in joined, (
+            "consent must never be inferred from the verdict or the"
+            " absence of a user"
         )
 
 
