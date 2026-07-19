@@ -66,10 +66,12 @@ def feature_head(repo, base, branch="feat", filename="f.txt"):
     return rev(repo)
 
 
-def attest(repo, base, head, verdict="PASS"):
+def attest(repo, base, head, verdict="PASS", status="FULL",
+           route="effective route confirmed"):
     return run_ps(WRITE, "-RepoRoot", str(repo), "-BaseSha", base,
-                  "-HeadSha", head, "-Verdict", verdict, "-Rounds", "1",
-                  "-Participants", "session/reviewer")
+                  "-HeadSha", head, "-Verdict", verdict,
+                  "-VerificationStatus", status, "-RouteNote", route,
+                  "-Rounds", "1", "-Participants", "session/reviewer")
 
 
 def verify(repo, sha):
@@ -127,7 +129,40 @@ class TestAttestationLane:
         head = feature_head(repo, base)
         assert attest(repo, base, head, verdict="FIX").returncode == 0
         v = verify(repo, head)
-        assert v.returncode == 1 and "not PASS" in v.stdout
+        assert v.returncode == 1 and "FULL, confirmed-route PASS" in v.stdout
+
+    def test_degraded_status_rejected(self, tmp_path):
+        # A DEGRADED PASS must never satisfy the gate - the poisoning rule
+        # holds mechanically, not just in skill prose.
+        repo = make_repo(tmp_path)
+        base = rev(repo)
+        head = feature_head(repo, base)
+        assert attest(repo, base, head, status="DEGRADED").returncode == 0
+        v = verify(repo, head)
+        assert v.returncode == 1 and "status=DEGRADED" in v.stdout
+
+    def test_unconfirmed_route_rejected(self, tmp_path):
+        repo = make_repo(tmp_path)
+        base = rev(repo)
+        head = feature_head(repo, base)
+        assert attest(repo, base, head,
+                      route="route-mismatch (header model differed)"
+                      ).returncode == 0
+        v = verify(repo, head)
+        assert v.returncode == 1 and "confirmed-route" in v.stdout
+
+    def test_wrong_mode_rejected(self, tmp_path):
+        # Only mode=diff records are gate input; a tampered mode field is
+        # a stale/hand-edited record.
+        repo = make_repo(tmp_path)
+        base = rev(repo)
+        head = feature_head(repo, base)
+        assert attest(repo, base, head).returncode == 0
+        record = json.loads(att_file(repo, head).read_text(encoding="utf-8"))
+        record["mode"] = "plan"
+        att_file(repo, head).write_text(json.dumps(record), encoding="utf-8")
+        v = verify(repo, head)
+        assert v.returncode == 1
 
     def test_misfiled_record_rejected(self, tmp_path):
         # A record whose head_sha does not match its own filename is stale

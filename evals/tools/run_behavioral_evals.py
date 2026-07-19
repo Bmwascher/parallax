@@ -502,7 +502,8 @@ def grade(case, transcript):
                 ["codex", "exec", "--sandbox", "read-only",
                  "-m", model, "-c", f"model_reasoning_effort={effort}",
                  "--output-last-message", str(reply_file), "-"],
-                input=prompt, capture_output=True, text=True, timeout=600,
+                input=prompt, stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT, text=True, timeout=600,
                 encoding="utf-8", errors="replace",
                 shell=(os.name == "nt"), env=codex_env(),
             )
@@ -510,12 +511,14 @@ def grade(case, transcript):
             return []
         if proc.returncode != 0:
             return []
-        # Scan stdout+stderr combined for the header - which stream codex
-        # prints it to is undocumented, and the drift watch's 2>&1 capture
-        # is stream-agnostic the same way. Fail closed: a mismatched route
-        # means these verdicts came from an unverified grader.
-        if not effective_route_ok((proc.stdout or "") + "\n" + (proc.stderr or ""),
-                                  model, effort):
+        # ONE ordered stream (stderr merged into stdout, same as the drift
+        # watch's 2>&1 capture): the startup header always precedes the
+        # prompt echo, so first-match cannot be shadowed by header-shaped
+        # text quoted later in the echoed transcript. Separate captures
+        # concatenated would break that ordering (Sol diff review, 0.6.0).
+        # Fail closed: a mismatched route means these verdicts came from an
+        # unverified grader.
+        if not effective_route_ok(proc.stdout or "", model, effort):
             return []
         raw = reply_file.read_text(encoding="utf-8") if reply_file.is_file() else proc.stdout
     start, end = raw.find("["), raw.rfind("]")
@@ -571,6 +574,17 @@ def main(argv=None):
         if not shutil.which(tool):
             print(f"error: {tool} CLI not on PATH - this runner is local-only")
             return 2
+
+    # Billable-lane preflight in the SAME sanitized env the dispatches use
+    # (Sol diff review, 0.6.0): require the first-party ChatGPT state -
+    # exit 0 alone also passes an API-key login.
+    login = subprocess.run(["codex", "login", "status"],
+                           capture_output=True, text=True,
+                           shell=(os.name == "nt"), env=codex_env())
+    login_text = (login.stdout or "") + (login.stderr or "")
+    if login.returncode != 0 or "Logged in using ChatGPT" not in login_text:
+        print(f"error: codex auth not ready: {login_text.strip()[:200]}")
+        return 2
 
     failures = 0
     for c in cases:

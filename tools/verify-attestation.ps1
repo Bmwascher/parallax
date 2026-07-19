@@ -30,13 +30,29 @@ function Read-Attestation($attDir, $sha, $repoName) {
         return $null
     }
     if (-not $att) { return $null }
-    # Strict shape: wrong schema, wrong repo, or a head_sha that does not
-    # match its own filename is a stale or hand-edited record - never a
-    # pass.
+    # Strict shape: wrong schema, wrong mode, wrong repo, or a head_sha
+    # that does not match its own filename is a stale or hand-edited
+    # record - never a pass.
     if ($att.schema -ne 1) { return $null }
+    if ($att.mode -ne "diff") { return $null }
     if ($att.head_sha -ne $sha) { return $null }
     if ($att.repo -ne $repoName) { return $null }
     return $att
+}
+
+function Test-AttestationPasses($att) {
+    # A gate-satisfying record binds the FULL verification state and the
+    # confirmed route, not just the verdict (Sol diff review 0.6.0): a
+    # DEGRADED PASS or an unconfirmed-route PASS must not satisfy the gate.
+    return (($att.verdict -eq "PASS") -and
+            ($att.verification_status -eq "FULL") -and
+            ($att.route_note -eq "effective route confirmed"))
+}
+
+function Get-AttestationRejectReason($att, $label) {
+    return ("attestation for $label is verdict=$($att.verdict)" +
+        " status=$($att.verification_status) route='$($att.route_note)'" +
+        " - a FULL, confirmed-route PASS is required")
 }
 
 $toplevel = (& git -C $RepoRoot rev-parse --show-toplevel 2>$null | Out-String).Trim()
@@ -69,11 +85,11 @@ if (-not (Test-Path $attDir)) {
 # Direct / fast-forward: the pushed sha carries its own attestation.
 $att = Read-Attestation $attDir $local $repoName
 if ($att) {
-    if ($att.verdict -eq "PASS") {
+    if (Test-AttestationPasses $att) {
         Write-Output "attested: $local (direct, $($att.stamp), $($att.participants))"
         exit 0
     }
-    Write-Output "attestation for $local has verdict $($att.verdict), not PASS"
+    Write-Output (Get-AttestationRejectReason $att $local)
     exit 1
 }
 
@@ -83,16 +99,16 @@ $p1 = (& git -C $RepoRoot rev-parse --verify --quiet ($local + "^1") 2>$null | O
 $p2 = (& git -C $RepoRoot rev-parse --verify --quiet ($local + "^2") 2>$null | Out-String).Trim()
 if ($p2) {
     $att2 = Read-Attestation $attDir $p2 $repoName
-    if ($att2 -and ($att2.verdict -eq "PASS") -and ($att2.base_sha -eq $p1)) {
+    if ($att2 -and (Test-AttestationPasses $att2) -and ($att2.base_sha -eq $p1)) {
         Write-Output "attested: merge $local (parent2 $p2 reviewed against base $p1, $($att2.stamp))"
         exit 0
     }
-    if ($att2 -and ($att2.verdict -eq "PASS")) {
+    if ($att2 -and (Test-AttestationPasses $att2)) {
         Write-Output "merge parent2 $p2 is attested but against base $($att2.base_sha), not parent1 $p1 (extra commits or rebase since review) - re-review"
         exit 1
     }
     if ($att2) {
-        Write-Output "merge parent2 $p2 attestation verdict is $($att2.verdict), not PASS"
+        Write-Output (Get-AttestationRejectReason $att2 "merge parent2 $p2")
         exit 1
     }
     Write-Output "no attestation for $local or its merge parent2 $p2"

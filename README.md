@@ -282,13 +282,22 @@ working tree: recording the verdict cannot move HEAD out from under its
 own SHA, and the record never ships in a commit.
 
 `tools/verify-attestation.ps1` is the consumer: a `main` push is attested
-when the pushed sha carries a PASS record (fast-forward), or when a merge
-commit's parent2 is attested **against parent1 as its base** — extra
-commits, a rebase, or a squash after the review all break the match and
-correctly force re-review. The pre-push hooks (this repo's
-`.githooks/pre-push`; adapters in consuming repos) call it and **warn,
-never block** in v1 — the warning stream is how the lane earns a
-blocking future.
+when the pushed sha carries a gate-satisfying record (fast-forward), or
+when a merge commit's parent2 carries one **against parent1 as its base**
+— extra commits, a rebase, or a squash after the review all break the
+match and correctly force re-review. Gate-satisfying means verdict PASS
+**and** `verification_status: FULL` **and** the confirmed route note — a
+DEGRADED or unconfirmed-route PASS is rejected mechanically, not just in
+skill prose. The pre-push hooks (this repo's `.githooks/pre-push`;
+adapters in consuming repos) call it and **warn, never block** in v1 —
+the warning stream is how the lane earns a blocking future.
+
+Enforcement is deliberately **local pre-push lanes only** (re-adjudicated
+2026-07-19 after the reviewer flagged the gap): the records live under
+`.git` and never ship, so a GitHub-CI check would need an attestation
+carrier (git note, PR metadata, or an uploaded artifact) — deferred until
+a PR-based merge flow exists; today both repos merge locally, so pre-push
+IS the integration boundary.
 
 ## Pattern lineage
 

@@ -536,6 +536,16 @@ $guide
                         if (-not ($reviewerModel -and $reviewerEffort)) {
                             $reviewNote = "cross-review UNAVAILABLE - canonical reviewer declaration missing from model-prompting-notes.md"
                         } elseif (Get-Command codex -ErrorAction SilentlyContinue) {
+                            # Env hygiene FIRST, script scope: preflight and
+                            # dispatch must see the SAME sanitized
+                            # environment (Sol diff review 0.6.0) - the two
+                            # keys can flip auth to API-key billing and the
+                            # base URL can reroute ChatGPT-authenticated
+                            # traffic. The review job below inherits this
+                            # process env.
+                            foreach ($v in @("CODEX_API_KEY", "OPENAI_API_KEY", "OPENAI_BASE_URL")) {
+                                Remove-Item "Env:$v" -ErrorAction SilentlyContinue
+                            }
                             # Auth preflight, immediately before the one
                             # billable call: require the exact ChatGPT auth
                             # state, not merely exit 0 - an API-key login
@@ -565,13 +575,10 @@ $guide
                             $briefLines | Set-Content -Path $reviewBrief
                             $job = Start-Job -ScriptBlock {
                                 param($briefPath, $outPath, $hdrPath, $model, $effort)
-                                # The reviewer rides the first-party login:
-                                # strip env overrides that could silently
-                                # reroute the call (API-key auth or a
-                                # redirected base URL).
-                                foreach ($v in @("CODEX_API_KEY", "OPENAI_API_KEY", "OPENAI_BASE_URL")) {
-                                    Remove-Item "Env:$v" -ErrorAction SilentlyContinue
-                                }
+                                # Env already sanitized at script scope
+                                # BEFORE the preflight (the job inherits
+                                # this process env) - preflight and
+                                # dispatch see the same environment.
                                 Get-Content -Raw $briefPath | codex exec --sandbox read-only -m $model -c model_reasoning_effort=$effort --output-last-message $outPath - > $hdrPath 2>&1
                                 return $LASTEXITCODE
                             } -ArgumentList $reviewBrief, $reviewOut, $reviewHdr, $reviewerModel, $reviewerEffort

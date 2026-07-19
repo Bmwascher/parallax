@@ -20,8 +20,12 @@ param(
     [Parameter(Mandatory = $true)][ValidateSet("PASS", "FIX", "ESCALATE")][string]$Verdict,
     [Parameter(Mandatory = $true)][int]$Rounds,
     [Parameter(Mandatory = $true)][string]$Participants,
-    [string]$Mode = "diff",
-    [string]$RouteNote = "effective route confirmed"
+    # Both mandatory, no defaults (Sol diff review 0.6.0): a defaulted
+    # success value would let an emitter that never checked the route or
+    # the verification status mint a gate-satisfying record.
+    [Parameter(Mandatory = $true)][ValidateSet("FULL", "DEGRADED")][string]$VerificationStatus,
+    [Parameter(Mandatory = $true)][string]$RouteNote,
+    [string]$Mode = "diff"
 )
 
 function Resolve-FullSha($repo, $sha, $label) {
@@ -60,16 +64,17 @@ $attDir = Join-Path (Join-Path $commonDir "parallax") "attestations"
 New-Item -ItemType Directory -Force -Path $attDir | Out-Null
 
 $att = [ordered]@{
-    schema       = 1
-    repo         = (Split-Path $toplevel -Leaf)
-    mode         = $Mode
-    base_sha     = $baseFull
-    head_sha     = $headFull
-    verdict      = $Verdict
-    rounds       = $Rounds
-    participants = $Participants
-    route_note   = $RouteNote
-    stamp        = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss")
+    schema              = 1
+    repo                = (Split-Path $toplevel -Leaf)
+    mode                = $Mode
+    base_sha            = $baseFull
+    head_sha            = $headFull
+    verdict             = $Verdict
+    verification_status = $VerificationStatus
+    rounds              = $Rounds
+    participants        = $Participants
+    route_note          = $RouteNote
+    stamp               = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss")
 }
 $outFile = Join-Path $attDir ($headFull + ".json")
 $att | ConvertTo-Json | Set-Content -Path $outFile -Encoding ASCII

@@ -126,7 +126,7 @@ verdict; a reviewer's PASS/FIX is never terminal by itself.
 verdict, run the attestation emitter from this plugin's checkout:
 
 ```powershell
-powershell -NoProfile -File <plugin-root>/tools/write-attestation.ps1 -RepoRoot <reviewed-repo> -BaseSha <base> -HeadSha <head> -Verdict <PASS|FIX|ESCALATE> -Rounds <n> -Participants "<session-model> (session) / <reviewer-model> (reviewer)"
+powershell -NoProfile -File <plugin-root>/tools/write-attestation.ps1 -RepoRoot <reviewed-repo> -BaseSha <base> -HeadSha <head> -Verdict <PASS|FIX|ESCALATE> -VerificationStatus <FULL|DEGRADED> -RouteNote "<effective route confirmed | the transport-failure class>" -Rounds <n> -Participants "<session-model> (session) / <reviewer-model> (reviewer)"
 ```
 
 It writes `.git/parallax/attestations/<head-sha>.json` inside the reviewed
