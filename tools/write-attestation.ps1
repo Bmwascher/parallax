@@ -25,7 +25,16 @@ param(
     # the verification status mint a gate-satisfying record.
     [Parameter(Mandatory = $true)][ValidateSet("FULL", "DEGRADED")][string]$VerificationStatus,
     [Parameter(Mandatory = $true)][string]$RouteNote,
-    [string]$Mode = "diff"
+    [string]$Mode = "diff",
+    # Optional (0.7.0): the application checkpoint that authorized the fix
+    # edits inside the attested range (references/application-checkpoint.md).
+    # Must live in the canonical <git-common-dir>/parallax/
+    # application-checkpoints/ directory - the verifier re-locates and
+    # re-hashes it there, so an artifact anywhere else is unverifiable.
+    # When present, the record binds the checkpoint hash AND the
+    # emitter-computed changed-path set - never caller-supplied - so an
+    # attestation minted for a different change set fails verification.
+    [string]$CheckpointFile = ""
 )
 
 function Resolve-FullSha($repo, $sha, $label) {
@@ -63,8 +72,12 @@ if ($baseFull -eq $headFull) {
 $attDir = Join-Path (Join-Path $commonDir "parallax") "attestations"
 New-Item -ItemType Directory -Force -Path $attDir | Out-Null
 
+# Schema 2 (0.7.0): checkpoint_binding is the emitter-authored
+# DECLARATION of whether this record carries checkpoint metadata -
+# without it, deleting the binding fields would downgrade a bound record
+# to legacy-unbound and the verifier could not tell (Sol round 2).
 $att = [ordered]@{
-    schema              = 1
+    schema              = 2
     repo                = (Split-Path $toplevel -Leaf)
     mode                = $Mode
     base_sha            = $baseFull
@@ -74,9 +87,35 @@ $att = [ordered]@{
     rounds              = $Rounds
     participants        = $Participants
     route_note          = $RouteNote
+    checkpoint_binding  = "none"
     stamp               = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss")
 }
+if ($CheckpointFile) {
+    if (-not (Test-Path $CheckpointFile)) {
+        Write-Output "ERROR: checkpoint file not found: $CheckpointFile"
+        exit 2
+    }
+    $cpFull = (Resolve-Path $CheckpointFile).Path
+    $cpDir = Join-Path (Join-Path $commonDir "parallax") "application-checkpoints"
+    $cpDirFull = if (Test-Path $cpDir) { (Resolve-Path $cpDir).Path } else { $null }
+    if ((-not $cpDirFull) -or ((Split-Path $cpFull -Parent) -ne $cpDirFull)) {
+        Write-Output "ERROR: checkpoint must live under $cpDir - the verifier re-hashes it there"
+        exit 2
+    }
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    $bytes = [System.IO.File]::ReadAllBytes($cpFull)
+    $cpHash = ([System.BitConverter]::ToString($sha.ComputeHash($bytes)) -replace '-', '').ToLower()
+    $changed = @(& git -C $RepoRoot diff --name-only ($baseFull + ".." + $headFull) 2>$null | Where-Object { $_ })
+    if ($LASTEXITCODE -ne 0) {
+        Write-Output "ERROR: could not compute the changed-path set for $baseFull..$headFull"
+        exit 2
+    }
+    $att["checkpoint_binding"] = "bound"
+    $att["checkpoint_file"] = (Split-Path $CheckpointFile -Leaf)
+    $att["checkpoint_hash"] = $cpHash
+    $att["changed_paths"] = $changed
+}
 $outFile = Join-Path $attDir ($headFull + ".json")
-$att | ConvertTo-Json | Set-Content -Path $outFile -Encoding ASCII
+$att | ConvertTo-Json -Depth 3 | Set-Content -Path $outFile -Encoding ASCII
 Write-Output "attestation written: $outFile ($Verdict, $baseFull..$headFull)"
 exit 0

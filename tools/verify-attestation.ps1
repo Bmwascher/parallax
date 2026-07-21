@@ -33,7 +33,7 @@ function Read-Attestation($attDir, $sha, $repoName) {
     # Strict shape: wrong schema, wrong mode, wrong repo, or a head_sha
     # that does not match its own filename is a stale or hand-edited
     # record - never a pass.
-    if ($att.schema -ne 1) { return $null }
+    if (($att.schema -ne 1) -and ($att.schema -ne 2)) { return $null }
     if ($att.mode -ne "diff") { return $null }
     if ($att.head_sha -ne $sha) { return $null }
     if ($att.repo -ne $repoName) { return $null }
@@ -53,6 +53,82 @@ function Get-AttestationRejectReason($att, $label) {
     return ("attestation for $label is verdict=$($att.verdict)" +
         " status=$($att.verification_status) route='$($att.route_note)'" +
         " - a FULL, confirmed-route PASS is required")
+}
+
+function Get-CheckpointBindingFailure($att, $repo, $commonDir) {
+    # 0.7.0 checkpoint binding. Returns $null when the binding holds (or
+    # the record is genuinely unbound), else the rejection reason.
+    # Binding metadata is ALL-OR-NONE: a record carrying any of the three
+    # fields must carry and satisfy all of them, or stripping one field
+    # (e.g. deleting changed_paths) would evade the rest. Records with
+    # none of the fields (pre-0.7.0, or a clean PASS with no fix
+    # application) skip the whole check.
+    $fields = @("checkpoint_file", "checkpoint_hash", "changed_paths")
+    $names = $att.PSObject.Properties.Name
+    $present = @($fields | Where-Object { $names -contains $_ })
+    if ($att.schema -ge 2) {
+        # Schema 2: the emitter DECLARES the binding state, so deleting
+        # the binding fields cannot downgrade a bound record to
+        # legacy-unbound (Sol round 2, R-F3). The declaration must exist
+        # and agree with the fields actually present.
+        if (-not ($names -contains "checkpoint_binding")) {
+            return "schema 2 record without checkpoint_binding - stale or tampered; re-review"
+        }
+        if ($att.checkpoint_binding -eq "none") {
+            if ($present.Count -ne 0) {
+                return "checkpoint_binding=none but binding fields present - stale or tampered; re-review"
+            }
+            return $null
+        }
+        if ($att.checkpoint_binding -cne "bound") {
+            return "unknown checkpoint_binding '$($att.checkpoint_binding)' - stale or tampered; re-review"
+        }
+        if ($present.Count -ne 3) {
+            return "checkpoint_binding=bound but binding fields missing - stale or tampered; re-review"
+        }
+    } else {
+        # Schema 1 (legacy, pre-0.7.0): binding presence is inferred.
+        if ($present.Count -eq 0) { return $null }
+        if ($present.Count -ne 3) {
+            return "partial checkpoint metadata ($($present -join ', ')) - binding is all-or-none; stale or tampered, re-review"
+        }
+    }
+    # Re-locate and re-hash the artifact at its canonical location: a
+    # checkpoint modified, deleted, or substituted after attestation must
+    # invalidate the record. checkpoint_file is a leaf name only - a
+    # separator would escape the canonical directory.
+    if ($att.checkpoint_file -match '[\\/]') {
+        return "checkpoint_file carries a path separator - not a canonical leaf name; re-review"
+    }
+    $cpPath = Join-Path (Join-Path (Join-Path $commonDir "parallax") "application-checkpoints") $att.checkpoint_file
+    if (-not (Test-Path $cpPath)) {
+        return "checkpoint artifact missing ($($att.checkpoint_file)) - the attested checkpoint no longer exists; re-review"
+    }
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    $bytes = [System.IO.File]::ReadAllBytes((Resolve-Path $cpPath).Path)
+    $hash = ([System.BitConverter]::ToString($sha.ComputeHash($bytes)) -replace '-', '').ToLower()
+    if ($hash -cne $att.checkpoint_hash) {
+        return "checkpoint artifact hash mismatch ($($att.checkpoint_file)) - modified after attestation; re-review"
+    }
+    # Ordinal, case-sensitive path comparison: PS Sort-Object and -ne are
+    # case-insensitive by default, so a case-only tamper compares equal.
+    $recorded = [string[]]@($att.changed_paths | Where-Object { $_ })
+    $actual = [string[]]@(& git -C $repo diff --name-only ($att.base_sha + ".." + $att.head_sha) 2>$null | Where-Object { $_ })
+    if ($LASTEXITCODE -ne 0) {
+        return "could not compute the changed-path set for the attested range; re-review"
+    }
+    [Array]::Sort($recorded, [System.StringComparer]::Ordinal)
+    [Array]::Sort($actual, [System.StringComparer]::Ordinal)
+    $mismatch = ($recorded.Count -ne $actual.Count)
+    if (-not $mismatch) {
+        for ($i = 0; $i -lt $recorded.Count; $i++) {
+            if ($recorded[$i] -cne $actual[$i]) { $mismatch = $true; break }
+        }
+    }
+    if ($mismatch) {
+        return "changed-path set no longer matches the attested range - stale or tampered; re-review"
+    }
+    return $null
 }
 
 $toplevel = (& git -C $RepoRoot rev-parse --show-toplevel 2>$null | Out-String).Trim()
@@ -86,6 +162,11 @@ if (-not (Test-Path $attDir)) {
 $att = Read-Attestation $attDir $local $repoName
 if ($att) {
     if (Test-AttestationPasses $att) {
+        $bindFail = Get-CheckpointBindingFailure $att $RepoRoot $commonDir
+        if ($bindFail) {
+            Write-Output "attestation for $local rejected: $bindFail"
+            exit 1
+        }
         Write-Output "attested: $local (direct, $($att.stamp), $($att.participants))"
         exit 0
     }
@@ -100,6 +181,11 @@ $p2 = (& git -C $RepoRoot rev-parse --verify --quiet ($local + "^2") 2>$null | O
 if ($p2) {
     $att2 = Read-Attestation $attDir $p2 $repoName
     if ($att2 -and (Test-AttestationPasses $att2) -and ($att2.base_sha -eq $p1)) {
+        $bindFail = Get-CheckpointBindingFailure $att2 $RepoRoot $commonDir
+        if ($bindFail) {
+            Write-Output "attestation for merge parent2 $p2 rejected: $bindFail"
+            exit 1
+        }
         Write-Output "attested: merge $local (parent2 $p2 reviewed against base $p1, $($att2.stamp))"
         exit 0
     }

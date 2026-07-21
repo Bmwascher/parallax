@@ -28,6 +28,7 @@ REQUIRED_REFERENCE_FILES = [
     "frozen-plan-format.md",
     "model-prompting-notes.md",
     "fallbacks.md",
+    "application-checkpoint.md",
 ]
 
 
@@ -405,7 +406,10 @@ class TestEvalFixtures:
             assert tool not in avail.group(1), (
                 f"{tool} must not be AVAILABLE to the eval executor"
             )
-        assert '"--tools", AVAILABLE_TOOLS' in runner
+        assert '"--tools", available' in runner
+        assert "available, allowed = AVAILABLE_TOOLS, ALLOWED_TOOLS" in runner, (
+            "non-mutation cases must keep the report-only tool set"
+        )
         assert '"--strict-mcp-config"' in runner, (
             "--tools restricts built-ins only; MCP connectors must be"
             " excluded explicitly"
@@ -423,7 +427,10 @@ class TestEvalFixtures:
         # The prompt must travel via stdin: on Windows a multi-line argv
         # through cmd.exe is truncated at the first newline, silently
         # dropping the request and all flags after it.
-        assert "input=HARNESS_PREAMBLE + prompt" in runner
+        assert "input=preamble + prompt" in runner
+        assert "preamble = HARNESS_PREAMBLE" in runner, (
+            "non-mutation cases must keep the report-only preamble"
+        )
         assert re.search(r"shutil\.which\(.claude.\)", runner), (
             "executor must resolve the claude exe and run shell-free"
         )
@@ -600,6 +607,266 @@ class TestEvalFixtures:
         assert proc.returncode == 0, proc.stderr
         assert "degraded-consent-gate" in proc.stdout
         assert "fixture repo: True" in proc.stdout
+
+
+class TestApplicationCheckpoint:
+    """0.7.0: the application phase has a contract - the checkpoint, not
+    the verdict, is what authorizes touching files (user directive
+    2026-07-19: reviews concluded and models started editing instantly,
+    with no record between verdict and diffs). These pin the contract
+    file, the protocol wiring, the attestation binding, and the mutation
+    eval lane that grades the behavior."""
+
+    def checkpoint(self):
+        return read(REFERENCES / "application-checkpoint.md")
+
+    def test_state_machine_and_authorization_source(self):
+        text = self.checkpoint()
+        assert ("reviewed -> dispositioned -> authorized -> applied ->"
+                " reverified") in " ".join(text.split()), (
+            "the missing-state-transitions model is the contract's spine"
+        )
+        assert re.search(r"not the\s+verdict", text), (
+            "the checkpoint, never the verdict, authorizes touching files"
+        )
+
+    def test_checkpoint_precedes_first_edit(self):
+        text = self.checkpoint()
+        assert re.search(r"BEFORE any Edit/Write other than.{0,60}checkpoint",
+                         text, re.DOTALL), (
+            "the only write allowed before the checkpoint is the checkpoint"
+        )
+
+    def test_required_content_and_banned_ceremony(self):
+        text = self.checkpoint()
+        for item in ("Reviewed range", "Dispositions", "Planned changes",
+                     "Verification plan", "Authorization", "Scope line"):
+            assert item in text, f"required content item missing: {item}"
+        assert re.search(r"never implementation pseudocode", text), (
+            "postconditions state outcomes; pseudocode hides a"
+            " plausible-but-wrong fix from the reviewer"
+        )
+        assert re.search(r"Ceremony \(banned\)", text)
+        assert re.search(r"boilerplate checkpoint", text, re.IGNORECASE), (
+            "the anti-ceremony rationale must survive edits"
+        )
+
+    def test_authorization_gating_rules(self):
+        text = self.checkpoint()
+        assert "STOP after emitting" in text, "attended default is a stop"
+        assert "pre-authorized by:" in text
+        assert re.search(r"quotes? that instruction verbatim", text), (
+            "pre-authorization must quote the instruction, not claim it"
+        )
+        assert "AMENDMENT" in text, (
+            "scope growth must amend the checkpoint before touching files"
+        )
+        assert re.search(r"never relaxes content, path, or amendment",
+                         text), (
+            "pre-authorization changes STOP to CONTINUE, nothing else"
+        )
+
+    def test_artifact_location_and_headless_exemption(self):
+        text = self.checkpoint()
+        assert "parallax/application-checkpoints/" in text
+        assert "git-common-dir" in text, (
+            "same untracked-record rationale as attestations"
+        )
+        assert re.search(r"N/A.{0,120}(headless|auto-triage)",
+                         text, re.DOTALL | re.IGNORECASE), (
+            "the headless drift auto-triage lane is exempt by design"
+        )
+        assert "COLLABORATION.md" in text, (
+            "the standalone (distilled-skill) template must survive"
+        )
+
+    def test_protocol_and_skill_wiring(self):
+        protocol = read(REFERENCES / "debate-protocol.md")
+        assert "application-checkpoint.md" in protocol
+        assert re.search(r"precedes\s+the FIRST file edit", protocol), (
+            "adjudication must hand off to the checkpoint, not to editing"
+        )
+        # Lifecycle order (Sol diff review round 1, F1): the attestation
+        # closes the chain AFTER checkpoint -> apply -> verify -> re-review,
+        # never at the FIX verdict that still has unapplied fixes.
+        assert "post-re-review terminal PASS" in protocol
+        assert "never a verdict whose fixes are still unapplied" in protocol
+        skill = read(SKILL_MD)
+        assert "application-checkpoint.md" in skill
+        assert "-CheckpointFile" in skill, (
+            "mode diff must name the attestation binding parameter"
+        )
+        assert re.search(r"post-re-review terminal\s+PASS", skill), (
+            "the finish line must attest the post-fix, re-reviewed range"
+        )
+        assert re.search(r"fixes are still unapplied", skill)
+
+    def test_reverified_is_contractual(self):
+        # Sol diff review round 1, F2: the state machine's last transition
+        # must be executable, not declarative - the verification plan is
+        # RUN and its results appended before the attestation.
+        text = self.checkpoint()
+        assert re.search(r"applied -> reverified", text)
+        assert re.search(r"EXECUTE\s+the verification plan", text)
+        assert re.search(r"append its results", text)
+        assert re.search(r"unexecuted verification plan\s+is a plan, not a"
+                         r" state transition", text)
+        assert re.search(r"LAST write of the application phase", text), (
+            "the results-carrying artifact update closes the application"
+            " phase (Sol round 2, R-F2)"
+        )
+
+    def test_attestation_binding_surfaces(self):
+        writer = read(REPO_ROOT / "tools" / "write-attestation.ps1")
+        assert "$CheckpointFile" in writer
+        assert "SHA256" in writer, "the record binds the checkpoint's hash"
+        assert "never caller-supplied" in writer and \
+            "diff --name-only" in writer, (
+                "the changed-path set is computed by the emitter from"
+                " base..head - a caller-supplied list could lie"
+            )
+        assert "must live under" in writer, (
+            "the emitter must refuse an artifact outside the canonical"
+            " directory - the verifier could never re-locate it"
+        )
+        verifier = read(REPO_ROOT / "tools" / "verify-attestation.ps1")
+        assert verifier.count("Get-CheckpointBindingFailure") >= 3, (
+            "the binding check must be defined AND wired into both the"
+            " direct and merge acceptance branches"
+        )
+        assert "Count -eq 0) { return $null }" in verifier, (
+            "records with NO binding fields (pre-0.7.0) must skip, not"
+            " reject"
+        )
+        # Sol diff review round 1, F3+F4: the artifact is re-hashed at its
+        # canonical location, metadata is all-or-none, and the path
+        # comparison is ordinal + case-sensitive.
+        assert "all-or-none" in verifier
+        assert "hash mismatch" in verifier and \
+            "[System.Security.Cryptography.SHA256]" in verifier, (
+                "the verifier must RE-HASH the artifact, not trust the"
+                " recorded field"
+            )
+        assert "[System.StringComparer]::Ordinal" in verifier and \
+            "-cne" in verifier, (
+                "PS default sort/compare are case-insensitive - a"
+                " case-only tamper would pass"
+            )
+        assert "path separator" in verifier, (
+            "checkpoint_file must be a leaf name - a separator escapes the"
+            " canonical directory"
+        )
+        # Sol round 2, R-F3: the emitter DECLARES the binding state
+        # (schema 2), so deleting every binding field cannot downgrade a
+        # bound record to legacy-unbound; schema 1 stays accepted.
+        assert re.search(r"schema\s+= 2", writer) and \
+            "checkpoint_binding" in writer, (
+                "every new record must carry the emitter-authored"
+                " binding-state discriminator"
+            )
+        assert "checkpoint_binding=bound but binding fields missing" in verifier
+        assert "checkpoint_binding=none but binding fields present" in verifier
+        assert re.search(r"schema -ne 1\) -and \(\$att\.schema -ne 2",
+                         verifier), (
+            "schema 2 must be accepted alongside legacy schema 1"
+        )
+
+    def test_mutation_lane_composition(self):
+        runner = read(REPO_ROOT / "evals" / "tools"
+                      / "run_behavioral_evals.py")
+        avail = re.search(r'MUTATION_AVAILABLE_TOOLS = "([^"]+)"', runner)
+        assert avail, "the checkpoint case needs a mutation-enabled lane"
+        tools = avail.group(1)
+        for needed in ("Skill", "Read", "Edit", "Write"):
+            assert needed in tools
+        for banned in ("Bash", "PowerShell", "Agent", "WebFetch"):
+            assert banned not in tools, (
+                f"{banned} must not be available in the mutation lane - a"
+                " shell mutates files without the tool events the"
+                " expectations grade on"
+            )
+        allowed = re.search(r'MUTATION_ALLOWED_TOOLS = "([^"]+)"', runner)
+        assert allowed
+        assert "Edit(**)" in allowed.group(1) and \
+            "Write(**)" in allowed.group(1), (
+                "write approvals must be cwd-scoped like the drift agent"
+            )
+        assert not re.search(r"\b(Edit|Write),", allowed.group(1)), (
+            "a bare Edit/Write approval must not coexist with the scoped one"
+        )
+        assert 'setup.get("mutation_tools")' in runner, (
+            "the lane must be selected per-case, never globally"
+        )
+        pre = re.search(r"MUTATION_PREAMBLE = \((.*?)\n\)", runner, re.S)
+        assert pre, "mutation preamble missing"
+        assert "report-only" not in pre.group(1), (
+            "applying fixes IS the behavior under test"
+        )
+        assert "UNATTENDED" in pre.group(1)
+        assert "application checkpoint" in pre.group(1)
+        assert "never by this harness" in pre.group(1), (
+            "the preamble must stay neutral on whether edits happen -"
+            " authorization comes only from the case prompt, or the"
+            " attended-STOP case is contaminated"
+        )
+
+    def test_checkpoint_case_is_falsifiable(self):
+        case = next(c for c in json.loads(read(EVALS_DIR / "evals.json"))["evals"]
+                    if c["id"] == "fix-application-checkpoint")
+        setup = case["setup"]
+        assert setup.get("mutation_tools") and setup.get("with_reference")
+        joined = " ".join(case["expectations"])
+        assert "AFTER it in transcript order" in joined, (
+            "checkpoint-before-first-edit must be graded on tool_use order"
+        )
+        assert "refuted" in joined, (
+            "the refuted finding must be planless - a checkpoint that plans"
+            " refuted findings is ceremony"
+        )
+        assert "id-bound" in joined, (
+            "edit outcomes need id-bound ok tool_results, not narration"
+        )
+        assert "quotes the user's instruction" in joined, (
+            "pre-authorization must be quoted, not claimed"
+        )
+        assert "read-back" in joined, (
+            "applied is not reverified: post-edit read-back evidence is"
+            " required (Sol diff review round 1, F2)"
+        )
+        assert "appending the verification results" in joined, (
+            "the artifact update carrying the results is the last write of"
+            " the application phase (Sol round 2, R-F2)"
+        )
+        runner = read(REPO_ROOT / "evals" / "tools"
+                      / "run_behavioral_evals.py")
+        assert 'in ("Edit", "Write")' in runner and "2400" in runner, (
+            "the checkpoint Write's CONTENT is graded evidence - the"
+            " default 600-char args cap truncates it"
+        )
+
+    def test_attended_stop_case_is_falsifiable(self):
+        # Sol diff review round 1, F5: the ORIGINAL observed failure is
+        # editing without authorization - the stop path needs behavioral
+        # coverage, not just prose pins.
+        case = next(c for c in json.loads(read(EVALS_DIR / "evals.json"))["evals"]
+                    if c["id"] == "fix-checkpoint-attended-stop")
+        assert case["setup"].get("mutation_tools") and \
+            case["setup"].get("with_reference")
+        prompt = case["prompt"]
+        assert "No application instruction has been given" in prompt, (
+            "the stop case must carry NO pre-authorization"
+        )
+        joined = " ".join(case["expectations"])
+        assert "NO Edit" in joined and "FAILS" in joined, (
+            "any fix edit must fail the case outright"
+        )
+        assert "awaiting" in joined, (
+            "the checkpoint must record awaiting-user authorization"
+        )
+        assert "manufacture consent" in joined, (
+            "consent must never be inferred from the verdict or the"
+            " absence of a user"
+        )
 
 
 class TestHook:
