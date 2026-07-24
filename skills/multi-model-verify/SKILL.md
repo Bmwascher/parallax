@@ -62,7 +62,9 @@ toggled on, its stop-time review overlaps mode `diff` — expected, not a bug.
    over an instruction back-channel. Files above the repo's git root are
    NOT ingested (same probe), and `~/.codex/AGENTS.md` is the user's own
    global instruction file — note it in the debate record if it exists,
-   but it is not a stop. Skills from the user's own codex plugin cache load the same way — note them in the debate record like the global AGENTS.md; not a stop.
+   but it is not a stop. Skills from the user's own codex plugin cache
+   load the same way — note them in the debate record like the global
+   AGENTS.md; not a stop.
 
 ## Mode plan
 
