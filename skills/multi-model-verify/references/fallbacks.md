@@ -28,10 +28,11 @@ Options: [fix codex] [run degraded] [abort]
 
 One retry with the SAME model, sandbox, effort, and session parameters is
 the DEFAULT recovery for any failure that has no named immediate-gate rule
-below (codex-missing, model-rejected, auth-expired, route-mismatch, and
-quota-exhausted go straight to the gate — retrying those changes nothing).
-The retry reduces nothing, so it needs no consent. A failed retry goes to
-the consent gate. This covers timeouts and transient transport errors.
+below (codex-missing, model-rejected, auth-expired, route-mismatch,
+quota-exhausted, and a missing-rollout resume go straight to the gate —
+retrying those changes nothing). The retry reduces nothing, so it needs no
+consent. A failed retry goes to the consent gate. This covers timeouts and
+transient transport errors.
 
 Cost framing (why exactly ONE): a pre-dispatch failure (spawn error, auth
 preflight, missing CLI) never reached the provider, so its retry is free; a
@@ -101,6 +102,12 @@ protocol property — so it is NOT automatic: one retry, then the consent
 gate with the specific option "continue with fresh per-round reviewer calls
 (full brief re-sent each round; costs tokens, loses the reviewer's debate
 memory)".
+
+One resume failure is deterministic and skips the retry: output matching
+`no rollout found for thread id ... (code -32600)` — class
+`missing-rollout` (probed 2026-07-24; the reply file is not written).
+The rollout is gone; skip the retry and go straight to this
+class's consent gate with the same fresh-per-round option.
 
 ### Stale API evidence
 If the project's API-reference drift check reports the build changed under

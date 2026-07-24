@@ -141,13 +141,12 @@ Canonical reasoning effort: `high`
   "<prompt>"` in a scratch fixture exited 1 with
   `Error: thread/resume: thread/resume failed: no rollout found for
   thread id <id> (code -32600)` and did NOT write the reply file.
-  Settles: a missing-rollout resume is never transient — a
-  skip-the-retry candidate under fallbacks' session-loss class (adoption
-  pending the 0.10.0 debate; fallbacks.md's one-retry rule is the live
-  contract until then). Claim source: jinn recognizes this same
+  Settles: a missing-rollout resume is never transient — class
+  missing-rollout in fallbacks.md skips the retry (adopted 0.10.0, debate
+  2026-07-24). Claim source: jinn recognizes this same
   signature (packages/jinn/src/engines/codex.ts:363 @ 6c46f57) — its
-  response (silently restarting a fresh thread) is the opposite of the
-  consent gate and was not adopted.
+  response (a warning-logged but automatic, unconsented fresh-thread
+  restart) is the opposite of the consent gate and was not adopted.
 - **AGENTS.md is an instruction back-channel**: codex auto-ingests a
   repo-root AGENTS.md into the reviewer's context. Probed 2026-07-24
   (v0.144.1): a planted AGENTS.md at the cwd repo root controlled the

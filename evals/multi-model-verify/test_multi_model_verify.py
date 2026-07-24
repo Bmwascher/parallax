@@ -381,6 +381,20 @@ class TestFallbacks:
         assert re.search(r"skip the retry", text, re.IGNORECASE)
         assert re.search(r"reset time", text, re.IGNORECASE)
 
+    def test_missing_rollout_is_named_class(self):
+        # Probed 2026-07-24 (codex-cli 0.144.1): resuming a nonexistent
+        # session id fails deterministically with "no rollout found for
+        # thread id <id> (code -32600)" and writes NO reply file. Never
+        # transient: skip the retry, straight to the session-loss
+        # consent gate (jinn intake, pinned 6c46f57).
+        text = self.fallbacks()
+        assert "no rollout found" in text
+        assert "-32600" in text
+        assert re.search(r"rollout.{0,240}skip the retry", text,
+                         re.IGNORECASE | re.DOTALL), (
+            "the missing-rollout signature must skip the retry"
+        )
+
     def test_stale_evidence_is_struck(self):
         text = self.fallbacks()
         assert re.search(r"struck until re-verified", text, re.IGNORECASE)

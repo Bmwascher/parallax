@@ -85,6 +85,7 @@ flowchart TD
     R -->|recovered| OK[debate continues]
     R -->|still failing| G["CONSENT GATE banner:<br/>what failed · what degraded mode<br/>would and would NOT verify"]
     X -. "quota-exhausted:<br/>skip the retry" .-> G
+    X -. "missing-rollout resume:<br/>skip the retry" .-> G
     G -->|fix codex| OK
     G -->|run degraded| D["single-vendor, visibly flagged;<br/>DEGRADED plan poisons any diff PASS"]
     G -->|abort or unattended| B2[BLOCKED / DEGRADED-NOT-AUTHORIZED]
@@ -96,7 +97,10 @@ flowchart TD
   re-spend — never a loop.)
 - Session/weekly usage limits get a dedicated `quota-exhausted` class: no
   retry (quota windows don't clear in seconds), and the banner quotes
-  codex's reset time verbatim.
+  codex's reset time verbatim. A resume failing with the missing-rollout
+  signature ("no rollout found ... code -32600", probed 2026-07-24) also
+  skips the retry — the rollout is gone; straight to the session-loss
+  consent gate.
 - **Effective-route check (0.6.0; `sandbox:` line added in 0.8.0)**: every
   codex call's startup header
   (`model:` / `provider:` / `reasoning effort:` / `sandbox: read-only`,
