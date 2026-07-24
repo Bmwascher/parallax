@@ -272,6 +272,12 @@ session's assertion, not independently verified evidence.
 | C9 | jinn skill QA weaker than parallax gates | session | rationale corrected by reviewer (jinn HAS targeted template-contract tests); rejection retained | jinn template-company-doctrine.test.ts:210-330 |
 | C10 | reference carries agent-instruction surfaces (release skill: 2FA-bypassing token publish) | session | accepted with precise surface naming; non-execution recorded as session assertion (reviewer UNVERIFIED note) | jinn .claude/skills/release-jinn-cli/SKILL.md:61-77 |
 
+### Post-freeze approved deviations
+
+| # | Deviation | Why | Approved by |
+|---|-----------|-----|-------------|
+| D1 | Task 2 Step 3(b) prose implemented as "The rollout is gone; skip the retry and go straight to this class's consent gate..." instead of the plan's "...and a retry changes nothing: go straight to..." | The plan's own Step 1 test regex (`rollout.{0,240}skip the retry`) cannot match the plan's Step 3(b) literal text — an internal plan wording defect; the test is the debate-locked contract, so the prose must satisfy it. Meaning-preserving; disclosed by the implementer; verified necessary by the task reviewer. | session adjudication, 2026-07-24 (task-2 review; surfaced to user in the execution report) |
+
 ### Escalated points (user-decided)
 
 | # | Question | Session position | Reviewer position | Owner's call |
