@@ -168,10 +168,7 @@ Canonical reasoning effort: `high`
   same run also loaded a skill from the user's own codex plugin cache
   (`~/.codex/plugins/cache/...`) — like `~/.codex/AGENTS.md`, the user's
   own by design: surface it in the debate record, never a stop.
-  Settles: the AGENTS.md-only preflight sweep has a coverage gap; fix
-  shape pending the 0.10.0 debate — SKILL.md's current preflight is the
-  live contract until then. Claim source: the jinn intake (pinned
-  6c46f57; `.agents/skills/<name>` symlink convention at its repo root).
+  Settles: the preflight enumeration sweeps '.agents/*' alongside AGENTS.md (adopted 0.10.0, debate 2026-07-24). '.codex/' stays unswept — unprobed; probe before adding.
 - **Fabrication counter**: Sol's METR/system-card record means "I verified X"
   claims from Sol get the same strike rule as everything else — quoted
   file:line or it did not happen.

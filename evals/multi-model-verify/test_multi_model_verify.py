@@ -177,10 +177,21 @@ class TestTransportContract:
             "the preflight enumeration must cover tracked, untracked, and"
             " ignored AGENTS.md files at any depth"
         )
+        # codex also advertises repo-level .agents/skills/*/SKILL.md to
+        # the model (probed 2026-07-24, v0.144.1: a planted skill was
+        # read into the reviewer's context as its first action) - the
+        # sweep must cover that surface too. .codex/ stays out: unprobed.
+        assert "'.agents/*'" in text, (
+            "the preflight enumeration must sweep .agents/ skill"
+            " droppings alongside AGENTS.md"
+        )
+        notes = read(REFERENCES / "model-prompting-notes.md")
+        assert ".agents/skills" in notes, (
+            "the .agents ingestion probe must be documented in the notes"
+        )
         assert re.search(r"(?s)AGENTS\.md.{0,700}STOP and surface", text), (
             "a present AGENTS.md must STOP the dispatch, not merely warn"
         )
-        notes = read(REFERENCES / "model-prompting-notes.md")
         assert "AGENTS.md" in notes, (
             "the ingestion probe results must be documented in the notes"
         )

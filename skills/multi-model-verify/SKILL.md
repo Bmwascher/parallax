@@ -47,11 +47,14 @@ toggled on, its stop-time review overlaps mode `diff` — expected, not a bug.
    `References/<name>/<version>/<file>:<line>`.
    For non-port work there is no reference folder — claims ground in the
    project's own source, specs, or upstream docs instead, same strike rule.
-3. The reviewed repo must carry no AGENTS.md: codex auto-ingests it as
-   instructions — a back-channel into the auditor that breaks independence
-   (probed 2026-07-24: a planted repo-root AGENTS.md controlled the
-   reviewer's reply; see model-prompting-notes.md). Enumerate the whole
-   tree in one listing — `git ls-files --cached --others '*AGENTS.md'` —
+3. The reviewed repo must carry no AGENTS.md and no `.agents/` entries:
+   codex auto-ingests AGENTS.md as instructions, and it advertises
+   repo-level `.agents/skills/*/SKILL.md` to the model, which read a
+   planted one as its FIRST action (both probed 2026-07-24: the planted
+   AGENTS.md controlled the reviewer's reply; the planted skill entered
+   its context; see model-prompting-notes.md) — back-channels into the
+   auditor that break independence. Enumerate the whole tree in one
+   listing — `git ls-files --cached --others '*AGENTS.md' '.agents/*'` —
    which covers tracked, untracked, AND ignored files at any depth
    (`.git` itself is never listed); a root-only or tracked-only check
    misses a nested drop.
@@ -59,7 +62,7 @@ toggled on, its stop-time review overlaps mode `diff` — expected, not a bug.
    over an instruction back-channel. Files above the repo's git root are
    NOT ingested (same probe), and `~/.codex/AGENTS.md` is the user's own
    global instruction file — note it in the debate record if it exists,
-   but it is not a stop.
+   but it is not a stop. Skills from the user's own codex plugin cache load the same way — note them in the debate record like the global AGENTS.md; not a stop.
 
 ## Mode plan
 
