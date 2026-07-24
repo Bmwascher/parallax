@@ -277,6 +277,7 @@ session's assertion, not independently verified evidence.
 | # | Deviation | Why | Approved by |
 |---|-----------|-----|-------------|
 | D1 | Task 2 Step 3(b) prose implemented as "The rollout is gone; skip the retry and go straight to this class's consent gate..." instead of the plan's "...and a retry changes nothing: go straight to..." | The plan's own Step 1 test regex (`rollout.{0,240}skip the retry`) cannot match the plan's Step 3(b) literal text — an internal plan wording defect; the test is the debate-locked contract, so the prose must satisfy it. Meaning-preserving; disclosed by the implementer; verified necessary by the task reviewer. | session adjudication, 2026-07-24 (task-2 review; surfaced to user in the execution report) |
+| D2 | Task 4 Step 3(b)'s fenced `python -c` one-liner replaced with a quoting-robust equivalent: the id-2 line filter (`'\"id\":2'`) becomes a `'rateLimits'` substring filter, eliminating every escaped double quote from the Python source | The plan's literal one-liner throws a Python SyntaxError when pasted into PowerShell — verified by the task reviewer under all three `$PSNativeCommandArgumentPassing` modes (`\"` sequences are mangled by native argument reconstruction). Handshake, timeout, kill, and N/A semantics unchanged; the pipelined two-line write itself is probe-verified (2026-07-24, and jinn ships the same shape at engine-limits.ts:443). | session adjudication, 2026-07-24 (task-4 review; surfaced to user in the execution report) |
 
 ### Escalated points (user-decided)
 
