@@ -133,6 +133,61 @@ class TestTransportContract:
             " model-prompting-notes.md)"
         )
 
+    def test_sandbox_verified_in_route_check(self):
+        # Sandbox mode has NO continuity across resumes: probed 2026-07-24
+        # (v0.144.1) - a resume WITHOUT --sandbox resolved to the config
+        # default (workspace-write on the dev machine) on the SAME session
+        # id and a test write LANDED; with the flag the write was blocked.
+        # The header's `sandbox:` line is where that surfaces, so every
+        # effective-route consumer must verify it alongside model/provider/
+        # effort (rocket-fuel review, Sol C1 amendment, 2026-07-24).
+        text = read(SKILL_MD)
+        assert re.search(r"`sandbox:`", text), (
+            "SKILL.md's route check must include the sandbox: header line"
+        )
+        notes = read(REFERENCES / "model-prompting-notes.md")
+        assert "`sandbox: `" in notes, (
+            "the route-confirmation bullet must name the sandbox: line"
+        )
+        runner = read(REPO_ROOT / "evals" / "tools" / "run_behavioral_evals.py")
+        assert '"sandbox"' in runner, (
+            "the grader's effective_route_ok must verify the sandbox line"
+        )
+        evals_json = read(EVALS_DIR / "evals.json")
+        assert "sandbox:" in evals_json, (
+            "the behavioral expectation must require the sandbox header line"
+        )
+
+    def test_agents_md_backchannel_check(self):
+        # codex auto-ingests AGENTS.md from the repo it runs in - an
+        # instruction back-channel into the auditor. Probed 2026-07-24
+        # (v0.144.1): a planted AGENTS.md at the cwd repo root controlled
+        # the reviewer's reply verbatim; one in a non-git parent above the
+        # git root was NOT ingested.
+        text = read(SKILL_MD)
+        assert "AGENTS.md" in text, (
+            "preflight must check the reviewed repo for AGENTS.md"
+        )
+        notes = read(REFERENCES / "model-prompting-notes.md")
+        assert "AGENTS.md" in notes, (
+            "the ingestion probe results must be documented in the notes"
+        )
+
+    def test_fresh_per_round_files(self):
+        # After a failed call, a reused --output-last-message path serves
+        # the PREVIOUS round's reply and reads exactly like success
+        # (rocket-fuel review finding, confirmed against fallbacks.md
+        # which named only EMPTY replies, 2026-07-24).
+        skill = read(SKILL_MD)
+        assert re.search(r"fresh[^\n]*round|round-numbered", skill,
+                         re.IGNORECASE), (
+            "SKILL.md must mandate fresh per-round reply/transcript files"
+        )
+        fallbacks = read(REFERENCES / "fallbacks.md")
+        assert re.search(r"stale reply", fallbacks, re.IGNORECASE), (
+            "a stale reply file must be a named transport failure"
+        )
+
     def test_reviewer_id_has_single_source(self):
         # A hardcoded reviewer model literal anywhere but the canonical
         # declaration file re-opens the partial-migration hole: that surface
@@ -340,6 +395,19 @@ class TestDegradedStatusFields:
         text = read(REFERENCES / "frozen-plan-format.md")
         assert re.search(r"participants line must name\s+the actual",
                          text, re.IGNORECASE)
+
+    def test_proof_oracle_adequacy_and_raw_rounds(self):
+        # Two controls adopted from the rocket-fuel review (Sol R3
+        # amendment, 2026-07-24): a proof command must be judged able to
+        # FAIL when the feature is broken, and the debate record must say
+        # where the verbatim round replies live (or that they were not
+        # retained) - summaries alone lose the provenance.
+        text = read(REFERENCES / "frozen-plan-format.md")
+        assert re.search(r"pass(es)? while .{0,40}broken", text,
+                         re.IGNORECASE), (
+            "proof commands need an oracle-adequacy check"
+        )
+        assert "**Raw rounds:**" in text
 
     def test_diff_mode_poisoning_rule(self):
         text = read(SKILL_MD)
@@ -1226,7 +1294,7 @@ class TestDriftProtection:
             "a header/canonical mismatch must be reported, never a verdict"
         )
         for key in ("'^model: (.+)$'", "'^reasoning effort: (.+)$'",
-                    "'^provider: (.+)$'"):
+                    "'^provider: (.+)$'", "'^sandbox: (.+)$'"):
             assert key in text, f"header parse missing {key}"
         assert re.search(r"rv\[0\]\.Line\.Trim\(\) -eq \$lastLine", text), (
             "the REVIEW line must be the LAST non-empty line of the reply"
@@ -1323,6 +1391,7 @@ class TestDoctorCommand:
                                                #    checkout - N/A, not BROKEN
             "Logged in using ChatGPT",         # 4: auth STATE, not exit-0
             "effective route",                 # 4: header echo check (0.6.0)
+            "`sandbox: `",                     # 4: sandbox line check (0.8.0)
         ):
             assert anchor in body, f"doctor check anchor missing: {anchor}"
         assert "PostToolUseFailure" in body, (

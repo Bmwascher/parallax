@@ -598,6 +598,7 @@ $guide
                                     $hdrModel = ""
                                     $hdrEffort = ""
                                     $hdrProvider = ""
+                                    $hdrSandbox = ""
                                     if (Test-Path $reviewHdr) {
                                         $mm = @(Select-String -Path $reviewHdr -Pattern '^model: (.+)$')
                                         if ($mm.Count -gt 0) { $hdrModel = $mm[0].Matches[0].Groups[1].Value.Trim() }
@@ -605,9 +606,15 @@ $guide
                                         if ($me.Count -gt 0) { $hdrEffort = $me[0].Matches[0].Groups[1].Value.Trim() }
                                         $mp = @(Select-String -Path $reviewHdr -Pattern '^provider: (.+)$')
                                         if ($mp.Count -gt 0) { $hdrProvider = $mp[0].Matches[0].Groups[1].Value.Trim() }
+                                        # sandbox: line too (0.8.0) - the
+                                        # call pins --sandbox read-only, so
+                                        # anything else here means a config
+                                        # default bled through the pin.
+                                        $ms = @(Select-String -Path $reviewHdr -Pattern '^sandbox: (.+)$')
+                                        if ($ms.Count -gt 0) { $hdrSandbox = $ms[0].Matches[0].Groups[1].Value.Trim() }
                                     }
-                                    if (($hdrModel -ne $reviewerModel) -or ($hdrEffort -ne $reviewerEffort) -or ($hdrProvider -ne "openai")) {
-                                        $reviewNote = "cross-review UNAVAILABLE - effective route mismatch (header model='$hdrModel' effort='$hdrEffort' provider='$hdrProvider'; expected $reviewerModel/$reviewerEffort/openai)"
+                                    if (($hdrModel -ne $reviewerModel) -or ($hdrEffort -ne $reviewerEffort) -or ($hdrProvider -ne "openai") -or ($hdrSandbox -ne "read-only")) {
+                                        $reviewNote = "cross-review UNAVAILABLE - effective route mismatch (header model='$hdrModel' effort='$hdrEffort' provider='$hdrProvider' sandbox='$hdrSandbox'; expected $reviewerModel/$reviewerEffort/openai/read-only)"
                                     } else {
                                         # Strict grammar AND position:
                                         # exactly one REVIEW: line and it
