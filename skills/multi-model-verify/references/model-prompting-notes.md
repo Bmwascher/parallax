@@ -108,13 +108,17 @@ Canonical reasoning effort: `high`
   `sandbox: read-only`. One omitted flag silently turns the read-only
   auditor into a writing agent; the `sandbox:` header line is the tripwire.
 - **Env hygiene for the call — one sequence, one environment**: clear
-  `CODEX_API_KEY`, `OPENAI_API_KEY`, `OPENAI_BASE_URL`, and `CODEX_HOME` FIRST, then run
-  the `codex login status` preflight, then dispatch — all in that same
-  sanitized environment (a preflight in ambient env can pass or fail on
-  overrides the dispatch never sees). The first two vars can flip auth to
-  API-key billing, the base URL can reroute even ChatGPT-authenticated
-  traffic. `CODEX_HOME` redirects auth.json and config.toml wholesale (see its probe bullet below); clearing it reverts codex to the default home, so a legitimately relocated home fails the auth preflight LOUDLY instead of silently rerouting the lane. The preflight must report `Logged in using ChatGPT` — exit 0
-  alone also passes an API-key login.
+  `CODEX_API_KEY`, `OPENAI_API_KEY`, `OPENAI_BASE_URL`, and `CODEX_HOME`
+  FIRST, then run the `codex login status` preflight, then dispatch —
+  all in that same sanitized environment (a preflight in ambient env can
+  pass or fail on overrides the dispatch never sees). The first two vars
+  can flip auth to API-key billing, the base URL can reroute even
+  ChatGPT-authenticated traffic. The preflight must report `Logged in
+  using ChatGPT` — exit 0 alone also passes an API-key login. `CODEX_HOME`
+  redirects auth.json and config.toml wholesale (see its probe bullet
+  below); clearing it reverts codex to the default home, so a legitimately
+  relocated home fails the auth preflight LOUDLY instead of silently
+  rerouting the lane.
 - **`CODEX_HOME` is reroute-capable**: probed 2026-07-24 (codex-cli
   0.144.1, Windows): with ambient `CODEX_HOME` pointed at an empty scratch
   directory, `codex login status` reported `Not logged in` (exit 1) while

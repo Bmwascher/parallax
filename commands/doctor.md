@@ -42,8 +42,9 @@ warns but cannot extract); none = BROKEN (diff gate inert). Also confirm
 ## 4. codex transport
 
 First sanitize the probe shell — clear `CODEX_API_KEY`, `OPENAI_API_KEY`,
-`OPENAI_BASE_URL`, and `CODEX_HOME` (`Remove-Item Env:<name>`) so the preflight and the
-probe below see the SAME environment the review lane uses. Then
+`OPENAI_BASE_URL`, and `CODEX_HOME` (`Remove-Item Env:<name>`) so the
+preflight and the probe below see the SAME environment the review lane
+uses. Then
 `codex --version`, then `codex login status`. The login check must report
 the first-party auth STATE — output matching `Logged in using ChatGPT` —
 not merely exit 0 (an API-key login also exits 0 but rides different
