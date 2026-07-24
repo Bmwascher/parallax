@@ -1430,6 +1430,78 @@ class TestDoctorCommand:
         )
 
 
+class TestIntakeCommand:
+    """commands/intake.md codifies the external-reference intake
+    methodology (4 cycles by 2026-07-24; the 0.8.0 rocket-fuel intake is
+    the reference run). Pin the rules a future session would be tempted
+    to skip."""
+
+    INTAKE = REPO_ROOT / "commands" / "intake.md"
+
+    def test_untrusted_data_charter(self):
+        # An external reference can carry instruction files aimed at the
+        # session or the reviewer; the intake treats all of it as subject
+        # data and calls an instruction file a finding in itself.
+        body = read(self.INTAKE)
+        assert "SUBJECT DATA" in body
+        assert re.search(r"never an instruction", body), (
+            "the never-instructions rule must bind the session AND every"
+            " reviewer charter that attaches reference files"
+        )
+        assert "AGENTS.md" in body, (
+            "agent-instruction files in the reference must be flagged as"
+            " a finding, not silently read"
+        )
+        assert re.search(r"scratchpad|never into this repo", body), (
+            "the reference is acquired outside the plugin repo"
+        )
+
+    def test_delta_grounding_requires_both_sides(self):
+        body = read(self.INTAKE)
+        assert re.search(r"BOTH sides|both sides", body), (
+            "every delta cites the reference AND the parallax file"
+        )
+        assert re.search(r"EVERY consumer", body), (
+            "lacks-X claims sweep all consumers - the 0.8.0 sandbox check"
+            " lived in six surfaces, not two"
+        )
+
+    def test_probe_gate_before_rule_text(self):
+        # The load-bearing rule: behavior claims are classified, and a
+        # needs-live-probe claim never becomes rule text unprobed. Probes
+        # that mutate run in disposable fixtures and land as dated
+        # bullets in the canonical notes file.
+        body = read(self.INTAKE)
+        for label in ("verifiable-from-files", "contradicted-by-dated-probe",
+                      "needs-live-probe"):
+            assert label in body, f"behavior-claim label missing: {label}"
+        assert re.search(r"until a live probe settles it", body)
+        assert "model-prompting-notes.md" in body, (
+            "probe results must land as dated bullets in the notes"
+        )
+        assert re.search(r"NEVER run in a real repo", body), (
+            "mutating probes stay in disposable fixtures"
+        )
+        assert re.search(r"the probe decides", body), (
+            "conflicts with live-verified contracts resolve by probe,"
+            " never by authority"
+        )
+
+    def test_dispositions_and_handoff(self):
+        body = read(self.INTAKE)
+        for label in ("adopt", "adopt-deferred", "reject", "needs-probe"):
+            assert label in body, f"disposition label missing: {label}"
+        assert re.search(r"user'?s (scope )?(pick|decision)", body), (
+            "release scope is the user's call, never the intake's"
+        )
+        assert "multi-model-verify" in body, (
+            "dispositions hand off to the debate, not to direct edits"
+        )
+        assert re.search(r"application\s+checkpoint", body), (
+            "review-verdict fixes go through the checkpoint contract"
+        )
+
+
 class TestDriftStateMachine:
     """evals/tools/drift_statemachine_tests.ps1 drives the REAL
     check-drift.ps1 through its full state machine offline (stub CLIs,
