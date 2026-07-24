@@ -68,9 +68,12 @@ $hdr = "$env:TEMP\parallax-doctor-hdr-$(Get-Random).txt"
 # OK requires ALL of: exit 0; $probe contains exactly TRANSPORT-OK; and the
 # captured header ($hdr) echoes the EFFECTIVE ROUTE - first `model: ` line
 # equals <id>, first `provider: ` line `openai`, first `reasoning effort: `
-# line `low` (the probe pins low). codex prints the RESOLVED config there,
-# so a config.toml override or profile silently swapping the reviewer
-# surfaces as a mismatch = BROKEN (report header value vs canonical).
+# line `low` (the probe pins low), first `sandbox: ` line `read-only` (the
+# probe pins it; sandbox mode has no cross-resume continuity, so a default
+# bleeding through here would also bleed into review resumes). codex
+# prints the RESOLVED config there, so a config.toml override or profile
+# silently swapping the reviewer surfaces as a mismatch = BROKEN (report
+# header value vs canonical).
 ```
 
 OK requires the zero exit, fresh `TRANSPORT-OK` content, AND the header

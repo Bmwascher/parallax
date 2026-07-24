@@ -509,16 +509,19 @@ def effective_route_ok(output, model, effort):
     config.toml override or profile silently swapping the grader surfaces
     here. First match wins - the header precedes any body text that could
     quote such lines. Client-resolved metadata: this confirms the
-    EFFECTIVE ROUTE, never server-attested runtime identity."""
+    EFFECTIVE ROUTE, never server-attested runtime identity. The sandbox
+    line is checked too (0.8.0): the dispatch pins --sandbox read-only,
+    so anything else means a config default bled through the pin."""
+    expected = {"model": model, "provider": "openai",
+                "reasoning effort": effort, "sandbox": "read-only"}
     header = {}
-    for key in ("model", "provider", "reasoning effort"):
+    for key in expected:
         m = re.search(rf"(?m)^{key}: (.+)$", output or "")
         header[key] = m.group(1).strip() if m else ""
-    ok = (header["model"] == model and header["provider"] == "openai"
-          and header["reasoning effort"] == effort)
+    ok = all(header[key] == want for key, want in expected.items())
     if not ok:
         print(f"    grader route mismatch: header={header};"
-              f" expected model={model} effort={effort} provider=openai")
+              f" expected {expected}")
     return ok
 
 

@@ -41,8 +41,11 @@ re-spend — anything beyond it is the user's call at the consent gate, never
 a silent loop.
 
 **Catch-all: any codex failure not named in this file — nonzero exit, empty
-reply file, malformed output, network loss, resume failure —
-gets the same treatment: one same-parameters retry, then the consent gate.**
+reply file, a stale reply file (a reused path serving an earlier round's
+reply after a failed call; round paths must be fresh, and stale content is
+DISCARDED unread), malformed output, network loss, resume failure —
+gets the same treatment: one same-parameters retry (for a stale reply:
+with a fresh path), then the consent gate.**
 No failure class is ever an implicit license to degrade.
 
 ## Failure classes
@@ -84,8 +87,9 @@ sign-in): consent gate.
 
 ### Effective route mismatch — class `route-mismatch`
 The codex startup header (client-resolved `model:` / `provider:` /
-`reasoning effort:` — see model-prompting-notes.md) disagrees with the
-canonical declarations, or a resume's `session id:` is not the one
+`reasoning effort:` / `sandbox:` — see model-prompting-notes.md) disagrees
+with the canonical declarations, the `sandbox:` line is not `read-only`,
+or a resume's `session id:` is not the one
 requested. Nothing here is transient — a config.toml override, a profile,
 or a dropped session does not fix itself: **skip the retry**, consent gate.
 The reviewer reply from the mismatched call is DISCARDED unread — it came

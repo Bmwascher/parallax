@@ -96,11 +96,15 @@ flowchart TD
 - Session/weekly usage limits get a dedicated `quota-exhausted` class: no
   retry (quota windows don't clear in seconds), and the banner quotes
   codex's reset time verbatim.
-- **Effective-route check (0.6.0)**: every codex call's startup header
-  (`model:` / `provider:` / `reasoning effort:`, plus the `session id:` on
+- **Effective-route check (0.6.0; `sandbox:` line added in 0.8.0)**: every
+  codex call's startup header
+  (`model:` / `provider:` / `reasoning effort:` / `sandbox: read-only`,
+  plus the `session id:` on
   resume) is verified against the canonical declarations — a config.toml
   override or profile silently swapping the reviewer is a named
-  `route-mismatch` class: no retry, reply discarded, consent gate. The
+  `route-mismatch` class: no retry, reply discarded, consent gate.
+  (Sandbox mode has no continuity across resumes — an omitted flag falls
+  back to the config default, probed 2026-07-24.) The
   call itself runs with reroute-capable env vars stripped
   (`CODEX_API_KEY`, `OPENAI_API_KEY`, `OPENAI_BASE_URL`) after a
   `codex login status` preflight that requires the first-party ChatGPT

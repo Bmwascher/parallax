@@ -91,7 +91,8 @@ Canonical reasoning effort: `high`
   echoes the RESOLVED config in its startup header — capture stdout and
   check the first `model: `, `provider: `, and `reasoning effort: ` lines
   against the canonical declarations above (provider must be `openai`),
-  and on a resume that `session id: ` equals the id you resumed. A
+  the first `sandbox: ` line reads `read-only`, and on a resume that
+  `session id: ` equals the id you resumed. A
   mismatch is a TRANSPORT failure (fallbacks.md consent gate), never a
   review result — a config.toml override or profile can silently swap the
   reviewer, and the header is where that surfaces. Vocabulary discipline:
@@ -99,7 +100,13 @@ Canonical reasoning effort: `high`
   confirmed", never "used and confirmed" (codex exposes no server-attested
   runtime identity); the reviewer's prose claiming a model name is never
   identity evidence. Probed 2026-07-19 (codex v0.144.1): fresh and resumed
-  calls both emit the full header block.
+  calls both emit the full header block. Probed 2026-07-24 (v0.144.1):
+  sandbox mode has NO continuity across resumes — a resume WITHOUT
+  `--sandbox read-only` resolved to the config default (`workspace-write`)
+  on the SAME session id and a test write LANDED; with the flag before the
+  `resume` subcommand the write was blocked and the header read
+  `sandbox: read-only`. One omitted flag silently turns the read-only
+  auditor into a writing agent; the `sandbox:` header line is the tripwire.
 - **Env hygiene for the call — one sequence, one environment**: clear
   `CODEX_API_KEY`, `OPENAI_API_KEY`, and `OPENAI_BASE_URL` FIRST, then run
   the `codex login status` preflight, then dispatch — all in that same
@@ -116,6 +123,14 @@ Canonical reasoning effort: `high`
   preserved debate memory either way. NEVER `resume --last` — it grabs
   whatever codex session ran most recently, which may be a concurrent
   /codex:review, not your debate.
+- **AGENTS.md is an instruction back-channel**: codex auto-ingests a
+  repo-root AGENTS.md into the reviewer's context. Probed 2026-07-24
+  (v0.144.1): a planted AGENTS.md at the cwd repo root controlled the
+  reply verbatim (an output-format directive was obeyed); an AGENTS.md in
+  a non-git parent directory ABOVE the git root was NOT ingested. The
+  preflight repo check in SKILL.md exists because of this. The user's own
+  `~/.codex/AGENTS.md` (global instructions) is theirs by design —
+  surfaced in the debate record when present, never a stop.
 - **Fabrication counter**: Sol's METR/system-card record means "I verified X"
   claims from Sol get the same strike rule as everything else — quoted
   file:line or it did not happen.

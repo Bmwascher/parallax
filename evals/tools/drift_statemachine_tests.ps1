@@ -192,10 +192,14 @@ if ($idx -ge 0 -and ($idx + 1) -lt $argList.Count) {
     foreach ($a in $argList) {
         if ("$a" -like "model_reasoning_effort=*") { $reqEffort = "$a".Split("=")[1] }
     }
+    $reqSandbox = ""
+    $sIdx = [Array]::IndexOf($argList, "--sandbox")
+    if ($sIdx -ge 0 -and ($sIdx + 1) -lt $argList.Count) { $reqSandbox = $argList[$sIdx + 1] }
     if ($env:CODEX_STUB_MODE -eq "wrong-model") { $reqModel = "stub-swapped-model" }
     Write-Output "model: $reqModel"
     Write-Output "provider: openai"
     Write-Output "reasoning effort: $reqEffort"
+    Write-Output "sandbox: $reqSandbox"
     $verdict = "REVIEW: PASS"
     if ($env:CODEX_STUB_MODE -eq "bad-review") {
         $verdict = "Looks good to me, ship it."
