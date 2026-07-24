@@ -168,6 +168,17 @@ class TestTransportContract:
         assert "AGENTS.md" in text, (
             "preflight must check the reviewed repo for AGENTS.md"
         )
+        # Scope is the contract (Sol round-2 R2-F1, 2026-07-24): the
+        # declared predicate is "the repo carries no AGENTS.md", so the
+        # command must cover tracked, untracked, AND ignored files at any
+        # depth - a root-only untracked check misses a nested drop.
+        assert "--cached --others" in text, (
+            "the preflight enumeration must cover tracked, untracked, and"
+            " ignored AGENTS.md files at any depth"
+        )
+        assert re.search(r"(?s)AGENTS\.md.{0,700}STOP and surface", text), (
+            "a present AGENTS.md must STOP the dispatch, not merely warn"
+        )
         notes = read(REFERENCES / "model-prompting-notes.md")
         assert "AGENTS.md" in notes, (
             "the ingestion probe results must be documented in the notes"
