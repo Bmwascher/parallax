@@ -91,7 +91,7 @@ experimental capability — drift is expected and is exactly what N/A is
 for). Hold stdin OPEN — the server exits when it closes.
 
 ```powershell
-python -c "import json,shutil,subprocess,threading;bin=shutil.which('codex');p=subprocess.Popen([bin,'app-server','--stdio'],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True);r={};t=threading.Thread(target=lambda:[r.update(m=l) for l in p.stdout if '\"id\":2' in l.replace(' ','')],daemon=True);t.start();p.stdin.write(json.dumps({'id':1,'method':'initialize','params':{'clientInfo':{'name':'parallax-doctor','version':'0'},'capabilities':{'experimentalApi':True}}})+'\n'+json.dumps({'id':2,'method':'account/rateLimits/read','params':None})+'\n');p.stdin.flush();t.join(timeout=10);p.kill();print(r.get('m','NO-ANSWER'))"
+python -c "import json,shutil,subprocess,threading;bin=shutil.which('codex');p=subprocess.Popen([bin,'app-server','--stdio'],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True);r={};t=threading.Thread(target=lambda:[r.update(m=l) for l in p.stdout if 'rateLimits' in l],daemon=True);t.start();p.stdin.write(json.dumps({'id':1,'method':'initialize','params':{'clientInfo':{'name':'parallax-doctor','version':'0'},'capabilities':{'experimentalApi':True}}})+'\n'+json.dumps({'id':2,'method':'account/rateLimits/read','params':None})+'\n');p.stdin.flush();t.join(timeout=10);p.kill();print(r.get('m','NO-ANSWER'))"
 ```
 
 Answer received: report `usedPercent`, `windowDurationMins` (as days/hours),
