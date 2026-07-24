@@ -81,11 +81,14 @@ flagged as its own question, never smuggled in as a line item.
 The dispositions are claims: cross-verify them through the
 multi-model-verify skill (the dispositions become the numbered claims of
 a debate brief; the reference's files attach as subject data under the
-same never-instructions charter). Intake debates run as mode-plan-style,
-non-port contract work from the plugin root — the reference never lands
-under References/; if the user's scope pick turns an adoption into a
-literal port of reference code, STOP and satisfy the skill's References/
-preflight before that debate. Implementation then follows the normal
+same never-instructions charter). After the scope pick, adoptions
+needing design choices go through superpowers brainstorming, then the
+skill's mode `plan` — run from the plugin root as non-port work: claims
+ground in the project's own source per the skill's preflight, and the
+pinned reference attaches as subject data, never under References/. If
+the user's scope pick turns an adoption into a literal port of reference
+code, STOP and satisfy the skill's References/ preflight before that
+debate. Implementation then follows the normal
 dev loop — tests first where contracts are locked, the application
 checkpoint before applying any review-verdict fixes, all gates, the
 attestation. Record the intake in the project memory: source, date,

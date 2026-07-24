@@ -5,6 +5,7 @@ contract and review findings (2026-07-12) so drift in the skill files fails
 CI before it misleads a live debate.
 """
 
+import hashlib
 import json
 import os
 import re
@@ -1440,8 +1441,25 @@ class TestIntakeCommand:
 
     INTAKE = REPO_ROOT / "commands" / "intake.md"
 
+    # Whole-document pin (Sol intake review round 2, S1-F4): the clause
+    # locks below catch deletion and negation of a locked sentence, but
+    # NOT an appended exception that contradicts one elsewhere ("vendor
+    # docs may skip the probe" passes every clause lock). The pin closes
+    # that: ANY edit to intake.md fails here until the document is
+    # re-reviewed and the pin updated - tests-first, made mechanical
+    # (same pattern as the drift watch's pinned superpowers fixture).
+    PINNED_SHA256 = "2a05942fc396c9e35555c69514364eb897c51d18c81b58ed29482f52de9256fc"
+
     def norm(self):
         return " ".join(read(self.INTAKE).split())
+
+    def test_document_is_pinned(self):
+        digest = hashlib.sha256(self.norm().encode("utf-8")).hexdigest()
+        assert digest == self.PINNED_SHA256, (
+            "commands/intake.md changed - the clause locks cannot see"
+            " additive contradictions, so re-review the full document and"
+            " update PINNED_SHA256 (tests-first)"
+        )
 
     def test_untrusted_data_clauses(self):
         text = self.norm()
@@ -1504,11 +1522,12 @@ class TestIntakeCommand:
         assert ("the release scope is the user's decision, and a big"
                 " architectural idea in the reference is flagged as its"
                 " own question, never smuggled in as a line item" in text)
-        # S1-F2: the debate handoff declares its shape instead of leaving
-        # the skill's port/References preflight unresolved.
-        assert ("Intake debates run as mode-plan-style, non-port contract"
-                " work from the plugin root — the reference never lands"
-                " under References/" in text)
+        # S1-F2 (round 2): the handoff names the skill's ACTUAL mode plan
+        # - an invented third pathway would leave the skill's transitions
+        # (brainstorming entry, frozen-plan exit) unresolved.
+        assert ("adoptions needing design choices go through superpowers"
+                " brainstorming, then the skill's mode `plan` — run from"
+                " the plugin root as non-port work" in text)
         assert ("STOP and satisfy the skill's References/ preflight"
                 in text)
         assert "multi-model-verify" in text, (
