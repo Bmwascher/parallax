@@ -111,7 +111,7 @@ flowchart TD
   (Sandbox mode has no continuity across resumes — an omitted flag falls
   back to the config default, probed 2026-07-24.) The
   call itself runs with reroute-capable env vars stripped
-  (`CODEX_API_KEY`, `OPENAI_API_KEY`, `OPENAI_BASE_URL`) after a
+  (`CODEX_API_KEY`, `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `CODEX_HOME`) after a
   `codex login status` preflight that requires the first-party ChatGPT
   state, not merely exit 0.
 - A DEGRADED-frozen plan cannot produce an ordinary diff PASS: mode `diff`

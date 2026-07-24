@@ -108,12 +108,12 @@ Canonical reasoning effort: `high`
   `sandbox: read-only`. One omitted flag silently turns the read-only
   auditor into a writing agent; the `sandbox:` header line is the tripwire.
 - **Env hygiene for the call — one sequence, one environment**: clear
-  `CODEX_API_KEY`, `OPENAI_API_KEY`, and `OPENAI_BASE_URL` FIRST, then run
+  `CODEX_API_KEY`, `OPENAI_API_KEY`, `OPENAI_BASE_URL`, and `CODEX_HOME` FIRST, then run
   the `codex login status` preflight, then dispatch — all in that same
   sanitized environment (a preflight in ambient env can pass or fail on
   overrides the dispatch never sees). The first two vars can flip auth to
   API-key billing, the base URL can reroute even ChatGPT-authenticated
-  traffic. The preflight must report `Logged in using ChatGPT` — exit 0
+  traffic. `CODEX_HOME` redirects auth.json and config.toml wholesale (see its probe bullet below); clearing it reverts codex to the default home, so a legitimately relocated home fails the auth preflight LOUDLY instead of silently rerouting the lane. The preflight must report `Logged in using ChatGPT` — exit 0
   alone also passes an API-key login.
 - **`CODEX_HOME` is reroute-capable**: probed 2026-07-24 (codex-cli
   0.144.1, Windows): with ambient `CODEX_HOME` pointed at an empty scratch
@@ -124,8 +124,8 @@ Canonical reasoning effort: `high`
   line still reads clean (the header names model/provider, not account).
   Claim source: jinn (pinned 6c46f57) strips `CODEX_*` and re-pins
   `CODEX_HOME` per engine child (packages/jinn/src/shared/child-env.ts:31).
-  Settles: `CODEX_HOME` is denylist-shaped; adoption pending the 0.10.0
-  debate — the three-var denylist above is the live contract until then.
+  Settles: `CODEX_HOME` is in the env denylist (adopted 0.10.0, debate
+  2026-07-24).
 - **Session resume, not context re-send**: capture the `session id:` from
   round 1 and resume it (flags before the subcommand). OpenAI documents
   5.6 reasoning reuse across turns as CONDITIONAL (carried through

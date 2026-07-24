@@ -1325,7 +1325,7 @@ class TestDriftProtection:
             "preflight must require the first-party auth STATE - exit 0"
             " alone also passes an API-key login"
         )
-        for var in ("CODEX_API_KEY", "OPENAI_API_KEY", "OPENAI_BASE_URL"):
+        for var in ("CODEX_API_KEY", "OPENAI_API_KEY", "OPENAI_BASE_URL", "CODEX_HOME"):
             assert var in text, f"env denylist must cover {var}"
         assert "effective route mismatch" in text, (
             "a header/canonical mismatch must be reported, never a verdict"
@@ -1350,6 +1350,13 @@ class TestDriftProtection:
             )
         assert "CODEX_ENV_DENYLIST" in runner, (
             "the grader spawn must strip reroute-capable env overrides"
+        )
+        assert re.search(
+            r'CODEX_ENV_DENYLIST = \("CODEX_API_KEY", "OPENAI_API_KEY",'
+            r'\s*"OPENAI_BASE_URL", "CODEX_HOME"\)', runner), (
+            "the denylist tuple must carry all four reroute-capable vars"
+            " - CODEX_HOME redirects auth+config wholesale (probed"
+            " 2026-07-24)"
         )
         assert "effective_route_ok" in runner, (
             "verdicts from an unverified grader route must be discarded"
@@ -1429,6 +1436,7 @@ class TestDoctorCommand:
             "Logged in using ChatGPT",         # 4: auth STATE, not exit-0
             "effective route",                 # 4: header echo check (0.6.0)
             "`sandbox: `",                     # 4: sandbox line check (0.8.0)
+            "CODEX_API_KEY", "OPENAI_API_KEY", "OPENAI_BASE_URL", "CODEX_HOME",
         ):
             assert anchor in body, f"doctor check anchor missing: {anchor}"
         assert "PostToolUseFailure" in body, (
