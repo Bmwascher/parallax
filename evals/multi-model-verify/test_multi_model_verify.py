@@ -1463,6 +1463,23 @@ class TestDoctorCommand:
             "doctor must diagnose, never mutate, without being asked"
         )
 
+    def test_quota_row_is_nonfailing(self):
+        # Probed 2026-07-24 (codex-cli 0.144.1): codex app-server
+        # answers account/rateLimits/read locally. Experimental
+        # surface: the row may be N/A, and N/A never contributes to
+        # overall failure (jinn intake, pinned 6c46f57; Sol round 2).
+        body = read(self.DOCTOR)
+        assert "OK / STALE / BROKEN / N/A" in body, (
+            "the table grammar must formally admit N/A"
+        )
+        assert re.search(r"N/A[^.]{0,160}never[^.]{0,80}overall",
+                         body, re.IGNORECASE), (
+            "N/A must be defined as never contributing to overall"
+            " failure"
+        )
+        assert "app-server" in body and "account/rateLimits/read" in body
+        assert "experimental" in body.lower()
+
 
 class TestIntakeCommand:
     """commands/intake.md codifies the external-reference intake

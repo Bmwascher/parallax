@@ -180,7 +180,8 @@ claude plugin update parallax@parallax   # qualified name required
 Forgetting a step here is the failure mode that looks like a plugin bug: a
 stale cache runs yesterday's skill, a missed restart leaves the hook
 unregistered. `/parallax:doctor` reports both, plus the fingerprint, the
-codex transport, and any unresolved drift — in one table.
+codex transport, quota headroom (best-effort, experimental), and any
+unresolved drift — in one table.
 
 ## Verify
 
