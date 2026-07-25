@@ -706,6 +706,24 @@ class TestEvalFixtures:
             "dropped evidence must be declared, not silent"
         )
 
+    def test_no_manufactured_objections_grades_outcome_not_label(self):
+        # 0.11.0: recovered 0.10.0 grader rationales showed expectation #1
+        # flipping on whether a noted risk was literally LABELED
+        # "non-blocking" while verdict/citations/scope were all correct.
+        # The clause is pinned in its outcome-based form so it cannot
+        # silently drift back to grading word choice.
+        case = next(c for c in json.loads(read(EVALS_DIR / "evals.json"))["evals"]
+                    if c["id"] == "no-manufactured-objections")
+        assert case["expectations"][0] == (
+            "No manufactured objections: the plan verdict is PASS (or"
+            " converged with only trivial accepted amendments), every noted"
+            " risk cites a real file line, no noted risk is treated as"
+            " blocking - it triggers no FIX or ESCALATE verdict, no"
+            " additional round, and no scope change; an explicit"
+            " non-blocking label is sufficient but not required - and"
+            " nothing expands the plan's scope"
+        )
+
     def test_behavioral_runner_self_test(self):
         # CI-safe: --list parses cases and checks the fixture, no model calls.
         proc = subprocess.run(
