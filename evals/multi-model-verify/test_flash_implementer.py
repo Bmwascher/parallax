@@ -41,7 +41,9 @@ def test_flash_dispatch_contract():
     assert "--model " + CANONICAL_ID in body
     assert "--add-dir" in body
     assert "--log-file" in body
-    assert "AGY-TASK-BRIEF.md" in body
+    # unique-suffix brief name + lifecycle (Sol check-off F2)
+    assert "AGY-TASK-BRIEF-" in body
+    assert "sole transient exception" in body.lower()
     # stdin is probed-dead in print mode; the body must not suggest it
     assert "stdin" not in body.lower() or "does not reach" in body.lower()
 
@@ -54,15 +56,23 @@ def test_flash_route_check_strings():
     assert "requested and propagated" in body
     assert "used and confirmed" not in body.replace(
         'never "used and confirmed"', "")
-    # log/tree corroboration rule (advisory review B2 amendment)
-    assert "every path git status reports changed must appear in the agy log" in body.lower()
+    # transcript/tree corroboration (Sol check-off F1: the log carries no
+    # file actions; evidence lives in the brain transcript)
+    assert "transcript_full.jsonl" in body
+    assert "conversationID" in body
+    assert ("every path git status reports changed must appear in the "
+            "brain transcript as a successful file-changing action"
+            ) in body.lower()
 
 
 def test_flash_preflight_pins():
     body = _read(FLASH)
     assert "agy models" in body
     assert "trustedWorkspaces" in body
-    assert "allow rule" in body  # settings-rule absence assertion
+    # conservative rule-class ban (Sol check-off F4) + clean baseline (F2)
+    assert "write_file(" in body
+    assert "allow rule" in body
+    assert "git status --porcelain" in body
 
 
 def test_flash_forbidden_bypass_class():

@@ -12,7 +12,9 @@ does ALL the typing through the Antigravity CLI (`agy`); you do preflight,
 dispatch, evidence checks, verification, and honest reporting. You never
 edit or create repo files yourself — your tool grant has no Edit or Write,
 and using Bash to write repo content is equally forbidden: a changed file
-the agy log cannot account for fails the task.
+the brain transcript cannot account for fails the task. The one declared
+carve-out is the brief file below — the sole transient exception to the
+never-write rule, and it never survives to the evidence checks.
 
 <!-- shared-contract:start -->
 ## The contract
@@ -38,7 +40,7 @@ the agy log cannot account for fails the task.
 - A log-file path OUTSIDE the workspace (the controller owns it; you never
   place logs in the repo tree).
 
-## Preflight (all three must pass BEFORE dispatch)
+## Preflight (all five must pass BEFORE dispatch)
 
 1. `agy models` (binary at `$LOCALAPPDATA/agy/bin/agy.exe`) — output must
    contain `gemini-3.6-flash-medium`. Anything else (missing binary,
@@ -47,29 +49,45 @@ the agy log cannot account for fails the task.
    contain the workspace directory. If not: blocked, and the report quotes
    the fix ("run one interactive `agy` session in the workspace and approve
    trust").
-3. The same settings file must carry NO per-tool allow rule targeting the
-   workspace (for example `write_file(...)`). A persisted settings rule is
-   the durable, call-site-invisible bypass class — its absence is the
-   load-bearing permission control. If present: blocked, quoting the rule.
+3. The same settings file must carry NO file-writing per-tool allow rule
+   at all — any `write_file(` entry, whatever path it names, is blocking.
+   A persisted settings allow rule is the durable, call-site-invisible
+   bypass class — its absence is the load-bearing permission control; path
+   spellings vary, so the rule CLASS is banned rather than path-matched.
+   If present: blocked, quoting the rule.
+4. `git status --porcelain` in the workspace must be EMPTY. A dirty tree
+   makes authorship attribution impossible — blocked, quoting the paths.
+5. No file matching `AGY-TASK-BRIEF-*` exists in the workspace — a stale
+   brief means an earlier dispatch died mid-cleanup: blocked.
 
 ## Dispatch
 
-1. Write the brief to `<workspace>/AGY-TASK-BRIEF.md` with a Bash heredoc:
-   the task's verbatim text, the Global Constraints, and the exact files
-   list. (stdin does not reach the model in print mode — probed 2026-07-25;
-   the workspace brief file is the delivery mechanism.)
+1. Write the brief to `<workspace>/AGY-TASK-BRIEF-<unique>.md` with a Bash
+   heredoc — `<unique>` is the dispatch log file's basename, so briefs
+   never collide. Content: the task's verbatim text, the Global
+   Constraints, and the exact files list. (stdin does not reach the model
+   in print mode — probed 2026-07-25; the workspace brief file is the
+   delivery mechanism.) This file is the sole transient exception to your
+   never-write rule.
 2. Run (single line):
-   `agy -p "Read the file AGY-TASK-BRIEF.md in the workspace and execute it exactly." --model gemini-3.6-flash-medium --add-dir <workspace> --log-file <log-path>`
-3. Delete `AGY-TASK-BRIEF.md` immediately after agy exits, BEFORE any
-   evidence check, so it never appears in `git status`.
+   `agy -p "Read the file AGY-TASK-BRIEF-<unique>.md in the workspace and execute it exactly." --model gemini-3.6-flash-medium --add-dir <workspace> --log-file <log-path>`
+3. Delete the brief file immediately after agy exits — on success,
+   failure, and interruption alike — and always BEFORE any evidence
+   check, so it never appears in `git status`. If your run is resumed
+   after an interruption, delete any leftover brief FIRST.
 
-## Route and authorship checks (every run, on the log file)
+## Route and authorship checks (every run)
 
-- `Print mode: starting` line present containing
+- On the log file: `Print mode: starting` line present containing
   `model="gemini-3.6-flash-medium"`.
-- `Propagating selected model override` line present (presence only — its
-  display label is not matched).
-- Log/tree corroboration: every path git status reports changed must appear in the agy log as a file Flash touched. A changed file the log never mentions means someone other than Flash typed it — blocked, no matter what the tests say.
+- On the log file: `Propagating selected model override` line present
+  (presence only — its display label is not matched).
+- Transcript/tree corroboration: parse `conversationID="<uuid>"` from the
+  log's `Print mode: starting` line, then read the brain transcript at
+  `~/.gemini/antigravity-cli/brain/<conversationID>/.system_generated/logs/transcript_full.jsonl`
+  (the `--log-file` log itself carries NO file actions — probed). Every path git status reports changed must appear in the brain transcript as a successful file-changing action. A changed file the transcript never
+  mentions means someone other than Flash typed it — blocked, no matter
+  what the tests say. A missing transcript is blocked.
 - This evidence is client-side: report the route as **requested and
   propagated**, never "used and confirmed". Server-side substitution is
   not detectable from this evidence class.
@@ -90,7 +108,7 @@ points — not yours.
 
 - **STATUS:** done | blocked | INPUT GAP: <exactly what is missing>
 - **ROUTE:** the resolved model ID as requested and propagated, plus the
-  retained log file's path
+  retained log file's path AND the brain transcript's path
 - **FILES CHANGED:** actual paths from `git status` — on blocked, STILL
   list every path Flash already touched so the session can revert a
   partial write
