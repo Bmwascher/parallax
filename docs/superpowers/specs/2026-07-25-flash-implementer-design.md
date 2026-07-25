@@ -116,7 +116,10 @@ record in the plan's debate appendix.
   frozen plan's **Escalated points (user-decided)** section — the existing
   artifact, not a new table. No automatic degradation — same ethos as the
   debate lane's transport consent gate.
-- Scope: the Flash lane runs in the MAIN CHECKOUT ONLY this cycle. Trust is
+- Scope: the Flash lane runs in the MAIN CHECKOUT ONLY this cycle, with
+  ONE declared exception — the live-verification task's trusted scratch
+  repo (Sol check-off round 3: an absolute constraint would contradict
+  the live verification a zero-judgment agent must execute). Trust is
   per-directory and grantable only interactively, so fresh worktrees are
   untrusted by construction; a worktree trust story is future-cycle work.
   Coupling made explicit: with no disposable worktree, the
@@ -147,7 +150,7 @@ lane-specific line:
 
 - **STATUS:** done | blocked | INPUT GAP: <what is missing>
 - **ROUTE:** resolved model ID as requested-and-propagated, from the log,
-  plus the retained log file's path
+  plus the retained log file's path AND the brain transcript's path
 - **FILES CHANGED:** actual paths from `git status` — on `blocked` this
   MUST still list every path Flash already touched, so the session can
   revert a partial write
@@ -300,10 +303,13 @@ so a future third agent file is swept by default, not silently missed.
   wrapper refusing the contradictory brief would "pass" without ever
   exercising the failure path): (a) a RAW agy probe, no agent, proving
   the CLI's loud invalid-model rejection with no writes; (b) a
-  reachable-failure probe through the REAL agent — plant a scratch-scoped
-  `write_file` allow rule in agy settings, dispatch a trivial task,
-  require preflight check 3 to block quoting the rule, then remove the
-  planted rule. Dev-loop ordering applies and is part of the task:
+  reachable-failure probe through the REAL agent — save the original
+  settings content, plant a NONMATCHING sentinel `write_file(` rule (the
+  preflight bans the class, so a sentinel triggers it without granting
+  any functional permission), dispatch a trivial task, require preflight
+  check 3 to block quoting the sentinel, then restore the saved settings
+  content (including on aborted runs) and confirm the restored file
+  matches the saved copy. Dev-loop ordering applies and is part of the task:
   the agent is not live until `plugin.json` bumps,
   `claude plugin update parallax@parallax` runs, and the session restarts.
 - Preflight cost: `agy models` is a network round-trip per task dispatch.

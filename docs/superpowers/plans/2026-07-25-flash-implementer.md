@@ -8,7 +8,7 @@
 
 **Tech Stack:** Claude Code agent frontmatter, agy 1.1.7 print mode, pytest (offline contract pins), PowerShell (drift snapshot).
 
-**STATUS: FROZEN** (re-frozen pending Sol round 2). Frozen 2026-07-25 by the backup-lane plan debate (Kimi K3-256k); REOPENED same day by the primary reviewer's check-off (Sol round 1, FIX — codex window reset early): five blocking findings, all session-verified and accepted; amendments folded into spec, this plan, and the Tasks 1-2 artifacts via an SDD fix wave. The diff debate gates the merge as always. Tasks 5-6 contain ATTENDED steps (user-interactive); Task 6 additionally requires the plugin dev-loop (bump, update, restart).
+**STATUS: FROZEN** (re-frozen pending Sol round 4 — the cap round, terminal confirmation). Frozen 2026-07-25 by the backup-lane plan debate (Kimi K3-256k); REOPENED same day by the primary reviewer's check-off (Sol, codex window reset early): round 1 FIX (5 blocking), round 2 FIX (3 blocking + 2 minor consistency ripples), round 3 FIX (4 blocking bookkeeping/sync) — every finding session-verified and accepted; amendments folded into spec, this plan, and the artifacts via SDD fix waves. The diff debate gates the merge as always. Tasks 5-6 contain ATTENDED steps (user-interactive); Task 6 additionally requires the plugin dev-loop (bump, update, restart).
 
 ## Global Constraints
 
@@ -16,7 +16,9 @@
 - The wrapper's tools allowlist is exactly Read, Grep, Glob, Bash — no Edit, no Write, no NotebookEdit (spec section 1).
 - Route language is "requested and propagated", never "used and confirmed" (spec section 2; doctor check-4 discipline).
 - Loud failure only: any preflight, dispatch, route-check, or corroboration failure is `STATUS: blocked` with quoted evidence; reroute to a Claude tier is a user decision recorded under the frozen plan's Escalated points (spec section 4).
-- The Flash lane runs in the MAIN CHECKOUT ONLY this cycle (spec Decisions).
+- The Flash lane runs in the MAIN CHECKOUT ONLY this cycle (spec
+  Decisions), with ONE declared exception: Task 6's trusted scratch repo
+  during live verification (Sol check-off round 3, finding 2).
 - Probed facts this plan treats as fixed (2026-07-25, agy 1.1.7): stdin does NOT reach the model in print mode; a workspace file named in a short `-p` pointer is read reliably (probed to 7,152 bytes); default-verbosity logs carry NO response-side model attribution (client-side `Print mode: starting` / `Propagating selected model override` lines only).
 - All new test code and evals content is pure ASCII.
 - Commits: lowercase imperative, prefixed `0.12.0:`, no AI-attribution trailers.
@@ -121,6 +123,8 @@ def test_flash_preflight_pins():
     assert "allow rule" in body
     assert "git status --porcelain" in body
     assert "No file matching `AGY-TASK-BRIEF-*`" in body
+    # main-checkout scope with its one declared carve-out (Sol round 3)
+    assert "sole live-verification exception" in body
 
 
 def test_flash_route_report_carries_transcript():
@@ -276,7 +280,9 @@ never-write rule, and it never survives to the evidence checks.
 ## Inputs (from the dispatching controller)
 
 - The task's verbatim text and the plan's Global Constraints.
-- The workspace directory (this cycle: the main checkout only).
+- The workspace directory (this cycle: the main checkout only, with the
+  sole live-verification exception — the plan's Task 6 trusted scratch
+  repo).
 - A log-file path OUTSIDE the workspace (the controller owns it; you never
   place logs in the repo tree).
 
@@ -366,7 +372,9 @@ This agent pins the Flash implementation lane. Canonical model literal:
 Antigravity CLI resolved ID). The literal lives ONLY here;
 `implementer.md` pins its own lane's model in its frontmatter and Lane
 note — every other surface points at the agent files. Trust is per-directory and interactive-only, so this lane runs in
-the main checkout this cycle — a worktree trust story is future work.
+the main checkout this cycle, with the plan's Task 6 trusted scratch repo
+as the sole live-verification exception — a worktree trust story is
+future work.
 ````
 
 - [ ] **Step 2: Edit `agents/implementer.md`**
@@ -596,11 +604,18 @@ User runs one interactive `agy` session in
 `C:\Users\Brandon\Documents\parallax`, approves trust, exits. Verify:
 `trustedWorkspaces` in the settings file now contains the repo path.
 
-- [ ] **Step 5: Version bump**
+- [ ] **Step 5: Version bump + commit**
 
-Edit `.claude-plugin/plugin.json`: `"version": "0.12.0"`.
+Edit `.claude-plugin/plugin.json`: `"version": "0.12.0"`. Commit
+IMMEDIATELY (Sol check-off round 3, finding 1 — the dry-run's clean-tree
+check cannot pass over an uncommitted bump):
 
-- [ ] **Step 6: Preflight dry-check + commit**
+```bash
+git add .claude-plugin/plugin.json
+git commit -m "0.12.0: bump plugin version"
+```
+
+- [ ] **Step 6: Preflight dry-check (post-commit, clean tree)**
 
 Run the agent's FIVE preflight checks by hand against the real
 environment, verbatim from the agent body: (1) `agy models` contains the
@@ -608,13 +623,8 @@ pinned ID; (2) `trustedWorkspaces` contains the repo path; (3) the
 settings file carries NO `write_file(` entry at all — if an unrelated
 write rule remains, STOP and surface it for user disposition (never
 silently delete shared configuration); (4) `git status --porcelain` in
-the repo is empty; (5) no `AGY-TASK-BRIEF-*` file exists in the repo.
-All five must pass. Then:
-
-```bash
-git add .claude-plugin/plugin.json
-git commit -m "0.12.0: bump plugin version"
-```
+the repo is empty (the bump is already committed); (5) no
+`AGY-TASK-BRIEF-*` file exists in the repo. All five must pass.
 
 ---
 
@@ -705,12 +715,12 @@ diff-debate brief cites them.
 ## Debate record
 
 **Participants:** Fable 5 (session) / Kimi K3 `kimi-code/k3-256k` (kimi-cli 1.49.0, session 4ba130bb-1615-4c95-9afc-d1e3049bb857) / GPT-5.6 Sol (codex exec, session 019f9ad5-e318-7831-8a3f-0c02c94caa8e)
-**Rounds used:** 2 of 4 (Kimi, plan mode) + 2 of 4 (Sol, primary check-off)
+**Rounds used:** 2 of 4 (Kimi, plan mode) + 4 of 4 (Sol, primary check-off: r1 FIX, r2 FIX, r3 FIX, r4 terminal)
 **Outcome:** converged with amendments
 **Verification status:** FULL
 **Degradation:** quota-exhausted (primary lane at the plan gate; backup lane substituted for rounds 1-2, primary check-off ran on the reset window)
 **Authorized by:** user at round 1 (backup-lane substitution; the user's standing ruling retained the primary check-off before branch close)
-**Raw rounds:** docs/superpowers/plans/rounds/2026-07-25-flash-implementer/ (plan-round1-brief.md, plan-round{1,2}-transcript.txt — Kimi; sol-checkoff-round1-{brief,reply,header}.md/txt — Sol; round-2 files added at convergence)
+**Raw rounds:** docs/superpowers/plans/rounds/2026-07-25-flash-implementer/ (plan-round1-brief.md, plan-round{1,2}-transcript.txt — Kimi; sol-checkoff-round{1,2,3,4}-{brief,reply,header} — Sol)
 
 Backup-lane note: Kimi ran read-only via a custom agent-file
 (ReadFile/ReadMediaFile/Glob/Grep/SetTodoList; pre-review write-probe
@@ -745,6 +755,10 @@ sandbox read-only / effort high.
 | 17 | F2/F4 amendments not actually pinned (loose keyword asserts) | Sol r2 | accepted; exact-sentence pins + ROUTE transcript pin added | test_flash_implementer.py dispatch/preflight tests |
 | 18 | Step 4b installs a functional bypass without interruption-safe restore | Sol r2 | accepted; nonmatching sentinel rule + save/restore-in-finally | plan Task 6 Step 4b |
 | 19 | Stale cross-references (log/tree, workdir-scoped, log-only ROUTE, #13 for #14) | Sol r2 | accepted; synchronized | plan header, spec Decisions + section 6, resolved point 7 |
+| 20 | Task 5 dry-run's clean-tree check cannot pass over the uncommitted bump | Sol r3 | accepted; bump commits first, dry-run post-commit | plan Task 5 Steps 5-6 |
+| 21 | MAIN-CHECKOUT-ONLY absolute vs Task 6 scratch dispatch | Sol r3 | accepted; sole live-verification exception declared in constraints, spec, agent body (pinned) | Global Constraints, spec Decisions, agent Inputs + Lane note |
+| 22 | Spec ROUTE line and step-4b recipe out of sync with amended contract | Sol r3 | accepted; synchronized (transcript path; sentinel + save/restore) | spec sections 1 and 6 |
+| 23 | Record metadata lagged live rounds; r2/r3 raw artifacts unretained | Sol r3 | accepted; this revision + artifacts retained | rounds/ dir, this appendix |
 
 ### Escalated points (user-decided)
 
@@ -763,6 +777,8 @@ the agent body and plan text as cited; #12 against
 frozen-plan-format.md:36-68; #13 against the live settings file's mixed
 path spellings. Kimi's rounds 1-2 were adjudicated at the time (all nine
 findings verified, fixes committed 5391455, round-2 re-verification by
-the reviewer). No finding was refuted; no point escalated. Convergence =
-Sol round-2 confirmation of these amendments (transcript retained under
-Raw rounds).
+the reviewer). Sol rounds 2-3 were each verified the same way (rows
+15-23: cited lines read, sequencing conflicts reproduced by inspection,
+fix waves re-reviewed in scope). No finding was refuted; no point
+escalated. Convergence = Sol round-4 terminal confirmation of the
+rounds-1-3 amendment chain (transcript retained under Raw rounds).
