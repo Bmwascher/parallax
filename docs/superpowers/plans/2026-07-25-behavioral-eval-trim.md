@@ -141,7 +141,9 @@ Add two new tests to `class TestEvalFixtures`:
         # The mapping's load-bearing rows, pinned so a refactor cannot
         # quietly decouple a case from the contract file it tests:
         # SKILL.md is every case's contract; the consent gate lives in
-        # fallbacks.md; both fix cases grade application-checkpoint.md.
+        # fallbacks.md; both fix cases grade application-checkpoint.md;
+        # the three debate cases grade debate discipline, whose contract
+        # is debate-protocol.md (Sol plan round 1, F2).
         data = json.loads(read(EVALS_DIR / "evals.json"))
         surfaces = {e["id"]: e["surface"] for e in data["evals"]}
         for cid, surface in surfaces.items():
@@ -152,6 +154,10 @@ Add two new tests to `class TestEvalFixtures`:
         for cid in ("fix-application-checkpoint",
                     "fix-checkpoint-attended-stop"):
             assert ("skills/multi-model-verify/references/application-checkpoint.md"
+                    in surfaces[cid])
+        for cid in ("plan-mode-debate-runs", "diff-mode-spec-fidelity",
+                    "no-manufactured-objections"):
+            assert ("skills/multi-model-verify/references/debate-protocol.md"
                     in surfaces[cid])
 ```
 
@@ -166,13 +172,16 @@ Add a `"surface"` key to every entry (place it right after `"setup"`), with exac
 
 | case id | surface |
 |---|---|
-| plan-mode-debate-runs | `["skills/multi-model-verify/SKILL.md", "skills/multi-model-verify/references/model-prompting-notes.md"]` |
-| diff-mode-spec-fidelity | `["skills/multi-model-verify/SKILL.md", "skills/multi-model-verify/references/model-prompting-notes.md"]` |
+| plan-mode-debate-runs | `["skills/multi-model-verify/SKILL.md", "skills/multi-model-verify/references/model-prompting-notes.md", "skills/multi-model-verify/references/debate-protocol.md"]` |
+| diff-mode-spec-fidelity | `["skills/multi-model-verify/SKILL.md", "skills/multi-model-verify/references/model-prompting-notes.md", "skills/multi-model-verify/references/debate-protocol.md"]` |
 | degraded-consent-gate | `["skills/multi-model-verify/SKILL.md", "skills/multi-model-verify/references/fallbacks.md"]` |
 | missing-reference-refusal | `["skills/multi-model-verify/SKILL.md"]` |
 | fix-application-checkpoint | `["skills/multi-model-verify/SKILL.md", "skills/multi-model-verify/references/application-checkpoint.md"]` |
 | fix-checkpoint-attended-stop | `["skills/multi-model-verify/SKILL.md", "skills/multi-model-verify/references/application-checkpoint.md"]` |
-| no-manufactured-objections | `["skills/multi-model-verify/SKILL.md", "skills/multi-model-verify/references/model-prompting-notes.md"]` |
+| no-manufactured-objections | `["skills/multi-model-verify/SKILL.md", "skills/multi-model-verify/references/model-prompting-notes.md", "skills/multi-model-verify/references/debate-protocol.md"]` |
+
+(The three debate cases carry `debate-protocol.md`: it is required reading
+before round 1 and both modes iterate under it — Sol plan round 1, F2.)
 
 - [ ] **Step 4: Run the full suite**
 
@@ -197,7 +206,7 @@ git commit -m "0.11.0: declare per-case contract surfaces in evals.json"
 
 **Interfaces:**
 - Consumes: `entry["surface"]` from Task 2.
-- Produces: `select_cases(cases, changed_paths, base_entries) -> (selected, skipped)` where `selected` is a list of `(case_dict, reason_str)` and `skipped` a list of `case_dict`; CLI flag `--changed [REF]`. Task 4 invokes the flag.
+- Produces: `select_cases(cases, changed_paths, base_entries) -> (selected, skipped)` where `selected` is a list of `(case_dict, reason_str)` and `skipped` a list of `case_dict`; `parse_base_entries(text) -> {id: entry} | None` (pure loader, fail-toward-running); CLI flag `--changed [REF]`. Task 4 invokes the flag.
 
 - [ ] **Step 1: Write the failing unit tests**
 
@@ -279,6 +288,17 @@ Add to `class TestEvalFixtures`:
         assert [c["id"] for c, _ in selected] == ["a", "b"]
         assert skipped == []
 
+    def test_parse_base_entries_structurally_invalid_returns_none(self):
+        # {"evals": null} is valid JSON that raises TypeError, not
+        # JSONDecodeError, during iteration - the loader must fail toward
+        # running (None), never crash selection (Sol plan round 1, F1).
+        runner = load_runner_module()
+        assert runner.parse_base_entries('{"evals": null}') is None
+        assert runner.parse_base_entries('{"evals": [null]}') is None
+        assert runner.parse_base_entries('not json at all') is None
+        assert runner.parse_base_entries('{"evals": [{"id": "a"}]}') == {
+            "a": {"id": "a"}}
+
     def test_changed_and_case_flags_are_mutually_exclusive(self):
         proc = subprocess.run(
             [sys.executable,
@@ -291,8 +311,8 @@ Add to `class TestEvalFixtures`:
 
 - [ ] **Step 2: Run to verify they fail**
 
-Run: `python -m pytest evals/multi-model-verify/test_multi_model_verify.py -q -k "select_cases or mutually_exclusive"`
-Expected: FAIL — AttributeError (`select_cases` does not exist); the CLI test fails on returncode 0/2 mismatch (unknown flag exits 2 — so assert the stderr text too, which fails until the flag exists with the right error).
+Run: `python -m pytest evals/multi-model-verify/test_multi_model_verify.py -q -k "select_cases or mutually_exclusive or parse_base_entries"`
+Expected: FAIL — AttributeError (`select_cases` / `parse_base_entries` do not exist); the CLI test fails on the missing "mutually exclusive" stderr text (an unknown flag also exits 2, so the text assert is what makes this test genuinely fail first).
 
 - [ ] **Step 3: Implement in run_behavioral_evals.py**
 
@@ -351,6 +371,17 @@ def changed_paths_vs(base):
             + _git_lines("ls-files", "--others", "--exclude-standard"))
 
 
+def parse_base_entries(text):
+    """{id: entry} from a base evals.json text, or None when the text is
+    syntactically OR structurally unparseable - {"evals": null} is valid
+    JSON that raises TypeError, not JSONDecodeError, during iteration
+    (Sol plan round 1, F1). None makes select_cases run everything."""
+    try:
+        return {c["id"]: c for c in json.loads(text)["evals"]}
+    except (json.JSONDecodeError, KeyError, TypeError):
+        return None
+
+
 def base_case_entries(base):
     try:
         out = subprocess.run(
@@ -358,9 +389,9 @@ def base_case_entries(base):
              f"{base}:evals/multi-model-verify/evals.json"],
             check=True, capture_output=True, text=True,
             encoding="utf-8", errors="replace")
-        return {c["id"]: c for c in json.loads(out.stdout)["evals"]}
-    except (subprocess.CalledProcessError, json.JSONDecodeError, KeyError):
+    except subprocess.CalledProcessError:
         return None
+    return parse_base_entries(out.stdout)
 ```
 
 In `main()`, add the flag next to `--case`:
@@ -400,7 +431,7 @@ After the `if args.list:` block and BEFORE the CLI tool checks (a doc-only diff 
 
 - [ ] **Step 4: Run the new tests, then the full suite**
 
-Run: `python -m pytest evals/multi-model-verify/test_multi_model_verify.py -q -k "select_cases or mutually_exclusive"`
+Run: `python -m pytest evals/multi-model-verify/test_multi_model_verify.py -q -k "select_cases or mutually_exclusive or parse_base_entries"`
 Expected: PASS.
 Run: `python -m pytest evals -q`
 Expected: PASS (the `--list` self-test at test_behavioral_runner_self_test must still pass unchanged).

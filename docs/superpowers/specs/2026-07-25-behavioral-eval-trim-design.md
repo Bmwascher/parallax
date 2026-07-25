@@ -121,7 +121,9 @@ changes).
    the standard CI four).
 2. Stability probe: 3× consecutive PASS on
    `run_behavioral_evals.py --head --case no-manufactured-objections
-   --artifacts <dir>` — the same bar D3 used. (~3 grader calls.)
+   --artifacts <dir>` — a stricter bar than 0.10.0's D3 evidence, whose
+   record was fail/fail/pass pre-fix and ONE confirming full-case PASS
+   post-fix (Sol plan round 1, F3). (~3 grader calls.)
 3. Dogfood: `--changed` on this branch must select exactly
    `{no-manufactured-objections}` — only its evals.json entry changes; no
    skill file is touched. The printed selection is itself the demo.
