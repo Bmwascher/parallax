@@ -119,6 +119,13 @@ def test_flash_report_headings():
     for heading in ("**STATUS:**", "**ROUTE:**", "**FILES CHANGED:**",
                     "**VERIFICATION:**", "**DEVIATIONS:**"):
         assert heading in body, heading
+    # the four shared headings are pinned in BOTH files so a unilateral
+    # rename in implementer.md cannot pass the suite (ROUTE is
+    # lane-specific to the flash file)
+    classic = _read(CLASSIC)
+    for heading in ("**STATUS:**", "**FILES CHANGED:**",
+                    "**VERIFICATION:**", "**DEVIATIONS:**"):
+        assert heading in classic, heading
 
 
 def _shared_block(text, path):
@@ -142,8 +149,8 @@ def test_classic_lane_note_retired_stale_claim():
 
 SWEEP_GLOBS = [
     "skills/**/*.md", "commands/*.md", "tools/*.ps1", "hooks/*",
-    "evals/**/*.py", "evals/**/*.json", "README.md", "CLAUDE.md",
-    "agents/*.md",
+    "evals/**/*.py", "evals/**/*.json", "evals/**/*.ps1",
+    "README.md", "CLAUDE.md", "agents/*.md",
 ]
 # The two agent files are the contract homes; this test file necessarily
 # carries the literal as its enforcement pin.
@@ -166,16 +173,20 @@ def test_flash_literal_single_source():
 def test_sonnet_implementer_literals_removed():
     readme = _read(REPO / "README.md")
     assert "currently `model: sonnet`" not in readme
+    # absence pins alone are vacuous against line-wrapped source; the
+    # presence pins below are the real oracles for Task 3's rewrites
     assert "`haiku`/`opus` are drop-ins" not in readme
+    assert "any Claude tier is a drop-in" in readme
     fpf = _read(REPO / "skills" / "multi-model-verify" / "references"
                 / "frozen-plan-format.md")
     assert "Sonnet 5" not in fpf
+    assert "the pinned lane in `agents/`" in fpf
 ```
 
 - [ ] **Step 2: Run the new file to verify everything fails for the right reasons**
 
 Run: `python -m pytest evals/multi-model-verify/test_flash_implementer.py -v`
-Expected: FAIL — flash tests with FileNotFoundError (agent file absent), parity with "missing shared-contract markers", `test_classic_lane_note_retired_stale_claim` and `test_sonnet_implementer_literals_removed` with assertion errors (literals still present). `test_flash_literal_single_source` PASSES vacuously (no stray literal exists yet) — that is correct behavior, not a defect.
+Expected: FAIL — flash tests AND parity with FileNotFoundError (agent file absent; the parity test's "missing shared-contract markers" assertion can only fire once the file exists without markers), `test_classic_lane_note_retired_stale_claim` and `test_sonnet_implementer_literals_removed` with assertion errors. `test_flash_literal_single_source` PASSES vacuously (no stray literal exists yet) — that is correct behavior, not a defect.
 
 - [ ] **Step 3: Confirm the rest of the suite is untouched**
 
@@ -312,9 +323,9 @@ points — not yours.
 
 This agent pins the Flash implementation lane. Canonical model literal:
 `gemini-3.6-flash-medium` (Gemini 3.6 Flash, medium reasoning effort,
-Antigravity CLI resolved ID). The literal lives ONLY here and in
-`implementer.md`'s Lane note; every other surface points at the agent
-files. Trust is per-directory and interactive-only, so this lane runs in
+Antigravity CLI resolved ID). The literal lives ONLY here;
+`implementer.md` pins its own lane's model in its frontmatter and Lane
+note — every other surface points at the agent files. Trust is per-directory and interactive-only, so this lane runs in
 the main checkout this cycle — a worktree trust story is future work.
 ````
 
@@ -430,7 +441,7 @@ git commit -m "0.12.0: single-source implementer model literals"
 
 Resolve the INSTALLED copy's `agents/flash-implementer.md` under the
 `installPath` from check 1 and parse the canonical model literal from its
-Lane note (the `gemini-3.6-flash-*` token) — the agent file is the ONE
+Lane note (the pinned model-ID token declared there) — the agent file is the ONE
 place the implementer model is defined; carry no literal here. A missing
 declaration is itself BROKEN. Then:
 
@@ -446,14 +457,36 @@ client-side, requested and propagated only.
 
 - [ ] **Step 2: Snapshot field in `tools/check-drift.ps1`**
 
-Read the FULL file first. Locate where the snapshot object records the
-codex version (search for the `codex` property written to
-`drift-snapshot.json`). Add, adjacent and in the same style:
+Read the FULL file first. The file's mandated style is the carry-forward
+pattern (check-drift.ps1:193-205: "A transient probe failure must never
+clobber the last known-good value"), and snapshot values are precomputed
+variables, never inline statements (an `if` used directly as a hashtable
+value is a parse error under the script's Windows PowerShell 5.1
+runtime). Three additions, each beside its existing sibling:
+
+1. Beside the other version probes (near the codex probe, ~lines 119-125):
 
 ```powershell
-agy = if (Test-Path "$env:LOCALAPPDATA\agy\bin\agy.exe") {
-    (& "$env:LOCALAPPDATA\agy\bin\agy.exe" --version 2>$null | Select-Object -First 1)
-} else { "N/A" }
+$agyVersion = ""
+$agyExe = Join-Path $env:LOCALAPPDATA "agy\bin\agy.exe"
+if (Test-Path $agyExe) {
+    $agyVersion = (& $agyExe --version 2>$null | Select-Object -First 1)
+}
+```
+
+2. In the carry-forward block (inside the existing `if ($snapshot)` at
+~lines 198-205, alongside `$codexVersionToSave`):
+
+```powershell
+$agyVersionToSave = $agyVersion
+# and inside if ($snapshot):
+if (-not $agyVersionToSave -and $snapshot.agy) { $agyVersionToSave = $snapshot.agy }
+```
+
+3. In the `$newSnapshot` object (~lines 274-279, beside `codex = ...`):
+
+```powershell
+agy = $agyVersionToSave
 ```
 
 Informational only: no comparison logic, no failure path — mirrors how the
@@ -490,11 +523,12 @@ git commit -m "0.12.0: doctor agy row and drift snapshot version field"
 
 - [ ] **Step 1: Remove the probe-dir allow rule (keep its trust entry for now)**
 
-Edit `~/.gemini/antigravity-cli/settings.json`: delete the
-`write_file(/Users/Brandon/AppData/.../agy-probe/)` entry from
-`permissions.allow` (leave the array empty if nothing else remains). Do
-NOT remove the probe dir's `trustedWorkspaces` entry yet — Step 2's probe
-needs a trusted directory.
+Edit `~/.gemini/antigravity-cli/settings.json`: delete the `write_file`
+entry in `permissions.allow` whose path targets the agy-probe scratchpad
+directory, whatever its exact path spelling in the file (leave the array
+empty if nothing else remains), then re-read the file to confirm the
+deletion. Do NOT remove the probe dir's `trustedWorkspaces` entry yet —
+Step 2's probe needs a trusted directory.
 
 - [ ] **Step 2: allowNonWorkspaceAccess narrowing attempt (bounded)**
 
@@ -572,8 +606,12 @@ the report alone — 0.10.0 lesson: controller-owned verification).
 - [ ] **Step 4: Red probe — bad model must block, not output**
 
 Same dispatch shape but the controller's brief pins
-`--model gemini-9.9-fake` for this probe run only. Expected: STATUS
-blocked quoting agy's "invalid model selection" output; no file changes.
+`--model gemini-9.9-fake` for this probe run only. PASS is disjunctive:
+STATUS blocked with NO file changes, whether the wrapper refuses the
+brief as contradicting its pinned dispatch contract (INPUT GAP /
+blocked — a contract-faithful reading) or dispatches and quotes agy's
+"invalid model selection" rejection. FAIL: any file change or STATUS
+done.
 
 - [ ] **Step 5 (ATTENDED - user): skip-permissions print-mode probe**
 
