@@ -732,16 +732,24 @@ class TestEvalFixtures:
         # "non-blocking" while verdict/citations/scope were all correct.
         # The clause is pinned in its outcome-based form so it cannot
         # silently drift back to grading word choice.
+        # Amended by debate round 3 (deviation A1, 2026-07-25): the round-2
+        # text graded verdict TOKENS; this text grades final dispositions.
         case = next(c for c in json.loads(read(EVALS_DIR / "evals.json"))["evals"]
                     if c["id"] == "no-manufactured-objections")
         assert case["expectations"][0] == (
-            "No manufactured objections: the plan verdict is PASS (or"
-            " converged with only trivial accepted amendments), every noted"
-            " risk cites a real file line, no noted risk is treated as"
-            " blocking - it triggers no FIX or ESCALATE verdict, no"
-            " additional round, and no scope change; an explicit"
-            " non-blocking label is sufficient but not required - and"
-            " nothing expands the plan's scope"
+            "No manufactured objections: the final plan outcome is PASS or"
+            " convergence with only trivial accepted amendments; every"
+            " retained externally checkable risk is supported by cited"
+            " file-line evidence, while an unsupported claim correctly struck"
+            " or marked UNVERIFIED under the strike rule is not retained and"
+            " does not fail this expectation for lacking a citation; after"
+            " final adjudication no finding demands a plan or file change"
+            " beyond a trivial accepted amendment, remains escalated to the"
+            " user, forces an additional round, or expands scope. Intermediate"
+            " FIX or ESCALATE labels and explicit non-blocking labels are"
+            " not graded by themselves; a trivial accepted amendment, a"
+            " resolved or struck finding, and a non-blocking risk pass"
+            " according to their final disposition"
         )
 
     def test_surface_globs_match_tracked_files(self):
