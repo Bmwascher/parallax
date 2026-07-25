@@ -50,7 +50,10 @@ Two issues, one cycle:
   - any changed path matches any of its `surface` globs (fnmatch), or
   - its own entry in evals.json differs from the base version — the base
     file is read via `git show <base>:evals/multi-model-verify/evals.json`
-    and compared per-entry; an edited grading contract re-selects its case.
+    and compared per-entry EXCLUDING the `surface` key (selection metadata
+    is not grading contract — without this exclusion, the very commit that
+    introduces surface fields would re-select all 7 cases, the opposite of
+    a trim); an edited grading contract re-selects its case.
     If the base file is missing or unparseable, every case whose entry
     cannot be compared is selected (fail toward running, never toward
     skipping).
