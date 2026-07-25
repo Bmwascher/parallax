@@ -192,9 +192,9 @@ Canonical reasoning effort: `high`
   windows (`usedPercent`, `windowDurationMins`, `resetsAt` epoch),
   `planType`, and credits. Handshake mirrored from jinn
   (packages/jinn/src/shared/engine-limits.ts:370-453 @ 6c46f57).
-  Experimental capability — expect drift. Candidate /parallax:doctor
-  quota-headroom line (adoption pending the 0.10.0 debate); complements,
-  never replaces, the reactive quota-exhausted class.
+  Experimental capability — expect drift. The doctor's quota-headroom row
+  (check 4b) reads this surface (adopted 0.10.0, debate 2026-07-24);
+  complements, never replaces, the reactive quota-exhausted class.
 
 ## Reusable recipes
 

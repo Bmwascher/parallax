@@ -390,6 +390,10 @@ class TestFallbacks:
         text = self.fallbacks()
         assert "no rollout found" in text
         assert "-32600" in text
+        assert "missing-rollout" in text, (
+            "the class NAME must be pinned - README and the notes"
+            " cross-reference it"
+        )
         assert re.search(r"rollout.{0,240}skip the retry", text,
                          re.IGNORECASE | re.DOTALL), (
             "the missing-rollout signature must skip the retry"
