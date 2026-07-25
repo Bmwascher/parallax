@@ -85,6 +85,7 @@ flowchart TD
     R -->|recovered| OK[debate continues]
     R -->|still failing| G["CONSENT GATE banner:<br/>what failed · what degraded mode<br/>would and would NOT verify"]
     X -. "quota-exhausted:<br/>skip the retry" .-> G
+    X -. "missing-rollout resume:<br/>skip the retry" .-> G
     G -->|fix codex| OK
     G -->|run degraded| D["single-vendor, visibly flagged;<br/>DEGRADED plan poisons any diff PASS"]
     G -->|abort or unattended| B2[BLOCKED / DEGRADED-NOT-AUTHORIZED]
@@ -96,7 +97,10 @@ flowchart TD
   re-spend — never a loop.)
 - Session/weekly usage limits get a dedicated `quota-exhausted` class: no
   retry (quota windows don't clear in seconds), and the banner quotes
-  codex's reset time verbatim.
+  codex's reset time verbatim. A resume failing with the missing-rollout
+  signature ("no rollout found ... code -32600", probed 2026-07-24) also
+  skips the retry — the rollout is gone; straight to the session-loss
+  consent gate.
 - **Effective-route check (0.6.0; `sandbox:` line added in 0.8.0)**: every
   codex call's startup header
   (`model:` / `provider:` / `reasoning effort:` / `sandbox: read-only`,
@@ -107,7 +111,7 @@ flowchart TD
   (Sandbox mode has no continuity across resumes — an omitted flag falls
   back to the config default, probed 2026-07-24.) The
   call itself runs with reroute-capable env vars stripped
-  (`CODEX_API_KEY`, `OPENAI_API_KEY`, `OPENAI_BASE_URL`) after a
+  (`CODEX_API_KEY`, `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `CODEX_HOME`) after a
   `codex login status` preflight that requires the first-party ChatGPT
   state, not merely exit 0.
 - A DEGRADED-frozen plan cannot produce an ordinary diff PASS: mode `diff`
@@ -176,7 +180,8 @@ claude plugin update parallax@parallax   # qualified name required
 Forgetting a step here is the failure mode that looks like a plugin bug: a
 stale cache runs yesterday's skill, a missed restart leaves the hook
 unregistered. `/parallax:doctor` reports both, plus the fingerprint, the
-codex transport, and any unresolved drift — in one table.
+codex transport, quota headroom (best-effort, experimental), and any
+unresolved drift — in one table.
 
 ## Verify
 

@@ -476,7 +476,7 @@ def elide_transcript(transcript, limit=40000, head_budget=15000,
 
 _REVIEWER = None
 
-CODEX_ENV_DENYLIST = ("CODEX_API_KEY", "OPENAI_API_KEY", "OPENAI_BASE_URL")
+CODEX_ENV_DENYLIST = ("CODEX_API_KEY", "OPENAI_API_KEY", "OPENAI_BASE_URL", "CODEX_HOME")
 
 
 def codex_env():

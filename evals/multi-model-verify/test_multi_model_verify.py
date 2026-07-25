@@ -177,10 +177,21 @@ class TestTransportContract:
             "the preflight enumeration must cover tracked, untracked, and"
             " ignored AGENTS.md files at any depth"
         )
+        # codex also advertises repo-level .agents/skills/*/SKILL.md to
+        # the model (probed 2026-07-24, v0.144.1: a planted skill was
+        # read into the reviewer's context as its first action) - the
+        # sweep must cover that surface too. .codex/ stays out: unprobed.
+        assert "'.agents/*'" in text, (
+            "the preflight enumeration must sweep .agents/ skill"
+            " droppings alongside AGENTS.md"
+        )
+        notes = read(REFERENCES / "model-prompting-notes.md")
+        assert ".agents/skills" in notes, (
+            "the .agents ingestion probe must be documented in the notes"
+        )
         assert re.search(r"(?s)AGENTS\.md.{0,700}STOP and surface", text), (
             "a present AGENTS.md must STOP the dispatch, not merely warn"
         )
-        notes = read(REFERENCES / "model-prompting-notes.md")
         assert "AGENTS.md" in notes, (
             "the ingestion probe results must be documented in the notes"
         )
@@ -369,6 +380,24 @@ class TestFallbacks:
                          text, re.IGNORECASE)
         assert re.search(r"skip the retry", text, re.IGNORECASE)
         assert re.search(r"reset time", text, re.IGNORECASE)
+
+    def test_missing_rollout_is_named_class(self):
+        # Probed 2026-07-24 (codex-cli 0.144.1): resuming a nonexistent
+        # session id fails deterministically with "no rollout found for
+        # thread id <id> (code -32600)" and writes NO reply file. Never
+        # transient: skip the retry, straight to the session-loss
+        # consent gate (jinn intake, pinned 6c46f57).
+        text = self.fallbacks()
+        assert "no rollout found" in text
+        assert "-32600" in text
+        assert "missing-rollout" in text, (
+            "the class NAME must be pinned - README and the notes"
+            " cross-reference it"
+        )
+        assert re.search(r"rollout.{0,240}skip the retry", text,
+                         re.IGNORECASE | re.DOTALL), (
+            "the missing-rollout signature must skip the retry"
+        )
 
     def test_stale_evidence_is_struck(self):
         text = self.fallbacks()
@@ -1300,7 +1329,7 @@ class TestDriftProtection:
             "preflight must require the first-party auth STATE - exit 0"
             " alone also passes an API-key login"
         )
-        for var in ("CODEX_API_KEY", "OPENAI_API_KEY", "OPENAI_BASE_URL"):
+        for var in ("CODEX_API_KEY", "OPENAI_API_KEY", "OPENAI_BASE_URL", "CODEX_HOME"):
             assert var in text, f"env denylist must cover {var}"
         assert "effective route mismatch" in text, (
             "a header/canonical mismatch must be reported, never a verdict"
@@ -1325,6 +1354,13 @@ class TestDriftProtection:
             )
         assert "CODEX_ENV_DENYLIST" in runner, (
             "the grader spawn must strip reroute-capable env overrides"
+        )
+        assert re.search(
+            r'CODEX_ENV_DENYLIST = \("CODEX_API_KEY", "OPENAI_API_KEY",'
+            r'\s*"OPENAI_BASE_URL", "CODEX_HOME"\)', runner), (
+            "the denylist tuple must carry all four reroute-capable vars"
+            " - CODEX_HOME redirects auth+config wholesale (probed"
+            " 2026-07-24)"
         )
         assert "effective_route_ok" in runner, (
             "verdicts from an unverified grader route must be discarded"
@@ -1404,6 +1440,7 @@ class TestDoctorCommand:
             "Logged in using ChatGPT",         # 4: auth STATE, not exit-0
             "effective route",                 # 4: header echo check (0.6.0)
             "`sandbox: `",                     # 4: sandbox line check (0.8.0)
+            "CODEX_API_KEY", "OPENAI_API_KEY", "OPENAI_BASE_URL", "CODEX_HOME",
         ):
             assert anchor in body, f"doctor check anchor missing: {anchor}"
         assert "PostToolUseFailure" in body, (
@@ -1429,6 +1466,23 @@ class TestDoctorCommand:
         assert re.search(r"[Rr]eport only", body), (
             "doctor must diagnose, never mutate, without being asked"
         )
+
+    def test_quota_row_is_nonfailing(self):
+        # Probed 2026-07-24 (codex-cli 0.144.1): codex app-server
+        # answers account/rateLimits/read locally. Experimental
+        # surface: the row may be N/A, and N/A never contributes to
+        # overall failure (jinn intake, pinned 6c46f57; Sol round 2).
+        body = read(self.DOCTOR)
+        assert "OK / STALE / BROKEN / N/A" in body, (
+            "the table grammar must formally admit N/A"
+        )
+        assert re.search(r"N/A[^.]{0,160}never[^.]{0,80}overall",
+                         body, re.IGNORECASE), (
+            "N/A must be defined as never contributing to overall"
+            " failure"
+        )
+        assert "app-server" in body and "account/rateLimits/read" in body
+        assert "experimental" in body.lower()
 
 
 class TestIntakeCommand:

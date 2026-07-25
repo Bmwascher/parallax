@@ -543,7 +543,8 @@ $guide
                             # base URL can reroute ChatGPT-authenticated
                             # traffic. The review job below inherits this
                             # process env.
-                            foreach ($v in @("CODEX_API_KEY", "OPENAI_API_KEY", "OPENAI_BASE_URL")) {
+                            # and CODEX_HOME redirects auth.json and config.toml wholesale.
+                            foreach ($v in @("CODEX_API_KEY", "OPENAI_API_KEY", "OPENAI_BASE_URL", "CODEX_HOME")) {
                                 Remove-Item "Env:$v" -ErrorAction SilentlyContinue
                             }
                             # Auth preflight, immediately before the one

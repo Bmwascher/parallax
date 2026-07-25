@@ -1,0 +1,25 @@
+`JINN/...` retains the pinned clone-root meaning from round 1.
+
+1. **C1:** The amended order now locks the probed `.agents/*` surface before changing the contract, consistent with the repository’s tests-first rule (`CLAUDE.md:39-43`) and the current AGENTS-only test seam (`evals/multi-model-verify/test_multi_model_verify.py:162-186`). `.codex/` remains correctly excluded pending a probe. **PASS**
+
+2. **C2:** The amendment covers all operative surfaces: immediate-gate/catch-all rules, session-loss handling, a dedicated regression test, and the public no-retry graph (`skills/multi-model-verify/references/fallbacks.md:27-48`, `skills/multi-model-verify/references/fallbacks.md:98-103`; `evals/multi-model-verify/test_multi_model_verify.py:348-370`; `README.md:82-99`). **PASS**
+
+3. **C3:** The doctor amendment does not fully absorb round 1. Pinning only `CODEX_HOME` would allow any of the existing three variables to disappear while the test still passed; the current doctor anchors pin none of them (`evals/multi-model-verify/test_multi_model_verify.py:1391-1408`). Make the doctor test assert the complete tuple `CODEX_API_KEY`, `OPENAI_API_KEY`, `OPENAI_BASE_URL`, and `CODEX_HOME`, matching the four-variable assertions planned for drift and runner (`evals/multi-model-verify/test_multi_model_verify.py:1292-1304`, `evals/multi-model-verify/test_multi_model_verify.py:1321-1328`). **FIX**
+
+4. **C4:** A separate quota row is sound, but the proposed `N/A` verdict still contradicts the table’s declared closed grammar of `OK / STALE / BROKEN` (`commands/doctor.md:5-7`). The existing GitHub-install exception uses `N/A` (`commands/doctor.md:13-18`), but that is evidence of an existing undocumented exception, not admission by the top-level grammar. Change line 6 to permit `N/A`, define that `N/A` never contributes to overall failure, and pin both rules in `TestDoctorCommand` (`evals/multi-model-verify/test_multi_model_verify.py:1385-1408`). **FIX**
+
+5. **C5:** The rejection remains supported by jinn’s bypass flags and broad pre-approvals versus parallax’s verified read-only route (`JINN/packages/jinn/src/engines/codex.ts:334-355`; `JINN/packages/jinn/src/cli/setup.ts:645-658`; `skills/multi-model-verify/SKILL.md:78-99`). **PASS**
+
+6. **C6:** Jinn’s nonzero-exit success path remains incompatible with parallax’s transport-failure contract (`JINN/packages/jinn/src/engines/codex.ts:745-756`; `skills/multi-model-verify/references/fallbacks.md:43-49`). **PASS**
+
+7. **C7:** “Warning-logged but automatic and unconsented” precisely matches the implementation and consent-gate conflict (`JINN/packages/jinn/src/engines/codex.ts:759-767`; `skills/multi-model-verify/references/fallbacks.md:3-6`, `skills/multi-model-verify/references/fallbacks.md:98-103`). **PASS**
+
+8. **C8:** Narrowing the rejection to setup-time engine version/drift probing removes the conflict with C4’s quota probe (`JINN/packages/jinn/src/cli/setup.ts:72-78`, `JINN/packages/jinn/src/cli/setup.ts:395-425`; `JINN/packages/jinn/src/shared/engine-limits.ts:370-453`). **PASS**
+
+9. **C9:** The corrected rationale accurately distinguishes jinn’s targeted template-contract tests from parallax’s generic lint/security/routing/structural gates (`JINN/packages/jinn/src/shared/__tests__/template-company-doctrine.test.ts:210-330`; `.github/workflows/skill-evals.yml:1-44`). **PASS**
+
+10. **C10:** The amended record now names the actual instruction surfaces and symlink (`JINN/.claude/skills/release-jinn-cli/SKILL.md:1-4`; `JINN/.claude/skills/showcase-video-capture/SKILL.md:1-4`; `JINN/.agents/skills/showcase-video-capture:1`). Recording “nothing followed or executed” explicitly as the session’s unverified assertion respects the intake charter without laundering it into evidence (`commands/intake.md:11-27`). **PASS**
+
+No ESCALATE points. C10’s historical non-execution statement remains intentionally **UNVERIFIED**, but is correctly labeled and does not block the finding.
+
+**Round 2 verdict: FIX — C3 must lock all four doctor variables; C4 must formally admit and define `N/A` in the table grammar.**

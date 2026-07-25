@@ -3,8 +3,10 @@ description: Operational health check for the parallax plugin - versions, hook, 
 ---
 
 Run the parallax operational checks below and present ONE table:
-check | state | verdict (OK / STALE / BROKEN) | fix. End with a one-line
-overall summary. Report only - fix nothing without being asked.
+check | state | verdict (OK / STALE / BROKEN / N/A) | fix. N/A marks a
+check that cannot apply here or an experimental surface that did not
+answer; an N/A verdict never contributes to overall failure. End with a
+one-line overall summary. Report only - fix nothing without being asked.
 
 ## 1. Checkout vs installed version
 
@@ -42,8 +44,9 @@ warns but cannot extract); none = BROKEN (diff gate inert). Also confirm
 ## 4. codex transport
 
 First sanitize the probe shell — clear `CODEX_API_KEY`, `OPENAI_API_KEY`,
-and `OPENAI_BASE_URL` (`Remove-Item Env:<name>`) so the preflight and the
-probe below see the SAME environment the review lane uses. Then
+`OPENAI_BASE_URL`, and `CODEX_HOME` (`Remove-Item Env:<name>`) so the
+preflight and the probe below see the SAME environment the review lane
+uses. Then
 `codex --version`, then `codex login status`. The login check must report
 the first-party auth STATE — output matching `Logged in using ChatGPT` —
 not merely exit 0 (an API-key login also exits 0 but rides different
@@ -79,6 +82,24 @@ $hdr = "$env:TEMP\parallax-doctor-hdr-$(Get-Random).txt"
 OK requires the zero exit, fresh `TRANSPORT-OK` content, AND the header
 match; anything else is BROKEN. The header is client-resolved metadata —
 report it as `effective route confirmed`, never "used and confirmed".
+
+## 4b. codex quota headroom (best effort, experimental)
+
+Same sanitized shell as check 4. `codex app-server --stdio` answers the
+JSON-RPC method `account/rateLimits/read` locally (probed 2026-07-24;
+experimental capability — drift is expected and is exactly what N/A is
+for). Hold stdin OPEN — the server exits when it closes.
+
+```powershell
+python -c "import json,shutil,subprocess,threading;bin=shutil.which('codex');p=subprocess.Popen([bin,'app-server','--stdio'],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True);r={};t=threading.Thread(target=lambda:[r.update(m=l) for l in p.stdout if 'rateLimits' in l],daemon=True);t.start();p.stdin.write(json.dumps({'id':1,'method':'initialize','params':{'clientInfo':{'name':'parallax-doctor','version':'0'},'capabilities':{'experimentalApi':True}}})+'\n'+json.dumps({'id':2,'method':'account/rateLimits/read','params':None})+'\n');p.stdin.flush();t.join(timeout=10);p.kill();print(r.get('m','NO-ANSWER'))"
+```
+
+Answer received: report `usedPercent`, `windowDurationMins` (as days/hours),
+`resetsAt` (as local time), and `planType` in the state column — verdict
+OK. `NO-ANSWER`, a spawn error, or malformed JSON: verdict
+`N/A (experimental surface unavailable)` — NEVER BROKEN from this row
+alone, and never retry in a loop. This row reads account state only; it
+sends no review traffic and must not replace check 4's transport probe.
 
 ## 5. Drift watch
 
