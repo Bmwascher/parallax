@@ -63,8 +63,9 @@ toggled on, its stop-time review overlaps mode `diff` — expected, not a bug.
    NOT ingested (same probe), and `~/.codex/AGENTS.md` is the user's own
    global instruction file — note it in the debate record if it exists,
    but it is not a stop. Skills from the user's own codex plugin cache
-   load the same way — note them in the debate record like the global
-   AGENTS.md; not a stop.
+   load the same way — record them in the debate record as a
+   non-blocking environment note with the cache path cited, like the
+   global AGENTS.md; not a stop and never a finding.
 
 ## Mode plan
 
