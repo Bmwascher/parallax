@@ -496,6 +496,15 @@ class TestEvalFixtures:
             assert setup.get("manual") or "with_reference" in setup, (
                 f"case {entry['id']} needs a setup config for the runner"
             )
+            # 0.11.0: every case declares the contract files it exercises;
+            # the --changed flag trims the battery by intersecting this
+            # surface with the diff.
+            assert entry.get("surface"), (
+                f"case {entry['id']} needs a surface list")
+            assert all(isinstance(s, str) and s.strip() and "\\" not in s
+                       for s in entry["surface"]), (
+                f"case {entry['id']} surface globs must be forward-slash"
+                " repo-relative strings")
 
     def test_behavioral_runner_allows_skill_tool(self):
         # Without Skill in the executor allowlist the agent can never load
@@ -723,6 +732,44 @@ class TestEvalFixtures:
             " non-blocking label is sufficient but not required - and"
             " nothing expands the plan's scope"
         )
+
+    def test_surface_globs_match_tracked_files(self):
+        # A surface glob that matches nothing tracked is rot: the mapping
+        # would silently stop selecting its case.
+        import fnmatch
+        data = json.loads(read(EVALS_DIR / "evals.json"))
+        tracked = subprocess.run(
+            ["git", "-C", str(REPO_ROOT), "ls-files"],
+            check=True, capture_output=True, text=True,
+        ).stdout.splitlines()
+        for entry in data["evals"]:
+            for glob in entry["surface"]:
+                assert any(fnmatch.fnmatch(p, glob) for p in tracked), (
+                    f"case {entry['id']} surface glob {glob!r} matches no"
+                    " tracked file")
+
+    def test_surface_semantic_pins(self):
+        # The mapping's load-bearing rows, pinned so a refactor cannot
+        # quietly decouple a case from the contract file it tests:
+        # SKILL.md is every case's contract; the consent gate lives in
+        # fallbacks.md; both fix cases grade application-checkpoint.md;
+        # the three debate cases grade debate discipline, whose contract
+        # is debate-protocol.md (Sol plan round 1, F2).
+        data = json.loads(read(EVALS_DIR / "evals.json"))
+        surfaces = {e["id"]: e["surface"] for e in data["evals"]}
+        for cid, surface in surfaces.items():
+            assert "skills/multi-model-verify/SKILL.md" in surface, (
+                f"case {cid} must include the skill body in its surface")
+        assert ("skills/multi-model-verify/references/fallbacks.md"
+                in surfaces["degraded-consent-gate"])
+        for cid in ("fix-application-checkpoint",
+                    "fix-checkpoint-attended-stop"):
+            assert ("skills/multi-model-verify/references/application-checkpoint.md"
+                    in surfaces[cid])
+        for cid in ("plan-mode-debate-runs", "diff-mode-spec-fidelity",
+                    "no-manufactured-objections"):
+            assert ("skills/multi-model-verify/references/debate-protocol.md"
+                    in surfaces[cid])
 
     def test_behavioral_runner_self_test(self):
         # CI-safe: --list parses cases and checks the fixture, no model calls.

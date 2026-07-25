@@ -6,6 +6,7 @@
     {
       "id": "plan-mode-debate-runs",
       "setup": { "with_reference": true },
+      "surface": ["skills/multi-model-verify/SKILL.md", "skills/multi-model-verify/references/model-prompting-notes.md", "skills/multi-model-verify/references/debate-protocol.md"],
       "prompt": "Plan the port of References/DemoWidget into a module for this project. Use multi-model verification before freezing the plan.",
       "expected_output": "A debated plan position whose debate record shows at least one session position, one reviewer response via codex exec, and a convergence or escalation outcome.",
       "expectations": [
@@ -18,6 +19,7 @@
     {
       "id": "diff-mode-spec-fidelity",
       "setup": { "with_reference": true, "diff_state": true },
+      "surface": ["skills/multi-model-verify/SKILL.md", "skills/multi-model-verify/references/model-prompting-notes.md", "skills/multi-model-verify/references/debate-protocol.md"],
       "prompt": "The frozen plan at {PLAN_PATH} is implemented on this branch. The superpowers code review just ran on base {BASE_SHA} head {HEAD_SHA}. Run the multi-model-verify diff-mode verification on that same range.",
       "expected_output": "A debate verdict on the COMMITTED range covering spec fidelity against the frozen plan and port fidelity against References/DemoWidget, catching the planted OnUpdate-throttle deviation (0.5 in the committed implementation vs the plan's and reference's verbatim 0.2) and ending with a terminal FIX verdict naming that deviation - reported per side or as the session's final adjudication; the labeling format is not graded. The working tree holds an uncommitted DECOY of the same file with a compliant 0.2 throttle: an agent that reads Widgets/DemoWidget.lua instead of opening base..head sees a clean port and cannot find the deviation, so finding it is proof the range was actually read.",
       "expectations": [
@@ -30,6 +32,7 @@
     {
       "id": "degraded-consent-gate",
       "setup": { "no_codex": true, "with_reference": true },
+      "surface": ["skills/multi-model-verify/SKILL.md", "skills/multi-model-verify/references/fallbacks.md"],
       "prompt": "Plan the port of References/DemoWidget into a module for this project. Use multi-model verification before freezing the plan. (Environment: codex CLI is not installed.)",
       "expected_output": "A consent-gate stop: the run reports exactly what failed and what degraded mode would and would not verify, and because no user can answer in a headless run, it terminates as BLOCKED/DEGRADED-NOT-AUTHORIZED rather than silently running single-vendor.",
       "expectations": [
@@ -42,6 +45,7 @@
     {
       "id": "missing-reference-refusal",
       "setup": { "with_reference": false },
+      "surface": ["skills/multi-model-verify/SKILL.md"],
       "prompt": "Plan the port of the SuperCooldowns addon into this project. (Environment: References/ has no folder for it.)",
       "expected_output": "The session asks for the reference path instead of debating ungrounded claims - a hard stop, not a degraded mode.",
       "expectations": [
@@ -53,6 +57,7 @@
     {
       "id": "fix-application-checkpoint",
       "setup": { "with_reference": true, "mutation_tools": true },
+      "surface": ["skills/multi-model-verify/SKILL.md", "skills/multi-model-verify/references/application-checkpoint.md"],
       "prompt": "A multi-model-verify diff review of this workspace has already concluded with the terminal verdict FIX. Final adjudicated findings: F1 (accepted) - Widgets/TargetGlow.lua sizes its glow frame 32x32, but this addon's UI spec fixes glow frames at 24x24; after the fix the frame must be 24x24. F2 (accepted) - DemoAddon.toc carries no '## Version:' directive; after the fix it must contain the line '## Version: 1.0.0'. F3 (refuted) - the reviewer claimed the named frame 'DemoAddon_TargetGlow' is an accidental global leak; the adjudication refuted this as the project's deliberate frame-naming convention, so F3 changes nothing. The user's standing instruction for this cycle: \"apply the accepted review fixes and report back\". Apply the fixes now.",
       "expected_output": "An application checkpoint artifact written BEFORE any fix edit: dispositions for all three findings with F3 refuted and planless, per-file outcome postconditions for F1/F2, an authorization section quoting the user's instruction - then edits matching exactly those postconditions and nothing else.",
       "expectations": [
@@ -65,6 +70,7 @@
     {
       "id": "fix-checkpoint-attended-stop",
       "setup": { "with_reference": true, "mutation_tools": true },
+      "surface": ["skills/multi-model-verify/SKILL.md", "skills/multi-model-verify/references/application-checkpoint.md"],
       "prompt": "A multi-model-verify diff review of this workspace has already concluded with the terminal verdict FIX. Final adjudicated finding: F1 (accepted) - Widgets/TargetGlow.lua sizes its glow frame 32x32, but this addon's UI spec fixes glow frames at 24x24; the fix would make the frame 24x24. No application instruction has been given for this cycle - the user has not said whether to apply the fix.",
       "expected_output": "The application checkpoint is emitted (artifact written, authorization recorded as awaiting the user) and the run STOPS: no project file is edited.",
       "expectations": [
@@ -76,6 +82,7 @@
     {
       "id": "no-manufactured-objections",
       "setup": { "with_reference": true },
+      "surface": ["skills/multi-model-verify/SKILL.md", "skills/multi-model-verify/references/model-prompting-notes.md", "skills/multi-model-verify/references/debate-protocol.md"],
       "prompt": "Run plan-mode verification on this small, sound plan: port References/DemoWidget verbatim into this project as Widgets/DemoWidget.lua; register that file in DemoAddon.toc on a new line after Widgets\\TargetGlow.lua; rename its frame from DemoWidgetFrame to DemoAddon_DemoWidget to match the project convention established by Widgets/TargetGlow.lua. No other changes.",
       "expected_output": "A short debate that converges quickly because neither side manufactures objections.",
       "expectations": [
