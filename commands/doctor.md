@@ -125,3 +125,20 @@ INSTALLED plugin by default; `--head` tests the checkout via `--plugin-dir`.
 If check 1 found a version mismatch, say so here: any behavioral run made
 WITHOUT `--head` tested the stale cache, not the checkout. A `--head` run is
 unaffected by the mismatch.
+
+## 7. agy transport (Flash implementer lane)
+
+Resolve the INSTALLED copy's `agents/flash-implementer.md` under the
+`installPath` from check 1 and parse the canonical model literal from its
+Lane note (the pinned model-ID token declared there) — the agent file is the ONE
+place the implementer model is defined; carry no literal here. A missing
+declaration is itself BROKEN. Then:
+
+- `& "$env:LOCALAPPDATA\agy\bin\agy.exe" --version` — missing binary =
+  BROKEN (the Flash lane cannot dispatch), report the install one-liner.
+- `agy models` — output must contain the parsed literal. Sign-out or a
+  missing model = BROKEN with the actual output. No generation probe —
+  this is a reachability check, and agy free-tier quota is opaque.
+
+Report the route language as declared in the agent file: evidence is
+client-side, requested and propagated only.
