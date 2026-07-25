@@ -81,6 +81,8 @@ def test_flash_preflight_pins():
     assert "allow rule" in body
     assert "git status --porcelain" in body
     assert "No file matching `AGY-TASK-BRIEF-*`" in body
+    # main-checkout scope with its one declared carve-out (Sol round 3)
+    assert "sole live-verification exception" in body
 
 
 def test_flash_route_report_carries_transcript():

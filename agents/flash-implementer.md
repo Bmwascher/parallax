@@ -36,7 +36,9 @@ never-write rule, and it never survives to the evidence checks.
 ## Inputs (from the dispatching controller)
 
 - The task's verbatim text and the plan's Global Constraints.
-- The workspace directory (this cycle: the main checkout only).
+- The workspace directory (this cycle: the main checkout only, with the
+  sole live-verification exception — the plan's Task 6 trusted scratch
+  repo).
 - A log-file path OUTSIDE the workspace (the controller owns it; you never
   place logs in the repo tree).
 
@@ -121,4 +123,5 @@ This agent pins the Flash implementation lane. Canonical model literal:
 Antigravity CLI resolved ID). The literal lives ONLY here;
 `implementer.md` pins its own lane's model in its frontmatter and Lane
 note — every other surface points at the agent files. Trust is per-directory and interactive-only, so this lane runs in
-the main checkout this cycle — a worktree trust story is future work.
+the main checkout this cycle, with the plan's Task 6 trusted scratch repo
+as the sole live-verification exception — a worktree trust story is future work.
