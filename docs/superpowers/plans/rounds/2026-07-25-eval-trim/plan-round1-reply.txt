@@ -1,0 +1,54 @@
+Overall verdict: **FIX**. Claims 4 and 6 expose substantive selection gaps; claim 8 contains a historical misstatement. (`docs/superpowers/plans/2026-07-25-behavioral-eval-trim.md:354-363`, `docs/superpowers/plans/2026-07-25-behavioral-eval-trim.md:169-175`, `docs/superpowers/plans/2026-07-24-jinn-intake-adoptions.md:281`)
+
+1. Cost model
+
+A completed non-manual case performs one executor subprocess, then calls `grade()` once; `grade()` contains one `codex exec` dispatch (`evals/tools/run_behavioral_evals.py:354-411`, `evals/tools/run_behavioral_evals.py:546-599`). The main loop invokes `run_case()` once per selected case, the JSON contains seven cases, and `--case` is the only current subset mechanism (`evals/tools/run_behavioral_evals.py:608-631`, `evals/tools/run_behavioral_evals.py:654-658`, `evals/multi-model-verify/evals.json:5-87`). “Exactly one” applies to cases reaching grading—executor failure returns before the grader (`evals/tools/run_behavioral_evals.py:406-411`). **PASS**
+
+2. Flake diagnosis
+
+The current clause requires the literal “explicitly non-blocking” wording (`evals/multi-model-verify/evals.json:77-84`). The approved spec records the recovered grader rationale, its concession that the result converged with only a trivial amendment and no scope expansion, and the separate citation failure already addressed by D3 (`docs/superpowers/specs/2026-07-25-behavioral-eval-trim-design.md:17-24`). That is sufficient as the approved design input; raw-log provenance remains separately unverified below. **PASS**
+
+3. Reword
+
+The canonical replacement retains PASS-or-trivial-amendments, real-file-line citations, and no scope expansion while replacing the label test with observable verdict/round/scope outcomes (`docs/superpowers/plans/2026-07-25-behavioral-eval-trim.md:43-47`). The equality test is written and expected to fail before `evals.json` changes (`docs/superpowers/plans/2026-07-25-behavioral-eval-trim.md:49-80`), and the case remains at three expectations (`evals/multi-model-verify/evals.json:81-84`, `docs/superpowers/specs/2026-07-25-behavioral-eval-trim-design.md:94-103`). **PASS**
+
+4. Selection design
+
+The planned pure selection logic, normalization, entry comparison, output, zero-selection return, mutual exclusion, and placement before CLI checks match the spec (`docs/superpowers/plans/2026-07-25-behavioral-eval-trim.md:297-399`). The existing `--list` self-test remains intact (`evals/multi-model-verify/test_multi_model_verify.py:709-718`).
+
+However, `base_case_entries()` promises that an unparseable base fails toward running, but its exception list omits `TypeError`; syntactically valid malformed JSON such as `{"evals": null}` fails during iteration instead of returning `None` (`docs/superpowers/plans/2026-07-25-behavioral-eval-trim.md:354-363`). The planned test exercises only an already-supplied `base_entries=None`, so it cannot catch this loader defect (`docs/superpowers/plans/2026-07-25-behavioral-eval-trim.md:274-280`).
+
+Specific fix: catch `TypeError` in `base_case_entries()` and add a loader-level test using syntactically valid but structurally invalid base JSON, asserting `None` and therefore all-case selection. **FIX**
+
+5. Entry diff excludes `surface`
+
+`_grading_view()` removes only `surface` before comparing current and base entries, and the test explicitly locks a surface-only change to zero selections (`docs/superpowers/plans/2026-07-25-behavioral-eval-trim.md:261-272`, `docs/superpowers/plans/2026-07-25-behavioral-eval-trim.md:302-327`). This implements the approved rationale that initial surface metadata must not select all seven cases (`docs/superpowers/specs/2026-07-25-behavioral-eval-trim-design.md:49-59`). **PASS**
+
+6. Mapping rows
+
+The stated rows for `fallbacks.md` and `application-checkpoint.md` are grounded: the degraded case grades the unattended consent stop defined there, while the mutation preamble explicitly directs both fix cases to the checkpoint contract (`evals/multi-model-verify/evals.json:31-40`, `skills/multi-model-verify/references/fallbacks.md:8-25`, `evals/tools/run_behavioral_evals.py:61-72`, `skills/multi-model-verify/references/application-checkpoint.md:24-71`). The three debate cases also depend on the transport and brief conventions in `model-prompting-notes.md` (`evals/multi-model-verify/evals.json:7-28`, `evals/multi-model-verify/evals.json:77-84`, `skills/multi-model-verify/references/model-prompting-notes.md:20-78`).
+
+The mapping is nevertheless incomplete: `debate-protocol.md` is mandatory before the first round, plan mode explicitly iterates under it, and diff mode inherits the same protocol (`skills/multi-model-verify/SKILL.md:18`, `skills/multi-model-verify/SKILL.md:123-138`). Yet none of the three debate cases includes that file, and the semantic-pin test checks only `SKILL.md`, `fallbacks.md`, and `application-checkpoint.md` (`docs/superpowers/plans/2026-07-25-behavioral-eval-trim.md:140-155`, `docs/superpowers/plans/2026-07-25-behavioral-eval-trim.md:169-175`).
+
+Specific fix: add `skills/multi-model-verify/references/debate-protocol.md` to `plan-mode-debate-runs`, `diff-mode-spec-fidelity`, and `no-manufactured-objections`, then pin those three associations in `test_surface_semantic_pins`. **FIX**
+
+7. Harness boundary
+
+The approved spec explicitly excludes runner, test, and fixture edits because offline suites cover the harness and `--changed` answers which contract files changed (`docs/superpowers/specs/2026-07-25-behavioral-eval-trim-design.md:87-90`). `CLAUDE.md` identifies the four CI gates and reserves behavioral runs for skill/prompt changes (`CLAUDE.md:11-22`). The accepted consequence follows from that declared boundary. **PASS**
+
+8. Cycle verification
+
+The plan correctly schedules the four documented offline gates, two explicit `--case` passes, and a third `--changed` pass expecting six skips and one selected case (`CLAUDE.md:11-16`, `docs/superpowers/plans/2026-07-25-behavioral-eval-trim.md:443-475`). The one-case expectation is statically coherent after Tasks 1–3 because only expectation #1 changes, every surface addition is excluded by `_grading_view`, and skill changes are prohibited (`docs/superpowers/plans/2026-07-25-behavioral-eval-trim.md:17`, `docs/superpowers/plans/2026-07-25-behavioral-eval-trim.md:78-80`, `docs/superpowers/plans/2026-07-25-behavioral-eval-trim.md:302-327`).
+
+The D3 attribution is false: the recorded D3 evidence was `fail/fail/pass`, followed by one post-D3 confirming PASS—not three consecutive PASSes (`docs/superpowers/plans/2026-07-24-jinn-intake-adoptions.md:281`). The proposed three-consecutive-PASS gate is stricter and can remain.
+
+Specific fix: replace “the same bar D3 used” in the spec with “a stricter three-consecutive-PASS stability bar”; no change to Task 4’s commands is required (`docs/superpowers/specs/2026-07-25-behavioral-eval-trim-design.md:122-124`). **FIX**
+
+UNVERIFIED
+
+- The raw prior-session grader logs and exact rationale quotations were not available in the repository; only the approved spec’s recovered-log summary was verifiable (`docs/superpowers/specs/2026-07-25-behavioral-eval-trim-design.md:17-24`).
+- Actual Skill-tool invocation in every live executor run is not statically guaranteed; the harness directs the executor to follow the skill and makes the tool available, while the test verifies availability rather than live invocation (`evals/tools/run_behavioral_evals.py:44-50`, `evals/tools/run_behavioral_evals.py:97-102`, `evals/multi-model-verify/test_multi_model_verify.py:500-513`).
+- The future three PASS results, exact dogfood printout, and current quota balance cannot be verified until Task 4 runs; the plan currently describes them as expected evidence (`docs/superpowers/plans/2026-07-25-behavioral-eval-trim.md:456-488`). The repository records only the cycle-start 91%-used reading (`docs/superpowers/specs/2026-07-25-behavioral-eval-trim-design.md:9-16`).
+
+**Round 1 terminal verdict: FIX — repair malformed-base fail-open handling, add the missing debate-protocol surfaces, and correct the D3 attribution.**
+

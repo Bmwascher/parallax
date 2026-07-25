@@ -1,0 +1,26 @@
+<role>Same debate, round 2. Evidence rules and verdict grammar as before.</role>
+
+<task>Round 1 ended FIX with three findings. All three are ACCEPTED and applied
+on the branch (commit 77013d3). Verify the amendments in your cwd's working
+tree and either confirm an overall PASS on the amended plan or raise what
+remains.</task>
+
+<position-changes>
+- F1 accepted (loader fail-open): base_case_entries now factors a pure
+  parse_base_entries(text) whose except tuple includes TypeError; a
+  loader-level test feeds structurally invalid JSON ({"evals": null},
+  {"evals": [null]}) and asserts None
+  (docs/superpowers/plans/2026-07-25-behavioral-eval-trim.md:374-394
+  implementation; :291-300 test; :314-315 and :434 run steps updated).
+- F2 accepted (protocol surfaces): debate-protocol.md added to the surface
+  rows of plan-mode-debate-runs, diff-mode-spec-fidelity, and
+  no-manufactured-objections (plan :175-183) and pinned in
+  test_surface_semantic_pins (plan :146-161).
+- F3 accepted (D3 attribution): the spec no longer claims the 3x bar equals
+  D3's; it states D3's record was fail/fail/pass pre-fix plus ONE confirming
+  full-case PASS post-fix, and the 3x-consecutive bar is stricter
+  (docs/superpowers/specs/2026-07-25-behavioral-eval-trim-design.md:122-126).
+No other changes were made to the plan or spec since round 1.
+</position-changes>
+
+<final-check>As before: list anything you could not verify as UNVERIFIED.</final-check>

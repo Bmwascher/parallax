@@ -520,6 +520,35 @@ Collect into the cycle's evidence note (for the diff debate): gate outputs from 
 
 ---
 
+## Debate record
+
+**Participants:** Fable 5 (session) / GPT-5.6 Sol (codex exec, session 019f97d1-fc78-73a1-9f32-b42e14a6f8c1)
+**Rounds used:** 2 of 4
+**Outcome:** converged with amendments (round-1 FIXes F1-F3 accepted, applied at 77013d3, verified PASS in round 2)
+**Verification status:** FULL
+**Degradation:** none
+**Authorized by:** n/a
+**Raw rounds:** docs/superpowers/plans/rounds/2026-07-25-eval-trim/ (briefs, replies, and header-bearing transcripts for both rounds)
+
+### Resolved points
+| # | Claim | Raised by | Outcome | Evidence |
+|---|-------|-----------|---------|----------|
+| 1 | base-evals.json loader crashes instead of failing toward running on structurally invalid JSON (`{"evals": null}` raises TypeError, uncaught) | reviewer (F1) | accepted into Task 3: pure `parse_base_entries` catches TypeError; loader-level test added | docs/superpowers/plans/2026-07-25-behavioral-eval-trim.md:374-394, :291-300 |
+| 2 | debate-protocol.md is missing from the three debate cases' surfaces despite being required reading that both modes iterate under | reviewer (F2) | accepted into Task 2: surface rows + semantic pins extended | docs/superpowers/plans/2026-07-25-behavioral-eval-trim.md:169-184, :140-161; skills/multi-model-verify/SKILL.md:18 |
+| 3 | "the same bar D3 used" misstates history — D3's record is fail/fail/pass pre-fix plus ONE confirming full-case PASS post-fix | reviewer (F3) | accepted into spec: reworded as a deliberately stricter bar | docs/superpowers/specs/2026-07-25-behavioral-eval-trim-design.md:122-126; docs/superpowers/plans/2026-07-24-jinn-intake-adoptions.md:281 |
+| 4 | Claims 1-3, 5, 7 of the round-1 brief (cost model, flake diagnosis, reword soundness, surface-key exclusion, harness boundary) and the amended claims 4, 6, 8 | session | confirmed PASS by reviewer (round 1: five PASS; round 2: overall PASS) | rounds/2026-07-25-eval-trim/plan-round1-reply.txt, plan-round2-reply.txt |
+
+### Escalated points (user-decided)
+| # | Question | Session position | Reviewer position | Owner's call |
+|---|----------|------------------|-------------------|--------------|
+
+### Environment notes (non-blocking)
+- `~/.codex/AGENTS.md` exists — the user's own global instruction file, by design.
+- Skills from the user's own codex plugin cache load into the reviewer's context, by design.
+- Both rounds' transcripts open with `ERROR codex_models_manager::cache: failed to load models cache: missing field supports_reasoning_summaries` — local models-cache noise; the startup header still resolved and matched the canonical route both rounds. Watch in drift triage if it persists.
+
+---
+
 ## Self-Review (done at write time)
 
 - **Spec coverage:** `--changed` semantics → Task 3; surface mapping → Task 2; expectation reword → Task 1; offline tests → Tasks 1-3; stability probe + dogfood + no-full-battery → Task 4; version bump → Task 4. The spec's "surface key excluded from entry diff" amendment is implemented in `_grading_view` and locked by `test_select_cases_surface_only_diff_does_not_select`.
