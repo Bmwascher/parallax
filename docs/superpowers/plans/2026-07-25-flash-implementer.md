@@ -8,7 +8,7 @@
 
 **Tech Stack:** Claude Code agent frontmatter, agy 1.1.7 print mode, pytest (offline contract pins), PowerShell (drift snapshot).
 
-**STATUS: CANDIDATE.** The plan debate (Sol) runs at the ~Jul 29 codex reset and must converge before Tasks 1-6 execute; the diff debate gates the merge. The debate record is appended to this file when the plan debate runs. Tasks 5-6 contain ATTENDED steps (user-interactive); Task 6 additionally requires the plugin dev-loop (bump, update, restart).
+**STATUS: FROZEN** by the backup-lane plan debate (Kimi K3-256k, 2026-07-25 — see Debate record). Changes now require reopening the debate. Per the user's standing ruling, the primary reviewer (Sol) retains a check-off before this branch merges (~Jul 29 codex reset); the diff debate gates the merge as always. Tasks 5-6 contain ATTENDED steps (user-interactive); Task 6 additionally requires the plugin dev-loop (bump, update, restart).
 
 ## Global Constraints
 
@@ -635,9 +635,36 @@ diff-debate brief cites them.
 
 ## Debate record
 
-Appended when the plan debate runs (quota-gated to the ~Jul 29 codex
-reset). Until then this plan is a CANDIDATE: no task executes, per the
-spec's Sol-gate decision. The advisory pass (Opus 5, same-vendor,
-2026-07-25, two rounds, FIX -> conditional PASS folded into the spec) is
-recorded in the spec's Review provenance section and forms no part of
-this gate.
+- **Mode:** plan. **Participants:** Fable 5 (session) / Kimi K3
+  (cross-vendor reviewer, BACKUP LANE — model `kimi-code/k3-256k`,
+  thinking on, effort pinned high via config overrides; kimi-cli 1.49.0,
+  session 4ba130bb-1615-4c95-9afc-d1e3049bb857).
+- **Backup-lane trigger (real, not drill):** primary reviewer transport
+  (codex) at 100% weekly quota, `rate_limit_reached`, resets ~Jul 29 —
+  the exact trigger condition defined for this lane. First live use of
+  the backup reviewer lane, predating its own 0.13.0 design cycle.
+- **Containment:** reviewer ran read-only via custom agent-file
+  (ReadFile/ReadMediaFile/Glob/Grep/SetTodoList only; write-probe
+  refused pre-review) against a throwaway clone of the branch — the real
+  tree was never exposed. Clone `git status` clean after both rounds
+  (sole untracked file: the session-authored brief).
+- **Rounds: 2 of 4.** Round 1 (head 624d52f): FIX — 1 blocking (Task 4
+  doctor text tripping the plan's own literal sweep) + 8 minors; all 9
+  verified by the session against the live repo and accepted; amendments
+  committed (5391455). Round 2 (head 5391455): terminal PASS — every
+  resolution re-verified by the reviewer, no new findings; reviewer
+  accepted presence-in-both heading pins vs the spec's "byte-identical"
+  phrasing as a trivial implementation difference.
+- **Verification status: FULL (backup lane).** Effective route confirmed
+  each round via the `Using LLM model: provider='managed:kimi-code'
+  model='k3-256k'` line in ~/.kimi/logs/kimi.log (client-side evidence
+  class — requested and propagated, per the route language discipline).
+  Fresh transcript files per round:
+  rounds/2026-07-25-flash-implementer/plan-round{1,2}-transcript.txt
+  (+ round-1 brief).
+- **Outstanding gate (user ruling, 2026-07-25):** Sol check-off required
+  before the branch closes — at minimum the mode-diff debate at merge
+  time, after the ~Jul 29 reset.
+- The advisory pass (Opus 5, same-vendor, 2026-07-25, two rounds,
+  FIX -> conditional PASS folded into the spec) is recorded in the
+  spec's Review provenance section and forms no part of this gate.
