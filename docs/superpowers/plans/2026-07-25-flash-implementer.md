@@ -8,7 +8,7 @@
 
 **Tech Stack:** Claude Code agent frontmatter, agy 1.1.7 print mode, pytest (offline contract pins), PowerShell (drift snapshot).
 
-**STATUS: FROZEN** (re-frozen pending Sol round 4 — the cap round, terminal confirmation). Frozen 2026-07-25 by the backup-lane plan debate (Kimi K3-256k); REOPENED same day by the primary reviewer's check-off (Sol, codex window reset early): round 1 FIX (5 blocking), round 2 FIX (3 blocking + 2 minor consistency ripples), round 3 FIX (4 blocking bookkeeping/sync) — every finding session-verified and accepted; amendments folded into spec, this plan, and the artifacts via SDD fix waves. The diff debate gates the merge as always. Tasks 5-6 contain ATTENDED steps (user-interactive); Task 6 additionally requires the plugin dev-loop (bump, update, restart).
+**STATUS: FROZEN — CONVERGED.** Frozen 2026-07-25 by the backup-lane plan debate (Kimi K3-256k, 2 rounds); reopened same day by the primary reviewer's check-off (Sol, codex window reset early) and re-frozen at round 4: r1 FIX (5 blocking), r2 FIX (3 blocking + 2 minor), r3 FIX (4 blocking), r4 terminal PASS — primary check-off GRANTED with one trivial accepted amendment (applied). Every finding session-verified and accepted; amendments folded into spec, this plan, and the artifacts via SDD fix waves. The diff debate gates the merge as always. Tasks 5-6 contain ATTENDED steps (user-interactive); Task 6 additionally requires the plugin dev-loop (bump, update, restart).
 
 ## Global Constraints
 
@@ -596,7 +596,9 @@ absent = restore `true` and record in the SDD ledger:
 - [ ] **Step 3: Drop the probe-dir trust entry**
 
 Remove the probe dir from `trustedWorkspaces` (session-temporary dir; the
-repo is the lane's only workspace this cycle).
+repo is the lane's only PERSISTENT implementation workspace this cycle —
+Task 6's trusted scratch repo is the declared live-verification
+exception).
 
 - [ ] **Step 4 (ATTENDED - user): Trust the repo**
 
@@ -759,6 +761,7 @@ sandbox read-only / effort high.
 | 21 | MAIN-CHECKOUT-ONLY absolute vs Task 6 scratch dispatch | Sol r3 | accepted; sole live-verification exception declared in constraints, spec, agent body (pinned) | Global Constraints, spec Decisions, agent Inputs + Lane note |
 | 22 | Spec ROUTE line and step-4b recipe out of sync with amended contract | Sol r3 | accepted; synchronized (transcript path; sentinel + save/restore) | spec sections 1 and 6 |
 | 23 | Record metadata lagged live rounds; r2/r3 raw artifacts unretained | Sol r3 | accepted; this revision + artifacts retained | rounds/ dir, this appendix |
+| 24 | Task 5 Step 3 phrase omitted the declared Task 6 exception | Sol r4 | trivial accepted amendment; applied | plan Task 5 Step 3 |
 
 ### Escalated points (user-decided)
 
