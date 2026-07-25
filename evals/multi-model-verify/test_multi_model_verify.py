@@ -38,6 +38,17 @@ def read(path):
     return path.read_text(encoding="utf-8")
 
 
+def load_runner_module():
+    """Import the behavioral runner as a module (its main() is guarded, its
+    module level is constants only) so pure functions are unit-testable."""
+    import importlib.util
+    path = REPO_ROOT / "evals" / "tools" / "run_behavioral_evals.py"
+    spec = importlib.util.spec_from_file_location("run_behavioral_evals", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
 def frontmatter(text):
     match = re.match(r"^---\n(.*?)\n---\n", text, re.DOTALL)
     assert match, "SKILL.md must start with YAML frontmatter"
@@ -781,6 +792,87 @@ class TestEvalFixtures:
         assert proc.returncode == 0, proc.stderr
         assert "degraded-consent-gate" in proc.stdout
         assert "fixture repo: True" in proc.stdout
+
+    def _trim_cases(self):
+        return [
+            {"id": "a", "prompt": "p", "expectations": ["x"],
+             "surface": ["skills/multi-model-verify/SKILL.md"]},
+            {"id": "b", "prompt": "p", "expectations": ["x"],
+             "surface": ["skills/multi-model-verify/references/fallbacks.md"]},
+        ]
+
+    def test_select_cases_surface_match_selects(self):
+        runner = load_runner_module()
+        cases = self._trim_cases()
+        base = {c["id"]: json.loads(json.dumps(c)) for c in cases}
+        selected, skipped = runner.select_cases(
+            cases, ["skills/multi-model-verify/SKILL.md"], base)
+        assert [c["id"] for c, _ in selected] == ["a"]
+        assert selected[0][1] == "skills/multi-model-verify/SKILL.md"
+        assert [c["id"] for c in skipped] == ["b"]
+
+    def test_select_cases_backslash_paths_normalized(self):
+        # git on Windows can hand back backslash separators; the mapping is
+        # declared forward-slash, so selection must normalize before match.
+        runner = load_runner_module()
+        cases = self._trim_cases()
+        base = {c["id"]: json.loads(json.dumps(c)) for c in cases}
+        selected, _ = runner.select_cases(
+            cases, ["skills\\multi-model-verify\\SKILL.md"], base)
+        assert [c["id"] for c, _ in selected] == ["a"]
+
+    def test_select_cases_entry_diff_self_selects(self):
+        # An edited grading contract re-selects its case even when no
+        # surface file changed.
+        runner = load_runner_module()
+        cases = self._trim_cases()
+        base = {c["id"]: json.loads(json.dumps(c)) for c in cases}
+        base["b"]["expectations"] = ["OLD WORDING"]
+        selected, skipped = runner.select_cases(cases, [], base)
+        assert [c["id"] for c, _ in selected] == ["b"]
+        assert "changed" in selected[0][1]
+        assert [c["id"] for c in skipped] == ["a"]
+
+    def test_select_cases_surface_only_diff_does_not_select(self):
+        # Selection metadata is not grading contract: refining a surface
+        # list must not re-run the battery (otherwise the commit that
+        # INTRODUCES surfaces re-selects all 7 cases - the opposite of a
+        # trim).
+        runner = load_runner_module()
+        cases = self._trim_cases()
+        base = {c["id"]: json.loads(json.dumps(c)) for c in cases}
+        base["a"]["surface"] = ["some/old/glob.md"]
+        selected, skipped = runner.select_cases(cases, [], base)
+        assert selected == []
+        assert [c["id"] for c in skipped] == ["a", "b"]
+
+    def test_select_cases_unreadable_base_selects_all(self):
+        # Fail toward running, never toward skipping.
+        runner = load_runner_module()
+        cases = self._trim_cases()
+        selected, skipped = runner.select_cases(cases, [], None)
+        assert [c["id"] for c, _ in selected] == ["a", "b"]
+        assert skipped == []
+
+    def test_parse_base_entries_structurally_invalid_returns_none(self):
+        # {"evals": null} is valid JSON that raises TypeError, not
+        # JSONDecodeError, during iteration - the loader must fail toward
+        # running (None), never crash selection (Sol plan round 1, F1).
+        runner = load_runner_module()
+        assert runner.parse_base_entries('{"evals": null}') is None
+        assert runner.parse_base_entries('{"evals": [null]}') is None
+        assert runner.parse_base_entries('not json at all') is None
+        assert runner.parse_base_entries('{"evals": [{"id": "a"}]}') == {
+            "a": {"id": "a"}}
+
+    def test_changed_and_case_flags_are_mutually_exclusive(self):
+        proc = subprocess.run(
+            [sys.executable,
+             str(REPO_ROOT / "evals" / "tools" / "run_behavioral_evals.py"),
+             "--changed", "--case", "plan-mode-debate-runs"],
+            capture_output=True, text=True)
+        assert proc.returncode == 2
+        assert "mutually exclusive" in (proc.stderr or "")
 
 
 class TestApplicationCheckpoint:

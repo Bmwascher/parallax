@@ -25,6 +25,7 @@ behaviorally test the stale cached copy.
 """
 
 import argparse
+import fnmatch
 import json
 import os
 import re
@@ -131,6 +132,81 @@ agent's behavior met it.</task>
 def load_cases():
     data = json.loads(CASES_FILE.read_text(encoding="utf-8"))
     return data["evals"]
+
+
+def _grading_view(entry):
+    """A case entry minus selection metadata: `surface` says WHICH files
+    select the case, it is not part of what the grader enforces."""
+    return {k: v for k, v in entry.items() if k != "surface"}
+
+
+def select_cases(cases, changed_paths, base_entries):
+    """Pure --changed selection. Returns (selected, skipped): selected is
+    [(case, reason)] where reason is the first matching changed path or an
+    entry-diff note; skipped is [case]. base_entries is {id: entry} parsed
+    from the base evals.json, or None when that file was missing or
+    unparseable - then EVERY case is selected (fail toward running, never
+    toward skipping)."""
+    changed = [p.replace("\\", "/") for p in changed_paths]
+    selected, skipped = [], []
+    for case in cases:
+        if base_entries is None:
+            selected.append((case, "base evals.json unreadable"))
+            continue
+        reason = next((p for p in changed
+                       for g in case.get("surface", ())
+                       if fnmatch.fnmatch(p, g)), None)
+        if reason is None:
+            base = base_entries.get(case["id"])
+            if base is None or _grading_view(case) != _grading_view(base):
+                reason = "case entry changed vs base"
+        if reason is None:
+            skipped.append(case)
+        else:
+            selected.append((case, reason))
+    return selected, skipped
+
+
+def _git_lines(*args):
+    out = subprocess.run(["git", "-C", str(PLUGIN_ROOT), *args],
+                         check=True, capture_output=True, text=True,
+                         encoding="utf-8", errors="replace")
+    return [ln.strip() for ln in out.stdout.splitlines() if ln.strip()]
+
+
+def resolve_changed_base(ref):
+    if ref is not None:
+        return ref
+    return _git_lines("merge-base", "HEAD", "main")[0]
+
+
+def changed_paths_vs(base):
+    """Committed + uncommitted (working tree vs base) plus untracked."""
+    return (_git_lines("diff", "--name-only", base)
+            + _git_lines("ls-files", "--others", "--exclude-standard"))
+
+
+def parse_base_entries(text):
+    """{id: entry} from a base evals.json text, or None when the text is
+    syntactically OR structurally unparseable - {"evals": null} is valid
+    JSON that raises TypeError, not JSONDecodeError, during iteration
+    (Sol plan round 1, F1). None makes select_cases run everything."""
+    try:
+        return {c["id"]: c for c in json.loads(text)["evals"]}
+    except (json.JSONDecodeError, KeyError, TypeError):
+        return None
+
+
+def base_case_entries(base):
+    try:
+        out = subprocess.run(
+            ["git", "-C", str(PLUGIN_ROOT), "show",
+             f"{base}:evals/multi-model-verify/evals.json"],
+            check=True, capture_output=True, text=True,
+            encoding="utf-8", errors="replace")
+    except subprocess.CalledProcessError:
+        return None
+    return parse_base_entries(out.stdout)
 
 
 FROZEN_PLAN = """# Port DemoWidget (frozen plan)
@@ -606,6 +682,12 @@ def main(argv=None):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     ap = argparse.ArgumentParser(description="Behavioral (Tier 3) evals runner.")
     ap.add_argument("--case", action="append", help="run only these case ids")
+    ap.add_argument("--changed", nargs="?", const="", default=None,
+                    metavar="REF",
+                    help="run only cases whose declared surface intersects"
+                         " the diff vs REF (default: merge-base with main)"
+                         " or whose own evals.json entry changed; prints"
+                         " every skip by name")
     ap.add_argument("--list", action="store_true", help="list cases and exit (CI self-test)")
     ap.add_argument("--model", default="sonnet",
                     help="executor model (default sonnet; use fable for full realism)")
@@ -622,6 +704,8 @@ def main(argv=None):
                          " same plugin is unverified; the pre-merge run"
                          " should still use the installed cache")
     args = ap.parse_args(argv)
+    if args.changed is not None and args.case:
+        ap.error("--changed and --case are mutually exclusive")
 
     cases = load_cases()
     if args.case:
@@ -637,6 +721,19 @@ def main(argv=None):
             print(f"{c['id']:34} [{', '.join(tags)}]  {len(c['expectations'])} expectations")
         print(f"\n{len(cases)} case(s); fixture repo: {FIXTURE_REPO.is_dir()}")
         return 0
+
+    if args.changed is not None:
+        base = resolve_changed_base(args.changed or None)
+        selected, skipped = select_cases(
+            cases, changed_paths_vs(base), base_case_entries(base))
+        for c in skipped:
+            print(f"SKIPPED(unchanged surface) {c['id']}")
+        for c, reason in selected:
+            print(f"SELECTED {c['id']} - {reason}")
+        if not selected:
+            print("no behavioral surface touched")
+            return 0
+        cases = [c for c, _ in selected]
 
     for tool in ("claude", "codex"):
         if not shutil.which(tool):
