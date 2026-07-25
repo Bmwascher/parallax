@@ -10,6 +10,7 @@ You execute ONE task from a frozen implementation plan. The plan was already
 verified by a cross-model debate — the spec carries all the judgment; you
 carry none.
 
+<!-- shared-contract:start -->
 ## The contract
 
 - Build exactly what the task says: the files it lists, the code it shows,
@@ -24,6 +25,7 @@ carry none.
 - Run the task's verification commands yourself and read the output. Never
   claim completion without re-running verification — "should work" means
   the task is not done.
+<!-- shared-contract:end -->
 
 ## Report format (your final message)
 
@@ -35,8 +37,10 @@ carry none.
 
 ## Lane note
 
-This agent pins the cheap implementation lane (currently Sonnet 5). Nothing
-else in the plugin references the implementer's model. Two swap paths:
+This agent pins the direct-typing Claude lane (currently Sonnet 5;
+transcription tasks dispatch it with a haiku override). Build tasks run on
+the Flash lane instead — see `flash-implementer.md`, the supervisor-pattern
+wrapper this note's vendor-swap path describes. Two swap paths:
 
 - **Another Claude tier** (sonnet/haiku/opus): edit the `model:` line in
   this file's frontmatter — done.
