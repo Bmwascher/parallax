@@ -41,9 +41,13 @@ def test_flash_dispatch_contract():
     assert "--model " + CANONICAL_ID in body
     assert "--add-dir" in body
     assert "--log-file" in body
-    # unique-suffix brief name + lifecycle (Sol check-off F2)
+    # unique-suffix brief name + full lifecycle, pinned by exact sentence
+    # fragments so a regression cannot pass on loose keywords
+    # (Sol check-off round 2, finding 3)
     assert "AGY-TASK-BRIEF-" in body
     assert "sole transient exception" in body.lower()
+    assert "the dispatch log file's basename" in body
+    assert "on success, failure, and interruption alike" in body
     # stdin is probed-dead in print mode; the body must not suggest it
     assert "stdin" not in body.lower() or "does not reach" in body.lower()
 
@@ -69,10 +73,19 @@ def test_flash_preflight_pins():
     body = _read(FLASH)
     assert "agy models" in body
     assert "trustedWorkspaces" in body
-    # conservative rule-class ban (Sol check-off F4) + clean baseline (F2)
-    assert "write_file(" in body
+    # conservative rule-class ban + clean baseline + stale-brief check,
+    # pinned by exact sentence fragments (Sol check-off round 2,
+    # finding 3): loose keyword pins would still pass a regression to
+    # path-scoped matching or a dropped preflight
+    assert "any `write_file(` entry, whatever path it names" in body
     assert "allow rule" in body
     assert "git status --porcelain" in body
+    assert "No file matching `AGY-TASK-BRIEF-*`" in body
+
+
+def test_flash_route_report_carries_transcript():
+    body = _read(FLASH)
+    assert "AND the brain transcript's path" in body
 
 
 def test_flash_forbidden_bypass_class():

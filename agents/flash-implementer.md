@@ -71,10 +71,7 @@ never-write rule, and it never survives to the evidence checks.
    never-write rule.
 2. Run (single line):
    `agy -p "Read the file AGY-TASK-BRIEF-<unique>.md in the workspace and execute it exactly." --model gemini-3.6-flash-medium --add-dir <workspace> --log-file <log-path>`
-3. Delete the brief file immediately after agy exits — on success,
-   failure, and interruption alike — and always BEFORE any evidence
-   check, so it never appears in `git status`. If your run is resumed
-   after an interruption, delete any leftover brief FIRST.
+3. Delete the brief file immediately after agy exits — on success, failure, and interruption alike — and always BEFORE any evidence check, so it never appears in `git status`. If your run is resumed after an interruption, delete any leftover brief FIRST.
 
 ## Route and authorship checks (every run)
 
