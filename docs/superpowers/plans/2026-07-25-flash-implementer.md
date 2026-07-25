@@ -4,7 +4,7 @@
 
 **Goal:** Add `agents/flash-implementer.md`, a haiku-wrapper SDD implementer that delegates all code-writing to Gemini 3.6 Flash via the Antigravity CLI (agy) headlessly, with mechanically enforced route and authorship checks.
 
-**Architecture:** Architecture A from the spec (`docs/superpowers/specs/2026-07-25-flash-implementer-design.md`): a new wrapper agent beside the untouched `implementer.md`. The wrapper never types repo code (tools allowlist without Edit/Write + log/tree corroboration); every failure is loud (`STATUS: blocked`); reroute is consent-gated. Model literal single-sourced to the two agent files.
+**Architecture:** Architecture A from the spec (`docs/superpowers/specs/2026-07-25-flash-implementer-design.md`): a new wrapper agent beside the untouched `implementer.md`. The wrapper never types repo code (tools allowlist without Edit/Write + transcript/tree corroboration); every failure is loud (`STATUS: blocked`); reroute is consent-gated. Model literal single-sourced to the two agent files.
 
 **Tech Stack:** Claude Code agent frontmatter, agy 1.1.7 print mode, pytest (offline contract pins), PowerShell (drift snapshot).
 
@@ -81,9 +81,13 @@ def test_flash_dispatch_contract():
     assert "--model " + CANONICAL_ID in body
     assert "--add-dir" in body
     assert "--log-file" in body
-    # unique-suffix brief name + lifecycle (Sol check-off F2)
+    # unique-suffix brief name + full lifecycle, pinned by exact sentence
+    # fragments so a regression cannot pass on loose keywords
+    # (Sol check-off round 2, finding 3)
     assert "AGY-TASK-BRIEF-" in body
     assert "sole transient exception" in body.lower()
+    assert "the dispatch log file's basename" in body
+    assert "on success, failure, and interruption alike" in body
     # stdin is probed-dead in print mode; the body must not suggest it
     assert "stdin" not in body.lower() or "does not reach" in body.lower()
 
@@ -109,10 +113,19 @@ def test_flash_preflight_pins():
     body = _read(FLASH)
     assert "agy models" in body
     assert "trustedWorkspaces" in body
-    # conservative rule-class ban (Sol check-off F4) + clean baseline (F2)
-    assert "write_file(" in body
+    # conservative rule-class ban + clean baseline + stale-brief check,
+    # pinned by exact sentence fragments (Sol check-off round 2,
+    # finding 3): loose keyword pins would still pass a regression to
+    # path-scoped matching or a dropped preflight
+    assert "any `write_file(` entry, whatever path it names" in body
     assert "allow rule" in body
     assert "git status --porcelain" in body
+    assert "No file matching `AGY-TASK-BRIEF-*`" in body
+
+
+def test_flash_route_report_carries_transcript():
+    body = _read(FLASH)
+    assert "AND the brain transcript's path" in body
 
 
 def test_flash_forbidden_bypass_class():
@@ -589,9 +602,14 @@ Edit `.claude-plugin/plugin.json`: `"version": "0.12.0"`.
 
 - [ ] **Step 6: Preflight dry-check + commit**
 
-Run the agent's three preflight checks by hand against the real
-environment (models list, trust entry, no repo-scoped allow rule) — all
-three must pass. Then:
+Run the agent's FIVE preflight checks by hand against the real
+environment, verbatim from the agent body: (1) `agy models` contains the
+pinned ID; (2) `trustedWorkspaces` contains the repo path; (3) the
+settings file carries NO `write_file(` entry at all — if an unrelated
+write rule remains, STOP and surface it for user disposition (never
+silently delete shared configuration); (4) `git status --porcelain` in
+the repo is empty; (5) no `AGY-TASK-BRIEF-*` file exists in the repo.
+All five must pass. Then:
 
 ```bash
 git add .claude-plugin/plugin.json
@@ -616,19 +634,25 @@ Bump is committed (Task 5); user runs `claude plugin update parallax@parallax` a
 - [ ] **Step 2: Scratch repo setup**
 
 Create a scratch git repo in the session scratchpad with one file
-(`hello.py`, `print("hello")`), plus an interactive trust approval
-(ATTENDED - user, same mechanism as Task 5 Step 3).
+(`hello.py`, `print("hello")`), and COMMIT it — the agent's clean-tree
+preflight (check 4) requires an empty `git status --porcelain` before
+dispatch (Sol check-off round 2, finding 1). Then an interactive trust
+approval (ATTENDED - user, same mechanism as Task 5 Step 4).
 
 - [ ] **Step 3: Green dry-run through the REAL agent**
 
-Dispatch `parallax:flash-implementer` (fresh subagent) with a minimal task:
+Verify `git status --porcelain` in the scratch repo is empty. Dispatch
+`parallax:flash-implementer` (fresh subagent) with a minimal task:
 "Modify hello.py so it prints exactly 'hello flash'. Verification:
 `python hello.py` prints `hello flash`." plus a log path in the
 scratchpad. Expected report: STATUS done; ROUTE carries
-`gemini-3.6-flash-medium` + log path; FILES CHANGED lists `hello.py`;
-VERIFICATION shows the wrapper's own `python hello.py` output;
-DEVIATIONS none. Controller re-runs `python hello.py` itself (never trust
-the report alone — 0.10.0 lesson: controller-owned verification).
+`gemini-3.6-flash-medium` + log path + brain transcript path; FILES
+CHANGED lists `hello.py`; VERIFICATION shows the wrapper's own
+`python hello.py` output; DEVIATIONS none. Controller re-runs
+`python hello.py` itself (never trust the report alone — 0.10.0 lesson:
+controller-owned verification). Then COMMIT the green result in the
+scratch repo and verify `git status --porcelain` is empty again, so the
+later probes start from a clean baseline.
 
 - [ ] **Step 4a: Raw red probe — the CLI's invalid-model path (no agent)**
 
@@ -645,12 +669,18 @@ file changes in the scratch tree.
 
 - [ ] **Step 4b: Reachable-failure probe — the REAL agent's blocked path**
 
-Plant a scratch-scoped rule in `~/.gemini/antigravity-cli/settings.json`
-`permissions.allow`: `write_file(<scratch, in the file's own path
-spelling>)`. Dispatch `parallax:flash-implementer` with a trivial task in
-the scratch repo. Expected: STATUS blocked at preflight check 3, quoting
-the planted rule; no dispatch reaches agy; no file changes. Then REMOVE
-the planted rule and re-read the settings file to confirm.
+First save the ORIGINAL settings content
+(`~/.gemini/antigravity-cli/settings.json`) to the session scratchpad.
+Then plant a NONMATCHING SENTINEL rule in `permissions.allow`:
+`write_file(/parallax-sentinel-never-matches/)` — preflight check 3 bans
+the rule CLASS, so the sentinel triggers it without ever granting a
+functional permission (Sol check-off round 2, finding 4). Dispatch
+`parallax:flash-implementer` with a trivial task in the scratch repo.
+Expected: STATUS blocked at preflight check 3, quoting the sentinel; no
+dispatch reaches agy; `git status --porcelain` still empty. Restore the
+saved ORIGINAL settings content afterward — including on an aborted or
+interrupted run, restore-before-anything-else on resume — and re-read
+the file to confirm it matches the saved copy.
 
 - [ ] **Step 5 (ATTENDED - user): skip-permissions print-mode probe**
 
@@ -702,7 +732,7 @@ sandbox read-only / effort high.
 | 4 | Sweep omits evals/**/*.ps1 vs the reviewer sweep it mirrors | Kimi r1 | accepted; glob added | test_multi_model_verify.py:249 |
 | 5 | Flash Lane note misstates where the literal lives | Kimi r1 | accepted; reworded | implementer.md carries no gemini literal |
 | 6 | Drift-snapshot snippet violates carry-forward invariant; PS 5.1 parse risk | Kimi r1 | accepted; Task 4 Step 2 rewritten to carry-forward | check-drift.ps1:193-205 |
-| 7 | Red-probe expectation contradicts pinned dispatch contract | Kimi r1 | accepted; made disjunctive (superseded by #13) | plan Task 6 vs agent body pin |
+| 7 | Red-probe expectation contradicts pinned dispatch contract | Kimi r1 | accepted; made disjunctive (superseded by #14) | plan Task 6 vs agent body pin |
 | 8 | Settings-deletion instruction pins unverifiable path spelling | Kimi r1 | accepted; made spelling-agnostic | settings file outside workspace |
 | 9 | Parity narrower than spec claim (headings unpinned in classic) | Kimi r1 | accepted; headings pinned in both files | spec section 1 vs test scope |
 | 10 | Corroboration evidence source wrong: --log-file log carries NO file actions; brain transcript does | Sol r1 | accepted; evidence source corrected to transcript_full.jsonl | probe9.log: 0 hits for probe-write4; brain/<cid>/.../transcript_full.jsonl: 5 hits |
@@ -710,6 +740,11 @@ sandbox read-only / effort high.
 | 12 | Debate record lacked required schema fields and session adjudication | Sol r1 | accepted; this record | frozen-plan-format.md:36-68, debate-protocol.md:63 |
 | 13 | Settings check had no path-matching algorithm | Sol r1 | accepted; conservative rule-class ban (any write_file( entry) | trust entry vs allow rule spelling mismatch on this machine |
 | 14 | Red probe vacuous (wrapper refusal passes without exercising failure path) | Sol r1 | accepted; split into raw-CLI probe + reachable-failure probe | plan Task 6 Steps 4a/4b |
+| 15 | Task 6 green run cannot satisfy the new clean-tree preflight | Sol r2 | accepted; scratch baseline committed, post-run commit + clean check | plan Task 6 Steps 2-3 |
+| 16 | Task 5 dry-check still tested the obsolete three-preflight contract | Sol r2 | accepted; Step 6 runs all five checks verbatim, unrelated rules escalate to user | plan Task 5 Step 6 |
+| 17 | F2/F4 amendments not actually pinned (loose keyword asserts) | Sol r2 | accepted; exact-sentence pins + ROUTE transcript pin added | test_flash_implementer.py dispatch/preflight tests |
+| 18 | Step 4b installs a functional bypass without interruption-safe restore | Sol r2 | accepted; nonmatching sentinel rule + save/restore-in-finally | plan Task 6 Step 4b |
+| 19 | Stale cross-references (log/tree, workdir-scoped, log-only ROUTE, #13 for #14) | Sol r2 | accepted; synchronized | plan header, spec Decisions + section 6, resolved point 7 |
 
 ### Escalated points (user-decided)
 

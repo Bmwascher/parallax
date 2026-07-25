@@ -109,7 +109,7 @@ record in the plan's debate appendix.
   REQUIRED, not optional.
 - True-Flash-only, fails loudly: the wrapper never types repo code itself
   and never completes work Flash failed. Enforced mechanically where
-  possible (tools allowlist, log/tree corroboration — see §1, §2), by
+  possible (tools allowlist, transcript/tree corroboration — see §1, §2), by
   contract text where not.
 - Consent-gated reroute: a blocked task surfaces to the session AND the user;
   rerouting to a Claude tier is an explicit user decision recorded in the
@@ -136,7 +136,7 @@ record in the plan's debate appendix.
 `model: haiku` frontmatter (wrapper/supervisor) plus an explicit `tools:`
 allowlist — Read, Grep, Glob, Bash; **no Edit, no Write, no NotebookEdit** —
 so the ergonomic path for the wrapper to type code itself does not exist.
-(Bash remains a write primitive in principle; the log/tree corroboration in
+(Bash remains a write primitive in principle; the transcript/tree corroboration in
 §2 is the control that catches that path.) If the long-brief probe (§2)
 forces brief-via-file, the brief is written with a Bash heredoc — Write
 stays out of the allowlist.
@@ -235,7 +235,7 @@ agy installed + signed in (done 2026-07-25). The repo root is trusted via
 one interactive agy session (same mechanism as the probe dir). An
 implementation task minimizes tonight's probe leftovers in agy's settings:
 remove the probe-dir `write_file` allow rule (required — §2's preflight
-asserts its absence for workdirs), and attempt the narrowest working
+bans the write_file( rule class outright), and attempt the narrowest working
 `allowNonWorkspaceAccess` config with a DECLARED fallback: if narrowing
 does not converge quickly, leave the value as-is and document it and why —
 the task must not stall, and the setting is shared with the Orca app's
@@ -245,12 +245,12 @@ above is the worktree story for this cycle.
 ### 4. Failure handling — loud, never silent
 
 `STATUS: blocked` with the exact output quoted, on: any preflight failure
-(sign-out, missing model, untrusted workdir, workdir allow rule present),
+(sign-out, missing model, untrusted workdir, any write_file( allow rule present),
 the print-mode soft-deny line, nonzero exit, route-check failure (missing
-route lines, wrong resolved ID, log/tree corroboration mismatch), files
+route lines, wrong resolved ID, transcript/tree corroboration mismatch), files
 diverted to internal scratch. Forbidden by class in the agent body: the
 `--dangerously-skip-permissions` flag by name, any `--mode`/approval bypass,
-AND persisting any per-tool allow rule for the workdir in agy settings —
+AND persisting any file-writing per-tool allow rule in agy settings —
 the durable settings-rule form is the load-bearing prohibition. On blocked,
 FILES CHANGED lists Flash's partial writes (per §1) as the recovery
 affordance. Reroute is consent-gated per Decisions.
@@ -286,7 +286,7 @@ so a future third agent file is swept by default, not silently missed.
 
 - Offline pytest (zero quota, both vendors): contract pins on the new agent
   file — dispatch flags, resolved-ID comparand, route-check strings
-  (including the log/tree corroboration rule), forbidden-class phrasing,
+  (including the transcript/tree corroboration rule), forbidden-class phrasing,
   report headings including ROUTE, `model: haiku` frontmatter, and the
   `tools:` allowlist (no Edit/Write/NotebookEdit) — plus the §1 parity test
   and the §5 implementer-literal sweep.
