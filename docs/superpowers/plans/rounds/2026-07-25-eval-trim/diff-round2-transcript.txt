@@ -1,0 +1,1527 @@
+2026-07-25T07:14:08.593738Z ERROR codex_models_manager::cache: failed to load models cache: missing field `supports_reasoning_summaries` at line 86 column 5
+OpenAI Codex v0.144.1
+--------
+workdir: C:\Users\Brandon\Documents\parallax
+model: gpt-5.6-sol
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: none
+session id: 019f97d1-fc78-73a1-9f32-b42e14a6f8c1
+--------
+user
+<role>Same diff-mode review, round 2. Evidence rules and verdict grammar as before.</role>
+
+<task>Your round-1 FIX (claims 1 and 6: fix wave 73d49f0 absent from the frozen
+plan's deviation table) is accepted and applied. Verify the amendment and issue
+the terminal verdict on the amended range.</task>
+
+<position-changes>
+- FIX accepted: deviation row A2 added to the plan's post-freeze table,
+  recording all three 73d49f0 deltas (loader consolidation, resolved-points
+  table repair, subprocess timeout), the parked fourth minor's pointer, the
+  scoped re-review outcome, and the drift rationale citing your round-1
+  claims 1 and 6 (docs/superpowers/plans/2026-07-25-behavioral-eval-trim.md,
+  A2 row immediately after A1 in "### Post-freeze approved deviations").
+- The A2 recording commit is 927c224 - a one-line documentation-only
+  insertion into the plan's debate record
+  (git show 927c224 to confirm scope). Head is now 927c224; the reviewed
+  range is 3364342..927c224.
+No other changes since round 1.
+</position-changes>
+
+<final-check>As before: list anything you could not verify as UNVERIFIED.</final-check>
+
+codex
+I’m using the multi-model verification protocol again because this is the scoped follow-up gate. I’ll inspect the accepted commit itself, the amended deviation table, and confirm that nothing else entered the range.
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command '$files = @(
+  '"'C:\\Users\\Brandon\\.codex\\plugins\\cache\\claude-plugins-official\\superpowers\\6.2.0\\skills\\using-superpowers\\SKILL.md',
+  'C:\\Users\\Brandon\\.codex\\plugins\\cache\\crosscheck\\crosscheck\\0.5.0\\skills\\multi-model-verify\\SKILL.md',
+  'C:\\Users\\Brandon\\.codex\\memories\\MEMORY.md'
+)
+foreach ("'$file in $files) {
+  "FILE: $file"
+  Get-Content -LiteralPath $file
+}' in C:\Users\Brandon\Documents\parallax
+ succeeded in 531ms:
+FILE: C:\Users\Brandon\.codex\plugins\cache\claude-plugins-official\superpowers\6.2.0\skills\using-superpowers\SKILL.md
+---
+name: using-superpowers
+description: Use when starting any conversation - establishes how to find and use skills, requiring skill invocation before ANY response including clarifying questions
+---
+
+<SUBAGENT-STOP>
+If you were dispatched as a subagent to execute a specific task, ignore this skill.
+</SUBAGENT-STOP>
+
+<EXTREMELY-IMPORTANT>
+If you think there is even a 1% chance a skill might apply to what you are doing, you ABSOLUTELY MUST invoke the skill.
+
+IF A SKILL APPLIES TO YOUR TASK, YOU DO NOT HAVE A CHOICE. YOU MUST USE IT.
+
+This is not negotiable. You cannot rationalize your way out of this.
+</EXTREMELY-IMPORTANT>
+
+## The Rule
+
+**Invoke relevant or requested skills BEFORE any response or action** — including clarifying questions, exploring the codebase, or checking files. If it turns out wrong for the situation, you don't have to use it.
+
+**Before entering plan mode:** if you haven't already brainstormed, invoke the brainstorming skill first.
+
+Then announce "Using [skill] to [purpose]" and follow the skill exactly. If it has a checklist, create a todo per item.
+
+## Skill Priority
+
+When multiple skills apply, process skills come first — they set the approach, then implementation skills (frontend-design, etc.) carry it out. Brainstorming and systematic-debugging are Superpowers' most common process skills, but the rule holds for any of them.
+
+- "Let's build X" → superpowers:brainstorming first, then implementation skills.
+- "Fix this bug" → superpowers:systematic-debugging first, then domain skills.
+
+## Red Flags
+
+These thoughts mean STOP—you're rationalizing:
+
+| Thought | Reality |
+|---------|---------|
+| "This is just a simple question" | Questions are tasks. Check for skills. |
+| "I need more context first" | Skill check comes BEFORE clarifying questions. |
+| "Let me explore the codebase first" | Skills tell you HOW to explore. Check first. |
+| "I can check git/files quickly" | Files lack conversation context. Check for skills. |
+| "Let me gather information first" | Skills tell you HOW to gather information. |
+| "This doesn't need a formal skill" | If a skill exists, use it. |
+| "I remember this skill" | Skills evolve. Read current version. |
+| "This doesn't count as a task" | Action = task. Check for skills. |
+| "The skill is overkill" | Simple things become complex. Use it. |
+| "I'll just do this one thing first" | Check BEFORE doing anything. |
+| "This feels productive" | Undisciplined action wastes time. Skills prevent this. |
+| "I know what that means" | Knowing the concept ≠ using the skill. Invoke it. |
+
+## Platform Adaptation
+
+If your harness appears here, read its reference file for special instructions:
+
+- Codex: `references/codex-tools.md`
+- Pi: `references/pi-tools.md`
+- Antigravity: `references/antigravity-tools.md`
+
+## User Instructions
+
+User instructions (CLAUDE.md, AGENTS.md, GEMINI.md, etc, direct requests) take precedence over skills, which in turn override default behavior. Only skip skill workflows or instructions when your human partner has explicitly told you to.
+FILE: C:\Users\Brandon\.codex\plugins\cache\crosscheck\crosscheck\0.5.0\skills\multi-model-verify\SKILL.md
+---
+name: multi-model-verify
+description: Use when planning a reference port, an API-sensitive module, or any change risky enough to need cross-model verification before implementation, or when an implemented diff must be checked against its plan and reference before merge. Fires automatically alongside superpowers requesting-code-review via the review-companion hook.
+---
+
+# Multi-Model Verify
+
+## Overview
+
+Two equal-weight advisors — Fable 5 (this session) and GPT-5.6 Sol (via the
+codex CLI) — verify and refute each other's claims before the cheap
+implementer touches code. Sol's documented fabrication risk (METR) is
+mitigated by the debate structure — evidence grounding plus mutual
+refutation — not by down-weighting either side.
+
+**REQUIRED READING before the first round:** references/debate-protocol.md.
+
+Companion to superpowers, not a replacement: it fills the cross-model review
+gap superpowers rules out of scope. `/codex:adversarial-review` remains the
+human-invoked pre-merge gate; if the codex plugin's stop-review-gate is
+toggled on, its stop-time review overlaps mode `diff` — expected, not a bug.
+
+## When to use
+
+- **Mode `plan`** — after superpowers brainstorming proposes approaches for a
+  port or API-sensitive module, before the implementation plan is written.
+- **Mode `diff`** — after implementation, alongside superpowers
+  requesting-code-review (the review-companion hook injects this
+  automatically with the matching base/head SHAs).
+- NOT for plain bugfixes, docs or release chores, GUI tweaks, or lint sweeps.
+
+## Preflight (both modes)
+
+1. `codex --version` must succeed — on failure follow references/fallbacks.md
+   (degraded mode, visibly flagged; never silently skip cross-vendor review).
+2. For port work: the reference source must exist under `References/`
+   (quote paths — some contain spaces, e.g. `References/M+ Timer`). Missing
+   → **HARD STOP before any debate round runs**: ask the user for the path
+   and go no further — do not run a codex exchange about the absence, do
+   not debate from memory, do not start a degraded mode. If the folder
+   holds version subdirectories (e.g. a `v1.4/` next to a `v1.1_old/`), use
+   the newest unless the user names one, and cite the versioned path:
+   `References/<name>/<version>/<file>:<line>`.
+   For non-port work there is no reference folder — claims ground in the
+   project's own source, specs, or upstream docs instead, same strike rule.
+
+## Mode plan
+
+1. Draft the Fable position: chosen approach, port-fidelity claims, and the
+   API/behavior risk register. Every reference claim cites a
+   `References/<name>/<file>:<line>` actually read this session — anchor
+   EVERY file with its full path the first time you cite it, manifests and
+   secondary files included (shorthand only once that file is anchored);
+   every API claim cites authoritative local docs (WoW projects:
+   `.wow-api-reference/` or a dated in-game probe result) — never memory.
+   The position has no separate artifact — it IS the claims section of the
+   step-2 brief.
+2. Compose Sol's debate brief per references/model-prompting-notes.md, write
+   it to a scratchpad file, then run round 1:
+
+   ```powershell
+   Get-Content -Raw <brief-file> | codex exec --sandbox read-only -m <canonical-model-id> -c model_reasoning_effort=<canonical-effort> --output-last-message <reply-file> -
+   ```
+
+   `<canonical-model-id>` and `<canonical-effort>` are the two declarations
+   in references/model-prompting-notes.md — read the literal values from
+   there, never from memory (the reviewer swaps by editing that one file,
+   and a remembered id silently defeats the swap).
+
+   Capture the `session id:` line printed in the run header (top of output);
+   read Sol's reply from `<reply-file>` — the stdout transcript logs every
+   file Sol reads and can run tens of KB, with the reply buried at the
+   bottom.
+3. Later rounds keep Sol's state by resuming that session — flags MUST
+   precede the resume subcommand (flags after it are a usage error):
+
+   ```powershell
+   codex exec --sandbox read-only -m <canonical-model-id> -c model_reasoning_effort=<canonical-effort> --output-last-message <reply-file> resume <SESSION_ID> "<rebuttal-brief>"
+   ```
+
+4. Iterate per debate-protocol.md until convergence or the round cap, then
+   escalate any unresolved points to the user with both positions stated.
+5. Freeze the converged plan per references/frozen-plan-format.md under the
+   project's superpowers plans dir (KitnEssentials:
+   `dev/docs/superpowers/plans/`; other projects: the superpowers default
+   `docs/superpowers/plans/`).
+
+## Mode diff
+
+Same transport and protocol. First read the frozen plan's debate record and
+its **Verification status** field. Then the brief carries the frozen plan
+path, the base/head SHAs superpowers code review used, and the
+`git diff base..head` output. Both sides check **spec fidelity** (drift from
+the frozen plan — the implementer makes zero judgment calls, so any drift is
+a finding) and, for port work, **port fidelity** (drift from the reference
+source), ending PASS / FIX / ESCALATE.
+
+**Degraded-plan poisoning rule:** a plan whose Verification status is
+DEGRADED cannot produce an ordinary diff PASS. Mode diff must first reopen
+and cross-verify the plan's claims and approved deviations (the
+retrospective pass the plan never got), and only then verify the
+implementation against it — confirming a diff matches an unsound plan
+verifies nothing. If cross-vendor verification is STILL unavailable, the
+only terminal state is `ESCALATE — CROSS-VENDOR GATE UNSATISFIED`: merging
+then requires the user's explicitly recorded risk acceptance, never a PASS.
+
+## Finish line
+
+Before it: the session's final-adjudication step (debate-protocol.md) —
+verify the last round's findings against the repo and issue the terminal
+verdict; a reviewer's PASS/FIX is never terminal by itself.
+
+End with one status line: participating models, rounds used, converged vs
+escalated points, and the verification status — `FULL`, or
+`DEGRADED (<class>, authorized by user at round N)` per fallbacks.md. The
+session emits this line itself; never delegate it to a subagent.
+
+## Common mistakes
+
+- Accepting Sol's claims about reference code without the cited lines —
+  strike the claim per protocol; do not argue against it.
+- Re-sending the full debate context each round instead of resuming the
+  codex session.
+- Running mode `diff` against different SHAs than the code review used.
+- Treating convergence as failure — a sound plan converging in one round is
+  the system working, not a skipped debate.
+FILE: C:\Users\Brandon\.codex\memories\MEMORY.md
+# Task Group: KitnRate implementation plan review and gate critique
+
+scope: Evidence-grounded reviews of the `KitnRate` implementation plan, ADRs, and glossary where the user wants ranked defects, current-doc consistency checks, task-by-task executability analysis, and judgment about whether experimental gates are actually decisive.
+applies_to: cwd=C:\Users\Brandon\Documents\KitnRate; reuse_rule=safe for similar plan/design/code-review work in this checkout when the current ADRs and glossary are re-opened from disk first, but re-check plan text and canonical docs before reusing any repo-specific conclusions
+
+## Task 1: Full-plan review of Phases 1-2, found gate/protocol/scale defects while confirming the pair algebra
+
+### rollout_summary_files
+
+- rollout_summaries/2026-07-22T07-29-12-Ny42-kitnrate_plan_review_sequence_and_gate_defects.md (cwd=\\?\C:\Users\Brandon\Documents\KitnRate, rollout_path=C:\Users\Brandon\.codex\sessions\2026\07\22\rollout-2026-07-22T02-29-12-019f88ba-84cb-7cf3-8b51-72232afab3fa.jsonl, updated_at=2026-07-22T18:51:26+00:00, thread_id=019f88ba-84cb-7cf3-8b51-72232afab3fa, fourth review pass of the current plan/ADR set; major defects were decisiveness, scale, and executability rather than the pair-practice algebra itself)
+
+### keywords
+
+- KitnRate, implementation plan review, ADR-0001, ADR-0002, ADR-0003, ADR-0004, CONTEXT.md, Evidence, Practice Time, Coverage, pair_totals, practice_time_ms, floor experiment, analyse_convergence, PoliteClient, PageArchive, archive_to_parquet, tests.test_derive, Windows PowerShell, task-by-task execution, irreversible decision
+
+## User preferences
+
+- when reviewing this repo's plan/docs, the user explicitly said the ADRs and glossary were updated and asked to read the current versions, not memory -> re-open the current `CONTEXT.md` and ADR files from disk before judging consistency or defects [Task 1]
+- when the user wanted the plan judged "as if for an engineer with no context" and said the engineer may execute tasks "task-by-task, possibly out of order" -> evaluate executability, undeclared dependencies, and sequencing, not just local correctness [Task 1]
+- when the user requested ranked code defects, test-quality defects, gate critiques, executability defects, and sequencing defects "all grounded in exact file contents" -> preserve severity ordering and exact line/symbol grounding in similar plan reviews [Task 1]
+- when the user asked whether tests are behavioral or tautological and wanted "at least two interaction failures the request did not anticipate" -> look for cross-task and cross-document failures, not just within one function or task [Task 1]
+- when the user wanted to know whether each gate was "decisive enough to justify an irreversible decision" -> judge the protocol and decision rule, not just whether the code runs [Task 1]
+
+## Reusable knowledge
+
+- `CONTEXT.md` now separates `Evidence` from `Practice Time`, keeps `Coverage` attached to the run/roster that played it, defines `Completed Run` / `Depleted Run` / `Abandoned Run` / `Practice Event` distinctly, and states there is one `Board` per Region and season [Task 1].
+- ADR-0001 keys Teams on `(region, sorted persona ids)` and treats `keystone_team_id` as alias; ADR-0003 defines `Rating = Team Score + λ · holdback · Efficiency Edge`, with holdback driven by Evidence and teams measured as of their own last Run; ADR-0004 keeps the raw layer immutable Parquet with completed/abandoned separation and manifest-pinned provenance [Task 1].
+- The pair-practice algebra is valid for a fixed five-person roster: summing `duration × C(shared,2) / 10` over runs matches the ten pairwise co-play totals divided by 10, and `pair_totals()` implements the ten projections correctly via `UNION ALL` [Task 1].
+- The plan's serious defects were pipeline-level: `practice_time_ms()` ignores its `floor` argument and truncates with `// 10`; `floor_loss_quantiles()` does per-team Python loops at the wrong complexity class for 10^5-10^6 teams; `analyse_convergence()` uses `new_in_sweep_c == 0`, which proves union saturation rather than single-sweep completeness [Task 1].
+- Task-by-task execution is currently brittle because the plan mixes POSIX shell snippets with a Windows/Python 3.12 environment, omits `archive.read()` from Task 5's declared interface, duplicates schema authority as `RUN_FIELDS` vs `RUN_SCHEMA`, and imports `full_card` / `mkrun` from `tests.test_derive` in Task 10 [Task 1].
+- In the crawler/archive/load/derive path, `PoliteClient.get_text()` correctly counts consecutive failures, but `PageArchive.write()` is not atomic, `parse_page()` can misread malformed payloads as valid empty pages, and `archive_to_parquet()` materializes the whole season in Python memory before writing Parquet [Task 1].
+- The cheapest stronger Gate 2 add-on is a fixed-cohort sensitivity table: define the cohort once, then report per-candidate-floor losses and retention for that same cohort instead of reselecting teams at each floor [Task 1].
+
+## Failures and how to do differently
+
+- Symptom: a revised plan review drifts into stale judgments. Cause: older design-round memory is reused after the ADRs/glossary changed. Fix: re-read the current canonical docs from disk before reviewing the plan [Task 1].
+- Symptom: a mathematically correct derivation still yields a bad implementation. Cause: correctness, scalability, and gate decisiveness were treated as one question. Fix: review those dimensions separately and explicitly [Task 1].
+- Symptom: a gate appears convincing but does not justify an irreversible decision. Cause: the protocol only emits a descriptive statistic or snapshot condition. Fix: require closed cohorts, repeatability/full-depth equality for completeness, and pre-registered thresholds/cohorts for destructive floor decisions [Task 1].
+- Symptom: tests pass while the external contract or execution order is still broken. Cause: fixtures are hand-authored, helpers are imported across test modules, or task dependencies are implicit. Fix: pin captured-response provenance, keep shared builders in dedicated fixtures, and declare every dependency in the task header [Task 1].
+- Symptom: a Windows-targeted plan is awkward or broken to execute. Cause: POSIX shell snippets and undeclared environment assumptions leaked into the task text. Fix: standardize on PowerShell or explicitly require Git Bash, and make shell assumptions part of the plan contract [Task 1].
+
+# Task Group: KitnEssentials workspace help-routing
+
+scope: Bare `--help` or similar command-routing requests in the `KitnEssentials` workspace where the user wants project-specific guidance, available skills, and read-only boundaries rather than shell-generic help.
+applies_to: cwd=C:\Users\Brandon\Documents\KitnDev\KitnEssentials; reuse_rule=safe for similar workspace-help requests in this checkout family, but re-check the current project skill surface before listing commands if the repo help system changes
+
+## Task 1: Interpret bare `--help` in the workspace, returned project-specific help
+
+### rollout_summary_files
+
+- rollout_summaries/2026-07-24T13-57-37-vseY-help_routing_check_kitnessentials.md (cwd=\\?\C:\Users\Brandon\Documents\KitnDev\KitnEssentials, rollout_path=C:\Users\Brandon\.codex\sessions\2026\07\24\rollout-2026-07-24T08-57-42-019f946a-d5c0-7770-8ed0-66ca354a87d8.jsonl, updated_at=2026-07-24T13:58:24+00:00, thread_id=019f946a-d5c0-7770-8ed0-66ca354a87d8, read-only routing run treated bare `--help` as a request for workspace-specific command guidance and surfaced the current project skill list)
+
+### keywords
+
+- help-routing, --help, KitnEssentials assistant, kitnessentials, superpowers, using-superpowers, read-only, source-command-quick-fix, source-command-audit, source-command-release, plain language
+
+## User preferences
+
+- when the user entered only `--help` in this workspace -> treat it as a request for project-specific command/help routing first, not generic shell help [Task 1]
+- when the help request happened in a read-only session and the user did not ask for edits -> keep the response informational and do not imply files can be changed [Task 1]
+
+## Reusable knowledge
+
+- The workspace help response can use a short `KitnEssentials assistant` help block, then end with "Use plain language or invoke a skill directly." [Task 1]
+- The visible project help surface at this point included `$source-command-quick-fix`, `$source-command-audit`, `$source-command-api-validate`, `$source-command-check-references`, `$source-command-new-module`, `$source-command-port-module`, `$source-command-changelog-entry`, `$source-command-release`, and `$source-command-memory-audit` [Task 1].
+- In read-only help mode, the safe contract is "I can inspect, diagnose, review, and recommend changes, but cannot modify files." [Task 1]
+
+## Failures and how to do differently
+
+- Symptom: a bare `--help` request in this repo gets answered as shell-generic help or with an edit-oriented plan. Cause: workspace context and read-only mode were ignored. Fix: surface the repo-specific command/skill map first and state the read-only boundary explicitly [Task 1]
+
+# Task Group: KitnEssentials WoW addon read-only source review
+
+scope: Read-only, adversarial WoW addon investigations and pre-merge reviews in `KitnEssentials` where the user wants source-backed Blizzard/API analysis, exact file:line citations, and an explicit merge/refutation verdict without code edits.
+applies_to: cwd=C:\Users\Brandon\Documents\KitnDev\KitnEssentials; reuse_rule=safe for similar read-only WoW addon source-review/debugging work in this checkout family, but re-check Blizzard source clones, branch state, and commit scope before reusing repo-specific conclusions
+
+## Task 1: DamageMeter reset-on-key-start pre-merge review of `fix/dm-key-reset-toggle`, passed branch-only lifecycle verification
+
+### rollout_summary_files
+
+- rollout_summaries/2026-07-18T09-08-47-VA9G-damagemeter_reset_on_key_start_premerge_review.md (cwd=\\?\C:\Users\Brandon\Documents\KitnDev\KitnEssentials, rollout_path=C:\Users\Brandon\.codex\sessions\2026\07\18\rollout-2026-07-18T04-08-52-019f747c-4030-7760-a421-8a79d5136f30.jsonl, updated_at=2026-07-18T09:13:50+00:00, thread_id=019f747c-4030-7760-a421-8a79d5136f30, read-only review confirmed no correctness/spec-drift issues after tracing the reset gate, GUI default-true toggle, and branch-only lifecycle harness)
+- rollout_summaries/2026-07-18T08-59-41-cfzc-damagemeter_reset_on_key_start_premerge_review.md (cwd=\\?\C:\Users\Brandon\Documents\KitnDev\KitnEssentials, rollout_path=C:\Users\Brandon\.codex\sessions\2026\07\18\rollout-2026-07-18T03-59-46-019f7473-e8f1-77f2-8507-76eab3d83a22.jsonl, updated_at=2026-07-18T09:01:36+00:00, thread_id=019f7473-e8f1-77f2-8507-76eab3d83a22, earlier branch-object review that established the exact `git show`-only evidence contract and the targeted gate/GUI inspection path)
+
+### keywords
+
+- DamageMeter, fix/dm-key-reset-toggle, b111073, ResetOnKeyStart, CHALLENGE_MODE_START, ResetAllCombatSessions, BumpSegment, ApplyActiveContext, branch drift, git show, luacheck, git diff --check, PASS
+
+- Related skill: skills/wow-addon-readonly-review/SKILL.md
+
+## Task 2: MythicPlusTimer count-split repair review of commit 59321e48, merge blocked by profile rebinding cache poison
+
+### rollout_summary_files
+
+- rollout_summaries/2026-07-14T20-00-23-fDWR-kitnessentials_mpt_count_split_adversarial_review.md (cwd=\\?\C:\Users\Brandon\Documents\KitnDev\KitnEssentials, rollout_path=C:\Users\Brandon\.codex\sessions\2026\07\14\rollout-2026-07-14T15-00-28-019f6237-5fb0-7a41-85f4-7f83334e1805.jsonl, updated_at=2026-07-14T20:06:56+00:00, thread_id=019f6237-5fb0-7a41-85f4-7f83334e1805, shared `liveElapsed` fix was confirmed but the merge stayed blocked because a foreign cache can enter through mid-run profile refresh)
+
+### keywords
+
+- MythicPlusTimer, 59321e48, OnDisable, liveElapsed, profile rebinding, ProfileManager, UpdateDB, ApplySettings, CommitSplits, UpdateObjectives, CHALLENGE_MODE_START, AceAddon-3.0, PROFILE_REBIND_POISON, DO NOT MERGE
+
+- Related skill: skills/wow-addon-readonly-review/SKILL.md
+
+## Task 3: MythicPlusTimer provenance-guard review of commit 6923a35, merge blocked because older foreign splits still persist
+
+### rollout_summary_files
+
+- rollout_summaries/2026-07-14T19-24-23-E0Xr-kitnessentials_mpt_count_split_adversarial_review_6923a35.md (cwd=\\?\C:\Users\Brandon\Documents\KitnDev\KitnEssentials, rollout_path=C:\Users\Brandon\.codex\sessions\2026\07\14\rollout-2026-07-14T14-24-28-019f6216-6936-7c63-9ad1-4b7864178435.jsonl, updated_at=2026-07-14T19:35:52+00:00, thread_id=019f6216-6936-7c63-9ad1-4b7864178435, the `saved > elapsed` backstop rejected some postdated caches but still allowed older foreign splits and a reachable zero-clock hole)
+
+### keywords
+
+- MythicPlusTimer, 6923a35, count split repair, UpdateObjectives, CacheBelongsToRun, CommitSplits, StartRun, ResetRun, CompleteRun, SCENARIO_CRITERIA_UPDATE, GetWorldElapsedTime, zero-sticky, older-foreign-committed, DO NOT MERGE
+
+- Related skill: skills/wow-addon-readonly-review/SKILL.md
+
+## Task 4: MythicPlusTimer level-0 reload-recovery review of commit 669d04a, merge blocked by stale same-map cache adoption
+
+### rollout_summary_files
+
+- rollout_summaries/2026-07-14T19-15-41-K7KW-kitnessentials_mpt_level0_reload_recovery_review.md (cwd=\\?\C:\Users\Brandon\Documents\KitnDev\KitnEssentials, rollout_path=C:\Users\Brandon\.codex\sessions\2026\07\14\rollout-2026-07-14T14-15-46-019f620e-72d5-7f63-acda-656cb7d94a0a.jsonl, updated_at=2026-07-14T19:20:51+00:00, thread_id=019f620e-72d5-7f63-acda-656cb7d94a0a, green helper spec still failed the disabled/recovery lifecycle edge)
+
+### keywords
+
+- MythicPlusTimer, 669d04a, CacheBelongsToRun, level-0 window, UpdateObjectives, RepairRunInfo, CHALLENGE_MODE_START, CHALLENGE_MODE_RESET, reload-recovery, stale same-map cache, Lua harness, DO NOT MERGE
+
+- Related skill: skills/wow-addon-readonly-review/SKILL.md
+
+## Task 5: MythicPlusTimer complete-run gating review of commit 96500a1, merge blocked by reload-recovery stale PB persistence
+
+### rollout_summary_files
+
+- rollout_summaries/2026-07-14T18-59-15-goRC-kitnessentials_mythicplustimer_complete_run_gating_review.md (cwd=\\?\C:\Users\Brandon\Documents\KitnDev\KitnEssentials, rollout_path=C:\Users\Brandon\.codex\sessions\2026\07\14\rollout-2026-07-14T13-59-20-019f61ff-666f-7a21-b680-84539899c7ac.jsonl, updated_at=2026-07-14T19:06:20+00:00, thread_id=019f61ff-666f-7a21-b680-84539899c7ac, completion-path gate was correct but reload recovery could still stamp and persist a stale count-objective PB)
+
+### keywords
+
+- MythicPlusTimer, 96500a1, run.completed, UpdateObjectives, CompleteRun, SCENARIO_CRITERIA_UPDATE, GetWorldElapsedTime, reload recovery, CommitSplits, stale clearTime, DO NOT MERGE
+
+- Related skill: skills/wow-addon-readonly-review/SKILL.md
+
+## Task 6: MythicPlusTimer live-clock defect review of commit 0be3cec, merge blocked by stale completion backfill
+
+### rollout_summary_files
+
+- rollout_summaries/2026-07-14T18-47-59-NMF3-kitnessentials_mythicplustimer_count_split_review_0be3cec.md (cwd=\\?\C:\Users\Brandon\Documents\KitnDev\KitnEssentials, rollout_path=C:\Users\Brandon\.codex\sessions\2026\07\14\rollout-2026-07-14T13-48-04-019f61f5-139e-7210-a056-ef96b54230f9.jsonl, updated_at=2026-07-14T18:55:48+00:00, thread_id=019f61f5-139e-7210-a056-ef96b54230f9, live-count fix helped active events but still re-read the world timer during `CompleteRun` backfill)
+- rollout_summaries/2026-07-14T18-09-38-q3BW-mpt_count_split_adversarial_review_live_clock_defect.md (cwd=\\?\C:\Users\Brandon\Documents\KitnDev\KitnEssentials, rollout_path=C:\Users\Brandon\.codex\sessions\2026\07\14\rollout-2026-07-14T13-09-43-019f61d1-f9eb-7b31-aa0a-c38411fc24ac.jsonl, updated_at=2026-07-14T18:21:06+00:00, thread_id=019f61d1-f9eb-7b31-aa0a-c38411fc24ac, earlier adversarial review that established the stale completion-backfill defect and verified historical vs HEAD spec status)
+
+### keywords
+
+- MythicPlusTimer, 0be3cec, GetWorldElapsedTime(1), run.elapsed, CompleteRun, UpdateObjectives, CommitSplits, challenge timer ID, stale world clock, CHANGELOG, busted historical replay, DO NOT MERGE
+
+- Related skill: skills/wow-addon-readonly-review/SKILL.md
+
+## Task 7: MythicPlusTimer count-split repair review, merge blocked by lifecycle bugs in repair-flag persistence and new-entry handling
+
+### rollout_summary_files
+
+- rollout_summaries/2026-07-14T04-39-33-O4sr-kitnessentials_mpt_count_split_adversarial_review.md (cwd=\\?\C:\Users\Brandon\Documents\KitnDev\KitnEssentials, rollout_path=C:\Users\Brandon\.codex\sessions\2026\07\13\rollout-2026-07-13T23-39-38-019f5eec-4f9f-7120-b590-cf03bfd4dcf3.jsonl, updated_at=2026-07-14T04:46:15+00:00, thread_id=019f5eec-4f9f-7120-b590-cf03bfd4dcf3, core diagnosis held but merge was blocked by repair-flag persistence and unstamped fresh entries)
+
+### keywords
+
+- MythicPlusTimer, count split repair, RepairCountSplitsIn, UpdateSplits, ResolvePBFrom, CommitSplits, ResetRun, StartRun, busted, lifecycle harness, countRepaired, DO NOT MERGE
+
+- Related skill: skills/wow-addon-readonly-review/SKILL.md
+
+## Task 8: Totem dupes root-cause thesis audit, refuted candidate cause and grounded the safer direct-slot fix direction
+
+### rollout_summary_files
+
+- rollout_summaries/2026-07-13T21-03-19-zIgJ-wow_addon_totem_dupes_root_cause_investigation.md (cwd=\\?\C:\Users\Brandon\Documents\KitnDev\KitnEssentials, rollout_path=C:\Users\Brandon\.codex\sessions\2026\07\13\rollout-2026-07-13T16-03-24-019f5d4a-9e6f-7cd1-b9f5-bfa1ab5edcc5.jsonl, updated_at=2026-07-13T21:12:03+00:00, thread_id=019f5d4a-9e6f-7cd1-b9f5-bfa1ab5edcc5, refuted the `TotemFrame` thesis and grounded the safer direct-slot fix direction)
+
+### keywords
+
+- TotemTracker, Future Self, TotemFrame, CooldownViewer, GetTotemDuration, GetTotemInfo, framepool, layout, spellID deduplication, AddUI-Totem, 12.0.7, source investigation
+
+- Related skill: skills/wow-addon-readonly-review/SKILL.md
+
+## Task 9: TotemTracker pre-merge secret-gate review, merge blocked on probe-required uncertainty
+
+### rollout_summary_files
+
+- rollout_summaries/2026-07-13T21-01-18-ZDwS-totemtracker_review_secret_gate_and_lifecycle_check.md (cwd=\\?\C:\Users\Brandon\Documents\KitnDev\KitnEssentials, rollout_path=C:\Users\Brandon\.codex\sessions\2026\07\13\rollout-2026-07-13T16-01-23-019f5d48-c794-7222-b31d-8f02be3bfc1a.jsonl, updated_at=2026-07-13T21:09:56+00:00, thread_id=019f5d48-c794-7222-b31d-8f02be3bfc1a, merge stayed blocked because `if not icon` was not statically settled under secret-value rules)
+
+### keywords
+
+- git diff main, TotemTracker.lua, GetTotemInfo, SecretWhenTotemSlotSecret, not icon, icon ~= nil, InCombatLockdown, SecureActionButtonTemplate, DecimalThreshold, classRestriction, preview fallout, probe required
+
+- Related skill: skills/wow-addon-readonly-review/SKILL.md
+
+## Task 10: DamageMeter `TipHeaderName` seam-export review of commit `f9db031`, passed with real-body spec coverage
+
+### rollout_summary_files
+
+- rollout_summaries/2026-07-19T22-02-05-qpYu-dm_tipheadername_seam_review_pass.md (cwd=\\?\C:\Users\Brandon\Documents\KitnDev\KitnEssentials, rollout_path=C:\Users\Brandon\.codex\sessions\2026\07\19\rollout-2026-07-19T17-02-10-019f7c66-95f5-7743-b24a-4ae7c4c7a92a.jsonl, updated_at=2026-07-19T22:03:52+00:00, thread_id=019f7c66-95f5-7743-b24a-4ae7c4c7a92a, read-only closing-round review confirmed the seam export was runtime-inert, the new tests exercised the real helper body, and focused/full gates plus `luacheck` were clean)
+
+### keywords
+
+- DamageMeter, Detail.lua, TipHeaderName, seam export, dm_breakdown_spec.lua, real function body, cached name wins, Breakdown, luacheck, busted, PASS
+
+- Related skill: skills/wow-addon-readonly-review/SKILL.md
+
+## Task 11: DamageMeter identity-memo review of `ed49e26`, runtime fix passed and the earlier headless-coverage overreach was narrowed
+
+### rollout_summary_files
+
+- rollout_summaries/2026-07-19T21-48-52-y3zx-damagemeter_identity_memo_review_and_spec_verification.md (cwd=\\?\C:\Users\Brandon\Documents\KitnDev\KitnEssentials, rollout_path=C:\Users\Brandon\.codex\sessions\2026\07\19\rollout-2026-07-19T16-48-57-019f7c5a-7af7-7b60-9714-a2b0d3dc6997.jsonl, updated_at=2026-07-19T21:59:49+00:00, thread_id=019f7c5a-7af7-7b60-9714-a2b0d3dc6997, read-only review confirmed the identity-memo runtime fix is secret-safe and source-cited, while preserving that test existence alone did not settle the earlier edge-case complaints)
+
+### keywords
+
+- DamageMeter, ed49e26, identity memo, History.lua, Window.lua, Detail.lua, dm_history_spec.lua, ConditionalSecret, plain-name memo, secret values, PASS, FIX
+
+- Related skill: skills/wow-addon-readonly-review/SKILL.md
+
+## Task 12: DamageMeter key-history follow-up verification on `ef1db8a..4dd295a`, prior findings closed after direct re-check and failure-path probe
+
+### rollout_summary_files
+
+- rollout_summaries/2026-07-19T04-23-08-YmOT-damagemeter_history_followup_verification.md (cwd=\\?\C:\Users\Brandon\Documents\KitnDev\KitnEssentials, rollout_path=C:\Users\Brandon\.codex\sessions\2026\07\18\rollout-2026-07-18T23-23-13-019f789d-1546-7793-832c-5253dd0ac86b.jsonl, updated_at=2026-07-19T07:17:30+00:00, thread_id=019f789d-1546-7793-832c-5253dd0ac86b, verification round reopened the fix range, proved the failing-reset branch was actually exercised, and confirmed focused/full gates plus `luacheck` stayed clean)
+
+### keywords
+
+- DamageMeter, key-history, ef1db8a..4dd295a, ResetAllCombatSessions, dm_history_spec.lua, failure-path probe, SegmentMenu.lua, Window.lua, GUI-DamageMeter.lua, Core.lua, per-finding verdicts, PASS
+
+- Related skill: skills/wow-addon-readonly-review/SKILL.md
+
+## Task 13: DamageMeter pinned-session meter-type switch review of commit `8a35cae`, passed after direct runtime-path tracing and red-green verification
+
+### rollout_summary_files
+
+- rollout_summaries/2026-07-24T13-59-00-Nsa5-damagemeter_pinned_session_switch_review_8a35cae.md (cwd=\\?\C:\Users\Brandon\Documents\KitnDev\KitnEssentials, rollout_path=C:\Users\Brandon\.codex\sessions\2026\07\24\rollout-2026-07-24T08-59-05-019f946c-18e9-7a73-9ae7-6eeadce317f9.jsonl, updated_at=2026-07-24T14:07:15+00:00, thread_id=019f946c-18e9-7a73-9ae7-6eeadce317f9, read-only adversarial review verified pinned negative-id and positive-id sessions survive meter-type changes, stay blank on missing-type data, and the new tests fail on the parent implementation)
+- rollout_summaries/2026-07-20T23-27-03-GS3B-kitnessentials_review_commit_8a35cae_adversarial_dm_key_hist.md (cwd=\\?\C:\Users\Brandon\Documents\KitnDev\KitnEssentials, rollout_path=C:\Users\Brandon\.codex\sessions\2026\07\20\rollout-2026-07-20T18-27-08-019f81da-b9a0-77e1-85de-c572e75cc8c7.jsonl, updated_at=2026-07-20T23:27:15+00:00, thread_id=019f81da-b9a0-77e1-85de-c572e75cc8c7, rollout preserved the adversarial review checklist and reporting contract, but no code/tool evidence was captured so the fix remained unverified)
+
+### keywords
+
+- DamageMeter, 8a35cae, feat/dm-key-history, Core.lua, History.lua, Window.lua, SegmentMenu.lua, Selector.lua, dm_history_spec.lua, W._curSessionID, ResolveRenderSession, EffectiveSessionID, CachedSession, HistorySession, GetCombatSessionFromID, missing_type_session_nil, parent_negative_pin_retained, PASS
+
+- Related skill: skills/wow-addon-readonly-review/SKILL.md
+
+## User preferences
+
+- when doing WoW addon investigations or reviews in this repo, the user said: "READ-ONLY analysis, no edits of any kind", "Adversarial pre-merge REVIEW ONLY — do not edit any files", "READ-ONLY task. Do not edit any files", and "READ-ONLY adversarial review, no edits" -> keep the run read-only unless the user later switches modes [Task 1][Task 2][Task 3][Task 4][Task 5][Task 6][Task 7][Task 8][Task 9]
+- when the working tree may not match the reviewed branch, the user warned: "do NOT trust the working-tree copies of these two files" -> read pinned review targets with `git show <branch>:<file>` and verify provenance before reasoning about the diff [Task 1][Task 13]
+- when evaluating another engineer's explanation, the user said: "Be adversarial: actively try to break this argument, do not confirm it by default", "Do not accept the stated rationale at face value -- try to break it", and "Try to break the argument do not rubber-stamp it" -> start with falsification-first reasoning instead of trying to rescue the thesis [Task 2][Task 3][Task 5][Task 6][Task 8]
+- when making factual Blizzard/API claims, the user required "Every factual claim about Blizzard behavior must cite a specific file:line", "For each of the six questions below, cite exact file:line evidence from the current repo state", and asked for "concrete defects with file:line and a failure scenario" -> include exact source citations, not uncited summaries [Task 1][Task 2][Task 3][Task 4][Task 5][Task 6][Task 8][Task 9]
+- when the user required "Every claim must cite a concrete file:line from the actual diff or surrounding code you read, not a guess" and wanted line-cited findings plus "the actual busted and luacheck output/counts observed" -> preserve exact evidence discipline and report observed counts verbatim rather than target counts or paraphrases [Task 10][Task 11][Task 13]
+- when a review is a follow-up verification round, the user asked to verify each finding is "genuinely closed", to "confirm the regression test actually drives the failure path", and to inspect `git show 4f7fc60` directly -> reopen the exact fix range or amended commit, re-check each prior finding one by one, and inspect the actual test body instead of trusting the earlier summary [Task 11][Task 12]
+- when a review is scoped to one commit, the user said "do not review other commits or the working tree diff beyond this one" -> pin analysis tightly to the named commit and explicitly ignore unrelated working-tree edits [Task 6]
+- when the user asked for "correctness and spec drift only, not style" -> keep findings focused on source-backed correctness/spec drift, not aesthetics [Task 1]
+- when a prior run hung or the task is merge-gating, the user asked to prioritize a verdict over exhaustive exploration -> optimize for decisive closure once the blocking path is proven [Task 2][Task 6]
+- when the evidence is incomplete, the user asked for each contested point to be labeled either "settled by docs/reference" or "requires an in-instance probe — not settleable statically" -> preserve epistemic status and say "probe required" when static sources do not settle it [Task 8][Task 9]
+- when closing similar analyses, the user asked for a `CONFIRMED` or `REFUTED` line, structured per-question `VERIFIED`/`REFUTED` answers, and a final `MERGE`/`DO NOT MERGE` verdict, and in the DamageMeter review required a terminal `PASS or FIX` line -> end with a blunt verdict that matches the user’s requested merge-gate format [Task 1][Task 2][Task 3][Task 4][Task 5][Task 6][Task 8][Task 9]
+- when the user required `Return: (1) a PASS or FIX verdict, (2) a numbered list of concrete findings each with file:line and a one-line explanation, (3) explicit answers to attack vectors 1-5, (4) the actual busted and luacheck output/counts observed)` or asked for "Numbered per-finding verdicts, then overall PASS or FIX" -> carry that exact adjudication structure into similar formal review runs instead of collapsing it into a generic summary [Task 12][Task 13]
+- when a review comes after an earlier acceptance round, the user still wanted the seam decision re-verified against the repo -> re-check accepted assumptions against current commit contents instead of inheriting earlier narrative [Task 10]
+- when the user challenged the earlier "no busted seam" claim around `Detail.lua` -> distinguish "full UI path is in-game-only" from "pure helper logic already has a headless seam" before claiming something cannot be tested headlessly [Task 11]
+- when a reference addon appears to solve the symptom, the user still asked whether it "actually work[s] correctly, or does it just look like it does?" and wanted latent bugs called out -> separate "works for this probe" from "safe to copy wholesale" [Task 8]
+
+## Reusable knowledge
+
+- `main..fix/dm-key-reset-toggle` touched exactly `Modules/DamageMeter/Core.lua` and `GUI/GUITabs/GUICombat/GUI-DamageMeter.lua`; `b111073` is the reviewed commit, `ResetOnKeyStart = true` was added to `DM_DEFAULTS`, and the GUI used the repo’s default-true convention (`db.X ~= false`) for the new checkbox [Task 1].
+- In the DamageMeter branch, `BumpSegment()` remained outside the reset gate and `ApplyActiveContext()` still ran after it; the branch-only harness verified both continue to execute when `ResetOnKeyStart` is false, while the gated teardown clears `_curSessionID`, closes detail panels, invalidates the targets cache, wipes `_sessionOutcomes`, and repaints only on the reset-enabled path [Task 1].
+- Branch-only pre-merge review in a drifted checkout can still be validated headlessly: read the exact branch blobs with `git show`, lint them through stdin, run `git diff --check`, and use a small loader harness that stubs file-scope WoW globals before loading the module [Task 1].
+- In `Modules/DamageMeter/Detail.lua`, `TipHeaderName` is a file-local helper at `1216`, existing callers still invoke the local helper, and adding `DM.TipHeaderName = TipHeaderName` at `1822` is runtime-inert for current addon behavior because no in-addon caller reads the export [Task 10].
+- `dev/spec/dm_breakdown_spec.lua` reloads the real `Modules/DamageMeter/Detail.lua` headlessly per test, so the `TipHeaderName` tests exercise the real function body rather than a mirrored helper. The added branches covered cached-name precedence, GUID-memo fallback, memo miss to `Breakdown`, and no-memo/load-order safety [Task 10].
+- `DamageMeterCombatSource.name` is locally documented as `ConditionalSecret`, so the identity-memo design around departed members is only safe if names are learned from changed plain reads, stored as plain-or-nil memo state, and cleared again on secret ticks; `ed49e26` preserved those invariants in `History.lua`, `Window.lua`, and `Detail.lua` [Task 11].
+- `4f7fc60` is test-only and tightened the identity-memo spec in the two places the earlier review had left soft: the secret-input test now seeds a live memo before the guarded lookup, and the no-downgrade test now asserts the bare first sighting before the realm-bearing upgrade/flicker sequence [Task 11].
+- For `Detail.lua`, the repo’s actual headless boundary is "pure helper logic can be unit-tested, frame layout / visual behavior is in-game only." `dev/spec/dm_breakdown_spec.lua` plus the DM static exports are the established seam; do not collapse those two buckets into one blanket "not headless-testable" claim [Task 10][Task 11].
+- `4dd295a` fixed the stale own-reset flag by arming `_historyOwnReset` only inside the guarded `ResetAllCombatSessions` call and clearing it on `pcall` failure; the paired regression test in `dev/spec/dm_history_spec.lua:339-348` and the ad hoc failure-path probe both confirmed the next external reset still clears pending provenance afterward [Task 12].
+- The July 19 DamageMeter follow-up closed four earlier findings in one range: retention slider display-clamps now match runtime retention semantics, flyout rows participate in `ReapplyBarVisuals`, flyout wheel input is swallowed, and the failing-reset branch is both source-fixed and directly exercised [Task 12].
+- The July 20 `8a35cae` review brief remained useful as the attack-surface checklist: `_curSessionID`, `ResolveRenderSession`, header-label behavior, empty/missing history-type handling, and whether the new specs really fail on pre-fix code [Task 13].
+- The July 24 adversarial review closed that `8a35cae` loop: `GetSession(sessionType, dmType, sessionID)` routes negative ids through `HistorySession(sessionID, dmType)` and positive ids through `C_DamageMeter.GetCombatSessionFromID(sessionID, dmType)`, so the pinned id remains meter-type aware in both branches [Task 13].
+- `HistorySession(sessionID, dmType)` returns `entry.byType[dmType]`, `CachedSession(sessionType, dmType, sessionID)` keys on `dmType` and is wiped every `Tick`, and `ResolveRenderSession` suppresses live fallback while a pin exists; together those paths mean a pinned session with no data for the selected meter type stays blank instead of silently reverting to live data [Task 13].
+- The headless `dm_history_spec.lua` loader for this review stubs `Enum`/`Tick`, leaves `CloseDetail`/`CloseSelector` absent, and is therefore suitable for pin/override bookkeeping checks rather than UI rendering claims [Task 13].
+- The requested gates on `8a35cae` all passed: focused spec `41 successes / 0 failures / 0 errors`, full suite `841 successes / 0 failures / 0 errors`, and `luacheck Modules/DamageMeter/Core.lua` returned `0 warnings / 0 errors` [Task 13].
+- A parent-commit red-green probe confirmed the new tests are meaningful: `8a35cae^` still cleared `W._curSessionID`, causing both negative-id and positive-id pin-retention checks to fail, while the reviewed commit preserved the pin and still suppressed live fallback on missing-type data [Task 13].
+- `UpdateObjectives` review outcomes now form a sequence: the original repair had lifecycle bugs around `countRepaired` state and unstamped fresh entries [Task 7]; the `GetWorldElapsedTime(1)` live-read change fixed active-event lag but still re-read the world clock during `CompleteRun` backfill [Task 6]; the `not run.completed` gate fixed that completion-path defect [Task 5]; later patches still failed because relaxed provenance and cache ownership rules allowed stale splits through reload, level-0, and profile-rebind paths [Task 2][Task 3][Task 4].
+- `CommitSplits` is repeatedly the terminal persistence risk surface: it is improve-only, persists any positive `clearTime`, and lacks provenance or upper-bound sanity checks, so any stale positive value accepted upstream can become a PB [Task 2][Task 3][Task 4][Task 5][Task 6][Task 7].
+- `StartRun` seeds `run.elapsed = 0` and `OnTimerTick` is the only live refresh; `SCENARIO_CRITERIA_UPDATE` does not refresh `run.elapsed` itself. That makes zero-clock and lagging-clock windows real review targets for count-objective logic [Task 3][Task 5][Task 6].
+- In this repo’s vendored AceAddon-3.0, `OnDisable` is manual-disable-only; `/reload` and normal login flow do not call it. Treat disable-time cleanup as only one provenance boundary, not proof that stale state cannot re-enter [Task 2].
+- `ProfileManager:RefreshAllModules()` rebinds module DB state on profile change/copy/reset via `module:UpdateDB()` and `module:ApplySettings()`. For MythicPlusTimer, that means a foreign split cache stored in another profile can become live mid-run without a disable cycle [Task 2].
+- `CacheBelongsToRun` still allows map-only matching while level is 0, so any fix layered on top of it must treat early run identity as relaxed and vulnerable to same-map stale cache adoption [Task 3][Task 4].
+- `Blizzard_UnitFrame/Mainline/TotemFrame.lua` did not support the claimed "at most 2" visible-cap mechanism; `CooldownViewer` has a real collapse layer, but it deduplicates by `spellID`, which would collapse same-spell dupes to one representative entry rather than two [Task 8].
+- On build `12.0.7`, the safer TotemTracker direction remained direct `1..GetNumTotemSlots()` enumeration plus explicit compaction of sparse occupied slots; that bypasses both Blizzard `TotemFrame` assumptions and `CooldownViewer` `spellID` deduplication [Task 8].
+- `GetTotemInfo` is documented as `SecretWhenTotemSlotSecret = true` and `MayReturnNothing = true`; repo precedent for secret-safe presence checks exists in `Modules/DungeonTimers/Trash/DungeonTrash.lua` via `issecretvalue(...) or ... ~= nil` short-circuiting [Task 9].
+- The pre-merge TotemTracker review found no confirmed lifecycle or secure-frame defect in the patch outside the unresolved secret gate: `CreateDestroyButtons` stayed `InCombatLockdown()`-guarded, dual call sites were idempotent, `totemButtons` remained effectively dense, and removing `classRestriction = "SHAMAN"` only broadened preview eligibility [Task 9].
+- In this environment, `rg` was unavailable, so the reliable fallback was PowerShell-native search with `Get-ChildItem -Recurse`, `Get-Content`, `Select-String`, and selective `git grep` [Task 1][Task 2][Task 3][Task 4][Task 5][Task 6][Task 7][Task 8][Task 9]
+
+## Failures and how to do differently
+
+- Symptom: the working tree is on a different branch from the review target. Cause: reasoning from checkout copies instead of the pinned branch blobs can review the wrong code entirely. Fix: use `git show <branch>:<file>` for exact targets, then run lint/harness checks against those branch blobs instead of the working tree [Task 1].
+- Symptom: a first branch-only Lua harness fails immediately on nil WoW globals. Cause: the ad hoc loader did not install file-scope globals such as `IsInInstance` before loading the module. Fix: stub the required globals first, then re-run the harness [Task 1].
+- Symptom: a review prompt narrates a RED/GREEN story or a root cause confidently, but the run has not reproduced that state. Cause: user-provided or earlier-round narrative was treated like evidence. Fix: label the story unverified until the exact failing state, diff, or test output is recreated from repo evidence [Task 10][Task 13].
+- Symptom: a meter-type-switch patch looks plausible because the selected session id survives, but the actual data path may still be wrong for history ids, stored ids, or missing meter types. Cause: review stopped at `_curSessionID` retention and did not trace `GetSession`, `HistorySession`, `ResolveRenderSession`, and the parent implementation. Fix: trace the session-routing chain first, then prove red-green behavior on the parent commit and probe the missing-type blank path before issuing `PASS` [Task 13].
+- Symptom: an amended follow-up review inherits the previous verdict without re-checking the actual fix range. Cause: the earlier summary or acceptance round was treated as authoritative. Fix: reopen the exact follow-up range or commit, inspect the concrete diff and test body, and then issue fresh per-finding verdicts [Task 11][Task 12].
+- Symptom: a regression test exists, but it may not exercise the failure branch that supposedly closes the bug. Cause: review stopped at the test name or pass count. Fix: inspect the test body for the erroring fake/guard path and, when the branch matters, run a tiny read-only failure-path probe that asserts the branch was hit and the state cleared as intended [Task 12].
+- Symptom: a focused busted/helper suite is green, but the patch still is not merge-safe. Cause: the tests never exercised live `UpdateObjectives` provenance, profile rebinding, or fresh-entry creation paths. Fix: for repair/cleanup fixes, trace `StartRun`/`ResetRun`/`CompleteRun` plus profile-refresh callbacks and validate with a small read-only lifecycle harness instead of helper tests alone [Task 2][Task 3][Task 4][Task 7].
+- Symptom: an `OnDisable` wipe looks like the stale-cache fix. Cause: the review stopped at reload/disable safety and missed later AceDB profile rebinding. Fix: separate "reload safety" from "profile rebinding safety" and inspect `ProfileManager:RefreshAllModules()` before calling provenance closed [Task 2].
+- Symptom: a provenance guard rejects some postdated values yet still allows corruption. Cause: the predicate only checked `saved > elapsed`, which filters future-looking caches but not older foreign splits that happen to be below the live clock. Fix: test both newer-than-clock and older-than-clock foreign values, and include zero-clock windows where `elapsed` is still 0 [Task 3].
+- Symptom: a level-0 ownership helper looks correct in isolation but still lets stale data through. Cause: the module can miss normal start/reset wipes while disabled, and the relaxed same-map predicate then re-stamps a foreign cache during recovery. Fix: test disable/re-enable and recovery flows where event-driven wipes are skipped [Task 4].
+- Symptom: a plausible Blizzard-mirroring explanation sounds good but does not match source. Cause: the candidate thesis was not falsified hard enough up front. Fix: inspect the actual Blizzard frame update path, pool, and layout code before accepting a mechanism like "TotemFrame caps this at 2" [Task 8].
+- Symptom: source review disproves one candidate cause but still does not fully explain the observed number. Cause: the visible frame stack/runtime context is missing. Fix: say explicitly that the candidate was refuted and, if the exact cause remains unknown, stop at "runtime/frame-stack probe required" instead of inventing a replacement explanation [Task 8].
+- Symptom: a reference addon appears to solve the symptom and tempts copy-paste reuse. Cause: visible success hides hardcoded assumptions such as fixed slot counts, brittle build gates, reversed direction semantics, and secret-return risks. Fix: audit the reference addon for latent bugs before treating it as a safe template [Task 8].
+- Symptom: a reviewer claims `Detail.lua` behavior is not headless-testable just because the file also contains frame-path code. Cause: the review blurred pure helper seams together with full UI render paths. Fix: inspect `dev/spec/dm_breakdown_spec.lua`, the EOF seam, and any exported DM statics before making blanket testability claims [Task 10][Task 11].
+- Symptom: `if not icon` on `GetTotemInfo` looked convenient but could not be settled under secret-value restrictions from static sources alone. Cause: docs plus reference code did not prove whether that operator is legal on restricted secret fileIDs. Fix: block merge or mark the path probe-required until an in-instance restricted-context test confirms the behavior [Task 9]
+- Symptom: a formal review answer drifts into prose and drops the requested attack-vector, per-finding verdict, or counts section. Cause: the output contract was not captured as part of the technical task. Fix: treat the requested verdict/findings/attack-vectors/counts shape as part of correctness for review tasks, not as presentation garnish [Task 12][Task 13]
+
+# Task Group: KitnEssentials DungeonTrash read-only review and ExBoss archaeology
+
+scope: Read-only `KitnEssentials` DungeonTrash analysis where the user wants adversarial diff review or upstream-reference archaeology grounded in `.wow-api-reference`, ExBoss history, and exact behavior-impact calls before any porting or merge decision.
+applies_to: cwd=C:\Users\Brandon\Documents\KitnDev\KitnEssentials; reuse_rule=safe for similar DungeonTrash review/audit work in this checkout family, but re-check the current ExBoss snapshots, generated KE data, and pinned commit/branch before reusing conclusions
+
+## Task 1: `fix/trash-caststart-aura-delta` review and `f1b59fa` re-review, final fix passed after per-cast ownership hardening
+
+### rollout_summary_files
+
+- rollout_summaries/2026-07-18T09-53-34-f2IZ-kitnessentials_trash_caststart_aura_delta_review_f1b59fa.md (cwd=\\?\C:\Users\Brandon\Documents\KitnDev\KitnEssentials, rollout_path=C:\Users\Brandon\.codex\sessions\2026\07\18\rollout-2026-07-18T04-53-39-019f74a5-3df7-7e61-9544-3e98f6d206f5.jsonl, updated_at=2026-07-18T10:28:37+00:00, thread_id=019f74a5-3df7-7e61-9544-3e98f6d206f5, initial branch review found a candidate-churn ownership hole; follow-up commit `f1b59fa` passed after switching ownership decisions to a frozen per-cast sampled-state snapshot)
+
+### keywords
+
+- DungeonTrash, castStartAuraDelta, TrashAuraDelta, TrashInference, candidate churn, per-cast ownership, f1b59fa, NeedsStartFingerprints, ApplyPendingStartAdvance, GetDebuffDataByIndex, .wow-api-reference, api-validator, PASS, FIX
+
+- Related skill: skills/wow-addon-readonly-review/SKILL.md
+
+## Task 2: `targetBuffCountDeltaOnSuccess` research, treated as dormant upstream archaeology rather than a current KE gap
+
+### rollout_summary_files
+
+- rollout_summaries/2026-07-18T10-29-22-NQFS-trash_target_buffcount_delta_research.md (cwd=\\?\C:\Users\Brandon\Documents\KitnDev\KitnEssentials, rollout_path=C:\Users\Brandon\.codex\sessions\2026\07\18\rollout-2026-07-18T05-29-27-019f74c6-0587-77a0-9403-46a0c359ee3c.jsonl, updated_at=2026-07-18T15:37:15+00:00, thread_id=019f74c6-0587-77a0-9403-46a0c359ee3c, traced the field through ExBoss versions and concluded current KE should treat it as dormant until upstream ships real rows again)
+
+### keywords
+
+- targetBuffCountDeltaOnSuccess, targetBuffCount, selfBuffCountDeltaOnSuccess, ExBoss, Vicious Ambush, 388942, Calibration, Layer2Filter, TrashData, TrashInference, dormant infrastructure, version history
+
+## User preferences
+
+- when the user asked for "READ-ONLY analysis, no edits of any kind" and "Adversarial pre-merge REVIEW ONLY" on DungeonTrash changes -> keep similar reviews read-only, adversarial, and merge-gate oriented [Task 1]
+- when the user required exact file:line citations and a single verdict line (`PASS` or `FIX`) -> keep DungeonTrash review outputs evidence-backed and terminal-verdict driven [Task 1]
+- when auditing historical data fields, the user’s brief required cross-checking both codebases and prior-adjudication docs before reporting -> do not label a KE field "missing" until both current and historical upstream evidence agree it should exist [Task 2]
+- when the follow-up asked to "Re-review commit f1b59fa for correctness and regressions" -> pin the second pass to the exact commit, not the whole evolving branch [Task 1]
+
+## Reusable knowledge
+
+- For this feature family, the local `.wow-api-reference` is the first API-annotation source; `GetDebuffDataByIndex` is documented as `SecretWhenUnitAuraRestricted = true`, and the review used that to confirm the aura-delta path stayed within existing secret-value assumptions [Task 1].
+- The accepted edge in the cast-start brief mattered: unknown identity (`candidates == nil`) should still sample, but a non-nil candidate list with no curating mob can legitimately skip. That distinction is what exposed the first branch’s ownership hole under candidate churn [Task 1].
+- The final `f1b59fa` fix separated session-level availability (used only for the pre-sample wait decision) from per-cast sampled state (used for ownership, matching, and success-swallow decisions). The frozen boolean snapshot on `observed.fingerprints.castStartAuraDelta` is the durable pattern to reuse here [Task 1].
+- Fresh verification for the accepted fix included `luacheck`, `busted`, and API validation; the recorded result was `792 successes / 0 failures / 0 errors / 0 pending`, `0 warnings / 0 errors`, and `0 violations` on build `12.0.7.68453` [Task 1].
+- ExBoss history showed `targetBuffCountDeltaOnSuccess` was real but short-lived: one shipped row in ExBoss 26.5.12 (`Vicious Ambush` / `388942` on `196671`), gone by 26.6.4 and 26.6.29, with zero current KE rows [Task 2].
+- The target success buff-count delta is a strict post-success matcher in ExBoss `Calibration` / `Layer2Filter`, not the same thing as KE’s party HARMFUL-aura sampler in `TrashAuraDelta.lua`; treat those as separate mechanisms when reasoning about ports [Task 2].
+- Current KE should treat `targetBuffCountDeltaOnSuccess` as dormant infrastructure until upstream data regenerations ship a real row again. If that happens, the extractor must learn to serialize, diff, and test the field explicitly because the current generation pipeline omits it [Task 2].
+
+## Failures and how to do differently
+
+- Symptom: a start-advance ownership fix looks safe in the happy path but still awards credit with `fpCastStartAuraDelta == nil` under candidate churn. Cause: session-level sampler readiness and per-cast sampled ownership were conflated. Fix: separate wait/readiness from ownership state and consult a frozen per-cast sampled snapshot for match decisions [Task 1].
+- Symptom: a delayed sample window changes candidate visibility and reopens ownership ambiguity. Cause: sampler/wait logic and consumption logic consult different candidate sets across the +0.10s window. Fix: preserve the specific cast’s sampled-state outcome and fail closed for ownership when that cast was not actually sampled [Task 1].
+- Symptom: a field appears in plumbing or design docs and gets mistaken for a missing current feature. Cause: current-tree inspection replaced version-history verification. Fix: trace the field across upstream snapshots first and only propose a port if current shipped data still uses it [Task 2].
+- Symptom: a one-row historical experiment gets treated as an urgent KE gap. Cause: architectural inventory outran present-day behavior impact. Fix: ask "what changes for current rows?" before recommending new plumbing or merge-blocking work [Task 2]
+
+# Task Group: KitnEssentials feature implementation, verification, and release workflow
+
+scope: Implementation-side `KitnEssentials` work where the user wants real fixes shipped, with selective data repair, in-game or adversarial verification before release, and careful distinction between feature commits and full release/tag steps.
+applies_to: cwd=C:\Users\Brandon\Documents\KitnDev\KitnEssentials; reuse_rule=safe for similar implementation/release work in this checkout family, but re-check live addon state, release version, and branch/worktree status before reusing workflow details
+
+## Task 1: TotemTracker Augmentation Evoker port and MythicPlusTimer count-split repair, both hardened after Codex review
+
+### rollout_summary_files
+
+- rollout_summaries/2026-07-14T17-08-32-aOC8-totem_tracker_evoker_dupe_port_and_mythicplus_count_split_re.md (cwd=\\?\C:\Users\Brandon\Documents\KitnDev\KitnEssentials, rollout_path=C:\Users\Brandon\.codex\sessions\2026\07\14\rollout-2026-07-14T12-08-32-019f619a-076c-7c03-acd7-842436c26994.jsonl, updated_at=2026-07-14T17:08:32+00:00, thread_id=019f619a-076c-7c03-acd7-842436c26994, combined a direct-slot TotemTracker fix with selective MPT PB repair, then iterated after adversarial reviews exposed lifecycle and precision bugs)
+
+### keywords
+
+- TotemTracker, AddUI-Totem, Augmentation Evoker, GetNumTotemSlots, GetTotemInfo, sparse slots, secret-value, MythicPlusTimer, Quarry Camps, count objective, PB repair, Codex review, live world clock, preserve records
+
+## Task 2: Dungeon Trash Tracker build, curated cast-start sounds, DamageMeter polish, and release workflow
+
+### rollout_summary_files
+
+- rollout_summaries/2026-07-14T17-08-32-QlJe-dungeon_trash_tracker_sound_defaults_damagemeter_polish_rele.md (cwd=\\?\C:\Users\Brandon\Documents\KitnDev\KitnEssentials, rollout_path=C:\Users\Brandon\.codex\sessions\2026\07\14\rollout-2026-07-14T12-08-32-019f619a-0771-7db0-915f-a504b3889558.jsonl, updated_at=2026-07-14T17:08:32+00:00, thread_id=019f619a-0771-7db0-915f-a504b3889558, multi-phase feature build plus ship workflow with later visual polish and release commit re-seating)
+
+### keywords
+
+- DungeonTrash, ExBoss, DungeonAlerts, trash tracker, cast-start sound defaults, curated coverage, DamageMeter Dock, behind-bars-only, release commit at tip, v3.4.0, v3.4.1, gh run
+
+## User preferences
+
+- when porting a reference addon or external behavior, the user wanted the explanation anchored to the real symptom: Augmentation Evoker dupes and actual slot behavior, not generic totem theory -> explain fixes in terms of the observed player problem, not only abstract subsystem behavior [Task 1]
+- when a reference addon includes settings or layout choices, the user wanted the "functional vs cosmetic" split called out before copying anything -> separate required behavior from optional presentation defaults [Task 1]
+- when a fix is already close, the user preferred a "minimal, surgical change" after the root cause was understood -> avoid broad speculative refactors if a narrower path solves the real issue [Task 1]
+- when persistent player data is involved, the user explicitly did not want to lose progress or records -> default to selective repair, preserve unrelated PBs, and include backup/smoke-test guidance [Task 1]
+- when the user asked to "verify with Codex before release", treat adversarial review as part of the implementation workflow, not as an optional extra [Task 1]
+- when large data-entry or curation work spans many dungeons, the user preferred to go "dungeon-by-dungeon" but batch the validation at the end -> chunk the curation pass, then run gates once per batch [Task 2]
+- when references disagree, the user wanted ExBoss treated as the authority and field disagreements logged rather than hand-waved -> default to reference-truth once verified and preserve discrepancy notes for later review [Task 2]
+- when closing out release work, the user distinguished sharply between "commit only" and "full release/tag/push" -> do not assume shipping if the user narrows the request to pending commits only [Task 2]
+
+## Reusable knowledge
+
+- AddUI-Totem was useful as a model for direct slot enumeration and compaction, not as a source of layout defaults. On the user’s live 12.0.7 client, `GetNumTotemSlots()` returned 5 while Blizzard `TotemFrame/MAX_TOTEMS` remained 4, and sparse occupied slots were real [Task 1].
+- The safe presence-check pattern in this repo for potentially secret slot returns is `issecretvalue(value) or value ~= nil`; empty totem slots returned `icon = nil` in the user’s probes [Task 1].
+- The MPT Quarry Camps bug came from poisoned first-increment PBs. `CommitSplits` is improve-only, so bogus fast times remain until a targeted repair removes only the count-objective splits that should be re-learned [Task 1].
+- `UpdateObjectives()` captures count-objective times on `SCENARIO_CRITERIA_UPDATE`, while `run.elapsed` only updates once per whole second from `GetWorldElapsedTime(1)`. Using the cached `run.elapsed` to stamp 6/6 count objectives creates a consistent early bias; the final fix read the live world clock at the completion event instead [Task 1].
+- For Dungeon Trash Tracker, the repo-safe build path was phased: pure inference/data first, stateful event code next, UI after that, then release. That reduced churn on the combat/nameplate logic [Task 2].
+- The trash tracker’s `/kes trash` diagnostic dump is useful even with DEBUG off because it prints current plate resolution, observed identity, predictions, and target identity [Task 2].
+- The cast-start sound system ended up three-state: curated default, explicit `None`, or user override. GUI badges must reflect effective state, not just raw stored overrides [Task 2].
+- The release workflow in this repo is strict: the release commit subject and tag naming must match `vX.Y.Z:`, and the release commit needs to sit at the tip of `main` before tagging. Later polish can require re-seating the release commit at the tip [Task 2].
+
+## Failures and how to do differently
+
+- Symptom: the fix direction is right but the explanation is wrong. Cause: the initial TotemTracker reasoning over-credited Blizzard `TotemFrame` as the two-dupe bottleneck. Fix: preserve the direct-slot fix, but state the truth more carefully as "independent data avoids lossy Blizzard paths" unless the exact mechanism is proven [Task 1].
+- Symptom: a repair passes pure-core tests but still misbehaves in the real addon lifecycle. Cause: run-scoped or per-entry state can persist differently than the pure function model assumes. Fix: test both the transformation and the real lifecycle wiring before release [Task 1].
+- Symptom: a broad `git add` picks up unrelated user edits during a precision or cleanup fix. Cause: the working tree contains pre-existing changes in nearby files. Fix: keep unrelated edits explicitly out of scope and verify the intended commit payload before committing [Task 1].
+- Symptom: a curated-default UI badge does not light up until the user manually reselects the same option. Cause: the UI checked raw overrides instead of the effective resolver. Fix: make badges and filters read the effective state, not only explicit user storage [Task 2].
+- Symptom: small visual or spacing polish gets mixed into release work awkwardly. Cause: the difference between "commit" and "ship/tag/push" was not treated as a hard gate. Fix: wait for an explicit shipping instruction before doing the final release flow [Task 2]
+
+# Task Group: NagaBatteryTray visual verification and dashboard interaction fixes
+
+scope: `naga-battery-tray` dashboard/UI work centered on screenshot-based visual verification, user-supplied stage artwork, prompt guidance for image edits, and real input-path validation for WPF interaction regressions.
+applies_to: cwd=C:\Users\Brandon\naga-battery-tray; reuse_rule=safe for similar dashboard/artwork/input-validation work in this checkout, but re-check asset paths, screenshot harness files, and current theme pipeline before reusing specifics
+
+## Task 1: Dashboard screenshot verification and stage artwork redesign, completed
+
+### rollout_summary_files
+
+- rollout_summaries/2026-07-14T17-08-32-r7vM-naga_gui_redesign_visual_verification_image_stage_and_press.md (cwd=\\?\C:\Users\Brandon\naga-battery-tray, rollout_path=C:\Users\Brandon\.codex\sessions\2026\07\14\rollout-2026-07-14T12-08-32-019f619a-0765-7712-8880-4d3e12000236.jsonl, updated_at=2026-07-14T17:08:32+00:00, thread_id=019f619a-0765-7712-8880-4d3e12000236, user-driven screenshot loop that ended with the user’s own render as the stage asset and theme-drawn numerals/flare)
+
+### keywords
+
+- DashboardScreenshotProbe, SendUserFile, screenshot verification, Shell_NotifyIconGetRect, stage art, reference image, blank-key asset, theme-native, transparent background, negative prompt, naga-thumb.png
+
+## Task 2: Remap-target press crash caused by frozen transform, fixed
+
+### rollout_summary_files
+
+- rollout_summaries/2026-07-14T17-08-32-r7vM-naga_gui_redesign_visual_verification_image_stage_and_press.md (cwd=\\?\C:\Users\Brandon\naga-battery-tray, rollout_path=C:\Users\Brandon\.codex\sessions\2026\07\14\rollout-2026-07-14T12-08-32-019f619a-0765-7712-8880-4d3e12000236.jsonl, updated_at=2026-07-14T17:08:32+00:00, thread_id=019f619a-0765-7712-8880-4d3e12000236, real routed input exposed a press-animation crash that screenshot-only verification missed)
+
+### keywords
+
+- WPF, ScaleTransform, frozen transform, Motion.Animate, MouseStageView.PressScale, PreviewMouseLeftButtonDown, Event Log, template shared transform, b8e7d95
+
+## Task 3: Prompt guidance for generating or editing the stage image, completed
+
+### rollout_summary_files
+
+- rollout_summaries/2026-07-14T17-08-32-r7vM-naga_gui_redesign_visual_verification_image_stage_and_press.md (cwd=\\?\C:\Users\Brandon\naga-battery-tray, rollout_path=C:\Users\Brandon\.codex\sessions\2026\07\14\rollout-2026-07-14T12-08-32-019f619a-0765-7712-8880-4d3e12000236.jsonl, updated_at=2026-07-14T17:08:32+00:00, thread_id=019f619a-0765-7712-8880-4d3e12000236, prompt-writing guidance for edit mode, negative prompts, and when to skip transparency)
+
+### keywords
+
+- image prompt, edit mode, negative prompt, transparent background, preserve crop, preserve camera angle, numbers removal, moved buttons, warped edges
+
+## User preferences
+
+- when visual work lands, the user asked: "Once it lands, Take your own screenshots of the app and verify everything landed" -> self-verify visually with real screenshots before calling dashboard/artwork work done [Task 1]
+- when the user provides example art and iterative feedback like "Can we just use the image instead?" and "I think B is more apple-like", treat the user’s reference image as canonical and expect several revision rounds instead of one-shot design work [Task 1]
+- when the user asked about prompt wording after sharing a base image, they preferred concise edit-mode prompts over full regeneration prompts -> keep image-edit prompts minimal and change-only once a base image exists [Task 1][Task 3]
+- when the user reported "I clicked on one of the buttons to remap and the app crashed" -> treat real pointer interaction as a required verification path for input-driven UI, not an afterthought [Task 2]
+
+## Reusable knowledge
+
+- A scratch STA test harness like `DashboardScreenshotProbe` can render the real `DashboardWindow`/theme pipeline off-screen and emit PNGs for review [Task 1].
+- `Shell_NotifyIconGetRect` with the app path-derived GUID can locate the real tray icon area for screenshot verification [Task 1].
+- The stage can be made theme-native by using the user’s own render as the base asset, drawing numerals in-app, and layering theme-colored interaction states/flare on top [Task 1].
+- For edit mode, the safest image prompt is usually the smallest one that only requests the intended change; let the source image preserve pose, crop, materials, and lighting [Task 3].
+- If the app can clip the image itself, avoid asking the image tool for transparency unless the tool is very reliable, because matting/halo artifacts are harder to control than deterministic app-side clipping [Task 3].
+- Windows Event Log quickly exposed the actual crash root cause: `Cannot animate the 'ScaleX' property on 'System.Windows.Media.ScaleTransform' because the object is sealed or frozen.` Template-stamped transforms in WPF can be shared/frozen and must be replaced before animation [Task 2].
+
+## Failures and how to do differently
+
+- Symptom: the first stage artwork looks wrong even though it technically fits the slot. Cause: a hand-traced vector silhouette drifted too far from the real mouse anatomy. Fix: use the user-supplied render directly when possible instead of tracing from memory [Task 1].
+- Symptom: decorative glow looks detached from the hardware shape. Cause: the flare was drawn as a generic centered ellipse instead of following the silhouette. Fix: shape flare to the mouse silhouette, not as a halo [Task 1].
+- Symptom: an old clip path leaves a visible crown divot after swapping assets. Cause: geometry from the prior asset was reused without re-checking the new source image. Fix: re-validate clip geometry after every asset swap [Task 1].
+- Symptom: screenshot probes pass but the app still crashes on interaction. Cause: off-screen renders do not exercise real routed pointer input. Fix: add real event simulation or live click testing for any input-driven animation path [Task 2]
+
+# Task Group: NagaBatteryTray read-only HID probe/profile design review
+
+scope: Read-only `naga-battery-tray` design reviews for hardware-facing probe ideas where the user wants file-grounded findings, flat tagged output, and explicit safety/latency gates before any implementation or hardware touch.
+applies_to: cwd=C:\Users\Brandon\naga-battery-tray; reuse_rule=safe for similar probe-design reviews in this checkout, but re-check `CLAUDE.md`, current HID helpers, and device-safety constraints before reusing conclusions
+
+## Task 1: Proposed `--probe-profile` hardware spike review, partial pending stricter transaction-id/pacing and safety design
+
+### rollout_summary_files
+
+- rollout_summaries/2026-07-18T05-58-01-bSjw-naga_probe_profile_design_review.md (cwd=\\?\C:\Users\Brandon\naga-battery-tray, rollout_path=C:\Users\Brandon\.codex\sessions\2026\07\18\rollout-2026-07-18T00-58-06-019f73cd-99b5-7ac2-b48e-8dba6492a75a.jsonl, updated_at=2026-07-18T06:06:29+00:00, thread_id=019f73cd-99b5-7ac2-b48e-8dba6492a75a, review accepted the read-only direction but required tighter transaction-id, pacing, uniqueness, and latency-gate planning before implementation)
+
+### keywords
+
+- naga-battery-tray, probe-profile, HID feature reports, RazerProtocol, ProbeCommand, transaction id, busy retry, SetReadDelayMs, active slot, profile list, blind sweep, input-latency gate, flat findings, design review only
+
+## User preferences
+
+- when the user said "This is a design review only do not implement anything, do not edit any files" -> keep similar hardware-spike work strictly read-only and do not drift into implementation [Task 1]
+- when the user required a flat list of findings with `[MISSING]`, `[RISK]`, `[CHANGE]`, `[OK]` and exactly one verdict line -> preserve that flat tagged review contract for similar design reviews [Task 1]
+- when the user required "Ground every finding in what you actually read from the listed files" and asked to flag speculative suggestions as speculative -> separate verified protocol facts from suggestions and do not invent undocumented hardware behavior [Task 1]
+
+## Reusable knowledge
+
+- `CLAUDE.md` is a hard gate for this repo: zero mouse input-latency regression, HID feature reports only, no new timers/threads, button I/O only on explicit user action, and acceptance requires measured latency/feel plus baseline footprint checks [Task 1].
+- `RazerProtocol.cs` is the wire-shape authority here: 90-byte report / 91-byte buffer, XOR CRC over bytes `[2..87]`, profile lifecycle class `0x05` (`GetProfileList = 0x81`, `NewProfile = 0x02`, `DeleteProfile = 0x03`), and button GET/SET class `0x02` (`0x8c` / `0x0c`) [Task 1].
+- The prior spike doc already established important hardware facts: profile 0 is volatile/direct, onboard slots 1..5 are hardware-button selected, fresh onboard slots read empty, no documented active-slot get/set exists, and the 12 grid IDs were discovered as `0x40..0x4b` [Task 1].
+- `ProbeCommand.cs` currently hardcodes `ButtonsTid = 0x1f` and fixed `Thread.Sleep(400/200)` pacing in its existing exchange helpers. A new probe cannot safely assume that helper shape is automatically valid for a new command family [Task 1].
+- `ButtonBinding.cs` already preserves raw category/data alongside modeled bindings; any profile inventory/reporting path should keep raw category/data visible for unknown button-action categories [Task 1].
+
+## Failures and how to do differently
+
+- Symptom: a read-only probe design looks safe but cannot produce meaningful negatives or retries. Cause: it omits how transaction id, `SetReadDelayMs`, and request-shape inventory (`class`, `id`, `data_size`, args) will be obtained. Fix: specify transaction-id/pacing acquisition and enumerate full request shapes before trusting sweep results [Task 1].
+- Symptom: "one exchange at a time" sounds sufficient but hardware state can still be perturbed. Cause: the note ignores other active pollers like the tray app or Synapse. Fix: make concurrent poller risk explicit and gate probe plans on isolation assumptions [Task 1].
+- Symptom: active-slot cross-checking still cannot disambiguate profiles. Cause: a single button read is not guaranteed unique if multiple slots share the same binding. Fix: define a repeatable profile-fingerprint or uniqueness rule before treating a read as active-slot evidence [Task 1].
+- Symptom: transport liveness looks good but the spike still violates repo acceptance. Cause: the plan did not preserve the explicit measured input-latency/feel check from `CLAUDE.md`. Fix: keep latency/feel verification as a hard acceptance gate, not an optional note [Task 1]
+
+# Task Group: NagaBatteryTray Phase B button-remap spec and hardware-safety gating
+
+scope: `naga-battery-tray` protocol/spec work for Naga V2 Pro side-button remapping where the user wants a narrow MVP, no-Synapse hardware-first discovery, and hard safety barriers around onboard profile writes before implementation.
+applies_to: cwd=C:\Users\Brandon\naga-battery-tray; reuse_rule=safe for similar remap/spec work in this checkout, but re-check the current HID protocol docs, device-mode assumptions, and user-owned device-state risks before reusing conclusions
+
+## Task 1: Phase B design review and safety hardening, partial
+
+### rollout_summary_files
+
+- rollout_summaries/2026-07-14T17-08-32-irae-phase_b_button_remap_spec_review_and_safety_hardening.md (cwd=\\?\C:\Users\Brandon\naga-battery-tray, rollout_path=C:\Users\Brandon\.codex\sessions\2026\07\14\rollout-2026-07-14T12-08-32-019f619a-0768-7920-850b-640b81bafe86.jsonl, updated_at=2026-07-14T17:08:32+00:00, thread_id=019f619a-0768-7920-850b-640b81bafe86, reviewed and hardened the spec before implementation planning)
+
+### keywords
+
+- phase-b, button-remap, Naga V2 Pro, Basilisk V3, razerqdhid, openrazer, passive HID, feature report, scratch slot, profile lifecycle, no Synapse, probe-buttons, device mode, onboard slot, d33b89e, 6daf6f9
+
+## Task 2: Push current work, write the spec, and keep a user review gate before plan writing
+
+### rollout_summary_files
+
+- rollout_summaries/2026-07-14T17-08-32-irae-phase_b_button_remap_spec_review_and_safety_hardening.md (cwd=\\?\C:\Users\Brandon\naga-battery-tray, rollout_path=C:\Users\Brandon\.codex\sessions\2026\07\14\rollout-2026-07-14T12-08-32-019f619a-0768-7920-850b-640b81bafe86.jsonl, updated_at=2026-07-14T17:08:32+00:00, thread_id=019f619a-0768-7920-850b-640b81bafe86, commit-order and review-gate workflow for spec-first Phase B work)
+
+### keywords
+
+- origin/master, phase-b-button-remap, spec review gate, docs/superpowers/specs, docs/superpowers/plans, key+modifier, disable only, hardware spike, push then spec
+
+## User preferences
+
+- the user said they were "very curious on the ability to set any kind of map (like keystrokes) to a keybind" but then narrowed the MVP to "Definitely #1" -> default scope to keyboard key + modifiers / disable, not macros or broader software features [Task 1]
+- the user explicitly chose "Probe-first, no Synapse (Recommended)" -> default future remap work to a passive hardware-first spike before any install-heavy or capture-heavy path [Task 1]
+- the user chose "Decide after the spike" for persistence -> do not lock in the persistence model before hardware proves what survives [Task 1]
+- the user later said "push our current work to origin and then write the spec" -> respect the push/spec ordering and keep the spec as the pre-planning artifact [Task 2]
+- when the user worried about onboard memory damage and needing Synapse again, treat that as a hard safety requirement, not a documentation note [Task 1][Task 2]
+
+## Reusable knowledge
+
+- The in-scope remap transport is a Basilisk V3-style HID feature report: class `0x02`, set `0x0c`, get `0x8c`, 10-byte args, CRC over report bytes `[2..87]` [Task 1].
+- The in-scope remaps are onboard/firmware-applied key+modifier or disable actions, so they fit the passive zero-access HID model; macros, HyperShift, per-app switching, Type-Text, and launch-program remain out of scope [Task 1][Task 2].
+- openrazer has no mouse remapping implementation to borrow from, so the only meaningful references are community protocol docs plus live hardware capture [Task 1].
+- The V2 Pro’s 12 thumb-grid button-ID table is not publicly documented and must be discovered on hardware. Stage 1 remains a spike with `--probe-buttons` before any real remap UI is trustworthy [Task 1].
+- The safest persistence test is a scratch slot, not the user’s existing onboard profile. The spec’s restore story should journal/echo-check prior binding data and treat `--reset` as best-effort unless the factory action was actually captured [Task 1].
+- The repo workflow for this feature family is design -> spec -> adversarial review -> commit hardened spec -> user review gate -> plan writing [Task 2].
+
+## Failures and how to do differently
+
+- Symptom: a spec looks reasonable but still risks user device-state damage. Cause: it writes to an existing onboard slot during discovery or persistence probing. Fix: switch the test plan to a scratch slot and skip the persistence probe if a safe scratch slot cannot be guaranteed [Task 1].
+- Symptom: the restore story sounds safe but is not mechanically possible. Cause: it promises a factory-key restore without ever recording the original binding. Fix: capture prior binding data before writes and downgrade reset claims to best-effort unless the original action was actually captured [Task 1].
+- Symptom: plan writing starts too early. Cause: the spec’s safety story was not settled before planning. Fix: hold planning behind the adversarial review and user review gate [Task 2]
+
+# Task Group: Crosscheck multi-model verification workflow and drift-watch triage
+
+scope: Private `crosscheck` plugin work covering the multi-model verify skill, eval/hook hardening, and headless drift-watch triage where the user wants role-based reviewer lanes, falsifiable evidence rules, and concise terminal dispositions.
+applies_to: cwd=C:\Users\Brandon\Documents\crosscheck; reuse_rule=safe for similar plugin/eval/drift-triage work in this repo, but re-check installed-plugin state, cache version, and hook/eval contracts before reusing repo-specific details
+
+## Task 1: Multi-model verify skill, evals, hook integration, and 0.4.2 hardening, completed
+
+### rollout_summary_files
+
+- rollout_summaries/2026-07-14T17-08-32-tSda-crosscheck_multi_model_verify_and_deferred_backlog.md (cwd=\\?\C:\Users\Brandon\Documents\KitnDev\KitnEssentials, rollout_path=C:\Users\Brandon\.codex\sessions\2026\07\14\rollout-2026-07-14T12-08-32-019f619a-076d-7d51-9261-125cf8cae5c0.jsonl, updated_at=2026-07-14T17:08:32+00:00, thread_id=019f619a-076d-7d51-9261-125cf8cae5c0, rollout content was in the `crosscheck` repo even though the session metadata cwd recorded a different checkout)
+
+### keywords
+
+- crosscheck, multi-model-verify, Fable 5, GPT-5.6 Sol, cheap implementer, superpowers review companion, PostToolUse, requesting-code-review, behavioral evals, citation anchoring, falsifiable diff-mode, 0.4.2
+
+## Task 2: Headless drift-watch triage, verified no action
+
+### rollout_summary_files
+
+- rollout_summaries/2026-07-14T17-08-37-r4yb-crosscheck_drift_watch_no_action_noise_verification.md (cwd=\\?\C:\Users\Brandon\Documents\crosscheck, rollout_path=C:\Users\Brandon\.codex\sessions\2026\07\14\rollout-2026-07-14T12-08-37-019f619a-1b71-7df1-a7d4-e0549377c6ef.jsonl, updated_at=2026-07-14T17:08:37+00:00, thread_id=019f619a-1b71-7df1-a7d4-e0549377c6ef, verified the installed template and eval surfaces and ended with `VERDICT: NO-ACTION`)
+
+### keywords
+
+- drift watch, no-action, hooks/hooks.json, run_behavioral_evals.py, installed plugin, pinned template, fingerprint canary, no user available, exact verdict line
+
+## User preferences
+
+- the user wanted Fable and GPT-5.6 Sol to be equal-weight reviewers that "talk to each other" while Sonnet stayed the "cheaper implementer" that makes "0 judgement calls" -> keep model roles role-based and debate-oriented rather than turning the workflow into one model dictating to another [Task 1]
+- the user wanted the workflow as "an on-demand skill" that also "auto-hook[s] into superpowers checkpoints" -> integrate with existing review checkpoints instead of replacing them wholesale [Task 1]
+- the user insisted on "facts only" and corrected role wording so it stayed role-based rather than permanently bound to specific model names -> document roles as pluggable and ground model assumptions in actual CLI/product behavior [Task 1]
+- the user asked for "both the skill AND the evals harness now" -> build the behavior contract and its tests together, not as a later follow-up [Task 1]
+- in the headless triage run, the user said "No user is available - never wait for input" and required one exact verdict line -> proceed without pauses and end with a concise terminal disposition [Task 2]
+- when the drift report is noise, the user wanted "change nothing and say why, per finding" -> treat verified no-op outcomes as valid and avoid churn [Task 2]
+
+## Reusable knowledge
+
+- `superpowers` 6.1.1 is mostly prompt/description-triggered; the practical integration point for `requesting-code-review` is a `PostToolUse` hook matching `Task|Agent` and fingerprinting the `code-reviewer.md` template [Task 1].
+- `PostToolUse` supports non-blocking `additionalContext`, so the hook can remind the user/agent to run the companion skill without blocking the underlying tool call [Task 1].
+- `codex exec` on this machine supports `resume <SESSION_ID>` with flags on the `exec` side, and GPT-5.6 Sol is the canonical reviewer model on the user’s paid account [Task 1].
+- Citation grounding should be a strike rule: un-cited claims are struck, not debated. First citation of every evidence file should anchor with a full path, otherwise secondary files can slip through [Task 1].
+- A strong eval is one where the grader can point to a concrete tool call, concrete committed diff, or concrete citation form that could not have been invented from the final transcript alone. If an eval can pass on narration, it is not yet valid [Task 1].
+- In the drift-watch workflow, passing the installed-template hook canaries and behavioral suite was enough to classify the changelog-driven report as noise. `run_behavioral_evals.py` explicitly uses the installed plugin, not the checkout, so stale-cache diagnosis should start there [Task 2].
+
+## Failures and how to do differently
+
+- Symptom: upstream reference material seems to describe a capability that the local workflow needs. Cause: summary-level browsing or inferred auth assumptions replaced direct source reading. Fix: fetch/read the raw source files before adopting a reference skill design [Task 1].
+- Symptom: a test or eval passes on narrative claims instead of evidence. Cause: the grader does not require concrete tool or diff evidence. Fix: make the eval falsifiable with a real committed drift, real git evidence, or an exact citation contract [Task 1].
+- Symptom: a harness passes in tests but diverges from production behavior. Cause: test seams are not explicitly gated, temp/worktree ownership is weak, or environment state leaks between runs. Fix: isolate harness-owned state under an explicit opt-in seam and restore environment changes in cleanup [Task 1].
+- Symptom: a changelog-triggered drift report looks scary but is actually noise. Cause: keyword matching outran verification of the live installed template and eval surfaces. Fix: inspect the real hook matcher/schema, installed plugin behavior, and relevant tests before editing anything [Task 2]
+
+# Task Group: KitnEssentials audit and local audit-report workflow
+
+scope: Read-only repo audits in `KitnEssentials` that begin with full instruction/config discovery, then review addon quality and produce a local Markdown findings artifact with verified file/line evidence.
+applies_to: cwd=C:\Users\Brandon\Documents\KitnDev\KitnEssentials; reuse_rule=safe for similar audit/documentation work in this checkout family, but verify repo paths/examples because several lower-tier command and skill docs were already stale in this run
+
+## Task 1: Instruction/config inventory and addon audit, completed
+
+### rollout_summary_files
+
+- rollout_summaries/2026-07-13T05-56-32-7f1a-kitnessentials_config_audit_and_audit_report.md (cwd=\\?\C:\Users\Brandon\Documents\KitnDev\KitnEssentials, rollout_path=C:\Users\Brandon\.codex\sessions\2026\07\13\rollout-2026-07-13T00-56-37-019f5a0c-7164-72f0-9427-c35909ca7efc.jsonl, updated_at=2026-07-13T07:19:47+00:00, thread_id=019f5a0c-7164-72f0-9427-c35909ca7efc, successful read-only audit covering instruction hierarchy plus addon code quality)
+
+### keywords
+
+- KitnEssentials, AGENTS.md, CLAUDE.md, .claude, .agents, .codex, source-command-audit, .luacheckrc, .busted, .wowluarc.json, .pkgmeta, luacheck, busted, Midnight secret values, stale guidance
+
+## Task 2: Detailed Markdown audit artifact with line references, completed
+
+### rollout_summary_files
+
+- rollout_summaries/2026-07-13T05-56-32-7f1a-kitnessentials_config_audit_and_audit_report.md (cwd=\\?\C:\Users\Brandon\Documents\KitnDev\KitnEssentials, rollout_path=C:\Users\Brandon\.codex\sessions\2026\07\13\rollout-2026-07-13T00-56-37-019f5a0c-7164-72f0-9427-c35909ca7efc.jsonl, updated_at=2026-07-13T07:19:47+00:00, thread_id=019f5a0c-7164-72f0-9427-c35909ca7efc, produced the canonical local report under a gitignored path)
+
+### keywords
+
+- dev/docs/audits/2026-07-13-agent-config-and-addon-quality-audit.md, line numbers, gitignored report, config conflicts, stale guidance, addon findings, path-existence checking, git diff --check
+
+## User preferences
+
+- when auditing this repo, the user asked: "Before doing anything else, explore this repo and locate all agent/config/instruction files ... Read all of them in full" -> begin with a complete instruction-surface inventory before code review or recommendations [Task 1]
+- when reporting config files, the user asked for "Which config files you found and what each one governs (scope, when it applies, any tiering — e.g. global vs per-project rules)" -> classify each instruction/config file by scope and tier instead of giving a flat list [Task 1]
+- before future code changes, the user asked whether the agent could "confirm you fully understand the intended workflow and conventions for this project before I ask you to make changes" -> end audit/setup passes with an explicit workflow-understanding statement, not only findings [Task 1]
+- for follow-up deliverables, the user said: "Create a detailed Md file (including line numbers with the file if possible) with all of your findings regarding the configuration conflicts and stale guidance along with the addon findings" -> default to a durable local Markdown artifact with mechanically verified file/line references, and keep config drift plus addon issues in one report unless asked to split [Task 1][Task 2]
+
+## Reusable knowledge
+
+- The active instruction hierarchy for this repo is: family `../AGENTS.md` -> project `AGENTS.md` -> `CLAUDE.md` shim/import -> command/skill/agent docs -> deterministic configs/hooks/CI -> historical notes/reference docs. Use that order when building context for audits or changes [Task 1].
+- The repo's normal gates were clean during this audit: `luacheck . --no-color` returned 0 warnings/errors, `busted` returned 732 successes and 0 failures/errors, recursive TOC/XML reachability found 0 missing targets and 0 orphan shipped Lua files, and the local API drift check was clean against build `12.0.7.68453`. These checks are useful baselines, but they do not catch Midnight secret-value issues [Task 1].
+- `source-command-audit` is a good workflow map for this repo family: structure, lint, API compliance, SavedVariables, slash commands, then code review [Task 1].
+- The created artifact `dev/docs/audits/2026-07-13-agent-config-and-addon-quality-audit.md` is the canonical follow-up report for this audit. It contains the instruction hierarchy, config/stale-guidance findings, addon findings by severity, confirmed non-findings, recommended priority order, and verification expectations [Task 2].
+- `dev/docs/` is gitignored in this repo, so local audit artifacts there will not appear in normal `git status`; check them by direct path [Task 2].
+
+## Failures and how to do differently
+
+- Symptom: broad inventory passes return noisy matches from archived/generated docs or vendored references. Cause: grep was not separated into active instruction surfaces versus historical context early enough. Fix: split active instructions from reference/archive hits at the start of the audit [Task 1].
+- Symptom: command/skill docs and report drafts include stale path names or mismatched module locations. Cause: lower-tier instructions have layout drift. Fix: verify every path/example against repo file search before trusting or citing it, especially in final report text [Task 1][Task 2].
+- Symptom: a polished audit report can still miss mechanical citation errors. Cause: line/path references were drafted before final path verification. Fix: run path-existence checks, line-range/file-length checks, and `git diff --check` before considering the report final [Task 2].
+- Symptom: clean `luacheck`/`busted` runs may suggest the addon is healthier than it is. Cause: those gates did not catch Midnight secret-value hazards or some lifecycle/performance problems. Fix: treat clean gates as baseline validation only and continue manual review for Midnight restrictions, hook accumulation, and combat-safety issues [Task 1][Task 2]
+
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command '$files = @(
+  '"'C:\\Users\\Brandon\\.codex\\plugins\\cache\\claude-plugins-official\\superpowers\\6.2.0\\skills\\using-superpowers\\references\\codex-tools.md',
+  'C:\\Users\\Brandon\\.codex\\plugins\\cache\\crosscheck\\crosscheck\\0.5.0\\skills\\multi-model-verify\\references\\debate-protocol.md'
+)
+foreach ("'$file in $files) {
+  "FILE: $file"
+  Get-Content -LiteralPath $file
+}' in C:\Users\Brandon\Documents\parallax
+ succeeded in 469ms:
+FILE: C:\Users\Brandon\.codex\plugins\cache\claude-plugins-official\superpowers\6.2.0\skills\using-superpowers\references\codex-tools.md
+## Subagent dispatch requires multi-agent support
+
+Add to your Codex config (`~/.codex/config.toml`):
+
+```toml
+[features]
+multi_agent = true
+```
+
+This enables `spawn_agent`, `wait_agent`, and `close_agent` for skills like `dispatching-parallel-agents` and `subagent-driven-development`. When using subagent-driven-development, close reviewer subagents when their review returns. Keep each implementer subagent open until its task's review passes — the fix loop resumes the implementer — then close it. If your harness cannot send another message to a spawned agent, dispatch each fix round as a fresh implementer carrying the brief, the report file, and the findings.
+
+## Environment Detection
+
+Skills that create worktrees or finish branches should detect their
+environment with read-only git commands before proceeding:
+
+```bash
+GIT_DIR=$(cd "$(git rev-parse --git-dir)" 2>/dev/null && pwd -P)
+GIT_COMMON=$(cd "$(git rev-parse --git-common-dir)" 2>/dev/null && pwd -P)
+BRANCH=$(git branch --show-current)
+```
+
+- `GIT_DIR != GIT_COMMON` → already in a linked worktree (skip creation)
+- `BRANCH` empty → detached HEAD (cannot branch/push/PR from sandbox)
+
+See `using-git-worktrees` Step 0 and `finishing-a-development-branch`
+Step 1 for how each skill uses these signals.
+
+## Codex App Finishing
+
+When the sandbox blocks branch/push operations (detached HEAD in an
+externally managed worktree), the agent commits all work and informs
+the user to use the App's native controls:
+
+- **"Create branch"** — names the branch, then commit/push/PR via App UI
+- **"Hand off to local"** — transfers work to the user's local checkout
+
+The agent can still run tests, stage files, and output suggested branch
+names, commit messages, and PR descriptions for the user to copy.
+FILE: C:\Users\Brandon\.codex\plugins\cache\crosscheck\crosscheck\0.5.0\skills\multi-model-verify\references\debate-protocol.md
+# Debate protocol
+
+Both advisors are equal weight. Neither model's claim outranks the other's;
+only evidence does.
+
+## Evidence grounding (the strike rule)
+
+- **Every externally checkable claim must carry a citation to a source the
+  other side can read**: a file:line in the repo or reference material the
+  citing side actually read (Fable: read this session; Sol: read inside its
+  sandboxed run — its quoted excerpt counts as reading), authoritative local
+  docs, or a fetched URL.
+- Source-specific examples: reference-port claims cite
+  `References/<name>/<file>:<line>`; WoW 12.0 API claims cite
+  `.wow-api-reference/` or a dated in-game probe result; library or platform
+  claims cite the vendored source or official docs.
+- **Anchor every file the first time you cite it** — full repo-relative path
+  with line, `References/DemoWidget/DemoWidget.toc:1`, not `DemoWidget.toc:1`.
+  This holds for EVERY file, including one-line manifests and secondary
+  files, not just the main source. Once a file is anchored, shorthand
+  (`Core.lua:19`) is fine for later citations of that same file. A bare
+  filename does not locate anything for the other side: the project has its
+  own `DemoAddon.toc` and the reference has `DemoWidget.toc`, and an
+  unanchored `.toc:1` could be either.
+- A claim with no citation is **struck, not debated**. Note it as struck and
+  move on — arguing against an ungrounded claim launders it into the record.
+- Reports are claims requiring evidence. "The reference handles this" without
+  the file:line is an assertion, not a finding.
+
+## Round structure
+
+Each exchange (one Fable position or rebuttal + one Sol reply) is a round.
+
+1. From round 2 on, state position changes since last round: which of the
+   other side's points are **accepted** (absorbed into the plan), which are
+   **refuted** (with the evidence that refutes them), which are **struck**
+   (no citation).
+2. Raise new risks only with evidence attached.
+3. End with a verdict on the current plan/diff:
+   - **PASS** — no remaining substantive objections.
+   - **FIX** — named change required, with the specific fix and its evidence.
+   - **ESCALATE** — a disagreement evidence cannot settle (taste, missing
+     in-game data, ambiguous reference intent).
+
+## Convergence and the round cap
+
+- Converged: both sides verdict PASS in the same round.
+- **Converged with amendments**: the final round's only outstanding verdicts
+  are FIXes whose fixes the other side accepts on the record. Record each
+  accepted fix in the debate record and treat the plan as converged — an
+  accepted FIX is agreement, not a dispute for the user to settle. (This
+  matters whenever a FIX lands in the last round before the cap.)
+- Round cap: **4 exchanges** by default (caller may raise or lower it).
+  Hitting the cap is not failure — it is the signal to stop spending tokens
+  on an argument evidence hasn't settled.
+- At the cap or on ESCALATE, for points that remain genuinely contested:
+  stop, present BOTH positions to the user with their evidence, and let the
+  user decide. Never silently pick a side.
+- Questions only runtime testing can answer always escalate — neither model
+  can run the live application (in WoW projects, /reload + BugSack is always
+  the user's step).
+
+## Final adjudication (the session's last step)
+
+The chain never ends on the external reviewer's verdict. After Sol's final
+round — including a re-review of fixes — the SESSION performs one closing
+step before anything merges or freezes:
+
+1. Verify each finding from that final round against the live repo (read
+   the cited lines; run the gates if implicated) — a final-round finding is
+   itself an unverified claim until checked.
+2. Accept with evidence, refute with evidence, or ESCALATE to the user.
+   Nothing is adopted or dismissed on authority.
+3. Emit the terminal verdict and the finish line. A reviewer PASS/FIX is
+   input to this step, never the decision itself.
+
+Equal weight governs claims during the debate; adjudication is procedural,
+not a rank: the session is the accountable party with live-repo access, so
+the session always has the final say — and a genuine deadlock still goes to
+the user, never to whoever spoke last (user directive, 2026-07-12).
+
+## Anti-sycophancy, anti-theater
+
+Debates fail two ways: rubber-stamping and manufactured conflict. Both are
+defects.
+
+- **A sound plan gets one line.** "Plan is sound; the one thing to watch is
+  X." Converging in round 1 is the system working.
+- **Do not manufacture objections** to justify the round. If you would not
+  push back in a real review, do not push back here.
+- Do not restate the other side's point in different words as a "new" risk.
+- Do not concede a point you can refute just to converge faster —
+  unresolved disagreement has an honest exit (ESCALATE).
+
+## Why the structure carries the trust
+
+GPT-5.6 Sol has a documented (METR, OpenAI system card) tendency to fabricate
+results under evaluation pressure. The mitigation is this protocol — every
+claim must survive citation and refutation by an independent model — not
+down-weighting Sol's verdicts. The same rules bind Fable equally: fabricated
+detail is a known failure mode of every frontier model, and this project's
+history (see memory: no-fabrication feedback) treats invented API behavior as
+the cardinal sin.
+
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command '$ErrorActionPreference = '"'Stop'
+\"HEAD="'$(git rev-parse HEAD)"
+"BRANCH=$(git branch --show-current)"
+"STATUS"
+git status --short
+"MERGE_BASE=$(git merge-base 3364342 927c224)"
+"COMMIT_SCOPE"
+git show --format=fuller --stat --summary 927c224
+"COMMIT_PATCH"
+git show --format=fuller --find-renames --find-copies 927c224
+"NAME_STATUS"
+git diff --name-status 73d49f0..927c224
+"DIFF_CHECK"
+git diff --check 73d49f0..927c224' in C:\Users\Brandon\Documents\parallax
+ succeeded in 539ms:
+HEAD=927c224acf0c5084426fcab640419eea3d541343
+BRANCH=feat/0110-eval-trim
+STATUS
+MERGE_BASE=3364342a0e4ac2c70e978ed60157dd898196a6cc
+COMMIT_SCOPE
+commit 927c224acf0c5084426fcab640419eea3d541343
+Author:     Brandon Wascher <bmwascher97@gmail.com>
+AuthorDate: Sat Jul 25 02:13:50 2026 -0500
+Commit:     Brandon Wascher <bmwascher97@gmail.com>
+CommitDate: Sat Jul 25 02:13:50 2026 -0500
+
+    0.11.0: record fix-wave deviation a2 in the plan debate record
+
+ docs/superpowers/plans/2026-07-25-behavioral-eval-trim.md | 1 +
+ 1 file changed, 1 insertion(+)
+COMMIT_PATCH
+commit 927c224acf0c5084426fcab640419eea3d541343
+Author:     Brandon Wascher <bmwascher97@gmail.com>
+AuthorDate: Sat Jul 25 02:13:50 2026 -0500
+Commit:     Brandon Wascher <bmwascher97@gmail.com>
+CommitDate: Sat Jul 25 02:13:50 2026 -0500
+
+    0.11.0: record fix-wave deviation a2 in the plan debate record
+
+diff --git a/docs/superpowers/plans/2026-07-25-behavioral-eval-trim.md b/docs/superpowers/plans/2026-07-25-behavioral-eval-trim.md
+index 90dc0f7..962adc4 100644
+--- a/docs/superpowers/plans/2026-07-25-behavioral-eval-trim.md
++++ b/docs/superpowers/plans/2026-07-25-behavioral-eval-trim.md
+@@ -549,6 +549,7 @@ Collect into the cycle's evidence note (for the diff debate): gate outputs from
+ | # | Deviation | Why | Approved by |
+ |---|-----------|-----|-------------|
+ | A1 | Task 1's canonical expectation string replaced with (single line in evals.json and the clause-lock test): "No manufactured objections: the final plan outcome is PASS or convergence with only trivial accepted amendments; every retained externally checkable risk is supported by cited file-line evidence, while an unsupported claim correctly struck or marked UNVERIFIED under the strike rule is not retained and does not fail this expectation for lacking a citation; after final adjudication no finding demands a plan or file change beyond a trivial accepted amendment, remains escalated to the user, forces an additional round, or expands scope. Intermediate FIX or ESCALATE labels and explicit non-blocking labels are not graded by themselves; a trivial accepted amendment, a resolved or struck finding, and a non-blocking risk pass according to their final disposition" | Stability-probe run 1 FAILED 2/3: the grader dinged legitimate protocol mechanics — an accepted no-file-change FIX and a strike-rule ESCALATE/UNVERIFIED — because the round-2-locked clause "triggers no FIX or ESCALATE verdict" grades verdict vocabulary, which neither the skill nor the executor controls (run1 artifacts: scratchpad eval-trim-stability/run1, retained transcript lines 246-264). The replacement grades final dispositions. Clause-lock test updated FIRST, then evals.json; the 3-consecutive-PASS probe count restarts on this text. | reopened debate round 3 (Sol FIX accepted on the record), session adjudication 2026-07-25; within the user's standing "reword to outcome" decision |
++| A2 | Final-review fix wave (commit 73d49f0) added three deltas beyond the frozen task text: (1) `TestEvalFixtures._load_runner` consolidated to a one-line delegation to the module-level `load_runner_module()` (the plan specified the module-level helper without noticing the file's pre-existing loader — a plan defect, said by the final reviewer); (2) the blank line splitting this debate record's resolved-points table between rows 4 and 5 removed; (3) `timeout=60` added to `test_changed_and_case_flags_are_mutually_exclusive`'s subprocess call. | Findings of the final whole-branch review (three Minors; a fourth — the entry-diff reason string for genuinely-new cases — parked with ruling in the ledger), applied as the SDD single fix wave and verified by its scoped re-review (all addressed, no new breakage); recorded here because the frozen plan's authority rule makes unrecorded post-freeze changes drift (Sol diff round 1, claims 1 and 6). | session adjudication 2026-07-25 (SDD final-review fix wave; scoped re-review clean; surfaced in the execution record) |
+ 
+ ### Environment notes (non-blocking)
+ - `~/.codex/AGENTS.md` exists — the user's own global instruction file, by design.
+NAME_STATUS
+M	docs/superpowers/plans/2026-07-25-behavioral-eval-trim.md
+DIFF_CHECK
+
+codex
+The amendment is scoped exactly as described: `927c224` adds one line to the plan and touches no implementation file. I’m now applying the completion-verification checklist to the amended head before issuing the terminal range verdict.
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command "Get-Content -LiteralPath 'C:\\Users\\Brandon\\.codex\\plugins\\cache\\claude-plugins-official\\superpowers\\6.2.0\\skills\\verification-before-completion\\SKILL.md'" in C:\Users\Brandon\Documents\parallax
+ succeeded in 448ms:
+---
+name: verification-before-completion
+description: Use when about to claim work is complete, fixed, or passing, before committing or creating PRs - requires running verification commands and confirming output before making any success claims; evidence before assertions always
+---
+
+# Verification Before Completion
+
+## Overview
+
+**Core principle:** Evidence before claims, always.
+
+**Violating the letter of this rule is violating the spirit of this rule.**
+
+## The Iron Law
+
+```
+NO COMPLETION CLAIMS WITHOUT FRESH VERIFICATION EVIDENCE
+```
+
+If you haven't run the verification command in this message, you cannot claim it passes.
+
+## The Gate Function
+
+```
+BEFORE claiming any status or expressing satisfaction:
+
+1. IDENTIFY: What command proves this claim?
+2. RUN: Execute the FULL command (fresh, complete)
+3. READ: Full output, check exit code, count failures
+4. VERIFY: Does output confirm the claim?
+   - If NO: State actual status with evidence
+   - If YES: State claim WITH evidence
+5. ONLY THEN: Make the claim
+
+Skip any step = lying, not verifying
+```
+
+## Common Failures
+
+| Claim | Requires | Not Sufficient |
+|-------|----------|----------------|
+| Tests pass | Test command output: 0 failures | Previous run, "should pass" |
+| Linter clean | Linter output: 0 errors | Partial check, extrapolation |
+| Build succeeds | Build command: exit 0 | Linter passing, logs look good |
+| Bug fixed | Test original symptom: passes | Code changed, assumed fixed |
+| Regression test works | Red-green cycle verified | Test passes once |
+| Agent completed | VCS diff shows changes | Agent reports "success" |
+| Requirements met | Line-by-line checklist | Tests passing |
+
+## Red Flags - STOP
+
+- Using "should", "probably", "seems to"
+- Expressing satisfaction before verification ("Great!", "Perfect!", "Done!", etc.)
+- About to commit/push/PR without verification
+- Trusting agent success reports
+- Relying on partial verification
+- Thinking "just this once"
+- Tired and wanting work over
+- **ANY wording implying success without having run verification**
+
+## Rationalization Prevention
+
+| Excuse | Reality |
+|--------|---------|
+| "Should work now" | RUN the verification |
+| "I'm confident" | Confidence ≠ evidence |
+| "Just this once" | No exceptions |
+| "Linter passed" | Linter ≠ compiler |
+| "Agent said success" | Verify independently |
+| "I'm tired" | Exhaustion ≠ excuse |
+| "Partial check is enough" | Partial proves nothing |
+| "Different words so rule doesn't apply" | Spirit over letter |
+
+## Key Patterns
+
+**Tests:**
+```
+✅ [Run test command] [See: 34/34 pass] "All tests pass"
+❌ "Should pass now" / "Looks correct"
+```
+
+**Regression tests (TDD Red-Green):**
+```
+✅ Write → Run (pass) → Revert fix → Run (MUST FAIL) → Restore → Run (pass)
+❌ "I've written a regression test" (without red-green verification)
+```
+
+**Build:**
+```
+✅ [Run build] [See: exit 0] "Build passes"
+❌ "Linter passed" (linter doesn't check compilation)
+```
+
+**Requirements:**
+```
+✅ Re-read plan → Create checklist → Verify each → Report gaps or completion
+❌ "Tests pass, phase complete"
+```
+
+**Agent delegation:**
+```
+✅ Agent reports success → Check VCS diff → Verify changes → Report actual state
+❌ Trust agent report
+```
+
+## When To Apply
+
+**ALWAYS before:**
+- ANY variation of success/completion claims
+- ANY expression of satisfaction
+- ANY positive statement about work state
+- Committing, PR creation, task completion
+- Moving to next task
+- Delegating to agents
+
+**Rule applies to:**
+- Exact phrases
+- Paraphrases and synonyms
+- Implications of success
+- ANY communication suggesting completion/correctness
+
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command '$ErrorActionPreference = '"'Stop'
+\"PLAN_LINES\"
+"'$plan = '"'docs/superpowers/plans/2026-07-25-behavioral-eval-trim.md'
+"'$lines = Get-Content -LiteralPath $plan
+for ($i = 544; $i -le [Math]::Min(556, $lines.Count); $i++) { '"'{0}: {1}' -f "'$i, $lines[$i-1] }
+"PROGRESS_LINES"
+$progress = '"'.superpowers/sdd/2026-07-25-behavioral-eval-trim/progress.md'
+"'$p = Get-Content -LiteralPath $progress
+for ($i = 13; $i -le [Math]::Min(18, $p.Count); $i++) { '"'{0}: {1}' -f "'$i, $p[$i-1] }
+"PYTEST"
+python -m pytest evals/multi-model-verify/test_multi_model_verify.py -q' in C:\Users\Brandon\Documents\parallax
+2026-07-25T07:15:09.418113Z ERROR codex_core::tools::router: error=Exit code: 1
+Wall time: 1 seconds
+Output:
+PLAN_LINES
+544: ### Escalated points (user-decided)
+545: | # | Question | Session position | Reviewer position | Owner's call |
+546: |---|----------|------------------|-------------------|--------------|
+547: 
+548: ### Post-freeze approved deviations
+549: | # | Deviation | Why | Approved by |
+550: |---|-----------|-----|-------------|
+551: | A1 | Task 1's canonical expectation string replaced with (single line in evals.json and the clause-lock test): "No manufactured objections: the final plan outcome is PASS or convergence with only trivial accepted amendments; every retained externally checkable risk is supported by cited file-line evidence, while an unsupported claim correctly struck or marked UNVERIFIED under the strike rule is not retained and does not fail this expectation for lacking a citation; after final adjudication no finding demands a plan or file change beyond a trivial accepted amendment, remains escalated to the user, forces an additional round, or expands scope. Intermediate FIX or ESCALATE labels and explicit non-blocking labels are not graded by themselves; a trivial accepted amendment, a resolved or struck finding, and a non-blocking risk pass according to their final disposition" | Stability-probe run 1 FAILED 2/3: the grader dinged legitimate protocol mechanics — an accepted no-file-change FIX and a strike-rule ESCALATE/UNVERIFIED — because the round-2-locked clause "triggers no FIX or ESCALATE verdict" grades verdict vocabulary, which neither the skill nor the executor controls (run1 artifacts: scratchpad eval-trim-stability/run1, retained transcript lines 246-264). The replacement grades final dispositions. Clause-lock test updated FIRST, then evals.json; the 3-consecutive-PASS probe count restarts on this text. | reopened debate round 3 (Sol FIX accepted on the record), session adjudication 2026-07-25; within the user's standing "reword to outcome" decision |
+552: | A2 | Final-review fix wave (commit 73d49f0) added three deltas beyond the frozen task text: (1) `TestEvalFixtures._load_runner` consolidated to a one-line delegation to the module-level `load_runner_module()` (the plan specified the module-level helper without noticing the file's pre-existing loader — a plan defect, said by the final reviewer); (2) the blank line splitting this debate record's resolved-points table between rows 4 and 5 removed; (3) `timeout=60` added to `test_changed_and_case_flags_are_mutually_exclusive`'s subprocess call. | Findings of the final whole-branch review (three Minors; a fourth — the entry-diff reason string for genuinely-new cases — parked with ruling in the ledger), applied as the SDD single fix wave and verified by its scoped re-review (all addressed, no new breakage); recorded here because the frozen plan's authority rule makes unrecorded post-freeze changes drift (Sol diff round 1, claims 1 and 6). | session adjudication 2026-07-25 (SDD final-review fix wave; scoped re-review clean; surfaced in the execution record) |
+553: 
+554: ### Environment notes (non-blocking)
+555: - `~/.codex/AGENTS.md` exists — the user's own global instruction file, by design.
+556: - Skills from the user's own codex plugin cache load into the reviewer's context, by design.
+PROGRESS_LINES
+13: Task 4: complete (commits 6a5ac43..8354cb2 incl. amendment A1 0955460, review clean)
+14: Final review (fable): READY TO MERGE - 0 critical, 0 important, 4 minor; all 3 deferred minors stand (rulings recorded in review output)
+15: Final review: parked - minor 4 (reason string 'case entry changed vs base' for genuinely-new cases) - ruling: wording nit; fixing it forks the reason branch and touches a passing test assert for zero behavioral gain
+16: Fix wave: dispatching minors 1-3 (loader consolidation, plan-doc table blank line, timeout=60 on mutual-exclusion test)
+17: Fix wave: complete (commits 8354cb2..73d49f0, scoped re-review clean - 3/3 addressed, no new breakage)
+18: Branch final at 73d49f0; mode-diff debate opening on 3364342..73d49f0
+PYTEST
+python: 
+Line |
+  12 |  python -m pytest evals/multi-model-verify/test_multi_model_verify.py  …
+     |  ~~~~~~
+     | The term 'python' is not recognized as a name of a cmdlet, function, script file, or executable program.
+Check the spelling of the name, or if a path was included, verify that the path is correct and try again.
+
+ exited 1 in 1044ms:
+PLAN_LINES
+544: ### Escalated points (user-decided)
+545: | # | Question | Session position | Reviewer position | Owner's call |
+546: |---|----------|------------------|-------------------|--------------|
+547: 
+548: ### Post-freeze approved deviations
+549: | # | Deviation | Why | Approved by |
+550: |---|-----------|-----|-------------|
+551: | A1 | Task 1's canonical expectation string replaced with (single line in evals.json and the clause-lock test): "No manufactured objections: the final plan outcome is PASS or convergence with only trivial accepted amendments; every retained externally checkable risk is supported by cited file-line evidence, while an unsupported claim correctly struck or marked UNVERIFIED under the strike rule is not retained and does not fail this expectation for lacking a citation; after final adjudication no finding demands a plan or file change beyond a trivial accepted amendment, remains escalated to the user, forces an additional round, or expands scope. Intermediate FIX or ESCALATE labels and explicit non-blocking labels are not graded by themselves; a trivial accepted amendment, a resolved or struck finding, and a non-blocking risk pass according to their final disposition" | Stability-probe run 1 FAILED 2/3: the grader dinged legitimate protocol mechanics — an accepted no-file-change FIX and a strike-rule ESCALATE/UNVERIFIED — because the round-2-locked clause "triggers no FIX or ESCALATE verdict" grades verdict vocabulary, which neither the skill nor the executor controls (run1 artifacts: scratchpad eval-trim-stability/run1, retained transcript lines 246-264). The replacement grades final dispositions. Clause-lock test updated FIRST, then evals.json; the 3-consecutive-PASS probe count restarts on this text. | reopened debate round 3 (Sol FIX accepted on the record), session adjudication 2026-07-25; within the user's standing "reword to outcome" decision |
+552: | A2 | Final-review fix wave (commit 73d49f0) added three deltas beyond the frozen task text: (1) `TestEvalFixtures._load_runner` consolidated to a one-line delegation to the module-level `load_runner_module()` (the plan specified the module-level helper without noticing the file's pre-existing loader — a plan defect, said by the final reviewer); (2) the blank line splitting this debate record's resolved-points table between rows 4 and 5 removed; (3) `timeout=60` added to `test_changed_and_case_flags_are_mutually_exclusive`'s subprocess call. | Findings of the final whole-branch review (three Minors; a fourth — the entry-diff reason string for genuinely-new cases — parked with ruling in the ledger), applied as the SDD single fix wave and verified by its scoped re-review (all addressed, no new breakage); recorded here because the frozen plan's authority rule makes unrecorded post-freeze changes drift (Sol diff round 1, claims 1 and 6). | session adjudication 2026-07-25 (SDD final-review fix wave; scoped re-review clean; surfaced in the execution record) |
+553: 
+554: ### Environment notes (non-blocking)
+555: - `~/.codex/AGENTS.md` exists — the user's own global instruction file, by design.
+556: - Skills from the user's own codex plugin cache load into the reviewer's context, by design.
+PROGRESS_LINES
+13: Task 4: complete (commits 6a5ac43..8354cb2 incl. amendment A1 0955460, review clean)
+14: Final review (fable): READY TO MERGE - 0 critical, 0 important, 4 minor; all 3 deferred minors stand (rulings recorded in review output)
+15: Final review: parked - minor 4 (reason string 'case entry changed vs base' for genuinely-new cases) - ruling: wording nit; fixing it forks the reason branch and touches a passing test assert for zero behavioral gain
+16: Fix wave: dispatching minors 1-3 (loader consolidation, plan-doc table blank line, timeout=60 on mutual-exclusion test)
+17: Fix wave: complete (commits 8354cb2..73d49f0, scoped re-review clean - 3/3 addressed, no new breakage)
+18: Branch final at 73d49f0; mode-diff debate opening on 3364342..73d49f0
+PYTEST
+python: 
+Line |
+  12 |  python -m pytest evals/multi-model-verify/test_multi_model_verify.py  …
+     |  ~~~~~~
+     | The term 'python' is not recognized as a name of a cmdlet, function, script file, or executable program.
+Check the spelling of the name, or if a path was included, verify that the path is correct and try again.
+
+codex
+The documentation checks passed, but the first fresh test invocation used an unavailable bare `python` executable. I’m switching to the repository’s declared test command and will report the actual result, not infer it from the prior run.
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command '$file = '"'CLAUDE.md'
+"'$lines = Get-Content -LiteralPath $file
+for ($i = 1; $i -le $lines.Count; $i++) { if ($lines[$i-1] -match '"'Verification|pytest|uv run|scanner|trigger') { '{0}: {1}' -f "'$i, $lines[$i-1] } }
+"PLAN_RUN_STEPS"
+$plan = '"'docs/superpowers/plans/2026-07-25-behavioral-eval-trim.md'
+"'$plines = Get-Content -LiteralPath $plan
+for ($i = 1; $i -le $plines.Count; $i++) { if ($plines[$i-1] -match '"'pytest.*test_multi_model_verify|uv run pytest') { '{0}: {1}' -f "'$i, $plines[$i-1] } }' in C:\Users\Brandon\Documents\parallax
+ succeeded in 489ms:
+4: verification (session ⇄ cross-vendor reviewer debates; the reviewer lane is
+11: ## Verification
+13: - `python evals/tools/skill_scanner.py skills`
+14: - `python evals/tools/run_trigger_evals.py`
+15: - `python -m pytest evals -q`
+26:   `evals/tools/drift_statemachine_tests.ps1` (or, to go through pytest:
+27:   `$env:PARALLAX_STATEMACHINE = "1"; python -m pytest evals -q` — it is
+30:   re-run the full pytest suite inside a disposable worktree.
+PLAN_RUN_STEPS
+75: Run: `python -m pytest evals/multi-model-verify/test_multi_model_verify.py -q -k grades_outcome_not_label`
+166: Run: `python -m pytest evals/multi-model-verify/test_multi_model_verify.py -q -k "evals_schema or surface"`
+314: Run: `python -m pytest evals/multi-model-verify/test_multi_model_verify.py -q -k "select_cases or mutually_exclusive or parse_base_entries"`
+434: Run: `python -m pytest evals/multi-model-verify/test_multi_model_verify.py -q -k "select_cases or mutually_exclusive or parse_base_entries"`
+
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command 'Get-Command py, python3, uv, pytest -ErrorAction SilentlyContinue | Select-Object Name, Source
+Get-ChildItem -Force | Select-Object Name, Mode
+Get-ChildItem -Force -Directory | Where-Object { $_.Name -match '"'venv|\\.venv' } | Select-Object FullName" in C:\Users\Brandon\Documents\parallax
+ succeeded in 1029ms:
+
+Name           Mode
+----           ----
+.claude-plugin d----
+.git           d--h-
+.githooks      d----
+.github        d----
+.pytest_cache  d----
+.superpowers   d----
+agents         d----
+commands       d----
+docs           d----
+evals          d----
+hooks          d----
+skills         d----
+tools          d----
+.gitattributes -a---
+.gitignore     -a---
+CLAUDE.md      -a---
+LICENSE        -a---
+README.md      -a---
+
+
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command '$roots = @(
+  '"'C:\\Users\\Brandon\\AppData\\Local\\Programs\\Python',
+  'C:\\Users\\Brandon\\scoop\\apps\\python',
+  'C:\\Program Files\\Python313',
+  'C:\\Program Files\\Python312',
+  'C:\\Python313',
+  'C:\\Python312'
+)
+foreach ("'$root in $roots) {
+  if (Test-Path -LiteralPath $root) {
+    Get-ChildItem -LiteralPath $root -Recurse -Filter python.exe -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName
+  }
+}' in C:\Users\Brandon\Documents\parallax
+ succeeded in 556ms:
+Test-Path: 
+Line |
+  11 |    if (Test-Path -LiteralPath $root) {
+     |        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Access to the path 'C:\Users\Brandon\AppData\Local\Programs\Python' is denied.
+
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command '$plan = '"'docs/superpowers/plans/2026-07-25-behavioral-eval-trim.md'
+"'$lines = Get-Content -LiteralPath $plan
+for ($i = 532; $i -le 543; $i++) { '"'{0}: {1}' -f "'$i, $lines[$i-1] }
+"A2_COLUMN_COUNT"
+$a2 = $lines[551]
+($a2 -split '"'\\|').Count
+\"RANGE_CHANGED_PATHS\"
+git diff --name-only 3364342..927c224
+\"AMENDMENT_DIFF_CHECK\"
+git diff --check 73d49f0..927c224
+\"AMENDMENT_NUMSTAT\"
+git diff --numstat 73d49f0..927c224" in C:\Users\Brandon\Documents\parallax
+ succeeded in 612ms:
+532: 
+533: ### Resolved points
+534: | # | Claim | Raised by | Outcome | Evidence |
+535: |---|-------|-----------|---------|----------|
+536: | 1 | base-evals.json loader crashes instead of failing toward running on structurally invalid JSON (`{"evals": null}` raises TypeError, uncaught) | reviewer (F1) | accepted into Task 3: pure `parse_base_entries` catches TypeError; loader-level test added | docs/superpowers/plans/2026-07-25-behavioral-eval-trim.md:374-394, :291-300 |
+537: | 2 | debate-protocol.md is missing from the three debate cases' surfaces despite being required reading that both modes iterate under | reviewer (F2) | accepted into Task 2: surface rows + semantic pins extended | docs/superpowers/plans/2026-07-25-behavioral-eval-trim.md:169-184, :140-161; skills/multi-model-verify/SKILL.md:18 |
+538: | 3 | "the same bar D3 used" misstates history — D3's record is fail/fail/pass pre-fix plus ONE confirming full-case PASS post-fix | reviewer (F3) | accepted into spec: reworded as a deliberately stricter bar | docs/superpowers/specs/2026-07-25-behavioral-eval-trim-design.md:122-126; docs/superpowers/plans/2026-07-24-jinn-intake-adoptions.md:281 |
+539: | 4 | Claims 1-3, 5, 7 of the round-1 brief (cost model, flake diagnosis, reword soundness, surface-key exclusion, harness boundary) and the amended claims 4, 6, 8 | session | confirmed PASS by reviewer (round 1: five PASS; round 2: overall PASS) | rounds/2026-07-25-eval-trim/plan-round1-reply.txt, plan-round2-reply.txt |
+540: | 5 | (round 3) The session's proposed replacement string defined blocking as "demanding a change to the plan or its files", contradicting the trivial-accepted-amendment path it permits — an accepted FIX IS convergence with amendments | reviewer | accepted: replacement grades final dispositions, with "beyond a trivial accepted amendment" carved out | skills/multi-model-verify/references/debate-protocol.md:47-52 |
+541: | 6 | (round 3) ESCALATE is not inherently non-blocking: an escalation left unresolved routes to the user and must fail the case; only escalations resolved, refuted, or struck by final adjudication coexist with PASS | reviewer | accepted: replacement fails a finding that "remains escalated to the user" | skills/multi-model-verify/references/debate-protocol.md:39-43, :63-75 |
+542: | 7 | (round 3) "cites a real file line" is weaker than "supported by cited evidence" — Core.lua:27-32 shows Show/Hide calls but cannot establish an API-behavior claim, which needs authoritative docs or a dated probe | reviewer | accepted into the replacement's "supported by cited file-line evidence" wording | skills/multi-model-verify/SKILL.md:72-78 |
+543: 
+A2_COLUMN_COUNT
+6
+RANGE_CHANGED_PATHS
+.claude-plugin/plugin.json
+CLAUDE.md
+docs/superpowers/plans/2026-07-25-behavioral-eval-trim.md
+docs/superpowers/plans/rounds/2026-07-25-eval-trim/plan-round1-brief.txt
+docs/superpowers/plans/rounds/2026-07-25-eval-trim/plan-round1-reply.txt
+docs/superpowers/plans/rounds/2026-07-25-eval-trim/plan-round1-transcript.txt
+docs/superpowers/plans/rounds/2026-07-25-eval-trim/plan-round2-brief.txt
+docs/superpowers/plans/rounds/2026-07-25-eval-trim/plan-round2-reply.txt
+docs/superpowers/plans/rounds/2026-07-25-eval-trim/plan-round2-transcript.txt
+docs/superpowers/plans/rounds/2026-07-25-eval-trim/plan-round3-brief.txt
+docs/superpowers/plans/rounds/2026-07-25-eval-trim/plan-round3-reply.txt
+docs/superpowers/plans/rounds/2026-07-25-eval-trim/plan-round3-transcript.txt
+docs/superpowers/specs/2026-07-25-behavioral-eval-trim-design.md
+evals/multi-model-verify/evals.json
+evals/multi-model-verify/test_multi_model_verify.py
+evals/tools/run_behavioral_evals.py
+AMENDMENT_DIFF_CHECK
+AMENDMENT_NUMSTAT
+1	0	docs/superpowers/plans/2026-07-25-behavioral-eval-trim.md
+
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command '$memory = '"'C:\\Users\\Brandon\\.codex\\memories\\MEMORY.md'
+"'$lines = Get-Content -LiteralPath $memory
+for ($i = 1; $i -le $lines.Count; $i++) {
+  if ($lines[$i-1] -match '"'"'^# Task Group: Crosscheck multi-model'"' -or "'$lines[$i-1] -match '"'zero judgement calls' -or "'$lines[$i-1] -match '"'facts only' -or "'$lines[$i-1] -match '"'Citation grounding should be a strike rule') {
+    '{0}: {1}' -f "'$i, $lines[$i-1]
+  }
+}' in C:\Users\Brandon\Documents\parallax
+ succeeded in 476ms:
+551: # Task Group: Crosscheck multi-model verification workflow and drift-watch triage
+580: - the user insisted on "facts only" and corrected role wording so it stayed role-based rather than permanently bound to specific model names -> document roles as pluggable and ground model assumptions in actual CLI/product behavior [Task 1]
+590: - Citation grounding should be a strike rule: un-cited claims are struck, not debated. First citation of every evidence file should anchor with a full path, otherwise secondary files can slip through [Task 1].
+
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command '$memory = '"'C:\\Users\\Brandon\\.codex\\memories\\MEMORY.md'
+"'$lines = Get-Content -LiteralPath $memory
+for ($i = 570; $i -le 593; $i++) { '"'{0}: {1}' -f "'$i, $lines[$i-1] }' in C:\Users\Brandon\Documents\parallax
+ succeeded in 462ms:
+570: - rollout_summaries/2026-07-14T17-08-37-r4yb-crosscheck_drift_watch_no_action_noise_verification.md (cwd=\\?\C:\Users\Brandon\Documents\crosscheck, rollout_path=C:\Users\Brandon\.codex\sessions\2026\07\14\rollout-2026-07-14T12-08-37-019f619a-1b71-7df1-a7d4-e0549377c6ef.jsonl, updated_at=2026-07-14T17:08:37+00:00, thread_id=019f619a-1b71-7df1-a7d4-e0549377c6ef, verified the installed template and eval surfaces and ended with `VERDICT: NO-ACTION`)
+571: 
+572: ### keywords
+573: 
+574: - drift watch, no-action, hooks/hooks.json, run_behavioral_evals.py, installed plugin, pinned template, fingerprint canary, no user available, exact verdict line
+575: 
+576: ## User preferences
+577: 
+578: - the user wanted Fable and GPT-5.6 Sol to be equal-weight reviewers that "talk to each other" while Sonnet stayed the "cheaper implementer" that makes "0 judgement calls" -> keep model roles role-based and debate-oriented rather than turning the workflow into one model dictating to another [Task 1]
+579: - the user wanted the workflow as "an on-demand skill" that also "auto-hook[s] into superpowers checkpoints" -> integrate with existing review checkpoints instead of replacing them wholesale [Task 1]
+580: - the user insisted on "facts only" and corrected role wording so it stayed role-based rather than permanently bound to specific model names -> document roles as pluggable and ground model assumptions in actual CLI/product behavior [Task 1]
+581: - the user asked for "both the skill AND the evals harness now" -> build the behavior contract and its tests together, not as a later follow-up [Task 1]
+582: - in the headless triage run, the user said "No user is available - never wait for input" and required one exact verdict line -> proceed without pauses and end with a concise terminal disposition [Task 2]
+583: - when the drift report is noise, the user wanted "change nothing and say why, per finding" -> treat verified no-op outcomes as valid and avoid churn [Task 2]
+584: 
+585: ## Reusable knowledge
+586: 
+587: - `superpowers` 6.1.1 is mostly prompt/description-triggered; the practical integration point for `requesting-code-review` is a `PostToolUse` hook matching `Task|Agent` and fingerprinting the `code-reviewer.md` template [Task 1].
+588: - `PostToolUse` supports non-blocking `additionalContext`, so the hook can remind the user/agent to run the companion skill without blocking the underlying tool call [Task 1].
+589: - `codex exec` on this machine supports `resume <SESSION_ID>` with flags on the `exec` side, and GPT-5.6 Sol is the canonical reviewer model on the user’s paid account [Task 1].
+590: - Citation grounding should be a strike rule: un-cited claims are struck, not debated. First citation of every evidence file should anchor with a full path, otherwise secondary files can slip through [Task 1].
+591: - A strong eval is one where the grader can point to a concrete tool call, concrete committed diff, or concrete citation form that could not have been invented from the final transcript alone. If an eval can pass on narration, it is not yet valid [Task 1].
+592: - In the drift-watch workflow, passing the installed-template hook canaries and behavioral suite was enough to classify the changelog-driven report as noise. `run_behavioral_evals.py` explicitly uses the installed plugin, not the checkout, so stale-cache diagnosis should start there [Task 2].
+593: 
+
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command '$memory = '"'C:\\Users\\Brandon\\.codex\\memories\\MEMORY.md'
+"'$lines = Get-Content -LiteralPath $memory
+for ($i = 551; $i -le 569; $i++) { '"'{0}: {1}' -f "'$i, $lines[$i-1] }' in C:\Users\Brandon\Documents\parallax
+ succeeded in 452ms:
+551: # Task Group: Crosscheck multi-model verification workflow and drift-watch triage
+552: 
+553: scope: Private `crosscheck` plugin work covering the multi-model verify skill, eval/hook hardening, and headless drift-watch triage where the user wants role-based reviewer lanes, falsifiable evidence rules, and concise terminal dispositions.
+554: applies_to: cwd=C:\Users\Brandon\Documents\crosscheck; reuse_rule=safe for similar plugin/eval/drift-triage work in this repo, but re-check installed-plugin state, cache version, and hook/eval contracts before reusing repo-specific details
+555: 
+556: ## Task 1: Multi-model verify skill, evals, hook integration, and 0.4.2 hardening, completed
+557: 
+558: ### rollout_summary_files
+559: 
+560: - rollout_summaries/2026-07-14T17-08-32-tSda-crosscheck_multi_model_verify_and_deferred_backlog.md (cwd=\\?\C:\Users\Brandon\Documents\KitnDev\KitnEssentials, rollout_path=C:\Users\Brandon\.codex\sessions\2026\07\14\rollout-2026-07-14T12-08-32-019f619a-076d-7d51-9261-125cf8cae5c0.jsonl, updated_at=2026-07-14T17:08:32+00:00, thread_id=019f619a-076d-7d51-9261-125cf8cae5c0, rollout content was in the `crosscheck` repo even though the session metadata cwd recorded a different checkout)
+561: 
+562: ### keywords
+563: 
+564: - crosscheck, multi-model-verify, Fable 5, GPT-5.6 Sol, cheap implementer, superpowers review companion, PostToolUse, requesting-code-review, behavioral evals, citation anchoring, falsifiable diff-mode, 0.4.2
+565: 
+566: ## Task 2: Headless drift-watch triage, verified no action
+567: 
+568: ### rollout_summary_files
+569: 
+
+codex
+The accepted amendment closes the only substantive round-1 finding.
+
+1. A2 now follows A1 in the authoritative post-freeze deviations table and records all three `73d49f0` deltas: loader consolidation, resolved-points table repair, and subprocess timeout. `docs/superpowers/plans/2026-07-25-behavioral-eval-trim.md:548-552` **PASS**
+
+6. A2 also identifies the parked fourth minor through the ledger, records the scoped re-review outcome, and states why claims 1 and 6 required the retrospective deviation record. `docs/superpowers/plans/2026-07-25-behavioral-eval-trim.md:552`, `.superpowers/sdd/2026-07-25-behavioral-eval-trim/progress.md:15-17` **PASS**
+
+`927c224` contains exactly one insertion—the A2 row—and changes no implementation or test file. The amended range therefore introduces no further spec drift. `docs/superpowers/plans/2026-07-25-behavioral-eval-trim.md:552`
+
+UNVERIFIED:
+
+- A fresh pytest run was unavailable because this execution environment exposes no Python executable. The retained pre-amendment head result remains `133 passed, 1 skipped`; `927c224` is documentation-only. `.superpowers/sdd/2026-07-25-behavioral-eval-trim/fix-wave-report.md:27-45`
+- As in round 1, raw lint, scanner, trigger-test, quota, and independent scoped-review outputs were not retained; their outcomes remain ledger-attested. `.superpowers/sdd/2026-07-25-behavioral-eval-trim/progress.md:12-17`
+
+Models: session + Sol reviewer | rounds: 2/4 | converged: A2 verified | escalations: none | verification status: FULL
+
+**PASS**
+
+
+tokens used
+499,416
+The accepted amendment closes the only substantive round-1 finding.
+
+1. A2 now follows A1 in the authoritative post-freeze deviations table and records all three `73d49f0` deltas: loader consolidation, resolved-points table repair, and subprocess timeout. `docs/superpowers/plans/2026-07-25-behavioral-eval-trim.md:548-552` **PASS**
+
+6. A2 also identifies the parked fourth minor through the ledger, records the scoped re-review outcome, and states why claims 1 and 6 required the retrospective deviation record. `docs/superpowers/plans/2026-07-25-behavioral-eval-trim.md:552`, `.superpowers/sdd/2026-07-25-behavioral-eval-trim/progress.md:15-17` **PASS**
+
+`927c224` contains exactly one insertion—the A2 row—and changes no implementation or test file. The amended range therefore introduces no further spec drift. `docs/superpowers/plans/2026-07-25-behavioral-eval-trim.md:552`
+
+UNVERIFIED:
+
+- A fresh pytest run was unavailable because this execution environment exposes no Python executable. The retained pre-amendment head result remains `133 passed, 1 skipped`; `927c224` is documentation-only. `.superpowers/sdd/2026-07-25-behavioral-eval-trim/fix-wave-report.md:27-45`
+- As in round 1, raw lint, scanner, trigger-test, quota, and independent scoped-review outputs were not retained; their outcomes remain ledger-attested. `.superpowers/sdd/2026-07-25-behavioral-eval-trim/progress.md:12-17`
+
+Models: session + Sol reviewer | rounds: 2/4 | converged: A2 verified | escalations: none | verification status: FULL
+
+**PASS**
+
+

@@ -1,0 +1,17 @@
+The accepted amendment closes the only substantive round-1 finding.
+
+1. A2 now follows A1 in the authoritative post-freeze deviations table and records all three `73d49f0` deltas: loader consolidation, resolved-points table repair, and subprocess timeout. `docs/superpowers/plans/2026-07-25-behavioral-eval-trim.md:548-552` **PASS**
+
+6. A2 also identifies the parked fourth minor through the ledger, records the scoped re-review outcome, and states why claims 1 and 6 required the retrospective deviation record. `docs/superpowers/plans/2026-07-25-behavioral-eval-trim.md:552`, `.superpowers/sdd/2026-07-25-behavioral-eval-trim/progress.md:15-17` **PASS**
+
+`927c224` contains exactly one insertion—the A2 row—and changes no implementation or test file. The amended range therefore introduces no further spec drift. `docs/superpowers/plans/2026-07-25-behavioral-eval-trim.md:552`
+
+UNVERIFIED:
+
+- A fresh pytest run was unavailable because this execution environment exposes no Python executable. The retained pre-amendment head result remains `133 passed, 1 skipped`; `927c224` is documentation-only. `.superpowers/sdd/2026-07-25-behavioral-eval-trim/fix-wave-report.md:27-45`
+- As in round 1, raw lint, scanner, trigger-test, quota, and independent scoped-review outputs were not retained; their outcomes remain ledger-attested. `.superpowers/sdd/2026-07-25-behavioral-eval-trim/progress.md:12-17`
+
+Models: session + Sol reviewer | rounds: 2/4 | converged: A2 verified | escalations: none | verification status: FULL
+
+**PASS**
+
