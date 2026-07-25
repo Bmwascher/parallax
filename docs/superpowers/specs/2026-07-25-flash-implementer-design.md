@@ -59,6 +59,13 @@ session scratchpad (`agy-probe/probe*.log`).
   `~/.gemini/antigravity-cli/settings.json`; the interactive session also set
   `allowNonWorkspaceAccess: true`) + headless `--add-dir <dir>` binding →
   file created in the bound tree, no prompting.
+- File-action evidence does NOT live in the `--log-file` log (probed
+  2026-07-25, Sol primary check-off F1: the WRITE4 run's log contains zero
+  mentions of the file it wrote). It lives in agy's internal brain
+  transcript: parse `conversationID="<uuid>"` from the log's
+  `Print mode: starting` line, then read
+  `~/.gemini/antigravity-cli/brain/<conversationID>/.system_generated/logs/transcript_full.jsonl`
+  (the WRITE4 file appears there in successful file-changing actions).
 - `agy --help` (v1.1.7) lists `--dangerously-skip-permissions` ("Auto-approve
   all tool permission requests without prompting"). Whether it takes effect
   in print mode is UNPROBED (accept-edits provably does not).
@@ -77,6 +84,16 @@ the amendments living in the spec, which this revision satisfies. This pass
 is NOT cross-vendor verification and forms no part of the Sol gate: the
 plan debate (before implementation) and diff debate (before merge) remain
 required and are quota-gated to the ~Jul 29 codex reset.
+
+Amended again 2026-07-25 after the PRIMARY reviewer's check-off (GPT-5.6
+Sol, codex window reset early; round 1 FIX, five blocking findings, all
+session-verified and accepted): F1 corroboration evidence source corrected
+to the brain transcript (the log carries no file actions — probed); F2
+brief-file lifecycle + clean-baseline preflight; F4 settings check made
+conservative (ban the write_file rule class, no path matching); F5 red
+probe split into raw-CLI and reachable-failure probes; F3 (debate-record
+schema) lands in the plan's Debate record, not this spec. Full round
+record in the plan's debate appendix.
 
 ## Decisions (user, 2026-07-25)
 
@@ -150,11 +167,19 @@ declared lane-specific and excluded from parity.
   2. `~/.gemini/antigravity-cli/settings.json` `trustedWorkspaces` contains
      the workdir — if not, block with the exact re-trust instruction (one
      interactive `agy` session in the workdir);
-  3. the same settings file carries NO per-tool allow rule targeting the
-     workdir (e.g. `write_file(...)`) — the durable, call-site-invisible
-     bypass class; this settings assertion is the LOAD-BEARING permission
-     control (a flag is at least visible per-dispatch; a settings rule
-     survives invisibly forever — tonight's probing itself left one behind).
+  3. the same settings file carries NO file-writing per-tool allow rule
+     AT ALL (any `write_file(` entry, whatever path it names) — the
+     durable, call-site-invisible bypass class; this settings assertion is
+     the LOAD-BEARING permission control (a flag is at least visible
+     per-dispatch; a settings rule survives invisibly forever — tonight's
+     probing itself left one behind). Conservative by amendment (Sol
+     check-off F4): agy's path normalization is not offline-verifiable
+     (trust entries and allow rules already disagree on drive-letter
+     spelling on this machine), so the lane bans the rule CLASS rather
+     than attempting workdir path-matching;
+  4. `git status --porcelain` is EMPTY before dispatch (Sol check-off F2:
+     without a pre-dispatch baseline, pre-existing changes are
+     unattributable — a dirty tree is blocked, not absorbed).
 - Dispatch: `agy -p <brief> --model gemini-3.6-flash-medium
   --add-dir <workdir> --log-file <fresh per-task log>`. Fresh log file per
   attempt, written under the session scratchpad (never the repo tree — no
@@ -164,15 +189,30 @@ declared lane-specific and excluded from parity.
   provenance, which the diff-debate brief then carries. Adding an
   implementer line to the frozen-plan debate record's Participants block is
   declared scope for the plan debate to settle.
+- Brief-file lifecycle (Sol check-off F2): the brief is the SOLE transient
+  file the wrapper may create in the repo tree — a declared exception to
+  its never-write rule. Unique reserved name (`AGY-TASK-BRIEF-<unique>.md`,
+  unique suffix from the dispatch's log-file basename); collision
+  preflight (any existing `AGY-TASK-BRIEF-*` file in the workspace =
+  stale state = blocked); deletion guaranteed after agy exits — success,
+  failure, or interruption path alike — and always BEFORE any evidence
+  check, so the brief never appears in the attribution set.
 - Route check, every run, on the log file:
   1. `Print mode: starting` line present with `model="gemini-3.6-flash-medium"`
      (the RESOLVED ID is the comparand — same string §5 pins as canonical);
   2. `Propagating selected model override` line present (presence-only; its
      display label is a second namespace and is NOT matched);
-  3. log/tree corroboration: every path `git status` reports changed MUST
-     appear in the agy log as a file Flash touched — a changed file the log
-     never mentions means the wrapper (or something else) typed it, and the
-     task is `blocked` regardless of test results.
+  3. transcript/tree corroboration (evidence source corrected by Sol
+     check-off F1 — the `--log-file` log carries NO file actions, probed):
+     parse `conversationID="<uuid>"` from the log's `Print mode: starting`
+     line, read the brain transcript at
+     `~/.gemini/antigravity-cli/brain/<conversationID>/.system_generated/logs/transcript_full.jsonl`,
+     and require every path `git status` reports changed to appear in that
+     transcript as a successful file-changing action. A changed file the
+     transcript never mentions means the wrapper (or something else) typed
+     it — blocked regardless of test results. A missing transcript is
+     blocked. The ROUTE report line carries the transcript path beside the
+     log path.
   This evidence class is CLIENT-side: the check verifies the route was
   **requested and propagated**, never "used and confirmed" (the doctor
   check-4 language discipline, `commands/doctor.md`). Server-side
@@ -255,8 +295,15 @@ so a future third agent file is swept by default, not silently missed.
   crossed.
 - Live verification through the REAL agent happens during implementation,
   AFTER the plan debate: one end-to-end dry-run task in a scratch repo
-  (trusted for the occasion), plus a red probe (bad model ID must produce
-  blocked, not output). Dev-loop ordering applies and is part of the task:
+  (trusted for the occasion), plus TWO failure probes (split by Sol
+  check-off F5 — the earlier single disjunctive probe was vacuous: a
+  wrapper refusing the contradictory brief would "pass" without ever
+  exercising the failure path): (a) a RAW agy probe, no agent, proving
+  the CLI's loud invalid-model rejection with no writes; (b) a
+  reachable-failure probe through the REAL agent — plant a scratch-scoped
+  `write_file` allow rule in agy settings, dispatch a trivial task,
+  require preflight check 3 to block quoting the rule, then remove the
+  planted rule. Dev-loop ordering applies and is part of the task:
   the agent is not live until `plugin.json` bumps,
   `claude plugin update parallax@parallax` runs, and the session restarts.
 - Preflight cost: `agy models` is a network round-trip per task dispatch.

@@ -8,7 +8,7 @@
 
 **Tech Stack:** Claude Code agent frontmatter, agy 1.1.7 print mode, pytest (offline contract pins), PowerShell (drift snapshot).
 
-**STATUS: FROZEN** by the backup-lane plan debate (Kimi K3-256k, 2026-07-25 — see Debate record). Changes now require reopening the debate. Per the user's standing ruling, the primary reviewer (Sol) retains a check-off before this branch merges (~Jul 29 codex reset); the diff debate gates the merge as always. Tasks 5-6 contain ATTENDED steps (user-interactive); Task 6 additionally requires the plugin dev-loop (bump, update, restart).
+**STATUS: FROZEN** (re-frozen pending Sol round 2). Frozen 2026-07-25 by the backup-lane plan debate (Kimi K3-256k); REOPENED same day by the primary reviewer's check-off (Sol round 1, FIX — codex window reset early): five blocking findings, all session-verified and accepted; amendments folded into spec, this plan, and the Tasks 1-2 artifacts via an SDD fix wave. The diff debate gates the merge as always. Tasks 5-6 contain ATTENDED steps (user-interactive); Task 6 additionally requires the plugin dev-loop (bump, update, restart).
 
 ## Global Constraints
 
@@ -81,7 +81,9 @@ def test_flash_dispatch_contract():
     assert "--model " + CANONICAL_ID in body
     assert "--add-dir" in body
     assert "--log-file" in body
-    assert "AGY-TASK-BRIEF.md" in body
+    # unique-suffix brief name + lifecycle (Sol check-off F2)
+    assert "AGY-TASK-BRIEF-" in body
+    assert "sole transient exception" in body.lower()
     # stdin is probed-dead in print mode; the body must not suggest it
     assert "stdin" not in body.lower() or "does not reach" in body.lower()
 
@@ -94,15 +96,23 @@ def test_flash_route_check_strings():
     assert "requested and propagated" in body
     assert "used and confirmed" not in body.replace(
         'never "used and confirmed"', "")
-    # log/tree corroboration rule (advisory review B2 amendment)
-    assert "every path git status reports changed must appear in the agy log" in body.lower()
+    # transcript/tree corroboration (Sol check-off F1: the log carries no
+    # file actions; evidence lives in the brain transcript)
+    assert "transcript_full.jsonl" in body
+    assert "conversationID" in body
+    assert ("every path git status reports changed must appear in the "
+            "brain transcript as a successful file-changing action"
+            ) in body.lower()
 
 
 def test_flash_preflight_pins():
     body = _read(FLASH)
     assert "agy models" in body
     assert "trustedWorkspaces" in body
-    assert "allow rule" in body  # settings-rule absence assertion
+    # conservative rule-class ban (Sol check-off F4) + clean baseline (F2)
+    assert "write_file(" in body
+    assert "allow rule" in body
+    assert "git status --porcelain" in body
 
 
 def test_flash_forbidden_bypass_class():
@@ -229,7 +239,9 @@ does ALL the typing through the Antigravity CLI (`agy`); you do preflight,
 dispatch, evidence checks, verification, and honest reporting. You never
 edit or create repo files yourself — your tool grant has no Edit or Write,
 and using Bash to write repo content is equally forbidden: a changed file
-the agy log cannot account for fails the task.
+the brain transcript cannot account for fails the task. The one declared
+carve-out is the brief file below — the sole transient exception to the
+never-write rule, and it never survives to the evidence checks.
 
 <!-- shared-contract:start -->
 ## The contract
@@ -255,7 +267,7 @@ the agy log cannot account for fails the task.
 - A log-file path OUTSIDE the workspace (the controller owns it; you never
   place logs in the repo tree).
 
-## Preflight (all three must pass BEFORE dispatch)
+## Preflight (all five must pass BEFORE dispatch)
 
 1. `agy models` (binary at `$LOCALAPPDATA/agy/bin/agy.exe`) — output must
    contain `gemini-3.6-flash-medium`. Anything else (missing binary,
@@ -264,32 +276,47 @@ the agy log cannot account for fails the task.
    contain the workspace directory. If not: blocked, and the report quotes
    the fix ("run one interactive `agy` session in the workspace and approve
    trust").
-3. The same settings file must carry NO per-tool allow rule targeting the
-   workspace (for example `write_file(...)`). A persisted settings rule is
-   the durable, call-site-invisible bypass class — its absence is the
-   load-bearing permission control. If present: blocked, quoting the rule.
+3. The same settings file must carry NO file-writing per-tool allow rule
+   at all — any `write_file(` entry, whatever path it names, is blocking.
+   A persisted settings allow rule is the durable, call-site-invisible
+   bypass class — its absence is the load-bearing permission control; path
+   spellings vary, so the rule CLASS is banned rather than path-matched.
+   If present: blocked, quoting the rule.
+4. `git status --porcelain` in the workspace must be EMPTY. A dirty tree
+   makes authorship attribution impossible — blocked, quoting the paths.
+5. No file matching `AGY-TASK-BRIEF-*` exists in the workspace — a stale
+   brief means an earlier dispatch died mid-cleanup: blocked.
 
 ## Dispatch
 
-1. Write the brief to `<workspace>/AGY-TASK-BRIEF.md` with a Bash heredoc:
-   the task's verbatim text, the Global Constraints, and the exact files
-   list. (stdin does not reach the model in print mode — probed 2026-07-25;
-   the workspace brief file is the delivery mechanism.)
+1. Write the brief to `<workspace>/AGY-TASK-BRIEF-<unique>.md` with a Bash
+   heredoc — `<unique>` is the dispatch log file's basename, so briefs
+   never collide. Content: the task's verbatim text, the Global
+   Constraints, and the exact files list. (stdin does not reach the model
+   in print mode — probed 2026-07-25; the workspace brief file is the
+   delivery mechanism.) This file is the sole transient exception to your
+   never-write rule.
 2. Run (single line):
-   `agy -p "Read the file AGY-TASK-BRIEF.md in the workspace and execute it exactly." --model gemini-3.6-flash-medium --add-dir <workspace> --log-file <log-path>`
-3. Delete `AGY-TASK-BRIEF.md` immediately after agy exits, BEFORE any
-   evidence check, so it never appears in `git status`.
+   `agy -p "Read the file AGY-TASK-BRIEF-<unique>.md in the workspace and execute it exactly." --model gemini-3.6-flash-medium --add-dir <workspace> --log-file <log-path>`
+3. Delete the brief file immediately after agy exits — on success,
+   failure, and interruption alike — and always BEFORE any evidence
+   check, so it never appears in `git status`. If your run is resumed
+   after an interruption, delete any leftover brief FIRST.
 
-## Route and authorship checks (every run, on the log file)
+## Route and authorship checks (every run)
 
-- `Print mode: starting` line present containing
+- On the log file: `Print mode: starting` line present containing
   `model="gemini-3.6-flash-medium"`.
-- `Propagating selected model override` line present (presence only — its
-  display label is not matched).
-- Log/tree corroboration: every path git status reports changed must
-  appear in the agy log as a file Flash touched. A changed file the log
-  never mentions means someone other than Flash typed it — blocked, no
-  matter what the tests say.
+- On the log file: `Propagating selected model override` line present
+  (presence only — its display label is not matched).
+- Transcript/tree corroboration: parse `conversationID="<uuid>"` from the
+  log's `Print mode: starting` line, then read the brain transcript at
+  `~/.gemini/antigravity-cli/brain/<conversationID>/.system_generated/logs/transcript_full.jsonl`
+  (the `--log-file` log itself carries NO file actions — probed). Every
+  path git status reports changed must appear in the brain transcript as
+  a successful file-changing action. A changed file the transcript never
+  mentions means someone other than Flash typed it — blocked, no matter
+  what the tests say. A missing transcript is blocked.
 - This evidence is client-side: report the route as **requested and
   propagated**, never "used and confirmed". Server-side substitution is
   not detectable from this evidence class.
@@ -310,7 +337,7 @@ points — not yours.
 
 - **STATUS:** done | blocked | INPUT GAP: <exactly what is missing>
 - **ROUTE:** the resolved model ID as requested and propagated, plus the
-  retained log file's path
+  retained log file's path AND the brain transcript's path
 - **FILES CHANGED:** actual paths from `git status` — on blocked, STILL
   list every path Flash already touched so the session can revert a
   partial write
@@ -603,15 +630,27 @@ VERIFICATION shows the wrapper's own `python hello.py` output;
 DEVIATIONS none. Controller re-runs `python hello.py` itself (never trust
 the report alone — 0.10.0 lesson: controller-owned verification).
 
-- [ ] **Step 4: Red probe — bad model must block, not output**
+- [ ] **Step 4a: Raw red probe — the CLI's invalid-model path (no agent)**
 
-Same dispatch shape but the controller's brief pins
-`--model gemini-9.9-fake` for this probe run only. PASS is disjunctive:
-STATUS blocked with NO file changes, whether the wrapper refuses the
-brief as contradicting its pinned dispatch contract (INPUT GAP /
-blocked — a contract-faithful reading) or dispatches and quotes agy's
-"invalid model selection" rejection. FAIL: any file change or STATUS
-done.
+Controller runs, directly in the scratch repo (split from a single
+disjunctive probe by Sol check-off F5 — a wrapper refusing a
+contradictory brief must not count as exercising this path):
+
+```powershell
+& "$env:LOCALAPPDATA\agy\bin\agy.exe" -p "Reply with exactly: X" --model gemini-9.9-fake --add-dir <scratch> --log-file <scratchpad>\red-raw.log
+```
+
+Expected: loud "invalid model selection" rejection, nonzero exit, no
+file changes in the scratch tree.
+
+- [ ] **Step 4b: Reachable-failure probe — the REAL agent's blocked path**
+
+Plant a scratch-scoped rule in `~/.gemini/antigravity-cli/settings.json`
+`permissions.allow`: `write_file(<scratch, in the file's own path
+spelling>)`. Dispatch `parallax:flash-implementer` with a trivial task in
+the scratch repo. Expected: STATUS blocked at preflight check 3, quoting
+the planted rule; no dispatch reaches agy; no file changes. Then REMOVE
+the planted rule and re-read the settings file to confirm.
 
 - [ ] **Step 5 (ATTENDED - user): skip-permissions print-mode probe**
 
@@ -635,36 +674,60 @@ diff-debate brief cites them.
 
 ## Debate record
 
-- **Mode:** plan. **Participants:** Fable 5 (session) / Kimi K3
-  (cross-vendor reviewer, BACKUP LANE — model `kimi-code/k3-256k`,
-  thinking on, effort pinned high via config overrides; kimi-cli 1.49.0,
-  session 4ba130bb-1615-4c95-9afc-d1e3049bb857).
-- **Backup-lane trigger (real, not drill):** primary reviewer transport
-  (codex) at 100% weekly quota, `rate_limit_reached`, resets ~Jul 29 —
-  the exact trigger condition defined for this lane. First live use of
-  the backup reviewer lane, predating its own 0.13.0 design cycle.
-- **Containment:** reviewer ran read-only via custom agent-file
-  (ReadFile/ReadMediaFile/Glob/Grep/SetTodoList only; write-probe
-  refused pre-review) against a throwaway clone of the branch — the real
-  tree was never exposed. Clone `git status` clean after both rounds
-  (sole untracked file: the session-authored brief).
-- **Rounds: 2 of 4.** Round 1 (head 624d52f): FIX — 1 blocking (Task 4
-  doctor text tripping the plan's own literal sweep) + 8 minors; all 9
-  verified by the session against the live repo and accepted; amendments
-  committed (5391455). Round 2 (head 5391455): terminal PASS — every
-  resolution re-verified by the reviewer, no new findings; reviewer
-  accepted presence-in-both heading pins vs the spec's "byte-identical"
-  phrasing as a trivial implementation difference.
-- **Verification status: FULL (backup lane).** Effective route confirmed
-  each round via the `Using LLM model: provider='managed:kimi-code'
-  model='k3-256k'` line in ~/.kimi/logs/kimi.log (client-side evidence
-  class — requested and propagated, per the route language discipline).
-  Fresh transcript files per round:
-  rounds/2026-07-25-flash-implementer/plan-round{1,2}-transcript.txt
-  (+ round-1 brief).
-- **Outstanding gate (user ruling, 2026-07-25):** Sol check-off required
-  before the branch closes — at minimum the mode-diff debate at merge
-  time, after the ~Jul 29 reset.
-- The advisory pass (Opus 5, same-vendor, 2026-07-25, two rounds,
-  FIX -> conditional PASS folded into the spec) is recorded in the
-  spec's Review provenance section and forms no part of this gate.
+**Participants:** Fable 5 (session) / Kimi K3 `kimi-code/k3-256k` (kimi-cli 1.49.0, session 4ba130bb-1615-4c95-9afc-d1e3049bb857) / GPT-5.6 Sol (codex exec, session 019f9ad5-e318-7831-8a3f-0c02c94caa8e)
+**Rounds used:** 2 of 4 (Kimi, plan mode) + 2 of 4 (Sol, primary check-off)
+**Outcome:** converged with amendments
+**Verification status:** FULL
+**Degradation:** quota-exhausted (primary lane at the plan gate; backup lane substituted for rounds 1-2, primary check-off ran on the reset window)
+**Authorized by:** user at round 1 (backup-lane substitution; the user's standing ruling retained the primary check-off before branch close)
+**Raw rounds:** docs/superpowers/plans/rounds/2026-07-25-flash-implementer/ (plan-round1-brief.md, plan-round{1,2}-transcript.txt — Kimi; sol-checkoff-round1-{brief,reply,header}.md/txt — Sol; round-2 files added at convergence)
+
+Backup-lane note: Kimi ran read-only via a custom agent-file
+(ReadFile/ReadMediaFile/Glob/Grep/SetTodoList; pre-review write-probe
+refused) against a throwaway clone — the real tree was never exposed.
+Route evidence per round: `Using LLM model: provider='managed:kimi-code'
+model='k3-256k'` in ~/.kimi/logs/kimi.log (client-side class). Clone
+`git status` after round 2: sole untracked file was the session-authored
+brief (retained evidence: rounds/.../clone-status-after-round2.txt).
+Sol round 1 route: header block model gpt-5.6-sol / provider openai /
+sandbox read-only / effort high.
+
+### Resolved points
+
+| # | Claim | Raised by | Outcome | Evidence |
+|---|-------|-----------|---------|----------|
+| 1 | Task 4 doctor text trips the plan's own literal sweep | Kimi r1 | accepted; doctor text reworded (5391455) | plan Task 4 vs test sweep globs |
+| 2 | Task 1 expected parity failure signature wrong (FileNotFoundError first) | Kimi r1 | accepted; expectation corrected | test_flash_implementer.py `_read` order |
+| 3 | README drop-ins absence pin vacuous (line-wrapped source) | Kimi r1 | accepted; presence pins added | README.md:132-133 line break |
+| 4 | Sweep omits evals/**/*.ps1 vs the reviewer sweep it mirrors | Kimi r1 | accepted; glob added | test_multi_model_verify.py:249 |
+| 5 | Flash Lane note misstates where the literal lives | Kimi r1 | accepted; reworded | implementer.md carries no gemini literal |
+| 6 | Drift-snapshot snippet violates carry-forward invariant; PS 5.1 parse risk | Kimi r1 | accepted; Task 4 Step 2 rewritten to carry-forward | check-drift.ps1:193-205 |
+| 7 | Red-probe expectation contradicts pinned dispatch contract | Kimi r1 | accepted; made disjunctive (superseded by #13) | plan Task 6 vs agent body pin |
+| 8 | Settings-deletion instruction pins unverifiable path spelling | Kimi r1 | accepted; made spelling-agnostic | settings file outside workspace |
+| 9 | Parity narrower than spec claim (headings unpinned in classic) | Kimi r1 | accepted; headings pinned in both files | spec section 1 vs test scope |
+| 10 | Corroboration evidence source wrong: --log-file log carries NO file actions; brain transcript does | Sol r1 | accepted; evidence source corrected to transcript_full.jsonl | probe9.log: 0 hits for probe-write4; brain/<cid>/.../transcript_full.jsonl: 5 hits |
+| 11 | Brief-file lifecycle unsafe (collision, interruption, unbaselined git status) | Sol r1 | accepted; unique name + collision preflight + guaranteed cleanup + clean-baseline preflight | agent body Dispatch/Preflight sections |
+| 12 | Debate record lacked required schema fields and session adjudication | Sol r1 | accepted; this record | frozen-plan-format.md:36-68, debate-protocol.md:63 |
+| 13 | Settings check had no path-matching algorithm | Sol r1 | accepted; conservative rule-class ban (any write_file( entry) | trust entry vs allow rule spelling mismatch on this machine |
+| 14 | Red probe vacuous (wrapper refusal passes without exercising failure path) | Sol r1 | accepted; split into raw-CLI probe + reachable-failure probe | plan Task 6 Steps 4a/4b |
+
+### Escalated points (user-decided)
+
+| # | Question | Session position | Reviewer position | Owner's call |
+|---|----------|------------------|-------------------|--------------|
+
+(none this debate; the consent-gated reroute mechanism records future
+blocked-task reroutes here)
+
+### Session adjudication (debate-protocol closing step)
+
+Each Sol round-1 finding was verified against live evidence before
+acceptance: #10 by grepping the retained WRITE4 probe log (zero
+file-path hits) and the brain transcript (five hits); #11/#14 against
+the agent body and plan text as cited; #12 against
+frozen-plan-format.md:36-68; #13 against the live settings file's mixed
+path spellings. Kimi's rounds 1-2 were adjudicated at the time (all nine
+findings verified, fixes committed 5391455, round-2 re-verification by
+the reviewer). No finding was refuted; no point escalated. Convergence =
+Sol round-2 confirmation of these amendments (transcript retained under
+Raw rounds).
