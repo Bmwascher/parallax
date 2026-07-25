@@ -630,13 +630,7 @@ class TestEvalFixtures:
 
     @staticmethod
     def _load_runner():
-        import importlib.util
-        spec = importlib.util.spec_from_file_location(
-            "bhv_runner",
-            REPO_ROOT / "evals" / "tools" / "run_behavioral_evals.py")
-        mod = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(mod)
-        return mod
+        return load_runner_module()
 
     def test_compact_stream_binds_results_to_calls(self):
         # The graded transcript is the ONLY thing the grader sees, so a
@@ -878,7 +872,7 @@ class TestEvalFixtures:
             [sys.executable,
              str(REPO_ROOT / "evals" / "tools" / "run_behavioral_evals.py"),
              "--changed", "--case", "plan-mode-debate-runs"],
-            capture_output=True, text=True)
+            capture_output=True, text=True, timeout=60)
         assert proc.returncode == 2
         assert "mutually exclusive" in (proc.stderr or "")
 
