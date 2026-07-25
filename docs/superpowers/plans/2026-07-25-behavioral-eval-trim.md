@@ -523,12 +523,12 @@ Collect into the cycle's evidence note (for the diff debate): gate outputs from 
 ## Debate record
 
 **Participants:** Fable 5 (session) / GPT-5.6 Sol (codex exec, session 019f97d1-fc78-73a1-9f32-b42e14a6f8c1)
-**Rounds used:** 2 of 4
-**Outcome:** converged with amendments (round-1 FIXes F1-F3 accepted, applied at 77013d3, verified PASS in round 2)
+**Rounds used:** 3 of 4
+**Outcome:** converged with amendments (round-1 FIXes F1-F3 accepted, applied at 77013d3, verified PASS in round 2; round 3 reopened the freeze after stability-probe run 1 failed — canonical-string amendment A1 accepted on the record per the converged-with-amendments rule)
 **Verification status:** FULL
 **Degradation:** none
 **Authorized by:** n/a
-**Raw rounds:** docs/superpowers/plans/rounds/2026-07-25-eval-trim/ (briefs, replies, and header-bearing transcripts for both rounds)
+**Raw rounds:** docs/superpowers/plans/rounds/2026-07-25-eval-trim/ (briefs, replies, and header-bearing transcripts for all rounds)
 
 ### Resolved points
 | # | Claim | Raised by | Outcome | Evidence |
@@ -538,9 +538,18 @@ Collect into the cycle's evidence note (for the diff debate): gate outputs from 
 | 3 | "the same bar D3 used" misstates history — D3's record is fail/fail/pass pre-fix plus ONE confirming full-case PASS post-fix | reviewer (F3) | accepted into spec: reworded as a deliberately stricter bar | docs/superpowers/specs/2026-07-25-behavioral-eval-trim-design.md:122-126; docs/superpowers/plans/2026-07-24-jinn-intake-adoptions.md:281 |
 | 4 | Claims 1-3, 5, 7 of the round-1 brief (cost model, flake diagnosis, reword soundness, surface-key exclusion, harness boundary) and the amended claims 4, 6, 8 | session | confirmed PASS by reviewer (round 1: five PASS; round 2: overall PASS) | rounds/2026-07-25-eval-trim/plan-round1-reply.txt, plan-round2-reply.txt |
 
+| 5 | (round 3) The session's proposed replacement string defined blocking as "demanding a change to the plan or its files", contradicting the trivial-accepted-amendment path it permits — an accepted FIX IS convergence with amendments | reviewer | accepted: replacement grades final dispositions, with "beyond a trivial accepted amendment" carved out | skills/multi-model-verify/references/debate-protocol.md:47-52 |
+| 6 | (round 3) ESCALATE is not inherently non-blocking: an escalation left unresolved routes to the user and must fail the case; only escalations resolved, refuted, or struck by final adjudication coexist with PASS | reviewer | accepted: replacement fails a finding that "remains escalated to the user" | skills/multi-model-verify/references/debate-protocol.md:39-43, :63-75 |
+| 7 | (round 3) "cites a real file line" is weaker than "supported by cited evidence" — Core.lua:27-32 shows Show/Hide calls but cannot establish an API-behavior claim, which needs authoritative docs or a dated probe | reviewer | accepted into the replacement's "supported by cited file-line evidence" wording | skills/multi-model-verify/SKILL.md:72-78 |
+
 ### Escalated points (user-decided)
 | # | Question | Session position | Reviewer position | Owner's call |
 |---|----------|------------------|-------------------|--------------|
+
+### Post-freeze approved deviations
+| # | Deviation | Why | Approved by |
+|---|-----------|-----|-------------|
+| A1 | Task 1's canonical expectation string replaced with (single line in evals.json and the clause-lock test): "No manufactured objections: the final plan outcome is PASS or convergence with only trivial accepted amendments; every retained externally checkable risk is supported by cited file-line evidence, while an unsupported claim correctly struck or marked UNVERIFIED under the strike rule is not retained and does not fail this expectation for lacking a citation; after final adjudication no finding demands a plan or file change beyond a trivial accepted amendment, remains escalated to the user, forces an additional round, or expands scope. Intermediate FIX or ESCALATE labels and explicit non-blocking labels are not graded by themselves; a trivial accepted amendment, a resolved or struck finding, and a non-blocking risk pass according to their final disposition" | Stability-probe run 1 FAILED 2/3: the grader dinged legitimate protocol mechanics — an accepted no-file-change FIX and a strike-rule ESCALATE/UNVERIFIED — because the round-2-locked clause "triggers no FIX or ESCALATE verdict" grades verdict vocabulary, which neither the skill nor the executor controls (run1 artifacts: scratchpad eval-trim-stability/run1, retained transcript lines 246-264). The replacement grades final dispositions. Clause-lock test updated FIRST, then evals.json; the 3-consecutive-PASS probe count restarts on this text. | reopened debate round 3 (Sol FIX accepted on the record), session adjudication 2026-07-25; within the user's standing "reword to outcome" decision |
 
 ### Environment notes (non-blocking)
 - `~/.codex/AGENTS.md` exists — the user's own global instruction file, by design.

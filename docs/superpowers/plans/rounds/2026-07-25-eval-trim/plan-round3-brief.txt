@@ -1,0 +1,69 @@
+<role>Same debate, round 3. Evidence rules and verdict grammar as before. The
+plan is frozen; per the freeze rule this round REOPENS it for one amendment.</role>
+
+<task>Task 4's stability probe run 1 FAILED on the canonical expectation string
+this debate locked, exposing a wording defect. Evaluate the root-cause analysis
+and the proposed replacement string. Verdict PASS (amendment adopted) or FIX
+(better wording, with the specific text).</task>
+
+<evidence>
+Run-1 artifacts (readable, absolute paths):
+- Verdicts: C:/Users/Brandon/AppData/Local/Temp/claude/C--Users-Brandon-Documents-parallax/855f66e5-6a7f-40b8-b52b-104a177322a0/scratchpad/eval-trim-stability/run1/no-manufactured-objections.verdicts.json
+  (grader MISS #1: "the report manufactured a FIX and an ESCALATE/UNVERIFIED
+  finding, contrary to the requirement that noted non-blocking risks trigger
+  neither verdict"; expectations 2 and 3 both met)
+- Transcript: C:/Users/Brandon/AppData/Local/Temp/claude/C--Users-Brandon-Documents-parallax/855f66e5-6a7f-40b8-b52b-104a177322a0/scratchpad/eval-trim-stability/run1/no-manufactured-objections.transcript.txt
+  Lines 246-264 show the executor's actual debate: 5 claims PASS; finding 6 is
+  the inner reviewer's FIX correcting the SESSION's own risk-register wording
+  (accepted, cited Core.lua:27-32, explicitly "requires no change to the plan
+  or to any file"); finding 7 is an uncitable "all APIs long-stable" claim
+  struck as UNVERIFIED and adjudicated non-blocking; convergence in the single
+  harness-capped round, no scope change, clean finish line.
+
+Root cause: the locked clause "no noted risk is treated as blocking - it
+triggers no FIX or ESCALATE verdict..." grades the debate's verdict
+VOCABULARY. FIX and ESCALATE tokens are legitimate protocol mechanics: the
+converged-with-amendments path is DEFINED as an accepted FIX
+(skills/multi-model-verify/references/debate-protocol.md:48-52), and striking
+an uncitable claim as UNVERIFIED is the strike rule working
+(debate-protocol.md:26-28). The clause therefore contradicts the expectation's
+own first clause, which allows "converged with only trivial accepted
+amendments". Inner-reviewer vocabulary is not under the skill's control; the
+run-1 behavior was the system working. The 0.10.0 flake graded the executor's
+label choice; the 0.11.0 reword moved that brittleness to the inner debate's
+token choice. Both grade words. The fix grades outcomes.
+</evidence>
+
+<proposal>
+Replace expectations[0] of no-manufactured-objections (currently the string
+locked at plan Task 1) with this single-line ASCII string:
+
+"No manufactured objections: the plan verdict is PASS (or converged with only trivial accepted amendments), every risk the debate keeps cites a real file line (a claim struck or marked UNVERIFIED under the strike rule needs no citation - striking it is the correct handling), and no finding blocks the outcome - blocking means demanding a change to the plan or its files, forcing an additional round, or expanding scope; an accepted amendment that changes no file and a risk noted with or without a non-blocking label both pass"
+
+Phrase rationale:
+- "every risk the debate keeps" + the strike-rule parenthetical: run-1's
+  struck claim must not be dinged for lacking the citation whose absence is
+  WHY it was struck (this also pre-empts a literal grader re-reading of the
+  old "every noted risk cites" clause against struck claims).
+- "blocking means demanding a change to the plan or its files, forcing an
+  additional round, or expanding scope": the outcome definition - all three
+  are observable in any transcript and none depend on which verdict token
+  either advisor chose.
+- The explicit allowances name exactly the two mechanics that produced run-1
+  tokens (accepted no-file-change amendment; unlabeled risk).
+- A genuinely manufactured objection still fails: it demands an unneeded
+  change (blocking), pads a round (blocking and expectation 2), or expands
+  scope (blocking and the verdict clause).
+
+Implementation path if adopted: recorded as a reopened-debate amendment in
+the plan's debate record and deviations table; clause-lock test updated
+FIRST, then evals.json; the stability probe restarts its 3-consecutive-PASS
+count from zero on the final text.
+</proposal>
+
+<boundaries>The user's standing decisions are not under debate: outcome-based
+reword (no split into multiple expectations, no skill hardening), and nothing
+under skills/ changes this cycle. Expectations 2 and 3 of the case are
+untouched.</boundaries>
+
+<final-check>List anything you could not verify as UNVERIFIED, as before.</final-check>

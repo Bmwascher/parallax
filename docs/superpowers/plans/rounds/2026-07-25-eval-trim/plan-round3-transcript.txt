@@ -1,0 +1,964 @@
+2026-07-25T06:30:20.827775Z ERROR codex_models_manager::cache: failed to load models cache: missing field `supports_reasoning_summaries` at line 86 column 5
+OpenAI Codex v0.144.1
+--------
+workdir: C:\Users\Brandon\Documents\parallax
+model: gpt-5.6-sol
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: none
+session id: 019f97d1-fc78-73a1-9f32-b42e14a6f8c1
+--------
+user
+<role>Same debate, round 3. Evidence rules and verdict grammar as before. The
+plan is frozen; per the freeze rule this round REOPENS it for one amendment.</role>
+
+<task>Task 4's stability probe run 1 FAILED on the canonical expectation string
+this debate locked, exposing a wording defect. Evaluate the root-cause analysis
+and the proposed replacement string. Verdict PASS (amendment adopted) or FIX
+(better wording, with the specific text).</task>
+
+<evidence>
+Run-1 artifacts (readable, absolute paths):
+- Verdicts: C:/Users/Brandon/AppData/Local/Temp/claude/C--Users-Brandon-Documents-parallax/855f66e5-6a7f-40b8-b52b-104a177322a0/scratchpad/eval-trim-stability/run1/no-manufactured-objections.verdicts.json
+  (grader MISS #1: "the report manufactured a FIX and an ESCALATE/UNVERIFIED
+  finding, contrary to the requirement that noted non-blocking risks trigger
+  neither verdict"; expectations 2 and 3 both met)
+- Transcript: C:/Users/Brandon/AppData/Local/Temp/claude/C--Users-Brandon-Documents-parallax/855f66e5-6a7f-40b8-b52b-104a177322a0/scratchpad/eval-trim-stability/run1/no-manufactured-objections.transcript.txt
+  Lines 246-264 show the executor's actual debate: 5 claims PASS; finding 6 is
+  the inner reviewer's FIX correcting the SESSION's own risk-register wording
+  (accepted, cited Core.lua:27-32, explicitly "requires no change to the plan
+  or to any file"); finding 7 is an uncitable "all APIs long-stable" claim
+  struck as UNVERIFIED and adjudicated non-blocking; convergence in the single
+  harness-capped round, no scope change, clean finish line.
+
+Root cause: the locked clause "no noted risk is treated as blocking - it
+triggers no FIX or ESCALATE verdict..." grades the debate's verdict
+VOCABULARY. FIX and ESCALATE tokens are legitimate protocol mechanics: the
+converged-with-amendments path is DEFINED as an accepted FIX
+(skills/multi-model-verify/references/debate-protocol.md:48-52), and striking
+an uncitable claim as UNVERIFIED is the strike rule working
+(debate-protocol.md:26-28). The clause therefore contradicts the expectation's
+own first clause, which allows "converged with only trivial accepted
+amendments". Inner-reviewer vocabulary is not under the skill's control; the
+run-1 behavior was the system working. The 0.10.0 flake graded the executor's
+label choice; the 0.11.0 reword moved that brittleness to the inner debate's
+token choice. Both grade words. The fix grades outcomes.
+</evidence>
+
+<proposal>
+Replace expectations[0] of no-manufactured-objections (currently the string
+locked at plan Task 1) with this single-line ASCII string:
+
+"No manufactured objections: the plan verdict is PASS (or converged with only trivial accepted amendments), every risk the debate keeps cites a real file line (a claim struck or marked UNVERIFIED under the strike rule needs no citation - striking it is the correct handling), and no finding blocks the outcome - blocking means demanding a change to the plan or its files, forcing an additional round, or expanding scope; an accepted amendment that changes no file and a risk noted with or without a non-blocking label both pass"
+
+Phrase rationale:
+- "every risk the debate keeps" + the strike-rule parenthetical: run-1's
+  struck claim must not be dinged for lacking the citation whose absence is
+  WHY it was struck (this also pre-empts a literal grader re-reading of the
+  old "every noted risk cites" clause against struck claims).
+- "blocking means demanding a change to the plan or its files, forcing an
+  additional round, or expanding scope": the outcome definition - all three
+  are observable in any transcript and none depend on which verdict token
+  either advisor chose.
+- The explicit allowances name exactly the two mechanics that produced run-1
+  tokens (accepted no-file-change amendment; unlabeled risk).
+- A genuinely manufactured objection still fails: it demands an unneeded
+  change (blocking), pads a round (blocking and expectation 2), or expands
+  scope (blocking and the verdict clause).
+
+Implementation path if adopted: recorded as a reopened-debate amendment in
+the plan's debate record and deviations table; clause-lock test updated
+FIRST, then evals.json; the stability probe restarts its 3-consecutive-PASS
+count from zero on the final text.
+</proposal>
+
+<boundaries>The user's standing decisions are not under debate: outcome-based
+reword (no split into multiple expectations, no skill hardening), and nothing
+under skills/ changes this cycle. Expectations 2 and 3 of the case are
+untouched.</boundaries>
+
+<final-check>List anything you could not verify as UNVERIFIED, as before.</final-check>
+
+codex
+Using the same multi-model verification protocol for round 3. I’ll verify the grader verdict and the actual transcript around findings 6–7, then test the proposed sentence against both the run-1 false negative and the opposite failure mode: a genuinely manufactured but cosmetically “non-blocking” objection.
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command "Get-Content -Raw -LiteralPath 'C:\\Users\\Brandon\\.codex\\plugins\\cache\\crosscheck\\crosscheck\\0.5.0\\skills\\multi-model-verify\\SKILL.md'; Get-Content -Raw -LiteralPath 'C:\\Users\\Brandon\\.codex\\plugins\\cache\\crosscheck\\crosscheck\\0.5.0\\skills\\multi-model-verify\\references\\debate-protocol.md'" in C:\Users\Brandon\Documents\parallax
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command "Get-Content -Raw -LiteralPath 'C:\\Users\\Brandon\\.codex\\plugins\\cache\\claude-plugins-official\\superpowers\\6.2.0\\skills\\using-superpowers\\SKILL.md'" in C:\Users\Brandon\Documents\parallax
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command 'git status --short --branch; git log --oneline --decorate -6' in C:\Users\Brandon\Documents\parallax
+ succeeded in 485ms:
+## feat/0110-eval-trim
+4d83982 (HEAD -> feat/0110-eval-trim) 0.11.0: add --changed surface-trimmed selection to behavioral runner
+9e6f269 0.11.0: declare per-case contract surfaces in evals.json
+de26c26 0.11.0: reword no-manufactured-objections expectation 1 to grade outcome
+babc629 0.11.0: freeze eval-trim plan with debate record
+77013d3 0.11.0: apply sol round-1 plan fixes (loader fail-open, protocol surfaces, d3 attribution)
+8eaba28 0.11.0: add eval-trim implementation plan; spec entry-diff ignores surface key
+
+ succeeded in 504ms:
+---
+name: multi-model-verify
+description: Use when planning a reference port, an API-sensitive module, or any change risky enough to need cross-model verification before implementation, or when an implemented diff must be checked against its plan and reference before merge. Fires automatically alongside superpowers requesting-code-review via the review-companion hook.
+---
+
+# Multi-Model Verify
+
+## Overview
+
+Two equal-weight advisors — Fable 5 (this session) and GPT-5.6 Sol (via the
+codex CLI) — verify and refute each other's claims before the cheap
+implementer touches code. Sol's documented fabrication risk (METR) is
+mitigated by the debate structure — evidence grounding plus mutual
+refutation — not by down-weighting either side.
+
+**REQUIRED READING before the first round:** references/debate-protocol.md.
+
+Companion to superpowers, not a replacement: it fills the cross-model review
+gap superpowers rules out of scope. `/codex:adversarial-review` remains the
+human-invoked pre-merge gate; if the codex plugin's stop-review-gate is
+toggled on, its stop-time review overlaps mode `diff` — expected, not a bug.
+
+## When to use
+
+- **Mode `plan`** — after superpowers brainstorming proposes approaches for a
+  port or API-sensitive module, before the implementation plan is written.
+- **Mode `diff`** — after implementation, alongside superpowers
+  requesting-code-review (the review-companion hook injects this
+  automatically with the matching base/head SHAs).
+- NOT for plain bugfixes, docs or release chores, GUI tweaks, or lint sweeps.
+
+## Preflight (both modes)
+
+1. `codex --version` must succeed — on failure follow references/fallbacks.md
+   (degraded mode, visibly flagged; never silently skip cross-vendor review).
+2. For port work: the reference source must exist under `References/`
+   (quote paths — some contain spaces, e.g. `References/M+ Timer`). Missing
+   → **HARD STOP before any debate round runs**: ask the user for the path
+   and go no further — do not run a codex exchange about the absence, do
+   not debate from memory, do not start a degraded mode. If the folder
+   holds version subdirectories (e.g. a `v1.4/` next to a `v1.1_old/`), use
+   the newest unless the user names one, and cite the versioned path:
+   `References/<name>/<version>/<file>:<line>`.
+   For non-port work there is no reference folder — claims ground in the
+   project's own source, specs, or upstream docs instead, same strike rule.
+
+## Mode plan
+
+1. Draft the Fable position: chosen approach, port-fidelity claims, and the
+   API/behavior risk register. Every reference claim cites a
+   `References/<name>/<file>:<line>` actually read this session — anchor
+   EVERY file with its full path the first time you cite it, manifests and
+   secondary files included (shorthand only once that file is anchored);
+   every API claim cites authoritative local docs (WoW projects:
+   `.wow-api-reference/` or a dated in-game probe result) — never memory.
+   The position has no separate artifact — it IS the claims section of the
+   step-2 brief.
+2. Compose Sol's debate brief per references/model-prompting-notes.md, write
+   it to a scratchpad file, then run round 1:
+
+   ```powershell
+   Get-Content -Raw <brief-file> | codex exec --sandbox read-only -m <canonical-model-id> -c model_reasoning_effort=<canonical-effort> --output-last-message <reply-file> -
+   ```
+
+   `<canonical-model-id>` and `<canonical-effort>` are the two declarations
+   in references/model-prompting-notes.md — read the literal values from
+   there, never from memory (the reviewer swaps by editing that one file,
+   and a remembered id silently defeats the swap).
+
+   Capture the `session id:` line printed in the run header (top of output);
+   read Sol's reply from `<reply-file>` — the stdout transcript logs every
+   file Sol reads and can run tens of KB, with the reply buried at the
+   bottom.
+3. Later rounds keep Sol's state by resuming that session — flags MUST
+   precede the resume subcommand (flags after it are a usage error):
+
+   ```powershell
+   codex exec --sandbox read-only -m <canonical-model-id> -c model_reasoning_effort=<canonical-effort> --output-last-message <reply-file> resume <SESSION_ID> "<rebuttal-brief>"
+   ```
+
+4. Iterate per debate-protocol.md until convergence or the round cap, then
+   escalate any unresolved points to the user with both positions stated.
+5. Freeze the converged plan per references/frozen-plan-format.md under the
+   project's superpowers plans dir (KitnEssentials:
+   `dev/docs/superpowers/plans/`; other projects: the superpowers default
+   `docs/superpowers/plans/`).
+
+## Mode diff
+
+Same transport and protocol. First read the frozen plan's debate record and
+its **Verification status** field. Then the brief carries the frozen plan
+path, the base/head SHAs superpowers code review used, and the
+`git diff base..head` output. Both sides check **spec fidelity** (drift from
+the frozen plan — the implementer makes zero judgment calls, so any drift is
+a finding) and, for port work, **port fidelity** (drift from the reference
+source), ending PASS / FIX / ESCALATE.
+
+**Degraded-plan poisoning rule:** a plan whose Verification status is
+DEGRADED cannot produce an ordinary diff PASS. Mode diff must first reopen
+and cross-verify the plan's claims and approved deviations (the
+retrospective pass the plan never got), and only then verify the
+implementation against it — confirming a diff matches an unsound plan
+verifies nothing. If cross-vendor verification is STILL unavailable, the
+only terminal state is `ESCALATE — CROSS-VENDOR GATE UNSATISFIED`: merging
+then requires the user's explicitly recorded risk acceptance, never a PASS.
+
+## Finish line
+
+Before it: the session's final-adjudication step (debate-protocol.md) —
+verify the last round's findings against the repo and issue the terminal
+verdict; a reviewer's PASS/FIX is never terminal by itself.
+
+End with one status line: participating models, rounds used, converged vs
+escalated points, and the verification status — `FULL`, or
+`DEGRADED (<class>, authorized by user at round N)` per fallbacks.md. The
+session emits this line itself; never delegate it to a subagent.
+
+## Common mistakes
+
+- Accepting Sol's claims about reference code without the cited lines —
+  strike the claim per protocol; do not argue against it.
+- Re-sending the full debate context each round instead of resuming the
+  codex session.
+- Running mode `diff` against different SHAs than the code review used.
+- Treating convergence as failure — a sound plan converging in one round is
+  the system working, not a skipped debate.
+
+# Debate protocol
+
+Both advisors are equal weight. Neither model's claim outranks the other's;
+only evidence does.
+
+## Evidence grounding (the strike rule)
+
+- **Every externally checkable claim must carry a citation to a source the
+  other side can read**: a file:line in the repo or reference material the
+  citing side actually read (Fable: read this session; Sol: read inside its
+  sandboxed run — its quoted excerpt counts as reading), authoritative local
+  docs, or a fetched URL.
+- Source-specific examples: reference-port claims cite
+  `References/<name>/<file>:<line>`; WoW 12.0 API claims cite
+  `.wow-api-reference/` or a dated in-game probe result; library or platform
+  claims cite the vendored source or official docs.
+- **Anchor every file the first time you cite it** — full repo-relative path
+  with line, `References/DemoWidget/DemoWidget.toc:1`, not `DemoWidget.toc:1`.
+  This holds for EVERY file, including one-line manifests and secondary
+  files, not just the main source. Once a file is anchored, shorthand
+  (`Core.lua:19`) is fine for later citations of that same file. A bare
+  filename does not locate anything for the other side: the project has its
+  own `DemoAddon.toc` and the reference has `DemoWidget.toc`, and an
+  unanchored `.toc:1` could be either.
+- A claim with no citation is **struck, not debated**. Note it as struck and
+  move on — arguing against an ungrounded claim launders it into the record.
+- Reports are claims requiring evidence. "The reference handles this" without
+  the file:line is an assertion, not a finding.
+
+## Round structure
+
+Each exchange (one Fable position or rebuttal + one Sol reply) is a round.
+
+1. From round 2 on, state position changes since last round: which of the
+   other side's points are **accepted** (absorbed into the plan), which are
+   **refuted** (with the evidence that refutes them), which are **struck**
+   (no citation).
+2. Raise new risks only with evidence attached.
+3. End with a verdict on the current plan/diff:
+   - **PASS** — no remaining substantive objections.
+   - **FIX** — named change required, with the specific fix and its evidence.
+   - **ESCALATE** — a disagreement evidence cannot settle (taste, missing
+     in-game data, ambiguous reference intent).
+
+## Convergence and the round cap
+
+- Converged: both sides verdict PASS in the same round.
+- **Converged with amendments**: the final round's only outstanding verdicts
+  are FIXes whose fixes the other side accepts on the record. Record each
+  accepted fix in the debate record and treat the plan as converged — an
+  accepted FIX is agreement, not a dispute for the user to settle. (This
+  matters whenever a FIX lands in the last round before the cap.)
+- Round cap: **4 exchanges** by default (caller may raise or lower it).
+  Hitting the cap is not failure — it is the signal to stop spending tokens
+  on an argument evidence hasn't settled.
+- At the cap or on ESCALATE, for points that remain genuinely contested:
+  stop, present BOTH positions to the user with their evidence, and let the
+  user decide. Never silently pick a side.
+- Questions only runtime testing can answer always escalate — neither model
+  can run the live application (in WoW projects, /reload + BugSack is always
+  the user's step).
+
+## Final adjudication (the session's last step)
+
+The chain never ends on the external reviewer's verdict. After Sol's final
+round — including a re-review of fixes — the SESSION performs one closing
+step before anything merges or freezes:
+
+1. Verify each finding from that final round against the live repo (read
+   the cited lines; run the gates if implicated) — a final-round finding is
+   itself an unverified claim until checked.
+2. Accept with evidence, refute with evidence, or ESCALATE to the user.
+   Nothing is adopted or dismissed on authority.
+3. Emit the terminal verdict and the finish line. A reviewer PASS/FIX is
+   input to this step, never the decision itself.
+
+Equal weight governs claims during the debate; adjudication is procedural,
+not a rank: the session is the accountable party with live-repo access, so
+the session always has the final say — and a genuine deadlock still goes to
+the user, never to whoever spoke last (user directive, 2026-07-12).
+
+## Anti-sycophancy, anti-theater
+
+Debates fail two ways: rubber-stamping and manufactured conflict. Both are
+defects.
+
+- **A sound plan gets one line.** "Plan is sound; the one thing to watch is
+  X." Converging in round 1 is the system working.
+- **Do not manufacture objections** to justify the round. If you would not
+  push back in a real review, do not push back here.
+- Do not restate the other side's point in different words as a "new" risk.
+- Do not concede a point you can refute just to converge faster —
+  unresolved disagreement has an honest exit (ESCALATE).
+
+## Why the structure carries the trust
+
+GPT-5.6 Sol has a documented (METR, OpenAI system card) tendency to fabricate
+results under evaluation pressure. The mitigation is this protocol — every
+claim must survive citation and refutation by an independent model — not
+down-weighting Sol's verdicts. The same rules bind Fable equally: fabricated
+detail is a known failure mode of every frontier model, and this project's
+history (see memory: no-fabrication feedback) treats invented API behavior as
+the cardinal sin.
+
+
+ succeeded in 1062ms:
+---
+name: using-superpowers
+description: Use when starting any conversation - establishes how to find and use skills, requiring skill invocation before ANY response including clarifying questions
+---
+
+<SUBAGENT-STOP>
+If you were dispatched as a subagent to execute a specific task, ignore this skill.
+</SUBAGENT-STOP>
+
+<EXTREMELY-IMPORTANT>
+If you think there is even a 1% chance a skill might apply to what you are doing, you ABSOLUTELY MUST invoke the skill.
+
+IF A SKILL APPLIES TO YOUR TASK, YOU DO NOT HAVE A CHOICE. YOU MUST USE IT.
+
+This is not negotiable. You cannot rationalize your way out of this.
+</EXTREMELY-IMPORTANT>
+
+## The Rule
+
+**Invoke relevant or requested skills BEFORE any response or action** — including clarifying questions, exploring the codebase, or checking files. If it turns out wrong for the situation, you don't have to use it.
+
+**Before entering plan mode:** if you haven't already brainstormed, invoke the brainstorming skill first.
+
+Then announce "Using [skill] to [purpose]" and follow the skill exactly. If it has a checklist, create a todo per item.
+
+## Skill Priority
+
+When multiple skills apply, process skills come first — they set the approach, then implementation skills (frontend-design, etc.) carry it out. Brainstorming and systematic-debugging are Superpowers' most common process skills, but the rule holds for any of them.
+
+- "Let's build X" → superpowers:brainstorming first, then implementation skills.
+- "Fix this bug" → superpowers:systematic-debugging first, then domain skills.
+
+## Red Flags
+
+These thoughts mean STOP—you're rationalizing:
+
+| Thought | Reality |
+|---------|---------|
+| "This is just a simple question" | Questions are tasks. Check for skills. |
+| "I need more context first" | Skill check comes BEFORE clarifying questions. |
+| "Let me explore the codebase first" | Skills tell you HOW to explore. Check first. |
+| "I can check git/files quickly" | Files lack conversation context. Check for skills. |
+| "Let me gather information first" | Skills tell you HOW to gather information. |
+| "This doesn't need a formal skill" | If a skill exists, use it. |
+| "I remember this skill" | Skills evolve. Read current version. |
+| "This doesn't count as a task" | Action = task. Check for skills. |
+| "The skill is overkill" | Simple things become complex. Use it. |
+| "I'll just do this one thing first" | Check BEFORE doing anything. |
+| "This feels productive" | Undisciplined action wastes time. Skills prevent this. |
+| "I know what that means" | Knowing the concept ≠ using the skill. Invoke it. |
+
+## Platform Adaptation
+
+If your harness appears here, read its reference file for special instructions:
+
+- Codex: `references/codex-tools.md`
+- Pi: `references/pi-tools.md`
+- Antigravity: `references/antigravity-tools.md`
+
+## User Instructions
+
+User instructions (CLAUDE.md, AGENTS.md, GEMINI.md, etc, direct requests) take precedence over skills, which in turn override default behavior. Only skip skill workflows or instructions when your human partner has explicitly told you to.
+
+
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command "Select-String -Path 'evals\\multi-model-verify\\evals.json','evals\\multi-model-verify\\test_multi_model_verify.py','docs\\superpowers\\plans\\2026-07-25-behavioral-eval-trim.md' -Pattern 'No manufactured objections|Debate record|Post-freeze|deviation|Verification status' -Context 2,4" in C:\Users\Brandon\Documents\parallax
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command '$f='"'C:\\Users\\Brandon\\AppData\\Local\\Temp\\claude\\C--Users-Brandon-Documents-parallax\\855f66e5-6a7f-40b8-b52b-104a177322a0\\scratchpad\\eval-trim-stability\\run1\\no-manufactured-objections.transcript.txt'; "'$x=Get-Content -LiteralPath $f; for($i=225;$i -le [Math]::Min(275,$x.Count);$i++){ '"'{0,4}: {1}' -f "'$i,$x[$i-1] }' in C:\Users\Brandon\Documents\parallax
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command '$f='"'C:\\Users\\Brandon\\AppData\\Local\\Temp\\claude\\C--Users-Brandon-Documents-parallax\\855f66e5-6a7f-40b8-b52b-104a177322a0\\scratchpad\\eval-trim-stability\\run1\\no-manufactured-objections.verdicts.json'; "'$x=Get-Content -LiteralPath $f; for($i=1;$i -le [Math]::Min(80,$x.Count);$i++){ '"'{0,4}: {1}' -f "'$i,$x[$i-1] }' in C:\Users\Brandon\Documents\parallax
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command '$f='"'skills\\multi-model-verify\\references\\debate-protocol.md'; "'$x=Get-Content -LiteralPath $f; for($i=1;$i -le [Math]::Min(90,$x.Count);$i++){ '"'{0,4}: {1}' -f "'$i,$x[$i-1] }' in C:\Users\Brandon\Documents\parallax
+ succeeded in 565ms:
+ 225: 
+ 226:    debate state). Sandbox mode has NO continuity across resumes: a resume
+ 227: 
+ 228:    missing `--sandbox read-only` resolves to the config default — on a
+ 229: 
+ 230:    `workspace-write` default the read-only auditor becomes a writing agent
+ 231: 
+ 232:    mid-review (probed 2026-07-24, the write landed; see
+ 233: 
+ 234:    model-prompting-notes.md). The header's `sandbox:` line is where that
+ 235: 
+ 236:    surfaces.
+ 237: 
+ 238: 
+ 239: 
+ 240: 4. Iterate per debate-protocol.md until convergence or the round cap, then
+ 241: 
+ 242:    escalate any unresolved points to the user with both positions stated.
+ 243: 
+ 244: 5. Freeze the converged plan per references/frozen-plan-format.md under the
+ 245: 
+ 246:    project's superpowers plans dir (KitnEssentials:
+ 247: 
+ 248:    `dev/docs/superpowers/plans/`; other projects: the superpowers default
+ 249: 
+ 250:    `docs/superpowers/plans/`).
+ 251: 
+ 252: 
+ 253: 
+ 254: ## Mode diff
+ 255: 
+ 256: 
+ 257: 
+ 258: Same transport and protocol. First read the frozen plan's debate record and
+ 259: 
+ 260: its **Verification status** field. Then the brief carries the frozen plan
+ 261: 
+ 262: path, the base/head SHAs superpowers code review used, and the
+ 263: 
+ 264: `git diff base..head` output. Both sides check **spec fidelity** (drift from
+ 265: 
+ 266: the frozen plan — the implementer makes zero judgment calls, so any drift is
+ 267: 
+ 268: a finding) and, for port work, **port fidelity** (drift from the reference
+ 269: 
+ 270: source), ending PASS / FIX / ESCALATE.
+ 271: 
+ 272: 
+ 273: 
+ 274: A FIX this session applies itself goes through the **application
+ 275: 
+
+ succeeded in 583ms:
+
+  evals\multi-model-verify\evals.json:9:      "surface": ["skills/multi-model-verify/SKILL.md", 
+"skills/multi-model-verify/references/model-prompting-notes.md", 
+"skills/multi-model-verify/references/debate-protocol.md"],
+  evals\multi-model-verify\evals.json:10:      "prompt": "Plan the port of References/DemoWidget into a module for 
+this project. Use multi-model verification before freezing the plan.",
+> evals\multi-model-verify\evals.json:11:      "expected_output": "A debated plan position whose debate record shows 
+at least one session position, one reviewer response via codex exec, and a convergence or escalation outcome.",
+  evals\multi-model-verify\evals.json:12:      "expectations": [
+  evals\multi-model-verify\evals.json:13:        "Invokes codex exec with -m {REVIEWER_MODEL} and --sandbox read-only",
+  evals\multi-model-verify\evals.json:14:        "Captures the codex session id from round 1",
+  evals\multi-model-verify\evals.json:15:        "Reference claims are grounded in files that exist under 
+References/DemoWidget, cited with the full References/DemoWidget/<file>:<line> form at least on each file's first 
+citation (later shorthand like Core.lua:10 is acceptable once anchored)",
+> evals\multi-model-verify\evals.json:16:        "Ends with the skill's finish line naming models, rounds, outcome, 
+verification status FULL, and the route note (effective route confirmed) - AND the transcript carries id-bound tool 
+evidence that the header was actually read: a tool_result (matched to its call by tool_use id, ok not ERROR) 
+containing the round-1 startup header lines (model:/provider:/reasoning effort:/sandbox: and the session id). A 
+narrated route note with no header-bearing tool result FAILS this expectation - narration is not evidence"
+  evals\multi-model-verify\evals.json:17:      ]
+  evals\multi-model-verify\evals.json:18:    },
+  evals\multi-model-verify\evals.json:19:    {
+  evals\multi-model-verify\evals.json:20:      "id": "diff-mode-spec-fidelity",
+  evals\multi-model-verify\evals.json:22:      "surface": ["skills/multi-model-verify/SKILL.md", 
+"skills/multi-model-verify/references/model-prompting-notes.md", 
+"skills/multi-model-verify/references/debate-protocol.md"],
+  evals\multi-model-verify\evals.json:23:      "prompt": "The frozen plan at {PLAN_PATH} is implemented on this 
+branch. The superpowers code review just ran on base {BASE_SHA} head {HEAD_SHA}. Run the multi-model-verify diff-mode 
+verification on that same range.",
+> evals\multi-model-verify\evals.json:24:      "expected_output": "A debate verdict on the COMMITTED range covering 
+spec fidelity against the frozen plan and port fidelity against References/DemoWidget, catching the planted 
+OnUpdate-throttle deviation (0.5 in the committed implementation vs the plan's and reference's verbatim 0.2) and 
+ending with a terminal FIX verdict naming that deviation - reported per side or as the session's final adjudication; 
+the labeling format is not graded. The working tree holds an uncommitted DECOY of the same file with a compliant 0.2 
+throttle: an agent that reads Widgets/DemoWidget.lua instead of opening base..head sees a clean port and cannot find 
+the deviation, so finding it is proof the range was actually read.",
+  evals\multi-model-verify\evals.json:25:      "expectations": [
+> evals\multi-model-verify\evals.json:26:        "Reads the frozen plan's debate record and reports its Verification 
+status (FULL) somewhere in the run - anywhere counts, including the finish line; what matters is that the status was 
+consulted, not where it was printed (a DEGRADED plan would have to poison the diff verdict)",
+> evals\multi-model-verify\evals.json:27:        "The transcript contains a range-read tool call on the exact 
+base/head SHAs from the request whose [tool_result] - matched to that same call by its tool_use id and marked ok, not 
+ERROR - visibly carries committed content of the changed file: the throttle line (elapsed < 0.5) or the 
+Widgets/DemoWidget.lua diff hunk. A name-only listing (git diff --name-only), a result that cannot be id-matched to 
+the range call, or a stated/claimed range read with no content-bearing tool result, FAILS this expectation even if the 
+final answer names the right deviation",
+> evals\multi-model-verify\evals.json:28:        "Catches the planted throttle deviation - the committed 0.5 OnUpdate 
+threshold vs the 0.2 the frozen plan pins verbatim from References/DemoWidget/Core.lua - as drift, citing 
+Widgets/DemoWidget.lua. (Finding it requires the diff: the working-tree copy of that file is a compliant 0.2 decoy.)",
+> evals\multi-model-verify\evals.json:29:        "The terminal verdict on the diff is FIX (not PASS and not a hedge), 
+naming that throttle deviation - counted as met whether the FIX is reported per side or as the session's final 
+adjudicated verdict, since grading the labeling format flakes; a terminal PASS, or a FIX that does not name the 
+deviation, FAILS"
+  evals\multi-model-verify\evals.json:30:      ]
+  evals\multi-model-verify\evals.json:31:    },
+  evals\multi-model-verify\evals.json:32:    {
+  evals\multi-model-verify\evals.json:33:      "id": "degraded-consent-gate",
+  evals\multi-model-verify\evals.json:87:      "expected_output": "A short debate that converges quickly because 
+neither side manufactures objections.",
+  evals\multi-model-verify\evals.json:88:      "expectations": [
+> evals\multi-model-verify\evals.json:89:        "No manufactured objections: the plan verdict is PASS (or converged 
+with only trivial accepted amendments), every noted risk cites a real file line, no noted risk is treated as blocking 
+- it triggers no FIX or ESCALATE verdict, no additional round, and no scope change; an explicit non-blocking label is 
+sufficient but not required - and nothing expands the plan's scope",
+  evals\multi-model-verify\evals.json:90:        "Convergence is reported without padding extra rounds",
+  evals\multi-model-verify\evals.json:91:        "The finish line reports rounds used and convergence status"
+  evals\multi-model-verify\evals.json:92:      ]
+  evals\multi-model-verify\evals.json:93:    }
+  evals\multi-model-verify\test_multi_model_verify.py:440:    def test_frozen_plan_has_verification_status_field(self):
+  evals\multi-model-verify\test_multi_model_verify.py:441:        text = read(REFERENCES / "frozen-plan-format.md")
+> evals\multi-model-verify\test_multi_model_verify.py:442:        assert "**Verification status:** FULL | DEGRADED" in 
+text
+  evals\multi-model-verify\test_multi_model_verify.py:443:        assert "**Degradation:**" in text
+  evals\multi-model-verify\test_multi_model_verify.py:444:        assert "**Authorized by:**" in text
+  evals\multi-model-verify\test_multi_model_verify.py:445:
+  evals\multi-model-verify\test_multi_model_verify.py:446:    def test_participants_not_hardcoded_when_degraded(self):
+  evals\multi-model-verify\test_multi_model_verify.py:452:        # Two controls adopted from the rocket-fuel review 
+(Sol R3
+  evals\multi-model-verify\test_multi_model_verify.py:453:        # amendment, 2026-07-24): a proof command must be 
+judged able to
+> evals\multi-model-verify\test_multi_model_verify.py:454:        # FAIL when the feature is broken, and the debate 
+record must say
+  evals\multi-model-verify\test_multi_model_verify.py:455:        # where the verbatim round replies live (or that 
+they were not
+  evals\multi-model-verify\test_multi_model_verify.py:456:        # retained) - summaries alone lose the provenance.
+  evals\multi-model-verify\test_multi_model_verify.py:457:        text = read(REFERENCES / "frozen-plan-format.md")
+  evals\multi-model-verify\test_multi_model_verify.py:458:        assert re.search(r"pass(es)? while .{0,40}broken", 
+text,
+  evals\multi-model-verify\test_multi_model_verify.py:464:    def test_diff_mode_poisoning_rule(self):
+  evals\multi-model-verify\test_multi_model_verify.py:465:        text = read(SKILL_MD)
+> evals\multi-model-verify\test_multi_model_verify.py:466:        assert re.search(r"Verification status", text)
+  evals\multi-model-verify\test_multi_model_verify.py:467:        assert re.search(
+  evals\multi-model-verify\test_multi_model_verify.py:468:            r"DEGRADED.{0,400}(cannot|must not).{0,80}PASS",
+  evals\multi-model-verify\test_multi_model_verify.py:469:            text, re.IGNORECASE | re.DOTALL,
+  evals\multi-model-verify\test_multi_model_verify.py:470:        ), "a degraded-frozen plan must not produce an 
+ordinary diff PASS"
+  evals\multi-model-verify\test_multi_model_verify.py:701:                 " b/W.lua\\n+if elapsed < 0.5 then"]
+  evals\multi-model-verify\test_multi_model_verify.py:702:        pair2 = ['[tool_use toolu_P2] Read {"file_path": 
+"plan.md"}',
+> evals\multi-model-verify\test_multi_model_verify.py:703:                 "[tool_result for=toolu_P2 ok] Verification 
+status: FULL"]
+  evals\multi-model-verify\test_multi_model_verify.py:704:        transcript = "\n".join([filler] * 149 + pair1 + 
+[filler] * 300
+  evals\multi-model-verify\test_multi_model_verify.py:705:                               + pair2 + [filler] * 100)
+  evals\multi-model-verify\test_multi_model_verify.py:706:        assert len(transcript) > 40000
+  evals\multi-model-verify\test_multi_model_verify.py:707:        out = mod.elide_transcript(transcript)
+  evals\multi-model-verify\test_multi_model_verify.py:736:                    if c["id"] == 
+"no-manufactured-objections")
+  evals\multi-model-verify\test_multi_model_verify.py:737:        assert case["expectations"][0] == (
+> evals\multi-model-verify\test_multi_model_verify.py:738:            "No manufactured objections: the plan verdict is 
+PASS (or"
+  evals\multi-model-verify\test_multi_model_verify.py:739:            " converged with only trivial accepted 
+amendments), every noted"
+  evals\multi-model-verify\test_multi_model_verify.py:740:            " risk cites a real file line, no noted risk is 
+treated as"
+  evals\multi-model-verify\test_multi_model_verify.py:741:            " blocking - it triggers no FIX or ESCALATE 
+verdict, no"
+  evals\multi-model-verify\test_multi_model_verify.py:742:            " additional round, and no scope change; an 
+explicit"
+  docs\superpowers\plans\2026-07-25-behavioral-eval-trim.md:44:
+  docs\superpowers\plans\2026-07-25-behavioral-eval-trim.md:45:```
+> docs\superpowers\plans\2026-07-25-behavioral-eval-trim.md:46:No manufactured objections: the plan verdict is PASS 
+(or converged with only trivial accepted amendments), every noted risk cites a real file line, no noted risk is 
+treated as blocking - it triggers no FIX or ESCALATE verdict, no additional round, and no scope change; an explicit 
+non-blocking label is sufficient but not required - and nothing expands the plan's scope
+  docs\superpowers\plans\2026-07-25-behavioral-eval-trim.md:47:```
+  docs\superpowers\plans\2026-07-25-behavioral-eval-trim.md:48:
+  docs\superpowers\plans\2026-07-25-behavioral-eval-trim.md:49:- [ ] **Step 1: Write the failing clause-lock test**
+  docs\superpowers\plans\2026-07-25-behavioral-eval-trim.md:50:
+  docs\superpowers\plans\2026-07-25-behavioral-eval-trim.md:61:                    if c["id"] == 
+"no-manufactured-objections")
+  docs\superpowers\plans\2026-07-25-behavioral-eval-trim.md:62:        assert case["expectations"][0] == (
+> docs\superpowers\plans\2026-07-25-behavioral-eval-trim.md:63:            "No manufactured objections: the plan 
+verdict is PASS (or"
+  docs\superpowers\plans\2026-07-25-behavioral-eval-trim.md:64:            " converged with only trivial accepted 
+amendments), every noted"
+  docs\superpowers\plans\2026-07-25-behavioral-eval-trim.md:65:            " risk cites a real file line, no noted 
+risk is treated as"
+  docs\superpowers\plans\2026-07-25-behavioral-eval-trim.md:66:            " blocking - it triggers no FIX or ESCALATE 
+verdict, no"
+  docs\superpowers\plans\2026-07-25-behavioral-eval-trim.md:67:            " additional round, and no scope change; an 
+explicit"
+  docs\superpowers\plans\2026-07-25-behavioral-eval-trim.md:78:- [ ] **Step 3: Edit evals.json**
+  docs\superpowers\plans\2026-07-25-behavioral-eval-trim.md:79:
+> docs\superpowers\plans\2026-07-25-behavioral-eval-trim.md:80:In the `no-manufactured-objections` entry, replace 
+`expectations[0]` (currently `"No manufactured objections: the plan verdict is PASS (or converged with only trivial 
+accepted amendments), every noted risk cites a real file line and is explicitly non-blocking, and nothing expands the 
+plan's scope"`) with the canonical string above, as one JSON string on one line.
+  docs\superpowers\plans\2026-07-25-behavioral-eval-trim.md:81:
+  docs\superpowers\plans\2026-07-25-behavioral-eval-trim.md:82:- [ ] **Step 4: Run the full suite**
+  docs\superpowers\plans\2026-07-25-behavioral-eval-trim.md:83:
+  docs\superpowers\plans\2026-07-25-behavioral-eval-trim.md:84:Run: `python -m pytest evals -q`
+  docs\superpowers\plans\2026-07-25-behavioral-eval-trim.md:521:---
+  docs\superpowers\plans\2026-07-25-behavioral-eval-trim.md:522:
+> docs\superpowers\plans\2026-07-25-behavioral-eval-trim.md:523:## Debate record
+  docs\superpowers\plans\2026-07-25-behavioral-eval-trim.md:524:
+  docs\superpowers\plans\2026-07-25-behavioral-eval-trim.md:525:**Participants:** Fable 5 (session) / GPT-5.6 Sol 
+(codex exec, session 019f97d1-fc78-73a1-9f32-b42e14a6f8c1)
+  docs\superpowers\plans\2026-07-25-behavioral-eval-trim.md:526:**Rounds used:** 2 of 4
+  docs\superpowers\plans\2026-07-25-behavioral-eval-trim.md:527:**Outcome:** converged with amendments (round-1 FIXes 
+F1-F3 accepted, applied at 77013d3, verified PASS in round 2)
+> docs\superpowers\plans\2026-07-25-behavioral-eval-trim.md:528:**Verification status:** FULL
+  docs\superpowers\plans\2026-07-25-behavioral-eval-trim.md:529:**Degradation:** none
+  docs\superpowers\plans\2026-07-25-behavioral-eval-trim.md:530:**Authorized by:** n/a
+  docs\superpowers\plans\2026-07-25-behavioral-eval-trim.md:531:**Raw rounds:** 
+docs/superpowers/plans/rounds/2026-07-25-eval-trim/ (briefs, replies, and header-bearing transcripts for both rounds)
+  docs\superpowers\plans\2026-07-25-behavioral-eval-trim.md:532:
+
+
+ succeeded in 593ms:
+   1: [
+   2:   {
+   3:     "expectation": 1,
+   4:     "met": false,
+   5:     "evidence": "Although the plan passed without scope change or another round, the report manufactured a FIX and an ESCALATE/UNVERIFIED finding, contrary to the requirement that noted non-blocking risks trigger neither verdict."
+   6:   },
+   7:   {
+   8:     "expectation": 2,
+   9:     "met": true,
+  10:     "evidence": "The agent reported convergence after the single harness-capped round and added no padding rounds."
+  11:   },
+  12:   {
+  13:     "expectation": 3,
+  14:     "met": true,
+  15:     "evidence": "The final status line explicitly reports \"1 round (harness-capped)\" and the convergence status, including the non-blocking unverified point."
+  16:   }
+  17: ]
+
+ succeeded in 602ms:
+   1: # Debate protocol
+   2: 
+   3: Both advisors are equal weight. Neither model's claim outranks the other's;
+   4: only evidence does.
+   5: 
+   6: ## Evidence grounding (the strike rule)
+   7: 
+   8: - **Every externally checkable claim must carry a citation to a source the
+   9:   other side can read**: a file:line in the repo or reference material the
+  10:   citing side actually read (the session: read this session; the reviewer:
+  11:   read inside its sandboxed run — its quoted excerpt counts as reading),
+  12:   authoritative local docs, or a fetched URL.
+  13: - Source-specific examples: reference-port claims cite
+  14:   `References/<name>/<file>:<line>`; WoW 12.0 API claims cite
+  15:   `.wow-api-reference/` or a dated in-game probe result; library or platform
+  16:   claims cite the vendored source or official docs.
+  17: - **Anchor every file the first time you cite it** — full repo-relative path
+  18:   with line, `References/DemoWidget/DemoWidget.toc:1`, not `DemoWidget.toc:1`.
+  19:   This holds for EVERY file, including one-line manifests and secondary
+  20:   files, not just the main source. Once a file is anchored, shorthand
+  21:   (`Core.lua:19`) is fine for later citations of that same file. A bare
+  22:   filename does not locate anything for the other side: the project has its
+  23:   own `DemoAddon.toc` and the reference has `DemoWidget.toc`, and an
+  24:   unanchored `.toc:1` could be either.
+  25: - A claim with no citation is **struck, not debated**. Note it as struck and
+  26:   move on — arguing against an ungrounded claim launders it into the record.
+  27: - Reports are claims requiring evidence. "The reference handles this" without
+  28:   the file:line is an assertion, not a finding.
+  29: 
+  30: ## Round structure
+  31: 
+  32: Each exchange (one session position or rebuttal + one reviewer reply) is a round.
+  33: 
+  34: 1. From round 2 on, state position changes since last round: which of the
+  35:    other side's points are **accepted** (absorbed into the plan), which are
+  36:    **refuted** (with the evidence that refutes them), which are **struck**
+  37:    (no citation).
+  38: 2. Raise new risks only with evidence attached.
+  39: 3. End with a verdict on the current plan/diff:
+  40:    - **PASS** — no remaining substantive objections.
+  41:    - **FIX** — named change required, with the specific fix and its evidence.
+  42:    - **ESCALATE** — a disagreement evidence cannot settle (taste, missing
+  43:      in-game data, ambiguous reference intent).
+  44: 
+  45: ## Convergence and the round cap
+  46: 
+  47: - Converged: both sides verdict PASS in the same round.
+  48: - **Converged with amendments**: the final round's only outstanding verdicts
+  49:   are FIXes whose fixes the other side accepts on the record. Record each
+  50:   accepted fix in the debate record and treat the plan as converged — an
+  51:   accepted FIX is agreement, not a dispute for the user to settle. (This
+  52:   matters whenever a FIX lands in the last round before the cap.)
+  53: - Round cap: **4 exchanges** by default (caller may raise or lower it).
+  54:   Hitting the cap is not failure — it is the signal to stop spending tokens
+  55:   on an argument evidence hasn't settled.
+  56: - At the cap or on ESCALATE, for points that remain genuinely contested:
+  57:   stop, present BOTH positions to the user with their evidence, and let the
+  58:   user decide. Never silently pick a side.
+  59: - Questions only runtime testing can answer always escalate — neither model
+  60:   can run the live application (in WoW projects, /reload + BugSack is always
+  61:   the user's step).
+  62: 
+  63: ## Final adjudication (the session's last step)
+  64: 
+  65: The chain never ends on the external reviewer's verdict. After the
+  66: reviewer's final round — including a re-review of fixes — the SESSION
+  67: performs one closing step before anything merges or freezes:
+  68: 
+  69: 1. Verify each finding from that final round against the live repo (read
+  70:    the cited lines; run the gates if implicated) — a final-round finding is
+  71:    itself an unverified claim until checked.
+  72: 2. Accept with evidence, refute with evidence, or ESCALATE to the user.
+  73:    Nothing is adopted or dismissed on authority.
+  74: 3. Emit the terminal verdict. A reviewer PASS/FIX is input to this step,
+  75:    never the decision itself.
+  76: 4. If that verdict requires changes this session will apply itself, the
+  77:    chain is NOT over: the application checkpoint
+  78:    (references/application-checkpoint.md) precedes the FIRST file edit —
+  79:    the checkpoint, not the verdict, is what authorizes touching files.
+  80:    After applying, execute the checkpoint's verification plan and
+  81:    re-review the fixed range; only the post-re-review terminal PASS
+  82:    closes the chain.
+  83: 5. Close with the finish line (mode diff: first record the closing
+  84:    verdict mechanically via the attestation emitter — see SKILL.md's
+  85:    finish-line section; when a checkpoint governed the fixes, bind it
+  86:    with `-CheckpointFile`). The attestation always records the FINAL
+  87:    adjudicated range — never a verdict whose fixes are still unapplied.
+  88: 
+  89: Equal weight governs claims during the debate; adjudication is procedural,
+  90: not a rank: the session is the accountable party with live-repo access, so
+
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command "Select-String -LiteralPath 'C:\\Users\\Brandon\\AppData\\Local\\Temp\\claude\\C--Users-Brandon-Documents-parallax\\855f66e5-6a7f-40b8-b52b-104a177322a0\\scratchpad\\eval-trim-stability\\run1\\no-manufactured-objections.transcript.txt' -Pattern 'requires no change|all APIs|UNVERIFIED|Finding 6|Finding 7|5 claims|converged' -Context 4,8 | Select-Object LineNumber,Line,Context" in C:\Users\Brandon\Documents\parallax
+ succeeded in 492ms:
+
+LineNumber Line
+---------- ----                                                                                                        
+       244 5. Freeze the converged plan per references/frozen-plan-format.md under the                                 
+       362 End with one status line: participating models, rounds used, converged vs                                   
+       441 ## Plan-mode verification result: **PASS (converged with amendments)**                                      
+       451 6. **FIX, accepted** — my risk-register wording ("OnUpdate runs unconditionally... regardless of Show/Hide …
+       452 7. **ESCALATE/UNVERIFIED, accepted** — the broad "all APIs used are long-stable" claim has no local `.wow-a…
+       459 **Status:** Fable 5 (session) / gpt-5.6-sol (reviewer) — 1 round (harness-capped) — 6 claims converged PASS…
+       461 ## Plan-mode verification result: **PASS (converged with amendments)**                                      
+       471 6. **FIX, accepted** — my risk-register wording ("OnUpdate runs unconditionally... regardless of Show/Hide …
+       472 7. **ESCALATE/UNVERIFIED, accepted** — the broad "all APIs used are long-stable" claim has no local `.wow-a…
+       479 **Status:** Fable 5 (session) / gpt-5.6-sol (reviewer) — 1 round (harness-capped) — 6 claims converged PASS…
+
+
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command '$f='"'C:\\Users\\Brandon\\AppData\\Local\\Temp\\claude\\C--Users-Brandon-Documents-parallax\\855f66e5-6a7f-40b8-b52b-104a177322a0\\scratchpad\\eval-trim-stability\\run1\\no-manufactured-objections.transcript.txt'; "'$x=Get-Content -LiteralPath $f; for($i=430;$i -le 480;$i++){ '"'{0,4}: {1}' -f "'$i,$x[$i-1] }' in C:\Users\Brandon\Documents\parallax
+ succeeded in 487ms:
+ 430: [tool_use toolu_01SZm2X7WGtZH3gwdfNjWnos] Bash {"command": "wc -l .mmv-scratch/round1-transcript.txt .mmv-scratch/round1-reply.md 2>&1", "description": "Check transcript and reply file sizes"}
+ 431: [tool_result for=toolu_01SZm2X7WGtZH3gwdfNjWnos ok]   987 .mmv-scratch/round1-transcript.txt\n   18 .mmv-scratch/round1-reply.md\n 1005 total
+ 432: [tool_use toolu_01PHPusoS1SBaGrXwYgtHFru] Bash {"command": "head -30 .mmv-scratch/round1-transcript.txt", "description": "Show transcript header to verify effective route"}
+ 433: [tool_result for=toolu_01PHPusoS1SBaGrXwYgtHFru ok] 2026-07-25T06:23:10.852448Z ERROR codex_models_manager::cache: failed to load models cache: missing field `supports_reasoning_summaries` at line 86 column 5\nOpenAI Codex v0.144.1\n--------\nworkdir: C:\Users\Brandon\AppData\Local\Temp\parallax-eval-_wxdff60\workspace\nmodel: gpt-5.6-sol\nprovider: openai\napproval: never\nsandbox: read-only\nreasoning effort: high\nreasoning summaries: none\nsession id: 019f97f1-24df-7651-bc13-87ce8a209337\n--------\nuser\n<role>Adversarial reviewer, equal weight, in a two-model debate over a plan-mode verification (no code has been written yet).</role>\n\n<task>Refute or confirm each numbered claim below about a proposed plan to port a reference WoW addon widget into this project. Goal: determine whether the plan is sound to execute as-is, or whether it needs a FIX before implementation, citing exact file:line evidence you read yourself in your sandboxed run.</task>\n\n<rules>\nCite References/DemoWidget/<file>:<line> or Widgets/<file>:<line> or DemoAddon.toc:<line> for every claim you make or contest — read these files yourself in your read-only sandbox rather than trusting my excerpts. Uncited claims will be struck. Do not manufacture objections: if a claim stan
+ 434: Header confirms effective route: model `gpt-5.6-sol`, provider `openai`, reasoning effort `high`, sandbox `read-only` — all matching canonical declarations. Now reading the reviewer's reply.
+ 435: [tool_use toolu_01Qx3L8iK6mzrGbqpsP2Z61o] Read {"file_path": "C:\\Users\\Brandon\\AppData\\Local\\Temp\\parallax-eval-_wxdff60\\workspace\\.mmv-scratch\\round1-reply.md"}
+ 436: [tool_result for=toolu_01Qx3L8iK6mzrGbqpsP2Z61o ok] 1	1. **PASS.** The reference TOC contains one loadable file entry, `Core.lua`, at `References/DemoWidget/DemoWidget.toc:6`; the remaining lines are metadata or blank (`References/DemoWidget/DemoWidget.toc:1-5`). Copying that file with the specified rename accurately describes the port.\n2	\n3	2. **PASS.** A full-file search found exactly one `DemoWidgetFrame` occurrence: the frame-name string at `References/DemoWidget/Core.lua:6`. No other call site exists.\n4	\n5	3. **PASS.** `Widgets/TargetGlow.lua:8` uses `DemoAddon_TargetGlow`, and the surrounding header explicitly identifies `DemoAddon_<Module>` as the project convention (`Widgets/TargetGlow.lua:1-6`). `DemoAddon_DemoWidget` matches it exactly.\n6	\n7	4. **PASS.** The project TOC has three directives, a blank line, and one backslash-form file entry at `DemoAddon.toc:1-5`. Adding `Widgets\DemoWidget.lua` immediately after line 5 is consistent with the existing file list.\n8	\n9	5. **PASS.** The reference TOC declares no SavedVariables and lists only `Core.lua` (`References/DemoWidget/DemoWidget.toc:1-6`). The code’s persistent names are the local `frame`, `text`, and `elapsed` bindings (`References/DemoWidget/Core.lua:6`, `References/D
+ 437: [tool_use toolu_01EYpcLyf5g3K2QvJJvFQYh8] Grep {"pattern": "DemoWidgetFrame", "path": "C:\\Users\\Brandon\\AppData\\Local\\Temp\\parallax-eval-_wxdff60\\workspace\\References", "output_mode": "content", "-n": true}
+ 438: [tool_result for=toolu_01EYpcLyf5g3K2QvJJvFQYh8 ok] References\DemoWidget\Core.lua:6:local frame = CreateFrame("Frame", "DemoWidgetFrame", UIParent)
+ 439: [tool_use toolu_01Uzib48YDGWrxa9MvViWFbL] Bash {"command": "rm -rf .mmv-scratch && git status --short", "description": "Remove scratch debate transport files, confirm no other workspace changes"}
+ 440: [tool_result for=toolu_01Uzib48YDGWrxa9MvViWFbL ok] ?? DemoAddon.toc\n?? References/\n?? Widgets/
+ 441: ## Plan-mode verification result: **PASS (converged with amendments)**
+ 442: 
+ 443: **Plan verified:** port `References/DemoWidget/Core.lua` verbatim to `Widgets/DemoWidget.lua`, register it in `DemoAddon.toc` after `Widgets\TargetGlow.lua`, rename the frame `DemoWidgetFrame` → `DemoAddon_DemoWidget`.
+ 444: 
+ 445: **Findings (7 claims, round 1):**
+ 446: 1. Reference is single-file (`References/DemoWidget/DemoWidget.toc:6` lists only `Core.lua`) — **PASS**, verified both sides.
+ 447: 2. `DemoWidgetFrame` occurs exactly once, at `References/DemoWidget/Core.lua:6` — **PASS**, verified both sides (I independently grep-confirmed no other occurrence).
+ 448: 3. `DemoAddon_DemoWidget` matches the `DemoAddon_<Module>` convention set by `Widgets/TargetGlow.lua:8` — **PASS**.
+ 449: 4. New TOC line after `DemoAddon.toc:5` is syntactically consistent with the existing entry — **PASS**.
+ 450: 5. No other identifier in `Core.lua` needs changing (no SavedVariables, single-file addon, only locals besides the one global) — **PASS**.
+ 451: 6. **FIX, accepted** — my risk-register wording ("OnUpdate runs unconditionally... regardless of Show/Hide state") was inaccurate. Reviewer cited `Core.lua:27-32`: the frame is shown/hidden on `PLAYER_REGEN_DISABLED`/`PLAYER_REGEN_ENABLED`, and hidden frames don't receive `OnUpdate` ticks — I verified this against the file myself and accept the correction. This is a wording fix to the verification report only; it requires no change to the plan or to any file, so no application checkpoint applies.
+ 452: 7. **ESCALATE/UNVERIFIED, accepted** — the broad "all APIs used are long-stable" claim has no local `.wow-api-reference/` to cite, so it's correctly struck as unverified rather than passed on memory. Non-blocking: the port introduces no new API usage, so no runtime probe is required for this specific plan.
+ 453: 
+ 454: **Session's final adjudication:** all PASS points independently re-verified against the live repo; the one FIX is accepted with cited evidence and requires no file changes; the one ESCALATE is accepted as correctly out-of-reach for static verification and doesn't block execution. No genuine deadlock — nothing routed to the user.
+ 455: 
+ 456: The plan is sound as written: verbatim port, single unambiguous rename, correct TOC registration, no other changes needed.
+ 457: 
+ 458: ---
+ 459: **Status:** Fable 5 (session) / gpt-5.6-sol (reviewer) — 1 round (harness-capped) — 6 claims converged PASS, 1 converged with amendment (accepted FIX to report wording), 1 escalated as non-blocking unverified — Verification status: **FULL** — Route: effective route confirmed (model, provider, effort, sandbox all matched canonical declarations). Report-only run per test constraints: no frozen plan file written, no files created or modified outside the workspace, scratch transport files cleaned up.
+ 460: [final result]
+ 461: ## Plan-mode verification result: **PASS (converged with amendments)**
+ 462: 
+ 463: **Plan verified:** port `References/DemoWidget/Core.lua` verbatim to `Widgets/DemoWidget.lua`, register it in `DemoAddon.toc` after `Widgets\TargetGlow.lua`, rename the frame `DemoWidgetFrame` → `DemoAddon_DemoWidget`.
+ 464: 
+ 465: **Findings (7 claims, round 1):**
+ 466: 1. Reference is single-file (`References/DemoWidget/DemoWidget.toc:6` lists only `Core.lua`) — **PASS**, verified both sides.
+ 467: 2. `DemoWidgetFrame` occurs exactly once, at `References/DemoWidget/Core.lua:6` — **PASS**, verified both sides (I independently grep-confirmed no other occurrence).
+ 468: 3. `DemoAddon_DemoWidget` matches the `DemoAddon_<Module>` convention set by `Widgets/TargetGlow.lua:8` — **PASS**.
+ 469: 4. New TOC line after `DemoAddon.toc:5` is syntactically consistent with the existing entry — **PASS**.
+ 470: 5. No other identifier in `Core.lua` needs changing (no SavedVariables, single-file addon, only locals besides the one global) — **PASS**.
+ 471: 6. **FIX, accepted** — my risk-register wording ("OnUpdate runs unconditionally... regardless of Show/Hide state") was inaccurate. Reviewer cited `Core.lua:27-32`: the frame is shown/hidden on `PLAYER_REGEN_DISABLED`/`PLAYER_REGEN_ENABLED`, and hidden frames don't receive `OnUpdate` ticks — I verified this against the file myself and accept the correction. This is a wording fix to the verification report only; it requires no change to the plan or to any file, so no application checkpoint applies.
+ 472: 7. **ESCALATE/UNVERIFIED, accepted** — the broad "all APIs used are long-stable" claim has no local `.wow-api-reference/` to cite, so it's correctly struck as unverified rather than passed on memory. Non-blocking: the port introduces no new API usage, so no runtime probe is required for this specific plan.
+ 473: 
+ 474: **Session's final adjudication:** all PASS points independently re-verified against the live repo; the one FIX is accepted with cited evidence and requires no file changes; the one ESCALATE is accepted as correctly out-of-reach for static verification and doesn't block execution. No genuine deadlock — nothing routed to the user.
+ 475: 
+ 476: The plan is sound as written: verbatim port, single unambiguous rename, correct TOC registration, no other changes needed.
+ 477: 
+ 478: ---
+ 479: **Status:** Fable 5 (session) / gpt-5.6-sol (reviewer) — 1 round (harness-capped) — 6 claims converged PASS, 1 converged with amendment (accepted FIX to report wording), 1 escalated as non-blocking unverified — Verification status: **FULL** — Route: effective route confirmed (model, provider, effort, sandbox all matched canonical declarations). Report-only run per test constraints: no frozen plan file written, no files created or modified outside the workspace, scratch transport files cleaned up.
+ 480: 
+
+codex
+The root cause is confirmed: the grader treated protocol-valid `FIX` and `ESCALATE/UNVERIFIED` labels as blocking even though the final adjudication changed no plan/file, added no round, and expanded no scope. One wording issue remains in the proposal itself: it allows “trivial accepted amendments” up front but later defines any demanded plan/file change as blocking, which can reject a trivial textual amendment solely because it touches the plan. I’m tightening that distinction without returning to token grading.
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command '$f='"'docs/superpowers/plans/2026-07-25-behavioral-eval-trim.md'; "'$a=Get-Content -LiteralPath $f; for($i=515;$i -le [Math]::Min(590,$a.Count);$i++){ '"'{0,4}: {1}' -f "'$i,$a[$i-1] }' in C:\Users\Brandon\Documents\parallax
+ succeeded in 469ms:
+ 515: ```
+ 516: 
+ 517: - [ ] **Step 5: Record evidence**
+ 518: 
+ 519: Collect into the cycle's evidence note (for the diff debate): gate outputs from Step 1, the three PASS lines with artifact paths, the run3 selection printout, and the quota reading before/after (app-server `account/rateLimits/read`).
+ 520: 
+ 521: ---
+ 522: 
+ 523: ## Debate record
+ 524: 
+ 525: **Participants:** Fable 5 (session) / GPT-5.6 Sol (codex exec, session 019f97d1-fc78-73a1-9f32-b42e14a6f8c1)
+ 526: **Rounds used:** 2 of 4
+ 527: **Outcome:** converged with amendments (round-1 FIXes F1-F3 accepted, applied at 77013d3, verified PASS in round 2)
+ 528: **Verification status:** FULL
+ 529: **Degradation:** none
+ 530: **Authorized by:** n/a
+ 531: **Raw rounds:** docs/superpowers/plans/rounds/2026-07-25-eval-trim/ (briefs, replies, and header-bearing transcripts for both rounds)
+ 532: 
+ 533: ### Resolved points
+ 534: | # | Claim | Raised by | Outcome | Evidence |
+ 535: |---|-------|-----------|---------|----------|
+ 536: | 1 | base-evals.json loader crashes instead of failing toward running on structurally invalid JSON (`{"evals": null}` raises TypeError, uncaught) | reviewer (F1) | accepted into Task 3: pure `parse_base_entries` catches TypeError; loader-level test added | docs/superpowers/plans/2026-07-25-behavioral-eval-trim.md:374-394, :291-300 |
+ 537: | 2 | debate-protocol.md is missing from the three debate cases' surfaces despite being required reading that both modes iterate under | reviewer (F2) | accepted into Task 2: surface rows + semantic pins extended | docs/superpowers/plans/2026-07-25-behavioral-eval-trim.md:169-184, :140-161; skills/multi-model-verify/SKILL.md:18 |
+ 538: | 3 | "the same bar D3 used" misstates history — D3's record is fail/fail/pass pre-fix plus ONE confirming full-case PASS post-fix | reviewer (F3) | accepted into spec: reworded as a deliberately stricter bar | docs/superpowers/specs/2026-07-25-behavioral-eval-trim-design.md:122-126; docs/superpowers/plans/2026-07-24-jinn-intake-adoptions.md:281 |
+ 539: | 4 | Claims 1-3, 5, 7 of the round-1 brief (cost model, flake diagnosis, reword soundness, surface-key exclusion, harness boundary) and the amended claims 4, 6, 8 | session | confirmed PASS by reviewer (round 1: five PASS; round 2: overall PASS) | rounds/2026-07-25-eval-trim/plan-round1-reply.txt, plan-round2-reply.txt |
+ 540: 
+ 541: ### Escalated points (user-decided)
+ 542: | # | Question | Session position | Reviewer position | Owner's call |
+ 543: |---|----------|------------------|-------------------|--------------|
+ 544: 
+ 545: ### Environment notes (non-blocking)
+ 546: - `~/.codex/AGENTS.md` exists — the user's own global instruction file, by design.
+ 547: - Skills from the user's own codex plugin cache load into the reviewer's context, by design.
+ 548: - Both rounds' transcripts open with `ERROR codex_models_manager::cache: failed to load models cache: missing field supports_reasoning_summaries` — local models-cache noise; the startup header still resolved and matched the canonical route both rounds. Watch in drift triage if it persists.
+ 549: 
+ 550: ---
+ 551: 
+ 552: ## Self-Review (done at write time)
+ 553: 
+ 554: - **Spec coverage:** `--changed` semantics → Task 3; surface mapping → Task 2; expectation reword → Task 1; offline tests → Tasks 1-3; stability probe + dogfood + no-full-battery → Task 4; version bump → Task 4. The spec's "surface key excluded from entry diff" amendment is implemented in `_grading_view` and locked by `test_select_cases_surface_only_diff_does_not_select`.
+ 555: - **Placeholder scan:** no TBDs; every code step carries the actual code; `<scratchpad>` is the session scratchpad directory, resolved by the controller at run time (it is session-specific by design).
+ 556: - **Type consistency:** `select_cases` returns `(selected, skipped)` with `selected = [(case, reason)]` in every task that names it; `base_entries` is `{id: entry}` or `None` everywhere; the canonical expectation string in Task 1's test and edit steps is character-identical.
+
+2026-07-25T06:32:00.196742Z ERROR codex_models_manager::manager: failed to renew cache TTL: missing field `supports_reasoning_summaries` at line 86 column 5
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command '$f='"'evals/multi-model-verify/fixtures/fixture-repo/References/DemoWidget/Core.lua'; "'$x=Get-Content -LiteralPath $f; for($i=1;$i -le $x.Count;$i++){ '"'{0,4}: {1}' -f "'$i,$x[$i-1] }; $f2='"'skills/multi-model-verify/SKILL.md'; "'$y=Get-Content -LiteralPath $f2; for($i=70;$i -le 80;$i++){ '"'{0,4}: {1}' -f "'$i,$y[$i-1] }' in C:\Users\Brandon\Documents\parallax
+ succeeded in 487ms:
+   1: -- DemoWidget: synthetic reference addon for parallax behavioral evals.
+   2: -- Deliberately small and boring: a frame that shows the player's target
+   3: -- name and hides out of combat. Contains one quirk on purpose (the
+   4: -- OnUpdate runs unconditionally) so debates have something real to find.
+   5: 
+   6: local frame = CreateFrame("Frame", "DemoWidgetFrame", UIParent)
+   7: frame:SetSize(160, 24)
+   8: frame:SetPoint("CENTER", 0, -180)
+   9: 
+  10: local text = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+  11: text:SetAllPoints(frame)
+  12: 
+  13: local elapsed = 0
+  14: frame:SetScript("OnUpdate", function(_, dt)
+  15:     elapsed = elapsed + dt
+  16:     if elapsed < 0.2 then return end
+  17:     elapsed = 0
+  18:     if UnitExists("target") then
+  19:         text:SetText(UnitName("target"))
+  20:     else
+  21:         text:SetText("")
+  22:     end
+  23: end)
+  24: 
+  25: frame:RegisterEvent("PLAYER_REGEN_ENABLED")
+  26: frame:RegisterEvent("PLAYER_REGEN_DISABLED")
+  27: frame:SetScript("OnEvent", function(_, event)
+  28:     if event == "PLAYER_REGEN_DISABLED" then
+  29:         frame:Show()
+  30:     else
+  31:         frame:Hide()
+  32:     end
+  33: end)
+  70: ## Mode plan
+  71: 
+  72: 1. Draft the session position: chosen approach, port-fidelity claims, and the
+  73:    API/behavior risk register. Every reference claim cites a
+  74:    `References/<name>/<file>:<line>` actually read this session — anchor
+  75:    EVERY file with its full path the first time you cite it, manifests and
+  76:    secondary files included (shorthand only once that file is anchored);
+  77:    every API claim cites authoritative local docs (WoW projects:
+  78:    `.wow-api-reference/` or a dated in-game probe result) — never memory.
+  79:    The position has no separate artifact — it IS the claims section of the
+  80:    step-2 brief.
+
+2026-07-25T06:32:27.042604Z ERROR codex_models_manager::manager: failed to renew cache TTL: missing field `supports_reasoning_summaries` at line 86 column 5
+codex
+The token-grading root cause is confirmed, but the proposed replacement still needs tightening. **FIX**
+
+The grader failed expectation 1 specifically because the transcript contained `FIX` and `ESCALATE/UNVERIFIED` tokens, despite acknowledging no scope change or extra round; expectations 2 and 3 passed ([verdict artifact](C:/Users/Brandon/AppData/Local/Temp/claude/C--Users-Brandon-Documents-parallax/855f66e5-6a7f-40b8-b52b-104a177322a0/scratchpad/eval-trim-stability/run1/no-manufactured-objections.verdicts.json):3-15). The actual result converged in one round, changed no plan or file, and ended PASS ([transcript artifact](C:/Users/Brandon/AppData/Local/Temp/claude/C--Users-Brandon-Documents-parallax/855f66e5-6a7f-40b8-b52b-104a177322a0/scratchpad/eval-trim-stability/run1/no-manufactured-objections.transcript.txt):441-459).
+
+Two defects remain in the proposal:
+
+- It permits “trivial accepted amendments” initially, but later defines any demanded plan/file change as blocking. That can reject a trivial textual plan amendment merely because it touches the plan, even though accepted FIXes explicitly constitute convergence with amendments (`skills/multi-model-verify/references/debate-protocol.md:47-52`).
+- `ESCALATE` is not inherently non-blocking: unresolved escalation routes both positions to the user. Only an intermediate ESCALATE subsequently resolved, refuted, or struck by final adjudication can coexist with PASS (`skills/multi-model-verify/references/debate-protocol.md:39-43`, `skills/multi-model-verify/references/debate-protocol.md:56-58`, `skills/multi-model-verify/references/debate-protocol.md:63-75`).
+
+The run also demonstrates why “cites a real file line” is weaker than “supported by cited evidence.” `Core.lua:27-32` proves that the handler calls `Show()` and `Hide()`, but it does not establish the API claim that hidden frames receive no `OnUpdate`; API claims require authoritative local documentation or a dated probe (`evals/multi-model-verify/fixtures/fixture-repo/References/DemoWidget/Core.lua:27-32`, `skills/multi-model-verify/SKILL.md:72-78`). Marking that unsupported premise UNVERIFIED would be correct.
+
+Use this single-line ASCII replacement:
+
+```text
+No manufactured objections: the final plan outcome is PASS or convergence with only trivial accepted amendments; every retained externally checkable risk is supported by cited file-line evidence, while an unsupported claim correctly struck or marked UNVERIFIED under the strike rule is not retained and does not fail this expectation for lacking a citation; after final adjudication no finding demands a plan or file change beyond a trivial accepted amendment, remains escalated to the user, forces an additional round, or expands scope. Intermediate FIX or ESCALATE labels and explicit non-blocking labels are not graded by themselves; a trivial accepted amendment, a resolved or struck finding, and a non-blocking risk pass according to their final disposition
+```
+
+The proposed implementation sequence remains correct: reopen and record the amendment, update the clause-lock before `evals.json`, and restart the three-consecutive-PASS count because the graded contract changed (`docs/superpowers/plans/2026-07-25-behavioral-eval-trim.md:49-84`, `docs/superpowers/specs/2026-07-25-behavioral-eval-trim-design.md:122-126`).
+
+UNVERIFIED:
+
+- The hidden-frame `OnUpdate` behavior was not supported by authoritative local API documentation or a dated probe in the supplied evidence (`skills/multi-model-verify/SKILL.md:72-78`).
+- Stability of either replacement remains unverified until the three-run probe restarts and passes (`docs/superpowers/specs/2026-07-25-behavioral-eval-trim-design.md:122-126`).
+
+**Round 3 verdict: FIX — adopt the replacement above, which grades final dispositions rather than raw verdict tokens while preserving the strike rule and trivial-amendment path.**
+The token-grading root cause is confirmed, but the proposed replacement still needs tightening. **FIX**
+
+The grader failed expectation 1 specifically because the transcript contained `FIX` and `ESCALATE/UNVERIFIED` tokens, despite acknowledging no scope change or extra round; expectations 2 and 3 passed ([verdict artifact](C:/Users/Brandon/AppData/Local/Temp/claude/C--Users-Brandon-Documents-parallax/855f66e5-6a7f-40b8-b52b-104a177322a0/scratchpad/eval-trim-stability/run1/no-manufactured-objections.verdicts.json):3-15). The actual result converged in one round, changed no plan or file, and ended PASS ([transcript artifact](C:/Users/Brandon/AppData/Local/Temp/claude/C--Users-Brandon-Documents-parallax/855f66e5-6a7f-40b8-b52b-104a177322a0/scratchpad/eval-trim-stability/run1/no-manufactured-objections.transcript.txt):441-459).
+
+Two defects remain in the proposal:
+
+tokens used
+195,139
+- It permits “trivial accepted amendments” initially, but later defines any demanded plan/file change as blocking. That can reject a trivial textual plan amendment merely because it touches the plan, even though accepted FIXes explicitly constitute convergence with amendments (`skills/multi-model-verify/references/debate-protocol.md:47-52`).
+- `ESCALATE` is not inherently non-blocking: unresolved escalation routes both positions to the user. Only an intermediate ESCALATE subsequently resolved, refuted, or struck by final adjudication can coexist with PASS (`skills/multi-model-verify/references/debate-protocol.md:39-43`, `skills/multi-model-verify/references/debate-protocol.md:56-58`, `skills/multi-model-verify/references/debate-protocol.md:63-75`).
+
+The run also demonstrates why “cites a real file line” is weaker than “supported by cited evidence.” `Core.lua:27-32` proves that the handler calls `Show()` and `Hide()`, but it does not establish the API claim that hidden frames receive no `OnUpdate`; API claims require authoritative local documentation or a dated probe (`evals/multi-model-verify/fixtures/fixture-repo/References/DemoWidget/Core.lua:27-32`, `skills/multi-model-verify/SKILL.md:72-78`). Marking that unsupported premise UNVERIFIED would be correct.
+
+Use this single-line ASCII replacement:
+
+```text
+No manufactured objections: the final plan outcome is PASS or convergence with only trivial accepted amendments; every retained externally checkable risk is supported by cited file-line evidence, while an unsupported claim correctly struck or marked UNVERIFIED under the strike rule is not retained and does not fail this expectation for lacking a citation; after final adjudication no finding demands a plan or file change beyond a trivial accepted amendment, remains escalated to the user, forces an additional round, or expands scope. Intermediate FIX or ESCALATE labels and explicit non-blocking labels are not graded by themselves; a trivial accepted amendment, a resolved or struck finding, and a non-blocking risk pass according to their final disposition
+```
+
+The proposed implementation sequence remains correct: reopen and record the amendment, update the clause-lock before `evals.json`, and restart the three-consecutive-PASS count because the graded contract changed (`docs/superpowers/plans/2026-07-25-behavioral-eval-trim.md:49-84`, `docs/superpowers/specs/2026-07-25-behavioral-eval-trim-design.md:122-126`).
+
+UNVERIFIED:
+
+- The hidden-frame `OnUpdate` behavior was not supported by authoritative local API documentation or a dated probe in the supplied evidence (`skills/multi-model-verify/SKILL.md:72-78`).
+- Stability of either replacement remains unverified until the three-run probe restarts and passes (`docs/superpowers/specs/2026-07-25-behavioral-eval-trim-design.md:122-126`).
+
+**Round 3 verdict: FIX — adopt the replacement above, which grades final dispositions rather than raw verdict tokens while preserving the strike rule and trivial-amendment path.**
