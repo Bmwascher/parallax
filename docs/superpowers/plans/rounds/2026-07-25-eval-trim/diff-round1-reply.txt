@@ -1,0 +1,37 @@
+Overall verdict: the implementation itself is faithful, but the frozen plan does not record the post-freeze `73d49f0` fix wave in its authoritative deviation table. That is unrecorded drift under this review contract. `docs/superpowers/plans/2026-07-25-behavioral-eval-trim.md:548-551`
+
+1. The original range’s changed paths are accounted for by the planned five implementation files, the spec/plan, and retained debate artifacts; the fix wave changes only the plan and test file. `.superpowers/sdd/2026-07-25-behavioral-eval-trim/final-review-3364342..8354cb2.diff:14-34`, `.superpowers/sdd/2026-07-25-behavioral-eval-trim/review-8354cb2..73d49f0.diff:1-9`, `docs/superpowers/plans/2026-07-25-behavioral-eval-trim.md:23-29`
+
+   However, the plan’s post-freeze deviation table contains only A1, while the ledger identifies `73d49f0` as a subsequent three-item fix wave. `docs/superpowers/plans/2026-07-25-behavioral-eval-trim.md:548-551`, `.superpowers/sdd/2026-07-25-behavioral-eval-trim/progress.md:14-18`
+
+   Specific fix: add an A2 row to the frozen plan recording `73d49f0`’s loader consolidation, table-format repair, and subprocess timeout; then re-review the documentation-only amended range. `.superpowers/sdd/2026-07-25-behavioral-eval-trim/fix-wave-report.md:9-25` **FIX**
+
+2. I compared the reconstructed UTF-8 values: all three A1 strings are identical, 762-byte ASCII strings. The test’s concatenated literal, shipped expectation, and A1 record have the same wording and punctuation. `evals/multi-model-verify/test_multi_model_verify.py:723-747`, `evals/multi-model-verify/evals.json:85-91`, `docs/superpowers/plans/2026-07-25-behavioral-eval-trim.md:551` **PASS**
+
+3. All seven shipped mappings match the debated table: universal `SKILL.md`, the degraded fallback, both checkpoint cases, the three dual debate references, and the skill-only missing-reference case. `evals/multi-model-verify/evals.json:5-93`, `docs/superpowers/plans/2026-07-25-behavioral-eval-trim.md:169-184`
+
+   One qualification: the semantic-pins test does not enforce literally all those facts. It pins universal `SKILL.md`, fallback, checkpoint, and `debate-protocol.md`, but not the three `model-prompting-notes.md` associations or missing-reference’s exact skill-only set. That narrower test is exactly what the frozen plan prescribed, so this is an overstatement in claim 3—not implementation drift. `evals/multi-model-verify/test_multi_model_verify.py:764-785`, `docs/superpowers/plans/2026-07-25-behavioral-eval-trim.md:140-161` **PASS**
+
+4. `select_cases` normalizes backslashes, uses `fnmatch`, selects entry changes using `_grading_view` without `surface`, and treats `base_entries is None` as select-all. `evals/tools/run_behavioral_evals.py:137-167`
+
+   `parse_base_entries` catches `TypeError`, and the loader-level regression covers both `{"evals": null}` and `{"evals": [null]}`. `evals/tools/run_behavioral_evals.py:189-209`, `evals/multi-model-verify/test_multi_model_verify.py:851-868` **PASS**
+
+5. The `--list` branch remains ahead of changed-case selection and tool checks; mutual exclusion is enforced immediately after parsing; zero selection emits the canonical message and exits successfully before checking either CLI. `evals/tools/run_behavioral_evals.py:678-741`
+
+   The timeout added by the fix wave changes only the subprocess test’s failure bound. `evals/multi-model-verify/test_multi_model_verify.py:870-877`, `.superpowers/sdd/2026-07-25-behavioral-eval-trim/review-8354cb2..73d49f0.diff:71-85` **PASS**
+
+6. A1 is properly recorded, and the ledger records Task completion, deferrals, the parked em-dash ruling, stability results, and the final-review fix wave. `docs/superpowers/plans/2026-07-25-behavioral-eval-trim.md:548-551`, `.superpowers/sdd/2026-07-25-behavioral-eval-trim/progress.md:2-18`
+
+   The scratch ledger is not a substitute for the frozen plan’s deviation table: `73d49f0` remains absent there. Apply the A2 documentation fix specified under claim 1. **FIX**
+
+7. Head pytest evidence reports `133 passed, 1 skipped`; the ledger records the other three gates green and the quota movement from 91% to 96%. `.superpowers/sdd/2026-07-25-behavioral-eval-trim/fix-wave-report.md:27-35`, `.superpowers/sdd/2026-07-25-behavioral-eval-trim/progress.md:7-13`
+
+   The three retained verdict files each mark all expectations met, while run 3 logs six `SKIPPED`, exactly one entry-diff `SELECTED`, and a final PASS. `C:/Users/Brandon/AppData/Local/Temp/claude/C--Users-Brandon-Documents-parallax/855f66e5-6a7f-40b8-b52b-104a177322a0/scratchpad/eval-trim-stability/a1-run1/no-manufactured-objections.verdicts.json:3-15`, `C:/Users/Brandon/AppData/Local/Temp/claude/C--Users-Brandon-Documents-parallax/855f66e5-6a7f-40b8-b52b-104a177322a0/scratchpad/eval-trim-stability/a1-run2/no-manufactured-objections.verdicts.json:3-15`, `C:/Users/Brandon/AppData/Local/Temp/claude/C--Users-Brandon-Documents-parallax/855f66e5-6a7f-40b8-b52b-104a177322a0/scratchpad/eval-trim-stability/a1-run3/no-manufactured-objections.verdicts.json:3-15`, `C:/Users/Brandon/AppData/Local/Temp/claude/C--Users-Brandon-Documents-parallax/855f66e5-6a7f-40b8-b52b-104a177322a0/scratchpad/eval-trim-stability/a1-run3.log:1-13` **PASS**
+
+UNVERIFIED:
+
+- Raw retained output for lint, sensitive-data scan, and trigger tests was not present in the files read; only the green ledger entry was available. `.superpowers/sdd/2026-07-25-behavioral-eval-trim/progress.md:12`
+- Raw quota-query output was not retained; the 91% and 96% values are ledger-attested. `.superpowers/sdd/2026-07-25-behavioral-eval-trim/progress.md:12`
+- The independent scoped re-review’s raw verdict was not located; its clean result is ledger-attested, although I directly inspected its complete two-file diff. `.superpowers/sdd/2026-07-25-behavioral-eval-trim/progress.md:16-17`, `.superpowers/sdd/2026-07-25-behavioral-eval-trim/review-8354cb2..73d49f0.diff:1-93`
+
+**FIX**

@@ -1,0 +1,771 @@
+2026-07-25T05:58:06.754975Z ERROR codex_models_manager::cache: failed to load models cache: missing field `supports_reasoning_summaries` at line 86 column 5
+OpenAI Codex v0.144.1
+--------
+workdir: C:\Users\Brandon\Documents\parallax
+model: gpt-5.6-sol
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: none
+session id: 019f97d1-fc78-73a1-9f32-b42e14a6f8c1
+--------
+user
+<role>Same debate, round 2. Evidence rules and verdict grammar as before.</role>
+
+<task>Round 1 ended FIX with three findings. All three are ACCEPTED and applied
+on the branch (commit 77013d3). Verify the amendments in your cwd's working
+tree and either confirm an overall PASS on the amended plan or raise what
+remains.</task>
+
+<position-changes>
+- F1 accepted (loader fail-open): base_case_entries now factors a pure
+  parse_base_entries(text) whose except tuple includes TypeError; a
+  loader-level test feeds structurally invalid JSON ({"evals": null},
+  {"evals": [null]}) and asserts None
+  (docs/superpowers/plans/2026-07-25-behavioral-eval-trim.md:374-394
+  implementation; :291-300 test; :314-315 and :434 run steps updated).
+- F2 accepted (protocol surfaces): debate-protocol.md added to the surface
+  rows of plan-mode-debate-runs, diff-mode-spec-fidelity, and
+  no-manufactured-objections (plan :175-183) and pinned in
+  test_surface_semantic_pins (plan :146-161).
+- F3 accepted (D3 attribution): the spec no longer claims the 3x bar equals
+  D3's; it states D3's record was fail/fail/pass pre-fix plus ONE confirming
+  full-case PASS post-fix, and the 3x-consecutive bar is stricter
+  (docs/superpowers/specs/2026-07-25-behavioral-eval-trim-design.md:122-126).
+No other changes were made to the plan or spec since round 1.
+</position-changes>
+
+<final-check>As before: list anything you could not verify as UNVERIFIED.</final-check>
+
+codex
+Using the multi-model verification protocol again for round 2. I’ll reopen commit `77013d3`, verify each accepted fix against the live files—not just the supplied line references—and check that the commit contains no unrelated plan/spec changes before adjudicating the amended plan.
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command "Get-Content -Raw -LiteralPath 'C:\\Users\\Brandon\\.codex\\plugins\\cache\\crosscheck\\crosscheck\\0.5.0\\skills\\multi-model-verify\\SKILL.md'; Get-Content -Raw -LiteralPath 'C:\\Users\\Brandon\\.codex\\plugins\\cache\\crosscheck\\crosscheck\\0.5.0\\skills\\multi-model-verify\\references\\debate-protocol.md'" in C:\Users\Brandon\Documents\parallax
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command "Get-Content -Raw -LiteralPath 'C:\\Users\\Brandon\\.codex\\plugins\\cache\\claude-plugins-official\\superpowers\\6.2.0\\skills\\using-superpowers\\SKILL.md'" in C:\Users\Brandon\Documents\parallax
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command 'git status --short --branch; git branch --show-current; git log --oneline --decorate -5; git show --stat --oneline 77013d3; git diff 77013d3''^ 77013d3 --' in C:\Users\Brandon\Documents\parallax
+ succeeded in 574ms:
+---
+name: multi-model-verify
+description: Use when planning a reference port, an API-sensitive module, or any change risky enough to need cross-model verification before implementation, or when an implemented diff must be checked against its plan and reference before merge. Fires automatically alongside superpowers requesting-code-review via the review-companion hook.
+---
+
+# Multi-Model Verify
+
+## Overview
+
+Two equal-weight advisors — Fable 5 (this session) and GPT-5.6 Sol (via the
+codex CLI) — verify and refute each other's claims before the cheap
+implementer touches code. Sol's documented fabrication risk (METR) is
+mitigated by the debate structure — evidence grounding plus mutual
+refutation — not by down-weighting either side.
+
+**REQUIRED READING before the first round:** references/debate-protocol.md.
+
+Companion to superpowers, not a replacement: it fills the cross-model review
+gap superpowers rules out of scope. `/codex:adversarial-review` remains the
+human-invoked pre-merge gate; if the codex plugin's stop-review-gate is
+toggled on, its stop-time review overlaps mode `diff` — expected, not a bug.
+
+## When to use
+
+- **Mode `plan`** — after superpowers brainstorming proposes approaches for a
+  port or API-sensitive module, before the implementation plan is written.
+- **Mode `diff`** — after implementation, alongside superpowers
+  requesting-code-review (the review-companion hook injects this
+  automatically with the matching base/head SHAs).
+- NOT for plain bugfixes, docs or release chores, GUI tweaks, or lint sweeps.
+
+## Preflight (both modes)
+
+1. `codex --version` must succeed — on failure follow references/fallbacks.md
+   (degraded mode, visibly flagged; never silently skip cross-vendor review).
+2. For port work: the reference source must exist under `References/`
+   (quote paths — some contain spaces, e.g. `References/M+ Timer`). Missing
+   → **HARD STOP before any debate round runs**: ask the user for the path
+   and go no further — do not run a codex exchange about the absence, do
+   not debate from memory, do not start a degraded mode. If the folder
+   holds version subdirectories (e.g. a `v1.4/` next to a `v1.1_old/`), use
+   the newest unless the user names one, and cite the versioned path:
+   `References/<name>/<version>/<file>:<line>`.
+   For non-port work there is no reference folder — claims ground in the
+   project's own source, specs, or upstream docs instead, same strike rule.
+
+## Mode plan
+
+1. Draft the Fable position: chosen approach, port-fidelity claims, and the
+   API/behavior risk register. Every reference claim cites a
+   `References/<name>/<file>:<line>` actually read this session — anchor
+   EVERY file with its full path the first time you cite it, manifests and
+   secondary files included (shorthand only once that file is anchored);
+   every API claim cites authoritative local docs (WoW projects:
+   `.wow-api-reference/` or a dated in-game probe result) — never memory.
+   The position has no separate artifact — it IS the claims section of the
+   step-2 brief.
+2. Compose Sol's debate brief per references/model-prompting-notes.md, write
+   it to a scratchpad file, then run round 1:
+
+   ```powershell
+   Get-Content -Raw <brief-file> | codex exec --sandbox read-only -m <canonical-model-id> -c model_reasoning_effort=<canonical-effort> --output-last-message <reply-file> -
+   ```
+
+   `<canonical-model-id>` and `<canonical-effort>` are the two declarations
+   in references/model-prompting-notes.md — read the literal values from
+   there, never from memory (the reviewer swaps by editing that one file,
+   and a remembered id silently defeats the swap).
+
+   Capture the `session id:` line printed in the run header (top of output);
+   read Sol's reply from `<reply-file>` — the stdout transcript logs every
+   file Sol reads and can run tens of KB, with the reply buried at the
+   bottom.
+3. Later rounds keep Sol's state by resuming that session — flags MUST
+   precede the resume subcommand (flags after it are a usage error):
+
+   ```powershell
+   codex exec --sandbox read-only -m <canonical-model-id> -c model_reasoning_effort=<canonical-effort> --output-last-message <reply-file> resume <SESSION_ID> "<rebuttal-brief>"
+   ```
+
+4. Iterate per debate-protocol.md until convergence or the round cap, then
+   escalate any unresolved points to the user with both positions stated.
+5. Freeze the converged plan per references/frozen-plan-format.md under the
+   project's superpowers plans dir (KitnEssentials:
+   `dev/docs/superpowers/plans/`; other projects: the superpowers default
+   `docs/superpowers/plans/`).
+
+## Mode diff
+
+Same transport and protocol. First read the frozen plan's debate record and
+its **Verification status** field. Then the brief carries the frozen plan
+path, the base/head SHAs superpowers code review used, and the
+`git diff base..head` output. Both sides check **spec fidelity** (drift from
+the frozen plan — the implementer makes zero judgment calls, so any drift is
+a finding) and, for port work, **port fidelity** (drift from the reference
+source), ending PASS / FIX / ESCALATE.
+
+**Degraded-plan poisoning rule:** a plan whose Verification status is
+DEGRADED cannot produce an ordinary diff PASS. Mode diff must first reopen
+and cross-verify the plan's claims and approved deviations (the
+retrospective pass the plan never got), and only then verify the
+implementation against it — confirming a diff matches an unsound plan
+verifies nothing. If cross-vendor verification is STILL unavailable, the
+only terminal state is `ESCALATE — CROSS-VENDOR GATE UNSATISFIED`: merging
+then requires the user's explicitly recorded risk acceptance, never a PASS.
+
+## Finish line
+
+Before it: the session's final-adjudication step (debate-protocol.md) —
+verify the last round's findings against the repo and issue the terminal
+verdict; a reviewer's PASS/FIX is never terminal by itself.
+
+End with one status line: participating models, rounds used, converged vs
+escalated points, and the verification status — `FULL`, or
+`DEGRADED (<class>, authorized by user at round N)` per fallbacks.md. The
+session emits this line itself; never delegate it to a subagent.
+
+## Common mistakes
+
+- Accepting Sol's claims about reference code without the cited lines —
+  strike the claim per protocol; do not argue against it.
+- Re-sending the full debate context each round instead of resuming the
+  codex session.
+- Running mode `diff` against different SHAs than the code review used.
+- Treating convergence as failure — a sound plan converging in one round is
+  the system working, not a skipped debate.
+
+# Debate protocol
+
+Both advisors are equal weight. Neither model's claim outranks the other's;
+only evidence does.
+
+## Evidence grounding (the strike rule)
+
+- **Every externally checkable claim must carry a citation to a source the
+  other side can read**: a file:line in the repo or reference material the
+  citing side actually read (Fable: read this session; Sol: read inside its
+  sandboxed run — its quoted excerpt counts as reading), authoritative local
+  docs, or a fetched URL.
+- Source-specific examples: reference-port claims cite
+  `References/<name>/<file>:<line>`; WoW 12.0 API claims cite
+  `.wow-api-reference/` or a dated in-game probe result; library or platform
+  claims cite the vendored source or official docs.
+- **Anchor every file the first time you cite it** — full repo-relative path
+  with line, `References/DemoWidget/DemoWidget.toc:1`, not `DemoWidget.toc:1`.
+  This holds for EVERY file, including one-line manifests and secondary
+  files, not just the main source. Once a file is anchored, shorthand
+  (`Core.lua:19`) is fine for later citations of that same file. A bare
+  filename does not locate anything for the other side: the project has its
+  own `DemoAddon.toc` and the reference has `DemoWidget.toc`, and an
+  unanchored `.toc:1` could be either.
+- A claim with no citation is **struck, not debated**. Note it as struck and
+  move on — arguing against an ungrounded claim launders it into the record.
+- Reports are claims requiring evidence. "The reference handles this" without
+  the file:line is an assertion, not a finding.
+
+## Round structure
+
+Each exchange (one Fable position or rebuttal + one Sol reply) is a round.
+
+1. From round 2 on, state position changes since last round: which of the
+   other side's points are **accepted** (absorbed into the plan), which are
+   **refuted** (with the evidence that refutes them), which are **struck**
+   (no citation).
+2. Raise new risks only with evidence attached.
+3. End with a verdict on the current plan/diff:
+   - **PASS** — no remaining substantive objections.
+   - **FIX** — named change required, with the specific fix and its evidence.
+   - **ESCALATE** — a disagreement evidence cannot settle (taste, missing
+     in-game data, ambiguous reference intent).
+
+## Convergence and the round cap
+
+- Converged: both sides verdict PASS in the same round.
+- **Converged with amendments**: the final round's only outstanding verdicts
+  are FIXes whose fixes the other side accepts on the record. Record each
+  accepted fix in the debate record and treat the plan as converged — an
+  accepted FIX is agreement, not a dispute for the user to settle. (This
+  matters whenever a FIX lands in the last round before the cap.)
+- Round cap: **4 exchanges** by default (caller may raise or lower it).
+  Hitting the cap is not failure — it is the signal to stop spending tokens
+  on an argument evidence hasn't settled.
+- At the cap or on ESCALATE, for points that remain genuinely contested:
+  stop, present BOTH positions to the user with their evidence, and let the
+  user decide. Never silently pick a side.
+- Questions only runtime testing can answer always escalate — neither model
+  can run the live application (in WoW projects, /reload + BugSack is always
+  the user's step).
+
+## Final adjudication (the session's last step)
+
+The chain never ends on the external reviewer's verdict. After Sol's final
+round — including a re-review of fixes — the SESSION performs one closing
+step before anything merges or freezes:
+
+1. Verify each finding from that final round against the live repo (read
+   the cited lines; run the gates if implicated) — a final-round finding is
+   itself an unverified claim until checked.
+2. Accept with evidence, refute with evidence, or ESCALATE to the user.
+   Nothing is adopted or dismissed on authority.
+3. Emit the terminal verdict and the finish line. A reviewer PASS/FIX is
+   input to this step, never the decision itself.
+
+Equal weight governs claims during the debate; adjudication is procedural,
+not a rank: the session is the accountable party with live-repo access, so
+the session always has the final say — and a genuine deadlock still goes to
+the user, never to whoever spoke last (user directive, 2026-07-12).
+
+## Anti-sycophancy, anti-theater
+
+Debates fail two ways: rubber-stamping and manufactured conflict. Both are
+defects.
+
+- **A sound plan gets one line.** "Plan is sound; the one thing to watch is
+  X." Converging in round 1 is the system working.
+- **Do not manufacture objections** to justify the round. If you would not
+  push back in a real review, do not push back here.
+- Do not restate the other side's point in different words as a "new" risk.
+- Do not concede a point you can refute just to converge faster —
+  unresolved disagreement has an honest exit (ESCALATE).
+
+## Why the structure carries the trust
+
+GPT-5.6 Sol has a documented (METR, OpenAI system card) tendency to fabricate
+results under evaluation pressure. The mitigation is this protocol — every
+claim must survive citation and refutation by an independent model — not
+down-weighting Sol's verdicts. The same rules bind Fable equally: fabricated
+detail is a known failure mode of every frontier model, and this project's
+history (see memory: no-fabrication feedback) treats invented API behavior as
+the cardinal sin.
+
+
+ succeeded in 588ms:
+---
+name: using-superpowers
+description: Use when starting any conversation - establishes how to find and use skills, requiring skill invocation before ANY response including clarifying questions
+---
+
+<SUBAGENT-STOP>
+If you were dispatched as a subagent to execute a specific task, ignore this skill.
+</SUBAGENT-STOP>
+
+<EXTREMELY-IMPORTANT>
+If you think there is even a 1% chance a skill might apply to what you are doing, you ABSOLUTELY MUST invoke the skill.
+
+IF A SKILL APPLIES TO YOUR TASK, YOU DO NOT HAVE A CHOICE. YOU MUST USE IT.
+
+This is not negotiable. You cannot rationalize your way out of this.
+</EXTREMELY-IMPORTANT>
+
+## The Rule
+
+**Invoke relevant or requested skills BEFORE any response or action** — including clarifying questions, exploring the codebase, or checking files. If it turns out wrong for the situation, you don't have to use it.
+
+**Before entering plan mode:** if you haven't already brainstormed, invoke the brainstorming skill first.
+
+Then announce "Using [skill] to [purpose]" and follow the skill exactly. If it has a checklist, create a todo per item.
+
+## Skill Priority
+
+When multiple skills apply, process skills come first — they set the approach, then implementation skills (frontend-design, etc.) carry it out. Brainstorming and systematic-debugging are Superpowers' most common process skills, but the rule holds for any of them.
+
+- "Let's build X" → superpowers:brainstorming first, then implementation skills.
+- "Fix this bug" → superpowers:systematic-debugging first, then domain skills.
+
+## Red Flags
+
+These thoughts mean STOP—you're rationalizing:
+
+| Thought | Reality |
+|---------|---------|
+| "This is just a simple question" | Questions are tasks. Check for skills. |
+| "I need more context first" | Skill check comes BEFORE clarifying questions. |
+| "Let me explore the codebase first" | Skills tell you HOW to explore. Check first. |
+| "I can check git/files quickly" | Files lack conversation context. Check for skills. |
+| "Let me gather information first" | Skills tell you HOW to gather information. |
+| "This doesn't need a formal skill" | If a skill exists, use it. |
+| "I remember this skill" | Skills evolve. Read current version. |
+| "This doesn't count as a task" | Action = task. Check for skills. |
+| "The skill is overkill" | Simple things become complex. Use it. |
+| "I'll just do this one thing first" | Check BEFORE doing anything. |
+| "This feels productive" | Undisciplined action wastes time. Skills prevent this. |
+| "I know what that means" | Knowing the concept ≠ using the skill. Invoke it. |
+
+## Platform Adaptation
+
+If your harness appears here, read its reference file for special instructions:
+
+- Codex: `references/codex-tools.md`
+- Pi: `references/pi-tools.md`
+- Antigravity: `references/antigravity-tools.md`
+
+## User Instructions
+
+User instructions (CLAUDE.md, AGENTS.md, GEMINI.md, etc, direct requests) take precedence over skills, which in turn override default behavior. Only skip skill workflows or instructions when your human partner has explicitly told you to.
+
+
+ succeeded in 625ms:
+## feat/0110-eval-trim
+feat/0110-eval-trim
+77013d3 (HEAD -> feat/0110-eval-trim) 0.11.0: apply sol round-1 plan fixes (loader fail-open, protocol surfaces, d3 attribution)
+8eaba28 0.11.0: add eval-trim implementation plan; spec entry-diff ignores surface key
+2bc264d 0.11.0: add behavioral-eval trim design spec
+3364342 (origin/main, origin/HEAD, main) Merge branch 'feat/0100-jinn-intake'
+dab859c 0.10.0: bump plugin version
+77013d3 0.11.0: apply sol round-1 plan fixes (loader fail-open, protocol surfaces, d3 attribution)
+ .../plans/2026-07-25-behavioral-eval-trim.md       | 51 +++++++++++++++++-----
+ .../2026-07-25-behavioral-eval-trim-design.md      |  4 +-
+ 2 files changed, 44 insertions(+), 11 deletions(-)
+diff --git a/docs/superpowers/plans/2026-07-25-behavioral-eval-trim.md b/docs/superpowers/plans/2026-07-25-behavioral-eval-trim.md
+index bde0a27..cf88a18 100644
+--- a/docs/superpowers/plans/2026-07-25-behavioral-eval-trim.md
++++ b/docs/superpowers/plans/2026-07-25-behavioral-eval-trim.md
+@@ -141,7 +141,9 @@ Add two new tests to `class TestEvalFixtures`:
+         # The mapping's load-bearing rows, pinned so a refactor cannot
+         # quietly decouple a case from the contract file it tests:
+         # SKILL.md is every case's contract; the consent gate lives in
+-        # fallbacks.md; both fix cases grade application-checkpoint.md.
++        # fallbacks.md; both fix cases grade application-checkpoint.md;
++        # the three debate cases grade debate discipline, whose contract
++        # is debate-protocol.md (Sol plan round 1, F2).
+         data = json.loads(read(EVALS_DIR / "evals.json"))
+         surfaces = {e["id"]: e["surface"] for e in data["evals"]}
+         for cid, surface in surfaces.items():
+@@ -153,6 +155,10 @@ Add two new tests to `class TestEvalFixtures`:
+                     "fix-checkpoint-attended-stop"):
+             assert ("skills/multi-model-verify/references/application-checkpoint.md"
+                     in surfaces[cid])
++        for cid in ("plan-mode-debate-runs", "diff-mode-spec-fidelity",
++                    "no-manufactured-objections"):
++            assert ("skills/multi-model-verify/references/debate-protocol.md"
++                    in surfaces[cid])
+ ```
+ 
+ - [ ] **Step 2: Run to verify they fail**
+@@ -166,13 +172,16 @@ Add a `"surface"` key to every entry (place it right after `"setup"`), with exac
+ 
+ | case id | surface |
+ |---|---|
+-| plan-mode-debate-runs | `["skills/multi-model-verify/SKILL.md", "skills/multi-model-verify/references/model-prompting-notes.md"]` |
+-| diff-mode-spec-fidelity | `["skills/multi-model-verify/SKILL.md", "skills/multi-model-verify/references/model-prompting-notes.md"]` |
++| plan-mode-debate-runs | `["skills/multi-model-verify/SKILL.md", "skills/multi-model-verify/references/model-prompting-notes.md", "skills/multi-model-verify/references/debate-protocol.md"]` |
++| diff-mode-spec-fidelity | `["skills/multi-model-verify/SKILL.md", "skills/multi-model-verify/references/model-prompting-notes.md", "skills/multi-model-verify/references/debate-protocol.md"]` |
+ | degraded-consent-gate | `["skills/multi-model-verify/SKILL.md", "skills/multi-model-verify/references/fallbacks.md"]` |
+ | missing-reference-refusal | `["skills/multi-model-verify/SKILL.md"]` |
+ | fix-application-checkpoint | `["skills/multi-model-verify/SKILL.md", "skills/multi-model-verify/references/application-checkpoint.md"]` |
+ | fix-checkpoint-attended-stop | `["skills/multi-model-verify/SKILL.md", "skills/multi-model-verify/references/application-checkpoint.md"]` |
+-| no-manufactured-objections | `["skills/multi-model-verify/SKILL.md", "skills/multi-model-verify/references/model-prompting-notes.md"]` |
++| no-manufactured-objections | `["skills/multi-model-verify/SKILL.md", "skills/multi-model-verify/references/model-prompting-notes.md", "skills/multi-model-verify/references/debate-protocol.md"]` |
++
++(The three debate cases carry `debate-protocol.md`: it is required reading
++before round 1 and both modes iterate under it — Sol plan round 1, F2.)
+ 
+ - [ ] **Step 4: Run the full suite**
+ 
+@@ -197,7 +206,7 @@ git commit -m "0.11.0: declare per-case contract surfaces in evals.json"
+ 
+ **Interfaces:**
+ - Consumes: `entry["surface"]` from Task 2.
+-- Produces: `select_cases(cases, changed_paths, base_entries) -> (selected, skipped)` where `selected` is a list of `(case_dict, reason_str)` and `skipped` a list of `case_dict`; CLI flag `--changed [REF]`. Task 4 invokes the flag.
++- Produces: `select_cases(cases, changed_paths, base_entries) -> (selected, skipped)` where `selected` is a list of `(case_dict, reason_str)` and `skipped` a list of `case_dict`; `parse_base_entries(text) -> {id: entry} | None` (pure loader, fail-toward-running); CLI flag `--changed [REF]`. Task 4 invokes the flag.
+ 
+ - [ ] **Step 1: Write the failing unit tests**
+ 
+@@ -279,6 +288,17 @@ Add to `class TestEvalFixtures`:
+         assert [c["id"] for c, _ in selected] == ["a", "b"]
+         assert skipped == []
+ 
++    def test_parse_base_entries_structurally_invalid_returns_none(self):
++        # {"evals": null} is valid JSON that raises TypeError, not
++        # JSONDecodeError, during iteration - the loader must fail toward
++        # running (None), never crash selection (Sol plan round 1, F1).
++        runner = load_runner_module()
++        assert runner.parse_base_entries('{"evals": null}') is None
++        assert runner.parse_base_entries('{"evals": [null]}') is None
++        assert runner.parse_base_entries('not json at all') is None
++        assert runner.parse_base_entries('{"evals": [{"id": "a"}]}') == {
++            "a": {"id": "a"}}
++
+     def test_changed_and_case_flags_are_mutually_exclusive(self):
+         proc = subprocess.run(
+             [sys.executable,
+@@ -291,8 +311,8 @@ Add to `class TestEvalFixtures`:
+ 
+ - [ ] **Step 2: Run to verify they fail**
+ 
+-Run: `python -m pytest evals/multi-model-verify/test_multi_model_verify.py -q -k "select_cases or mutually_exclusive"`
+-Expected: FAIL — AttributeError (`select_cases` does not exist); the CLI test fails on returncode 0/2 mismatch (unknown flag exits 2 — so assert the stderr text too, which fails until the flag exists with the right error).
++Run: `python -m pytest evals/multi-model-verify/test_multi_model_verify.py -q -k "select_cases or mutually_exclusive or parse_base_entries"`
++Expected: FAIL — AttributeError (`select_cases` / `parse_base_entries` do not exist); the CLI test fails on the missing "mutually exclusive" stderr text (an unknown flag also exits 2, so the text assert is what makes this test genuinely fail first).
+ 
+ - [ ] **Step 3: Implement in run_behavioral_evals.py**
+ 
+@@ -351,6 +371,17 @@ def changed_paths_vs(base):
+             + _git_lines("ls-files", "--others", "--exclude-standard"))
+ 
+ 
++def parse_base_entries(text):
++    """{id: entry} from a base evals.json text, or None when the text is
++    syntactically OR structurally unparseable - {"evals": null} is valid
++    JSON that raises TypeError, not JSONDecodeError, during iteration
++    (Sol plan round 1, F1). None makes select_cases run everything."""
++    try:
++        return {c["id"]: c for c in json.loads(text)["evals"]}
++    except (json.JSONDecodeError, KeyError, TypeError):
++        return None
++
++
+ def base_case_entries(base):
+     try:
+         out = subprocess.run(
+@@ -358,9 +389,9 @@ def base_case_entries(base):
+              f"{base}:evals/multi-model-verify/evals.json"],
+             check=True, capture_output=True, text=True,
+             encoding="utf-8", errors="replace")
+-        return {c["id"]: c for c in json.loads(out.stdout)["evals"]}
+-    except (subprocess.CalledProcessError, json.JSONDecodeError, KeyError):
++    except subprocess.CalledProcessError:
+         return None
++    return parse_base_entries(out.stdout)
+ ```
+ 
+ In `main()`, add the flag next to `--case`:
+@@ -400,7 +431,7 @@ After the `if args.list:` block and BEFORE the CLI tool checks (a doc-only diff
+ 
+ - [ ] **Step 4: Run the new tests, then the full suite**
+ 
+-Run: `python -m pytest evals/multi-model-verify/test_multi_model_verify.py -q -k "select_cases or mutually_exclusive"`
++Run: `python -m pytest evals/multi-model-verify/test_multi_model_verify.py -q -k "select_cases or mutually_exclusive or parse_base_entries"`
+ Expected: PASS.
+ Run: `python -m pytest evals -q`
+ Expected: PASS (the `--list` self-test at test_behavioral_runner_self_test must still pass unchanged).
+diff --git a/docs/superpowers/specs/2026-07-25-behavioral-eval-trim-design.md b/docs/superpowers/specs/2026-07-25-behavioral-eval-trim-design.md
+index 945ad5e..9f39feb 100644
+--- a/docs/superpowers/specs/2026-07-25-behavioral-eval-trim-design.md
++++ b/docs/superpowers/specs/2026-07-25-behavioral-eval-trim-design.md
+@@ -121,7 +121,9 @@ changes).
+    the standard CI four).
+ 2. Stability probe: 3× consecutive PASS on
+    `run_behavioral_evals.py --head --case no-manufactured-objections
+-   --artifacts <dir>` — the same bar D3 used. (~3 grader calls.)
++   --artifacts <dir>` — a stricter bar than 0.10.0's D3 evidence, whose
++   record was fail/fail/pass pre-fix and ONE confirming full-case PASS
++   post-fix (Sol plan round 1, F3). (~3 grader calls.)
+ 3. Dogfood: `--changed` on this branch must select exactly
+    `{no-manufactured-objections}` — only its evals.json entry changes; no
+    skill file is touched. The printed selection is itself the demo.
+
+2026-07-25T05:58:26.507630Z ERROR codex_models_manager::manager: failed to renew cache TTL: missing field `supports_reasoning_summaries` at line 86 column 5
+codex
+All three amendments are present in the commit, and the diff is confined to the plan and approved spec. I’m doing the last adversarial pass now: checking the new parser’s actual failure modes, ensuring the protocol mapping is both implemented and test-pinned, and comparing the corrected D3 statement to the retained 0.10.0 record.
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command '$f='"'docs/superpowers/plans/2026-07-25-behavioral-eval-trim.md'; "'$x=Get-Content -LiteralPath $f; for($i=360;$i -le [Math]::Min(440,$x.Count);$i++){ '"'{0,4}: {1}' -f "'$i,$x[$i-1] }' in C:\Users\Brandon\Documents\parallax
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command '$f='"'docs/superpowers/plans/2026-07-25-behavioral-eval-trim.md'; "'$x=Get-Content -LiteralPath $f; for($i=136;$i -le [Math]::Min(190,$x.Count);$i++){ '"'{0,4}: {1}' -f "'$i,$x[$i-1] }' in C:\Users\Brandon\Documents\parallax
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command '$f='"'docs/superpowers/plans/2026-07-25-behavioral-eval-trim.md'; "'$x=Get-Content -LiteralPath $f; for($i=280;$i -le [Math]::Min(321,$x.Count);$i++){ '"'{0,4}: {1}' -f "'$i,$x[$i-1] }' in C:\Users\Brandon\Documents\parallax
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command 'git diff --check 77013d3''^ 77013d3; git diff --name-only 77013d3''^ 77013d3; git status --porcelain' in C:\Users\Brandon\Documents\parallax
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command '$f='"'docs/superpowers/plans/2026-07-24-jinn-intake-adoptions.md'; "'$x=Get-Content -LiteralPath $f; for($i=275;$i -le [Math]::Min(282,$x.Count);$i++){ '"'{0,4}: {1}' -f "'$i,$x[$i-1] }' in C:\Users\Brandon\Documents\parallax
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command '$f='"'docs/superpowers/specs/2026-07-25-behavioral-eval-trim-design.md'; "'$x=Get-Content -LiteralPath $f; for($i=118;$i -le [Math]::Min(132,$x.Count);$i++){ '"'{0,4}: {1}' -f "'$i,$x[$i-1] }' in C:\Users\Brandon\Documents\parallax
+ succeeded in 611ms:
+ 360: 
+ 361: 
+ 362: def resolve_changed_base(ref):
+ 363:     if ref is not None:
+ 364:         return ref
+ 365:     return _git_lines("merge-base", "HEAD", "main")[0]
+ 366: 
+ 367: 
+ 368: def changed_paths_vs(base):
+ 369:     """Committed + uncommitted (working tree vs base) plus untracked."""
+ 370:     return (_git_lines("diff", "--name-only", base)
+ 371:             + _git_lines("ls-files", "--others", "--exclude-standard"))
+ 372: 
+ 373: 
+ 374: def parse_base_entries(text):
+ 375:     """{id: entry} from a base evals.json text, or None when the text is
+ 376:     syntactically OR structurally unparseable - {"evals": null} is valid
+ 377:     JSON that raises TypeError, not JSONDecodeError, during iteration
+ 378:     (Sol plan round 1, F1). None makes select_cases run everything."""
+ 379:     try:
+ 380:         return {c["id"]: c for c in json.loads(text)["evals"]}
+ 381:     except (json.JSONDecodeError, KeyError, TypeError):
+ 382:         return None
+ 383: 
+ 384: 
+ 385: def base_case_entries(base):
+ 386:     try:
+ 387:         out = subprocess.run(
+ 388:             ["git", "-C", str(PLUGIN_ROOT), "show",
+ 389:              f"{base}:evals/multi-model-verify/evals.json"],
+ 390:             check=True, capture_output=True, text=True,
+ 391:             encoding="utf-8", errors="replace")
+ 392:     except subprocess.CalledProcessError:
+ 393:         return None
+ 394:     return parse_base_entries(out.stdout)
+ 395: ```
+ 396: 
+ 397: In `main()`, add the flag next to `--case`:
+ 398: 
+ 399: ```python
+ 400:     ap.add_argument("--changed", nargs="?", const="", default=None,
+ 401:                     metavar="REF",
+ 402:                     help="run only cases whose declared surface intersects"
+ 403:                          " the diff vs REF (default: merge-base with main)"
+ 404:                          " or whose own evals.json entry changed; prints"
+ 405:                          " every skip by name")
+ 406: ```
+ 407: 
+ 408: Immediately after `args = ap.parse_args(argv)`:
+ 409: 
+ 410: ```python
+ 411:     if args.changed is not None and args.case:
+ 412:         ap.error("--changed and --case are mutually exclusive")
+ 413: ```
+ 414: 
+ 415: After the `if args.list:` block and BEFORE the CLI tool checks (a doc-only diff must be reportable without claude/codex installed; `--list` itself stays git-free for CI):
+ 416: 
+ 417: ```python
+ 418:     if args.changed is not None:
+ 419:         base = resolve_changed_base(args.changed or None)
+ 420:         selected, skipped = select_cases(
+ 421:             cases, changed_paths_vs(base), base_case_entries(base))
+ 422:         for c in skipped:
+ 423:             print(f"SKIPPED(unchanged surface) {c['id']}")
+ 424:         for c, reason in selected:
+ 425:             print(f"SELECTED {c['id']} - {reason}")
+ 426:         if not selected:
+ 427:             print("no behavioral surface touched")
+ 428:             return 0
+ 429:         cases = [c for c, _ in selected]
+ 430: ```
+ 431: 
+ 432: - [ ] **Step 4: Run the new tests, then the full suite**
+ 433: 
+ 434: Run: `python -m pytest evals/multi-model-verify/test_multi_model_verify.py -q -k "select_cases or mutually_exclusive or parse_base_entries"`
+ 435: Expected: PASS.
+ 436: Run: `python -m pytest evals -q`
+ 437: Expected: PASS (the `--list` self-test at test_behavioral_runner_self_test must still pass unchanged).
+ 438: 
+ 439: - [ ] **Step 5: Add the CLAUDE.md sentence**
+ 440: 
+
+ succeeded in 613ms:
+docs/superpowers/plans/2026-07-25-behavioral-eval-trim.md
+docs/superpowers/specs/2026-07-25-behavioral-eval-trim-design.md
+
+ succeeded in 639ms:
+ 280:         assert selected == []
+ 281:         assert [c["id"] for c in skipped] == ["a", "b"]
+ 282: 
+ 283:     def test_select_cases_unreadable_base_selects_all(self):
+ 284:         # Fail toward running, never toward skipping.
+ 285:         runner = load_runner_module()
+ 286:         cases = self._trim_cases()
+ 287:         selected, skipped = runner.select_cases(cases, [], None)
+ 288:         assert [c["id"] for c, _ in selected] == ["a", "b"]
+ 289:         assert skipped == []
+ 290: 
+ 291:     def test_parse_base_entries_structurally_invalid_returns_none(self):
+ 292:         # {"evals": null} is valid JSON that raises TypeError, not
+ 293:         # JSONDecodeError, during iteration - the loader must fail toward
+ 294:         # running (None), never crash selection (Sol plan round 1, F1).
+ 295:         runner = load_runner_module()
+ 296:         assert runner.parse_base_entries('{"evals": null}') is None
+ 297:         assert runner.parse_base_entries('{"evals": [null]}') is None
+ 298:         assert runner.parse_base_entries('not json at all') is None
+ 299:         assert runner.parse_base_entries('{"evals": [{"id": "a"}]}') == {
+ 300:             "a": {"id": "a"}}
+ 301: 
+ 302:     def test_changed_and_case_flags_are_mutually_exclusive(self):
+ 303:         proc = subprocess.run(
+ 304:             [sys.executable,
+ 305:              str(REPO_ROOT / "evals" / "tools" / "run_behavioral_evals.py"),
+ 306:              "--changed", "--case", "plan-mode-debate-runs"],
+ 307:             capture_output=True, text=True)
+ 308:         assert proc.returncode == 2
+ 309:         assert "mutually exclusive" in (proc.stderr or "")
+ 310: ```
+ 311: 
+ 312: - [ ] **Step 2: Run to verify they fail**
+ 313: 
+ 314: Run: `python -m pytest evals/multi-model-verify/test_multi_model_verify.py -q -k "select_cases or mutually_exclusive or parse_base_entries"`
+ 315: Expected: FAIL — AttributeError (`select_cases` / `parse_base_entries` do not exist); the CLI test fails on the missing "mutually exclusive" stderr text (an unknown flag also exits 2, so the text assert is what makes this test genuinely fail first).
+ 316: 
+ 317: - [ ] **Step 3: Implement in run_behavioral_evals.py**
+ 318: 
+ 319: Add `import fnmatch` to the imports block. Add after `load_cases()`:
+ 320: 
+ 321: ```python
+
+ succeeded in 674ms:
+ 136:                 assert any(fnmatch.fnmatch(p, glob) for p in tracked), (
+ 137:                     f"case {entry['id']} surface glob {glob!r} matches no"
+ 138:                     " tracked file")
+ 139: 
+ 140:     def test_surface_semantic_pins(self):
+ 141:         # The mapping's load-bearing rows, pinned so a refactor cannot
+ 142:         # quietly decouple a case from the contract file it tests:
+ 143:         # SKILL.md is every case's contract; the consent gate lives in
+ 144:         # fallbacks.md; both fix cases grade application-checkpoint.md;
+ 145:         # the three debate cases grade debate discipline, whose contract
+ 146:         # is debate-protocol.md (Sol plan round 1, F2).
+ 147:         data = json.loads(read(EVALS_DIR / "evals.json"))
+ 148:         surfaces = {e["id"]: e["surface"] for e in data["evals"]}
+ 149:         for cid, surface in surfaces.items():
+ 150:             assert "skills/multi-model-verify/SKILL.md" in surface, (
+ 151:                 f"case {cid} must include the skill body in its surface")
+ 152:         assert ("skills/multi-model-verify/references/fallbacks.md"
+ 153:                 in surfaces["degraded-consent-gate"])
+ 154:         for cid in ("fix-application-checkpoint",
+ 155:                     "fix-checkpoint-attended-stop"):
+ 156:             assert ("skills/multi-model-verify/references/application-checkpoint.md"
+ 157:                     in surfaces[cid])
+ 158:         for cid in ("plan-mode-debate-runs", "diff-mode-spec-fidelity",
+ 159:                     "no-manufactured-objections"):
+ 160:             assert ("skills/multi-model-verify/references/debate-protocol.md"
+ 161:                     in surfaces[cid])
+ 162: ```
+ 163: 
+ 164: - [ ] **Step 2: Run to verify they fail**
+ 165: 
+ 166: Run: `python -m pytest evals/multi-model-verify/test_multi_model_verify.py -q -k "evals_schema or surface"`
+ 167: Expected: FAIL — `test_evals_schema` on the missing `surface` key; the two new tests on KeyError/missing key.
+ 168: 
+ 169: - [ ] **Step 3: Add surface fields to evals.json**
+ 170: 
+ 171: Add a `"surface"` key to every entry (place it right after `"setup"`), with exactly these values:
+ 172: 
+ 173: | case id | surface |
+ 174: |---|---|
+ 175: | plan-mode-debate-runs | `["skills/multi-model-verify/SKILL.md", "skills/multi-model-verify/references/model-prompting-notes.md", "skills/multi-model-verify/references/debate-protocol.md"]` |
+ 176: | diff-mode-spec-fidelity | `["skills/multi-model-verify/SKILL.md", "skills/multi-model-verify/references/model-prompting-notes.md", "skills/multi-model-verify/references/debate-protocol.md"]` |
+ 177: | degraded-consent-gate | `["skills/multi-model-verify/SKILL.md", "skills/multi-model-verify/references/fallbacks.md"]` |
+ 178: | missing-reference-refusal | `["skills/multi-model-verify/SKILL.md"]` |
+ 179: | fix-application-checkpoint | `["skills/multi-model-verify/SKILL.md", "skills/multi-model-verify/references/application-checkpoint.md"]` |
+ 180: | fix-checkpoint-attended-stop | `["skills/multi-model-verify/SKILL.md", "skills/multi-model-verify/references/application-checkpoint.md"]` |
+ 181: | no-manufactured-objections | `["skills/multi-model-verify/SKILL.md", "skills/multi-model-verify/references/model-prompting-notes.md", "skills/multi-model-verify/references/debate-protocol.md"]` |
+ 182: 
+ 183: (The three debate cases carry `debate-protocol.md`: it is required reading
+ 184: before round 1 and both modes iterate under it — Sol plan round 1, F2.)
+ 185: 
+ 186: - [ ] **Step 4: Run the full suite**
+ 187: 
+ 188: Run: `python -m pytest evals -q`
+ 189: Expected: PASS.
+ 190: 
+
+ succeeded in 677ms:
+ 275: ### Post-freeze approved deviations
+ 276: 
+ 277: | # | Deviation | Why | Approved by |
+ 278: |---|-----------|-----|-------------|
+ 279: | D1 | Task 2 Step 3(b) prose implemented as "The rollout is gone; skip the retry and go straight to this class's consent gate..." instead of the plan's "...and a retry changes nothing: go straight to..." | The plan's own Step 1 test regex (`rollout.{0,240}skip the retry`) cannot match the plan's Step 3(b) literal text — an internal plan wording defect; the test is the debate-locked contract, so the prose must satisfy it. Meaning-preserving; disclosed by the implementer; verified necessary by the task reviewer. | session adjudication, 2026-07-24 (task-2 review; surfaced to user in the execution report) |
+ 280: | D2 | Task 4 Step 3(b)'s fenced `python -c` one-liner replaced with a quoting-robust equivalent: the id-2 line filter (`'\"id\":2'`) becomes a `'rateLimits'` substring filter, eliminating every escaped double quote from the Python source | The plan's literal one-liner throws a Python SyntaxError when pasted into PowerShell — verified by the task reviewer under all three `$PSNativeCommandArgumentPassing` modes (`\"` sequences are mangled by native argument reconstruction). Handshake, timeout, kill, and N/A semantics unchanged; the pipelined two-line write itself is probe-verified (2026-07-24, and jinn ships the same shape at engine-limits.ts:443). | session adjudication, 2026-07-24 (task-4 review; surfaced to user in the execution report) |
+ 281: | D3 | Task 1 Step 3's appended sentence hardened; shipped text: "Skills from the user's own codex plugin cache load the same way — record them in the debate record as a non-blocking environment note with the cache path cited, like the global AGENTS.md; not a stop and never a finding." (was: "...note them in the debate record like the global AGENTS.md; not a stop.") | Behavioral gate evidence (three runs of `no-manufactured-objections`: fail/fail/pass): executors phrased the mandated note inconsistently, and the grader's "every noted risk cites a file line and is explicitly non-blocking" expectation graded loose phrasings as under-cited risks. Specifying the note's shape removes the phrasing lottery. Post-D3 confirming run: PASS 3/3 (behavioral-rerun-nmo3.log). | user, 2026-07-24 (gate-fix decision: "Harden the skill sentence") |
+ 282: | D4 | Final-review fix wave (commit de47bea) added three deltas beyond the frozen task text: (1) `test_missing_rollout_is_named_class` also asserts the literal class name `missing-rollout`; (2) the notes quota probe bullet rewritten from "adoption pending" to adopted form naming doctor check 4b; (3) the check-drift.ps1 env-hygiene comment extended to cover `CODEX_HOME`. | Findings of the final whole-branch review (one Important, two Minors), applied via the SDD single fix wave and verified by its scoped re-review; recorded here because the frozen plan's authority rule makes unrecorded post-freeze changes drift (mode-diff round 1, F6). | user, 2026-07-25 (application-checkpoint authorization, 20260725-de47bea2901b.md) |
+
+ succeeded in 686ms:
+ 118: ## Verification for this cycle
+ 119: 
+ 120: 1. `python -m pytest evals -q` green (plus lint, scanner, trigger evals —
+ 121:    the standard CI four).
+ 122: 2. Stability probe: 3× consecutive PASS on
+ 123:    `run_behavioral_evals.py --head --case no-manufactured-objections
+ 124:    --artifacts <dir>` — a stricter bar than 0.10.0's D3 evidence, whose
+ 125:    record was fail/fail/pass pre-fix and ONE confirming full-case PASS
+ 126:    post-fix (Sol plan round 1, F3). (~3 grader calls.)
+ 127: 3. Dogfood: `--changed` on this branch must select exactly
+ 128:    `{no-manufactured-objections}` — only its evals.json entry changes; no
+ 129:    skill file is touched. The printed selection is itself the demo.
+ 130: 4. **No full 7-case battery this cycle.** The changed surface is
+ 131:    evals-only, which is precisely the situation the feature exists for.
+ 132:    This deviation from prior-cycle tradition is declared here for the plan
+
+2026-07-25T05:58:51.018987Z ERROR codex_models_manager::manager: failed to renew cache TTL: missing field `supports_reasoning_summaries` at line 86 column 5
+codex
+Overall verdict: **PASS**. All three accepted amendments are correctly applied; no substantive objection remains.
+
+1. F1 — loader fail-open
+
+`parse_base_entries()` now catches `JSONDecodeError`, `KeyError`, and `TypeError`; `base_case_entries()` routes successful `git show` output through it (`docs/superpowers/plans/2026-07-25-behavioral-eval-trim.md:374-394`). The test covers invalid JSON plus both structurally invalid examples, while the focused and full-suite commands include the new test (`docs/superpowers/plans/2026-07-25-behavioral-eval-trim.md:291-315`, `docs/superpowers/plans/2026-07-25-behavioral-eval-trim.md:432-437`). **PASS**
+
+2. F2 — protocol surfaces
+
+All three debate cases now include `debate-protocol.md`, and the semantic-pin test locks those exact associations (`docs/superpowers/plans/2026-07-25-behavioral-eval-trim.md:140-161`, `docs/superpowers/plans/2026-07-25-behavioral-eval-trim.md:169-184`). This matches the skill’s mandatory-reading and mode-protocol requirements (`skills/multi-model-verify/SKILL.md:18`, `skills/multi-model-verify/SKILL.md:123-138`). **PASS**
+
+3. F3 — D3 attribution
+
+The spec now describes the new gate as stricter and accurately records D3 as fail/fail/pass followed by one confirming full-case PASS (`docs/superpowers/specs/2026-07-25-behavioral-eval-trim-design.md:122-126`). That matches the durable 0.10.0 deviation record (`docs/superpowers/plans/2026-07-24-jinn-intake-adoptions.md:281`). **PASS**
+
+UNVERIFIED:
+
+- The future implementation tests and live behavioral runs remain prospective; the amended plan schedules them but does not claim they have already passed (`docs/superpowers/plans/2026-07-25-behavioral-eval-trim.md:432-437`).
+- The old raw D3 run artifacts were not available; the corrected history was verified against the repository’s durable D3 record (`docs/superpowers/plans/2026-07-24-jinn-intake-adoptions.md:281`).
+
+**Round 2: PASS — converged with all three amendments accepted and verified; no escalated points.**
+Overall verdict: **PASS**. All three accepted amendments are correctly applied; no substantive objection remains.
+
+1. F1 — loader fail-open
+
+`parse_base_entries()` now catches `JSONDecodeError`, `KeyError`, and `TypeError`; `base_case_entries()` routes successful `git show` output through it (`docs/superpowers/plans/2026-07-25-behavioral-eval-trim.md:374-394`). The test covers invalid JSON plus both structurally invalid examples, while the focused and full-suite commands include the new test (`docs/superpowers/plans/2026-07-25-behavioral-eval-trim.md:291-315`, `docs/superpowers/plans/2026-07-25-behavioral-eval-trim.md:432-437`). **PASS**
+
+2. F2 — protocol surfaces
+
+All three debate cases now include `debate-protocol.md`, and the semantic-pin test locks those exact associations (`docs/superpowers/plans/2026-07-25-behavioral-eval-trim.md:140-161`, `docs/superpowers/plans/2026-07-25-behavioral-eval-trim.md:169-184`). This matches the skill’s mandatory-reading and mode-protocol requirements (`skills/multi-model-verify/SKILL.md:18`, `skills/multi-model-verify/SKILL.md:123-138`). **PASS**
+
+3. F3 — D3 attribution
+
+The spec now describes the new gate as stricter and accurately records D3 as fail/fail/pass followed by one confirming full-case PASS (`docs/superpowers/specs/2026-07-25-behavioral-eval-trim-design.md:122-126`). That matches the durable 0.10.0 deviation record (`docs/superpowers/plans/2026-07-24-jinn-intake-adoptions.md:281`). **PASS**
+
+UNVERIFIED:
+
+- The future implementation tests and live behavioral runs remain prospective; the amended plan schedules them but does not claim they have already passed (`docs/superpowers/plans/2026-07-25-behavioral-eval-trim.md:432-437`).
+- The old raw D3 run artifacts were not available; the corrected history was verified against the repository’s durable D3 record (`docs/superpowers/plans/2026-07-24-jinn-intake-adoptions.md:281`).
+
+**Round 2: PASS — converged with all three amendments accepted and verified; no escalated points.**
+tokens used
+146,675

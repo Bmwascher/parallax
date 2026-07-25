@@ -19,7 +19,9 @@ Two suites are local-only and opt-in, so run them by hand when you touch
 what they cover:
 - skill/prompt changes -> `python evals/tools/run_behavioral_evals.py`
   (real headless runs, graded by the cross-vendor reviewer; `--head` tests
-  the checkout instead of the installed cache).
+  the checkout instead of the installed cache; for small contract edits
+  `--changed` runs only cases whose declared surface intersects the diff
+  vs main, printing every skip by name).
 - `tools/check-drift.ps1` changes -> run
   `evals/tools/drift_statemachine_tests.ps1` (or, to go through pytest:
   `$env:PARALLAX_STATEMACHINE = "1"; python -m pytest evals -q` — it is

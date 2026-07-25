@@ -1,0 +1,107 @@
+<role>Adversarial reviewer, equal weight, in a two-model debate. Mode: plan (non-port).</role>
+
+<task>Refute or confirm each numbered claim about the 0.11.0 implementation plan
+for the parallax repo (your cwd, branch feat/0110-eval-trim). The cycle adds a
+--changed surface-trim flag to the behavioral-eval runner and rewords one flaky
+graded expectation. Primary documents:
+- docs/superpowers/specs/2026-07-25-behavioral-eval-trim-design.md (approved spec)
+- docs/superpowers/plans/2026-07-25-behavioral-eval-trim.md (the plan under review)
+- evals/multi-model-verify/evals.json, evals/tools/run_behavioral_evals.py,
+  evals/multi-model-verify/test_multi_model_verify.py, CLAUDE.md (current state)
+</task>
+
+<rules>Cite <repo-relative file>:<line> for every claim you make or contest;
+uncited claims will be struck. Do not manufacture objections: if a claim
+stands, say PASS and move on. End each claim with PASS, FIX (with the specific
+fix), or ESCALATE. Round cap 4.</rules>
+
+<claims>
+1. Cost model. Each behavioral case costs one headless executor run plus
+exactly one cross-vendor grader call (evals/tools/run_behavioral_evals.py:546-599,
+per-case loop :654-658). The battery has 7 cases
+(evals/multi-model-verify/evals.json:5-87). For an edit touching one contract
+file, running all 7 spends grader quota on cases whose surface cannot have
+changed; the runner's only current subset mechanism is manual --case
+(run_behavioral_evals.py:608) with nothing enforcing the choice.
+
+2. Flake diagnosis. no-manufactured-objections expectation #1 currently reads
+"...every noted risk cites a real file line and is explicitly non-blocking..."
+(evals.json:82). Two recovered 0.10.0 grader rationales failed it with "the
+cited OnUpdate risk was not explicitly labeled non[-blocking]" while conceding
+the verdict converged with only a trivial amendment and no scope expansion -
+the clause grades the executor's word choice, not its behavior. The rationale
+quotes are session-attested (recovered from the prior session's run logs;
+quoted in the spec's Problem section,
+docs/superpowers/specs/2026-07-25-behavioral-eval-trim-design.md:12-24).
+
+3. Reword. Plan Task 1 replaces that clause with outcome conditions: a noted
+risk passes when it triggers no FIX or ESCALATE verdict, no additional round,
+and no scope change; an explicit non-blocking label is sufficient but not
+required (canonical string in plan Task 1). The guard does not weaken: the
+PASS-or-trivial-amendments clause, the real-file-line citation requirement,
+and the no-scope-expansion clause all persist, and the new text is
+clause-locked in pytest BEFORE evals.json changes (plan Task 1 Steps 1-2).
+
+4. Selection design. select_cases is a pure function (plan Task 3 Step 3): a
+case is selected on surface-glob match (fnmatch over backslash-normalized
+changed paths) OR on grading-view entry diff vs the base evals.json;
+base_entries=None (base file missing or unparseable) selects ALL cases - fail
+toward running, never toward skipping; every skipped case prints by name; zero
+selections prints "no behavioral surface touched" and exits 0 BEFORE the
+claude/codex CLI checks; --changed and --case are mutually exclusive
+(argparse error); the --list CI path is untouched (self-test at
+evals/multi-model-verify/test_multi_model_verify.py:709-712 must keep passing).
+
+5. Entry diff excludes the surface key (_grading_view helper): selection
+metadata is not grading contract; without the exclusion, the very commit that
+INTRODUCES surface fields would re-select all 7 cases - the opposite of a trim
+(spec, docs/superpowers/specs/2026-07-25-behavioral-eval-trim-design.md:49-58).
+Locked by test_select_cases_surface_only_diff_does_not_select (plan Task 3
+Step 1).
+
+6. Mapping rows (plan Task 2 table). skills/multi-model-verify/SKILL.md in
+every case's surface: every executor loads the skill via the Skill tool
+(run_behavioral_evals.py:97, harness preamble :44-50), so the skill body is
+every case's contract - a SKILL.md edit honestly selects the full battery.
+skills/multi-model-verify/references/fallbacks.md -> degraded-consent-gate:
+that case grades consent-gate behavior (evals.json:31-41) whose contract lives
+in fallbacks.md. skills/multi-model-verify/references/application-checkpoint.md
+-> both fix-* cases: the mutation preamble directs the checkpoint contract
+(run_behavioral_evals.py:61-72).
+skills/multi-model-verify/references/model-prompting-notes.md ->
+plan-mode-debate-runs, diff-mode-spec-fidelity, no-manufactured-objections:
+those cases exercise the transport and brief conventions declared there, and
+the runner parses the canonical reviewer declaration from that file
+(run_behavioral_evals.py:528-543) and substitutes it into expectations
+(:558-560).
+
+7. Harness boundary. Edits to the runner, tests, or fixtures do NOT trigger
+the battery: the battery tests the skill; the harness is tested offline by
+pytest (CLAUDE.md, Verification section). Consequence accepted on the record:
+a runner bug ships without a battery run unless pytest catches it.
+
+8. Cycle verification. Offline: the four CI gates. Live: 3x consecutive PASS
+on the reworded case (the same stability bar 0.10.0's D3 fix used), with run 3
+invoked via --changed so it doubles as the dogfood demo - on this branch only
+no-manufactured-objections' grading view differs from the merge-base, so
+selection must print exactly one SELECTED line and six SKIPPED lines. No full
+7-case battery this cycle: skills/ is untouched, which is precisely the
+situation the feature exists for. Cost: ~3 grader calls against the ~9%
+weekly quota remaining.
+</claims>
+
+<boundaries>
+Already decided by the user, NOT under debate: (a) the mapping lives as a
+surface field in evals.json (docs-table and runner-dict alternatives
+rejected); (b) expectation #1 is reworded, not split, and the skill is not
+hardened further; (c) live verification runs now despite the quota level;
+(d) nothing under skills/, hooks/, or commands/ changes this cycle; (e) the
+full battery remains the deep-release gate - --changed serves small contract
+edits.
+Environment notes for the record (non-blocking): ~/.codex/AGENTS.md exists
+(the user's own global instructions); skills from the user's own codex plugin
+cache load into your context by design.
+</boundaries>
+
+<final-check>List any claim you could not verify against files you read, as
+UNVERIFIED - do not fold unverified material into your verdict.</final-check>

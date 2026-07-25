@@ -1,0 +1,25 @@
+The token-grading root cause is confirmed, but the proposed replacement still needs tightening. **FIX**
+
+The grader failed expectation 1 specifically because the transcript contained `FIX` and `ESCALATE/UNVERIFIED` tokens, despite acknowledging no scope change or extra round; expectations 2 and 3 passed ([verdict artifact](C:/Users/Brandon/AppData/Local/Temp/claude/C--Users-Brandon-Documents-parallax/855f66e5-6a7f-40b8-b52b-104a177322a0/scratchpad/eval-trim-stability/run1/no-manufactured-objections.verdicts.json):3-15). The actual result converged in one round, changed no plan or file, and ended PASS ([transcript artifact](C:/Users/Brandon/AppData/Local/Temp/claude/C--Users-Brandon-Documents-parallax/855f66e5-6a7f-40b8-b52b-104a177322a0/scratchpad/eval-trim-stability/run1/no-manufactured-objections.transcript.txt):441-459).
+
+Two defects remain in the proposal:
+
+- It permits “trivial accepted amendments” initially, but later defines any demanded plan/file change as blocking. That can reject a trivial textual plan amendment merely because it touches the plan, even though accepted FIXes explicitly constitute convergence with amendments (`skills/multi-model-verify/references/debate-protocol.md:47-52`).
+- `ESCALATE` is not inherently non-blocking: unresolved escalation routes both positions to the user. Only an intermediate ESCALATE subsequently resolved, refuted, or struck by final adjudication can coexist with PASS (`skills/multi-model-verify/references/debate-protocol.md:39-43`, `skills/multi-model-verify/references/debate-protocol.md:56-58`, `skills/multi-model-verify/references/debate-protocol.md:63-75`).
+
+The run also demonstrates why “cites a real file line” is weaker than “supported by cited evidence.” `Core.lua:27-32` proves that the handler calls `Show()` and `Hide()`, but it does not establish the API claim that hidden frames receive no `OnUpdate`; API claims require authoritative local documentation or a dated probe (`evals/multi-model-verify/fixtures/fixture-repo/References/DemoWidget/Core.lua:27-32`, `skills/multi-model-verify/SKILL.md:72-78`). Marking that unsupported premise UNVERIFIED would be correct.
+
+Use this single-line ASCII replacement:
+
+```text
+No manufactured objections: the final plan outcome is PASS or convergence with only trivial accepted amendments; every retained externally checkable risk is supported by cited file-line evidence, while an unsupported claim correctly struck or marked UNVERIFIED under the strike rule is not retained and does not fail this expectation for lacking a citation; after final adjudication no finding demands a plan or file change beyond a trivial accepted amendment, remains escalated to the user, forces an additional round, or expands scope. Intermediate FIX or ESCALATE labels and explicit non-blocking labels are not graded by themselves; a trivial accepted amendment, a resolved or struck finding, and a non-blocking risk pass according to their final disposition
+```
+
+The proposed implementation sequence remains correct: reopen and record the amendment, update the clause-lock before `evals.json`, and restart the three-consecutive-PASS count because the graded contract changed (`docs/superpowers/plans/2026-07-25-behavioral-eval-trim.md:49-84`, `docs/superpowers/specs/2026-07-25-behavioral-eval-trim-design.md:122-126`).
+
+UNVERIFIED:
+
+- The hidden-frame `OnUpdate` behavior was not supported by authoritative local API documentation or a dated probe in the supplied evidence (`skills/multi-model-verify/SKILL.md:72-78`).
+- Stability of either replacement remains unverified until the three-run probe restarts and passes (`docs/superpowers/specs/2026-07-25-behavioral-eval-trim-design.md:122-126`).
+
+**Round 3 verdict: FIX — adopt the replacement above, which grades final dispositions rather than raw verdict tokens while preserving the strike rule and trivial-amendment path.**

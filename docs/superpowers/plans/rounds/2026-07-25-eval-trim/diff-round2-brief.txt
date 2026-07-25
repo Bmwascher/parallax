@@ -1,0 +1,21 @@
+<role>Same diff-mode review, round 2. Evidence rules and verdict grammar as before.</role>
+
+<task>Your round-1 FIX (claims 1 and 6: fix wave 73d49f0 absent from the frozen
+plan's deviation table) is accepted and applied. Verify the amendment and issue
+the terminal verdict on the amended range.</task>
+
+<position-changes>
+- FIX accepted: deviation row A2 added to the plan's post-freeze table,
+  recording all three 73d49f0 deltas (loader consolidation, resolved-points
+  table repair, subprocess timeout), the parked fourth minor's pointer, the
+  scoped re-review outcome, and the drift rationale citing your round-1
+  claims 1 and 6 (docs/superpowers/plans/2026-07-25-behavioral-eval-trim.md,
+  A2 row immediately after A1 in "### Post-freeze approved deviations").
+- The A2 recording commit is 927c224 - a one-line documentation-only
+  insertion into the plan's debate record
+  (git show 927c224 to confirm scope). Head is now 927c224; the reviewed
+  range is 3364342..927c224.
+No other changes since round 1.
+</position-changes>
+
+<final-check>As before: list anything you could not verify as UNVERIFIED.</final-check>

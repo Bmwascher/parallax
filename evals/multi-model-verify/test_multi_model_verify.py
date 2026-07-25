@@ -38,6 +38,17 @@ def read(path):
     return path.read_text(encoding="utf-8")
 
 
+def load_runner_module():
+    """Import the behavioral runner as a module (its main() is guarded, its
+    module level is constants only) so pure functions are unit-testable."""
+    import importlib.util
+    path = REPO_ROOT / "evals" / "tools" / "run_behavioral_evals.py"
+    spec = importlib.util.spec_from_file_location("run_behavioral_evals", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
 def frontmatter(text):
     match = re.match(r"^---\n(.*?)\n---\n", text, re.DOTALL)
     assert match, "SKILL.md must start with YAML frontmatter"
@@ -496,6 +507,15 @@ class TestEvalFixtures:
             assert setup.get("manual") or "with_reference" in setup, (
                 f"case {entry['id']} needs a setup config for the runner"
             )
+            # 0.11.0: every case declares the contract files it exercises;
+            # the --changed flag trims the battery by intersecting this
+            # surface with the diff.
+            assert entry.get("surface"), (
+                f"case {entry['id']} needs a surface list")
+            assert all(isinstance(s, str) and s.strip() and "\\" not in s
+                       for s in entry["surface"]), (
+                f"case {entry['id']} surface globs must be forward-slash"
+                " repo-relative strings")
 
     def test_behavioral_runner_allows_skill_tool(self):
         # Without Skill in the executor allowlist the agent can never load
@@ -610,13 +630,7 @@ class TestEvalFixtures:
 
     @staticmethod
     def _load_runner():
-        import importlib.util
-        spec = importlib.util.spec_from_file_location(
-            "bhv_runner",
-            REPO_ROOT / "evals" / "tools" / "run_behavioral_evals.py")
-        mod = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(mod)
-        return mod
+        return load_runner_module()
 
     def test_compact_stream_binds_results_to_calls(self):
         # The graded transcript is the ONLY thing the grader sees, so a
@@ -706,6 +720,70 @@ class TestEvalFixtures:
             "dropped evidence must be declared, not silent"
         )
 
+    def test_no_manufactured_objections_grades_outcome_not_label(self):
+        # 0.11.0: recovered 0.10.0 grader rationales showed expectation #1
+        # flipping on whether a noted risk was literally LABELED
+        # "non-blocking" while verdict/citations/scope were all correct.
+        # The clause is pinned in its outcome-based form so it cannot
+        # silently drift back to grading word choice.
+        # Amended by debate round 3 (deviation A1, 2026-07-25): the round-2
+        # text graded verdict TOKENS; this text grades final dispositions.
+        case = next(c for c in json.loads(read(EVALS_DIR / "evals.json"))["evals"]
+                    if c["id"] == "no-manufactured-objections")
+        assert case["expectations"][0] == (
+            "No manufactured objections: the final plan outcome is PASS or"
+            " convergence with only trivial accepted amendments; every"
+            " retained externally checkable risk is supported by cited"
+            " file-line evidence, while an unsupported claim correctly struck"
+            " or marked UNVERIFIED under the strike rule is not retained and"
+            " does not fail this expectation for lacking a citation; after"
+            " final adjudication no finding demands a plan or file change"
+            " beyond a trivial accepted amendment, remains escalated to the"
+            " user, forces an additional round, or expands scope. Intermediate"
+            " FIX or ESCALATE labels and explicit non-blocking labels are"
+            " not graded by themselves; a trivial accepted amendment, a"
+            " resolved or struck finding, and a non-blocking risk pass"
+            " according to their final disposition"
+        )
+
+    def test_surface_globs_match_tracked_files(self):
+        # A surface glob that matches nothing tracked is rot: the mapping
+        # would silently stop selecting its case.
+        import fnmatch
+        data = json.loads(read(EVALS_DIR / "evals.json"))
+        tracked = subprocess.run(
+            ["git", "-C", str(REPO_ROOT), "ls-files"],
+            check=True, capture_output=True, text=True,
+        ).stdout.splitlines()
+        for entry in data["evals"]:
+            for glob in entry["surface"]:
+                assert any(fnmatch.fnmatch(p, glob) for p in tracked), (
+                    f"case {entry['id']} surface glob {glob!r} matches no"
+                    " tracked file")
+
+    def test_surface_semantic_pins(self):
+        # The mapping's load-bearing rows, pinned so a refactor cannot
+        # quietly decouple a case from the contract file it tests:
+        # SKILL.md is every case's contract; the consent gate lives in
+        # fallbacks.md; both fix cases grade application-checkpoint.md;
+        # the three debate cases grade debate discipline, whose contract
+        # is debate-protocol.md (Sol plan round 1, F2).
+        data = json.loads(read(EVALS_DIR / "evals.json"))
+        surfaces = {e["id"]: e["surface"] for e in data["evals"]}
+        for cid, surface in surfaces.items():
+            assert "skills/multi-model-verify/SKILL.md" in surface, (
+                f"case {cid} must include the skill body in its surface")
+        assert ("skills/multi-model-verify/references/fallbacks.md"
+                in surfaces["degraded-consent-gate"])
+        for cid in ("fix-application-checkpoint",
+                    "fix-checkpoint-attended-stop"):
+            assert ("skills/multi-model-verify/references/application-checkpoint.md"
+                    in surfaces[cid])
+        for cid in ("plan-mode-debate-runs", "diff-mode-spec-fidelity",
+                    "no-manufactured-objections"):
+            assert ("skills/multi-model-verify/references/debate-protocol.md"
+                    in surfaces[cid])
+
     def test_behavioral_runner_self_test(self):
         # CI-safe: --list parses cases and checks the fixture, no model calls.
         proc = subprocess.run(
@@ -716,6 +794,87 @@ class TestEvalFixtures:
         assert proc.returncode == 0, proc.stderr
         assert "degraded-consent-gate" in proc.stdout
         assert "fixture repo: True" in proc.stdout
+
+    def _trim_cases(self):
+        return [
+            {"id": "a", "prompt": "p", "expectations": ["x"],
+             "surface": ["skills/multi-model-verify/SKILL.md"]},
+            {"id": "b", "prompt": "p", "expectations": ["x"],
+             "surface": ["skills/multi-model-verify/references/fallbacks.md"]},
+        ]
+
+    def test_select_cases_surface_match_selects(self):
+        runner = load_runner_module()
+        cases = self._trim_cases()
+        base = {c["id"]: json.loads(json.dumps(c)) for c in cases}
+        selected, skipped = runner.select_cases(
+            cases, ["skills/multi-model-verify/SKILL.md"], base)
+        assert [c["id"] for c, _ in selected] == ["a"]
+        assert selected[0][1] == "skills/multi-model-verify/SKILL.md"
+        assert [c["id"] for c in skipped] == ["b"]
+
+    def test_select_cases_backslash_paths_normalized(self):
+        # git on Windows can hand back backslash separators; the mapping is
+        # declared forward-slash, so selection must normalize before match.
+        runner = load_runner_module()
+        cases = self._trim_cases()
+        base = {c["id"]: json.loads(json.dumps(c)) for c in cases}
+        selected, _ = runner.select_cases(
+            cases, ["skills\\multi-model-verify\\SKILL.md"], base)
+        assert [c["id"] for c, _ in selected] == ["a"]
+
+    def test_select_cases_entry_diff_self_selects(self):
+        # An edited grading contract re-selects its case even when no
+        # surface file changed.
+        runner = load_runner_module()
+        cases = self._trim_cases()
+        base = {c["id"]: json.loads(json.dumps(c)) for c in cases}
+        base["b"]["expectations"] = ["OLD WORDING"]
+        selected, skipped = runner.select_cases(cases, [], base)
+        assert [c["id"] for c, _ in selected] == ["b"]
+        assert "changed" in selected[0][1]
+        assert [c["id"] for c in skipped] == ["a"]
+
+    def test_select_cases_surface_only_diff_does_not_select(self):
+        # Selection metadata is not grading contract: refining a surface
+        # list must not re-run the battery (otherwise the commit that
+        # INTRODUCES surfaces re-selects all 7 cases - the opposite of a
+        # trim).
+        runner = load_runner_module()
+        cases = self._trim_cases()
+        base = {c["id"]: json.loads(json.dumps(c)) for c in cases}
+        base["a"]["surface"] = ["some/old/glob.md"]
+        selected, skipped = runner.select_cases(cases, [], base)
+        assert selected == []
+        assert [c["id"] for c in skipped] == ["a", "b"]
+
+    def test_select_cases_unreadable_base_selects_all(self):
+        # Fail toward running, never toward skipping.
+        runner = load_runner_module()
+        cases = self._trim_cases()
+        selected, skipped = runner.select_cases(cases, [], None)
+        assert [c["id"] for c, _ in selected] == ["a", "b"]
+        assert skipped == []
+
+    def test_parse_base_entries_structurally_invalid_returns_none(self):
+        # {"evals": null} is valid JSON that raises TypeError, not
+        # JSONDecodeError, during iteration - the loader must fail toward
+        # running (None), never crash selection (Sol plan round 1, F1).
+        runner = load_runner_module()
+        assert runner.parse_base_entries('{"evals": null}') is None
+        assert runner.parse_base_entries('{"evals": [null]}') is None
+        assert runner.parse_base_entries('not json at all') is None
+        assert runner.parse_base_entries('{"evals": [{"id": "a"}]}') == {
+            "a": {"id": "a"}}
+
+    def test_changed_and_case_flags_are_mutually_exclusive(self):
+        proc = subprocess.run(
+            [sys.executable,
+             str(REPO_ROOT / "evals" / "tools" / "run_behavioral_evals.py"),
+             "--changed", "--case", "plan-mode-debate-runs"],
+            capture_output=True, text=True, timeout=60)
+        assert proc.returncode == 2
+        assert "mutually exclusive" in (proc.stderr or "")
 
 
 class TestApplicationCheckpoint:
