@@ -1,7 +1,7 @@
 # Frozen plan format
 
 The debate's output is a superpowers-compatible implementation plan. The
-implementer (Sonnet 5 or the session model, via superpowers
+implementer (the pinned lane in `agents/`, or the session model, via superpowers
 subagent-driven-development or executing-plans) follows it with **zero
 judgment calls** — anything the plan leaves open is a plan defect, found in
 mode `diff` as drift.
