@@ -204,3 +204,23 @@ were written for GPT-5.4-era codex: the structural advice (tight task
 framing, no chain-of-thought micromanagement) still applies to Sol, but
 verify any model-specific flag or behavior claim against current OpenAI docs
 before relying on it.
+
+## The backup reviewer lane (currently Kimi K3 via kimi-cli)
+
+THE single source for the BACKUP reviewer's identity — the same
+swap-by-one-edit rule as the primary declarations above, and the same
+consistency-test enforcement (the backup literal is forbidden
+everywhere else; command surfaces carry `<canonical-backup-model-id>`).
+The primary declarations above MUST stay ahead of this block: both
+runtime parsers match the first `Canonical model id:` occurrence, and
+the drift script's PowerShell match is case-insensitive.
+
+Canonical backup reviewer model id: `kimi-code/k3-256k`
+
+Canonical backup thinking flag: `--thinking`
+
+Everything else about the lane — transport, containment, per-round
+evidence, clone isolation, failure routing — lives in
+references/backup-lane.md. The lane enters only through the
+fallbacks.md consent gate.
+
