@@ -2,8 +2,9 @@
 
 The backup lane substitutes a SECOND cross-vendor reviewer (currently
 Kimi K3 via kimi-cli) when the primary reviewer transport is down. It
-enters ONLY through the fallbacks.md consent gate — auto-qualified by
-the classes named there, manual on user request — and preserves
+enters through the fallbacks.md consent gate — auto-qualified by the
+classes named there, manual on user request — or via a user-invoked
+panel (the participation paragraph below), and preserves
 cross-vendor independence, so a backup-lane debate records
 `Verification status: FULL` with the lane substitution noted per
 frozen-plan-format.md. Same debate protocol, same brief conventions,

@@ -1690,6 +1690,7 @@ into the SDD ledger — the diff-debate brief cites them.
 | 9 | Claim 12 overclaimed probe coverage: the smoke never exercises the dead-agent case | Sol R1 | accepted; observation-scope paragraph added — the case stays OPEN unless a lane dies, never claimed covered (e44956e) | docs/superpowers/plans/rounds/2026-07-26-seat-reshuffle/subagent-resume-probe.md:77-100 |
 | 10 | The no-unrequested-refactor snippet lives in the escalation contract rather than the notes distillation | Kimi R1 (observation) | no change — the spec's own sentence homes it in the escalation lane's DECISIONS discipline, which is where the plan puts it | docs/superpowers/specs/2026-07-26-seat-reshuffle-design.md:232-233 |
 | 11 | The session's claim 10 miscounted the anchored edits ("nine") | Kimi R1 | accepted as a record correction: ten anchored edits, seven pure insertions; anchor uniqueness itself was verified independently by both lanes | both R1 replies |
+| 12 | Post-freeze reopen: the pre-existing "enters ONLY/only through the fallbacks.md consent gate" openings (backup-lane.md, notes.md backup block) contradicted the new sanctioned panel entry paragraph beneath them | Task 4 task-review gate (sonnet, same-vendor) | accepted; user-authorized 2026-07-26 ("Let's go with your recommendation"); both openings amended to admit the user-invoked panel route; cross-vendor cover: the whole-branch mode-diff debate reviews this amendment (the 0.13.0 post-freeze README precedent) | skills/multi-model-verify/references/backup-lane.md:4-7; skills/multi-model-verify/references/model-prompting-notes.md:283-284 |
 
 ### Escalated points (user-decided)
 
@@ -1745,3 +1746,10 @@ into the SDD ledger — the diff-debate brief cites them.
   freeze action per frozen-plan-format.md (the writing-plans
   self-review ran pre-candidate). After this commit, changes require
   reopening the debate — the implementer never edits the plan.
+- Reopened once post-freeze (row 12): the Task 4 review gate surfaced
+  a plan-authored contradiction between the untouched backup-lane and
+  notes opening sentences and the new panel entry paragraph; the user
+  ruled for the one-line amendments before the dev loop. The
+  amendment is implementation prose only — no pinned sentence, no
+  test, and no plan task text changed; the whole-branch mode-diff
+  debate provides its cross-vendor review.
