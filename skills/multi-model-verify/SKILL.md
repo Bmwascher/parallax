@@ -20,6 +20,9 @@ substitutes ONLY through the fallbacks.md consent gate — auto-qualified
 by the classes named there, manual on user request — with the same
 protocol, a different transport, and `Verification status: FULL`
 preserved.
+Mode diff's debate is preceded by a REQUIRED whole-branch review from
+the fable-reviewer seat (agents/fable-reviewer.md), and the user may
+convene multi-reviewer PANELS (references/panels.md) in either mode.
 
 **REQUIRED READING before the first round:** references/debate-protocol.md.
 
@@ -101,6 +104,8 @@ toggled on, its stop-time review overlaps mode `diff` — expected, not a bug.
 
    Backup lane: same protocol, transport and per-round evidence per references/backup-lane.md.
 
+   Panels: any reviewer-lane combination per references/panels.md.
+
    From `<transcript-file>`: verify the effective route — the header's
    `model:`, `provider:`, and `reasoning effort:` lines against the
    canonical declarations, and the `sandbox:` line reads `read-only`, per
@@ -140,14 +145,27 @@ toggled on, its stop-time review overlaps mode `diff` — expected, not a bug.
 ## Mode diff
 
 Same transport and protocol. First read the frozen plan's debate record and
-its **Verification status** field. Then the brief carries the frozen plan
+its **Verification status** field.
+
+Required before round 1: the agents/fable-reviewer.md whole-branch review runs on the same range, its raw reply is retained as a range-bound artifact, and the round-1 brief cites that artifact with the session's per-finding adjudications.
+The session adjudicates each review finding with evidence — accept,
+refute, or ESCALATE into the debate — before any reviewer lane sees
+them; the review is the debate's required input, never its verdict,
+and the debate record names the artifact path.
+
+Then the brief carries the frozen plan
 path, the base/head SHAs superpowers code review used, and the
 `git diff base..head` output. Both sides check **spec fidelity** (drift from
 the frozen plan — the implementer makes zero judgment calls, so any drift is
-a finding) and, for port work, **port fidelity** (drift from the reference
+a finding, with one carve-out: envelope-designated escalation-lane DECISIONS
+are adjudicated against their frozen envelope per
+references/frozen-plan-format.md, and only envelope overruns are drift) and,
+for port work, **port fidelity** (drift from the reference
 source), ending PASS / FIX / ESCALATE.
 
 Backup lane: same protocol, transport and per-round evidence per references/backup-lane.md.
+
+Panels: any reviewer-lane combination per references/panels.md.
 
 A FIX this session applies itself goes through the **application
 checkpoint** (references/application-checkpoint.md) before the first edit.

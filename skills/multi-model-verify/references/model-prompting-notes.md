@@ -1,21 +1,80 @@
 # Model prompting notes
 
-## Fable 5 (the session side)
+## The session driver seat
 
-From Anthropic's Fable 5 prompting guide (distilled 2026-07; re-check the
-guide when it updates):
+The driver seat is whatever Claude model runs the session — the debate
+rules, final adjudication, and grounding discipline attach to the SEAT
+(debate-protocol.md), not the model. Seat-invariant rules, present in
+both official Anthropic guides (fetched 2026-07-26; re-check when they
+update):
 
-- **Ground progress claims**: state what was actually run and observed, not
-  what should have happened — the guide's grounding pattern nearly eliminated
-  fabricated status reports in Anthropic's evals. In debate terms: your
-  PASS/FIX verdicts cite the evidence you actually read this session.
-- **State the boundaries**: tell the model what is out of scope explicitly.
-  The debate brief states what is NOT under debate (already-decided user
-  directives, e.g. equal-weight advisors, the chosen reference addon).
-- **Fresh-context verification beats self-critique**: Fable reviewing its own
-  plan in the same context rubber-stamps. That is the reason Sol exists in
-  this loop — and the reason degraded mode (fallbacks.md) must run the
-  skeptic pass in a FRESH subagent, not inline.
+- **Ground progress claims**: state what was actually run and observed,
+  not what should have happened — the guides' grounding pattern nearly
+  eliminated fabricated status reports in Anthropic's evals. In debate
+  terms: your PASS/FIX verdicts cite the evidence you actually read
+  this session.
+- **State the boundaries**: tell the model what is out of scope
+  explicitly. The debate brief states what is NOT under debate
+  (already-decided user directives, e.g. equal-weight advisors, the
+  chosen reference addon).
+- **Fresh-context verification beats self-critique**: a driver
+  reviewing its own plan in the same context rubber-stamps. That is
+  the reason the cross-vendor reviewer exists in this loop — and the
+  reason degraded mode (fallbacks.md) must run the skeptic pass in a
+  FRESH subagent, not inline. It is also why the required whole-branch
+  review (agents/fable-reviewer.md) runs as a fresh subagent even when
+  Fable itself drives.
+
+### Fable 5
+
+From the official Fable 5 guide
+(platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-fable-5,
+fetched 2026-07-26) — the three seat-invariant rules above appear in
+it near-verbatim; Fable-specific additions:
+
+- Bug-finding recall is a documented strength — the basis for the
+  fable-reviewer seat.
+- Effort is the primary dial: high default; medium/low viable where
+  quality holds (reviewer dispatches may sweep effort with evals,
+  never silently).
+- Over-prescriptive skill text DEGRADES Fable 5 output — the Fable
+  seat agent files state contracts and invariants, not step-by-step
+  choreography.
+- Never instruct a Fable seat to echo or transcribe its internal
+  reasoning (the reasoning_extraction refusal class): report
+  contracts ask for evidence and decisions, never thinking.
+- Same-harness Fable seats (panel lane, whole-branch reviewer,
+  escalation) resume probe, 2026-07-26, Claude Code 2.1.220:
+  conversation state persists across resume and the resume surface
+  carries no model parameter — full record with literal payloads at
+  docs/superpowers/plans/rounds/2026-07-26-seat-reshuffle/subagent-resume-probe.md;
+  the dead-agent case is narrowed to the 0.14.0 smoke's observation
+  scope.
+
+### Opus 5
+
+From the official Opus 5 guide
+(platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-opus-5,
+fetched 2026-07-26), for when Opus 5 takes the driver seat:
+
+- Strongest when given the complete task specification up front and
+  left to run — the frozen-plan discipline is already this shape.
+- Review dispatches: never instruct "only report high-severity
+  issues" — it complies literally and under-reports; ask for
+  everything and filter in adjudication (converges with the existing
+  no-pre-judging dispatch rule).
+- Effort economics: low/medium strong — re-run an effort sweep rather
+  than carrying prior defaults; xhigh for the hardest work only.
+- Over-verification: remove explicit "verify your work" instructions —
+  Opus 5 verifies unprompted and such instructions compound into
+  wasted tokens.
+- Delegation appetite: it spawns subagents readily — dispatch prompts
+  carry explicit delegation guidance and caps.
+- Scope control for narrow tasks: instruct "deliver what was asked,
+  at the scope intended" — it can otherwise widen tasks on its own
+  judgment.
+- 1M-token context window with consistent instruction following
+  throughout.
 
 ## The reviewer lane (currently GPT-5.6 Sol via the codex CLI)
 
@@ -71,7 +130,7 @@ Canonical reasoning effort: `high`
   contest; uncited claims will be struck. Do not manufacture objections:
   if a claim stands, say PASS and move on. End with PASS, FIX (with the
   specific fix), or ESCALATE per claim.</rules>
-  <claims>...numbered claims with Fable's citations...</claims>
+  <claims>...numbered claims with the session's citations...</claims>
   <boundaries>...what is already decided and not under debate...</boundaries>
   <final-check>List any claim you could not verify against files you read,
   as UNVERIFIED — do not fold unverified material into your verdict.</final-check>
@@ -223,3 +282,18 @@ Everything else about the lane — transport, containment, per-round
 evidence, clone isolation, failure routing — lives in
 references/backup-lane.md. The lane enters only through the
 fallbacks.md consent gate.
+
+Brief conventions for the backup lane (from Kimi's general prompt
+best-practices guide, platform.kimi.ai/docs/guide/prompt-best-practice,
+fetched 2026-07-26 — generic, not K3-specific): XML-style delimiters
+suit Kimi briefs (the tag convention the 0.13.0 debates used); state
+steps explicitly for complex review tasks; grounding instructions
+carry an explicit cannot-find fallback (the UNVERIFIED discipline);
+prefer paragraph/bullet-count length guidance over word counts. The K3
+tool-calling guide
+(platform.kimi.ai/docs/guide/kimi-k3-tool-calling-best-practice,
+fetched 2026-07-26) was evaluated: API-integration guidance
+inapplicable to the CLI-driven lane; its two applicable echoes are
+already design facts — the minimal five-tool allowlist and reasoning
+effort fixed before the session (the config.toml pin; mid-session
+changes would also break prefix caching per the guide).
