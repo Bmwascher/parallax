@@ -74,8 +74,14 @@ def test_backup_files_no_backslash_paths():
 
 def test_backup_lane_dispatch_and_resume_pins():
     body = _read(BACKUP_LANE)
-    assert "--quiet --thinking -m <canonical-backup-model-id>" in body
-    assert "--agent-file" in body
+    # the dispatch pin covers the COMPLETE command through -w and -p:
+    # a dropped -w would dispatch the reviewer in the shell's cwd (the
+    # same class the resume pin below guards), and a bare substring
+    # check would stay green through it (final-review finding, 0.13.0)
+    assert ("kimi --quiet --thinking -m <canonical-backup-model-id> "
+            "--agent-file <plugin-checkout>/skills/multi-model-verify/"
+            "references/kimi-reviewer-agent.yaml -w <throwaway-clone> -p"
+            ) in body
     assert "KIMI-REVIEW-BRIEF.md" in body
     # the re-pinned resume is load-bearing: bare -r restores full tools,
     # model/thinking inherit from CONFIG DEFAULTS, and -w does not
@@ -146,6 +152,7 @@ SWEEP_GLOBS = [
     "skills/**/*.md", "skills/**/*.yaml", "commands/*.md", "tools/*.ps1",
     "hooks/*", "evals/**/*.py", "evals/**/*.json", "evals/**/*.ps1",
     "README.md", "CLAUDE.md", "agents/*.md",
+    ".claude-plugin/*.json", ".githooks/*",
 ]
 ALLOWED = {NOTES.resolve(), Path(__file__).resolve()}
 
