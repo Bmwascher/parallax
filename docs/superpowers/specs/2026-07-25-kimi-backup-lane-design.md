@@ -142,11 +142,18 @@ DEFAULT agent with the full tool set (Shell, WriteFile, StrReplaceFile,
 web tools all live) while the route line still reads clean — the probe's
 refusal came from conversation priming alone, with write tools restored
 underneath. The codified resume form therefore re-pins `--agent-file`,
-`-m`, and `--thinking` on every resumed call (probed working: the
+`-m`, `--thinking`, AND `-w` on every resumed call (probed working: the
 re-pinned resume loaded the committed yaml and exactly the five-tool
 allowlist); model/thinking inheritance comes from config defaults, not
 the session, so the re-pin is load-bearing whenever the backup id ever
-diverges from the config default.
+diverges from the config default. `-w` does not inherit at all — a
+resume without it runs in the dispatching shell's current directory
+(CAUGHT LIVE 2026-07-25, during this cycle's own plan debate: such a
+resume landed in the REAL tree instead of the clone; the containment
+allowlist held, the reviewer detected the missing brief and wrong
+workspace itself, refused to manufacture findings, and the round was
+quarantined per the integrity class — the lane's protocol worked
+end-to-end on its first live failure).
 
 Mechanical containment evidence (discovered by the same probe): kimi.log
 also appends per-invocation `Loading agent: <path>` and

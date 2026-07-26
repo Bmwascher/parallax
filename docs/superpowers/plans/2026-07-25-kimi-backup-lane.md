@@ -119,10 +119,13 @@ def test_backup_lane_dispatch_and_resume_pins():
     assert "--agent-file" in body
     assert "KIMI-REVIEW-BRIEF.md" in body
     # the re-pinned resume is load-bearing: bare -r restores full tools,
-    # and model/thinking inherit from CONFIG DEFAULTS, so the pin covers
-    # the COMPLETE resumed command through --thinking
+    # model/thinking inherit from CONFIG DEFAULTS, and -w does not
+    # inherit at all (a resume without it runs in the shell's cwd -
+    # caught live against the real tree), so the pin covers the
+    # COMPLETE resumed command through -w
     assert ("kimi --quiet -r <session-id> --agent-file <same yaml> -m "
-            "<canonical-backup-model-id> --thinking") in body
+            "<canonical-backup-model-id> --thinking -w <same clone>"
+            ) in body
     assert "loads the DEFAULT agent with full write and shell tools" in body
     assert BACKUP_ID not in body  # placeholder discipline
 
@@ -311,8 +314,8 @@ uses placeholders.
 - Dispatch (single line):
   `kimi --quiet --thinking -m <canonical-backup-model-id> --agent-file <plugin-checkout>/skills/multi-model-verify/references/kimi-reviewer-agent.yaml -w <throwaway-clone> -p "Read the file KIMI-REVIEW-BRIEF.md in this workspace and execute the review it describes."`
 - Resume (single line — every flag below is load-bearing):
-  `kimi --quiet -r <session-id> --agent-file <same yaml> -m <canonical-backup-model-id> --thinking -p "<rebuttal>"`
-  A bare `kimi -r` loads the DEFAULT agent with full write and shell tools while the route line still reads clean (probed 2026-07-25: the behavioral refusal came from conversation priming with WriteFile and Shell live underneath); model and thinking inheritance come from CONFIG DEFAULTS, not the session. Re-pin all three on every resumed call.
+  `kimi --quiet -r <session-id> --agent-file <same yaml> -m <canonical-backup-model-id> --thinking -w <same clone> -p "<rebuttal>"`
+  A bare `kimi -r` loads the DEFAULT agent with full write and shell tools while the route line still reads clean (probed 2026-07-25: the behavioral refusal came from conversation priming with WriteFile and Shell live underneath); model and thinking inheritance come from CONFIG DEFAULTS, not the session, and the working directory does not inherit either — a resume without `-w` runs in the dispatching shell's current directory (caught live 2026-07-25: such a resume landed in the REAL tree; the containment allowlist held and the round was quarantined). Re-pin all four on every resumed call.
 - The session id is printed at the end of every run ("To resume this
   session: kimi -r <uuid>"). Capture it from round 1.
 - Reviewer reasoning effort has NO CLI flag and NO log field: it is
