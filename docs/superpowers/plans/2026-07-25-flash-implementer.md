@@ -645,12 +645,12 @@ the repo is empty (the bump is already committed); (5) no
 - None in-repo (scratch repo + probe records; SDD ledger notes)
 
 **Interfaces:**
-- Consumes: the installed 0.12.0 cache (dev loop: `claude plugin update parallax@parallax`, restart — the agent is NOT live before that).
+- Consumes: the installed 0.12.1 cache (dev loop: `claude plugin update parallax@parallax`, restart — the agent is NOT live before that).
 - Produces: the live evidence the diff debate's brief cites.
 
 - [ ] **Step 1 (ATTENDED - user): Dev loop**
 
-Bump is committed (Task 5); user runs `claude plugin update parallax@parallax` and restarts the session. Without the restart the dispatched agent is the cached pre-0.12.0 set — a dry-run before restart tests nothing.
+Bump is committed (Task 5: 0.12.0; the amendment bump to 0.12.1 is resolved row 25); user runs `claude plugin update parallax@parallax` and restarts the session. Without the restart the dispatched agent is the cached pre-0.12.1 set — a dry-run before restart tests nothing.
 
 - [ ] **Step 2: Scratch repo setup**
 
