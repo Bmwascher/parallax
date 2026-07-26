@@ -168,7 +168,15 @@ a lost lane's incomplete round is never adjudicated.
   0.13.0 debates already used); state steps explicitly for complex
   review tasks; grounding instructions carry an explicit
   cannot-find fallback (maps onto the UNVERIFIED discipline); prefer
-  paragraph/bullet-count length guidance over word counts.
+  paragraph/bullet-count length guidance over word counts. Also
+  evaluated: the K3 tool-calling guide
+  (platform.kimi.ai/docs/guide/kimi-k3-tool-calling-best-practice,
+  fetched 2026-07-26) — API-integration guidance (dynamic tool
+  injection, tool_choice, prefix caching) that does not apply to the
+  CLI-driven lane; its two applicable echoes are already design
+  facts: minimal declared toolset (the five-tool allowlist) and
+  reasoning effort fixed before the session (the config.toml pin,
+  now with a cache-behavior rationale on record).
 - No new model-id declarations: Fable seats are same-harness subagents
   whose model is pinned in their own agent frontmatter (the
   flash-implementer precedent). No new transports, no doctor changes.
