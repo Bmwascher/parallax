@@ -156,6 +156,7 @@ def test_fallbacks_backup_wiring():
     assert "quota-exhausted" in fb and "auth-expired" in fb
     assert "route-attribution" in fb
     assert "LLM not set" in fb
+    assert "access_terminated_error" in fb
 
 
 def test_plan_format_lane_substitution_pin():
@@ -472,6 +473,15 @@ choice.
   - kimi-missing: `kimi --version` fails → no retry, consent gate.
   - kimi-bad-model: `LLM not set` (exit 1, loud) → no retry, consent
     gate.
+  - kimi-quota-exhausted: HTTP 403 `access_terminated_error` ("usage
+    limit") → skip the in-window retry — nothing about a quota window
+    is transient. The error text says "billing cycle" even when the
+    exhausted window is the SHORT one (observed live 2026-07-25/26: a
+    5-hour-window 403 carried the billing-cycle wording and cleared at
+    the window reset), so the reset horizon comes from the user's
+    kimi.com quota dashboard (5-hour / 7-day / monthly windows), quoted
+    at the consent gate; a mid-debate outage notes the kimi session id
+    in the debate record so the debate resumes after the reset.
   - route-attribution failure (offset rule in backup-lane.md): nothing
     transient → no retry, reply DISCARDED unread, consent gate.
   - resume failure: one same-parameters retry, then the consent gate
