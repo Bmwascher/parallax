@@ -130,6 +130,11 @@ if (Test-Path $agyExe) {
     $agyVersion = (& $agyExe --version 2>$null | Select-Object -First 1)
 }
 
+$kimiVersion = ""
+$kimiRaw = ""
+try { $kimiRaw = (& kimi --version 2>&1 | Out-String).Trim() } catch {}
+if ($kimiRaw -match '(\d+\.\d+\.\d+)') { $kimiVersion = $Matches[1] }
+
 $registryFile = Join-Path $env:USERPROFILE ".claude\plugins\installed_plugins.json"
 $spVersion = ""
 $spInstall = ""
@@ -189,6 +194,27 @@ if ($codexVersion) {
     }
 }
 
+# --- check 2b (every run): kimi backup transport surface -----------------------
+# Short flags (-m/-w/-p/-r) substring-match trivially inside long-flag
+# help text; the long flags carry the real detection. All seven are
+# probed for spec conformance - a miss on any is a loud contract break.
+
+if ($kimiVersion) {
+    $kimiHelp = (& kimi --help 2>&1 | Out-String)
+    foreach ($flag in @("--quiet", "--thinking", "-m", "--agent-file", "-w", "-p", "-r")) {
+        $flagPattern = '(^|[\s,\[])' + [regex]::Escape($flag) + '($|[\s,\]=])'
+        if (-not [regex]::IsMatch($kimiHelp, $flagPattern)) {
+            $findings += "[CRITICAL] kimi --help ($kimiVersion) no longer lists $flag - the backup lane's transport commands are broken; update references/backup-lane.md"
+        }
+    }
+    & python -c "import kimi_cli.tools.file, kimi_cli.tools.todo" 2>$null
+    if ($LASTEXITCODE -ne 0) {
+        $findings += "[CRITICAL] kimi_cli tool modules no longer import - the containment agent-file's tool allowlist may be stale; re-probe references/kimi-reviewer-agent.yaml against the installed kimi-cli"
+    }
+} else {
+    $notes += "kimi absent or version unparseable - backup-lane probes skipped (lane optional; primary unaffected)"
+}
+
 # --- check 3 (on change): Claude Code changelog slice --------------------------
 
 $snapshot = $null
@@ -204,11 +230,13 @@ if (Test-Path $SnapshotFile) {
 $claudeVersionToSave = $claudeVersion
 $codexVersionToSave = $codexVersion
 $agyVersionToSave = $agyVersion
+$kimiVersionToSave = $kimiVersion
 $spVersionToSave = $spVersion
 if ($snapshot) {
     if (-not $claudeVersionToSave -and $snapshot.claude) { $claudeVersionToSave = $snapshot.claude }
     if (-not $codexVersionToSave -and $snapshot.codex) { $codexVersionToSave = $snapshot.codex }
     if (-not $agyVersionToSave -and $snapshot.agy) { $agyVersionToSave = $snapshot.agy }
+    if (-not $kimiVersionToSave -and $snapshot.kimi) { $kimiVersionToSave = $snapshot.kimi }
     if (-not $spVersionToSave -and $snapshot.superpowers) { $spVersionToSave = $snapshot.superpowers }
 }
 
@@ -283,6 +311,7 @@ $newSnapshot = @{
     claude      = $claudeVersionToSave
     codex       = $codexVersionToSave
     agy         = $agyVersionToSave
+    kimi        = $kimiVersionToSave
     superpowers = $spVersionToSave
     updated     = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss")
 }

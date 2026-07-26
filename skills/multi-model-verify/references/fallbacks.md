@@ -15,7 +15,8 @@ to the user — before any degraded work happens:
 What failed:      <exact command + error>
 What degraded mode would verify:     <e.g. claims via a fresh same-vendor skeptic>
 What it would NOT verify:            <cross-vendor independence>
-Options: [fix codex] [run degraded] [abort]
+Backup lane: offered when a class below qualifies it; on request otherwise — preserves cross-vendor independence; does NOT verify reviewer reasoning effort (config-only)
+Options: [fix codex] [run backup lane (cross-vendor preserved)] [run degraded] [abort]
 ```
 
 - The user's choice is recorded in the debate record (`Authorized by:` field
@@ -114,6 +115,51 @@ If the project's API-reference drift check reports the build changed under
 a claim, that claim is **struck until re-verified** — the strike rule does
 not weaken to a flag. Re-verify against the updated reference (or an
 in-game/runtime probe) before the claim re-enters the debate.
+
+## Backup reviewer lane (cross-vendor substitution)
+
+A SECOND cross-vendor reviewer (transport, containment, and per-round
+evidence: references/backup-lane.md; identity declared in
+model-prompting-notes.md) can substitute for the primary WITHOUT
+reducing vendor diversity — so a substituted debate stays
+`Verification status: FULL`, recorded per frozen-plan-format.md's lane
+substitution note. Substitution is still a consented transition: the
+gate offers it, the user picks it, and `Authorized by:` records the
+choice.
+
+- Auto-qualified (the gate OFFERS the backup option) for:
+  `quota-exhausted` (standing user ruling), codex-missing,
+  model-rejected, auth-expired, and a route-mismatch or
+  missing-rollout that survives its own gate. Available on user
+  request for anything else.
+- When the backup option is offered, the banner's
+  `What it would NOT verify:` line names the backup lane's known
+  evidence gap: reviewer reasoning effort (config-validation only —
+  no per-call evidence).
+- Backup-lane failures (detection → retry → disposition):
+  - kimi-missing: `kimi --version` fails → no retry, consent gate.
+  - kimi-bad-model: `LLM not set` (exit 1, loud) → no retry, consent
+    gate.
+  - kimi-quota-exhausted: HTTP 403 `access_terminated_error` ("usage
+    limit") → skip the in-window retry — nothing about a quota window
+    is transient. The error text says "billing cycle" even when the
+    exhausted window is the SHORT one (observed live 2026-07-25/26: a
+    5-hour-window 403 carried the billing-cycle wording and cleared at
+    the window reset), so the reset horizon comes from the user's
+    kimi.com quota dashboard (5-hour / 7-day / monthly windows), quoted
+    at the consent gate; a mid-debate outage notes the kimi session id
+    in the debate record so the debate resumes after the reset.
+  - route-attribution failure (offset rule in backup-lane.md): nothing
+    transient → no retry, reply DISCARDED unread, consent gate.
+  - resume failure: one same-parameters retry, then the consent gate
+    with the fresh-per-round option (full brief re-sent each round).
+  - integrity failure (write-probe fail, or a clone delta beyond the
+    brief): no retry, reply quarantined, consent gate.
+  - catch-all: one same-parameters retry, then the consent gate —
+    mirrors the primary catch-all.
+- BOTH lanes down: the honest choices are wait for a reset, the
+  single-vendor DEGRADED skeptic, or abort — never a silent third
+  vendor.
 
 ## Degraded-mode output requirements (after consent)
 

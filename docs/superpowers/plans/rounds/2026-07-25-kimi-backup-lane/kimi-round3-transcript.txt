@@ -1,0 +1,31 @@
+Terminal re-review complete. Round-1/2 memory intact. I re-ran the pin-integrity sweep over all changed material at f5fc46c and verified every fix against the live anchors.
+
+## Round-2 finding fixes — all verified correctly applied
+
+1. **Mode-plan anchor (my F1)** — FIXED. Step 3b now anchors on the true two-line physical block (plan:603-606), which matches skills/multi-model-verify/SKILL.md:91-92 exactly, including the 3-space indentation on both lines. The mode-diff line-ending anchor (plan:615-616) still resolves at SKILL.md:138. ✓
+2. **Scenario placement (my F2)** — FIXED. Step 4(c) inserts the scenario block "Immediately BEFORE the comment block `# --- scenario: triage-timeout (LAST - see header) ---...`" (plan:805) — that comment exists verbatim at evals/tools/drift_statemachine_tests.ps1:535, so the four new scenarios precede the timeout kill as the invariant (:26-27) requires. Each scenario is wrapped in `$b = $script:failCount` / `Complete-Scenario $b` (plan:810-852), matching the harness's own pattern (drift_statemachine_tests.ps1:538-545), and (d) adds the four names to the header list before the triage-timeout line (plan:855 vs :28-40). ✓
+3. **Env save/restore (my F3)** — FIXED. (a0) inserts `KIMI_STUB_MODE`, `PYTHON_STUB_MODE`, `DRIFT_REAL_PYTHON` into `$savedEnv` after the `"CLAUDE_STUB_MODE", "CODEX_STUB_MODE",` line (plan:748) — that line exists at drift_statemachine_tests.ps1:62. ✓
+4. **Task 7 expectation (my F4)** — FIXED verbatim: "re-pin --agent-file, -m, --thinking, and -w (a resume missing any of the four is a violation)" (plan:894). ✓
+
+## Other lane's round-2 uniques — verified
+
+- **Token-boundary flag probe** (plan:729-734): the pattern `(^|[\s,\[])<flag>($|[\s,\]=])` is sound against all three stub help texts. Healthy help (plan:778) matches all seven flags; `drop-agent-file` (plan:771) yields exactly the one finding; `drop-short-m` (plan:775) — the `[--model MODEL]` decoy cannot false-match `-m` because the preceding character is a dash, which is outside the left-boundary class (and the assertion string `no longer lists -m` cannot substring-collide with `--agent-file`'s finding, since `lists --m` ≠ `lists -m`). The vacuous-substring defect is genuinely closed. ✓
+- **README pin** (plan:179-180) asserts the exact mermaid edge `G -->|run backup lane| BK["cross-vendor backup reviewer` against the shipped edge (plan:631) — single physical line, substring present; the comment's rationale (plan:177-178) is correct that the table row alone would keep the old pin green. Table-row pin (plan:181-182 vs 640) unchanged and still single-line. ✓
+- **Task 8 fallback probe** (plan:947-964): fully executable — locate command, exact embedded fallback-agent.yaml in the copy-plus-`ROLE_ADDITIONAL` form, scratch-only, diagnostic-only semantics, and a failed committed-pair write-probe blocks regardless of the fallback outcome per spec §5 (stricter than the spec's in-task fallback, and correctly so under the zero-judgment contract: changing the shipped form becomes an explicit design revision, not an implementer judgment call). The yaml carries no backup literal, no forbidden markers. ✓
+
+## Findings
+
+None. Every round-2 finding is fixed with anchors I verified exist in the live files; the relayed uniques are internally consistent and correctly pinned; no new line-join, anchor, sweep, or contract defects introduced in this wave. The unchanged material from rounds 1-2 (pins at plan:116-202, backup-lane.md blocks, fallbacks/notes/plan-format blocks, doctor check 8, Task 6 Steps 1-3 anchors at tools/check-drift.ps1:127-131/:206/:211/:285/:177-192) was spot-re-verified and stands.
+
+## UNVERIFIED (not folded into the verdict)
+
+- Runtime execution of the four new scenarios and the amended stubs (plan:752-853) — statically consistent, nothing executed here.
+- The token-boundary regex against the REAL `kimi --help` text (plan:730) — live surface; the probe is designed to fail loud if the real layout differs.
+- That kimi's packaged `agents/default/system.md` accepts a `ROLE_ADDITIONAL` template arg (plan:954-955) — per the 0.12.0 probe record; diagnostic-only, fails loud at Task 8 if wrong.
+- The "144 pre-existing passing tests" figure (plan:217) — unchanged; consistent with the static count (145 functions, 1 env-gated skip) but unrun.
+
+## Verdict: **PASS**
+
+Three rounds, clean convergence: my five round-1 findings, four round-2 findings, and all relayed findings from the other lane are verifiably applied at f5fc46c, every pin I re-checked matches its shipped block on a single physical line, and every edit anchor resolves to real file content. The candidate implements every spec section, including the `-w` amendment corroborated by this session's own quarantined resume. No findings remain; nothing under user ruling was touched.
+
+To resume this session: kimi -r 020a5770-0ef1-4070-aba2-b2a006278acd

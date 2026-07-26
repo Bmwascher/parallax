@@ -76,6 +76,15 @@ tables above are the adjudication, not the provenance, and a later dispute
 about what the reviewer actually said needs the raw text or an honest
 "gone".
 
+Lane substitution (backup reviewer): `Verification status: FULL` MAY
+carry a `Degradation:` class plus `Authorized by: user at round N` when
+a backup cross-vendor lane substituted for the primary — lane substitution is NOT degradation; the Degradation field then names the
+PRIMARY-lane failure that triggered substitution, and the Participants
+line names the actual backup participant, e.g.
+`Kimi K3 (kimi-cli, session <id>)`. This codifies the combination first
+used by the 0.12.0 record. The Degraded-mode note stays bound to
+DEGRADED status; a debate in which a backup cross-vendor lane substituted for the primary is recorded with this combination, never as DEGRADED.
+
 The appendix is the audit trail: mode `diff` re-reads it to know which
 deviations were approved and which claims were struck. A frozen plan without
 the appendix was not verified — treat it as an unfrozen draft.

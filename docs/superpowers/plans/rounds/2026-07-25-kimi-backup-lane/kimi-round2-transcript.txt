@@ -1,0 +1,43 @@
+Re-review complete. Round-1 memory is intact (my prior findings are in this session). I re-verified every accepted fix against the amended candidate and the live anchors, re-ran the pin-integrity sweep over all new/changed pins, and verified the `-w` amendment. Details below.
+
+## Fix verification (round-1 findings — all five correctly applied)
+
+1. **Dispatch pointers** — Task 5 Step 3b added (plan:594-613), pin counts exactly two occurrences (plan:173-175); Overview now states primary-is-default and auto-qualified-or-manual (plan:550-554). **But the mode-plan anchor is itself defective — see Finding 1.**
+2. **README table row** — fixed correctly: proper two-column row inserted after the `skills/multi-model-verify/` row (plan:623-630; anchor exists at README.md:64); the pin substring `references/backup-lane.md\` | The cross-vendor backup reviewer lane` (plan:178-179) matches the shipped row on one physical line (plan:629). ✓
+3. **Doctor installPath** — check 8 resolves the installed copy under check 1's installPath, "never a bare relative path" (plan:667-668). ✓
+4. **Doctor format/verdict** — ships as `## 8.` heading with BROKEN/N-A verdicts inside the file's grammar (plan:662-678). ✓
+5. **Spec §5 fallback branch** — Task 8 Step 4 item 2 names copy-at-invocation retry, else lane BROKEN/design revision (plan:910). ✓
+
+## Relay-wave verification (all confirmed in the candidate)
+
+- Banner conditional-offer line shipped and pinned (plan:439, pin plan:152) ✓; the resume pin now asserts the complete command through `-w` (plan:126-128) against the shipped resume line (plan:317) — single physical line ✓; allowlist test regex-parses and asserts list equality (plan:104-105) against the shipped yaml's exactly five quoted entries in order (plan:246-250) ✓; no-backslash test added (plan:111-113) ✓; SKILL.md Steps 1-2 anchors re-pinned as exact physical-line blocks (plan:531-539 vs SKILL.md:10-16; plan:565-570 vs SKILL.md:36-39) ✓; Task 1 Step 3 RED command runs both files (plan:208) ✓; Task 6 check-drift.ps1 anchors all exist (tools/check-drift.ps1:127-131 agy block, :206/:211 carry-forward, :285 snapshot, :177-192 check-2/check-3 boundary) and harness symbols exist (`Reset-State` drift_statemachine_tests.ps1:264, `Assert-True`:75, `$PinnedFixture`:230, `$SpTemplate`:227, `$PendingFile`:100, `$ReportsDir`:98, `$SnapshotFile`:99).
+
+## `-w` amendment verification
+
+Codified consistently in all three places: spec §6 re-pins all four flags and records the live catch (docs/superpowers/specs/2026-07-25-kimi-backup-lane-design.md:144-156); plan Task 3 resume line carries `-w <same clone>` with the non-inheritance rationale and live-catch record (plan:317-318); the Task 1 pin covers the complete command through `-w` (plan:126-128). The amendment accurately describes what happened to this session (the quarantined dispatch-defective resume) — corroborated firsthand.
+
+## Findings
+
+**1. MEDIUM — Task 5 Step 3b's mode-plan anchor line does not exist (the same defect class this wave fixed elsewhere).**
+The plan anchors the mode-plan insertion on "the physical line `   Apply that file's env hygiene to the invocation.`" (plan:596-597). No such physical line exists: the sentence spans two lines — SKILL.md:91 ends `...silently defeats the swap). Apply that file's env` and SKILL.md:92 is `   hygiene to the invocation.`. The wave explicitly re-pinned Steps 1-2 for exactly this class ("a fragment anchor ... does not exist in the file", plan:527-529, 561-563) but reintroduced it here. A zero-judgment implementer cannot execute the step. **Fix:** anchor on "the physical line ending `hygiene to the invocation.`" (matching the mode-diff anchor's line-ending style at plan:604-605, which I verified exists at SKILL.md:138).
+
+**2. MEDIUM — Task 6 Step 4(c) appends the three new scenarios AFTER triage-timeout, violating the suite's documented LAST invariant.**
+The plan says append "at the end of the scenario sequence (after the last existing scenario's assertions, before the suite's final summary/exit code block)" (plan:787). The last existing scenario is triage-timeout (evals/tools/drift_statemachine_tests.ps1:535-545), and the header pins: "triage-timeout LAST - its killed stub can orphan a child that briefly holds the worktree, so nothing may run after it" (drift_statemachine_tests.ps1:26-27, reiterated at :535). The new scenarios each run `Invoke-Drift` against the same worktree — exactly what the invariant forbids after the timeout kill. The header's scenario list (:28-40) also doesn't name the new scenarios. **Fix:** insert the three scenarios between auth-preflight-fail (:533) and the triage-timeout block (:535), and add them to the header list above triage-timeout.
+
+**3. LOW — the new stub machinery's environment variables escape the harness's save/restore contract.**
+The harness promises "Every environment variable this harness changes is restored in a finally block" (drift_statemachine_tests.ps1:22-24) via the saved list at :61-65. The plan's edit (a) sets `$env:DRIFT_REAL_PYTHON` once (plan:742) and never restores it, and `KIMI_STUB_MODE`/`PYTHON_STUB_MODE` are absent from the saved list (they are self-cleaned per-scenario at plan:796/803/815, but a mid-scenario crash leaves them set). **Fix:** add `DRIFT_REAL_PYTHON`, `KIMI_STUB_MODE`, `PYTHON_STUB_MODE` to the saved-env name list at :61-65.
+
+**4. LOW — Task 7's behavioral expectation under-specifies the resume re-pin it grades.**
+Expectation 2 requires resumed calls to "re-pin --agent-file, -m, and --thinking (a bare kimi -r is a violation)" (plan:857) — it omits `-w`, which the amended contract now makes load-bearing (plan:317-318; spec:149-156). A resume missing only `-w` — the precise failure that landed this session in the real tree — would satisfy this expectation while violating the codified lane. **Fix:** amend the expectation to "re-pin --agent-file, -m, --thinking, and -w (a resume missing any of the four is a violation)".
+
+## UNVERIFIED (not folded into the verdict)
+
+- Runtime behavior of the new kimi.cmd/python.cmd stubs and the three scenarios (plan:738-816) — statically consistent (stub help texts, mode gating, forwarding logic, and assertion strings all cross-check against the amended probe block at plan:716-729), but nothing was executed.
+- That `kimi --help` actually lists all seven flags (plan:718) — live surface, treated per the spec's probe record.
+- The "144 pre-existing passing tests" figure (plan:214) — unchanged from round 1; static count (145 test functions, 1 env-gated skip) remains consistent but unrun.
+
+## Verdict: **FIX**
+
+The fix wave landed cleanly: all five of my round-1 findings and all seven relay findings are verifiably applied, every new and changed pin is single-line and matches its shipped block, and the `-w` amendment is coherent across spec, plan, and pins. Two MEDIUM defects remain — both in the wave's own new material (a nonexistent physical-line anchor in Step 3b, and scenario placement that breaks the state-machine suite's documented triage-timeout-LAST invariant) — plus two LOW consistency gaps. All four have exact fixes and touch nothing under user ruling.
+
+To resume this session: kimi -r 020a5770-0ef1-4070-aba2-b2a006278acd

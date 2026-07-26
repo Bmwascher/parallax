@@ -1,0 +1,702 @@
+2026-07-26T05:27:46.586818Z ERROR codex_models_manager::cache: failed to load models cache: missing field `supports_reasoning_summaries` at line 86 column 5
+OpenAI Codex v0.144.1
+--------
+workdir: C:\Users\Brandon\Documents\parallax
+model: gpt-5.6-sol
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: none
+session id: 019f9c9f-d83f-7e40-ae8b-2a71c4105d8a
+--------
+user
+# Mode plan, round 4 — one-row post-convergence delta; confirmation requested
+
+Evidence rules and verdict grammar as before. Both lanes reached
+terminal PASS at f5fc46c (the second lane's round 3 landed after its
+quota window reset — its transcript is retained). One session-raised
+delta was then applied at e128efb, and per the freeze rule it needs
+reviewer confirmation before the plan freezes:
+
+THE DELTA (only change; `git diff f5fc46c..e128efb` is 10 inserted
+lines in the plan file): the Task 4 backup failure table gains a
+`kimi-quota-exhausted` row, and the Task 1 fallbacks-wiring test gains
+`assert "access_terminated_error" in fb`. The row is pinned from a LIVE
+event during this very debate: the second lane's first round-3 attempt
+failed with HTTP 403 `access_terminated_error` whose text said
+"billing cycle" — while the user's quota dashboard showed 6.42% monthly
+usage; the exhausted window was the 5-HOUR one, and the retry after its
+reset succeeded. The row therefore: skips the in-window retry, warns
+that the error text cannot identify WHICH window died, names the
+dashboard (5-hour / 7-day / monthly) as the reset-horizon authority
+quoted at the consent gate, and notes the kimi session id in the debate
+record for post-reset resumption.
+
+Confirm: the row is internally consistent with the surrounding table
+(fallbacks.md remains the single failure-class home), the new test pin
+matches the shipped row text, and nothing else moved. End with a
+verdict on the candidate at e128efb: PASS / FIX / ESCALATE.
+
+codex
+I’ll review only `f5fc46c..e128efb`, verify the literal test pin against the inserted row, and check the new class against the surrounding retry/consent semantics and the single-home rule. I’ll treat the reported live 403/reset event as the supplied provenance, while grounding the plan verdict in the amended tree.
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command "Get-Content -Raw 'C:\\Users\\Brandon\\.codex\\plugins\\cache\\claude-plugins-official\\superpowers\\6.2.0\\skills\\using-superpowers\\SKILL.md'" in C:\Users\Brandon\Documents\parallax
+ succeeded in 571ms:
+---
+name: using-superpowers
+description: Use when starting any conversation - establishes how to find and use skills, requiring skill invocation before ANY response including clarifying questions
+---
+
+<SUBAGENT-STOP>
+If you were dispatched as a subagent to execute a specific task, ignore this skill.
+</SUBAGENT-STOP>
+
+<EXTREMELY-IMPORTANT>
+If you think there is even a 1% chance a skill might apply to what you are doing, you ABSOLUTELY MUST invoke the skill.
+
+IF A SKILL APPLIES TO YOUR TASK, YOU DO NOT HAVE A CHOICE. YOU MUST USE IT.
+
+This is not negotiable. You cannot rationalize your way out of this.
+</EXTREMELY-IMPORTANT>
+
+## The Rule
+
+**Invoke relevant or requested skills BEFORE any response or action** — including clarifying questions, exploring the codebase, or checking files. If it turns out wrong for the situation, you don't have to use it.
+
+**Before entering plan mode:** if you haven't already brainstormed, invoke the brainstorming skill first.
+
+Then announce "Using [skill] to [purpose]" and follow the skill exactly. If it has a checklist, create a todo per item.
+
+## Skill Priority
+
+When multiple skills apply, process skills come first — they set the approach, then implementation skills (frontend-design, etc.) carry it out. Brainstorming and systematic-debugging are Superpowers' most common process skills, but the rule holds for any of them.
+
+- "Let's build X" → superpowers:brainstorming first, then implementation skills.
+- "Fix this bug" → superpowers:systematic-debugging first, then domain skills.
+
+## Red Flags
+
+These thoughts mean STOP—you're rationalizing:
+
+| Thought | Reality |
+|---------|---------|
+| "This is just a simple question" | Questions are tasks. Check for skills. |
+| "I need more context first" | Skill check comes BEFORE clarifying questions. |
+| "Let me explore the codebase first" | Skills tell you HOW to explore. Check first. |
+| "I can check git/files quickly" | Files lack conversation context. Check for skills. |
+| "Let me gather information first" | Skills tell you HOW to gather information. |
+| "This doesn't need a formal skill" | If a skill exists, use it. |
+| "I remember this skill" | Skills evolve. Read current version. |
+| "This doesn't count as a task" | Action = task. Check for skills. |
+| "The skill is overkill" | Simple things become complex. Use it. |
+| "I'll just do this one thing first" | Check BEFORE doing anything. |
+| "This feels productive" | Undisciplined action wastes time. Skills prevent this. |
+| "I know what that means" | Knowing the concept ≠ using the skill. Invoke it. |
+
+## Platform Adaptation
+
+If your harness appears here, read its reference file for special instructions:
+
+- Codex: `references/codex-tools.md`
+- Pi: `references/pi-tools.md`
+- Antigravity: `references/antigravity-tools.md`
+
+## User Instructions
+
+User instructions (CLAUDE.md, AGENTS.md, GEMINI.md, etc, direct requests) take precedence over skills, which in turn override default behavior. Only skip skill workflows or instructions when your human partner has explicitly told you to.
+
+
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command "Get-Content -Raw 'C:\\Users\\Brandon\\.codex\\plugins\\cache\\crosscheck\\crosscheck\\0.5.0\\skills\\multi-model-verify\\SKILL.md'" in C:\Users\Brandon\Documents\parallax
+ succeeded in 636ms:
+---
+name: multi-model-verify
+description: Use when planning a reference port, an API-sensitive module, or any change risky enough to need cross-model verification before implementation, or when an implemented diff must be checked against its plan and reference before merge. Fires automatically alongside superpowers requesting-code-review via the review-companion hook.
+---
+
+# Multi-Model Verify
+
+## Overview
+
+Two equal-weight advisors — Fable 5 (this session) and GPT-5.6 Sol (via the
+codex CLI) — verify and refute each other's claims before the cheap
+implementer touches code. Sol's documented fabrication risk (METR) is
+mitigated by the debate structure — evidence grounding plus mutual
+refutation — not by down-weighting either side.
+
+**REQUIRED READING before the first round:** references/debate-protocol.md.
+
+Companion to superpowers, not a replacement: it fills the cross-model review
+gap superpowers rules out of scope. `/codex:adversarial-review` remains the
+human-invoked pre-merge gate; if the codex plugin's stop-review-gate is
+toggled on, its stop-time review overlaps mode `diff` — expected, not a bug.
+
+## When to use
+
+- **Mode `plan`** — after superpowers brainstorming proposes approaches for a
+  port or API-sensitive module, before the implementation plan is written.
+- **Mode `diff`** — after implementation, alongside superpowers
+  requesting-code-review (the review-companion hook injects this
+  automatically with the matching base/head SHAs).
+- NOT for plain bugfixes, docs or release chores, GUI tweaks, or lint sweeps.
+
+## Preflight (both modes)
+
+1. `codex --version` must succeed — on failure follow references/fallbacks.md
+   (degraded mode, visibly flagged; never silently skip cross-vendor review).
+2. For port work: the reference source must exist under `References/`
+   (quote paths — some contain spaces, e.g. `References/M+ Timer`). Missing
+   → **HARD STOP before any debate round runs**: ask the user for the path
+   and go no further — do not run a codex exchange about the absence, do
+   not debate from memory, do not start a degraded mode. If the folder
+   holds version subdirectories (e.g. a `v1.4/` next to a `v1.1_old/`), use
+   the newest unless the user names one, and cite the versioned path:
+   `References/<name>/<version>/<file>:<line>`.
+   For non-port work there is no reference folder — claims ground in the
+   project's own source, specs, or upstream docs instead, same strike rule.
+
+## Mode plan
+
+1. Draft the Fable position: chosen approach, port-fidelity claims, and the
+   API/behavior risk register. Every reference claim cites a
+   `References/<name>/<file>:<line>` actually read this session — anchor
+   EVERY file with its full path the first time you cite it, manifests and
+   secondary files included (shorthand only once that file is anchored);
+   every API claim cites authoritative local docs (WoW projects:
+   `.wow-api-reference/` or a dated in-game probe result) — never memory.
+   The position has no separate artifact — it IS the claims section of the
+   step-2 brief.
+2. Compose Sol's debate brief per references/model-prompting-notes.md, write
+   it to a scratchpad file, then run round 1:
+
+   ```powershell
+   Get-Content -Raw <brief-file> | codex exec --sandbox read-only -m <canonical-model-id> -c model_reasoning_effort=<canonical-effort> --output-last-message <reply-file> -
+   ```
+
+   `<canonical-model-id>` and `<canonical-effort>` are the two declarations
+   in references/model-prompting-notes.md — read the literal values from
+   there, never from memory (the reviewer swaps by editing that one file,
+   and a remembered id silently defeats the swap).
+
+   Capture the `session id:` line printed in the run header (top of output);
+   read Sol's reply from `<reply-file>` — the stdout transcript logs every
+   file Sol reads and can run tens of KB, with the reply buried at the
+   bottom.
+3. Later rounds keep Sol's state by resuming that session — flags MUST
+   precede the resume subcommand (flags after it are a usage error):
+
+   ```powershell
+   codex exec --sandbox read-only -m <canonical-model-id> -c model_reasoning_effort=<canonical-effort> --output-last-message <reply-file> resume <SESSION_ID> "<rebuttal-brief>"
+   ```
+
+4. Iterate per debate-protocol.md until convergence or the round cap, then
+   escalate any unresolved points to the user with both positions stated.
+5. Freeze the converged plan per references/frozen-plan-format.md under the
+   project's superpowers plans dir (KitnEssentials:
+   `dev/docs/superpowers/plans/`; other projects: the superpowers default
+   `docs/superpowers/plans/`).
+
+## Mode diff
+
+Same transport and protocol. First read the frozen plan's debate record and
+its **Verification status** field. Then the brief carries the frozen plan
+path, the base/head SHAs superpowers code review used, and the
+`git diff base..head` output. Both sides check **spec fidelity** (drift from
+the frozen plan — the implementer makes zero judgment calls, so any drift is
+a finding) and, for port work, **port fidelity** (drift from the reference
+source), ending PASS / FIX / ESCALATE.
+
+**Degraded-plan poisoning rule:** a plan whose Verification status is
+DEGRADED cannot produce an ordinary diff PASS. Mode diff must first reopen
+and cross-verify the plan's claims and approved deviations (the
+retrospective pass the plan never got), and only then verify the
+implementation against it — confirming a diff matches an unsound plan
+verifies nothing. If cross-vendor verification is STILL unavailable, the
+only terminal state is `ESCALATE — CROSS-VENDOR GATE UNSATISFIED`: merging
+then requires the user's explicitly recorded risk acceptance, never a PASS.
+
+## Finish line
+
+Before it: the session's final-adjudication step (debate-protocol.md) —
+verify the last round's findings against the repo and issue the terminal
+verdict; a reviewer's PASS/FIX is never terminal by itself.
+
+End with one status line: participating models, rounds used, converged vs
+escalated points, and the verification status — `FULL`, or
+`DEGRADED (<class>, authorized by user at round N)` per fallbacks.md. The
+session emits this line itself; never delegate it to a subagent.
+
+## Common mistakes
+
+- Accepting Sol's claims about reference code without the cited lines —
+  strike the claim per protocol; do not argue against it.
+- Re-sending the full debate context each round instead of resuming the
+  codex session.
+- Running mode `diff` against different SHAs than the code review used.
+- Treating convergence as failure — a sound plan converging in one round is
+  the system working, not a skipped debate.
+
+
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command "Get-Content -Raw 'C:\\Users\\Brandon\\.codex\\plugins\\cache\\crosscheck\\crosscheck\\0.5.0\\skills\\multi-model-verify\\references\\debate-protocol.md'" in C:\Users\Brandon\Documents\parallax
+ succeeded in 540ms:
+# Debate protocol
+
+Both advisors are equal weight. Neither model's claim outranks the other's;
+only evidence does.
+
+## Evidence grounding (the strike rule)
+
+- **Every externally checkable claim must carry a citation to a source the
+  other side can read**: a file:line in the repo or reference material the
+  citing side actually read (Fable: read this session; Sol: read inside its
+  sandboxed run — its quoted excerpt counts as reading), authoritative local
+  docs, or a fetched URL.
+- Source-specific examples: reference-port claims cite
+  `References/<name>/<file>:<line>`; WoW 12.0 API claims cite
+  `.wow-api-reference/` or a dated in-game probe result; library or platform
+  claims cite the vendored source or official docs.
+- **Anchor every file the first time you cite it** — full repo-relative path
+  with line, `References/DemoWidget/DemoWidget.toc:1`, not `DemoWidget.toc:1`.
+  This holds for EVERY file, including one-line manifests and secondary
+  files, not just the main source. Once a file is anchored, shorthand
+  (`Core.lua:19`) is fine for later citations of that same file. A bare
+  filename does not locate anything for the other side: the project has its
+  own `DemoAddon.toc` and the reference has `DemoWidget.toc`, and an
+  unanchored `.toc:1` could be either.
+- A claim with no citation is **struck, not debated**. Note it as struck and
+  move on — arguing against an ungrounded claim launders it into the record.
+- Reports are claims requiring evidence. "The reference handles this" without
+  the file:line is an assertion, not a finding.
+
+## Round structure
+
+Each exchange (one Fable position or rebuttal + one Sol reply) is a round.
+
+1. From round 2 on, state position changes since last round: which of the
+   other side's points are **accepted** (absorbed into the plan), which are
+   **refuted** (with the evidence that refutes them), which are **struck**
+   (no citation).
+2. Raise new risks only with evidence attached.
+3. End with a verdict on the current plan/diff:
+   - **PASS** — no remaining substantive objections.
+   - **FIX** — named change required, with the specific fix and its evidence.
+   - **ESCALATE** — a disagreement evidence cannot settle (taste, missing
+     in-game data, ambiguous reference intent).
+
+## Convergence and the round cap
+
+- Converged: both sides verdict PASS in the same round.
+- **Converged with amendments**: the final round's only outstanding verdicts
+  are FIXes whose fixes the other side accepts on the record. Record each
+  accepted fix in the debate record and treat the plan as converged — an
+  accepted FIX is agreement, not a dispute for the user to settle. (This
+  matters whenever a FIX lands in the last round before the cap.)
+- Round cap: **4 exchanges** by default (caller may raise or lower it).
+  Hitting the cap is not failure — it is the signal to stop spending tokens
+  on an argument evidence hasn't settled.
+- At the cap or on ESCALATE, for points that remain genuinely contested:
+  stop, present BOTH positions to the user with their evidence, and let the
+  user decide. Never silently pick a side.
+- Questions only runtime testing can answer always escalate — neither model
+  can run the live application (in WoW projects, /reload + BugSack is always
+  the user's step).
+
+## Final adjudication (the session's last step)
+
+The chain never ends on the external reviewer's verdict. After Sol's final
+round — including a re-review of fixes — the SESSION performs one closing
+step before anything merges or freezes:
+
+1. Verify each finding from that final round against the live repo (read
+   the cited lines; run the gates if implicated) — a final-round finding is
+   itself an unverified claim until checked.
+2. Accept with evidence, refute with evidence, or ESCALATE to the user.
+   Nothing is adopted or dismissed on authority.
+3. Emit the terminal verdict and the finish line. A reviewer PASS/FIX is
+   input to this step, never the decision itself.
+
+Equal weight governs claims during the debate; adjudication is procedural,
+not a rank: the session is the accountable party with live-repo access, so
+the session always has the final say — and a genuine deadlock still goes to
+the user, never to whoever spoke last (user directive, 2026-07-12).
+
+## Anti-sycophancy, anti-theater
+
+Debates fail two ways: rubber-stamping and manufactured conflict. Both are
+defects.
+
+- **A sound plan gets one line.** "Plan is sound; the one thing to watch is
+  X." Converging in round 1 is the system working.
+- **Do not manufacture objections** to justify the round. If you would not
+  push back in a real review, do not push back here.
+- Do not restate the other side's point in different words as a "new" risk.
+- Do not concede a point you can refute just to converge faster —
+  unresolved disagreement has an honest exit (ESCALATE).
+
+## Why the structure carries the trust
+
+GPT-5.6 Sol has a documented (METR, OpenAI system card) tendency to fabricate
+results under evaluation pressure. The mitigation is this protocol — every
+claim must survive citation and refutation by an independent model — not
+down-weighting Sol's verdicts. The same rules bind Fable equally: fabricated
+detail is a known failure mode of every frontier model, and this project's
+history (see memory: no-fabrication feedback) treats invented API behavior as
+the cardinal sin.
+
+
+  → Pin e128efb and verify the exact f5fc46c delta scope
+  • Check the new test literal against the shipped fallback-row block
+  • Check retry, consent, dashboard-authority, session-resume, and single-home consistency
+  • Issue cited confirmation verdict
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command 'git diff --stat f5fc46c..e128efb; git diff --name-only f5fc46c..e128efb; git diff --numstat f5fc46c..e128efb; git diff --check f5fc46c..e128efb' in C:\Users\Brandon\Documents\parallax
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command 'git branch --show-current; git rev-parse HEAD; git status --short; git log -3 --oneline --decorate' in C:\Users\Brandon\Documents\parallax
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command 'git diff --unified=10 f5fc46c..e128efb -- docs/superpowers/plans/2026-07-25-kimi-backup-lane.md' in C:\Users\Brandon\Documents\parallax
+ succeeded in 740ms:
+diff --git a/docs/superpowers/plans/2026-07-25-kimi-backup-lane.md b/docs/superpowers/plans/2026-07-25-kimi-backup-lane.md
+index 83d3415..dac357a 100644
+--- a/docs/superpowers/plans/2026-07-25-kimi-backup-lane.md
++++ b/docs/superpowers/plans/2026-07-25-kimi-backup-lane.md
+@@ -149,20 +149,21 @@ def test_fallbacks_backup_wiring():
+     assert "[run backup lane (cross-vendor preserved)]" in fb
+     # the banner itself carries the conditional-offer semantics and the
+     # backup option's own consequence line, not just an Options entry
+     assert "offered when a class below qualifies it; on request otherwise" in fb
+     assert "reviewer reasoning effort" in fb
+     # transport-broken mapping names its member classes
+     assert "codex-missing" in fb and "model-rejected" in fb
+     assert "quota-exhausted" in fb and "auth-expired" in fb
+     assert "route-attribution" in fb
+     assert "LLM not set" in fb
++    assert "access_terminated_error" in fb
+ 
+ 
+ def test_plan_format_lane_substitution_pin():
+     fmt = _read(PLAN_FORMAT)
+     assert "lane substitution is NOT degradation" in fmt
+     assert "backup cross-vendor lane substituted" in fmt
+ 
+ 
+ def test_skill_and_readme_route_the_lane():
+     skill = _read(REPO / "skills" / "multi-model-verify" / "SKILL.md")
+@@ -465,20 +466,29 @@ choice.
+   missing-rollout that survives its own gate. Available on user
+   request for anything else.
+ - When the backup option is offered, the banner's
+   `What it would NOT verify:` line names the backup lane's known
+   evidence gap: reviewer reasoning effort (config-validation only —
+   no per-call evidence).
+ - Backup-lane failures (detection → retry → disposition):
+   - kimi-missing: `kimi --version` fails → no retry, consent gate.
+   - kimi-bad-model: `LLM not set` (exit 1, loud) → no retry, consent
+     gate.
++  - kimi-quota-exhausted: HTTP 403 `access_terminated_error` ("usage
++    limit") → skip the in-window retry — nothing about a quota window
++    is transient. The error text says "billing cycle" even when the
++    exhausted window is the SHORT one (observed live 2026-07-25/26: a
++    5-hour-window 403 carried the billing-cycle wording and cleared at
++    the window reset), so the reset horizon comes from the user's
++    kimi.com quota dashboard (5-hour / 7-day / monthly windows), quoted
++    at the consent gate; a mid-debate outage notes the kimi session id
++    in the debate record so the debate resumes after the reset.
+   - route-attribution failure (offset rule in backup-lane.md): nothing
+     transient → no retry, reply DISCARDED unread, consent gate.
+   - resume failure: one same-parameters retry, then the consent gate
+     with the fresh-per-round option (full brief re-sent each round).
+   - integrity failure (write-probe fail, or a clone delta beyond the
+     brief): no retry, reply quarantined, consent gate.
+   - catch-all: one same-parameters retry, then the consent gate —
+     mirrors the primary catch-all.
+ - BOTH lanes down: the honest choices are wait for a reset, the
+   single-vendor DEGRADED skeptic, or abort — never a silent third
+
+ succeeded in 809ms:
+ docs/superpowers/plans/2026-07-25-kimi-backup-lane.md | 10 ++++++++++
+ 1 file changed, 10 insertions(+)
+docs/superpowers/plans/2026-07-25-kimi-backup-lane.md
+10	0	docs/superpowers/plans/2026-07-25-kimi-backup-lane.md
+
+ succeeded in 845ms:
+feat/0130-kimi-backup-lane
+e128efbd355ca78910cf2a485c65bb1c4942c1ca
+e128efb (HEAD -> feat/0130-kimi-backup-lane) 0.13.0: pin kimi-quota-exhausted class from the live 403 event
+f5fc46c 0.13.0: carry -w into the behavioral resume expectation per kimi round-2
+4714725 0.13.0: fold sol round-2 findings into plan candidate
+
+codex
+The scope check matches the brief exactly: one plan file, ten inserted lines, no deletions, and no whitespace errors. The signature pin resolves to the new row, whose disposition follows the table’s detection → retry → consent-gate pattern and keeps the session-resume evidence needed after reset.
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command '$p='"'docs\\superpowers\\plans\\2026-07-25-kimi-backup-lane.md';"'$i=0;Get-Content -LiteralPath $p|%{$i++;if($i-ge450-and$i-le510){'"'{0,4}: {1}'-f"'$i,$_}}' in C:\Users\Brandon\Documents\parallax
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command '$p='"'docs\\superpowers\\plans\\2026-07-25-kimi-backup-lane.md';"'$i=0;Get-Content -LiteralPath $p|%{$i++;if($i-ge140-and$i-le170){'"'{0,4}: {1}'-f"'$i,$_}}' in C:\Users\Brandon\Documents\parallax
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command '$p='"'docs\\superpowers\\plans\\2026-07-25-kimi-backup-lane.md';"'$i=0;Get-Content -LiteralPath $p|%{$i++;if($i-ge335-and$i-le370){'"'{0,4}: {1}'-f"'$i,$_}}' in C:\Users\Brandon\Documents\parallax
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command '$p='"'skills\\multi-model-verify\\references\\fallbacks.md';"'$i=0;Get-Content -LiteralPath $p|%{$i++;if($i-ge27-and$i-le110){'"'{0,4}: {1}'-f"'$i,$_}}' in C:\Users\Brandon\Documents\parallax
+ succeeded in 849ms:
+ 450: 
+ 451: ```markdown
+ 452: ## Backup reviewer lane (cross-vendor substitution)
+ 453: 
+ 454: A SECOND cross-vendor reviewer (transport, containment, and per-round
+ 455: evidence: references/backup-lane.md; identity declared in
+ 456: model-prompting-notes.md) can substitute for the primary WITHOUT
+ 457: reducing vendor diversity — so a substituted debate stays
+ 458: `Verification status: FULL`, recorded per frozen-plan-format.md's lane
+ 459: substitution note. Substitution is still a consented transition: the
+ 460: gate offers it, the user picks it, and `Authorized by:` records the
+ 461: choice.
+ 462: 
+ 463: - Auto-qualified (the gate OFFERS the backup option) for:
+ 464:   `quota-exhausted` (standing user ruling), codex-missing,
+ 465:   model-rejected, auth-expired, and a route-mismatch or
+ 466:   missing-rollout that survives its own gate. Available on user
+ 467:   request for anything else.
+ 468: - When the backup option is offered, the banner's
+ 469:   `What it would NOT verify:` line names the backup lane's known
+ 470:   evidence gap: reviewer reasoning effort (config-validation only —
+ 471:   no per-call evidence).
+ 472: - Backup-lane failures (detection → retry → disposition):
+ 473:   - kimi-missing: `kimi --version` fails → no retry, consent gate.
+ 474:   - kimi-bad-model: `LLM not set` (exit 1, loud) → no retry, consent
+ 475:     gate.
+ 476:   - kimi-quota-exhausted: HTTP 403 `access_terminated_error` ("usage
+ 477:     limit") → skip the in-window retry — nothing about a quota window
+ 478:     is transient. The error text says "billing cycle" even when the
+ 479:     exhausted window is the SHORT one (observed live 2026-07-25/26: a
+ 480:     5-hour-window 403 carried the billing-cycle wording and cleared at
+ 481:     the window reset), so the reset horizon comes from the user's
+ 482:     kimi.com quota dashboard (5-hour / 7-day / monthly windows), quoted
+ 483:     at the consent gate; a mid-debate outage notes the kimi session id
+ 484:     in the debate record so the debate resumes after the reset.
+ 485:   - route-attribution failure (offset rule in backup-lane.md): nothing
+ 486:     transient → no retry, reply DISCARDED unread, consent gate.
+ 487:   - resume failure: one same-parameters retry, then the consent gate
+ 488:     with the fresh-per-round option (full brief re-sent each round).
+ 489:   - integrity failure (write-probe fail, or a clone delta beyond the
+ 490:     brief): no retry, reply quarantined, consent gate.
+ 491:   - catch-all: one same-parameters retry, then the consent gate —
+ 492:     mirrors the primary catch-all.
+ 493: - BOTH lanes down: the honest choices are wait for a reset, the
+ 494:   single-vendor DEGRADED skeptic, or abort — never a silent third
+ 495:   vendor.
+ 496: ```
+ 497: 
+ 498: - [ ] **Step 4: Pin lane substitution in frozen-plan-format.md**
+ 499: 
+ 500: Immediately AFTER the fenced template block's closing fence and its explanatory paragraph ("The three status fields are structured on purpose..."), append EXACTLY this paragraph as its own block:
+ 501: 
+ 502: ```markdown
+ 503: Lane substitution (backup reviewer): `Verification status: FULL` MAY
+ 504: carry a `Degradation:` class plus `Authorized by: user at round N` when
+ 505: a backup cross-vendor lane substituted for the primary — lane substitution is NOT degradation; the Degradation field then names the
+ 506: PRIMARY-lane failure that triggered substitution, and the Participants
+ 507: line names the actual backup participant, e.g.
+ 508: `Kimi K3 (kimi-cli, session <id>)`. This codifies the combination first
+ 509: used by the 0.12.0 record. The Degraded-mode note stays bound to
+ 510: DEGRADED status; a debate in which a backup cross-vendor lane substituted for the primary is recorded with this combination, never as DEGRADED.
+
+ succeeded in 879ms:
+ 335: - Before every dispatch capture the byte length of `~/.kimi/logs/kimi.log`; after the call, past that offset, require all three: exactly one new `Using LLM model:` line carrying the canonical backup id, a `Loading agent:` line naming the committed yaml, and a `Loaded tools:` line equal to the allowlist exactly.
+ 336: - Zero matching new lines, more than one, a wrong id, a wrong agent path, or any extra tool entry is a route-attribution failure: the reply is DISCARDED unread and the failure goes to the fallbacks.md consent gate.
+ 337: - This evidence is client-side: report it as "route line verified
+ 338:   (client-side)" in the record prose. Server-side substitution is not
+ 339:   detectable from this class; the finish line's normalized
+ 340:   `effective route confirmed` means every round's evidence matched THIS
+ 341:   lane's canonical declarations under these rules.
+ 342: 
+ 343: ## Containment
+ 344: 
+ 345: - The committed pair `kimi-reviewer-agent.yaml` +
+ 346:   `kimi-reviewer-system.md` (this directory) is the ONLY agent
+ 347:   configuration the lane dispatches with. The yaml's five-tool
+ 348:   allowlist (SetTodoList, ReadFile, ReadMediaFile, Glob, Grep) carries
+ 349:   no write, shell, or web tool — kimi print mode auto-approves ALL
+ 350:   tools and `--plan` does not block writes (probed), so the allowlist
+ 351:   is the load-bearing control and the per-round `Loaded tools:` check
+ 352:   is its verification.
+ 353: - WRITE-PROBE (before round 1 of every backup-lane debate): in a fresh
+ 354:   disposable session with the exact debate configuration, ask the
+ 355:   contained agent to create a named marker file. PASS requires all of: explicit refusal in the reply, marker absent on disk, clone status delta empty.
+ 356:   Anything else means the lane is BROKEN (integrity failure class in
+ 357:   fallbacks.md) — never dispatch a review over it.
+ 358: 
+ 359: ## Clone isolation and the brief
+ 360: 
+ 361: - Reviews run in a THROWAWAY CLONE of the repo in the session
+ 362:   scratchpad — never the real tree.
+ 363: - The brief is written into the clone as the untracked
+ 364:   `KIMI-REVIEW-BRIEF.md`; the `-p` pointer tells the reviewer to read
+ 365:   it (headless stdin does not carry the brief).
+ 366: - After every round, `git status --porcelain` in the clone must list exactly the brief file and nothing else; any other delta quarantines that round's reply (integrity failure class).
+ 367: - The brief is retained as evidence per the raw-rounds convention.
+ 368: - Never run `kimi export` inside a repo — it writes a session zip into the current directory; export only from a scratch directory. Nothing in this lane uses export.
+ 369: 
+ 370: ## Failure handling
+
+ succeeded in 910ms:
+ 140:     assert "DISCARDED unread" in body
+ 141:     assert ("explicit refusal in the reply, marker absent on disk, "
+ 142:             "clone status delta empty") in body
+ 143:     assert ("must list exactly the brief file and nothing else") in body
+ 144:     assert "Never run `kimi export` inside a repo" in body
+ 145: 
+ 146: 
+ 147: def test_fallbacks_backup_wiring():
+ 148:     fb = _read(FALLBACKS)
+ 149:     assert "[run backup lane (cross-vendor preserved)]" in fb
+ 150:     # the banner itself carries the conditional-offer semantics and the
+ 151:     # backup option's own consequence line, not just an Options entry
+ 152:     assert "offered when a class below qualifies it; on request otherwise" in fb
+ 153:     assert "reviewer reasoning effort" in fb
+ 154:     # transport-broken mapping names its member classes
+ 155:     assert "codex-missing" in fb and "model-rejected" in fb
+ 156:     assert "quota-exhausted" in fb and "auth-expired" in fb
+ 157:     assert "route-attribution" in fb
+ 158:     assert "LLM not set" in fb
+ 159:     assert "access_terminated_error" in fb
+ 160: 
+ 161: 
+ 162: def test_plan_format_lane_substitution_pin():
+ 163:     fmt = _read(PLAN_FORMAT)
+ 164:     assert "lane substitution is NOT degradation" in fmt
+ 165:     assert "backup cross-vendor lane substituted" in fmt
+ 166: 
+ 167: 
+ 168: def test_skill_and_readme_route_the_lane():
+ 169:     skill = _read(REPO / "skills" / "multi-model-verify" / "SKILL.md")
+ 170:     assert "backup-lane.md" in skill
+
+ succeeded in 897ms:
+  27: ## Bounded recovery (automatic, consent-free)
+  28: 
+  29: One retry with the SAME model, sandbox, effort, and session parameters is
+  30: the DEFAULT recovery for any failure that has no named immediate-gate rule
+  31: below (codex-missing, model-rejected, auth-expired, route-mismatch,
+  32: quota-exhausted, and a missing-rollout resume go straight to the gate —
+  33: retrying those changes nothing). The retry reduces nothing, so it needs no
+  34: consent. A failed retry goes to the consent gate. This covers timeouts and
+  35: transient transport errors.
+  36: 
+  37: Cost framing (why exactly ONE): a pre-dispatch failure (spawn error, auth
+  38: preflight, missing CLI) never reached the provider, so its retry is free; a
+  39: post-dispatch failure (timeout, empty reply, malformed output) may have
+  40: already incurred quota cost, so the single automatic retry is the bounded
+  41: re-spend — anything beyond it is the user's call at the consent gate, never
+  42: a silent loop.
+  43: 
+  44: **Catch-all: any codex failure not named in this file — nonzero exit, empty
+  45: reply file, a stale reply file (a reused path serving an earlier round's
+  46: reply after a failed call; round paths must be fresh, and stale content is
+  47: DISCARDED unread), malformed output, network loss, resume failure —
+  48: gets the same treatment: one same-parameters retry (for a stale reply:
+  49: with a fresh path), then the consent gate.**
+  50: No failure class is ever an implicit license to degrade.
+  51: 
+  52: ## Failure classes
+  53: 
+  54: ### codex CLI missing or broken
+  55: `codex --version` fails → consent gate immediately (there is nothing to
+  56: retry). If the user chooses degraded mode: replace each reviewer round with
+  57: a FRESH-context skeptic subagent (the session model's vendor, read-only
+  58: tools) — fresh context is
+  59: mandatory; same-context self-critique rubber-stamps (see
+  60: model-prompting-notes.md). Brief the skeptic with the same XML-style brief
+  61: the reviewer would have received, including the strike rule and the
+  62: anti-manufactured-objection rule.
+  63: 
+  64: ### Reviewer model rejected (400 "not supported when using Codex with a ChatGPT account")
+  65: The account tier lost access to the canonical reviewer model (the id is
+  66: declared ONLY in model-prompting-notes.md). Do NOT silently substitute
+  67: another model — the reviewer model is a user directive. Consent gate: fix
+  68: subscription / run degraded / abort. Tier-gating diagnostics for the
+  69: current lane (which sibling model confirms gating vs a CLI problem) live
+  70: in model-prompting-notes.md's Lane diagnostics bullet.
+  71: 
+  72: ### Usage limit reached (session or weekly quota) — class `quota-exhausted`
+  73: The ChatGPT account's usage quota is exhausted; codex's error names which
+  74: limit was hit (the ~5-hour session window vs the weekly cap) and when it
+  75: resets. **Skip the retry** — nothing about a quota window is transient, and
+  76: a retry only burns another attempt against it. Go straight to the consent
+  77: gate with codex's reset time quoted verbatim in the `What failed:` line;
+  78: here the "fix codex" option means *wait for the reset* or *upgrade the
+  79: tier* — record which. If a debate is mid-flight, also note the codex
+  80: session id in the debate record so the debate resumes after the reset
+  81: instead of restarting from round 1.
+  82: 
+  83: ### codex auth expired or wrong auth mode
+  84: `codex login status` fails, or succeeds without reporting `Logged in using
+  85: ChatGPT` (an API-key login also exits 0 but rides different billing) → the
+  86: fix needs the user anyway (`codex login` is an interactive browser
+  87: sign-in): consent gate.
+  88: 
+  89: ### Effective route mismatch — class `route-mismatch`
+  90: The codex startup header (client-resolved `model:` / `provider:` /
+  91: `reasoning effort:` / `sandbox:` — see model-prompting-notes.md) disagrees
+  92: with the canonical declarations, the `sandbox:` line is not `read-only`,
+  93: or a resume's `session id:` is not the one
+  94: requested. Nothing here is transient — a config.toml override, a profile,
+  95: or a dropped session does not fix itself: **skip the retry**, consent gate.
+  96: The reviewer reply from the mismatched call is DISCARDED unread — it came
+  97: over an unverified route and never enters the debate record.
+  98: 
+  99: ### Session id lost or resume fails
+ 100: Losing the resumed session degrades conversation continuity — an advertised
+ 101: protocol property — so it is NOT automatic: one retry, then the consent
+ 102: gate with the specific option "continue with fresh per-round reviewer calls
+ 103: (full brief re-sent each round; costs tokens, loses the reviewer's debate
+ 104: memory)".
+ 105: 
+ 106: One resume failure is deterministic and skips the retry: output matching
+ 107: `no rollout found for thread id ... (code -32600)` — class
+ 108: `missing-rollout` (probed 2026-07-24; the reply file is not written).
+ 109: The rollout is gone; skip the retry and go straight to this
+ 110: class's consent gate with the same fresh-per-round option.
+
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command '$p='"'docs\\superpowers\\plans\\2026-07-25-kimi-backup-lane.md';"'$i=0;Get-Content -LiteralPath $p|%{$i++;if($i-ge370-and$i-le385){'"'{0,4}: {1}'-f"'$i,$_}}' in C:\Users\Brandon\Documents\parallax
+ succeeded in 548ms:
+ 370: ## Failure handling
+ 371: 
+ 372: All failure classes, retries, and consent-gate dispositions live in
+ 373: fallbacks.md (the single failure-class namespace) — this file defines
+ 374: none of its own. Record fields for a substituted debate live in
+ 375: frozen-plan-format.md.
+ 376: ```
+ 377: 
+ 378: - [ ] **Step 2: Run the tests**
+ 379: 
+ 380: Run: `python -m pytest evals/multi-model-verify/test_backup_lane.py -q`
+ 381: Expected: test_backup_artifacts_exist, dispatch/resume pins, evidence pins, and single-source sweep now PASS; fallbacks/plan-format/SKILL pins still FAIL (Tasks 4-5).
+ 382: 
+ 383: - [ ] **Step 3: Commit**
+ 384: 
+ 385: ```bash
+
+The exact 10-line delta was verified. The signature pin matches the inserted row; the row is a named immediate-gate exception, preserves dashboard-sourced reset attribution and session resumption, and remains solely in the planned fallbacks.md section.
+  ✓ Pin e128efb and verify the exact f5fc46c delta scope
+  ✓ Check the new test literal against the shipped fallback-row block
+  ✓ Check retry, consent, dashboard-authority, session-resume, and single-home consistency
+  ✓ Issue cited confirmation verdict
+2026-07-26T05:29:23.602726Z ERROR codex_models_manager::manager: failed to renew cache TTL: missing field `supports_reasoning_summaries` at line 86 column 5
+codex
+Scope confirmed: the delta contains only the new assertion ([plan:159](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-07-25-kimi-backup-lane.md:159)) and the `kimi-quota-exhausted` row ([plan:476](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-07-25-kimi-backup-lane.md:476)).
+
+The pin matches `access_terminated_error` exactly. The row clearly defines detection, skips the in-window retry, routes to the consent gate using dashboard-derived reset attribution, and preserves the session ID for resumption ([plan:476](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-07-25-kimi-backup-lane.md:476)). That is consistent with the existing primary quota precedent ([fallbacks.md:72](/C:/Users/Brandon/Documents/parallax/skills/multi-model-verify/references/fallbacks.md:72)) and remains inside the single failure-class namespace ([plan:370](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-07-25-kimi-backup-lane.md:370)).
+
+UNVERIFIED: the live 403/dashboard event and retained second-lane transcript were not independently available in this tree; their provenance was accepted as supplied. Python tests remain unexecuted in this shell.
+
+PASS
+Scope confirmed: the delta contains only the new assertion ([plan:159](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-07-25-kimi-backup-lane.md:159)) and the `kimi-quota-exhausted` row ([plan:476](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-07-25-kimi-backup-lane.md:476)).
+
+The pin matches `access_terminated_error` exactly. The row clearly defines detection, skips the in-window retry, routes to the consent gate using dashboard-derived reset attribution, and preserves the session ID for resumption ([plan:476](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-07-25-kimi-backup-lane.md:476)). That is consistent with the existing primary quota precedent ([fallbacks.md:72](/C:/Users/Brandon/Documents/parallax/skills/multi-model-verify/references/fallbacks.md:72)) and remains inside the single failure-class namespace ([plan:370](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-07-25-kimi-backup-lane.md:370)).
+
+UNVERIFIED: the live 403/dashboard event and retained second-lane transcript were not independently available in this tree; their provenance was accepted as supplied. Python tests remain unexecuted in this shell.
+
+PASS
+tokens used
+241,722

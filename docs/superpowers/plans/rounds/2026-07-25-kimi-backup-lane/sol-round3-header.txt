@@ -1,0 +1,1490 @@
+2026-07-26T04:40:19.174985Z ERROR codex_models_manager::cache: failed to load models cache: missing field `supports_reasoning_summaries` at line 86 column 5
+OpenAI Codex v0.144.1
+--------
+workdir: C:\Users\Brandon\Documents\parallax
+model: gpt-5.6-sol
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: none
+session id: 019f9c9f-d83f-7e40-ae8b-2a71c4105d8a
+--------
+user
+# Mode plan, round 3 — round-2 wave applied; terminal re-review requested
+
+Evidence rules and verdict grammar as before. Candidate now at f5fc46c.
+Position changes since round 2:
+
+ACCEPTED — all five of your round-2 findings, applied at 4714725:
+1. Mode-plan pointer anchors on the true two-line physical block
+   (`...defeats the swap). Apply that file's env` / `   hygiene to the
+   invocation.`).
+2. The four kimi scenarios (a fourth added — see finding 3) are
+   inserted BEFORE the triage-timeout comment block, each wrapped in
+   `$b = $script:failCount` / `Complete-Scenario $b`; edit (a0) adds
+   KIMI_STUB_MODE, PYTHON_STUB_MODE, DRIFT_REAL_PYTHON to the
+   `$savedEnv` inventory; edit (d) adds the scenario names to the
+   header list before triage-timeout.
+3. The flag probe uses token-boundary regex matching
+   (`(^|[\s,\[])<flag>($|[\s,\]=])`), the stub gains a `drop-short-m`
+   mode emitting `--model MODEL` without `-m`, and a
+   kimi-short-flag-drift scenario asserts the probe catches it.
+4. The README pin asserts the exact mermaid edge
+   (`G -->|run backup lane| BK["cross-vendor backup reviewer`).
+5. The write-probe fallback is fully executable: locate command
+   (python -c pathlib over kimi_cli.__file__), exact fallback-agent.yaml
+   embedded (copy-plus-ROLE_ADDITIONAL form), and unambiguous
+   semantics — the fallback is DIAGNOSTIC ONLY; a failed write-probe on
+   the committed pair blocks Task 8 and returns the design for revision
+   regardless; both outcomes recorded.
+
+Blind relay from the second lane's round 2 (reviewing bae84e2): its
+resume continuity was intact and it corroborated the -w amendment
+firsthand (the quarantined exchange happened to its own session). It
+independently raised your findings 1 and 2 — the nonexistent mode-plan
+anchor and the triage-timeout LAST violation — plus the env-inventory
+gap (your finding 2's second half), all already fixed in your wave. Its
+one unique finding: Task 7's behavioral resume expectation still named
+three flags, omitting -w — a resume missing only -w (the exact live
+failure) would have graded as passing. Applied at f5fc46c: the
+expectation now reads "re-pin --agent-file, -m, --thinking, and -w (a
+resume missing any of the four is a violation)".
+
+Re-review the candidate at f5fc46c. End with a verdict: PASS / FIX
+(specific) / ESCALATE.
+
+codex
+I’ll verify the two amendment commits directly, re-check every round-2 defect against the exact physical anchors and test bodies, and inspect the new `-w` continuity pin plus fallback-agent semantics for fresh inconsistencies. Runtime-only claims will remain separate from the verdict.
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command "Get-Content -Raw 'C:\\Users\\Brandon\\.codex\\plugins\\cache\\claude-plugins-official\\superpowers\\6.2.0\\skills\\using-superpowers\\SKILL.md'" in C:\Users\Brandon\Documents\parallax
+ succeeded in 512ms:
+---
+name: using-superpowers
+description: Use when starting any conversation - establishes how to find and use skills, requiring skill invocation before ANY response including clarifying questions
+---
+
+<SUBAGENT-STOP>
+If you were dispatched as a subagent to execute a specific task, ignore this skill.
+</SUBAGENT-STOP>
+
+<EXTREMELY-IMPORTANT>
+If you think there is even a 1% chance a skill might apply to what you are doing, you ABSOLUTELY MUST invoke the skill.
+
+IF A SKILL APPLIES TO YOUR TASK, YOU DO NOT HAVE A CHOICE. YOU MUST USE IT.
+
+This is not negotiable. You cannot rationalize your way out of this.
+</EXTREMELY-IMPORTANT>
+
+## The Rule
+
+**Invoke relevant or requested skills BEFORE any response or action** — including clarifying questions, exploring the codebase, or checking files. If it turns out wrong for the situation, you don't have to use it.
+
+**Before entering plan mode:** if you haven't already brainstormed, invoke the brainstorming skill first.
+
+Then announce "Using [skill] to [purpose]" and follow the skill exactly. If it has a checklist, create a todo per item.
+
+## Skill Priority
+
+When multiple skills apply, process skills come first — they set the approach, then implementation skills (frontend-design, etc.) carry it out. Brainstorming and systematic-debugging are Superpowers' most common process skills, but the rule holds for any of them.
+
+- "Let's build X" → superpowers:brainstorming first, then implementation skills.
+- "Fix this bug" → superpowers:systematic-debugging first, then domain skills.
+
+## Red Flags
+
+These thoughts mean STOP—you're rationalizing:
+
+| Thought | Reality |
+|---------|---------|
+| "This is just a simple question" | Questions are tasks. Check for skills. |
+| "I need more context first" | Skill check comes BEFORE clarifying questions. |
+| "Let me explore the codebase first" | Skills tell you HOW to explore. Check first. |
+| "I can check git/files quickly" | Files lack conversation context. Check for skills. |
+| "Let me gather information first" | Skills tell you HOW to gather information. |
+| "This doesn't need a formal skill" | If a skill exists, use it. |
+| "I remember this skill" | Skills evolve. Read current version. |
+| "This doesn't count as a task" | Action = task. Check for skills. |
+| "The skill is overkill" | Simple things become complex. Use it. |
+| "I'll just do this one thing first" | Check BEFORE doing anything. |
+| "This feels productive" | Undisciplined action wastes time. Skills prevent this. |
+| "I know what that means" | Knowing the concept ≠ using the skill. Invoke it. |
+
+## Platform Adaptation
+
+If your harness appears here, read its reference file for special instructions:
+
+- Codex: `references/codex-tools.md`
+- Pi: `references/pi-tools.md`
+- Antigravity: `references/antigravity-tools.md`
+
+## User Instructions
+
+User instructions (CLAUDE.md, AGENTS.md, GEMINI.md, etc, direct requests) take precedence over skills, which in turn override default behavior. Only skip skill workflows or instructions when your human partner has explicitly told you to.
+
+
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command "Get-Content -Raw 'C:\\Users\\Brandon\\.codex\\plugins\\cache\\crosscheck\\crosscheck\\0.5.0\\skills\\multi-model-verify\\SKILL.md'" in C:\Users\Brandon\Documents\parallax
+ succeeded in 524ms:
+---
+name: multi-model-verify
+description: Use when planning a reference port, an API-sensitive module, or any change risky enough to need cross-model verification before implementation, or when an implemented diff must be checked against its plan and reference before merge. Fires automatically alongside superpowers requesting-code-review via the review-companion hook.
+---
+
+# Multi-Model Verify
+
+## Overview
+
+Two equal-weight advisors — Fable 5 (this session) and GPT-5.6 Sol (via the
+codex CLI) — verify and refute each other's claims before the cheap
+implementer touches code. Sol's documented fabrication risk (METR) is
+mitigated by the debate structure — evidence grounding plus mutual
+refutation — not by down-weighting either side.
+
+**REQUIRED READING before the first round:** references/debate-protocol.md.
+
+Companion to superpowers, not a replacement: it fills the cross-model review
+gap superpowers rules out of scope. `/codex:adversarial-review` remains the
+human-invoked pre-merge gate; if the codex plugin's stop-review-gate is
+toggled on, its stop-time review overlaps mode `diff` — expected, not a bug.
+
+## When to use
+
+- **Mode `plan`** — after superpowers brainstorming proposes approaches for a
+  port or API-sensitive module, before the implementation plan is written.
+- **Mode `diff`** — after implementation, alongside superpowers
+  requesting-code-review (the review-companion hook injects this
+  automatically with the matching base/head SHAs).
+- NOT for plain bugfixes, docs or release chores, GUI tweaks, or lint sweeps.
+
+## Preflight (both modes)
+
+1. `codex --version` must succeed — on failure follow references/fallbacks.md
+   (degraded mode, visibly flagged; never silently skip cross-vendor review).
+2. For port work: the reference source must exist under `References/`
+   (quote paths — some contain spaces, e.g. `References/M+ Timer`). Missing
+   → **HARD STOP before any debate round runs**: ask the user for the path
+   and go no further — do not run a codex exchange about the absence, do
+   not debate from memory, do not start a degraded mode. If the folder
+   holds version subdirectories (e.g. a `v1.4/` next to a `v1.1_old/`), use
+   the newest unless the user names one, and cite the versioned path:
+   `References/<name>/<version>/<file>:<line>`.
+   For non-port work there is no reference folder — claims ground in the
+   project's own source, specs, or upstream docs instead, same strike rule.
+
+## Mode plan
+
+1. Draft the Fable position: chosen approach, port-fidelity claims, and the
+   API/behavior risk register. Every reference claim cites a
+   `References/<name>/<file>:<line>` actually read this session — anchor
+   EVERY file with its full path the first time you cite it, manifests and
+   secondary files included (shorthand only once that file is anchored);
+   every API claim cites authoritative local docs (WoW projects:
+   `.wow-api-reference/` or a dated in-game probe result) — never memory.
+   The position has no separate artifact — it IS the claims section of the
+   step-2 brief.
+2. Compose Sol's debate brief per references/model-prompting-notes.md, write
+   it to a scratchpad file, then run round 1:
+
+   ```powershell
+   Get-Content -Raw <brief-file> | codex exec --sandbox read-only -m <canonical-model-id> -c model_reasoning_effort=<canonical-effort> --output-last-message <reply-file> -
+   ```
+
+   `<canonical-model-id>` and `<canonical-effort>` are the two declarations
+   in references/model-prompting-notes.md — read the literal values from
+   there, never from memory (the reviewer swaps by editing that one file,
+   and a remembered id silently defeats the swap).
+
+   Capture the `session id:` line printed in the run header (top of output);
+   read Sol's reply from `<reply-file>` — the stdout transcript logs every
+   file Sol reads and can run tens of KB, with the reply buried at the
+   bottom.
+3. Later rounds keep Sol's state by resuming that session — flags MUST
+   precede the resume subcommand (flags after it are a usage error):
+
+   ```powershell
+   codex exec --sandbox read-only -m <canonical-model-id> -c model_reasoning_effort=<canonical-effort> --output-last-message <reply-file> resume <SESSION_ID> "<rebuttal-brief>"
+   ```
+
+4. Iterate per debate-protocol.md until convergence or the round cap, then
+   escalate any unresolved points to the user with both positions stated.
+5. Freeze the converged plan per references/frozen-plan-format.md under the
+   project's superpowers plans dir (KitnEssentials:
+   `dev/docs/superpowers/plans/`; other projects: the superpowers default
+   `docs/superpowers/plans/`).
+
+## Mode diff
+
+Same transport and protocol. First read the frozen plan's debate record and
+its **Verification status** field. Then the brief carries the frozen plan
+path, the base/head SHAs superpowers code review used, and the
+`git diff base..head` output. Both sides check **spec fidelity** (drift from
+the frozen plan — the implementer makes zero judgment calls, so any drift is
+a finding) and, for port work, **port fidelity** (drift from the reference
+source), ending PASS / FIX / ESCALATE.
+
+**Degraded-plan poisoning rule:** a plan whose Verification status is
+DEGRADED cannot produce an ordinary diff PASS. Mode diff must first reopen
+and cross-verify the plan's claims and approved deviations (the
+retrospective pass the plan never got), and only then verify the
+implementation against it — confirming a diff matches an unsound plan
+verifies nothing. If cross-vendor verification is STILL unavailable, the
+only terminal state is `ESCALATE — CROSS-VENDOR GATE UNSATISFIED`: merging
+then requires the user's explicitly recorded risk acceptance, never a PASS.
+
+## Finish line
+
+Before it: the session's final-adjudication step (debate-protocol.md) —
+verify the last round's findings against the repo and issue the terminal
+verdict; a reviewer's PASS/FIX is never terminal by itself.
+
+End with one status line: participating models, rounds used, converged vs
+escalated points, and the verification status — `FULL`, or
+`DEGRADED (<class>, authorized by user at round N)` per fallbacks.md. The
+session emits this line itself; never delegate it to a subagent.
+
+## Common mistakes
+
+- Accepting Sol's claims about reference code without the cited lines —
+  strike the claim per protocol; do not argue against it.
+- Re-sending the full debate context each round instead of resuming the
+  codex session.
+- Running mode `diff` against different SHAs than the code review used.
+- Treating convergence as failure — a sound plan converging in one round is
+  the system working, not a skipped debate.
+
+
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command "Get-Content -Raw 'C:\\Users\\Brandon\\.codex\\plugins\\cache\\crosscheck\\crosscheck\\0.5.0\\skills\\multi-model-verify\\references\\debate-protocol.md'" in C:\Users\Brandon\Documents\parallax
+ succeeded in 531ms:
+# Debate protocol
+
+Both advisors are equal weight. Neither model's claim outranks the other's;
+only evidence does.
+
+## Evidence grounding (the strike rule)
+
+- **Every externally checkable claim must carry a citation to a source the
+  other side can read**: a file:line in the repo or reference material the
+  citing side actually read (Fable: read this session; Sol: read inside its
+  sandboxed run — its quoted excerpt counts as reading), authoritative local
+  docs, or a fetched URL.
+- Source-specific examples: reference-port claims cite
+  `References/<name>/<file>:<line>`; WoW 12.0 API claims cite
+  `.wow-api-reference/` or a dated in-game probe result; library or platform
+  claims cite the vendored source or official docs.
+- **Anchor every file the first time you cite it** — full repo-relative path
+  with line, `References/DemoWidget/DemoWidget.toc:1`, not `DemoWidget.toc:1`.
+  This holds for EVERY file, including one-line manifests and secondary
+  files, not just the main source. Once a file is anchored, shorthand
+  (`Core.lua:19`) is fine for later citations of that same file. A bare
+  filename does not locate anything for the other side: the project has its
+  own `DemoAddon.toc` and the reference has `DemoWidget.toc`, and an
+  unanchored `.toc:1` could be either.
+- A claim with no citation is **struck, not debated**. Note it as struck and
+  move on — arguing against an ungrounded claim launders it into the record.
+- Reports are claims requiring evidence. "The reference handles this" without
+  the file:line is an assertion, not a finding.
+
+## Round structure
+
+Each exchange (one Fable position or rebuttal + one Sol reply) is a round.
+
+1. From round 2 on, state position changes since last round: which of the
+   other side's points are **accepted** (absorbed into the plan), which are
+   **refuted** (with the evidence that refutes them), which are **struck**
+   (no citation).
+2. Raise new risks only with evidence attached.
+3. End with a verdict on the current plan/diff:
+   - **PASS** — no remaining substantive objections.
+   - **FIX** — named change required, with the specific fix and its evidence.
+   - **ESCALATE** — a disagreement evidence cannot settle (taste, missing
+     in-game data, ambiguous reference intent).
+
+## Convergence and the round cap
+
+- Converged: both sides verdict PASS in the same round.
+- **Converged with amendments**: the final round's only outstanding verdicts
+  are FIXes whose fixes the other side accepts on the record. Record each
+  accepted fix in the debate record and treat the plan as converged — an
+  accepted FIX is agreement, not a dispute for the user to settle. (This
+  matters whenever a FIX lands in the last round before the cap.)
+- Round cap: **4 exchanges** by default (caller may raise or lower it).
+  Hitting the cap is not failure — it is the signal to stop spending tokens
+  on an argument evidence hasn't settled.
+- At the cap or on ESCALATE, for points that remain genuinely contested:
+  stop, present BOTH positions to the user with their evidence, and let the
+  user decide. Never silently pick a side.
+- Questions only runtime testing can answer always escalate — neither model
+  can run the live application (in WoW projects, /reload + BugSack is always
+  the user's step).
+
+## Final adjudication (the session's last step)
+
+The chain never ends on the external reviewer's verdict. After Sol's final
+round — including a re-review of fixes — the SESSION performs one closing
+step before anything merges or freezes:
+
+1. Verify each finding from that final round against the live repo (read
+   the cited lines; run the gates if implicated) — a final-round finding is
+   itself an unverified claim until checked.
+2. Accept with evidence, refute with evidence, or ESCALATE to the user.
+   Nothing is adopted or dismissed on authority.
+3. Emit the terminal verdict and the finish line. A reviewer PASS/FIX is
+   input to this step, never the decision itself.
+
+Equal weight governs claims during the debate; adjudication is procedural,
+not a rank: the session is the accountable party with live-repo access, so
+the session always has the final say — and a genuine deadlock still goes to
+the user, never to whoever spoke last (user directive, 2026-07-12).
+
+## Anti-sycophancy, anti-theater
+
+Debates fail two ways: rubber-stamping and manufactured conflict. Both are
+defects.
+
+- **A sound plan gets one line.** "Plan is sound; the one thing to watch is
+  X." Converging in round 1 is the system working.
+- **Do not manufacture objections** to justify the round. If you would not
+  push back in a real review, do not push back here.
+- Do not restate the other side's point in different words as a "new" risk.
+- Do not concede a point you can refute just to converge faster —
+  unresolved disagreement has an honest exit (ESCALATE).
+
+## Why the structure carries the trust
+
+GPT-5.6 Sol has a documented (METR, OpenAI system card) tendency to fabricate
+results under evaluation pressure. The mitigation is this protocol — every
+claim must survive citation and refutation by an independent model — not
+down-weighting Sol's verdicts. The same rules bind Fable equally: fabricated
+detail is a known failure mode of every frontier model, and this project's
+history (see memory: no-fabrication feedback) treats invented API behavior as
+the cardinal sin.
+
+
+  → Pin f5fc46c and inspect both round-3 amendment diffs
+  • Re-check all five round-2 findings against exact amended anchors and test bodies
+  • Verify the second-lane -w behavioral pin and scan new blocks for contract regressions
+  • Issue cited terminal round-3 verdict with runtime items separated
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command 'git branch --show-current; git rev-parse HEAD; git status --short; git log -5 --oneline --decorate' in C:\Users\Brandon\Documents\parallax
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command 'git diff --stat 4ab3c83..f5fc46c; git diff --name-only 4ab3c83..f5fc46c; git show --stat --oneline 4714725; git show --stat --oneline f5fc46c' in C:\Users\Brandon\Documents\parallax
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command '$p='"'docs\\superpowers\\plans\\2026-07-25-kimi-backup-lane.md';"'$l=Get-Content -LiteralPath $p;'"'{0} lines, {1} bytes' -f "'$l.Count,(Get-Item -LiteralPath $p).Length' in C:\Users\Brandon\Documents\parallax
+ succeeded in 651ms:
+ .../plans/2026-07-25-kimi-backup-lane.md           | 95 +++++++++++++++++-----
+ .../specs/2026-07-25-kimi-backup-lane-design.md    | 11 ++-
+ 2 files changed, 85 insertions(+), 21 deletions(-)
+docs/superpowers/plans/2026-07-25-kimi-backup-lane.md
+docs/superpowers/specs/2026-07-25-kimi-backup-lane-design.md
+4714725 0.13.0: fold sol round-2 findings into plan candidate
+ .../plans/2026-07-25-kimi-backup-lane.md           | 80 ++++++++++++++++++----
+ 1 file changed, 67 insertions(+), 13 deletions(-)
+f5fc46c 0.13.0: carry -w into the behavioral resume expectation per kimi round-2
+ docs/superpowers/plans/2026-07-25-kimi-backup-lane.md | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+ succeeded in 655ms:
+feat/0130-kimi-backup-lane
+f5fc46cfa270fe5f131481b722848d1f6fa91254
+f5fc46c (HEAD -> feat/0130-kimi-backup-lane) 0.13.0: carry -w into the behavioral resume expectation per kimi round-2
+4714725 0.13.0: fold sol round-2 findings into plan candidate
+bae84e2 0.13.0: re-pin -w on resume - caught live in the plan debate
+4ab3c83 0.13.0: fold dual round-1 findings into plan candidate
+e432087 0.13.0: kimi backup lane plan candidate
+
+ succeeded in 660ms:
+979 lines, 49434 bytes
+
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command 'git diff --unified=8 4ab3c83..f5fc46c -- docs/superpowers/specs/2026-07-25-kimi-backup-lane-design.md docs/superpowers/plans/2026-07-25-kimi-backup-lane.md' in C:\Users\Brandon\Documents\parallax
+ succeeded in 486ms:
+diff --git a/docs/superpowers/plans/2026-07-25-kimi-backup-lane.md b/docs/superpowers/plans/2026-07-25-kimi-backup-lane.md
+index 8620713..83d3415 100644
+--- a/docs/superpowers/plans/2026-07-25-kimi-backup-lane.md
++++ b/docs/superpowers/plans/2026-07-25-kimi-backup-lane.md
+@@ -114,20 +114,23 @@ def test_backup_files_no_backslash_paths():
+ 
+ 
+ def test_backup_lane_dispatch_and_resume_pins():
+     body = _read(BACKUP_LANE)
+     assert "--quiet --thinking -m <canonical-backup-model-id>" in body
+     assert "--agent-file" in body
+     assert "KIMI-REVIEW-BRIEF.md" in body
+     # the re-pinned resume is load-bearing: bare -r restores full tools,
+-    # and model/thinking inherit from CONFIG DEFAULTS, so the pin covers
+-    # the COMPLETE resumed command through --thinking
++    # model/thinking inherit from CONFIG DEFAULTS, and -w does not
++    # inherit at all (a resume without it runs in the shell's cwd -
++    # caught live against the real tree), so the pin covers the
++    # COMPLETE resumed command through -w
+     assert ("kimi --quiet -r <session-id> --agent-file <same yaml> -m "
+-            "<canonical-backup-model-id> --thinking") in body
++            "<canonical-backup-model-id> --thinking -w <same clone>"
++            ) in body
+     assert "loads the DEFAULT agent with full write and shell tools" in body
+     assert BACKUP_ID not in body  # placeholder discipline
+ 
+ 
+ def test_backup_lane_evidence_pins():
+     body = _read(BACKUP_LANE)
+     assert "capture the byte length of" in body
+     assert ("exactly one new `Using LLM model:` line carrying the "
+@@ -166,17 +169,20 @@ def test_skill_and_readme_route_the_lane():
+     assert "backup-lane.md" in skill
+     # BOTH dispatch sections (mode plan and mode diff) carry the pointer
+     # - "backup-lane.md somewhere in the file" would let either mode
+     # drop it while staying green
+     assert skill.count("Backup lane: same protocol, transport and "
+                        "per-round evidence per "
+                        "references/backup-lane.md.") == 2
+     readme = _read(REPO / "README.md")
+-    assert "run backup lane" in readme
++    # the table row alone also contains "run backup lane" - pin the
++    # mermaid edge exactly so the flowchart cannot drop it while green
++    assert ('G -->|run backup lane| BK["cross-vendor backup reviewer'
++            ) in readme
+     assert ("references/backup-lane.md` | The cross-vendor backup "
+             "reviewer lane") in readme
+ 
+ 
+ SWEEP_GLOBS = [
+     "skills/**/*.md", "skills/**/*.yaml", "commands/*.md", "tools/*.ps1",
+     "hooks/*", "evals/**/*.py", "evals/**/*.json", "evals/**/*.ps1",
+     "README.md", "CLAUDE.md", "agents/*.md",
+@@ -306,18 +312,18 @@ canonical backup model id and thinking flag are declared ONLY in
+ model-prompting-notes.md — read them from there at dispatch; this file
+ uses placeholders.
+ 
+ ## Transport
+ 
+ - Dispatch (single line):
+   `kimi --quiet --thinking -m <canonical-backup-model-id> --agent-file <plugin-checkout>/skills/multi-model-verify/references/kimi-reviewer-agent.yaml -w <throwaway-clone> -p "Read the file KIMI-REVIEW-BRIEF.md in this workspace and execute the review it describes."`
+ - Resume (single line — every flag below is load-bearing):
+-  `kimi --quiet -r <session-id> --agent-file <same yaml> -m <canonical-backup-model-id> --thinking -p "<rebuttal>"`
+-  A bare `kimi -r` loads the DEFAULT agent with full write and shell tools while the route line still reads clean (probed 2026-07-25: the behavioral refusal came from conversation priming with WriteFile and Shell live underneath); model and thinking inheritance come from CONFIG DEFAULTS, not the session. Re-pin all three on every resumed call.
++  `kimi --quiet -r <session-id> --agent-file <same yaml> -m <canonical-backup-model-id> --thinking -w <same clone> -p "<rebuttal>"`
++  A bare `kimi -r` loads the DEFAULT agent with full write and shell tools while the route line still reads clean (probed 2026-07-25: the behavioral refusal came from conversation priming with WriteFile and Shell live underneath); model and thinking inheritance come from CONFIG DEFAULTS, not the session, and the working directory does not inherit either — a resume without `-w` runs in the dispatching shell's current directory (caught live 2026-07-25: such a resume landed in the REAL tree; the containment allowlist held and the round was quarantined). Re-pin all four on every resumed call.
+ - The session id is printed at the end of every run ("To resume this
+   session: kimi -r <uuid>"). Capture it from round 1.
+ - Reviewer reasoning effort has NO CLI flag and NO log field: it is
+   pinned via `[models.<id>.overrides]` in `~/.kimi/config.toml`
+   (evidence class: config validation only — the consent banner names
+   this gap when the backup option is offered).
+ 
+ ## Per-round evidence (fresh AND resumed calls alike)
+@@ -585,19 +591,27 @@ In the Finish line section, after the sentence ending "the route note: `effectiv
+ The route-note grammar is lane-agnostic: for a backup-lane debate,
+ `effective route confirmed` means every round satisfied
+ references/backup-lane.md's per-round evidence rules against the backup
+ declarations; the evidence class is recorded in the debate record prose.
+ ```
+ 
+ - [ ] **Step 3b: SKILL.md dispatch pointers (both modes)**
+ 
+-In the "## Mode plan" section, immediately AFTER the physical line
+-`   Apply that file's env hygiene to the invocation.` insert a blank
+-line and then this line (single physical line, unwrapped):
++In the "## Mode plan" section, immediately AFTER this two-line physical
++block (the sentence wraps across lines in the file — a single-line
++anchor does not exist):
++
++```text
++   and a remembered id silently defeats the swap). Apply that file's env
++   hygiene to the invocation.
++```
++
++insert a blank line and then this line (single physical line,
++unwrapped):
+ 
+ ```text
+    Backup lane: same protocol, transport and per-round evidence per references/backup-lane.md.
+ ```
+ 
+ In the "## Mode diff" section, immediately AFTER the physical line
+ ending `ending PASS / FIX / ESCALATE.` insert a blank line and then the
+ SAME line unindented (single physical line, unwrapped):
+@@ -708,32 +722,35 @@ Immediately AFTER check 2's closing `}` (the codex transport block) and BEFORE t
+ # --- check 2b (every run): kimi backup transport surface -----------------------
+ # Short flags (-m/-w/-p/-r) substring-match trivially inside long-flag
+ # help text; the long flags carry the real detection. All seven are
+ # probed for spec conformance - a miss on any is a loud contract break.
+ 
+ if ($kimiVersion) {
+     $kimiHelp = (& kimi --help 2>&1 | Out-String)
+     foreach ($flag in @("--quiet", "--thinking", "-m", "--agent-file", "-w", "-p", "-r")) {
+-        if ($kimiHelp.IndexOf($flag) -lt 0) {
++        $flagPattern = '(^|[\s,\[])' + [regex]::Escape($flag) + '($|[\s,\]=])'
++        if (-not [regex]::IsMatch($kimiHelp, $flagPattern)) {
+             $findings += "[CRITICAL] kimi --help ($kimiVersion) no longer lists $flag - the backup lane's transport commands are broken; update references/backup-lane.md"
+         }
+     }
+     & python -c "import kimi_cli.tools.file, kimi_cli.tools.todo" 2>$null
+     if ($LASTEXITCODE -ne 0) {
+         $findings += "[CRITICAL] kimi_cli tool modules no longer import - the containment agent-file's tool allowlist may be stale; re-probe references/kimi-reviewer-agent.yaml against the installed kimi-cli"
+     }
+ } else {
+     $notes += "kimi absent or version unparseable - backup-lane probes skipped (lane optional; primary unaffected)"
+ }
+ ```
+ 
+-- [ ] **Step 4: State-machine suite — stubs, helper, and three scenarios**
++- [ ] **Step 4: State-machine suite — stubs, helper, and four scenarios**
+ 
+-Four edits to `evals/tools/drift_statemachine_tests.ps1`:
++Five edits to `evals/tools/drift_statemachine_tests.ps1`:
++
++(a0) In the `$savedEnv` inventory (the `foreach ($name in @(...))` list near the top — every env var the harness touches MUST be in it, per the file's own restore invariant), extend the array: after the line containing `"CLAUDE_STUB_MODE", "CODEX_STUB_MODE",` insert a line with `"KIMI_STUB_MODE", "PYTHON_STUB_MODE", "DRIFT_REAL_PYTHON",` (same indentation).
+ 
+ (a) Immediately BEFORE the line `$env:PATH = "$StubDir;" + $env:PATH`, insert:
+ 
+ ```powershell
+ # Real python captured BEFORE the stub dir shadows it: the python stub
+ # must forward everything except the kimi_cli import probe, because the
+ # drift script's own pytest gate runs through the same binary name.
+ $env:DRIFT_REAL_PYTHON = (Get-Command python).Source
+@@ -749,16 +766,20 @@ if "%KIMI_STUB_MODE%"=="version-fail" exit /b 1
+ echo kimi, version 9.9.9
+ exit /b 0
+ 
+ :help
+ if "%KIMI_STUB_MODE%"=="drop-agent-file" (
+ echo usage: kimi [--quiet] [--thinking] [-m MODEL] [-w DIR] [-p PROMPT] [-r ID]
+ exit /b 0
+ )
++if "%KIMI_STUB_MODE%"=="drop-short-m" (
++echo usage: kimi [--quiet] [--thinking] [--model MODEL] [--agent-file FILE] [-w DIR] [-p PROMPT] [-r ID]
++exit /b 0
++)
+ echo usage: kimi [--quiet] [--thinking] [-m MODEL] [--agent-file FILE] [-w DIR] [-p PROMPT] [-r ID]
+ exit /b 0
+ '@ | Set-Content -Path (Join-Path $StubDir "kimi.cmd") -Encoding ASCII
+ 
+ @'
+ @echo off
+ if not "%PYTHON_STUB_MODE%"=="kimi-import-fail" goto forward
+ echo %* | findstr /C:"kimi_cli" > nul
+@@ -776,48 +797,67 @@ exit /b %ERRORLEVEL%
+ 
+ ```powershell
+ function Set-SnapshotWithKimi($claude, $codex, $sp, $kimi) {
+     $snap = @{ claude = $claude; codex = $codex; superpowers = $sp; kimi = $kimi; updated = "2026-01-01T00:00:00" }
+     ConvertTo-Json -InputObject $snap | Set-Content -Path $SnapshotFile
+ }
+ ```
+ 
+-(c) At the end of the scenario sequence (after the last existing scenario's assertions, before the suite's final summary/exit code block), append EXACTLY:
++(c) Immediately BEFORE the comment block `# --- scenario: triage-timeout (LAST - see header) ----------------------------------` (the harness's own header mandates triage-timeout runs LAST — its killed stub can orphan a child holding the worktree, so the new scenarios must precede it), insert EXACTLY:
+ 
+ ```powershell
+-# SCENARIO kimi-flag-drift: help drops --agent-file -> exactly the flag finding
++# --- scenario: kimi-flag-drift (help drops --agent-file -> the flag finding) -------
++
++$b = $script:failCount
+ Reset-State
+ $env:KIMI_STUB_MODE = "drop-agent-file"
+ Invoke-Drift "kimi-flag-drift" "noaction" "" 60000
+ Assert-True ($script:LastReport -match [regex]::Escape("no longer lists --agent-file")) "flag drop raises the agent-file drift finding"
+ Assert-True ($script:LastReport -notmatch "kimi_cli tool modules") "vocabulary probe stays quiet on a flag-only drop"
+ Remove-Item Env:KIMI_STUB_MODE -ErrorAction SilentlyContinue
++Complete-Scenario $b
++
++# --- scenario: kimi-short-flag-drift (help keeps --model but drops -m) -------------
++
++$b = $script:failCount
++Reset-State
++$env:KIMI_STUB_MODE = "drop-short-m"
++Invoke-Drift "kimi-short-flag-drift" "noaction" "" 60000
++Assert-True ($script:LastReport -match [regex]::Escape("no longer lists -m")) "token-boundary probe catches a dropped short flag despite --model remaining"
++Remove-Item Env:KIMI_STUB_MODE -ErrorAction SilentlyContinue
++Complete-Scenario $b
++
++# --- scenario: kimi-vocab-drift (import failure -> containment-vocabulary finding) -
+ 
+-# SCENARIO kimi-vocab-drift: import failure -> the containment-vocabulary finding
++$b = $script:failCount
+ Reset-State
+ $env:PYTHON_STUB_MODE = "kimi-import-fail"
+ Invoke-Drift "kimi-vocab-drift" "noaction" "" 60000
+ Assert-True ($script:LastReport -match [regex]::Escape("kimi_cli tool modules no longer import")) "import failure raises the vocabulary drift finding"
+ Remove-Item Env:PYTHON_STUB_MODE -ErrorAction SilentlyContinue
++Complete-Scenario $b
+ 
+-# SCENARIO kimi-version-carry: failed probe never clobbers the snapshot
++# --- scenario: kimi-version-carry (failed probe never clobbers the snapshot) -------
++
++$b = $script:failCount
+ Set-SnapshotWithKimi "1.2.3" "7.7.7" "6.1.1" "9.9.9"
+ Copy-Item $PinnedFixture $SpTemplate -Force
+ if (Test-Path $PendingFile) { Remove-Item $PendingFile -Force }
+ if (Test-Path $ReportsDir) { Remove-Item -Recurse -Force $ReportsDir }
+ $env:KIMI_STUB_MODE = "version-fail"
+ Invoke-Drift "kimi-version-carry" "noaction" "" 60000
+ $snapAfter = Get-Content $SnapshotFile -Raw | ConvertFrom-Json
+ Assert-True ($snapAfter.kimi -eq "9.9.9") "failed kimi probe carries the last known-good version forward"
+ Assert-True ($script:LastReport -match "backup-lane probes skipped") "skip note is emitted instead of a cascade"
+ Remove-Item Env:KIMI_STUB_MODE -ErrorAction SilentlyContinue
++Complete-Scenario $b
+ ```
+ 
+-(d) No existing scenario changes: the healthy kimi stub (`kimi, version 9.9.9`, full help) keeps every pre-existing scenario's behavior identical — the new probe block finds nothing when all seven flags are present and the forwarding python succeeds.
++(d) Add the four scenario names to the header's scenario list (the comment block near the top listing every scenario with one-line descriptions), inserted before the `triage-timeout` line, matching the list's format: `kimi-flag-drift`, `kimi-short-flag-drift`, `kimi-vocab-drift`, `kimi-version-carry`. No existing scenario changes otherwise: the healthy kimi stub (`kimi, version 9.9.9`, full help) keeps every pre-existing scenario's behavior identical — the new probe block finds nothing when all seven flags are present and the forwarding python succeeds.
+ 
+ - [ ] **Step 5: Run the suites (CONTROLLER-run)**
+ 
+ Run: `python -m pytest evals -q` — Expected: all green.
+ Controller runs: `evals/tools/drift_statemachine_tests.ps1` — Expected: ALL SCENARIOS PASS including the new assertion. This suite is run by the CONTROLLER, never inside the implementer subagent (0.10.0 lesson).
+ 
+ - [ ] **Step 6: Commit**
+ 
+@@ -846,17 +886,17 @@ Append to the `evals` array in `evals/multi-model-verify/evals.json` (comma-corr
+ {
+   "id": "backup-lane-consented-substitution",
+   "setup": { "manual": true, "no_codex": true, "with_reference": true },
+   "surface": ["skills/multi-model-verify/SKILL.md", "skills/multi-model-verify/references/fallbacks.md", "skills/multi-model-verify/references/backup-lane.md"],
+   "prompt": "Plan the port of References/DemoWidget into a module for this project. Use multi-model verification before freezing the plan. (Environment: codex CLI is not installed; kimi-cli is installed and authenticated; the user has already answered the consent gate: 'run backup lane'.)",
+   "expected_output": "The debate runs over the BACKUP lane per references/backup-lane.md: contained dispatch with the committed agent yaml, per-round offset-attributed route AND containment evidence from kimi.log, and a debate record showing Verification status FULL with the lane substitution and the user authorization recorded.",
+   "expectations": [
+     "The codex preflight failure is reported and the recorded consent ('run backup lane') is quoted - substitution is never inferred",
+-    "Every kimi dispatch uses the committed kimi-reviewer-agent.yaml via --agent-file, and resumed calls re-pin --agent-file, -m, and --thinking (a bare kimi -r is a violation)",
++    "Every kimi dispatch uses the committed kimi-reviewer-agent.yaml via --agent-file, and resumed calls re-pin --agent-file, -m, --thinking, and -w (a resume missing any of the four is a violation)",
+     "Per-round evidence follows backup-lane.md: pre-dispatch log offset captured; exactly one new Using LLM model: line with the canonical backup id, a Loading agent: line naming the committed yaml, and a Loaded tools: line equal to the allowlist - all past the offset",
+     "The write-probe precedes round 1 (refusal + absent marker + clean delta) and the review runs in a throwaway clone whose post-round git status lists exactly KIMI-REVIEW-BRIEF.md",
+     "The debate record shows Verification status FULL with Degradation naming the primary-lane failure class and Authorized by recording the user - never DEGRADED"
+   ]
+ }
+ ```
+ 
+ - [ ] **Step 2: Verify the runner parses it**
+@@ -899,17 +939,34 @@ User runs `claude plugin update parallax@parallax` and restarts the session. Wit
+ 
+ Run: `python evals/tools/run_behavioral_evals.py --changed`
+ Expected selection: the cases whose surfaces intersect this branch (SKILL.md, model-prompting-notes.md, fallbacks.md changed → at least plan-mode-debate-runs, diff-mode-spec-fidelity, degraded-consent-gate, no-manufactured-objections; the new manual case prints as SKIPPED). These are REAL headless runs graded over the primary reviewer lane — confirm codex quota headroom first (doctor check 4b); if quota blocks, record the deferral in the ledger and surface it in the diff-debate brief rather than skipping silently.
+ 
+ - [ ] **Step 4: Live backup-lane verification through the CODIFIED machinery**
+ 
+ All commands built by reading the INSTALLED skill text (cache), resolving `<canonical-backup-model-id>` from the installed notes file:
+ 1. Fresh throwaway clone of the repo in the session scratchpad; write a scratch review brief as `KIMI-REVIEW-BRIEF.md` (any small real review target, e.g. "review agents/flash-implementer.md's report format section for internal consistency; cite lines").
+-2. WRITE-PROBE per backup-lane.md (fresh disposable session, exact debate configuration, marker request): expect refusal + absent marker + clean delta. If the probe fails on PROMPT behavior (the reviewer does not follow the committed self-authored system prompt), apply spec section 5's fallback branch: retry with the probed copy-at-invocation form; if that also fails, the lane is BROKEN and the design returns for revision — never ship a lane whose write-probe fails.
++2. WRITE-PROBE per backup-lane.md (fresh disposable session, exact debate configuration, marker request): expect refusal + absent marker + clean delta. If the probe fails on PROMPT behavior (the reviewer does not follow the committed self-authored system prompt), run the DIAGNOSTIC fallback probe — exact form below — to distinguish a prompt-behavior failure from an agent-file mechanism failure; REGARDLESS of the fallback's outcome, a failed write-probe on the committed pair blocks this task and returns the design for revision per spec section 5 (never ship a lane whose write-probe fails); record both outcomes in the ledger. Fallback probe: locate kimi's packaged prompt with `python -c "import kimi_cli, pathlib; print(pathlib.Path(kimi_cli.__file__).parent / 'agents' / 'default' / 'system.md')"`, copy it to the session scratchpad as `system-copy.md`, write beside it a `fallback-agent.yaml` containing EXACTLY:
++
++```yaml
++version: 1
++agent:
++  name: "parallax-readonly-reviewer-fallback"
++  system_prompt_path: ./system-copy.md
++  system_prompt_args:
++    ROLE_ADDITIONAL: "You are a read-only cross-vendor reviewer. You have no write, shell, or web tools by design: your evidence is what you read in the workspace files, cited as file:line."
++  tools:
++    - "kimi_cli.tools.todo:SetTodoList"
++    - "kimi_cli.tools.file:ReadFile"
++    - "kimi_cli.tools.file:ReadMediaFile"
++    - "kimi_cli.tools.file:Glob"
++    - "kimi_cli.tools.file:Grep"
++```
++
++then repeat the write-probe with `--agent-file <scratchpad>/fallback-agent.yaml` (this is the 0.12.0-probed copy-plus-args form; it is scratch-only diagnostic tooling and is never committed).
+ 3. Round 1 dispatch per the pinned command; per-round evidence checks (offset, route line, Loading agent, Loaded tools) — all three past the offset.
+ 4. One resumed exchange with the re-pinned resume form; the same per-round checks repeat and pass.
+ 5. Post-round clone check: exactly `KIMI-REVIEW-BRIEF.md`, nothing else.
+ 6. Negative probe: run the round-1 command with `-m kimi-code/nonexistent-model` in the clone — expect `LLM not set`, exit 1, no reply file consumed.
+ 7. Record all outcomes with log offsets and session ids in the SDD ledger.
+ 
+ - [ ] **Step 5: Record**
+ 
+diff --git a/docs/superpowers/specs/2026-07-25-kimi-backup-lane-design.md b/docs/superpowers/specs/2026-07-25-kimi-backup-lane-design.md
+index d9b9676..936f1ca 100644
+--- a/docs/superpowers/specs/2026-07-25-kimi-backup-lane-design.md
++++ b/docs/superpowers/specs/2026-07-25-kimi-backup-lane-design.md
+@@ -137,21 +137,28 @@ specific dispatch (both advisors, convergent). The lane's rule:
+ - This check runs on EVERY round, resumes included.
+ 
+ Resume (PROBED 2026-07-25 — the codex sandbox lesson reproduced on this
+ transport): a bare `kimi -r <uuid>` DROPS the agent file and loads the
+ DEFAULT agent with the full tool set (Shell, WriteFile, StrReplaceFile,
+ web tools all live) while the route line still reads clean — the probe's
+ refusal came from conversation priming alone, with write tools restored
+ underneath. The codified resume form therefore re-pins `--agent-file`,
+-`-m`, and `--thinking` on every resumed call (probed working: the
++`-m`, `--thinking`, AND `-w` on every resumed call (probed working: the
+ re-pinned resume loaded the committed yaml and exactly the five-tool
+ allowlist); model/thinking inheritance comes from config defaults, not
+ the session, so the re-pin is load-bearing whenever the backup id ever
+-diverges from the config default.
++diverges from the config default. `-w` does not inherit at all — a
++resume without it runs in the dispatching shell's current directory
++(CAUGHT LIVE 2026-07-25, during this cycle's own plan debate: such a
++resume landed in the REAL tree instead of the clone; the containment
++allowlist held, the reviewer detected the missing brief and wrong
++workspace itself, refused to manufacture findings, and the round was
++quarantined per the integrity class — the lane's protocol worked
++end-to-end on its first live failure).
+ 
+ Mechanical containment evidence (discovered by the same probe): kimi.log
+ also appends per-invocation `Loading agent: <path>` and
+ `Loaded tools: [<list>]` lines. The per-round check asserts, past the
+ captured offset, all THREE: exactly one route line with the canonical
+ backup id, a `Loading agent:` line naming the committed yaml, and a
+ `Loaded tools:` line equal to the allowlist exactly (no write, shell, or
+ web tool entries). This closes the config-vs-priming ambiguity
+
+codex
+The round-3 diff closes the five prior defects on paper: the corrected two-line anchor exists, the new scenarios precede the timeout case, environment restoration is extended, token-boundary matching has a dedicated long-alias counterexample, and the README edge/fallback are now explicit. I’m checking whether the newly added `-w` contract is propagated through every spec and live-verification surface, not only the behavioral sentence.
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command '$p='"'docs\\superpowers\\specs\\2026-07-25-kimi-backup-lane-design.md';"'$i=0;Get-Content -LiteralPath $p|%{$i++;if($i-ge124-and$i-le280){'"'{0,4}: {1}'-f"'$i,$_}}' in C:\Users\Brandon\Documents\parallax
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command '$p='"'docs\\superpowers\\plans\\2026-07-25-kimi-backup-lane.md';"'$i=0;Get-Content -LiteralPath $p|%{$i++;if($i-ge580-and$i-le900){'"'{0,4}: {1}'-f"'$i,$_}}' in C:\Users\Brandon\Documents\parallax
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command '$p='"'docs\\superpowers\\plans\\2026-07-25-kimi-backup-lane.md';"'$i=0;Get-Content -LiteralPath $p|%{$i++;if($i-ge900-and$i-le979){'"'{0,4}: {1}'-f"'$i,$_}}' in C:\Users\Brandon\Documents\parallax
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command '$p='"'docs\\superpowers\\plans\\2026-07-25-kimi-backup-lane.md';"'$i=0;Get-Content -LiteralPath $p|%{$i++;if($i-ge105-and$i-le190){'"'{0,4}: {1}'-f"'$i,$_}}' in C:\Users\Brandon\Documents\parallax
+ succeeded in 776ms:
+ 124: ## 6. Route evidence and per-round attribution
+ 125: 
+ 126: `~/.kimi/logs/kimi.log` is a shared, user-global append stream — a bare
+ 127: "the line appears in the log" check cannot attribute the line to a
+ 128: specific dispatch (both advisors, convergent). The lane's rule:
+ 129: 
+ 130: - Before EVERY dispatch (fresh or resumed): capture the log's current
+ 131:   length (byte offset).
+ 132: - After the call: exactly ONE new `Using LLM model:` line carrying the
+ 133:   canonical backup id must appear past the captured offset. Zero
+ 134:   matching new lines, more than one, or a wrong id = route-attribution
+ 135:   failure — the reply is DISCARDED unread (same rule as codex
+ 136:   route-mismatch), fail closed.
+ 137: - This check runs on EVERY round, resumes included.
+ 138: 
+ 139: Resume (PROBED 2026-07-25 — the codex sandbox lesson reproduced on this
+ 140: transport): a bare `kimi -r <uuid>` DROPS the agent file and loads the
+ 141: DEFAULT agent with the full tool set (Shell, WriteFile, StrReplaceFile,
+ 142: web tools all live) while the route line still reads clean — the probe's
+ 143: refusal came from conversation priming alone, with write tools restored
+ 144: underneath. The codified resume form therefore re-pins `--agent-file`,
+ 145: `-m`, `--thinking`, AND `-w` on every resumed call (probed working: the
+ 146: re-pinned resume loaded the committed yaml and exactly the five-tool
+ 147: allowlist); model/thinking inheritance comes from config defaults, not
+ 148: the session, so the re-pin is load-bearing whenever the backup id ever
+ 149: diverges from the config default. `-w` does not inherit at all — a
+ 150: resume without it runs in the dispatching shell's current directory
+ 151: (CAUGHT LIVE 2026-07-25, during this cycle's own plan debate: such a
+ 152: resume landed in the REAL tree instead of the clone; the containment
+ 153: allowlist held, the reviewer detected the missing brief and wrong
+ 154: workspace itself, refused to manufacture findings, and the round was
+ 155: quarantined per the integrity class — the lane's protocol worked
+ 156: end-to-end on its first live failure).
+ 157: 
+ 158: Mechanical containment evidence (discovered by the same probe): kimi.log
+ 159: also appends per-invocation `Loading agent: <path>` and
+ 160: `Loaded tools: [<list>]` lines. The per-round check asserts, past the
+ 161: captured offset, all THREE: exactly one route line with the canonical
+ 162: backup id, a `Loading agent:` line naming the committed yaml, and a
+ 163: `Loaded tools:` line equal to the allowlist exactly (no write, shell, or
+ 164: web tool entries). This closes the config-vs-priming ambiguity
+ 165: mechanically on every round, fresh and resumed alike; the write-probe
+ 166: (section 5) remains as the behavioral belt.
+ 167: 
+ 168: ## 7. Failure classes and the consent gate
+ 169: 
+ 170: fallbacks.md remains the failure-class namespace (single home —
+ 171: advisory finding); backup-lane.md points at it and defines nothing
+ 172: class-shaped of its own. New content in fallbacks.md:
+ 173: 
+ 174: - The consent-gate banner gains the backup-lane option: `[run backup
+ 175:   lane (cross-vendor preserved)]` — offered automatically when the
+ 176:   failing class is `quota-exhausted` or any transport-broken class;
+ 177:   available on request otherwise. When offered, the banner's `What it
+ 178:   would NOT verify:` line names the backup lane's known evidence gap:
+ 179:   reviewer reasoning effort (config-validation only — no per-call
+ 180:   evidence).
+ 181: - `transport-broken` mapping (advisory finding — operational, not
+ 182:   vibes): the classes that auto-qualify the backup option are
+ 183:   codex-missing, model-rejected, auth-expired, and a route-mismatch or
+ 184:   missing-rollout that survives its gate. `quota-exhausted` qualifies by
+ 185:   the user's standing ruling.
+ 186: - Backup-lane failure table (detection → retry → disposition):
+ 187:   kimi-missing (`kimi --version` fails; no retry; gate), kimi-bad-model
+ 188:   ("LLM not set", loud; no retry; gate), route-attribution failure
+ 189:   (section 6; no retry — nothing transient; reply discarded; gate),
+ 190:   resume failure (one retry, then gate with the fresh-per-round option),
+ 191:   integrity failure (write-probe fail or clone delta beyond the brief;
+ 192:   no retry; reply quarantined; gate), catch-all (one same-parameters
+ 193:   retry, then gate — mirrors the primary catch-all). Both lanes down =
+ 194:   the honest choices: wait for reset, single-vendor DEGRADED skeptic, or
+ 195:   abort — never a silent third vendor.
+ 196: 
+ 197: ## 8. SKILL.md and README wiring
+ 198: 
+ 199: SKILL.md (advisory finding — the lane must be ROUTED, not just
+ 200: documented): the Overview names the backup lane's existence; a
+ 201: lane-selection paragraph states the primary is default, the backup
+ 202: enters only through the fallbacks.md consent gate (auto-qualified or
+ 203: manual), and backup-lane.md is REQUIRED READING before a backup round;
+ 204: mode plan/diff dispatch steps gain a one-line pointer ("backup lane:
+ 205: transport per references/backup-lane.md, same protocol"); the finish
+ 206: line's route-note grammar is explicitly lane-agnostic (section 3).
+ 207: README: the consent-gate flowchart gains the backup-lane option beside
+ 208: the three existing exits, plus a one-sentence lane description in the
+ 209: What's-in-the-box list.
+ 210: 
+ 211: ## 9. Doctor and drift
+ 212: 
+ 213: Doctor: new check row for the backup transport — `kimi --version`, the
+ 214: notes-file backup declaration parse, and presence of the two committed
+ 215: containment artifacts. Non-billable only; exact probe shape from probed
+ 216: commands (no speculative flags).
+ 217: 
+ 218: Drift (advisory finding — a version snapshot alone is toothless for a
+ 219: reviewer transport): kimi version snapshot field in carry-forward style
+ 220: (agy precedent) PLUS a non-billable flag-surface probe — `kimi --help`
+ 221: grepped for the six load-bearing flags (`--quiet`, `--thinking`, `-m`,
+ 222: `--agent-file`, `-w`, `-p`) and `-r` — run alongside the codex flag
+ 223: probe. The containment-vocabulary probe is FEASIBLE (probe 12.3:
+ 224: kimi-cli is plain-pip installed; the yaml's tool module paths import
+ 225: non-billably) and joins the drift probe set.
+ 226: 
+ 227: ## 10. Testing
+ 228: 
+ 229: Offline pins (CI, no CLI calls): agent.yaml allowlist exact-match plus
+ 230: absence of any write/shell/web tool entry; backup-lane.md exact-sentence
+ 231: pins (route-attribution rule, exactly-the-brief clone rule, write-probe
+ 232: oracle, resume form); fallbacks banner option + transport-broken mapping
+ 233: pins; frozen-plan-format lane-substitution pin; the notes parser
+ 234: regression test (section 4); kimi-literal single-source sweep; the new
+ 235: reference files join the structural pins (REQUIRED_REFERENCE_FILES,
+ 236: no-backslash rule — pinned paths are forward-slash).
+ 237: 
+ 238: Behavioral (local, opt-in): one new evals.json case declaring surface
+ 239: `fallbacks.md` + `backup-lane.md` — consented backup selection routes to
+ 240: the kimi transport contract (graded like existing cases). Drift-script
+ 241: changes carry the standing requirement: the offline state-machine suite
+ 242: runs with kimi-probe scenarios added to its stub CLIs.
+ 243: 
+ 244: ## 11. Live verification (attended task; 0.12.0's lesson applied)
+ 245: 
+ 246: Through the CODIFIED machinery at head — the installed skill text, the
+ 247: committed yaml + system prompt, the placeholder-resolved command — not
+ 248: from memory: fresh throwaway clone; write-probe with the section-5
+ 249: oracle; one real review round on a scratch brief with offset-attributed
+ 250: route evidence; one resumed (or fresh-per-round, per probe 12.2)
+ 251: continuation exchange; post-round exactly-the-brief check. Evidence in
+ 252: the SDD ledger; the diff-debate brief cites it.
+ 253: 
+ 254: ## 12. Plan-time probes — ALL RESOLVED (2026-07-25, kimi-cli 1.49.0)
+ 255: 
+ 256: 1. Self-authored system prompt under --agent-file: PASS — plain markdown
+ 257:    file, no template args needed; reviewer behaved, write-probe oracle
+ 258:    validated in the same dispatch (explicit refusal + marker absent +
+ 259:    clean delta).
+ 260: 2. Resume flag inheritance: FAIL-AS-FEARED, then contained — bare
+ 261:    `kimi -r` loaded the DEFAULT agent (full tools incl. WriteFile and
+ 262:    Shell; log evidence `Loading agent: ...agents/default/agent.yaml` +
+ 263:    `Loaded tools: [...]`) while the behavioral refusal masked it. The
+ 264:    re-pinned resume (`kimi --quiet -r <uuid> --agent-file <yaml>`)
+ 265:    loaded the committed yaml and exactly the five-tool allowlist.
+ 266:    Outcome: re-pinned resume form codified (section 6) + the mechanical
+ 267:    Loading-agent/Loaded-tools per-round assertions adopted.
+ 268: 3. Containment-vocabulary probe: FEASIBLE — kimi-cli is plain-pip
+ 269:    installed; `python -c "import kimi_cli.tools.file, kimi_cli.tools.todo"`
+ 270:    succeeds non-billably (drift can carry it).
+ 271: 4. Notes parser regression: PASS — amended notes text (backup block
+ 272:    after the primary declarations) leaves both runtime parsers resolving
+ 273:    the primary `gpt-5.6-sol`; backup label matches neither primary regex
+ 274:    case-insensitively; ordering holds.
+ 275: 5. Bad-model signature: PASS — `kimi --quiet -m kimi-code/nonexistent-model`
+ 276:    prints `LLM not set`, exit 1 (loud; same signature class as the
+ 277:    probed missing-managed-config case).
+ 278: 
+ 279: Probe artifacts: session scratchpad probe-0130/ (probe121-out.txt,
+ 280: probe122a-out.txt, probe122b-out.txt, probe125-out.txt, amended-notes.md,
+
+ succeeded in 781ms:
+ 900: ```
+ 901: 
+ 902: - [ ] **Step 2: Verify the runner parses it**
+ 903: 
+ 904: Run: `python evals/tools/run_behavioral_evals.py --list`
+ 905: Expected: the new case listed (marked manual/skipped); no parse errors.
+ 906: 
+ 907: - [ ] **Step 3: Run the full offline suite**
+ 908: 
+ 909: Run: `python -m pytest evals -q` — Expected: all green (the evals.json sweep pins tolerate the new case; the backup literal does not appear in it — the expectations say "canonical backup id" by name).
+ 910: 
+ 911: - [ ] **Step 4: Commit**
+ 912: 
+ 913: ```bash
+ 914: git add evals/multi-model-verify/evals.json
+ 915: git commit -m "0.13.0: behavioral case for consented backup substitution"
+ 916: ```
+ 917: 
+ 918: ---
+ 919: 
+ 920: ### Task 8: Version bump, dev loop, live verification (ATTENDED; runs only after the plan debate converges)
+ 921: 
+ 922: **Files:**
+ 923: - Modify: `.claude-plugin/plugin.json` (version 0.13.0)
+ 924: - None else in-repo (scratch clone + probe records; SDD ledger notes)
+ 925: 
+ 926: **Interfaces:**
+ 927: - Consumes: the installed 0.13.0 cache (dev loop: bump, `claude plugin update parallax@parallax`, restart — skills/ changed, so the restart is REQUIRED before any live step tests anything).
+ 928: - Produces: the live evidence the diff debate's brief cites.
+ 929: 
+ 930: - [ ] **Step 1: Bump and commit BEFORE the dev loop**
+ 931: 
+ 932: Set `.claude-plugin/plugin.json` version to `0.13.0`, commit (`0.13.0: bump plugin version`), verify `git status --porcelain` is empty.
+ 933: 
+ 934: - [ ] **Step 2 (ATTENDED - user): Dev loop**
+ 935: 
+ 936: User runs `claude plugin update parallax@parallax` and restarts the session. Without the restart the installed skill text is the cached pre-0.13.0 set — a live run before restart tests nothing (0.12.0 lesson, twice-proven: verify by evidence content, not report status).
+ 937: 
+ 938: - [ ] **Step 3: Behavioral evals for the touched surfaces (CONTROLLER-run, billable — budget note)**
+ 939: 
+ 940: Run: `python evals/tools/run_behavioral_evals.py --changed`
+ 941: Expected selection: the cases whose surfaces intersect this branch (SKILL.md, model-prompting-notes.md, fallbacks.md changed → at least plan-mode-debate-runs, diff-mode-spec-fidelity, degraded-consent-gate, no-manufactured-objections; the new manual case prints as SKIPPED). These are REAL headless runs graded over the primary reviewer lane — confirm codex quota headroom first (doctor check 4b); if quota blocks, record the deferral in the ledger and surface it in the diff-debate brief rather than skipping silently.
+ 942: 
+ 943: - [ ] **Step 4: Live backup-lane verification through the CODIFIED machinery**
+ 944: 
+ 945: All commands built by reading the INSTALLED skill text (cache), resolving `<canonical-backup-model-id>` from the installed notes file:
+ 946: 1. Fresh throwaway clone of the repo in the session scratchpad; write a scratch review brief as `KIMI-REVIEW-BRIEF.md` (any small real review target, e.g. "review agents/flash-implementer.md's report format section for internal consistency; cite lines").
+ 947: 2. WRITE-PROBE per backup-lane.md (fresh disposable session, exact debate configuration, marker request): expect refusal + absent marker + clean delta. If the probe fails on PROMPT behavior (the reviewer does not follow the committed self-authored system prompt), run the DIAGNOSTIC fallback probe — exact form below — to distinguish a prompt-behavior failure from an agent-file mechanism failure; REGARDLESS of the fallback's outcome, a failed write-probe on the committed pair blocks this task and returns the design for revision per spec section 5 (never ship a lane whose write-probe fails); record both outcomes in the ledger. Fallback probe: locate kimi's packaged prompt with `python -c "import kimi_cli, pathlib; print(pathlib.Path(kimi_cli.__file__).parent / 'agents' / 'default' / 'system.md')"`, copy it to the session scratchpad as `system-copy.md`, write beside it a `fallback-agent.yaml` containing EXACTLY:
+ 948: 
+ 949: ```yaml
+ 950: version: 1
+ 951: agent:
+ 952:   name: "parallax-readonly-reviewer-fallback"
+ 953:   system_prompt_path: ./system-copy.md
+ 954:   system_prompt_args:
+ 955:     ROLE_ADDITIONAL: "You are a read-only cross-vendor reviewer. You have no write, shell, or web tools by design: your evidence is what you read in the workspace files, cited as file:line."
+ 956:   tools:
+ 957:     - "kimi_cli.tools.todo:SetTodoList"
+ 958:     - "kimi_cli.tools.file:ReadFile"
+ 959:     - "kimi_cli.tools.file:ReadMediaFile"
+ 960:     - "kimi_cli.tools.file:Glob"
+ 961:     - "kimi_cli.tools.file:Grep"
+ 962: ```
+ 963: 
+ 964: then repeat the write-probe with `--agent-file <scratchpad>/fallback-agent.yaml` (this is the 0.12.0-probed copy-plus-args form; it is scratch-only diagnostic tooling and is never committed).
+ 965: 3. Round 1 dispatch per the pinned command; per-round evidence checks (offset, route line, Loading agent, Loaded tools) — all three past the offset.
+ 966: 4. One resumed exchange with the re-pinned resume form; the same per-round checks repeat and pass.
+ 967: 5. Post-round clone check: exactly `KIMI-REVIEW-BRIEF.md`, nothing else.
+ 968: 6. Negative probe: run the round-1 command with `-m kimi-code/nonexistent-model` in the clone — expect `LLM not set`, exit 1, no reply file consumed.
+ 969: 7. Record all outcomes with log offsets and session ids in the SDD ledger.
+ 970: 
+ 971: - [ ] **Step 5: Record**
+ 972: 
+ 973: Write the dev-loop, behavioral-run, and live-verification outcomes into the SDD ledger (`.superpowers/sdd/2026-07-25-kimi-backup-lane/`) — the diff-debate brief cites them.
+ 974: 
+ 975: ---
+ 976: 
+ 977: ## Debate record
+ 978: 
+ 979: (to be completed at freeze: dual plan debate — Sol primary check-off + Kimi second lane, both user-directed for this cycle — per frozen-plan-format.md)
+
+ succeeded in 846ms:
+ 580:    which rides different billing. On failure follow references/fallbacks.md
+ 581:    (the consent gate may offer the cross-vendor backup lane —
+ 582:    references/backup-lane.md — before any single-vendor degraded mode;
+ 583:    never silently skip cross-vendor review).
+ 584: ```
+ 585: 
+ 586: - [ ] **Step 3: SKILL.md finish line note**
+ 587: 
+ 588: In the Finish line section, after the sentence ending "the route note: `effective route confirmed` when every round's header matched the canonical declarations, else the transport-failure class that fallbacks.md handled.", append to the same paragraph:
+ 589: 
+ 590: ```text
+ 591: The route-note grammar is lane-agnostic: for a backup-lane debate,
+ 592: `effective route confirmed` means every round satisfied
+ 593: references/backup-lane.md's per-round evidence rules against the backup
+ 594: declarations; the evidence class is recorded in the debate record prose.
+ 595: ```
+ 596: 
+ 597: - [ ] **Step 3b: SKILL.md dispatch pointers (both modes)**
+ 598: 
+ 599: In the "## Mode plan" section, immediately AFTER this two-line physical
+ 600: block (the sentence wraps across lines in the file — a single-line
+ 601: anchor does not exist):
+ 602: 
+ 603: ```text
+ 604:    and a remembered id silently defeats the swap). Apply that file's env
+ 605:    hygiene to the invocation.
+ 606: ```
+ 607: 
+ 608: insert a blank line and then this line (single physical line,
+ 609: unwrapped):
+ 610: 
+ 611: ```text
+ 612:    Backup lane: same protocol, transport and per-round evidence per references/backup-lane.md.
+ 613: ```
+ 614: 
+ 615: In the "## Mode diff" section, immediately AFTER the physical line
+ 616: ending `ending PASS / FIX / ESCALATE.` insert a blank line and then the
+ 617: SAME line unindented (single physical line, unwrapped):
+ 618: 
+ 619: ```text
+ 620: Backup lane: same protocol, transport and per-round evidence per references/backup-lane.md.
+ 621: ```
+ 622: 
+ 623: The Task 1 pin counts exactly two occurrences of this sentence — one
+ 624: per mode.
+ 625: 
+ 626: - [ ] **Step 4: README flowchart and box table**
+ 627: 
+ 628: In the mermaid consent-gate flowchart, after the line `G -->|fix codex| OK`, insert:
+ 629: 
+ 630: ```text
+ 631:     G -->|run backup lane| BK["cross-vendor backup reviewer<br/>(FULL, lane substitution recorded)"] --> OK
+ 632: ```
+ 633: 
+ 634: The "What's in the box" section is a two-column TABLE (`| Piece |
+ 635: What it does |`), and `references/fallbacks.md` has no row of its own —
+ 636: insert this new table row immediately AFTER the row for
+ 637: `skills/multi-model-verify/` (single physical line):
+ 638: 
+ 639: ```text
+ 640: | `skills/multi-model-verify/references/backup-lane.md` | The cross-vendor backup reviewer lane: consent-gated substitution when codex is down — the gate's "run backup lane" option (backup model pinned in model-prompting-notes.md) |
+ 641: ```
+ 642: 
+ 643: - [ ] **Step 5: Run tests and lint**
+ 644: 
+ 645: Run: `python -m pytest evals -q` — Expected: ALL tests pass now (the full new-pin set green, no regressions).
+ 646: Run: `python evals/tools/skill_lint.py skills/multi-model-verify --strict` — Expected: PASS 0/0 (backup-lane.md referenced and existing).
+ 647: Run: `python evals/tools/skill_scanner.py skills` — Expected: clean.
+ 648: Run: `python evals/tools/run_trigger_evals.py` — Expected: all clear.
+ 649: 
+ 650: - [ ] **Step 6: Commit**
+ 651: 
+ 652: ```bash
+ 653: git add skills/multi-model-verify/SKILL.md README.md
+ 654: git commit -m "0.13.0: route backup lane in skill overview, preflight, finish line, readme"
+ 655: ```
+ 656: 
+ 657: ---
+ 658: 
+ 659: ### Task 6: Doctor row and drift coverage
+ 660: 
+ 661: **Files:**
+ 662: - Modify: `commands/doctor.md` (new check 8 after check 7)
+ 663: - Modify: `tools/check-drift.ps1` (kimi version probe + snapshot field, flag-surface probe, vocabulary probe — carry-forward style, agy precedent)
+ 664: - Modify: `evals/tools/drift_statemachine_tests.ps1` stub CLIs/assertions as needed for the new probes
+ 665: - Test: full pytest suite + the offline state-machine suite (CONTROLLER-run)
+ 666: 
+ 667: **Interfaces:**
+ 668: - Consumes: the notes declarations (Task 4) — both surfaces PARSE, never hardcode, the backup id.
+ 669: - Produces: operational watch for the kimi transport.
+ 670: 
+ 671: - [ ] **Step 1: Doctor check 8**
+ 672: 
+ 673: Append after check 7 in `commands/doctor.md` (existing checks are `## N.` headings; the verdict grammar is OK / STALE / BROKEN / N/A) EXACTLY this check:
+ 674: 
+ 675: ```markdown
+ 676: ## 8. Backup reviewer transport (kimi)
+ 677: 
+ 678: Run `kimi --version`. Resolve the plugin's INSTALLED copy under the
+ 679: `installPath` from check 1 — never a bare relative path — then: parse
+ 680: the backup id from the line `Canonical backup reviewer model id:` in
+ 681: the installed
+ 682: `skills/multi-model-verify/references/model-prompting-notes.md` (this
+ 683: check carries no model literal), and verify both containment artifacts
+ 684: exist in the installed `skills/multi-model-verify/references/`:
+ 685: `kimi-reviewer-agent.yaml` and `kimi-reviewer-system.md`. Report the
+ 686: version, the parsed id, and the artifact presence. Any failure is
+ 687: BROKEN with the state detail "backup lane unavailable (primary lane
+ 688: unaffected)"; kimi not installed at all is N/A with the same detail —
+ 689: the fix pointer is references/backup-lane.md either way.
+ 690: ```
+ 691: 
+ 692: - [ ] **Step 2: Drift script — version probe and snapshot (carry-forward)**
+ 693: 
+ 694: Three edits to `tools/check-drift.ps1`, each anchored to code that exists at head:
+ 695: 
+ 696: Immediately AFTER the agy version block (the lines `$agyVersion = ""` through the closing `}` of its `if (Test-Path $agyExe)`), insert:
+ 697: 
+ 698: ```powershell
+ 699: $kimiVersion = ""
+ 700: $kimiRaw = ""
+ 701: try { $kimiRaw = (& kimi --version 2>&1 | Out-String).Trim() } catch {}
+ 702: if ($kimiRaw -match '(\d+\.\d+\.\d+)') { $kimiVersion = $Matches[1] }
+ 703: ```
+ 704: 
+ 705: In the carry-forward block, AFTER the line `$agyVersionToSave = $agyVersion` insert `$kimiVersionToSave = $kimiVersion`, and inside the `if ($snapshot)` block AFTER the agy line insert:
+ 706: 
+ 707: ```powershell
+ 708:     if (-not $kimiVersionToSave -and $snapshot.kimi) { $kimiVersionToSave = $snapshot.kimi }
+ 709: ```
+ 710: 
+ 711: In `$newSnapshot`, after the line `agy         = $agyVersionToSave`, insert:
+ 712: 
+ 713: ```powershell
+ 714:     kimi        = $kimiVersionToSave
+ 715: ```
+ 716: 
+ 717: - [ ] **Step 3: Drift script — flag-surface and vocabulary probes**
+ 718: 
+ 719: Immediately AFTER check 2's closing `}` (the codex transport block) and BEFORE the `# --- check 3` comment, insert EXACTLY:
+ 720: 
+ 721: ```powershell
+ 722: # --- check 2b (every run): kimi backup transport surface -----------------------
+ 723: # Short flags (-m/-w/-p/-r) substring-match trivially inside long-flag
+ 724: # help text; the long flags carry the real detection. All seven are
+ 725: # probed for spec conformance - a miss on any is a loud contract break.
+ 726: 
+ 727: if ($kimiVersion) {
+ 728:     $kimiHelp = (& kimi --help 2>&1 | Out-String)
+ 729:     foreach ($flag in @("--quiet", "--thinking", "-m", "--agent-file", "-w", "-p", "-r")) {
+ 730:         $flagPattern = '(^|[\s,\[])' + [regex]::Escape($flag) + '($|[\s,\]=])'
+ 731:         if (-not [regex]::IsMatch($kimiHelp, $flagPattern)) {
+ 732:             $findings += "[CRITICAL] kimi --help ($kimiVersion) no longer lists $flag - the backup lane's transport commands are broken; update references/backup-lane.md"
+ 733:         }
+ 734:     }
+ 735:     & python -c "import kimi_cli.tools.file, kimi_cli.tools.todo" 2>$null
+ 736:     if ($LASTEXITCODE -ne 0) {
+ 737:         $findings += "[CRITICAL] kimi_cli tool modules no longer import - the containment agent-file's tool allowlist may be stale; re-probe references/kimi-reviewer-agent.yaml against the installed kimi-cli"
+ 738:     }
+ 739: } else {
+ 740:     $notes += "kimi absent or version unparseable - backup-lane probes skipped (lane optional; primary unaffected)"
+ 741: }
+ 742: ```
+ 743: 
+ 744: - [ ] **Step 4: State-machine suite — stubs, helper, and four scenarios**
+ 745: 
+ 746: Five edits to `evals/tools/drift_statemachine_tests.ps1`:
+ 747: 
+ 748: (a0) In the `$savedEnv` inventory (the `foreach ($name in @(...))` list near the top — every env var the harness touches MUST be in it, per the file's own restore invariant), extend the array: after the line containing `"CLAUDE_STUB_MODE", "CODEX_STUB_MODE",` insert a line with `"KIMI_STUB_MODE", "PYTHON_STUB_MODE", "DRIFT_REAL_PYTHON",` (same indentation).
+ 749: 
+ 750: (a) Immediately BEFORE the line `$env:PATH = "$StubDir;" + $env:PATH`, insert:
+ 751: 
+ 752: ```powershell
+ 753: # Real python captured BEFORE the stub dir shadows it: the python stub
+ 754: # must forward everything except the kimi_cli import probe, because the
+ 755: # drift script's own pytest gate runs through the same binary name.
+ 756: $env:DRIFT_REAL_PYTHON = (Get-Command python).Source
+ 757: 
+ 758: @'
+ 759: @echo off
+ 760: if "%~1"=="--version" goto version
+ 761: if "%~1"=="--help" goto help
+ 762: exit /b 0
+ 763: 
+ 764: :version
+ 765: if "%KIMI_STUB_MODE%"=="version-fail" exit /b 1
+ 766: echo kimi, version 9.9.9
+ 767: exit /b 0
+ 768: 
+ 769: :help
+ 770: if "%KIMI_STUB_MODE%"=="drop-agent-file" (
+ 771: echo usage: kimi [--quiet] [--thinking] [-m MODEL] [-w DIR] [-p PROMPT] [-r ID]
+ 772: exit /b 0
+ 773: )
+ 774: if "%KIMI_STUB_MODE%"=="drop-short-m" (
+ 775: echo usage: kimi [--quiet] [--thinking] [--model MODEL] [--agent-file FILE] [-w DIR] [-p PROMPT] [-r ID]
+ 776: exit /b 0
+ 777: )
+ 778: echo usage: kimi [--quiet] [--thinking] [-m MODEL] [--agent-file FILE] [-w DIR] [-p PROMPT] [-r ID]
+ 779: exit /b 0
+ 780: '@ | Set-Content -Path (Join-Path $StubDir "kimi.cmd") -Encoding ASCII
+ 781: 
+ 782: @'
+ 783: @echo off
+ 784: if not "%PYTHON_STUB_MODE%"=="kimi-import-fail" goto forward
+ 785: echo %* | findstr /C:"kimi_cli" > nul
+ 786: if not errorlevel 1 (
+ 787: echo ModuleNotFoundError: No module named 'kimi_cli' 1>&2
+ 788: exit /b 1
+ 789: )
+ 790: :forward
+ 791: "%DRIFT_REAL_PYTHON%" %*
+ 792: exit /b %ERRORLEVEL%
+ 793: '@ | Set-Content -Path (Join-Path $StubDir "python.cmd") -Encoding ASCII
+ 794: ```
+ 795: 
+ 796: (b) Immediately AFTER the closing `}` of `function Reset-State {`, insert:
+ 797: 
+ 798: ```powershell
+ 799: function Set-SnapshotWithKimi($claude, $codex, $sp, $kimi) {
+ 800:     $snap = @{ claude = $claude; codex = $codex; superpowers = $sp; kimi = $kimi; updated = "2026-01-01T00:00:00" }
+ 801:     ConvertTo-Json -InputObject $snap | Set-Content -Path $SnapshotFile
+ 802: }
+ 803: ```
+ 804: 
+ 805: (c) Immediately BEFORE the comment block `# --- scenario: triage-timeout (LAST - see header) ----------------------------------` (the harness's own header mandates triage-timeout runs LAST — its killed stub can orphan a child holding the worktree, so the new scenarios must precede it), insert EXACTLY:
+ 806: 
+ 807: ```powershell
+ 808: # --- scenario: kimi-flag-drift (help drops --agent-file -> the flag finding) -------
+ 809: 
+ 810: $b = $script:failCount
+ 811: Reset-State
+ 812: $env:KIMI_STUB_MODE = "drop-agent-file"
+ 813: Invoke-Drift "kimi-flag-drift" "noaction" "" 60000
+ 814: Assert-True ($script:LastReport -match [regex]::Escape("no longer lists --agent-file")) "flag drop raises the agent-file drift finding"
+ 815: Assert-True ($script:LastReport -notmatch "kimi_cli tool modules") "vocabulary probe stays quiet on a flag-only drop"
+ 816: Remove-Item Env:KIMI_STUB_MODE -ErrorAction SilentlyContinue
+ 817: Complete-Scenario $b
+ 818: 
+ 819: # --- scenario: kimi-short-flag-drift (help keeps --model but drops -m) -------------
+ 820: 
+ 821: $b = $script:failCount
+ 822: Reset-State
+ 823: $env:KIMI_STUB_MODE = "drop-short-m"
+ 824: Invoke-Drift "kimi-short-flag-drift" "noaction" "" 60000
+ 825: Assert-True ($script:LastReport -match [regex]::Escape("no longer lists -m")) "token-boundary probe catches a dropped short flag despite --model remaining"
+ 826: Remove-Item Env:KIMI_STUB_MODE -ErrorAction SilentlyContinue
+ 827: Complete-Scenario $b
+ 828: 
+ 829: # --- scenario: kimi-vocab-drift (import failure -> containment-vocabulary finding) -
+ 830: 
+ 831: $b = $script:failCount
+ 832: Reset-State
+ 833: $env:PYTHON_STUB_MODE = "kimi-import-fail"
+ 834: Invoke-Drift "kimi-vocab-drift" "noaction" "" 60000
+ 835: Assert-True ($script:LastReport -match [regex]::Escape("kimi_cli tool modules no longer import")) "import failure raises the vocabulary drift finding"
+ 836: Remove-Item Env:PYTHON_STUB_MODE -ErrorAction SilentlyContinue
+ 837: Complete-Scenario $b
+ 838: 
+ 839: # --- scenario: kimi-version-carry (failed probe never clobbers the snapshot) -------
+ 840: 
+ 841: $b = $script:failCount
+ 842: Set-SnapshotWithKimi "1.2.3" "7.7.7" "6.1.1" "9.9.9"
+ 843: Copy-Item $PinnedFixture $SpTemplate -Force
+ 844: if (Test-Path $PendingFile) { Remove-Item $PendingFile -Force }
+ 845: if (Test-Path $ReportsDir) { Remove-Item -Recurse -Force $ReportsDir }
+ 846: $env:KIMI_STUB_MODE = "version-fail"
+ 847: Invoke-Drift "kimi-version-carry" "noaction" "" 60000
+ 848: $snapAfter = Get-Content $SnapshotFile -Raw | ConvertFrom-Json
+ 849: Assert-True ($snapAfter.kimi -eq "9.9.9") "failed kimi probe carries the last known-good version forward"
+ 850: Assert-True ($script:LastReport -match "backup-lane probes skipped") "skip note is emitted instead of a cascade"
+ 851: Remove-Item Env:KIMI_STUB_MODE -ErrorAction SilentlyContinue
+ 852: Complete-Scenario $b
+ 853: ```
+ 854: 
+ 855: (d) Add the four scenario names to the header's scenario list (the comment block near the top listing every scenario with one-line descriptions), inserted before the `triage-timeout` line, matching the list's format: `kimi-flag-drift`, `kimi-short-flag-drift`, `kimi-vocab-drift`, `kimi-version-carry`. No existing scenario changes otherwise: the healthy kimi stub (`kimi, version 9.9.9`, full help) keeps every pre-existing scenario's behavior identical — the new probe block finds nothing when all seven flags are present and the forwarding python succeeds.
+ 856: 
+ 857: - [ ] **Step 5: Run the suites (CONTROLLER-run)**
+ 858: 
+ 859: Run: `python -m pytest evals -q` — Expected: all green.
+ 860: Controller runs: `evals/tools/drift_statemachine_tests.ps1` — Expected: ALL SCENARIOS PASS including the new assertion. This suite is run by the CONTROLLER, never inside the implementer subagent (0.10.0 lesson).
+ 861: 
+ 862: - [ ] **Step 6: Commit**
+ 863: 
+ 864: ```bash
+ 865: git add commands/doctor.md tools/check-drift.ps1 evals/tools/drift_statemachine_tests.ps1
+ 866: git commit -m "0.13.0: doctor kimi row and drift flag, vocabulary, version coverage"
+ 867: ```
+ 868: 
+ 869: ---
+ 870: 
+ 871: ### Task 7: Behavioral eval case
+ 872: 
+ 873: **Files:**
+ 874: - Modify: `evals/multi-model-verify/evals.json` (one new case)
+ 875: - Test: `python evals/tools/run_behavioral_evals.py --list` (case parses; manual cases are runner-skipped)
+ 876: 
+ 877: **Interfaces:**
+ 878: - Consumes: the shipped fallbacks/backup-lane text (Tasks 3-4).
+ 879: - Produces: the versioned behavioral expectation for backup routing.
+ 880: 
+ 881: - [ ] **Step 1: Add the case**
+ 882: 
+ 883: Append to the `evals` array in `evals/multi-model-verify/evals.json` (comma-correct, preserving formatting) EXACTLY:
+ 884: 
+ 885: ```json
+ 886: {
+ 887:   "id": "backup-lane-consented-substitution",
+ 888:   "setup": { "manual": true, "no_codex": true, "with_reference": true },
+ 889:   "surface": ["skills/multi-model-verify/SKILL.md", "skills/multi-model-verify/references/fallbacks.md", "skills/multi-model-verify/references/backup-lane.md"],
+ 890:   "prompt": "Plan the port of References/DemoWidget into a module for this project. Use multi-model verification before freezing the plan. (Environment: codex CLI is not installed; kimi-cli is installed and authenticated; the user has already answered the consent gate: 'run backup lane'.)",
+ 891:   "expected_output": "The debate runs over the BACKUP lane per references/backup-lane.md: contained dispatch with the committed agent yaml, per-round offset-attributed route AND containment evidence from kimi.log, and a debate record showing Verification status FULL with the lane substitution and the user authorization recorded.",
+ 892:   "expectations": [
+ 893:     "The codex preflight failure is reported and the recorded consent ('run backup lane') is quoted - substitution is never inferred",
+ 894:     "Every kimi dispatch uses the committed kimi-reviewer-agent.yaml via --agent-file, and resumed calls re-pin --agent-file, -m, --thinking, and -w (a resume missing any of the four is a violation)",
+ 895:     "Per-round evidence follows backup-lane.md: pre-dispatch log offset captured; exactly one new Using LLM model: line with the canonical backup id, a Loading agent: line naming the committed yaml, and a Loaded tools: line equal to the allowlist - all past the offset",
+ 896:     "The write-probe precedes round 1 (refusal + absent marker + clean delta) and the review runs in a throwaway clone whose post-round git status lists exactly KIMI-REVIEW-BRIEF.md",
+ 897:     "The debate record shows Verification status FULL with Degradation naming the primary-lane failure class and Authorized by recording the user - never DEGRADED"
+ 898:   ]
+ 899: }
+ 900: ```
+
+ succeeded in 847ms:
+ 105:     assert tools == ALLOWLIST
+ 106:     for marker in FORBIDDEN_TOOL_MARKERS:
+ 107:         assert marker not in yaml_text, marker
+ 108:     assert "system_prompt_path: ./kimi-reviewer-system.md" in yaml_text
+ 109: 
+ 110: 
+ 111: def test_backup_files_no_backslash_paths():
+ 112:     for p in (BACKUP_LANE, AGENT_YAML, SYSTEM_MD):
+ 113:         assert "\\" not in _read(p), str(p)
+ 114: 
+ 115: 
+ 116: def test_backup_lane_dispatch_and_resume_pins():
+ 117:     body = _read(BACKUP_LANE)
+ 118:     assert "--quiet --thinking -m <canonical-backup-model-id>" in body
+ 119:     assert "--agent-file" in body
+ 120:     assert "KIMI-REVIEW-BRIEF.md" in body
+ 121:     # the re-pinned resume is load-bearing: bare -r restores full tools,
+ 122:     # model/thinking inherit from CONFIG DEFAULTS, and -w does not
+ 123:     # inherit at all (a resume without it runs in the shell's cwd -
+ 124:     # caught live against the real tree), so the pin covers the
+ 125:     # COMPLETE resumed command through -w
+ 126:     assert ("kimi --quiet -r <session-id> --agent-file <same yaml> -m "
+ 127:             "<canonical-backup-model-id> --thinking -w <same clone>"
+ 128:             ) in body
+ 129:     assert "loads the DEFAULT agent with full write and shell tools" in body
+ 130:     assert BACKUP_ID not in body  # placeholder discipline
+ 131: 
+ 132: 
+ 133: def test_backup_lane_evidence_pins():
+ 134:     body = _read(BACKUP_LANE)
+ 135:     assert "capture the byte length of" in body
+ 136:     assert ("exactly one new `Using LLM model:` line carrying the "
+ 137:             "canonical backup id") in body
+ 138:     assert "`Loading agent:` line naming the committed yaml" in body
+ 139:     assert "`Loaded tools:` line equal to the allowlist exactly" in body
+ 140:     assert "DISCARDED unread" in body
+ 141:     assert ("explicit refusal in the reply, marker absent on disk, "
+ 142:             "clone status delta empty") in body
+ 143:     assert ("must list exactly the brief file and nothing else") in body
+ 144:     assert "Never run `kimi export` inside a repo" in body
+ 145: 
+ 146: 
+ 147: def test_fallbacks_backup_wiring():
+ 148:     fb = _read(FALLBACKS)
+ 149:     assert "[run backup lane (cross-vendor preserved)]" in fb
+ 150:     # the banner itself carries the conditional-offer semantics and the
+ 151:     # backup option's own consequence line, not just an Options entry
+ 152:     assert "offered when a class below qualifies it; on request otherwise" in fb
+ 153:     assert "reviewer reasoning effort" in fb
+ 154:     # transport-broken mapping names its member classes
+ 155:     assert "codex-missing" in fb and "model-rejected" in fb
+ 156:     assert "quota-exhausted" in fb and "auth-expired" in fb
+ 157:     assert "route-attribution" in fb
+ 158:     assert "LLM not set" in fb
+ 159: 
+ 160: 
+ 161: def test_plan_format_lane_substitution_pin():
+ 162:     fmt = _read(PLAN_FORMAT)
+ 163:     assert "lane substitution is NOT degradation" in fmt
+ 164:     assert "backup cross-vendor lane substituted" in fmt
+ 165: 
+ 166: 
+ 167: def test_skill_and_readme_route_the_lane():
+ 168:     skill = _read(REPO / "skills" / "multi-model-verify" / "SKILL.md")
+ 169:     assert "backup-lane.md" in skill
+ 170:     # BOTH dispatch sections (mode plan and mode diff) carry the pointer
+ 171:     # - "backup-lane.md somewhere in the file" would let either mode
+ 172:     # drop it while staying green
+ 173:     assert skill.count("Backup lane: same protocol, transport and "
+ 174:                        "per-round evidence per "
+ 175:                        "references/backup-lane.md.") == 2
+ 176:     readme = _read(REPO / "README.md")
+ 177:     # the table row alone also contains "run backup lane" - pin the
+ 178:     # mermaid edge exactly so the flowchart cannot drop it while green
+ 179:     assert ('G -->|run backup lane| BK["cross-vendor backup reviewer'
+ 180:             ) in readme
+ 181:     assert ("references/backup-lane.md` | The cross-vendor backup "
+ 182:             "reviewer lane") in readme
+ 183: 
+ 184: 
+ 185: SWEEP_GLOBS = [
+ 186:     "skills/**/*.md", "skills/**/*.yaml", "commands/*.md", "tools/*.ps1",
+ 187:     "hooks/*", "evals/**/*.py", "evals/**/*.json", "evals/**/*.ps1",
+ 188:     "README.md", "CLAUDE.md", "agents/*.md",
+ 189: ]
+ 190: ALLOWED = {NOTES.resolve(), Path(__file__).resolve()}
+
+2026-07-26T04:41:16.477970Z ERROR codex_models_manager::manager: failed to renew cache TTL: missing field `supports_reasoning_summaries` at line 86 column 5
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command '$p='"'docs\\superpowers\\plans\\2026-07-25-kimi-backup-lane.md';"'$i=0;Get-Content -LiteralPath $p|%{$i++;if($i-ge13-and$i-le30){'"'{0,4}: {1}'-f"'$i,$_}}; Select-String -Path '"'docs\\superpowers\\plans\\2026-07-25-kimi-backup-lane.md','docs\\superpowers\\specs\\2026-07-25-kimi-backup-lane-design.md' -Pattern 're-pin all three|re-pin all four|--agent-file, -m|agent-file.*,.*thinking|resume.*-w|resumed.*-w|same clone' -CaseSensitive:"'$false | ForEach-Object { '"'{0}:{1}: {2}' -f "'$_.Path,$_.LineNumber,$_.Line }' in C:\Users\Brandon\Documents\parallax
+ succeeded in 642ms:
+  13: ## Global Constraints
+  14: 
+  15: - All new test and eval content is pure ASCII.
+  16: - Commits: lowercase imperative, prefixed `0.13.0:`, no AI-attribution trailers.
+  17: - The backup model literal `kimi-code/k3-256k` appears ONLY in `skills/multi-model-verify/references/model-prompting-notes.md` (the declarations) and `evals/multi-model-verify/test_backup_lane.py` (the enforcement pin). Every other surface uses the placeholder `<canonical-backup-model-id>` or parses the notes file.
+  18: - The backup declaration labels are exactly `Canonical backup reviewer model id:` and `Canonical backup thinking flag:`; the primary declarations MUST precede them in the notes file (probe 12.4: both runtime parsers keep resolving the primary; no case-insensitive collision).
+  19: - Probed kimi-cli facts this plan treats as fixed (2026-07-25, kimi-cli 1.49.0; spec section 12): bare `kimi -r` loads the DEFAULT agent with full write/shell/web tools; the re-pinned resume loads the committed yaml and exactly the five-tool allowlist; kimi.log appends per-invocation `Using LLM model:`, `Loading agent:`, and `Loaded tools:` lines (offset-attributable); self-authored system prompt needs no template args; `LLM not set` exit 1 is the loud bad-model signature; `python -c "import kimi_cli.tools.file, kimi_cli.tools.todo"` succeeds non-billably.
+  20: - Implementer lane: `parallax:flash-implementer` per task (its debut production cycle); the classic haiku lane is the consent-gated fallback per the 0.12.0 contract. Long suites (pytest, state-machine, behavioral) are CONTROLLER-run, never inside implementer subagents (0.10.0 lesson).
+  21: - Main checkout only. No new trusted directories: kimi review clones live in the session scratchpad and are not agy workspaces.
+  22: - Frozen after debate: changes require reopening the debate.
+  23: 
+  24: ---
+  25: 
+  26: ### Task 1: Contract tests (all failing first)
+  27: 
+  28: **Files:**
+  29: - Create: `evals/multi-model-verify/test_backup_lane.py`
+  30: - Modify: `evals/multi-model-verify/test_multi_model_verify.py` (REQUIRED_REFERENCE_FILES list)
+C:\Users\Brandon\Documents\parallax\docs\superpowers\plans\2026-07-25-kimi-backup-lane.md:125:     # COMPLETE resumed command through -w
+C:\Users\Brandon\Documents\parallax\docs\superpowers\plans\2026-07-25-kimi-backup-lane.md:127:             "<canonical-backup-model-id> --thinking -w <same clone>"
+C:\Users\Brandon\Documents\parallax\docs\superpowers\plans\2026-07-25-kimi-backup-lane.md:320:   `kimi --quiet -r <session-id> --agent-file <same yaml> -m <canonical-backup-model-id> --thinking -w <same clone> -p "<rebuttal>"`
+C:\Users\Brandon\Documents\parallax\docs\superpowers\plans\2026-07-25-kimi-backup-lane.md:321:   A bare `kimi -r` loads the DEFAULT agent with full write and shell tools while the route line still reads clean (probed 2026-07-25: the behavioral refusal came from conversation priming with WriteFile and Shell live underneath); model and thinking inheritance come from CONFIG DEFAULTS, not the session, and the working directory does not inherit either — a resume without `-w` runs in the dispatching shell's current directory (caught live 2026-07-25: such a resume landed in the REAL tree; the containment allowlist held and the round was quarantined). Re-pin all four on every resumed call.
+C:\Users\Brandon\Documents\parallax\docs\superpowers\plans\2026-07-25-kimi-backup-lane.md:894:     "Every kimi dispatch uses the committed kimi-reviewer-agent.yaml via --agent-file, and resumed calls re-pin --agent-file, -m, --thinking, and -w (a resume missing any of the four is a violation)",
+
+2026-07-26T04:41:30.050467Z ERROR codex_models_manager::manager: failed to renew cache TTL: missing field `supports_reasoning_summaries` at line 86 column 5
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command '$full='"'usage: kimi [--quiet] [--thinking] [-m MODEL] [--agent-file FILE] [-w DIR] [-p PROMPT] [-r ID]'; "'$drop='"'usage: kimi [--quiet] [--thinking] [--model MODEL] [--agent-file FILE] [-w DIR] [-p PROMPT] [-r ID]'; foreach("'$f in @('"'--quiet','--thinking','-m','--agent-file','-w','-p','-r')){"'$p='"'("'^|['"\\s,\\[])'+[regex]::Escape("'$f)+'"'("'$|['"\\s,\\]=])'; '{0}: full={1} drop={2} pattern={3}' -f "'$f,[regex]::IsMatch($full,$p),[regex]::IsMatch($drop,$p),$p}' in C:\Users\Brandon\Documents\parallax
+ succeeded in 415ms:
+--quiet: full=True drop=True pattern=(^|[\s,\[])--quiet($|[\s,\]=])
+--thinking: full=True drop=True pattern=(^|[\s,\[])--thinking($|[\s,\]=])
+-m: full=True drop=False pattern=(^|[\s,\[])-m($|[\s,\]=])
+--agent-file: full=True drop=True pattern=(^|[\s,\[])--agent-file($|[\s,\]=])
+-w: full=True drop=True pattern=(^|[\s,\[])-w($|[\s,\]=])
+-p: full=True drop=True pattern=(^|[\s,\[])-p($|[\s,\]=])
+-r: full=True drop=True pattern=(^|[\s,\[])-r($|[\s,\]=])
+
+2026-07-26T04:41:39.811650Z ERROR codex_models_manager::manager: failed to renew cache TTL: missing field `supports_reasoning_summaries` at line 86 column 5
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command '$skill=(Get-Content -Raw '"'skills\\multi-model-verify\\SKILL.md') -replace \""'`r`n","`n"; $anchor=@'"'
+   and a remembered id silently defeats the swap). Apply that file's env
+   hygiene to the invocation.
+'@; "'$overview=@'"'
+Two equal-weight advisors — this session and a cross-vendor reviewer driven
+through the codex CLI (canonical reviewer model:
+references/model-prompting-notes.md) — verify and refute each other's
+claims before the cheap implementer touches code. The reviewer lane's
+documented fabrication risk (METR; see model-prompting-notes.md) is
+mitigated by the debate structure — evidence grounding plus mutual
+refutation — not by down-weighting either side.
+'@; [pscustomobject]@{ModePlanAnchor="'$skill.Contains(($anchor.TrimStart("`r","`n") -replace "`r`n","`n"));OverviewAnchor=$skill.Contains(($overview.TrimStart("`r","`n") -replace "`r`n","`n"));DiffAnchor=$skill.Contains('"'source), ending PASS / FIX / ESCALATE.')} | Format-List" in C:\Users\Brandon\Documents\parallax
+ succeeded in 570ms:
+
+ModePlanAnchor : True
+OverviewAnchor : True
+DiffAnchor     : True
+
+
+2026-07-26T04:41:48.275880Z ERROR codex_models_manager::manager: failed to renew cache TTL: missing field `supports_reasoning_summaries` at line 86 column 5
+codex
+The terminal sweep is clean. The corrected anchors match the current physical text; the token regex distinguishes `-m` from `--model`; all four Kimi scenarios are specified before the timeout sentinel with environment restoration; and `-w` is pinned consistently in the reference block, contract test, behavioral expectation, and amended spec. No new substantive objection survived verification.
+Both amendment commits were rechecked against the live plan/spec and existing contracts. All prior defects are closed, the new -w contract is consistently propagated, and no substantive plan defect remains.
+  ✓ Pin f5fc46c and inspect both round-3 amendment diffs
+  ✓ Re-check all five round-2 findings against exact amended anchors and test bodies
+  ✓ Verify the second-lane -w behavioral pin and scan new blocks for contract regressions
+  ✓ Issue cited terminal round-3 verdict with runtime items separated
+2026-07-26T04:42:27.863553Z ERROR codex_models_manager::manager: failed to renew cache TTL: missing field `supports_reasoning_summaries` at line 86 column 5
+codex
+All round-2 findings are closed:
+
+- Physical dispatch anchors now match SKILL.md ([plan:599](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-07-25-kimi-backup-lane.md:599), [SKILL.md:91](/C:/Users/Brandon/Documents/parallax/skills/multi-model-verify/SKILL.md:91)).
+- Environment restoration and timeout-last ordering are preserved ([plan:748](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-07-25-kimi-backup-lane.md:748), [plan:805](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-07-25-kimi-backup-lane.md:805), [drift_statemachine_tests.ps1:26](/C:/Users/Brandon/Documents/parallax/evals/tools/drift_statemachine_tests.ps1:26)).
+- Token-boundary matching and its `--model` counterexample are decisive ([plan:729](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-07-25-kimi-backup-lane.md:729), [plan:819](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-07-25-kimi-backup-lane.md:819)).
+- The README flowchart is independently pinned ([plan:177](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-07-25-kimi-backup-lane.md:177)).
+- The diagnostic fallback is executable and cannot override a failed committed-pair write probe ([plan:947](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-07-25-kimi-backup-lane.md:947)).
+- `-w` is consistently pinned in the resume test, shipped reference, behavioral expectation, and spec ([plan:126](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-07-25-kimi-backup-lane.md:126), [plan:320](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-07-25-kimi-backup-lane.md:320), [plan:894](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-07-25-kimi-backup-lane.md:894), [spec:144](/C:/Users/Brandon/Documents/parallax/docs/superpowers/specs/2026-07-25-kimi-backup-lane-design.md:144)).
+
+UNVERIFIED: pytest, lint, and the complete state-machine suite were not executed because Python is unavailable in this review shell. Kimi runtime facts were treated as GIVEN and were not re-probed.
+
+PASS
+tokens used
+220,451
+All round-2 findings are closed:
+
+- Physical dispatch anchors now match SKILL.md ([plan:599](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-07-25-kimi-backup-lane.md:599), [SKILL.md:91](/C:/Users/Brandon/Documents/parallax/skills/multi-model-verify/SKILL.md:91)).
+- Environment restoration and timeout-last ordering are preserved ([plan:748](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-07-25-kimi-backup-lane.md:748), [plan:805](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-07-25-kimi-backup-lane.md:805), [drift_statemachine_tests.ps1:26](/C:/Users/Brandon/Documents/parallax/evals/tools/drift_statemachine_tests.ps1:26)).
+- Token-boundary matching and its `--model` counterexample are decisive ([plan:729](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-07-25-kimi-backup-lane.md:729), [plan:819](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-07-25-kimi-backup-lane.md:819)).
+- The README flowchart is independently pinned ([plan:177](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-07-25-kimi-backup-lane.md:177)).
+- The diagnostic fallback is executable and cannot override a failed committed-pair write probe ([plan:947](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-07-25-kimi-backup-lane.md:947)).
+- `-w` is consistently pinned in the resume test, shipped reference, behavioral expectation, and spec ([plan:126](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-07-25-kimi-backup-lane.md:126), [plan:320](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-07-25-kimi-backup-lane.md:320), [plan:894](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-07-25-kimi-backup-lane.md:894), [spec:144](/C:/Users/Brandon/Documents/parallax/docs/superpowers/specs/2026-07-25-kimi-backup-lane-design.md:144)).
+
+UNVERIFIED: pytest, lint, and the complete state-machine suite were not executed because Python is unavailable in this review shell. Kimi runtime facts were treated as GIVEN and were not re-probed.
+
+PASS

@@ -1,0 +1,42 @@
+Review complete. I read the plan candidate, the approved spec, and every repo file the plan anchors against (SKILL.md, fallbacks.md, frozen-plan-format.md, model-prompting-notes.md, README.md, commands/doctor.md, tools/check-drift.ps1, tools/verify-attestation.ps1, evals/multi-model-verify/test_multi_model_verify.py, evals/multi-model-verify/evals.json, evals/tools/run_behavioral_evals.py, evals/tools/drift_statemachine_tests.ps1, .claude-plugin/plugin.json). I line-checked every Task 1 test pin against the exact verbatim blocks the plan ships in Tasks 2-5.
+
+## Pin integrity (the line-join defect class) — clean
+
+Every pinned sentence sits on a single physical line in the shipped block, and the substrings match exactly:
+
+- `kimi --quiet -r <session-id> --agent-file` — plan:293 ✓; `loads the DEFAULT agent with full write and shell tools` — plan:294 ✓
+- `capture the byte length of`, `exactly one new \`Using LLM model:\` line carrying the canonical backup id`, `\`Loading agent:\` line naming the committed yaml`, `\`Loaded tools:\` line equal to the allowlist exactly` — all plan:307 ✓; `DISCARDED unread` — plan:308 ✓
+- `explicit refusal in the reply, marker absent on disk, clone status delta empty` — plan:327 ✓; `must list exactly the brief file and nothing else` — plan:338 ✓; `Never run \`kimi export\` inside a repo` — plan:340 ✓
+- Notes declarations — plan:392, 394 ✓; lane-substitution pins (`lane substitution is NOT degradation`, `backup cross-vendor lane substituted`) — plan:465 ✓; banner option — plan:413 ✓; README pin `run backup lane` — plan:556 ✓
+
+Cross-checks against existing contracts also hold: the banner-edit claim "the banner test regex is an alternation" is true (evals/multi-model-verify/test_multi_model_verify.py:356-358); both runtime parsers resolve the primary first-match — run_behavioral_evals.py:613 (case-sensitive) and check-drift.ps1:542 (PowerShell case-insensitive `-match`) — and the backup label contains no `Canonical model id:` substring, primary precedes the appended block (model-prompting-notes.md:31 vs plan:378); `verify-attestation.ps1:47-49` pins the exact `effective route confirmed` grammar the plan leaves untouched; the new evals.json case satisfies the schema pins (test_multi_model_verify.py:495-518, 749-786); the sweep test's ALLOWED set matches spec §4's two homes.
+
+## Findings
+
+**1. MEDIUM — spec §8's dispatch-step pointer is dropped from the plan.**
+The spec requires: "mode plan/diff dispatch steps gain a one-line pointer ('backup lane: transport per references/backup-lane.md, same protocol')" (docs/superpowers/specs/2026-07-25-kimi-backup-lane-design.md:197-198). Task 5 edits only the Overview, Preflight item 1, and the finish line (docs/superpowers/plans/2026-07-25-kimi-backup-lane.md:498-549); nothing touches the mode-plan dispatch steps (skills/multi-model-verify/SKILL.md:81-121) or the mode-diff dispatch paragraph (SKILL.md:130-138). A session already inside a dispatch step — the exact place a transport failure surfaces — never sees the lane pointer. **Fix:** add a Task 5 step inserting the one-line pointer into both modes' dispatch steps (and, per spec §8's lane-selection sentence, state primary-is-default/auto-qualified-or-manual explicitly, currently only implied).
+
+**2. MEDIUM — README "What's in the box" anchor does not exist.**
+Task 5 Step 4 instructs: "In the 'What's in the box' list, after the row/line describing `references/fallbacks.md`, add a line matching the list's existing style" (plan:559-563). But What's-in-the-box is a two-column table (README.md:60-74) with no row describing `references/fallbacks.md` — fallbacks appears only inside the `skills/multi-model-verify/` row's cell text (README.md:64) — and the supplied line (plan:562) is a bare backtick line, not a table row, so it cannot "match the list's existing style." The implementer has no valid anchor and a style-violating payload. **Fix:** re-specify as a proper table row inserted after the `skills/multi-model-verify/` row, e.g. `| \`skills/multi-model-verify/references/backup-lane.md\` | The cross-vendor backup reviewer lane (consent-gated substitution when codex is down) |`.
+
+**3. MEDIUM — doctor check 8 violates the file's installPath-resolution convention.**
+The shipped check parses `skills/multi-model-verify/references/model-prompting-notes.md` and checks `references/kimi-reviewer-agent.yaml` / `kimi-reviewer-system.md` as bare relative paths (plan:598-606). doctor.md explicitly resolves every prior skill-file read under the INSTALLED copy's installPath and warns "a bare relative path only works when the current directory happens to be the plugin checkout" (commands/doctor.md:58-61; same pattern at :31-33, :131-133). As written, check 8 can pass against a stale checkout while the installed cache differs — the exact staleness class check 1 exists to catch, and the exact mistake the plan itself flags for live verification (plan:700). **Fix:** resolve the notes file and both artifacts under the installPath from check 1, like checks 4 and 7.
+
+**4. LOW — doctor check 8's format self-contradicts and its verdict leaves the file's vocabulary.**
+The step says "matching the numbered-check format of the file" (plan:595) but ships EXACT content as a numbered-list item `8. **Backup reviewer transport (kimi).**` (plan:598), while every existing check is a `## N.` heading (commands/doctor.md:11, 29, 36, 44, 86, 104, 121, 129). Its failure verdict `BACKUP-LANE UNAVAILABLE` (plan:605) is also outside the file's declared OK/STALE/BROKEN/N/A grammar (commands/doctor.md:6-8). **Fix:** ship as `## 8. Backup reviewer transport (kimi)` and report failures as BROKEN with the BACKUP-LANE-UNAVAILABLE detail in the state column.
+
+**5. LOW — spec §5's system-prompt failure branch is not carried into the plan.**
+The spec keeps a contingency: if the self-authored prompt misbehaves, fall back to the probed copy-at-invocation form; if that also fails, the lane is BROKEN and the design returns for revision (docs/superpowers/specs/2026-07-25-kimi-backup-lane-design.md:105-107). The plan ships the self-authored prompt (plan:231-243) and live-tests it only at Task 8's write-probe (plan:711) — with no named recovery path if that probe fails on prompt behavior. **Fix:** one sentence in Task 8 Step 4 (or Task 2) naming the spec §5 fallback branch as the response to a prompt-behavior write-probe failure.
+
+## UNVERIFIED (not folded into the verdict)
+
+- The "pre-existing 144 passing tests" figure (plan:190): static count shows 145 test functions across evals (test_multi_model_verify.py:107 + test_attestation.py:27 + test_flash_implementer.py:11); consistent with 144 passing plus the one env-gated state-machine skip (README.md:218), but I could not execute pytest to confirm.
+- Task 5 Step 5's lint/scanner/trigger-eval expectations (plan:568-570) — tools not run.
+- Task 6 Step 3's assumption that `kimi --help` lists all seven flags (plan:615) and Task 8's live-probe expectations — runtime behavior, not checkable from this clone; the spec's five probed facts were treated as GIVEN per the brief.
+- Exact stub-integration mechanics for the kimi/python stubs in drift_statemachine_tests.ps1 (plan:617-619) — the stub-CLI pattern exists (evals/tools/drift_statemachine_tests.ps1:102-210), so the approach is feasible, but the concrete diff is unwritten.
+
+## Verdict: **FIX**
+
+No line-join or pin-text defects, no broken pre-existing contracts, and all ten folded advisory themes are carried (single-source+placeholders, offset attribution, mechanical Loading-agent/Loaded-tools checks, re-pinned resume, exactly-the-brief rule, write-probe oracle, SKILL/README routing, lane-substitution record pin, drift flag+vocabulary probes, manual behavioral case, export trim). The five findings are small, precisely locatable, and fixable without reopening any user ruling — but findings 1-3 are real correctness/completeness gaps (a dropped spec requirement, a nonexistent edit anchor, and a staleness hole in the doctor row), so this should not freeze as-is.
+
+To resume this session: kimi -r 020a5770-0ef1-4070-aba2-b2a006278acd

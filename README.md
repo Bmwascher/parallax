@@ -6,13 +6,28 @@ codex CLI; the current reviewer lane is declared in the skill's
 model-prompting-notes.md) —
 verify and refute each other's claims with file:line evidence *before* a
 cheaper implementer touches code, and again *before* the result merges.
-Neither vendor grades its own homework.
+Neither vendor grades its own homework. When codex is down, a
+consent-gated backup reviewer lane (Kimi K3 via kimi-cli) substitutes a
+second cross-vendor seat rather than degrading to single-vendor review.
 
 Companion to [superpowers](https://github.com/obra/superpowers), not a
 replacement: it fills the cross-model review gap superpowers rules out of
 scope.
 
 ## How it works
+
+**Current lineup.** Every seat is a plug (see [Swapping lanes](#swapping-lanes));
+this table is descriptive — the binding declarations live in
+`skills/multi-model-verify/references/model-prompting-notes.md` and the
+agent files:
+
+| Seat | Model today | Transport |
+|---|---|---|
+| Session — debates, adjudicates, merges | Claude (currently Fable 5) | Claude Code |
+| Cross-vendor reviewer (primary) | GPT-5.6 Sol | OpenAI codex CLI, `exec` read-only |
+| Cross-vendor reviewer (backup, consent-gated) | Kimi K3 | kimi-cli, contained agent-file, read-only |
+| Implementer (direct lane) | Claude (Haiku tier) | `agents/implementer.md` |
+| Implementer (Flash lane) | Gemini 3.6 Flash | Antigravity CLI (`agy`) via haiku wrapper, `agents/flash-implementer.md` |
 
 ```mermaid
 flowchart LR
@@ -62,6 +77,7 @@ The debate rules that keep this honest
 | Piece | What it does |
 |---|---|
 | `skills/multi-model-verify/` | The debate skill: both modes, debate protocol, frozen-plan format, model prompting notes, fallbacks/consent gate |
+| `skills/multi-model-verify/references/backup-lane.md` | The cross-vendor backup reviewer lane — currently Kimi K3 via kimi-cli: consent-gated substitution when codex is down — the gate's "run backup lane" option (backup model id pinned in model-prompting-notes.md) |
 | `hooks/` | PostToolUse + PostToolUseFailure hook (matcher `Task\|Agent`): fingerprints the superpowers code-reviewer dispatch, injects the mode-`diff` reminder with matching SHAs; inert everywhere else |
 | `agents/implementer.md` | Zero-judgment direct-typing executor for frozen-plan tasks (model pinned in the file's frontmatter) |
 | `agents/flash-implementer.md` | Zero-judgment Flash lane: haiku wrapper drives Gemini Flash through the Antigravity CLI headlessly; route + authorship evidence checked every run (model literal pinned in the file) |
@@ -88,6 +104,7 @@ flowchart TD
     X -. "quota-exhausted:<br/>skip the retry" .-> G
     X -. "missing-rollout resume:<br/>skip the retry" .-> G
     G -->|fix codex| OK
+    G -->|run backup lane| BK["cross-vendor backup reviewer<br/>(Kimi K3 · FULL, lane substitution recorded)"] --> OK
     G -->|run degraded| D["single-vendor, visibly flagged;<br/>DEGRADED plan poisons any diff PASS"]
     G -->|abort or unattended| B2[BLOCKED / DEGRADED-NOT-AUTHORIZED]
 ```
@@ -144,7 +161,9 @@ configuration:
   runtime (failing loud if they vanish), and every instruction surface
   (SKILL.md transport commands, doctor, drift-triage) reads them from
   there; a consistency test forbids a hardcoded `-m` literal anywhere
-  else.
+  else. The backup reviewer (Kimi K3 via kimi-cli, consent-gated per
+  fallbacks.md) swaps the same way — its declarations sit directly below
+  the primary's in the same file, under the same single-source test.
 - **Session** — whatever model runs the session; the debate rules and
   final adjudication follow the seat automatically.
 
@@ -156,6 +175,12 @@ configuration:
   `skills/multi-model-verify/references/model-prompting-notes.md`)
 - `pwsh` (PowerShell 7) for the hook; Windows PowerShell 5.1 for the drift
   watch scheduled task; Python 3.10+ for the evals
+- Optional — backup reviewer lane: kimi-cli 1.49+ authenticated (Kimi K3;
+  backup model id and thinking flag declared in
+  `skills/multi-model-verify/references/model-prompting-notes.md`)
+- Optional — Flash implementer lane: the Antigravity CLI (`agy`)
+  authenticated (Gemini 3.6 Flash; model literal pinned in
+  `agents/flash-implementer.md`)
 
 ## Install
 

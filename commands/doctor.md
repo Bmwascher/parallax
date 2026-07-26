@@ -142,3 +142,19 @@ declaration is itself BROKEN. Then:
 
 Report the route language as declared in the agent file: evidence is
 client-side, requested and propagated only.
+
+## 8. Backup reviewer transport (kimi)
+
+Run `kimi --version`. Resolve the plugin's INSTALLED copy under the
+`installPath` from check 1 — never a bare relative path — then: parse
+the backup id from the line `Canonical backup reviewer model id:` in
+the installed
+`skills/multi-model-verify/references/model-prompting-notes.md` (this
+check carries no model literal), and verify both containment artifacts
+exist in the installed `skills/multi-model-verify/references/`:
+`kimi-reviewer-agent.yaml` and `kimi-reviewer-system.md`. Report the
+version, the parsed id, and the artifact presence. Any failure is
+BROKEN with the state detail "backup lane unavailable (primary lane
+unaffected)"; kimi not installed at all is N/A with the same detail —
+the fix pointer is references/backup-lane.md either way.
+
