@@ -1,0 +1,7 @@
+Scope confirmed: the delta contains only the new assertion ([plan:159](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-07-25-kimi-backup-lane.md:159)) and the `kimi-quota-exhausted` row ([plan:476](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-07-25-kimi-backup-lane.md:476)).
+
+The pin matches `access_terminated_error` exactly. The row clearly defines detection, skips the in-window retry, routes to the consent gate using dashboard-derived reset attribution, and preserves the session ID for resumption ([plan:476](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-07-25-kimi-backup-lane.md:476)). That is consistent with the existing primary quota precedent ([fallbacks.md:72](/C:/Users/Brandon/Documents/parallax/skills/multi-model-verify/references/fallbacks.md:72)) and remains inside the single failure-class namespace ([plan:370](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-07-25-kimi-backup-lane.md:370)).
+
+UNVERIFIED: the live 403/dashboard event and retained second-lane transcript were not independently available in this tree; their provenance was accepted as supplied. Python tests remain unexecuted in this shell.
+
+PASS

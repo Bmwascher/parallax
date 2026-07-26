@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**STATUS: CANDIDATE — awaiting the dual plan debate (Sol + Kimi, user-directed)**
+**STATUS: FROZEN — CONVERGED (dual plan debate, Sol + Kimi, user-directed; record below)**
 
 **Goal:** Codify the field-proven Kimi K3 backup reviewer lane into the plugin: consent-gated cross-vendor substitution when the primary (codex) transport is down, with mechanical per-round route AND containment evidence.
 
@@ -986,4 +986,78 @@ Write the dev-loop, behavioral-run, and live-verification outcomes into the SDD 
 
 ## Debate record
 
-(to be completed at freeze: dual plan debate — Sol primary check-off + Kimi second lane, both user-directed for this cycle — per frozen-plan-format.md)
+**Participants:** Fable 5 (session) / GPT-5.6 Sol (codex exec, session 019f9c9f-d83f-7e40-ae8b-2a71c4105d8a) / Kimi K3 `kimi-code/k3-256k` (kimi-cli 1.49.0, session 020a5770-0ef1-4070-aba2-b2a006278acd)
+**Rounds used:** 4 of 4 (Sol: r1 FIX, r2 FIX, r3 PASS, r4 delta-PASS) + 3 of 4 (Kimi: r1 FIX, r2 FIX, r3 terminal PASS)
+**Outcome:** converged with amendments
+**Verification status:** FULL
+**Degradation:** none
+**Authorized by:** n/a (dual review user-directed; no degradation occurred)
+**Raw rounds:** docs/superpowers/plans/rounds/2026-07-25-kimi-backup-lane/ (sol-round{1,2,3,4}-{brief,reply,header} — Sol; kimi-round{1,2,3}-transcript + kimi-round3-brief — Kimi; kimi rounds 1-2 brief files not retained (overwritten in place in the clone; their content is summarized in the rounds' reply context); kimi-quarantined-exchange-transcript + kimi-quota-403-transcript — transport events, not rounds)
+
+Dual-lane notes (hub-and-spoke, blind): both lanes reviewed each tip
+independently; findings were relayed anonymously with evidence and
+convergences recorded. Kimi ran read-only via the probed containment
+agent-file against a throwaway clone; per-dispatch evidence captured for
+EVERY call (log offset; exactly one route line `Using LLM model:
+provider='managed:kimi-code' model='k3-256k'`; `Loading agent:` naming
+the agent yaml; `Loaded tools:` equal to the five-tool allowlist).
+Transport events, both live-caught and folded as contract text:
+(1) a dispatch-defective resume (controller omitted `-w`) landed Kimi in
+the real tree — the contained reviewer detected the wrong workspace and
+missing brief itself, refused to manufacture findings, and the exchange
+was quarantined (integrity class; not a round); the `-w` non-inheritance
+became the four-flag resume pin (commit bae84e2). (2) Kimi's first r3
+attempt died on HTTP 403 `access_terminated_error` whose text said
+"billing cycle" while the dashboard showed 6.42% monthly — the exhausted
+window was the 5-hour one; the user-directed retry after the window
+reset succeeded, and the event became the kimi-quota-exhausted class row
+(commit e128efb, Sol r4-confirmed; Kimi not re-consulted for the row —
+window economy preserved for Task 8's live verification — the row
+documents Kimi's own outage, corroborated by its retained transcripts).
+Sol r1 route header: gpt-5.6-sol / openai / high / read-only, echoed on
+every resume.
+
+### Resolved points
+
+| # | Claim | Raised by | Outcome | Evidence |
+|---|-------|-----------|---------|----------|
+| 1 | Spec §8 dispatch-step pointers dropped from Task 5 | Kimi r1 + Sol r1 (convergent) | accepted; Step 3b added, pointer pinned x2 | plan Task 5 Step 3b; SKILL.md mode sections |
+| 2 | README box anchor nonexistent (table, no fallbacks row; non-table payload) | Kimi r1 + Sol r1 (convergent) | accepted; table row after the skill row | README.md:62-74 |
+| 3 | Doctor check 8 violates installPath resolution | Kimi r1 + Sol r1 (convergent) | accepted; resolves under check 1's installPath | commands/doctor.md:58-61 |
+| 4 | Doctor check format + verdict outside file grammar | Kimi r1 | accepted; `## 8.` heading, BROKEN/N-A verdicts | commands/doctor.md:6-8 |
+| 5 | Spec §5 system-prompt fallback branch absent from plan | Kimi r1 | accepted; named in Task 8 (made executable in r2 wave) | plan Task 8 Step 4 item 2 |
+| 6 | Banner Options-only edit cannot express conditional offer or effort gap | Sol r1 | accepted; conditional-offer banner line, pinned | fallbacks.md banner block; plan Task 4 Step 2 |
+| 7 | Resume pin false-negative (missing -m/--thinking) | Sol r1 | accepted; complete-command pin (extended to -w by event 1) | plan Task 1 resume pin |
+| 8 | Allowlist test tolerates extra tools | Sol r1 | accepted; regex-parse + list equality | plan test_agent_yaml_allowlist_exact |
+| 9 | New artifacts lacked structural/no-backslash coverage | Sol r1 | accepted; test_backup_files_no_backslash_paths | plan Task 1 |
+| 10 | Task 6 "mirror"/"as needed" violates zero-judgment contract | Sol r1 | accepted; exact code for doctor, drift, harness | frozen-plan-format.md:11; plan Task 6 |
+| 11 | SKILL Overview/Preflight anchors were nonexistent fragments | Sol r1 | accepted; complete physical-line blocks | SKILL.md:10-16,36-39 |
+| 12 | Task 1 RED step named a test its command did not run | Sol r1 | accepted; both files in the command | plan Task 1 Step 3 |
+| 13 | Mode-plan pointer anchor itself soft-wrapped (defect class reintroduced) | Sol r2 + Kimi r2 (convergent) | accepted; two-line physical block anchor | SKILL.md:91-92 |
+| 14 | New scenarios appended after triage-timeout (LAST invariant) + header list | Sol r2 + Kimi r2 (convergent) | accepted; inserted before timeout, $b/Complete-Scenario wrapped, header updated | drift_statemachine_tests.ps1:26-27,535 |
+| 15 | New env vars escape the save/restore inventory | Sol r2 + Kimi r2 (convergent) | accepted; three names added to $savedEnv | drift_statemachine_tests.ps1:59-67 |
+| 16 | Short-flag probe vacuous (substring matches long aliases) | Sol r2 | accepted; token-boundary regex + drop-short-m stub + scenario | plan Task 6 check-2b + Step 4 |
+| 17 | README flowchart pin false-negative (satisfied by table row) | Sol r2 | accepted; exact mermaid-edge pin | plan Task 1 readme pins |
+| 18 | Write-probe fallback named but not executable | Sol r2 | accepted; locate command + exact fallback yaml, diagnostic-only | plan Task 8 Step 4 item 2 |
+| 19 | Behavioral resume expectation omitted -w | Kimi r2 | accepted; four-flag expectation | plan Task 7 expectation 2 |
+| 20 | -w does not inherit across resume (live catch, session-raised) | session (event 1) | accepted both lanes; four-flag resume pinned in plan, test, spec | bae84e2; kimi-quarantined-exchange-transcript |
+| 21 | kimi-quota-exhausted class missing from failure table (live catch, session-raised) | session (event 2) | accepted; row + test pin, Sol r4-confirmed | e128efb; kimi-quota-403-transcript; user dashboard |
+
+### Escalated points (user-decided)
+
+| # | Question | Session position | Reviewer position | Owner's call |
+|---|----------|------------------|-------------------|--------------|
+| 1 | Mid-debate Kimi 403: wait / buy / close lane at 2 rounds | close at 2 rounds (findings all applied) | n/a (transport outage, not a review dispute) | user: retry after window reset — retry succeeded, lane completed r3 |
+
+### Session adjudication (debate-protocol closing step)
+
+Every reviewer finding was verified against the live files before
+acceptance (anchors read, parser regexes executed against the amended
+notes text, README/doctor/harness citations confirmed by direct read);
+convergent blind findings (rows 1-3, 13-15) were counted once and fixed
+once. Sol r3 and Kimi r3 PASS claims were spot-verified against the
+shipped blocks; Sol r4 confirmed the only post-convergence delta. The
+reviewers' shared UNVERIFIED (no python in either sandbox) was closed by
+controller-run pytest at the freeze tip: 144 passed, 1 skipped. No
+finding was refuted; the single escalation was transport disposition,
+decided by the user in-session. Terminal session verdict: PASS — frozen.

@@ -1,0 +1,15 @@
+**Integrity failure — I cannot execute the re-review, because the brief it names is not in this workspace.**
+
+I searched exhaustively before concluding this:
+
+1. **`KIMI-REVIEW-BRIEF.md` does not exist at the workspace root.** The top-level listing contains only `CLAUDE.md` and `README.md` as root markdown files; a `KIMI*` glob returns no matches.
+2. **It exists in no subdirectory either.** Globs at depths 1–2 (`*/KIMI-REVIEW-BRIEF*`, `*/*/KIMI-REVIEW-BRIEF*`) return nothing, and a content search for the filename across the entire tree hits only protocol references — `docs/superpowers/plans/2026-07-25-kimi-backup-lane.md:312,357`, `docs/superpowers/specs/2026-07-25-kimi-backup-lane-design.md:120` — plus retained evidence snapshots from the earlier flash-implementer check-off (`sol-checkoff-round1-header.txt`, `sol-checkoff-round2-header.txt`, `clone-status-after-round2.txt`).
+3. **It is not hidden by ignore rules.** `.gitignore:1-8` lists only `__pycache__/`, `.pytest_cache/`, `.claude/`, and the drift-watch state files — nothing that would mask the brief.
+4. **No rebuttal content exists anywhere in the tree.** A search for "round-2 rebuttal" returns zero matches. There is no `rounds/` directory for the kimi-backup-lane debate at all (`docs/superpowers/plans/rounds/` holds only jinn-intake, eval-trim, and flash-implementer).
+5. **The only live sighting of this filename is a snapshot, not a file.** `docs/superpowers/plans/rounds/2026-07-25-flash-implementer/clone-status-after-round2.txt:1` shows `?? KIMI-REVIEW-BRIEF.md` — a *retained git-status capture from a throwaway clone* in a previous debate, which is exactly where the protocol says the brief lives: "The brief is written into the clone as the untracked `KIMI-REVIEW-BRIEF.md`" (`docs/superpowers/plans/2026-07-25-kimi-backup-lane.md:356-357`).
+
+That last point compounds the problem: per the same plan, reviews run "in a THROWAWAY CLONE of the repo in the session scratchpad — never the real tree" (`2026-07-25-kimi-backup-lane.md:354-355`). My working directory **is** the real tree (`C:\Users\Brandon\Documents\parallax`). So either the dispatch machinery never wrote the round-2 brief into my workspace, or this session was pointed at the wrong directory entirely.
+
+**Verdict: ESCALATE — round quarantined (integrity failure class).** I have no round-1 context in this session and no round-2 brief on disk, so any "numbered findings" I produced would be manufactured — which the backup-lane protocol explicitly forbids. Before re-dispatching: write the round-2 rebuttal brief into the workspace this session actually runs in (and confirm that workspace is the throwaway clone, not the real tree), then resume with the re-pinned command.
+
+To resume this session: kimi -r 020a5770-0ef1-4070-aba2-b2a006278acd
