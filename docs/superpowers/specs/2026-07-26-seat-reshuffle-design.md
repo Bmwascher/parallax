@@ -159,6 +159,16 @@ a lost lane's incomplete round is never adjudicated.
   contracts ask for evidence and decisions, never thinking); the
   no-unrequested-refactor snippet backs the escalation lane's
   DECISIONS discipline.
+- Backup-lane brief conventions get a cited basis: one bullet in
+  notes.md's backup section distilled from Kimi's general
+  prompt-best-practices guide
+  (platform.kimi.ai/docs/guide/prompt-best-practice, fetched
+  2026-07-26; generic, not K3-specific — noted as such): XML-style
+  delimiters suit Kimi briefs (confirming the tag convention the
+  0.13.0 debates already used); state steps explicitly for complex
+  review tasks; grounding instructions carry an explicit
+  cannot-find fallback (maps onto the UNVERIFIED discipline); prefer
+  paragraph/bullet-count length guidance over word counts.
 - No new model-id declarations: Fable seats are same-harness subagents
   whose model is pinned in their own agent frontmatter (the
   flash-implementer precedent). No new transports, no doctor changes.
