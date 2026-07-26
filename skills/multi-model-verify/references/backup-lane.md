@@ -12,6 +12,8 @@ canonical backup model id and thinking flag are declared ONLY in
 model-prompting-notes.md — read them from there at dispatch; this file
 uses placeholders.
 
+Panel participation: a user-invoked panel per references/panels.md is a second sanctioned entry route - the invocation itself is the consent, with no fallbacks banner (nothing degraded); containment, per-round evidence, and the write-probe apply unchanged, and no failure class is recorded because nothing substituted.
+
 ## Transport
 
 - Dispatch (single line):

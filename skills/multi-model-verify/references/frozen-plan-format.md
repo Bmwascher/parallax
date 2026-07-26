@@ -6,6 +6,13 @@ subagent-driven-development or executing-plans) follows it with **zero
 judgment calls** — anything the plan leaves open is a plan defect, found in
 mode `diff` as drift.
 
+A task the plan routes to the escalation lane carries an enumerated decision envelope; DECISIONS inside the envelope are authorized outcomes, not drift.
+The envelope is part of the frozen task text: each delegated decision
+point is enumerated with the constraints that bound it, the escalation
+lane (agents/escalation-implementer.md) logs one DECISIONS entry per
+point, and mode diff adjudicates those entries against the envelope -
+only envelope overruns are drift.
+
 ## Base format
 
 Follow the superpowers writing-plans template exactly (header with Goal /
@@ -84,6 +91,28 @@ line names the actual backup participant, e.g.
 `Kimi K3 (kimi-cli, session <id>)`. This codifies the combination first
 used by the 0.12.0 record. The Degraded-mode note stays bound to
 DEGRADED status; a debate in which a backup cross-vendor lane substituted for the primary is recorded with this combination, never as DEGRADED.
+
+Panel recording (references/panels.md): the Participants line lists
+every lane that produced a terminal verdict, with its transport and
+session or agent id — a completed panel lists every member; a
+consented post-loss continuation lists only the surviving lanes, with
+the lost lane and its loss class in the failure prose; Rounds are
+counted per lane (e.g. `Sol 3 of 4 / Kimi 2 of 4`); convergent blind
+findings are marked convergent in the resolved rows and counted once;
+for mode diff the record names the required fable-review artifact
+path.
+A panel records Verification status: FULL only when every participating lane's per-round evidence was clean AND every terminal verdict cites the final subject revision.
+For the attestation emitter the panel mapping is: `-Rounds` = the
+maximum lane round count; `-Participants` names the driver and every
+lane; `-RouteNote` stays `effective route confirmed` only under the
+strictest-lane rule — every lane's every-round evidence matched that
+lane's own canonical declarations; per-lane detail lives in this
+record's prose, never in the JSON (emitter and verifier schemas are
+unchanged).
+A consented post-loss continuation records the panel-lane-loss class
+and the consent (`Authorized by:`), mirroring the lane-substitution
+shape above; a cross-vendor-free remainder records DEGRADED per
+fallbacks.md.
 
 The appendix is the audit trail: mode `diff` re-reads it to know which
 deviations were approved and which claims were struck. A frozen plan without

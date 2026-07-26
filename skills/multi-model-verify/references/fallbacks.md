@@ -161,6 +161,26 @@ choice.
   single-vendor DEGRADED skeptic, or abort — never a silent third
   vendor.
 
+### Panel lane loss — class `panel-lane-loss`
+
+A reviewer lane failing mid-panel (references/panels.md) first
+resolves through its own transport classes above (codex classes for
+Sol, the backup-lane classes for Kimi; a dead Fable panel subagent is
+directly this class). If the lane cannot continue:
+A lost lane stops the panel at the consent gate - continuing with fewer lanes never happens automatically.
+The gate offers: continue with the remaining lanes; substitute the
+lost lane (the substitution machinery above, where applicable); or
+abort. A single-lane remainder proceeds as a bilateral debate and is
+recorded as such, not as a panel - and its status splits by what
+remains: a surviving cross-vendor lane (Sol or Kimi) clean on
+evidence may still record FULL; a surviving Fable-only remainder is
+single-vendor relative to the Claude driver and records DEGRADED
+under the degraded-mode rules below, with the poisoning rule applying
+to any downstream PASS. The lost lane's unresolved findings carry
+into the debate record as OPEN - adjudicated by the session or
+re-raised with a substitute, never silently dropped. A lost lane's
+incomplete round is never adjudicated.
+
 ## Degraded-mode output requirements (after consent)
 
 - The SUPERVISING SESSION emits the banner — never delegate the banner to
