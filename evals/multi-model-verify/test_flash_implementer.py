@@ -48,6 +48,12 @@ def test_flash_dispatch_contract():
     assert "sole transient exception" in body.lower()
     assert "the dispatch log file's basename" in body
     assert "on success, failure, and interruption alike" in body
+    # brief-borne no-commands line (Sol diff-debate F1: a task whose text
+    # carries a verification command otherwise soft-denies in print mode
+    # and blocks the green path - live-verified 2026-07-25)
+    assert ("Do not run commands or attempt verification - the wrapper "
+            "runs all verification after you finish; your only job is "
+            "the file edits.") in body
     # stdin is probed-dead in print mode; the body must not suggest it
     assert "stdin" not in body.lower() or "does not reach" in body.lower()
 

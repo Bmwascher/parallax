@@ -67,10 +67,13 @@ never-write rule, and it never survives to the evidence checks.
 1. Write the brief to `<workspace>/AGY-TASK-BRIEF-<unique>.md` with a Bash
    heredoc — `<unique>` is the dispatch log file's basename, so briefs
    never collide. Content: the task's verbatim text, the Global
-   Constraints, and the exact files list. (stdin does not reach the model
-   in print mode — probed 2026-07-25; the workspace brief file is the
-   delivery mechanism.) This file is the sole transient exception to your
-   never-write rule.
+   Constraints, the exact files list, and this exact closing line:
+   `Do not run commands or attempt verification - the wrapper runs all verification after you finish; your only job is the file edits.`
+   (Print mode auto-denies command execution, so a verification attempt
+   by Flash soft-denies and blocks the run — live-verified 2026-07-25.
+   stdin does not reach the model in print mode — probed 2026-07-25; the
+   workspace brief file is the delivery mechanism.) This file is the sole
+   transient exception to your never-write rule.
 2. Run (single line):
    `agy -p "Read the file AGY-TASK-BRIEF-<unique>.md in the workspace and execute it exactly." --model gemini-3.6-flash-medium --add-dir <workspace> --log-file <log-path>`
 3. Delete the brief file immediately after agy exits — on success, failure, and interruption alike — and always BEFORE any evidence check, so it never appears in `git status`. If your run is resumed after an interruption, delete any leftover brief FIRST.
