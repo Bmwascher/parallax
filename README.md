@@ -62,6 +62,7 @@ The debate rules that keep this honest
 | Piece | What it does |
 |---|---|
 | `skills/multi-model-verify/` | The debate skill: both modes, debate protocol, frozen-plan format, model prompting notes, fallbacks/consent gate |
+| `skills/multi-model-verify/references/backup-lane.md` | The cross-vendor backup reviewer lane: consent-gated substitution when codex is down — the gate's "run backup lane" option (backup model pinned in model-prompting-notes.md) |
 | `hooks/` | PostToolUse + PostToolUseFailure hook (matcher `Task\|Agent`): fingerprints the superpowers code-reviewer dispatch, injects the mode-`diff` reminder with matching SHAs; inert everywhere else |
 | `agents/implementer.md` | Zero-judgment direct-typing executor for frozen-plan tasks (model pinned in the file's frontmatter) |
 | `agents/flash-implementer.md` | Zero-judgment Flash lane: haiku wrapper drives Gemini Flash through the Antigravity CLI headlessly; route + authorship evidence checked every run (model literal pinned in the file) |
@@ -88,6 +89,7 @@ flowchart TD
     X -. "quota-exhausted:<br/>skip the retry" .-> G
     X -. "missing-rollout resume:<br/>skip the retry" .-> G
     G -->|fix codex| OK
+    G -->|run backup lane| BK["cross-vendor backup reviewer<br/>(FULL, lane substitution recorded)"] --> OK
     G -->|run degraded| D["single-vendor, visibly flagged;<br/>DEGRADED plan poisons any diff PASS"]
     G -->|abort or unattended| B2[BLOCKED / DEGRADED-NOT-AUTHORIZED]
 ```

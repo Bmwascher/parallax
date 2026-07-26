@@ -13,7 +13,13 @@ references/model-prompting-notes.md) — verify and refute each other's
 claims before the cheap implementer touches code. The reviewer lane's
 documented fabrication risk (METR; see model-prompting-notes.md) is
 mitigated by the debate structure — evidence grounding plus mutual
-refutation — not by down-weighting either side.
+refutation — not by down-weighting either side. The PRIMARY reviewer
+lane (codex) is the default; a second cross-vendor BACKUP reviewer lane
+(references/backup-lane.md — REQUIRED READING before any backup round)
+substitutes ONLY through the fallbacks.md consent gate — auto-qualified
+by the classes named there, manual on user request — with the same
+protocol, a different transport, and `Verification status: FULL`
+preserved.
 
 **REQUIRED READING before the first round:** references/debate-protocol.md.
 
@@ -36,7 +42,9 @@ toggled on, its stop-time review overlaps mode `diff` — expected, not a bug.
 1. `codex --version` must succeed, and `codex login status` must report
    `Logged in using ChatGPT` — exit 0 alone also passes an API-key login,
    which rides different billing. On failure follow references/fallbacks.md
-   (degraded mode, visibly flagged; never silently skip cross-vendor review).
+   (the consent gate may offer the cross-vendor backup lane —
+   references/backup-lane.md — before any single-vendor degraded mode;
+   never silently skip cross-vendor review).
 2. For port work: the reference source must exist under `References/`
    (quote paths — some contain spaces, e.g. `References/M+ Timer`). Missing
    → **HARD STOP before any debate round runs**: ask the user for the path
@@ -91,6 +99,8 @@ toggled on, its stop-time review overlaps mode `diff` — expected, not a bug.
    and a remembered id silently defeats the swap). Apply that file's env
    hygiene to the invocation.
 
+   Backup lane: same protocol, transport and per-round evidence per references/backup-lane.md.
+
    From `<transcript-file>`: verify the effective route — the header's
    `model:`, `provider:`, and `reasoning effort:` lines against the
    canonical declarations, and the `sandbox:` line reads `read-only`, per
@@ -136,6 +146,8 @@ path, the base/head SHAs superpowers code review used, and the
 the frozen plan — the implementer makes zero judgment calls, so any drift is
 a finding) and, for port work, **port fidelity** (drift from the reference
 source), ending PASS / FIX / ESCALATE.
+
+Backup lane: same protocol, transport and per-round evidence per references/backup-lane.md.
 
 A FIX this session applies itself goes through the **application
 checkpoint** (references/application-checkpoint.md) before the first edit.
@@ -186,7 +198,10 @@ escalated points, the verification status — `FULL`, or
 `DEGRADED (<class>, authorized by user at round N)` per fallbacks.md — and
 the route note: `effective route confirmed` when every round's header
 matched the canonical declarations, else the transport-failure class that
-fallbacks.md handled. The session emits this line itself; never delegate it
+fallbacks.md handled. The route-note grammar is lane-agnostic: for a backup-lane debate,
+`effective route confirmed` means every round satisfied
+references/backup-lane.md's per-round evidence rules against the backup
+declarations; the evidence class is recorded in the debate record prose. The session emits this line itself; never delegate it
 to a subagent.
 
 ## Common mistakes
