@@ -136,15 +136,27 @@ specific dispatch (both advisors, convergent). The lane's rule:
   route-mismatch), fail closed.
 - This check runs on EVERY round, resumes included.
 
-Resume: the codified resume form re-pins the load-bearing flags
-defensively (`kimi -r <uuid> --agent-file <yaml> ...` — exact form
-settled by probe 12.2, which tests whether resume inherits or drops
-`--agent-file`, `-m`, and `--thinking`; the codex lane's costliest probe
-lesson — sandbox non-continuity — applied to this transport). If probe
-12.2 shows resume cannot be made containment-safe, resumed rounds are
-replaced by fresh-per-round dispatches with the full brief (the
-continuity cost recorded in the debate record), and backup-lane.md says
-so explicitly.
+Resume (PROBED 2026-07-25 — the codex sandbox lesson reproduced on this
+transport): a bare `kimi -r <uuid>` DROPS the agent file and loads the
+DEFAULT agent with the full tool set (Shell, WriteFile, StrReplaceFile,
+web tools all live) while the route line still reads clean — the probe's
+refusal came from conversation priming alone, with write tools restored
+underneath. The codified resume form therefore re-pins `--agent-file`,
+`-m`, and `--thinking` on every resumed call (probed working: the
+re-pinned resume loaded the committed yaml and exactly the five-tool
+allowlist); model/thinking inheritance comes from config defaults, not
+the session, so the re-pin is load-bearing whenever the backup id ever
+diverges from the config default.
+
+Mechanical containment evidence (discovered by the same probe): kimi.log
+also appends per-invocation `Loading agent: <path>` and
+`Loaded tools: [<list>]` lines. The per-round check asserts, past the
+captured offset, all THREE: exactly one route line with the canonical
+backup id, a `Loading agent:` line naming the committed yaml, and a
+`Loaded tools:` line equal to the allowlist exactly (no write, shell, or
+web tool entries). This closes the config-vs-priming ambiguity
+mechanically on every round, fresh and resumed alike; the write-probe
+(section 5) remains as the behavioral belt.
 
 ## 7. Failure classes and the consent gate
 
@@ -201,10 +213,9 @@ reviewer transport): kimi version snapshot field in carry-forward style
 (agy precedent) PLUS a non-billable flag-surface probe — `kimi --help`
 grepped for the six load-bearing flags (`--quiet`, `--thinking`, `-m`,
 `--agent-file`, `-w`, `-p`) and `-r` — run alongside the codex flag
-probe. A containment-vocabulary probe (the yaml's tool module paths
-still importable in the installed kimi-cli) is settled by plan-time
-probe 12.3; if no clean non-billable form exists, the vocabulary check
-lands in the doctor row instead, and drift covers flags only.
+probe. The containment-vocabulary probe is FEASIBLE (probe 12.3:
+kimi-cli is plain-pip installed; the yaml's tool module paths import
+non-billably) and joins the drift probe set.
 
 ## 10. Testing
 
@@ -233,18 +244,37 @@ route evidence; one resumed (or fresh-per-round, per probe 12.2)
 continuation exchange; post-round exactly-the-brief check. Evidence in
 the SDD ledger; the diff-debate brief cites it.
 
-## 12. Plan-time probes (each with a failure branch)
+## 12. Plan-time probes — ALL RESOLVED (2026-07-25, kimi-cli 1.49.0)
 
-1. Self-authored system prompt behaves under --agent-file (else:
-   copy-at-invocation; else lane BROKEN, design revisits).
-2. Resume flag inheritance: does `kimi -r` retain --agent-file / -m /
-   --thinking? Probe with a disposable session + write-probe on the
-   RESUMED round (else: fresh-per-round dispatches, recorded).
-3. Containment-vocabulary probe feasibility (else: doctor-only check).
-4. Notes-file parser regression harness: amended notes text against both
-   runtime parsers before the text ships (grader + drift).
-5. "LLM not set" also covers the missing/broken managed-config case
-   (auth-shaped failures) — confirm the loud-fail signature class.
+1. Self-authored system prompt under --agent-file: PASS — plain markdown
+   file, no template args needed; reviewer behaved, write-probe oracle
+   validated in the same dispatch (explicit refusal + marker absent +
+   clean delta).
+2. Resume flag inheritance: FAIL-AS-FEARED, then contained — bare
+   `kimi -r` loaded the DEFAULT agent (full tools incl. WriteFile and
+   Shell; log evidence `Loading agent: ...agents/default/agent.yaml` +
+   `Loaded tools: [...]`) while the behavioral refusal masked it. The
+   re-pinned resume (`kimi --quiet -r <uuid> --agent-file <yaml>`)
+   loaded the committed yaml and exactly the five-tool allowlist.
+   Outcome: re-pinned resume form codified (section 6) + the mechanical
+   Loading-agent/Loaded-tools per-round assertions adopted.
+3. Containment-vocabulary probe: FEASIBLE — kimi-cli is plain-pip
+   installed; `python -c "import kimi_cli.tools.file, kimi_cli.tools.todo"`
+   succeeds non-billably (drift can carry it).
+4. Notes parser regression: PASS — amended notes text (backup block
+   after the primary declarations) leaves both runtime parsers resolving
+   the primary `gpt-5.6-sol`; backup label matches neither primary regex
+   case-insensitively; ordering holds.
+5. Bad-model signature: PASS — `kimi --quiet -m kimi-code/nonexistent-model`
+   prints `LLM not set`, exit 1 (loud; same signature class as the
+   probed missing-managed-config case).
+
+Probe artifacts: session scratchpad probe-0130/ (probe121-out.txt,
+probe122a-out.txt, probe122b-out.txt, probe125-out.txt, amended-notes.md,
+agent/agent-self.yaml, agent/system-self.md); probe sessions
+f8889815-b957-4456-99d2-95d7304aef3d (12.1/12.2 chain) and
+53ba9c17-74a5-4fc5-81b0-04b3180e7651 (12.5); route/agent/tool log lines
+in ~/.kimi/logs/kimi.log, offset-attributed per dispatch.
 
 ## 13. Trimmed and out of scope
 
