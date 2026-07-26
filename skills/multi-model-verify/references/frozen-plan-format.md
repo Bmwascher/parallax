@@ -81,7 +81,10 @@ verbatim reviewer replies live (scratchpad transcripts are temporary — if
 they were not copied somewhere durable, say `not retained`): the summary
 tables above are the adjudication, not the provenance, and a later dispute
 about what the reviewer actually said needs the raw text or an honest
-"gone".
+"gone". The canonical retained location is
+`docs/superpowers/plans/rounds/<YYYY-MM-DD>-<topic>/` next to the frozen
+plans (established by the 2026-07-24 jinn intake) — prefer it over ad-hoc
+paths so retention survives scratchpad cleanup by default.
 
 Lane substitution (backup reviewer): `Verification status: FULL` MAY
 carry a `Degradation:` class plus `Authorized by: user at round N` when

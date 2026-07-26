@@ -1663,7 +1663,7 @@ class TestIntakeCommand:
     # that: ANY edit to intake.md fails here until the document is
     # re-reviewed and the pin updated - tests-first, made mechanical
     # (same pattern as the drift watch's pinned superpowers fixture).
-    PINNED_SHA256 = "2a05942fc396c9e35555c69514364eb897c51d18c81b58ed29482f52de9256fc"
+    PINNED_SHA256 = "18c3bd98849887a8a73453811d28ba719ed52ffbb8784fde41bc724913e588d6"
 
     def norm(self):
         return " ".join(read(self.INTAKE).split())
