@@ -125,8 +125,9 @@ a lost lane's incomplete round is never adjudicated.
 - model-prompting-notes.md: the `## Fable 5 (the session side)` section
   generalizes to `## The session driver seat` — seat-attached rules
   (grounding, boundaries, fresh-context verification) stay at the top,
-  with per-model subsections beneath: the existing Fable 5 notes, and
-  a NEW Opus 5 subsection distilled from the official guide
+  with per-model subsections beneath: a re-distilled Fable 5
+  subsection, and a NEW Opus 5 subsection distilled from the official
+  guide
   (platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-opus-5,
   fetched 2026-07-26): complete-spec-up-front strength; review
   precision guidance (never instruct "only report high-severity" —
@@ -141,6 +142,23 @@ a lost lane's incomplete round is never adjudicated.
   is probed against both runtime parsers before freeze anyway (0.13.0
   probe class; the parsers match `Canonical model id:` labels, which
   are untouched).
+- Fable 5 subsection re-distillation (official guide
+  platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-fable-5,
+  fetched 2026-07-26 — the existing three bullets all appear in it
+  and are RETAINED with the official citation): grounding progress
+  claims (audit each claim against a tool result); state the
+  boundaries (assessment-not-fix default); fresh-context verifier
+  subagents outperform self-critique. NEW points, curated for the
+  three new Fable seats: bug-finding recall is a strength
+  (fable-reviewer basis); effort is the primary dial — high default,
+  medium/low viable where quality holds (reviewer dispatches may
+  sweep); over-prescriptive skills DEGRADE Fable 5 output — the new
+  agent files state contracts and invariants, not step-by-step
+  choreography; never instruct a Fable seat to echo or transcribe its
+  internal reasoning (reasoning_extraction refusal class — report
+  contracts ask for evidence and decisions, never thinking); the
+  no-unrequested-refactor snippet backs the escalation lane's
+  DECISIONS discipline.
 - No new model-id declarations: Fable seats are same-harness subagents
   whose model is pinned in their own agent frontmatter (the
   flash-implementer precedent). No new transports, no doctor changes.
