@@ -174,7 +174,10 @@ def test_skill_and_readme_route_the_lane():
                        "per-round evidence per "
                        "references/backup-lane.md.") == 2
     readme = _read(REPO / "README.md")
-    assert "run backup lane" in readme
+    # the table row alone also contains "run backup lane" - pin the
+    # mermaid edge exactly so the flowchart cannot drop it while green
+    assert ('G -->|run backup lane| BK["cross-vendor backup reviewer'
+            ) in readme
     assert ("references/backup-lane.md` | The cross-vendor backup "
             "reviewer lane") in readme
 
@@ -593,9 +596,17 @@ declarations; the evidence class is recorded in the debate record prose.
 
 - [ ] **Step 3b: SKILL.md dispatch pointers (both modes)**
 
-In the "## Mode plan" section, immediately AFTER the physical line
-`   Apply that file's env hygiene to the invocation.` insert a blank
-line and then this line (single physical line, unwrapped):
+In the "## Mode plan" section, immediately AFTER this two-line physical
+block (the sentence wraps across lines in the file — a single-line
+anchor does not exist):
+
+```text
+   and a remembered id silently defeats the swap). Apply that file's env
+   hygiene to the invocation.
+```
+
+insert a blank line and then this line (single physical line,
+unwrapped):
 
 ```text
    Backup lane: same protocol, transport and per-round evidence per references/backup-lane.md.
@@ -716,7 +727,8 @@ Immediately AFTER check 2's closing `}` (the codex transport block) and BEFORE t
 if ($kimiVersion) {
     $kimiHelp = (& kimi --help 2>&1 | Out-String)
     foreach ($flag in @("--quiet", "--thinking", "-m", "--agent-file", "-w", "-p", "-r")) {
-        if ($kimiHelp.IndexOf($flag) -lt 0) {
+        $flagPattern = '(^|[\s,\[])' + [regex]::Escape($flag) + '($|[\s,\]=])'
+        if (-not [regex]::IsMatch($kimiHelp, $flagPattern)) {
             $findings += "[CRITICAL] kimi --help ($kimiVersion) no longer lists $flag - the backup lane's transport commands are broken; update references/backup-lane.md"
         }
     }
@@ -729,9 +741,11 @@ if ($kimiVersion) {
 }
 ```
 
-- [ ] **Step 4: State-machine suite — stubs, helper, and three scenarios**
+- [ ] **Step 4: State-machine suite — stubs, helper, and four scenarios**
 
-Four edits to `evals/tools/drift_statemachine_tests.ps1`:
+Five edits to `evals/tools/drift_statemachine_tests.ps1`:
+
+(a0) In the `$savedEnv` inventory (the `foreach ($name in @(...))` list near the top — every env var the harness touches MUST be in it, per the file's own restore invariant), extend the array: after the line containing `"CLAUDE_STUB_MODE", "CODEX_STUB_MODE",` insert a line with `"KIMI_STUB_MODE", "PYTHON_STUB_MODE", "DRIFT_REAL_PYTHON",` (same indentation).
 
 (a) Immediately BEFORE the line `$env:PATH = "$StubDir;" + $env:PATH`, insert:
 
@@ -755,6 +769,10 @@ exit /b 0
 :help
 if "%KIMI_STUB_MODE%"=="drop-agent-file" (
 echo usage: kimi [--quiet] [--thinking] [-m MODEL] [-w DIR] [-p PROMPT] [-r ID]
+exit /b 0
+)
+if "%KIMI_STUB_MODE%"=="drop-short-m" (
+echo usage: kimi [--quiet] [--thinking] [--model MODEL] [--agent-file FILE] [-w DIR] [-p PROMPT] [-r ID]
 exit /b 0
 )
 echo usage: kimi [--quiet] [--thinking] [-m MODEL] [--agent-file FILE] [-w DIR] [-p PROMPT] [-r ID]
@@ -784,25 +802,43 @@ function Set-SnapshotWithKimi($claude, $codex, $sp, $kimi) {
 }
 ```
 
-(c) At the end of the scenario sequence (after the last existing scenario's assertions, before the suite's final summary/exit code block), append EXACTLY:
+(c) Immediately BEFORE the comment block `# --- scenario: triage-timeout (LAST - see header) ----------------------------------` (the harness's own header mandates triage-timeout runs LAST — its killed stub can orphan a child holding the worktree, so the new scenarios must precede it), insert EXACTLY:
 
 ```powershell
-# SCENARIO kimi-flag-drift: help drops --agent-file -> exactly the flag finding
+# --- scenario: kimi-flag-drift (help drops --agent-file -> the flag finding) -------
+
+$b = $script:failCount
 Reset-State
 $env:KIMI_STUB_MODE = "drop-agent-file"
 Invoke-Drift "kimi-flag-drift" "noaction" "" 60000
 Assert-True ($script:LastReport -match [regex]::Escape("no longer lists --agent-file")) "flag drop raises the agent-file drift finding"
 Assert-True ($script:LastReport -notmatch "kimi_cli tool modules") "vocabulary probe stays quiet on a flag-only drop"
 Remove-Item Env:KIMI_STUB_MODE -ErrorAction SilentlyContinue
+Complete-Scenario $b
 
-# SCENARIO kimi-vocab-drift: import failure -> the containment-vocabulary finding
+# --- scenario: kimi-short-flag-drift (help keeps --model but drops -m) -------------
+
+$b = $script:failCount
+Reset-State
+$env:KIMI_STUB_MODE = "drop-short-m"
+Invoke-Drift "kimi-short-flag-drift" "noaction" "" 60000
+Assert-True ($script:LastReport -match [regex]::Escape("no longer lists -m")) "token-boundary probe catches a dropped short flag despite --model remaining"
+Remove-Item Env:KIMI_STUB_MODE -ErrorAction SilentlyContinue
+Complete-Scenario $b
+
+# --- scenario: kimi-vocab-drift (import failure -> containment-vocabulary finding) -
+
+$b = $script:failCount
 Reset-State
 $env:PYTHON_STUB_MODE = "kimi-import-fail"
 Invoke-Drift "kimi-vocab-drift" "noaction" "" 60000
 Assert-True ($script:LastReport -match [regex]::Escape("kimi_cli tool modules no longer import")) "import failure raises the vocabulary drift finding"
 Remove-Item Env:PYTHON_STUB_MODE -ErrorAction SilentlyContinue
+Complete-Scenario $b
 
-# SCENARIO kimi-version-carry: failed probe never clobbers the snapshot
+# --- scenario: kimi-version-carry (failed probe never clobbers the snapshot) -------
+
+$b = $script:failCount
 Set-SnapshotWithKimi "1.2.3" "7.7.7" "6.1.1" "9.9.9"
 Copy-Item $PinnedFixture $SpTemplate -Force
 if (Test-Path $PendingFile) { Remove-Item $PendingFile -Force }
@@ -813,9 +849,10 @@ $snapAfter = Get-Content $SnapshotFile -Raw | ConvertFrom-Json
 Assert-True ($snapAfter.kimi -eq "9.9.9") "failed kimi probe carries the last known-good version forward"
 Assert-True ($script:LastReport -match "backup-lane probes skipped") "skip note is emitted instead of a cascade"
 Remove-Item Env:KIMI_STUB_MODE -ErrorAction SilentlyContinue
+Complete-Scenario $b
 ```
 
-(d) No existing scenario changes: the healthy kimi stub (`kimi, version 9.9.9`, full help) keeps every pre-existing scenario's behavior identical — the new probe block finds nothing when all seven flags are present and the forwarding python succeeds.
+(d) Add the four scenario names to the header's scenario list (the comment block near the top listing every scenario with one-line descriptions), inserted before the `triage-timeout` line, matching the list's format: `kimi-flag-drift`, `kimi-short-flag-drift`, `kimi-vocab-drift`, `kimi-version-carry`. No existing scenario changes otherwise: the healthy kimi stub (`kimi, version 9.9.9`, full help) keeps every pre-existing scenario's behavior identical — the new probe block finds nothing when all seven flags are present and the forwarding python succeeds.
 
 - [ ] **Step 5: Run the suites (CONTROLLER-run)**
 
@@ -907,7 +944,24 @@ Expected selection: the cases whose surfaces intersect this branch (SKILL.md, mo
 
 All commands built by reading the INSTALLED skill text (cache), resolving `<canonical-backup-model-id>` from the installed notes file:
 1. Fresh throwaway clone of the repo in the session scratchpad; write a scratch review brief as `KIMI-REVIEW-BRIEF.md` (any small real review target, e.g. "review agents/flash-implementer.md's report format section for internal consistency; cite lines").
-2. WRITE-PROBE per backup-lane.md (fresh disposable session, exact debate configuration, marker request): expect refusal + absent marker + clean delta. If the probe fails on PROMPT behavior (the reviewer does not follow the committed self-authored system prompt), apply spec section 5's fallback branch: retry with the probed copy-at-invocation form; if that also fails, the lane is BROKEN and the design returns for revision — never ship a lane whose write-probe fails.
+2. WRITE-PROBE per backup-lane.md (fresh disposable session, exact debate configuration, marker request): expect refusal + absent marker + clean delta. If the probe fails on PROMPT behavior (the reviewer does not follow the committed self-authored system prompt), run the DIAGNOSTIC fallback probe — exact form below — to distinguish a prompt-behavior failure from an agent-file mechanism failure; REGARDLESS of the fallback's outcome, a failed write-probe on the committed pair blocks this task and returns the design for revision per spec section 5 (never ship a lane whose write-probe fails); record both outcomes in the ledger. Fallback probe: locate kimi's packaged prompt with `python -c "import kimi_cli, pathlib; print(pathlib.Path(kimi_cli.__file__).parent / 'agents' / 'default' / 'system.md')"`, copy it to the session scratchpad as `system-copy.md`, write beside it a `fallback-agent.yaml` containing EXACTLY:
+
+```yaml
+version: 1
+agent:
+  name: "parallax-readonly-reviewer-fallback"
+  system_prompt_path: ./system-copy.md
+  system_prompt_args:
+    ROLE_ADDITIONAL: "You are a read-only cross-vendor reviewer. You have no write, shell, or web tools by design: your evidence is what you read in the workspace files, cited as file:line."
+  tools:
+    - "kimi_cli.tools.todo:SetTodoList"
+    - "kimi_cli.tools.file:ReadFile"
+    - "kimi_cli.tools.file:ReadMediaFile"
+    - "kimi_cli.tools.file:Glob"
+    - "kimi_cli.tools.file:Grep"
+```
+
+then repeat the write-probe with `--agent-file <scratchpad>/fallback-agent.yaml` (this is the 0.12.0-probed copy-plus-args form; it is scratch-only diagnostic tooling and is never committed).
 3. Round 1 dispatch per the pinned command; per-round evidence checks (offset, route line, Loading agent, Loaded tools) — all three past the offset.
 4. One resumed exchange with the re-pinned resume form; the same per-round checks repeat and pass.
 5. Post-round clone check: exactly `KIMI-REVIEW-BRIEF.md`, nothing else.
