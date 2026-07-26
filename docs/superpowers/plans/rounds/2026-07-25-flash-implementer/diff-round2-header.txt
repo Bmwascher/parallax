@@ -1,0 +1,1944 @@
+2026-07-26T02:30:20.710107Z ERROR codex_models_manager::cache: failed to load models cache: missing field `supports_reasoning_summaries` at line 86 column 5
+OpenAI Codex v0.144.1
+--------
+workdir: C:\Users\Brandon\Documents\parallax
+model: gpt-5.6-sol
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: none
+session id: 019f9c24-8351-7942-aeea-06f87774d26b
+--------
+user
+# Mode diff, round 2 — fix wave applied; re-review requested
+
+Evidence rules and verdict grammar as before. Position changes since
+round 1:
+
+ACCEPTED — your F1 (frozen-plan dispatch-input drift), adjudicated
+against the retained logs before acceptance: run 1 vs run 2 dispatch
+inputs differed only by the controller-added no-commands line. Fix wave
+applied under application checkpoint 20260725-2115-d46045700de2
+(user-authorized), commits e665aa9 (docs) / 6bf1af4 (agent+tests) /
+2e0bd3f (version). New head: 2e0bd3f. Re-review range:
+d460457..2e0bd3f (the fix range on top of the round-1 head).
+
+The fix, exactly as you specified:
+1. agents/flash-implementer.md Dispatch step 1: brief content now ends
+   with an exact closing line — "Do not run commands or attempt
+   verification - the wrapper runs all verification after you finish;
+   your only job is the file edits." — written by the wrapper itself
+   into every brief (brief-borne, never controller-supplied).
+2. test_flash_implementer.py: that exact sentence is now a contiguous
+   dispatch pin (test_flash_dispatch_contract).
+3. Plan: embedded agent block and embedded test block re-synced; Task 6
+   Step 3 now states the controller supplies ONLY the frozen inputs;
+   Debate record gains resolved row 25, mode-diff participants/rounds
+   metadata, raw-rounds pattern, and an adjudication paragraph.
+   Round-1 artifacts committed under rounds/ as diff-round1-{brief,
+   reply,header}.
+4. Spec: new "Brief closing line" bullet in the dispatch/lifecycle
+   section (Sol diff-debate F1 attribution, live-verified date).
+5. .claude-plugin/plugin.json: 0.12.1 (dev-loop cache refresh so the
+   installed agent equals head — the extra bump beyond Task 5's frozen
+   0.12.0 is recorded as an amendment consequence in row 25).
+
+Verification executed (suites in-repo; agy outcomes GIVEN class):
+- pytest 144 passed 1 skipped; skill_lint PASS 0/0; scanner 0/0/0;
+  triggers all clear — all post-wave at 2e0bd3f.
+- Installed 0.12.1 cache agents/flash-implementer.md hash-identical to
+  head.
+- Task 6 Step 3 RERUN with FROZEN INPUTS ONLY (task verbatim + the same
+  two Global Constraints lines from run 1 + log path — no no-commands
+  line from the controller): GREEN. Decisive A/B vs round-1 evidence:
+  flash-dryrun4.log carries ZERO soft-deny lines (runs 1 and the
+  invalidated pre-restart attempt each carried one), and the brain
+  transcript (87f69919-661c-490a-aae3-4ce85ee7eef4) contains the
+  brief-borne closing line (1 hit; 0 hits in the old-agent transcript).
+  Wrapper report: done, route requested-and-propagated, corroboration
+  held, wrapper-run verification; controller re-ran `python hello.py`
+  -> `hello flash`; green result committed in the scratch repo.
+- Task 6 Step 4b sentinel RERUN under the amended agent: blocked at
+  preflight check 3 quoting the sentinel, no dispatch reached agy,
+  settings restored hash-identical.
+
+Two disclosures for your record (neither changes shipped text; assess
+whether either blocks):
+- D-a: The FIRST rerun attempt ran before the session restart; the
+  controller INVALIDATED it via transcript check — the session's Agent
+  tool still served the 0.12.0 cache (closing line 0 hits, soft-deny
+  recurred). The dev-loop restart requirement the plan's Task 6 Step 1
+  states was thereby re-confirmed; the valid rerun above followed the
+  restart.
+- D-b: That invalidated old-contract run exposed a wrapper-compliance
+  variance: its haiku wrapper reported done DESPITE the soft-deny line,
+  where run 1's wrapper blocked on the identical signal. Session
+  assessment: the amended contract removes Flash's trigger to attempt
+  commands (no soft-deny is produced on the green path, as the valid
+  rerun shows), the soft-deny-means-blocked rule stays pinned contract
+  text, and controller re-verification of reports remains the designed
+  backstop — no further contract change proposed. Your view is invited.
+
+End with a verdict on the merge at 2e0bd3f: PASS / FIX (specific) /
+ESCALATE.
+
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command "Get-Content -Raw 'C:\\Users\\Brandon\\.codex\\plugins\\cache\\claude-plugins-official\\superpowers\\6.2.0\\skills\\using-superpowers\\SKILL.md'" in C:\Users\Brandon\Documents\parallax
+ succeeded in 547ms:
+---
+name: using-superpowers
+description: Use when starting any conversation - establishes how to find and use skills, requiring skill invocation before ANY response including clarifying questions
+---
+
+<SUBAGENT-STOP>
+If you were dispatched as a subagent to execute a specific task, ignore this skill.
+</SUBAGENT-STOP>
+
+<EXTREMELY-IMPORTANT>
+If you think there is even a 1% chance a skill might apply to what you are doing, you ABSOLUTELY MUST invoke the skill.
+
+IF A SKILL APPLIES TO YOUR TASK, YOU DO NOT HAVE A CHOICE. YOU MUST USE IT.
+
+This is not negotiable. You cannot rationalize your way out of this.
+</EXTREMELY-IMPORTANT>
+
+## The Rule
+
+**Invoke relevant or requested skills BEFORE any response or action** — including clarifying questions, exploring the codebase, or checking files. If it turns out wrong for the situation, you don't have to use it.
+
+**Before entering plan mode:** if you haven't already brainstormed, invoke the brainstorming skill first.
+
+Then announce "Using [skill] to [purpose]" and follow the skill exactly. If it has a checklist, create a todo per item.
+
+## Skill Priority
+
+When multiple skills apply, process skills come first — they set the approach, then implementation skills (frontend-design, etc.) carry it out. Brainstorming and systematic-debugging are Superpowers' most common process skills, but the rule holds for any of them.
+
+- "Let's build X" → superpowers:brainstorming first, then implementation skills.
+- "Fix this bug" → superpowers:systematic-debugging first, then domain skills.
+
+## Red Flags
+
+These thoughts mean STOP—you're rationalizing:
+
+| Thought | Reality |
+|---------|---------|
+| "This is just a simple question" | Questions are tasks. Check for skills. |
+| "I need more context first" | Skill check comes BEFORE clarifying questions. |
+| "Let me explore the codebase first" | Skills tell you HOW to explore. Check first. |
+| "I can check git/files quickly" | Files lack conversation context. Check for skills. |
+| "Let me gather information first" | Skills tell you HOW to gather information. |
+| "This doesn't need a formal skill" | If a skill exists, use it. |
+| "I remember this skill" | Skills evolve. Read current version. |
+| "This doesn't count as a task" | Action = task. Check for skills. |
+| "The skill is overkill" | Simple things become complex. Use it. |
+| "I'll just do this one thing first" | Check BEFORE doing anything. |
+| "This feels productive" | Undisciplined action wastes time. Skills prevent this. |
+| "I know what that means" | Knowing the concept ≠ using the skill. Invoke it. |
+
+## Platform Adaptation
+
+If your harness appears here, read its reference file for special instructions:
+
+- Codex: `references/codex-tools.md`
+- Pi: `references/pi-tools.md`
+- Antigravity: `references/antigravity-tools.md`
+
+## User Instructions
+
+User instructions (CLAUDE.md, AGENTS.md, GEMINI.md, etc, direct requests) take precedence over skills, which in turn override default behavior. Only skip skill workflows or instructions when your human partner has explicitly told you to.
+
+
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command "Get-Content -Raw 'C:\\Users\\Brandon\\.codex\\plugins\\cache\\crosscheck\\crosscheck\\0.5.0\\skills\\multi-model-verify\\SKILL.md'" in C:\Users\Brandon\Documents\parallax
+ succeeded in 564ms:
+---
+name: multi-model-verify
+description: Use when planning a reference port, an API-sensitive module, or any change risky enough to need cross-model verification before implementation, or when an implemented diff must be checked against its plan and reference before merge. Fires automatically alongside superpowers requesting-code-review via the review-companion hook.
+---
+
+# Multi-Model Verify
+
+## Overview
+
+Two equal-weight advisors — Fable 5 (this session) and GPT-5.6 Sol (via the
+codex CLI) — verify and refute each other's claims before the cheap
+implementer touches code. Sol's documented fabrication risk (METR) is
+mitigated by the debate structure — evidence grounding plus mutual
+refutation — not by down-weighting either side.
+
+**REQUIRED READING before the first round:** references/debate-protocol.md.
+
+Companion to superpowers, not a replacement: it fills the cross-model review
+gap superpowers rules out of scope. `/codex:adversarial-review` remains the
+human-invoked pre-merge gate; if the codex plugin's stop-review-gate is
+toggled on, its stop-time review overlaps mode `diff` — expected, not a bug.
+
+## When to use
+
+- **Mode `plan`** — after superpowers brainstorming proposes approaches for a
+  port or API-sensitive module, before the implementation plan is written.
+- **Mode `diff`** — after implementation, alongside superpowers
+  requesting-code-review (the review-companion hook injects this
+  automatically with the matching base/head SHAs).
+- NOT for plain bugfixes, docs or release chores, GUI tweaks, or lint sweeps.
+
+## Preflight (both modes)
+
+1. `codex --version` must succeed — on failure follow references/fallbacks.md
+   (degraded mode, visibly flagged; never silently skip cross-vendor review).
+2. For port work: the reference source must exist under `References/`
+   (quote paths — some contain spaces, e.g. `References/M+ Timer`). Missing
+   → **HARD STOP before any debate round runs**: ask the user for the path
+   and go no further — do not run a codex exchange about the absence, do
+   not debate from memory, do not start a degraded mode. If the folder
+   holds version subdirectories (e.g. a `v1.4/` next to a `v1.1_old/`), use
+   the newest unless the user names one, and cite the versioned path:
+   `References/<name>/<version>/<file>:<line>`.
+   For non-port work there is no reference folder — claims ground in the
+   project's own source, specs, or upstream docs instead, same strike rule.
+
+## Mode plan
+
+1. Draft the Fable position: chosen approach, port-fidelity claims, and the
+   API/behavior risk register. Every reference claim cites a
+   `References/<name>/<file>:<line>` actually read this session — anchor
+   EVERY file with its full path the first time you cite it, manifests and
+   secondary files included (shorthand only once that file is anchored);
+   every API claim cites authoritative local docs (WoW projects:
+   `.wow-api-reference/` or a dated in-game probe result) — never memory.
+   The position has no separate artifact — it IS the claims section of the
+   step-2 brief.
+2. Compose Sol's debate brief per references/model-prompting-notes.md, write
+   it to a scratchpad file, then run round 1:
+
+   ```powershell
+   Get-Content -Raw <brief-file> | codex exec --sandbox read-only -m <canonical-model-id> -c model_reasoning_effort=<canonical-effort> --output-last-message <reply-file> -
+   ```
+
+   `<canonical-model-id>` and `<canonical-effort>` are the two declarations
+   in references/model-prompting-notes.md — read the literal values from
+   there, never from memory (the reviewer swaps by editing that one file,
+   and a remembered id silently defeats the swap).
+
+   Capture the `session id:` line printed in the run header (top of output);
+   read Sol's reply from `<reply-file>` — the stdout transcript logs every
+   file Sol reads and can run tens of KB, with the reply buried at the
+   bottom.
+3. Later rounds keep Sol's state by resuming that session — flags MUST
+   precede the resume subcommand (flags after it are a usage error):
+
+   ```powershell
+   codex exec --sandbox read-only -m <canonical-model-id> -c model_reasoning_effort=<canonical-effort> --output-last-message <reply-file> resume <SESSION_ID> "<rebuttal-brief>"
+   ```
+
+4. Iterate per debate-protocol.md until convergence or the round cap, then
+   escalate any unresolved points to the user with both positions stated.
+5. Freeze the converged plan per references/frozen-plan-format.md under the
+   project's superpowers plans dir (KitnEssentials:
+   `dev/docs/superpowers/plans/`; other projects: the superpowers default
+   `docs/superpowers/plans/`).
+
+## Mode diff
+
+Same transport and protocol. First read the frozen plan's debate record and
+its **Verification status** field. Then the brief carries the frozen plan
+path, the base/head SHAs superpowers code review used, and the
+`git diff base..head` output. Both sides check **spec fidelity** (drift from
+the frozen plan — the implementer makes zero judgment calls, so any drift is
+a finding) and, for port work, **port fidelity** (drift from the reference
+source), ending PASS / FIX / ESCALATE.
+
+**Degraded-plan poisoning rule:** a plan whose Verification status is
+DEGRADED cannot produce an ordinary diff PASS. Mode diff must first reopen
+and cross-verify the plan's claims and approved deviations (the
+retrospective pass the plan never got), and only then verify the
+implementation against it — confirming a diff matches an unsound plan
+verifies nothing. If cross-vendor verification is STILL unavailable, the
+only terminal state is `ESCALATE — CROSS-VENDOR GATE UNSATISFIED`: merging
+then requires the user's explicitly recorded risk acceptance, never a PASS.
+
+## Finish line
+
+Before it: the session's final-adjudication step (debate-protocol.md) —
+verify the last round's findings against the repo and issue the terminal
+verdict; a reviewer's PASS/FIX is never terminal by itself.
+
+End with one status line: participating models, rounds used, converged vs
+escalated points, and the verification status — `FULL`, or
+`DEGRADED (<class>, authorized by user at round N)` per fallbacks.md. The
+session emits this line itself; never delegate it to a subagent.
+
+## Common mistakes
+
+- Accepting Sol's claims about reference code without the cited lines —
+  strike the claim per protocol; do not argue against it.
+- Re-sending the full debate context each round instead of resuming the
+  codex session.
+- Running mode `diff` against different SHAs than the code review used.
+- Treating convergence as failure — a sound plan converging in one round is
+  the system working, not a skipped debate.
+
+
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command "Get-Content -Raw 'C:\\Users\\Brandon\\.codex\\plugins\\cache\\claude-plugins-official\\superpowers\\6.2.0\\skills\\verification-before-completion\\SKILL.md'" in C:\Users\Brandon\Documents\parallax
+ succeeded in 533ms:
+---
+name: verification-before-completion
+description: Use when about to claim work is complete, fixed, or passing, before committing or creating PRs - requires running verification commands and confirming output before making any success claims; evidence before assertions always
+---
+
+# Verification Before Completion
+
+## Overview
+
+**Core principle:** Evidence before claims, always.
+
+**Violating the letter of this rule is violating the spirit of this rule.**
+
+## The Iron Law
+
+```
+NO COMPLETION CLAIMS WITHOUT FRESH VERIFICATION EVIDENCE
+```
+
+If you haven't run the verification command in this message, you cannot claim it passes.
+
+## The Gate Function
+
+```
+BEFORE claiming any status or expressing satisfaction:
+
+1. IDENTIFY: What command proves this claim?
+2. RUN: Execute the FULL command (fresh, complete)
+3. READ: Full output, check exit code, count failures
+4. VERIFY: Does output confirm the claim?
+   - If NO: State actual status with evidence
+   - If YES: State claim WITH evidence
+5. ONLY THEN: Make the claim
+
+Skip any step = lying, not verifying
+```
+
+## Common Failures
+
+| Claim | Requires | Not Sufficient |
+|-------|----------|----------------|
+| Tests pass | Test command output: 0 failures | Previous run, "should pass" |
+| Linter clean | Linter output: 0 errors | Partial check, extrapolation |
+| Build succeeds | Build command: exit 0 | Linter passing, logs look good |
+| Bug fixed | Test original symptom: passes | Code changed, assumed fixed |
+| Regression test works | Red-green cycle verified | Test passes once |
+| Agent completed | VCS diff shows changes | Agent reports "success" |
+| Requirements met | Line-by-line checklist | Tests passing |
+
+## Red Flags - STOP
+
+- Using "should", "probably", "seems to"
+- Expressing satisfaction before verification ("Great!", "Perfect!", "Done!", etc.)
+- About to commit/push/PR without verification
+- Trusting agent success reports
+- Relying on partial verification
+- Thinking "just this once"
+- Tired and wanting work over
+- **ANY wording implying success without having run verification**
+
+## Rationalization Prevention
+
+| Excuse | Reality |
+|--------|---------|
+| "Should work now" | RUN the verification |
+| "I'm confident" | Confidence ≠ evidence |
+| "Just this once" | No exceptions |
+| "Linter passed" | Linter ≠ compiler |
+| "Agent said success" | Verify independently |
+| "I'm tired" | Exhaustion ≠ excuse |
+| "Partial check is enough" | Partial proves nothing |
+| "Different words so rule doesn't apply" | Spirit over letter |
+
+## Key Patterns
+
+**Tests:**
+```
+✅ [Run test command] [See: 34/34 pass] "All tests pass"
+❌ "Should pass now" / "Looks correct"
+```
+
+**Regression tests (TDD Red-Green):**
+```
+✅ Write → Run (pass) → Revert fix → Run (MUST FAIL) → Restore → Run (pass)
+❌ "I've written a regression test" (without red-green verification)
+```
+
+**Build:**
+```
+✅ [Run build] [See: exit 0] "Build passes"
+❌ "Linter passed" (linter doesn't check compilation)
+```
+
+**Requirements:**
+```
+✅ Re-read plan → Create checklist → Verify each → Report gaps or completion
+❌ "Tests pass, phase complete"
+```
+
+**Agent delegation:**
+```
+✅ Agent reports success → Check VCS diff → Verify changes → Report actual state
+❌ Trust agent report
+```
+
+## When To Apply
+
+**ALWAYS before:**
+- ANY variation of success/completion claims
+- ANY expression of satisfaction
+- ANY positive statement about work state
+- Committing, PR creation, task completion
+- Moving to next task
+- Delegating to agents
+
+**Rule applies to:**
+- Exact phrases
+- Paraphrases and synonyms
+- Implications of success
+- ANY communication suggesting completion/correctness
+
+
+codex
+Using the diff-debate and verification workflows for a scoped re-review of `d460457..2e0bd3f`. I’ll reopen the exact prior finding, inspect the amended plan/spec/agent/test and retained round record, then adjudicate D-a and D-b separately from the GIVEN agy outcomes.
+  → Pin head/base and inspect the complete fix-range diff plus amended full files
+  • Verify the exact dispatch sentence, plan/test synchronization, version amendment, and debate record
+  • Adjudicate D-a and D-b against the amended contract and retained ledger evidence
+  • Run available fresh gates and issue the round-2 merge verdict
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command 'git status --short --branch; git rev-parse HEAD; git merge-base main HEAD; git log --oneline --reverse d460457..2e0bd3f' in C:\Users\Brandon\Documents\parallax
+ succeeded in 658ms:
+## feat/0120-flash-implementer
+2e0bd3f4102c9825c7656d56218f172e89a58c7d
+afc55911dcb4dfbd86516f18346377d5171fe59c
+e665aa9 0.12.0: fold sol diff-round-1 amendment into spec and plan
+6bf1af4 0.12.0: carry brief-borne no-commands line in agent and tests
+2e0bd3f 0.12.0: bump plugin version to 0.12.1 for amended dispatch contract
+
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command 'git diff --stat d460457..2e0bd3f; git diff --name-status d460457..2e0bd3f' in C:\Users\Brandon\Documents\parallax
+ succeeded in 503ms:
+ .claude-plugin/plugin.json                         |     2 +-
+ agents/flash-implementer.md                        |    11 +-
+ .../plans/2026-07-25-flash-implementer.md          |    37 +-
+ .../diff-round1-brief.md                           |   116 +
+ .../diff-round1-header.txt                         | 12766 +++++++++++++++++++
+ .../diff-round1-reply.md                           |    17 +
+ .../specs/2026-07-25-flash-implementer-design.md   |     9 +
+ evals/multi-model-verify/test_flash_implementer.py |     6 +
+ 8 files changed, 12951 insertions(+), 13 deletions(-)
+M	.claude-plugin/plugin.json
+M	agents/flash-implementer.md
+M	docs/superpowers/plans/2026-07-25-flash-implementer.md
+A	docs/superpowers/plans/rounds/2026-07-25-flash-implementer/diff-round1-brief.md
+A	docs/superpowers/plans/rounds/2026-07-25-flash-implementer/diff-round1-header.txt
+A	docs/superpowers/plans/rounds/2026-07-25-flash-implementer/diff-round1-reply.md
+M	docs/superpowers/specs/2026-07-25-flash-implementer-design.md
+M	evals/multi-model-verify/test_flash_implementer.py
+
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command 'git diff --unified=30 d460457..2e0bd3f -- agents/flash-implementer.md evals/multi-model-verify/test_flash_implementer.py docs/superpowers/plans/2026-07-25-flash-implementer.md docs/superpowers/specs/2026-07-25-flash-implementer-design.md .claude-plugin/plugin.json' in C:\Users\Brandon\Documents\parallax
+ succeeded in 497ms:
+diff --git a/.claude-plugin/plugin.json b/.claude-plugin/plugin.json
+index 9e712fc..1936af6 100644
+--- a/.claude-plugin/plugin.json
++++ b/.claude-plugin/plugin.json
+@@ -1,20 +1,20 @@
+ {
+   "name": "parallax",
+-  "version": "0.12.0",
++  "version": "0.12.1",
+   "description": "Cross-model verification for Claude Code: an evidence-grounded adversarial debate between the session model and a cross-vendor reviewer gates plans before implementation and diffs before merge, hooked into the superpowers workflow.",
+   "author": {
+     "name": "Brandon Wascher",
+     "url": "https://github.com/Bmwascher"
+   },
+   "homepage": "https://github.com/Bmwascher/parallax",
+   "license": "MIT",
+   "keywords": [
+     "multi-model",
+     "verification",
+     "debate",
+     "code-review",
+     "codex",
+     "superpowers",
+     "evals"
+   ]
+ }
+diff --git a/agents/flash-implementer.md b/agents/flash-implementer.md
+index 56911cc..69dbdb0 100644
+--- a/agents/flash-implementer.md
++++ b/agents/flash-implementer.md
+@@ -40,64 +40,67 @@ never-write rule, and it never survives to the evidence checks.
+   sole live-verification exception — the plan's Task 6 trusted scratch
+   repo).
+ - A log-file path OUTSIDE the workspace (the controller owns it; you never
+   place logs in the repo tree).
+ 
+ ## Preflight (all five must pass BEFORE dispatch)
+ 
+ 1. `agy models` (binary at `$LOCALAPPDATA/agy/bin/agy.exe`) — output must
+    contain `gemini-3.6-flash-medium`. Anything else (missing binary,
+    sign-out, missing model) is blocked.
+ 2. `~/.gemini/antigravity-cli/settings.json` — `trustedWorkspaces` must
+    contain the workspace directory. If not: blocked, and the report quotes
+    the fix ("run one interactive `agy` session in the workspace and approve
+    trust").
+ 3. The same settings file must carry NO file-writing per-tool allow rule
+    at all — any `write_file(` entry, whatever path it names, is blocking.
+    A persisted settings allow rule is the durable, call-site-invisible
+    bypass class — its absence is the load-bearing permission control; path
+    spellings vary, so the rule CLASS is banned rather than path-matched.
+    If present: blocked, quoting the rule.
+ 4. `git status --porcelain` in the workspace must be EMPTY. A dirty tree
+    makes authorship attribution impossible — blocked, quoting the paths.
+ 5. No file matching `AGY-TASK-BRIEF-*` exists in the workspace — a stale
+    brief means an earlier dispatch died mid-cleanup: blocked.
+ 
+ ## Dispatch
+ 
+ 1. Write the brief to `<workspace>/AGY-TASK-BRIEF-<unique>.md` with a Bash
+    heredoc — `<unique>` is the dispatch log file's basename, so briefs
+    never collide. Content: the task's verbatim text, the Global
+-   Constraints, and the exact files list. (stdin does not reach the model
+-   in print mode — probed 2026-07-25; the workspace brief file is the
+-   delivery mechanism.) This file is the sole transient exception to your
+-   never-write rule.
++   Constraints, the exact files list, and this exact closing line:
++   `Do not run commands or attempt verification - the wrapper runs all verification after you finish; your only job is the file edits.`
++   (Print mode auto-denies command execution, so a verification attempt
++   by Flash soft-denies and blocks the run — live-verified 2026-07-25.
++   stdin does not reach the model in print mode — probed 2026-07-25; the
++   workspace brief file is the delivery mechanism.) This file is the sole
++   transient exception to your never-write rule.
+ 2. Run (single line):
+    `agy -p "Read the file AGY-TASK-BRIEF-<unique>.md in the workspace and execute it exactly." --model gemini-3.6-flash-medium --add-dir <workspace> --log-file <log-path>`
+ 3. Delete the brief file immediately after agy exits — on success, failure, and interruption alike — and always BEFORE any evidence check, so it never appears in `git status`. If your run is resumed after an interruption, delete any leftover brief FIRST.
+ 
+ ## Route and authorship checks (every run)
+ 
+ - On the log file: `Print mode: starting` line present containing
+   `model="gemini-3.6-flash-medium"`.
+ - On the log file: `Propagating selected model override` line present
+   (presence only — its display label is not matched).
+ - Transcript/tree corroboration: parse `conversationID="<uuid>"` from the
+   log's `Print mode: starting` line, then read the brain transcript at
+   `~/.gemini/antigravity-cli/brain/<conversationID>/.system_generated/logs/transcript_full.jsonl`
+   (the `--log-file` log itself carries NO file actions — probed). Every path git status reports changed must appear in the brain transcript as a successful file-changing action. A changed file the transcript never
+   mentions means someone other than Flash typed it — blocked, no matter
+   what the tests say. A missing transcript is blocked.
+ - This evidence is client-side: report the route as **requested and
+   propagated**, never "used and confirmed". Server-side substitution is
+   not detectable from this evidence class.
+ 
+ ## Failure handling — loud, never silent
+ 
+ Blocked (quote the exact output) on: any preflight failure, the print-mode
+ soft-deny line ("auto-denied"), nonzero exit, a missing or mismatched
+ route line, a corroboration mismatch, or writes diverted to agy's internal
+ scratch (expected files absent from the tree). Never retry with
+ `--dangerously-skip-permissions` — that flag is forbidden in this lane, as
+ is ANY approval-bypass flag or persisted per-tool allow rule added to agy
+ settings. Never complete the work yourself: rerouting a blocked task to a
+ Claude tier is the user's decision, recorded in the plan's Escalated
+diff --git a/docs/superpowers/plans/2026-07-25-flash-implementer.md b/docs/superpowers/plans/2026-07-25-flash-implementer.md
+index 1a8ae5a..2f566c9 100644
+--- a/docs/superpowers/plans/2026-07-25-flash-implementer.md
++++ b/docs/superpowers/plans/2026-07-25-flash-implementer.md
+@@ -63,60 +63,66 @@ def _read(p):
+     return p.read_text(encoding="utf-8")
+ 
+ 
+ def _frontmatter(text):
+     m = re.match(r"^---\n(.*?)\n---\n", text, re.DOTALL)
+     assert m, "missing frontmatter"
+     return m.group(1)
+ 
+ 
+ def test_flash_frontmatter_pins_model_and_tools():
+     fm = _frontmatter(_read(FLASH))
+     assert re.search(r"^model: haiku$", fm, re.MULTILINE)
+     m = re.search(r"^tools: (.+)$", fm, re.MULTILINE)
+     assert m, "tools allowlist missing"
+     tools = [t.strip() for t in m.group(1).split(",")]
+     assert sorted(tools) == ["Bash", "Glob", "Grep", "Read"]
+ 
+ 
+ def test_flash_dispatch_contract():
+     body = _read(FLASH)
+     assert "--model " + CANONICAL_ID in body
+     assert "--add-dir" in body
+     assert "--log-file" in body
+     # unique-suffix brief name + full lifecycle, pinned by exact sentence
+     # fragments so a regression cannot pass on loose keywords
+     # (Sol check-off round 2, finding 3)
+     assert "AGY-TASK-BRIEF-" in body
+     assert "sole transient exception" in body.lower()
+     assert "the dispatch log file's basename" in body
+     assert "on success, failure, and interruption alike" in body
++    # brief-borne no-commands line (Sol diff-debate F1: a task whose text
++    # carries a verification command otherwise soft-denies in print mode
++    # and blocks the green path - live-verified 2026-07-25)
++    assert ("Do not run commands or attempt verification - the wrapper "
++            "runs all verification after you finish; your only job is "
++            "the file edits.") in body
+     # stdin is probed-dead in print mode; the body must not suggest it
+     assert "stdin" not in body.lower() or "does not reach" in body.lower()
+ 
+ 
+ def test_flash_route_check_strings():
+     body = _read(FLASH)
+     assert 'Print mode: starting' in body
+     assert 'model="' + CANONICAL_ID + '"' in body
+     assert "Propagating selected model override" in body
+     assert "requested and propagated" in body
+     assert "used and confirmed" not in body.replace(
+         'never "used and confirmed"', "")
+     # transcript/tree corroboration (Sol check-off F1: the log carries no
+     # file actions; evidence lives in the brain transcript)
+     assert "transcript_full.jsonl" in body
+     assert "conversationID" in body
+     assert ("every path git status reports changed must appear in the "
+             "brain transcript as a successful file-changing action"
+             ) in body.lower()
+ 
+ 
+ def test_flash_preflight_pins():
+     body = _read(FLASH)
+     assert "agy models" in body
+     assert "trustedWorkspaces" in body
+     # conservative rule-class ban + clean baseline + stale-brief check,
+     # pinned by exact sentence fragments (Sol check-off round 2,
+     # finding 3): loose keyword pins would still pass a regression to
+     # path-scoped matching or a dropped preflight
+     assert "any `write_file(` entry, whatever path it names" in body
+@@ -284,64 +290,67 @@ never-write rule, and it never survives to the evidence checks.
+   sole live-verification exception — the plan's Task 6 trusted scratch
+   repo).
+ - A log-file path OUTSIDE the workspace (the controller owns it; you never
+   place logs in the repo tree).
+ 
+ ## Preflight (all five must pass BEFORE dispatch)
+ 
+ 1. `agy models` (binary at `$LOCALAPPDATA/agy/bin/agy.exe`) — output must
+    contain `gemini-3.6-flash-medium`. Anything else (missing binary,
+    sign-out, missing model) is blocked.
+ 2. `~/.gemini/antigravity-cli/settings.json` — `trustedWorkspaces` must
+    contain the workspace directory. If not: blocked, and the report quotes
+    the fix ("run one interactive `agy` session in the workspace and approve
+    trust").
+ 3. The same settings file must carry NO file-writing per-tool allow rule
+    at all — any `write_file(` entry, whatever path it names, is blocking.
+    A persisted settings allow rule is the durable, call-site-invisible
+    bypass class — its absence is the load-bearing permission control; path
+    spellings vary, so the rule CLASS is banned rather than path-matched.
+    If present: blocked, quoting the rule.
+ 4. `git status --porcelain` in the workspace must be EMPTY. A dirty tree
+    makes authorship attribution impossible — blocked, quoting the paths.
+ 5. No file matching `AGY-TASK-BRIEF-*` exists in the workspace — a stale
+    brief means an earlier dispatch died mid-cleanup: blocked.
+ 
+ ## Dispatch
+ 
+ 1. Write the brief to `<workspace>/AGY-TASK-BRIEF-<unique>.md` with a Bash
+    heredoc — `<unique>` is the dispatch log file's basename, so briefs
+    never collide. Content: the task's verbatim text, the Global
+-   Constraints, and the exact files list. (stdin does not reach the model
+-   in print mode — probed 2026-07-25; the workspace brief file is the
+-   delivery mechanism.) This file is the sole transient exception to your
+-   never-write rule.
++   Constraints, the exact files list, and this exact closing line:
++   `Do not run commands or attempt verification - the wrapper runs all verification after you finish; your only job is the file edits.`
++   (Print mode auto-denies command execution, so a verification attempt
++   by Flash soft-denies and blocks the run — live-verified 2026-07-25.
++   stdin does not reach the model in print mode — probed 2026-07-25; the
++   workspace brief file is the delivery mechanism.) This file is the sole
++   transient exception to your never-write rule.
+ 2. Run (single line):
+    `agy -p "Read the file AGY-TASK-BRIEF-<unique>.md in the workspace and execute it exactly." --model gemini-3.6-flash-medium --add-dir <workspace> --log-file <log-path>`
+ 3. Delete the brief file immediately after agy exits — on success,
+    failure, and interruption alike — and always BEFORE any evidence
+    check, so it never appears in `git status`. If your run is resumed
+    after an interruption, delete any leftover brief FIRST.
+ 
+ ## Route and authorship checks (every run)
+ 
+ - On the log file: `Print mode: starting` line present containing
+   `model="gemini-3.6-flash-medium"`.
+ - On the log file: `Propagating selected model override` line present
+   (presence only — its display label is not matched).
+ - Transcript/tree corroboration: parse `conversationID="<uuid>"` from the
+   log's `Print mode: starting` line, then read the brain transcript at
+   `~/.gemini/antigravity-cli/brain/<conversationID>/.system_generated/logs/transcript_full.jsonl`
+   (the `--log-file` log itself carries NO file actions — probed). Every
+   path git status reports changed must appear in the brain transcript as
+   a successful file-changing action. A changed file the transcript never
+   mentions means someone other than Flash typed it — blocked, no matter
+   what the tests say. A missing transcript is blocked.
+ - This evidence is client-side: report the route as **requested and
+   propagated**, never "used and confirmed". Server-side substitution is
+   not detectable from this evidence class.
+ 
+ ## Failure handling — loud, never silent
+ 
+ Blocked (quote the exact output) on: any preflight failure, the print-mode
+ soft-deny line ("auto-denied"), nonzero exit, a missing or mismatched
+ route line, a corroboration mismatch, or writes diverted to agy's internal
+@@ -630,158 +639,170 @@ the repo is empty (the bump is already committed); (5) no
+ 
+ ---
+ 
+ ### Task 6: Live verification (ATTENDED; runs only after the plan debate converges)
+ 
+ **Files:**
+ - None in-repo (scratch repo + probe records; SDD ledger notes)
+ 
+ **Interfaces:**
+ - Consumes: the installed 0.12.0 cache (dev loop: `claude plugin update parallax@parallax`, restart — the agent is NOT live before that).
+ - Produces: the live evidence the diff debate's brief cites.
+ 
+ - [ ] **Step 1 (ATTENDED - user): Dev loop**
+ 
+ Bump is committed (Task 5); user runs `claude plugin update parallax@parallax` and restarts the session. Without the restart the dispatched agent is the cached pre-0.12.0 set — a dry-run before restart tests nothing.
+ 
+ - [ ] **Step 2: Scratch repo setup**
+ 
+ Create a scratch git repo in the session scratchpad with one file
+ (`hello.py`, `print("hello")`), and COMMIT it — the agent's clean-tree
+ preflight (check 4) requires an empty `git status --porcelain` before
+ dispatch (Sol check-off round 2, finding 1). Then an interactive trust
+ approval (ATTENDED - user, same mechanism as Task 5 Step 4).
+ 
+ - [ ] **Step 3: Green dry-run through the REAL agent**
+ 
+ Verify `git status --porcelain` in the scratch repo is empty. Dispatch
+ `parallax:flash-implementer` (fresh subagent) with a minimal task:
+ "Modify hello.py so it prints exactly 'hello flash'. Verification:
+ `python hello.py` prints `hello flash`." plus a log path in the
+-scratchpad. Expected report: STATUS done; ROUTE carries
++scratchpad. The controller supplies ONLY these frozen inputs — the
++no-commands closing line is brief-borne per the agent's Dispatch step 1,
++never a controller addition (Sol diff-debate F1). Expected report:
++STATUS done; ROUTE carries
+ `gemini-3.6-flash-medium` + log path + brain transcript path; FILES
+ CHANGED lists `hello.py`; VERIFICATION shows the wrapper's own
+ `python hello.py` output; DEVIATIONS none. Controller re-runs
+ `python hello.py` itself (never trust the report alone — 0.10.0 lesson:
+ controller-owned verification). Then COMMIT the green result in the
+ scratch repo and verify `git status --porcelain` is empty again, so the
+ later probes start from a clean baseline.
+ 
+ - [ ] **Step 4a: Raw red probe — the CLI's invalid-model path (no agent)**
+ 
+ Controller runs, directly in the scratch repo (split from a single
+ disjunctive probe by Sol check-off F5 — a wrapper refusing a
+ contradictory brief must not count as exercising this path):
+ 
+ ```powershell
+ & "$env:LOCALAPPDATA\agy\bin\agy.exe" -p "Reply with exactly: X" --model gemini-9.9-fake --add-dir <scratch> --log-file <scratchpad>\red-raw.log
+ ```
+ 
+ Expected: loud "invalid model selection" rejection, nonzero exit, no
+ file changes in the scratch tree.
+ 
+ - [ ] **Step 4b: Reachable-failure probe — the REAL agent's blocked path**
+ 
+ First save the ORIGINAL settings content
+ (`~/.gemini/antigravity-cli/settings.json`) to the session scratchpad.
+ Then plant a NONMATCHING SENTINEL rule in `permissions.allow`:
+ `write_file(/parallax-sentinel-never-matches/)` — preflight check 3 bans
+ the rule CLASS, so the sentinel triggers it without ever granting a
+ functional permission (Sol check-off round 2, finding 4). Dispatch
+ `parallax:flash-implementer` with a trivial task in the scratch repo.
+ Expected: STATUS blocked at preflight check 3, quoting the sentinel; no
+ dispatch reaches agy; `git status --porcelain` still empty. Restore the
+ saved ORIGINAL settings content afterward — including on an aborted or
+ interrupted run, restore-before-anything-else on resume — and re-read
+ the file to confirm it matches the saved copy.
+ 
+ - [ ] **Step 5 (ATTENDED - user): skip-permissions print-mode probe**
+ 
+ User runs, in the scratch repo (isolated), the one command the spec's
+ probe task left open:
+ `agy -p "Create a file named skip-probe.txt containing SKIP-OK" --model gemini-3.6-flash-low --add-dir <scratch> --dangerously-skip-permissions --log-file <scratchpad>\probe-skip.log`
+ after REMOVING the scratch repo's trust entry. Record the outcome in the
+ SDD ledger: file created = the flag works in print mode (both bypass
+ surfaces live); soft-denied = the flag is inert in print mode (the
+ settings assertion is the whole live defense). Either way the lane's
+ contract is unchanged — the flag stays forbidden; this only settles which
+ defense is load-bearing, per spec section 2.
+ 
+ - [ ] **Step 6: Record**
+ 
+ Write the dry-run + red-probe + skip-probe outcomes into the SDD ledger
+ (`.superpowers/sdd/2026-07-25-flash-implementer/`), with log paths — the
+ diff-debate brief cites them.
+ 
+ ---
+ 
+ ## Debate record
+ 
+-**Participants:** Fable 5 (session) / Kimi K3 `kimi-code/k3-256k` (kimi-cli 1.49.0, session 4ba130bb-1615-4c95-9afc-d1e3049bb857) / GPT-5.6 Sol (codex exec, session 019f9ad5-e318-7831-8a3f-0c02c94caa8e)
+-**Rounds used:** 2 of 4 (Kimi, plan mode) + 4 of 4 (Sol, primary check-off: r1 FIX, r2 FIX, r3 FIX, r4 terminal)
++**Participants:** Fable 5 (session) / Kimi K3 `kimi-code/k3-256k` (kimi-cli 1.49.0, session 4ba130bb-1615-4c95-9afc-d1e3049bb857) / GPT-5.6 Sol (codex exec, sessions 019f9ad5-e318-7831-8a3f-0c02c94caa8e primary check-off, 019f9c24-8351-7942-aeea-06f87774d26b mode-diff)
++**Rounds used:** 2 of 4 (Kimi, plan mode) + 4 of 4 (Sol, primary check-off: r1 FIX, r2 FIX, r3 FIX, r4 terminal) + mode-diff debate at merge (Sol: r1 FIX, fix wave applied — resolved row 25; re-review in flight)
+ **Outcome:** converged with amendments
+ **Verification status:** FULL
+ **Degradation:** quota-exhausted (primary lane at the plan gate; backup lane substituted for rounds 1-2, primary check-off ran on the reset window)
+ **Authorized by:** user at round 1 (backup-lane substitution; the user's standing ruling retained the primary check-off before branch close)
+-**Raw rounds:** docs/superpowers/plans/rounds/2026-07-25-flash-implementer/ (plan-round1-brief.md, plan-round{1,2}-transcript.txt — Kimi; sol-checkoff-round{1,2,3,4}-{brief,reply,header} — Sol)
++**Raw rounds:** docs/superpowers/plans/rounds/2026-07-25-flash-implementer/ (plan-round1-brief.md, plan-round{1,2}-transcript.txt — Kimi; sol-checkoff-round{1,2,3,4}-{brief,reply,header} — Sol; diff-round{n}-{brief,reply,header} — Sol mode-diff)
+ 
+ Backup-lane note: Kimi ran read-only via a custom agent-file
+ (ReadFile/ReadMediaFile/Glob/Grep/SetTodoList; pre-review write-probe
+ refused) against a throwaway clone — the real tree was never exposed.
+ Route evidence per round: `Using LLM model: provider='managed:kimi-code'
+ model='k3-256k'` in ~/.kimi/logs/kimi.log (client-side class). Clone
+ `git status` after round 2: sole untracked file was the session-authored
+ brief (retained evidence: rounds/.../clone-status-after-round2.txt).
+ Sol round 1 route: header block model gpt-5.6-sol / provider openai /
+ sandbox read-only / effort high.
+ 
+ ### Resolved points
+ 
+ | # | Claim | Raised by | Outcome | Evidence |
+ |---|-------|-----------|---------|----------|
+ | 1 | Task 4 doctor text trips the plan's own literal sweep | Kimi r1 | accepted; doctor text reworded (5391455) | plan Task 4 vs test sweep globs |
+ | 2 | Task 1 expected parity failure signature wrong (FileNotFoundError first) | Kimi r1 | accepted; expectation corrected | test_flash_implementer.py `_read` order |
+ | 3 | README drop-ins absence pin vacuous (line-wrapped source) | Kimi r1 | accepted; presence pins added | README.md:132-133 line break |
+ | 4 | Sweep omits evals/**/*.ps1 vs the reviewer sweep it mirrors | Kimi r1 | accepted; glob added | test_multi_model_verify.py:249 |
+ | 5 | Flash Lane note misstates where the literal lives | Kimi r1 | accepted; reworded | implementer.md carries no gemini literal |
+ | 6 | Drift-snapshot snippet violates carry-forward invariant; PS 5.1 parse risk | Kimi r1 | accepted; Task 4 Step 2 rewritten to carry-forward | check-drift.ps1:193-205 |
+ | 7 | Red-probe expectation contradicts pinned dispatch contract | Kimi r1 | accepted; made disjunctive (superseded by #14) | plan Task 6 vs agent body pin |
+ | 8 | Settings-deletion instruction pins unverifiable path spelling | Kimi r1 | accepted; made spelling-agnostic | settings file outside workspace |
+ | 9 | Parity narrower than spec claim (headings unpinned in classic) | Kimi r1 | accepted; headings pinned in both files | spec section 1 vs test scope |
+ | 10 | Corroboration evidence source wrong: --log-file log carries NO file actions; brain transcript does | Sol r1 | accepted; evidence source corrected to transcript_full.jsonl | probe9.log: 0 hits for probe-write4; brain/<cid>/.../transcript_full.jsonl: 5 hits |
+ | 11 | Brief-file lifecycle unsafe (collision, interruption, unbaselined git status) | Sol r1 | accepted; unique name + collision preflight + guaranteed cleanup + clean-baseline preflight | agent body Dispatch/Preflight sections |
+ | 12 | Debate record lacked required schema fields and session adjudication | Sol r1 | accepted; this record | frozen-plan-format.md:36-68, debate-protocol.md:63 |
+ | 13 | Settings check had no path-matching algorithm | Sol r1 | accepted; conservative rule-class ban (any write_file( entry) | trust entry vs allow rule spelling mismatch on this machine |
+ | 14 | Red probe vacuous (wrapper refusal passes without exercising failure path) | Sol r1 | accepted; split into raw-CLI probe + reachable-failure probe | plan Task 6 Steps 4a/4b |
+ | 15 | Task 6 green run cannot satisfy the new clean-tree preflight | Sol r2 | accepted; scratch baseline committed, post-run commit + clean check | plan Task 6 Steps 2-3 |
+ | 16 | Task 5 dry-check still tested the obsolete three-preflight contract | Sol r2 | accepted; Step 6 runs all five checks verbatim, unrelated rules escalate to user | plan Task 5 Step 6 |
+ | 17 | F2/F4 amendments not actually pinned (loose keyword asserts) | Sol r2 | accepted; exact-sentence pins + ROUTE transcript pin added | test_flash_implementer.py dispatch/preflight tests |
+ | 18 | Step 4b installs a functional bypass without interruption-safe restore | Sol r2 | accepted; nonmatching sentinel rule + save/restore-in-finally | plan Task 6 Step 4b |
+ | 19 | Stale cross-references (log/tree, workdir-scoped, log-only ROUTE, #13 for #14) | Sol r2 | accepted; synchronized | plan header, spec Decisions + section 6, resolved point 7 |
+ | 20 | Task 5 dry-run's clean-tree check cannot pass over the uncommitted bump | Sol r3 | accepted; bump commits first, dry-run post-commit | plan Task 5 Steps 5-6 |
+ | 21 | MAIN-CHECKOUT-ONLY absolute vs Task 6 scratch dispatch | Sol r3 | accepted; sole live-verification exception declared in constraints, spec, agent body (pinned) | Global Constraints, spec Decisions, agent Inputs + Lane note |
+ | 22 | Spec ROUTE line and step-4b recipe out of sync with amended contract | Sol r3 | accepted; synchronized (transcript path; sentinel + save/restore) | spec sections 1 and 6 |
+ | 23 | Record metadata lagged live rounds; r2/r3 raw artifacts unretained | Sol r3 | accepted; this revision + artifacts retained | rounds/ dir, this appendix |
+ | 24 | Task 5 Step 3 phrase omitted the declared Task 6 exception | Sol r4 | trivial accepted amendment; applied | plan Task 5 Step 3 |
++| 25 | Task 6 green run patched the frozen dispatch input at runtime — the no-commands line was controller-added, not contract text, and lived only in the gitignored ledger | Sol diff-r1 | accepted; exact brief-borne closing line added to Dispatch step 1, test-pinned, plugin bumped 0.12.1, Task 6 Step 3 + 4b rerun with frozen inputs only | flash-dryrun.log:126 soft-deny vs flash-dryrun2.log clean; agent Dispatch step 1; test_flash_implementer.py dispatch pins |
+ 
+ ### Escalated points (user-decided)
+ 
+ | # | Question | Session position | Reviewer position | Owner's call |
+ |---|----------|------------------|-------------------|--------------|
+ 
+ (none this debate; the consent-gated reroute mechanism records future
+ blocked-task reroutes here)
+ 
+ ### Session adjudication (debate-protocol closing step)
+ 
+ Each Sol round-1 finding was verified against live evidence before
+ acceptance: #10 by grepping the retained WRITE4 probe log (zero
+ file-path hits) and the brain transcript (five hits); #11/#14 against
+ the agent body and plan text as cited; #12 against
+ frozen-plan-format.md:36-68; #13 against the live settings file's mixed
+ path spellings. Kimi's rounds 1-2 were adjudicated at the time (all nine
+ findings verified, fixes committed 5391455, round-2 re-verification by
+ the reviewer). Sol rounds 2-3 were each verified the same way (rows
+ 15-23: cited lines read, sequencing conflicts reproduced by inspection,
+ fix waves re-reviewed in scope). No finding was refuted; no point
+ escalated. Convergence = Sol round-4 terminal confirmation of the
+ rounds-1-3 amendment chain (transcript retained under Raw rounds).
++
++Mode-diff round 1 (row 25) was adjudicated the same way before
++acceptance: the run-1 vs run-2 dispatch inputs differ only by the
++controller-added no-commands line (retained logs: flash-dryrun.log line
++126 soft-deny; flash-dryrun2.log zero soft-denies), and the frozen brief
++recipe permitted only task text + Global Constraints + files list —
++Sol's drift claim reproduced by inspection. Application governed by
++checkpoint 20260725-2115-d46045700de2.
+diff --git a/docs/superpowers/specs/2026-07-25-flash-implementer-design.md b/docs/superpowers/specs/2026-07-25-flash-implementer-design.md
+index c549a04..2367f8a 100644
+--- a/docs/superpowers/specs/2026-07-25-flash-implementer-design.md
++++ b/docs/superpowers/specs/2026-07-25-flash-implementer-design.md
+@@ -173,60 +173,69 @@ declared lane-specific and excluded from parity.
+   3. the same settings file carries NO file-writing per-tool allow rule
+      AT ALL (any `write_file(` entry, whatever path it names) — the
+      durable, call-site-invisible bypass class; this settings assertion is
+      the LOAD-BEARING permission control (a flag is at least visible
+      per-dispatch; a settings rule survives invisibly forever — tonight's
+      probing itself left one behind). Conservative by amendment (Sol
+      check-off F4): agy's path normalization is not offline-verifiable
+      (trust entries and allow rules already disagree on drive-letter
+      spelling on this machine), so the lane bans the rule CLASS rather
+      than attempting workdir path-matching;
+   4. `git status --porcelain` is EMPTY before dispatch (Sol check-off F2:
+      without a pre-dispatch baseline, pre-existing changes are
+      unattributable — a dirty tree is blocked, not absorbed).
+ - Dispatch: `agy -p <brief> --model gemini-3.6-flash-medium
+   --add-dir <workdir> --log-file <fresh per-task log>`. Fresh log file per
+   attempt, written under the session scratchpad (never the repo tree — no
+   .gitignore dependency); each task's report carries its log path, and the
+   SDD execution record (the `.superpowers/sdd/<date>-<topic>/` workspace
+   the subagent-driven-development skill maintains) records per-task lane
+   provenance, which the diff-debate brief then carries. Adding an
+   implementer line to the frozen-plan debate record's Participants block is
+   declared scope for the plan debate to settle.
+ - Brief-file lifecycle (Sol check-off F2): the brief is the SOLE transient
+   file the wrapper may create in the repo tree — a declared exception to
+   its never-write rule. Unique reserved name (`AGY-TASK-BRIEF-<unique>.md`,
+   unique suffix from the dispatch's log-file basename); collision
+   preflight (any existing `AGY-TASK-BRIEF-*` file in the workspace =
+   stale state = blocked); deletion guaranteed after agy exits — success,
+   failure, or interruption path alike — and always BEFORE any evidence
+   check, so the brief never appears in the attribution set.
++- Brief closing line (Sol diff-debate F1, live-verified 2026-07-25): the
++  brief ends with an exact test-pinned line telling Flash to run no
++  commands and attempt no verification — the wrapper verifies after agy
++  exits. Print mode auto-denies command execution, so a task whose
++  verbatim text carries a Verification command otherwise soft-denies and
++  blocks the green path (the first live dry-run reproduced exactly this;
++  the wrapper's blocked report was the designed loud failure). The line
++  is brief-borne — written by the wrapper itself per its Dispatch recipe,
++  never a controller-supplied constraint.
+ - Route check, every run, on the log file:
+   1. `Print mode: starting` line present with `model="gemini-3.6-flash-medium"`
+      (the RESOLVED ID is the comparand — same string §5 pins as canonical);
+   2. `Propagating selected model override` line present (presence-only; its
+      display label is a second namespace and is NOT matched);
+   3. transcript/tree corroboration (evidence source corrected by Sol
+      check-off F1 — the `--log-file` log carries NO file actions, probed):
+      parse `conversationID="<uuid>"` from the log's `Print mode: starting`
+      line, read the brain transcript at
+      `~/.gemini/antigravity-cli/brain/<conversationID>/.system_generated/logs/transcript_full.jsonl`,
+      and require every path `git status` reports changed to appear in that
+      transcript as a successful file-changing action. A changed file the
+      transcript never mentions means the wrapper (or something else) typed
+      it — blocked regardless of test results. A missing transcript is
+      blocked. The ROUTE report line carries the transcript path beside the
+      log path.
+   This evidence class is CLIENT-side: the check verifies the route was
+   **requested and propagated**, never "used and confirmed" (the doctor
+   check-4 language discipline, `commands/doctor.md`). Server-side
+   substitution is undetectable with today's evidence — named in Risks.
+ - Probe task (pre-plan, throwaway harness, no agent file needed), pinned
+   before the agent body freezes:
+   1. long-brief mechanics — argument vs stdin vs file, quoting, size limits;
+   2. does agy emit ANY response-side model attribution (log tail, response
+      metadata; agy has no `--output-format` flag) — if yes, that artifact
+      becomes the route check and the client-side lines demote to
+      preconditions; the probe's answer is written into this section as the
+      final route-check contract text;
+   3. does `--dangerously-skip-permissions` take effect in print mode at all
+      (accept-edits provably does not) — if inert, the settings assertion is
+diff --git a/evals/multi-model-verify/test_flash_implementer.py b/evals/multi-model-verify/test_flash_implementer.py
+index 410ab83..b822734 100644
+--- a/evals/multi-model-verify/test_flash_implementer.py
++++ b/evals/multi-model-verify/test_flash_implementer.py
+@@ -21,60 +21,66 @@ def _read(p):
+     return p.read_text(encoding="utf-8")
+ 
+ 
+ def _frontmatter(text):
+     m = re.match(r"^---\n(.*?)\n---\n", text, re.DOTALL)
+     assert m, "missing frontmatter"
+     return m.group(1)
+ 
+ 
+ def test_flash_frontmatter_pins_model_and_tools():
+     fm = _frontmatter(_read(FLASH))
+     assert re.search(r"^model: haiku$", fm, re.MULTILINE)
+     m = re.search(r"^tools: (.+)$", fm, re.MULTILINE)
+     assert m, "tools allowlist missing"
+     tools = [t.strip() for t in m.group(1).split(",")]
+     assert sorted(tools) == ["Bash", "Glob", "Grep", "Read"]
+ 
+ 
+ def test_flash_dispatch_contract():
+     body = _read(FLASH)
+     assert "--model " + CANONICAL_ID in body
+     assert "--add-dir" in body
+     assert "--log-file" in body
+     # unique-suffix brief name + full lifecycle, pinned by exact sentence
+     # fragments so a regression cannot pass on loose keywords
+     # (Sol check-off round 2, finding 3)
+     assert "AGY-TASK-BRIEF-" in body
+     assert "sole transient exception" in body.lower()
+     assert "the dispatch log file's basename" in body
+     assert "on success, failure, and interruption alike" in body
++    # brief-borne no-commands line (Sol diff-debate F1: a task whose text
++    # carries a verification command otherwise soft-denies in print mode
++    # and blocks the green path - live-verified 2026-07-25)
++    assert ("Do not run commands or attempt verification - the wrapper "
++            "runs all verification after you finish; your only job is "
++            "the file edits.") in body
+     # stdin is probed-dead in print mode; the body must not suggest it
+     assert "stdin" not in body.lower() or "does not reach" in body.lower()
+ 
+ 
+ def test_flash_route_check_strings():
+     body = _read(FLASH)
+     assert 'Print mode: starting' in body
+     assert 'model="' + CANONICAL_ID + '"' in body
+     assert "Propagating selected model override" in body
+     assert "requested and propagated" in body
+     assert "used and confirmed" not in body.replace(
+         'never "used and confirmed"', "")
+     # transcript/tree corroboration (Sol check-off F1: the log carries no
+     # file actions; evidence lives in the brain transcript)
+     assert "transcript_full.jsonl" in body
+     assert "conversationID" in body
+     assert ("every path git status reports changed must appear in the "
+             "brain transcript as a successful file-changing action"
+             ) in body.lower()
+ 
+ 
+ def test_flash_preflight_pins():
+     body = _read(FLASH)
+     assert "agy models" in body
+     assert "trustedWorkspaces" in body
+     # conservative rule-class ban + clean baseline + stale-brief check,
+     # pinned by exact sentence fragments (Sol check-off round 2,
+     # finding 3): loose keyword pins would still pass a regression to
+     # path-scoped matching or a dropped preflight
+     assert "any `write_file(` entry, whatever path it names" in body
+
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command "Get-ChildItem -Path '.git/parallax/application-checkpoints' -File -ErrorAction SilentlyContinue | Sort-Object LastWriteTime | Select-Object Name,Length,LastWriteTime" in C:\Users\Brandon\Documents\parallax
+ succeeded in 616ms:
+
+Name                            Length LastWriteTime
+----                            ------ -------------
+20260719-ef83c0ad8047.md         10067 7/21/2026 12:38:34 PM
+20260724-112627-2ccae0f39c85.md   3981 7/24/2026 11:33:24 AM
+20260724-135152-6527f6cb1099.md   5816 7/24/2026 4:57:05 PM
+20260725-de47bea2901b.md          2728 7/24/2026 9:13:28 PM
+20260725-2115-d46045700de2.md     5457 7/25/2026 9:29:51 PM
+
+
+codex
+The scoped diff contains the requested fix, but I found one synchronization point that needs close scrutiny: Task 6’s interface/Step 1 still names the installed `0.12.0` cache even though the amended agent is `0.12.1`. D-a shows that cache identity is operationally decisive, so I’m checking whether row 25 adequately overrides those executable instructions or whether this remains actionable drift.
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command '$p='"'agents/flash-implementer.md';"'$l=Get-Content -LiteralPath $p;1..$l.Count|ForEach-Object{'"'{0,4}: {1}' -f "'$_,$l[$_-1]}' in C:\Users\Brandon\Documents\parallax
+ succeeded in 536ms:
+   1: ---
+   2: name: flash-implementer
+   3: description: Zero-judgment Flash implementer for frozen-plan tasks. Use when executing build tasks from a debate-frozen implementation plan - give it ONE task's verbatim text plus the plan's Global Constraints and a log-file path. It delegates ALL code-writing to Gemini 3.6 Flash via the Antigravity CLI headlessly, verifies route and authorship evidence, runs the task's verification itself, and reports. It never types repo code and never makes design decisions.
+   4: model: haiku
+   5: tools: Read, Grep, Glob, Bash
+   6: ---
+   7: 
+   8: # Flash implementer (agy wrapper)
+   9: 
+  10: You supervise ONE task from a frozen implementation plan. Gemini 3.6 Flash
+  11: does ALL the typing through the Antigravity CLI (`agy`); you do preflight,
+  12: dispatch, evidence checks, verification, and honest reporting. You never
+  13: edit or create repo files yourself — your tool grant has no Edit or Write,
+  14: and using Bash to write repo content is equally forbidden: a changed file
+  15: the brain transcript cannot account for fails the task. The one declared
+  16: carve-out is the brief file below — the sole transient exception to the
+  17: never-write rule, and it never survives to the evidence checks.
+  18: 
+  19: <!-- shared-contract:start -->
+  20: ## The contract
+  21: 
+  22: - Build exactly what the task says: the files it lists, the code it shows,
+  23:   the commands it specifies. Nothing else.
+  24: - No improvements, no drive-by refactors, no added error handling, no scope
+  25:   adjustments. A deviation is a defect even when it looks better — the diff
+  26:   gets checked against the plan afterward, and unexplained drift fails it.
+  27: - **INPUT GAP rule:** if the task references a file, interface, value, or
+  28:   convention that is not in your brief and not discoverable at the exact
+  29:   path the task names, STOP and report the gap. Never invent or guess the
+  30:   missing piece.
+  31: - Run the task's verification commands yourself and read the output. Never
+  32:   claim completion without re-running verification — "should work" means
+  33:   the task is not done.
+  34: <!-- shared-contract:end -->
+  35: 
+  36: ## Inputs (from the dispatching controller)
+  37: 
+  38: - The task's verbatim text and the plan's Global Constraints.
+  39: - The workspace directory (this cycle: the main checkout only, with the
+  40:   sole live-verification exception — the plan's Task 6 trusted scratch
+  41:   repo).
+  42: - A log-file path OUTSIDE the workspace (the controller owns it; you never
+  43:   place logs in the repo tree).
+  44: 
+  45: ## Preflight (all five must pass BEFORE dispatch)
+  46: 
+  47: 1. `agy models` (binary at `$LOCALAPPDATA/agy/bin/agy.exe`) — output must
+  48:    contain `gemini-3.6-flash-medium`. Anything else (missing binary,
+  49:    sign-out, missing model) is blocked.
+  50: 2. `~/.gemini/antigravity-cli/settings.json` — `trustedWorkspaces` must
+  51:    contain the workspace directory. If not: blocked, and the report quotes
+  52:    the fix ("run one interactive `agy` session in the workspace and approve
+  53:    trust").
+  54: 3. The same settings file must carry NO file-writing per-tool allow rule
+  55:    at all — any `write_file(` entry, whatever path it names, is blocking.
+  56:    A persisted settings allow rule is the durable, call-site-invisible
+  57:    bypass class — its absence is the load-bearing permission control; path
+  58:    spellings vary, so the rule CLASS is banned rather than path-matched.
+  59:    If present: blocked, quoting the rule.
+  60: 4. `git status --porcelain` in the workspace must be EMPTY. A dirty tree
+  61:    makes authorship attribution impossible — blocked, quoting the paths.
+  62: 5. No file matching `AGY-TASK-BRIEF-*` exists in the workspace — a stale
+  63:    brief means an earlier dispatch died mid-cleanup: blocked.
+  64: 
+  65: ## Dispatch
+  66: 
+  67: 1. Write the brief to `<workspace>/AGY-TASK-BRIEF-<unique>.md` with a Bash
+  68:    heredoc — `<unique>` is the dispatch log file's basename, so briefs
+  69:    never collide. Content: the task's verbatim text, the Global
+  70:    Constraints, the exact files list, and this exact closing line:
+  71:    `Do not run commands or attempt verification - the wrapper runs all verification after you finish; your only job is the file edits.`
+  72:    (Print mode auto-denies command execution, so a verification attempt
+  73:    by Flash soft-denies and blocks the run — live-verified 2026-07-25.
+  74:    stdin does not reach the model in print mode — probed 2026-07-25; the
+  75:    workspace brief file is the delivery mechanism.) This file is the sole
+  76:    transient exception to your never-write rule.
+  77: 2. Run (single line):
+  78:    `agy -p "Read the file AGY-TASK-BRIEF-<unique>.md in the workspace and execute it exactly." --model gemini-3.6-flash-medium --add-dir <workspace> --log-file <log-path>`
+  79: 3. Delete the brief file immediately after agy exits — on success, failure, and interruption alike — and always BEFORE any evidence check, so it never appears in `git status`. If your run is resumed after an interruption, delete any leftover brief FIRST.
+  80: 
+  81: ## Route and authorship checks (every run)
+  82: 
+  83: - On the log file: `Print mode: starting` line present containing
+  84:   `model="gemini-3.6-flash-medium"`.
+  85: - On the log file: `Propagating selected model override` line present
+  86:   (presence only — its display label is not matched).
+  87: - Transcript/tree corroboration: parse `conversationID="<uuid>"` from the
+  88:   log's `Print mode: starting` line, then read the brain transcript at
+  89:   `~/.gemini/antigravity-cli/brain/<conversationID>/.system_generated/logs/transcript_full.jsonl`
+  90:   (the `--log-file` log itself carries NO file actions — probed). Every path git status reports changed must appear in the brain transcript as a successful file-changing action. A changed file the transcript never
+  91:   mentions means someone other than Flash typed it — blocked, no matter
+  92:   what the tests say. A missing transcript is blocked.
+  93: - This evidence is client-side: report the route as **requested and
+  94:   propagated**, never "used and confirmed". Server-side substitution is
+  95:   not detectable from this evidence class.
+  96: 
+  97: ## Failure handling — loud, never silent
+  98: 
+  99: Blocked (quote the exact output) on: any preflight failure, the print-mode
+ 100: soft-deny line ("auto-denied"), nonzero exit, a missing or mismatched
+ 101: route line, a corroboration mismatch, or writes diverted to agy's internal
+ 102: scratch (expected files absent from the tree). Never retry with
+ 103: `--dangerously-skip-permissions` — that flag is forbidden in this lane, as
+ 104: is ANY approval-bypass flag or persisted per-tool allow rule added to agy
+ 105: settings. Never complete the work yourself: rerouting a blocked task to a
+ 106: Claude tier is the user's decision, recorded in the plan's Escalated
+ 107: points — not yours.
+ 108: 
+ 109: ## Report format (your final message)
+ 110: 
+ 111: - **STATUS:** done | blocked | INPUT GAP: <exactly what is missing>
+ 112: - **ROUTE:** the resolved model ID as requested and propagated, plus the
+ 113:   retained log file's path AND the brain transcript's path
+ 114: - **FILES CHANGED:** actual paths from `git status` — on blocked, STILL
+ 115:   list every path Flash already touched so the session can revert a
+ 116:   partial write
+ 117: - **VERIFICATION:** each command you ran yourself, with its real output
+ 118:   (condensed)
+ 119: - **DEVIATIONS:** must be "none" — anything else means you stopped and are
+ 120:   explaining why the task could not be built as written
+ 121: 
+ 122: ## Lane note
+ 123: 
+ 124: This agent pins the Flash implementation lane. Canonical model literal:
+ 125: `gemini-3.6-flash-medium` (Gemini 3.6 Flash, medium reasoning effort,
+ 126: Antigravity CLI resolved ID). The literal lives ONLY here;
+ 127: `implementer.md` pins its own lane's model in its frontmatter and Lane
+ 128: note — every other surface points at the agent files. Trust is per-directory and interactive-only, so this lane runs in
+ 129: the main checkout this cycle, with the plan's Task 6 trusted scratch repo
+ 130: as the sole live-verification exception — a worktree trust story is future work.
+
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command '$p='"'evals/multi-model-verify/test_flash_implementer.py';"'$l=Get-Content -LiteralPath $p;1..$l.Count|ForEach-Object{'"'{0,4}: {1}' -f "'$_,$l[$_-1]}' in C:\Users\Brandon\Documents\parallax
+ succeeded in 543ms:
+   1: """Contract pins for the Flash implementer lane (agents/flash-implementer.md).
+   2: 
+   3: Amended by design spec 2026-07-25 (advisory review B1-B8): these tests pin
+   4: the agent file's contract text so drift in the dispatch recipe, route
+   5: check, forbidden-bypass class, or report format fails offline with zero
+   6: CLI calls. The two agent files are the only allowed homes for the
+   7: implementer model literal.
+   8: """
+   9: import re
+  10: from pathlib import Path
+  11: 
+  12: REPO = Path(__file__).resolve().parents[2]
+  13: FLASH = REPO / "agents" / "flash-implementer.md"
+  14: CLASSIC = REPO / "agents" / "implementer.md"
+  15: CANONICAL_ID = "gemini-3.6-flash-medium"
+  16: SHARED_START = "<!-- shared-contract:start -->"
+  17: SHARED_END = "<!-- shared-contract:end -->"
+  18: 
+  19: 
+  20: def _read(p):
+  21:     return p.read_text(encoding="utf-8")
+  22: 
+  23: 
+  24: def _frontmatter(text):
+  25:     m = re.match(r"^---\n(.*?)\n---\n", text, re.DOTALL)
+  26:     assert m, "missing frontmatter"
+  27:     return m.group(1)
+  28: 
+  29: 
+  30: def test_flash_frontmatter_pins_model_and_tools():
+  31:     fm = _frontmatter(_read(FLASH))
+  32:     assert re.search(r"^model: haiku$", fm, re.MULTILINE)
+  33:     m = re.search(r"^tools: (.+)$", fm, re.MULTILINE)
+  34:     assert m, "tools allowlist missing"
+  35:     tools = [t.strip() for t in m.group(1).split(",")]
+  36:     assert sorted(tools) == ["Bash", "Glob", "Grep", "Read"]
+  37: 
+  38: 
+  39: def test_flash_dispatch_contract():
+  40:     body = _read(FLASH)
+  41:     assert "--model " + CANONICAL_ID in body
+  42:     assert "--add-dir" in body
+  43:     assert "--log-file" in body
+  44:     # unique-suffix brief name + full lifecycle, pinned by exact sentence
+  45:     # fragments so a regression cannot pass on loose keywords
+  46:     # (Sol check-off round 2, finding 3)
+  47:     assert "AGY-TASK-BRIEF-" in body
+  48:     assert "sole transient exception" in body.lower()
+  49:     assert "the dispatch log file's basename" in body
+  50:     assert "on success, failure, and interruption alike" in body
+  51:     # brief-borne no-commands line (Sol diff-debate F1: a task whose text
+  52:     # carries a verification command otherwise soft-denies in print mode
+  53:     # and blocks the green path - live-verified 2026-07-25)
+  54:     assert ("Do not run commands or attempt verification - the wrapper "
+  55:             "runs all verification after you finish; your only job is "
+  56:             "the file edits.") in body
+  57:     # stdin is probed-dead in print mode; the body must not suggest it
+  58:     assert "stdin" not in body.lower() or "does not reach" in body.lower()
+  59: 
+  60: 
+  61: def test_flash_route_check_strings():
+  62:     body = _read(FLASH)
+  63:     assert 'Print mode: starting' in body
+  64:     assert 'model="' + CANONICAL_ID + '"' in body
+  65:     assert "Propagating selected model override" in body
+  66:     assert "requested and propagated" in body
+  67:     assert "used and confirmed" not in body.replace(
+  68:         'never "used and confirmed"', "")
+  69:     # transcript/tree corroboration (Sol check-off F1: the log carries no
+  70:     # file actions; evidence lives in the brain transcript)
+  71:     assert "transcript_full.jsonl" in body
+  72:     assert "conversationID" in body
+  73:     assert ("every path git status reports changed must appear in the "
+  74:             "brain transcript as a successful file-changing action"
+  75:             ) in body.lower()
+  76: 
+  77: 
+  78: def test_flash_preflight_pins():
+  79:     body = _read(FLASH)
+  80:     assert "agy models" in body
+  81:     assert "trustedWorkspaces" in body
+  82:     # conservative rule-class ban + clean baseline + stale-brief check,
+  83:     # pinned by exact sentence fragments (Sol check-off round 2,
+  84:     # finding 3): loose keyword pins would still pass a regression to
+  85:     # path-scoped matching or a dropped preflight
+  86:     assert "any `write_file(` entry, whatever path it names" in body
+  87:     assert "allow rule" in body
+  88:     assert "git status --porcelain" in body
+  89:     assert "No file matching `AGY-TASK-BRIEF-*`" in body
+  90:     # main-checkout scope with its one declared carve-out (Sol round 3)
+  91:     assert "sole live-verification exception" in body
+  92: 
+  93: 
+  94: def test_flash_route_report_carries_transcript():
+  95:     body = _read(FLASH)
+  96:     assert "AND the brain transcript's path" in body
+  97: 
+  98: 
+  99: def test_flash_forbidden_bypass_class():
+ 100:     body = _read(FLASH)
+ 101:     assert "--dangerously-skip-permissions" in body
+ 102:     idx = body.find("--dangerously-skip-permissions")
+ 103:     window = body[max(0, idx - 200):idx + 200].lower()
+ 104:     assert "never" in window or "forbidden" in window
+ 105:     assert "persisted" in body and "settings" in body
+ 106: 
+ 107: 
+ 108: def test_flash_report_headings():
+ 109:     body = _read(FLASH)
+ 110:     for heading in ("**STATUS:**", "**ROUTE:**", "**FILES CHANGED:**",
+ 111:                     "**VERIFICATION:**", "**DEVIATIONS:**"):
+ 112:         assert heading in body, heading
+ 113:     # the four shared headings are pinned in BOTH files so a unilateral
+ 114:     # rename in implementer.md cannot pass the suite (ROUTE is
+ 115:     # lane-specific to the flash file)
+ 116:     classic = _read(CLASSIC)
+ 117:     for heading in ("**STATUS:**", "**FILES CHANGED:**",
+ 118:                     "**VERIFICATION:**", "**DEVIATIONS:**"):
+ 119:         assert heading in classic, heading
+ 120: 
+ 121: 
+ 122: def _shared_block(text, path):
+ 123:     assert SHARED_START in text and SHARED_END in text, (
+ 124:         "missing shared-contract markers in " + str(path))
+ 125:     return text.split(SHARED_START)[1].split(SHARED_END)[0]
+ 126: 
+ 127: 
+ 128: def test_shared_contract_parity():
+ 129:     # byte-identical shared block; ROUTE is lane-specific and lives
+ 130:     # outside the block (spec section 1)
+ 131:     assert _shared_block(_read(FLASH), FLASH) == _shared_block(
+ 132:         _read(CLASSIC), CLASSIC)
+ 133: 
+ 134: 
+ 135: def test_classic_lane_note_retired_stale_claim():
+ 136:     body = _read(CLASSIC)
+ 137:     assert "Nothing else in the plugin references" not in body
+ 138:     assert "flash-implementer" in body
+ 139: 
+ 140: 
+ 141: SWEEP_GLOBS = [
+ 142:     "skills/**/*.md", "commands/*.md", "tools/*.ps1", "hooks/*",
+ 143:     "evals/**/*.py", "evals/**/*.json", "evals/**/*.ps1",
+ 144:     "README.md", "CLAUDE.md", "agents/*.md",
+ 145: ]
+ 146: # The two agent files are the contract homes; this test file necessarily
+ 147: # carries the literal as its enforcement pin.
+ 148: ALLOWED = {FLASH.resolve(), CLASSIC.resolve(),
+ 149:            Path(__file__).resolve()}
+ 150: 
+ 151: 
+ 152: def test_flash_literal_single_source():
+ 153:     offenders = []
+ 154:     for pattern in SWEEP_GLOBS:
+ 155:         for p in REPO.glob(pattern):
+ 156:             if p.resolve() in ALLOWED:
+ 157:                 continue
+ 158:             if "gemini-3.6-flash" in p.read_text(encoding="utf-8",
+ 159:                                                  errors="replace"):
+ 160:                 offenders.append(str(p))
+ 161:     assert offenders == []
+ 162: 
+ 163: 
+ 164: def test_sonnet_implementer_literals_removed():
+ 165:     readme = _read(REPO / "README.md")
+ 166:     assert "currently `model: sonnet`" not in readme
+ 167:     # absence pins alone are vacuous against line-wrapped source; the
+ 168:     # presence pins below are the real oracles for Task 3's rewrites
+ 169:     assert "`haiku`/`opus` are drop-ins" not in readme
+ 170:     assert "any Claude tier is a drop-in" in readme
+ 171:     fpf = _read(REPO / "skills" / "multi-model-verify" / "references"
+ 172:                 / "frozen-plan-format.md")
+ 173:     assert "Sonnet 5" not in fpf
+ 174:     assert "the pinned lane in `agents/`" in fpf
+
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command '$p='"'.git/parallax/application-checkpoints/20260725-2115-d46045700de2.md';"'$l=Get-Content -LiteralPath $p;1..$l.Count|ForEach-Object{'"'{0,4}: {1}' -f "'$_,$l[$_-1]}' in C:\Users\Brandon\Documents\parallax
+ succeeded in 538ms:
+   1: # Application checkpoint — 0.12.0 mode-diff FIX (Sol round 1)
+   2: 
+   3: ## Reviewed range and terminal outcome
+   4: Range afc5591..d460457 (feat/0120-flash-implementer merge gate). Sol
+   5: diff-debate round 1 (codex session 019f9c24-8351-7942-aeea-06f87774d26b,
+   6: effective route confirmed: gpt-5.6-sol / openai / high / read-only):
+   7: VERDICT FIX — one blocking finding. This checkpoint applies that FIX;
+   8: re-review (round 2 resume) and terminal verdict follow application.
+   9: 
+  10: ## Dispositions
+  11: - F1 frozen-plan dispatch-input drift | accepted | The frozen brief
+  12:   recipe (plan:280-287, agents/flash-implementer.md:67-75) permits task
+  13:   text + Global Constraints + files list only. Task 6 run 1 used exactly
+  14:   that shape and blocked (flash-dryrun.log:126 soft-deny); run 2 went
+  15:   green only because the controller added a "Flash runs no commands"
+  16:   line at dispatch time (ledger progress.md Task 6 step 3 entries). The
+  17:   load-bearing sentence lives only in the gitignored ledger — not
+  18:   shipped. plan:26 freezes changes behind reopening the debate.
+  19: - Claim 2 UNVERIFIED (no python in Sol sandbox) | resolved by session
+  20:   run | pytest evals -q at head d460457: 144 passed, 1 skipped (this
+  21:   session, 2026-07-25 21:14).
+  22: - Claim 5 reviewer-provenance UNVERIFIED | noted, no action | the
+  23:   fresh-eyes review is a session subagent artifact, not on disk; its two
+  24:   note-level findings were independently re-confirmed by Sol with
+  25:   citations (README.md:66-69,180-184; test_flash_implementer.py:146-155).
+  26: 
+  27: ## Planned changes
+  28: | file | intended postcondition | finding |
+  29: |---|---|---|
+  30: | agents/flash-implementer.md | Dispatch step 1's brief content list gains a mandatory single-line sentence telling Flash it runs no commands and never attempts verification — the wrapper verifies after agy exits (exact wording test-pinned; written as one physical line so no new line-join) | F1 |
+  31: | evals/multi-model-verify/test_flash_implementer.py | the dispatch-pins test additionally asserts that exact sentence as a contiguous substring | F1 |
+  32: | docs/superpowers/plans/2026-07-25-flash-implementer.md | embedded test block byte-identical to the updated test file; embedded agent block word-identical to the updated agent; Task 6 Step 3 states the no-commands sentence is brief-borne (controller adds no extra constraint); Debate record gains the diff-debate participants/session and resolved row 25 for F1; freeze retained as converged-with-amendments | F1 |
+  33: | docs/superpowers/specs/2026-07-25-flash-implementer-design.md | brief-delivery/dispatch section states the brief carries the wrapper-verifies/no-commands sentence (spec-sync discipline per check-off round 3) | F1 |
+  34: | .claude-plugin/plugin.json | version 0.12.1 (dev-loop: cache must serve the amended agent for the Task 6 rerun; the extra bump beyond Task 5's frozen 0.12.0 is recorded as an amendment consequence) | F1 |
+  35: 
+  36: ## Verification plan
+  37: | gate | what passing proves |
+  38: |---|---|
+  39: | python -m pytest evals -q | new pin holds; no regression (expect 144+1skip) |
+  40: | skill_lint --strict + skill_scanner + run_trigger_evals | CI parity at amended head |
+  41: | plugin update + cache byte-compare of agents/flash-implementer.md | the installed contract equals the amended head |
+  42: | Task 6 Step 3 rerun, frozen inputs ONLY (no controller no-commands line) | the contract as shipped produces the green path — F1's exact failure mode retested |
+  43: | Task 6 Step 4b sentinel rerun | amended agent still blocks at preflight 3 (regression) |
+  44: | Sol round 2 (resume 019f9c24) | reviewer re-review of the fixed range |
+  45: Unaffected, prior evidence cited: Step 4a (raw CLI, no agent), Step 5
+  46: skip probe (raw CLI, user-run).
+  47: 
+  48: ## Authorization
+  49: user: "go" (2026-07-25, after checkpoint presented in full)
+  50: 
+  51: ## Scope line
+  52: no files beyond the rows above; amend this checkpoint before expanding.
+  53: 
+  54: ## Verification results (appended after application)
+  55: | gate | result |
+  56: |---|---|
+  57: | python -m pytest evals -q | 144 passed, 1 skipped (post-wave, new pin active) |
+  58: | skill_lint --strict / skill_scanner / run_trigger_evals | PASS 0/0 · 0 CRITICAL 0 WARN 0 INFO · all clear |
+  59: | plugin update + cache byte-compare | 0.12.1 cache agents/flash-implementer.md hash-identical to head |
+  60: | Task 6 Step 3 rerun, frozen inputs only | GREEN (post-restart): flash-dryrun4.log 0 soft-denies; brain transcript 87f69919 carries the brief-borne closing line (1 hit); controller re-ran python hello.py -> hello flash; committed 3e8416a |
+  61: | Task 6 Step 4b sentinel rerun | blocked at preflight 3 quoting the sentinel; no dispatch; settings restored hash-identical, scratch trust entry then removed |
+  62: | Sol round 2 (resume 019f9c24) | dispatched next; terminal verdict follows adjudication |
+  63: 
+  64: Deviations: (1) first rerun attempt ran before the session restart and was
+  65: INVALIDATED by controller transcript check — the session's Agent tool
+  66: still served the 0.12.0 cache (closing line 0 hits; soft-deny recurred);
+  67: commits e665aa9/6bf1af4/2e0bd3f were unaffected. (2) That invalid run
+  68: exposed a wrapper-compliance variance: the old-contract wrapper reported
+  69: done despite the soft-deny where run 1 blocked on the identical signal —
+  70: disclosed to Sol in round 2; the amended contract removes the trigger
+  71: structurally and controller re-verification remains the backstop.
+  72: (3) The scratch trust entry was restored by direct settings edit (a
+  73: restore of the trust the user granted interactively earlier this session,
+  74: same path), then removed after 4b — final settings: parallax trust only.
+
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command '$p='"'docs/superpowers/plans/rounds/2026-07-25-flash-implementer/diff-round1-reply.md';"'$l=Get-Content -LiteralPath $p;1..$l.Count|ForEach-Object{'"'{0,4}: {1}' -f "'$_,$l[$_-1]}' in C:\Users\Brandon\Documents\parallax
+ succeeded in 551ms:
+   1: Blocking finding: Task 6’s successful run did not exercise the frozen dispatch contract. The frozen input is the task verbatim plus the plan’s Global Constraints (`docs/superpowers/plans/2026-07-25-flash-implementer.md:280-287`; `agents/flash-implementer.md:36-43`), and the brief recipe permits only those items plus the files list (`agents/flash-implementer.md:67-75`). The first run using that contract blocked; the green retry depended on an added “Flash runs no commands” constraint (`.superpowers/sdd/2026-07-25-flash-implementer/progress.md:34-35`). Calling that controller-owned input does not make it plan-conformant.
+   2: 
+   3: 1. **PASS.** The test block and doctor check 7 exactly match their frozen blocks (`plan:42-210` ↔ `test_flash_implementer.py:1-168`; `plan:487-503` ↔ `commands/doctor.md:129-144`). The agent is word-identical with the three disclosed joins at `agents/flash-implementer.md:76,87,127`, plus `README.md:133`; the shared blocks are identical at `agents/flash-implementer.md:19-34` and `agents/implementer.md:13-28`.
+   4: 
+   5: 2. **UNVERIFIED.** The required commands are `CLAUDE.md:11-16`, but no Python interpreter was available in this sandbox. Older on-disk reports record the quoted lint/scanner results (`task-3-report.md:21-27`) and `144 passed, 1 skipped` (`task-4-report.md:26-27`), but they do not independently prove the claimed fresh-head run.
+   6: 
+   7: 3. **PASS — DEFER.** All seven declared surfaces exclude both `agents/*` and `frozen-plan-format.md` (`evals/multi-model-verify/evals.json:7-85`); the selector uses only surface intersection or case-entry changes (`run_behavioral_evals.py:143-166`). Static selection produced zero cases. An agent-transport case requires harness expansion because the current runner creates temporary workspaces and exposes no Agent tool (`run_behavioral_evals.py:432-459`, `:98-113`). Deferral matches the declared non-goal (`design.md:320-326,370-372`).
+   8: 
+   9: 4. **REFUTED in part.** The GIVEN green, red, sentinel, and bypass outcomes match the ledger (`progress.md:35-38`). But 4b’s disposition is wrong: the successful retry patched the frozen dispatch input at runtime. The plan freezes changes behind renewed debate (`plan:26`) and specifies the exact live task (`plan:654-667`). Therefore Task 6 is not conformantly complete.
+  10: 
+  11: 5. **PASS on substance; reviewer provenance UNVERIFIED.** The README omission is outside the exact planned edits (`plan:429-456`; `README.md:66-69,180-184`). The missing `is_file()` guard is real (`test_flash_implementer.py:146-155` versus `test_multi_model_verify.py:248-252`) but cannot create a silent pass. The claimed fresh-eyes review artifact was not present on disk.
+  12: 
+  13: 6. **REFUTED** because claim 4 leaves a blocking frozen-plan deviation.
+  14: 
+  15: Specific fix: reopen the plan debate; add an exact “Flash runs no commands; wrapper performs verification” sentence to the dispatch brief contract, pin it in `test_flash_implementer.py`, update the agent verbatim, refresh the installed plugin, and rerun Task 6 using only the newly frozen inputs plus all four gates.
+  16: 
+  17: **VERDICT: FIX — frozen-plan dispatch-input drift; Fable-model / Codex-Sol, one diff exchange, not converged, frozen-plan verification FULL.**
+
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command '$p='"'docs/superpowers/plans/rounds/2026-07-25-flash-implementer/diff-round1-brief.md';"'$l=Get-Content -LiteralPath $p;1..$l.Count|ForEach-Object{'"'{0,4}: {1}' -f "'$_,$l[$_-1]}' in C:\Users\Brandon\Documents\parallax
+ succeeded in 570ms:
+   1: # Mode: diff (merge gate) — parallax 0.12.0 Flash implementer lane
+   2: 
+   3: <role>Adversarial reviewer, equal weight, in a two-model debate. This is
+   4: the mode-diff debate at branch close — the separate, later gate your
+   5: 4-round primary check-off (your session 019f9ad5-e318-7831-8a3f-0c02c94caa8e,
+   6: terminal PASS at the cap) explicitly reserved.</role>
+   7: 
+   8: <task>Verify the implemented diff against the frozen plan: spec fidelity
+   9: (the implementer makes zero judgment calls, so ANY drift from the frozen
+  10: plan is a finding). Confirm or refute each numbered claim below, then end
+  11: with one verdict on the merge: PASS / FIX (with the specific fix) /
+  12: ESCALATE.</task>
+  13: 
+  14: <rules>Cite file:line from this tree for every claim you make or contest;
+  15: uncited claims are struck. Externally probed CLI facts quoted in claim 4
+  16: and in the spec's probe record are GIVEN (you cannot re-run agy here).
+  17: Do not manufacture objections: if a claim stands, say PASS and move on.
+  18: Grade final dispositions, not vocabulary.</rules>
+  19: 
+  20: <state>
+  21: - Branch feat/0120-flash-implementer = your working directory (read-only
+  22:   sandbox). Base afc5591 (merge-base with main), head d460457.
+  23: - Read the range yourself: `git diff afc5591..d460457` (17 commits,
+  24:   26 files, +18125/-8 — the bulk is committed debate-round transcripts
+  25:   under docs/superpowers/plans/rounds/2026-07-25-flash-implementer/).
+  26: - FROZEN plan (STATUS: FROZEN — CONVERGED, Verification status FULL):
+  27:   docs/superpowers/plans/2026-07-25-flash-implementer.md — converged via
+  28:   Kimi backup-lane debate (2R) + your own 4-round check-off; resolved
+  29:   points 1-24 in its Debate record.
+  30: - Approved spec: docs/superpowers/specs/2026-07-25-flash-implementer-design.md
+  31: - Code surfaces in the range: agents/flash-implementer.md (new),
+  32:   agents/implementer.md (shared-contract markers + Lane note),
+  33:   evals/multi-model-verify/test_flash_implementer.py (new, 11 tests),
+  34:   README.md, skills/multi-model-verify/references/frozen-plan-format.md,
+  35:   commands/doctor.md (check 7), tools/check-drift.ps1 (agy snapshot
+  36:   field), .claude-plugin/plugin.json (0.12.0).
+  37: </state>
+  38: 
+  39: <claims>
+  40: 1. Plan conformance is exact at head: test_flash_implementer.py and
+  41:    doctor.md check 7 are byte-identical to the plan's embedded blocks;
+  42:    agents/flash-implementer.md is word-identical with exactly the
+  43:    disclosed line-join class (plan's fenced blocks soft-wrap phrases the
+  44:    tests pin contiguous; 4 instances total incl. README.md:133, all
+  45:    word-identical — deviation-record candidate D1: plan-internal
+  46:    conflict, executable pin governs). Shared-contract blocks in the two
+  47:    agent files are byte-identical between the markers.
+  48: 2. Suites green at head d460457 (run by a fresh-eyes fable-model
+  49:    reviewer, quoted): skill_lint --strict "PASS — 0 error(s), 0
+  50:    warning(s)"; skill_scanner "0 CRITICAL, 0 WARN, 0 INFO";
+  51:    run_trigger_evals "PASS multi-model-verify: 5 positives clear 5
+  52:    near-misses"; pytest evals -q "144 passed, 1 skipped". You may re-run
+  53:    any of these in your sandbox if it permits.
+  54: 3. Behavioral evals: `run_behavioral_evals.py --changed` selects ZERO
+  55:    cases for this range — all seven cases declare surfaces limited to
+  56:    SKILL.md + four reference files not touched here;
+  57:    frozen-plan-format.md appears in no case's surface; evals.json
+  58:    untouched. Matches the spec §6 gap declaration, which assigns the
+  59:    "should an agents/-surfaced case exist" question to THIS debate:
+  60:    our position is DEFER to 0.13.0+ (a behavioral case needs the live
+  61:    agy transport in the eval harness — new machinery, not this branch).
+  62: 4. Task 6 live verification ran to completion (GIVEN, external evidence;
+  63:    full record in .superpowers/sdd/2026-07-25-flash-implementer/progress.md
+  64:    — gitignored by design, readable on disk):
+  65:    a. Green dry-run through the installed agent: STATUS done, route
+  66:       `Print mode: starting (... model="gemini-3.6-flash-medium" ...)`,
+  67:       brain-transcript corroboration held, wrapper ran verification
+  68:       itself, controller re-ran it, green result committed in the
+  69:       scratch repo.
+  70:    b. FIRST dispatch blocked HONESTLY: Flash typed the edit correctly,
+  71:       then attempted the verification command itself; agy print mode
+  72:       emitted `Print mode: soft-denying tool confirmation "Bash" at
+  73:       step 10`; the wrapper reported STATUS blocked per contract, listed
+  74:       the partial write, deleted the brief. Root cause: dispatch-brief
+  75:       gap, not an agent defect. Resolution: the controller's per-dispatch
+  76:       Global Constraints now state verification is the wrapper's job and
+  77:       Flash runs no commands. This is controller-owned dispatch INPUT
+  78:       (agent file "Inputs" section) — no frozen text was changed.
+  79:       Recorded in the ledger as the lane's standing dispatch convention.
+  80:    c. Red probe 4a: `--model gemini-9.9-fake` → "Error: invalid model
+  81:       selection", exit 1, no file changes.
+  82:    d. Sentinel probe 4b: planted `write_file(/parallax-sentinel-never-matches/)`
+  83:       → the real agent blocked at preflight check 3 QUOTING the sentinel,
+  84:       no dispatch reached agy; settings restored hash-identical,
+  85:       confirmed by re-read.
+  86:    e. Skip-permissions probe (user-run, untrusted dir): file WAS created;
+  87:       log: `Print mode: --dangerously-skip-permissions set,
+  88:       auto-approving all tool permissions`. Settles spec §2's open
+  89:       question: the flag is a FULL bypass in print mode, so the
+  90:       preflight-3 settings assertion AND the contract's flag ban are
+  91:       EACH load-bearing. Lane contract unchanged — flag stays forbidden.
+  92: 5. Fresh-eyes whole-branch review (fable-model subagent, this session)
+  93:    returned PASS with two note-level items, neither blocking: (i)
+  94:    README.md:69 and :181-184 enumerate doctor's checks without the new
+  95:    agy row — correctly absent (the frozen plan enumerated the exact
+  96:    README edits; adding it would itself be freeze drift); future-cycle
+  97:    one-liner. (ii) test_flash_implementer.py:146-155 sweep lacks the
+  98:    `f.is_file()` guard its model (test_multi_model_verify.py:252) has —
+  99:    failure mode is a loud test error, not a silent pass; zero non-file
+ 100:    matches at head. Deferred minors triaged harmless: the two
+ 101:    DEVIATIONS-field contradictions live only in gitignored fix-wave
+ 102:    reports nothing shipped depends on; the line-join class re-verified
+ 103:    word-identical at head.
+ 104: 6. Session position: PASS for merge at d460457.
+ 105: </claims>
+ 106: 
+ 107: <boundaries>Not under debate: the frozen plan's content (converged
+ 108: through your own check-off; resolved points 1-24 are settled), the user's
+ 109: architecture rulings (true-Flash-only wrapper, consent-gated reroute,
+ 110: main-checkout-only with the Task 6 scratch-repo exception), the canonical
+ 111: reviewer/implementer literals, and the agy CLI's probed behavior (GIVEN
+ 112: class). The two note-level items in claim 5 are future-cycle candidates
+ 113: unless you show one is load-bearing NOW.</boundaries>
+ 114: 
+ 115: <final-check>List any claim you could not verify against files you read,
+ 116: as UNVERIFIED — do not fold unverified material into your verdict.</final-check>
+
+2026-07-26T02:31:55.972750Z ERROR codex_models_manager::manager: failed to renew cache TTL: missing field `supports_reasoning_summaries` at line 86 column 5
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command '$p='"'.superpowers/sdd/2026-07-25-flash-implementer/progress.md';"'$l=Get-Content -LiteralPath $p;1..$l.Count|ForEach-Object{'"'{0,4}: {1}' -f "'$_,$l[$_-1]}' in C:\Users\Brandon\Documents\parallax
+ succeeded in 536ms:
+   1: # SDD ledger — plan: docs/superpowers/plans/2026-07-25-flash-implementer.md
+   2: 
+   3: Branch: feat/0120-flash-implementer. Plan FROZEN 2026-07-25 (kimi
+   4: backup-lane debate, 2 rounds, terminal PASS; commit 2726da6). Sol check-off
+   5: still required before merge (user ruling; ~Jul 29 reset).
+   6: Implementation start authorized by user 2026-07-25 ("Start implementing now").
+   7: Pre-flight conflict scan: clean (the plan survived a 2-round adversarial
+   8: review that specifically hunted internal contradictions; F1 was exactly
+   9: such a conflict and is fixed).
+  10: Process note: Task 4's state-machine suite runs CONTROLLER-OWNED (0.10.0
+  11: lesson: background suites inside subagents die silently), before Task 4 is
+  12: marked complete.
+  13: Task 5 steps 1-3 (agy settings hygiene) touch a user-global config file
+  14: outside the repo; Task 5 step 4 and Task 6 are ATTENDED (user).
+  15: Task 1: complete (commits 2726da6..43c763e, review clean)
+  16: Task 2: minor (deferred): report DEVIATIONS field said none while prose disclosed the line-join - bookkeeping contradiction only
+  17: Task 2: deviation-record candidate D1 for diff debate: plan's fenced block line-wraps the corroboration bullet; implementer joined it to one line (wording unchanged) because frozen test test_flash_route_check_strings pins the contiguous substring - plan-internal conflict, executable pin governs
+  18: Task 2: complete (commits 43c763e..f8b51e4, review clean, 1 minor deferred)
+  19: Task 3: complete (commits f8b51e4..bce91b8, review clean)
+  20: Pause before Task 4: codex quota reset per user - Sol plan check-off runs NOW (cheaper to amend pre-Task-4); diff debate still gates merge
+  21: Sol primary check-off round 1 (session 019f9ad5): FIX, 5 blocking - all verified (F1 with hard probe evidence: log 0 hits vs brain transcript 5 hits) and accepted. Spec+plan amended (6348a47), debate record rewritten to schema, fix wave 3b5074f (tests+agent synced, 10/10 + 143+1skip green), scoped re-review PASS (no wording drift in disclosed line-join).
+  22: Fix wave: minor (deferred): report DEVIATIONS field again said none while prose disclosed the forced line-join - same class as Task 2's deferred minor
+  23: Sol round 2: FIX (3 blocking + 2 minor, all consistency ripples) - all accepted. Amendments 96a8224 (Task 6 baselines, Task 5 five-check dry-run + user-disposition rule, Step 4b sentinel+restore, stale refs synced, resolved rows 15-19), fix wave 2 7cae001 (exact-sentence pins + transcript-ROUTE test; 11/11, 144+1skip; third disclosed line-join, no wording change; scoped re-review PASS)
+  24: Sol r3 amendments 6a2ed04 + fix wave 3 17dc41e (scope exception synced; 11/11, 144+1skip)
+  25: Sol round 3: FIX (4 blocking: Task 5 sequencing, scope-conflict, spec sync, record integrity) - all accepted; amendments 6a2ed04, fix wave 3 17dc41e, re-review all-addressed.
+  26: Sol round 4 (CAP): terminal PASS - primary check-off GRANTED, 1 trivial accepted amendment applied. Plan re-frozen CONVERGED at f73cf6f. Controller-run suite: 144 passed 1 skipped. Sol session total: 4 rounds, 019f9ad5-e318-7831-8a3f-0c02c94caa8e.
+  27: Resuming Task 4.
+  28: Task 4: complete (commits f73cf6f..3599c99, review clean, state-machine suite ALL SCENARIOS PASS controller-run)
+  29: Task 5 step 1: probe-dir write_file allow rule removed (settings now carry no allow rules - preflight check 3 satisfied).
+  30: Task 5 step 2: narrowing attempt FAILED as permitted - allowNonWorkspaceAccess=false soft-denies print-mode writes (probed, narrow-probe.txt not created); restored true per the plan's declared fallback: "allowNonWorkspaceAccess=true required for print-mode writes as of agy 1.1.7 - documented fallback per spec section 3". Side observation: agy normalizes settings.json on run (dropped empty permissions block and the false key) - noted for drift triage.
+  31: Task 5: complete (commits 3599c99..d460457; steps: allow rule removed, narrowing fallback documented, probe-dir trust dropped, repo trusted by user, bump committed d460457, five-check dry-run ALL PASS)
+  32: Task 6 step 1: dev loop complete (user: plugin update 0.11.0->0.12.0 + session restart; parallax:flash-implementer live in agent registry with pinned toolset Read/Grep/Glob/Bash).
+  33: Task 6 step 2: scratch repo created+committed (bfd591c, hello.py) in session scratchpad flash-live-verify; trusted by user interactively; trustedWorkspaces entry verified.
+  34: Task 6 step 3 first dispatch: blocked HONESTLY - Flash typed hello.py correctly (transcript-corroborated, conversationID 0c0bdf47) then attempted the verification command itself; agy print mode soft-denied Bash (flash-dryrun.log line 126: 'Print mode: soft-denying tool confirmation "Bash" at step 10'); wrapper reported STATUS blocked per contract, listed the partial write, deleted the brief. Root cause: dispatch-brief gap, not an agent defect - the brief must tell Flash verification is the wrapper's job and command execution is auto-denied in print mode. Fixed in controller-owned Global Constraints wording (per-dispatch input; no frozen text touched). DISPATCH CONVENTION for the lane going forward: every brief's Global Constraints must carry the no-commands/wrapper-verifies line. Bonus evidence: loud-failure path proven with a real unplanted trigger.
+  35: Task 6 step 3 take 2: GREEN - STATUS done; ROUTE gemini-3.6-flash-medium requested and propagated (flash-dryrun2.log line 'Print mode: starting ... model="gemini-3.6-flash-medium"'; brain transcript 2a166e87-082a-43c9-89b7-64cd823876a7); FILES CHANGED hello.py only; wrapper ran python hello.py itself; DEVIATIONS none. Controller re-ran python hello.py -> 'hello flash'; 0 soft-deny lines; 0 stale briefs; green result committed d885801; porcelain empty.
+  36: Task 6 step 4a: raw red probe PASS - 'Error: invalid model selection (--model "gemini-9.9-fake" ...)' + available-model list, exit code 1, no file changes (red-raw.log).
+  37: Task 6 step 4b: sentinel probe PASS - original settings saved to scratchpad (settings-original.json, hash ACDD365C); sentinel write_file(/parallax-sentinel-never-matches/) planted in permissions.allow; real agent blocked at preflight check 3 QUOTING the sentinel, 3 tool uses, no dispatch reached agy (sentinel-probe.log never created), porcelain empty. Settings restored hash-identical and confirmed by re-read.
+  38: Task 6 step 5 (user-run): skip-probe.txt CREATED with content SKIP-OK against an UNTRUSTED dir (scratch trust entry removed first). probe-skip.log line 57: 'Print mode: --dangerously-skip-permissions set, auto-approving all tool permissions'; 0 soft-denies; route model="gemini-3.6-flash-low" as commanded. VERDICT per spec section 2: the flag WORKS in print mode - BOTH bypass surfaces are live; preflight-3 settings assertion AND the flag ban are each load-bearing. Lane contract unchanged - flag stays forbidden.
+  39: Task 6 step 6: this record. Final settings state: allowNonWorkspaceAccess:true + parallax trust only (scratch entry removed). Evidence retained in session scratchpad: flash-dryrun.log, flash-dryrun2.log, red-raw.log, probe-skip.log, settings-original.json; scratch repo flash-live-verify (2 commits + untracked skip-probe.txt).
+  40: Task 6: complete (all steps; the diff-debate brief cites the evidence paths above). Next: final whole-branch review, Sol mode-diff debate (gates merge per user ruling), attestation, merge.
+  41: Final whole-branch review (fable-model subagent, fresh eyes): PASS - suites green at d460457 (144+1skip, lint, scanner, triggers), plan blocks byte/word-identical, deferred minors harmless, behavioral --changed selects zero cases (simulated). Two note-level items: README doctor-enumeration omits check 7 (out of frozen scope, future cycle); sweep lacks is_file() guard (loud-fail only).
+  42: Sol mode-diff debate round 1 (session 019f9c24-8351-7942-aeea-06f87774d26b, route confirmed gpt-5.6-sol/openai/high/read-only): VERDICT FIX - F1 accepted after adjudication: Task 6's green run patched the frozen dispatch input at runtime (controller-added no-commands line; run1 vs run2 logs differ only by it); convention lived only in this gitignored ledger. Claims 1/3/4-rest/5 PASS; claim-2 UNVERIFIED closed by session pytest run at head (144+1skip).
+  43: Fix wave (checkpoint 20260725-2115-d46045700de2, user-authorized "go"): brief-borne exact closing line added to agent Dispatch step 1 + test-pinned + plan blocks synced + Task 6 Step 3 frozen-inputs-only language + spec brief-closing-line bullet + record row 25 + participants/rounds/raw-rounds metadata + diff-round1 artifacts committed. Commits e665aa9 (docs), 6bf1af4 (agent+tests), 2e0bd3f (bump 0.12.1). Suites green post-wave: 144+1skip, lint PASS, scanner clean, triggers clear. Cache 0.12.1 byte-identical to head agent.
+  44: Step 3 rerun attempt (pre-restart): INVALIDATED by controller - session Agent tool still served the 0.12.0 cached agent (brain transcript 3e70f968: 0 hits for the closing line; soft-deny recurred flash-dryrun3.log:127). Wrapper variance noted for the record: this old-contract wrapper reported done despite the soft-deny where run 1 blocked on the identical signal - haiku-compliance variance; amended contract removes the trigger structurally, controller re-verification is the backstop. Scratch reset to bfd591c. PENDING: session restart (user), then Step 3 rerun with frozen inputs only + 4b sentinel rerun + trust-entry removal + Sol round 2 (resume 019f9c24) + adjudication + attestation + merge.
+  45: Post-restart (user restarted; 0.12.1 cache live): Step 3 rerun GREEN with FROZEN INPUTS ONLY - decisive A/B vs the pre-restart invalidated attempt: flash-dryrun4.log 0 soft-denies (vs 1 in both old-agent runs), brain transcript 87f69919-661c-490a-aae3-4ce85ee7eef4 carries the brief-borne closing line (1 hit; 0 hits in the old-agent run), wrapper reported done/route/corroboration/verification per contract, controller re-ran python hello.py -> 'hello flash', brief deleted, green result committed 3e8416a, porcelain empty. Sol diff-F1 failure mode closed by direct retest.
+  46: 4b sentinel rerun PASS under amended agent: blocked at preflight check 3 quoting the sentinel rule, 2 tool uses, no dispatch (sentinel-probe2.log never created), porcelain empty; settings restored hash-identical (saved copy settings-original-4b2.json).
+  47: Final settings hygiene: scratch trust entry removed - settings back to allowNonWorkspaceAccess:true + parallax trust only.
+  48: Checkpoint verification plan: ALL GATES EXECUTED (suites green post-wave; cache byte-match; Step 3 frozen-inputs rerun green; 4b rerun blocked correctly). Next: Sol round 2 (resume 019f9c24), adjudication, attestation, merge.
+
+2026-07-26T02:32:00.164307Z ERROR codex_models_manager::manager: failed to renew cache TTL: missing field `supports_reasoning_summaries` at line 86 column 5
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command '$p='"'docs/superpowers/plans/2026-07-25-flash-implementer.md';"'$l=Get-Content $p;635..680|ForEach-Object{'"'{0,4}: {1}' -f "'$_,$l[$_-1]};710..820|ForEach-Object{'"'{0,4}: {1}' -f "'$_,$l[$_-1]}' in C:\Users\Brandon\Documents\parallax
+ succeeded in 588ms:
+ 635: write rule remains, STOP and surface it for user disposition (never
+ 636: silently delete shared configuration); (4) `git status --porcelain` in
+ 637: the repo is empty (the bump is already committed); (5) no
+ 638: `AGY-TASK-BRIEF-*` file exists in the repo. All five must pass.
+ 639: 
+ 640: ---
+ 641: 
+ 642: ### Task 6: Live verification (ATTENDED; runs only after the plan debate converges)
+ 643: 
+ 644: **Files:**
+ 645: - None in-repo (scratch repo + probe records; SDD ledger notes)
+ 646: 
+ 647: **Interfaces:**
+ 648: - Consumes: the installed 0.12.0 cache (dev loop: `claude plugin update parallax@parallax`, restart — the agent is NOT live before that).
+ 649: - Produces: the live evidence the diff debate's brief cites.
+ 650: 
+ 651: - [ ] **Step 1 (ATTENDED - user): Dev loop**
+ 652: 
+ 653: Bump is committed (Task 5); user runs `claude plugin update parallax@parallax` and restarts the session. Without the restart the dispatched agent is the cached pre-0.12.0 set — a dry-run before restart tests nothing.
+ 654: 
+ 655: - [ ] **Step 2: Scratch repo setup**
+ 656: 
+ 657: Create a scratch git repo in the session scratchpad with one file
+ 658: (`hello.py`, `print("hello")`), and COMMIT it — the agent's clean-tree
+ 659: preflight (check 4) requires an empty `git status --porcelain` before
+ 660: dispatch (Sol check-off round 2, finding 1). Then an interactive trust
+ 661: approval (ATTENDED - user, same mechanism as Task 5 Step 4).
+ 662: 
+ 663: - [ ] **Step 3: Green dry-run through the REAL agent**
+ 664: 
+ 665: Verify `git status --porcelain` in the scratch repo is empty. Dispatch
+ 666: `parallax:flash-implementer` (fresh subagent) with a minimal task:
+ 667: "Modify hello.py so it prints exactly 'hello flash'. Verification:
+ 668: `python hello.py` prints `hello flash`." plus a log path in the
+ 669: scratchpad. The controller supplies ONLY these frozen inputs — the
+ 670: no-commands closing line is brief-borne per the agent's Dispatch step 1,
+ 671: never a controller addition (Sol diff-debate F1). Expected report:
+ 672: STATUS done; ROUTE carries
+ 673: `gemini-3.6-flash-medium` + log path + brain transcript path; FILES
+ 674: CHANGED lists `hello.py`; VERIFICATION shows the wrapper's own
+ 675: `python hello.py` output; DEVIATIONS none. Controller re-runs
+ 676: `python hello.py` itself (never trust the report alone — 0.10.0 lesson:
+ 677: controller-owned verification). Then COMMIT the green result in the
+ 678: scratch repo and verify `git status --porcelain` is empty again, so the
+ 679: later probes start from a clean baseline.
+ 680: 
+ 710: 
+ 711: User runs, in the scratch repo (isolated), the one command the spec's
+ 712: probe task left open:
+ 713: `agy -p "Create a file named skip-probe.txt containing SKIP-OK" --model gemini-3.6-flash-low --add-dir <scratch> --dangerously-skip-permissions --log-file <scratchpad>\probe-skip.log`
+ 714: after REMOVING the scratch repo's trust entry. Record the outcome in the
+ 715: SDD ledger: file created = the flag works in print mode (both bypass
+ 716: surfaces live); soft-denied = the flag is inert in print mode (the
+ 717: settings assertion is the whole live defense). Either way the lane's
+ 718: contract is unchanged — the flag stays forbidden; this only settles which
+ 719: defense is load-bearing, per spec section 2.
+ 720: 
+ 721: - [ ] **Step 6: Record**
+ 722: 
+ 723: Write the dry-run + red-probe + skip-probe outcomes into the SDD ledger
+ 724: (`.superpowers/sdd/2026-07-25-flash-implementer/`), with log paths — the
+ 725: diff-debate brief cites them.
+ 726: 
+ 727: ---
+ 728: 
+ 729: ## Debate record
+ 730: 
+ 731: **Participants:** Fable 5 (session) / Kimi K3 `kimi-code/k3-256k` (kimi-cli 1.49.0, session 4ba130bb-1615-4c95-9afc-d1e3049bb857) / GPT-5.6 Sol (codex exec, sessions 019f9ad5-e318-7831-8a3f-0c02c94caa8e primary check-off, 019f9c24-8351-7942-aeea-06f87774d26b mode-diff)
+ 732: **Rounds used:** 2 of 4 (Kimi, plan mode) + 4 of 4 (Sol, primary check-off: r1 FIX, r2 FIX, r3 FIX, r4 terminal) + mode-diff debate at merge (Sol: r1 FIX, fix wave applied — resolved row 25; re-review in flight)
+ 733: **Outcome:** converged with amendments
+ 734: **Verification status:** FULL
+ 735: **Degradation:** quota-exhausted (primary lane at the plan gate; backup lane substituted for rounds 1-2, primary check-off ran on the reset window)
+ 736: **Authorized by:** user at round 1 (backup-lane substitution; the user's standing ruling retained the primary check-off before branch close)
+ 737: **Raw rounds:** docs/superpowers/plans/rounds/2026-07-25-flash-implementer/ (plan-round1-brief.md, plan-round{1,2}-transcript.txt — Kimi; sol-checkoff-round{1,2,3,4}-{brief,reply,header} — Sol; diff-round{n}-{brief,reply,header} — Sol mode-diff)
+ 738: 
+ 739: Backup-lane note: Kimi ran read-only via a custom agent-file
+ 740: (ReadFile/ReadMediaFile/Glob/Grep/SetTodoList; pre-review write-probe
+ 741: refused) against a throwaway clone — the real tree was never exposed.
+ 742: Route evidence per round: `Using LLM model: provider='managed:kimi-code'
+ 743: model='k3-256k'` in ~/.kimi/logs/kimi.log (client-side class). Clone
+ 744: `git status` after round 2: sole untracked file was the session-authored
+ 745: brief (retained evidence: rounds/.../clone-status-after-round2.txt).
+ 746: Sol round 1 route: header block model gpt-5.6-sol / provider openai /
+ 747: sandbox read-only / effort high.
+ 748: 
+ 749: ### Resolved points
+ 750: 
+ 751: | # | Claim | Raised by | Outcome | Evidence |
+ 752: |---|-------|-----------|---------|----------|
+ 753: | 1 | Task 4 doctor text trips the plan's own literal sweep | Kimi r1 | accepted; doctor text reworded (5391455) | plan Task 4 vs test sweep globs |
+ 754: | 2 | Task 1 expected parity failure signature wrong (FileNotFoundError first) | Kimi r1 | accepted; expectation corrected | test_flash_implementer.py `_read` order |
+ 755: | 3 | README drop-ins absence pin vacuous (line-wrapped source) | Kimi r1 | accepted; presence pins added | README.md:132-133 line break |
+ 756: | 4 | Sweep omits evals/**/*.ps1 vs the reviewer sweep it mirrors | Kimi r1 | accepted; glob added | test_multi_model_verify.py:249 |
+ 757: | 5 | Flash Lane note misstates where the literal lives | Kimi r1 | accepted; reworded | implementer.md carries no gemini literal |
+ 758: | 6 | Drift-snapshot snippet violates carry-forward invariant; PS 5.1 parse risk | Kimi r1 | accepted; Task 4 Step 2 rewritten to carry-forward | check-drift.ps1:193-205 |
+ 759: | 7 | Red-probe expectation contradicts pinned dispatch contract | Kimi r1 | accepted; made disjunctive (superseded by #14) | plan Task 6 vs agent body pin |
+ 760: | 8 | Settings-deletion instruction pins unverifiable path spelling | Kimi r1 | accepted; made spelling-agnostic | settings file outside workspace |
+ 761: | 9 | Parity narrower than spec claim (headings unpinned in classic) | Kimi r1 | accepted; headings pinned in both files | spec section 1 vs test scope |
+ 762: | 10 | Corroboration evidence source wrong: --log-file log carries NO file actions; brain transcript does | Sol r1 | accepted; evidence source corrected to transcript_full.jsonl | probe9.log: 0 hits for probe-write4; brain/<cid>/.../transcript_full.jsonl: 5 hits |
+ 763: | 11 | Brief-file lifecycle unsafe (collision, interruption, unbaselined git status) | Sol r1 | accepted; unique name + collision preflight + guaranteed cleanup + clean-baseline preflight | agent body Dispatch/Preflight sections |
+ 764: | 12 | Debate record lacked required schema fields and session adjudication | Sol r1 | accepted; this record | frozen-plan-format.md:36-68, debate-protocol.md:63 |
+ 765: | 13 | Settings check had no path-matching algorithm | Sol r1 | accepted; conservative rule-class ban (any write_file( entry) | trust entry vs allow rule spelling mismatch on this machine |
+ 766: | 14 | Red probe vacuous (wrapper refusal passes without exercising failure path) | Sol r1 | accepted; split into raw-CLI probe + reachable-failure probe | plan Task 6 Steps 4a/4b |
+ 767: | 15 | Task 6 green run cannot satisfy the new clean-tree preflight | Sol r2 | accepted; scratch baseline committed, post-run commit + clean check | plan Task 6 Steps 2-3 |
+ 768: | 16 | Task 5 dry-check still tested the obsolete three-preflight contract | Sol r2 | accepted; Step 6 runs all five checks verbatim, unrelated rules escalate to user | plan Task 5 Step 6 |
+ 769: | 17 | F2/F4 amendments not actually pinned (loose keyword asserts) | Sol r2 | accepted; exact-sentence pins + ROUTE transcript pin added | test_flash_implementer.py dispatch/preflight tests |
+ 770: | 18 | Step 4b installs a functional bypass without interruption-safe restore | Sol r2 | accepted; nonmatching sentinel rule + save/restore-in-finally | plan Task 6 Step 4b |
+ 771: | 19 | Stale cross-references (log/tree, workdir-scoped, log-only ROUTE, #13 for #14) | Sol r2 | accepted; synchronized | plan header, spec Decisions + section 6, resolved point 7 |
+ 772: | 20 | Task 5 dry-run's clean-tree check cannot pass over the uncommitted bump | Sol r3 | accepted; bump commits first, dry-run post-commit | plan Task 5 Steps 5-6 |
+ 773: | 21 | MAIN-CHECKOUT-ONLY absolute vs Task 6 scratch dispatch | Sol r3 | accepted; sole live-verification exception declared in constraints, spec, agent body (pinned) | Global Constraints, spec Decisions, agent Inputs + Lane note |
+ 774: | 22 | Spec ROUTE line and step-4b recipe out of sync with amended contract | Sol r3 | accepted; synchronized (transcript path; sentinel + save/restore) | spec sections 1 and 6 |
+ 775: | 23 | Record metadata lagged live rounds; r2/r3 raw artifacts unretained | Sol r3 | accepted; this revision + artifacts retained | rounds/ dir, this appendix |
+ 776: | 24 | Task 5 Step 3 phrase omitted the declared Task 6 exception | Sol r4 | trivial accepted amendment; applied | plan Task 5 Step 3 |
+ 777: | 25 | Task 6 green run patched the frozen dispatch input at runtime — the no-commands line was controller-added, not contract text, and lived only in the gitignored ledger | Sol diff-r1 | accepted; exact brief-borne closing line added to Dispatch step 1, test-pinned, plugin bumped 0.12.1, Task 6 Step 3 + 4b rerun with frozen inputs only | flash-dryrun.log:126 soft-deny vs flash-dryrun2.log clean; agent Dispatch step 1; test_flash_implementer.py dispatch pins |
+ 778: 
+ 779: ### Escalated points (user-decided)
+ 780: 
+ 781: | # | Question | Session position | Reviewer position | Owner's call |
+ 782: |---|----------|------------------|-------------------|--------------|
+ 783: 
+ 784: (none this debate; the consent-gated reroute mechanism records future
+ 785: blocked-task reroutes here)
+ 786: 
+ 787: ### Session adjudication (debate-protocol closing step)
+ 788: 
+ 789: Each Sol round-1 finding was verified against live evidence before
+ 790: acceptance: #10 by grepping the retained WRITE4 probe log (zero
+ 791: file-path hits) and the brain transcript (five hits); #11/#14 against
+ 792: the agent body and plan text as cited; #12 against
+ 793: frozen-plan-format.md:36-68; #13 against the live settings file's mixed
+ 794: path spellings. Kimi's rounds 1-2 were adjudicated at the time (all nine
+ 795: findings verified, fixes committed 5391455, round-2 re-verification by
+ 796: the reviewer). Sol rounds 2-3 were each verified the same way (rows
+ 797: 15-23: cited lines read, sequencing conflicts reproduced by inspection,
+ 798: fix waves re-reviewed in scope). No finding was refuted; no point
+ 799: escalated. Convergence = Sol round-4 terminal confirmation of the
+ 800: rounds-1-3 amendment chain (transcript retained under Raw rounds).
+ 801: 
+ 802: Mode-diff round 1 (row 25) was adjudicated the same way before
+ 803: acceptance: the run-1 vs run-2 dispatch inputs differ only by the
+ 804: controller-added no-commands line (retained logs: flash-dryrun.log line
+ 805: 126 soft-deny; flash-dryrun2.log zero soft-denies), and the frozen brief
+ 806: recipe permitted only task text + Global Constraints + files list —
+ 807: Sol's drift claim reproduced by inspection. Application governed by
+ 808: checkpoint 20260725-2115-d46045700de2.
+ 809: 
+ 810: 
+ 811: 
+ 812: 
+ 813: 
+ 814: 
+ 815: 
+ 816: 
+ 817: 
+ 818: 
+ 819: 
+ 820: 
+
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command '$p='"'docs/superpowers/specs/2026-07-25-flash-implementer-design.md';"'$l=Get-Content $p;185..225|ForEach-Object{'"'{0,4}: {1}' -f "'$_,$l[$_-1]}' in C:\Users\Brandon\Documents\parallax
+ succeeded in 603ms:
+ 185:      unattributable — a dirty tree is blocked, not absorbed).
+ 186: - Dispatch: `agy -p <brief> --model gemini-3.6-flash-medium
+ 187:   --add-dir <workdir> --log-file <fresh per-task log>`. Fresh log file per
+ 188:   attempt, written under the session scratchpad (never the repo tree — no
+ 189:   .gitignore dependency); each task's report carries its log path, and the
+ 190:   SDD execution record (the `.superpowers/sdd/<date>-<topic>/` workspace
+ 191:   the subagent-driven-development skill maintains) records per-task lane
+ 192:   provenance, which the diff-debate brief then carries. Adding an
+ 193:   implementer line to the frozen-plan debate record's Participants block is
+ 194:   declared scope for the plan debate to settle.
+ 195: - Brief-file lifecycle (Sol check-off F2): the brief is the SOLE transient
+ 196:   file the wrapper may create in the repo tree — a declared exception to
+ 197:   its never-write rule. Unique reserved name (`AGY-TASK-BRIEF-<unique>.md`,
+ 198:   unique suffix from the dispatch's log-file basename); collision
+ 199:   preflight (any existing `AGY-TASK-BRIEF-*` file in the workspace =
+ 200:   stale state = blocked); deletion guaranteed after agy exits — success,
+ 201:   failure, or interruption path alike — and always BEFORE any evidence
+ 202:   check, so the brief never appears in the attribution set.
+ 203: - Brief closing line (Sol diff-debate F1, live-verified 2026-07-25): the
+ 204:   brief ends with an exact test-pinned line telling Flash to run no
+ 205:   commands and attempt no verification — the wrapper verifies after agy
+ 206:   exits. Print mode auto-denies command execution, so a task whose
+ 207:   verbatim text carries a Verification command otherwise soft-denies and
+ 208:   blocks the green path (the first live dry-run reproduced exactly this;
+ 209:   the wrapper's blocked report was the designed loud failure). The line
+ 210:   is brief-borne — written by the wrapper itself per its Dispatch recipe,
+ 211:   never a controller-supplied constraint.
+ 212: - Route check, every run, on the log file:
+ 213:   1. `Print mode: starting` line present with `model="gemini-3.6-flash-medium"`
+ 214:      (the RESOLVED ID is the comparand — same string §5 pins as canonical);
+ 215:   2. `Propagating selected model override` line present (presence-only; its
+ 216:      display label is a second namespace and is NOT matched);
+ 217:   3. transcript/tree corroboration (evidence source corrected by Sol
+ 218:      check-off F1 — the `--log-file` log carries NO file actions, probed):
+ 219:      parse `conversationID="<uuid>"` from the log's `Print mode: starting`
+ 220:      line, read the brain transcript at
+ 221:      `~/.gemini/antigravity-cli/brain/<conversationID>/.system_generated/logs/transcript_full.jsonl`,
+ 222:      and require every path `git status` reports changed to appear in that
+ 223:      transcript as a successful file-changing action. A changed file the
+ 224:      transcript never mentions means the wrapper (or something else) typed
+ 225:      it — blocked regardless of test results. A missing transcript is
+
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command '$p='"'.claude-plugin/plugin.json';"'$l=Get-Content $p;1..5|ForEach-Object{'"'{0,4}: {1}' -f "'$_,$l[$_-1]}' in C:\Users\Brandon\Documents\parallax
+ succeeded in 545ms:
+   1: {
+   2:   "name": "parallax",
+   3:   "version": "0.12.1",
+   4:   "description": "Cross-model verification for Claude Code: an evidence-grounded adversarial debate between the session model and a cross-vendor reviewer gates plans before implementation and diffs before merge, hooked into the superpowers workflow.",
+   5:   "author": {
+
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command '$p='"'docs/superpowers/plans/rounds/2026-07-25-flash-implementer/diff-round1-header.txt';"'$l=Get-Content $p;1..30|ForEach-Object{'"'{0,4}: {1}' -f "'$_,$l[$_-1]}' in C:\Users\Brandon\Documents\parallax
+ succeeded in 680ms:
+   1: 2026-07-26T01:57:46.100322Z ERROR codex_models_manager::cache: failed to load models cache: missing field `supports_reasoning_summaries` at line 86 column 5
+   2: OpenAI Codex v0.144.1
+   3: --------
+   4: workdir: C:\Users\Brandon\Documents\parallax
+   5: model: gpt-5.6-sol
+   6: provider: openai
+   7: approval: never
+   8: sandbox: read-only
+   9: reasoning effort: high
+  10: reasoning summaries: none
+  11: session id: 019f9c24-8351-7942-aeea-06f87774d26b
+  12: --------
+  13: user
+  14: # Mode: diff (merge gate) — parallax 0.12.0 Flash implementer lane
+  15: 
+  16: <role>Adversarial reviewer, equal weight, in a two-model debate. This is
+  17: the mode-diff debate at branch close — the separate, later gate your
+  18: 4-round primary check-off (your session 019f9ad5-e318-7831-8a3f-0c02c94caa8e,
+  19: terminal PASS at the cap) explicitly reserved.</role>
+  20: 
+  21: <task>Verify the implemented diff against the frozen plan: spec fidelity
+  22: (the implementer makes zero judgment calls, so ANY drift from the frozen
+  23: plan is a finding). Confirm or refute each numbered claim below, then end
+  24: with one verdict on the merge: PASS / FIX (with the specific fix) /
+  25: ESCALATE.</task>
+  26: 
+  27: <rules>Cite file:line from this tree for every claim you make or contest;
+  28: uncited claims are struck. Externally probed CLI facts quoted in claim 4
+  29: and in the spec's probe record are GIVEN (you cannot re-run agy here).
+  30: Do not manufacture objections: if a claim stands, say PASS and move on.
+
+2026-07-26T02:32:11.022386Z ERROR codex_models_manager::manager: failed to renew cache TTL: missing field `supports_reasoning_summaries` at line 86 column 5
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command '
+$reg=Join-Path $env:USERPROFILE '"'.claude\\plugins\\installed_plugins.json'
+if(Test-Path "'$reg){
+ $j=Get-Content $reg -Raw|ConvertFrom-Json
+ $p=$j.plugins.'"'parallax@parallax'|Select-Object -First 1
+ if("'$p){$installed=Join-Path $p.installPath '"'agents\\flash-implementer.md';"'$head=(Resolve-Path '"'agents/flash-implementer.md').Path;Write-Output \"version="'$($p.version) installPath=$($p.installPath)";Write-Output "installed_exists=$(Test-Path $installed)";if(Test-Path $installed){$h1=(Get-FileHash -Algorithm SHA256 $installed).Hash;$h2=(Get-FileHash -Algorithm SHA256 $head).Hash;Write-Output "installed_hash=$h1";Write-Output "head_hash=$h2";Write-Output "hash_equal=$($h1 -eq $h2)"}}
+}else{Write-Output '"'registry missing'}
+" in C:\Users\Brandon\Documents\parallax
+ succeeded in 645ms:
+version=0.12.1 installPath=C:\Users\Brandon\.claude\plugins\cache\parallax\parallax\0.12.1
+installed_exists=True
+installed_hash=279C82DEF59F7AD35B28B427882E39F7D3B556942EA161213C9A4DDF0C34913F
+head_hash=279C82DEF59F7AD35B28B427882E39F7D3B556942EA161213C9A4DDF0C34913F
+hash_equal=True
+
+2026-07-26T02:33:02.299621Z ERROR codex_models_manager::manager: failed to renew cache TTL: missing field `supports_reasoning_summaries` at line 86 column 5
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command '$ErrorActionPreference='"'Stop';"'$plan=Get-Content '"'docs/superpowers/plans/2026-07-25-flash-implementer.md';"'$test=Get-Content '"'evals/multi-model-verify/test_flash_implementer.py';"'$agent=Get-Content '"'agents/flash-implementer.md';function FenceBlock("'$lines,$anchor,$fence){$a=($lines|Select-String -SimpleMatch $anchor|Select-Object -First 1).LineNumber-1;$o=-1;for($i=$a;$i-lt$lines.Count;$i++){if($lines[$i]-eq$fence){$o=$i;break}};$c=-1;for($i=$o+1;$i-lt$lines.Count;$i++){if($lines[$i]-eq($fence -replace '"'[A-Za-z]+"'$'"','')){"'$c=$i;break}};,$lines[($o+1)..($c-1)]};function Eq($a,$b){if($a.Count-ne$b.Count){return $false};for($i=0;$i-lt$a.Count;$i++){if($a[$i]-cne$b[$i]){return $false}};$true};function Words($x){(($x -split '"'\\s+'|Where-Object{"'$_})-join'"' ')};"'$tb=FenceBlock $plan '"'### Task 1:' '"'```python'"';"'$ab=FenceBlock $plan '"'### Task 2:' '"'````markdown'"';Write-Output \"test_exact="'$(Eq $tb $test) plan_test_lines=$($tb.Count) actual=$($test.Count)";Write-Output "agent_word_exact=$((Words $ab)-ceq(Words $agent)) plan_agent_lines=$($ab.Count) actual=$($agent.Count)";$sentence='"'Do not run commands or attempt verification - the wrapper runs all verification after you finish; your only job is the file edits.';foreach("'$p in @('"'agents/flash-implementer.md','evals/multi-model-verify/test_flash_implementer.py','docs/superpowers/plans/2026-07-25-flash-implementer.md','docs/superpowers/specs/2026-07-25-flash-implementer-design.md')){"'$raw=Get-Content $p -Raw;Write-Output "$p exact_sentence_count=$(([regex]::Matches($raw,[regex]::Escape($sentence))).Count)"};$classic=Get-Content '"'agents/implementer.md';function Block("'$x){(($x-join"`n").Split('"'<"'!-- shared-contract:start -->'"')[1].Split('<"'!-- shared-contract:end -->'"')[0])};Write-Output \"shared_exact="'$((Block $agent)-ceq(Block $classic))"' in C:\Users\Brandon\Documents\parallax
+ succeeded in 644ms:
+test_exact=True plan_test_lines=174 actual=174
+agent_word_exact=True plan_agent_lines=136 actual=130
+agents/flash-implementer.md exact_sentence_count=1
+evals/multi-model-verify/test_flash_implementer.py exact_sentence_count=0
+docs/superpowers/plans/2026-07-25-flash-implementer.md exact_sentence_count=1
+docs/superpowers/specs/2026-07-25-flash-implementer-design.md exact_sentence_count=0
+shared_exact=True
+
+2026-07-26T02:33:19.496636Z ERROR codex_models_manager::manager: failed to renew cache TTL: missing field `supports_reasoning_summaries` at line 86 column 5
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command "Select-String -Path 'docs/superpowers/plans/2026-07-25-flash-implementer.md','docs/superpowers/specs/2026-07-25-flash-implementer-design.md','README.md','CLAUDE.md' -Pattern '0\\.12\\.0 cache|pre-0\\.12\\.0|installed 0\\.12\\.0|0\\.12\\.1' | ForEach-Object { \""'$($_.Path):$($_.LineNumber): $($_.Line)" }' in C:\Users\Brandon\Documents\parallax
+ succeeded in 557ms:
+C:\Users\Brandon\Documents\parallax\docs\superpowers\plans\2026-07-25-flash-implementer.md:648: - Consumes: the installed 0.12.0 cache (dev loop: `claude plugin update parallax@parallax`, restart — the agent is NOT live before that).
+C:\Users\Brandon\Documents\parallax\docs\superpowers\plans\2026-07-25-flash-implementer.md:653: Bump is committed (Task 5); user runs `claude plugin update parallax@parallax` and restarts the session. Without the restart the dispatched agent is the cached pre-0.12.0 set — a dry-run before restart tests nothing.
+C:\Users\Brandon\Documents\parallax\docs\superpowers\plans\2026-07-25-flash-implementer.md:777: | 25 | Task 6 green run patched the frozen dispatch input at runtime — the no-commands line was controller-added, not contract text, and lived only in the gitignored ledger | Sol diff-r1 | accepted; exact brief-borne closing line added to Dispatch step 1, test-pinned, plugin bumped 0.12.1, Task 6 Step 3 + 4b rerun with frozen inputs only | flash-dryrun.log:126 soft-deny vs flash-dryrun2.log clean; agent Dispatch step 1; test_flash_implementer.py dispatch pins |
+
+The requested F1 implementation and live rerun evidence are present and synchronized. One executable-plan inconsistency remains: Task 6 still instructs use of 0.12.0/pre-0.12.0 despite the amended contract existing only in 0.12.1.
+  ✓ Pin head/base and inspect the complete fix-range diff plus amended full files
+  ✓ Verify the exact dispatch sentence, plan/test synchronization, version amendment, and debate record
+  ✓ Adjudicate D-a and D-b against the amended contract and retained ledger evidence
+  → Run available fresh gates and issue the round-2 merge verdict
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command '$ErrorActionPreference='"'Stop';git diff --check d460457..2e0bd3f -- . ':(exclude)docs/superpowers/plans/rounds/2026-07-25-flash-implementer/**';if("'$LASTEXITCODE-ne 0){throw '"'scoped diff-check failed'};Get-Content '.claude-plugin/plugin.json' -Raw|ConvertFrom-Json|Out-Null;"'$plan=Get-Content '"'docs/superpowers/plans/2026-07-25-flash-implementer.md';"'$test=Get-Content '"'evals/multi-model-verify/test_flash_implementer.py';"'$agent=Get-Content '"'agents/flash-implementer.md';"'$classic=Get-Content '"'agents/implementer.md';function FenceBlock("'$lines,$anchor,$fence){$a=($lines|Select-String -SimpleMatch $anchor|Select-Object -First 1).LineNumber-1;$o=-1;for($i=$a;$i-lt$lines.Count;$i++){if($lines[$i]-eq$fence){$o=$i;break}};$close=$fence-replace'"'[A-Za-z]+"'$'"','';for("'$i=$o+1;$i-lt$lines.Count;$i++){if($lines[$i]-eq$close){return ,$lines[($o+1)..($i-1)]}};throw '"'fence close missing'};function Eq("'$a,$b){if($a.Count-ne$b.Count){return $false};for($i=0;$i-lt$a.Count;$i++){if($a[$i]-cne$b[$i]){return $false}};$true};function Words($x){(($x-split'"'\\s+'|Where-Object{"'$_})-join'"' ')};"'$tb=FenceBlock $plan '"'### Task 1:' '"'```python'"';"'$ab=FenceBlock $plan '"'### Task 2:' '"'````markdown'"';if(-not(Eq "'$tb $test)){throw '"'test block mismatch'};if((Words "'$ab)-cne(Words $agent)){throw '"'agent word mismatch'};function Block("'$x){(($x-join"`n").Split('"'<"'!-- shared-contract:start -->'"')[1].Split('<"'!-- shared-contract:end -->'"')[0])};if((Block "'$agent)-cne(Block $classic)){throw '"'shared mismatch'};"'$py=Get-Command python -ErrorAction SilentlyContinue;$dirty=@(git status --porcelain);$tests=@($test|Select-String '"'"'^def test_'"');Write-Output \"STATIC-REREVIEW PASS | scoped-diff-check=clean | plugin-json=parse | test-block=exact | agent-words=exact | shared-block=exact | test-functions="'$($tests.Count) | python_available=$([bool]$py) | dirty-lines=$($dirty.Count) | head=$(git rev-parse --short HEAD)"' in C:\Users\Brandon\Documents\parallax
+ succeeded in 1620ms:
+STATIC-REREVIEW PASS | scoped-diff-check=clean | plugin-json=parse | test-block=exact | agent-words=exact | shared-block=exact | test-functions=11 | python_available=False | dirty-lines=0 | head=2e0bd3f
+
+Round-2 adjudication is complete. The prior dispatch-input defect is fixed and D-a/D-b do not independently block, but Task 6's executable cache-version instructions remain stale and contradict the 0.12.1 amendment.
+  ✓ Pin head/base and inspect the complete fix-range diff plus amended full files
+  ✓ Verify the exact dispatch sentence, plan/test synchronization, version amendment, and debate record
+  ✓ Adjudicate D-a and D-b against the amended contract and retained ledger evidence
+  ✓ Run available fresh gates and issue the round-2 merge verdict
+codex
+Blocking finding: the amended Task 6 still instructs the executor to consume the installed `0.12.0` cache and describes only a pre-`0.12.0` cache as stale (`docs/superpowers/plans/2026-07-25-flash-implementer.md:647-653`). The amended agent exists only in plugin `0.12.1` (`.claude-plugin/plugin.json:3`), and resolved row 25 explicitly makes that bump part of the amendment (`plan:777`). D-a proves this distinction is load-bearing: the `0.12.0` cache served the old contract and invalidated the run, whereas the restarted `0.12.1` run exercised the closing line (`.superpowers/sdd/2026-07-25-flash-implementer/progress.md:44-45`).
+
+Prior F1: **PASS.** The exact closing line is brief-borne at `agents/flash-implementer.md:67-76`, pinned at `test_flash_implementer.py:51-56`, synchronized into the spec at `design.md:203-211`, and Task 6 now forbids controller supplementation at `plan:665-671`. The embedded test block is line-identical and the agent block word-identical.
+
+D-a: **PASS, non-blocking.** It was correctly invalidated before being used as evidence (`checkpoint:64-67`); the valid post-restart run is separately recorded at `checkpoint:59-61`.
+
+D-b: **PASS, non-blocking for this head.** The variance occurred under the old cached agent (`checkpoint:67-71`). The amended agent retains the soft-deny blocking rule (`agents/flash-implementer.md:97-107`), the valid amended run produced no soft-deny, and the amended sentinel path blocked correctly (`progress.md:45-46`). There is no evidence that the installed `0.12.1` agent violated its current contract.
+
+Suites: **UNVERIFIED independently.** Their post-wave results are recorded at `checkpoint:57-58`, but Python remains unavailable in this sandbox. This is not folded into the verdict.
+
+Specific fix: change Task 6’s interface to “installed `0.12.1` cache” and Step 1 to “cached pre-`0.12.1` set”; also attribute the committed bump to row 25 rather than only Task 5. No agent, test, version, or agy rerun is required.
+
+**VERDICT: FIX — stale, load-bearing Task 6 cache-version instructions; Fable 5 / GPT-5.6 Sol, 2 mode-diff rounds, not converged, verification FULL.**
+tokens used
+262,363
+Blocking finding: the amended Task 6 still instructs the executor to consume the installed `0.12.0` cache and describes only a pre-`0.12.0` cache as stale (`docs/superpowers/plans/2026-07-25-flash-implementer.md:647-653`). The amended agent exists only in plugin `0.12.1` (`.claude-plugin/plugin.json:3`), and resolved row 25 explicitly makes that bump part of the amendment (`plan:777`). D-a proves this distinction is load-bearing: the `0.12.0` cache served the old contract and invalidated the run, whereas the restarted `0.12.1` run exercised the closing line (`.superpowers/sdd/2026-07-25-flash-implementer/progress.md:44-45`).
+
+Prior F1: **PASS.** The exact closing line is brief-borne at `agents/flash-implementer.md:67-76`, pinned at `test_flash_implementer.py:51-56`, synchronized into the spec at `design.md:203-211`, and Task 6 now forbids controller supplementation at `plan:665-671`. The embedded test block is line-identical and the agent block word-identical.
+
+D-a: **PASS, non-blocking.** It was correctly invalidated before being used as evidence (`checkpoint:64-67`); the valid post-restart run is separately recorded at `checkpoint:59-61`.
+
+D-b: **PASS, non-blocking for this head.** The variance occurred under the old cached agent (`checkpoint:67-71`). The amended agent retains the soft-deny blocking rule (`agents/flash-implementer.md:97-107`), the valid amended run produced no soft-deny, and the amended sentinel path blocked correctly (`progress.md:45-46`). There is no evidence that the installed `0.12.1` agent violated its current contract.
+
+Suites: **UNVERIFIED independently.** Their post-wave results are recorded at `checkpoint:57-58`, but Python remains unavailable in this sandbox. This is not folded into the verdict.
+
+Specific fix: change Task 6’s interface to “installed `0.12.1` cache” and Step 1 to “cached pre-`0.12.1` set”; also attribute the committed bump to row 25 rather than only Task 5. No agent, test, version, or agy rerun is required.
+
+**VERDICT: FIX — stale, load-bearing Task 6 cache-version instructions; Fable 5 / GPT-5.6 Sol, 2 mode-diff rounds, not converged, verification FULL.**

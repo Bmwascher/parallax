@@ -729,7 +729,7 @@ diff-debate brief cites them.
 ## Debate record
 
 **Participants:** Fable 5 (session) / Kimi K3 `kimi-code/k3-256k` (kimi-cli 1.49.0, session 4ba130bb-1615-4c95-9afc-d1e3049bb857) / GPT-5.6 Sol (codex exec, sessions 019f9ad5-e318-7831-8a3f-0c02c94caa8e primary check-off, 019f9c24-8351-7942-aeea-06f87774d26b mode-diff)
-**Rounds used:** 2 of 4 (Kimi, plan mode) + 4 of 4 (Sol, primary check-off: r1 FIX, r2 FIX, r3 FIX, r4 terminal) + mode-diff debate at merge (Sol: r1 FIX, fix wave applied — resolved row 25; re-review in flight)
+**Rounds used:** 2 of 4 (Kimi, plan mode) + 4 of 4 (Sol, primary check-off: r1 FIX, r2 FIX, r3 FIX, r4 terminal) + 3 of 4 (Sol, mode-diff at merge: r1 FIX, r2 FIX, r3 terminal PASS — resolved rows 25-26)
 **Outcome:** converged with amendments
 **Verification status:** FULL
 **Degradation:** quota-exhausted (primary lane at the plan gate; backup lane substituted for rounds 1-2, primary check-off ran on the reset window)
@@ -775,6 +775,7 @@ sandbox read-only / effort high.
 | 23 | Record metadata lagged live rounds; r2/r3 raw artifacts unretained | Sol r3 | accepted; this revision + artifacts retained | rounds/ dir, this appendix |
 | 24 | Task 5 Step 3 phrase omitted the declared Task 6 exception | Sol r4 | trivial accepted amendment; applied | plan Task 5 Step 3 |
 | 25 | Task 6 green run patched the frozen dispatch input at runtime — the no-commands line was controller-added, not contract text, and lived only in the gitignored ledger | Sol diff-r1 | accepted; exact brief-borne closing line added to Dispatch step 1, test-pinned, plugin bumped 0.12.1, Task 6 Step 3 + 4b rerun with frozen inputs only | flash-dryrun.log:126 soft-deny vs flash-dryrun2.log clean; agent Dispatch step 1; test_flash_implementer.py dispatch pins |
+| 26 | Task 6 dev-loop text still named the 0.12.0 cache after row 25's bump made 0.12.1 the live contract — stale and load-bearing (the invalidated pre-restart rerun proved the cache version decides which contract runs) | Sol diff-r2 | accepted; Interfaces consume the installed 0.12.1 cache, Step 1 names the pre-0.12.1 set and attributes the amendment bump to row 25 | plan Task 6 Interfaces + Step 1; commit 7463359 |
 
 ### Escalated points (user-decided)
 
@@ -806,3 +807,18 @@ controller-added no-commands line (retained logs: flash-dryrun.log line
 recipe permitted only task text + Global Constraints + files list —
 Sol's drift claim reproduced by inspection. Application governed by
 checkpoint 20260725-2115-d46045700de2.
+
+Mode-diff rounds 2-3: round 2 verified the F1 fix at its cited lines
+(PASS), passed both session disclosures as non-blocking (the invalidated
+pre-restart rerun; the old-contract wrapper's done-despite-soft-deny
+variance), and raised row 26 — verified against plan:648/:653 and
+accepted; fix committed 7463359 under the checkpoint's dated AMENDMENT.
+The reviewer's per-round suite UNVERIFIED (no python in its sandbox) was
+closed by session-run pytest at both heads (144 passed, 1 skipped).
+Round 3 re-verified the fix statically (no stale cache references, exact
+embedded blocks, shared-contract identity, installed 0.12.1 agent
+hash-identical to head): terminal PASS, converged. Session terminal
+verdict after this adjudication: PASS. Live-verification evidence
+(frozen-inputs green rerun with the brief-borne line transcript-proven;
+sentinel rerun blocked at preflight 3) is recorded in the SDD ledger and
+the checkpoint's verification results.
