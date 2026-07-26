@@ -223,4 +223,3 @@ Everything else about the lane — transport, containment, per-round
 evidence, clone isolation, failure routing — lives in
 references/backup-lane.md. The lane enters only through the
 fallbacks.md consent gate.
-

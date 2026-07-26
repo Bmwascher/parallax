@@ -245,15 +245,17 @@ exit /b 0
 
 @'
 @echo off
-if not "%PYTHON_STUB_MODE%"=="kimi-import-fail" goto forward
 echo %* | findstr /C:"kimi_cli" > nul
-if not errorlevel 1 (
+if not errorlevel 1 goto kimiprobe
+"%DRIFT_REAL_PYTHON%" %*
+exit /b %ERRORLEVEL%
+
+:kimiprobe
+if "%PYTHON_STUB_MODE%"=="kimi-import-fail" (
 echo ModuleNotFoundError: No module named 'kimi_cli' 1>&2
 exit /b 1
 )
-:forward
-"%DRIFT_REAL_PYTHON%" %*
-exit /b %ERRORLEVEL%
+exit /b 0
 '@ | Set-Content -Path (Join-Path $StubDir "python.cmd") -Encoding ASCII
 
 $env:PATH = "$StubDir;" + $env:PATH

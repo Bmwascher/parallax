@@ -157,4 +157,3 @@ version, the parsed id, and the artifact presence. Any failure is
 BROKEN with the state detail "backup lane unavailable (primary lane
 unaffected)"; kimi not installed at all is N/A with the same detail —
 the fix pointer is references/backup-lane.md either way.
-
