@@ -30,6 +30,7 @@ REQUIRED_REFERENCE_FILES = [
     "model-prompting-notes.md",
     "fallbacks.md",
     "application-checkpoint.md",
+    "backup-lane.md",
 ]
 
 
