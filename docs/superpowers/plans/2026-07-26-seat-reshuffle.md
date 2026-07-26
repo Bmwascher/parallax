@@ -1537,7 +1537,8 @@ git commit -m "0.14.0: add panel behavioral case"
 
 **Files:**
 - Modify: `.claude-plugin/plugin.json` (version 0.14.0)
-- Create (evidence, in-repo): `docs/superpowers/plans/rounds/2026-07-26-seat-reshuffle/smoke-*` artifacts and `fable-review.md`
+- Create (evidence, committed in Step 4): `docs/superpowers/plans/rounds/2026-07-26-seat-reshuffle/smoke-*` artifacts
+- Create (evidence, UNTRACKED through ship): `docs/superpowers/plans/rounds/2026-07-26-seat-reshuffle/fable-review.md`
 - None else in-repo (SDD ledger notes are gitignored)
 
 **Interfaces:**
@@ -1628,11 +1629,16 @@ Save its raw reply VERBATIM to
 with the base/head SHAs at the top; adjudicate each finding (accept /
 refute / ESCALATE) and cite the artifact plus adjudications in the
 diff-debate round-1 brief exactly as the new SKILL.md sentence
-requires. Do NOT commit the artifact yet: it stays untracked through
-the diff debate so the reviewed head never moves out from under the
-review — it is committed together with the debate record after the
-terminal verdict
-(`0.14.0: retain fable review artifact and diff debate record`).
+requires. Do NOT commit the artifact — on this branch, ever: like the
+attestation, it is retained UNTRACKED at its rounds/ path through the
+diff debate, the attestation, the merge, and the push, so the
+reviewed head never moves out from under the review (the pre-push
+verifier accepts only the attested head itself or a merge whose
+second parent is the attested head — an evidence commit after the
+verdict would break the match and force a re-review). The SDD ledger
+records the artifact's path and SHA-256 hash; the attestation and the
+ledger are the durable verdict records — the 0.13.0 precedent, where
+diff-phase evidence never lands on the reviewed branch.
 
 - [ ] **Step 6: Record**
 
@@ -1650,11 +1656,12 @@ into the SDD ledger — the diff-debate brief cites them.
   11). The per-task verification steps name exactly which tests flip
   when.
 - After Task 8: the mode-diff debate over the whole branch (with Task
-  8 Step 5's fable-review artifact as its required input; that
-  artifact commits with the debate record only after the terminal
-  verdict), attestation, merge, push. The user flips `/model` to
-  Opus 5 AFTER ship so this cycle's debate record stays single-driver
-  (the 0.12.0 precedent).
+  8 Step 5's fable-review artifact as its required input; the
+  artifact stays UNTRACKED through ship — diff-phase evidence never
+  commits to the reviewed branch, so the attested head never moves),
+  attestation, merge, push. The user flips `/model` to Opus 5 AFTER
+  ship so this cycle's debate record stays single-driver (the 0.12.0
+  precedent).
 
 ## Debate record
 
