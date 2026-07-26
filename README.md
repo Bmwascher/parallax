@@ -162,8 +162,9 @@ configuration:
   (SKILL.md transport commands, doctor, drift-triage) reads them from
   there; a consistency test forbids a hardcoded `-m` literal anywhere
   else. The backup reviewer (Kimi K3 via kimi-cli, consent-gated per
-  fallbacks.md) swaps the same way — its declarations sit directly below
-  the primary's in the same file, under the same single-source test.
+  fallbacks.md) swaps the same way — its declarations live in the same
+  file (after the primary's, as the parsers require), under the same
+  single-source test.
 - **Session** — whatever model runs the session; the debate rules and
   final adjudication follow the seat automatically.
 
