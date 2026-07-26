@@ -200,6 +200,15 @@ declared lane-specific and excluded from parity.
   stale state = blocked); deletion guaranteed after agy exits — success,
   failure, or interruption path alike — and always BEFORE any evidence
   check, so the brief never appears in the attribution set.
+- Brief closing line (Sol diff-debate F1, live-verified 2026-07-25): the
+  brief ends with an exact test-pinned line telling Flash to run no
+  commands and attempt no verification — the wrapper verifies after agy
+  exits. Print mode auto-denies command execution, so a task whose
+  verbatim text carries a Verification command otherwise soft-denies and
+  blocks the green path (the first live dry-run reproduced exactly this;
+  the wrapper's blocked report was the designed loud failure). The line
+  is brief-borne — written by the wrapper itself per its Dispatch recipe,
+  never a controller-supplied constraint.
 - Route check, every run, on the log file:
   1. `Print mode: starting` line present with `model="gemini-3.6-flash-medium"`
      (the RESOLVED ID is the comparand — same string §5 pins as canonical);

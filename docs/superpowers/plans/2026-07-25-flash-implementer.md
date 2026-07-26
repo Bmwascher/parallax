@@ -90,6 +90,12 @@ def test_flash_dispatch_contract():
     assert "sole transient exception" in body.lower()
     assert "the dispatch log file's basename" in body
     assert "on success, failure, and interruption alike" in body
+    # brief-borne no-commands line (Sol diff-debate F1: a task whose text
+    # carries a verification command otherwise soft-denies in print mode
+    # and blocks the green path - live-verified 2026-07-25)
+    assert ("Do not run commands or attempt verification - the wrapper "
+            "runs all verification after you finish; your only job is "
+            "the file edits.") in body
     # stdin is probed-dead in print mode; the body must not suggest it
     assert "stdin" not in body.lower() or "does not reach" in body.lower()
 
@@ -311,10 +317,13 @@ never-write rule, and it never survives to the evidence checks.
 1. Write the brief to `<workspace>/AGY-TASK-BRIEF-<unique>.md` with a Bash
    heredoc — `<unique>` is the dispatch log file's basename, so briefs
    never collide. Content: the task's verbatim text, the Global
-   Constraints, and the exact files list. (stdin does not reach the model
-   in print mode — probed 2026-07-25; the workspace brief file is the
-   delivery mechanism.) This file is the sole transient exception to your
-   never-write rule.
+   Constraints, the exact files list, and this exact closing line:
+   `Do not run commands or attempt verification - the wrapper runs all verification after you finish; your only job is the file edits.`
+   (Print mode auto-denies command execution, so a verification attempt
+   by Flash soft-denies and blocks the run — live-verified 2026-07-25.
+   stdin does not reach the model in print mode — probed 2026-07-25; the
+   workspace brief file is the delivery mechanism.) This file is the sole
+   transient exception to your never-write rule.
 2. Run (single line):
    `agy -p "Read the file AGY-TASK-BRIEF-<unique>.md in the workspace and execute it exactly." --model gemini-3.6-flash-medium --add-dir <workspace> --log-file <log-path>`
 3. Delete the brief file immediately after agy exits — on success,
@@ -657,7 +666,10 @@ Verify `git status --porcelain` in the scratch repo is empty. Dispatch
 `parallax:flash-implementer` (fresh subagent) with a minimal task:
 "Modify hello.py so it prints exactly 'hello flash'. Verification:
 `python hello.py` prints `hello flash`." plus a log path in the
-scratchpad. Expected report: STATUS done; ROUTE carries
+scratchpad. The controller supplies ONLY these frozen inputs — the
+no-commands closing line is brief-borne per the agent's Dispatch step 1,
+never a controller addition (Sol diff-debate F1). Expected report:
+STATUS done; ROUTE carries
 `gemini-3.6-flash-medium` + log path + brain transcript path; FILES
 CHANGED lists `hello.py`; VERIFICATION shows the wrapper's own
 `python hello.py` output; DEVIATIONS none. Controller re-runs
@@ -716,13 +728,13 @@ diff-debate brief cites them.
 
 ## Debate record
 
-**Participants:** Fable 5 (session) / Kimi K3 `kimi-code/k3-256k` (kimi-cli 1.49.0, session 4ba130bb-1615-4c95-9afc-d1e3049bb857) / GPT-5.6 Sol (codex exec, session 019f9ad5-e318-7831-8a3f-0c02c94caa8e)
-**Rounds used:** 2 of 4 (Kimi, plan mode) + 4 of 4 (Sol, primary check-off: r1 FIX, r2 FIX, r3 FIX, r4 terminal)
+**Participants:** Fable 5 (session) / Kimi K3 `kimi-code/k3-256k` (kimi-cli 1.49.0, session 4ba130bb-1615-4c95-9afc-d1e3049bb857) / GPT-5.6 Sol (codex exec, sessions 019f9ad5-e318-7831-8a3f-0c02c94caa8e primary check-off, 019f9c24-8351-7942-aeea-06f87774d26b mode-diff)
+**Rounds used:** 2 of 4 (Kimi, plan mode) + 4 of 4 (Sol, primary check-off: r1 FIX, r2 FIX, r3 FIX, r4 terminal) + mode-diff debate at merge (Sol: r1 FIX, fix wave applied — resolved row 25; re-review in flight)
 **Outcome:** converged with amendments
 **Verification status:** FULL
 **Degradation:** quota-exhausted (primary lane at the plan gate; backup lane substituted for rounds 1-2, primary check-off ran on the reset window)
 **Authorized by:** user at round 1 (backup-lane substitution; the user's standing ruling retained the primary check-off before branch close)
-**Raw rounds:** docs/superpowers/plans/rounds/2026-07-25-flash-implementer/ (plan-round1-brief.md, plan-round{1,2}-transcript.txt — Kimi; sol-checkoff-round{1,2,3,4}-{brief,reply,header} — Sol)
+**Raw rounds:** docs/superpowers/plans/rounds/2026-07-25-flash-implementer/ (plan-round1-brief.md, plan-round{1,2}-transcript.txt — Kimi; sol-checkoff-round{1,2,3,4}-{brief,reply,header} — Sol; diff-round{n}-{brief,reply,header} — Sol mode-diff)
 
 Backup-lane note: Kimi ran read-only via a custom agent-file
 (ReadFile/ReadMediaFile/Glob/Grep/SetTodoList; pre-review write-probe
@@ -762,6 +774,7 @@ sandbox read-only / effort high.
 | 22 | Spec ROUTE line and step-4b recipe out of sync with amended contract | Sol r3 | accepted; synchronized (transcript path; sentinel + save/restore) | spec sections 1 and 6 |
 | 23 | Record metadata lagged live rounds; r2/r3 raw artifacts unretained | Sol r3 | accepted; this revision + artifacts retained | rounds/ dir, this appendix |
 | 24 | Task 5 Step 3 phrase omitted the declared Task 6 exception | Sol r4 | trivial accepted amendment; applied | plan Task 5 Step 3 |
+| 25 | Task 6 green run patched the frozen dispatch input at runtime — the no-commands line was controller-added, not contract text, and lived only in the gitignored ledger | Sol diff-r1 | accepted; exact brief-borne closing line added to Dispatch step 1, test-pinned, plugin bumped 0.12.1, Task 6 Step 3 + 4b rerun with frozen inputs only | flash-dryrun.log:126 soft-deny vs flash-dryrun2.log clean; agent Dispatch step 1; test_flash_implementer.py dispatch pins |
 
 ### Escalated points (user-decided)
 
@@ -785,3 +798,11 @@ the reviewer). Sol rounds 2-3 were each verified the same way (rows
 fix waves re-reviewed in scope). No finding was refuted; no point
 escalated. Convergence = Sol round-4 terminal confirmation of the
 rounds-1-3 amendment chain (transcript retained under Raw rounds).
+
+Mode-diff round 1 (row 25) was adjudicated the same way before
+acceptance: the run-1 vs run-2 dispatch inputs differ only by the
+controller-added no-commands line (retained logs: flash-dryrun.log line
+126 soft-deny; flash-dryrun2.log zero soft-denies), and the frozen brief
+recipe permitted only task text + Global Constraints + files list —
+Sol's drift claim reproduced by inspection. Application governed by
+checkpoint 20260725-2115-d46045700de2.
