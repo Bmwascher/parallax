@@ -1,0 +1,30 @@
+# Round-2 review — amended plan (git head 5391455)
+
+Re-read the amended `docs/superpowers/plans/2026-07-25-flash-implementer.md` in full and re-verified each delta against the live repo surfaces it touches.
+
+## 1. FINDINGS
+
+None. All nine round-1 findings are resolved, and the amended regions introduce no new defects:
+
+- **F1 — resolved.** The doctor check-7 block (plan:440-455) now reads "the pinned model-ID token declared there" and contains no `gemini-3.6-flash` substring; the sweep test (plan:161-170, prefix match over `commands/*.md`) will stay green after Task 4 Step 1, and the spec's "carry no literal" discipline (spec:280-283) is now honored.
+- **F2 — resolved.** Task 1 Step 2 (plan:189) now expects FileNotFoundError for the flash tests AND parity, with the marker-assertion timing explained. Consistent with the F9 change: `test_flash_report_headings` reads FLASH first (plan:118), so the new CLASSIC read (plan:125) does not alter the expected failure signature.
+- **F3 — resolved.** Presence pins added at plan:179 and plan:183, and both match the Task 3 replacement texts exactly ("any Claude tier is a drop-in" at plan:396; "the pinned lane in `agents/`" at plan:408). The Task 3 rewrites now have real oracles.
+- **F4 — resolved.** `"evals/**/*.ps1"` added to SWEEP_GLOBS (plan:152), matching the reviewer sweep's file set (test_multi_model_verify.py:248-250) as spec §5 requires. Baseline remains vacuously green — no existing evals .ps1 carries the literal.
+- **F5 — resolved.** The flash Lane note (plan:326-328) now says the literal lives ONLY in this file and that implementer.md pins its own lane's model — consistent with Task 2 Step 2's replacement text (plan:350-355), which carries no gemini literal.
+- **F6 — resolved.** Task 4 Step 2 (plan:460-490) now follows the file's actual carry-forward pattern: version probe beside check-drift.ps1:119-125, `$agyVersionToSave` with `$snapshot.agy` fallback inside the existing `if ($snapshot)` block (check-drift.ps1:201-205), and a precomputed variable in `$newSnapshot` (check-drift.ps1:274-279). Old snapshots lacking the `agy` key yield `$snapshot.agy` = `$null`, so the fallback is inert — correct. (The amendment asserts the PS 5.1 hashtable-`if` parse hazard as fact where I labeled it UNVERIFIED; the direction is safe and the state-machine suite is the backstop — not a finding.)
+- **F7 — resolved.** The red probe (plan:609-614) is now disjunctive: wrapper refusal (INPUT GAP/blocked on the contradictory brief) or agy's CLI rejection both PASS with no file changes; any file change or STATUS done FAILS.
+- **F8 — resolved.** Task 5 Step 1 (plan:526-531) now targets the probe-dir `write_file` entry "whatever its exact path spelling", with a post-edit re-read to confirm.
+
+To resume this session: kimi -r 4ba130bb-1615-4c95-9afc-d1e3049bb857
+- **F9 — resolved.** The four shared report headings are now pinned in BOTH agent files (plan:125-128); implementer.md:30-34 does contain all four, so the pin bites on a unilateral rename in either file. This is presence-in-both rather than the spec's literal "byte-identical" (spec:141-143), but it catches the same drift class — a trivial implementation difference I accept, not a finding.
+
+## 2. COVERAGE CHECK (deltas from round 1)
+
+- **§1** — Gap closed: report-heading parity now enforced across both agent files (F9 fix); Lane-note location claim now truthful (F5 fix). Fully covered.
+- **§5** — Gaps closed: sweep file set now matches the reviewer sweep plus `agents/*.md` per spec (F4 fix); Task 3's rewrites are now test-verified (F3 fix); the F1 reword removes the collision between §7's doctor row and §5's sweep. Fully covered.
+- **§7** — Gap closed: the drift-snapshot row now follows the script's mandated carry-forward style and no longer risks a parse/verification dead-end (F6 fix). Fully covered.
+- **§2, §3, §4, §6** — No deltas; round-1 assessments stand (all covered; §6's spec-internal state-machine tension remains correctly resolved by the plan's mandatory Task 4 Step 3).
+
+## 3. VERDICT
+
+**PASS.** Every round-1 finding — the one blocking sweep/doctor collision and the eight minors — is resolved by an amendment I verified against the live repo, and the amended regions introduce no new defects: pinned strings match their replacement sources, expected failure signatures are accurate, the sweep's file set and allowed-homes set are internally consistent, and the check-drift snippet now matches the target file's actual structure and invariants. The plan correctly and completely implements the approved spec, and its tasks are executable by a zero-judgment implementer with faithful expected outputs. This plan is ready from the cross-vendor backup lane; per the brief, the primary-reviewer (Sol) check-off at the ~Jul 29 reset still gates execution.

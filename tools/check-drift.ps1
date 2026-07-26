@@ -124,6 +124,12 @@ if (-not $codexVersion) {
     $findings += "[CRITICAL] codex --version failed or unparseable: $codexRaw"
 }
 
+$agyVersion = ""
+$agyExe = Join-Path $env:LOCALAPPDATA "agy\bin\agy.exe"
+if (Test-Path $agyExe) {
+    $agyVersion = (& $agyExe --version 2>$null | Select-Object -First 1)
+}
+
 $registryFile = Join-Path $env:USERPROFILE ".claude\plugins\installed_plugins.json"
 $spVersion = ""
 $spInstall = ""
@@ -197,10 +203,12 @@ if (Test-Path $SnapshotFile) {
 # value forward here is not a quiet path.
 $claudeVersionToSave = $claudeVersion
 $codexVersionToSave = $codexVersion
+$agyVersionToSave = $agyVersion
 $spVersionToSave = $spVersion
 if ($snapshot) {
     if (-not $claudeVersionToSave -and $snapshot.claude) { $claudeVersionToSave = $snapshot.claude }
     if (-not $codexVersionToSave -and $snapshot.codex) { $codexVersionToSave = $snapshot.codex }
+    if (-not $agyVersionToSave -and $snapshot.agy) { $agyVersionToSave = $snapshot.agy }
     if (-not $spVersionToSave -and $snapshot.superpowers) { $spVersionToSave = $snapshot.superpowers }
 }
 
@@ -274,6 +282,7 @@ $report | Write-Output
 $newSnapshot = @{
     claude      = $claudeVersionToSave
     codex       = $codexVersionToSave
+    agy         = $agyVersionToSave
     superpowers = $spVersionToSave
     updated     = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss")
 }

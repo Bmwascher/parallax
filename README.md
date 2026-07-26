@@ -63,7 +63,8 @@ The debate rules that keep this honest
 |---|---|
 | `skills/multi-model-verify/` | The debate skill: both modes, debate protocol, frozen-plan format, model prompting notes, fallbacks/consent gate |
 | `hooks/` | PostToolUse + PostToolUseFailure hook (matcher `Task\|Agent`): fingerprints the superpowers code-reviewer dispatch, injects the mode-`diff` reminder with matching SHAs; inert everywhere else |
-| `agents/implementer.md` | Zero-judgment executor for frozen-plan tasks, pinned to the cheap lane (currently `model: sonnet`) |
+| `agents/implementer.md` | Zero-judgment direct-typing executor for frozen-plan tasks (model pinned in the file's frontmatter) |
+| `agents/flash-implementer.md` | Zero-judgment Flash lane: haiku wrapper drives Gemini Flash through the Antigravity CLI headlessly; route + authorship evidence checked every run (model literal pinned in the file) |
 | `commands/drift-triage.md` | `/parallax:drift-triage` — reads the newest drift report, verifies each finding against the live contract surfaces, repairs on a branch |
 | `commands/doctor.md` | `/parallax:doctor` — operational health check: checkout-vs-installed version, hook registration, superpowers fingerprint, codex transport round-trip, drift task + pending entries. Reports, never fixes |
 | `commands/intake.md` | `/parallax:intake` — external-reference intake: clone read-only as untrusted subject data, ground every claimed delta on both sides, probe-gate behavior claims, rank dispositions for the user's scope pick, then hand into the multi-model-verify debate |
@@ -129,12 +130,11 @@ lineup (session / cross-vendor reviewer / cheap implementer) is one
 configuration:
 
 - **Implementer, Claude tier** — edit one line: `model:` in
-  `agents/implementer.md` frontmatter (`sonnet` today; `haiku`/`opus` are
-  drop-ins). The contract (zero judgment calls, INPUT GAP rule, structured
+  `agents/implementer.md` frontmatter (any Claude tier is a drop-in). The contract (zero judgment calls, INPUT GAP rule, structured
   report) stays identical whoever fills it.
 - **Implementer, cross-vendor** (the fable-advisor v3 Grok pattern) —
   agent frontmatter only accepts Claude tiers, so a vendor swap uses the
-  supervisor pattern documented in `agents/implementer.md`: a cheap Claude
+  supervisor pattern `agents/flash-implementer.md` implements (documented in `agents/implementer.md`'s Lane note): a cheap Claude
   model supervises, delegates the body of work to the vendor CLI, and
   re-runs verification itself.
 - **Cross-vendor reviewer** — a ONE-LINE swap: the canonical model id and
