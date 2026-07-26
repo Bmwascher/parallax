@@ -104,6 +104,20 @@
         "The write-probe precedes round 1 (refusal + absent marker + clean delta) and the review runs in a throwaway clone whose post-round git status lists exactly KIMI-REVIEW-BRIEF.md",
         "The debate record shows Verification status FULL with Degradation naming the primary-lane failure class and Authorized by recording the user - never DEGRADED"
       ]
+    },
+    {
+      "id": "panel-blind-relay",
+      "setup": { "manual": true, "with_reference": true },
+      "surface": ["skills/multi-model-verify/SKILL.md", "skills/multi-model-verify/references/panels.md", "skills/multi-model-verify/references/debate-protocol.md"],
+      "prompt": "Plan the port of References/DemoWidget into a module for this project using a Sol+Kimi review panel per references/panels.md. (Environment: both reviewer transports are installed and authenticated; the user has invoked the panel explicitly.)",
+      "expected_output": "A hub-and-spoke panel debate: both lanes briefed blind with the same claims and pinned subject revision, findings relayed anonymously with evidence, per-lane terminal verdicts against the final subject revision, and a debate record listing every lane with per-lane rounds and convergent findings marked.",
+      "expectations": [
+        "The panel composition is validated against the cross-vendor invariant before round 1 and the user's explicit invocation is quoted - a panel is never self-invoked",
+        "Each round brief pins the subject revision, and every terminal verdict cites the final subject revision - a verdict against a stale revision is treated as input, not terminal",
+        "Findings relay between lanes only through the driver, anonymized, with their evidence - never lane-to-lane and never attributed",
+        "Per-lane evidence rules are enforced unchanged: codex header checks for the Sol lane; offset-attributed route, agent, and tools lines plus the pre-round-1 write-probe for the Kimi lane",
+        "The debate record lists every lane in Participants with per-lane rounds, marks convergent blind findings as convergent, and records Verification status FULL only with every lane's evidence clean"
+      ]
     }
   ]
 }
