@@ -445,6 +445,14 @@ vendor. One defective Sol exchange (empty prompt from a failed brief
 write) quarantined, not counted as a round. All raw briefs and replies
 retained at docs/superpowers/plans/rounds/2026-07-26-seat-reshuffle/.
 Kimi was not re-consulted on this final fold (window economy, the
-0.13.0 precedent — its three minors are folded verbatim); Sol
-delta-confirmation on the fold is the remaining gate before the user
-review.
+0.13.0 precedent — its three minors are folded verbatim). Sol
+delta-confirmation on the fold (same session): all six deltas
+CONFIRMED, verdict SOUND-WITH-FIXES with one remaining Important —
+the probe artifact lacked its literal invocation payloads and
+notification evidence — applied directly: the artifact now carries
+the exact Agent/SendMessage argument objects, the schema property
+set, the synchronous resume tool result, the task-notification
+metadata, and a NARROWED failure-mode claim (finished-agent
+notification observed; the dead-agent case deferred to the attended
+smoke's observation scope). Advisory stage closed; the plan debate is
+the next external gate.
