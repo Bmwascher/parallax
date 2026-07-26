@@ -55,7 +55,6 @@ docs/superpowers/plans/rounds/2026-07-26-seat-reshuffle/subagent-resume-probe.md
 
 **Files:**
 - Create: `evals/multi-model-verify/test_seat_reshuffle.py`
-- Modify: `evals/multi-model-verify/test_multi_model_verify.py` (REQUIRED_REFERENCE_FILES list)
 - Test: the new file itself (RED expected)
 
 **Interfaces:**
@@ -164,9 +163,10 @@ def test_backup_lane_panel_participation():
     bl = _read(REFERENCES / "backup-lane.md")
     assert ("Panel participation: a user-invoked panel per "
             "references/panels.md is a second sanctioned entry route - "
-            "the invocation itself is the consent; containment, "
-            "per-round evidence, and the write-probe apply unchanged, "
-            "and no failure class is recorded because nothing "
+            "the invocation itself is the consent, with no fallbacks "
+            "banner (nothing degraded); containment, per-round "
+            "evidence, and the write-probe apply unchanged, and no "
+            "failure class is recorded because nothing "
             "substituted.") in bl
 
 
@@ -219,33 +219,24 @@ def test_readme_reshuffle_pins():
             "reviewer lane") in readme
 ```
 
-- [ ] **Step 2: Register panels.md as a required reference**
+- [ ] **Step 2: Run the new file to verify RED**
 
-In `evals/multi-model-verify/test_multi_model_verify.py`, find the
-REQUIRED_REFERENCE_FILES list (it currently ends with the
-`"backup-lane.md",` entry added in 0.13.0) and append one entry
-directly after that line, matching its indentation and style:
+Run: `python -m pytest evals/multi-model-verify/test_seat_reshuffle.py -q`
+Expected: FAIL — all 10 new tests fail (missing artifacts). The
+REQUIRED_REFERENCE_FILES registration of panels.md lands in Task 3
+WITH the file itself, so existing suites stay green throughout (spec
+section 11).
 
-```python
-    "panels.md",
-```
-
-- [ ] **Step 3: Run the new file and the amended file to verify RED**
-
-Run: `python -m pytest evals/multi-model-verify/test_seat_reshuffle.py evals/multi-model-verify/test_multi_model_verify.py -q`
-Expected: FAIL — all 10 new tests fail (missing artifacts), plus
-test_reference_files_exist and test_no_backslash_paths_anywhere fail on
-the missing panels.md. Everything else passes.
-
-- [ ] **Step 4: Run the full suite to record the RED baseline**
+- [ ] **Step 3: Run the full suite to record the RED baseline**
 
 Run: `python -m pytest evals -q`
-Expected: 12 failed, 152 passed, 1 skipped.
+Expected: 10 failed, 154 passed, 1 skipped — the 10 failures are all
+in test_seat_reshuffle.py; every pre-existing test still passes.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 4: Commit**
 
 ```bash
-git add evals/multi-model-verify/test_seat_reshuffle.py evals/multi-model-verify/test_multi_model_verify.py
+git add evals/multi-model-verify/test_seat_reshuffle.py
 git commit -m "0.14.0: add seat reshuffle contract tests (failing)"
 ```
 
@@ -457,7 +448,8 @@ git commit -m "0.14.0: add fable reviewer, panel reviewer, and escalation agents
 
 **Files:**
 - Create: `skills/multi-model-verify/references/panels.md`
-- Test: `evals/multi-model-verify/test_seat_reshuffle.py::test_panels_reference_pins`, plus the two amended test_multi_model_verify tests
+- Modify: `evals/multi-model-verify/test_multi_model_verify.py` (REQUIRED_REFERENCE_FILES list)
+- Test: `evals/multi-model-verify/test_seat_reshuffle.py::test_panels_reference_pins`, plus the two reference-registry tests in test_multi_model_verify.py
 
 **Interfaces:**
 - Consumes: the agent filename `agents/fable-panel-reviewer.md` (Task 2).
@@ -556,17 +548,32 @@ marking, the strictest-lane FULL condition, and the required
 fable-review artifact path for mode diff.
 ```
 
-- [ ] **Step 2: Run the reference tests to verify green**
+- [ ] **Step 2: Register panels.md as a required reference**
+
+In `evals/multi-model-verify/test_multi_model_verify.py`, find the
+REQUIRED_REFERENCE_FILES list (it currently ends with the
+`"backup-lane.md",` entry added in 0.13.0) and append one entry
+directly after that line, matching its indentation and style:
+
+```python
+    "panels.md",
+```
+
+The registration lands in the same task (and commit) as the file it
+registers, so the existing reference-registry tests never go red
+(spec section 11: existing suites stay green throughout).
+
+- [ ] **Step 3: Run the reference tests to verify green**
 
 Run: `python -m pytest evals/multi-model-verify/test_seat_reshuffle.py::test_panels_reference_pins evals/multi-model-verify/test_multi_model_verify.py -q`
 Expected: test_panels_reference_pins PASSES;
-test_reference_files_exist and test_no_backslash_paths_anywhere flip
-back to PASS (panels.md now exists, forward slashes only).
+test_reference_files_exist and test_no_backslash_paths_anywhere STAY
+green with panels.md registered and present (forward slashes only).
 
-- [ ] **Step 3: Commit**
+- [ ] **Step 4: Commit**
 
 ```bash
-git add skills/multi-model-verify/references/panels.md
+git add skills/multi-model-verify/references/panels.md evals/multi-model-verify/test_multi_model_verify.py
 git commit -m "0.14.0: add panels reference"
 ```
 
@@ -658,7 +665,10 @@ Insert AFTER those lines a blank line and EXACTLY this block:
 
 ```markdown
 Panel recording (references/panels.md): the Participants line lists
-EVERY lane with its transport and session or agent id; Rounds are
+every lane that produced a terminal verdict, with its transport and
+session or agent id — a completed panel lists every member; a
+consented post-loss continuation lists only the surviving lanes, with
+the lost lane and its loss class in the failure prose; Rounds are
 counted per lane (e.g. `Sol 3 of 4 / Kimi 2 of 4`); convergent blind
 findings are marked convergent in the resolved rows and counted once;
 for mode diff the record names the required fable-review artifact
@@ -692,7 +702,7 @@ Insert AFTER those lines a blank line and EXACTLY this single-paragraph
 block (ONE physical line — the file's long-line precedent):
 
 ```markdown
-Panel participation: a user-invoked panel per references/panels.md is a second sanctioned entry route - the invocation itself is the consent; containment, per-round evidence, and the write-probe apply unchanged, and no failure class is recorded because nothing substituted.
+Panel participation: a user-invoked panel per references/panels.md is a second sanctioned entry route - the invocation itself is the consent, with no fallbacks banner (nothing degraded); containment, per-round evidence, and the write-probe apply unchanged, and no failure class is recorded because nothing substituted.
 ```
 
 - [ ] **Step 5: Run the three wiring tests to verify green**
@@ -728,10 +738,9 @@ git commit -m "0.14.0: wire panel classes into fallbacks, record format, backup 
 In `model-prompting-notes.md`, REPLACE this block (the current heading,
 intro, and three bullets — complete physical lines from the `## Fable 5
 (the session side)` heading through the end of the third bullet,
-`  mandatory; same-context self-critique rubber-stamps (see`
-`  model-prompting-notes.md).` — i.e. everything before the blank line
-that precedes `## The reviewer lane (currently GPT-5.6 Sol via the
-codex CLI)`):
+`  skeptic pass in a FRESH subagent, not inline.` — i.e. everything
+before the blank line that precedes `## The reviewer lane (currently
+GPT-5.6 Sol via the codex CLI)`):
 
 ```text
 ## Fable 5 (the session side)
@@ -1053,6 +1062,8 @@ flowchart LR
     E -->|PASS| F([merge])
     E -->|FIX| D
     E -->|ESCALATE| U
+    P[/"panel option: user-invoked, any combo of<br/>Sol · Kimi · Fable, ≥1 cross-vendor<br/>(references/panels.md)"/] -.- B
+    P -.- E
 ```
 
 - **Mode `plan`** — after brainstorming, before the implementation plan is
@@ -1559,21 +1570,7 @@ no-manufactured-objections; the two manual cases print as SKIPPED).
 If quota blocks, record the deferral in the ledger and surface it in
 the diff-debate brief rather than skipping silently.
 
-- [ ] **Step 4: Dogfood the required review through the codified agent**
-
-This cycle's own final whole-branch review IS the live verification of
-the new required step. Build the review package for the whole branch
-(merge-base with main to tip), then dispatch the INSTALLED
-`parallax:fable-reviewer` agent with the frozen plan path, the SDD
-ledger path, and the package path. Save its raw reply VERBATIM to
-`docs/superpowers/plans/rounds/2026-07-26-seat-reshuffle/fable-review.md`
-with the base/head SHAs at the top; adjudicate each finding (accept /
-refute / ESCALATE) and cite the artifact plus adjudications in the
-diff-debate round-1 brief exactly as the new SKILL.md sentence
-requires. Commit the artifact
-(`0.14.0: retain fable review artifact for the diff debate`).
-
-- [ ] **Step 5: Two-round Sol+Fable panel smoke (ATTENDED, billable both lanes)**
+- [ ] **Step 4: Two-round Sol+Fable panel smoke (ATTENDED, billable both lanes)**
 
 Scratch subject: `agents/flash-implementer.md`'s report-format section
 (a small real review target with a known-good prior answer). Procedure,
@@ -1611,6 +1608,32 @@ lane is NOT in this smoke (its panel mechanics are the live-proven
 0.13.0 transport; the kimi.com dashboard remains the authority if a
 Kimi panel is exercised later).
 
+Observation scope: the dead-agent failure case stays observation-only
+in this smoke — it is exercised only if a lane actually dies (loud
+task-notification, class panel-lane-loss). If no death occurs, the
+case remains OPEN per the probe record and is logged as such in the
+ledger, never claimed covered.
+
+- [ ] **Step 5: Dogfood the required review through the codified agent (runs LAST, after every content commit)**
+
+This cycle's own final whole-branch review IS the live verification of
+the new required step, and it runs against the branch's immutable
+final head: every content commit — including Step 4's smoke
+artifacts — is already in when it dispatches. Build the review
+package for the whole branch (merge-base with main to that final
+head), then dispatch the INSTALLED `parallax:fable-reviewer` agent
+with the frozen plan path, the SDD ledger path, and the package path.
+Save its raw reply VERBATIM to
+`docs/superpowers/plans/rounds/2026-07-26-seat-reshuffle/fable-review.md`
+with the base/head SHAs at the top; adjudicate each finding (accept /
+refute / ESCALATE) and cite the artifact plus adjudications in the
+diff-debate round-1 brief exactly as the new SKILL.md sentence
+requires. Do NOT commit the artifact yet: it stays untracked through
+the diff debate so the reviewed head never moves out from under the
+review — it is committed together with the debate record after the
+terminal verdict
+(`0.14.0: retain fable review artifact and diff debate record`).
+
 - [ ] **Step 6: Record**
 
 Write the dev-loop, behavioral-run, dogfood-review, and smoke outcomes
@@ -1622,12 +1645,16 @@ into the SDD ledger — the diff-debate brief cites them.
 
 - Task order is strict: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8. Tasks 2-7 are
   unattended flash-implementer dispatches; Task 8 is attended.
-- The suite is RED between Tasks 1 and 6 by design (TDD window); the
-  per-task verification steps name exactly which tests flip when.
-- After Task 8: the mode-diff debate over the whole branch (with the
-  Task 4 fable-review artifact as its required input), attestation,
-  merge, push. The user flips `/model` to Opus 5 AFTER ship so this
-  cycle's debate record stays single-driver (the 0.12.0 precedent).
+- Only test_seat_reshuffle.py is RED between Tasks 1 and 6 by design
+  (TDD window); existing suites stay green throughout (spec section
+  11). The per-task verification steps name exactly which tests flip
+  when.
+- After Task 8: the mode-diff debate over the whole branch (with Task
+  8 Step 5's fable-review artifact as its required input; that
+  artifact commits with the debate record only after the terminal
+  verdict), attestation, merge, push. The user flips `/model` to
+  Opus 5 AFTER ship so this cycle's debate record stays single-driver
+  (the 0.12.0 precedent).
 
 ## Debate record
 
