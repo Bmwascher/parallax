@@ -1,0 +1,74 @@
+# Backup reviewer lane (cross-vendor substitution)
+
+The backup lane substitutes a SECOND cross-vendor reviewer (currently
+Kimi K3 via kimi-cli) when the primary reviewer transport is down. It
+enters ONLY through the fallbacks.md consent gate — auto-qualified by
+the classes named there, manual on user request — and preserves
+cross-vendor independence, so a backup-lane debate records
+`Verification status: FULL` with the lane substitution noted per
+frozen-plan-format.md. Same debate protocol, same brief conventions,
+same strike rule as the primary; only the transport differs. The
+canonical backup model id and thinking flag are declared ONLY in
+model-prompting-notes.md — read them from there at dispatch; this file
+uses placeholders.
+
+## Transport
+
+- Dispatch (single line):
+  `kimi --quiet --thinking -m <canonical-backup-model-id> --agent-file <plugin-checkout>/skills/multi-model-verify/references/kimi-reviewer-agent.yaml -w <throwaway-clone> -p "Read the file KIMI-REVIEW-BRIEF.md in this workspace and execute the review it describes."`
+- Resume (single line — every flag below is load-bearing):
+  `kimi --quiet -r <session-id> --agent-file <same yaml> -m <canonical-backup-model-id> --thinking -w <same clone> -p "<rebuttal>"`
+  A bare `kimi -r` loads the DEFAULT agent with full write and shell tools while the route line still reads clean (probed 2026-07-25: the behavioral refusal came from conversation priming with WriteFile and Shell live underneath); model and thinking inheritance come from CONFIG DEFAULTS, not the session, and the working directory does not inherit either — a resume without `-w` runs in the dispatching shell's current directory (caught live 2026-07-25: such a resume landed in the REAL tree; the containment allowlist held and the round was quarantined). Re-pin all four on every resumed call.
+- The session id is printed at the end of every run ("To resume this
+  session: kimi -r <uuid>"). Capture it from round 1.
+- Reviewer reasoning effort has NO CLI flag and NO log field: it is
+  pinned via `[models.<id>.overrides]` in `~/.kimi/config.toml`
+  (evidence class: config validation only — the consent banner names
+  this gap when the backup option is offered).
+
+## Per-round evidence (fresh AND resumed calls alike)
+
+`~/.kimi/logs/kimi.log` is a shared, user-global append stream — a bare
+"the line appears somewhere" check attributes nothing. The rule:
+
+- Before every dispatch capture the byte length of `~/.kimi/logs/kimi.log`; after the call, past that offset, require all three: exactly one new `Using LLM model:` line carrying the canonical backup id, a `Loading agent:` line naming the committed yaml, and a `Loaded tools:` line equal to the allowlist exactly.
+- Zero matching new lines, more than one, a wrong id, a wrong agent path, or any extra tool entry is a route-attribution failure: the reply is DISCARDED unread and the failure goes to the fallbacks.md consent gate.
+- This evidence is client-side: report it as "route line verified
+  (client-side)" in the record prose. Server-side substitution is not
+  detectable from this class; the finish line's normalized
+  `effective route confirmed` means every round's evidence matched THIS
+  lane's canonical declarations under these rules.
+
+## Containment
+
+- The committed pair `kimi-reviewer-agent.yaml` +
+  `kimi-reviewer-system.md` (this directory) is the ONLY agent
+  configuration the lane dispatches with. The yaml's five-tool
+  allowlist (SetTodoList, ReadFile, ReadMediaFile, Glob, Grep) carries
+  no write, shell, or web tool — kimi print mode auto-approves ALL
+  tools and `--plan` does not block writes (probed), so the allowlist
+  is the load-bearing control and the per-round `Loaded tools:` check
+  is its verification.
+- WRITE-PROBE (before round 1 of every backup-lane debate): in a fresh
+  disposable session with the exact debate configuration, ask the
+  contained agent to create a named marker file. PASS requires all of: explicit refusal in the reply, marker absent on disk, clone status delta empty.
+  Anything else means the lane is BROKEN (integrity failure class in
+  fallbacks.md) — never dispatch a review over it.
+
+## Clone isolation and the brief
+
+- Reviews run in a THROWAWAY CLONE of the repo in the session
+  scratchpad — never the real tree.
+- The brief is written into the clone as the untracked
+  `KIMI-REVIEW-BRIEF.md`; the `-p` pointer tells the reviewer to read
+  it (headless stdin does not carry the brief).
+- After every round, `git status --porcelain` in the clone must list exactly the brief file and nothing else; any other delta quarantines that round's reply (integrity failure class).
+- The brief is retained as evidence per the raw-rounds convention.
+- Never run `kimi export` inside a repo — it writes a session zip into the current directory; export only from a scratch directory. Nothing in this lane uses export.
+
+## Failure handling
+
+All failure classes, retries, and consent-gate dispositions live in
+fallbacks.md (the single failure-class namespace) — this file defines
+none of its own. Record fields for a substituted debate live in
+frozen-plan-format.md.
