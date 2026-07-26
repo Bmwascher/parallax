@@ -1663,8 +1663,85 @@ into the SDD ledger — the diff-debate brief cites them.
   ship so this cycle's debate record stays single-driver (the 0.12.0
   precedent).
 
+---
+
 ## Debate record
 
-(Appended at freeze per references/frozen-plan-format.md — this plan is
-a candidate until the mode-plan debate converges and the record lands
-here.)
+**Participants:** Fable 5 (session) / GPT-5.6 Sol (codex exec, session 019f9de9-7f04-7a83-b41a-b76c9def820c) / Kimi K3 (kimi-cli, session 1108e314-a88a-4af8-84be-41df037b7a7f)
+**Rounds used:** Sol 3 of 4 / Kimi 3 of 4
+**Outcome:** converged
+**Verification status:** FULL
+**Degradation:** none
+**Authorized by:** n/a (dual review user-invoked — see prose)
+**Raw rounds:** docs/superpowers/plans/rounds/2026-07-26-seat-reshuffle/plan-debate-* — all six reviewer replies verbatim, Sol briefs r1-r3 and the Kimi r3 brief verbatim, plus the write-probe reply. Kimi r1/r2 brief bytes not retained (overwritten in place per the single-brief-file containment convention); their claims sections were byte-identical to the same-round Sol briefs' claims with the documented clone-subject wrapper.
+
+### Resolved points
+
+| # | Claim | Raised by | Outcome | Evidence |
+|---|-------|-----------|---------|----------|
+| 1 | Task 5's replace-extent parenthetical quoted fallbacks.md text as model-prompting-notes.md's third-bullet ending — a false input-gap stop for the implementer | Kimi R1 | accepted; locator now quotes the true ending (e44956e) | skills/multi-model-verify/references/fallbacks.md:60; skills/multi-model-verify/references/model-prompting-notes.md:18 |
+| 2 | Task 1's REQUIRED_REFERENCE_FILES edit broke two existing tests in the TDD window, violating spec section 11 "Existing suites stay green throughout" | Sol R1 | accepted; edit moved to Task 3 alongside panels.md, RED baseline now 10 failed / 154 passed / 1 skipped (e44956e) | docs/superpowers/specs/2026-07-26-seat-reshuffle-design.md:340 |
+| 3 | Panel-record Participants read "EVERY lane" unconditionally; the spec pins post-loss Participants to terminal-verdict lanes | Sol R1 | accepted; sentence made conditional — completed panel lists every member, post-loss lists survivors with the lost lane in failure prose (e44956e) | docs/superpowers/specs/2026-07-26-seat-reshuffle-design.md:189-191 |
+| 4 | The pinned backup-lane sentence omitted the spec's "no fallbacks banner (nothing degraded)" clause | Sol R1 | accepted; sentence and Task 1 test pin amended byte-identically (e44956e) | docs/superpowers/specs/2026-07-26-seat-reshuffle-design.md:148-151 |
+| 5 | The README workflow mermaid lacked the spec-required explicit panel option | Sol R1 | accepted; panel-option node dotted to both debate nodes (e44956e) | docs/superpowers/specs/2026-07-26-seat-reshuffle-design.md:293-295 |
+| 6 | Task 8 order was self-referential: the review-artifact commit plus smoke commits moved the head past the reviewed range | Sol R1 | accepted; smoke reordered before the review, review dispatched at the immutable final head (e44956e) | plan Task 8; SKILL.md required-step sentence |
+| 7 | Residual of #6: committing the artifact and debate record after the terminal verdict still produces an unattested head | Sol R2, refuting the #6 amendment | accepted; artifact retained UNTRACKED through ship, ledger records path + SHA-256 (047dedf) | tools/verify-attestation.ps1:161-183; the plan's embedded attestation-lane text |
+| 8 | The execution note mislabeled the review artifact "Task 4" | Sol R1 | accepted; now cites Task 8 Step 5 (e44956e) | plan execution notes |
+| 9 | Claim 12 overclaimed probe coverage: the smoke never exercises the dead-agent case | Sol R1 | accepted; observation-scope paragraph added — the case stays OPEN unless a lane dies, never claimed covered (e44956e) | docs/superpowers/plans/rounds/2026-07-26-seat-reshuffle/subagent-resume-probe.md:77-100 |
+| 10 | The no-unrequested-refactor snippet lives in the escalation contract rather than the notes distillation | Kimi R1 (observation) | no change — the spec's own sentence homes it in the escalation lane's DECISIONS discipline, which is where the plan puts it | docs/superpowers/specs/2026-07-26-seat-reshuffle-design.md:232-233 |
+| 11 | The session's claim 10 miscounted the anchored edits ("nine") | Kimi R1 | accepted as a record correction: ten anchored edits, seven pure insertions; anchor uniqueness itself was verified independently by both lanes | both R1 replies |
+
+### Escalated points (user-decided)
+
+| # | Question | Session position | Reviewer position | Owner's call |
+|---|----------|------------------|-------------------|--------------|
+
+(none)
+
+### Prose notes
+
+- Entry and topology: dual review user-invoked (2026-07-26, "We're fine
+  in usage limits if that's the route we want to go") — the Kimi lane's
+  sanctioned user-request entry. Blind hub-and-spoke: findings relayed
+  anonymized as "a second independent review"; no lane learned the
+  other's identity.
+- Sol evidence: every round's header matched the canonical declarations
+  (model, provider openai, reasoning effort high, sandbox read-only);
+  both resumes echoed the round-1 session id; env hygiene plus the
+  "Logged in using ChatGPT" preflight ran in the same sanitized shell
+  before every dispatch. Effective route confirmed.
+- Kimi evidence: write-probe PASS before round 1 (explicit refusal,
+  marker absent, clean clone delta); all three rounds' offset-attributed
+  log evidence clean — exactly one `Using LLM model:` line with the
+  canonical backup id, `Loading agent:` naming the committed yaml,
+  `Loaded tools:` equal to the five-tool allowlist — and the clone
+  delta was the brief file alone after every round. Route lines
+  verified (client-side).
+- Subject revisions: ea84e4f (round 1) -> e44956e (round-1 fold) ->
+  047dedf (residual fold). Both terminal PASSes cite
+  047dedfc99b85b88b04d60a2059d14f3e8631615. Kimi's round-2 PASS at
+  e44956e was reopened as stale when the subject changed — the
+  panels.md terminal-verdict rule applied before it ships.
+- Convergence signals: both lanes independently verified anchor
+  uniqueness, both README pins, the primary-declaration ordering, and
+  literal-sweep cleanliness (round 1); both round-3
+  post-verdict-commit sweeps returned clean independently. The defect
+  sets were disjoint — Kimi caught the locator misquote, Sol the six
+  fidelity/execution findings — and finding #7 was missed by one lane
+  and caught by the other: lens diversity, not redundancy, carried the
+  panel value.
+- Environment notes (non-blocking, per convention): the user's global
+  `~/.codex/AGENTS.md` exists (the user's own instruction file); the
+  user's codex plugin cache is present and its skills load into the
+  reviewer by design. The repo-level back-channel sweep
+  (`git ls-files --cached --others '*AGENTS.md' '.agents/*'`) returned
+  empty at preflight.
+- Lane limits (documented evidence classes): neither reviewer shell
+  has git or Python — commit SHAs were asserted by the driver and
+  verified by content, and all pytest arithmetic is static, not
+  executed; backup-lane reviewer reasoning effort remains
+  config-validation-only per backup-lane.md.
+- Freeze: plan content converged at 047dedf; this appendix is the
+  freeze action per frozen-plan-format.md (the writing-plans
+  self-review ran pre-candidate). After this commit, changes require
+  reopening the debate — the implementer never edits the plan.
