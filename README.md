@@ -1,57 +1,70 @@
 # parallax
 
-**Cross-model verification for Claude Code.** Two equal-weight frontier
-models — the session model and a cross-vendor reviewer (via the OpenAI
-codex CLI; the current reviewer lane is declared in the skill's
-model-prompting-notes.md) —
-verify and refute each other's claims with file:line evidence *before* a
-cheaper implementer touches code, and again *before* the result merges.
-Neither vendor grades its own homework. When codex is down, a
-consent-gated backup reviewer lane (Kimi K3 via kimi-cli) substitutes a
-second cross-vendor seat rather than degrading to single-vendor review.
+**Cross-model verification for Claude Code.** Equal-weight frontier
+models — the session driver and at least one cross-vendor reviewer —
+verify and refute each other's claims with file:line evidence *before*
+a cheaper implementer touches code, and again *before* the result
+merges. Neither vendor grades its own homework: when the primary
+reviewer transport is down, a consent-gated backup reviewer (Kimi K3
+via kimi-cli) substitutes a second cross-vendor seat rather than
+degrading to single-vendor review, and the user can convene
+multi-reviewer panels for work worth more than one set of eyes.
 
 Companion to [superpowers](https://github.com/obra/superpowers), not a
 replacement: it fills the cross-model review gap superpowers rules out of
 scope.
 
-## How it works
+## Current lineup
 
-**Current lineup.** Every seat is a plug (see [Swapping lanes](#swapping-lanes));
-this table is descriptive — the binding declarations live in
-`skills/multi-model-verify/references/model-prompting-notes.md` and the
-agent files:
+Every seat is a plug (see [Swapping lanes](#swapping-lanes)); this
+table is descriptive — the binding declarations live in
+`skills/multi-model-verify/references/model-prompting-notes.md` and
+the agent files:
 
 | Seat | Model today | Transport |
 |---|---|---|
-| Session — debates, adjudicates, merges | Claude (currently Fable 5) | Claude Code |
+| Session driver — debates, adjudicates, merges | Any Claude model (rules attach to the seat) | Claude Code |
 | Cross-vendor reviewer (primary) | GPT-5.6 Sol | OpenAI codex CLI, `exec` read-only |
 | Cross-vendor reviewer (backup, consent-gated) | Kimi K3 | kimi-cli, contained agent-file, read-only |
-| Implementer (direct lane) | Claude (Haiku tier) | `agents/implementer.md` |
-| Implementer (Flash lane) | Gemini 3.6 Flash | Antigravity CLI (`agy`) via haiku wrapper, `agents/flash-implementer.md` |
+| Panel reviewer (Claude lane, panels only) | Fable | `agents/fable-panel-reviewer.md`, read-only subagent |
+| Whole-branch reviewer (required before mode diff) | Fable | `agents/fable-reviewer.md`, read-only subagent |
+| Implementer (mechanical) | Gemini 3.6 Flash | Antigravity CLI (`agy`) via haiku wrapper, `agents/flash-implementer.md` |
+| Implementer (transcription) | Claude tier | `agents/implementer.md` (frontmatter default `sonnet`; haiku per dispatch) |
+| Implementer (escalation, judgment inside an envelope) | Fable | `agents/escalation-implementer.md` |
+
+## How it works
 
 ```mermaid
 flowchart LR
-    A[superpowers<br/>brainstorm] --> B{{"mode plan debate<br/>session ⇄ reviewer"}}
+    A[superpowers<br/>brainstorm] --> B{{"mode plan debate<br/>session ⇄ reviewer(s)"}}
     B -->|converged| C["frozen plan<br/>+ debate record"]
     B -->|escalated| U[user decides]
-    C --> D["implementer subagent<br/>(zero judgment calls)"]
-    D --> E{{"mode diff debate<br/>spec + port fidelity"}}
+    C --> D["implementer lane<br/>(zero judgment calls)"]
+    D --> R["required fable review<br/>(whole branch, retained)"]
+    R --> E{{"mode diff debate<br/>spec + port fidelity"}}
     E -->|PASS| F([merge])
     E -->|FIX| D
     E -->|ESCALATE| U
+    P[/"panel option: user-invoked, any combo of<br/>Sol · Kimi · Fable, ≥1 cross-vendor<br/>(references/panels.md)"/] -.- B
+    P -.- E
 ```
 
 - **Mode `plan`** — after brainstorming, before the implementation plan is
-  written. The two models debate the approach, port-fidelity claims, and the
+  written. The models debate the approach, port-fidelity claims, and the
   API/behavior risk register until convergence or the round cap, then the
   converged plan is frozen with a full debate record
   (participants, rounds, resolved/struck/escalated points, verification
   status).
 - **Mode `diff`** — after implementation, alongside superpowers code review.
-  A PostToolUse hook fingerprints the superpowers code-reviewer dispatch and
+  A required whole-branch review from the fable-reviewer seat runs first
+  and its retained, range-bound report feeds the debate brief; then a
+  PostToolUse hook fingerprints the superpowers code-reviewer dispatch and
   injects the diff-mode reminder with the same base/head SHAs, so both
   reviews always look at the same range. Verdicts are PASS / FIX / ESCALATE
   from *each* side.
+- **Panels** — either mode can run as a user-invoked multi-reviewer panel:
+  any combination of the Sol, Kimi, and Fable lanes that keeps at least
+  one cross-vendor seat. See [Panels](#panels).
 
 The debate rules that keep this honest
 (`skills/multi-model-verify/references/debate-protocol.md`):
@@ -78,14 +91,18 @@ The debate rules that keep this honest
 |---|---|
 | `skills/multi-model-verify/` | The debate skill: both modes, debate protocol, frozen-plan format, model prompting notes, fallbacks/consent gate |
 | `skills/multi-model-verify/references/backup-lane.md` | The cross-vendor backup reviewer lane — currently Kimi K3 via kimi-cli: consent-gated substitution when codex is down — the gate's "run backup lane" option (backup model id pinned in model-prompting-notes.md) |
+| `skills/multi-model-verify/references/panels.md` | Multi-reviewer panels: any lane combination with at least one cross-vendor seat; hub-and-spoke blind relay; subject-revision binding |
 | `hooks/` | PostToolUse + PostToolUseFailure hook (matcher `Task\|Agent`): fingerprints the superpowers code-reviewer dispatch, injects the mode-`diff` reminder with matching SHAs; inert everywhere else |
 | `agents/implementer.md` | Zero-judgment direct-typing executor for frozen-plan tasks (model pinned in the file's frontmatter) |
 | `agents/flash-implementer.md` | Zero-judgment Flash lane: haiku wrapper drives Gemini Flash through the Antigravity CLI headlessly; route + authorship evidence checked every run (model literal pinned in the file) |
+| `agents/escalation-implementer.md` | Fable escalation lane: implementation judgment ONLY inside a plan-enumerated decision envelope, every decision logged for the diff debate to adjudicate |
+| `agents/fable-reviewer.md` | The required whole-branch review before every mode-diff debate — read-only, raw reply retained as a range-bound artifact |
+| `agents/fable-panel-reviewer.md` | The Claude-side panel reviewer lane — read-only, resumable, dispatch-metadata evidence class |
 | `commands/drift-triage.md` | `/parallax:drift-triage` — reads the newest drift report, verifies each finding against the live contract surfaces, repairs on a branch |
-| `commands/doctor.md` | `/parallax:doctor` — operational health check: checkout-vs-installed version, hook registration, superpowers fingerprint, codex transport round-trip, drift task + pending entries. Reports, never fixes |
+| `commands/doctor.md` | `/parallax:doctor` — operational health check: checkout-vs-installed version, hook registration, superpowers fingerprint, codex transport round-trip, backup lane, drift task + pending entries. Reports, never fixes |
 | `commands/intake.md` | `/parallax:intake` — external-reference intake: clone read-only as untrusted subject data, ground every claimed delta on both sides, probe-gate behavior claims, rank dispositions for the user's scope pick, then hand into the multi-model-verify debate |
 | `evals/` | Four gate tiers for the skill itself — see [Verify](#verify) |
-| `tools/check-drift.ps1` | Weekly drift watch over the three upstreams the contract depends on — see [Drift protection](#drift-protection) |
+| `tools/check-drift.ps1` | Weekly drift watch over the upstreams the contract depends on — see [Drift protection](#drift-protection) |
 | `tools/write-attestation.ps1` · `tools/verify-attestation.ps1` | SHA-bound review attestations — see [Attestation lane](#attestation-lane) |
 | `.githooks/pre-push` | Non-blocking attestation check on `main` pushes (`git config core.hooksPath .githooks` to enable) |
 
@@ -132,6 +149,10 @@ flowchart TD
   (`CODEX_API_KEY`, `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `CODEX_HOME`) after a
   `codex login status` preflight that requires the first-party ChatGPT
   state, not merely exit 0.
+- A lane failing mid-panel gets the same treatment (`panel-lane-loss`):
+  the panel stops at the consent gate — continuing with fewer lanes never
+  happens automatically, and a remainder without a cross-vendor lane can
+  only proceed as DEGRADED.
 - A DEGRADED-frozen plan cannot produce an ordinary diff PASS: mode `diff`
   must first retrospectively cross-verify the plan's claims, and if
   cross-vendor is *still* unavailable the only terminal state is
@@ -140,12 +161,31 @@ flowchart TD
   never a degraded mode — a debate about remembered code is two models
   fabricating at each other.
 
+## Panels
+
+For work worth more than one reviewer, the user can convene a panel
+(`skills/multi-model-verify/references/panels.md`): any combination of
+the Sol, Kimi, and Fable lanes — Sol+Kimi, Sol+Fable, Kimi+Fable, or
+all three — with one invariant: **every panel contains at least one
+cross-vendor lane**; an all-Claude panel is invalid by contract test.
+The driver mediates hub-and-spoke: reviewer lanes never talk to each
+other, findings relay anonymously with their evidence (blind
+cross-examination — independently convergent findings are the
+strongest signal the system produces), every round brief pins the
+subject revision, and each lane keeps its own transport, evidence
+rules, and round cap unchanged. Panels are user-invoked only — the
+default remains the bilateral Sol debate.
+
 ## Swapping lanes
 
 Every role is a plug — the contracts attach to roles, not models. Today's
-lineup (session / cross-vendor reviewer / cheap implementer) is one
-configuration:
+lineup is one configuration:
 
+- **Session driver** — whatever Claude model runs the session (`/model`);
+  the debate rules and final adjudication follow the seat automatically,
+  and per-model driver notes live in
+  `skills/multi-model-verify/references/model-prompting-notes.md` (The
+  session driver seat).
 - **Implementer, Claude tier** — edit one line: `model:` in
   `agents/implementer.md` frontmatter (any Claude tier is a drop-in). The contract (zero judgment calls, INPUT GAP rule, structured
   report) stays identical whoever fills it.
@@ -154,6 +194,9 @@ configuration:
   supervisor pattern `agents/flash-implementer.md` implements (documented in `agents/implementer.md`'s Lane note): a cheap Claude
   model supervises, delegates the body of work to the vendor CLI, and
   re-runs verification itself.
+- **Implementer, escalation** — `agents/escalation-implementer.md`: the
+  judgment-heavy lane; its authority comes from the frozen plan's
+  enumerated decision envelope, never from the model filling it.
 - **Cross-vendor reviewer** — a ONE-LINE swap: the canonical model id and
   reasoning effort live solely in
   `skills/multi-model-verify/references/model-prompting-notes.md`. The
@@ -165,8 +208,10 @@ configuration:
   fallbacks.md) swaps the same way — its declarations live in the same
   file (after the primary's, as the parsers require), under the same
   single-source test.
-- **Session** — whatever model runs the session; the debate rules and
-  final adjudication follow the seat automatically.
+- **Fable review seats** — `agents/fable-reviewer.md` and
+  `agents/fable-panel-reviewer.md` pin `model: fable` in frontmatter;
+  a tier swap is that one line, with the read-only tool grant and
+  evidence class unchanged.
 
 ## Requirements
 
@@ -182,10 +227,12 @@ configuration:
 - Optional — Flash implementer lane: the Antigravity CLI (`agy`)
   authenticated (Gemini 3.6 Flash; model literal pinned in
   `agents/flash-implementer.md`)
+- The Fable seats need no extra transport — they are Claude Code
+  subagents
 
 ## Install
 
-Stable (any machine with git auth for this private repo):
+Stable:
 
 ```
 claude plugin marketplace add Bmwascher/parallax
@@ -206,8 +253,8 @@ claude plugin update parallax@parallax   # qualified name required
 Forgetting a step here is the failure mode that looks like a plugin bug: a
 stale cache runs yesterday's skill, a missed restart leaves the hook
 unregistered. `/parallax:doctor` reports both, plus the fingerprint, the
-codex transport, quota headroom (best-effort, experimental), and any
-unresolved drift — in one table.
+codex transport, quota headroom (best-effort, experimental), the backup
+lane, and any unresolved drift — in one table.
 
 ## Verify
 
@@ -215,7 +262,7 @@ unresolved drift — in one table.
 |---|---|---|---|
 | 1 — structure | Spec lint + security scan | `python evals/tools/skill_lint.py skills/multi-model-verify --strict` · `python evals/tools/skill_scanner.py skills` | CI + local |
 | 2 — routing | Trigger/routing evals | `python evals/tools/run_trigger_evals.py` | CI + local |
-| 2.5 — contract | Structural pytest suite (hook e2e under pwsh, pinned superpowers template fixture, transport/fallback/status-field pins) | `python -m pytest evals -q` | CI + local |
+| 2.5 — contract | Structural pytest suite (hook e2e under pwsh, pinned superpowers template fixture, transport/fallback/status-field/seat pins) | `python -m pytest evals -q` | CI + local |
 | 3 — behavior | Real headless `claude -p` executor runs each case in a throwaway workspace (synthetic `References/DemoWidget` fixture; codex stripped from PATH for degraded cases), graded expectation-by-expectation by the cross-vendor reviewer — the executor's vendor never grades itself | `python evals/tools/run_behavioral_evals.py` | local only |
 
 Tier 3 tests the **installed** plugin, not the checkout — run the dev-loop
@@ -228,15 +275,13 @@ base/head SHAs, so a pass means the debate found the drift in a real diff.
 
 The drift script has its own offline state machine —
 `evals/tools/drift_statemachine_tests.ps1` drives the **real**
-`tools/check-drift.ps1` through thirteen scenarios against stub CLIs and a
-throwaway clone: probe-failure carry-forward, the verdict trust matrix
-(`BLOCKED`, no verdict, trusted `NO-ACTION`), both halves of the toast
-matrix (CRITICAL dismissal toasts VERIFY, WARN-only dismissal toasts
-nothing), the pytest gate (a stub fix that *breaks the suite* must never
-commit), commit failure, off-grammar cross-review, an effective-route
-mismatch and a failed auth preflight (both read UNAVAILABLE, never a
-verdict), pending lifecycle, and the hung-agent kill. Slow and opt-in —
-run it whenever `check-drift.ps1` changes:
+`tools/check-drift.ps1` through its scenarios against stub CLIs and a
+throwaway clone: probe-failure carry-forward, the verdict trust matrix,
+both halves of the toast matrix, the pytest gate, commit failure,
+off-grammar cross-review, an effective-route mismatch, a failed auth
+preflight, kimi flag/vocabulary/version drift, pending lifecycle, and
+the hung-agent kill. Slow and opt-in — run it whenever
+`check-drift.ps1` changes:
 
 ```powershell
 .\evals\tools\drift_statemachine_tests.ps1
@@ -246,8 +291,8 @@ $env:PARALLAX_STATEMACHINE = "1"; python -m pytest evals -q
 
 ## Drift protection
 
-parallax's contract points at three moving targets it does not control.
-`tools/check-drift.ps1` watches all three; a clean run raises no toast
+parallax's contract points at moving targets it does not control.
+`tools/check-drift.ps1` watches them; a clean run raises no toast
 (the report is still archived under `tools/drift-reports/` — gitignored,
 machine-local).
 
@@ -256,6 +301,7 @@ machine-local).
 | superpowers | Template rewrite rots the hook fingerprint (`Senior Code Reviewer` / `Git Range to Review`) or the `Base:`/`Head:` extraction | Every run: hash the installed template against the pinned fixture; CRITICAL if the fingerprints are gone |
 | Claude Code | Surface changes — the Task→Agent tool rename (v2.1.63) silently killed the hook matcher once already | On version change: fetch the changelog slice between versions and grep for hook/plugin/matcher/skill/tool-rename keywords |
 | codex CLI | `exec` transport flags the skill's commands depend on | Every run: probe `--sandbox`, `--output-last-message`, model/config flags, and the `exec resume` subcommand |
+| kimi-cli | Backup-lane flags (`--agent-file`, `-m`, `--thinking`, `-w`, `-r`) and the kimi_cli tool-module vocabulary the containment allowlist names | Every run when kimi is present: token-boundary flag probe + python import probe; version carry-forward when absent |
 
 ```
 powershell tools/check-drift.ps1            # one-shot
@@ -317,6 +363,13 @@ the reviewed repo's `.git/parallax/attestations/`. The git dir, not the
 working tree: recording the verdict cannot move HEAD out from under its
 own SHA, and the record never ships in a commit.
 
+For a panel-reviewed diff the same schema holds under the
+strictest-lane rule: `Rounds` records the maximum lane round count,
+`Participants` names the driver and every lane, and the route note
+reads `effective route confirmed` only when EVERY lane's per-round
+evidence matched its own canonical declarations — per-lane detail
+lives in the debate record, not the JSON.
+
 `tools/verify-attestation.ps1` is the consumer: a `main` push is attested
 when the pushed sha carries a gate-satisfying record (fast-forward), or
 when a merge commit's parent2 carries one **against parent1 as its base**
@@ -332,7 +385,7 @@ Enforcement is deliberately **local pre-push lanes only** (re-adjudicated
 2026-07-19 after the reviewer flagged the gap): the records live under
 `.git` and never ship, so a GitHub-CI check would need an attestation
 carrier (git note, PR metadata, or an uploaded artifact) — deferred until
-a PR-based merge flow exists; today both repos merge locally, so pre-push
+a PR-based merge flow exists; today merges happen locally, so pre-push
 IS the integration boundary.
 
 ## Application checkpoint
@@ -366,5 +419,8 @@ match the stated postconditions.
 Advisor/evals ideas from
 [awesome-llm-apps agent_skills](https://github.com/Shubhamsaboo/awesome-llm-apps);
 plugin + self-marketplace shape from
-[fable-advisor](https://github.com/DannyMac180/fable-advisor); vendored eval
-tooling attribution in `evals/tools/LICENSE-THIRD-PARTY.md`. MIT licensed.
+[fable-advisor](https://github.com/DannyMac180/fable-advisor) (whose
+v4.0.0 architect-move and mandatory end-review informed the 0.14.0
+seat reshuffle — adopted while keeping the reviewer cross-vendor);
+vendored eval tooling attribution in `evals/tools/LICENSE-THIRD-PARTY.md`.
+MIT licensed.

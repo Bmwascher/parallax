@@ -1,0 +1,1211 @@
+OpenAI Codex v0.144.1
+--------
+workdir: C:\Users\Brandon\Documents\parallax
+model: gpt-5.6-sol
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: none
+session id: 019f9faf-950d-7c80-9ce0-626d232ac1c9
+--------
+user
+# Panel smoke — shared round-1 claims (Sol+Fable, blind hub-and-spoke)
+
+Subject: the report-format contract of `agents/flash-implementer.md` (the
+`## Report format (your final message)` section and its supporting rules).
+Subject revision (pinned in every round of every lane): checkout HEAD
+c95f18e1ec2cb6a5d7de586557e072e638583e9f; reviewed file blob
+69dbdb0f77d6606e5729ffe5414bc131aa4922e8
+(`git rev-parse HEAD:agents/flash-implementer.md`).
+
+<role>Adversarial reviewer, equal weight, in a multi-reviewer debate. Refute or confirm each numbered claim; cite agents/flash-implementer.md:<line> for every claim you make or contest; uncited claims are struck. Do not manufacture objections. End each claim PASS / FIX (with the specific fix) / ESCALATE, then ONE overall verdict line citing the subject revision.</role>
+
+<claims>
+1. The report contract's five fields — STATUS, ROUTE, FILES CHANGED,
+   VERIFICATION, DEVIATIONS (agents/flash-implementer.md:111-120) — are
+   each verifiable from wrapper-observable evidence alone (git status,
+   retained logs, the brain transcript, the wrapper's own command runs);
+   none requires trusting the inner Flash model's self-report, consistent
+   with the route evidence being declared client-side at line 93.
+2. The blocked path preserves recoverability: FILES CHANGED stays
+   mandatory on `blocked` (lines 114-116, "STILL list every path Flash
+   already touched") so the session can always revert a partial write —
+   the contract's recovery property.
+3. STATUS's third value `INPUT GAP: <exactly what is missing>` (line 111)
+   is a distinct terminal state backed by the stop rule at line 29 ("STOP
+   and report the gap") — the contract forbids improvised inputs rather
+   than degrading them into a `done`.
+4. DEVIATIONS is a drift tripwire, not a change log: the only passing
+   value is the literal "none" (lines 119-120), and any other value
+   converts the report into an explanation of why the task could not be
+   built as written — there is no vocabulary for an accepted deviation
+   inside this lane's report.
+</claims>
+
+<boundaries>The file's design (zero-judgment lane, Flash delegation, the containment rules outside the report-format section) is not under debate — only the four claims about the report contract as written at this revision.</boundaries>
+
+<final-check>List any claim you could not verify against the lines you read as UNVERIFIED.</final-check>
+
+
+codex
+I’ll run this as a pinned, read-only contract review. I’m using the multi-model verification skill because the request is explicitly a multi-reviewer adversarial lane; I’ll first load its rules, then verify the commit/blob and cite the file’s exact numbered lines.
+codex
+I’m also applying the repository’s skill-use bootstrap so the review follows the local invocation and evidence rules before I inspect the subject.
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command "Get-Content -Raw 'C:\\Users\\Brandon\\.codex\\plugins\\cache\\claude-plugins-official\\superpowers\\6.2.0\\skills\\using-superpowers\\SKILL.md'; Get-Content -Raw 'C:\\Users\\Brandon\\.codex\\plugins\\cache\\parallax\\0.14.0\\skills\\multi-model-verify\\SKILL.md'; Select-String -Path 'C:\\Users\\Brandon\\.codex\\memories\\MEMORY.md' -Pattern 'parallax|multi-model-verify|Panel smoke|flash-implementer' -Context 2,4" in C:\Users\Brandon\Documents\parallax
+ succeeded in 631ms:
+---
+name: using-superpowers
+description: Use when starting any conversation - establishes how to find and use skills, requiring skill invocation before ANY response including clarifying questions
+---
+
+<SUBAGENT-STOP>
+If you were dispatched as a subagent to execute a specific task, ignore this skill.
+</SUBAGENT-STOP>
+
+<EXTREMELY-IMPORTANT>
+If you think there is even a 1% chance a skill might apply to what you are doing, you ABSOLUTELY MUST invoke the skill.
+
+IF A SKILL APPLIES TO YOUR TASK, YOU DO NOT HAVE A CHOICE. YOU MUST USE IT.
+
+This is not negotiable. You cannot rationalize your way out of this.
+</EXTREMELY-IMPORTANT>
+
+## The Rule
+
+**Invoke relevant or requested skills BEFORE any response or action** — including clarifying questions, exploring the codebase, or checking files. If it turns out wrong for the situation, you don't have to use it.
+
+**Before entering plan mode:** if you haven't already brainstormed, invoke the brainstorming skill first.
+
+Then announce "Using [skill] to [purpose]" and follow the skill exactly. If it has a checklist, create a todo per item.
+
+## Skill Priority
+
+When multiple skills apply, process skills come first — they set the approach, then implementation skills (frontend-design, etc.) carry it out. Brainstorming and systematic-debugging are Superpowers' most common process skills, but the rule holds for any of them.
+
+- "Let's build X" → superpowers:brainstorming first, then implementation skills.
+- "Fix this bug" → superpowers:systematic-debugging first, then domain skills.
+
+## Red Flags
+
+These thoughts mean STOP—you're rationalizing:
+
+| Thought | Reality |
+|---------|---------|
+| "This is just a simple question" | Questions are tasks. Check for skills. |
+| "I need more context first" | Skill check comes BEFORE clarifying questions. |
+| "Let me explore the codebase first" | Skills tell you HOW to explore. Check first. |
+| "I can check git/files quickly" | Files lack conversation context. Check for skills. |
+| "Let me gather information first" | Skills tell you HOW to gather information. |
+| "This doesn't need a formal skill" | If a skill exists, use it. |
+| "I remember this skill" | Skills evolve. Read current version. |
+| "This doesn't count as a task" | Action = task. Check for skills. |
+| "The skill is overkill" | Simple things become complex. Use it. |
+| "I'll just do this one thing first" | Check BEFORE doing anything. |
+| "This feels productive" | Undisciplined action wastes time. Skills prevent this. |
+| "I know what that means" | Knowing the concept ≠ using the skill. Invoke it. |
+
+## Platform Adaptation
+
+If your harness appears here, read its reference file for special instructions:
+
+- Codex: `references/codex-tools.md`
+- Pi: `references/pi-tools.md`
+- Antigravity: `references/antigravity-tools.md`
+
+## User Instructions
+
+User instructions (CLAUDE.md, AGENTS.md, GEMINI.md, etc, direct requests) take precedence over skills, which in turn override default behavior. Only skip skill workflows or instructions when your human partner has explicitly told you to.
+
+
+  C:\Users\Brandon\.codex\memories\MEMORY.md:654:### keywords
+  C:\Users\Brandon\.codex\memories\MEMORY.md:655:
+> C:\Users\Brandon\.codex\memories\MEMORY.md:656:- crosscheck, multi-model-verify, Fable 5, GPT-5.6 Sol, cheap 
+implementer, superpowers review companion, PostToolUse, requesting-code-review, behavioral evals, citation anchoring, 
+falsifiable diff-mode, 0.4.2
+  C:\Users\Brandon\.codex\memories\MEMORY.md:657:
+  C:\Users\Brandon\.codex\memories\MEMORY.md:658:## Task 2: Headless drift-watch triage, verified no action
+  C:\Users\Brandon\.codex\memories\MEMORY.md:659:
+  C:\Users\Brandon\.codex\memories\MEMORY.md:660:### rollout_summary_files
+
+Get-Content: 
+Line |
+   2 |  … \SKILL.md'; Get-Content -Raw 'C:\Users\Brandon\.codex\plugins\cache\p …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot find path 'C:\Users\Brandon\.codex\plugins\cache\parallax\0.14.0\skills\multi-model-verify\SKILL.md' because it does not exist.
+
+codex
+The listed Parallax cache path is stale, so that skill did not load. I’m locating the installed copy and reading the Codex-specific bootstrap reference before touching the reviewed blob.
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command "Get-Content -Raw 'C:\\Users\\Brandon\\.codex\\plugins\\cache\\claude-plugins-official\\superpowers\\6.2.0\\skills\\using-superpowers\\references\\codex-tools.md'; Get-ChildItem -Path 'C:\\Users\\Brandon\\.codex\\plugins\\cache' -Recurse -Filter 'SKILL.md' -ErrorAction SilentlyContinue | Where-Object { "'$_.FullName -match '"'parallax.*multi-model-verify' } | Select-Object -ExpandProperty FullName; Get-Content 'C:\\Users\\Brandon\\.codex\\memories\\MEMORY.md' | Select-Object -Skip 620 -First 45" in C:\Users\Brandon\Documents\parallax
+ succeeded in 720ms:
+## Subagent dispatch requires multi-agent support
+
+Add to your Codex config (`~/.codex/config.toml`):
+
+```toml
+[features]
+multi_agent = true
+```
+
+This enables `spawn_agent`, `wait_agent`, and `close_agent` for skills like `dispatching-parallel-agents` and `subagent-driven-development`. When using subagent-driven-development, close reviewer subagents when their review returns. Keep each implementer subagent open until its task's review passes — the fix loop resumes the implementer — then close it. If your harness cannot send another message to a spawned agent, dispatch each fix round as a fresh implementer carrying the brief, the report file, and the findings.
+
+## Environment Detection
+
+Skills that create worktrees or finish branches should detect their
+environment with read-only git commands before proceeding:
+
+```bash
+GIT_DIR=$(cd "$(git rev-parse --git-dir)" 2>/dev/null && pwd -P)
+GIT_COMMON=$(cd "$(git rev-parse --git-common-dir)" 2>/dev/null && pwd -P)
+BRANCH=$(git branch --show-current)
+```
+
+- `GIT_DIR != GIT_COMMON` → already in a linked worktree (skip creation)
+- `BRANCH` empty → detached HEAD (cannot branch/push/PR from sandbox)
+
+See `using-git-worktrees` Step 0 and `finishing-a-development-branch`
+Step 1 for how each skill uses these signals.
+
+## Codex App Finishing
+
+When the sandbox blocks branch/push operations (detached HEAD in an
+externally managed worktree), the agent commits all work and informs
+the user to use the App's native controls:
+
+- **"Create branch"** — names the branch, then commit/push/PR via App UI
+- **"Hand off to local"** — transfers work to the user's local checkout
+
+The agent can still run tests, stage files, and output suggested branch
+names, commit messages, and PR descriptions for the user to copy.
+
+C:\Users\Brandon\.codex\plugins\cache\parallax\parallax\0.14.0\skills\multi-model-verify\SKILL.md
+
+- the user said they were "very curious on the ability to set any kind of map (like keystrokes) to a keybind" but then narrowed the MVP to "Definitely #1" -> default scope to keyboard key + modifiers / disable, not macros or broader software features [Task 1]
+- the user explicitly chose "Probe-first, no Synapse (Recommended)" -> default future remap work to a passive hardware-first spike before any install-heavy or capture-heavy path [Task 1]
+- the user chose "Decide after the spike" for persistence -> do not lock in the persistence model before hardware proves what survives [Task 1]
+- the user later said "push our current work to origin and then write the spec" -> respect the push/spec ordering and keep the spec as the pre-planning artifact [Task 2]
+- when the user worried about onboard memory damage and needing Synapse again, treat that as a hard safety requirement, not a documentation note [Task 1][Task 2]
+
+## Reusable knowledge
+
+- The in-scope remap transport is a Basilisk V3-style HID feature report: class `0x02`, set `0x0c`, get `0x8c`, 10-byte args, CRC over report bytes `[2..87]` [Task 1].
+- The in-scope remaps are onboard/firmware-applied key+modifier or disable actions, so they fit the passive zero-access HID model; macros, HyperShift, per-app switching, Type-Text, and launch-program remain out of scope [Task 1][Task 2].
+- openrazer has no mouse remapping implementation to borrow from, so the only meaningful references are community protocol docs plus live hardware capture [Task 1].
+- The V2 Pro’s 12 thumb-grid button-ID table is not publicly documented and must be discovered on hardware. Stage 1 remains a spike with `--probe-buttons` before any real remap UI is trustworthy [Task 1].
+- The safest persistence test is a scratch slot, not the user’s existing onboard profile. The spec’s restore story should journal/echo-check prior binding data and treat `--reset` as best-effort unless the factory action was actually captured [Task 1].
+- The repo workflow for this feature family is design -> spec -> adversarial review -> commit hardened spec -> user review gate -> plan writing [Task 2].
+
+## Failures and how to do differently
+
+- Symptom: a spec looks reasonable but still risks user device-state damage. Cause: it writes to an existing onboard slot during discovery or persistence probing. Fix: switch the test plan to a scratch slot and skip the persistence probe if a safe scratch slot cannot be guaranteed [Task 1].
+- Symptom: the restore story sounds safe but is not mechanically possible. Cause: it promises a factory-key restore without ever recording the original binding. Fix: capture prior binding data before writes and downgrade reset claims to best-effort unless the original action was actually captured [Task 1].
+- Symptom: plan writing starts too early. Cause: the spec’s safety story was not settled before planning. Fix: hold planning behind the adversarial review and user review gate [Task 2]
+
+# Task Group: Crosscheck multi-model verification workflow and drift-watch triage
+
+scope: Private `crosscheck` plugin work covering the multi-model verify skill, eval/hook hardening, and headless drift-watch triage where the user wants role-based reviewer lanes, falsifiable evidence rules, and concise terminal dispositions.
+applies_to: cwd=C:\Users\Brandon\Documents\crosscheck; reuse_rule=safe for similar plugin/eval/drift-triage work in this repo, but re-check installed-plugin state, cache version, and hook/eval contracts before reusing repo-specific details
+
+## Task 1: Multi-model verify skill, evals, hook integration, and 0.4.2 hardening, completed
+
+### rollout_summary_files
+
+- rollout_summaries/2026-07-14T17-08-32-tSda-crosscheck_multi_model_verify_and_deferred_backlog.md (cwd=\\?\C:\Users\Brandon\Documents\KitnDev\KitnEssentials, rollout_path=C:\Users\Brandon\.codex\sessions\2026\07\14\rollout-2026-07-14T12-08-32-019f619a-076d-7d51-9261-125cf8cae5c0.jsonl, updated_at=2026-07-14T17:08:32+00:00, thread_id=019f619a-076d-7d51-9261-125cf8cae5c0, rollout content was in the `crosscheck` repo even though the session metadata cwd recorded a different checkout)
+
+### keywords
+
+- crosscheck, multi-model-verify, Fable 5, GPT-5.6 Sol, cheap implementer, superpowers review companion, PostToolUse, requesting-code-review, behavioral evals, citation anchoring, falsifiable diff-mode, 0.4.2
+
+## Task 2: Headless drift-watch triage, verified no action
+
+### rollout_summary_files
+
+- rollout_summaries/2026-07-14T17-08-37-r4yb-crosscheck_drift_watch_no_action_noise_verification.md (cwd=\\?\C:\Users\Brandon\Documents\crosscheck, rollout_path=C:\Users\Brandon\.codex\sessions\2026\07\14\rollout-2026-07-14T12-08-37-019f619a-1b71-7df1-a7d4-e0549377c6ef.jsonl, updated_at=2026-07-14T17:08:37+00:00, thread_id=019f619a-1b71-7df1-a7d4-e0549377c6ef, verified the installed template and eval surfaces and ended with `VERDICT: NO-ACTION`)
+
+### keywords
+
+
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command "Get-Content -Raw 'C:\\Users\\Brandon\\.codex\\plugins\\cache\\parallax\\parallax\\0.14.0\\skills\\multi-model-verify\\SKILL.md'" in C:\Users\Brandon\Documents\parallax
+ succeeded in 529ms:
+---
+name: multi-model-verify
+description: Use when planning a reference port, an API-sensitive module, or any change risky enough to need cross-model verification before implementation, or when an implemented diff must be checked against its plan and reference before merge. Fires automatically alongside superpowers requesting-code-review via the review-companion hook.
+---
+
+# Multi-Model Verify
+
+## Overview
+
+Two equal-weight advisors — this session and a cross-vendor reviewer driven
+through the codex CLI (canonical reviewer model:
+references/model-prompting-notes.md) — verify and refute each other's
+claims before the cheap implementer touches code. The reviewer lane's
+documented fabrication risk (METR; see model-prompting-notes.md) is
+mitigated by the debate structure — evidence grounding plus mutual
+refutation — not by down-weighting either side. The PRIMARY reviewer
+lane (codex) is the default; a second cross-vendor BACKUP reviewer lane
+(references/backup-lane.md — REQUIRED READING before any backup round)
+substitutes ONLY through the fallbacks.md consent gate — auto-qualified
+by the classes named there, manual on user request — with the same
+protocol, a different transport, and `Verification status: FULL`
+preserved.
+Mode diff's debate is preceded by a REQUIRED whole-branch review from
+the fable-reviewer seat (agents/fable-reviewer.md), and the user may
+convene multi-reviewer PANELS (references/panels.md) in either mode.
+
+**REQUIRED READING before the first round:** references/debate-protocol.md.
+
+Companion to superpowers, not a replacement: it fills the cross-model review
+gap superpowers rules out of scope. `/codex:adversarial-review` remains the
+human-invoked pre-merge gate; if the codex plugin's stop-review-gate is
+toggled on, its stop-time review overlaps mode `diff` — expected, not a bug.
+
+## When to use
+
+- **Mode `plan`** — after superpowers brainstorming proposes approaches for a
+  port or API-sensitive module, before the implementation plan is written.
+- **Mode `diff`** — after implementation, alongside superpowers
+  requesting-code-review (the review-companion hook injects this
+  automatically with the matching base/head SHAs).
+- NOT for plain bugfixes, docs or release chores, GUI tweaks, or lint sweeps.
+
+## Preflight (both modes)
+
+1. `codex --version` must succeed, and `codex login status` must report
+   `Logged in using ChatGPT` — exit 0 alone also passes an API-key login,
+   which rides different billing. On failure follow references/fallbacks.md
+   (the consent gate may offer the cross-vendor backup lane —
+   references/backup-lane.md — before any single-vendor degraded mode;
+   never silently skip cross-vendor review).
+2. For port work: the reference source must exist under `References/`
+   (quote paths — some contain spaces, e.g. `References/M+ Timer`). Missing
+   → **HARD STOP before any debate round runs**: ask the user for the path
+   and go no further — do not run a codex exchange about the absence, do
+   not debate from memory, do not start a degraded mode. If the folder
+   holds version subdirectories (e.g. a `v1.4/` next to a `v1.1_old/`), use
+   the newest unless the user names one, and cite the versioned path:
+   `References/<name>/<version>/<file>:<line>`.
+   For non-port work there is no reference folder — claims ground in the
+   project's own source, specs, or upstream docs instead, same strike rule.
+3. The reviewed repo must carry no AGENTS.md and no `.agents/` entries:
+   codex auto-ingests AGENTS.md as instructions, and it advertises
+   repo-level `.agents/skills/*/SKILL.md` to the model, which read a
+   planted one as its FIRST action (both probed 2026-07-24: the planted
+   AGENTS.md controlled the reviewer's reply; the planted skill entered
+   its context; see model-prompting-notes.md) — back-channels into the
+   auditor that break independence. Enumerate the whole tree in one
+   listing — `git ls-files --cached --others '*AGENTS.md' '.agents/*'` —
+   which covers tracked, untracked, AND ignored files at any depth
+   (`.git` itself is never listed); a root-only or tracked-only check
+   misses a nested drop.
+   If present: STOP and surface it to the user — never dispatch a review
+   over an instruction back-channel. Files above the repo's git root are
+   NOT ingested (same probe), and `~/.codex/AGENTS.md` is the user's own
+   global instruction file — note it in the debate record if it exists,
+   but it is not a stop. Skills from the user's own codex plugin cache
+   load the same way — record them in the debate record as a
+   non-blocking environment note with the cache path cited, like the
+   global AGENTS.md; not a stop and never a finding.
+
+## Mode plan
+
+1. Draft the session position: chosen approach, port-fidelity claims, and the
+   API/behavior risk register. Every reference claim cites a
+   `References/<name>/<file>:<line>` actually read this session — anchor
+   EVERY file with its full path the first time you cite it, manifests and
+   secondary files included (shorthand only once that file is anchored);
+   every API claim cites authoritative local docs (WoW projects:
+   `.wow-api-reference/` or a dated in-game probe result) — never memory.
+   The position has no separate artifact — it IS the claims section of the
+   step-2 brief.
+2. Compose the reviewer's debate brief per references/model-prompting-notes.md, write
+   it to a scratchpad file, then run round 1:
+
+   ```powershell
+   Get-Content -Raw <brief-file> | codex exec --sandbox read-only -m <canonical-model-id> -c model_reasoning_effort=<canonical-effort> --output-last-message <reply-file> - > <transcript-file> 2>&1
+   ```
+
+   `<canonical-model-id>` and `<canonical-effort>` are the two declarations
+   in references/model-prompting-notes.md — read the literal values from
+   there, never from memory (the reviewer swaps by editing that one file,
+   and a remembered id silently defeats the swap). Apply that file's env
+   hygiene to the invocation.
+
+   Backup lane: same protocol, transport and per-round evidence per references/backup-lane.md.
+
+   Panels: any reviewer-lane combination per references/panels.md.
+
+   From `<transcript-file>`: verify the effective route — the header's
+   `model:`, `provider:`, and `reasoning effort:` lines against the
+   canonical declarations, and the `sandbox:` line reads `read-only`, per
+   model-prompting-notes.md; a mismatch is a transport failure
+   (fallbacks.md), never a review result — and capture the `session id:`
+   line. Read the reviewer's reply from `<reply-file>` — the transcript
+   logs every file the reviewer reads and can run tens of KB, with the
+   reply buried at the bottom. Every round writes FRESH round-numbered
+   `<reply-file>`/`<transcript-file>` paths: after a failed call, a reused
+   path serves the previous round's reply and reads exactly like success —
+   a reply not freshly written by this round's call is a stale reply, a
+   transport failure (fallbacks.md), never a review result.
+3. Later rounds keep the reviewer's state by resuming that session — flags MUST
+   precede the resume subcommand (flags after it are a usage error):
+
+   ```powershell
+   codex exec --sandbox read-only -m <canonical-model-id> -c model_reasoning_effort=<canonical-effort> --output-last-message <reply-file> resume <SESSION_ID> "<rebuttal-brief>" > <transcript-file> 2>&1
+   ```
+
+   Each resume's header must echo the resumed `session id:` and the same
+   effective route — the round-1 check repeated, `sandbox:` included (a
+   resume that silently started a fresh session has dropped the reviewer's
+   debate state). Sandbox mode has NO continuity across resumes: a resume
+   missing `--sandbox read-only` resolves to the config default — on a
+   `workspace-write` default the read-only auditor becomes a writing agent
+   mid-review (probed 2026-07-24, the write landed; see
+   model-prompting-notes.md). The header's `sandbox:` line is where that
+   surfaces.
+
+4. Iterate per debate-protocol.md until convergence or the round cap, then
+   escalate any unresolved points to the user with both positions stated.
+5. Freeze the converged plan per references/frozen-plan-format.md under the
+   project's superpowers plans dir (KitnEssentials:
+   `dev/docs/superpowers/plans/`; other projects: the superpowers default
+   `docs/superpowers/plans/`).
+
+## Mode diff
+
+Same transport and protocol. First read the frozen plan's debate record and
+its **Verification status** field.
+
+Required before round 1: the agents/fable-reviewer.md whole-branch review runs on the same range, its raw reply is retained as a range-bound artifact, and the round-1 brief cites that artifact with the session's per-finding adjudications.
+The session adjudicates each review finding with evidence — accept,
+refute, or ESCALATE into the debate — before any reviewer lane sees
+them; the review is the debate's required input, never its verdict,
+and the debate record names the artifact path.
+
+Then the brief carries the frozen plan
+path, the base/head SHAs superpowers code review used, and the
+`git diff base..head` output. Both sides check **spec fidelity** (drift from
+the frozen plan — the implementer makes zero judgment calls, so any drift is
+a finding, with one carve-out: envelope-designated escalation-lane DECISIONS
+are adjudicated against their frozen envelope per
+references/frozen-plan-format.md, and only envelope overruns are drift) and,
+for port work, **port fidelity** (drift from the reference
+source), ending PASS / FIX / ESCALATE.
+
+Backup lane: same protocol, transport and per-round evidence per references/backup-lane.md.
+
+Panels: any reviewer-lane combination per references/panels.md.
+
+A FIX this session applies itself goes through the **application
+checkpoint** (references/application-checkpoint.md) before the first edit.
+The fixed range is then re-reviewed, and only the post-re-review terminal
+PASS is attested — with the emitter's `-CheckpointFile` binding the
+checkpoint; a FIX verdict whose fixes are still unapplied is never the
+attested verdict.
+
+**Degraded-plan poisoning rule:** a plan whose Verification status is
+DEGRADED cannot produce an ordinary diff PASS. Mode diff must first reopen
+and cross-verify the plan's claims and approved deviations (the
+retrospective pass the plan never got), and only then verify the
+implementation against it — confirming a diff matches an unsound plan
+verifies nothing. If cross-vendor verification is STILL unavailable, the
+only terminal state is `ESCALATE — CROSS-VENDOR GATE UNSATISFIED`: merging
+then requires the user's explicitly recorded risk acceptance, never a PASS.
+
+## Finish line
+
+Before it: the session's final-adjudication step (debate-protocol.md) —
+verify the last round's findings against the repo and issue the terminal
+verdict; a reviewer's PASS/FIX is never terminal by itself.
+
+**Mode diff only — record the verdict mechanically.** After the terminal
+verdict, run the attestation emitter from this plugin's checkout:
+
+```powershell
+powershell -NoProfile -File <plugin-root>/tools/write-attestation.ps1 -RepoRoot <reviewed-repo> -BaseSha <base> -HeadSha <head> -Verdict <PASS|FIX|ESCALATE> -VerificationStatus <FULL|DEGRADED> -RouteNote "<effective route confirmed | the transport-failure class>" -Rounds <n> -Participants "<session-model> (session) / <reviewer-model> (reviewer)" [-CheckpointFile <application-checkpoint-artifact>]
+```
+
+When an application checkpoint governed fix application, pass it via
+`-CheckpointFile`: the record then also binds the checkpoint's hash and
+the emitter-computed changed-path set, `<head>` is the POST-fix,
+re-reviewed head — never the head the FIX verdict was issued on — and
+the artifact must already carry its appended verification results (the
+recorded hash covers the final artifact).
+
+It writes `.git/parallax/attestations/<head-sha>.json` inside the reviewed
+repo — untracked by design, so recording the verdict cannot move HEAD out
+from under its own SHA. The pre-push lane (`tools/verify-attestation.ps1`)
+later warns when a `main` push has no matching attestation for the pushed
+head (fast-forward: pushed sha == attested head; merge commit: parent1 ==
+attested base, parent2 == attested head — a squash changes the sha and
+correctly forces re-review).
+
+End with one status line: participating models, rounds used, converged vs
+escalated points, the verification status — `FULL`, or
+`DEGRADED (<class>, authorized by user at round N)` per fallbacks.md — and
+the route note: `effective route confirmed` when every round's header
+matched the canonical declarations, else the transport-failure class that
+fallbacks.md handled. The route-note grammar is lane-agnostic: for a backup-lane debate,
+`effective route confirmed` means every round satisfied
+references/backup-lane.md's per-round evidence rules against the backup
+declarations; the evidence class is recorded in the debate record prose. The session emits this line itself; never delegate it
+to a subagent.
+
+## Common mistakes
+
+- Accepting the reviewer's claims about reference code without the cited lines —
+  strike the claim per protocol; do not argue against it.
+- Re-sending the full debate context each round instead of resuming the
+  codex session.
+- Running mode `diff` against different SHAs than the code review used.
+- Treating convergence as failure — a sound plan converging in one round is
+  the system working, not a skipped debate.
+
+
+codex
+The skill routes panel work through its panel protocol and makes the debate protocol mandatory reading. I’m loading both now; this is still evidence setup, not an additional reviewer dispatch.
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command "Get-Content -Raw 'references\\debate-protocol.md'; Get-Content -Raw 'references\\panels.md'; Get-Content -Raw 'references\\model-prompting-notes.md'" in C:\Users\Brandon\Documents\parallax
+2026-07-26T18:29:02.674513Z ERROR codex_core::tools::router: error=Exit code: 1
+Wall time: 0.7 seconds
+Output:
+Get-Content: 
+Line |
+   2 |  Get-Content -Raw 'references\debate-protocol.md'; Get-Content -Raw 'r …
+     |  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot find path 'C:\Users\Brandon\Documents\parallax\references\debate-protocol.md' because it does not exist.
+Get-Content: 
+Line |
+   2 |  … \debate-protocol.md'; Get-Content -Raw 'references\panels.md'; Get-Co …
+     |                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot find path 'C:\Users\Brandon\Documents\parallax\references\panels.md' because it does not exist.
+Get-Content: 
+Line |
+   2 |  … es\panels.md'; Get-Content -Raw 'references\model-prompting-notes.md'
+     |                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot find path 'C:\Users\Brandon\Documents\parallax\references\model-prompting-notes.md' because it does not exist.
+
+ exited 1 in 668ms:
+Get-Content: 
+Line |
+   2 |  Get-Content -Raw 'references\debate-protocol.md'; Get-Content -Raw 'r …
+     |  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot find path 'C:\Users\Brandon\Documents\parallax\references\debate-protocol.md' because it does not exist.
+Get-Content: 
+Line |
+   2 |  … \debate-protocol.md'; Get-Content -Raw 'references\panels.md'; Get-Co …
+     |                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot find path 'C:\Users\Brandon\Documents\parallax\references\panels.md' because it does not exist.
+Get-Content: 
+Line |
+   2 |  … es\panels.md'; Get-Content -Raw 'references\model-prompting-notes.md'
+     |                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot find path 'C:\Users\Brandon\Documents\parallax\references\model-prompting-notes.md' because it does not exist.
+
+codex
+Those references are packaged beside the installed skill, not at the repository root. I’m correcting the path and continuing with the installed 0.14.0 protocol.
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command '$skillRoot = '"'C:\\Users\\Brandon\\.codex\\plugins\\cache\\parallax\\parallax\\0.14.0\\skills\\multi-model-verify'; Get-Content -Raw (Join-Path "'$skillRoot '"'references\\debate-protocol.md'); Get-Content -Raw (Join-Path "'$skillRoot '"'references\\panels.md'); Get-Content -Raw (Join-Path "'$skillRoot '"'references\\model-prompting-notes.md')" in C:\Users\Brandon\Documents\parallax
+ succeeded in 547ms:
+# Debate protocol
+
+Both advisors are equal weight. Neither model's claim outranks the other's;
+only evidence does.
+
+## Evidence grounding (the strike rule)
+
+- **Every externally checkable claim must carry a citation to a source the
+  other side can read**: a file:line in the repo or reference material the
+  citing side actually read (the session: read this session; the reviewer:
+  read inside its sandboxed run — its quoted excerpt counts as reading),
+  authoritative local docs, or a fetched URL.
+- Source-specific examples: reference-port claims cite
+  `References/<name>/<file>:<line>`; WoW 12.0 API claims cite
+  `.wow-api-reference/` or a dated in-game probe result; library or platform
+  claims cite the vendored source or official docs.
+- **Anchor every file the first time you cite it** — full repo-relative path
+  with line, `References/DemoWidget/DemoWidget.toc:1`, not `DemoWidget.toc:1`.
+  This holds for EVERY file, including one-line manifests and secondary
+  files, not just the main source. Once a file is anchored, shorthand
+  (`Core.lua:19`) is fine for later citations of that same file. A bare
+  filename does not locate anything for the other side: the project has its
+  own `DemoAddon.toc` and the reference has `DemoWidget.toc`, and an
+  unanchored `.toc:1` could be either.
+- A claim with no citation is **struck, not debated**. Note it as struck and
+  move on — arguing against an ungrounded claim launders it into the record.
+- Reports are claims requiring evidence. "The reference handles this" without
+  the file:line is an assertion, not a finding.
+
+## Round structure
+
+Each exchange (one session position or rebuttal + one reviewer reply) is a round.
+
+1. From round 2 on, state position changes since last round: which of the
+   other side's points are **accepted** (absorbed into the plan), which are
+   **refuted** (with the evidence that refutes them), which are **struck**
+   (no citation).
+2. Raise new risks only with evidence attached.
+3. End with a verdict on the current plan/diff:
+   - **PASS** — no remaining substantive objections.
+   - **FIX** — named change required, with the specific fix and its evidence.
+   - **ESCALATE** — a disagreement evidence cannot settle (taste, missing
+     in-game data, ambiguous reference intent).
+
+## Convergence and the round cap
+
+- Converged: both sides verdict PASS in the same round.
+- **Converged with amendments**: the final round's only outstanding verdicts
+  are FIXes whose fixes the other side accepts on the record. Record each
+  accepted fix in the debate record and treat the plan as converged — an
+  accepted FIX is agreement, not a dispute for the user to settle. (This
+  matters whenever a FIX lands in the last round before the cap.)
+- Round cap: **4 exchanges** by default (caller may raise or lower it).
+  Hitting the cap is not failure — it is the signal to stop spending tokens
+  on an argument evidence hasn't settled.
+- At the cap or on ESCALATE, for points that remain genuinely contested:
+  stop, present BOTH positions to the user with their evidence, and let the
+  user decide. Never silently pick a side.
+- Questions only runtime testing can answer always escalate — neither model
+  can run the live application (in WoW projects, /reload + BugSack is always
+  the user's step).
+
+## Final adjudication (the session's last step)
+
+The chain never ends on the external reviewer's verdict. After the
+reviewer's final round — including a re-review of fixes — the SESSION
+performs one closing step before anything merges or freezes:
+
+1. Verify each finding from that final round against the live repo (read
+   the cited lines; run the gates if implicated) — a final-round finding is
+   itself an unverified claim until checked.
+2. Accept with evidence, refute with evidence, or ESCALATE to the user.
+   Nothing is adopted or dismissed on authority.
+3. Emit the terminal verdict. A reviewer PASS/FIX is input to this step,
+   never the decision itself.
+4. If that verdict requires changes this session will apply itself, the
+   chain is NOT over: the application checkpoint
+   (references/application-checkpoint.md) precedes the FIRST file edit —
+   the checkpoint, not the verdict, is what authorizes touching files.
+   After applying, execute the checkpoint's verification plan and
+   re-review the fixed range; only the post-re-review terminal PASS
+   closes the chain.
+5. Close with the finish line (mode diff: first record the closing
+   verdict mechanically via the attestation emitter — see SKILL.md's
+   finish-line section; when a checkpoint governed the fixes, bind it
+   with `-CheckpointFile`). The attestation always records the FINAL
+   adjudicated range — never a verdict whose fixes are still unapplied.
+
+Equal weight governs claims during the debate; adjudication is procedural,
+not a rank: the session is the accountable party with live-repo access, so
+the session always has the final say — and a genuine deadlock still goes to
+the user, never to whoever spoke last (user directive, 2026-07-12).
+
+## Anti-sycophancy, anti-theater
+
+Debates fail two ways: rubber-stamping and manufactured conflict. Both are
+defects.
+
+- **A sound plan gets one line.** "Plan is sound; the one thing to watch is
+  X." Converging in round 1 is the system working.
+- **Do not manufacture objections** to justify the round. If you would not
+  push back in a real review, do not push back here.
+- Do not restate the other side's point in different words as a "new" risk.
+- Do not concede a point you can refute just to converge faster —
+  unresolved disagreement has an honest exit (ESCALATE).
+
+## Why the structure carries the trust
+
+The current reviewer lane has a documented (METR, vendor system card — see
+model-prompting-notes.md) tendency to fabricate
+results under evaluation pressure. The mitigation is this protocol — every
+claim must survive citation and refutation by an independent model — not
+down-weighting the reviewer's verdicts. The same rules bind the session
+model equally: fabricated
+detail is a known failure mode of every frontier model, and this project's
+history (see memory: no-fabrication feedback) treats invented API behavior as
+the cardinal sin.
+
+# Panels (multi-reviewer debates)
+
+A panel convenes MORE than one reviewer lane for a single debate -
+user-invoked only, never automatic. Sol solo stays the default;
+Kimi solo stays the consent-gated backup lane (fallbacks.md). A panel
+is for work the user judges worth multiple independent reviewers:
+complicated plans, high-risk diffs, or a debate the user wants
+cross-examined from more than one vendor culture.
+
+## Compositions
+
+Valid compositions: Sol+Kimi, Sol+Fable, Kimi+Fable, Sol+Kimi+Fable.
+
+Every panel contains at least one cross-vendor lane (Sol or Kimi); an all-Claude panel is invalid.
+
+The invariant is checked before round 1 and quoted with the user's
+invocation in the debate record. Fable is never a cross-vendor lane:
+with a Claude driver it shares the vendor, which is exactly why it
+cannot be a panel's only reviewer.
+
+## Topology: hub-and-spoke, blind
+
+- The driver mediates every exchange. Reviewer lanes never communicate
+  directly and never learn which lane raised a finding.
+- Findings relay anonymously WITH their evidence; the driver verifies
+  each claim against the repo before relaying it (a relayed claim the
+  driver could not verify is relayed as UNVERIFIED, not as fact).
+- Convergent blind findings - the same defect raised independently by
+  more than one lane - are the strongest signal the panel produces;
+  they are counted once, fixed once, and marked convergent in the
+  record.
+- Each lane runs the EXISTING bilateral protocol unchanged: the same
+  round structure, strike rule, verdict grammar, and round cap it
+  would have solo.
+
+## Subject revision
+
+The driver pins the subject revision in every round brief of every
+lane. Mode diff: the base..head git SHAs. Mode plan: the SHA-256 of
+the current round's claims section (the canonical position bytes every
+lane receives that round) - the frozen plan file's blob hash takes
+over only at freeze. An accepted amendment that changes the subject
+re-opens all lanes.
+
+A terminal verdict counts only when it cites the FINAL subject revision; a verdict against a stale revision is input, never terminal.
+
+## Lane transports (all pre-existing machinery)
+
+- Sol: codex exec sessions per SKILL.md - env hygiene, header route
+  checks, session resume. Unchanged.
+- Kimi: the backup-lane transport per references/backup-lane.md -
+  contained agent-file dispatch, per-round offset evidence, and the
+  pre-round-1 write-probe - all unchanged and all required in panels.
+  Panel participation is a sanctioned entry route recorded in
+  backup-lane.md; the user's panel invocation is the consent.
+- Fable: agents/fable-panel-reviewer.md - a fresh same-harness
+  subagent at round 1, resumed for later rounds. Per-round evidence
+  class, recorded in these words: dispatch metadata - the round-1
+  dispatch names the model pin, and the resume surface carries no
+  model parameter (probed 2026-07-26; record:
+  docs/superpowers/plans/rounds/2026-07-26-seat-reshuffle/subagent-resume-probe.md),
+  so the pin cannot be silently swapped mid-debate. Round continuity
+  is evidenced by transcript recall; the failure mode is agent death,
+  which is loud (class panel-lane-loss, fallbacks.md). Self-reported
+  identity is priming-class and never evidence.
+
+## Convergence and adjudication
+
+Each lane reaches its own terminal verdict under its own round cap
+against the final subject revision. The session then adjudicates
+across lanes per debate-protocol.md's final-adjudication step -
+verify, accept or refute with evidence, escalate genuine deadlocks to
+the user. A panel converges when every lane's terminal verdict on the
+final subject revision is PASS or its FIXes are accepted on the
+record.
+
+## Failure handling and recording
+
+All failure classes live in fallbacks.md (single namespace) - a lost
+lane routes through its own transport classes first, then the
+panel-lane-loss class governs: the panel stops at the consent gate,
+never continues automatically. Record fields for a panel debate live
+in frozen-plan-format.md: per-lane Participants and rounds, convergent
+marking, the strictest-lane FULL condition, and the required
+fable-review artifact path for mode diff.
+
+# Model prompting notes
+
+## The session driver seat
+
+The driver seat is whatever Claude model runs the session — the debate
+rules, final adjudication, and grounding discipline attach to the SEAT
+(debate-protocol.md), not the model. Seat-invariant rules, present in
+both official Anthropic guides (fetched 2026-07-26; re-check when they
+update):
+
+- **Ground progress claims**: state what was actually run and observed,
+  not what should have happened — the guides' grounding pattern nearly
+  eliminated fabricated status reports in Anthropic's evals. In debate
+  terms: your PASS/FIX verdicts cite the evidence you actually read
+  this session.
+- **State the boundaries**: tell the model what is out of scope
+  explicitly. The debate brief states what is NOT under debate
+  (already-decided user directives, e.g. equal-weight advisors, the
+  chosen reference addon).
+- **Fresh-context verification beats self-critique**: a driver
+  reviewing its own plan in the same context rubber-stamps. That is
+  the reason the cross-vendor reviewer exists in this loop — and the
+  reason degraded mode (fallbacks.md) must run the skeptic pass in a
+  FRESH subagent, not inline. It is also why the required whole-branch
+  review (agents/fable-reviewer.md) runs as a fresh subagent even when
+  Fable itself drives.
+
+### Fable 5
+
+From the official Fable 5 guide
+(platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-fable-5,
+fetched 2026-07-26) — the three seat-invariant rules above appear in
+it near-verbatim; Fable-specific additions:
+
+- Bug-finding recall is a documented strength — the basis for the
+  fable-reviewer seat.
+- Effort is the primary dial: high default; medium/low viable where
+  quality holds (reviewer dispatches may sweep effort with evals,
+  never silently).
+- Over-prescriptive skill text DEGRADES Fable 5 output — the Fable
+  seat agent files state contracts and invariants, not step-by-step
+  choreography.
+- Never instruct a Fable seat to echo or transcribe its internal
+  reasoning (the reasoning_extraction refusal class): report
+  contracts ask for evidence and decisions, never thinking.
+- Same-harness Fable seats (panel lane, whole-branch reviewer,
+  escalation) resume probe, 2026-07-26, Claude Code 2.1.220:
+  conversation state persists across resume and the resume surface
+  carries no model parameter — full record with literal payloads at
+  docs/superpowers/plans/rounds/2026-07-26-seat-reshuffle/subagent-resume-probe.md;
+  the dead-agent case is narrowed to the 0.14.0 smoke's observation
+  scope.
+
+### Opus 5
+
+From the official Opus 5 guide
+(platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-opus-5,
+fetched 2026-07-26), for when Opus 5 takes the driver seat:
+
+- Strongest when given the complete task specification up front and
+  left to run — the frozen-plan discipline is already this shape.
+- Review dispatches: never instruct "only report high-severity
+  issues" — it complies literally and under-reports; ask for
+  everything and filter in adjudication (converges with the existing
+  no-pre-judging dispatch rule).
+- Effort economics: low/medium strong — re-run an effort sweep rather
+  than carrying prior defaults; xhigh for the hardest work only.
+- Over-verification: remove explicit "verify your work" instructions —
+  Opus 5 verifies unprompted and such instructions compound into
+  wasted tokens.
+- Delegation appetite: it spawns subagents readily — dispatch prompts
+  carry explicit delegation guidance and caps.
+- Scope control for narrow tasks: instruct "deliver what was asked,
+  at the scope intended" — it can otherwise widen tasks on its own
+  judgment.
+- 1M-token context window with consistent instruction following
+  throughout.
+
+## The reviewer lane (currently GPT-5.6 Sol via the codex CLI)
+
+THE single source for the reviewer transport. Swapping the reviewer model
+is a one-line edit HERE and nowhere else: the executable surfaces (the
+behavioral runner's grader, the drift watch's cross-review) PARSE these
+two declarations at runtime and fail loud when they are missing, and the
+instruction surfaces (SKILL.md transport commands, /parallax:doctor's
+probe, /parallax:drift-triage's example) direct the agent to read the
+values from this file rather than type a remembered id. The consistency
+test forbids a hardcoded `-m` model literal anywhere else in the repo.
+
+Canonical model id: `gpt-5.6-sol`
+
+Canonical reasoning effort: `high`
+
+- **Outcome-oriented briefs**: tell Sol the outcome to verify, not the steps
+  to take. Its codex harness plans its own file reads. OpenAI's GPT-5.6
+  guidance (developers.openai.com/api/docs/guides/prompt-guidance,
+  fetched 2026-07-16; the review example also appears on
+  /api/docs/guides/latest-model): "state the goal, relevant context, constraints, required
+  evidence, success criteria, and output format." Its own review-task
+  example maps directly onto our debate briefs: "Review this database
+  migration plan for failure modes... For each finding, cite the relevant
+  step, estimate impact and likelihood, and recommend a specific
+  mitigation."
+- **Six-element shape — goal, context, constraints, required evidence,
+  success criteria, output format** (the 5.6 framing; use only the parts
+  that help). The XML-style tags below map onto it: task=goal,
+  claims=context+evidence, rules=success criteria+output format,
+  boundaries=constraints. The tags themselves are OUR convention, not
+  OpenAI's — 5.6 prescribes no tags for review tasks — kept because the
+  strike rule needs addressable sections to strike against.
+- **Lean briefs, rules stated ONCE** (5.6 guidance; leaner prompts scored
+  10-15% better in OpenAI's own coding-agent evals): state the evidence
+  rules and verdict grammar in full in round 1; later rounds REFERENCE
+  them ("evidence rules and verdict grammar as before"), never restate.
+  Avoid repeated negations ("do not mutate" three ways) — 5.6 reads
+  repetition as noise and it can trigger needless approval requests.
+  Prefer decision rules over ALWAYS/NEVER except for true invariants
+  (read-only sandbox, the strike rule, the verdict grammar).
+- **Final check** (OUR convention, not OpenAI's — the guide's review
+  example asks for impact/likelihood/mitigation per finding, not an
+  unverified-information pass): every brief ends by asking Sol to flag
+  information it could NOT verify — those flags feed the strike rule
+  instead of masquerading as findings.
+- **Structure the brief with XML-style tags**:
+
+  ```text
+  <role>Adversarial reviewer, equal weight, in a two-model debate.</role>
+  <task>Refute or confirm each numbered claim about the port plan below.</task>
+  <rules>Cite References/<addon>/<file>:<line> for every claim you make or
+  contest; uncited claims will be struck. Do not manufacture objections:
+  if a claim stands, say PASS and move on. End with PASS, FIX (with the
+  specific fix), or ESCALATE per claim.</rules>
+  <claims>...numbered claims with the session's citations...</claims>
+  <boundaries>...what is already decided and not under debate...</boundaries>
+  <final-check>List any claim you could not verify against files you read,
+  as UNVERIFIED — do not fold unverified material into your verdict.</final-check>
+  ```
+
+- **Effort**: pin `-c model_reasoning_effort=<canonical effort above>` per
+  call. Do not raise it to ultra/xhigh for debate rounds — Sol propagates
+  its effort to every subagent it spawns, which burns tokens without
+  changing verdicts. The same value is set in `~/.codex/config.toml`, but
+  pin it per call anyway so the debate is config-independent. (The doctor's
+  transport probe deliberately uses `low` — it is a reachability check, not
+  a review.) 5.6 migration advice: "preserve your current reasoning effort
+  as the baseline, then compare one level lower" — `medium` is a tuning
+  candidate, but only via a full behavioral-suite pass at both levels;
+  never silently downgrade the review lane.
+- **Effective route confirmation (every call, fresh or resume)**: codex
+  echoes the RESOLVED config in its startup header — capture stdout and
+  check the first `model: `, `provider: `, and `reasoning effort: ` lines
+  against the canonical declarations above (provider must be `openai`),
+  the first `sandbox: ` line reads `read-only`, and on a resume that
+  `session id: ` equals the id you resumed. A
+  mismatch is a TRANSPORT failure (fallbacks.md consent gate), never a
+  review result — a config.toml override or profile can silently swap the
+  reviewer, and the header is where that surfaces. Vocabulary discipline:
+  the header is CLIENT-RESOLVED metadata, so report "effective route
+  confirmed", never "used and confirmed" (codex exposes no server-attested
+  runtime identity); the reviewer's prose claiming a model name is never
+  identity evidence. Probed 2026-07-19 (codex v0.144.1): fresh and resumed
+  calls both emit the full header block. Probed 2026-07-24 (v0.144.1):
+  sandbox mode has NO continuity across resumes — a resume WITHOUT
+  `--sandbox read-only` resolved to the config default (`workspace-write`)
+  on the SAME session id and a test write LANDED; with the flag before the
+  `resume` subcommand the write was blocked and the header read
+  `sandbox: read-only`. One omitted flag silently turns the read-only
+  auditor into a writing agent; the `sandbox:` header line is the tripwire.
+- **Env hygiene for the call — one sequence, one environment**: clear
+  `CODEX_API_KEY`, `OPENAI_API_KEY`, `OPENAI_BASE_URL`, and `CODEX_HOME`
+  FIRST, then run the `codex login status` preflight, then dispatch —
+  all in that same sanitized environment (a preflight in ambient env can
+  pass or fail on overrides the dispatch never sees). The first two vars
+  can flip auth to API-key billing, the base URL can reroute even
+  ChatGPT-authenticated traffic. The preflight must report `Logged in
+  using ChatGPT` — exit 0 alone also passes an API-key login. `CODEX_HOME`
+  redirects auth.json and config.toml wholesale (see its probe bullet
+  below); clearing it reverts codex to the default home, so a legitimately
+  relocated home fails the auth preflight LOUDLY instead of silently
+  rerouting the lane.
+- **`CODEX_HOME` is reroute-capable**: probed 2026-07-24 (codex-cli
+  0.144.1, Windows): with ambient `CODEX_HOME` pointed at an empty scratch
+  directory, `codex login status` reported `Not logged in` (exit 1) while
+  the real home reported `Logged in using ChatGPT` — the variable
+  redirects auth.json and config.toml wholesale, so an ambient override
+  can route a debate to a DIFFERENT ChatGPT account while every header
+  line still reads clean (the header names model/provider, not account).
+  Claim source: jinn (pinned 6c46f57) strips `CODEX_*` and re-pins
+  `CODEX_HOME` per engine child (packages/jinn/src/shared/child-env.ts:31).
+  Settles: `CODEX_HOME` is in the env denylist (adopted 0.10.0, debate
+  2026-07-24).
+- **Session resume, not context re-send**: capture the `session id:` from
+  round 1 and resume it (flags before the subcommand). OpenAI documents
+  5.6 reasoning reuse across turns as CONDITIONAL (carried through
+  previous_response_id-style continuation); whether `codex exec resume`
+  engages it is not documented — the resume rule stands on token cost and
+  preserved debate memory either way. NEVER `resume --last` — it grabs
+  whatever codex session ran most recently, which may be a concurrent
+  /codex:review, not your debate.
+- **Lost-rollout resume failure is deterministic with a stable
+  signature**: probed 2026-07-24 (codex-cli 0.144.1): `codex exec
+  --sandbox read-only -m gpt-5.6-sol -c model_reasoning_effort=low
+  --output-last-message <file> resume 00000000-0000-0000-0000-000000000000
+  "<prompt>"` in a scratch fixture exited 1 with
+  `Error: thread/resume: thread/resume failed: no rollout found for
+  thread id <id> (code -32600)` and did NOT write the reply file.
+  Settles: a missing-rollout resume is never transient — class
+  missing-rollout in fallbacks.md skips the retry (adopted 0.10.0, debate
+  2026-07-24). Claim source: jinn recognizes this same
+  signature (packages/jinn/src/engines/codex.ts:363 @ 6c46f57) — its
+  response (a warning-logged but automatic, unconsented fresh-thread
+  restart) is the opposite of the consent gate and was not adopted.
+- **AGENTS.md is an instruction back-channel**: codex auto-ingests a
+  repo-root AGENTS.md into the reviewer's context. Probed 2026-07-24
+  (v0.144.1): a planted AGENTS.md at the cwd repo root controlled the
+  reply verbatim (an output-format directive was obeyed); an AGENTS.md in
+  a non-git parent directory ABOVE the git root was NOT ingested. The
+  preflight repo check in SKILL.md exists because of this. The user's own
+  `~/.codex/AGENTS.md` (global instructions) is theirs by design —
+  surfaced in the debate record when present, never a stop.
+- **Repo-level `.agents/skills/` is a second instruction back-channel**:
+  probed 2026-07-24 (codex-cli 0.144.1): in a scratch fixture repo whose
+  only planted content was `.agents/skills/probe-skill/SKILL.md` (canary
+  directives in both description and body), a fresh `codex exec` run's
+  FIRST action was reading that file's full content at its exact path —
+  no search preceded it, so the harness advertises repo-level
+  `.agents/skills` entries to the model. The canary directive did not
+  control that run's reply, but untrusted repo text entered the
+  reviewer's context, which is the back-channel condition itself. The
+  same run also loaded a skill from the user's own codex plugin cache
+  (`~/.codex/plugins/cache/...`) — like `~/.codex/AGENTS.md`, the user's
+  own by design: surface it in the debate record, never a stop.
+  Settles: the preflight enumeration sweeps '.agents/*' alongside
+  AGENTS.md (adopted 0.10.0, debate 2026-07-24). '.codex/' stays unswept
+  — unprobed; probe before adding. Claim source: the jinn intake (pinned
+  6c46f57; `.agents/skills/<name>` symlink convention at its repo root).
+- **Fabrication counter**: Sol's METR/system-card record means "I verified X"
+  claims from Sol get the same strike rule as everything else — quoted
+  file:line or it did not happen.
+- **Lane diagnostics (tier gating)**: a 400 "not supported when using
+  Codex with a ChatGPT account" on the canonical id while `gpt-5.6-terra`
+  responds confirms subscription tier-gating, not a CLI problem (free/Go
+  tiers get Terra only; Plus and above get Sol — probed 2026-07-12). This
+  feeds the consent gate in fallbacks.md; the ids live HERE because
+  fallbacks.md never names models.
+- **Structured quota state is locally readable (experimental)**: probed
+  2026-07-24 (codex-cli 0.144.1): `codex app-server --stdio` with an
+  NDJSON `initialize` (`capabilities.experimentalApi: true`, stdin held
+  OPEN — the server exits when stdin closes) then
+  `account/rateLimits/read` (id 2) answered in under 10s with per-limit
+  windows (`usedPercent`, `windowDurationMins`, `resetsAt` epoch),
+  `planType`, and credits. Handshake mirrored from jinn
+  (packages/jinn/src/shared/engine-limits.ts:370-453 @ 6c46f57).
+  Experimental capability — expect drift. The doctor's quota-headroom row
+  (check 4b) reads this surface (adopted 0.10.0, debate 2026-07-24);
+  complements, never replaces, the reactive quota-exhausted class.
+
+## Reusable recipes
+
+The installed codex plugin ships prompt recipes and antipatterns under its
+`gpt-5-4-prompting` skill (plugin cache, `skills/gpt-5-4-prompting/`). They
+were written for GPT-5.4-era codex: the structural advice (tight task
+framing, no chain-of-thought micromanagement) still applies to Sol, but
+verify any model-specific flag or behavior claim against current OpenAI docs
+before relying on it.
+
+## The backup reviewer lane (currently Kimi K3 via kimi-cli)
+
+THE single source for the BACKUP reviewer's identity — the same
+swap-by-one-edit rule as the primary declarations above, and the same
+consistency-test enforcement (the backup literal is forbidden
+everywhere else; command surfaces carry `<canonical-backup-model-id>`).
+The primary declarations above MUST stay ahead of this block: both
+runtime parsers match the first `Canonical model id:` occurrence, and
+the drift script's PowerShell match is case-insensitive.
+
+Canonical backup reviewer model id: `kimi-code/k3-256k`
+
+Canonical backup thinking flag: `--thinking`
+
+Everything else about the lane — transport, containment, per-round
+evidence, clone isolation, failure routing — lives in
+references/backup-lane.md. The lane enters through the fallbacks.md
+consent gate, or via a user-invoked panel (references/panels.md).
+
+Brief conventions for the backup lane (from Kimi's general prompt
+best-practices guide, platform.kimi.ai/docs/guide/prompt-best-practice,
+fetched 2026-07-26 — generic, not K3-specific): XML-style delimiters
+suit Kimi briefs (the tag convention the 0.13.0 debates used); state
+steps explicitly for complex review tasks; grounding instructions
+carry an explicit cannot-find fallback (the UNVERIFIED discipline);
+prefer paragraph/bullet-count length guidance over word counts. The K3
+tool-calling guide
+(platform.kimi.ai/docs/guide/kimi-k3-tool-calling-best-practice,
+fetched 2026-07-26) was evaluated: API-integration guidance
+inapplicable to the CLI-driven lane; its two applicable echoes are
+already design facts — the minimal five-tool allowlist and reasoning
+effort fixed before the session (the config.toml pin; mid-session
+changes would also break prefix caching per the guide).
+
+
+codex
+I’ve confirmed this is a valid Sol+Fable panel shape and that each lane must judge the same pinned revision independently. I’m now checking the supplied commit/blob identities and reading the entire pinned file with stable line numbers.
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command "git rev-parse HEAD; git rev-parse 'c95f18e1ec2cb6a5d7de586557e072e638583e9f:agents/flash-implementer.md'; "'$content = git show '"'c95f18e1ec2cb6a5d7de586557e072e638583e9f:agents/flash-implementer.md'; for ("'$i = 0; $i -lt $content.Count; $i++) { '"'{0,4}: {1}' -f ("'$i + 1), $content[$i] }' in C:\Users\Brandon\Documents\parallax
+ succeeded in 484ms:
+c95f18e1ec2cb6a5d7de586557e072e638583e9f
+69dbdb0f77d6606e5729ffe5414bc131aa4922e8
+   1: ---
+   2: name: flash-implementer
+   3: description: Zero-judgment Flash implementer for frozen-plan tasks. Use when executing build tasks from a debate-frozen implementation plan - give it ONE task's verbatim text plus the plan's Global Constraints and a log-file path. It delegates ALL code-writing to Gemini 3.6 Flash via the Antigravity CLI headlessly, verifies route and authorship evidence, runs the task's verification itself, and reports. It never types repo code and never makes design decisions.
+   4: model: haiku
+   5: tools: Read, Grep, Glob, Bash
+   6: ---
+   7: 
+   8: # Flash implementer (agy wrapper)
+   9: 
+  10: You supervise ONE task from a frozen implementation plan. Gemini 3.6 Flash
+  11: does ALL the typing through the Antigravity CLI (`agy`); you do preflight,
+  12: dispatch, evidence checks, verification, and honest reporting. You never
+  13: edit or create repo files yourself — your tool grant has no Edit or Write,
+  14: and using Bash to write repo content is equally forbidden: a changed file
+  15: the brain transcript cannot account for fails the task. The one declared
+  16: carve-out is the brief file below — the sole transient exception to the
+  17: never-write rule, and it never survives to the evidence checks.
+  18: 
+  19: <!-- shared-contract:start -->
+  20: ## The contract
+  21: 
+  22: - Build exactly what the task says: the files it lists, the code it shows,
+  23:   the commands it specifies. Nothing else.
+  24: - No improvements, no drive-by refactors, no added error handling, no scope
+  25:   adjustments. A deviation is a defect even when it looks better — the diff
+  26:   gets checked against the plan afterward, and unexplained drift fails it.
+  27: - **INPUT GAP rule:** if the task references a file, interface, value, or
+  28:   convention that is not in your brief and not discoverable at the exact
+  29:   path the task names, STOP and report the gap. Never invent or guess the
+  30:   missing piece.
+  31: - Run the task's verification commands yourself and read the output. Never
+  32:   claim completion without re-running verification — "should work" means
+  33:   the task is not done.
+  34: <!-- shared-contract:end -->
+  35: 
+  36: ## Inputs (from the dispatching controller)
+  37: 
+  38: - The task's verbatim text and the plan's Global Constraints.
+  39: - The workspace directory (this cycle: the main checkout only, with the
+  40:   sole live-verification exception — the plan's Task 6 trusted scratch
+  41:   repo).
+  42: - A log-file path OUTSIDE the workspace (the controller owns it; you never
+  43:   place logs in the repo tree).
+  44: 
+  45: ## Preflight (all five must pass BEFORE dispatch)
+  46: 
+  47: 1. `agy models` (binary at `$LOCALAPPDATA/agy/bin/agy.exe`) — output must
+  48:    contain `gemini-3.6-flash-medium`. Anything else (missing binary,
+  49:    sign-out, missing model) is blocked.
+  50: 2. `~/.gemini/antigravity-cli/settings.json` — `trustedWorkspaces` must
+  51:    contain the workspace directory. If not: blocked, and the report quotes
+  52:    the fix ("run one interactive `agy` session in the workspace and approve
+  53:    trust").
+  54: 3. The same settings file must carry NO file-writing per-tool allow rule
+  55:    at all — any `write_file(` entry, whatever path it names, is blocking.
+  56:    A persisted settings allow rule is the durable, call-site-invisible
+  57:    bypass class — its absence is the load-bearing permission control; path
+  58:    spellings vary, so the rule CLASS is banned rather than path-matched.
+  59:    If present: blocked, quoting the rule.
+  60: 4. `git status --porcelain` in the workspace must be EMPTY. A dirty tree
+  61:    makes authorship attribution impossible — blocked, quoting the paths.
+  62: 5. No file matching `AGY-TASK-BRIEF-*` exists in the workspace — a stale
+  63:    brief means an earlier dispatch died mid-cleanup: blocked.
+  64: 
+  65: ## Dispatch
+  66: 
+  67: 1. Write the brief to `<workspace>/AGY-TASK-BRIEF-<unique>.md` with a Bash
+  68:    heredoc — `<unique>` is the dispatch log file's basename, so briefs
+  69:    never collide. Content: the task's verbatim text, the Global
+  70:    Constraints, the exact files list, and this exact closing line:
+  71:    `Do not run commands or attempt verification - the wrapper runs all verification after you finish; your only job is the file edits.`
+  72:    (Print mode auto-denies command execution, so a verification attempt
+  73:    by Flash soft-denies and blocks the run — live-verified 2026-07-25.
+  74:    stdin does not reach the model in print mode — probed 2026-07-25; the
+  75:    workspace brief file is the delivery mechanism.) This file is the sole
+  76:    transient exception to your never-write rule.
+  77: 2. Run (single line):
+  78:    `agy -p "Read the file AGY-TASK-BRIEF-<unique>.md in the workspace and execute it exactly." --model gemini-3.6-flash-medium --add-dir <workspace> --log-file <log-path>`
+  79: 3. Delete the brief file immediately after agy exits — on success, failure, and interruption alike — and always BEFORE any evidence check, so it never appears in `git status`. If your run is resumed after an interruption, delete any leftover brief FIRST.
+  80: 
+  81: ## Route and authorship checks (every run)
+  82: 
+  83: - On the log file: `Print mode: starting` line present containing
+  84:   `model="gemini-3.6-flash-medium"`.
+  85: - On the log file: `Propagating selected model override` line present
+  86:   (presence only — its display label is not matched).
+  87: - Transcript/tree corroboration: parse `conversationID="<uuid>"` from the
+  88:   log's `Print mode: starting` line, then read the brain transcript at
+  89:   `~/.gemini/antigravity-cli/brain/<conversationID>/.system_generated/logs/transcript_full.jsonl`
+  90:   (the `--log-file` log itself carries NO file actions — probed). Every path git status reports changed must appear in the brain transcript as a successful file-changing action. A changed file the transcript never
+  91:   mentions means someone other than Flash typed it — blocked, no matter
+  92:   what the tests say. A missing transcript is blocked.
+  93: - This evidence is client-side: report the route as **requested and
+  94:   propagated**, never "used and confirmed". Server-side substitution is
+  95:   not detectable from this evidence class.
+  96: 
+  97: ## Failure handling — loud, never silent
+  98: 
+  99: Blocked (quote the exact output) on: any preflight failure, the print-mode
+ 100: soft-deny line ("auto-denied"), nonzero exit, a missing or mismatched
+ 101: route line, a corroboration mismatch, or writes diverted to agy's internal
+ 102: scratch (expected files absent from the tree). Never retry with
+ 103: `--dangerously-skip-permissions` — that flag is forbidden in this lane, as
+ 104: is ANY approval-bypass flag or persisted per-tool allow rule added to agy
+ 105: settings. Never complete the work yourself: rerouting a blocked task to a
+ 106: Claude tier is the user's decision, recorded in the plan's Escalated
+ 107: points — not yours.
+ 108: 
+ 109: ## Report format (your final message)
+ 110: 
+ 111: - **STATUS:** done | blocked | INPUT GAP: <exactly what is missing>
+ 112: - **ROUTE:** the resolved model ID as requested and propagated, plus the
+ 113:   retained log file's path AND the brain transcript's path
+ 114: - **FILES CHANGED:** actual paths from `git status` — on blocked, STILL
+ 115:   list every path Flash already touched so the session can revert a
+ 116:   partial write
+ 117: - **VERIFICATION:** each command you ran yourself, with its real output
+ 118:   (condensed)
+ 119: - **DEVIATIONS:** must be "none" — anything else means you stopped and are
+ 120:   explaining why the task could not be built as written
+ 121: 
+ 122: ## Lane note
+ 123: 
+ 124: This agent pins the Flash implementation lane. Canonical model literal:
+ 125: `gemini-3.6-flash-medium` (Gemini 3.6 Flash, medium reasoning effort,
+ 126: Antigravity CLI resolved ID). The literal lives ONLY here;
+ 127: `implementer.md` pins its own lane's model in its frontmatter and Lane
+ 128: note — every other surface points at the agent files. Trust is per-directory and interactive-only, so this lane runs in
+ 129: the main checkout this cycle, with the plan's Task 6 trusted scratch repo
+ 130: as the sole live-verification exception — a worktree trust story is future work.
+
+codex
+The evidence separates two kinds of confidence: the wrapper can directly substantiate route metadata, changed paths, and command output, but the text does not establish complete semantic-conformance or touched-path completeness. I’m doing the final citation pass now so the verdict distinguishes overstatement from genuinely unverified material.
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command '$memory = Get-Content '"'C:\\Users\\Brandon\\.codex\\memories\\MEMORY.md'; for ("'$i = 638; $i -le 657; $i++) { '"'{0}: {1}' -f ("'$i + 1), $memory[$i] }' in C:\Users\Brandon\Documents\parallax
+ succeeded in 536ms:
+639: - Symptom: a spec looks reasonable but still risks user device-state damage. Cause: it writes to an existing onboard slot during discovery or persistence probing. Fix: switch the test plan to a scratch slot and skip the persistence probe if a safe scratch slot cannot be guaranteed [Task 1].
+640: - Symptom: the restore story sounds safe but is not mechanically possible. Cause: it promises a factory-key restore without ever recording the original binding. Fix: capture prior binding data before writes and downgrade reset claims to best-effort unless the original action was actually captured [Task 1].
+641: - Symptom: plan writing starts too early. Cause: the spec’s safety story was not settled before planning. Fix: hold planning behind the adversarial review and user review gate [Task 2]
+642: 
+643: # Task Group: Crosscheck multi-model verification workflow and drift-watch triage
+644: 
+645: scope: Private `crosscheck` plugin work covering the multi-model verify skill, eval/hook hardening, and headless drift-watch triage where the user wants role-based reviewer lanes, falsifiable evidence rules, and concise terminal dispositions.
+646: applies_to: cwd=C:\Users\Brandon\Documents\crosscheck; reuse_rule=safe for similar plugin/eval/drift-triage work in this repo, but re-check installed-plugin state, cache version, and hook/eval contracts before reusing repo-specific details
+647: 
+648: ## Task 1: Multi-model verify skill, evals, hook integration, and 0.4.2 hardening, completed
+649: 
+650: ### rollout_summary_files
+651: 
+652: - rollout_summaries/2026-07-14T17-08-32-tSda-crosscheck_multi_model_verify_and_deferred_backlog.md (cwd=\\?\C:\Users\Brandon\Documents\KitnDev\KitnEssentials, rollout_path=C:\Users\Brandon\.codex\sessions\2026\07\14\rollout-2026-07-14T12-08-32-019f619a-076d-7d51-9261-125cf8cae5c0.jsonl, updated_at=2026-07-14T17:08:32+00:00, thread_id=019f619a-076d-7d51-9261-125cf8cae5c0, rollout content was in the `crosscheck` repo even though the session metadata cwd recorded a different checkout)
+653: 
+654: ### keywords
+655: 
+656: - crosscheck, multi-model-verify, Fable 5, GPT-5.6 Sol, cheap implementer, superpowers review companion, PostToolUse, requesting-code-review, behavioral evals, citation anchoring, falsifiable diff-mode, 0.4.2
+657: 
+658: ## Task 2: Headless drift-watch triage, verified no action
+
+2026-07-26T18:30:34.410091Z ERROR codex_models_manager::manager: failed to renew cache TTL: missing field `supports_reasoning_summaries` at line 86 column 5
+codex
+1. **FIX.** ROUTE, FILES CHANGED, and VERIFICATION have direct evidence requirements (`agents/flash-implementer.md:83-95`, `agents/flash-implementer.md:114-118`). DEVIATIONS, however, is only required to say `none`; no wrapper-side conformance check proves that assertion, and the contract says plan drift is checked afterward (`agents/flash-implementer.md:22-26`, `agents/flash-implementer.md:119-120`). Consequently, an unconditional `STATUS: done` also cannot establish exact task fidelity from those artifacts alone. **Specific fix:** narrow the claim to direct observability of route metadata, git-visible changes, and verification output; characterize `DEVIATIONS: none` and `done` as wrapper adjudications still subject to the later diff-versus-plan check.
+
+2. **FIX.** The clean-tree preflight provides a recoverable baseline (`agents/flash-implementer.md:60-61`), and blocked reports preserve paths currently reported by `git status` (`agents/flash-implementer.md:114-116`). But “always” and “every path Flash already touched” are stronger than the supporting rules: authorship corroboration is only one-way—every path reported changed by Git must appear in the transcript—not a guarantee that every transcript write remains represented by Git status (`agents/flash-implementer.md:87-92`). **Specific fix:** state that the report supports recovery of every remaining, git-visible partial change from the clean baseline.
+
+3. **PASS.** `INPUT GAP` is a separate STATUS value (`agents/flash-implementer.md:111`), and the corresponding rule requires stopping, reporting the missing input, and never inventing or guessing it (`agents/flash-implementer.md:27-30`).
+
+4. **PASS.** Deviations are defects under the lane contract (`agents/flash-implementer.md:24-26`); the report permits only `none`, with any other content explaining why execution stopped rather than recording an accepted deviation (`agents/flash-implementer.md:119-120`).
+
+**UNVERIFIED:** none.
+
+**OVERALL: FIX — subject revision `c95f18e1ec2cb6a5d7de586557e072e638583e9f`, blob `69dbdb0f77d6606e5729ffe5414bc131aa4922e8`; claims 1 and 2 overstate the guarantees established by `agents/flash-implementer.md:83-120`.**
+
+
+1. **FIX.** ROUTE, FILES CHANGED, and VERIFICATION have direct evidence requirements (`agents/flash-implementer.md:83-95`, `agents/flash-implementer.md:114-118`). DEVIATIONS, however, is only required to say `none`; no wrapper-side conformance check proves that assertion, and the contract says plan drift is checked afterward (`agents/flash-implementer.md:22-26`, `agents/flash-implementer.md:119-120`). Consequently, an unconditional `STATUS: done` also cannot establish exact task fidelity from those artifacts alone. **Specific fix:** narrow the claim to direct observability of route metadata, git-visible changes, and verification output; characterize `DEVIATIONS: none` and `done` as wrapper adjudications still subject to the later diff-versus-plan check.
+
+2. **FIX.** The clean-tree preflight provides a recoverable baseline (`agents/flash-implementer.md:60-61`), and blocked reports preserve paths currently reported by `git status` (`agents/flash-implementer.md:114-116`). But “always” and “every path Flash already touched” are stronger than the supporting rules: authorship corroboration is only one-way—every path reported changed by Git must appear in the transcript—not a guarantee that every transcript write remains represented by Git status (`agents/flash-implementer.md:87-92`). **Specific fix:** state that the report supports recovery of every remaining, git-visible partial change from the clean baseline.
+
+3. **PASS.** `INPUT GAP` is a separate STATUS value (`agents/flash-implementer.md:111`), and the corresponding rule requires stopping, reporting the missing input, and never inventing or guessing it (`agents/flash-implementer.md:27-30`).
+
+4. **PASS.** Deviations are defects under the lane contract (`agents/flash-implementer.md:24-26`); the report permits only `none`, with any other content explaining why execution stopped rather than recording an accepted deviation (`agents/flash-implementer.md:119-120`).
+
+**UNVERIFIED:** none.
+
+**OVERALL: FIX — subject revision `c95f18e1ec2cb6a5d7de586557e072e638583e9f`, blob `69dbdb0f77d6606e5729ffe5414bc131aa4922e8`; claims 1 and 2 overstate the guarantees established by `agents/flash-implementer.md:83-120`.**
+
+
+tokens used
+56,377

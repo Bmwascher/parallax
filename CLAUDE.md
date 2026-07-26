@@ -36,7 +36,7 @@ edits are NOT live until you: bump `.claude-plugin/plugin.json`, run
 `claude plugin update parallax@parallax` (qualified name required),
 and restart the session when hooks/ or skills/ changed. A restart alone
 only reloads the cached version. GitHub remote (Bmwascher/parallax,
-private) serves stable installs on other machines.
+public) serves stable installs on other machines.
 
 ## Skill editing rules
 The multi-model-verify skill's transport commands (codex exec flags, resume

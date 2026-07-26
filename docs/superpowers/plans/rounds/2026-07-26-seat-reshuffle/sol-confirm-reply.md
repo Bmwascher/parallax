@@ -1,0 +1,39 @@
+The revision substantially improves the design, but four prior resolutions remain partial and two new integration defects appeared.
+
+| Prior finding | Status |
+|---|---|
+| B1 — Fable panel interface | **PARTIAL** — the third agent, tools, evidence class, and resume rule now exist; the supporting probe is not reproducibly recorded. [Spec §§2, 6, 11, 15](</C:/Users/Brandon/Documents/parallax/docs/superpowers/specs/2026-07-26-seat-reshuffle-design.md:28>) |
+| B2 — escalation authority | **PARTIAL** — the envelope is sound, but it is not propagated into two contradictory pinned surfaces or durably recorded for blocked reroutes. [Spec §5](</C:/Users/Brandon/Documents/parallax/docs/superpowers/specs/2026-07-26-seat-reshuffle-design.md:80>) |
+| B3 — common subject revision | **PARTIAL** — diff mode is resolved; plan mode names an artifact that does not yet exist. [Spec §6](</C:/Users/Brandon/Documents/parallax/docs/superpowers/specs/2026-07-26-seat-reshuffle-design.md:118>) |
+| B4 — lane loss | **PARTIAL** — consent-first behavior and cardinality are fixed; Fable-only remainder status is unspecified. [Spec §7](</C:/Users/Brandon/Documents/parallax/docs/superpowers/specs/2026-07-26-seat-reshuffle-design.md:151>) |
+| I1 — required-review artifact | **CONFIRMED** — retained path, SHAs, raw reply, adjudications, brief citation, and debate-record citation are specified. [Spec §§3-4](</C:/Users/Brandon/Documents/parallax/docs/superpowers/specs/2026-07-26-seat-reshuffle-design.md:37>) |
+| I2 — panel attestation | **CONFIRMED for completed panels** — maximum rounds, complete participants, strictest-lane aggregate route rule, and per-lane prose evidence are defined without a schema change. [Spec §8](</C:/Users/Brandon/Documents/parallax/docs/superpowers/specs/2026-07-26-seat-reshuffle-design.md:229>) |
+| I3 — Kimi panel charter | **CONFIRMED** — panel invocation is a distinct consented route without fabricated substitution/degradation state. [Spec §§6, 9](</C:/Users/Brandon/Documents/parallax/docs/superpowers/specs/2026-07-26-seat-reshuffle-design.md:127>) |
+| I4 — reviewer containment pins | **CONFIRMED** — both Fable reviewers have exact read-only tool grants and corresponding test pins. [Spec §§3, 6, 11](</C:/Users/Brandon/Documents/parallax/docs/superpowers/specs/2026-07-26-seat-reshuffle-design.md:39>) |
+| I5 — Fable behavioral coverage | **PARTIAL** — Sol+Fable is now selected, but the proposed one-round smoke cannot exercise resume. [Spec §§12-13](</C:/Users/Brandon/Documents/parallax/docs/superpowers/specs/2026-07-26-seat-reshuffle-design.md:313>) |
+
+## Blocking
+
+1. **Plan-mode subject revision hashes an artifact that does not exist during debate.** Spec §6 requires every plan-round brief to carry “the plan file’s blob hash.” Current mode plan explicitly says the session position has no separate artifact—it exists only inside the reviewer brief—and the plan file is saved only after convergence. A plan panel therefore cannot comply with the new rule. Hash a canonical position artifact or the exact normalized claims/brief bytes during debate; use the frozen-plan blob only after freezing. [Spec §6](</C:/Users/Brandon/Documents/parallax/docs/superpowers/specs/2026-07-26-seat-reshuffle-design.md:118>); [SKILL.md:78-90](</C:/Users/Brandon/Documents/parallax/skills/multi-model-verify/SKILL.md:78>); [SKILL.md:133-138](</C:/Users/Brandon/Documents/parallax/skills/multi-model-verify/SKILL.md:133>)
+
+## Important
+
+1. **The escalation envelope is not routed into the pinned contracts it must amend.** Spec §5 defines the envelope, but §9 does not require edits to `frozen-plan-format.md` or the mode-diff paragraph, and §11 does not test either. Those files still state that every implementer makes zero judgment calls and every drift is a finding. Additionally, a blocked-task reroute places its envelope only in a “reroute message”; mode diff needs a durable artifact to audit later. Require a frozen-format carve-out, amend the mode-diff rule, pin both, and retain the consented reroute envelope in the execution ledger or another named artifact. [Spec §§5, 9, 11](</C:/Users/Brandon/Documents/parallax/docs/superpowers/specs/2026-07-26-seat-reshuffle-design.md:80>); [frozen-plan-format.md:3-18](</C:/Users/Brandon/Documents/parallax/skills/multi-model-verify/references/frozen-plan-format.md:3>); [SKILL.md:140-148](</C:/Users/Brandon/Documents/parallax/skills/multi-model-verify/SKILL.md:140>)
+
+2. **A Fable-only remainder is not an ordinary FULL bilateral debate.** If Sol is lost from Sol+Fable—or Kimi from Kimi+Fable—the surviving Fable lane is single-vendor relative to the Claude driver. Section 7 permits continuation as an “ordinary bilateral debate” without specifying `DEGRADED`, poisoning downstream PASS, or how the attestation excludes the lost lane. State separately: surviving Sol/Kimi may remain FULL when clean; surviving Fable follows the existing single-vendor degraded contract and cannot emit an ordinary PASS. Define whether post-loss `Participants` contains surviving lanes only, with the lost lane preserved in failure prose. [Spec §§7-8](</C:/Users/Brandon/Documents/parallax/docs/superpowers/specs/2026-07-26-seat-reshuffle-design.md:151>); [fallbacks.md:164-177](</C:/Users/Brandon/Documents/parallax/skills/multi-model-verify/references/fallbacks.md:164>)
+
+3. **A one-round smoke cannot test resume.** Section 13 says a one-round Sol+Fable panel exercises resume, but round 1 creates the fresh subagent; only a later round invokes resume. Make the smoke two rounds or split it into a round-one dispatch followed by one explicit resumed rebuttal. [Spec §§6, 13](</C:/Users/Brandon/Documents/parallax/docs/superpowers/specs/2026-07-26-seat-reshuffle-design.md:133>); [SKILL.md:116-126](</C:/Users/Brandon/Documents/parallax/skills/multi-model-verify/SKILL.md:116>)
+
+4. **Section 15 does not meet the repo’s probe-record contract, so the resume claim remains unverified from committed evidence.** It lacks the Claude Code version, exact dispatch/resume calls or captured tool schemas, and a durable transcript/artifact path; it is also stored only in the design spec rather than the canonical prompting notes. Repo rules require date, tool/version, exact command or fixture, observed result, settled claim, and a dated `model-prompting-notes.md` entry before runtime behavior enters rule text or tests. Add that record before pinning the no-model-parameter claim. [Spec §15](</C:/Users/Brandon/Documents/parallax/docs/superpowers/specs/2026-07-26-seat-reshuffle-design.md:366>); [commands/intake.md:38-60](</C:/Users/Brandon/Documents/parallax/commands/intake.md:38>)
+
+## Minor
+
+1. **Section 4 misnames its adjudication vocabulary.** It calls `accept / refute / defer` the “final-adjudication vocabulary,” but final adjudication defines `accept / refute / ESCALATE`; `deferred` belongs to the application-checkpoint disposition grammar the spec says it is deliberately not using. Either use `ESCALATE`, or define a separate `defer-to-round-one` state without attributing it to final adjudication. [Spec §4](</C:/Users/Brandon/Documents/parallax/docs/superpowers/specs/2026-07-26-seat-reshuffle-design.md:60>); [debate-protocol.md:63-75](</C:/Users/Brandon/Documents/parallax/skills/multi-model-verify/references/debate-protocol.md:63>); [application-checkpoint.md:24-33](</C:/Users/Brandon/Documents/parallax/skills/multi-model-verify/references/application-checkpoint.md:24>)
+
+## UNVERIFIED
+
+- Same-harness resume behavior remains unverified from committed, reproducible evidence for the reason above. I did not use runtime infeasibility as a verdict input.
+- The suite was not run; this remains a design-only confirmation, and Python is unavailable on this lane.
+- GitHub public visibility remains externally unverified and does not affect this verdict.
+
+**SOUND-WITH-FIXES**

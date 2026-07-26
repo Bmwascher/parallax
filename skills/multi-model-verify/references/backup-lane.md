@@ -2,8 +2,9 @@
 
 The backup lane substitutes a SECOND cross-vendor reviewer (currently
 Kimi K3 via kimi-cli) when the primary reviewer transport is down. It
-enters ONLY through the fallbacks.md consent gate — auto-qualified by
-the classes named there, manual on user request — and preserves
+enters through the fallbacks.md consent gate — auto-qualified by the
+classes named there, manual on user request — or via a user-invoked
+panel (the participation paragraph below), and preserves
 cross-vendor independence, so a backup-lane debate records
 `Verification status: FULL` with the lane substitution noted per
 frozen-plan-format.md. Same debate protocol, same brief conventions,
@@ -11,6 +12,8 @@ same strike rule as the primary; only the transport differs. The
 canonical backup model id and thinking flag are declared ONLY in
 model-prompting-notes.md — read them from there at dispatch; this file
 uses placeholders.
+
+Panel participation: a user-invoked panel per references/panels.md is a second sanctioned entry route - the invocation itself is the consent, with no fallbacks banner (nothing degraded); containment, per-round evidence, and the write-probe apply unchanged, and no failure class is recorded because nothing substituted.
 
 ## Transport
 

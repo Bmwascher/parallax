@@ -1,0 +1,9 @@
+1. ACCEPTED — Task 8 separates committed Step 4 smoke artifacts from the Fable review artifact, which remains untracked through ship. [docs/superpowers/plans/2026-07-26-seat-reshuffle.md:1538](C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-07-26-seat-reshuffle.md:1538)
+
+2. ACCEPTED — Step 5 runs after every content commit and explicitly forbids ever committing `fable-review.md`; it remains untracked through debate, attestation, merge, and push, with its path and SHA-256 recorded in the ledger. [docs/superpowers/plans/2026-07-26-seat-reshuffle.md:1618](C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-07-26-seat-reshuffle.md:1618) [docs/superpowers/plans/2026-07-26-seat-reshuffle.md:1632](C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-07-26-seat-reshuffle.md:1632)
+
+3. ACCEPTED — The execution notes now preserve the artifact untracked through ship so the attested head cannot move. [docs/superpowers/plans/2026-07-26-seat-reshuffle.md:1658](C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-07-26-seat-reshuffle.md:1658)
+
+Whole-plan sweep: the remaining artifact-commit instruction applies only to Step 4 smoke evidence, committed before the immutable final-head review begins. [docs/superpowers/plans/2026-07-26-seat-reshuffle.md:1602](C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-07-26-seat-reshuffle.md:1602) The debate-record append is a plan-freeze action, not post-verdict diff evidence. [docs/superpowers/plans/2026-07-26-seat-reshuffle.md:1666](C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-07-26-seat-reshuffle.md:1666) No contradictory instruction or new evidence-backed risk remains.
+
+PASS — subject revision `047dedfc99b85b88b04d60a2059d14f3e8631615`.
