@@ -62,9 +62,11 @@ merge; Fable seats never replace the cross-vendor gate.
 SKILL.md mode diff gains a pinned step before the round-1 brief: the
 fable-reviewer whole-branch review runs on the same range, the SESSION
 adjudicates each of its findings with evidence (accept / refute /
-defer — final-adjudication vocabulary, deliberately NOT the
-application-checkpoint's "dispositioned"), and the round-1 brief cites
-the retained review artifact path plus the adjudications. Exact pinned
+ESCALATE — the final-adjudication vocabulary exactly, deliberately NOT
+the application-checkpoint's "dispositioned"; a finding the session
+wants the debate to settle is an ESCALATE into the round-1 brief), and
+the round-1 brief cites the retained review artifact path plus the
+adjudications. Exact pinned
 sentence (single physical line, test-enforced):
 
 `Required before round 1: the agents/fable-reviewer.md whole-branch review runs on the same range, its raw reply is retained as a range-bound artifact, and the round-1 brief cites that artifact with the session's per-finding adjudications.`
@@ -99,7 +101,19 @@ location explicit so the future move is a deliberate edit, not drift.
   2. Blocked-task reroute: a blocked Flash (or Claude-lane) task may
      be rerouted here ONLY with user consent per the 0.12.0 ruling —
      the driver and the user both see the failure, then decide; the
-     reroute message states the envelope. Unattended runs fail closed.
+     consented envelope is recorded DURABLY in the cycle's SDD ledger
+     (the named audit artifact mode diff reads later), never only in
+     the reroute message. Unattended runs fail closed.
+- ENVELOPE PROPAGATION (the two pinned surfaces that currently say
+  zero-judgment-always are amended WITH this lane, not left to
+  contradict it): frozen-plan-format.md gains an envelope carve-out
+  paragraph — a task the plan routes to the escalation lane carries
+  its enumerated decision envelope, and DECISIONS inside the envelope
+  are authorized outcomes, not drift; SKILL.md's mode-diff paragraph
+  gains the matching clause — spec-fidelity treats any drift as a
+  finding EXCEPT envelope-designated decisions, which are adjudicated
+  against their envelope. Both amendments are test-pinned (section
+  11).
 
 ## 6. references/panels.md
 
@@ -115,13 +129,18 @@ location explicit so the future move is a deliberate edit, not drift.
   talk to each other directly; findings relay anonymously with their
   evidence (blind cross-examination). The driver verifies claims
   against the repo before relaying.
-- SUBJECT-REVISION RULE: the driver pins the subject revision (git
-  SHA for diffs; the plan file's blob hash for plans) in every round
-  brief of every lane. An accepted amendment that changes the subject
-  re-opens all lanes: a terminal verdict counts only when it cites
-  the FINAL subject revision — a verdict against a stale revision is
-  input, never terminal. (The bilateral freeze rule and 0.13.0's
-  post-convergence delta-confirmation round, generalized.)
+- SUBJECT-REVISION RULE: the driver pins the subject revision in
+  every round brief of every lane. Mode diff: the base..head git
+  SHAs. Mode plan: the plan-under-debate has no committed file during
+  the debate (the position lives in the round briefs), so the pinned
+  revision is the SHA-256 of the current round's claims section — the
+  canonical position bytes every lane receives that round; the frozen
+  plan file's blob hash takes over only at freeze. An accepted
+  amendment that changes the subject re-opens all lanes: a terminal
+  verdict counts only when it cites the FINAL subject revision — a
+  verdict against a stale revision is input, never terminal. (The
+  bilateral freeze rule and 0.13.0's post-convergence
+  delta-confirmation round, generalized.)
 - Lane transports, all pre-existing machinery:
   - Sol: codex exec sessions, header route checks — unchanged.
   - Kimi: backup-lane.md containment, per-round offset evidence, and
@@ -158,10 +177,17 @@ continue, the panel STOPS AT THE CONSENT GATE — no automatic
 continuation, ever: continuing with fewer lanes reduces evidence
 quality, and no such transition happens without explicit user consent
 (the governing fallbacks rule, unchanged). The gate offers: continue
-with the remaining lanes (a single-lane remainder proceeds as an
-ordinary bilateral debate and is recorded as such, not as a panel);
-substitute the lost lane (the existing kimi substitution machinery,
-where applicable); or abort. The lost lane's unresolved findings carry
+with the remaining lanes; substitute the lost lane (the existing kimi
+substitution machinery, where applicable); or abort. A single-lane
+remainder proceeds as a bilateral debate and is recorded as such, not
+as a panel — with its status split by WHAT remains: a surviving
+cross-vendor lane (Sol or Kimi) clean on evidence may still record
+FULL; a surviving FABLE-ONLY remainder is single-vendor relative to
+the Claude driver and follows the existing degraded contract — it
+records DEGRADED, and the degraded-plan poisoning rule applies to any
+downstream PASS exactly as in bilateral degraded mode. The record's
+Participants field lists the lanes that produced terminal verdicts;
+the lost lane and its loss class live in the failure prose. The lost lane's unresolved findings carry
 into the record as OPEN — adjudicated by the session or re-raised with
 a substitute, never silently dropped. A lost lane's incomplete round
 is never adjudicated.
@@ -292,6 +318,9 @@ artifact:
   DECISIONS and DEVIATIONS sections BOTH required (`DEVIATIONS` must
   be `none` retained); the envelope sentence and consent-gate
   sentence present.
+- frozen-plan-format.md carries the envelope carve-out paragraph;
+  SKILL.md's mode-diff paragraph carries the envelope-adjudication
+  clause (both pinned sentences).
 - SKILL.md carries the section-4 required-step sentence (exact,
   count == 1) and the panel pointer (count == 2).
 - panels.md exists; the any-combination enumeration, the cross-vendor
@@ -330,10 +359,13 @@ which exercises the lane the manual case does not).
 - Dogfooding: this cycle's own final review is dispatched through the
   new agents/fable-reviewer.md file with its retained artifact (live
   verification of the required step).
-- Attended smoke: a one-round SOL+FABLE mini-panel on a scratch brief
-  — it exercises the NEW lane live (dispatch metadata, resume, blind
-  relay, subject-revision citation, artifact retention) while
-  containing a cross-vendor lane; Kimi's panel mechanics are
+- Attended smoke: a TWO-ROUND Sol+Fable mini-panel on a scratch brief
+  — round 1 dispatches both lanes fresh; round 2 is one resumed
+  rebuttal exchange per lane, because resume is the mechanism under
+  test and a single round never invokes it. The smoke exercises the
+  NEW lane live (dispatch metadata, the agent-file resume variant the
+  section-15 probe defers, blind relay, subject-revision citation,
+  artifact retention) while containing a cross-vendor lane; Kimi's panel mechanics are
   already-live-proven transport (0.13.0) plus the write-probe, so the
   smoke goes where the untested risk is. Budget: codex weekly window
   via doctor 4b; the Kimi dashboard is the authority for any Kimi
@@ -365,18 +397,26 @@ which exercises the lane the manual case does not).
 
 ## 15. Probe record
 
-- 2026-07-26 (this session, Claude Code harness): same-harness
-  subagent resume probe — a `model: fable` general-purpose subagent
-  dispatched with a stored token, then resumed via the harness resume
-  surface. RESULT: the resumed agent recalled the token exactly
-  (conversation state persists across resume); the resume surface
-  carries NO model parameter (only recipient and message — verified
-  against the tool schema), so the round-1 model pin cannot be
-  silently swapped by a resume call — the inverse of the kimi
-  bare-resume hazard; a dead agent surfaces as a loud harness
-  notification. Settles the dual-advisory UNVERIFIED (both lanes) on
-  Fable panel-lane feasibility. Self-reported identity in the reply
-  is priming-class and was not counted as evidence.
+- 2026-07-26, Claude Code 2.1.220 (Windows): same-harness subagent
+  resume probe. FULL RECORD (exact dispatch and resume mechanics,
+  verbatim replies, results, residual limits) committed at
+  docs/superpowers/plans/rounds/2026-07-26-seat-reshuffle/subagent-resume-probe.md.
+  Summary: conversation state persists across resume (nonce recalled
+  exactly); the resume surface carries NO model parameter (verified
+  against the loaded tool schema — only recipient, summary, message),
+  so the round-1 model pin cannot be silently swapped by a resume
+  call, the inverse of the kimi bare-resume hazard; a dead agent
+  surfaces as a loud harness notification. Settles the dual-advisory
+  UNVERIFIED (both lanes) on Fable panel-lane feasibility.
+  Self-reported identity is priming-class, not evidence. RESIDUAL
+  (recorded in the artifact): the probe used a general-purpose
+  subagent; the agent-file variant is re-probed by the two-round
+  attended smoke before the lane carries a real review. The build
+  adds the matching dated bullet to model-prompting-notes.md (the
+  canonical probe home) as part of Task routing — rule text and test
+  pins cite the committed record, honoring the probe-record contract
+  (date, tool + version, exact mechanics, observed result, settled
+  claim, durable path).
 
 ## 16. Advisory record
 
@@ -392,5 +432,19 @@ containment; lane-loss consent; attestation schema; adjudication step)
 plus Sol-only (subject-revision binding; Fable-lane live coverage) and
 Kimi-only minors (second private-claim instance; kimi budget
 authority; implementer.md label). All nine resolutions user-approved
-2026-07-26 and folded into this revision. Raw replies retained in the
-session scratchpad; confirmation round pending on this revision.
+2026-07-26 and folded. CONFIRMATION ROUNDS on the revision (blind):
+Kimi SOUND-WITH-FIXES — all nine resolutions verified RESOLVED, three
+new one-clause minors (probe-record version; Fable-only-remainder
+status; durable raw-reply retention); Sol SOUND-WITH-FIXES — four
+CONFIRMED, four PARTIAL + one blocking (plan-mode subject-revision
+hashing a not-yet-existing file) + vocabulary minor. Convergent across
+the two confirmation rounds: the probe-record contract gap and the
+Fable-only-remainder status — both folded, with the probe record
+committed durably and the remainder rule split by surviving-lane
+vendor. One defective Sol exchange (empty prompt from a failed brief
+write) quarantined, not counted as a round. All raw briefs and replies
+retained at docs/superpowers/plans/rounds/2026-07-26-seat-reshuffle/.
+Kimi was not re-consulted on this final fold (window economy, the
+0.13.0 precedent — its three minors are folded verbatim); Sol
+delta-confirmation on the fold is the remaining gate before the user
+review.
