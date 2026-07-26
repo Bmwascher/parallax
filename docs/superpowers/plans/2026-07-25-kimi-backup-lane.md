@@ -99,11 +99,18 @@ def test_notes_backup_declarations():
 
 def test_agent_yaml_allowlist_exact():
     yaml_text = _read(AGENT_YAML)
-    for tool in ALLOWLIST:
-        assert '"' + tool + '"' in yaml_text, tool
+    # exact LIST equality: extra, missing, or reordered tool entries all
+    # fail - presence checks alone would tolerate an added WriteFile
+    tools = re.findall(r'-\s+"([^"]+)"', yaml_text)
+    assert tools == ALLOWLIST
     for marker in FORBIDDEN_TOOL_MARKERS:
         assert marker not in yaml_text, marker
     assert "system_prompt_path: ./kimi-reviewer-system.md" in yaml_text
+
+
+def test_backup_files_no_backslash_paths():
+    for p in (BACKUP_LANE, AGENT_YAML, SYSTEM_MD):
+        assert "\\" not in _read(p), str(p)
 
 
 def test_backup_lane_dispatch_and_resume_pins():
@@ -111,8 +118,11 @@ def test_backup_lane_dispatch_and_resume_pins():
     assert "--quiet --thinking -m <canonical-backup-model-id>" in body
     assert "--agent-file" in body
     assert "KIMI-REVIEW-BRIEF.md" in body
-    # the re-pinned resume is load-bearing: bare -r restores full tools
-    assert ("kimi --quiet -r <session-id> --agent-file" in body)
+    # the re-pinned resume is load-bearing: bare -r restores full tools,
+    # and model/thinking inherit from CONFIG DEFAULTS, so the pin covers
+    # the COMPLETE resumed command through --thinking
+    assert ("kimi --quiet -r <session-id> --agent-file <same yaml> -m "
+            "<canonical-backup-model-id> --thinking") in body
     assert "loads the DEFAULT agent with full write and shell tools" in body
     assert BACKUP_ID not in body  # placeholder discipline
 
@@ -134,6 +144,9 @@ def test_backup_lane_evidence_pins():
 def test_fallbacks_backup_wiring():
     fb = _read(FALLBACKS)
     assert "[run backup lane (cross-vendor preserved)]" in fb
+    # the banner itself carries the conditional-offer semantics and the
+    # backup option's own consequence line, not just an Options entry
+    assert "offered when a class below qualifies it; on request otherwise" in fb
     assert "reviewer reasoning effort" in fb
     # transport-broken mapping names its member classes
     assert "codex-missing" in fb and "model-rejected" in fb
@@ -151,8 +164,16 @@ def test_plan_format_lane_substitution_pin():
 def test_skill_and_readme_route_the_lane():
     skill = _read(REPO / "skills" / "multi-model-verify" / "SKILL.md")
     assert "backup-lane.md" in skill
+    # BOTH dispatch sections (mode plan and mode diff) carry the pointer
+    # - "backup-lane.md somewhere in the file" would let either mode
+    # drop it while staying green
+    assert skill.count("Backup lane: same protocol, transport and "
+                       "per-round evidence per "
+                       "references/backup-lane.md.") == 2
     readme = _read(REPO / "README.md")
     assert "run backup lane" in readme
+    assert ("references/backup-lane.md` | The cross-vendor backup "
+            "reviewer lane") in readme
 
 
 SWEEP_GLOBS = [
@@ -181,7 +202,7 @@ In `evals/multi-model-verify/test_multi_model_verify.py`, find the `REQUIRED_REF
 
 - [ ] **Step 3: Run the new tests to verify they fail**
 
-Run: `python -m pytest evals/multi-model-verify/test_backup_lane.py -q`
+Run: `python -m pytest evals/multi-model-verify/test_backup_lane.py evals/multi-model-verify/test_multi_model_verify.py -q`
 Expected: FAIL — `test_backup_artifacts_exist` errors first (files missing); the modified `test_multi_model_verify.py` reference-file pin also fails on the missing `backup-lane.md`.
 
 - [ ] **Step 4: Run the full suite to confirm no collateral damage**
@@ -407,9 +428,12 @@ In the consent-gate banner fenced block, replace the line:
 Options: [fix codex] [run degraded] [abort]
 ```
 
-with:
+with these two lines (the banner itself carries the conditional-offer
+semantics and the backup option's own consequence line — an Options
+entry alone cannot express either):
 
 ```text
+Backup lane: offered when a class below qualifies it; on request otherwise — preserves cross-vendor independence; does NOT verify reviewer reasoning effort (config-only)
 Options: [fix codex] [run backup lane (cross-vendor preserved)] [run degraded] [abort]
 ```
 
@@ -497,13 +521,18 @@ git commit -m "0.13.0: wire backup lane into declarations, fallbacks, record for
 
 - [ ] **Step 1: SKILL.md Overview**
 
-In the Overview paragraph, replace the sentence fragment:
+Replace this COMPLETE Overview paragraph (all seven physical lines —
+the third sentence shares a physical line with the second, so a
+fragment anchor ending at "touches code." does not exist in the file):
 
 ```text
 Two equal-weight advisors — this session and a cross-vendor reviewer driven
 through the codex CLI (canonical reviewer model:
 references/model-prompting-notes.md) — verify and refute each other's
-claims before the cheap implementer touches code.
+claims before the cheap implementer touches code. The reviewer lane's
+documented fabrication risk (METR; see model-prompting-notes.md) is
+mitigated by the debate structure — evidence grounding plus mutual
+refutation — not by down-weighting either side.
 ```
 
 with:
@@ -512,26 +541,37 @@ with:
 Two equal-weight advisors — this session and a cross-vendor reviewer driven
 through the codex CLI (canonical reviewer model:
 references/model-prompting-notes.md) — verify and refute each other's
-claims before the cheap implementer touches code. A second cross-vendor
-BACKUP reviewer lane (references/backup-lane.md — REQUIRED READING
-before any backup round) substitutes through the fallbacks.md consent
-gate when the primary transport is down; same protocol, different
-transport, `Verification status: FULL` preserved.
+claims before the cheap implementer touches code. The reviewer lane's
+documented fabrication risk (METR; see model-prompting-notes.md) is
+mitigated by the debate structure — evidence grounding plus mutual
+refutation — not by down-weighting either side. The PRIMARY reviewer
+lane (codex) is the default; a second cross-vendor BACKUP reviewer lane
+(references/backup-lane.md — REQUIRED READING before any backup round)
+substitutes ONLY through the fallbacks.md consent gate — auto-qualified
+by the classes named there, manual on user request — with the same
+protocol, a different transport, and `Verification status: FULL`
+preserved.
 ```
 
 - [ ] **Step 2: SKILL.md Preflight item 1**
 
-Replace:
+Replace this COMPLETE item (all four physical lines — "On failure"
+begins mid-line after the billing sentence, so a fragment anchor
+starting there does not exist in the file):
 
 ```text
-   On failure follow references/fallbacks.md
+1. `codex --version` must succeed, and `codex login status` must report
+   `Logged in using ChatGPT` — exit 0 alone also passes an API-key login,
+   which rides different billing. On failure follow references/fallbacks.md
    (degraded mode, visibly flagged; never silently skip cross-vendor review).
 ```
 
 with:
 
 ```text
-   On failure follow references/fallbacks.md
+1. `codex --version` must succeed, and `codex login status` must report
+   `Logged in using ChatGPT` — exit 0 alone also passes an API-key login,
+   which rides different billing. On failure follow references/fallbacks.md
    (the consent gate may offer the cross-vendor backup lane —
    references/backup-lane.md — before any single-vendor degraded mode;
    never silently skip cross-vendor review).
@@ -548,7 +588,28 @@ references/backup-lane.md's per-round evidence rules against the backup
 declarations; the evidence class is recorded in the debate record prose.
 ```
 
-- [ ] **Step 4: README flowchart and box list**
+- [ ] **Step 3b: SKILL.md dispatch pointers (both modes)**
+
+In the "## Mode plan" section, immediately AFTER the physical line
+`   Apply that file's env hygiene to the invocation.` insert a blank
+line and then this line (single physical line, unwrapped):
+
+```text
+   Backup lane: same protocol, transport and per-round evidence per references/backup-lane.md.
+```
+
+In the "## Mode diff" section, immediately AFTER the physical line
+ending `ending PASS / FIX / ESCALATE.` insert a blank line and then the
+SAME line unindented (single physical line, unwrapped):
+
+```text
+Backup lane: same protocol, transport and per-round evidence per references/backup-lane.md.
+```
+
+The Task 1 pin counts exactly two occurrences of this sentence — one
+per mode.
+
+- [ ] **Step 4: README flowchart and box table**
 
 In the mermaid consent-gate flowchart, after the line `G -->|fix codex| OK`, insert:
 
@@ -556,10 +617,13 @@ In the mermaid consent-gate flowchart, after the line `G -->|fix codex| OK`, ins
     G -->|run backup lane| BK["cross-vendor backup reviewer<br/>(FULL, lane substitution recorded)"] --> OK
 ```
 
-In the "What's in the box" list, after the row/line describing `references/fallbacks.md`, add a line matching the list's existing style:
+The "What's in the box" section is a two-column TABLE (`| Piece |
+What it does |`), and `references/fallbacks.md` has no row of its own —
+insert this new table row immediately AFTER the row for
+`skills/multi-model-verify/` (single physical line):
 
 ```text
-`references/backup-lane.md` — the cross-vendor backup reviewer lane (consent-gated substitution when codex is down; the gate's "run backup lane" option)
+| `skills/multi-model-verify/references/backup-lane.md` | The cross-vendor backup reviewer lane: consent-gated substitution when codex is down — the gate's "run backup lane" option (backup model pinned in model-prompting-notes.md) |
 ```
 
 - [ ] **Step 5: Run tests and lint**
@@ -592,31 +656,163 @@ git commit -m "0.13.0: route backup lane in skill overview, preflight, finish li
 
 - [ ] **Step 1: Doctor check 8**
 
-Append after check 7 in `commands/doctor.md`, matching the numbered-check format of the file, a check with EXACTLY this content:
+Append after check 7 in `commands/doctor.md` (existing checks are `## N.` headings; the verdict grammar is OK / STALE / BROKEN / N/A) EXACTLY this check:
 
 ```markdown
-8. **Backup reviewer transport (kimi).** Run `kimi --version`. Parse the
-   backup id from the line `Canonical backup reviewer model id:` in
-   skills/multi-model-verify/references/model-prompting-notes.md (this
-   check carries no model literal). Verify both containment artifacts
-   exist: references/kimi-reviewer-agent.yaml and
-   references/kimi-reviewer-system.md. Report the version, the parsed
-   id, and the artifact presence. Any failure is reported as
-   BACKUP-LANE UNAVAILABLE (the primary lane is unaffected) — the fix
-   pointer is references/backup-lane.md.
+## 8. Backup reviewer transport (kimi)
+
+Run `kimi --version`. Resolve the plugin's INSTALLED copy under the
+`installPath` from check 1 — never a bare relative path — then: parse
+the backup id from the line `Canonical backup reviewer model id:` in
+the installed
+`skills/multi-model-verify/references/model-prompting-notes.md` (this
+check carries no model literal), and verify both containment artifacts
+exist in the installed `skills/multi-model-verify/references/`:
+`kimi-reviewer-agent.yaml` and `kimi-reviewer-system.md`. Report the
+version, the parsed id, and the artifact presence. Any failure is
+BROKEN with the state detail "backup lane unavailable (primary lane
+unaffected)"; kimi not installed at all is N/A with the same detail —
+the fix pointer is references/backup-lane.md either way.
 ```
 
-- [ ] **Step 2: Drift script — version snapshot (carry-forward)**
+- [ ] **Step 2: Drift script — version probe and snapshot (carry-forward)**
 
-Mirror the agy field exactly: add a `$kimiVersion` probe beside the agy probe (`kimi --version`, tolerate absence), a `$kimiVersionToSave` carry-forward inside the existing `if ($snapshot)` block, and `kimi = $kimiVersionToSave` in `$newSnapshot` — same pattern, same failure tolerance as the agy field. No inline `if` in the hashtable (PS 5.1 hazard).
+Three edits to `tools/check-drift.ps1`, each anchored to code that exists at head:
+
+Immediately AFTER the agy version block (the lines `$agyVersion = ""` through the closing `}` of its `if (Test-Path $agyExe)`), insert:
+
+```powershell
+$kimiVersion = ""
+$kimiRaw = ""
+try { $kimiRaw = (& kimi --version 2>&1 | Out-String).Trim() } catch {}
+if ($kimiRaw -match '(\d+\.\d+\.\d+)') { $kimiVersion = $Matches[1] }
+```
+
+In the carry-forward block, AFTER the line `$agyVersionToSave = $agyVersion` insert `$kimiVersionToSave = $kimiVersion`, and inside the `if ($snapshot)` block AFTER the agy line insert:
+
+```powershell
+    if (-not $kimiVersionToSave -and $snapshot.kimi) { $kimiVersionToSave = $snapshot.kimi }
+```
+
+In `$newSnapshot`, after the line `agy         = $agyVersionToSave`, insert:
+
+```powershell
+    kimi        = $kimiVersionToSave
+```
 
 - [ ] **Step 3: Drift script — flag-surface and vocabulary probes**
 
-Beside the codex flag probe, add a kimi probe block: capture `kimi --help` once; require each of `--quiet`, `--thinking`, `-m`, `--agent-file`, `-w`, `-p`, `-r` to appear in the help text; then run `python -c "import kimi_cli.tools.file, kimi_cli.tools.todo"` and require exit 0. Each miss appends a drift finding naming the missing flag or module (finding style copied from the codex flag probe's findings). Both probes are skipped with a single carried-forward note when `kimi --version` failed (no cascade).
+Immediately AFTER check 2's closing `}` (the codex transport block) and BEFORE the `# --- check 3` comment, insert EXACTLY:
 
-- [ ] **Step 4: State-machine suite stubs**
+```powershell
+# --- check 2b (every run): kimi backup transport surface -----------------------
+# Short flags (-m/-w/-p/-r) substring-match trivially inside long-flag
+# help text; the long flags carry the real detection. All seven are
+# probed for spec conformance - a miss on any is a loud contract break.
 
-Extend the stub CLIs in `evals/tools/drift_statemachine_tests.ps1` so the existing scenarios still drive the script end-to-end offline: a stub `kimi` answering `--version` and `--help` (help text containing all seven flags) and a stub `python` import success where the harness fakes binaries. Add one scenario assertion: a help text MISSING `--agent-file` produces a drift finding naming it.
+if ($kimiVersion) {
+    $kimiHelp = (& kimi --help 2>&1 | Out-String)
+    foreach ($flag in @("--quiet", "--thinking", "-m", "--agent-file", "-w", "-p", "-r")) {
+        if ($kimiHelp.IndexOf($flag) -lt 0) {
+            $findings += "[CRITICAL] kimi --help ($kimiVersion) no longer lists $flag - the backup lane's transport commands are broken; update references/backup-lane.md"
+        }
+    }
+    & python -c "import kimi_cli.tools.file, kimi_cli.tools.todo" 2>$null
+    if ($LASTEXITCODE -ne 0) {
+        $findings += "[CRITICAL] kimi_cli tool modules no longer import - the containment agent-file's tool allowlist may be stale; re-probe references/kimi-reviewer-agent.yaml against the installed kimi-cli"
+    }
+} else {
+    $notes += "kimi absent or version unparseable - backup-lane probes skipped (lane optional; primary unaffected)"
+}
+```
+
+- [ ] **Step 4: State-machine suite — stubs, helper, and three scenarios**
+
+Four edits to `evals/tools/drift_statemachine_tests.ps1`:
+
+(a) Immediately BEFORE the line `$env:PATH = "$StubDir;" + $env:PATH`, insert:
+
+```powershell
+# Real python captured BEFORE the stub dir shadows it: the python stub
+# must forward everything except the kimi_cli import probe, because the
+# drift script's own pytest gate runs through the same binary name.
+$env:DRIFT_REAL_PYTHON = (Get-Command python).Source
+
+@'
+@echo off
+if "%~1"=="--version" goto version
+if "%~1"=="--help" goto help
+exit /b 0
+
+:version
+if "%KIMI_STUB_MODE%"=="version-fail" exit /b 1
+echo kimi, version 9.9.9
+exit /b 0
+
+:help
+if "%KIMI_STUB_MODE%"=="drop-agent-file" (
+echo usage: kimi [--quiet] [--thinking] [-m MODEL] [-w DIR] [-p PROMPT] [-r ID]
+exit /b 0
+)
+echo usage: kimi [--quiet] [--thinking] [-m MODEL] [--agent-file FILE] [-w DIR] [-p PROMPT] [-r ID]
+exit /b 0
+'@ | Set-Content -Path (Join-Path $StubDir "kimi.cmd") -Encoding ASCII
+
+@'
+@echo off
+if not "%PYTHON_STUB_MODE%"=="kimi-import-fail" goto forward
+echo %* | findstr /C:"kimi_cli" > nul
+if not errorlevel 1 (
+echo ModuleNotFoundError: No module named 'kimi_cli' 1>&2
+exit /b 1
+)
+:forward
+"%DRIFT_REAL_PYTHON%" %*
+exit /b %ERRORLEVEL%
+'@ | Set-Content -Path (Join-Path $StubDir "python.cmd") -Encoding ASCII
+```
+
+(b) Immediately AFTER the closing `}` of `function Reset-State {`, insert:
+
+```powershell
+function Set-SnapshotWithKimi($claude, $codex, $sp, $kimi) {
+    $snap = @{ claude = $claude; codex = $codex; superpowers = $sp; kimi = $kimi; updated = "2026-01-01T00:00:00" }
+    ConvertTo-Json -InputObject $snap | Set-Content -Path $SnapshotFile
+}
+```
+
+(c) At the end of the scenario sequence (after the last existing scenario's assertions, before the suite's final summary/exit code block), append EXACTLY:
+
+```powershell
+# SCENARIO kimi-flag-drift: help drops --agent-file -> exactly the flag finding
+Reset-State
+$env:KIMI_STUB_MODE = "drop-agent-file"
+Invoke-Drift "kimi-flag-drift" "noaction" "" 60000
+Assert-True ($script:LastReport -match [regex]::Escape("no longer lists --agent-file")) "flag drop raises the agent-file drift finding"
+Assert-True ($script:LastReport -notmatch "kimi_cli tool modules") "vocabulary probe stays quiet on a flag-only drop"
+Remove-Item Env:KIMI_STUB_MODE -ErrorAction SilentlyContinue
+
+# SCENARIO kimi-vocab-drift: import failure -> the containment-vocabulary finding
+Reset-State
+$env:PYTHON_STUB_MODE = "kimi-import-fail"
+Invoke-Drift "kimi-vocab-drift" "noaction" "" 60000
+Assert-True ($script:LastReport -match [regex]::Escape("kimi_cli tool modules no longer import")) "import failure raises the vocabulary drift finding"
+Remove-Item Env:PYTHON_STUB_MODE -ErrorAction SilentlyContinue
+
+# SCENARIO kimi-version-carry: failed probe never clobbers the snapshot
+Set-SnapshotWithKimi "1.2.3" "7.7.7" "6.1.1" "9.9.9"
+Copy-Item $PinnedFixture $SpTemplate -Force
+if (Test-Path $PendingFile) { Remove-Item $PendingFile -Force }
+if (Test-Path $ReportsDir) { Remove-Item -Recurse -Force $ReportsDir }
+$env:KIMI_STUB_MODE = "version-fail"
+Invoke-Drift "kimi-version-carry" "noaction" "" 60000
+$snapAfter = Get-Content $SnapshotFile -Raw | ConvertFrom-Json
+Assert-True ($snapAfter.kimi -eq "9.9.9") "failed kimi probe carries the last known-good version forward"
+Assert-True ($script:LastReport -match "backup-lane probes skipped") "skip note is emitted instead of a cascade"
+Remove-Item Env:KIMI_STUB_MODE -ErrorAction SilentlyContinue
+```
+
+(d) No existing scenario changes: the healthy kimi stub (`kimi, version 9.9.9`, full help) keeps every pre-existing scenario's behavior identical — the new probe block finds nothing when all seven flags are present and the forwarding python succeeds.
 
 - [ ] **Step 5: Run the suites (CONTROLLER-run)**
 
@@ -708,7 +904,7 @@ Expected selection: the cases whose surfaces intersect this branch (SKILL.md, mo
 
 All commands built by reading the INSTALLED skill text (cache), resolving `<canonical-backup-model-id>` from the installed notes file:
 1. Fresh throwaway clone of the repo in the session scratchpad; write a scratch review brief as `KIMI-REVIEW-BRIEF.md` (any small real review target, e.g. "review agents/flash-implementer.md's report format section for internal consistency; cite lines").
-2. WRITE-PROBE per backup-lane.md (fresh disposable session, exact debate configuration, marker request): expect refusal + absent marker + clean delta.
+2. WRITE-PROBE per backup-lane.md (fresh disposable session, exact debate configuration, marker request): expect refusal + absent marker + clean delta. If the probe fails on PROMPT behavior (the reviewer does not follow the committed self-authored system prompt), apply spec section 5's fallback branch: retry with the probed copy-at-invocation form; if that also fails, the lane is BROKEN and the design returns for revision — never ship a lane whose write-probe fails.
 3. Round 1 dispatch per the pinned command; per-round evidence checks (offset, route line, Loading agent, Loaded tools) — all three past the offset.
 4. One resumed exchange with the re-pinned resume form; the same per-round checks repeat and pass.
 5. Post-round clone check: exactly `KIMI-REVIEW-BRIEF.md`, nothing else.
