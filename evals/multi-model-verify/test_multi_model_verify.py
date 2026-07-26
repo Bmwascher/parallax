@@ -31,6 +31,7 @@ REQUIRED_REFERENCE_FILES = [
     "fallbacks.md",
     "application-checkpoint.md",
     "backup-lane.md",
+    "panels.md",
 ]
 
 
