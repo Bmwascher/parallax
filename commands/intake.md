@@ -1,5 +1,6 @@
 ---
 description: Intake review of an external reference (repo, skill, article) for practices worth incorporating - untrusted-data discipline, delta grounding, probe-gated adoption, then the debate
+argument-hint: <reference url or path>
 ---
 
 Review the external reference the user named (URL or local path) for
@@ -61,7 +62,10 @@ conflicts with a live-verified parallax contract, the probe decides —
 never the authority or age of either document. Both directions happen:
 0.8.0's intake found one external claim provably wrong (never pin `-m`)
 and one right and critical (resume sandbox fallback) — only probes told
-them apart.
+them apart. Sequencing is cost-aware: rank the dispositions first with
+needs-live-probe labels standing, and run probes only for the adoptions
+the user picks — an unpicked candidate never spends quota (established
+by the 2026-07-24 jinn intake).
 
 ## 3. Dispositions, ranked, to the user
 
