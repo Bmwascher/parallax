@@ -37,6 +37,10 @@
 #   commit-failure     failed commit discards changes, keeps no branch
 #   route-mismatch     wrong header model reads as UNAVAILABLE, fix still lands
 #   auth-preflight-fail failed login status skips the review call entirely
+#   kimi-flag-drift    help drops --agent-file -> the flag finding
+#   kimi-short-flag-drift help keeps --model but drops -m
+#   kimi-vocab-drift   import failure -> containment-vocabulary finding
+#   kimi-version-carry failed probe never clobbers the snapshot
 #   triage-timeout     hung agent is killed at the cap
 #
 # Runtime: several minutes - four scenarios re-run the full pytest suite
@@ -60,6 +64,7 @@ New-Item -ItemType Directory -Force -Path $Root | Out-Null
 $savedEnv = @{}
 foreach ($name in @("PATH", "USERPROFILE", "HOME", "TEMP", "TMP",
                     "CLAUDE_STUB_MODE", "CODEX_STUB_MODE",
+                    "KIMI_STUB_MODE", "PYTHON_STUB_MODE", "DRIFT_REAL_PYTHON",
                     "PARALLAX_DRIFT_STATEMACHINE",
                     "PARALLAX_DRIFT_TOAST_LOG",
                     "PARALLAX_DRIFT_TRIAGE_TIMEOUT_MS")) {
@@ -209,6 +214,48 @@ if ($idx -ge 0 -and ($idx + 1) -lt $argList.Count) {
 exit 0
 '@ | Set-Content -Path (Join-Path $StubDir "codex.ps1") -Encoding ASCII
 
+# Real python captured BEFORE the stub dir shadows it: the python stub
+# must forward everything except the kimi_cli import probe, because the
+# drift script's own pytest gate runs through the same binary name.
+$env:DRIFT_REAL_PYTHON = (Get-Command python).Source
+
+@'
+@echo off
+if "%~1"=="--version" goto version
+if "%~1"=="--help" goto help
+exit /b 0
+
+:version
+if "%KIMI_STUB_MODE%"=="version-fail" exit /b 1
+echo kimi, version 9.9.9
+exit /b 0
+
+:help
+if "%KIMI_STUB_MODE%"=="drop-agent-file" (
+echo usage: kimi [--quiet] [--thinking] [-m MODEL] [-w DIR] [-p PROMPT] [-r ID]
+exit /b 0
+)
+if "%KIMI_STUB_MODE%"=="drop-short-m" (
+echo usage: kimi [--quiet] [--thinking] [--model MODEL] [--agent-file FILE] [-w DIR] [-p PROMPT] [-r ID]
+exit /b 0
+)
+echo usage: kimi [--quiet] [--thinking] [-m MODEL] [--agent-file FILE] [-w DIR] [-p PROMPT] [-r ID]
+exit /b 0
+'@ | Set-Content -Path (Join-Path $StubDir "kimi.cmd") -Encoding ASCII
+
+@'
+@echo off
+if not "%PYTHON_STUB_MODE%"=="kimi-import-fail" goto forward
+echo %* | findstr /C:"kimi_cli" > nul
+if not errorlevel 1 (
+echo ModuleNotFoundError: No module named 'kimi_cli' 1>&2
+exit /b 1
+)
+:forward
+"%DRIFT_REAL_PYTHON%" %*
+exit /b %ERRORLEVEL%
+'@ | Set-Content -Path (Join-Path $StubDir "python.cmd") -Encoding ASCII
+
 $env:PATH = "$StubDir;" + $env:PATH
 
 # Harness-owned TEMP: the script derives its worktree path from $env:TEMP,
@@ -270,6 +317,11 @@ function Reset-State {
     Copy-Item $PinnedFixture $SpTemplate -Force
     if (Test-Path $PendingFile) { Remove-Item $PendingFile -Force }
     if (Test-Path $ReportsDir) { Remove-Item -Recurse -Force $ReportsDir }
+}
+
+function Set-SnapshotWithKimi($claude, $codex, $sp, $kimi) {
+    $snap = @{ claude = $claude; codex = $codex; superpowers = $sp; kimi = $kimi; updated = "2026-01-01T00:00:00" }
+    ConvertTo-Json -InputObject $snap | Set-Content -Path $SnapshotFile
 }
 
 function Invoke-Drift($scenario, $claudeMode, $codexMode, $timeoutMs) {
@@ -530,6 +582,52 @@ Assert-True ($script:LastReport -match 'cross-review UNAVAILABLE - codex auth no
 Assert-True (-not ($script:LastReport -match 'cross-review: ')) "no reviewer verdict without a passed preflight"
 $pend = Get-Pending
 if ($pend.Count -ge 1 -and $pend[0].branch) { git -C $Clone branch -D $pend[0].branch 2>&1 | Out-Null }
+Complete-Scenario $b
+
+# --- scenario: kimi-flag-drift (help drops --agent-file -> the flag finding) -------
+
+$b = $script:failCount
+Reset-State
+$env:KIMI_STUB_MODE = "drop-agent-file"
+Invoke-Drift "kimi-flag-drift" "noaction" "" 60000
+Assert-True ($script:LastReport -match [regex]::Escape("no longer lists --agent-file")) "flag drop raises the agent-file drift finding"
+Assert-True ($script:LastReport -notmatch "kimi_cli tool modules") "vocabulary probe stays quiet on a flag-only drop"
+Remove-Item Env:KIMI_STUB_MODE -ErrorAction SilentlyContinue
+Complete-Scenario $b
+
+# --- scenario: kimi-short-flag-drift (help keeps --model but drops -m) -------------
+
+$b = $script:failCount
+Reset-State
+$env:KIMI_STUB_MODE = "drop-short-m"
+Invoke-Drift "kimi-short-flag-drift" "noaction" "" 60000
+Assert-True ($script:LastReport -match [regex]::Escape("no longer lists -m")) "token-boundary probe catches a dropped short flag despite --model remaining"
+Remove-Item Env:KIMI_STUB_MODE -ErrorAction SilentlyContinue
+Complete-Scenario $b
+
+# --- scenario: kimi-vocab-drift (import failure -> containment-vocabulary finding) -
+
+$b = $script:failCount
+Reset-State
+$env:PYTHON_STUB_MODE = "kimi-import-fail"
+Invoke-Drift "kimi-vocab-drift" "noaction" "" 60000
+Assert-True ($script:LastReport -match [regex]::Escape("kimi_cli tool modules no longer import")) "import failure raises the vocabulary drift finding"
+Remove-Item Env:PYTHON_STUB_MODE -ErrorAction SilentlyContinue
+Complete-Scenario $b
+
+# --- scenario: kimi-version-carry (failed probe never clobbers the snapshot) -------
+
+$b = $script:failCount
+Set-SnapshotWithKimi "1.2.3" "7.7.7" "6.1.1" "9.9.9"
+Copy-Item $PinnedFixture $SpTemplate -Force
+if (Test-Path $PendingFile) { Remove-Item $PendingFile -Force }
+if (Test-Path $ReportsDir) { Remove-Item -Recurse -Force $ReportsDir }
+$env:KIMI_STUB_MODE = "version-fail"
+Invoke-Drift "kimi-version-carry" "noaction" "" 60000
+$snapAfter = Get-Content $SnapshotFile -Raw | ConvertFrom-Json
+Assert-True ($snapAfter.kimi -eq "9.9.9") "failed kimi probe carries the last known-good version forward"
+Assert-True ($script:LastReport -match "backup-lane probes skipped") "skip note is emitted instead of a cascade"
+Remove-Item Env:KIMI_STUB_MODE -ErrorAction SilentlyContinue
 Complete-Scenario $b
 
 # --- scenario: triage-timeout (LAST - see header) ----------------------------------
