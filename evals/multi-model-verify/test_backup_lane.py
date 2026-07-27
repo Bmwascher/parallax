@@ -131,6 +131,19 @@ def test_backup_lane_evidence_pins():
     assert "`Loading agent:` line naming the committed yaml" in body
     assert "`Loaded tools:` line equal to the allowlist exactly" in body
     assert "DISCARDED unread" in body
+    # 0.14.3: the offset rule assumes an append-only file and kimi's
+    # client does not guarantee one. Rotation currently FAILS on
+    # Windows (WinError 32, log still open), so offsets have held by
+    # accident - if rotation ever succeeds, every byte position from
+    # the earlier measurement is meaningless and the check would read
+    # whatever happens to sit there.
+    assert ("Rotation guard" in body)
+    assert ("if after the call the file is SMALLER than the captured "
+            "offset, or absent") in body
+    # re-reading the rotated file from zero is the tempting wrong
+    # answer: it attributes lines that may belong to any session
+    assert ("not a reason to re-read from zero" in body)
+    assert ("offsets have held by accident rather than by design" in body)
     # 0.14.2 Kimi panel round 2 (4b): the three PASS conditions were
     # pinned but the probe's CONFIGURATION FIDELITY was not - a probe
     # run under a stricter config than the debate's would pass while
@@ -429,6 +442,18 @@ def test_skill_and_readme_route_the_lane():
             "reviewer lane") in readme
 
 
+# `docs/**` is DELIBERATELY out of scope and must stay that way. The
+# requirement this sweep enforces is placeholder discipline on DISPATCH
+# surfaces - the files an agent reads to build a command. docs/ holds
+# design specs, plans, and retained round evidence that legitimately
+# QUOTE model ids as historical record (~40 occurrences today); sweeping
+# them would manufacture false reds, and the predictable response to a
+# perpetually red test is to weaken it. Raised and correctly declined
+# during the 0.14.2 panel; recorded here so it is not re-litigated.
+# (Note: docs/superpowers/plans/2026-07-25-kimi-backup-lane.md claims the
+# literal appears ONLY in notes.md and this file. That was true of
+# operational surfaces when written and is false of docs/ itself - left
+# as-is, being a historical record of what was planned, not a live rule.)
 SWEEP_GLOBS = [
     "skills/**/*.md", "skills/**/*.yaml", "commands/*.md", "tools/*.ps1",
     "hooks/*", "evals/**/*.py", "evals/**/*.json", "evals/**/*.ps1",
