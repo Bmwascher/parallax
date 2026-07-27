@@ -144,6 +144,17 @@ def test_backup_lane_evidence_pins():
     # answer: it attributes lines that may belong to any session
     assert ("not a reason to re-read from zero" in body)
     assert ("offsets have held by accident rather than by design" in body)
+    # 0.14.3 fable review F1: DETECTION without a DISPOSITION leaves the
+    # driver to invent a rule. The nearby "DISCARDED unread" pin above is
+    # satisfied by the pre-existing bullet, so the guard's consequence
+    # half needs its own pin or it deletes green - pin-integrity instance
+    # ten in this file.
+    assert ("That is a route-attribution failure" in body)
+    # F4: the residual gap's CONTINGENCY is the only recorded instruction
+    # for the day rotation starts succeeding. The surrounding caveat prose
+    # is deliberately left unpinned - it is narrative, not a rule.
+    assert ("compare file identity (creation time) too, not just length"
+            in body)
     # 0.14.2 Kimi panel round 2 (4b): the three PASS conditions were
     # pinned but the probe's CONFIGURATION FIDELITY was not - a probe
     # run under a stricter config than the debate's would pass while
@@ -414,6 +425,14 @@ def test_fallbacks_backup_wiring():
     assert "codex-missing" in fb and "model-rejected" in fb
     assert "quota-exhausted" in fb and "auth-expired" in fb
     assert "route-attribution" in fb
+    # 0.14.3 fable review F3: the class's stated no-retry rationale is
+    # "nothing transient", which is true of a wrong id or a stray tool but
+    # NOT of a rotation under the call - that one would yield clean
+    # evidence on a re-dispatch. The disposition is still right, for a
+    # different reason, and the reason has to be on the record or the two
+    # files read as a contradiction.
+    assert ("a rotation under the call is the one member that IS "
+            "transient") in fb
     assert "LLM not set" in fb
     assert "access_terminated_error" in fb
 
