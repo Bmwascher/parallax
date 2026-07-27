@@ -4,9 +4,9 @@ Date: 2026-07-27
 Backlog item: 1 of 6 (docs/superpowers/plans/2026-07-27-0150-backlog.md)
 Target release: 0.15.0
 
-**Revision 3**, after three rounds of cross-vendor plan debate across two
-reviewer lanes, which found ten defects between them. The mechanism
-changed twice: sentence splitting is gone, pin collection is a
+**Revision 4**, after four rounds of cross-vendor plan debate across two
+reviewer lanes, which found fourteen defects between them. The mechanism
+changed three times: sentence splitting is gone, pin collection is a
 clause-matching rule rather than a tree walk, and marker rejection now
 runs over the whole document text. What changed and why is in "Revision
 history" at the end. Read it before proposing a return to any earlier
@@ -145,10 +145,17 @@ checker could never run.
   | `body.count("literal")`, alone or compared `== n`, `>= n` (n ≥ 1) or `> n` (n ≥ 0) | the call's arguments |
   | `<clause> and <clause>` | the union |
 
+  **The needle must be a plain string literal, not an expression
+  containing one.** Adjacent literals fold into one constant at parse
+  time, so nearly every existing pin qualifies. A conditional does not:
+  `assert ("x" if flag else "y") in body` requires only the selected
+  branch, and collecting every constant beneath the operand would pin the
+  other one too.
+
   Everything else contributes nothing: a failure message, `not`,
   `not in`, `or`, `==` against anything but a positive count, a bare
   name, a call that is not `.count`. Measured on the live suite, the
-  clause rule takes 715 strings down to 371. All nine regions in scope
+  clause rule takes 715 strings down to 366. All nine regions in scope
   keep the coverage they had, and all three history controls stay
   covered, so nothing load-bearing is lost.
 
@@ -203,10 +210,19 @@ The reader never has to search 633 assertions to find which one is short.
 
 ## Accepted limits
 
-- **A pin must be written as a literal in one of the three clause
-  forms.** Three real losses are accepted, all with the same safe failure
-  direction — the region reads uncovered, which is a red, and the author
-  rewrites the assertion:
+- **Every positive assertion outside the three clause forms is rejected,
+  whatever it means.** This is the categorical statement, and it is the
+  honest way to put it: the checker does not attempt to understand
+  assertions, it recognizes three shapes. Reversed count comparisons
+  (`1 == body.count("x")`), chained comparisons, `all(...)`
+  comprehensions, walruses, `count(...) != 0`, and a conditional operand
+  all lock text and are all dropped. So are the three named below. The
+  failure direction is identical in every case — the region reads
+  uncovered, which is a red, and the author rewrites the assertion into
+  one of the three forms. Listing only a few losses would suggest the
+  rest are handled.
+
+  The three worth naming, because each is live:
   - A string bound to a variable and asserted through that name. One such
     pin exists today, in `test_seat_reshuffle.py`. Following name
     bindings was considered and rejected as machinery with no failure
@@ -221,18 +237,18 @@ The reader never has to search 633 assertions to find which one is short.
     larger rule than the one it would serve. An author who wants a
     marked region locked writes a membership assertion instead.
   - A literal compared with `==`.
-- **A typo in the comment opener or the keyword makes a marker invisible
-  rather than rejected.** The failure table's promise covers comments the
-  detector RECOGNIZES as ours; anything that misses the detector entirely
-  is not seen at all. The class is wider than one spelling:
-  `<!-- contract : start id=x -->` with a space before the colon,
-  `<!--- contract:start id=x -->` with a mistyped opener, and anything
-  else that breaks `<!--` immediately followed by `contract:`. It cannot
-  cause a silent deletion in practice, and the argument covers the whole
-  class rather than one member: a one-sided typo is caught by the partner
-  marker, and a two-sided typo while ADDING a region is caught by the
-  declared inventory, which the task order always populates before any
-  document is touched.
+- **A typo in the comment OPENER makes a marker invisible rather than
+  rejected.** The detector tolerates a spaced colon, so
+  `<!-- contract : start id=x -->` is now rejected rather than ignored.
+  What it cannot see is a broken `<!--`, as in
+  `<!--- contract:start id=x -->`. The failure table's promise covers
+  comments the detector recognizes as ours; a mistyped opener is not one.
+  This is a real limit and the safety argument is PROCESS-dependent
+  rather than mechanical: a one-sided typo leaves an unmatched partner
+  marker and fails, and a two-sided typo while ADDING a region fails
+  against the declared inventory, which this plan's task order always
+  populates before any document is touched. A different task order would
+  not have that protection.
 - **The count form matches any receiver named `count`, not only a
   document.** `ast` sees a method name, never a type, so
   `paths.count("The rule stands.")` over a list would register as a pin.
@@ -278,13 +294,16 @@ temporary directory, each a small document plus a small test file:
 | region text present only in a `not in` assertion | fails — that asserts absence |
 | region text present only in `("text" in body) == False` | fails — the enclosing expression inverts the clause |
 | region text present only in `flag or "text" in body` | fails — the assertion does not require it |
+| region text present only in one branch of a conditional operand | fails — only the selected branch is required |
 | region text present only in `body.count("text") == 0` | fails — a zero count asserts absence |
 | region text present only in an `==` comparison | fails — not one of the three clause forms |
 | region text in a `body.count(...)` assertion | passes — the second positive shape |
 | declared region absent from documents | fails — the deletion hole |
 | `contract:` comment with invalid syntax | fails — the vanishing-region hole |
 | `contract:` comment with no closing `-->` | fails — otherwise it is invisible |
-| a `contract:` comment split across lines | fails — a line-by-line scan alone would miss it entirely |
+| a `contract:` comment split across lines, by any line boundary | fails — a line-by-line scan alone would miss it entirely |
+| a marker preceded elsewhere in the file by a stray `<!--` | fails — openers are found directly, so nothing can swallow one |
+| `<!-- contract : start id=x -->` with a spaced colon | fails — the opener tolerates the space so the spelling is rejected, not ignored |
 | a marker sharing its line with prose | fails — markers own their line |
 | a `shared-contract:` comment from the 0.12.0 parity mechanism | ignored — a different marker family, not ours |
 | start marker with no end | fails |
@@ -406,6 +425,36 @@ and both lanes independently reported the same one:
     the pattern this whole mechanism exists to break: a defect inside the
     fix, in the last-written and least-checked artifact.
 
-The lane that ran the code found eight of the ten. The lane that could
-only read found the one written into the instruction file, which running
-the code would never have surfaced. Neither seat was redundant.
+**Revision 3** applied those, and a fourth round across both lanes found
+four more — again including one inside the fix for the one before:
+
+11. **The clause rule collected every constant beneath an operand.**
+    `assert ("x" if flag else "y") in body` requires only the selected
+    branch, so the other became a pin the assertion never checks. The
+    needle must now be a plain string literal.
+12. **Single-line-ness was tested with `"\n" in span`.** `splitlines`
+    also breaks on `\r`, `\v`, `\f`, `\x1c`-`\x1e`, `\x85`, ` ` and
+    ` `, so a marker split by a bare CR passed the whole-text check
+    and was then split into two invisible halves by the line scan.
+13. **A stray comment opener could swallow a real marker.** The
+    whole-text pass iterated comment SPANS, and `re.finditer` yields
+    non-overlapping matches, so a `<!-->` earlier in the file consumed
+    forward through a later marker's `-->`. Openers are now found
+    directly.
+14. **The rewritten CLAUDE.md text was itself wrong** — it named two
+    clause forms where the code has three, omitted the count bounds, and
+    contradicted itself on `==`. That is the instruction-file defect
+    recurring inside its own fix, and both lanes reported it.
+
+The same round corrected the accepted limits: a wrong line citation
+copied from a review without checking, a "one case" claim where at least
+five live assertions match, an unstated `.count` receiver limit, and a
+marker-spelling limit that named one spelling out of a class. The spaced
+colon is no longer a limit at all — the opener now tolerates the space so
+the spelling is rejected rather than ignored.
+
+Across four rounds the lane that ran the code found eleven of the
+fourteen. The lane that could only read found the instruction-file
+defects, twice, which running the code would never have surfaced.
+Neither seat was redundant, and every round found something inside the
+previous round's fixes.
