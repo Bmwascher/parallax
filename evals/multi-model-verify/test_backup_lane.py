@@ -216,8 +216,14 @@ def test_backup_lane_workspace_is_a_mirror_not_a_clone():
             "each has a defined action") in body
     assert ("**Deletion-only entries** (` D` / `D `): OMIT them" in body)
     assert ("HEAD plus the baseline already bind the absence" in body)
+    # instance 9, on text added two commits earlier: this pin stopped at
+    # the destination rule, leaving the source half unpinned - and an
+    # `R` source is not literally a ` D` entry, so without that sentence
+    # a driver has a defined action for `new` and an invented one for
+    # `old`. The class applies to new text the day it lands.
     assert ("**Rename or copy entries** (`R`/`C`, `old -> new`): hash "
-            "the CURRENT DESTINATION path") in body
+            "the CURRENT DESTINATION path. The source path is a "
+            "deletion and falls under the rule above.") in body
     # separator and encoding are pinned too: without them two captures
     # are equivalent but not byte-comparable
     assert ("the repo-relative path, a single space, then the SHA-256 of "
