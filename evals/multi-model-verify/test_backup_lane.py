@@ -131,6 +131,38 @@ def test_backup_lane_evidence_pins():
     assert "`Loading agent:` line naming the committed yaml" in body
     assert "`Loaded tools:` line equal to the allowlist exactly" in body
     assert "DISCARDED unread" in body
+    # 0.14.3: the offset rule assumes an append-only file and kimi's
+    # client does not guarantee one. Rotation currently FAILS on
+    # Windows (WinError 32, log still open), so offsets have held by
+    # accident - if rotation ever succeeds, every byte position from
+    # the earlier measurement is meaningless and the check would read
+    # whatever happens to sit there.
+    assert ("Rotation guard" in body)
+    assert ("if after the call the file is SMALLER than the captured "
+            "offset, or absent") in body
+    # re-reading the rotated file from zero is the tempting wrong
+    # answer: it attributes lines that may belong to any session
+    assert ("not a reason to re-read from zero" in body)
+    assert ("offsets have held by accident rather than by design" in body)
+    # 0.14.3 fable review F1: DETECTION without a DISPOSITION leaves the
+    # driver to invent a rule. The nearby "DISCARDED unread" pin above is
+    # satisfied by the pre-existing bullet, so the guard's consequence
+    # half needs its own pin or it deletes green - pin-integrity instance
+    # ten in this file.
+    assert ("That is a route-attribution failure" in body)
+    # F4: the residual gap's CONTINGENCY is the only recorded instruction
+    # for the day rotation starts succeeding.
+    assert ("compare file identity (creation time) too, not just length"
+            in body)
+    # 0.14.3 Sol panel round 1 (claim 6), REVERSING the session's earlier
+    # call that this paragraph was narrative and not worth pinning. It is
+    # not narrative: it states that the detection check has a known
+    # FALSE-NEGATIVE boundary, and a driver who reads only the detection
+    # rule over-trusts the guard. What a driver believes about coverage
+    # is contract.
+    assert ("The size test is necessary, not sufficient: a rotation "
+            "whose replacement file grew back PAST the captured offset "
+            "within the same call would slip through.") in body
     # 0.14.2 Kimi panel round 2 (4b): the three PASS conditions were
     # pinned but the probe's CONFIGURATION FIDELITY was not - a probe
     # run under a stricter config than the debate's would pass while
@@ -401,6 +433,24 @@ def test_fallbacks_backup_wiring():
     assert "codex-missing" in fb and "model-rejected" in fb
     assert "quota-exhausted" in fb and "auth-expired" in fb
     assert "route-attribution" in fb
+    # 0.14.3 fable review F3: the class's stated no-retry rationale is
+    # "nothing transient", which is true of a wrong id or a stray tool but
+    # NOT of a rotation under the call - that one would yield clean
+    # evidence on a re-dispatch. The disposition is still right, for a
+    # different reason, and the reason has to be on the record or the two
+    # files read as a contradiction.
+    # 0.14.3 Sol panel round 1 (claim 5): the pin below MUST run to the
+    # end of the justification. Stopping at "IS transient" named the
+    # exception while leaving the operative half - WHY the retry is still
+    # skipped, and WHO decides the re-spend - deletable green. That is
+    # pin-integrity instance eleven, reproduced inside the very sentence
+    # added this cycle to fix instance ten.
+    assert ("a rotation under the call is the one member that IS "
+            "transient — a re-dispatch with a freshly captured offset "
+            "would produce clean evidence. It still skips the retry, "
+            "because the round already spent is unattributable and no "
+            "retry can make it attributable after the fact; the user "
+            "decides at the gate whether to spend another.") in fb
     assert "LLM not set" in fb
     assert "access_terminated_error" in fb
 
@@ -429,6 +479,19 @@ def test_skill_and_readme_route_the_lane():
             "reviewer lane") in readme
 
 
+# `docs/**` is DELIBERATELY out of scope and must stay that way. The
+# requirement this sweep enforces is placeholder discipline on DISPATCH
+# surfaces - the files an agent reads to build a command. docs/ holds
+# design specs, plans, and retained round evidence that legitimately
+# QUOTE model ids as historical record (92 occurrences across 20 files
+# as of 63fa715); sweeping
+# them would manufacture false reds, and the predictable response to a
+# perpetually red test is to weaken it. Raised and correctly declined
+# during the 0.14.2 panel; recorded here so it is not re-litigated.
+# (Note: docs/superpowers/plans/2026-07-25-kimi-backup-lane.md claims the
+# literal appears ONLY in notes.md and this file. That was true of
+# operational surfaces when written and is false of docs/ itself - left
+# as-is, being a historical record of what was planned, not a live rule.)
 SWEEP_GLOBS = [
     "skills/**/*.md", "skills/**/*.yaml", "commands/*.md", "tools/*.ps1",
     "hooks/*", "evals/**/*.py", "evals/**/*.json", "evals/**/*.ps1",

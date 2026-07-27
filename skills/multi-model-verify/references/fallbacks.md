@@ -150,7 +150,15 @@ choice.
     at the consent gate; a mid-debate outage notes the kimi session id
     in the debate record so the debate resumes after the reset.
   - route-attribution failure (offset rule in backup-lane.md): nothing
-    transient → no retry, reply DISCARDED unread, consent gate.
+    transient → no retry, reply DISCARDED unread, consent gate. One
+    exception to the RATIONALE, not to the disposition: a rotation under
+    the call is the one member that IS transient — a re-dispatch with a
+    freshly captured offset would produce clean evidence. It still skips
+    the retry, because the round already spent is unattributable and no
+    retry can make it attributable after the fact; the user decides at
+    the gate whether to spend another. Stated here so the class's
+    "nothing transient" premise is not read as covering a member it
+    does not describe.
   - output-encoding failure — class `output-encoding`:
     `UnicodeEncodeError` / `'charmap' codec can't encode character`
     from the kimi process on a Windows driver. The round COMPLETED and
