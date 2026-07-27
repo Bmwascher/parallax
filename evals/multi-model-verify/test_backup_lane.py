@@ -112,8 +112,20 @@ def test_backup_lane_dispatch_and_resume_pins():
 
 
 def test_backup_lane_evidence_pins():
-    body = _read(BACKUP_LANE)
-    assert "capture the byte length of" in body
+    # normalized: these pins now span markdown wraps, and a re-wrap is
+    # not a semantic change (same reasoning as the write-probe pin)
+    body = _norm(BACKUP_LANE)
+    # 0.14.2 Kimi panel round 3 (instance 7, the worst of the class):
+    # the rule has two halves - capture the offset, then require the
+    # three lines PAST IT. Only the capture half was pinned, and
+    # "past that offset" appeared in no file under evals/ at all.
+    # Deleting it left every pin green while the check stopped
+    # attributing anything: kimi.log is a shared append stream, so
+    # without the offset the three lines can be satisfied by an earlier
+    # debate's entries - the exact route-attribution failure this rule
+    # exists to prevent.
+    assert ("capture the byte length of `~/.kimi/logs/kimi.log`; after "
+            "the call, past that offset") in body
     assert ("exactly one new `Using LLM model:` line carrying the "
             "canonical backup id") in body
     assert "`Loading agent:` line naming the committed yaml" in body
@@ -124,8 +136,10 @@ def test_backup_lane_evidence_pins():
     # run under a stricter config than the debate's would pass while
     # the real debate config could still write. That is a silent
     # weakening in the dangerous direction, so the clause is pinned.
-    assert ("in a fresh\n  disposable session with the exact debate "
-            "configuration") in _read(BACKUP_LANE)
+    # normalized, not raw: a pure re-wrap of this bullet is not a
+    # semantic change and should not false-red the pin
+    assert ("in a fresh disposable session with the exact debate "
+            "configuration") in body
     assert ("explicit refusal in the reply, marker absent on disk, "
             "mirror status delta empty") in body
     assert "Never run `kimi export` inside a repo" in body
@@ -286,6 +300,13 @@ def test_backup_lane_client_config_sweep():
             "repo-level `.agents/skills` advertisement") in body
     assert "never a finding" in body
     assert "do not infer either key's value" in body
+    # instance 8, same shape at lower severity: the comment claims both
+    # keys are RECORDED, but only the disposition half was pinned.
+    # Dropping "and RECORDED" leaves a driver reading the keys and
+    # discarding them, which defeats the section's own justification -
+    # the check is what makes the effort claim true rather than assumed,
+    # and that only holds if the read reaches the record.
+    assert "read and RECORDED in the debate record" in body
     # the key alone is not the surface - a true key over empty sources
     # merges nothing, so the check reads key AND sources together
     # (probed 2026-07-26: true key, every source absent = LATENT)
