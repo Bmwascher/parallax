@@ -30,7 +30,7 @@ less than it appeared to, and nothing measured the gap.
 ## Goal
 
 Detect under-pinning mechanically. Keep substring pins as the way contract
-text is locked. Do not replace the 529 existing assert statements.
+text is locked. Do not replace the 633 existing assert statements in `evals/**/test_*.py`.
 
 Explicitly out of scope: proving a pin is semantically correct, and
 locking text that is explanation rather than rule.
@@ -148,7 +148,7 @@ All of the following are hard failures, never warnings:
 
 A coverage failure names the region id, the file, and the exact uncovered
 sentence, then states the fix in one line: add a pin containing that
-sentence whole. The reader never has to search 529 assertions to find
+sentence whole. The reader never has to search 633 assertions to find
 which one is short.
 
 ## Accepted limits

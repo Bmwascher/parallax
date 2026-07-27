@@ -16,7 +16,7 @@
 - All marker and coverage problems are hard test failures. Never warnings, never skips.
 - Sentence split rule: `.`, `?` or `!` followed by whitespace then a capital letter. Abbreviation exceptions, exactly this list: `e.g.`, `i.e.`, `vs.`, `etc.`, `cf.`
 - Region text and pin text are both whitespace-normalized before comparison, matching the existing `_norm` convention (`" ".join(text.split())`).
-- Do not modify the 529 existing assert statements except to extend ones the checker proves are short.
+- Do not modify the 633 existing assert statements in `evals/**/test_*.py` except to extend ones the checker proves are short.
 - Do not reword any text inside a marked region in this plan. Rewording contract text is a separate reviewed change. Item 5 of the backlog will do that for the rotation guard.
 - Every task ends green on all four offline gates:
   `python evals/tools/skill_lint.py skills/multi-model-verify --strict`,
@@ -806,9 +806,9 @@ Expected: FAIL, `declared region(s) not found in any document:
 
 - [ ] **Step 3: Mark the operative sentences in panels.md**
 
-In `skills/multi-model-verify/references/panels.md`, wrap only the two
-operative sentences. The narrative sentences before them, and the
-changelog source note after them, stay outside.
+In `skills/multi-model-verify/references/panels.md`, wrap only the
+operative sentence. The narrative sentences before it, and the changelog
+source note after it, stay outside.
 
 Place `<!-- contract:start id=panel-floor-reference -->` immediately
 before the sentence beginning `Check \`claude`, and
@@ -918,9 +918,13 @@ git commit -m "0.15.0: mark the panel harness floor and extend the two pins it p
 - Consumes: `DECLARED_REGIONS` from Tasks 4 and 5.
 - Produces: two more ids, completing the inventory at six.
 
-Scope narrowing, recorded deliberately: `fallbacks.md` defines eleven
-failure classes. This task marks the two with recorded failures behind
-them, `panel-lane-loss` and `panel-lane-unavailable`. The 0.14.4 review
+Scope narrowing, recorded deliberately. `fallbacks.md` states its
+classes in two shapes: ten `###`-headed entries, and a bullet list of
+backup-lane classes under the backup reviewer section. Five entries name
+a class in backticks. No single count covers them all, so the selection
+rule is stated instead of a total: this task marks the two entries with
+recorded failures behind them, both `###`-headed, `panel-lane-loss` at
+`fallbacks.md:190` and `panel-lane-unavailable` at `fallbacks.md:210`. The 0.14.4 review
 found that new text contradicted `panel-lane-loss` while inventing
 mechanics for a case that had no class, so these two are where the
 evidence is. The other nine get marked as they are next edited.
