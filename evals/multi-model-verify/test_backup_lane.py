@@ -205,6 +205,19 @@ def test_backup_lane_workspace_is_a_mirror_not_a_clone():
     assert ("any tracked file modified relative to HEAD" in body)
     # recursion, format, order, timing
     assert "Directories expand RECURSIVELY to their files" in body
+    # 0.14.2 Sol round 5: coverage said "exactly the baseline paths" and
+    # the format said "SHA-256 of the file's raw bytes" - but a ` D`
+    # entry is a path with NO file, and a rename entry is two paths.
+    # Both left the driver inventing a rule, in a section whose whole
+    # claim is that no judgment remains. (Cross-lane split: the other
+    # lane saw this and rated it readability; adjudicated to Sol - an
+    # undefined action on a real entry shape is an executability gap.)
+    assert ("Two baseline entry shapes are not hashable as written, and "
+            "each has a defined action") in body
+    assert ("**Deletion-only entries** (` D` / `D `): OMIT them" in body)
+    assert ("HEAD plus the baseline already bind the absence" in body)
+    assert ("**Rename or copy entries** (`R`/`C`, `old -> new`): hash "
+            "the CURRENT DESTINATION path") in body
     # separator and encoding are pinned too: without them two captures
     # are equivalent but not byte-comparable
     assert ("the repo-relative path, a single space, then the SHA-256 of "

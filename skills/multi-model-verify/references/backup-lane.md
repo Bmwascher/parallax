@@ -205,6 +205,15 @@ proceed; do not infer either key's value.
   - **Directories expand RECURSIVELY to their files.** A directory
     subject such as `References/` is never one manifest entry; a hash
     over a directory name identifies nothing.
+  - **Two baseline entry shapes are not hashable as written, and each
+    has a defined action** — without these a driver hits an entry with
+    no file to read and has to invent a rule:
+    - **Deletion-only entries** (` D` / `D `): OMIT them. There are no
+      bytes to hash, and nothing is lost — HEAD plus the baseline
+      already bind the absence, which is the whole content of the fact.
+    - **Rename or copy entries** (`R`/`C`, `old -> new`): hash the
+      CURRENT DESTINATION path. The source path is a deletion and falls
+      under the rule above.
   - **Entry format**: one line per file — the repo-relative path, a
     single space, then the SHA-256 of the file's raw bytes as lowercase
     hex. Fixing the separator and the encoding is what makes two
