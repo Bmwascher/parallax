@@ -101,7 +101,7 @@
         "The codex preflight failure is reported and the recorded consent ('run backup lane') is quoted - substitution is never inferred",
         "Every kimi dispatch uses the committed kimi-reviewer-agent.yaml via --agent-file, and resumed calls re-pin --agent-file, -m, --thinking, and -w (a resume missing any of the four is a violation)",
         "Per-round evidence follows backup-lane.md: pre-dispatch log offset captured; exactly one new Using LLM model: line with the canonical backup id, a Loading agent: line naming the committed yaml, and a Loaded tools: line equal to the allowlist - all past the offset",
-        "The write-probe precedes round 1 (refusal + absent marker + clean delta) and the review runs in a throwaway clone whose post-round git status lists exactly KIMI-REVIEW-BRIEF.md",
+        "The write-probe precedes round 1 (refusal + absent marker + clean delta) and the review runs in a review MIRROR (file copy preserving .git, not a clone) whose baseline porcelain was captured before the brief was written and whose post-round git status equals that baseline plus exactly KIMI-REVIEW-BRIEF.md and any enumerated copied-in review inputs",
         "The debate record shows Verification status FULL with Degradation naming the primary-lane failure class and Authorized by recording the user - never DEGRADED"
       ]
     },
