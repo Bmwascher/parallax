@@ -1,12 +1,13 @@
 # Diff package - parallax 0.14.4
-# Range: f8bab1c..f5ed873d32a537effb58bda80935eeef811ebd99 (branch fix/harness-version-floor)
-# Base f8bab1c is the 0.14.3 merge commit.
+# Range: f8bab1c..f9926048ee3bb6849ee0e2dd0ff09a7d3a20fbcf (branch fix/harness-version-floor)
+# Base f8bab1c is the 0.14.3 merge commit. Regenerated at the round-2 subject.
 
 ## Commits (oldest first)
 b48bb8f 0.14.4: record the harness floor the Fable panel lane depends on, re-pin the superpowers fixture
 7b0b904 0.14.4: correct the retention claim in the 0.14.3 debate record
 f9fd9b9 0.14.4: bump plugin version
 f5ed873 0.14.4: pin the floor's operative half and give the below-floor case a class
+f992604 0.14.4: retain this cycle's gate output and round evidence
 
 ## Diffstat (full range, nothing excluded)
  .claude-plugin/plugin.json                         |    2 +-
@@ -37,6 +38,12 @@ f5ed873 0.14.4: pin the floor's operative half and give the below-floor case a c
  .../sol-diff-r7-reply.md                           |    3 +
  .../sol-diff-r7-transcript.txt                     |  395 ++
  .../2026-07-26-seat-reshuffle/fable-review.md      |   56 +
+ .../2026-07-27-harness-floor/diff-package.txt      |  693 +++
+ .../2026-07-27-harness-floor/fable-review.md       |   70 +
+ .../2026-07-27-harness-floor/gate-output.txt       |  130 +
+ .../2026-07-27-harness-floor/kimi-r1-reply.md      |   56 +
+ .../2026-07-27-harness-floor/mirror-baseline.txt   |  122 +
+ .../2026-07-27-harness-floor/mirror-manifest.txt   |  122 +
  .../base-absence-check.txt                         |   35 +
  .../2026-07-27-rotation-guard/debate-record.md     |  141 +
  .../2026-07-27-rotation-guard/diff-package.txt     |  170 +
@@ -62,21 +69,19 @@ f5ed873 0.14.4: pin the floor's operative half and give the below-floor case a c
  skills/multi-model-verify/references/fallbacks.md  |   20 +
  skills/multi-model-verify/references/panels.md     |   16 +
  tools/check-drift.ps1                              |    2 +-
- 53 files changed, 19616 insertions(+), 15 deletions(-)
+ 59 files changed, 20809 insertions(+), 15 deletions(-)
 
 ## Diff
-# EXCLUSIONS, declared precisely (an earlier package justified these
-# as 'not authored this cycle', which was FALSE of commit 7b0b904 -
-# it edits a file inside the first glob, this cycle):
-#
+# EXCLUSIONS, declared precisely:
 #  1. docs/superpowers/plans/rounds/2026-07-26-* and
-#     docs/superpowers/plans/rounds/2026-07-27-rotation-guard/ EXCEPT
-#     debate-record.md - ~40 files of retained 0.14.2/0.14.3 round
-#     transcripts, committed here as catch-up, not authored now.
-#     debate-record.md IS included below: 7b0b904 edits it this cycle.
+#     .../2026-07-27-rotation-guard/ EXCEPT debate-record.md - retained
+#     0.14.2/0.14.3 round transcripts, committed as catch-up, not
+#     authored now. debate-record.md IS included: 7b0b904 edits it.
 #  2. the renamed fixture body (6.1.1 -> 6.2.0) - a verbatim vendored
-#     copy of the superpowers template, not parallax-authored text.
-#     Its rename and header are visible in the diffstat above.
+#     copy of the superpowers template, not parallax-authored.
+#  3. this cycle's own round evidence under .../2026-07-27-harness-floor/
+#     - the fable review, gate output, mirror baseline/manifest and
+#     THIS package. Self-referential; readable directly at those paths.
 
 diff --git a/.claude-plugin/plugin.json b/.claude-plugin/plugin.json
 index 17a86ee..66ff3b3 100644

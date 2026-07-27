@@ -1,5 +1,4 @@
-?? docs/superpowers/plans/rounds/2026-07-27-harness-floor/diff-package.txt
-?? docs/superpowers/plans/rounds/2026-07-27-harness-floor/fable-review.md
+ M docs/superpowers/plans/rounds/2026-07-27-harness-floor/diff-package.txt
 !! .pytest_cache/.gitignore
 !! .pytest_cache/CACHEDIR.TAG
 !! .pytest_cache/README.md
