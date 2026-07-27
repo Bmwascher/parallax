@@ -181,11 +181,18 @@ proceed; do not infer either key's value.
     below would recursively hash repository metadata — objects, logs,
     index, hooks, config — which is volatile, potentially enormous, and
     identifies nothing about the reviewed material.
-  - **Coverage within that universe is one exclusion test, never an
-    enumerated list**: every FILE present in the mirror that HEAD does
-    not already bind — i.e.
-    every file whose bytes are not identical to its HEAD blob, plus
-    every file HEAD has no blob for. That single rule admits the
+  - **Coverage within that universe is exactly the paths the BASELINE
+    capture lists** — the same `--ignored -uall` output, so manifest and
+    baseline describe one tree state and cannot disagree. Those are, by
+    git's own reckoning, precisely the files HEAD does not bind. Do NOT
+    define coverage as "bytes differ from the HEAD blob": git applies
+    clean/smudge filters, so on a line-ending-normalizing checkout a
+    file git calls CLEAN is not byte-identical to its blob. Probed
+    2026-07-26 on this repo (`core.autocrlf=true`): `README.md` is
+    25843 bytes in the worktree and 25417 in the blob, reported clean by
+    `git status`; the byte rule classified 283 of 287 files as
+    manifest-worthy against a 122-entry baseline, degenerating to the
+    whole tree. Coverage by baseline admits the
     copied-in inputs, the gitignored subject material (frozen plan,
     spec, reference source), inherited untracked files whether ignored
     or not, and any tracked file modified relative to HEAD (which mode

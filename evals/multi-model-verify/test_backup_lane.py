@@ -158,11 +158,16 @@ def test_backup_lane_workspace_is_a_mirror_not_a_clone():
             in body)
     assert ("it may be a directory or, in a worktree or submodule "
             "checkout, a file — exclude it either way") in body
-    # coverage by exclusion test, so no file class can be omitted
-    assert ("Coverage within that universe is one exclusion test, never "
-            "an enumerated list") in body
-    assert ("every file whose bytes are not identical to its HEAD blob, "
-            "plus every file HEAD has no blob for") in body
+    # coverage is git's own reckoning, not a raw-byte comparison:
+    # found by EXECUTING this contract 2026-07-26 - with
+    # core.autocrlf=true a file git calls clean is not byte-identical
+    # to its blob, and the byte rule ballooned to 283/287 files against
+    # a 122-entry baseline
+    assert ("Coverage within that universe is exactly the paths the "
+            "BASELINE capture lists") in body
+    assert ('Do NOT define coverage as "bytes differ from the HEAD blob"'
+            in body)
+    assert ("git applies clean/smudge filters" in body)
     # the classes an enumerated list would have dropped
     assert ("inherited untracked files whether ignored or not" in body)
     assert ("any tracked file modified relative to HEAD" in body)
