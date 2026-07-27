@@ -150,6 +150,16 @@ def test_backup_lane_client_config_sweep():
             "repo-level `.agents/skills` advertisement") in body
     assert "never a finding" in body
     assert "do not infer either key's value" in body
+    # the key alone is not the surface - a true key over empty sources
+    # merges nothing, so the check reads key AND sources together
+    # (probed 2026-07-26: true key, every source absent = LATENT)
+    assert "plus the SOURCES it merges from" in body
+    assert "`extra_skill_dirs`" in body
+    assert "a LATENT surface with nothing to merge, not an active one" in body
+    # the populated-source case is honestly marked unprobed rather than
+    # waved through on the tool allowlist
+    assert ("treat a true key with a NON-EMPTY source as unprobed "
+            "territory") in body
 
 
 def test_skill_preflight_names_the_remediation():

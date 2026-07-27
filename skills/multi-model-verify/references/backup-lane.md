@@ -68,18 +68,30 @@ and neither is observable from the per-round route evidence above.
   `[models."<canonical-backup-model-id>".overrides]`. Absent means the
   lane runs at PROVIDER DEFAULT with no verifiable effort evidence.
   The consent banner already declares effort to be config-validation
-  only; this check is what makes that claim true rather than assumed
-  (observed absent 2026-07-26 — the block did not exist and the lane
-  had been running at provider default).
-- `merge_all_available_skills`. When true, the client merges every
-  available skill into the dispatched agent — the same class of
-  instruction back-channel as codex's repo-level `.agents/skills`
-  advertisement (SKILL.md preflight 3), on this lane's side of the
-  fence. Here it is observable rather than blind: the mirror carries
-  no `.agents/` once preflight remediation has run, and the per-round
-  `Loaded tools:` check is the load-bearing control. Record it as an
-  environment note citing the config path and line, exactly like the
-  primary lane's `~/.codex/AGENTS.md` — never a finding.
+  only; this check is what makes that claim true rather than assumed.
+  Probed 2026-07-26 (kimi-cli 1.49.0): the file carried ZERO
+  `overrides` blocks — the model table for the canonical id exists but
+  has no override sub-table — so the pin had never been set and every
+  round to date ran at provider default.
+- `merge_all_available_skills`, plus the SOURCES it merges from. The
+  key is the same class of instruction back-channel as codex's
+  repo-level `.agents/skills` advertisement (SKILL.md preflight 3), on
+  this lane's side of the fence, and the key alone does not tell you
+  whether anything is actually being merged — so enumerate the sources
+  in the same breath: `extra_skill_dirs`, `~/.kimi/skills`,
+  `~/.kimi/agents`, and any repo-local skill directory. Probed
+  2026-07-26 (kimi-cli 1.49.0): the key was `true` at
+  `~/.kimi/config.toml:10` while `extra_skill_dirs` was empty and none
+  of those directories existed — a LATENT surface with nothing to
+  merge, not an active one. What the key does once those directories
+  are populated is UNVERIFIED; treat a true key with a NON-EMPTY
+  source as unprobed territory and say so in the record rather than
+  assuming the allowlist absorbs it. The standing mitigations are
+  unchanged: the mirror carries no `.agents/` once preflight
+  remediation has run, and the per-round `Loaded tools:` check is the
+  load-bearing control. Record key and sources together as an
+  environment note citing path and line, exactly like the primary
+  lane's `~/.codex/AGENTS.md` — never a finding.
 
 A config file that cannot be read is itself the note: record that and
 proceed; do not infer either key's value.
