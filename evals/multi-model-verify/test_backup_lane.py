@@ -446,7 +446,8 @@ def test_skill_and_readme_route_the_lane():
 # requirement this sweep enforces is placeholder discipline on DISPATCH
 # surfaces - the files an agent reads to build a command. docs/ holds
 # design specs, plans, and retained round evidence that legitimately
-# QUOTE model ids as historical record (~40 occurrences today); sweeping
+# QUOTE model ids as historical record (92 occurrences across 20 files
+# as of 63fa715); sweeping
 # them would manufacture false reds, and the predictable response to a
 # perpetually red test is to weaken it. Raised and correctly declined
 # during the 0.14.2 panel; recorded here so it is not re-litigated.
