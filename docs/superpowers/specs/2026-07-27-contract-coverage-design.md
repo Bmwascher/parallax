@@ -195,6 +195,12 @@ The reader never has to search 633 assertions to find which one is short.
   region read as uncovered, which is a red, and the author rewrites the
   assertion. It can never manufacture coverage. Following name bindings
   was considered and rejected as machinery with no failure behind it.
+- **The keyword must be spelled `contract:` with no space before the
+  colon.** `<!-- contract : start id=x -->` matches neither the detector
+  nor the strict forms, so it is ignored rather than rejected. It cannot
+  cause a silent deletion in practice: a one-sided typo is caught by the
+  partner marker, and a two-sided typo while ADDING a region is caught by
+  the declared inventory, which the task order always populates first.
 - **`body.count("x") == 0` would be collected.** That shape asserts
   absence, so counting it is wrong in principle, but no instance exists
   in the suite and the false-coverage path it opens needs a region whose

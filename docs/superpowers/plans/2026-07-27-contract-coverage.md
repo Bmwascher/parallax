@@ -1331,12 +1331,16 @@ In `CLAUDE.md`, under `## Skill editing rules`, append:
 
 ```markdown
 Contract text inside `contract:start` / `contract:end` HTML comment
-markers must sit WHOLE inside a single pin in `evals/multi-model-verify/`,
-where a pin is a string inside an `assert`. `test_contract_coverage.py`
-enforces it and lists any region that is not locked. A region too long
-for one pin is two regions. Adding or removing a marked region also means
-editing `DECLARED_REGIONS` in that file, which is what makes deleting a
-region visible.
+markers must sit WHOLE inside a single pin in `evals/multi-model-verify/`.
+A pin is a string literal on the left of `"literal" in body`, or an
+argument to `body.count("literal")`. Nothing else counts: a string in an
+assertion's failure message, under `not`, in a `not in` comparison, in an
+`==` comparison, or reached through a variable name locks nothing, and
+the checker will report the region as unlocked.
+`test_contract_coverage.py` enforces this and lists any region that is
+not locked. A region too long for one pin is two regions. Adding or
+removing a marked region also means editing `DECLARED_REGIONS` in that
+file, which is what makes deleting a region visible.
 ```
 
 - [ ] **Step 2: Add a row to the README component table**
