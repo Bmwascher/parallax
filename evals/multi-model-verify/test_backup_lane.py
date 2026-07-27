@@ -144,9 +144,23 @@ def test_mirror_baseline_closes_the_dirty_tree_hole():
     # touched them - and a tracked modification can never be absorbed
     # by any "untracked set" wording.
     body = _norm(BACKUP_LANE)
-    assert ("BASELINE, captured immediately after construction and "
-            "BEFORE the brief is written") in body
+    # timing is load-bearing and was WRONG in the first fix pass:
+    # preflight-3 remediation runs between construction and the brief,
+    # deleting entries and (tracked case) committing - so a baseline
+    # taken at construction fails every round of a remediated debate
+    # and pins a stale HEAD, reintroducing the false-quarantine on the
+    # one path the mirror exists to support
+    assert ("BASELINE, captured after construction AND after any "
+            "preflight-3 remediation, immediately before the brief is "
+            "written") in body
+    assert ("a baseline taken before it fails every round of a "
+            "remediated debate and pins a HEAD the mirror no longer "
+            "has") in body
     assert "A clone would have guaranteed this empty; a file copy does NOT" in body
+    # the check's reach is stated honestly rather than implied broader
+    assert "The porcelain check is PATH-level, not content-level" in body
+    assert ("governs what APPEARS in the mirror, never what mutates "
+            "inside it") in body
     # identity: HEAD alone stops being sufficient once uncommitted work
     # can ride in, so the record carries path + HEAD + baseline
     assert ("The mirror's identity in the debate record is its path, its "

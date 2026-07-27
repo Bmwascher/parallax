@@ -135,13 +135,23 @@ proceed; do not infer either key's value.
   above the repo root, an assignment PDF, a spec kept outside the tree —
   is copied in deliberately and enumerated before the round. An input the
   reviewer cannot read is a gap in the review, not a silent omission.
-- **BASELINE, captured immediately after construction and BEFORE the
-  brief is written**: `git status --porcelain` in the fresh mirror. A
-  clone would have guaranteed this empty; a file copy does NOT — the
-  real tree's untracked files and uncommitted modifications ride along,
-  and without a baseline every one of them quarantines every round of a
-  review that never touched them. Tracked modifications especially
-  cannot be absorbed by any "untracked set" wording.
+- **BASELINE, captured after construction AND after any preflight-3 remediation, immediately before the brief is written**:
+  `git status --porcelain` in the mirror. A clone would have guaranteed
+  this empty; a file copy does NOT — the real tree's untracked files
+  and uncommitted modifications ride along, and without a baseline
+  every one of them quarantines every round of a review that never
+  touched them. Tracked modifications especially cannot be absorbed by
+  any "untracked set" wording. The timing is load-bearing: remediation
+  deletes entries and in the tracked case commits, so a baseline taken
+  before it fails every round of a remediated debate and pins a HEAD
+  the mirror no longer has — and remediation is precisely the procedure
+  the mirror exists to support.
+- The porcelain check is PATH-level, not content-level: a file already
+  listed in the baseline shows the same entry however its content
+  changes, so baseline-dirty files are not write-visible to this check.
+  That blindness is bounded by the tool allowlist and the write-probe,
+  which stay the load-bearing controls — the porcelain check governs
+  what APPEARS in the mirror, never what mutates inside it.
 - After every round, `git status --porcelain` in the mirror must equal the BASELINE plus exactly the expected untracked set — the brief plus any review inputs copied in, enumerated before the round — and nothing else; any other delta quarantines that round's reply (integrity failure class). Both halves are declared in advance, which is what keeps the check exact rather than adjudicated after the fact.
 - The mirror's identity in the debate record is its path, its
   `git rev-parse HEAD`, AND its baseline. For a file copy HEAD alone
