@@ -36,7 +36,7 @@ param(
 $RepoRoot = Split-Path $PSScriptRoot
 $SnapshotFile = Join-Path $PSScriptRoot "drift-snapshot.json"
 $ReportDir = Join-Path $PSScriptRoot "drift-reports"
-$FixtureFile = Join-Path $RepoRoot "evals\multi-model-verify\fixtures\superpowers-code-reviewer-6.1.1.md"
+$FixtureFile = Join-Path $RepoRoot "evals\multi-model-verify\fixtures\superpowers-code-reviewer-6.2.0.md"
 $ChangelogUrl = "https://raw.githubusercontent.com/anthropics/claude-code/main/CHANGELOG.md"
 # Keywords in a Claude Code changelog entry that can affect parallax's
 # hook, skill loading, or the behavioral runner's headless invocation.

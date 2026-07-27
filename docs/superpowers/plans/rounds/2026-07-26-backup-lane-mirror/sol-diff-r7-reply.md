@@ -1,0 +1,3 @@
+The characterization is confirmed. The assertion now requires both the current-destination hashing rule and the source-path deletion rule, matching the complete contract language ([test_backup_lane.py](C:/Users/Brandon/Documents/parallax/evals/multi-model-verify/test_backup_lane.py:219), [backup-lane.md](C:/Users/Brandon/Documents/parallax/skills/multi-model-verify/references/backup-lane.md:208)). The diff contains no change beyond strengthening this pin and introduces no defect. PASS
+
+OVERALL VERDICT: PASS — range `c73ca2f..ce2e9d7` is sound.

@@ -49,6 +49,16 @@ def test_fable_panel_reviewer_exists_and_pins():
     assert "the resume surface carries no model parameter" in body
     assert "probed 2026-07-26" in body
     assert "cite the subject revision" in body
+    # 0.14.4 drift triage: the resume property is HARNESS-VERSION
+    # DEPENDENT, not a platform invariant. Before Claude Code 2.1.216 a
+    # resumed background agent silently reverted to the DEFAULT agent,
+    # losing the model pin, this system prompt, AND the read-only tool
+    # restriction - the exact containment the lane's evidence class
+    # rests on. Both probes ran on 2.1.220, after the fix, so the
+    # unqualified wording read as a platform guarantee. The floor must
+    # travel with the claim.
+    assert "Claude Code 2.1.216" in body
+    assert "silently reverted to the default agent" in body
 
 
 def test_escalation_implementer_exists_and_pins():
@@ -89,6 +99,12 @@ def test_panels_reference_pins():
             "subject revision; a verdict against a stale revision is "
             "input, never terminal.") in body
     assert "hub-and-spoke" in body
+    # 0.14.4 drift triage: panels.md states the Fable lane's failure
+    # mode as "agent death, which is loud". That is true only at or
+    # above the floor - below it the lane had a SILENT failure mode
+    # that defeats the pin and the allowlist together, so the floor
+    # belongs next to the claim it qualifies, not only in the agent file.
+    assert "Claude Code 2.1.216" in body
 
 
 def test_backup_lane_panel_participation():
