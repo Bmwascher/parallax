@@ -144,8 +144,24 @@ def test_backup_lane_workspace_is_a_mirror_not_a_clone():
             "appear") in body
     # F4: HEAD binds tracked content only, and this lane's inputs are
     # deliberately outside it - so identity carries a content manifest
-    assert ("a CONTENT MANIFEST — path plus SHA-256 — of every review "
-            "input HEAD does not identify") in body
+    # 0.14.2 Sol round 2, F4 held at FIX: naming a manifest is not
+    # specifying one. The pin must constrain coverage, recursion,
+    # ordering, and capture point - otherwise "content manifest" as a
+    # phrase satisfies it while a driver cannot execute it.
+    assert "AND a CONTENT MANIFEST" in body
+    # coverage by exclusion test, so no file class can be omitted
+    assert ("Coverage is one exclusion test, never an enumerated list" in body)
+    assert ("every file whose bytes are not identical to its HEAD blob, "
+            "plus every file HEAD has no blob for") in body
+    # the classes an enumerated list would have dropped
+    assert ("inherited untracked files whether ignored or not" in body)
+    assert ("any tracked file modified relative to HEAD" in body)
+    # recursion, format, order, timing
+    assert "Directories expand RECURSIVELY to their files" in body
+    assert ("repo-relative path plus the SHA-256 of the file's raw bytes"
+            in body)
+    assert "sorted by path in byte order" in body
+    assert ("Captured at the same moment as the baseline" in body)
     # F8: absence of an override pin proves neither an override nor
     # provider-default; the record must not manufacture either
     assert ("Record a round with no contemporaneous config evidence as "

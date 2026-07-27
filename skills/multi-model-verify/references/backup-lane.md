@@ -168,16 +168,34 @@ proceed; do not infer either key's value.
   content manifest below for the inputs that matter.
 - After every round, the status command in the mirror must equal the BASELINE plus exactly the expected untracked set — the brief plus any review inputs copied in, enumerated before the round — and nothing else; any other delta quarantines that round's reply (integrity failure class). Both halves are declared in advance, which is what keeps the check exact rather than adjudicated after the fact.
 - The mirror's identity in the debate record is its path, its
-  `git rev-parse HEAD`, its baseline, AND a CONTENT MANIFEST — path plus
-  SHA-256 — of every review input HEAD does not identify: the copied-in
-  inputs and the gitignored material that is itself the review subject
-  (frozen plan, spec, reference source). HEAD binds tracked content
-  only, and in this lane the inputs that matter are deliberately outside
-  it, so without the manifest the record names what was reviewed without
-  being able to reconstruct it. If the baseline contains TRACKED
-  modifications the reviewed content is not the committed range:
-  disclose that in the record, and in mode diff take the mirror from a
-  tree whose tracked files are clean instead.
+  `git rev-parse HEAD`, its baseline, AND a CONTENT MANIFEST. HEAD binds
+  tracked content only, and in this lane the inputs that matter are
+  deliberately outside it, so without the manifest the record names what
+  was reviewed without being able to reconstruct it.
+- **The manifest, specified to be executable without judgment:**
+  - **Coverage is one exclusion test, never an enumerated list**: every
+    FILE present in the mirror that HEAD does not already bind — i.e.
+    every file whose bytes are not identical to its HEAD blob, plus
+    every file HEAD has no blob for. That single rule admits the
+    copied-in inputs, the gitignored subject material (frozen plan,
+    spec, reference source), inherited untracked files whether ignored
+    or not, and any tracked file modified relative to HEAD (which mode
+    diff bars outright and other modes permit only with disclosure). An
+    enumerated list would omit a class; this cannot.
+  - **Directories expand RECURSIVELY to their files.** A directory
+    subject such as `References/` is never one manifest entry; a hash
+    over a directory name identifies nothing.
+  - **Entry format**: one line per file, repo-relative path plus the
+    SHA-256 of the file's raw bytes.
+  - **Order**: sorted by path in byte order, so the manifest is
+    deterministic and two captures are diffable.
+  - **Captured at the same moment as the baseline** — after construction
+    and any preflight-3 remediation, immediately before the brief is
+    written — so the two describe the same tree state. The brief itself
+    is written after both and is therefore not in either.
+- If the baseline contains TRACKED modifications the reviewed content is
+  not the committed range: disclose that in the record, and in mode diff
+  take the mirror from a tree whose tracked files are clean instead.
 - The brief is retained as evidence per the raw-rounds convention.
 - Never run `kimi export` inside a repo — it writes a session zip into the current directory; export only from a scratch directory. Nothing in this lane uses export.
 
