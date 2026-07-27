@@ -82,8 +82,12 @@ toggled on, its stop-time review overlaps mode `diff` — expected, not a bug.
    debate — dispatch codex with the mirror as cwd, and keep citations
    resolvable in the real repo. Whether the removal needs a commit
    branches on tracked-ness, and the difference misreads as a failure:
-   a TRACKED entry's deletion shows as ` D` in `git status --porcelain`,
-   which violates the mirror's containment rule, so commit the removal
+   a TRACKED entry's deletion shows as ` D` in `git status --porcelain`
+   — a tracked MODIFICATION, which the post-remediation baseline would
+   absorb, so the per-round check is not what forces the issue: an
+   uncommitted ` D` leaves a tracked modification sitting in the
+   baseline, which bars mode diff and breaks HEAD-identifies-content
+   (references/backup-lane.md) — so commit the removal
    inside the mirror; an IGNORED or untracked entry's deletion shows
    nothing, no commit is possible, and HEAD legitimately stays where it
    was — `nothing to commit` alongside an unchanged HEAD is the CORRECT
