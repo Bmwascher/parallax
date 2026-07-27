@@ -33,6 +33,11 @@ def _read(p):
     return p.read_text(encoding="utf-8")
 
 
+def _norm(p):
+    """Whitespace-normalized read, for pins that span a markdown wrap."""
+    return " ".join(_read(p).split())
+
+
 def test_backup_artifacts_exist():
     for p in (BACKUP_LANE, AGENT_YAML, SYSTEM_MD):
         assert p.is_file(), str(p)
@@ -80,7 +85,7 @@ def test_backup_lane_dispatch_and_resume_pins():
     # check would stay green through it (final-review finding, 0.13.0)
     assert ("kimi --quiet --thinking -m <canonical-backup-model-id> "
             "--agent-file <plugin-checkout>/skills/multi-model-verify/"
-            "references/kimi-reviewer-agent.yaml -w <throwaway-clone> -p"
+            "references/kimi-reviewer-agent.yaml -w <review-mirror> -p"
             ) in body
     assert "KIMI-REVIEW-BRIEF.md" in body
     # the re-pinned resume is load-bearing: bare -r restores full tools,
@@ -89,7 +94,7 @@ def test_backup_lane_dispatch_and_resume_pins():
     # caught live against the real tree), so the pin covers the
     # COMPLETE resumed command through -w
     assert ("kimi --quiet -r <session-id> --agent-file <same yaml> -m "
-            "<canonical-backup-model-id> --thinking -w <same clone>"
+            "<canonical-backup-model-id> --thinking -w <same mirror>"
             ) in body
     assert "loads the DEFAULT agent with full write and shell tools" in body
     assert BACKUP_ID not in body  # placeholder discipline
@@ -104,14 +109,72 @@ def test_backup_lane_evidence_pins():
     assert "`Loaded tools:` line equal to the allowlist exactly" in body
     assert "DISCARDED unread" in body
     assert ("explicit refusal in the reply, marker absent on disk, "
-            "clone status delta empty") in body
-    assert ("must list exactly the brief file and nothing else") in body
+            "mirror status delta empty") in body
     assert "Never run `kimi export` inside a repo" in body
 
 
+def test_backup_lane_workspace_is_a_mirror_not_a_clone():
+    # 0.14.2, found live 2026-07-26 (KitnEssentials): the lane's
+    # workspace was specified as a `git clone`, which carries TRACKED
+    # FILES ONLY - and the review inputs are routinely gitignored (the
+    # frozen plan under a project's docs dir, References/ for port
+    # work). A cloned workspace hands the reviewer a tree with nothing
+    # to review while every route and containment check stays green.
+    body = _norm(BACKUP_LANE)
+    assert "THROWAWAY REVIEW MIRROR" in body
+    assert ("a FILE COPY of the working tree that PRESERVES `.git`, not "
+            "a `git clone`") in body
+    assert "a clone carries TRACKED FILES ONLY" in body
+    # the failure is named concretely, not left as an abstraction
+    assert "`dev/docs/` and `References/` are both gitignored" in body
+    # inputs the mirror cannot inherit are copied in DELIBERATELY and
+    # enumerated - the containment rule keys off a declared set, so an
+    # unexpected delta still quarantines
+    assert ("must list exactly the expected untracked set - the brief "
+            "plus any review inputs copied in, enumerated before the "
+            "round - and nothing else") in body
+    assert "is a gap in the review, not a silent omission" in body
+
+
+def test_backup_lane_client_config_sweep():
+    # 0.14.2: the primary lane was hardened against instruction
+    # back-channels (SKILL.md preflight 3) while the backup lane's own
+    # client config was never swept. Both keys are recorded, neither
+    # is a stop - and neither is observable from the route evidence.
+    body = _norm(BACKUP_LANE)
+    assert "## Client config surface" in body
+    assert '`[models."<canonical-backup-model-id>".overrides]`' in body
+    assert "runs at PROVIDER DEFAULT with no verifiable effort evidence" in body
+    assert "`merge_all_available_skills`" in body
+    assert ("the same class of instruction back-channel as codex's "
+            "repo-level `.agents/skills` advertisement") in body
+    assert "never a finding" in body
+    assert "do not infer either key's value" in body
+
+
+def test_skill_preflight_names_the_remediation():
+    # 0.14.2: preflight 3 said STOP and never said how to clear it.
+    # The tracked/ignored branch is the part that misreads as a bug:
+    # deleting an IGNORED back-channel leaves HEAD untouched and
+    # `nothing to commit`, which looks like a failed remediation and
+    # is in fact the correct one (both observed 2026-07-26).
+    skill = _norm(REPO / "skills" / "multi-model-verify" / "SKILL.md")
+    assert "review mirror" in skill
+    assert "empty output is the evidence" in skill
+    assert ("a TRACKED entry's deletion shows as ` D` in "
+            "`git status --porcelain`") in skill
+    assert ("`nothing to commit` alongside an unchanged HEAD is the "
+            "CORRECT observation there, not an inconsistency to chase"
+            ) in skill
+
+
 def test_fallbacks_backup_wiring():
-    fb = _read(FALLBACKS)
+    fb = _norm(FALLBACKS)
     assert "[run backup lane (cross-vendor preserved)]" in fb
+    # the integrity class names the mirror's declared-set rule, not a
+    # bare "clone delta" (0.14.2 rename)
+    assert ("integrity failure (write-probe fail, or a mirror delta "
+            "beyond the expected untracked set)") in fb
     # the banner itself carries the conditional-offer semantics and the
     # backup option's own consequence line, not just an Options entry
     assert "offered when a class below qualifies it; on request otherwise" in fb

@@ -279,8 +279,8 @@ Canonical backup reviewer model id: `kimi-code/k3-256k`
 Canonical backup thinking flag: `--thinking`
 
 Everything else about the lane — transport, containment, per-round
-evidence, clone isolation, failure routing — lives in
-references/backup-lane.md. The lane enters through the fallbacks.md
+evidence, client config surface, mirror isolation, failure routing —
+lives in references/backup-lane.md. The lane enters through the fallbacks.md
 consent gate, or via a user-invoked panel (references/panels.md).
 
 Brief conventions for the backup lane (from Kimi's general prompt

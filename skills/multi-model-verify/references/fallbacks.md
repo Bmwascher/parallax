@@ -153,8 +153,8 @@ choice.
     transient → no retry, reply DISCARDED unread, consent gate.
   - resume failure: one same-parameters retry, then the consent gate
     with the fresh-per-round option (full brief re-sent each round).
-  - integrity failure (write-probe fail, or a clone delta beyond the
-    brief): no retry, reply quarantined, consent gate.
+  - integrity failure (write-probe fail, or a mirror delta beyond the
+    expected untracked set): no retry, reply quarantined, consent gate.
   - catch-all: one same-parameters retry, then the consent gate —
     mirrors the primary catch-all.
 - BOTH lanes down: the honest choices are wait for a reset, the
