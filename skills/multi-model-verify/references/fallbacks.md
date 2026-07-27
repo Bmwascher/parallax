@@ -207,6 +207,26 @@ into the debate record as OPEN - adjudicated by the session or
 re-raised with a substitute, never silently dropped. A lost lane's
 incomplete round is never adjudicated.
 
+### Panel lane unavailable before dispatch - class `panel-lane-unavailable`
+
+A lane the environment cannot host AT ALL, established before round 1:
+the Fable seat below its harness floor (references/panels.md), a CLI
+absent from the machine, a model the account cannot reach. This is not
+`panel-lane-loss` - that class governs a lane failing MID-panel, and
+its machinery (carrying OPEN findings forward, never adjudicating an
+incomplete round) has nothing to act on here, because no round was
+dispatched, so nothing is spent and nothing is quarantined.
+
+The disposition is the same in the one respect that matters: the
+panel cannot silently convene without it. Before round 1 the driver
+states which lanes it can actually convene and which it cannot, with
+the reason, and the user chooses - proceed with the convenable
+composition, substitute, or abort. The panel invariant still binds
+whatever is chosen: at least one cross-vendor lane, so a composition
+reduced to Fable alone is not a panel and cannot proceed as one. An
+unavailable lane is recorded in the debate record by name and reason;
+a composition the user was never shown is never the one that ran.
+
 ## Degraded-mode output requirements (after consent)
 
 - The SUPERVISING SESSION emits the banner — never delegate the banner to
