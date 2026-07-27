@@ -84,8 +84,11 @@ and neither is observable from the per-round route evidence above.
   only; this check is what makes that claim true rather than assumed.
   Probed 2026-07-26 (kimi-cli 1.49.0): the file carried ZERO
   `overrides` blocks — the model table for the canonical id exists but
-  has no override sub-table — so the pin had never been set and every
-  round to date ran at provider default.
+  has no override sub-table — so the pin is not set. A single read of
+  the current file cannot establish what the config held during earlier
+  rounds; what it does establish is that nothing pins effort now, so
+  treat any round without its own contemporaneous config evidence as
+  provider-default.
 - `merge_all_available_skills`, plus the SOURCES it merges from. The
   key is the same class of instruction back-channel as codex's
   repo-level `.agents/skills` advertisement (SKILL.md preflight 3), on
@@ -132,9 +135,21 @@ proceed; do not infer either key's value.
   above the repo root, an assignment PDF, a spec kept outside the tree —
   is copied in deliberately and enumerated before the round. An input the
   reviewer cannot read is a gap in the review, not a silent omission.
-- After every round, `git status --porcelain` in the mirror must list exactly the expected untracked set - the brief plus any review inputs copied in, enumerated before the round - and nothing else; any other delta quarantines that round's reply (integrity failure class). Keying off a declared set is what keeps the check exact once inputs are copied in.
-- The mirror's `git rev-parse HEAD` is recorded in the debate record
-  alongside its path.
+- **BASELINE, captured immediately after construction and BEFORE the
+  brief is written**: `git status --porcelain` in the fresh mirror. A
+  clone would have guaranteed this empty; a file copy does NOT — the
+  real tree's untracked files and uncommitted modifications ride along,
+  and without a baseline every one of them quarantines every round of a
+  review that never touched them. Tracked modifications especially
+  cannot be absorbed by any "untracked set" wording.
+- After every round, `git status --porcelain` in the mirror must equal the BASELINE plus exactly the expected untracked set — the brief plus any review inputs copied in, enumerated before the round — and nothing else; any other delta quarantines that round's reply (integrity failure class). Both halves are declared in advance, which is what keeps the check exact rather than adjudicated after the fact.
+- The mirror's identity in the debate record is its path, its
+  `git rev-parse HEAD`, AND its baseline. For a file copy HEAD alone
+  does not identify the reviewed content, because uncommitted work rode
+  in with it. If the baseline contains TRACKED modifications the
+  reviewed content is not the committed range: disclose that in the
+  record, and in mode diff take the mirror from a tree whose tracked
+  files are clean instead.
 - The brief is retained as evidence per the raw-rounds convention.
 - Never run `kimi export` inside a repo — it writes a session zip into the current directory; export only from a scratch directory. Nothing in this lane uses export.
 

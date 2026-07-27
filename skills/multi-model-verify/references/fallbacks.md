@@ -163,8 +163,11 @@ choice.
     tainted evidence. Recovery is a RESUME of the surviving session
     with all four flags re-pinned AND the UTF-8 environment forced
     (backup-lane.md) — never a fresh review, which throws away a round
-    the provider already charged for. If the crash also cost the
-    session id, or the forced-UTF-8 resume fails, then the consent
+    the provider already charged for. The resume's `-p` carries no
+    rebuttal here — there is nothing to rebut yet — but it is never
+    empty: ask the session to re-emit its previous reply verbatim, and
+    treat what comes back as that round's reply. If the crash also cost
+    the session id, or the forced-UTF-8 resume fails, then the consent
     gate.
   - resume failure: one same-parameters retry, then the consent gate
     with the fresh-per-round option (full brief re-sent each round).

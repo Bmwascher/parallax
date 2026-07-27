@@ -130,10 +130,52 @@ def test_backup_lane_workspace_is_a_mirror_not_a_clone():
     # inputs the mirror cannot inherit are copied in DELIBERATELY and
     # enumerated - the containment rule keys off a declared set, so an
     # unexpected delta still quarantines
-    assert ("must list exactly the expected untracked set - the brief "
-            "plus any review inputs copied in, enumerated before the "
-            "round - and nothing else") in body
+    assert ("must equal the BASELINE plus exactly the expected untracked "
+            "set — the brief plus any review inputs copied in, "
+            "enumerated before the round — and nothing else") in body
     assert "is a gap in the review, not a silent omission" in body
+
+
+def test_mirror_baseline_closes_the_dirty_tree_hole():
+    # 0.14.2 whole-branch review, Important 1: a clone guaranteed an
+    # empty porcelain; a file copy does not. Without a baseline, the
+    # real tree's untracked files and uncommitted modifications ride
+    # into the mirror and quarantine every round of a review that never
+    # touched them - and a tracked modification can never be absorbed
+    # by any "untracked set" wording.
+    body = _norm(BACKUP_LANE)
+    assert ("BASELINE, captured immediately after construction and "
+            "BEFORE the brief is written") in body
+    assert "A clone would have guaranteed this empty; a file copy does NOT" in body
+    # identity: HEAD alone stops being sufficient once uncommitted work
+    # can ride in, so the record carries path + HEAD + baseline
+    assert ("The mirror's identity in the debate record is its path, its "
+            "`git rev-parse HEAD`, AND its baseline") in body
+    assert ("For a file copy HEAD alone does not identify the reviewed "
+            "content") in body
+    # a dirty tracked baseline means the reviewed content is not the
+    # committed range - disclosed, and disallowed outright in mode diff
+    assert ("in mode diff take the mirror from a tree whose tracked "
+            "files are clean instead") in body
+
+
+def test_backup_lane_eval_case_matches_the_mirror_contract():
+    # 0.14.2 whole-branch review, Important 2: the manual eval case
+    # declares backup-lane.md in its surface but still graded the
+    # superseded clone contract. Manual cases never run in CI, so
+    # nothing would have caught it until a future manual run failed
+    # CORRECT mirror behavior.
+    import json
+    cases = json.loads(
+        (REPO / "evals" / "multi-model-verify" / "evals.json").read_text(
+            encoding="utf-8"))["evals"]
+    case = next(c for c in cases
+                if c["id"] == "backup-lane-consented-substitution")
+    assert "skills/multi-model-verify/references/backup-lane.md" in case["surface"]
+    joined = " ".join(case["expectations"])
+    assert "review MIRROR (file copy preserving .git, not a clone)" in joined
+    assert "baseline porcelain was captured before the brief was written" in joined
+    assert "throwaway clone" not in joined
 
 
 def test_backup_lane_client_config_sweep():
@@ -194,6 +236,9 @@ def test_output_encoding_class_is_wired():
     fb = _norm(FALLBACKS)
     assert "class `output-encoding`" in fb
     assert "**Skip the retry**" in fb
+    # the resume's -p carries no rebuttal in recovery, but must not be
+    # empty - say what to send (whole-branch review, Minor 2)
+    assert ("ask the session to re-emit its previous reply verbatim" in fb)
     # the class must NOT be filed under the two evidence-tainting
     # classes - nothing reached disk, so nothing is suspect
     assert ("neither a route-attribution nor an integrity failure" in fb)
