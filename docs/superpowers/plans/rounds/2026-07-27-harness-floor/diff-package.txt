@@ -1,0 +1,693 @@
+# Diff package - parallax 0.14.4
+# Range: f8bab1c..f5ed873d32a537effb58bda80935eeef811ebd99 (branch fix/harness-version-floor)
+# Base f8bab1c is the 0.14.3 merge commit.
+
+## Commits (oldest first)
+b48bb8f 0.14.4: record the harness floor the Fable panel lane depends on, re-pin the superpowers fixture
+7b0b904 0.14.4: correct the retention claim in the 0.14.3 debate record
+f9fd9b9 0.14.4: bump plugin version
+f5ed873 0.14.4: pin the floor's operative half and give the below-floor case a class
+
+## Diffstat (full range, nothing excluded)
+ .claude-plugin/plugin.json                         |    2 +-
+ agents/fable-panel-reviewer.md                     |   13 +-
+ .../2026-07-26-backup-lane-mirror/fable-review.md  |  168 +
+ .../kimi-baseline.txt                              |  122 +
+ .../kimi-manifest.txt                              |  122 +
+ .../2026-07-26-backup-lane-mirror/kimi-r1-reply.md |   44 +
+ .../2026-07-26-backup-lane-mirror/kimi-r2-reply.md |   38 +
+ .../2026-07-26-backup-lane-mirror/kimi-r3-reply.md |   47 +
+ .../2026-07-26-backup-lane-mirror/kimi-r4-reply.md |   38 +
+ .../2026-07-26-backup-lane-mirror/kimi-r5-reply.md |   39 +
+ .../2026-07-26-backup-lane-mirror/kimi-r6-reply.md |   24 +
+ .../kimi-writeprobe-reply.md                       |   16 +
+ .../sol-diff-r1-brief.md                           |   51 +
+ .../sol-diff-r1-reply.md                           |   76 +
+ .../sol-diff-r1-transcript.txt                     | 4008 ++++++++++++++++++
+ .../sol-diff-r2-reply.md                           |   38 +
+ .../sol-diff-r2-transcript.txt                     | 1704 ++++++++
+ .../sol-diff-r3-reply.md                           |    9 +
+ .../sol-diff-r3-transcript.txt                     | 1139 +++++
+ .../sol-diff-r4-reply.md                           |    5 +
+ .../sol-diff-r4-transcript.txt                     |  591 +++
+ .../sol-diff-r5-reply.md                           |   15 +
+ .../sol-diff-r5-transcript.txt                     | 1697 ++++++++
+ .../sol-diff-r6-reply.md                           |    5 +
+ .../sol-diff-r6-transcript.txt                     |  560 +++
+ .../sol-diff-r7-reply.md                           |    3 +
+ .../sol-diff-r7-transcript.txt                     |  395 ++
+ .../2026-07-26-seat-reshuffle/fable-review.md      |   56 +
+ .../base-absence-check.txt                         |   35 +
+ .../2026-07-27-rotation-guard/debate-record.md     |  141 +
+ .../2026-07-27-rotation-guard/diff-package.txt     |  170 +
+ .../2026-07-27-rotation-guard/fable-review.md      |   63 +
+ .../2026-07-27-rotation-guard/gate-output.txt      |   33 +
+ .../2026-07-27-rotation-guard/kimi-r1-reply.md     |   36 +
+ .../2026-07-27-rotation-guard/kimi-r2-reply.md     |   45 +
+ .../2026-07-27-rotation-guard/kimi-r3-reply.md     |   30 +
+ .../2026-07-27-rotation-guard/mirror-baseline.txt  |  161 +
+ .../2026-07-27-rotation-guard/mirror-manifest.txt  |  156 +
+ .../2026-07-27-rotation-guard/probe-record.md      |   76 +
+ .../2026-07-27-rotation-guard/sol-r1-reply.md      |   28 +
+ .../sol-r1-transcript.txt                          | 4400 ++++++++++++++++++++
+ .../2026-07-27-rotation-guard/sol-r2-reply.md      |   14 +
+ .../sol-r2-transcript.txt                          | 2075 +++++++++
+ .../2026-07-27-rotation-guard/sol-r3-reply.md      |   13 +
+ .../sol-r3-transcript.txt                          | 1006 +++++
+ ...6.1.1.md => superpowers-code-reviewer-6.2.0.md} |    4 +-
+ .../multi-model-verify/test_multi_model_verify.py  |    4 +-
+ evals/multi-model-verify/test_seat_reshuffle.py    |   62 +
+ evals/tools/drift_statemachine_tests.ps1           |   14 +-
+ hooks/superpowers-review-companion.ps1             |    2 +-
+ skills/multi-model-verify/references/fallbacks.md  |   20 +
+ skills/multi-model-verify/references/panels.md     |   16 +
+ tools/check-drift.ps1                              |    2 +-
+ 53 files changed, 19616 insertions(+), 15 deletions(-)
+
+## Diff
+# EXCLUSIONS, declared precisely (an earlier package justified these
+# as 'not authored this cycle', which was FALSE of commit 7b0b904 -
+# it edits a file inside the first glob, this cycle):
+#
+#  1. docs/superpowers/plans/rounds/2026-07-26-* and
+#     docs/superpowers/plans/rounds/2026-07-27-rotation-guard/ EXCEPT
+#     debate-record.md - ~40 files of retained 0.14.2/0.14.3 round
+#     transcripts, committed here as catch-up, not authored now.
+#     debate-record.md IS included below: 7b0b904 edits it this cycle.
+#  2. the renamed fixture body (6.1.1 -> 6.2.0) - a verbatim vendored
+#     copy of the superpowers template, not parallax-authored text.
+#     Its rename and header are visible in the diffstat above.
+
+diff --git a/.claude-plugin/plugin.json b/.claude-plugin/plugin.json
+index 17a86ee..66ff3b3 100644
+--- a/.claude-plugin/plugin.json
++++ b/.claude-plugin/plugin.json
+@@ -1,6 +1,6 @@
+ {
+   "name": "parallax",
+-  "version": "0.14.3",
++  "version": "0.14.4",
+   "description": "Cross-model verification for Claude Code: an evidence-grounded adversarial debate between the session model and a cross-vendor reviewer gates plans before implementation and diffs before merge, hooked into the superpowers workflow.",
+   "author": {
+     "name": "Brandon Wascher",
+diff --git a/agents/fable-panel-reviewer.md b/agents/fable-panel-reviewer.md
+index 1404aa3..8efca55 100644
+--- a/agents/fable-panel-reviewer.md
++++ b/agents/fable-panel-reviewer.md
+@@ -19,7 +19,18 @@ rule, no manufactured objections.
+   conversation state persists across the resume (probed 2026-07-26),
+   and the resume surface carries no model parameter, so your model pin
+   rides the agent identity; your identity evidence is dispatch
+-  metadata, recorded by the driver, never your own claim.
++  metadata, recorded by the driver, never your own claim. That property
++  has a FLOOR: **Claude Code 2.1.216**. Below it a resumed background
++  agent silently reverted to the default agent, and the fix that
++  restores "the agent's prompt and tool restrictions" landed in that
++  release; the probe above ran on 2.1.220, after it. So on an older
++  harness this seat silently reverted to the default agent - losing the
++  model pin, this system prompt, and the read-only tool restriction
++  together, which is every control the lane relies on at once. The
++  driver checks `claude --version` against the floor before dispatching
++  this seat; below it, the Fable lane is unavailable rather than
++  degraded, because a silently unpinned fully-tooled agent is not a
++  weaker reviewer, it is a different one.
+ - From round 2 on, state position changes: accepted / refuted (with
+   evidence) / struck (no citation). End every round with a verdict per
+   claim - PASS / FIX (specific) / ESCALATE - and one verdict on the
+diff --git a/docs/superpowers/plans/rounds/2026-07-27-rotation-guard/debate-record.md b/docs/superpowers/plans/rounds/2026-07-27-rotation-guard/debate-record.md
+new file mode 100644
+index 0000000..b5eba62
+--- /dev/null
++++ b/docs/superpowers/plans/rounds/2026-07-27-rotation-guard/debate-record.md
+@@ -0,0 +1,141 @@
++# Debate record — parallax 0.14.3 (mode diff, panel)
++
++**Subject revision:** `b040079..472cdc4` (final). Earlier rounds ran
++against `b040079..8eacc8a`; the change re-opened both lanes, and both
++terminal verdicts cite the final revision.
++
++**Merge:** `f8bab1c` (--no-ff), pushed to `origin/main`.
++
++**Verification status:** FULL — two cross-vendor reviewer lanes, no
++substitution, no degradation, no failure class recorded.
++
++**Panel invocation (user, verbatim):** "You can use a panel as well. I
++have a lot of kimi usage." Composition Sol + Kimi. Panel invariant
++checked before round 1: at least one cross-vendor lane present — both
++lanes are cross-vendor relative to the Claude driver. Valid.
++
++## Participants and rounds
++
++| seat | role | rounds | terminal verdict |
++|---|---|---|---|
++| Opus 5 | session driver, final adjudication | — | PASS (terminal) |
++| `gpt-5.6-sol` (codex exec) | cross-vendor reviewer lane | 3 | PASS |
++| `kimi-code/k3-256k` (kimi-cli) | cross-vendor reviewer lane | 3 | PASS |
++| fable-reviewer | required whole-branch pre-merge review | 1 | Ready-with-fixes (all applied) |
++
++Topology: hub-and-spoke, blind. Neither reviewer lane learned of the
++other's existence beyond "more than one lane is participating"; every
++relayed finding was verified by the driver against the repo before relay.
++
++## Route evidence
++
++**Sol** — `effective route confirmed`. All three rounds echoed
++`model: gpt-5.6-sol`, `provider: openai`, `reasoning effort: high`,
++`sandbox: read-only`; both resumes echoed the round-1 session id
++`019fa22c-ace8-7212-9443-66179804b038`. Client-resolved header metadata,
++per model-prompting-notes.md — not server-attested identity.
++
++**Kimi** — `effective route confirmed` under backup-lane.md's per-round
++rules. All three rounds plus the write-probe produced, past the captured
++offset, exactly one `Using LLM model:` line carrying the canonical id,
++one `Loading agent:` line naming the committed yaml, and one
++`Loaded tools:` line equal to the five-tool allowlist. Mirror status
++delta equalled baseline + `KIMI-REVIEW-BRIEF.md` exactly on every round.
++Rotation guard satisfied on every call (the log grew: 361338 → 365835 →
++370345 → 378038 → 384718 → 390333). Session
++`663caf26-ea69-4e45-9fec-b7a3855e279e`, all four flags re-pinned on both
++resumes. Evidence class: client-side.
++
++**Effort evidence (Kimi):** NO VERIFIED EFFORT PIN. `~/.kimi/config.toml`
++carries no `[models."<canonical-backup-id>".overrides]` block. Recorded
++per backup-lane.md rather than inferred as provider-default.
++
++**Environment notes (not findings):** `~/.codex/AGENTS.md` exists — the
++user's own global instruction file. `merge_all_available_skills = true`
++at `~/.kimi/config.toml:10` with `extra_skill_dirs = []` and no source
++directories present: latent, nothing to merge. Repo preflight-3 sweep
++(`git ls-files --cached --others '*AGENTS.md' '.agents/*'`) returned
++empty in both the real tree and the mirror.
++
++## Workspace
++
++Review mirror: file copy preserving `.git` (never a clone), at
++`<scratchpad>/mirror-0143-final`, HEAD `472cdc4`. Baseline 161 entries by
++`git status --porcelain --ignored -uall`; content manifest same coverage,
++SHA-256 per file, path-sorted in byte order. No tracked modifications in
++the baseline, so the reviewed content IS the committed range. Write-probe
++PASS on all three conditions (explicit refusal, marker absent, delta
++empty).
++
++## Findings, by round
++
++**Pre-round-1 (whole-branch review).** F1 the rotation guard's
++disposition sentence was unpinned — pin-integrity instance TEN, in a file
++that took nine instances of the same class in 0.14.2. F2 the sweep
++comment's occurrence count was wrong (~40 vs 92/20) — found independently
++by the session first, CONVERGENT, counted once. F3 routing rotation to
++route-attribution falsified that class's stated "nothing transient"
++rationale. F4 the residual-gap paragraph was unpinned. F5 the diff
++package lacked a commit list. All accepted; F4 accepted in part.
++
++**Round 1.** Sol FIX, Kimi PASS. Sol claim 5: the fallbacks pin added for
++F3 stopped at "IS transient", leaving the operative justification
++deletable green — **pin-integrity instance ELEVEN, inside the fix for
++instance ten**. Sol claim 6: the residual-gap caveat is substantive, not
++narrative. CROSS-LANE SPLIT on claim 6 — Sol FIX, Kimi PASS — adjudicated
++to Sol, reversing the session's own F4-in-part call: the clause states a
++known false-negative boundary, and what a driver believes about coverage
++is contract. Kimi's PASS had deferred to the session's stated rationale
++rather than refuting Sol, and the whole-branch review had flagged the
++same paragraph. Both lanes independently flagged the unretained gate
++output (CONVERGENT); Kimi additionally flagged that the probe byte counts
++existed only in the brief.
++
++**Round 2.** Both lanes FIX, on different mechanical defects, both in
++retained evidence rather than in the contract, both accepted: the gate
++artifact was captured at "8eacc8a + uncommitted" rather than bound to the
++committed subject SHA (Sol); the diff package still declared the stale
++range (Kimi). Both lanes independently agreed to DEFER the structural
++question raised by the session against itself — that two consecutive
++pin-integrity misses are evidence hand-applied substring pinning is a
++weak mechanism — on the ground that a two-item follow-on cycle is the
++wrong vehicle for a mechanism redesign and would bypass the plan-debate
++gate. CONVERGENT. Seeded as a plan-cycle item.
++
++**Round 3.** Both lanes PASS on the final revision. Converged.
++
++## Retained artifacts
++
++`fable-review.md`, `sol-r{1,2,3}-reply.md` + transcripts,
++`kimi-r{1,2,3}-reply.md`, `diff-package.txt`, `gate-output.txt`,
++`base-absence-check.txt`, `probe-record.md`, `mirror-baseline.txt`,
++`mirror-manifest.txt`. Committed under
++`docs/superpowers/plans/rounds/<date>-<topic>/` per
++frozen-plan-format.md:85, which is where every prior cycle's round
++evidence lives. (An earlier draft of this record said "untracked by
++design" — that is false, and the phrase belongs only to the
++`.git/parallax/` attestations and checkpoints, whose whole point is that
++recording a verdict must not move the head the verdict names. Round
++evidence has the opposite requirement: it must ship with the history it
++describes.)
++
++Application checkpoint:
++`.git/parallax/application-checkpoints/20260727-055732-63fa7156b63c.md`
++with three amendments and appended verification results; bound into the
++attestation via `-CheckpointFile`.
++
++## Driver defect found while closing out
++
++The first attestation emit put descriptive prose in `-RouteNote`. The
++pre-push lane requires an EXACT `route_note -eq "effective route
++confirmed"` (`tools/verify-attestation.ps1:49`), so a valid PASS/FULL
++attestation failed its own gate and the push emitted a non-blocking
++warning whose text self-contradicts — it reports the attestation as
++PASS/FULL/route-confirmed and then says one is required. Re-emitted with
++the canonical token; verification now exits 0. The route detail lives
++here, in the record prose, which is where the skill says it belongs.
++
++The self-contradicting warning text is a real usability defect in the
++verifier and is NOT fixed in this cycle — it is out of a two-item
++follow-on's scope, and it is seeded alongside the pin-mechanism question
++for the next plan cycle.
+diff --git a/docs/superpowers/plans/rounds/2026-07-27-rotation-guard/diff-package.txt b/docs/superpowers/plans/rounds/2026-07-27-rotation-guard/diff-package.txt
+new file mode 100644
+index 0000000..d54dce1
+--- /dev/null
++++ b/docs/superpowers/plans/rounds/2026-07-27-rotation-guard/diff-package.txt
+@@ -0,0 +1,170 @@
++# Diff package — parallax 0.14.3
++# Range: b040079..472cdc473f9bfc0ee4959cf13bc03a53724e3416 (branch fix/log-rotation-guard)
++# Regenerated at the round-2 subject revision.
++
++## Commits (oldest first)
++4d8a121 0.14.3: guard the per-round offset rule against log rotation and record the sweep scope
++63fa715 0.14.3: bump plugin version
++0600be1 0.14.3: correct the sweep-scope comment's occurrence count
++8eacc8a 0.14.3: pin the rotation guard's disposition and reconcile its failure class
++472cdc4 0.14.3: run the rotation-class pins to the end of what they lock
++
++## Diffstat
++ .claude-plugin/plugin.json                         |  2 +-
++ evals/multi-model-verify/test_backup_lane.py       | 63 ++++++++++++++++++++++
++ .../multi-model-verify/references/backup-lane.md   | 19 +++++++
++ skills/multi-model-verify/references/fallbacks.md  | 10 +++-
++ 4 files changed, 92 insertions(+), 2 deletions(-)
++
++## Diff
++diff --git a/.claude-plugin/plugin.json b/.claude-plugin/plugin.json
++index 61600f1..17a86ee 100644
++--- a/.claude-plugin/plugin.json
+++++ b/.claude-plugin/plugin.json
++@@ -1,6 +1,6 @@
++ {
++   "name": "parallax",
++-  "version": "0.14.2",
+++  "version": "0.14.3",
++   "description": "Cross-model verification for Claude Code: an evidence-grounded adversarial debate between the session model and a cross-vendor reviewer gates plans before implementation and diffs before merge, hooked into the superpowers workflow.",
++   "author": {
++     "name": "Brandon Wascher",
++diff --git a/evals/multi-model-verify/test_backup_lane.py b/evals/multi-model-verify/test_backup_lane.py
++index 1034747..433693b 100644
++--- a/evals/multi-model-verify/test_backup_lane.py
+++++ b/evals/multi-model-verify/test_backup_lane.py
++@@ -131,6 +131,38 @@ def test_backup_lane_evidence_pins():
++     assert "`Loading agent:` line naming the committed yaml" in body
++     assert "`Loaded tools:` line equal to the allowlist exactly" in body
++     assert "DISCARDED unread" in body
+++    # 0.14.3: the offset rule assumes an append-only file and kimi's
+++    # client does not guarantee one. Rotation currently FAILS on
+++    # Windows (WinError 32, log still open), so offsets have held by
+++    # accident - if rotation ever succeeds, every byte position from
+++    # the earlier measurement is meaningless and the check would read
+++    # whatever happens to sit there.
+++    assert ("Rotation guard" in body)
+++    assert ("if after the call the file is SMALLER than the captured "
+++            "offset, or absent") in body
+++    # re-reading the rotated file from zero is the tempting wrong
+++    # answer: it attributes lines that may belong to any session
+++    assert ("not a reason to re-read from zero" in body)
+++    assert ("offsets have held by accident rather than by design" in body)
+++    # 0.14.3 fable review F1: DETECTION without a DISPOSITION leaves the
+++    # driver to invent a rule. The nearby "DISCARDED unread" pin above is
+++    # satisfied by the pre-existing bullet, so the guard's consequence
+++    # half needs its own pin or it deletes green - pin-integrity instance
+++    # ten in this file.
+++    assert ("That is a route-attribution failure" in body)
+++    # F4: the residual gap's CONTINGENCY is the only recorded instruction
+++    # for the day rotation starts succeeding.
+++    assert ("compare file identity (creation time) too, not just length"
+++            in body)
+++    # 0.14.3 Sol panel round 1 (claim 6), REVERSING the session's earlier
+++    # call that this paragraph was narrative and not worth pinning. It is
+++    # not narrative: it states that the detection check has a known
+++    # FALSE-NEGATIVE boundary, and a driver who reads only the detection
+++    # rule over-trusts the guard. What a driver believes about coverage
+++    # is contract.
+++    assert ("The size test is necessary, not sufficient: a rotation "
+++            "whose replacement file grew back PAST the captured offset "
+++            "within the same call would slip through.") in body
++     # 0.14.2 Kimi panel round 2 (4b): the three PASS conditions were
++     # pinned but the probe's CONFIGURATION FIDELITY was not - a probe
++     # run under a stricter config than the debate's would pass while
++@@ -401,6 +433,24 @@ def test_fallbacks_backup_wiring():
++     assert "codex-missing" in fb and "model-rejected" in fb
++     assert "quota-exhausted" in fb and "auth-expired" in fb
++     assert "route-attribution" in fb
+++    # 0.14.3 fable review F3: the class's stated no-retry rationale is
+++    # "nothing transient", which is true of a wrong id or a stray tool but
+++    # NOT of a rotation under the call - that one would yield clean
+++    # evidence on a re-dispatch. The disposition is still right, for a
+++    # different reason, and the reason has to be on the record or the two
+++    # files read as a contradiction.
+++    # 0.14.3 Sol panel round 1 (claim 5): the pin below MUST run to the
+++    # end of the justification. Stopping at "IS transient" named the
+++    # exception while leaving the operative half - WHY the retry is still
+++    # skipped, and WHO decides the re-spend - deletable green. That is
+++    # pin-integrity instance eleven, reproduced inside the very sentence
+++    # added this cycle to fix instance ten.
+++    assert ("a rotation under the call is the one member that IS "
+++            "transient — a re-dispatch with a freshly captured offset "
+++            "would produce clean evidence. It still skips the retry, "
+++            "because the round already spent is unattributable and no "
+++            "retry can make it attributable after the fact; the user "
+++            "decides at the gate whether to spend another.") in fb
++     assert "LLM not set" in fb
++     assert "access_terminated_error" in fb
++ 
++@@ -429,6 +479,19 @@ def test_skill_and_readme_route_the_lane():
++             "reviewer lane") in readme
++ 
++ 
+++# `docs/**` is DELIBERATELY out of scope and must stay that way. The
+++# requirement this sweep enforces is placeholder discipline on DISPATCH
+++# surfaces - the files an agent reads to build a command. docs/ holds
+++# design specs, plans, and retained round evidence that legitimately
+++# QUOTE model ids as historical record (92 occurrences across 20 files
+++# as of 63fa715); sweeping
+++# them would manufacture false reds, and the predictable response to a
+++# perpetually red test is to weaken it. Raised and correctly declined
+++# during the 0.14.2 panel; recorded here so it is not re-litigated.
+++# (Note: docs/superpowers/plans/2026-07-25-kimi-backup-lane.md claims the
+++# literal appears ONLY in notes.md and this file. That was true of
+++# operational surfaces when written and is false of docs/ itself - left
+++# as-is, being a historical record of what was planned, not a live rule.)
++ SWEEP_GLOBS = [
++     "skills/**/*.md", "skills/**/*.yaml", "commands/*.md", "tools/*.ps1",
++     "hooks/*", "evals/**/*.py", "evals/**/*.json", "evals/**/*.ps1",
++diff --git a/skills/multi-model-verify/references/backup-lane.md b/skills/multi-model-verify/references/backup-lane.md
++index a58a8fc..3da1c2d 100644
++--- a/skills/multi-model-verify/references/backup-lane.md
+++++ b/skills/multi-model-verify/references/backup-lane.md
++@@ -49,6 +49,25 @@ Panel participation: a user-invoked panel per references/panels.md is a second s
++ 
++ - Before every dispatch capture the byte length of `~/.kimi/logs/kimi.log`; after the call, past that offset, require all three: exactly one new `Using LLM model:` line carrying the canonical backup id, a `Loading agent:` line naming the committed yaml, and a `Loaded tools:` line equal to the allowlist exactly.
++ - Zero matching new lines, more than one, a wrong id, a wrong agent path, or any extra tool entry is a route-attribution failure: the reply is DISCARDED unread and the failure goes to the fallbacks.md consent gate.
+++- **Rotation guard.** The offset rule assumes an append-only file, and
+++  the kimi client does not guarantee one. Before trusting the offset,
+++  confirm the stream did not rotate under the call: if after the call the
+++  file is SMALLER than the captured offset, or absent, it was rotated or
+++  replaced and every byte position from the earlier measurement is
+++  meaningless. That is a route-attribution failure — and specifically
+++  **not a reason to re-read from zero**, which is the tempting wrong
+++  answer: the new file's opening lines may belong to any session, so
+++  reading it attributes nothing while looking like evidence. Observed
+++  2026-07-26 (kimi-cli 1.49.0, Windows): rotation ATTEMPTS fire and fail
+++  with `PermissionError: [WinError 32]` because the log is still open, so
+++  offsets have held by accident rather than by design — do not build on
+++  that accident. The size test is necessary, not sufficient: a rotation
+++  whose replacement file grew back PAST the captured offset within the
+++  same call would slip through. That needs the pre-rotation offset to
+++  have been small, which only follows an immediately preceding rotation,
+++  so it is not worth a second mechanism — but if rotation ever starts
+++  succeeding here, compare file identity (creation time) too, not just
+++  length.
++ - This evidence is client-side: report it as "route line verified
++   (client-side)" in the record prose. Server-side substitution is not
++   detectable from this class; the finish line's normalized
++diff --git a/skills/multi-model-verify/references/fallbacks.md b/skills/multi-model-verify/references/fallbacks.md
++index 96341e0..46190bc 100644
++--- a/skills/multi-model-verify/references/fallbacks.md
+++++ b/skills/multi-model-verify/references/fallbacks.md
++@@ -150,7 +150,15 @@ choice.
++     at the consent gate; a mid-debate outage notes the kimi session id
++     in the debate record so the debate resumes after the reset.
++   - route-attribution failure (offset rule in backup-lane.md): nothing
++-    transient → no retry, reply DISCARDED unread, consent gate.
+++    transient → no retry, reply DISCARDED unread, consent gate. One
+++    exception to the RATIONALE, not to the disposition: a rotation under
+++    the call is the one member that IS transient — a re-dispatch with a
+++    freshly captured offset would produce clean evidence. It still skips
+++    the retry, because the round already spent is unattributable and no
+++    retry can make it attributable after the fact; the user decides at
+++    the gate whether to spend another. Stated here so the class's
+++    "nothing transient" premise is not read as covering a member it
+++    does not describe.
++   - output-encoding failure — class `output-encoding`:
++     `UnicodeEncodeError` / `'charmap' codec can't encode character`
++     from the kimi process on a Windows driver. The round COMPLETED and
+diff --git a/evals/multi-model-verify/test_multi_model_verify.py b/evals/multi-model-verify/test_multi_model_verify.py
+index f0ef753..7ee3beb 100644
+--- a/evals/multi-model-verify/test_multi_model_verify.py
++++ b/evals/multi-model-verify/test_multi_model_verify.py
+@@ -1257,7 +1257,7 @@ class TestHook:
+         """Layer-2 rot detection (Sol round-2 fix D): a pinned copy of the
+         superpowers template, rendered with real SHAs and fed through the
+         actual script - hermetic, runs in CI."""
+-        fixture = EVALS_DIR / "fixtures" / "superpowers-code-reviewer-6.1.1.md"
++        fixture = EVALS_DIR / "fixtures" / "superpowers-code-reviewer-6.2.0.md"
+         assert fixture.is_file(), "pinned superpowers template fixture missing"
+         template = fixture.read_text(encoding="utf-8")
+         for literal in ("Senior Code Reviewer", "Git Range to Review"):
+@@ -1325,7 +1325,7 @@ class TestDriftProtection:
+         text = self.drift()
+         for literal in ("Senior Code Reviewer", "Git Range to Review"):
+             assert literal in text, "canary must check the hook fingerprints"
+-        assert "superpowers-code-reviewer-6.1.1.md" in text, (
++        assert "superpowers-code-reviewer-6.2.0.md" in text, (
+             "canary must hash against the pinned fixture"
+         )
+         assert "installed_plugins.json" in text
+diff --git a/evals/multi-model-verify/test_seat_reshuffle.py b/evals/multi-model-verify/test_seat_reshuffle.py
+index 3c8086c..a003535 100644
+--- a/evals/multi-model-verify/test_seat_reshuffle.py
++++ b/evals/multi-model-verify/test_seat_reshuffle.py
+@@ -17,6 +17,16 @@ def _read(p):
+     return p.read_text(encoding="utf-8")
+ 
+ 
++def _norm(p):
++    """Whitespace-normalized read, for pins that span a markdown wrap.
++
++    Same convention as test_backup_lane.py. A pin that must lock a whole
++    operative sentence cannot be held hostage to where the paragraph
++    happens to wrap - reflowing a file is not a contract change.
++    """
++    return " ".join(_read(p).split())
++
++
+ def _frontmatter(text):
+     m = re.match(r"---\n(.*?)\n---\n", text, re.DOTALL)
+     assert m, "frontmatter block missing"
+@@ -49,6 +59,25 @@ def test_fable_panel_reviewer_exists_and_pins():
+     assert "the resume surface carries no model parameter" in body
+     assert "probed 2026-07-26" in body
+     assert "cite the subject revision" in body
++    # 0.14.4 drift triage: the resume property is HARNESS-VERSION
++    # DEPENDENT, not a platform invariant. Before Claude Code 2.1.216 a
++    # resumed background agent silently reverted to the DEFAULT agent,
++    # losing the model pin, this system prompt, AND the read-only tool
++    # restriction - the exact containment the lane's evidence class
++    # rests on. Both probes ran on 2.1.220, after the fix, so the
++    # unqualified wording read as a platform guarantee. The floor must
++    # travel with the claim.
++    assert "Claude Code 2.1.216" in body
++    assert "silently reverted to the default agent" in body
++    # 0.14.4 fable review I1: the two pins above lock the DESCRIPTION of
++    # the hazard. The operative half - that the driver checks the version
++    # and that the lane is unavailable rather than degraded below the
++    # floor - deleted green. Pin-integrity instance twelve, and once
++    # again inside a fix for an overclaim.
++    nbody = _norm(p)
++    assert ("checks `claude --version` against the floor before "
++            "dispatching this seat") in nbody
++    assert "unavailable rather than degraded" in nbody
+ 
+ 
+ def test_escalation_implementer_exists_and_pins():
+@@ -89,6 +118,28 @@ def test_panels_reference_pins():
+             "subject revision; a verdict against a stale revision is "
+             "input, never terminal.") in body
+     assert "hub-and-spoke" in body
++    # 0.14.4 drift triage: panels.md states the Fable lane's failure
++    # mode as "agent death, which is loud". That is true only at or
++    # above the floor - below it the lane had a SILENT failure mode
++    # that defeats the pin and the allowlist together, so the floor
++    # belongs next to the claim it qualifies, not only in the agent file.
++    #
++    # 0.14.4 fable review I1: "Claude Code 2.1.216" occurs TWICE here -
++    # the floor header and the changelog citation - so on its own it does
++    # not even lock the paragraph's EXISTENCE: delete the whole floor and
++    # the citation keeps it green. Pin the operative sentences instead,
++    # and pin the header string by a phrase that occurs exactly once.
++    nbody = _norm(p)
++    assert nbody.count("Harness floor: Claude Code 2.1.216") == 1
++    assert ("Check `claude --version` before dispatching the Fable "
++            "lane") in nbody
++    assert "the lane is UNAVAILABLE, not degraded" in nbody
++    # I2: this file must not state class mechanics. The below-floor case
++    # routes to the consent gate like every other lane loss; the earlier
++    # wording claimed an automatic drop to remaining lanes, contradicting
++    # fallbacks.md AND panels.md's own paragraph 22 lines below it.
++    assert "drops to its remaining lanes" not in nbody
++    assert "panel-lane-unavailable" in nbody
+ 
+ 
+ def test_backup_lane_panel_participation():
+@@ -109,6 +160,17 @@ def test_fallbacks_panel_lane_loss():
+             "continuing with fewer lanes never happens "
+             "automatically.") in fb
+     assert "records DEGRADED" in fb
++    # 0.14.4 fable review I2: panel-lane-loss covers a lane failing
++    # MID-panel. A lane the harness cannot host at all is a different
++    # condition with a different disposition - nothing was dispatched, so
++    # no round is spent and nothing is quarantined - and it had no home
++    # here, which is what pushed class mechanics into panels.md where
++    # they are barred.
++    nfb = _norm(REFERENCES / "fallbacks.md")
++    assert "panel-lane-unavailable" in nfb
++    assert ("no round was dispatched, so nothing is spent and nothing "
++            "is quarantined") in nfb
++    assert ("the panel cannot silently convene without it") in nfb
+ 
+ 
+ def test_plan_format_panel_and_envelope_pins():
+diff --git a/evals/tools/drift_statemachine_tests.ps1 b/evals/tools/drift_statemachine_tests.ps1
+index 52bd60f..b6b28d6 100644
+--- a/evals/tools/drift_statemachine_tests.ps1
++++ b/evals/tools/drift_statemachine_tests.ps1
+@@ -273,10 +273,10 @@ $env:TMP = $FakeTemp
+ # pinned fixture, so the template canary passes offline; .gitconfig gives
+ # the script's worktree commits an identity.
+ $FakeProfile = Join-Path $Root "profile"
+-$SpTemplate = Join-Path $FakeProfile ".claude\plugins\cache\claude-plugins-official\superpowers\6.1.1\skills\requesting-code-review\code-reviewer.md"
+-$FakeSp = Join-Path $FakeProfile ".claude\plugins\cache\claude-plugins-official\superpowers\6.1.1"
++$SpTemplate = Join-Path $FakeProfile ".claude\plugins\cache\claude-plugins-official\superpowers\6.2.0\skills\requesting-code-review\code-reviewer.md"
++$FakeSp = Join-Path $FakeProfile ".claude\plugins\cache\claude-plugins-official\superpowers\6.2.0"
+ New-Item -ItemType Directory -Force -Path (Split-Path $SpTemplate) | Out-Null
+-$PinnedFixture = Join-Path $Clone "evals\multi-model-verify\fixtures\superpowers-code-reviewer-6.1.1.md"
++$PinnedFixture = Join-Path $Clone "evals\multi-model-verify\fixtures\superpowers-code-reviewer-6.2.0.md"
+ Copy-Item $PinnedFixture $SpTemplate -Force
+ # A fake USERPROFILE needs a real profile's shell-folder skeleton: PS 5.1
+ # resolves its job persistence path through USERPROFILE-expanded folders,
+@@ -289,7 +289,7 @@ foreach ($dir in @("Documents", "AppData\Roaming", "AppData\Local", "AppData\Loc
+ $registry = @{
+     plugins = @{
+         "superpowers@claude-plugins-official" = @(
+-            @{ version = "6.1.1"; installPath = $FakeSp }
++            @{ version = "6.2.0"; installPath = $FakeSp }
+         )
+     }
+ }
+@@ -315,7 +315,7 @@ function Reset-State {
+     # changelog fetch - every scenario runs fully offline. The superpowers
+     # template is restored to the pinned fixture so only the scenario that
+     # wants a WARN gets one.
+-    Set-Snapshot "1.2.3" "7.7.7" "6.1.1"
++    Set-Snapshot "1.2.3" "7.7.7" "6.2.0"
+     Copy-Item $PinnedFixture $SpTemplate -Force
+     if (Test-Path $PendingFile) { Remove-Item $PendingFile -Force }
+     if (Test-Path $ReportsDir) { Remove-Item -Recurse -Force $ReportsDir }
+@@ -385,7 +385,7 @@ function Complete-Scenario($failsBefore) {
+ 
+ $b = $script:failCount
+ Reset-State
+-Set-Snapshot "9.9.9" "7.7.7" "6.1.1"
++Set-Snapshot "9.9.9" "7.7.7" "6.2.0"
+ Invoke-Drift "carry-forward" "version-fail" "" 60000
+ Assert-True ($script:LastExit -eq 1) "exit code 1 on findings"
+ Assert-True ($script:LastReport -match '\[CRITICAL\] claude --version failed') "claude probe failure is CRITICAL"
+@@ -620,7 +620,7 @@ Complete-Scenario $b
+ # --- scenario: kimi-version-carry (failed probe never clobbers the snapshot) -------
+ 
+ $b = $script:failCount
+-Set-SnapshotWithKimi "1.2.3" "7.7.7" "6.1.1" "9.9.9"
++Set-SnapshotWithKimi "1.2.3" "7.7.7" "6.2.0" "9.9.9"
+ Copy-Item $PinnedFixture $SpTemplate -Force
+ if (Test-Path $PendingFile) { Remove-Item $PendingFile -Force }
+ if (Test-Path $ReportsDir) { Remove-Item -Recurse -Force $ReportsDir }
+diff --git a/hooks/superpowers-review-companion.ps1 b/hooks/superpowers-review-companion.ps1
+index 0d03d84..f1959f6 100644
+--- a/hooks/superpowers-review-companion.ps1
++++ b/hooks/superpowers-review-companion.ps1
+@@ -1,7 +1,7 @@
+ # PostToolUse hook (Task): when the superpowers requesting-code-review skill
+ # dispatches its code-reviewer subagent, inject a reminder to run the
+ # multi-model-verify skill's diff mode on the same commit range.
+-# Fingerprint: the rendered code-reviewer.md template (superpowers 6.1.1)
++# Fingerprint: the rendered code-reviewer.md template (superpowers 6.2.0)
+ # always contains the literals "Senior Code Reviewer" and "Git Range to
+ # Review"; both must be present. Re-check the template after superpowers
+ # updates - if the fingerprint rots, this hook silently stops firing (fails
+diff --git a/skills/multi-model-verify/references/fallbacks.md b/skills/multi-model-verify/references/fallbacks.md
+index 46190bc..11b0cab 100644
+--- a/skills/multi-model-verify/references/fallbacks.md
++++ b/skills/multi-model-verify/references/fallbacks.md
+@@ -207,6 +207,26 @@ into the debate record as OPEN - adjudicated by the session or
+ re-raised with a substitute, never silently dropped. A lost lane's
+ incomplete round is never adjudicated.
+ 
++### Panel lane unavailable before dispatch - class `panel-lane-unavailable`
++
++A lane the environment cannot host AT ALL, established before round 1:
++the Fable seat below its harness floor (references/panels.md), a CLI
++absent from the machine, a model the account cannot reach. This is not
++`panel-lane-loss` - that class governs a lane failing MID-panel, and
++its machinery (carrying OPEN findings forward, never adjudicating an
++incomplete round) has nothing to act on here, because no round was
++dispatched, so nothing is spent and nothing is quarantined.
++
++The disposition is the same in the one respect that matters: the
++panel cannot silently convene without it. Before round 1 the driver
++states which lanes it can actually convene and which it cannot, with
++the reason, and the user chooses - proceed with the convenable
++composition, substitute, or abort. The panel invariant still binds
++whatever is chosen: at least one cross-vendor lane, so a composition
++reduced to Fable alone is not a panel and cannot proceed as one. An
++unavailable lane is recorded in the debate record by name and reason;
++a composition the user was never shown is never the one that ran.
++
+ ## Degraded-mode output requirements (after consent)
+ 
+ - The SUPERVISING SESSION emits the banner — never delegate the banner to
+diff --git a/skills/multi-model-verify/references/panels.md b/skills/multi-model-verify/references/panels.md
+index 38bcaac..24d54b4 100644
+--- a/skills/multi-model-verify/references/panels.md
++++ b/skills/multi-model-verify/references/panels.md
+@@ -63,6 +63,22 @@ A terminal verdict counts only when it cites the FINAL subject revision; a verdi
+   is evidenced by transcript recall; the failure mode is agent death,
+   which is loud (class panel-lane-loss, fallbacks.md). Self-reported
+   identity is priming-class and never evidence.
++  **Harness floor: Claude Code 2.1.216.** Everything in the paragraph
++  above holds only at or above it. Below the floor a resumed background
++  agent silently reverted to the default agent, dropping the model pin,
++  the seat's system prompt, and its read-only tool restriction in one
++  step - so "the failure mode is agent death, which is loud" was false
++  there, and the silent mode defeated the pin and the allowlist
++  together. Both probes ran on 2.1.220, after the fix, which is why the
++  original wording read as a platform guarantee. Check `claude
++  --version` before dispatching the Fable lane; below the floor the lane
++  is UNAVAILABLE, not degraded, and the case routes to fallbacks.md's
++  `panel-lane-unavailable` - which, like every other lane loss, stops
++  at the consent gate rather than quietly convening a smaller panel.
++  (Source: Claude Code 2.1.216 changelog, "Fixed resumed background
++  agent sessions reverting to the default agent: the agent's prompt and
++  tool restrictions are now restored"; surfaced by the drift watch,
++  triaged 2026-07-27.)
+ 
+ ## Convergence and adjudication
+ 
+diff --git a/tools/check-drift.ps1 b/tools/check-drift.ps1
+index 4d8817c..049b612 100644
+--- a/tools/check-drift.ps1
++++ b/tools/check-drift.ps1
+@@ -36,7 +36,7 @@ param(
+ $RepoRoot = Split-Path $PSScriptRoot
+ $SnapshotFile = Join-Path $PSScriptRoot "drift-snapshot.json"
+ $ReportDir = Join-Path $PSScriptRoot "drift-reports"
+-$FixtureFile = Join-Path $RepoRoot "evals\multi-model-verify\fixtures\superpowers-code-reviewer-6.1.1.md"
++$FixtureFile = Join-Path $RepoRoot "evals\multi-model-verify\fixtures\superpowers-code-reviewer-6.2.0.md"
+ $ChangelogUrl = "https://raw.githubusercontent.com/anthropics/claude-code/main/CHANGELOG.md"
+ # Keywords in a Claude Code changelog entry that can affect parallax's
+ # hook, skill loading, or the behavioral runner's headless invocation.
