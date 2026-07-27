@@ -212,17 +212,34 @@ The reader never has to search 633 assertions to find which one is short.
     bindings was considered and rejected as machinery with no failure
     behind it.
   - A regex lock. `re.search(r"converged with amendments", text)` at
-    `test_multi_model_verify.py:313` genuinely locks a phrase in
-    `debate-protocol.md`, and is dropped. A regex is not a substring, so
-    admitting it would mean deciding which patterns are literal — a much
-    larger rule for one case.
+    `test_multi_model_verify.py:318` genuinely locks a phrase in
+    `debate-protocol.md`, and is dropped. This is NOT one case: lines
+    306, 307, 311, 318 and 325 of that file all lock literal phrases in
+    the same document this way, and more do so elsewhere. The loss is
+    accepted anyway, because a regex is not a substring: admitting it
+    would mean deciding which patterns are literal, which is a much
+    larger rule than the one it would serve. An author who wants a
+    marked region locked writes a membership assertion instead.
   - A literal compared with `==`.
-- **The keyword must be spelled `contract:` with no space before the
-  colon.** `<!-- contract : start id=x -->` matches neither the detector
-  nor the strict forms, so it is ignored rather than rejected. It cannot
-  cause a silent deletion in practice: a one-sided typo is caught by the
-  partner marker, and a two-sided typo while ADDING a region is caught by
-  the declared inventory, which the task order always populates first.
+- **A typo in the comment opener or the keyword makes a marker invisible
+  rather than rejected.** The failure table's promise covers comments the
+  detector RECOGNIZES as ours; anything that misses the detector entirely
+  is not seen at all. The class is wider than one spelling:
+  `<!-- contract : start id=x -->` with a space before the colon,
+  `<!--- contract:start id=x -->` with a mistyped opener, and anything
+  else that breaks `<!--` immediately followed by `contract:`. It cannot
+  cause a silent deletion in practice, and the argument covers the whole
+  class rather than one member: a one-sided typo is caught by the partner
+  marker, and a two-sided typo while ADDING a region is caught by the
+  declared inventory, which the task order always populates before any
+  document is touched.
+- **The count form matches any receiver named `count`, not only a
+  document.** `ast` sees a method name, never a type, so
+  `paths.count("The rule stands.")` over a list would register as a pin.
+  Every live `.count` receiver is a document string, and the wording
+  everywhere else says `body.count(...)` because that is the intended
+  use. Checking the receiver's type is not possible from the syntax tree,
+  so the limit is stated rather than closed.
 - **`body.count("x") == 0` is rejected, not accepted.** An earlier
   revision left it in as a limit, reasoning that the false-coverage path
   needed one document to both contain and exclude the same text. That

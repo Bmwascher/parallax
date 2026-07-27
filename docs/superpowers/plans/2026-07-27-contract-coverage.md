@@ -625,6 +625,13 @@ def _strings(node):
 
 
 def _is_count_call(node):
+    """Any `<something>.count(...)` call.
+
+    Accepted limit: ast sees a method NAME, never a type, so a
+    `list.count(...)` would register too. Every live receiver is a
+    document string, and checking the type is not possible from the
+    syntax tree, so the limit is stated rather than closed.
+    """
     return (isinstance(node, ast.Call)
             and isinstance(node.func, ast.Attribute)
             and node.func.attr == "count")
@@ -1449,11 +1456,23 @@ In `CLAUDE.md`, under `## Skill editing rules`, append:
 ```markdown
 Contract text inside `contract:start` / `contract:end` HTML comment
 markers must sit WHOLE inside a single pin in `evals/multi-model-verify/`.
-A pin is a string literal on the left of `"literal" in body`, or an
-argument to `body.count("literal")`. Nothing else counts: a string in an
-assertion's failure message, under `not`, in a `not in` comparison, in an
-`==` comparison, or reached through a variable name locks nothing, and
-the checker will report the region as unlocked.
+
+A pin is a string literal in one of exactly three assertion clause forms:
+
+- `"literal" in body`
+- `body.count("literal")`, alone or compared `== n` or `>= n` with n at
+  least 1, or `> n` with n at least 0
+- an `and` of those
+
+Nothing else counts, and the rule matches a COMPLETE clause rather than
+looking for these shapes anywhere in the expression. A string locks
+nothing if it sits in a docstring, in an assertion's failure message,
+under `not`, in a `not in` comparison, on either side of an `or`, in a
+zero or negative count comparison, in an `==` comparison, in a regex such
+as `re.search(...)`, or is reached through a variable name. In every one
+of those cases the checker reports the region as unlocked, which is a
+red; it never reads as covered.
+
 `test_contract_coverage.py` enforces this and lists any region that is
 not locked. A region too long for one pin is two regions. Adding or
 removing a marked region also means editing `DECLARED_REGIONS` in that
