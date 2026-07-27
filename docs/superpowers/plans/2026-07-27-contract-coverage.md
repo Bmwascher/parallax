@@ -4,21 +4,24 @@
 
 **Goal:** Make it impossible for a marked contract region to go unpinned, or for a marked region to be deleted, without a test turning red.
 
-**Architecture:** A pure-function module parses `<!-- contract:start id=... -->` regions out of the reference and agent documents, extracts every string literal that a positive-presence assertion checks for in the test modules through Python's `ast`, and requires each region to sit whole inside one of those strings. A separate declared inventory of region ids closes the delete-the-whole-region hole. The checker is consumed by one pytest module.
+**Architecture:** A pure-function module parses `<!-- contract:start id=... -->` regions out of the reference and agent documents, extracts every string literal that a positive-presence assertion clause checks for in the test modules through Python's `ast`, and requires each region to sit whole inside one of those strings. A separate declared inventory of region ids closes the delete-the-whole-region hole. The checker is consumed by one pytest module.
 
 **Tech Stack:** Python 3.12 standard library only (`ast`, `re`, `pathlib`), pytest 9.x, `tmp_path` fixtures. No new dependencies.
 
-**This is revision 2 of the plan.** Revision 1 split regions into sentences with a regex and treated every string constant as a pin. A cross-vendor review ran the code and refuted both. See the design's "Revision history". Do not reintroduce sentence splitting.
+**This is revision 3 of the plan, after three rounds of cross-vendor review that found ten defects.** Revision 1 split regions into sentences with a regex and treated every string constant as a pin; both were refuted by running the code. Revision 2 fixed those but still let an enclosing expression invert a pin, and still let a multi-line marker comment vanish. See the design's "Revision history" before proposing a return to any earlier behaviour. Do not reintroduce sentence splitting, and do not relax the clause rule into a generic tree walk.
 
 ## Global Constraints
 
 - Design spec: `docs/superpowers/specs/2026-07-27-contract-coverage-design.md`. Copied verbatim below where a task depends on it.
 - **Whole-region containment.** A region is covered only when ONE pin string contains the whole region body. Overlap does not count, and two pins that jointly span a region do not count.
 - **One region, one pin.** There is no sentence splitting anywhere in this plan. A region too long for one pin is two regions.
-- **A pin is a string literal in one of exactly two positive-presence shapes:** the left operand of `"literal" in body`, or an argument to `body.count("literal")`. Nothing else counts. Not a docstring, not an assertion's failure message, not anything under `not`, not anything in a `not in` comparison, not an `==` comparison, and not a string reached through a variable name. Every one of those exclusions is an accepted limit whose failure direction is safe: it makes a region read UNCOVERED, which is a red, and can never manufacture coverage.
+- **A pin is a string literal in one of exactly three positive-presence CLAUSE forms:** `"literal" in body`; `body.count("literal")` alone or compared `== n` / `>= n` (n ≥ 1) / `> n` (n ≥ 0); or an `and` of those. Nothing else counts.
+- **The rule matches a complete clause and NEVER descends into an unrecognized expression.** Matching `in` anywhere in the tree lets an enclosing expression flip its meaning: `assert ("lit" in body) == False` and `assert flag or "lit" in body` both contain a membership test the assertion does not require. The second shape is live at `evals/multi-model-verify/test_flash_implementer.py:58`.
+- Excluded, every one an accepted limit whose failure direction is safe — the region reads UNCOVERED, which is a red, never false coverage: a docstring, an assertion's failure message, anything under `not`, anything in a `not in` comparison, anything under `or`, a zero or negative count comparison, an `==` comparison, a regex lock such as `re.search(...)`, and a string reached through a variable name.
 - Region ids are lowercase letters, digits and hyphens, and unique across the whole repo, not per file.
 - All marker and coverage problems are hard test failures. Never warnings, never skips.
 - **A marker owns its line.** Any line whose comment keyword is `contract:` must strip to exactly the start or end syntax, or it is a hard failure. Detection does not require a closing `-->`, because an unterminated marker would otherwise be invisible, which is the same silent-deletion hole in a different shape.
+- **Marker detection runs over the WHOLE text before the line scan.** An HTML comment may legally span lines, and `<!--` on one line with `contract:start id=demo -->` on the next matches no single line at all. A line scan alone would let that region vanish with no error.
 - **`agents/*.md` already carries a different marker family and must keep working.** `agents/implementer.md` and `agents/flash-implementer.md` contain `<!-- shared-contract:start -->` / `<!-- shared-contract:end -->`, the 0.12.0 parity mechanism pinned by `test_shared_contract_parity`. Both files are inside the tree this checker scans. The keyword must therefore be anchored to the start of the comment, so `shared-contract:` is ignored rather than rejected. Do not rename the existing markers.
 - Region text and pin text are both whitespace-normalized before comparison, matching the existing `_norm` convention (`" ".join(text.split())`).
 - Do not modify the 633 existing assert statements in `evals/**/test_*.py` except to extend ones the checker proves are short.
@@ -191,6 +194,19 @@ def test_an_unterminated_marker_is_rejected_not_ignored():
         parse_regions(text, "demo.md")
 
 
+def test_a_marker_split_across_lines_is_rejected_not_ignored():
+    """A legal HTML comment may span lines, and then it matches no single
+    line at all. A line-by-line scan alone lets the region vanish without
+    a word, which is the same silent-deletion hole in a third shape."""
+    text = (
+        "<!--\ncontract:start id=demo -->\n"
+        "The rule.\n"
+        "<!-- contract:end -->\n"
+    )
+    with pytest.raises(MarkerError, match="malformed contract marker"):
+        parse_regions(text, "demo.md")
+
+
 def test_a_marker_sharing_a_line_with_prose_is_rejected():
     text = (
         "prose before <!-- contract:start id=demo --> prose after\n"
@@ -274,6 +290,14 @@ END = re.compile(r"<!--\s*contract:end\s*-->")
 # capitalized keyword is REJECTED rather than silently ignored.
 MARKERISH = re.compile(r"<!--\s*contract:", re.IGNORECASE)
 
+# Whole-text pass, run BEFORE the line scan. An HTML comment may legally
+# span lines, and `<!--` on one line with `contract:start id=demo -->` on
+# the next matches no single line at all - so a line scan alone lets that
+# region vanish without a word. Trailing `|\Z` so an unterminated comment
+# is still matched rather than being skipped.
+COMMENT = re.compile(r"<!--(.*?)(?:-->|\Z)", re.S)
+KEYWORD = re.compile(r"\s*contract:", re.IGNORECASE)
+
 
 class MarkerError(Exception):
     """Malformed or mis-declared markers. Always a hard failure."""
@@ -305,8 +329,31 @@ def _classify(line, source, lineno):
         "'<!-- contract:end -->'.")
 
 
+def _preflight(text, source):
+    """Reject any contract-keyword comment that is not a clean one-liner.
+
+    Runs over the whole text, so it catches the two shapes a line scan
+    cannot see: a comment split across lines, and an unterminated one.
+    `shared-contract:` is untouched - KEYWORD is anchored to the start of
+    the comment body, so the 0.12.0 parity markers do not match.
+    """
+    for match in COMMENT.finditer(text):
+        if not KEYWORD.match(match.group(1)):
+            continue
+        span = match.group(0)
+        stripped = span.strip()
+        if ("\n" in span
+                or not (START.fullmatch(stripped) or END.fullmatch(stripped))):
+            raise MarkerError(
+                f"{source}: malformed contract marker {span[:60]!r}. "
+                "A marker must be a single line, exactly "
+                "'<!-- contract:start id=<lowercase-id> -->' or "
+                "'<!-- contract:end -->'.")
+
+
 def parse_regions(text, source):
     """Return {region_id: normalized_body} for ONE document."""
+    _preflight(text, source)
     regions = {}
     open_id = None
     buf = []
@@ -362,12 +409,12 @@ def collect_regions(paths):
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `python -m pytest evals/multi-model-verify/test_contract_coverage.py -q`
-Expected: 16 passed.
+Expected: 17 passed.
 
 - [ ] **Step 5: Run the full suite to confirm nothing regressed**
 
 Run: `python -m pytest evals -q`
-Expected: 186 passed, 1 skipped.
+Expected: 187 passed, 1 skipped.
 
 - [ ] **Step 6: Commit**
 
@@ -453,8 +500,48 @@ def test_a_negative_membership_assertion_is_not_a_pin(tmp_path):
     assert "The other rule." not in pins
 
 
+def test_a_membership_test_inverted_by_its_parent_is_not_a_pin(tmp_path):
+    """The clause rule exists for this. Matching `in` anywhere in the
+    tree lets an enclosing expression flip its meaning."""
+    src = 'def test_x():\n    assert ("The rule stands." in body) == False\n'
+    p = _write(tmp_path, "test_sample.py", src)
+    assert "The rule stands." not in collect_pins([p])
+
+
+def test_a_membership_test_inside_an_or_is_not_a_pin(tmp_path):
+    """Live shape at evals/multi-model-verify/test_flash_implementer.py:58:
+    the assertion permits EITHER branch, so neither side is required and
+    neither locks anything on its own."""
+    src = (
+        'def test_x():\n'
+        '    assert "stdin" not in body or "The rule stands." in body\n'
+    )
+    p = _write(tmp_path, "test_sample.py", src)
+    assert "The rule stands." not in collect_pins([p])
+
+
+def test_a_zero_count_assertion_is_not_a_pin(tmp_path):
+    """A zero count asserts ABSENCE. Pins and regions are pooled
+    repo-wide, so an absence assertion about one document would otherwise
+    cover identical text in another."""
+    src = 'def test_x():\n    assert body.count("The rule stands.") == 0\n'
+    p = _write(tmp_path, "test_sample.py", src)
+    assert "The rule stands." not in collect_pins([p])
+
+
+def test_a_conjunction_of_clauses_collects_both(tmp_path):
+    src = (
+        'def test_x():\n'
+        '    assert "First rule." in body and "Second rule." in body\n'
+    )
+    p = _write(tmp_path, "test_sample.py", src)
+    pins = collect_pins([p])
+    assert "First rule." in pins
+    assert "Second rule." in pins
+
+
 def test_an_equality_expectation_is_not_a_pin(tmp_path):
-    """Neither of the two positive shapes. Accepted limit: the failure
+    """None of the three clause forms. Accepted limit: the failure
     direction is a red, never false coverage."""
     src = 'def test_x():\n    assert result == "The rule stands."\n'
     p = _write(tmp_path, "test_sample.py", src)
@@ -537,38 +624,68 @@ def _strings(node):
             if isinstance(s, ast.Constant) and isinstance(s.value, str)}
 
 
-def _collect_from(node, pins):
-    """Walk an assert's TEST expression for positive-presence literals.
+def _is_count_call(node):
+    return (isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "count")
 
-    Exactly two shapes count: the left operand of `"literal" in body`,
-    and an argument to `body.count("literal")`. Both check that text is
-    PRESENT in a document, which is what a pin means.
 
-    Everything else is skipped, and the skips are the point. Measured on
-    the live suite: walking a whole `ast.Assert` yields 715 strings, of
-    which 192 are only reachable through a failure message and lock
-    nothing, and 19 sit in `not in` comparisons that assert ABSENCE. A
-    hermetic `assert path.is_file(), "The rule stands."` would otherwise
-    make a region read as covered while checking no document at all.
-    Restricting to the two positive shapes yields 375, and every region
-    in scope keeps the coverage it had.
+def _clause_pins(node):
+    """Pins from a COMPLETE positive-presence clause, or nothing.
+
+    This function NEVER descends into an expression it does not
+    recognize, and that restraint is the whole point. Matching a shape
+    anywhere in the tree lets an enclosing expression flip its meaning:
+    `assert ("lit" in body) == False` and `assert flag or "lit" in body`
+    both CONTAIN a positive membership test that the assertion as a whole
+    does not require. The second is live, at
+    evals/multi-model-verify/test_flash_implementer.py:58, where the
+    assertion permits either the absence of "stdin" or the presence of
+    "does not reach" - so treating the latter as an unconditional pin
+    would manufacture coverage.
+
+    Three clause forms and no others:
+      "literal" in body
+      body.count("literal"), alone or compared == n / >= n (n >= 1)
+                             or > n (n >= 0)
+      <clause> and <clause>
+
+    Measured on the live suite: an unrestricted walk of `ast.Assert`
+    yields 715 strings, of which 192 are only reachable through a failure
+    message and lock nothing, and 19 sit in `not in` comparisons that
+    assert ABSENCE. The clause rule yields 371, and every region in scope
+    keeps the coverage it had.
 
     Never called on `Assert.msg`.
     """
-    if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not):
-        return
-    if isinstance(node, ast.Compare):
-        if any(isinstance(op, ast.NotIn) for op in node.ops):
-            return
-        if len(node.ops) == 1 and isinstance(node.ops[0], ast.In):
-            pins |= _strings(node.left)
-    if isinstance(node, ast.Call):
-        fn = node.func
-        if isinstance(fn, ast.Attribute) and fn.attr == "count":
-            for arg in node.args:
-                pins |= _strings(arg)
-    for child in ast.iter_child_nodes(node):
-        _collect_from(child, pins)
+    if isinstance(node, ast.BoolOp) and isinstance(node.op, ast.And):
+        pins = set()
+        for value in node.values:
+            pins |= _clause_pins(value)
+        return pins
+    if isinstance(node, ast.Compare) and len(node.ops) == 1:
+        op, right = node.ops[0], node.comparators[0]
+        if isinstance(op, ast.In):
+            return _strings(node.left)
+        if (_is_count_call(node.left)
+                and isinstance(right, ast.Constant)
+                and isinstance(right.value, int)
+                and not isinstance(right.value, bool)):
+            n = right.value
+            positive = ((isinstance(op, (ast.Eq, ast.GtE)) and n >= 1)
+                        or (isinstance(op, ast.Gt) and n >= 0))
+            if positive:
+                pins = set()
+                for arg in node.left.args:
+                    pins |= _strings(arg)
+                return pins
+        return set()
+    if _is_count_call(node):
+        pins = set()
+        for arg in node.args:
+            pins |= _strings(arg)
+        return pins
+    return set()
 
 
 def collect_pins(paths):
@@ -578,17 +695,17 @@ def collect_pins(paths):
     as adjacent string literals across several lines, and the parser
     joins those into one constant for us.
 
-    Accepted limit: a string bound to a name and asserted through that
-    name is not collected. One such pin exists today. The failure
-    direction is safe - its region reads as uncovered, which is a red -
-    so following name bindings is machinery with no failure behind it.
+    Accepted limits, all with the same safe failure direction - the
+    region reads UNCOVERED, which is a red, never false coverage: a
+    string bound to a name and asserted through that name, a regex lock
+    such as `re.search(r"...", text)`, and a literal compared with `==`.
     """
     pins = set()
     for path in paths:
         tree = ast.parse(path.read_text(encoding="utf-8"))
         for node in ast.walk(tree):
             if isinstance(node, ast.Assert):
-                _collect_from(node.test, pins)
+                pins |= _clause_pins(node.test)
     return pins
 
 
@@ -623,12 +740,12 @@ def format_failure(misses):
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `python -m pytest evals/multi-model-verify/test_contract_coverage.py -q`
-Expected: 29 passed.
+Expected: 34 passed.
 
 - [ ] **Step 5: Run the full suite**
 
 Run: `python -m pytest evals -q`
-Expected: 199 passed, 1 skipped.
+Expected: 204 passed, 1 skipped.
 
 - [ ] **Step 6: Commit**
 
@@ -803,7 +920,7 @@ was built for. Stop and fix the checker, not the test.
 - [ ] **Step 6: Run the full suite**
 
 Run: `python -m pytest evals -q`
-Expected: 203 passed, 1 skipped.
+Expected: 208 passed, 1 skipped.
 
 - [ ] **Step 7: Commit**
 
@@ -997,7 +1114,7 @@ Expected: all passed.
 - [ ] **Step 7: Run the full suite and the two skill gates**
 
 Run: `python -m pytest evals -q`
-Expected: 205 passed, 1 skipped.
+Expected: 210 passed, 1 skipped.
 
 Run: `python evals/tools/skill_lint.py skills/multi-model-verify --strict`
 Expected: `PASS — 0 error(s), 0 warning(s)`
@@ -1147,7 +1264,7 @@ Expected: all passed.
 - [ ] **Step 8: Run the full suite and both skill gates**
 
 Run: `python -m pytest evals -q`
-Expected: 205 passed, 1 skipped.
+Expected: 210 passed, 1 skipped.
 
 Run: `python evals/tools/skill_lint.py skills/multi-model-verify --strict`
 Expected: `PASS — 0 error(s), 0 warning(s)`
@@ -1297,7 +1414,7 @@ Expected: all passed.
 - [ ] **Step 7: Run the full suite and both skill gates**
 
 Run: `python -m pytest evals -q`
-Expected: 205 passed, 1 skipped.
+Expected: 210 passed, 1 skipped.
 
 Run: `python evals/tools/skill_lint.py skills/multi-model-verify --strict`
 Expected: `PASS — 0 error(s), 0 warning(s)`
@@ -1359,7 +1476,7 @@ In `.claude-plugin/plugin.json`, change `"version": "0.14.4"` to
 - [ ] **Step 4: Run every gate**
 
 Run: `python -m pytest evals -q`
-Expected: 205 passed, 1 skipped.
+Expected: 210 passed, 1 skipped.
 
 Run: `python evals/tools/skill_lint.py skills/multi-model-verify --strict`
 Expected: `PASS — 0 error(s), 0 warning(s)`
@@ -1396,8 +1513,8 @@ to update the two pins extended in Task 4.
 
 ## Counts, and what to do if they differ
 
-Expected `python -m pytest evals -q` after each task: 186, 199, 203, 205,
-205, 205, 205 passed, with 1 skipped throughout. These come from the test
-functions this plan adds: 16 in Task 1, 13 in Task 2, 4 in Task 3, 2 in
+Expected `python -m pytest evals -q` after each task: 187, 204, 208, 210,
+210, 210, 210 passed, with 1 skipped throughout. These come from the test
+functions this plan adds: 17 in Task 1, 17 in Task 2, 4 in Task 3, 2 in
 Task 4, none in Tasks 5 to 7. If a number differs, count the tests you
 actually added before assuming a regression.

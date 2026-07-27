@@ -4,11 +4,13 @@ Date: 2026-07-27
 Backlog item: 1 of 6 (docs/superpowers/plans/2026-07-27-0150-backlog.md)
 Target release: 0.15.0
 
-**Revision 2**, after a two-lane cross-vendor plan debate. The mechanism
-changed as a result: sentence splitting is gone, pins are no longer "any
-string constant", and malformed markers are now a hard failure. What
-changed and why is in "Revision history" at the end. Read that before
-proposing a return to any revision-1 behaviour.
+**Revision 3**, after three rounds of cross-vendor plan debate across two
+reviewer lanes, which found ten defects between them. The mechanism
+changed twice: sentence splitting is gone, pin collection is a
+clause-matching rule rather than a tree walk, and marker rejection now
+runs over the whole document text. What changed and why is in "Revision
+history" at the end. Read it before proposing a return to any earlier
+behaviour.
 
 ## Problem
 
@@ -102,6 +104,12 @@ silently ceases to exist. Silence is the one outcome this design may
 never produce. Detection therefore does not wait for a closing `-->`,
 because an unterminated marker would otherwise be invisible too.
 
+Detection also runs over the WHOLE document text before the line-by-line
+scan, not only over lines. An HTML comment may legally span lines, and
+`<!--` on one line with `contract:start id=demo -->` on the next matches
+no single line at all, so a line scan alone lets that region vanish
+without a word.
+
 The keyword is anchored to the start of the comment. `agents/` already
 carries a different marker family — the 0.12.0 `shared-contract:start` /
 `shared-contract:end` parity mechanism in `implementer.md` and
@@ -118,23 +126,31 @@ checker could never run.
   floor is contract text and lives in an agent file.
 - Pins: every string literal that a POSITIVE-PRESENCE assertion checks
   against a document, in every `.py` under `evals/multi-model-verify/`,
-  read through Python's `ast`. Two shapes count, and only these two:
-  the left operand of `"literal" in body`, and an argument to
-  `body.count("literal")`. The parser joins implicitly concatenated
+  read through Python's `ast`. The parser joins implicitly concatenated
   literals, which is how nearly every pin in this repo is written.
 
-  Three exclusions, each closing a measured false-coverage path in the
-  live suite:
+  **The rule matches a COMPLETE assertion clause, and never descends into
+  an expression it does not recognize.** This is the part that took three
+  attempts to get right. Recognizing a shape anywhere in the tree lets an
+  enclosing expression flip its meaning: `assert ("lit" in body) == False`
+  and `assert flag or "lit" in body` both contain a positive membership
+  test that the assertion as a whole does not require. The second shape
+  is live, at `evals/multi-model-verify/test_flash_implementer.py:58`.
 
-  | excluded | why | live count |
-  |---|---|---|
-  | an assertion's failure message | `assert m, "..."` checks nothing about the text | 192 strings |
-  | anything under `not` | a negation asserts absence | 9 assertions |
-  | anything in a `not in` comparison | likewise | 19 strings |
+  Three clause forms, and only these three:
 
-  Restricting to the two positive shapes takes the live pin set from 715
-  strings to 375. All nine regions in scope keep the coverage they had
-  under the looser rule, so nothing real is lost.
+  | clause | pins |
+  |---|---|
+  | `"literal" in body` | the left operand |
+  | `body.count("literal")`, alone or compared `== n`, `>= n` (n ≥ 1) or `> n` (n ≥ 0) | the call's arguments |
+  | `<clause> and <clause>` | the union |
+
+  Everything else contributes nothing: a failure message, `not`,
+  `not in`, `or`, `==` against anything but a positive count, a bare
+  name, a call that is not `.count`. Measured on the live suite, the
+  clause rule takes 715 strings down to 371. All nine regions in scope
+  keep the coverage they had, and all three history controls stay
+  covered, so nothing load-bearing is lost.
 
 **Procedure.**
 
@@ -187,25 +203,32 @@ The reader never has to search 633 assertions to find which one is short.
 
 ## Accepted limits
 
-- **A pin must be written as a literal in one of the two positive
-  shapes.** A string bound to a variable and asserted through that name
-  is not collected; one such pin exists today, in
-  `test_seat_reshuffle.py`. Nor is a literal compared with `==`. The
-  failure direction is safe in every case: an uncollected pin makes its
-  region read as uncovered, which is a red, and the author rewrites the
-  assertion. It can never manufacture coverage. Following name bindings
-  was considered and rejected as machinery with no failure behind it.
+- **A pin must be written as a literal in one of the three clause
+  forms.** Three real losses are accepted, all with the same safe failure
+  direction — the region reads uncovered, which is a red, and the author
+  rewrites the assertion:
+  - A string bound to a variable and asserted through that name. One such
+    pin exists today, in `test_seat_reshuffle.py`. Following name
+    bindings was considered and rejected as machinery with no failure
+    behind it.
+  - A regex lock. `re.search(r"converged with amendments", text)` at
+    `test_multi_model_verify.py:313` genuinely locks a phrase in
+    `debate-protocol.md`, and is dropped. A regex is not a substring, so
+    admitting it would mean deciding which patterns are literal — a much
+    larger rule for one case.
+  - A literal compared with `==`.
 - **The keyword must be spelled `contract:` with no space before the
   colon.** `<!-- contract : start id=x -->` matches neither the detector
   nor the strict forms, so it is ignored rather than rejected. It cannot
   cause a silent deletion in practice: a one-sided typo is caught by the
   partner marker, and a two-sided typo while ADDING a region is caught by
   the declared inventory, which the task order always populates first.
-- **`body.count("x") == 0` would be collected.** That shape asserts
-  absence, so counting it is wrong in principle, but no instance exists
-  in the suite and the false-coverage path it opens needs a region whose
-  text is simultaneously present and asserted absent. Left unhandled
-  deliberately, rather than adding a rule with no failure behind it.
+- **`body.count("x") == 0` is rejected, not accepted.** An earlier
+  revision left it in as a limit, reasoning that the false-coverage path
+  needed one document to both contain and exclude the same text. That
+  reasoning was wrong: pins and regions are pooled repo-wide, so an
+  absence assertion about document B can cover identical text in document
+  A. The count comparison must therefore be positive.
 - **Cross-region coverage.** A region is covered if any pin anywhere
   contains it, so two regions could in principle be satisfied by each
   other's pins. Regions are long enough that this requires a real
@@ -236,11 +259,15 @@ temporary directory, each a small document plus a small test file:
 | region text present only in a docstring, in no assert | fails — a string that locks nothing is not a pin |
 | region text present only in an assertion's failure message | fails — the message checks nothing |
 | region text present only in a `not in` assertion | fails — that asserts absence |
-| region text present only in an `==` comparison | fails — not one of the two positive shapes |
+| region text present only in `("text" in body) == False` | fails — the enclosing expression inverts the clause |
+| region text present only in `flag or "text" in body` | fails — the assertion does not require it |
+| region text present only in `body.count("text") == 0` | fails — a zero count asserts absence |
+| region text present only in an `==` comparison | fails — not one of the three clause forms |
 | region text in a `body.count(...)` assertion | passes — the second positive shape |
 | declared region absent from documents | fails — the deletion hole |
 | `contract:` comment with invalid syntax | fails — the vanishing-region hole |
 | `contract:` comment with no closing `-->` | fails — otherwise it is invisible |
+| a `contract:` comment split across lines | fails — a line-by-line scan alone would miss it entirely |
 | a marker sharing its line with prose | fails — markers own their line |
 | a `shared-contract:` comment from the 0.12.0 parity mechanism | ignored — a different marker family, not ours |
 | start marker with no end | fails |
@@ -323,5 +350,45 @@ predicted two failing tests where one passes vacuously with zero regions,
 and this document said "three regions" where the inventory holds nine
 ids.
 
-The difference between the two lanes was not judgement. It was that one
-of them ran the code.
+**Revision 2** fixed those three, and a second review round found three
+more in the fixes themselves:
+
+4. **Pin collection walked the whole `ast.Assert`, including its failure
+   message.** 194 of 715 collected strings came from `assert x, "msg"`,
+   which checks nothing about any document. Re-deriving that surfaced a
+   second path the review named but had not counted: 19 strings sit in
+   `not in` comparisons, which assert ABSENCE.
+5. **Marker detection required a closing `-->`,** so an unterminated
+   `<!-- contract:start id=demo` was ignored rather than rejected. The
+   same silent-deletion hole in a new shape.
+6. **A marker-placement step gave no indentation instruction,** so a
+   zero-judgment implementer could put a marker at column zero and end
+   the enclosing markdown list item.
+
+A third round, run across BOTH lanes independently, found four more —
+and both lanes independently reported the same one:
+
+7. **Restricting to `Assert.test` was not enough, because the collector
+   still descended generically.** `assert ("lit" in body) == False` and
+   `assert flag or "lit" in body` both contain a positive membership test
+   the assertion does not require, and the second shape is live at
+   `test_flash_implementer.py:58`. The fix is the clause rule above: no
+   generic descent at all.
+8. **`body.count("x") == 0` was accepted as a limit on wrong reasoning.**
+   Revision 2 argued the false-coverage path needed one document to both
+   contain and exclude the text. Pins and regions are pooled repo-wide,
+   so an absence assertion about document B covers identical text in
+   document A. Now rejected.
+9. **A multi-line marker comment vanished.** `<!--` on one line and
+   `contract:start id=demo -->` on the next matches no single line, so a
+   line-by-line scan missed it entirely. Detection now runs over the
+   whole text first.
+10. **Task 7 still told future authors that a pin is "a string inside an
+    `assert`"** — the definition finding 4 had just refuted, written into
+    the standing instruction file. Both lanes found this one, and it is
+    the pattern this whole mechanism exists to break: a defect inside the
+    fix, in the last-written and least-checked artifact.
+
+The lane that ran the code found eight of the ten. The lane that could
+only read found the one written into the instruction file, which running
+the code would never have surfaced. Neither seat was redundant.
