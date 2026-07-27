@@ -98,11 +98,15 @@ def test_backup_lane_dispatch_and_resume_pins():
     # the re-pinned resume is load-bearing: bare -r restores full tools,
     # model/thinking inherit from CONFIG DEFAULTS, and -w does not
     # inherit at all (a resume without it runs in the shell's cwd -
-    # caught live against the real tree), so the pin covers the
-    # COMPLETE resumed command through -w
+    # caught live against the real tree).
+    # 0.14.2 Kimi panel round 2: this pin stopped at -w while its own
+    # comment claimed it covered the COMPLETE command - asserting
+    # completeness over a command it truncated. The resume payload is
+    # the same load-bearing class as the dispatch payload (headless
+    # stdin carries nothing), so the pin now runs through it.
     assert ("kimi --quiet -r <session-id> --agent-file <same yaml> -m "
-            "<canonical-backup-model-id> --thinking -w <same mirror>"
-            ) in body
+            "<canonical-backup-model-id> --thinking -w <same mirror> "
+            '-p "<rebuttal>"') in body
     assert "loads the DEFAULT agent with full write and shell tools" in body
     assert BACKUP_ID not in body  # placeholder discipline
 
@@ -115,6 +119,13 @@ def test_backup_lane_evidence_pins():
     assert "`Loading agent:` line naming the committed yaml" in body
     assert "`Loaded tools:` line equal to the allowlist exactly" in body
     assert "DISCARDED unread" in body
+    # 0.14.2 Kimi panel round 2 (4b): the three PASS conditions were
+    # pinned but the probe's CONFIGURATION FIDELITY was not - a probe
+    # run under a stricter config than the debate's would pass while
+    # the real debate config could still write. That is a silent
+    # weakening in the dangerous direction, so the clause is pinned.
+    assert ("in a fresh\n  disposable session with the exact debate "
+            "configuration") in _read(BACKUP_LANE)
     assert ("explicit refusal in the reply, marker absent on disk, "
             "mirror status delta empty") in body
     assert "Never run `kimi export` inside a repo" in body
