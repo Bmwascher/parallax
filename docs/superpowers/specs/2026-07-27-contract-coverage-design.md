@@ -67,8 +67,10 @@ alternative:
    Overlap catches instance 10 only; instance 11 had a pin touching the
    sentence that stopped early. Per-sentence coverage was the revision-1
    design and is refuted below.
-3. **A pin is a string inside an `assert` statement, not any string in
-   the file.** A string that participates in no assertion locks nothing.
+3. **A pin is a string literal in a positive-presence assertion, not any
+   string in the file and not any string inside an `assert`.** A string
+   that participates in no assertion locks nothing; neither does an
+   assertion's failure message, nor an assertion that text is ABSENT.
 4. **Pins come from the test sources, not a registry.** A registry binds
    regions to pins exactly, but requires rewriting existing pins and
    moves them away from the assertion that uses them.
@@ -92,11 +94,20 @@ word for word goes inside; rationale, observation dates, and version
 notes stay outside. This keeps regions small, which is what makes
 one-region-one-pin affordable.
 
-**Any comment containing `contract:` that does not exactly match the
-start or end syntax is a hard failure.** Without this rule a typo such as
-`<!-- contract:end id=x -->` matches neither pattern, both markers are
-ignored, and the region silently ceases to exist. Silence is the one
-outcome this design may never produce.
+**A marker owns its line, and any line whose comment keyword is
+`contract:` that does not exactly match the start or end syntax is a hard
+failure.** Without this rule a typo such as `<!-- contract:end id=x -->`
+matches neither pattern, both markers are ignored, and the region
+silently ceases to exist. Silence is the one outcome this design may
+never produce. Detection therefore does not wait for a closing `-->`,
+because an unterminated marker would otherwise be invisible too.
+
+The keyword is anchored to the start of the comment. `agents/` already
+carries a different marker family — the 0.12.0 `shared-contract:start` /
+`shared-contract:end` parity mechanism in `implementer.md` and
+`flash-implementer.md` — and both files sit inside the tree this checker
+scans. An unanchored rule would call every one of them malformed and the
+checker could never run.
 
 ## The checker
 
@@ -105,10 +116,25 @@ outcome this design may never produce.
 - Regions: every `.md` under `skills/multi-model-verify/references/` and
   every `.md` under `agents/`. Both trees are required: the panel harness
   floor is contract text and lives in an agent file.
-- Pins: every string constant appearing syntactically inside an `assert`
-  statement, in every `.py` under `evals/multi-model-verify/`, read
-  through Python's `ast`. The parser joins implicitly concatenated
+- Pins: every string literal that a POSITIVE-PRESENCE assertion checks
+  against a document, in every `.py` under `evals/multi-model-verify/`,
+  read through Python's `ast`. Two shapes count, and only these two:
+  the left operand of `"literal" in body`, and an argument to
+  `body.count("literal")`. The parser joins implicitly concatenated
   literals, which is how nearly every pin in this repo is written.
+
+  Three exclusions, each closing a measured false-coverage path in the
+  live suite:
+
+  | excluded | why | live count |
+  |---|---|---|
+  | an assertion's failure message | `assert m, "..."` checks nothing about the text | 192 strings |
+  | anything under `not` | a negation asserts absence | 9 assertions |
+  | anything in a `not in` comparison | likewise | 19 strings |
+
+  Restricting to the two positive shapes takes the live pin set from 715
+  strings to 375. All nine regions in scope keep the coverage they had
+  under the looser rule, so nothing real is lost.
 
 **Procedure.**
 
@@ -161,13 +187,19 @@ The reader never has to search 633 assertions to find which one is short.
 
 ## Accepted limits
 
-- **A pin must appear syntactically inside its `assert`.** A string bound
-  to a variable and asserted through that name is not collected. One such
-  pin exists today, in `test_seat_reshuffle.py`. The failure direction is
-  safe: an uncollected pin makes its region read as uncovered, which is a
-  red, and the author inlines the string. It can never manufacture
-  coverage. Following name bindings was considered and rejected as
-  machinery with no failure behind it.
+- **A pin must be written as a literal in one of the two positive
+  shapes.** A string bound to a variable and asserted through that name
+  is not collected; one such pin exists today, in
+  `test_seat_reshuffle.py`. Nor is a literal compared with `==`. The
+  failure direction is safe in every case: an uncollected pin makes its
+  region read as uncovered, which is a red, and the author rewrites the
+  assertion. It can never manufacture coverage. Following name bindings
+  was considered and rejected as machinery with no failure behind it.
+- **`body.count("x") == 0` would be collected.** That shape asserts
+  absence, so counting it is wrong in principle, but no instance exists
+  in the suite and the false-coverage path it opens needs a region whose
+  text is simultaneously present and asserted absent. Left unhandled
+  deliberately, rather than adding a rule with no failure behind it.
 - **Cross-region coverage.** A region is covered if any pin anywhere
   contains it, so two regions could in principle be satisfied by each
   other's pins. Regions are long enough that this requires a real
@@ -196,8 +228,15 @@ temporary directory, each a small document plus a small test file:
 | pin stops mid-region | fails — instance 11 reproduced deliberately |
 | two pins that jointly span the region but neither contains it | fails — the revision-1 silent pass, kept as a regression test |
 | region text present only in a docstring, in no assert | fails — a string that locks nothing is not a pin |
+| region text present only in an assertion's failure message | fails — the message checks nothing |
+| region text present only in a `not in` assertion | fails — that asserts absence |
+| region text present only in an `==` comparison | fails — not one of the two positive shapes |
+| region text in a `body.count(...)` assertion | passes — the second positive shape |
 | declared region absent from documents | fails — the deletion hole |
 | `contract:` comment with invalid syntax | fails — the vanishing-region hole |
+| `contract:` comment with no closing `-->` | fails — otherwise it is invisible |
+| a marker sharing its line with prose | fails — markers own their line |
+| a `shared-contract:` comment from the 0.12.0 parity mechanism | ignored — a different marker family, not ours |
 | start marker with no end | fails |
 | duplicate region id | fails |
 
