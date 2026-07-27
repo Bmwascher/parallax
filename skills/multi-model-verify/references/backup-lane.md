@@ -173,8 +173,17 @@ proceed; do not infer either key's value.
   deliberately outside it, so without the manifest the record names what
   was reviewed without being able to reconstruct it.
 - **The manifest, specified to be executable without judgment:**
-  - **Coverage is one exclusion test, never an enumerated list**: every
-    FILE present in the mirror that HEAD does not already bind — i.e.
+  - **Universe first**: the mirror's WORKTREE files, excluding the root
+    git administrative entry `.git` entirely (it may be a directory or,
+    in a worktree or submodule checkout, a file — exclude it either
+    way). The mirror preserves `.git` on purpose, and HEAD represents
+    none of its contents, so without this exclusion the coverage test
+    below would recursively hash repository metadata — objects, logs,
+    index, hooks, config — which is volatile, potentially enormous, and
+    identifies nothing about the reviewed material.
+  - **Coverage within that universe is one exclusion test, never an
+    enumerated list**: every FILE present in the mirror that HEAD does
+    not already bind — i.e.
     every file whose bytes are not identical to its HEAD blob, plus
     every file HEAD has no blob for. That single rule admits the
     copied-in inputs, the gitignored subject material (frozen plan,

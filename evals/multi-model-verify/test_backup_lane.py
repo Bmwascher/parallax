@@ -149,8 +149,18 @@ def test_backup_lane_workspace_is_a_mirror_not_a_clone():
     # ordering, and capture point - otherwise "content manifest" as a
     # phrase satisfies it while a driver cannot execute it.
     assert "AND a CONTENT MANIFEST" in body
+    # 0.14.2 Sol round 3: the mirror preserves .git by design and HEAD
+    # represents none of it, so the coverage test literally swept
+    # repository metadata - objects, logs, index, hooks. The universe
+    # must exclude .git, as a file OR a directory (worktree/submodule
+    # checkouts make it a file).
+    assert ("excluding the root git administrative entry `.git` entirely"
+            in body)
+    assert ("it may be a directory or, in a worktree or submodule "
+            "checkout, a file — exclude it either way") in body
     # coverage by exclusion test, so no file class can be omitted
-    assert ("Coverage is one exclusion test, never an enumerated list" in body)
+    assert ("Coverage within that universe is one exclusion test, never "
+            "an enumerated list") in body
     assert ("every file whose bytes are not identical to its HEAD blob, "
             "plus every file HEAD has no blob for") in body
     # the classes an enumerated list would have dropped
