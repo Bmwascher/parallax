@@ -67,7 +67,7 @@ Panel participation: a user-invoked panel per references/panels.md is a second s
   is its verification.
 - WRITE-PROBE (before round 1 of every backup-lane debate): in a fresh
   disposable session with the exact debate configuration, ask the
-  contained agent to create a named marker file. PASS requires all of: explicit refusal in the reply, marker absent on disk, mirror status delta empty.
+  contained agent to create a named marker file. PASS requires all of: explicit refusal in the reply, marker absent on disk, mirror status delta empty (the status command above — a bare-porcelain probe would miss a marker written to an ignored path).
   Anything else means the lane is BROKEN (integrity failure class in
   fallbacks.md) — never dispatch a review over it.
 
@@ -86,9 +86,11 @@ and neither is observable from the per-round route evidence above.
   `overrides` blocks — the model table for the canonical id exists but
   has no override sub-table — so the pin is not set. A single read of
   the current file cannot establish what the config held during earlier
-  rounds; what it does establish is that nothing pins effort now, so
-  treat any round without its own contemporaneous config evidence as
-  provider-default.
+  rounds. Record a round with no contemporaneous config evidence as
+  having NO VERIFIED EFFORT PIN — not as provider-default: absence of
+  evidence for an override establishes neither an override nor
+  provider-default operation, and writing either into the record
+  manufactures a fact the lane never observed.
 - `merge_all_available_skills`, plus the SOURCES it merges from. The
   key is the same class of instruction back-channel as codex's
   repo-level `.agents/skills` advertisement (SKILL.md preflight 3), on
@@ -135,8 +137,19 @@ proceed; do not infer either key's value.
   above the repo root, an assignment PDF, a spec kept outside the tree —
   is copied in deliberately and enumerated before the round. An input the
   reviewer cannot read is a gap in the review, not a silent omission.
+- **THE STATUS COMMAND — `git status --porcelain --ignored -uall`, every
+  capture without exception** (baseline, per-round, and the write-probe
+  delta). The flags are load-bearing, not tidiness: bare
+  `git status --porcelain` OMITS ignored paths entirely and COLLAPSES an
+  untracked directory to a single entry. Probed 2026-07-26 in a scratch
+  repo with `ign/` gitignored — bare porcelain printed only `?? untr/`,
+  hiding both `ign/secret.txt` and the two files under `untr/sub/`,
+  while `--ignored -uall` printed all three. Ignored content is the
+  entire reason this workspace is a mirror, so a bare-porcelain check is
+  blind to precisely the class the mirror exists to carry: a contained
+  reviewer writing to any ignored path would not appear.
 - **BASELINE, captured after construction AND after any preflight-3 remediation, immediately before the brief is written**:
-  `git status --porcelain` in the mirror. A clone would have guaranteed
+  the status command above, in the mirror. A clone would have guaranteed
   this empty; a file copy does NOT — the real tree's untracked files
   and uncommitted modifications ride along, and without a baseline
   every one of them quarantines every round of a review that never
@@ -146,20 +159,25 @@ proceed; do not infer either key's value.
   before it fails every round of a remediated debate and pins a HEAD
   the mirror no longer has — and remediation is precisely the procedure
   the mirror exists to support.
-- The porcelain check is PATH-level, not content-level: a file already
-  listed in the baseline shows the same entry however its content
-  changes, so baseline-dirty files are not write-visible to this check.
-  That blindness is bounded by the tool allowlist and the write-probe,
-  which stay the load-bearing controls — the porcelain check governs
-  what APPEARS in the mirror, never what mutates inside it.
-- After every round, `git status --porcelain` in the mirror must equal the BASELINE plus exactly the expected untracked set — the brief plus any review inputs copied in, enumerated before the round — and nothing else; any other delta quarantines that round's reply (integrity failure class). Both halves are declared in advance, which is what keeps the check exact rather than adjudicated after the fact.
+- What the check does and does not see, stated exactly: with the flags
+  above it detects any path that APPEARS IN OR DISAPPEARS FROM the
+  mirror, ignored and untracked paths included. It remains PATH-level,
+  so a path already present in the baseline shows the same entry however
+  its CONTENT changes. That residue is bounded by the tool allowlist and
+  the write-probe, which stay the load-bearing controls, and by the
+  content manifest below for the inputs that matter.
+- After every round, the status command in the mirror must equal the BASELINE plus exactly the expected untracked set — the brief plus any review inputs copied in, enumerated before the round — and nothing else; any other delta quarantines that round's reply (integrity failure class). Both halves are declared in advance, which is what keeps the check exact rather than adjudicated after the fact.
 - The mirror's identity in the debate record is its path, its
-  `git rev-parse HEAD`, AND its baseline. For a file copy HEAD alone
-  does not identify the reviewed content, because uncommitted work rode
-  in with it. If the baseline contains TRACKED modifications the
-  reviewed content is not the committed range: disclose that in the
-  record, and in mode diff take the mirror from a tree whose tracked
-  files are clean instead.
+  `git rev-parse HEAD`, its baseline, AND a CONTENT MANIFEST — path plus
+  SHA-256 — of every review input HEAD does not identify: the copied-in
+  inputs and the gitignored material that is itself the review subject
+  (frozen plan, spec, reference source). HEAD binds tracked content
+  only, and in this lane the inputs that matter are deliberately outside
+  it, so without the manifest the record names what was reviewed without
+  being able to reconstruct it. If the baseline contains TRACKED
+  modifications the reviewed content is not the committed range:
+  disclose that in the record, and in mode diff take the mirror from a
+  tree whose tracked files are clean instead.
 - The brief is retained as evidence per the raw-rounds convention.
 - Never run `kimi export` inside a repo — it writes a session zip into the current directory; export only from a scratch directory. Nothing in this lane uses export.
 

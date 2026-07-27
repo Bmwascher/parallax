@@ -133,6 +133,25 @@ def test_backup_lane_workspace_is_a_mirror_not_a_clone():
     assert ("must equal the BASELINE plus exactly the expected untracked "
             "set — the brief plus any review inputs copied in, "
             "enumerated before the round — and nothing else") in body
+    # 0.14.2 Sol round 1, F2/F5: bare porcelain OMITS ignored paths and
+    # COLLAPSES untracked directories, and ignored content is the whole
+    # reason this workspace is a mirror - so the flags are the check,
+    # not decoration. Probed: bare printed only "?? untr/".
+    assert "`git status --porcelain --ignored -uall`, every" in body
+    assert ("bare `git status --porcelain` OMITS ignored paths entirely "
+            "and COLLAPSES an untracked directory to a single entry") in body
+    assert ("a contained reviewer writing to any ignored path would not "
+            "appear") in body
+    # F4: HEAD binds tracked content only, and this lane's inputs are
+    # deliberately outside it - so identity carries a content manifest
+    assert ("a CONTENT MANIFEST — path plus SHA-256 — of every review "
+            "input HEAD does not identify") in body
+    # F8: absence of an override pin proves neither an override nor
+    # provider-default; the record must not manufacture either
+    assert ("Record a round with no contemporaneous config evidence as "
+            "having NO VERIFIED EFFORT PIN") in body
+    assert ("establishes neither an override nor provider-default "
+            "operation") in body
     assert "is a gap in the review, not a silent omission" in body
 
 
@@ -158,15 +177,20 @@ def test_mirror_baseline_closes_the_dirty_tree_hole():
             "has") in body
     assert "A clone would have guaranteed this empty; a file copy does NOT" in body
     # the check's reach is stated honestly rather than implied broader
-    assert "The porcelain check is PATH-level, not content-level" in body
-    assert ("governs what APPEARS in the mirror, never what mutates "
-            "inside it") in body
+    # reach is stated against the FLAGGED command: it sees appearance
+    # and disappearance of any path including ignored ones, and is
+    # honest that content changes to an already-present path are the
+    # residue the allowlist, write-probe, and manifest cover
+    assert ("it detects any path that APPEARS IN OR DISAPPEARS FROM the "
+            "mirror, ignored and untracked paths included") in body
+    assert ("It remains PATH-level, so a path already present in the "
+            "baseline shows the same entry however its CONTENT changes") in body
     # identity: HEAD alone stops being sufficient once uncommitted work
     # can ride in, so the record carries path + HEAD + baseline
     assert ("The mirror's identity in the debate record is its path, its "
-            "`git rev-parse HEAD`, AND its baseline") in body
-    assert ("For a file copy HEAD alone does not identify the reviewed "
-            "content") in body
+            "`git rev-parse HEAD`, its baseline, AND a CONTENT MANIFEST") in body
+    assert ("HEAD binds tracked content only, and in this lane the inputs "
+            "that matter are deliberately outside it") in body
     # a dirty tracked baseline means the reviewed content is not the
     # committed range - disclosed, and disallowed outright in mode diff
     assert ("in mode diff take the mirror from a tree whose tracked "
@@ -190,6 +214,11 @@ def test_backup_lane_eval_case_matches_the_mirror_contract():
     assert "review MIRROR (file copy preserving .git, not a clone)" in joined
     assert "baseline porcelain was captured before the brief was written" in joined
     assert "throwaway clone" not in joined
+    # 0.14.2 Sol round 1, F10a: the pin above checks only the mirror
+    # VOCABULARY, so deleting the equality half of the expectation left
+    # it green - the half that actually grades containment. Pin it.
+    assert ("equals that baseline plus exactly KIMI-REVIEW-BRIEF.md and "
+            "any enumerated copied-in review inputs") in joined
 
 
 def test_backup_lane_client_config_sweep():
@@ -232,6 +261,13 @@ def test_skill_preflight_names_the_remediation():
     assert ("`nothing to commit` alongside an unchanged HEAD is the "
             "CORRECT observation there, not an inconsistency to chase"
             ) in skill
+    # 0.14.2 Sol round 1, F10b: the assertions above pin the OBSERVATIONS
+    # but never the imperative, so deleting "commit the removal inside
+    # the mirror" left the pin green - and that commit is the whole
+    # point of the tracked branch. Pin the imperative and the
+    # consequence that justifies it.
+    assert "so commit the removal inside the mirror" in skill
+    assert ("bars mode diff and breaks HEAD-identifies-content" in skill)
 
 
 def test_output_encoding_class_is_wired():
