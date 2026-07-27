@@ -184,7 +184,11 @@ proceed; do not infer either key's value.
   - **Coverage within that universe is exactly the paths the BASELINE
     capture lists** — the same `--ignored -uall` output, so manifest and
     baseline describe one tree state and cannot disagree. Those are, by
-    git's own reckoning, precisely the files HEAD does not bind. Do NOT
+    git's own reckoning, the files whose CURRENT worktree bytes HEAD
+    does not account for — untracked, ignored, or modified-relative-to-
+    HEAD (for a modified tracked file HEAD still binds its committed
+    content; what it does not bind is what the reviewer will actually
+    read). Do NOT
     define coverage as "bytes differ from the HEAD blob": git applies
     clean/smudge filters, so on a line-ending-normalizing checkout a
     file git calls CLEAN is not byte-identical to its blob. Probed
@@ -201,8 +205,10 @@ proceed; do not infer either key's value.
   - **Directories expand RECURSIVELY to their files.** A directory
     subject such as `References/` is never one manifest entry; a hash
     over a directory name identifies nothing.
-  - **Entry format**: one line per file, repo-relative path plus the
-    SHA-256 of the file's raw bytes.
+  - **Entry format**: one line per file — the repo-relative path, a
+    single space, then the SHA-256 of the file's raw bytes as lowercase
+    hex. Fixing the separator and the encoding is what makes two
+    captures byte-comparable instead of merely equivalent.
   - **Order**: sorted by path in byte order, so the manifest is
     deterministic and two captures are diffable.
   - **Captured at the same moment as the baseline** — after construction

@@ -83,11 +83,18 @@ def test_backup_lane_dispatch_and_resume_pins():
     # a dropped -w would dispatch the reviewer in the shell's cwd (the
     # same class the resume pin below guards), and a bare substring
     # check would stay green through it (final-review finding, 0.13.0)
+    # 0.14.2 Kimi panel round 1: this pin used to stop at `-p`, and the
+    # brief pointer was covered only by a position-free filename check
+    # that the workspace section also satisfies - so deleting the -p
+    # PAYLOAD from the dispatch line left both green. The payload is
+    # load-bearing (headless stdin does not carry the brief), so the
+    # pin now runs through it, same treatment `-w` already had.
     assert ("kimi --quiet --thinking -m <canonical-backup-model-id> "
             "--agent-file <plugin-checkout>/skills/multi-model-verify/"
-            "references/kimi-reviewer-agent.yaml -w <review-mirror> -p"
+            "references/kimi-reviewer-agent.yaml -w <review-mirror> "
+            '-p "Read the file KIMI-REVIEW-BRIEF.md in this workspace '
+            'and execute the review it describes."'
             ) in body
-    assert "KIMI-REVIEW-BRIEF.md" in body
     # the re-pinned resume is load-bearing: bare -r restores full tools,
     # model/thinking inherit from CONFIG DEFAULTS, and -w does not
     # inherit at all (a resume without it runs in the shell's cwd -
@@ -173,8 +180,10 @@ def test_backup_lane_workspace_is_a_mirror_not_a_clone():
     assert ("any tracked file modified relative to HEAD" in body)
     # recursion, format, order, timing
     assert "Directories expand RECURSIVELY to their files" in body
-    assert ("repo-relative path plus the SHA-256 of the file's raw bytes"
-            in body)
+    # separator and encoding are pinned too: without them two captures
+    # are equivalent but not byte-comparable
+    assert ("the repo-relative path, a single space, then the SHA-256 of "
+            "the file's raw bytes as lowercase hex") in body
     assert "sorted by path in byte order" in body
     assert ("Captured at the same moment as the baseline" in body)
     # F8: absence of an override pin proves neither an override nor
