@@ -2,19 +2,24 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make it impossible for a contract sentence in a marked region to go unpinned, or for a marked region to be deleted, without a test turning red.
+**Goal:** Make it impossible for a marked contract region to go unpinned, or for a marked region to be deleted, without a test turning red.
 
-**Architecture:** A pure-function module parses `<!-- contract:start id=... -->` regions out of the reference and agent documents, extracts every string constant from the test modules through Python's `ast`, and requires each sentence of each region to sit whole inside one of those strings. A separate declared inventory of region ids closes the delete-the-whole-region hole. The checker is consumed by one pytest module.
+**Architecture:** A pure-function module parses `<!-- contract:start id=... -->` regions out of the reference and agent documents, extracts every string constant that sits inside an `assert` statement in the test modules through Python's `ast`, and requires each region to sit whole inside one of those strings. A separate declared inventory of region ids closes the delete-the-whole-region hole. The checker is consumed by one pytest module.
 
 **Tech Stack:** Python 3.12 standard library only (`ast`, `re`, `pathlib`), pytest 9.x, `tmp_path` fixtures. No new dependencies.
+
+**This is revision 2 of the plan.** Revision 1 split regions into sentences with a regex and treated every string constant as a pin. A cross-vendor review ran the code and refuted both. See the design's "Revision history". Do not reintroduce sentence splitting.
 
 ## Global Constraints
 
 - Design spec: `docs/superpowers/specs/2026-07-27-contract-coverage-design.md`. Copied verbatim below where a task depends on it.
-- Whole-sentence containment. A sentence is covered only when one pin string contains it in full. Overlap does not count.
-- Region ids are unique across the whole repo, not per file.
+- **Whole-region containment.** A region is covered only when ONE pin string contains the whole region body. Overlap does not count, and two pins that jointly span a region do not count.
+- **One region, one pin.** There is no sentence splitting anywhere in this plan. A region too long for one pin is two regions.
+- **A pin is a string constant that appears syntactically inside an `assert` statement.** A docstring is not a pin. A string assigned to a name and asserted through that name is not a pin; that is an accepted limit, and its failure direction is safe.
+- Region ids are lowercase letters, digits and hyphens, and unique across the whole repo, not per file.
 - All marker and coverage problems are hard test failures. Never warnings, never skips.
-- Sentence split rule: `.`, `?` or `!` followed by whitespace then a capital letter. Abbreviation exceptions, exactly this list: `e.g.`, `i.e.`, `vs.`, `etc.`, `cf.`
+- **Any HTML comment whose keyword is `contract:` and that does not exactly match the start or end syntax is a hard failure.** Without this a typo makes the region vanish with no error.
+- **`agents/*.md` already carries a different marker family and must keep working.** `agents/implementer.md` and `agents/flash-implementer.md` contain `<!-- shared-contract:start -->` / `<!-- shared-contract:end -->`, the 0.12.0 parity mechanism pinned by `test_shared_contract_parity`. Both files are inside the tree this checker scans. The keyword must therefore be anchored to the start of the comment, so `shared-contract:` is ignored rather than rejected. Do not rename the existing markers.
 - Region text and pin text are both whitespace-normalized before comparison, matching the existing `_norm` convention (`" ".join(text.split())`).
 - Do not modify the 633 existing assert statements in `evals/**/test_*.py` except to extend ones the checker proves are short.
 - Do not reword any text inside a marked region in this plan. Rewording contract text is a separate reviewed change. Item 5 of the backlog will do that for the rotation guard.
@@ -23,6 +28,7 @@
   `python evals/tools/skill_scanner.py skills`,
   `python evals/tools/run_trigger_evals.py`,
   `python -m pytest evals -q`
+- Baseline before Task 1: `170 passed, 1 skipped`.
 - Verified before planning, do not re-litigate: HTML comment markers pass `skill_lint --strict` and `skill_scanner` with zero findings, and a sibling module next to the test files is importable under pytest with no `conftest.py`.
 
 ---
@@ -31,14 +37,15 @@
 
 | file | responsibility |
 |---|---|
-| `evals/multi-model-verify/contract_coverage.py` | Create. Pure functions: marker parsing, sentence splitting, pin extraction, coverage. No pytest imports, no I/O beyond reading paths it is handed. |
+| `evals/multi-model-verify/contract_coverage.py` | Create. Pure functions: marker parsing, pin extraction, coverage, failure formatting. No pytest imports, no repo paths baked in. |
 | `evals/multi-model-verify/test_contract_coverage.py` | Create. The declared region inventory, the live repo check, and the fixture tests that prove the checker. |
-| `evals/multi-model-verify/fixtures/contract-coverage-history/` | Create. Three verbatim historical snippets proving the checker catches instances 10, 11 and 12. |
-| `skills/multi-model-verify/references/backup-lane.md` | Modify. Add markers around the rotation guard rule and residual gap. |
-| `skills/multi-model-verify/references/panels.md` | Modify. Add markers around the harness floor. |
-| `agents/fable-panel-reviewer.md` | Modify. Add markers around the harness floor as stated there. |
-| `skills/multi-model-verify/references/fallbacks.md` | Modify. Add markers around the two panel lane classes. |
-| `evals/multi-model-verify/test_backup_lane.py` | Modify. Extend two short pins the checker will flag. |
+| `evals/multi-model-verify/fixtures/contract-coverage-history/` | Create. Three historical snippets, each with a control region and a defect region, proving the checker catches instances 10, 11 and 12. |
+| `skills/multi-model-verify/references/backup-lane.md` | Modify. Markers around three rotation guard regions. |
+| `skills/multi-model-verify/references/panels.md` | Modify. Markers around the harness floor rule. |
+| `agents/fable-panel-reviewer.md` | Modify. Markers around the harness floor as stated there. |
+| `skills/multi-model-verify/references/fallbacks.md` | Modify. Markers around four panel lane regions. |
+| `evals/multi-model-verify/test_backup_lane.py` | Modify. Extend two short pins the checker flags. |
+| `evals/multi-model-verify/test_seat_reshuffle.py` | Modify. Extend five short pins the checker flags. |
 | `README.md`, `CLAUDE.md` | Modify. One line each describing the mechanism. |
 | `.claude-plugin/plugin.json` | Modify. Version bump. |
 
@@ -59,8 +66,8 @@
 Create `evals/multi-model-verify/test_contract_coverage.py`:
 
 ```python
-"""Contract coverage: every sentence in a marked region must sit whole
-inside some test pin.
+"""Contract coverage: every marked region must sit whole inside some
+test pin.
 
 Design: docs/superpowers/specs/2026-07-27-contract-coverage-design.md
 
@@ -83,12 +90,12 @@ def test_parses_a_region_and_normalizes_whitespace():
     text = (
         "intro line\n"
         "<!-- contract:start id=demo -->\n"
-        "One sentence   here.\nAnd  another.\n"
+        "One rule   here.\nContinued  on two lines.\n"
         "<!-- contract:end -->\n"
         "trailing line\n"
     )
     regions = parse_regions(text, "demo.md")
-    assert regions == {"demo": "One sentence here. And another."}
+    assert regions == {"demo": "One rule here. Continued on two lines."}
 
 
 def test_text_outside_markers_is_not_part_of_the_region():
@@ -98,6 +105,18 @@ def test_text_outside_markers_is_not_part_of_the_region():
         "The rule.\n"
         "<!-- contract:end -->\n"
         "More rationale.\n"
+    )
+    assert parse_regions(text, "demo.md")["demo"] == "The rule."
+
+
+def test_indented_markers_inside_a_list_item_are_recognized():
+    """Markers sit at the list item's content indent so they stay inside
+    the item. Indentation must not hide them."""
+    text = (
+        "- **Rule.** Preamble.\n"
+        "  <!-- contract:start id=demo -->\n"
+        "  The rule.\n"
+        "  <!-- contract:end -->\n"
     )
     assert parse_regions(text, "demo.md")["demo"] == "The rule."
 
@@ -139,6 +158,45 @@ def test_duplicate_id_within_one_document_is_an_error():
         parse_regions(text, "demo.md")
 
 
+def test_an_end_marker_carrying_an_id_is_rejected_not_ignored():
+    """The vanishing-region hole. A near-miss comment that matches
+    neither pattern used to be skipped, so BOTH markers were ignored and
+    the region ceased to exist with no error."""
+    text = (
+        "<!-- contract:start id=demo -->\n"
+        "The rule.\n"
+        "<!-- contract:end id=demo -->\n"
+    )
+    with pytest.raises(MarkerError, match="malformed contract marker"):
+        parse_regions(text, "demo.md")
+
+
+def test_an_id_with_illegal_characters_is_rejected_not_ignored():
+    text = "<!-- contract:start id=Bad_ID -->\nThe rule.\n<!-- contract:end -->\n"
+    with pytest.raises(MarkerError, match="malformed contract marker"):
+        parse_regions(text, "demo.md")
+
+
+def test_a_misspelled_marker_keyword_is_rejected():
+    text = "<!-- contract:begin id=demo -->\nThe rule.\n<!-- contract:end -->\n"
+    with pytest.raises(MarkerError, match="malformed contract marker"):
+        parse_regions(text, "demo.md")
+
+
+def test_a_different_marker_family_is_ignored_not_rejected():
+    """agents/implementer.md and agents/flash-implementer.md already carry
+    shared-contract markers, the 0.12.0 parity mechanism. Both files are
+    inside the tree this checker scans, so the keyword is anchored to the
+    start of the comment: shared-contract: is not our marker at all."""
+    text = (
+        "<!-- shared-contract:start -->\n"
+        "Shared block owned by another mechanism.\n"
+        "<!-- shared-contract:end -->\n"
+        "<!-- contract:start id=demo -->\nThe rule.\n<!-- contract:end -->\n"
+    )
+    assert parse_regions(text, "flash-implementer.md") == {"demo": "The rule."}
+
+
 def test_duplicate_id_across_documents_is_an_error(tmp_path):
     body = "<!-- contract:start id=demo -->\na\n<!-- contract:end -->\n"
     a = _write(tmp_path, "a.md", body)
@@ -166,9 +224,16 @@ Create `evals/multi-model-verify/contract_coverage.py`:
 ```python
 """Contract coverage checker.
 
-Every sentence inside a marked region must sit WHOLE inside some pin
-string. Pure functions only: no pytest, no repo paths baked in, so the
-fixture tests can drive it over temporary directories.
+Every marked region must sit WHOLE inside some pin string. There is no
+sentence splitting: the region is the unit of coverage, and the author
+sizes it to be pinnable by one string. Revision 1 split sentences with a
+regex; a review produced a counterexample where two fragment pins covered
+both halves of a mis-split sentence while nothing covered the sentence,
+so coverage passed on an unlocked rule. Dropping the split removes that
+bug class rather than patching it.
+
+Pure functions only: no pytest, no repo paths baked in, so the fixture
+tests can drive it over temporary directories.
 
 Design: docs/superpowers/specs/2026-07-27-contract-coverage-design.md
 """
@@ -178,10 +243,19 @@ import re
 START = re.compile(r"<!--\s*contract:start\s+id=([a-z0-9][a-z0-9-]*)\s*-->")
 END = re.compile(r"<!--\s*contract:end\s*-->")
 
-# Deliberately a fixed, short list. An abbreviation NOT on it causes a
-# wrong split, which demands a pin for a fragment - a visible red, never
-# a silent pass. The failure direction is safe by construction.
-ABBREVIATIONS = ("e.g.", "i.e.", "vs.", "etc.", "cf.")
+# Any comment whose KEYWORD is contract:. A match here that fullmatches
+# NEITHER pattern above is a hard failure, never a skip. Skipping is how a
+# typo would delete a region silently, which is the one outcome this
+# checker may never produce.
+#
+# The keyword is anchored to the start of the comment on purpose.
+# agents/implementer.md and agents/flash-implementer.md already carry
+# <!-- shared-contract:start --> markers - the 0.12.0 parity mechanism,
+# pinned by test_shared_contract_parity - and both files are inside the
+# tree this checker scans. An unanchored search would call every one of
+# them malformed and the checker could never run. Case-insensitive so a
+# capitalized keyword is REJECTED rather than silently ignored.
+MARKERISH = re.compile(r"<!--\s*contract:[^>]*-->", re.IGNORECASE)
 
 
 class MarkerError(Exception):
@@ -192,26 +266,46 @@ def _norm(text):
     return " ".join(text.split())
 
 
+def _classify(line, source, lineno):
+    """Return ('start', id) | ('end', None) | (None, None) for one line.
+
+    Raises on any comment that mentions contract: without exactly
+    matching one of the two valid forms.
+    """
+    found = MARKERISH.findall(line)
+    if not found:
+        return None, None
+    if len(found) > 1:
+        raise MarkerError(
+            f"{source}:{lineno}: more than one contract marker on one line")
+    text = found[0]
+    start = START.fullmatch(text)
+    if start:
+        return "start", start.group(1)
+    if END.fullmatch(text):
+        return "end", None
+    raise MarkerError(
+        f"{source}:{lineno}: malformed contract marker {text!r}. "
+        "Valid forms are exactly '<!-- contract:start id=<lowercase-id> -->' "
+        "and '<!-- contract:end -->'.")
+
+
 def parse_regions(text, source):
     """Return {region_id: normalized_body} for ONE document."""
     regions = {}
     open_id = None
     buf = []
     for lineno, line in enumerate(text.splitlines(), 1):
-        start = START.search(line)
-        end = END.search(line)
-        if start and end:
-            raise MarkerError(
-                f"{source}:{lineno}: start and end markers on one line")
-        if start:
+        kind, rid = _classify(line, source, lineno)
+        if kind == "start":
             if open_id is not None:
                 raise MarkerError(
-                    f"{source}:{lineno}: region '{start.group(1)}' opens "
-                    f"inside still-open region '{open_id}'")
-            open_id = start.group(1)
+                    f"{source}:{lineno}: region '{rid}' opens inside "
+                    f"still-open region '{open_id}'")
+            open_id = rid
             buf = []
             continue
-        if end:
+        if kind == "end":
             if open_id is None:
                 raise MarkerError(f"{source}:{lineno}: end with no start")
             body = _norm(" ".join(buf))
@@ -253,23 +347,23 @@ def collect_regions(paths):
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `python -m pytest evals/multi-model-verify/test_contract_coverage.py -q`
-Expected: 9 passed.
+Expected: 14 passed.
 
 - [ ] **Step 5: Run the full suite to confirm nothing regressed**
 
 Run: `python -m pytest evals -q`
-Expected: 179 passed, 1 skipped.
+Expected: 184 passed, 1 skipped.
 
 - [ ] **Step 6: Commit**
 
 ```bash
 git add evals/multi-model-verify/contract_coverage.py evals/multi-model-verify/test_contract_coverage.py
-git commit -m "0.15.0: parse contract regions and enforce unique region ids"
+git commit -m "0.15.0: parse contract regions and reject malformed markers"
 ```
 
 ---
 
-### Task 2: Sentence splitting, pin extraction, coverage
+### Task 2: Pin extraction and whole-region coverage
 
 **Files:**
 - Modify: `evals/multi-model-verify/contract_coverage.py`
@@ -277,85 +371,100 @@ git commit -m "0.15.0: parse contract regions and enforce unique region ids"
 
 **Interfaces:**
 - Consumes: `parse_regions`, `collect_regions`, `MarkerError` from Task 1.
-- Produces: `split_sentences(text: str) -> list[str]`; `collect_pins(paths: list[Path]) -> set[str]` returning whitespace-normalized string constants; `uncovered(regions: dict[str, tuple[str, str]], pins: set[str]) -> list[tuple[str, str, str]]` returning `(region_id, source_name, sentence)` for every sentence with no containing pin; `format_failure(misses: list) -> str`.
+- Produces: `collect_pins(paths: list[Path]) -> set[str]` returning whitespace-normalized string constants found inside `assert` statements; `uncovered(regions: dict[str, tuple[str, str]], pins: set[str]) -> list[tuple[str, str, str]]` returning `(region_id, source_name, body)` for every region with no containing pin; `format_failure(misses: list) -> str`.
 
 - [ ] **Step 1: Write the failing tests**
 
 Append to `evals/multi-model-verify/test_contract_coverage.py`:
 
 ```python
-from contract_coverage import (
-    collect_pins, format_failure, split_sentences, uncovered)
+from contract_coverage import collect_pins, format_failure, uncovered
 
 
-def test_splits_on_sentence_end_followed_by_a_capital():
-    text = "First rule here. Second rule here. Third rule here."
-    assert split_sentences(text) == [
-        "First rule here.", "Second rule here.", "Third rule here."]
-
-
-def test_does_not_split_inside_a_version_or_filename():
-    text = "Check claude --version against 2.1.216 before dispatch."
-    assert split_sentences(text) == [
-        "Check claude --version against 2.1.216 before dispatch."]
-
-
-def test_does_not_split_after_a_known_abbreviation():
-    text = "Some lanes, e.g. Sol, are cross-vendor. That is the rule."
-    assert split_sentences(text) == [
-        "Some lanes, e.g. Sol, are cross-vendor.", "That is the rule."]
-
-
-def test_collects_pins_and_joins_implicit_concatenation(tmp_path):
+def test_collects_pins_from_asserts_and_joins_implicit_concatenation(tmp_path):
     src = (
         'def test_x():\n'
         '    assert ("a rotation under the call is the one member "\n'
         '            "that IS transient") in body\n'
     )
-    p = tmp_path / "test_sample.py"
-    p.write_text(src, encoding="utf-8")
-    pins = collect_pins([p])
-    assert "a rotation under the call is the one member that IS transient" in pins
+    p = _write(tmp_path, "test_sample.py", src)
+    assert ("a rotation under the call is the one member that IS transient"
+            in collect_pins([p]))
+
+
+def test_a_docstring_is_not_a_pin(tmp_path):
+    """Pin provenance. 47 of 172 string constants in test_backup_lane.py
+    sit in no assertion, so 'every constant is a pin' would let a
+    docstring make a region read as locked while locking nothing."""
+    src = (
+        '"""That is a route-attribution failure."""\n'
+        'def test_x():\n'
+        '    """That is a route-attribution failure."""\n'
+        '    assert True\n'
+    )
+    p = _write(tmp_path, "test_sample.py", src)
+    assert "That is a route-attribution failure." not in collect_pins([p])
+
+
+def test_a_string_assigned_but_never_asserted_is_not_a_pin(tmp_path):
+    """An accepted limit, tested so it stays deliberate. The failure
+    direction is safe: an uncollected pin makes its region read as
+    uncovered, which is a red. It can never manufacture coverage."""
+    src = (
+        'def test_x():\n'
+        '    required = "The rule stands."\n'
+        '    assert required in body\n'
+    )
+    p = _write(tmp_path, "test_sample.py", src)
+    assert "The rule stands." not in collect_pins([p])
 
 
 def test_pins_are_whitespace_normalized(tmp_path):
-    p = tmp_path / "test_sample.py"
-    p.write_text('X = "two   spaces\\nand a newline"\n', encoding="utf-8")
+    src = 'def test_x():\n    assert "two   spaces\\nand a newline" in body\n'
+    p = _write(tmp_path, "test_sample.py", src)
     assert "two spaces and a newline" in collect_pins([p])
 
 
-def test_a_fully_covered_region_reports_nothing():
+def test_a_covered_region_reports_nothing():
     regions = {"demo": ("The rule stands.", "demo.md")}
     pins = {"the text says The rule stands. right here"}
     assert uncovered(regions, pins) == []
 
 
-def test_a_sentence_with_no_pin_at_all_is_reported():
-    """Instance 10: the consequence sentence had no pin."""
-    regions = {"demo": ("Detect it. That is a route-attribution failure.",
-                        "backup-lane.md")}
+def test_a_region_with_no_pin_at_all_is_reported():
+    """Instance 10: the disposition sentence had no pin."""
+    body = "That is a route-attribution failure."
+    regions = {"demo": (body, "backup-lane.md")}
     pins = {"Detect it."}
-    misses = uncovered(regions, pins)
-    assert misses == [
-        ("demo", "backup-lane.md", "That is a route-attribution failure.")]
+    assert uncovered(regions, pins) == [("demo", "backup-lane.md", body)]
 
 
-def test_a_pin_that_stops_mid_sentence_does_not_cover_it():
+def test_a_pin_that_stops_mid_region_does_not_cover_it():
     """Instance 11: the pin stopped at 'IS transient'."""
-    sentence = ("A rotation is the one member that IS transient, so the "
-                "user decides whether to spend another.")
-    regions = {"demo": (sentence, "fallbacks.md")}
+    body = ("A rotation is the one member that IS transient, so the user "
+            "decides whether to spend another.")
+    regions = {"demo": (body, "fallbacks.md")}
     pins = {"A rotation is the one member that IS transient"}
-    assert uncovered(regions, pins) == [("demo", "fallbacks.md", sentence)]
+    assert uncovered(regions, pins) == [("demo", "fallbacks.md", body)]
 
 
-def test_failure_message_names_region_file_and_sentence():
+def test_two_pins_that_jointly_span_a_region_do_not_cover_it():
+    """The revision-1 silent pass, kept as a regression test. Under
+    per-sentence coverage a mis-split let two fragment pins satisfy both
+    halves while nothing contained the whole rule."""
+    body = "Use U.S. Servers only."
+    regions = {"demo": (body, "demo.md")}
+    pins = {"Use U.S.", "Servers only."}
+    assert uncovered(regions, pins) == [("demo", "demo.md", body)]
+
+
+def test_failure_message_names_region_file_and_body():
     misses = [("demo", "panels.md", "The lane is UNAVAILABLE, not degraded.")]
     msg = format_failure(misses)
     assert "demo" in msg
     assert "panels.md" in msg
     assert "The lane is UNAVAILABLE, not degraded." in msg
-    assert "add a pin containing that sentence whole" in msg
+    assert "add a pin containing that region whole" in msg
 ```
 
 - [ ] **Step 2: Run the tests to verify they fail**
@@ -368,82 +477,77 @@ Expected: `ImportError: cannot import name 'collect_pins'`.
 Append to `evals/multi-model-verify/contract_coverage.py`:
 
 ```python
-def split_sentences(text):
-    """Split a normalized region into sentences.
-
-    Rule: a sentence ends at . ? or ! followed by whitespace then a
-    capital letter, unless the run ends with a known abbreviation. A
-    wrong split demands a pin for a fragment, which is loud; it can never
-    hide a gap.
-    """
-    parts = []
-    start = 0
-    for match in re.finditer(r"[.?!]\s+(?=[A-Z])", text):
-        head = text[start:match.end()].rstrip()
-        if any(head.endswith(abbr) for abbr in ABBREVIATIONS):
-            continue
-        parts.append(head)
-        start = match.end()
-    tail = text[start:].strip()
-    if tail:
-        parts.append(tail)
-    return [p for p in parts if p]
-
-
 def collect_pins(paths):
-    """Every string constant in the given Python files, normalized.
+    """String constants that sit inside an `assert`, normalized.
 
     Read through ast, not regex: nearly every pin in this repo is written
     as adjacent string literals across several lines, and the parser
     joins those into one constant for us.
+
+    Only strings INSIDE an assert count. A string that participates in no
+    assertion locks nothing, and admitting docstrings and fixture data
+    would let a region read as locked by text that no test checks.
+
+    Accepted limit: a string bound to a name and asserted through that
+    name is not collected. One such pin exists today. The failure
+    direction is safe - its region reads as uncovered, which is a red -
+    so following name bindings is machinery with no failure behind it.
     """
     pins = set()
     for path in paths:
         tree = ast.parse(path.read_text(encoding="utf-8"))
         for node in ast.walk(tree):
-            if isinstance(node, ast.Constant) and isinstance(node.value, str):
-                pins.add(_norm(node.value))
+            if not isinstance(node, ast.Assert):
+                continue
+            for sub in ast.walk(node):
+                if isinstance(sub, ast.Constant) and isinstance(sub.value, str):
+                    pins.add(_norm(sub.value))
     return pins
 
 
 def uncovered(regions, pins):
-    """[(region_id, source, sentence)] for every sentence with no pin."""
+    """[(region_id, source, body)] for every region no pin contains.
+
+    Containment runs one way only: the PIN must contain the REGION. A pin
+    that the region contains is a fragment, which is exactly the defect
+    this checker exists to catch.
+    """
     misses = []
     for rid in sorted(regions):
         body, source = regions[rid]
-        for sentence in split_sentences(body):
-            if not any(sentence in pin for pin in pins):
-                misses.append((rid, source, sentence))
+        if not any(body in pin for pin in pins):
+            misses.append((rid, source, body))
     return misses
 
 
 def format_failure(misses):
     lines = [
-        f"{len(misses)} contract sentence(s) are not locked by any pin.",
-        "For each one, add a pin containing that sentence whole.",
+        f"{len(misses)} contract region(s) are not locked by any pin.",
+        "For each one, add a pin containing that region whole.",
+        "A pin the region contains is a fragment and does not count.",
         "",
     ]
-    for rid, source, sentence in misses:
+    for rid, source, body in misses:
         lines.append(f"  region '{rid}' in {source}:")
-        lines.append(f"    {sentence}")
+        lines.append(f"    {body}")
     return "\n".join(lines)
 ```
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `python -m pytest evals/multi-model-verify/test_contract_coverage.py -q`
-Expected: 18 passed.
+Expected: 23 passed.
 
 - [ ] **Step 5: Run the full suite**
 
 Run: `python -m pytest evals -q`
-Expected: 188 passed, 1 skipped.
+Expected: 193 passed, 1 skipped.
 
 - [ ] **Step 6: Commit**
 
 ```bash
 git add evals/multi-model-verify/contract_coverage.py evals/multi-model-verify/test_contract_coverage.py
-git commit -m "0.15.0: add sentence splitting, pin extraction, and coverage"
+git commit -m "0.15.0: collect pins from asserts and check whole-region coverage"
 ```
 
 ---
@@ -453,6 +557,11 @@ git commit -m "0.15.0: add sentence splitting, pin extraction, and coverage"
 The checker must catch the failures that motivated it. This task builds
 hermetic fixtures from the real historical text so CI needs no git
 history.
+
+**Each fixture holds TWO regions.** One is a CONTROL that the historical
+pins do cover; one is the DEFECT that they do not. The control is what
+makes the red meaningful: without it, a fixture that failed to load its
+pins at all would produce the same red for the wrong reason.
 
 **Files:**
 - Create: `evals/multi-model-verify/fixtures/contract-coverage-history/instance-10-doc.md`
@@ -467,56 +576,90 @@ history.
 - Consumes: `collect_regions`, `collect_pins`, `uncovered` from Tasks 1 and 2.
 - Produces: nothing new. This task adds tests only.
 
-Verified facts these fixtures encode, confirmed against git before planning:
-- At `4d8a121` the sentence `That is a route-attribution failure` appeared once in `backup-lane.md` and zero times in `test_backup_lane.py`.
-- At `8eacc8a` the fallbacks pin was exactly `("a rotation under the call is the one member that IS " "transient") in fb`.
-- At `f9fd9b9` the panels pin was exactly `assert "Claude Code 2.1.216" in body`.
+Simulated against real git history before planning. For all three, the
+control region is covered and the defect region is not.
 
-- [ ] **Step 1: Build the fixtures from git history**
+- [ ] **Step 1: Copy the historical pin files verbatim**
 
 ```bash
 mkdir -p evals/multi-model-verify/fixtures/contract-coverage-history
 cd evals/multi-model-verify/fixtures/contract-coverage-history
-
-git show 4d8a121:skills/multi-model-verify/references/backup-lane.md \
-  | sed -n '/- \*\*Rotation guard\.\*\*/,/- This evidence is client-side/p' \
-  | head -n -1 > instance-10-body.txt
-
-git show 8eacc8a:skills/multi-model-verify/references/fallbacks.md \
-  | sed -n '/route-attribution failure (offset rule/,/does not describe\./p' \
-  > instance-11-body.txt
-
-git show f9fd9b9:skills/multi-model-verify/references/panels.md \
-  | sed -n '/\*\*Harness floor/,/triaged 2026-07-27\.)/p' \
-  > instance-12-body.txt
-
 git show 4d8a121:evals/multi-model-verify/test_backup_lane.py > instance-10-pins.py
 git show 8eacc8a:evals/multi-model-verify/test_backup_lane.py > instance-11-pins.py
 git show f9fd9b9:evals/multi-model-verify/test_seat_reshuffle.py > instance-12-pins.py
 cd -
 ```
 
-- [ ] **Step 2: Wrap each body in markers to make it a region**
+- [ ] **Step 2: Write the three fixture documents**
 
-For each of the three `instance-NN-body.txt` files, create the matching
-`instance-NN-doc.md` by adding a header comment and the markers. Example
-for instance 10, and repeat the same shape for 11 and 12 with ids
-`hist-instance-11` and `hist-instance-12`:
+The bodies below are verbatim from the documents at those commits, with
+newlines collapsed. Create each file exactly as shown.
 
-```bash
-cd evals/multi-model-verify/fixtures/contract-coverage-history
-{ echo '<!-- Verbatim historical text from parallax 4d8a121. Instance 10:'
-  echo '     the disposition sentence had no pin. Do not edit; this file'
-  echo '     is evidence, not documentation. -->'
-  echo '<!-- contract:start id=hist-instance-10 -->'
-  cat instance-10-body.txt
-  echo '<!-- contract:end -->'
-} > instance-10-doc.md
-rm instance-10-body.txt
-cd -
+`instance-10-doc.md`:
+
+```markdown
+<!-- Verbatim historical text from parallax 4d8a121, backup-lane.md.
+     Instance 10: the disposition sentence had no pin. Do not edit; this
+     file is evidence, not documentation. -->
+<!-- contract:start id=hist-10-control -->
+if after the call the file is SMALLER than the captured offset, or absent
+<!-- contract:end -->
+<!-- contract:start id=hist-10-defect -->
+That is a route-attribution failure — and specifically **not a reason to
+re-read from zero**, which is the tempting wrong answer: the new file's
+opening lines may belong to any session, so reading it attributes nothing
+while looking like evidence.
+<!-- contract:end -->
 ```
 
-- [ ] **Step 3: Write the failing regression tests**
+`instance-11-doc.md`:
+
+```markdown
+<!-- Verbatim historical text from parallax 8eacc8a, fallbacks.md.
+     Instance 11: the pin stopped at "IS transient". Do not edit; this
+     file is evidence, not documentation. -->
+<!-- contract:start id=hist-11-control -->
+a rotation under the call is the one member that IS transient
+<!-- contract:end -->
+<!-- contract:start id=hist-11-defect -->
+a rotation under the call is the one member that IS transient — a
+re-dispatch with a freshly captured offset would produce clean evidence.
+<!-- contract:end -->
+```
+
+`instance-12-doc.md`:
+
+```markdown
+<!-- Verbatim historical text from parallax f9fd9b9, panels.md.
+     Instance 12: the pin was the bare phrase "Claude Code 2.1.216",
+     which occurred twice. Do not edit; this file is evidence, not
+     documentation. -->
+<!-- contract:start id=hist-12-control -->
+Claude Code 2.1.216
+<!-- contract:end -->
+<!-- contract:start id=hist-12-defect -->
+Check `claude --version` before dispatching the Fable lane; below the
+floor the lane is UNAVAILABLE, not degraded - a panel drops to its
+remaining lanes under panel-lane-loss, and a Fable-only remainder cannot
+proceed at all.
+<!-- contract:end -->
+```
+
+The em dashes in fixtures 10 and 11 are the characters in the historical
+documents. Write the files as UTF-8.
+
+- [ ] **Step 3: Verify each defect body against git before trusting it**
+
+```bash
+git show 4d8a121:skills/multi-model-verify/references/backup-lane.md | grep -c "while looking like evidence"
+git show 8eacc8a:skills/multi-model-verify/references/fallbacks.md | grep -c "would produce clean evidence"
+git show f9fd9b9:skills/multi-model-verify/references/panels.md | grep -c "cannot proceed at"
+```
+
+Expected: `1` from each. If any prints `0`, the fixture text is wrong.
+Stop and re-extract rather than editing the expectation.
+
+- [ ] **Step 4: Write the failing regression tests**
 
 Append to `evals/multi-model-verify/test_contract_coverage.py`:
 
@@ -530,51 +673,52 @@ HISTORY = (Path(__file__).resolve().parent / "fixtures"
 def _history_case(stem):
     regions = collect_regions([HISTORY / f"{stem}-doc.md"])
     pins = collect_pins([HISTORY / f"{stem}-pins.py"])
-    return uncovered(regions, pins)
+    return regions, uncovered(regions, pins)
 
 
 def test_catches_instance_10_missing_disposition_pin():
     """4d8a121: 'That is a route-attribution failure' had no pin."""
-    misses = _history_case("instance-10")
-    assert any("That is a route-attribution failure" in sentence
-               for _, _, sentence in misses)
+    regions, misses = _history_case("instance-10")
+    assert [rid for rid, _, _ in misses] == ["hist-10-defect"]
 
 
 def test_catches_instance_11_pin_stopping_mid_sentence():
     """8eacc8a: the pin ended at 'IS transient'."""
-    misses = _history_case("instance-11")
-    assert any("the user decides at the gate whether to spend another"
-               in sentence for _, _, sentence in misses)
+    regions, misses = _history_case("instance-11")
+    assert [rid for rid, _, _ in misses] == ["hist-11-defect"]
 
 
 def test_catches_instance_12_bare_phrase_pin():
     """f9fd9b9: the pin was the bare phrase 'Claude Code 2.1.216'."""
-    misses = _history_case("instance-12")
-    assert any("UNAVAILABLE" in sentence or "Check `claude" in sentence
-               for _, _, sentence in misses)
+    regions, misses = _history_case("instance-12")
+    assert [rid for rid, _, _ in misses] == ["hist-12-defect"]
 
 
 def test_history_fixtures_are_not_vacuous():
-    """A fixture that parsed to zero regions would pass every test above
-    for the wrong reason."""
+    """Each fixture must hold exactly two regions, and its CONTROL must
+    be covered. A fixture whose pins failed to load would report both
+    regions uncovered and the tests above would still be red - for the
+    wrong reason."""
     for stem in ("instance-10", "instance-11", "instance-12"):
-        regions = collect_regions([HISTORY / f"{stem}-doc.md"])
-        assert len(regions) == 1, f"{stem} must contain exactly one region"
-        assert regions, f"{stem} parsed to no regions"
+        regions, misses = _history_case(stem)
+        assert len(regions) == 2, f"{stem} must contain exactly two regions"
+        assert len(misses) == 1, (
+            f"{stem}: expected exactly the defect region uncovered, got "
+            f"{[rid for rid, _, _ in misses]}")
 ```
 
-- [ ] **Step 4: Run the regression tests**
+- [ ] **Step 5: Run the regression tests**
 
 Run: `python -m pytest evals/multi-model-verify/test_contract_coverage.py -q -k "history or instance"`
 Expected: 4 passed. If any fails, the checker does not catch a failure it
 was built for. Stop and fix the checker, not the test.
 
-- [ ] **Step 5: Run the full suite**
+- [ ] **Step 6: Run the full suite**
 
 Run: `python -m pytest evals -q`
-Expected: 192 passed, 1 skipped.
+Expected: 197 passed, 1 skipped.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add evals/multi-model-verify/fixtures/contract-coverage-history evals/multi-model-verify/test_contract_coverage.py
@@ -594,11 +738,10 @@ git commit -m "0.15.0: prove the checker catches pin-integrity instances 10, 11 
 - Consumes: everything from Tasks 1 to 3.
 - Produces: module constants `DECLARED_REGIONS: set[str]`, `DOC_PATHS: list[Path]`, `PIN_PATHS: list[Path]`, consumed by Tasks 5 and 6 which each add ids to `DECLARED_REGIONS`.
 
-Simulated against the live tree before planning. The rotation guard
-paragraph splits into six sentences. Only sentence 5 is covered today.
-Sentences 1, 4 and 6 are rationale and observation and stay OUTSIDE the
-markers. Sentences 2 and 3 are operative and are short-pinned, so this
-task will flag them.
+Simulated against the live tree before planning. Of the three rotation
+guard regions, `rotation-guard-residual-gap` is ALREADY covered by an
+existing whole-sentence pin. The other two are covered only by fragments
+and will be reported.
 
 - [ ] **Step 1: Write the failing live-repo tests**
 
@@ -612,15 +755,16 @@ DOC_PATHS = (
     + sorted((REPO / "agents").glob("*.md"))
 )
 
-# This module is excluded from pin collection on purpose. Its fixture
-# strings contain whole contract sentences, so including it would let the
+# This module is excluded from pin collection on purpose. Its own
+# assertions quote whole contract bodies, so including it would let the
 # checker satisfy itself.
 PIN_PATHS = [p for p in sorted((REPO / "evals" / "multi-model-verify")
                                .glob("test_*.py"))
              if p.name != Path(__file__).name]
 
 DECLARED_REGIONS = {
-    "rotation-guard-rule",
+    "rotation-guard-detection",
+    "rotation-guard-disposition",
     "rotation-guard-residual-gap",
 }
 
@@ -639,47 +783,60 @@ def test_declared_regions_match_the_documents():
         "Add them to DECLARED_REGIONS.")
 
 
-def test_every_marked_sentence_is_locked_by_a_pin():
+def test_every_marked_region_is_locked_by_a_pin():
     regions = collect_regions(DOC_PATHS)
     misses = uncovered(regions, collect_pins(PIN_PATHS))
     assert not misses, format_failure(misses)
 ```
 
-- [ ] **Step 2: Run to verify both fail**
+- [ ] **Step 2: Run and read the RED carefully**
 
 Run: `python -m pytest evals/multi-model-verify/test_contract_coverage.py -q -k "declared or marked"`
-Expected: `test_declared_regions_match_the_documents` fails with both
-declared ids missing, because no markers exist yet.
+
+Expected: **one failed, one passed.**
+`test_declared_regions_match_the_documents` FAILS with all three declared
+ids missing, because no markers exist yet.
+`test_every_marked_region_is_locked_by_a_pin` PASSES VACUOUSLY over zero
+regions. That is correct and expected at this step; it becomes meaningful
+after Step 3. Do not treat the pass as evidence of anything.
 
 - [ ] **Step 3: Add the markers to backup-lane.md**
 
 In `skills/multi-model-verify/references/backup-lane.md`, the rotation
-guard bullet becomes the text below. Only markers are added. No word of
-the existing text changes.
+guard bullet becomes the text below. Only markers are added, and line
+breaks move to let a marker sit on its own line. No word changes.
+
+Markers are indented two spaces so they stay inside the list item. They
+are HTML blocks, so the bullet renders as several paragraphs instead of
+one. That is a rendering change with no word change, and these files are
+read by agents, not published.
 
 ```markdown
 - **Rotation guard.** The offset rule assumes an append-only file, and
   the kimi client does not guarantee one.
-<!-- contract:start id=rotation-guard-rule -->
+  <!-- contract:start id=rotation-guard-detection -->
   Before trusting the offset,
   confirm the stream did not rotate under the call: if after the call the
   file is SMALLER than the captured offset, or absent, it was rotated or
   replaced and every byte position from the earlier measurement is
-  meaningless. That is a route-attribution failure — and specifically
+  meaningless.
+  <!-- contract:end -->
+  <!-- contract:start id=rotation-guard-disposition -->
+  That is a route-attribution failure — and specifically
   **not a reason to re-read from zero**, which is the tempting wrong
   answer: the new file's opening lines may belong to any session, so
   reading it attributes nothing while looking like evidence.
-<!-- contract:end -->
+  <!-- contract:end -->
   Observed
   2026-07-26 (kimi-cli 1.49.0, Windows): rotation ATTEMPTS fire and fail
   with `PermissionError: [WinError 32]` because the log is still open, so
   offsets have held by accident rather than by design — do not build on
   that accident.
-<!-- contract:start id=rotation-guard-residual-gap -->
+  <!-- contract:start id=rotation-guard-residual-gap -->
   The size test is necessary, not sufficient: a rotation
   whose replacement file grew back PAST the captured offset within the
   same call would slip through.
-<!-- contract:end -->
+  <!-- contract:end -->
   That needs the pre-rotation offset to
   have been small, which only follows an immediately preceding rotation,
   so it is not worth a second mechanism — but if rotation ever starts
@@ -690,20 +847,18 @@ the existing text changes.
 - [ ] **Step 4: Run the coverage test to see exactly which pins are short**
 
 Run: `python -m pytest evals/multi-model-verify/test_contract_coverage.py -q -k "marked"`
-Expected: FAIL naming region `rotation-guard-rule` and these two
-sentences, which are the two operative halves the current pins only
-partially cover:
 
-```
-Before trusting the offset, confirm the stream did not rotate under the call: if after the call the file is SMALLER than the captured offset, or absent, it was rotated or replaced and every byte position from the earlier measurement is meaningless.
-That is a route-attribution failure — and specifically **not a reason to re-read from zero**, which is the tempting wrong answer: the new file's opening lines may belong to any session, so reading it attributes nothing while looking like evidence.
-```
+Expected: FAIL naming exactly two regions,
+`rotation-guard-detection` and `rotation-guard-disposition`.
+`rotation-guard-residual-gap` must NOT be reported: `test_backup_lane.py`
+already pins that sentence whole. If it IS reported, stop: something in
+the marker placement changed the body.
 
 - [ ] **Step 5: Extend the two short pins**
 
 In `evals/multi-model-verify/test_backup_lane.py`, inside
-`test_backup_lane_evidence_pins`, replace the two partial pins with full
-sentence pins. Keep the existing comments above them; add the note below.
+`test_backup_lane_evidence_pins`, extend the two fragment pins. Keep the
+existing comments above them; add the note below.
 
 Replace:
 
@@ -715,7 +870,7 @@ Replace:
 with:
 
 ```python
-    # 0.15.0: extended from a fragment to the whole sentence, because the
+    # 0.15.0: extended from a fragment to the whole rule, because the
     # contract coverage checker proved the fragment left the consequence
     # half of the detection rule unlocked.
     assert ("Before trusting the offset, confirm the stream did not "
@@ -734,6 +889,8 @@ Replace:
 with:
 
 ```python
+    # 0.15.0: extended from a fragment to the whole rule. The fragment
+    # named the failure class but locked none of the prohibition.
     assert ("That is a route-attribution failure — and specifically "
             "**not a reason to re-read from zero**, which is the "
             "tempting wrong answer: the new file's opening lines may "
@@ -741,9 +898,9 @@ with:
             "while looking like evidence.") in body
 ```
 
-Note the em dash in the second pin is the character already in the
-document. `test_backup_lane.py` reads with `_norm`, which normalizes
-whitespace only, so the character must match exactly.
+The em dash in the second pin is the character already in the document.
+`test_backup_lane.py` reads with `_norm`, which normalizes whitespace
+only, so the character must match exactly.
 
 - [ ] **Step 6: Run the coverage test to verify it passes**
 
@@ -753,7 +910,7 @@ Expected: all passed.
 - [ ] **Step 7: Run the full suite and the two skill gates**
 
 Run: `python -m pytest evals -q`
-Expected: 194 passed, 1 skipped.
+Expected: 199 passed, 1 skipped.
 
 Run: `python evals/tools/skill_lint.py skills/multi-model-verify --strict`
 Expected: `PASS — 0 error(s), 0 warning(s)`
@@ -776,7 +933,7 @@ git commit -m "0.15.0: mark the rotation guard and extend the two pins it proved
 - Modify: `skills/multi-model-verify/references/panels.md`
 - Modify: `agents/fable-panel-reviewer.md`
 - Modify: `evals/multi-model-verify/test_contract_coverage.py`
-- Modify: `evals/multi-model-verify/test_seat_reshuffle.py` (only if the checker proves a pin short)
+- Modify: `evals/multi-model-verify/test_seat_reshuffle.py`
 
 **Interfaces:**
 - Consumes: `DECLARED_REGIONS` from Task 4.
@@ -791,7 +948,8 @@ In `evals/multi-model-verify/test_contract_coverage.py`, extend:
 
 ```python
 DECLARED_REGIONS = {
-    "rotation-guard-rule",
+    "rotation-guard-detection",
+    "rotation-guard-disposition",
     "rotation-guard-residual-gap",
     "panel-floor-reference",
     "panel-floor-agent",
@@ -806,35 +964,41 @@ Expected: FAIL, `declared region(s) not found in any document:
 
 - [ ] **Step 3: Mark the operative sentence in panels.md**
 
-In `skills/multi-model-verify/references/panels.md`, wrap only the
-operative sentence. The narrative sentences before it, and the changelog
-source note after it, stay outside.
+In `skills/multi-model-verify/references/panels.md`, put
+`<!-- contract:start id=panel-floor-reference -->` on its own line
+immediately before the sentence beginning ``Check `claude``, and
+`<!-- contract:end -->` on its own line immediately after
+`quietly convening a smaller panel.` Move line breaks as needed so each
+marker owns its line; change no words. Indent both markers to match the
+surrounding text so they stay inside the list item.
 
-Place `<!-- contract:start id=panel-floor-reference -->` immediately
-before the sentence beginning `Check \`claude`, and
-`<!-- contract:end -->` immediately after `rather than quietly convening
-a smaller panel.` so the marked body is exactly:
+The marked body must normalize to exactly:
 
 ```
 Check `claude --version` before dispatching the Fable lane; below the floor the lane is UNAVAILABLE, not degraded, and the case routes to fallbacks.md's `panel-lane-unavailable` - which, like every other lane loss, stops at the consent gate rather than quietly convening a smaller panel.
 ```
 
+The narrative sentences before it, and the changelog source note in
+parentheses after it, stay outside.
+
 - [ ] **Step 4: Mark the operative sentence in the agent file**
 
-In `agents/fable-panel-reviewer.md`, wrap the sentence stating what the
-driver does, with id `panel-floor-agent`, so the marked body is exactly:
+In `agents/fable-panel-reviewer.md`, mark the sentence stating what the
+driver does, with id `panel-floor-agent`. The marked body must normalize
+to exactly:
 
 ```
 The driver checks `claude --version` against the floor before dispatching this seat; below it, the Fable lane is unavailable rather than degraded, because a silently unpinned fully-tooled agent is not a weaker reviewer, it is a different one.
 ```
 
-- [ ] **Step 5: Run the coverage test to see both pins are short**
+- [ ] **Step 5: Run the coverage test to see both regions reported**
 
 Run: `python -m pytest evals/multi-model-verify/test_contract_coverage.py -q -k "marked"`
 
-Simulated before planning. Expect BOTH sentences reported. The 0.14.4
-pins are fragments, and containment runs the other way: the pin must
-contain the sentence, not the sentence contain the pin.
+Simulated before planning. Expect BOTH new regions reported and no
+rotation guard region reported. The 0.14.4 pins are fragments, and
+containment runs the other way: the pin must contain the region, not the
+region contain the pin.
 
 - [ ] **Step 6: Extend both pins to whole sentences**
 
@@ -890,7 +1054,7 @@ Expected: all passed.
 - [ ] **Step 8: Run the full suite and both skill gates**
 
 Run: `python -m pytest evals -q`
-Expected: 194 passed, 1 skipped.
+Expected: 199 passed, 1 skipped.
 
 Run: `python evals/tools/skill_lint.py skills/multi-model-verify --strict`
 Expected: `PASS — 0 error(s), 0 warning(s)`
@@ -907,73 +1071,104 @@ git commit -m "0.15.0: mark the panel harness floor and extend the two pins it p
 
 ---
 
-### Task 6: Mark the two panel lane failure classes
+### Task 6: Mark the panel lane failure classes
 
 **Files:**
 - Modify: `skills/multi-model-verify/references/fallbacks.md`
 - Modify: `evals/multi-model-verify/test_contract_coverage.py`
-- Modify: `evals/multi-model-verify/test_seat_reshuffle.py` (only if the checker proves a pin short)
+- Modify: `evals/multi-model-verify/test_seat_reshuffle.py`
 
 **Interfaces:**
 - Consumes: `DECLARED_REGIONS` from Tasks 4 and 5.
-- Produces: two more ids, completing the inventory at six.
+- Produces: four more ids, completing the inventory at nine.
 
-Scope narrowing, recorded deliberately. `fallbacks.md` states its
-classes in two shapes: ten `###`-headed entries, and a bullet list of
-backup-lane classes under the backup reviewer section. Five entries name
-a class in backticks. No single count covers them all, so the selection
-rule is stated instead of a total: this task marks the two entries with
-recorded failures behind them, both `###`-headed, `panel-lane-loss` at
-`fallbacks.md:190` and `panel-lane-unavailable` at `fallbacks.md:210`. The 0.14.4 review
-found that new text contradicted `panel-lane-loss` while inventing
-mechanics for a case that had no class, so these two are where the
-evidence is. The rest get marked as they are next edited.
+Scope narrowing, recorded deliberately. `fallbacks.md` states its classes
+in two shapes: ten `###`-headed entries, and a bullet list of backup-lane
+classes under the backup reviewer section. Five entries name a class in
+backticks. No single count covers them all, so the selection rule is
+stated instead of a total: this task marks the two entries with recorded
+failures behind them, both `###`-headed, `panel-lane-loss` at
+`fallbacks.md:190` and `panel-lane-unavailable` at `fallbacks.md:210`.
+The 0.14.4 review found that new text contradicted `panel-lane-loss`
+while inventing mechanics for a case that had no class, so these two are
+where the evidence is. The rest get marked as they are next edited.
 
-- [ ] **Step 1: Add the two ids to the declared set**
+`panel-lane-unavailable` becomes THREE regions, not one, because one
+region is one pin and its disposition paragraph states three separate
+rules: the shared principle, the pre-round-1 procedure, and the panel
+invariant. Splitting is the design's answer to a paragraph too long for
+a single pin.
+
+- [ ] **Step 1: Add the four ids to the declared set**
 
 ```python
 DECLARED_REGIONS = {
-    "rotation-guard-rule",
+    "rotation-guard-detection",
+    "rotation-guard-disposition",
     "rotation-guard-residual-gap",
     "panel-floor-reference",
     "panel-floor-agent",
     "panel-lane-loss-disposition",
-    "panel-lane-unavailable-disposition",
+    "panel-unavailable-principle",
+    "panel-unavailable-procedure",
+    "panel-unavailable-invariant",
 }
 ```
 
 - [ ] **Step 2: Run to verify the inventory test fails**
 
 Run: `python -m pytest evals/multi-model-verify/test_contract_coverage.py -q -k "declared"`
-Expected: FAIL naming both new ids as not found.
+Expected: FAIL naming all four new ids as not found.
 
 - [ ] **Step 3: Mark the panel-lane-loss disposition**
 
 In `skills/multi-model-verify/references/fallbacks.md`, wrap the sentence
-that is already pinned by `test_fallbacks_panel_lane_loss`, with id
-`panel-lane-loss-disposition`, so the marked body is exactly:
+that already sits on its own line, with id `panel-lane-loss-disposition`,
+so the marked body is exactly:
 
 ```
 A lost lane stops the panel at the consent gate - continuing with fewer lanes never happens automatically.
 ```
 
-- [ ] **Step 4: Mark the panel-lane-unavailable disposition**
+Simulated before planning: this region is ALREADY covered by an existing
+whole-sentence pin and must NOT be reported in Step 5. It is marked so
+the region inventory protects it from deletion.
 
-Wrap the three sentences added in 0.14.4 that state what the class does,
-with id `panel-lane-unavailable-disposition`, so the marked body is
-exactly:
+- [ ] **Step 4: Mark the three panel-lane-unavailable rules**
+
+In the `panel-lane-unavailable` section, mark three consecutive regions.
+Move line breaks so each marker owns its line; change no words. The
+sentence after the third region, beginning `An unavailable lane is
+recorded`, stays outside.
+
+`panel-unavailable-principle`:
 
 ```
-The disposition is the same in the one respect that matters: the panel cannot silently convene without it. Before round 1 the driver states which lanes it can actually convene and which it cannot, with the reason, and the user chooses - proceed with the convenable composition, substitute, or abort. The panel invariant still binds whatever is chosen: at least one cross-vendor lane, so a composition reduced to Fable alone is not a panel and cannot proceed as one.
+The disposition is the same in the one respect that matters: the panel cannot silently convene without it.
 ```
 
-- [ ] **Step 5: Run the coverage test and extend any short pin**
+`panel-unavailable-procedure`:
 
-Run: `python -m pytest evals/multi-model-verify/test_contract_coverage.py -q`
+```
+Before round 1 the driver states which lanes it can actually convene and which it cannot, with the reason, and the user chooses - proceed with the convenable composition, substitute, or abort.
+```
 
-Simulated before planning: ALL THREE sentences are reported. The 0.14.4
-pins are fragments of the first and third, and containment runs the other
-way, so none of the three is locked.
+`panel-unavailable-invariant`:
+
+```
+The panel invariant still binds whatever is chosen: at least one cross-vendor lane, so a composition reduced to Fable alone is not a panel and cannot proceed as one.
+```
+
+- [ ] **Step 5: Run the coverage test**
+
+Run: `python -m pytest evals/multi-model-verify/test_contract_coverage.py -q -k "marked"`
+
+Simulated before planning: exactly the three `panel-unavailable-*`
+regions are reported. `panel-lane-loss-disposition` is not. The 0.14.4
+pin is a fragment of the principle sentence, and nothing pins the
+procedure or the invariant at all.
+
+- [ ] **Step 6: Extend the short pin into three whole-sentence pins**
 
 In `evals/multi-model-verify/test_seat_reshuffle.py`, inside
 `test_fallbacks_panel_lane_loss`, replace this line:
@@ -987,8 +1182,8 @@ that module:
 
 ```python
     # 0.15.0: was a fragment. The coverage checker proved all three
-    # sentences of the disposition unlocked - including the only place
-    # that says the driver must state the convenable composition BEFORE
+    # rules of the disposition unlocked - including the only place that
+    # says the driver must state the convenable composition BEFORE
     # round 1, which is what stops a quiet reduction.
     assert ("The disposition is the same in the one respect that "
             "matters: the panel cannot silently convene without "
@@ -1006,10 +1201,10 @@ that module:
 Re-run: `python -m pytest evals/multi-model-verify/test_contract_coverage.py -q`
 Expected: all passed.
 
-- [ ] **Step 6: Run the full suite and both skill gates**
+- [ ] **Step 7: Run the full suite and both skill gates**
 
 Run: `python -m pytest evals -q`
-Expected: 194 passed, 1 skipped.
+Expected: 199 passed, 1 skipped.
 
 Run: `python evals/tools/skill_lint.py skills/multi-model-verify --strict`
 Expected: `PASS — 0 error(s), 0 warning(s)`
@@ -1017,11 +1212,11 @@ Expected: `PASS — 0 error(s), 0 warning(s)`
 Run: `python evals/tools/skill_scanner.py skills`
 Expected: `Summary: 0 CRITICAL, 0 WARN, 0 INFO`
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
 git add skills/multi-model-verify/references/fallbacks.md evals/multi-model-verify/test_contract_coverage.py evals/multi-model-verify/test_seat_reshuffle.py
-git commit -m "0.15.0: mark the two panel lane failure classes"
+git commit -m "0.15.0: mark the panel lane failure classes"
 ```
 
 ---
@@ -1042,12 +1237,13 @@ git commit -m "0.15.0: mark the two panel lane failure classes"
 In `CLAUDE.md`, under `## Skill editing rules`, append:
 
 ```markdown
-Contract text inside `<!-- contract:start id=... -->` markers must have
-every sentence locked whole by some pin in `evals/multi-model-verify/`.
-`test_contract_coverage.py` enforces it and lists any sentence that is
-not. Adding or removing a marked region also means editing
-`DECLARED_REGIONS` in that file, which is what makes deleting a region
-visible.
+Contract text inside `contract:start` / `contract:end` HTML comment
+markers must sit WHOLE inside a single pin in `evals/multi-model-verify/`,
+where a pin is a string inside an `assert`. `test_contract_coverage.py`
+enforces it and lists any region that is not locked. A region too long
+for one pin is two regions. Adding or removing a marked region also means
+editing `DECLARED_REGIONS` in that file, which is what makes deleting a
+region visible.
 ```
 
 - [ ] **Step 2: Add a row to the README component table**
@@ -1055,7 +1251,7 @@ visible.
 In `README.md`, in the table that lists `hooks/` and `tools/`, add:
 
 ```markdown
-| `evals/multi-model-verify/contract_coverage.py` | Contract coverage: every sentence in a marked document region must sit whole inside some test pin. Closes the pin-integrity class that produced twelve instances across three cycles |
+| `evals/multi-model-verify/contract_coverage.py` | Contract coverage: every marked document region must sit whole inside some test pin. Closes the pin-integrity class that produced twelve instances across three cycles |
 ```
 
 - [ ] **Step 3: Bump the version**
@@ -1066,7 +1262,7 @@ In `.claude-plugin/plugin.json`, change `"version": "0.14.4"` to
 - [ ] **Step 4: Run every gate**
 
 Run: `python -m pytest evals -q`
-Expected: 194 passed, 1 skipped.
+Expected: 199 passed, 1 skipped.
 
 Run: `python evals/tools/skill_lint.py skills/multi-model-verify --strict`
 Expected: `PASS — 0 error(s), 0 warning(s)`
@@ -1100,3 +1296,11 @@ paragraph is now inside markers. That is the mechanism working as
 designed: changing marked text without updating its pin turns the
 coverage test red. Item 5 should be planned separately and should expect
 to update the two pins extended in Task 4.
+
+## Counts, and what to do if they differ
+
+Expected `python -m pytest evals -q` after each task: 184, 193, 197, 199,
+199, 199, 199 passed, with 1 skipped throughout. These come from the test
+functions this plan adds: 14 in Task 1, 9 in Task 2, 4 in Task 3, 2 in
+Task 4, none in Tasks 5 to 7. If a number differs, count the tests you
+actually added before assuming a regression.
