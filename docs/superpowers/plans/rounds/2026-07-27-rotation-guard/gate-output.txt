@@ -1,0 +1,33 @@
+GATE OUTPUT - parallax 0.14.3
+Committed head under test: 472cdc473f9bfc0ee4959cf13bc03a53724e3416
+Tracked worktree vs HEAD: CLEAN (no tracked modification, so these gates ran on exactly the committed bytes)
+Captured: 2026-07-27
+
+=== 1/4  python evals/tools/skill_lint.py skills/multi-model-verify --strict ===
+Linting C:\Users\Brandon\Documents\parallax\skills\multi-model-verify (strict=on)
+  PASS — 0 error(s), 0 warning(s)
+exit=0
+
+=== 2/4  python evals/tools/skill_scanner.py skills ===
+agent-skill security scan v1.0.0 — 1 skill(s) under skills
+
+=== multi-model-verify (skills\multi-model-verify) ===
+  clean — no findings
+
+Summary: 0 CRITICAL, 0 WARN, 0 INFO
+Verdict guidance: no pattern hits. Still read SKILL.md end-to-end — natural-language attacks evade pattern scanners (OWASP AST08).
+exit=0
+
+=== 3/4  python evals/tools/run_trigger_evals.py ===
+PASS  multi-model-verify: 5 positives clear 5 near-misses (weakest 0.32 vs strongest 0.00)
+
+trigger & routing: all clear (1 skill)
+exit=0
+
+=== 4/4  python -m pytest evals -q ===
+........................................................................ [ 42%]
+........................................................................ [ 84%]
+................s..........                                              [100%]
+170 passed, 1 skipped in 31.76s
+exit=0
+

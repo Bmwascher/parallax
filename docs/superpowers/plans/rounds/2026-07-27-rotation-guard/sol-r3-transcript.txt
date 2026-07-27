@@ -1,0 +1,1006 @@
+2026-07-27T06:33:29.808422Z ERROR codex_models_manager::cache: failed to load models cache: missing field `supports_reasoning_summaries` at line 86 column 5
+OpenAI Codex v0.144.1
+--------
+workdir: C:\Users\Brandon\Documents\parallax
+model: gpt-5.6-sol
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: none
+session id: 019fa22c-ace8-7212-9443-66179804b038
+--------
+user
+<role>Adversarial reviewer, equal weight. Round 3.</role>
+
+<subject-revision>
+b040079..472cdc4 — UNCHANGED since round 2. Every round-2 fix landed in
+untracked evidence artifacts, not in the merge candidate, so the code and
+contract under review are byte-identical to what you verified last round.
+This is deliberate: retained artifacts are untracked by design so that
+recording evidence cannot move the head out from under its own SHA.
+</subject-revision>
+
+<rules>Evidence rules and verdict grammar as before.</rules>
+
+<position-changes>
+Both round-2 verdicts were FIX, on DIFFERENT mechanical defects, both in
+retained evidence rather than in the contract. Both were accepted in
+full; neither was refuted or struck. Findings are relayed anonymously and
+marked CONVERGENT where more than one lane raised them.
+
+B1. ACCEPTED — the gate artifact disclosed capture at "8eacc8a +
+uncommitted pin additions" rather than at the committed subject head, so
+it did not bind those bytes to the reviewed SHA. One lane judged the
+disclosure materially equivalent for these particular gates; the stricter
+reading governed, because re-running costs a minute and an honest
+disclosure of a weaker binding is still a weaker binding.
+docs/superpowers/plans/rounds/2026-07-27-rotation-guard/gate-output.txt
+now opens with the committed SHA `472cdc4...`, and with the evidence that
+makes the binding real rather than asserted: `git status --porcelain`
+reports NO tracked modification, so the gates ran on exactly the
+committed bytes. All four pass at exit 0 — pytest 170 passed / 1 skipped,
+skill_lint 0 errors 0 warnings, skill_scanner 0 CRITICAL / 0 WARN / 0
+INFO, trigger evals 5 positives clear 5 near-misses.
+
+B2. ACCEPTED — the diff package still declared `Range: b040079..8eacc8a`
+with a commit list and diffstat that stopped there, so the next consumer
+of the folder would have reviewed the wrong range. Regenerated: the
+header, the five-commit list, and the diffstat now all cover
+`b040079..472cdc4`
+(docs/superpowers/plans/rounds/2026-07-27-rotation-guard/diff-package.txt:1-11).
+
+B3. ACCEPTED — the em-dash in the red-first proof rendered as cp1252
+mojibake. Cosmetic in effect, but the artifact's entire purpose is exact
+string comparison, so a corrupted string in it undermines the evidence it
+presents. Regenerated with explicit UTF-8; each pinned string now prints
+in full rather than truncated, and the header records both the base blob
+and the head SHA
+(docs/superpowers/plans/rounds/2026-07-27-rotation-guard/base-absence-check.txt).
+
+B4. ACCEPTED, claim-side only — the round-2 memo cited the fallbacks pin
+at :434-445 when the assert is at :448-453 (that range is its comment).
+Line drift in the brief, not in the contract. The correct current
+anchors: seven backup-lane.md pins at
+evals/multi-model-verify/test_backup_lane.py:140, :141-142, :145, :146,
+:152, :155-156, :163-165, and one fallbacks.md pin at :448-453.
+
+B5. CONVERGENT, recorded and deferred — both lanes independently agreed
+that the recurrence of the pin-integrity class (instance ten found
+pre-merge, instance eleven found in round 1 inside the fix for ten) is
+real evidence that hand-applied substring pinning is a weak mechanism,
+AND that a two-item follow-on cycle is the wrong vehicle for a mechanism
+redesign, since forcing one in would bypass the plan-debate gate this
+cycle runs under. Seeded as a plan-cycle item. Not acted on here, and not
+an ESCALATE.
+</position-changes>
+
+<task>
+Confirm the three artifact fixes, or name what remains. Then issue your
+terminal verdict on `b040079..472cdc4` as a merge candidate: PASS, FIX
+(specific, with evidence), or ESCALATE.
+
+If your position is that the contract passes and only evidence hygiene
+was ever outstanding, say PASS plainly — converging is the expected
+outcome once findings are resolved, and manufacturing a further objection
+to justify the round is itself a defect.
+</task>
+
+<final-check>List anything you could not verify, as UNVERIFIED, and keep
+it out of your verdict.</final-check>
+
+codex
+I’m reapplying `parallax:multi-model-verify` and the completion-verification gate for round 3. I’ll verify the three regenerated artifacts against live Git state at `472cdc4`, including their exact SHA/range bindings and UTF-8 strings, then issue the terminal merge verdict without reopening resolved design questions.
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command "Get-Content -Raw 'C:\\Users\\Brandon\\.codex\\plugins\\cache\\parallax\\parallax\\0.14.0\\skills\\multi-model-verify\\SKILL.md'" in C:\Users\Brandon\Documents\parallax
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command "Get-Content -Raw 'C:\\Users\\Brandon\\.codex\\plugins\\cache\\parallax\\parallax\\0.14.0\\skills\\multi-model-verify\\references\\debate-protocol.md'" in C:\Users\Brandon\Documents\parallax
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command "Get-Content -Raw 'C:\\Users\\Brandon\\.codex\\plugins\\cache\\claude-plugins-official\\superpowers\\6.2.0\\skills\\verification-before-completion\\SKILL.md'" in C:\Users\Brandon\Documents\parallax
+ succeeded in 536ms:
+# Debate protocol
+
+Both advisors are equal weight. Neither model's claim outranks the other's;
+only evidence does.
+
+## Evidence grounding (the strike rule)
+
+- **Every externally checkable claim must carry a citation to a source the
+  other side can read**: a file:line in the repo or reference material the
+  citing side actually read (the session: read this session; the reviewer:
+  read inside its sandboxed run — its quoted excerpt counts as reading),
+  authoritative local docs, or a fetched URL.
+- Source-specific examples: reference-port claims cite
+  `References/<name>/<file>:<line>`; WoW 12.0 API claims cite
+  `.wow-api-reference/` or a dated in-game probe result; library or platform
+  claims cite the vendored source or official docs.
+- **Anchor every file the first time you cite it** — full repo-relative path
+  with line, `References/DemoWidget/DemoWidget.toc:1`, not `DemoWidget.toc:1`.
+  This holds for EVERY file, including one-line manifests and secondary
+  files, not just the main source. Once a file is anchored, shorthand
+  (`Core.lua:19`) is fine for later citations of that same file. A bare
+  filename does not locate anything for the other side: the project has its
+  own `DemoAddon.toc` and the reference has `DemoWidget.toc`, and an
+  unanchored `.toc:1` could be either.
+- A claim with no citation is **struck, not debated**. Note it as struck and
+  move on — arguing against an ungrounded claim launders it into the record.
+- Reports are claims requiring evidence. "The reference handles this" without
+  the file:line is an assertion, not a finding.
+
+## Round structure
+
+Each exchange (one session position or rebuttal + one reviewer reply) is a round.
+
+1. From round 2 on, state position changes since last round: which of the
+   other side's points are **accepted** (absorbed into the plan), which are
+   **refuted** (with the evidence that refutes them), which are **struck**
+   (no citation).
+2. Raise new risks only with evidence attached.
+3. End with a verdict on the current plan/diff:
+   - **PASS** — no remaining substantive objections.
+   - **FIX** — named change required, with the specific fix and its evidence.
+   - **ESCALATE** — a disagreement evidence cannot settle (taste, missing
+     in-game data, ambiguous reference intent).
+
+## Convergence and the round cap
+
+- Converged: both sides verdict PASS in the same round.
+- **Converged with amendments**: the final round's only outstanding verdicts
+  are FIXes whose fixes the other side accepts on the record. Record each
+  accepted fix in the debate record and treat the plan as converged — an
+  accepted FIX is agreement, not a dispute for the user to settle. (This
+  matters whenever a FIX lands in the last round before the cap.)
+- Round cap: **4 exchanges** by default (caller may raise or lower it).
+  Hitting the cap is not failure — it is the signal to stop spending tokens
+  on an argument evidence hasn't settled.
+- At the cap or on ESCALATE, for points that remain genuinely contested:
+  stop, present BOTH positions to the user with their evidence, and let the
+  user decide. Never silently pick a side.
+- Questions only runtime testing can answer always escalate — neither model
+  can run the live application (in WoW projects, /reload + BugSack is always
+  the user's step).
+
+## Final adjudication (the session's last step)
+
+The chain never ends on the external reviewer's verdict. After the
+reviewer's final round — including a re-review of fixes — the SESSION
+performs one closing step before anything merges or freezes:
+
+1. Verify each finding from that final round against the live repo (read
+   the cited lines; run the gates if implicated) — a final-round finding is
+   itself an unverified claim until checked.
+2. Accept with evidence, refute with evidence, or ESCALATE to the user.
+   Nothing is adopted or dismissed on authority.
+3. Emit the terminal verdict. A reviewer PASS/FIX is input to this step,
+   never the decision itself.
+4. If that verdict requires changes this session will apply itself, the
+   chain is NOT over: the application checkpoint
+   (references/application-checkpoint.md) precedes the FIRST file edit —
+   the checkpoint, not the verdict, is what authorizes touching files.
+   After applying, execute the checkpoint's verification plan and
+   re-review the fixed range; only the post-re-review terminal PASS
+   closes the chain.
+5. Close with the finish line (mode diff: first record the closing
+   verdict mechanically via the attestation emitter — see SKILL.md's
+   finish-line section; when a checkpoint governed the fixes, bind it
+   with `-CheckpointFile`). The attestation always records the FINAL
+   adjudicated range — never a verdict whose fixes are still unapplied.
+
+Equal weight governs claims during the debate; adjudication is procedural,
+not a rank: the session is the accountable party with live-repo access, so
+the session always has the final say — and a genuine deadlock still goes to
+the user, never to whoever spoke last (user directive, 2026-07-12).
+
+## Anti-sycophancy, anti-theater
+
+Debates fail two ways: rubber-stamping and manufactured conflict. Both are
+defects.
+
+- **A sound plan gets one line.** "Plan is sound; the one thing to watch is
+  X." Converging in round 1 is the system working.
+- **Do not manufacture objections** to justify the round. If you would not
+  push back in a real review, do not push back here.
+- Do not restate the other side's point in different words as a "new" risk.
+- Do not concede a point you can refute just to converge faster —
+  unresolved disagreement has an honest exit (ESCALATE).
+
+## Why the structure carries the trust
+
+The current reviewer lane has a documented (METR, vendor system card — see
+model-prompting-notes.md) tendency to fabricate
+results under evaluation pressure. The mitigation is this protocol — every
+claim must survive citation and refutation by an independent model — not
+down-weighting the reviewer's verdicts. The same rules bind the session
+model equally: fabricated
+detail is a known failure mode of every frontier model, and this project's
+history (see memory: no-fabrication feedback) treats invented API behavior as
+the cardinal sin.
+
+
+ succeeded in 575ms:
+---
+name: multi-model-verify
+description: Use when planning a reference port, an API-sensitive module, or any change risky enough to need cross-model verification before implementation, or when an implemented diff must be checked against its plan and reference before merge. Fires automatically alongside superpowers requesting-code-review via the review-companion hook.
+---
+
+# Multi-Model Verify
+
+## Overview
+
+Two equal-weight advisors — this session and a cross-vendor reviewer driven
+through the codex CLI (canonical reviewer model:
+references/model-prompting-notes.md) — verify and refute each other's
+claims before the cheap implementer touches code. The reviewer lane's
+documented fabrication risk (METR; see model-prompting-notes.md) is
+mitigated by the debate structure — evidence grounding plus mutual
+refutation — not by down-weighting either side. The PRIMARY reviewer
+lane (codex) is the default; a second cross-vendor BACKUP reviewer lane
+(references/backup-lane.md — REQUIRED READING before any backup round)
+substitutes ONLY through the fallbacks.md consent gate — auto-qualified
+by the classes named there, manual on user request — with the same
+protocol, a different transport, and `Verification status: FULL`
+preserved.
+Mode diff's debate is preceded by a REQUIRED whole-branch review from
+the fable-reviewer seat (agents/fable-reviewer.md), and the user may
+convene multi-reviewer PANELS (references/panels.md) in either mode.
+
+**REQUIRED READING before the first round:** references/debate-protocol.md.
+
+Companion to superpowers, not a replacement: it fills the cross-model review
+gap superpowers rules out of scope. `/codex:adversarial-review` remains the
+human-invoked pre-merge gate; if the codex plugin's stop-review-gate is
+toggled on, its stop-time review overlaps mode `diff` — expected, not a bug.
+
+## When to use
+
+- **Mode `plan`** — after superpowers brainstorming proposes approaches for a
+  port or API-sensitive module, before the implementation plan is written.
+- **Mode `diff`** — after implementation, alongside superpowers
+  requesting-code-review (the review-companion hook injects this
+  automatically with the matching base/head SHAs).
+- NOT for plain bugfixes, docs or release chores, GUI tweaks, or lint sweeps.
+
+## Preflight (both modes)
+
+1. `codex --version` must succeed, and `codex login status` must report
+   `Logged in using ChatGPT` — exit 0 alone also passes an API-key login,
+   which rides different billing. On failure follow references/fallbacks.md
+   (the consent gate may offer the cross-vendor backup lane —
+   references/backup-lane.md — before any single-vendor degraded mode;
+   never silently skip cross-vendor review).
+2. For port work: the reference source must exist under `References/`
+   (quote paths — some contain spaces, e.g. `References/M+ Timer`). Missing
+   → **HARD STOP before any debate round runs**: ask the user for the path
+   and go no further — do not run a codex exchange about the absence, do
+   not debate from memory, do not start a degraded mode. If the folder
+   holds version subdirectories (e.g. a `v1.4/` next to a `v1.1_old/`), use
+   the newest unless the user names one, and cite the versioned path:
+   `References/<name>/<version>/<file>:<line>`.
+   For non-port work there is no reference folder — claims ground in the
+   project's own source, specs, or upstream docs instead, same strike rule.
+3. The reviewed repo must carry no AGENTS.md and no `.agents/` entries:
+   codex auto-ingests AGENTS.md as instructions, and it advertises
+   repo-level `.agents/skills/*/SKILL.md` to the model, which read a
+   planted one as its FIRST action (both probed 2026-07-24: the planted
+   AGENTS.md controlled the reviewer's reply; the planted skill entered
+   its context; see model-prompting-notes.md) — back-channels into the
+   auditor that break independence. Enumerate the whole tree in one
+   listing — `git ls-files --cached --others '*AGENTS.md' '.agents/*'` —
+   which covers tracked, untracked, AND ignored files at any depth
+   (`.git` itself is never listed); a root-only or tracked-only check
+   misses a nested drop.
+   If present: STOP and surface it to the user — never dispatch a review
+   over an instruction back-channel. Files above the repo's git root are
+   NOT ingested (same probe), and `~/.codex/AGENTS.md` is the user's own
+   global instruction file — note it in the debate record if it exists,
+   but it is not a stop. Skills from the user's own codex plugin cache
+   load the same way — record them in the debate record as a
+   non-blocking environment note with the cache path cited, like the
+   global AGENTS.md; not a stop and never a finding.
+
+## Mode plan
+
+1. Draft the session position: chosen approach, port-fidelity claims, and the
+   API/behavior risk register. Every reference claim cites a
+   `References/<name>/<file>:<line>` actually read this session — anchor
+   EVERY file with its full path the first time you cite it, manifests and
+   secondary files included (shorthand only once that file is anchored);
+   every API claim cites authoritative local docs (WoW projects:
+   `.wow-api-reference/` or a dated in-game probe result) — never memory.
+   The position has no separate artifact — it IS the claims section of the
+   step-2 brief.
+2. Compose the reviewer's debate brief per references/model-prompting-notes.md, write
+   it to a scratchpad file, then run round 1:
+
+   ```powershell
+   Get-Content -Raw <brief-file> | codex exec --sandbox read-only -m <canonical-model-id> -c model_reasoning_effort=<canonical-effort> --output-last-message <reply-file> - > <transcript-file> 2>&1
+   ```
+
+   `<canonical-model-id>` and `<canonical-effort>` are the two declarations
+   in references/model-prompting-notes.md — read the literal values from
+   there, never from memory (the reviewer swaps by editing that one file,
+   and a remembered id silently defeats the swap). Apply that file's env
+   hygiene to the invocation.
+
+   Backup lane: same protocol, transport and per-round evidence per references/backup-lane.md.
+
+   Panels: any reviewer-lane combination per references/panels.md.
+
+   From `<transcript-file>`: verify the effective route — the header's
+   `model:`, `provider:`, and `reasoning effort:` lines against the
+   canonical declarations, and the `sandbox:` line reads `read-only`, per
+   model-prompting-notes.md; a mismatch is a transport failure
+   (fallbacks.md), never a review result — and capture the `session id:`
+   line. Read the reviewer's reply from `<reply-file>` — the transcript
+   logs every file the reviewer reads and can run tens of KB, with the
+   reply buried at the bottom. Every round writes FRESH round-numbered
+   `<reply-file>`/`<transcript-file>` paths: after a failed call, a reused
+   path serves the previous round's reply and reads exactly like success —
+   a reply not freshly written by this round's call is a stale reply, a
+   transport failure (fallbacks.md), never a review result.
+3. Later rounds keep the reviewer's state by resuming that session — flags MUST
+   precede the resume subcommand (flags after it are a usage error):
+
+   ```powershell
+   codex exec --sandbox read-only -m <canonical-model-id> -c model_reasoning_effort=<canonical-effort> --output-last-message <reply-file> resume <SESSION_ID> "<rebuttal-brief>" > <transcript-file> 2>&1
+   ```
+
+   Each resume's header must echo the resumed `session id:` and the same
+   effective route — the round-1 check repeated, `sandbox:` included (a
+   resume that silently started a fresh session has dropped the reviewer's
+   debate state). Sandbox mode has NO continuity across resumes: a resume
+   missing `--sandbox read-only` resolves to the config default — on a
+   `workspace-write` default the read-only auditor becomes a writing agent
+   mid-review (probed 2026-07-24, the write landed; see
+   model-prompting-notes.md). The header's `sandbox:` line is where that
+   surfaces.
+
+4. Iterate per debate-protocol.md until convergence or the round cap, then
+   escalate any unresolved points to the user with both positions stated.
+5. Freeze the converged plan per references/frozen-plan-format.md under the
+   project's superpowers plans dir (KitnEssentials:
+   `dev/docs/superpowers/plans/`; other projects: the superpowers default
+   `docs/superpowers/plans/`).
+
+## Mode diff
+
+Same transport and protocol. First read the frozen plan's debate record and
+its **Verification status** field.
+
+Required before round 1: the agents/fable-reviewer.md whole-branch review runs on the same range, its raw reply is retained as a range-bound artifact, and the round-1 brief cites that artifact with the session's per-finding adjudications.
+The session adjudicates each review finding with evidence — accept,
+refute, or ESCALATE into the debate — before any reviewer lane sees
+them; the review is the debate's required input, never its verdict,
+and the debate record names the artifact path.
+
+Then the brief carries the frozen plan
+path, the base/head SHAs superpowers code review used, and the
+`git diff base..head` output. Both sides check **spec fidelity** (drift from
+the frozen plan — the implementer makes zero judgment calls, so any drift is
+a finding, with one carve-out: envelope-designated escalation-lane DECISIONS
+are adjudicated against their frozen envelope per
+references/frozen-plan-format.md, and only envelope overruns are drift) and,
+for port work, **port fidelity** (drift from the reference
+source), ending PASS / FIX / ESCALATE.
+
+Backup lane: same protocol, transport and per-round evidence per references/backup-lane.md.
+
+Panels: any reviewer-lane combination per references/panels.md.
+
+A FIX this session applies itself goes through the **application
+checkpoint** (references/application-checkpoint.md) before the first edit.
+The fixed range is then re-reviewed, and only the post-re-review terminal
+PASS is attested — with the emitter's `-CheckpointFile` binding the
+checkpoint; a FIX verdict whose fixes are still unapplied is never the
+attested verdict.
+
+**Degraded-plan poisoning rule:** a plan whose Verification status is
+DEGRADED cannot produce an ordinary diff PASS. Mode diff must first reopen
+and cross-verify the plan's claims and approved deviations (the
+retrospective pass the plan never got), and only then verify the
+implementation against it — confirming a diff matches an unsound plan
+verifies nothing. If cross-vendor verification is STILL unavailable, the
+only terminal state is `ESCALATE — CROSS-VENDOR GATE UNSATISFIED`: merging
+then requires the user's explicitly recorded risk acceptance, never a PASS.
+
+## Finish line
+
+Before it: the session's final-adjudication step (debate-protocol.md) —
+verify the last round's findings against the repo and issue the terminal
+verdict; a reviewer's PASS/FIX is never terminal by itself.
+
+**Mode diff only — record the verdict mechanically.** After the terminal
+verdict, run the attestation emitter from this plugin's checkout:
+
+```powershell
+powershell -NoProfile -File <plugin-root>/tools/write-attestation.ps1 -RepoRoot <reviewed-repo> -BaseSha <base> -HeadSha <head> -Verdict <PASS|FIX|ESCALATE> -VerificationStatus <FULL|DEGRADED> -RouteNote "<effective route confirmed | the transport-failure class>" -Rounds <n> -Participants "<session-model> (session) / <reviewer-model> (reviewer)" [-CheckpointFile <application-checkpoint-artifact>]
+```
+
+When an application checkpoint governed fix application, pass it via
+`-CheckpointFile`: the record then also binds the checkpoint's hash and
+the emitter-computed changed-path set, `<head>` is the POST-fix,
+re-reviewed head — never the head the FIX verdict was issued on — and
+the artifact must already carry its appended verification results (the
+recorded hash covers the final artifact).
+
+It writes `.git/parallax/attestations/<head-sha>.json` inside the reviewed
+repo — untracked by design, so recording the verdict cannot move HEAD out
+from under its own SHA. The pre-push lane (`tools/verify-attestation.ps1`)
+later warns when a `main` push has no matching attestation for the pushed
+head (fast-forward: pushed sha == attested head; merge commit: parent1 ==
+attested base, parent2 == attested head — a squash changes the sha and
+correctly forces re-review).
+
+End with one status line: participating models, rounds used, converged vs
+escalated points, the verification status — `FULL`, or
+`DEGRADED (<class>, authorized by user at round N)` per fallbacks.md — and
+the route note: `effective route confirmed` when every round's header
+matched the canonical declarations, else the transport-failure class that
+fallbacks.md handled. The route-note grammar is lane-agnostic: for a backup-lane debate,
+`effective route confirmed` means every round satisfied
+references/backup-lane.md's per-round evidence rules against the backup
+declarations; the evidence class is recorded in the debate record prose. The session emits this line itself; never delegate it
+to a subagent.
+
+## Common mistakes
+
+- Accepting the reviewer's claims about reference code without the cited lines —
+  strike the claim per protocol; do not argue against it.
+- Re-sending the full debate context each round instead of resuming the
+  codex session.
+- Running mode `diff` against different SHAs than the code review used.
+- Treating convergence as failure — a sound plan converging in one round is
+  the system working, not a skipped debate.
+
+
+ succeeded in 599ms:
+---
+name: verification-before-completion
+description: Use when about to claim work is complete, fixed, or passing, before committing or creating PRs - requires running verification commands and confirming output before making any success claims; evidence before assertions always
+---
+
+# Verification Before Completion
+
+## Overview
+
+**Core principle:** Evidence before claims, always.
+
+**Violating the letter of this rule is violating the spirit of this rule.**
+
+## The Iron Law
+
+```
+NO COMPLETION CLAIMS WITHOUT FRESH VERIFICATION EVIDENCE
+```
+
+If you haven't run the verification command in this message, you cannot claim it passes.
+
+## The Gate Function
+
+```
+BEFORE claiming any status or expressing satisfaction:
+
+1. IDENTIFY: What command proves this claim?
+2. RUN: Execute the FULL command (fresh, complete)
+3. READ: Full output, check exit code, count failures
+4. VERIFY: Does output confirm the claim?
+   - If NO: State actual status with evidence
+   - If YES: State claim WITH evidence
+5. ONLY THEN: Make the claim
+
+Skip any step = lying, not verifying
+```
+
+## Common Failures
+
+| Claim | Requires | Not Sufficient |
+|-------|----------|----------------|
+| Tests pass | Test command output: 0 failures | Previous run, "should pass" |
+| Linter clean | Linter output: 0 errors | Partial check, extrapolation |
+| Build succeeds | Build command: exit 0 | Linter passing, logs look good |
+| Bug fixed | Test original symptom: passes | Code changed, assumed fixed |
+| Regression test works | Red-green cycle verified | Test passes once |
+| Agent completed | VCS diff shows changes | Agent reports "success" |
+| Requirements met | Line-by-line checklist | Tests passing |
+
+## Red Flags - STOP
+
+- Using "should", "probably", "seems to"
+- Expressing satisfaction before verification ("Great!", "Perfect!", "Done!", etc.)
+- About to commit/push/PR without verification
+- Trusting agent success reports
+- Relying on partial verification
+- Thinking "just this once"
+- Tired and wanting work over
+- **ANY wording implying success without having run verification**
+
+## Rationalization Prevention
+
+| Excuse | Reality |
+|--------|---------|
+| "Should work now" | RUN the verification |
+| "I'm confident" | Confidence ≠ evidence |
+| "Just this once" | No exceptions |
+| "Linter passed" | Linter ≠ compiler |
+| "Agent said success" | Verify independently |
+| "I'm tired" | Exhaustion ≠ excuse |
+| "Partial check is enough" | Partial proves nothing |
+| "Different words so rule doesn't apply" | Spirit over letter |
+
+## Key Patterns
+
+**Tests:**
+```
+✅ [Run test command] [See: 34/34 pass] "All tests pass"
+❌ "Should pass now" / "Looks correct"
+```
+
+**Regression tests (TDD Red-Green):**
+```
+✅ Write → Run (pass) → Revert fix → Run (MUST FAIL) → Restore → Run (pass)
+❌ "I've written a regression test" (without red-green verification)
+```
+
+**Build:**
+```
+✅ [Run build] [See: exit 0] "Build passes"
+❌ "Linter passed" (linter doesn't check compilation)
+```
+
+**Requirements:**
+```
+✅ Re-read plan → Create checklist → Verify each → Report gaps or completion
+❌ "Tests pass, phase complete"
+```
+
+**Agent delegation:**
+```
+✅ Agent reports success → Check VCS diff → Verify changes → Report actual state
+❌ Trust agent report
+```
+
+## When To Apply
+
+**ALWAYS before:**
+- ANY variation of success/completion claims
+- ANY expression of satisfaction
+- ANY positive statement about work state
+- Committing, PR creation, task completion
+- Moving to next task
+- Delegating to agents
+
+**Rule applies to:**
+- Exact phrases
+- Paraphrases and synonyms
+- Implications of success
+- ANY communication suggesting completion/correctness
+
+
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command 'git rev-parse HEAD; git status --porcelain --untracked-files=no; git status --short --branch; git log --oneline b040079..472cdc4; git diff --stat b040079..472cdc4; git diff --check b040079..472cdc4' in C:\Users\Brandon\Documents\parallax
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command "Get-Content -Raw 'docs/superpowers/plans/rounds/2026-07-27-rotation-guard/base-absence-check.txt'" in C:\Users\Brandon\Documents\parallax
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command "Get-Content -Raw 'docs/superpowers/plans/rounds/2026-07-27-rotation-guard/gate-output.txt'" in C:\Users\Brandon\Documents\parallax
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command "Get-Content -Raw 'docs/superpowers/plans/rounds/2026-07-27-rotation-guard/diff-package.txt'" in C:\Users\Brandon\Documents\parallax
+ succeeded in 628ms:
+RED-FIRST PROOF - parallax 0.14.3
+BASE blob: b040079   HEAD worktree: 472cdc473f9bfc0ee4959cf13bc03a53724e3416
+Encoding: UTF-8 (regenerated - the prior capture mangled the em-dash)
+
+Every pin added this cycle, checked against the BASE blob and the HEAD
+worktree, whitespace-normalized exactly as the test's _norm reader does.
+A pin already satisfied at base would be describing text rather than
+locking it; a pin missing at head would not match the sentence it claims
+to lock. Both are failures.
+
+[OK] backup-lane.md: base=absent  head=present
+       Rotation guard
+
+[OK] backup-lane.md: base=absent  head=present
+       if after the call the file is SMALLER than the captured offset, or absent
+
+[OK] backup-lane.md: base=absent  head=present
+       not a reason to re-read from zero
+
+[OK] backup-lane.md: base=absent  head=present
+       offsets have held by accident rather than by design
+
+[OK] backup-lane.md: base=absent  head=present
+       That is a route-attribution failure
+
+[OK] backup-lane.md: base=absent  head=present
+       compare file identity (creation time) too, not just length
+
+[OK] backup-lane.md: base=absent  head=present
+       The size test is necessary, not sufficient: a rotation whose replacement file grew back PAST the captured offset within the same call would slip through.
+
+[OK] fallbacks.md: base=absent  head=present
+       a rotation under the call is the one member that IS transient — a re-dispatch with a freshly captured offset would produce clean evidence. It still skips the retry, because the round already spent is unattributable and no retry can make it attributable after the fact; the user decides at the gate whether to spend another.
+
+RESULT: ALL 8 PINS LOCK TEXT INTRODUCED BY THIS RANGE
+
+
+ succeeded in 673ms:
+GATE OUTPUT - parallax 0.14.3
+Committed head under test: 472cdc473f9bfc0ee4959cf13bc03a53724e3416
+Tracked worktree vs HEAD: CLEAN (no tracked modification, so these gates ran on exactly the committed bytes)
+Captured: 2026-07-27
+
+=== 1/4  python evals/tools/skill_lint.py skills/multi-model-verify --strict ===
+Linting C:\Users\Brandon\Documents\parallax\skills\multi-model-verify (strict=on)
+  PASS — 0 error(s), 0 warning(s)
+exit=0
+
+=== 2/4  python evals/tools/skill_scanner.py skills ===
+agent-skill security scan v1.0.0 — 1 skill(s) under skills
+
+=== multi-model-verify (skills\multi-model-verify) ===
+  clean — no findings
+
+Summary: 0 CRITICAL, 0 WARN, 0 INFO
+Verdict guidance: no pattern hits. Still read SKILL.md end-to-end — natural-language attacks evade pattern scanners (OWASP AST08).
+exit=0
+
+=== 3/4  python evals/tools/run_trigger_evals.py ===
+PASS  multi-model-verify: 5 positives clear 5 near-misses (weakest 0.32 vs strongest 0.00)
+
+trigger & routing: all clear (1 skill)
+exit=0
+
+=== 4/4  python -m pytest evals -q ===
+........................................................................ [ 42%]
+........................................................................ [ 84%]
+................s..........                                              [100%]
+170 passed, 1 skipped in 31.76s
+exit=0
+
+
+
+ succeeded in 680ms:
+472cdc473f9bfc0ee4959cf13bc03a53724e3416
+## fix/log-rotation-guard
+?? docs/superpowers/plans/rounds/2026-07-26-backup-lane-mirror/
+?? docs/superpowers/plans/rounds/2026-07-26-seat-reshuffle/fable-review.md
+?? docs/superpowers/plans/rounds/2026-07-27-rotation-guard/
+472cdc4 0.14.3: run the rotation-class pins to the end of what they lock
+8eacc8a 0.14.3: pin the rotation guard's disposition and reconcile its failure class
+0600be1 0.14.3: correct the sweep-scope comment's occurrence count
+63fa715 0.14.3: bump plugin version
+4d8a121 0.14.3: guard the per-round offset rule against log rotation and record the sweep scope
+ .claude-plugin/plugin.json                         |  2 +-
+ evals/multi-model-verify/test_backup_lane.py       | 63 ++++++++++++++++++++++
+ .../multi-model-verify/references/backup-lane.md   | 19 +++++++
+ skills/multi-model-verify/references/fallbacks.md  | 10 +++-
+ 4 files changed, 92 insertions(+), 2 deletions(-)
+
+ succeeded in 687ms:
+# Diff package — parallax 0.14.3
+# Range: b040079..472cdc473f9bfc0ee4959cf13bc03a53724e3416 (branch fix/log-rotation-guard)
+# Regenerated at the round-2 subject revision.
+
+## Commits (oldest first)
+4d8a121 0.14.3: guard the per-round offset rule against log rotation and record the sweep scope
+63fa715 0.14.3: bump plugin version
+0600be1 0.14.3: correct the sweep-scope comment's occurrence count
+8eacc8a 0.14.3: pin the rotation guard's disposition and reconcile its failure class
+472cdc4 0.14.3: run the rotation-class pins to the end of what they lock
+
+## Diffstat
+ .claude-plugin/plugin.json                         |  2 +-
+ evals/multi-model-verify/test_backup_lane.py       | 63 ++++++++++++++++++++++
+ .../multi-model-verify/references/backup-lane.md   | 19 +++++++
+ skills/multi-model-verify/references/fallbacks.md  | 10 +++-
+ 4 files changed, 92 insertions(+), 2 deletions(-)
+
+## Diff
+diff --git a/.claude-plugin/plugin.json b/.claude-plugin/plugin.json
+index 61600f1..17a86ee 100644
+--- a/.claude-plugin/plugin.json
++++ b/.claude-plugin/plugin.json
+@@ -1,6 +1,6 @@
+ {
+   "name": "parallax",
+-  "version": "0.14.2",
++  "version": "0.14.3",
+   "description": "Cross-model verification for Claude Code: an evidence-grounded adversarial debate between the session model and a cross-vendor reviewer gates plans before implementation and diffs before merge, hooked into the superpowers workflow.",
+   "author": {
+     "name": "Brandon Wascher",
+diff --git a/evals/multi-model-verify/test_backup_lane.py b/evals/multi-model-verify/test_backup_lane.py
+index 1034747..433693b 100644
+--- a/evals/multi-model-verify/test_backup_lane.py
++++ b/evals/multi-model-verify/test_backup_lane.py
+@@ -131,6 +131,38 @@ def test_backup_lane_evidence_pins():
+     assert "`Loading agent:` line naming the committed yaml" in body
+     assert "`Loaded tools:` line equal to the allowlist exactly" in body
+     assert "DISCARDED unread" in body
++    # 0.14.3: the offset rule assumes an append-only file and kimi's
++    # client does not guarantee one. Rotation currently FAILS on
++    # Windows (WinError 32, log still open), so offsets have held by
++    # accident - if rotation ever succeeds, every byte position from
++    # the earlier measurement is meaningless and the check would read
++    # whatever happens to sit there.
++    assert ("Rotation guard" in body)
++    assert ("if after the call the file is SMALLER than the captured "
++            "offset, or absent") in body
++    # re-reading the rotated file from zero is the tempting wrong
++    # answer: it attributes lines that may belong to any session
++    assert ("not a reason to re-read from zero" in body)
++    assert ("offsets have held by accident rather than by design" in body)
++    # 0.14.3 fable review F1: DETECTION without a DISPOSITION leaves the
++    # driver to invent a rule. The nearby "DISCARDED unread" pin above is
++    # satisfied by the pre-existing bullet, so the guard's consequence
++    # half needs its own pin or it deletes green - pin-integrity instance
++    # ten in this file.
++    assert ("That is a route-attribution failure" in body)
++    # F4: the residual gap's CONTINGENCY is the only recorded instruction
++    # for the day rotation starts succeeding.
++    assert ("compare file identity (creation time) too, not just length"
++            in body)
++    # 0.14.3 Sol panel round 1 (claim 6), REVERSING the session's earlier
++    # call that this paragraph was narrative and not worth pinning. It is
++    # not narrative: it states that the detection check has a known
++    # FALSE-NEGATIVE boundary, and a driver who reads only the detection
++    # rule over-trusts the guard. What a driver believes about coverage
++    # is contract.
++    assert ("The size test is necessary, not sufficient: a rotation "
++            "whose replacement file grew back PAST the captured offset "
++            "within the same call would slip through.") in body
+     # 0.14.2 Kimi panel round 2 (4b): the three PASS conditions were
+     # pinned but the probe's CONFIGURATION FIDELITY was not - a probe
+     # run under a stricter config than the debate's would pass while
+@@ -401,6 +433,24 @@ def test_fallbacks_backup_wiring():
+     assert "codex-missing" in fb and "model-rejected" in fb
+     assert "quota-exhausted" in fb and "auth-expired" in fb
+     assert "route-attribution" in fb
++    # 0.14.3 fable review F3: the class's stated no-retry rationale is
++    # "nothing transient", which is true of a wrong id or a stray tool but
++    # NOT of a rotation under the call - that one would yield clean
++    # evidence on a re-dispatch. The disposition is still right, for a
++    # different reason, and the reason has to be on the record or the two
++    # files read as a contradiction.
++    # 0.14.3 Sol panel round 1 (claim 5): the pin below MUST run to the
++    # end of the justification. Stopping at "IS transient" named the
++    # exception while leaving the operative half - WHY the retry is still
++    # skipped, and WHO decides the re-spend - deletable green. That is
++    # pin-integrity instance eleven, reproduced inside the very sentence
++    # added this cycle to fix instance ten.
++    assert ("a rotation under the call is the one member that IS "
++            "transient — a re-dispatch with a freshly captured offset "
++            "would produce clean evidence. It still skips the retry, "
++            "because the round already spent is unattributable and no "
++            "retry can make it attributable after the fact; the user "
++            "decides at the gate whether to spend another.") in fb
+     assert "LLM not set" in fb
+     assert "access_terminated_error" in fb
+ 
+@@ -429,6 +479,19 @@ def test_skill_and_readme_route_the_lane():
+             "reviewer lane") in readme
+ 
+ 
++# `docs/**` is DELIBERATELY out of scope and must stay that way. The
++# requirement this sweep enforces is placeholder discipline on DISPATCH
++# surfaces - the files an agent reads to build a command. docs/ holds
++# design specs, plans, and retained round evidence that legitimately
++# QUOTE model ids as historical record (92 occurrences across 20 files
++# as of 63fa715); sweeping
++# them would manufacture false reds, and the predictable response to a
++# perpetually red test is to weaken it. Raised and correctly declined
++# during the 0.14.2 panel; recorded here so it is not re-litigated.
++# (Note: docs/superpowers/plans/2026-07-25-kimi-backup-lane.md claims the
++# literal appears ONLY in notes.md and this file. That was true of
++# operational surfaces when written and is false of docs/ itself - left
++# as-is, being a historical record of what was planned, not a live rule.)
+ SWEEP_GLOBS = [
+     "skills/**/*.md", "skills/**/*.yaml", "commands/*.md", "tools/*.ps1",
+     "hooks/*", "evals/**/*.py", "evals/**/*.json", "evals/**/*.ps1",
+diff --git a/skills/multi-model-verify/references/backup-lane.md b/skills/multi-model-verify/references/backup-lane.md
+index a58a8fc..3da1c2d 100644
+--- a/skills/multi-model-verify/references/backup-lane.md
++++ b/skills/multi-model-verify/references/backup-lane.md
+@@ -49,6 +49,25 @@ Panel participation: a user-invoked panel per references/panels.md is a second s
+ 
+ - Before every dispatch capture the byte length of `~/.kimi/logs/kimi.log`; after the call, past that offset, require all three: exactly one new `Using LLM model:` line carrying the canonical backup id, a `Loading agent:` line naming the committed yaml, and a `Loaded tools:` line equal to the allowlist exactly.
+ - Zero matching new lines, more than one, a wrong id, a wrong agent path, or any extra tool entry is a route-attribution failure: the reply is DISCARDED unread and the failure goes to the fallbacks.md consent gate.
++- **Rotation guard.** The offset rule assumes an append-only file, and
++  the kimi client does not guarantee one. Before trusting the offset,
++  confirm the stream did not rotate under the call: if after the call the
++  file is SMALLER than the captured offset, or absent, it was rotated or
++  replaced and every byte position from the earlier measurement is
++  meaningless. That is a route-attribution failure — and specifically
++  **not a reason to re-read from zero**, which is the tempting wrong
++  answer: the new file's opening lines may belong to any session, so
++  reading it attributes nothing while looking like evidence. Observed
++  2026-07-26 (kimi-cli 1.49.0, Windows): rotation ATTEMPTS fire and fail
++  with `PermissionError: [WinError 32]` because the log is still open, so
++  offsets have held by accident rather than by design — do not build on
++  that accident. The size test is necessary, not sufficient: a rotation
++  whose replacement file grew back PAST the captured offset within the
++  same call would slip through. That needs the pre-rotation offset to
++  have been small, which only follows an immediately preceding rotation,
++  so it is not worth a second mechanism — but if rotation ever starts
++  succeeding here, compare file identity (creation time) too, not just
++  length.
+ - This evidence is client-side: report it as "route line verified
+   (client-side)" in the record prose. Server-side substitution is not
+   detectable from this class; the finish line's normalized
+diff --git a/skills/multi-model-verify/references/fallbacks.md b/skills/multi-model-verify/references/fallbacks.md
+index 96341e0..46190bc 100644
+--- a/skills/multi-model-verify/references/fallbacks.md
++++ b/skills/multi-model-verify/references/fallbacks.md
+@@ -150,7 +150,15 @@ choice.
+     at the consent gate; a mid-debate outage notes the kimi session id
+     in the debate record so the debate resumes after the reset.
+   - route-attribution failure (offset rule in backup-lane.md): nothing
+-    transient → no retry, reply DISCARDED unread, consent gate.
++    transient → no retry, reply DISCARDED unread, consent gate. One
++    exception to the RATIONALE, not to the disposition: a rotation under
++    the call is the one member that IS transient — a re-dispatch with a
++    freshly captured offset would produce clean evidence. It still skips
++    the retry, because the round already spent is unattributable and no
++    retry can make it attributable after the fact; the user decides at
++    the gate whether to spend another. Stated here so the class's
++    "nothing transient" premise is not read as covering a member it
++    does not describe.
+   - output-encoding failure — class `output-encoding`:
+     `UnicodeEncodeError` / `'charmap' codec can't encode character`
+     from the kimi process on a Windows driver. The round COMPLETED and
+
+
+2026-07-27T06:34:04.863922Z ERROR codex_models_manager::manager: failed to renew cache TTL: missing field `supports_reasoning_summaries` at line 86 column 5
+codex
+All three regenerated artifacts now match the live subject revision: the gate capture names committed head `472cdc4` and a clean tracked worktree; the package’s five commits and 92/2 diffstat match Git; and the red-first record now carries full UTF-8 strings. I’m performing one last independent base/head string comparison before the terminal verdict.
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command '$p='"'docs/superpowers/plans/rounds/2026-07-27-rotation-guard/base-absence-check.txt'; "'$s=Get-Content -Raw -Encoding utf8 $p; '"'replacement_char={0} em_dash={1} truncated_marker={2}' -f "'$s.Contains([char]0xfffd),$s.Contains('"'—'),"'$s.Contains('"'...')" in C:\Users\Brandon\Documents\parallax
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command '$pkg=Get-Content -Raw '"'docs/superpowers/plans/rounds/2026-07-27-rotation-guard/diff-package.txt'; "'$commits=@(git log --format='"'%h %s' --reverse b040079..472cdc4); "'$missing=@($commits|Where-Object{-not $pkg.Contains($_)}); '"'commit_count={0} missing={1}' -f "'$commits.Count,$missing.Count; $live=(git diff --shortstat b040079..472cdc4); '"'live_shortstat={0}' -f "'$live; '"'package_has_4files_92_2={0}' -f ("'$pkg.Contains('"'4 files changed, 92 insertions(+), 2 deletions(-)'))" in C:\Users\Brandon\Documents\parallax
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command 'function Norm([string]$s){(($s -split '"'\\s+'|Where-Object{"'$_}) -join '"' ')}; "'$bl=Norm ((git show b040079:skills/multi-model-verify/references/backup-lane.md)-join "`n"); $hl=Norm ((git show 472cdc4:skills/multi-model-verify/references/backup-lane.md)-join "`n"); $bf=Norm ((git show b040079:skills/multi-model-verify/references/fallbacks.md)-join "`n"); $hf=Norm ((git show 472cdc4:skills/multi-model-verify/references/fallbacks.md)-join "`n"); $lp=@('"'Rotation guard','if after the call the file is SMALLER than the captured offset, or absent','not a reason to re-read from zero','offsets have held by accident rather than by design','That is a route-attribution failure','compare file identity (creation time) too, not just length','The size test is necessary, not sufficient: a rotation whose replacement file grew back PAST the captured offset within the same call would slip through.'); "'$ok=$true; foreach($x in $lp){$r=(-not $bl.Contains($x))-and $hl.Contains($x); $ok=$ok-and$r; '"'{0} {1}' -f "'$r,$x}; $x='"'a rotation under the call is the one member that IS transient — a re-dispatch with a freshly captured offset would produce clean evidence. It still skips the retry, because the round already spent is unattributable and no retry can make it attributable after the fact; the user decides at the gate whether to spend another.'; "'$r=(-not $bf.Contains($x))-and $hf.Contains($x); $ok=$ok-and$r; '"'{0} fallback complete rationale' -f "'$r; '"'ALL={0}' -f "'$ok' in C:\Users\Brandon\Documents\parallax
+ succeeded in 640ms:
+True Rotation guard
+True if after the call the file is SMALLER than the captured offset, or absent
+True not a reason to re-read from zero
+True offsets have held by accident rather than by design
+True That is a route-attribution failure
+True compare file identity (creation time) too, not just length
+True The size test is necessary, not sufficient: a rotation whose replacement file grew back PAST the captured offset within the same call would slip through.
+True fallback complete rationale
+ALL=True
+
+ succeeded in 664ms:
+replacement_char=False em_dash=True truncated_marker=False
+
+ succeeded in 703ms:
+commit_count=5 missing=0
+live_shortstat= 4 files changed, 92 insertions(+), 2 deletions(-)
+package_has_4files_92_2=True
+
+2026-07-27T06:34:30.287416Z ERROR codex_models_manager::manager: failed to renew cache TTL: missing field `supports_reasoning_summaries` at line 86 column 5
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command '$l=Get-Content -Encoding utf8 '"'docs/superpowers/plans/rounds/2026-07-27-rotation-guard/gate-output.txt'; for("'$i=1;$i -le [Math]::Min(32,$l.Count);$i++){ '"'{0}:{1}' -f "'$i,$l[$i-1] }' in C:\Users\Brandon\Documents\parallax
+ succeeded in 488ms:
+1:GATE OUTPUT - parallax 0.14.3
+2:Committed head under test: 472cdc473f9bfc0ee4959cf13bc03a53724e3416
+3:Tracked worktree vs HEAD: CLEAN (no tracked modification, so these gates ran on exactly the committed bytes)
+4:Captured: 2026-07-27
+5:
+6:=== 1/4  python evals/tools/skill_lint.py skills/multi-model-verify --strict ===
+7:Linting C:\Users\Brandon\Documents\parallax\skills\multi-model-verify (strict=on)
+8:  PASS — 0 error(s), 0 warning(s)
+9:exit=0
+10:
+11:=== 2/4  python evals/tools/skill_scanner.py skills ===
+12:agent-skill security scan v1.0.0 — 1 skill(s) under skills
+13:
+14:=== multi-model-verify (skills\multi-model-verify) ===
+15:  clean — no findings
+16:
+17:Summary: 0 CRITICAL, 0 WARN, 0 INFO
+18:Verdict guidance: no pattern hits. Still read SKILL.md end-to-end — natural-language attacks evade pattern scanners (OWASP AST08).
+19:exit=0
+20:
+21:=== 3/4  python evals/tools/run_trigger_evals.py ===
+22:PASS  multi-model-verify: 5 positives clear 5 near-misses (weakest 0.32 vs strongest 0.00)
+23:
+24:trigger & routing: all clear (1 skill)
+25:exit=0
+26:
+27:=== 4/4  python -m pytest evals -q ===
+28:........................................................................ [ 42%]
+29:........................................................................ [ 84%]
+30:................s..........                                              [100%]
+31:170 passed, 1 skipped in 31.76s
+32:exit=0
+
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command '$l=Get-Content -Encoding utf8 '"'docs/superpowers/plans/rounds/2026-07-27-rotation-guard/diff-package.txt'; for("'$i=1;$i -le [Math]::Min(18,$l.Count);$i++){ '"'{0}:{1}' -f "'$i,$l[$i-1] }' in C:\Users\Brandon\Documents\parallax
+ succeeded in 480ms:
+1:# Diff package — parallax 0.14.3
+2:# Range: b040079..472cdc473f9bfc0ee4959cf13bc03a53724e3416 (branch fix/log-rotation-guard)
+3:# Regenerated at the round-2 subject revision.
+4:
+5:## Commits (oldest first)
+6:4d8a121 0.14.3: guard the per-round offset rule against log rotation and record the sweep scope
+7:63fa715 0.14.3: bump plugin version
+8:0600be1 0.14.3: correct the sweep-scope comment's occurrence count
+9:8eacc8a 0.14.3: pin the rotation guard's disposition and reconcile its failure class
+10:472cdc4 0.14.3: run the rotation-class pins to the end of what they lock
+11:
+12:## Diffstat
+13: .claude-plugin/plugin.json                         |  2 +-
+14: evals/multi-model-verify/test_backup_lane.py       | 63 ++++++++++++++++++++++
+15: .../multi-model-verify/references/backup-lane.md   | 19 +++++++
+16: skills/multi-model-verify/references/fallbacks.md  | 10 +++-
+17: 4 files changed, 92 insertions(+), 2 deletions(-)
+18:
+
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command '$l=Get-Content -Encoding utf8 '"'docs/superpowers/plans/rounds/2026-07-27-rotation-guard/base-absence-check.txt'; for("'$i=1;$i -le [Math]::Min(40,$l.Count);$i++){ '"'{0}:{1}' -f "'$i,$l[$i-1] }' in C:\Users\Brandon\Documents\parallax
+ succeeded in 478ms:
+1:RED-FIRST PROOF - parallax 0.14.3
+2:BASE blob: b040079   HEAD worktree: 472cdc473f9bfc0ee4959cf13bc03a53724e3416
+3:Encoding: UTF-8 (regenerated - the prior capture mangled the em-dash)
+4:
+5:Every pin added this cycle, checked against the BASE blob and the HEAD
+6:worktree, whitespace-normalized exactly as the test's _norm reader does.
+7:A pin already satisfied at base would be describing text rather than
+8:locking it; a pin missing at head would not match the sentence it claims
+9:to lock. Both are failures.
+10:
+11:[OK] backup-lane.md: base=absent  head=present
+12:       Rotation guard
+13:
+14:[OK] backup-lane.md: base=absent  head=present
+15:       if after the call the file is SMALLER than the captured offset, or absent
+16:
+17:[OK] backup-lane.md: base=absent  head=present
+18:       not a reason to re-read from zero
+19:
+20:[OK] backup-lane.md: base=absent  head=present
+21:       offsets have held by accident rather than by design
+22:
+23:[OK] backup-lane.md: base=absent  head=present
+24:       That is a route-attribution failure
+25:
+26:[OK] backup-lane.md: base=absent  head=present
+27:       compare file identity (creation time) too, not just length
+28:
+29:[OK] backup-lane.md: base=absent  head=present
+30:       The size test is necessary, not sufficient: a rotation whose replacement file grew back PAST the captured offset within the same call would slip through.
+31:
+32:[OK] fallbacks.md: base=absent  head=present
+33:       a rotation under the call is the one member that IS transient — a re-dispatch with a freshly captured offset would produce clean evidence. It still skips the retry, because the round already spent is unattributable and no retry can make it attributable after the fact; the user decides at the gate whether to spend another.
+34:
+35:RESULT: ALL 8 PINS LOCK TEXT INTRODUCED BY THIS RANGE
+
+2026-07-27T06:34:44.948949Z ERROR codex_models_manager::manager: failed to renew cache TTL: missing field `supports_reasoning_summaries` at line 86 column 5
+codex
+B1 confirmed. The gate artifact binds committed head `472cdc473f9bfc0ee4959cf13bc03a53724e3416` to a clean tracked worktree (`docs/superpowers/plans/rounds/2026-07-27-rotation-guard/gate-output.txt:1-4`) and records exit 0 for lint, scanner, trigger evals, and pytest with the stated counts (`gate-output.txt:6-32`).
+
+B2 confirmed. The regenerated package names the correct range, all five commits, and the live-matching 4-file/92-insertion/2-deletion diffstat (`docs/superpowers/plans/rounds/2026-07-27-rotation-guard/diff-package.txt:1-17`).
+
+B3 confirmed. The proof identifies both exact SHAs, declares UTF-8, prints all eight strings without truncation or replacement characters, and records each absent at base/present at head (`docs/superpowers/plans/rounds/2026-07-27-rotation-guard/base-absence-check.txt:1-35`). My independent base/head comparison reproduced all eight results.
+
+B4’s corrected anchors are accurate: the residual-boundary pin is at `evals/multi-model-verify/test_backup_lane.py:163-165`, and the full fallback rationale pin is at `evals/multi-model-verify/test_backup_lane.py:448-453`.
+
+B5 remains appropriately deferred. The recurrence is documented, while the current operative clauses are completely pinned (`evals/multi-model-verify/test_backup_lane.py:147-165`, `:442-453`); no remaining defect requires widening this cycle into a mechanism redesign.
+
+UNVERIFIED: none material to the verdict.
+
+**VERDICT: PASS — `b040079..472cdc4` is ready to merge.**
+B1 confirmed. The gate artifact binds committed head `472cdc473f9bfc0ee4959cf13bc03a53724e3416` to a clean tracked worktree (`docs/superpowers/plans/rounds/2026-07-27-rotation-guard/gate-output.txt:1-4`) and records exit 0 for lint, scanner, trigger evals, and pytest with the stated counts (`gate-output.txt:6-32`).
+
+B2 confirmed. The regenerated package names the correct range, all five commits, and the live-matching 4-file/92-insertion/2-deletion diffstat (`docs/superpowers/plans/rounds/2026-07-27-rotation-guard/diff-package.txt:1-17`).
+
+B3 confirmed. The proof identifies both exact SHAs, declares UTF-8, prints all eight strings without truncation or replacement characters, and records each absent at base/present at head (`docs/superpowers/plans/rounds/2026-07-27-rotation-guard/base-absence-check.txt:1-35`). My independent base/head comparison reproduced all eight results.
+
+B4’s corrected anchors are accurate: the residual-boundary pin is at `evals/multi-model-verify/test_backup_lane.py:163-165`, and the full fallback rationale pin is at `evals/multi-model-verify/test_backup_lane.py:448-453`.
+
+B5 remains appropriately deferred. The recurrence is documented, while the current operative clauses are completely pinned (`evals/multi-model-verify/test_backup_lane.py:147-165`, `:442-453`); no remaining defect requires widening this cycle into a mechanism redesign.
+
+UNVERIFIED: none material to the verdict.
+
+**VERDICT: PASS — `b040079..472cdc4` is ready to merge.**
+tokens used
+330,426

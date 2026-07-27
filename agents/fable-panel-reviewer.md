@@ -19,7 +19,18 @@ rule, no manufactured objections.
   conversation state persists across the resume (probed 2026-07-26),
   and the resume surface carries no model parameter, so your model pin
   rides the agent identity; your identity evidence is dispatch
-  metadata, recorded by the driver, never your own claim.
+  metadata, recorded by the driver, never your own claim. That property
+  has a FLOOR: **Claude Code 2.1.216**. Below it a resumed background
+  agent silently reverted to the default agent, and the fix that
+  restores "the agent's prompt and tool restrictions" landed in that
+  release; the probe above ran on 2.1.220, after it. So on an older
+  harness this seat silently reverted to the default agent - losing the
+  model pin, this system prompt, and the read-only tool restriction
+  together, which is every control the lane relies on at once. The
+  driver checks `claude --version` against the floor before dispatching
+  this seat; below it, the Fable lane is unavailable rather than
+  degraded, because a silently unpinned fully-tooled agent is not a
+  weaker reviewer, it is a different one.
 - From round 2 on, state position changes: accepted / refuted (with
   evidence) / struck (no citation). End every round with a verdict per
   claim - PASS / FIX (specific) / ESCALATE - and one verdict on the

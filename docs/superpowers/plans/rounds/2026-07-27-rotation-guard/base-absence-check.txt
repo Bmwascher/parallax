@@ -1,0 +1,35 @@
+RED-FIRST PROOF - parallax 0.14.3
+BASE blob: b040079   HEAD worktree: 472cdc473f9bfc0ee4959cf13bc03a53724e3416
+Encoding: UTF-8 (regenerated - the prior capture mangled the em-dash)
+
+Every pin added this cycle, checked against the BASE blob and the HEAD
+worktree, whitespace-normalized exactly as the test's _norm reader does.
+A pin already satisfied at base would be describing text rather than
+locking it; a pin missing at head would not match the sentence it claims
+to lock. Both are failures.
+
+[OK] backup-lane.md: base=absent  head=present
+       Rotation guard
+
+[OK] backup-lane.md: base=absent  head=present
+       if after the call the file is SMALLER than the captured offset, or absent
+
+[OK] backup-lane.md: base=absent  head=present
+       not a reason to re-read from zero
+
+[OK] backup-lane.md: base=absent  head=present
+       offsets have held by accident rather than by design
+
+[OK] backup-lane.md: base=absent  head=present
+       That is a route-attribution failure
+
+[OK] backup-lane.md: base=absent  head=present
+       compare file identity (creation time) too, not just length
+
+[OK] backup-lane.md: base=absent  head=present
+       The size test is necessary, not sufficient: a rotation whose replacement file grew back PAST the captured offset within the same call would slip through.
+
+[OK] fallbacks.md: base=absent  head=present
+       a rotation under the call is the one member that IS transient — a re-dispatch with a freshly captured offset would produce clean evidence. It still skips the retry, because the round already spent is unattributable and no retry can make it attributable after the fact; the user decides at the gate whether to spend another.
+
+RESULT: ALL 8 PINS LOCK TEXT INTRODUCED BY THIS RANGE

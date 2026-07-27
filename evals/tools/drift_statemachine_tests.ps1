@@ -273,10 +273,10 @@ $env:TMP = $FakeTemp
 # pinned fixture, so the template canary passes offline; .gitconfig gives
 # the script's worktree commits an identity.
 $FakeProfile = Join-Path $Root "profile"
-$SpTemplate = Join-Path $FakeProfile ".claude\plugins\cache\claude-plugins-official\superpowers\6.1.1\skills\requesting-code-review\code-reviewer.md"
-$FakeSp = Join-Path $FakeProfile ".claude\plugins\cache\claude-plugins-official\superpowers\6.1.1"
+$SpTemplate = Join-Path $FakeProfile ".claude\plugins\cache\claude-plugins-official\superpowers\6.2.0\skills\requesting-code-review\code-reviewer.md"
+$FakeSp = Join-Path $FakeProfile ".claude\plugins\cache\claude-plugins-official\superpowers\6.2.0"
 New-Item -ItemType Directory -Force -Path (Split-Path $SpTemplate) | Out-Null
-$PinnedFixture = Join-Path $Clone "evals\multi-model-verify\fixtures\superpowers-code-reviewer-6.1.1.md"
+$PinnedFixture = Join-Path $Clone "evals\multi-model-verify\fixtures\superpowers-code-reviewer-6.2.0.md"
 Copy-Item $PinnedFixture $SpTemplate -Force
 # A fake USERPROFILE needs a real profile's shell-folder skeleton: PS 5.1
 # resolves its job persistence path through USERPROFILE-expanded folders,
@@ -289,7 +289,7 @@ foreach ($dir in @("Documents", "AppData\Roaming", "AppData\Local", "AppData\Loc
 $registry = @{
     plugins = @{
         "superpowers@claude-plugins-official" = @(
-            @{ version = "6.1.1"; installPath = $FakeSp }
+            @{ version = "6.2.0"; installPath = $FakeSp }
         )
     }
 }
@@ -315,7 +315,7 @@ function Reset-State {
     # changelog fetch - every scenario runs fully offline. The superpowers
     # template is restored to the pinned fixture so only the scenario that
     # wants a WARN gets one.
-    Set-Snapshot "1.2.3" "7.7.7" "6.1.1"
+    Set-Snapshot "1.2.3" "7.7.7" "6.2.0"
     Copy-Item $PinnedFixture $SpTemplate -Force
     if (Test-Path $PendingFile) { Remove-Item $PendingFile -Force }
     if (Test-Path $ReportsDir) { Remove-Item -Recurse -Force $ReportsDir }
@@ -385,7 +385,7 @@ function Complete-Scenario($failsBefore) {
 
 $b = $script:failCount
 Reset-State
-Set-Snapshot "9.9.9" "7.7.7" "6.1.1"
+Set-Snapshot "9.9.9" "7.7.7" "6.2.0"
 Invoke-Drift "carry-forward" "version-fail" "" 60000
 Assert-True ($script:LastExit -eq 1) "exit code 1 on findings"
 Assert-True ($script:LastReport -match '\[CRITICAL\] claude --version failed') "claude probe failure is CRITICAL"
@@ -620,7 +620,7 @@ Complete-Scenario $b
 # --- scenario: kimi-version-carry (failed probe never clobbers the snapshot) -------
 
 $b = $script:failCount
-Set-SnapshotWithKimi "1.2.3" "7.7.7" "6.1.1" "9.9.9"
+Set-SnapshotWithKimi "1.2.3" "7.7.7" "6.2.0" "9.9.9"
 Copy-Item $PinnedFixture $SpTemplate -Force
 if (Test-Path $PendingFile) { Remove-Item $PendingFile -Force }
 if (Test-Path $ReportsDir) { Remove-Item -Recurse -Force $ReportsDir }

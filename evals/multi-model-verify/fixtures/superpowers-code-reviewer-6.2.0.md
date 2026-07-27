@@ -1,5 +1,5 @@
-<!-- [pinned fixture 2026-07-12] Verbatim copy of obra/superpowers (MIT)
-     skills/requesting-code-review/code-reviewer.md at plugin version 6.1.1.
+<!-- [pinned fixture 2026-07-27] Verbatim copy of obra/superpowers (MIT)
+     skills/requesting-code-review/code-reviewer.md at plugin version 6.2.0.
      Pins the hook's fingerprint contract in CI; re-pin when superpowers
      updates its template. -->
 

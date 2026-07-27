@@ -1,0 +1,591 @@
+2026-07-27T04:37:50.583137Z ERROR codex_models_manager::cache: failed to load models cache: missing field `supports_reasoning_summaries` at line 86 column 5
+OpenAI Codex v0.144.1
+--------
+workdir: C:\Users\Brandon\Documents\parallax
+model: gpt-5.6-sol
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: none
+session id: 019fa1c5-60af-7732-a16f-8821c3945e96
+--------
+user
+Round 4 (round cap) - final confirmation. Evidence rules and verdict grammar as before.
+
+F4 ACCEPTED again, in full. You were right: the mirror preserves .git by design and HEAD represents none of its contents, so the coverage test literally swept repository metadata - objects, logs, index, hooks, config. Fixed head is a621c42 (range c73ca2f..a621c42); read the current checkout.
+
+The manifest now defines its UNIVERSE before its coverage rule: the mirror's worktree files, excluding the root git administrative entry `.git` entirely. I took your parenthetical seriously and wrote both shapes into the contract - `.git` is a directory in a normal checkout and a FILE in a worktree or submodule checkout, and the exclusion covers it either way. Coverage (the exclusion test, recursion, format, ordering, capture point) is unchanged and now applies inside that universe. The pin requires the exclusion including the file-or-directory case.
+
+Gates on this head: pytest 170 passed / 1 skipped, skill_lint PASS strict, scanner 0/0/0, trigger evals all clear.
+
+This is the round cap. Give me your terminal verdict on the range c73ca2f..a621c42. If anything remains open, state it as a specific FIX with its evidence so it can be escalated to the user with both positions rather than silently carried; if the range is sound, say PASS. Do not manufacture a finding to fill the round.
+codex
+I’m doing the cap-round confirmation against `a621c42` now: exact HEAD/range, the amended universe clause, and the corresponding pin. I’ll report only a file-grounded remaining defect; otherwise this closes PASS.
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command 'git rev-parse HEAD' in C:\Users\Brandon\Documents\parallax
+ succeeded in 432ms:
+a621c42329b7fc2de14d003e8e3f483e3e695fca
+
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command 'git log --oneline 7ca532fb2b008aae313e2d3870c7ddbeb050fba0..HEAD' in C:\Users\Brandon\Documents\parallax
+ succeeded in 407ms:
+a621c42 0.14.2: exclude .git from the manifest universe
+
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command 'git diff --stat 7ca532fb2b008aae313e2d3870c7ddbeb050fba0..HEAD' in C:\Users\Brandon\Documents\parallax
+ succeeded in 417ms:
+ evals/multi-model-verify/test_backup_lane.py        | 12 +++++++++++-
+ skills/multi-model-verify/references/backup-lane.md | 13 +++++++++++--
+ 2 files changed, 22 insertions(+), 3 deletions(-)
+
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command 'git status --short' in C:\Users\Brandon\Documents\parallax
+ succeeded in 406ms:
+?? docs/superpowers/plans/rounds/2026-07-26-backup-lane-mirror/
+?? docs/superpowers/plans/rounds/2026-07-26-seat-reshuffle/fable-review.md
+
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command "Get-Content -Raw 'skills\\multi-model-verify\\SKILL.md'" in C:\Users\Brandon\Documents\parallax
+ succeeded in 499ms:
+---
+name: multi-model-verify
+description: Use when planning a reference port, an API-sensitive module, or any change risky enough to need cross-model verification before implementation, or when an implemented diff must be checked against its plan and reference before merge. Fires automatically alongside superpowers requesting-code-review via the review-companion hook.
+---
+
+# Multi-Model Verify
+
+## Overview
+
+Two equal-weight advisors — this session and a cross-vendor reviewer driven
+through the codex CLI (canonical reviewer model:
+references/model-prompting-notes.md) — verify and refute each other's
+claims before the cheap implementer touches code. The reviewer lane's
+documented fabrication risk (METR; see model-prompting-notes.md) is
+mitigated by the debate structure — evidence grounding plus mutual
+refutation — not by down-weighting either side. The PRIMARY reviewer
+lane (codex) is the default; a second cross-vendor BACKUP reviewer lane
+(references/backup-lane.md — REQUIRED READING before any backup round)
+substitutes ONLY through the fallbacks.md consent gate — auto-qualified
+by the classes named there, manual on user request — with the same
+protocol, a different transport, and `Verification status: FULL`
+preserved.
+Mode diff's debate is preceded by a REQUIRED whole-branch review from
+the fable-reviewer seat (agents/fable-reviewer.md), and the user may
+convene multi-reviewer PANELS (references/panels.md) in either mode.
+
+**REQUIRED READING before the first round:** references/debate-protocol.md.
+
+Companion to superpowers, not a replacement: it fills the cross-model review
+gap superpowers rules out of scope. `/codex:adversarial-review` remains the
+human-invoked pre-merge gate; if the codex plugin's stop-review-gate is
+toggled on, its stop-time review overlaps mode `diff` — expected, not a bug.
+
+## When to use
+
+- **Mode `plan`** — after superpowers brainstorming proposes approaches for a
+  port or API-sensitive module, before the implementation plan is written.
+- **Mode `diff`** — after implementation, alongside superpowers
+  requesting-code-review (the review-companion hook injects this
+  automatically with the matching base/head SHAs).
+- NOT for plain bugfixes, docs or release chores, GUI tweaks, or lint sweeps.
+
+## Preflight (both modes)
+
+1. `codex --version` must succeed, and `codex login status` must report
+   `Logged in using ChatGPT` — exit 0 alone also passes an API-key login,
+   which rides different billing. On failure follow references/fallbacks.md
+   (the consent gate may offer the cross-vendor backup lane —
+   references/backup-lane.md — before any single-vendor degraded mode;
+   never silently skip cross-vendor review).
+2. For port work: the reference source must exist under `References/`
+   (quote paths — some contain spaces, e.g. `References/M+ Timer`). Missing
+   → **HARD STOP before any debate round runs**: ask the user for the path
+   and go no further — do not run a codex exchange about the absence, do
+   not debate from memory, do not start a degraded mode. If the folder
+   holds version subdirectories (e.g. a `v1.4/` next to a `v1.1_old/`), use
+   the newest unless the user names one, and cite the versioned path:
+   `References/<name>/<version>/<file>:<line>`.
+   For non-port work there is no reference folder — claims ground in the
+   project's own source, specs, or upstream docs instead, same strike rule.
+3. The reviewed repo must carry no AGENTS.md and no `.agents/` entries:
+   codex auto-ingests AGENTS.md as instructions, and it advertises
+   repo-level `.agents/skills/*/SKILL.md` to the model, which read a
+   planted one as its FIRST action (both probed 2026-07-24: the planted
+   AGENTS.md controlled the reviewer's reply; the planted skill entered
+   its context; see model-prompting-notes.md) — back-channels into the
+   auditor that break independence. Enumerate the whole tree in one
+   listing — `git ls-files --cached --others '*AGENTS.md' '.agents/*'` —
+   which covers tracked, untracked, AND ignored files at any depth
+   (`.git` itself is never listed); a root-only or tracked-only check
+   misses a nested drop.
+   If present: STOP and surface it to the user — never dispatch a review
+   over an instruction back-channel.
+
+   Clearing it — only on the user's choice, never automatically: build
+   the **review mirror** (references/backup-lane.md owns its
+   construction, its baseline, and its identity fields — a file copy
+   preserving `.git`, NOT a clone), delete the offending entries THERE,
+   and re-run the enumeration above inside the mirror; empty output is
+   the evidence, and the mirror's identity fields go in the debate
+   record. The mirror is then the reviewed tree for every lane in that
+   debate — dispatch codex with the mirror as cwd, and keep citations
+   resolvable in the real repo. Whether the removal needs a commit
+   branches on tracked-ness, and the difference misreads as a failure:
+   a TRACKED entry's deletion shows as ` D` in `git status --porcelain`
+   — a tracked MODIFICATION, which the post-remediation baseline would
+   absorb, so the per-round check is not what forces the issue: an
+   uncommitted ` D` leaves a tracked modification sitting in the
+   baseline, which bars mode diff and breaks HEAD-identifies-content
+   (references/backup-lane.md) — so commit the removal
+   inside the mirror; an IGNORED or untracked entry's deletion shows
+   nothing, no commit is possible, and HEAD legitimately stays where it
+   was — `nothing to commit` alongside an unchanged HEAD is the CORRECT
+   observation there, not an inconsistency to chase (both observed
+   2026-07-26). The mirror carries the real repo's `.git`, hooks
+   included, so a commit inside it runs that project's pre-commit hooks
+   against the scratchpad copy: expect them to fire, and treat a hook
+   failure as a mirror-construction problem, never as a finding about
+   the reviewed work.
+
+   Files above the repo's git root are NOT ingested (same probe), and
+   `~/.codex/AGENTS.md` is the user's own
+   global instruction file — note it in the debate record if it exists,
+   but it is not a stop. Skills from the user's own codex plugin cache
+   load the same way — record them in the debate record as a
+   non-blocking environment note with the cache path cited, like the
+   global AGENTS.md; not a stop and never a finding.
+
+## Mode plan
+
+1. Draft the session position: chosen approach, port-fidelity claims, and the
+   API/behavior risk register. Every reference claim cites a
+   `References/<name>/<file>:<line>` actually read this session — anchor
+   EVERY file with its full path the first time you cite it, manifests and
+   secondary files included (shorthand only once that file is anchored);
+   every API claim cites authoritative local docs (WoW projects:
+   `.wow-api-reference/` or a dated in-game probe result) — never memory.
+   The position has no separate artifact — it IS the claims section of the
+   step-2 brief.
+2. Compose the reviewer's debate brief per references/model-prompting-notes.md, write
+   it to a scratchpad file, then run round 1:
+
+   ```powershell
+   Get-Content -Raw <brief-file> | codex exec --sandbox read-only -m <canonical-model-id> -c model_reasoning_effort=<canonical-effort> --output-last-message <reply-file> - > <transcript-file> 2>&1
+   ```
+
+   `<canonical-model-id>` and `<canonical-effort>` are the two declarations
+   in references/model-prompting-notes.md — read the literal values from
+   there, never from memory (the reviewer swaps by editing that one file,
+   and a remembered id silently defeats the swap). Apply that file's env
+   hygiene to the invocation.
+
+   Backup lane: same protocol, transport and per-round evidence per references/backup-lane.md.
+
+   Panels: any reviewer-lane combination per references/panels.md.
+
+   From `<transcript-file>`: verify the effective route — the header's
+   `model:`, `provider:`, and `reasoning effort:` lines against the
+   canonical declarations, and the `sandbox:` line reads `read-only`, per
+   model-prompting-notes.md; a mismatch is a transport failure
+   (fallbacks.md), never a review result — and capture the `session id:`
+   line. Read the reviewer's reply from `<reply-file>` — the transcript
+   logs every file the reviewer reads and can run tens of KB, with the
+   reply buried at the bottom. Every round writes FRESH round-numbered
+   `<reply-file>`/`<transcript-file>` paths: after a failed call, a reused
+   path serves the previous round's reply and reads exactly like success —
+   a reply not freshly written by this round's call is a stale reply, a
+   transport failure (fallbacks.md), never a review result.
+3. Later rounds keep the reviewer's state by resuming that session — flags MUST
+   precede the resume subcommand (flags after it are a usage error):
+
+   ```powershell
+   codex exec --sandbox read-only -m <canonical-model-id> -c model_reasoning_effort=<canonical-effort> --output-last-message <reply-file> resume <SESSION_ID> "<rebuttal-brief>" > <transcript-file> 2>&1
+   ```
+
+   Each resume's header must echo the resumed `session id:` and the same
+   effective route — the round-1 check repeated, `sandbox:` included (a
+   resume that silently started a fresh session has dropped the reviewer's
+   debate state). Sandbox mode has NO continuity across resumes: a resume
+   missing `--sandbox read-only` resolves to the config default — on a
+   `workspace-write` default the read-only auditor becomes a writing agent
+   mid-review (probed 2026-07-24, the write landed; see
+   model-prompting-notes.md). The header's `sandbox:` line is where that
+   surfaces.
+
+4. Iterate per debate-protocol.md until convergence or the round cap, then
+   escalate any unresolved points to the user with both positions stated.
+5. Freeze the converged plan per references/frozen-plan-format.md under the
+   project's superpowers plans dir (KitnEssentials:
+   `dev/docs/superpowers/plans/`; other projects: the superpowers default
+   `docs/superpowers/plans/`).
+
+## Mode diff
+
+Same transport and protocol. First read the frozen plan's debate record and
+its **Verification status** field.
+
+Required before round 1: the agents/fable-reviewer.md whole-branch review runs on the same range, its raw reply is retained as a range-bound artifact, and the round-1 brief cites that artifact with the session's per-finding adjudications.
+The session adjudicates each review finding with evidence — accept,
+refute, or ESCALATE into the debate — before any reviewer lane sees
+them; the review is the debate's required input, never its verdict,
+and the debate record names the artifact path.
+
+Then the brief carries the frozen plan
+path, the base/head SHAs superpowers code review used, and the
+`git diff base..head` output. Both sides check **spec fidelity** (drift from
+the frozen plan — the implementer makes zero judgment calls, so any drift is
+a finding, with one carve-out: envelope-designated escalation-lane DECISIONS
+are adjudicated against their frozen envelope per
+references/frozen-plan-format.md, and only envelope overruns are drift) and,
+for port work, **port fidelity** (drift from the reference
+source), ending PASS / FIX / ESCALATE.
+
+Backup lane: same protocol, transport and per-round evidence per references/backup-lane.md.
+
+Panels: any reviewer-lane combination per references/panels.md.
+
+A FIX this session applies itself goes through the **application
+checkpoint** (references/application-checkpoint.md) before the first edit.
+The fixed range is then re-reviewed, and only the post-re-review terminal
+PASS is attested — with the emitter's `-CheckpointFile` binding the
+checkpoint; a FIX verdict whose fixes are still unapplied is never the
+attested verdict.
+
+**Degraded-plan poisoning rule:** a plan whose Verification status is
+DEGRADED cannot produce an ordinary diff PASS. Mode diff must first reopen
+and cross-verify the plan's claims and approved deviations (the
+retrospective pass the plan never got), and only then verify the
+implementation against it — confirming a diff matches an unsound plan
+verifies nothing. If cross-vendor verification is STILL unavailable, the
+only terminal state is `ESCALATE — CROSS-VENDOR GATE UNSATISFIED`: merging
+then requires the user's explicitly recorded risk acceptance, never a PASS.
+
+## Finish line
+
+Before it: the session's final-adjudication step (debate-protocol.md) —
+verify the last round's findings against the repo and issue the terminal
+verdict; a reviewer's PASS/FIX is never terminal by itself.
+
+**Mode diff only — record the verdict mechanically.** After the terminal
+verdict, run the attestation emitter from this plugin's checkout:
+
+```powershell
+powershell -NoProfile -File <plugin-root>/tools/write-attestation.ps1 -RepoRoot <reviewed-repo> -BaseSha <base> -HeadSha <head> -Verdict <PASS|FIX|ESCALATE> -VerificationStatus <FULL|DEGRADED> -RouteNote "<effective route confirmed | the transport-failure class>" -Rounds <n> -Participants "<session-model> (session) / <reviewer-model> (reviewer)" [-CheckpointFile <application-checkpoint-artifact>]
+```
+
+When an application checkpoint governed fix application, pass it via
+`-CheckpointFile`: the record then also binds the checkpoint's hash and
+the emitter-computed changed-path set, `<head>` is the POST-fix,
+re-reviewed head — never the head the FIX verdict was issued on — and
+the artifact must already carry its appended verification results (the
+recorded hash covers the final artifact).
+
+It writes `.git/parallax/attestations/<head-sha>.json` inside the reviewed
+repo — untracked by design, so recording the verdict cannot move HEAD out
+from under its own SHA. The pre-push lane (`tools/verify-attestation.ps1`)
+later warns when a `main` push has no matching attestation for the pushed
+head (fast-forward: pushed sha == attested head; merge commit: parent1 ==
+attested base, parent2 == attested head — a squash changes the sha and
+correctly forces re-review).
+
+End with one status line: participating models, rounds used, converged vs
+escalated points, the verification status — `FULL`, or
+`DEGRADED (<class>, authorized by user at round N)` per fallbacks.md — and
+the route note: `effective route confirmed` when every round's header
+matched the canonical declarations, else the transport-failure class that
+fallbacks.md handled. The route-note grammar is lane-agnostic: for a backup-lane debate,
+`effective route confirmed` means every round satisfied
+references/backup-lane.md's per-round evidence rules against the backup
+declarations; the evidence class is recorded in the debate record prose. The session emits this line itself; never delegate it
+to a subagent.
+
+## Common mistakes
+
+- Accepting the reviewer's claims about reference code without the cited lines —
+  strike the claim per protocol; do not argue against it.
+- Re-sending the full debate context each round instead of resuming the
+  codex session.
+- Running mode `diff` against different SHAs than the code review used.
+- Treating convergence as failure — a sound plan converging in one round is
+  the system working, not a skipped debate.
+
+
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command '$l=Get-Content '"'skills\\multi-model-verify\\references\\backup-lane.md';for("'$i=117;$i -le 215;$i++){'"'{0,4}: {1}' -f "'$i,$l[$i-1]}' in C:\Users\Brandon\Documents\parallax
+ succeeded in 515ms:
+ 117: ## Workspace isolation and the brief
+ 118: 
+ 119: - Reviews run in a THROWAWAY REVIEW MIRROR in the session scratchpad —
+ 120:   never the real tree.
+ 121: - The mirror is a FILE COPY of the working tree that PRESERVES `.git`, not
+ 122:   a `git clone`. This is not a preference: a clone carries TRACKED FILES ONLY,
+ 123:   and the review inputs are routinely gitignored — a project's frozen
+ 124:   plans under its docs dir, `References/` for port work. Probed live
+ 125:   2026-07-26 in KitnEssentials, where `dev/docs/` and `References/` are both gitignored:
+ 126:   a cloned workspace drops the frozen plan, the spec, AND the reference
+ 127:   source, handing the reviewer a tree with nothing to review while every
+ 128:   route and containment check stays green. `.git` rides along because the
+ 129:   containment check below is a git command.
+ 130: - SKILL.md preflight-3 remediation is performed HERE, in the mirror,
+ 131:   never in the real tree — see that section for the procedure and for
+ 132:   which cases need a commit inside the mirror.
+ 133: - The brief is written into the mirror as the untracked
+ 134:   `KIMI-REVIEW-BRIEF.md`; the `-p` pointer tells the reviewer to read
+ 135:   it (headless stdin does not carry the brief).
+ 136: - Any review input the mirror cannot inherit — a standards file living
+ 137:   above the repo root, an assignment PDF, a spec kept outside the tree —
+ 138:   is copied in deliberately and enumerated before the round. An input the
+ 139:   reviewer cannot read is a gap in the review, not a silent omission.
+ 140: - **THE STATUS COMMAND — `git status --porcelain --ignored -uall`, every
+ 141:   capture without exception** (baseline, per-round, and the write-probe
+ 142:   delta). The flags are load-bearing, not tidiness: bare
+ 143:   `git status --porcelain` OMITS ignored paths entirely and COLLAPSES an
+ 144:   untracked directory to a single entry. Probed 2026-07-26 in a scratch
+ 145:   repo with `ign/` gitignored — bare porcelain printed only `?? untr/`,
+ 146:   hiding both `ign/secret.txt` and the two files under `untr/sub/`,
+ 147:   while `--ignored -uall` printed all three. Ignored content is the
+ 148:   entire reason this workspace is a mirror, so a bare-porcelain check is
+ 149:   blind to precisely the class the mirror exists to carry: a contained
+ 150:   reviewer writing to any ignored path would not appear.
+ 151: - **BASELINE, captured after construction AND after any preflight-3 remediation, immediately before the brief is written**:
+ 152:   the status command above, in the mirror. A clone would have guaranteed
+ 153:   this empty; a file copy does NOT — the real tree's untracked files
+ 154:   and uncommitted modifications ride along, and without a baseline
+ 155:   every one of them quarantines every round of a review that never
+ 156:   touched them. Tracked modifications especially cannot be absorbed by
+ 157:   any "untracked set" wording. The timing is load-bearing: remediation
+ 158:   deletes entries and in the tracked case commits, so a baseline taken
+ 159:   before it fails every round of a remediated debate and pins a HEAD
+ 160:   the mirror no longer has — and remediation is precisely the procedure
+ 161:   the mirror exists to support.
+ 162: - What the check does and does not see, stated exactly: with the flags
+ 163:   above it detects any path that APPEARS IN OR DISAPPEARS FROM the
+ 164:   mirror, ignored and untracked paths included. It remains PATH-level,
+ 165:   so a path already present in the baseline shows the same entry however
+ 166:   its CONTENT changes. That residue is bounded by the tool allowlist and
+ 167:   the write-probe, which stay the load-bearing controls, and by the
+ 168:   content manifest below for the inputs that matter.
+ 169: - After every round, the status command in the mirror must equal the BASELINE plus exactly the expected untracked set — the brief plus any review inputs copied in, enumerated before the round — and nothing else; any other delta quarantines that round's reply (integrity failure class). Both halves are declared in advance, which is what keeps the check exact rather than adjudicated after the fact.
+ 170: - The mirror's identity in the debate record is its path, its
+ 171:   `git rev-parse HEAD`, its baseline, AND a CONTENT MANIFEST. HEAD binds
+ 172:   tracked content only, and in this lane the inputs that matter are
+ 173:   deliberately outside it, so without the manifest the record names what
+ 174:   was reviewed without being able to reconstruct it.
+ 175: - **The manifest, specified to be executable without judgment:**
+ 176:   - **Universe first**: the mirror's WORKTREE files, excluding the root
+ 177:     git administrative entry `.git` entirely (it may be a directory or,
+ 178:     in a worktree or submodule checkout, a file — exclude it either
+ 179:     way). The mirror preserves `.git` on purpose, and HEAD represents
+ 180:     none of its contents, so without this exclusion the coverage test
+ 181:     below would recursively hash repository metadata — objects, logs,
+ 182:     index, hooks, config — which is volatile, potentially enormous, and
+ 183:     identifies nothing about the reviewed material.
+ 184:   - **Coverage within that universe is one exclusion test, never an
+ 185:     enumerated list**: every FILE present in the mirror that HEAD does
+ 186:     not already bind — i.e.
+ 187:     every file whose bytes are not identical to its HEAD blob, plus
+ 188:     every file HEAD has no blob for. That single rule admits the
+ 189:     copied-in inputs, the gitignored subject material (frozen plan,
+ 190:     spec, reference source), inherited untracked files whether ignored
+ 191:     or not, and any tracked file modified relative to HEAD (which mode
+ 192:     diff bars outright and other modes permit only with disclosure). An
+ 193:     enumerated list would omit a class; this cannot.
+ 194:   - **Directories expand RECURSIVELY to their files.** A directory
+ 195:     subject such as `References/` is never one manifest entry; a hash
+ 196:     over a directory name identifies nothing.
+ 197:   - **Entry format**: one line per file, repo-relative path plus the
+ 198:     SHA-256 of the file's raw bytes.
+ 199:   - **Order**: sorted by path in byte order, so the manifest is
+ 200:     deterministic and two captures are diffable.
+ 201:   - **Captured at the same moment as the baseline** — after construction
+ 202:     and any preflight-3 remediation, immediately before the brief is
+ 203:     written — so the two describe the same tree state. The brief itself
+ 204:     is written after both and is therefore not in either.
+ 205: - If the baseline contains TRACKED modifications the reviewed content is
+ 206:   not the committed range: disclose that in the record, and in mode diff
+ 207:   take the mirror from a tree whose tracked files are clean instead.
+ 208: - The brief is retained as evidence per the raw-rounds convention.
+ 209: - Never run `kimi export` inside a repo — it writes a session zip into the current directory; export only from a scratch directory. Nothing in this lane uses export.
+ 210: 
+ 211: ## Failure handling
+ 212: 
+ 213: All failure classes, retries, and consent-gate dispositions live in
+ 214: fallbacks.md (the single failure-class namespace) — this file defines
+ 215: none of its own. Record fields for a substituted debate live in
+
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command '$l=Get-Content '"'evals\\multi-model-verify\\test_backup_lane.py';for("'$i=130;$i -le 175;$i++){'"'{0,4}: {1}' -f "'$i,$l[$i-1]}' in C:\Users\Brandon\Documents\parallax
+ succeeded in 502ms:
+ 130:     # inputs the mirror cannot inherit are copied in DELIBERATELY and
+ 131:     # enumerated - the containment rule keys off a declared set, so an
+ 132:     # unexpected delta still quarantines
+ 133:     assert ("must equal the BASELINE plus exactly the expected untracked "
+ 134:             "set — the brief plus any review inputs copied in, "
+ 135:             "enumerated before the round — and nothing else") in body
+ 136:     # 0.14.2 Sol round 1, F2/F5: bare porcelain OMITS ignored paths and
+ 137:     # COLLAPSES untracked directories, and ignored content is the whole
+ 138:     # reason this workspace is a mirror - so the flags are the check,
+ 139:     # not decoration. Probed: bare printed only "?? untr/".
+ 140:     assert "`git status --porcelain --ignored -uall`, every" in body
+ 141:     assert ("bare `git status --porcelain` OMITS ignored paths entirely "
+ 142:             "and COLLAPSES an untracked directory to a single entry") in body
+ 143:     assert ("a contained reviewer writing to any ignored path would not "
+ 144:             "appear") in body
+ 145:     # F4: HEAD binds tracked content only, and this lane's inputs are
+ 146:     # deliberately outside it - so identity carries a content manifest
+ 147:     # 0.14.2 Sol round 2, F4 held at FIX: naming a manifest is not
+ 148:     # specifying one. The pin must constrain coverage, recursion,
+ 149:     # ordering, and capture point - otherwise "content manifest" as a
+ 150:     # phrase satisfies it while a driver cannot execute it.
+ 151:     assert "AND a CONTENT MANIFEST" in body
+ 152:     # 0.14.2 Sol round 3: the mirror preserves .git by design and HEAD
+ 153:     # represents none of it, so the coverage test literally swept
+ 154:     # repository metadata - objects, logs, index, hooks. The universe
+ 155:     # must exclude .git, as a file OR a directory (worktree/submodule
+ 156:     # checkouts make it a file).
+ 157:     assert ("excluding the root git administrative entry `.git` entirely"
+ 158:             in body)
+ 159:     assert ("it may be a directory or, in a worktree or submodule "
+ 160:             "checkout, a file — exclude it either way") in body
+ 161:     # coverage by exclusion test, so no file class can be omitted
+ 162:     assert ("Coverage within that universe is one exclusion test, never "
+ 163:             "an enumerated list") in body
+ 164:     assert ("every file whose bytes are not identical to its HEAD blob, "
+ 165:             "plus every file HEAD has no blob for") in body
+ 166:     # the classes an enumerated list would have dropped
+ 167:     assert ("inherited untracked files whether ignored or not" in body)
+ 168:     assert ("any tracked file modified relative to HEAD" in body)
+ 169:     # recursion, format, order, timing
+ 170:     assert "Directories expand RECURSIVELY to their files" in body
+ 171:     assert ("repo-relative path plus the SHA-256 of the file's raw bytes"
+ 172:             in body)
+ 173:     assert "sorted by path in byte order" in body
+ 174:     assert ("Captured at the same moment as the baseline" in body)
+ 175:     # F8: absence of an override pin proves neither an override nor
+
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command 'git diff --unified=18 7ca532fb2b008aae313e2d3870c7ddbeb050fba0..HEAD -- skills/multi-model-verify/references/backup-lane.md evals/multi-model-verify/test_backup_lane.py' in C:\Users\Brandon\Documents\parallax
+ succeeded in 410ms:
+diff --git a/evals/multi-model-verify/test_backup_lane.py b/evals/multi-model-verify/test_backup_lane.py
+index b2f7398..0e18199 100644
+--- a/evals/multi-model-verify/test_backup_lane.py
++++ b/evals/multi-model-verify/test_backup_lane.py
+@@ -134,38 +134,48 @@ def test_backup_lane_workspace_is_a_mirror_not_a_clone():
+             "set — the brief plus any review inputs copied in, "
+             "enumerated before the round — and nothing else") in body
+     # 0.14.2 Sol round 1, F2/F5: bare porcelain OMITS ignored paths and
+     # COLLAPSES untracked directories, and ignored content is the whole
+     # reason this workspace is a mirror - so the flags are the check,
+     # not decoration. Probed: bare printed only "?? untr/".
+     assert "`git status --porcelain --ignored -uall`, every" in body
+     assert ("bare `git status --porcelain` OMITS ignored paths entirely "
+             "and COLLAPSES an untracked directory to a single entry") in body
+     assert ("a contained reviewer writing to any ignored path would not "
+             "appear") in body
+     # F4: HEAD binds tracked content only, and this lane's inputs are
+     # deliberately outside it - so identity carries a content manifest
+     # 0.14.2 Sol round 2, F4 held at FIX: naming a manifest is not
+     # specifying one. The pin must constrain coverage, recursion,
+     # ordering, and capture point - otherwise "content manifest" as a
+     # phrase satisfies it while a driver cannot execute it.
+     assert "AND a CONTENT MANIFEST" in body
++    # 0.14.2 Sol round 3: the mirror preserves .git by design and HEAD
++    # represents none of it, so the coverage test literally swept
++    # repository metadata - objects, logs, index, hooks. The universe
++    # must exclude .git, as a file OR a directory (worktree/submodule
++    # checkouts make it a file).
++    assert ("excluding the root git administrative entry `.git` entirely"
++            in body)
++    assert ("it may be a directory or, in a worktree or submodule "
++            "checkout, a file — exclude it either way") in body
+     # coverage by exclusion test, so no file class can be omitted
+-    assert ("Coverage is one exclusion test, never an enumerated list" in body)
++    assert ("Coverage within that universe is one exclusion test, never "
++            "an enumerated list") in body
+     assert ("every file whose bytes are not identical to its HEAD blob, "
+             "plus every file HEAD has no blob for") in body
+     # the classes an enumerated list would have dropped
+     assert ("inherited untracked files whether ignored or not" in body)
+     assert ("any tracked file modified relative to HEAD" in body)
+     # recursion, format, order, timing
+     assert "Directories expand RECURSIVELY to their files" in body
+     assert ("repo-relative path plus the SHA-256 of the file's raw bytes"
+             in body)
+     assert "sorted by path in byte order" in body
+     assert ("Captured at the same moment as the baseline" in body)
+     # F8: absence of an override pin proves neither an override nor
+     # provider-default; the record must not manufacture either
+     assert ("Record a round with no contemporaneous config evidence as "
+             "having NO VERIFIED EFFORT PIN") in body
+     assert ("establishes neither an override nor provider-default "
+             "operation") in body
+     assert "is a gap in the review, not a silent omission" in body
+diff --git a/skills/multi-model-verify/references/backup-lane.md b/skills/multi-model-verify/references/backup-lane.md
+index e894d25..6443ebd 100644
+--- a/skills/multi-model-verify/references/backup-lane.md
++++ b/skills/multi-model-verify/references/backup-lane.md
+@@ -158,38 +158,47 @@ proceed; do not infer either key's value.
+   deletes entries and in the tracked case commits, so a baseline taken
+   before it fails every round of a remediated debate and pins a HEAD
+   the mirror no longer has — and remediation is precisely the procedure
+   the mirror exists to support.
+ - What the check does and does not see, stated exactly: with the flags
+   above it detects any path that APPEARS IN OR DISAPPEARS FROM the
+   mirror, ignored and untracked paths included. It remains PATH-level,
+   so a path already present in the baseline shows the same entry however
+   its CONTENT changes. That residue is bounded by the tool allowlist and
+   the write-probe, which stay the load-bearing controls, and by the
+   content manifest below for the inputs that matter.
+ - After every round, the status command in the mirror must equal the BASELINE plus exactly the expected untracked set — the brief plus any review inputs copied in, enumerated before the round — and nothing else; any other delta quarantines that round's reply (integrity failure class). Both halves are declared in advance, which is what keeps the check exact rather than adjudicated after the fact.
+ - The mirror's identity in the debate record is its path, its
+   `git rev-parse HEAD`, its baseline, AND a CONTENT MANIFEST. HEAD binds
+   tracked content only, and in this lane the inputs that matter are
+   deliberately outside it, so without the manifest the record names what
+   was reviewed without being able to reconstruct it.
+ - **The manifest, specified to be executable without judgment:**
+-  - **Coverage is one exclusion test, never an enumerated list**: every
+-    FILE present in the mirror that HEAD does not already bind — i.e.
++  - **Universe first**: the mirror's WORKTREE files, excluding the root
++    git administrative entry `.git` entirely (it may be a directory or,
++    in a worktree or submodule checkout, a file — exclude it either
++    way). The mirror preserves `.git` on purpose, and HEAD represents
++    none of its contents, so without this exclusion the coverage test
++    below would recursively hash repository metadata — objects, logs,
++    index, hooks, config — which is volatile, potentially enormous, and
++    identifies nothing about the reviewed material.
++  - **Coverage within that universe is one exclusion test, never an
++    enumerated list**: every FILE present in the mirror that HEAD does
++    not already bind — i.e.
+     every file whose bytes are not identical to its HEAD blob, plus
+     every file HEAD has no blob for. That single rule admits the
+     copied-in inputs, the gitignored subject material (frozen plan,
+     spec, reference source), inherited untracked files whether ignored
+     or not, and any tracked file modified relative to HEAD (which mode
+     diff bars outright and other modes permit only with disclosure). An
+     enumerated list would omit a class; this cannot.
+   - **Directories expand RECURSIVELY to their files.** A directory
+     subject such as `References/` is never one manifest entry; a hash
+     over a directory name identifies nothing.
+   - **Entry format**: one line per file, repo-relative path plus the
+     SHA-256 of the file's raw bytes.
+   - **Order**: sorted by path in byte order, so the manifest is
+     deterministic and two captures are diffable.
+   - **Captured at the same moment as the baseline** — after construction
+     and any preflight-3 remediation, immediately before the brief is
+     written — so the two describe the same tree state. The brief itself
+     is written after both and is therefore not in either.
+
+codex
+F4 is closed. The manifest universe now excludes root `.git` whether it is a directory or file, before applying the complete coverage rule (`skills/multi-model-verify/references/backup-lane.md:175-193`). Recursion, entry format, deterministic ordering, and capture timing remain executable (`backup-lane.md:194-204`), and the pin requires both `.git` shapes plus every previously required property (`evals/multi-model-verify/test_backup_lane.py:145-174`).
+
+Verdict: PASS.
+
+OVERALL VERDICT: PASS — range `c73ca2f..a621c42` is sound; no findings remain open at the round cap.
+tokens used
+224,001
+F4 is closed. The manifest universe now excludes root `.git` whether it is a directory or file, before applying the complete coverage rule (`skills/multi-model-verify/references/backup-lane.md:175-193`). Recursion, entry format, deterministic ordering, and capture timing remain executable (`backup-lane.md:194-204`), and the pin requires both `.git` shapes plus every previously required property (`evals/multi-model-verify/test_backup_lane.py:145-174`).
+
+Verdict: PASS.
+
+OVERALL VERDICT: PASS — range `c73ca2f..a621c42` is sound; no findings remain open at the round cap.

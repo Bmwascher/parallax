@@ -1,0 +1,1697 @@
+2026-07-27T05:05:30.054051Z ERROR codex_models_manager::cache: failed to load models cache: missing field `supports_reasoning_summaries` at line 86 column 5
+OpenAI Codex v0.144.1
+--------
+workdir: C:\Users\Brandon\Documents\parallax
+model: gpt-5.6-sol
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: none
+session id: 019fa1c5-60af-7732-a16f-8821c3945e96
+--------
+user
+Round 5. I am RAISING THE ROUND CAP from 4 to 5, deliberately and on the record, for one reason: your round-4 PASS cited a621c42, and the head has since moved to e719634. A terminal verdict that cites a stale revision is input, not a verdict, so I need yours on the final revision or the panel record cannot claim you verdicted it.
+
+Evidence rules and verdict grammar as before. Read the current checkout, which IS e719634.
+
+What happened after your PASS, in order:
+
+1. I found a defect in my own manifest rule while EXECUTING it to build a second reviewer lane's workspace. Coverage was "bytes differ from the HEAD blob"; on this repo core.autocrlf=true makes README.md 25843 worktree bytes vs 25417 in the blob while git reports it clean, so the rule selected 283 of 287 files against a 122-entry baseline - the manifest degenerated to the whole tree. Coverage is now "exactly the paths the BASELINE capture lists", which is git's own reckoning and makes manifest and baseline incapable of disagreeing. This postdates your PASS and is the reason I am not carrying that PASS forward.
+
+2. A second reviewer lane then found five more instances of the pin-integrity class you identified in claim 10 - including two you did not catch across four rounds: the dispatch pin stopped before its -p payload, and the resume pin stopped before its -p payload while its comment claimed it covered the COMPLETE command. Also: the per-round evidence rule's attribution half ("past that offset") was pinned nowhere under evals/ at all, so deleting it left every pin green while the check stopped attributing anything against a shared append stream.
+
+I am telling you this because you found the class and I want your judgment on whether it is now actually closed, not mine. Every fix was verified by simulating the exact weakening: green before, red after.
+
+Your task: terminal verdict on range c73ca2f..e719634. Specifically - is the corrected manifest coverage rule sound, and does the pin suite now resist the weakening class you opened in round 1? If you disagree with any disposition, say so; a dissent recorded against the other lane's PASS is more useful to me than agreement. Do not manufacture a finding to fill the round.
+codex
+I’m treating round 5 as the new cap and rebinding the verdict to `e719634`. I’ll read the complete amended contract and pin suite, then attack the manifest-baseline equivalence and every newly extended command/evidence pin against the exact deletion or truncation it claims to prevent.
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command 'git rev-parse HEAD' in C:\Users\Brandon\Documents\parallax
+ succeeded in 383ms:
+e7196343b7b270d98055dfea03961f14f60cf3d0
+
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command 'git log --oneline a621c42329b7fc2de14d003e8e3f483e3e695fca..HEAD' in C:\Users\Brandon\Documents\parallax
+ succeeded in 385ms:
+e719634 0.14.2: pin the offset attribution half and the RECORDED imperative
+b908e47 0.14.2: pin the resume payload and the write-probe configuration clause
+83a12e1 0.14.2: pin the dispatch -p payload; tighten manifest precision
+93d002a 0.14.2: define manifest coverage by the baseline, not raw blob bytes
+
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command 'git diff --stat a621c42329b7fc2de14d003e8e3f483e3e695fca..HEAD' in C:\Users\Brandon\Documents\parallax
+ succeeded in 373ms:
+ evals/multi-model-verify/test_backup_lane.py       | 76 +++++++++++++++++-----
+ .../multi-model-verify/references/backup-lane.md   | 27 ++++++--
+ 2 files changed, 81 insertions(+), 22 deletions(-)
+
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command 'git diff --name-status a621c42329b7fc2de14d003e8e3f483e3e695fca..HEAD' in C:\Users\Brandon\Documents\parallax
+ succeeded in 372ms:
+M	evals/multi-model-verify/test_backup_lane.py
+M	skills/multi-model-verify/references/backup-lane.md
+
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command 'git status --short' in C:\Users\Brandon\Documents\parallax
+ succeeded in 405ms:
+?? docs/superpowers/plans/rounds/2026-07-26-backup-lane-mirror/
+?? docs/superpowers/plans/rounds/2026-07-26-seat-reshuffle/fable-review.md
+
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command "Get-Content -Raw 'skills\\multi-model-verify\\SKILL.md'" in C:\Users\Brandon\Documents\parallax
+ succeeded in 508ms:
+---
+name: multi-model-verify
+description: Use when planning a reference port, an API-sensitive module, or any change risky enough to need cross-model verification before implementation, or when an implemented diff must be checked against its plan and reference before merge. Fires automatically alongside superpowers requesting-code-review via the review-companion hook.
+---
+
+# Multi-Model Verify
+
+## Overview
+
+Two equal-weight advisors — this session and a cross-vendor reviewer driven
+through the codex CLI (canonical reviewer model:
+references/model-prompting-notes.md) — verify and refute each other's
+claims before the cheap implementer touches code. The reviewer lane's
+documented fabrication risk (METR; see model-prompting-notes.md) is
+mitigated by the debate structure — evidence grounding plus mutual
+refutation — not by down-weighting either side. The PRIMARY reviewer
+lane (codex) is the default; a second cross-vendor BACKUP reviewer lane
+(references/backup-lane.md — REQUIRED READING before any backup round)
+substitutes ONLY through the fallbacks.md consent gate — auto-qualified
+by the classes named there, manual on user request — with the same
+protocol, a different transport, and `Verification status: FULL`
+preserved.
+Mode diff's debate is preceded by a REQUIRED whole-branch review from
+the fable-reviewer seat (agents/fable-reviewer.md), and the user may
+convene multi-reviewer PANELS (references/panels.md) in either mode.
+
+**REQUIRED READING before the first round:** references/debate-protocol.md.
+
+Companion to superpowers, not a replacement: it fills the cross-model review
+gap superpowers rules out of scope. `/codex:adversarial-review` remains the
+human-invoked pre-merge gate; if the codex plugin's stop-review-gate is
+toggled on, its stop-time review overlaps mode `diff` — expected, not a bug.
+
+## When to use
+
+- **Mode `plan`** — after superpowers brainstorming proposes approaches for a
+  port or API-sensitive module, before the implementation plan is written.
+- **Mode `diff`** — after implementation, alongside superpowers
+  requesting-code-review (the review-companion hook injects this
+  automatically with the matching base/head SHAs).
+- NOT for plain bugfixes, docs or release chores, GUI tweaks, or lint sweeps.
+
+## Preflight (both modes)
+
+1. `codex --version` must succeed, and `codex login status` must report
+   `Logged in using ChatGPT` — exit 0 alone also passes an API-key login,
+   which rides different billing. On failure follow references/fallbacks.md
+   (the consent gate may offer the cross-vendor backup lane —
+   references/backup-lane.md — before any single-vendor degraded mode;
+   never silently skip cross-vendor review).
+2. For port work: the reference source must exist under `References/`
+   (quote paths — some contain spaces, e.g. `References/M+ Timer`). Missing
+   → **HARD STOP before any debate round runs**: ask the user for the path
+   and go no further — do not run a codex exchange about the absence, do
+   not debate from memory, do not start a degraded mode. If the folder
+   holds version subdirectories (e.g. a `v1.4/` next to a `v1.1_old/`), use
+   the newest unless the user names one, and cite the versioned path:
+   `References/<name>/<version>/<file>:<line>`.
+   For non-port work there is no reference folder — claims ground in the
+   project's own source, specs, or upstream docs instead, same strike rule.
+3. The reviewed repo must carry no AGENTS.md and no `.agents/` entries:
+   codex auto-ingests AGENTS.md as instructions, and it advertises
+   repo-level `.agents/skills/*/SKILL.md` to the model, which read a
+   planted one as its FIRST action (both probed 2026-07-24: the planted
+   AGENTS.md controlled the reviewer's reply; the planted skill entered
+   its context; see model-prompting-notes.md) — back-channels into the
+   auditor that break independence. Enumerate the whole tree in one
+   listing — `git ls-files --cached --others '*AGENTS.md' '.agents/*'` —
+   which covers tracked, untracked, AND ignored files at any depth
+   (`.git` itself is never listed); a root-only or tracked-only check
+   misses a nested drop.
+   If present: STOP and surface it to the user — never dispatch a review
+   over an instruction back-channel.
+
+   Clearing it — only on the user's choice, never automatically: build
+   the **review mirror** (references/backup-lane.md owns its
+   construction, its baseline, and its identity fields — a file copy
+   preserving `.git`, NOT a clone), delete the offending entries THERE,
+   and re-run the enumeration above inside the mirror; empty output is
+   the evidence, and the mirror's identity fields go in the debate
+   record. The mirror is then the reviewed tree for every lane in that
+   debate — dispatch codex with the mirror as cwd, and keep citations
+   resolvable in the real repo. Whether the removal needs a commit
+   branches on tracked-ness, and the difference misreads as a failure:
+   a TRACKED entry's deletion shows as ` D` in `git status --porcelain`
+   — a tracked MODIFICATION, which the post-remediation baseline would
+   absorb, so the per-round check is not what forces the issue: an
+   uncommitted ` D` leaves a tracked modification sitting in the
+   baseline, which bars mode diff and breaks HEAD-identifies-content
+   (references/backup-lane.md) — so commit the removal
+   inside the mirror; an IGNORED or untracked entry's deletion shows
+   nothing, no commit is possible, and HEAD legitimately stays where it
+   was — `nothing to commit` alongside an unchanged HEAD is the CORRECT
+   observation there, not an inconsistency to chase (both observed
+   2026-07-26). The mirror carries the real repo's `.git`, hooks
+   included, so a commit inside it runs that project's pre-commit hooks
+   against the scratchpad copy: expect them to fire, and treat a hook
+   failure as a mirror-construction problem, never as a finding about
+   the reviewed work.
+
+   Files above the repo's git root are NOT ingested (same probe), and
+   `~/.codex/AGENTS.md` is the user's own
+   global instruction file — note it in the debate record if it exists,
+   but it is not a stop. Skills from the user's own codex plugin cache
+   load the same way — record them in the debate record as a
+   non-blocking environment note with the cache path cited, like the
+   global AGENTS.md; not a stop and never a finding.
+
+## Mode plan
+
+1. Draft the session position: chosen approach, port-fidelity claims, and the
+   API/behavior risk register. Every reference claim cites a
+   `References/<name>/<file>:<line>` actually read this session — anchor
+   EVERY file with its full path the first time you cite it, manifests and
+   secondary files included (shorthand only once that file is anchored);
+   every API claim cites authoritative local docs (WoW projects:
+   `.wow-api-reference/` or a dated in-game probe result) — never memory.
+   The position has no separate artifact — it IS the claims section of the
+   step-2 brief.
+2. Compose the reviewer's debate brief per references/model-prompting-notes.md, write
+   it to a scratchpad file, then run round 1:
+
+   ```powershell
+   Get-Content -Raw <brief-file> | codex exec --sandbox read-only -m <canonical-model-id> -c model_reasoning_effort=<canonical-effort> --output-last-message <reply-file> - > <transcript-file> 2>&1
+   ```
+
+   `<canonical-model-id>` and `<canonical-effort>` are the two declarations
+   in references/model-prompting-notes.md — read the literal values from
+   there, never from memory (the reviewer swaps by editing that one file,
+   and a remembered id silently defeats the swap). Apply that file's env
+   hygiene to the invocation.
+
+   Backup lane: same protocol, transport and per-round evidence per references/backup-lane.md.
+
+   Panels: any reviewer-lane combination per references/panels.md.
+
+   From `<transcript-file>`: verify the effective route — the header's
+   `model:`, `provider:`, and `reasoning effort:` lines against the
+   canonical declarations, and the `sandbox:` line reads `read-only`, per
+   model-prompting-notes.md; a mismatch is a transport failure
+   (fallbacks.md), never a review result — and capture the `session id:`
+   line. Read the reviewer's reply from `<reply-file>` — the transcript
+   logs every file the reviewer reads and can run tens of KB, with the
+   reply buried at the bottom. Every round writes FRESH round-numbered
+   `<reply-file>`/`<transcript-file>` paths: after a failed call, a reused
+   path serves the previous round's reply and reads exactly like success —
+   a reply not freshly written by this round's call is a stale reply, a
+   transport failure (fallbacks.md), never a review result.
+3. Later rounds keep the reviewer's state by resuming that session — flags MUST
+   precede the resume subcommand (flags after it are a usage error):
+
+   ```powershell
+   codex exec --sandbox read-only -m <canonical-model-id> -c model_reasoning_effort=<canonical-effort> --output-last-message <reply-file> resume <SESSION_ID> "<rebuttal-brief>" > <transcript-file> 2>&1
+   ```
+
+   Each resume's header must echo the resumed `session id:` and the same
+   effective route — the round-1 check repeated, `sandbox:` included (a
+   resume that silently started a fresh session has dropped the reviewer's
+   debate state). Sandbox mode has NO continuity across resumes: a resume
+   missing `--sandbox read-only` resolves to the config default — on a
+   `workspace-write` default the read-only auditor becomes a writing agent
+   mid-review (probed 2026-07-24, the write landed; see
+   model-prompting-notes.md). The header's `sandbox:` line is where that
+   surfaces.
+
+4. Iterate per debate-protocol.md until convergence or the round cap, then
+   escalate any unresolved points to the user with both positions stated.
+5. Freeze the converged plan per references/frozen-plan-format.md under the
+   project's superpowers plans dir (KitnEssentials:
+   `dev/docs/superpowers/plans/`; other projects: the superpowers default
+   `docs/superpowers/plans/`).
+
+## Mode diff
+
+Same transport and protocol. First read the frozen plan's debate record and
+its **Verification status** field.
+
+Required before round 1: the agents/fable-reviewer.md whole-branch review runs on the same range, its raw reply is retained as a range-bound artifact, and the round-1 brief cites that artifact with the session's per-finding adjudications.
+The session adjudicates each review finding with evidence — accept,
+refute, or ESCALATE into the debate — before any reviewer lane sees
+them; the review is the debate's required input, never its verdict,
+and the debate record names the artifact path.
+
+Then the brief carries the frozen plan
+path, the base/head SHAs superpowers code review used, and the
+`git diff base..head` output. Both sides check **spec fidelity** (drift from
+the frozen plan — the implementer makes zero judgment calls, so any drift is
+a finding, with one carve-out: envelope-designated escalation-lane DECISIONS
+are adjudicated against their frozen envelope per
+references/frozen-plan-format.md, and only envelope overruns are drift) and,
+for port work, **port fidelity** (drift from the reference
+source), ending PASS / FIX / ESCALATE.
+
+Backup lane: same protocol, transport and per-round evidence per references/backup-lane.md.
+
+Panels: any reviewer-lane combination per references/panels.md.
+
+A FIX this session applies itself goes through the **application
+checkpoint** (references/application-checkpoint.md) before the first edit.
+The fixed range is then re-reviewed, and only the post-re-review terminal
+PASS is attested — with the emitter's `-CheckpointFile` binding the
+checkpoint; a FIX verdict whose fixes are still unapplied is never the
+attested verdict.
+
+**Degraded-plan poisoning rule:** a plan whose Verification status is
+DEGRADED cannot produce an ordinary diff PASS. Mode diff must first reopen
+and cross-verify the plan's claims and approved deviations (the
+retrospective pass the plan never got), and only then verify the
+implementation against it — confirming a diff matches an unsound plan
+verifies nothing. If cross-vendor verification is STILL unavailable, the
+only terminal state is `ESCALATE — CROSS-VENDOR GATE UNSATISFIED`: merging
+then requires the user's explicitly recorded risk acceptance, never a PASS.
+
+## Finish line
+
+Before it: the session's final-adjudication step (debate-protocol.md) —
+verify the last round's findings against the repo and issue the terminal
+verdict; a reviewer's PASS/FIX is never terminal by itself.
+
+**Mode diff only — record the verdict mechanically.** After the terminal
+verdict, run the attestation emitter from this plugin's checkout:
+
+```powershell
+powershell -NoProfile -File <plugin-root>/tools/write-attestation.ps1 -RepoRoot <reviewed-repo> -BaseSha <base> -HeadSha <head> -Verdict <PASS|FIX|ESCALATE> -VerificationStatus <FULL|DEGRADED> -RouteNote "<effective route confirmed | the transport-failure class>" -Rounds <n> -Participants "<session-model> (session) / <reviewer-model> (reviewer)" [-CheckpointFile <application-checkpoint-artifact>]
+```
+
+When an application checkpoint governed fix application, pass it via
+`-CheckpointFile`: the record then also binds the checkpoint's hash and
+the emitter-computed changed-path set, `<head>` is the POST-fix,
+re-reviewed head — never the head the FIX verdict was issued on — and
+the artifact must already carry its appended verification results (the
+recorded hash covers the final artifact).
+
+It writes `.git/parallax/attestations/<head-sha>.json` inside the reviewed
+repo — untracked by design, so recording the verdict cannot move HEAD out
+from under its own SHA. The pre-push lane (`tools/verify-attestation.ps1`)
+later warns when a `main` push has no matching attestation for the pushed
+head (fast-forward: pushed sha == attested head; merge commit: parent1 ==
+attested base, parent2 == attested head — a squash changes the sha and
+correctly forces re-review).
+
+End with one status line: participating models, rounds used, converged vs
+escalated points, the verification status — `FULL`, or
+`DEGRADED (<class>, authorized by user at round N)` per fallbacks.md — and
+the route note: `effective route confirmed` when every round's header
+matched the canonical declarations, else the transport-failure class that
+fallbacks.md handled. The route-note grammar is lane-agnostic: for a backup-lane debate,
+`effective route confirmed` means every round satisfied
+references/backup-lane.md's per-round evidence rules against the backup
+declarations; the evidence class is recorded in the debate record prose. The session emits this line itself; never delegate it
+to a subagent.
+
+## Common mistakes
+
+- Accepting the reviewer's claims about reference code without the cited lines —
+  strike the claim per protocol; do not argue against it.
+- Re-sending the full debate context each round instead of resuming the
+  codex session.
+- Running mode `diff` against different SHAs than the code review used.
+- Treating convergence as failure — a sound plan converging in one round is
+  the system working, not a skipped debate.
+
+
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command '$n=0;Get-Content '"'skills\\multi-model-verify\\references\\backup-lane.md'|ForEach-Object{"'$n++;'"'{0,4}: {1}' -f "'$n,$_}' in C:\Users\Brandon\Documents\parallax
+ succeeded in 522ms:
+   1: # Backup reviewer lane (cross-vendor substitution)
+   2: 
+   3: The backup lane substitutes a SECOND cross-vendor reviewer (currently
+   4: Kimi K3 via kimi-cli) when the primary reviewer transport is down. It
+   5: enters through the fallbacks.md consent gate — auto-qualified by the
+   6: classes named there, manual on user request — or via a user-invoked
+   7: panel (the participation paragraph below), and preserves
+   8: cross-vendor independence, so a backup-lane debate records
+   9: `Verification status: FULL` with the lane substitution noted per
+  10: frozen-plan-format.md. Same debate protocol, same brief conventions,
+  11: same strike rule as the primary; only the transport differs. The
+  12: canonical backup model id and thinking flag are declared ONLY in
+  13: model-prompting-notes.md — read them from there at dispatch; this file
+  14: uses placeholders.
+  15: 
+  16: Panel participation: a user-invoked panel per references/panels.md is a second sanctioned entry route - the invocation itself is the consent, with no fallbacks banner (nothing degraded); containment, per-round evidence, and the write-probe apply unchanged, and no failure class is recorded because nothing substituted.
+  17: 
+  18: ## Transport
+  19: 
+  20: - **Environment — every call, fresh or resumed.** On a Windows driver,
+  21:   force UTF-8 for the kimi process: `PYTHONIOENCODING=utf-8` and
+  22:   `PYTHONUTF8=1`. kimi-cli is Python, so on a cp1252 console a reply
+  23:   containing any non-encodable character raises `UnicodeEncodeError`
+  24:   AFTER the model has already answered — the round completes, the
+  25:   quota is spent, and the review is lost on the way to disk. Arrows and
+  26:   em-dashes are routine in review prose, so this is a standing hazard,
+  27:   not an edge case. Observed 2026-07-26 (kimi-cli 1.49.0, Windows):
+  28:   `'charmap' codec can't encode character '→'`. Which of the two
+  29:   variables is load-bearing, and whether the same guard is needed for
+  30:   kimi's own session-log write, is UNVERIFIED — set both. The primary
+  31:   lane does not share this exposure (codex is not Python and writes the
+  32:   reply via `--output-last-message`), so the guard is lane-local.
+  33: - Dispatch (single line):
+  34:   `kimi --quiet --thinking -m <canonical-backup-model-id> --agent-file <plugin-checkout>/skills/multi-model-verify/references/kimi-reviewer-agent.yaml -w <review-mirror> -p "Read the file KIMI-REVIEW-BRIEF.md in this workspace and execute the review it describes."`
+  35: - Resume (single line — every flag below is load-bearing):
+  36:   `kimi --quiet -r <session-id> --agent-file <same yaml> -m <canonical-backup-model-id> --thinking -w <same mirror> -p "<rebuttal>"`
+  37:   A bare `kimi -r` loads the DEFAULT agent with full write and shell tools while the route line still reads clean (probed 2026-07-25: the behavioral refusal came from conversation priming with WriteFile and Shell live underneath); model and thinking inheritance come from CONFIG DEFAULTS, not the session, and the working directory does not inherit either — a resume without `-w` runs in the dispatching shell's current directory (caught live 2026-07-25: such a resume landed in the REAL tree; the containment allowlist held and the round was quarantined). Re-pin all four on every resumed call.
+  38: - The session id is printed at the end of every run ("To resume this
+  39:   session: kimi -r <uuid>"). Capture it from round 1.
+  40: - Reviewer reasoning effort has NO CLI flag and NO log field: it is
+  41:   pinned via `[models.<id>.overrides]` in `~/.kimi/config.toml`
+  42:   (evidence class: config validation only — the consent banner names
+  43:   this gap when the backup option is offered).
+  44: 
+  45: ## Per-round evidence (fresh AND resumed calls alike)
+  46: 
+  47: `~/.kimi/logs/kimi.log` is a shared, user-global append stream — a bare
+  48: "the line appears somewhere" check attributes nothing. The rule:
+  49: 
+  50: - Before every dispatch capture the byte length of `~/.kimi/logs/kimi.log`; after the call, past that offset, require all three: exactly one new `Using LLM model:` line carrying the canonical backup id, a `Loading agent:` line naming the committed yaml, and a `Loaded tools:` line equal to the allowlist exactly.
+  51: - Zero matching new lines, more than one, a wrong id, a wrong agent path, or any extra tool entry is a route-attribution failure: the reply is DISCARDED unread and the failure goes to the fallbacks.md consent gate.
+  52: - This evidence is client-side: report it as "route line verified
+  53:   (client-side)" in the record prose. Server-side substitution is not
+  54:   detectable from this class; the finish line's normalized
+  55:   `effective route confirmed` means every round's evidence matched THIS
+  56:   lane's canonical declarations under these rules.
+  57: 
+  58: ## Containment
+  59: 
+  60: - The committed pair `kimi-reviewer-agent.yaml` +
+  61:   `kimi-reviewer-system.md` (this directory) is the ONLY agent
+  62:   configuration the lane dispatches with. The yaml's five-tool
+  63:   allowlist (SetTodoList, ReadFile, ReadMediaFile, Glob, Grep) carries
+  64:   no write, shell, or web tool — kimi print mode auto-approves ALL
+  65:   tools and `--plan` does not block writes (probed), so the allowlist
+  66:   is the load-bearing control and the per-round `Loaded tools:` check
+  67:   is its verification.
+  68: - WRITE-PROBE (before round 1 of every backup-lane debate): in a fresh
+  69:   disposable session with the exact debate configuration, ask the
+  70:   contained agent to create a named marker file. PASS requires all of: explicit refusal in the reply, marker absent on disk, mirror status delta empty (the status command above — a bare-porcelain probe would miss a marker written to an ignored path).
+  71:   Anything else means the lane is BROKEN (integrity failure class in
+  72:   fallbacks.md) — never dispatch a review over it.
+  73: 
+  74: ## Client config surface (read before round 1)
+  75: 
+  76: `~/.kimi/config.toml` is user-global and configures this lane's client.
+  77: Two keys are read and RECORDED in the debate record; neither is a stop,
+  78: and neither is observable from the per-round route evidence above.
+  79: 
+  80: - The effort override block for the canonical backup id,
+  81:   `[models."<canonical-backup-model-id>".overrides]`. Absent means the
+  82:   lane runs at PROVIDER DEFAULT with no verifiable effort evidence.
+  83:   The consent banner already declares effort to be config-validation
+  84:   only; this check is what makes that claim true rather than assumed.
+  85:   Probed 2026-07-26 (kimi-cli 1.49.0): the file carried ZERO
+  86:   `overrides` blocks — the model table for the canonical id exists but
+  87:   has no override sub-table — so the pin is not set. A single read of
+  88:   the current file cannot establish what the config held during earlier
+  89:   rounds. Record a round with no contemporaneous config evidence as
+  90:   having NO VERIFIED EFFORT PIN — not as provider-default: absence of
+  91:   evidence for an override establishes neither an override nor
+  92:   provider-default operation, and writing either into the record
+  93:   manufactures a fact the lane never observed.
+  94: - `merge_all_available_skills`, plus the SOURCES it merges from. The
+  95:   key is the same class of instruction back-channel as codex's
+  96:   repo-level `.agents/skills` advertisement (SKILL.md preflight 3), on
+  97:   this lane's side of the fence, and the key alone does not tell you
+  98:   whether anything is actually being merged — so enumerate the sources
+  99:   in the same breath: `extra_skill_dirs`, `~/.kimi/skills`,
+ 100:   `~/.kimi/agents`, and any repo-local skill directory. Probed
+ 101:   2026-07-26 (kimi-cli 1.49.0): the key was `true` at
+ 102:   `~/.kimi/config.toml:10` while `extra_skill_dirs` was empty and none
+ 103:   of those directories existed — a LATENT surface with nothing to
+ 104:   merge, not an active one. What the key does once those directories
+ 105:   are populated is UNVERIFIED; treat a true key with a NON-EMPTY
+ 106:   source as unprobed territory and say so in the record rather than
+ 107:   assuming the allowlist absorbs it. The standing mitigations are
+ 108:   unchanged: the mirror carries no `.agents/` once preflight
+ 109:   remediation has run, and the per-round `Loaded tools:` check is the
+ 110:   load-bearing control. Record key and sources together as an
+ 111:   environment note citing path and line, exactly like the primary
+ 112:   lane's `~/.codex/AGENTS.md` — never a finding.
+ 113: 
+ 114: A config file that cannot be read is itself the note: record that and
+ 115: proceed; do not infer either key's value.
+ 116: 
+ 117: ## Workspace isolation and the brief
+ 118: 
+ 119: - Reviews run in a THROWAWAY REVIEW MIRROR in the session scratchpad —
+ 120:   never the real tree.
+ 121: - The mirror is a FILE COPY of the working tree that PRESERVES `.git`, not
+ 122:   a `git clone`. This is not a preference: a clone carries TRACKED FILES ONLY,
+ 123:   and the review inputs are routinely gitignored — a project's frozen
+ 124:   plans under its docs dir, `References/` for port work. Probed live
+ 125:   2026-07-26 in KitnEssentials, where `dev/docs/` and `References/` are both gitignored:
+ 126:   a cloned workspace drops the frozen plan, the spec, AND the reference
+ 127:   source, handing the reviewer a tree with nothing to review while every
+ 128:   route and containment check stays green. `.git` rides along because the
+ 129:   containment check below is a git command.
+ 130: - SKILL.md preflight-3 remediation is performed HERE, in the mirror,
+ 131:   never in the real tree — see that section for the procedure and for
+ 132:   which cases need a commit inside the mirror.
+ 133: - The brief is written into the mirror as the untracked
+ 134:   `KIMI-REVIEW-BRIEF.md`; the `-p` pointer tells the reviewer to read
+ 135:   it (headless stdin does not carry the brief).
+ 136: - Any review input the mirror cannot inherit — a standards file living
+ 137:   above the repo root, an assignment PDF, a spec kept outside the tree —
+ 138:   is copied in deliberately and enumerated before the round. An input the
+ 139:   reviewer cannot read is a gap in the review, not a silent omission.
+ 140: - **THE STATUS COMMAND — `git status --porcelain --ignored -uall`, every
+ 141:   capture without exception** (baseline, per-round, and the write-probe
+ 142:   delta). The flags are load-bearing, not tidiness: bare
+ 143:   `git status --porcelain` OMITS ignored paths entirely and COLLAPSES an
+ 144:   untracked directory to a single entry. Probed 2026-07-26 in a scratch
+ 145:   repo with `ign/` gitignored — bare porcelain printed only `?? untr/`,
+ 146:   hiding both `ign/secret.txt` and the two files under `untr/sub/`,
+ 147:   while `--ignored -uall` printed all three. Ignored content is the
+ 148:   entire reason this workspace is a mirror, so a bare-porcelain check is
+ 149:   blind to precisely the class the mirror exists to carry: a contained
+ 150:   reviewer writing to any ignored path would not appear.
+ 151: - **BASELINE, captured after construction AND after any preflight-3 remediation, immediately before the brief is written**:
+ 152:   the status command above, in the mirror. A clone would have guaranteed
+ 153:   this empty; a file copy does NOT — the real tree's untracked files
+ 154:   and uncommitted modifications ride along, and without a baseline
+ 155:   every one of them quarantines every round of a review that never
+ 156:   touched them. Tracked modifications especially cannot be absorbed by
+ 157:   any "untracked set" wording. The timing is load-bearing: remediation
+ 158:   deletes entries and in the tracked case commits, so a baseline taken
+ 159:   before it fails every round of a remediated debate and pins a HEAD
+ 160:   the mirror no longer has — and remediation is precisely the procedure
+ 161:   the mirror exists to support.
+ 162: - What the check does and does not see, stated exactly: with the flags
+ 163:   above it detects any path that APPEARS IN OR DISAPPEARS FROM the
+ 164:   mirror, ignored and untracked paths included. It remains PATH-level,
+ 165:   so a path already present in the baseline shows the same entry however
+ 166:   its CONTENT changes. That residue is bounded by the tool allowlist and
+ 167:   the write-probe, which stay the load-bearing controls, and by the
+ 168:   content manifest below for the inputs that matter.
+ 169: - After every round, the status command in the mirror must equal the BASELINE plus exactly the expected untracked set — the brief plus any review inputs copied in, enumerated before the round — and nothing else; any other delta quarantines that round's reply (integrity failure class). Both halves are declared in advance, which is what keeps the check exact rather than adjudicated after the fact.
+ 170: - The mirror's identity in the debate record is its path, its
+ 171:   `git rev-parse HEAD`, its baseline, AND a CONTENT MANIFEST. HEAD binds
+ 172:   tracked content only, and in this lane the inputs that matter are
+ 173:   deliberately outside it, so without the manifest the record names what
+ 174:   was reviewed without being able to reconstruct it.
+ 175: - **The manifest, specified to be executable without judgment:**
+ 176:   - **Universe first**: the mirror's WORKTREE files, excluding the root
+ 177:     git administrative entry `.git` entirely (it may be a directory or,
+ 178:     in a worktree or submodule checkout, a file — exclude it either
+ 179:     way). The mirror preserves `.git` on purpose, and HEAD represents
+ 180:     none of its contents, so without this exclusion the coverage test
+ 181:     below would recursively hash repository metadata — objects, logs,
+ 182:     index, hooks, config — which is volatile, potentially enormous, and
+ 183:     identifies nothing about the reviewed material.
+ 184:   - **Coverage within that universe is exactly the paths the BASELINE
+ 185:     capture lists** — the same `--ignored -uall` output, so manifest and
+ 186:     baseline describe one tree state and cannot disagree. Those are, by
+ 187:     git's own reckoning, the files whose CURRENT worktree bytes HEAD
+ 188:     does not account for — untracked, ignored, or modified-relative-to-
+ 189:     HEAD (for a modified tracked file HEAD still binds its committed
+ 190:     content; what it does not bind is what the reviewer will actually
+ 191:     read). Do NOT
+ 192:     define coverage as "bytes differ from the HEAD blob": git applies
+ 193:     clean/smudge filters, so on a line-ending-normalizing checkout a
+ 194:     file git calls CLEAN is not byte-identical to its blob. Probed
+ 195:     2026-07-26 on this repo (`core.autocrlf=true`): `README.md` is
+ 196:     25843 bytes in the worktree and 25417 in the blob, reported clean by
+ 197:     `git status`; the byte rule classified 283 of 287 files as
+ 198:     manifest-worthy against a 122-entry baseline, degenerating to the
+ 199:     whole tree. Coverage by baseline admits the
+ 200:     copied-in inputs, the gitignored subject material (frozen plan,
+ 201:     spec, reference source), inherited untracked files whether ignored
+ 202:     or not, and any tracked file modified relative to HEAD (which mode
+ 203:     diff bars outright and other modes permit only with disclosure). An
+ 204:     enumerated list would omit a class; this cannot.
+ 205:   - **Directories expand RECURSIVELY to their files.** A directory
+ 206:     subject such as `References/` is never one manifest entry; a hash
+ 207:     over a directory name identifies nothing.
+ 208:   - **Entry format**: one line per file — the repo-relative path, a
+ 209:     single space, then the SHA-256 of the file's raw bytes as lowercase
+ 210:     hex. Fixing the separator and the encoding is what makes two
+ 211:     captures byte-comparable instead of merely equivalent.
+ 212:   - **Order**: sorted by path in byte order, so the manifest is
+ 213:     deterministic and two captures are diffable.
+ 214:   - **Captured at the same moment as the baseline** — after construction
+ 215:     and any preflight-3 remediation, immediately before the brief is
+ 216:     written — so the two describe the same tree state. The brief itself
+ 217:     is written after both and is therefore not in either.
+ 218: - If the baseline contains TRACKED modifications the reviewed content is
+ 219:   not the committed range: disclose that in the record, and in mode diff
+ 220:   take the mirror from a tree whose tracked files are clean instead.
+ 221: - The brief is retained as evidence per the raw-rounds convention.
+ 222: - Never run `kimi export` inside a repo — it writes a session zip into the current directory; export only from a scratch directory. Nothing in this lane uses export.
+ 223: 
+ 224: ## Failure handling
+ 225: 
+ 226: All failure classes, retries, and consent-gate dispositions live in
+ 227: fallbacks.md (the single failure-class namespace) — this file defines
+ 228: none of its own. Record fields for a substituted debate live in
+ 229: frozen-plan-format.md.
+
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command '$n=0;Get-Content '"'evals\\multi-model-verify\\test_backup_lane.py'|ForEach-Object{"'$n++;'"'{0,4}: {1}' -f "'$n,$_}' in C:\Users\Brandon\Documents\parallax
+ succeeded in 505ms:
+   1: """Contract pins for the Kimi backup reviewer lane (0.13.0).
+   2: 
+   3: Design spec: docs/superpowers/specs/2026-07-25-kimi-backup-lane-design.md.
+   4: These pins lock the lane's transport command shape, containment
+   5: allowlist, per-round route+containment evidence rules, single-source
+   6: discipline, and fallback wiring - all offline, zero CLI calls.
+   7: """
+   8: import re
+   9: from pathlib import Path
+  10: 
+  11: REPO = Path(__file__).resolve().parents[2]
+  12: REFS = REPO / "skills" / "multi-model-verify" / "references"
+  13: BACKUP_LANE = REFS / "backup-lane.md"
+  14: AGENT_YAML = REFS / "kimi-reviewer-agent.yaml"
+  15: SYSTEM_MD = REFS / "kimi-reviewer-system.md"
+  16: NOTES = REFS / "model-prompting-notes.md"
+  17: FALLBACKS = REFS / "fallbacks.md"
+  18: PLAN_FORMAT = REFS / "frozen-plan-format.md"
+  19: BACKUP_ID = "kimi-code/k3-256k"
+  20: ALLOWLIST = [
+  21:     "kimi_cli.tools.todo:SetTodoList",
+  22:     "kimi_cli.tools.file:ReadFile",
+  23:     "kimi_cli.tools.file:ReadMediaFile",
+  24:     "kimi_cli.tools.file:Glob",
+  25:     "kimi_cli.tools.file:Grep",
+  26: ]
+  27: FORBIDDEN_TOOL_MARKERS = ["WriteFile", "StrReplaceFile", "Shell",
+  28:                           "SearchWeb", "FetchURL", "tools.web",
+  29:                           "tools.shell"]
+  30: 
+  31: 
+  32: def _read(p):
+  33:     return p.read_text(encoding="utf-8")
+  34: 
+  35: 
+  36: def _norm(p):
+  37:     """Whitespace-normalized read, for pins that span a markdown wrap."""
+  38:     return " ".join(_read(p).split())
+  39: 
+  40: 
+  41: def test_backup_artifacts_exist():
+  42:     for p in (BACKUP_LANE, AGENT_YAML, SYSTEM_MD):
+  43:         assert p.is_file(), str(p)
+  44: 
+  45: 
+  46: def test_notes_backup_declarations():
+  47:     notes = _read(NOTES)
+  48:     assert "Canonical backup reviewer model id: `" + BACKUP_ID + "`" in notes
+  49:     assert "Canonical backup thinking flag: `--thinking`" in notes
+  50:     # primary parse must survive the amendment, in BOTH parser dialects
+  51:     m = re.search(r"Canonical model id: `([^`]+)`", notes)
+  52:     assert m and m.group(1) and m.group(1) != BACKUP_ID
+  53:     mi = re.search(r"Canonical model id: `([^`]+)`", notes, re.IGNORECASE)
+  54:     assert mi and mi.group(1) == m.group(1)
+  55:     # backup labels collide with neither primary regex, case-insensitive
+  56:     assert not re.search(r"Canonical model id:",
+  57:                          "Canonical backup reviewer model id:",
+  58:                          re.IGNORECASE)
+  59:     # ordering: primary declarations precede the backup block
+  60:     assert notes.index("Canonical model id:") < notes.index(
+  61:         "Canonical backup reviewer model id:")
+  62: 
+  63: 
+  64: def test_agent_yaml_allowlist_exact():
+  65:     yaml_text = _read(AGENT_YAML)
+  66:     # exact LIST equality: extra, missing, or reordered tool entries all
+  67:     # fail - presence checks alone would tolerate an added WriteFile
+  68:     tools = re.findall(r'-\s+"([^"]+)"', yaml_text)
+  69:     assert tools == ALLOWLIST
+  70:     for marker in FORBIDDEN_TOOL_MARKERS:
+  71:         assert marker not in yaml_text, marker
+  72:     assert "system_prompt_path: ./kimi-reviewer-system.md" in yaml_text
+  73: 
+  74: 
+  75: def test_backup_files_no_backslash_paths():
+  76:     for p in (BACKUP_LANE, AGENT_YAML, SYSTEM_MD):
+  77:         assert "\\" not in _read(p), str(p)
+  78: 
+  79: 
+  80: def test_backup_lane_dispatch_and_resume_pins():
+  81:     body = _read(BACKUP_LANE)
+  82:     # the dispatch pin covers the COMPLETE command through -w and -p:
+  83:     # a dropped -w would dispatch the reviewer in the shell's cwd (the
+  84:     # same class the resume pin below guards), and a bare substring
+  85:     # check would stay green through it (final-review finding, 0.13.0)
+  86:     # 0.14.2 Kimi panel round 1: this pin used to stop at `-p`, and the
+  87:     # brief pointer was covered only by a position-free filename check
+  88:     # that the workspace section also satisfies - so deleting the -p
+  89:     # PAYLOAD from the dispatch line left both green. The payload is
+  90:     # load-bearing (headless stdin does not carry the brief), so the
+  91:     # pin now runs through it, same treatment `-w` already had.
+  92:     assert ("kimi --quiet --thinking -m <canonical-backup-model-id> "
+  93:             "--agent-file <plugin-checkout>/skills/multi-model-verify/"
+  94:             "references/kimi-reviewer-agent.yaml -w <review-mirror> "
+  95:             '-p "Read the file KIMI-REVIEW-BRIEF.md in this workspace '
+  96:             'and execute the review it describes."'
+  97:             ) in body
+  98:     # the re-pinned resume is load-bearing: bare -r restores full tools,
+  99:     # model/thinking inherit from CONFIG DEFAULTS, and -w does not
+ 100:     # inherit at all (a resume without it runs in the shell's cwd -
+ 101:     # caught live against the real tree).
+ 102:     # 0.14.2 Kimi panel round 2: this pin stopped at -w while its own
+ 103:     # comment claimed it covered the COMPLETE command - asserting
+ 104:     # completeness over a command it truncated. The resume payload is
+ 105:     # the same load-bearing class as the dispatch payload (headless
+ 106:     # stdin carries nothing), so the pin now runs through it.
+ 107:     assert ("kimi --quiet -r <session-id> --agent-file <same yaml> -m "
+ 108:             "<canonical-backup-model-id> --thinking -w <same mirror> "
+ 109:             '-p "<rebuttal>"') in body
+ 110:     assert "loads the DEFAULT agent with full write and shell tools" in body
+ 111:     assert BACKUP_ID not in body  # placeholder discipline
+ 112: 
+ 113: 
+ 114: def test_backup_lane_evidence_pins():
+ 115:     # normalized: these pins now span markdown wraps, and a re-wrap is
+ 116:     # not a semantic change (same reasoning as the write-probe pin)
+ 117:     body = _norm(BACKUP_LANE)
+ 118:     # 0.14.2 Kimi panel round 3 (instance 7, the worst of the class):
+ 119:     # the rule has two halves - capture the offset, then require the
+ 120:     # three lines PAST IT. Only the capture half was pinned, and
+ 121:     # "past that offset" appeared in no file under evals/ at all.
+ 122:     # Deleting it left every pin green while the check stopped
+ 123:     # attributing anything: kimi.log is a shared append stream, so
+ 124:     # without the offset the three lines can be satisfied by an earlier
+ 125:     # debate's entries - the exact route-attribution failure this rule
+ 126:     # exists to prevent.
+ 127:     assert ("capture the byte length of `~/.kimi/logs/kimi.log`; after "
+ 128:             "the call, past that offset") in body
+ 129:     assert ("exactly one new `Using LLM model:` line carrying the "
+ 130:             "canonical backup id") in body
+ 131:     assert "`Loading agent:` line naming the committed yaml" in body
+ 132:     assert "`Loaded tools:` line equal to the allowlist exactly" in body
+ 133:     assert "DISCARDED unread" in body
+ 134:     # 0.14.2 Kimi panel round 2 (4b): the three PASS conditions were
+ 135:     # pinned but the probe's CONFIGURATION FIDELITY was not - a probe
+ 136:     # run under a stricter config than the debate's would pass while
+ 137:     # the real debate config could still write. That is a silent
+ 138:     # weakening in the dangerous direction, so the clause is pinned.
+ 139:     # normalized, not raw: a pure re-wrap of this bullet is not a
+ 140:     # semantic change and should not false-red the pin
+ 141:     assert ("in a fresh disposable session with the exact debate "
+ 142:             "configuration") in body
+ 143:     assert ("explicit refusal in the reply, marker absent on disk, "
+ 144:             "mirror status delta empty") in body
+ 145:     assert "Never run `kimi export` inside a repo" in body
+ 146: 
+ 147: 
+ 148: def test_backup_lane_workspace_is_a_mirror_not_a_clone():
+ 149:     # 0.14.2, found live 2026-07-26 (KitnEssentials): the lane's
+ 150:     # workspace was specified as a `git clone`, which carries TRACKED
+ 151:     # FILES ONLY - and the review inputs are routinely gitignored (the
+ 152:     # frozen plan under a project's docs dir, References/ for port
+ 153:     # work). A cloned workspace hands the reviewer a tree with nothing
+ 154:     # to review while every route and containment check stays green.
+ 155:     body = _norm(BACKUP_LANE)
+ 156:     assert "THROWAWAY REVIEW MIRROR" in body
+ 157:     assert ("a FILE COPY of the working tree that PRESERVES `.git`, not "
+ 158:             "a `git clone`") in body
+ 159:     assert "a clone carries TRACKED FILES ONLY" in body
+ 160:     # the failure is named concretely, not left as an abstraction
+ 161:     assert "`dev/docs/` and `References/` are both gitignored" in body
+ 162:     # inputs the mirror cannot inherit are copied in DELIBERATELY and
+ 163:     # enumerated - the containment rule keys off a declared set, so an
+ 164:     # unexpected delta still quarantines
+ 165:     assert ("must equal the BASELINE plus exactly the expected untracked "
+ 166:             "set — the brief plus any review inputs copied in, "
+ 167:             "enumerated before the round — and nothing else") in body
+ 168:     # 0.14.2 Sol round 1, F2/F5: bare porcelain OMITS ignored paths and
+ 169:     # COLLAPSES untracked directories, and ignored content is the whole
+ 170:     # reason this workspace is a mirror - so the flags are the check,
+ 171:     # not decoration. Probed: bare printed only "?? untr/".
+ 172:     assert "`git status --porcelain --ignored -uall`, every" in body
+ 173:     assert ("bare `git status --porcelain` OMITS ignored paths entirely "
+ 174:             "and COLLAPSES an untracked directory to a single entry") in body
+ 175:     assert ("a contained reviewer writing to any ignored path would not "
+ 176:             "appear") in body
+ 177:     # F4: HEAD binds tracked content only, and this lane's inputs are
+ 178:     # deliberately outside it - so identity carries a content manifest
+ 179:     # 0.14.2 Sol round 2, F4 held at FIX: naming a manifest is not
+ 180:     # specifying one. The pin must constrain coverage, recursion,
+ 181:     # ordering, and capture point - otherwise "content manifest" as a
+ 182:     # phrase satisfies it while a driver cannot execute it.
+ 183:     assert "AND a CONTENT MANIFEST" in body
+ 184:     # 0.14.2 Sol round 3: the mirror preserves .git by design and HEAD
+ 185:     # represents none of it, so the coverage test literally swept
+ 186:     # repository metadata - objects, logs, index, hooks. The universe
+ 187:     # must exclude .git, as a file OR a directory (worktree/submodule
+ 188:     # checkouts make it a file).
+ 189:     assert ("excluding the root git administrative entry `.git` entirely"
+ 190:             in body)
+ 191:     assert ("it may be a directory or, in a worktree or submodule "
+ 192:             "checkout, a file — exclude it either way") in body
+ 193:     # coverage is git's own reckoning, not a raw-byte comparison:
+ 194:     # found by EXECUTING this contract 2026-07-26 - with
+ 195:     # core.autocrlf=true a file git calls clean is not byte-identical
+ 196:     # to its blob, and the byte rule ballooned to 283/287 files against
+ 197:     # a 122-entry baseline
+ 198:     assert ("Coverage within that universe is exactly the paths the "
+ 199:             "BASELINE capture lists") in body
+ 200:     assert ('Do NOT define coverage as "bytes differ from the HEAD blob"'
+ 201:             in body)
+ 202:     assert ("git applies clean/smudge filters" in body)
+ 203:     # the classes an enumerated list would have dropped
+ 204:     assert ("inherited untracked files whether ignored or not" in body)
+ 205:     assert ("any tracked file modified relative to HEAD" in body)
+ 206:     # recursion, format, order, timing
+ 207:     assert "Directories expand RECURSIVELY to their files" in body
+ 208:     # separator and encoding are pinned too: without them two captures
+ 209:     # are equivalent but not byte-comparable
+ 210:     assert ("the repo-relative path, a single space, then the SHA-256 of "
+ 211:             "the file's raw bytes as lowercase hex") in body
+ 212:     assert "sorted by path in byte order" in body
+ 213:     assert ("Captured at the same moment as the baseline" in body)
+ 214:     # F8: absence of an override pin proves neither an override nor
+ 215:     # provider-default; the record must not manufacture either
+ 216:     assert ("Record a round with no contemporaneous config evidence as "
+ 217:             "having NO VERIFIED EFFORT PIN") in body
+ 218:     assert ("establishes neither an override nor provider-default "
+ 219:             "operation") in body
+ 220:     assert "is a gap in the review, not a silent omission" in body
+ 221: 
+ 222: 
+ 223: def test_mirror_baseline_closes_the_dirty_tree_hole():
+ 224:     # 0.14.2 whole-branch review, Important 1: a clone guaranteed an
+ 225:     # empty porcelain; a file copy does not. Without a baseline, the
+ 226:     # real tree's untracked files and uncommitted modifications ride
+ 227:     # into the mirror and quarantine every round of a review that never
+ 228:     # touched them - and a tracked modification can never be absorbed
+ 229:     # by any "untracked set" wording.
+ 230:     body = _norm(BACKUP_LANE)
+ 231:     # timing is load-bearing and was WRONG in the first fix pass:
+ 232:     # preflight-3 remediation runs between construction and the brief,
+ 233:     # deleting entries and (tracked case) committing - so a baseline
+ 234:     # taken at construction fails every round of a remediated debate
+ 235:     # and pins a stale HEAD, reintroducing the false-quarantine on the
+ 236:     # one path the mirror exists to support
+ 237:     assert ("BASELINE, captured after construction AND after any "
+ 238:             "preflight-3 remediation, immediately before the brief is "
+ 239:             "written") in body
+ 240:     assert ("a baseline taken before it fails every round of a "
+ 241:             "remediated debate and pins a HEAD the mirror no longer "
+ 242:             "has") in body
+ 243:     assert "A clone would have guaranteed this empty; a file copy does NOT" in body
+ 244:     # the check's reach is stated honestly rather than implied broader
+ 245:     # reach is stated against the FLAGGED command: it sees appearance
+ 246:     # and disappearance of any path including ignored ones, and is
+ 247:     # honest that content changes to an already-present path are the
+ 248:     # residue the allowlist, write-probe, and manifest cover
+ 249:     assert ("it detects any path that APPEARS IN OR DISAPPEARS FROM the "
+ 250:             "mirror, ignored and untracked paths included") in body
+ 251:     assert ("It remains PATH-level, so a path already present in the "
+ 252:             "baseline shows the same entry however its CONTENT changes") in body
+ 253:     # identity: HEAD alone stops being sufficient once uncommitted work
+ 254:     # can ride in, so the record carries path + HEAD + baseline
+ 255:     assert ("The mirror's identity in the debate record is its path, its "
+ 256:             "`git rev-parse HEAD`, its baseline, AND a CONTENT MANIFEST") in body
+ 257:     assert ("HEAD binds tracked content only, and in this lane the inputs "
+ 258:             "that matter are deliberately outside it") in body
+ 259:     # a dirty tracked baseline means the reviewed content is not the
+ 260:     # committed range - disclosed, and disallowed outright in mode diff
+ 261:     assert ("in mode diff take the mirror from a tree whose tracked "
+ 262:             "files are clean instead") in body
+ 263: 
+ 264: 
+ 265: def test_backup_lane_eval_case_matches_the_mirror_contract():
+ 266:     # 0.14.2 whole-branch review, Important 2: the manual eval case
+ 267:     # declares backup-lane.md in its surface but still graded the
+ 268:     # superseded clone contract. Manual cases never run in CI, so
+ 269:     # nothing would have caught it until a future manual run failed
+ 270:     # CORRECT mirror behavior.
+ 271:     import json
+ 272:     cases = json.loads(
+ 273:         (REPO / "evals" / "multi-model-verify" / "evals.json").read_text(
+ 274:             encoding="utf-8"))["evals"]
+ 275:     case = next(c for c in cases
+ 276:                 if c["id"] == "backup-lane-consented-substitution")
+ 277:     assert "skills/multi-model-verify/references/backup-lane.md" in case["surface"]
+ 278:     joined = " ".join(case["expectations"])
+ 279:     assert "review MIRROR (file copy preserving .git, not a clone)" in joined
+ 280:     assert "baseline porcelain was captured before the brief was written" in joined
+ 281:     assert "throwaway clone" not in joined
+ 282:     # 0.14.2 Sol round 1, F10a: the pin above checks only the mirror
+ 283:     # VOCABULARY, so deleting the equality half of the expectation left
+ 284:     # it green - the half that actually grades containment. Pin it.
+ 285:     assert ("equals that baseline plus exactly KIMI-REVIEW-BRIEF.md and "
+ 286:             "any enumerated copied-in review inputs") in joined
+ 287: 
+ 288: 
+ 289: def test_backup_lane_client_config_sweep():
+ 290:     # 0.14.2: the primary lane was hardened against instruction
+ 291:     # back-channels (SKILL.md preflight 3) while the backup lane's own
+ 292:     # client config was never swept. Both keys are recorded, neither
+ 293:     # is a stop - and neither is observable from the route evidence.
+ 294:     body = _norm(BACKUP_LANE)
+ 295:     assert "## Client config surface" in body
+ 296:     assert '`[models."<canonical-backup-model-id>".overrides]`' in body
+ 297:     assert "runs at PROVIDER DEFAULT with no verifiable effort evidence" in body
+ 298:     assert "`merge_all_available_skills`" in body
+ 299:     assert ("the same class of instruction back-channel as codex's "
+ 300:             "repo-level `.agents/skills` advertisement") in body
+ 301:     assert "never a finding" in body
+ 302:     assert "do not infer either key's value" in body
+ 303:     # instance 8, same shape at lower severity: the comment claims both
+ 304:     # keys are RECORDED, but only the disposition half was pinned.
+ 305:     # Dropping "and RECORDED" leaves a driver reading the keys and
+ 306:     # discarding them, which defeats the section's own justification -
+ 307:     # the check is what makes the effort claim true rather than assumed,
+ 308:     # and that only holds if the read reaches the record.
+ 309:     assert "read and RECORDED in the debate record" in body
+ 310:     # the key alone is not the surface - a true key over empty sources
+ 311:     # merges nothing, so the check reads key AND sources together
+ 312:     # (probed 2026-07-26: true key, every source absent = LATENT)
+ 313:     assert "plus the SOURCES it merges from" in body
+ 314:     assert "`extra_skill_dirs`" in body
+ 315:     assert "a LATENT surface with nothing to merge, not an active one" in body
+ 316:     # the populated-source case is honestly marked unprobed rather than
+ 317:     # waved through on the tool allowlist
+ 318:     assert ("treat a true key with a NON-EMPTY source as unprobed "
+ 319:             "territory") in body
+ 320: 
+ 321: 
+ 322: def test_skill_preflight_names_the_remediation():
+ 323:     # 0.14.2: preflight 3 said STOP and never said how to clear it.
+ 324:     # The tracked/ignored branch is the part that misreads as a bug:
+ 325:     # deleting an IGNORED back-channel leaves HEAD untouched and
+ 326:     # `nothing to commit`, which looks like a failed remediation and
+ 327:     # is in fact the correct one (both observed 2026-07-26).
+ 328:     skill = _norm(REPO / "skills" / "multi-model-verify" / "SKILL.md")
+ 329:     assert "review mirror" in skill
+ 330:     assert "empty output is the evidence" in skill
+ 331:     assert ("a TRACKED entry's deletion shows as ` D` in "
+ 332:             "`git status --porcelain`") in skill
+ 333:     assert ("`nothing to commit` alongside an unchanged HEAD is the "
+ 334:             "CORRECT observation there, not an inconsistency to chase"
+ 335:             ) in skill
+ 336:     # 0.14.2 Sol round 1, F10b: the assertions above pin the OBSERVATIONS
+ 337:     # but never the imperative, so deleting "commit the removal inside
+ 338:     # the mirror" left the pin green - and that commit is the whole
+ 339:     # point of the tracked branch. Pin the imperative and the
+ 340:     # consequence that justifies it.
+ 341:     assert "so commit the removal inside the mirror" in skill
+ 342:     assert ("bars mode diff and breaks HEAD-identifies-content" in skill)
+ 343: 
+ 344: 
+ 345: def test_output_encoding_class_is_wired():
+ 346:     # 0.14.2, observed live 2026-07-26 (Windows, kimi-cli 1.49.0): the
+ 347:     # round completed and UnicodeEncodeError killed the WRITE. The
+ 348:     # catch-all would have spent a second real call on a retry that
+ 349:     # cannot succeed, and the honest recovery (resume the surviving
+ 350:     # session with UTF-8 forced) had no path in the rules at all.
+ 351:     lane = _norm(BACKUP_LANE)
+ 352:     assert "`PYTHONIOENCODING=utf-8` and `PYTHONUTF8=1`" in lane
+ 353:     assert "AFTER the model has already answered" in lane
+ 354:     # the unprobed part is marked, not papered over
+ 355:     assert ("Which of the two variables is load-bearing, and whether the "
+ 356:             "same guard is needed for kimi's own session-log write, is "
+ 357:             "UNVERIFIED") in lane
+ 358:     fb = _norm(FALLBACKS)
+ 359:     assert "class `output-encoding`" in fb
+ 360:     assert "**Skip the retry**" in fb
+ 361:     # the resume's -p carries no rebuttal in recovery, but must not be
+ 362:     # empty - say what to send (whole-branch review, Minor 2)
+ 363:     assert ("ask the session to re-emit its previous reply verbatim" in fb)
+ 364:     # the class must NOT be filed under the two evidence-tainting
+ 365:     # classes - nothing reached disk, so nothing is suspect
+ 366:     assert ("neither a route-attribution nor an integrity failure" in fb)
+ 367:     assert ("Recovery is a RESUME of the surviving session" in fb)
+ 368: 
+ 369: 
+ 370: def test_fallbacks_backup_wiring():
+ 371:     fb = _norm(FALLBACKS)
+ 372:     assert "[run backup lane (cross-vendor preserved)]" in fb
+ 373:     # the integrity class names the mirror's declared-set rule, not a
+ 374:     # bare "clone delta" (0.14.2 rename)
+ 375:     assert ("integrity failure (write-probe fail, or a mirror delta "
+ 376:             "beyond the expected untracked set)") in fb
+ 377:     # the banner itself carries the conditional-offer semantics and the
+ 378:     # backup option's own consequence line, not just an Options entry
+ 379:     assert "offered when a class below qualifies it; on request otherwise" in fb
+ 380:     assert "reviewer reasoning effort" in fb
+ 381:     # transport-broken mapping names its member classes
+ 382:     assert "codex-missing" in fb and "model-rejected" in fb
+ 383:     assert "quota-exhausted" in fb and "auth-expired" in fb
+ 384:     assert "route-attribution" in fb
+ 385:     assert "LLM not set" in fb
+ 386:     assert "access_terminated_error" in fb
+ 387: 
+ 388: 
+ 389: def test_plan_format_lane_substitution_pin():
+ 390:     fmt = _read(PLAN_FORMAT)
+ 391:     assert "lane substitution is NOT degradation" in fmt
+ 392:     assert "backup cross-vendor lane substituted" in fmt
+ 393: 
+ 394: 
+ 395: def test_skill_and_readme_route_the_lane():
+ 396:     skill = _read(REPO / "skills" / "multi-model-verify" / "SKILL.md")
+ 397:     assert "backup-lane.md" in skill
+ 398:     # BOTH dispatch sections (mode plan and mode diff) carry the pointer
+ 399:     # - "backup-lane.md somewhere in the file" would let either mode
+ 400:     # drop it while staying green
+ 401:     assert skill.count("Backup lane: same protocol, transport and "
+ 402:                        "per-round evidence per "
+ 403:                        "references/backup-lane.md.") == 2
+ 404:     readme = _read(REPO / "README.md")
+ 405:     # the table row alone also contains "run backup lane" - pin the
+ 406:     # mermaid edge exactly so the flowchart cannot drop it while green
+ 407:     assert ('G -->|run backup lane| BK["cross-vendor backup reviewer'
+ 408:             ) in readme
+ 409:     assert ("references/backup-lane.md` | The cross-vendor backup "
+ 410:             "reviewer lane") in readme
+ 411: 
+ 412: 
+ 413: SWEEP_GLOBS = [
+ 414:     "skills/**/*.md", "skills/**/*.yaml", "commands/*.md", "tools/*.ps1",
+ 415:     "hooks/*", "evals/**/*.py", "evals/**/*.json", "evals/**/*.ps1",
+ 416:     "README.md", "CLAUDE.md", "agents/*.md",
+ 417:     ".claude-plugin/*.json", ".githooks/*",
+ 418: ]
+ 419: ALLOWED = {NOTES.resolve(), Path(__file__).resolve()}
+ 420: 
+ 421: 
+ 422: def test_backup_literal_single_source():
+ 423:     offenders = []
+ 424:     for pattern in SWEEP_GLOBS:
+ 425:         for p in REPO.glob(pattern):
+ 426:             if not p.is_file() or p.resolve() in ALLOWED:
+ 427:                 continue
+ 428:             if BACKUP_ID in p.read_text(encoding="utf-8",
+ 429:                                         errors="replace"):
+ 430:                 offenders.append(str(p))
+ 431:     assert offenders == []
+
+codex
+The changed surfaces are limited to the same contract and pin file. I’m narrowing the read now because the full output was truncated: exact baseline-to-manifest parsing, dispatch/resume payload extent, offset attribution, write-probe configuration fidelity, and the “recorded” imperative.
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command '$l=Get-Content '"'skills\\multi-model-verify\\references\\backup-lane.md';for("'$i=45;$i -le 215;$i++){'"'{0,4}: {1}' -f "'$i,$l[$i-1]}' in C:\Users\Brandon\Documents\parallax
+ succeeded in 480ms:
+  45: ## Per-round evidence (fresh AND resumed calls alike)
+  46: 
+  47: `~/.kimi/logs/kimi.log` is a shared, user-global append stream — a bare
+  48: "the line appears somewhere" check attributes nothing. The rule:
+  49: 
+  50: - Before every dispatch capture the byte length of `~/.kimi/logs/kimi.log`; after the call, past that offset, require all three: exactly one new `Using LLM model:` line carrying the canonical backup id, a `Loading agent:` line naming the committed yaml, and a `Loaded tools:` line equal to the allowlist exactly.
+  51: - Zero matching new lines, more than one, a wrong id, a wrong agent path, or any extra tool entry is a route-attribution failure: the reply is DISCARDED unread and the failure goes to the fallbacks.md consent gate.
+  52: - This evidence is client-side: report it as "route line verified
+  53:   (client-side)" in the record prose. Server-side substitution is not
+  54:   detectable from this class; the finish line's normalized
+  55:   `effective route confirmed` means every round's evidence matched THIS
+  56:   lane's canonical declarations under these rules.
+  57: 
+  58: ## Containment
+  59: 
+  60: - The committed pair `kimi-reviewer-agent.yaml` +
+  61:   `kimi-reviewer-system.md` (this directory) is the ONLY agent
+  62:   configuration the lane dispatches with. The yaml's five-tool
+  63:   allowlist (SetTodoList, ReadFile, ReadMediaFile, Glob, Grep) carries
+  64:   no write, shell, or web tool — kimi print mode auto-approves ALL
+  65:   tools and `--plan` does not block writes (probed), so the allowlist
+  66:   is the load-bearing control and the per-round `Loaded tools:` check
+  67:   is its verification.
+  68: - WRITE-PROBE (before round 1 of every backup-lane debate): in a fresh
+  69:   disposable session with the exact debate configuration, ask the
+  70:   contained agent to create a named marker file. PASS requires all of: explicit refusal in the reply, marker absent on disk, mirror status delta empty (the status command above — a bare-porcelain probe would miss a marker written to an ignored path).
+  71:   Anything else means the lane is BROKEN (integrity failure class in
+  72:   fallbacks.md) — never dispatch a review over it.
+  73: 
+  74: ## Client config surface (read before round 1)
+  75: 
+  76: `~/.kimi/config.toml` is user-global and configures this lane's client.
+  77: Two keys are read and RECORDED in the debate record; neither is a stop,
+  78: and neither is observable from the per-round route evidence above.
+  79: 
+  80: - The effort override block for the canonical backup id,
+  81:   `[models."<canonical-backup-model-id>".overrides]`. Absent means the
+  82:   lane runs at PROVIDER DEFAULT with no verifiable effort evidence.
+  83:   The consent banner already declares effort to be config-validation
+  84:   only; this check is what makes that claim true rather than assumed.
+  85:   Probed 2026-07-26 (kimi-cli 1.49.0): the file carried ZERO
+  86:   `overrides` blocks — the model table for the canonical id exists but
+  87:   has no override sub-table — so the pin is not set. A single read of
+  88:   the current file cannot establish what the config held during earlier
+  89:   rounds. Record a round with no contemporaneous config evidence as
+  90:   having NO VERIFIED EFFORT PIN — not as provider-default: absence of
+  91:   evidence for an override establishes neither an override nor
+  92:   provider-default operation, and writing either into the record
+  93:   manufactures a fact the lane never observed.
+  94: - `merge_all_available_skills`, plus the SOURCES it merges from. The
+  95:   key is the same class of instruction back-channel as codex's
+  96:   repo-level `.agents/skills` advertisement (SKILL.md preflight 3), on
+  97:   this lane's side of the fence, and the key alone does not tell you
+  98:   whether anything is actually being merged — so enumerate the sources
+  99:   in the same breath: `extra_skill_dirs`, `~/.kimi/skills`,
+ 100:   `~/.kimi/agents`, and any repo-local skill directory. Probed
+ 101:   2026-07-26 (kimi-cli 1.49.0): the key was `true` at
+ 102:   `~/.kimi/config.toml:10` while `extra_skill_dirs` was empty and none
+ 103:   of those directories existed — a LATENT surface with nothing to
+ 104:   merge, not an active one. What the key does once those directories
+ 105:   are populated is UNVERIFIED; treat a true key with a NON-EMPTY
+ 106:   source as unprobed territory and say so in the record rather than
+ 107:   assuming the allowlist absorbs it. The standing mitigations are
+ 108:   unchanged: the mirror carries no `.agents/` once preflight
+ 109:   remediation has run, and the per-round `Loaded tools:` check is the
+ 110:   load-bearing control. Record key and sources together as an
+ 111:   environment note citing path and line, exactly like the primary
+ 112:   lane's `~/.codex/AGENTS.md` — never a finding.
+ 113: 
+ 114: A config file that cannot be read is itself the note: record that and
+ 115: proceed; do not infer either key's value.
+ 116: 
+ 117: ## Workspace isolation and the brief
+ 118: 
+ 119: - Reviews run in a THROWAWAY REVIEW MIRROR in the session scratchpad —
+ 120:   never the real tree.
+ 121: - The mirror is a FILE COPY of the working tree that PRESERVES `.git`, not
+ 122:   a `git clone`. This is not a preference: a clone carries TRACKED FILES ONLY,
+ 123:   and the review inputs are routinely gitignored — a project's frozen
+ 124:   plans under its docs dir, `References/` for port work. Probed live
+ 125:   2026-07-26 in KitnEssentials, where `dev/docs/` and `References/` are both gitignored:
+ 126:   a cloned workspace drops the frozen plan, the spec, AND the reference
+ 127:   source, handing the reviewer a tree with nothing to review while every
+ 128:   route and containment check stays green. `.git` rides along because the
+ 129:   containment check below is a git command.
+ 130: - SKILL.md preflight-3 remediation is performed HERE, in the mirror,
+ 131:   never in the real tree — see that section for the procedure and for
+ 132:   which cases need a commit inside the mirror.
+ 133: - The brief is written into the mirror as the untracked
+ 134:   `KIMI-REVIEW-BRIEF.md`; the `-p` pointer tells the reviewer to read
+ 135:   it (headless stdin does not carry the brief).
+ 136: - Any review input the mirror cannot inherit — a standards file living
+ 137:   above the repo root, an assignment PDF, a spec kept outside the tree —
+ 138:   is copied in deliberately and enumerated before the round. An input the
+ 139:   reviewer cannot read is a gap in the review, not a silent omission.
+ 140: - **THE STATUS COMMAND — `git status --porcelain --ignored -uall`, every
+ 141:   capture without exception** (baseline, per-round, and the write-probe
+ 142:   delta). The flags are load-bearing, not tidiness: bare
+ 143:   `git status --porcelain` OMITS ignored paths entirely and COLLAPSES an
+ 144:   untracked directory to a single entry. Probed 2026-07-26 in a scratch
+ 145:   repo with `ign/` gitignored — bare porcelain printed only `?? untr/`,
+ 146:   hiding both `ign/secret.txt` and the two files under `untr/sub/`,
+ 147:   while `--ignored -uall` printed all three. Ignored content is the
+ 148:   entire reason this workspace is a mirror, so a bare-porcelain check is
+ 149:   blind to precisely the class the mirror exists to carry: a contained
+ 150:   reviewer writing to any ignored path would not appear.
+ 151: - **BASELINE, captured after construction AND after any preflight-3 remediation, immediately before the brief is written**:
+ 152:   the status command above, in the mirror. A clone would have guaranteed
+ 153:   this empty; a file copy does NOT — the real tree's untracked files
+ 154:   and uncommitted modifications ride along, and without a baseline
+ 155:   every one of them quarantines every round of a review that never
+ 156:   touched them. Tracked modifications especially cannot be absorbed by
+ 157:   any "untracked set" wording. The timing is load-bearing: remediation
+ 158:   deletes entries and in the tracked case commits, so a baseline taken
+ 159:   before it fails every round of a remediated debate and pins a HEAD
+ 160:   the mirror no longer has — and remediation is precisely the procedure
+ 161:   the mirror exists to support.
+ 162: - What the check does and does not see, stated exactly: with the flags
+ 163:   above it detects any path that APPEARS IN OR DISAPPEARS FROM the
+ 164:   mirror, ignored and untracked paths included. It remains PATH-level,
+ 165:   so a path already present in the baseline shows the same entry however
+ 166:   its CONTENT changes. That residue is bounded by the tool allowlist and
+ 167:   the write-probe, which stay the load-bearing controls, and by the
+ 168:   content manifest below for the inputs that matter.
+ 169: - After every round, the status command in the mirror must equal the BASELINE plus exactly the expected untracked set — the brief plus any review inputs copied in, enumerated before the round — and nothing else; any other delta quarantines that round's reply (integrity failure class). Both halves are declared in advance, which is what keeps the check exact rather than adjudicated after the fact.
+ 170: - The mirror's identity in the debate record is its path, its
+ 171:   `git rev-parse HEAD`, its baseline, AND a CONTENT MANIFEST. HEAD binds
+ 172:   tracked content only, and in this lane the inputs that matter are
+ 173:   deliberately outside it, so without the manifest the record names what
+ 174:   was reviewed without being able to reconstruct it.
+ 175: - **The manifest, specified to be executable without judgment:**
+ 176:   - **Universe first**: the mirror's WORKTREE files, excluding the root
+ 177:     git administrative entry `.git` entirely (it may be a directory or,
+ 178:     in a worktree or submodule checkout, a file — exclude it either
+ 179:     way). The mirror preserves `.git` on purpose, and HEAD represents
+ 180:     none of its contents, so without this exclusion the coverage test
+ 181:     below would recursively hash repository metadata — objects, logs,
+ 182:     index, hooks, config — which is volatile, potentially enormous, and
+ 183:     identifies nothing about the reviewed material.
+ 184:   - **Coverage within that universe is exactly the paths the BASELINE
+ 185:     capture lists** — the same `--ignored -uall` output, so manifest and
+ 186:     baseline describe one tree state and cannot disagree. Those are, by
+ 187:     git's own reckoning, the files whose CURRENT worktree bytes HEAD
+ 188:     does not account for — untracked, ignored, or modified-relative-to-
+ 189:     HEAD (for a modified tracked file HEAD still binds its committed
+ 190:     content; what it does not bind is what the reviewer will actually
+ 191:     read). Do NOT
+ 192:     define coverage as "bytes differ from the HEAD blob": git applies
+ 193:     clean/smudge filters, so on a line-ending-normalizing checkout a
+ 194:     file git calls CLEAN is not byte-identical to its blob. Probed
+ 195:     2026-07-26 on this repo (`core.autocrlf=true`): `README.md` is
+ 196:     25843 bytes in the worktree and 25417 in the blob, reported clean by
+ 197:     `git status`; the byte rule classified 283 of 287 files as
+ 198:     manifest-worthy against a 122-entry baseline, degenerating to the
+ 199:     whole tree. Coverage by baseline admits the
+ 200:     copied-in inputs, the gitignored subject material (frozen plan,
+ 201:     spec, reference source), inherited untracked files whether ignored
+ 202:     or not, and any tracked file modified relative to HEAD (which mode
+ 203:     diff bars outright and other modes permit only with disclosure). An
+ 204:     enumerated list would omit a class; this cannot.
+ 205:   - **Directories expand RECURSIVELY to their files.** A directory
+ 206:     subject such as `References/` is never one manifest entry; a hash
+ 207:     over a directory name identifies nothing.
+ 208:   - **Entry format**: one line per file — the repo-relative path, a
+ 209:     single space, then the SHA-256 of the file's raw bytes as lowercase
+ 210:     hex. Fixing the separator and the encoding is what makes two
+ 211:     captures byte-comparable instead of merely equivalent.
+ 212:   - **Order**: sorted by path in byte order, so the manifest is
+ 213:     deterministic and two captures are diffable.
+ 214:   - **Captured at the same moment as the baseline** — after construction
+ 215:     and any preflight-3 remediation, immediately before the brief is
+
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command '$l=Get-Content '"'evals\\multi-model-verify\\test_backup_lane.py';for("'$i=75;$i -le 222;$i++){'"'{0,4}: {1}' -f "'$i,$l[$i-1]}' in C:\Users\Brandon\Documents\parallax
+ succeeded in 487ms:
+  75: def test_backup_files_no_backslash_paths():
+  76:     for p in (BACKUP_LANE, AGENT_YAML, SYSTEM_MD):
+  77:         assert "\\" not in _read(p), str(p)
+  78: 
+  79: 
+  80: def test_backup_lane_dispatch_and_resume_pins():
+  81:     body = _read(BACKUP_LANE)
+  82:     # the dispatch pin covers the COMPLETE command through -w and -p:
+  83:     # a dropped -w would dispatch the reviewer in the shell's cwd (the
+  84:     # same class the resume pin below guards), and a bare substring
+  85:     # check would stay green through it (final-review finding, 0.13.0)
+  86:     # 0.14.2 Kimi panel round 1: this pin used to stop at `-p`, and the
+  87:     # brief pointer was covered only by a position-free filename check
+  88:     # that the workspace section also satisfies - so deleting the -p
+  89:     # PAYLOAD from the dispatch line left both green. The payload is
+  90:     # load-bearing (headless stdin does not carry the brief), so the
+  91:     # pin now runs through it, same treatment `-w` already had.
+  92:     assert ("kimi --quiet --thinking -m <canonical-backup-model-id> "
+  93:             "--agent-file <plugin-checkout>/skills/multi-model-verify/"
+  94:             "references/kimi-reviewer-agent.yaml -w <review-mirror> "
+  95:             '-p "Read the file KIMI-REVIEW-BRIEF.md in this workspace '
+  96:             'and execute the review it describes."'
+  97:             ) in body
+  98:     # the re-pinned resume is load-bearing: bare -r restores full tools,
+  99:     # model/thinking inherit from CONFIG DEFAULTS, and -w does not
+ 100:     # inherit at all (a resume without it runs in the shell's cwd -
+ 101:     # caught live against the real tree).
+ 102:     # 0.14.2 Kimi panel round 2: this pin stopped at -w while its own
+ 103:     # comment claimed it covered the COMPLETE command - asserting
+ 104:     # completeness over a command it truncated. The resume payload is
+ 105:     # the same load-bearing class as the dispatch payload (headless
+ 106:     # stdin carries nothing), so the pin now runs through it.
+ 107:     assert ("kimi --quiet -r <session-id> --agent-file <same yaml> -m "
+ 108:             "<canonical-backup-model-id> --thinking -w <same mirror> "
+ 109:             '-p "<rebuttal>"') in body
+ 110:     assert "loads the DEFAULT agent with full write and shell tools" in body
+ 111:     assert BACKUP_ID not in body  # placeholder discipline
+ 112: 
+ 113: 
+ 114: def test_backup_lane_evidence_pins():
+ 115:     # normalized: these pins now span markdown wraps, and a re-wrap is
+ 116:     # not a semantic change (same reasoning as the write-probe pin)
+ 117:     body = _norm(BACKUP_LANE)
+ 118:     # 0.14.2 Kimi panel round 3 (instance 7, the worst of the class):
+ 119:     # the rule has two halves - capture the offset, then require the
+ 120:     # three lines PAST IT. Only the capture half was pinned, and
+ 121:     # "past that offset" appeared in no file under evals/ at all.
+ 122:     # Deleting it left every pin green while the check stopped
+ 123:     # attributing anything: kimi.log is a shared append stream, so
+ 124:     # without the offset the three lines can be satisfied by an earlier
+ 125:     # debate's entries - the exact route-attribution failure this rule
+ 126:     # exists to prevent.
+ 127:     assert ("capture the byte length of `~/.kimi/logs/kimi.log`; after "
+ 128:             "the call, past that offset") in body
+ 129:     assert ("exactly one new `Using LLM model:` line carrying the "
+ 130:             "canonical backup id") in body
+ 131:     assert "`Loading agent:` line naming the committed yaml" in body
+ 132:     assert "`Loaded tools:` line equal to the allowlist exactly" in body
+ 133:     assert "DISCARDED unread" in body
+ 134:     # 0.14.2 Kimi panel round 2 (4b): the three PASS conditions were
+ 135:     # pinned but the probe's CONFIGURATION FIDELITY was not - a probe
+ 136:     # run under a stricter config than the debate's would pass while
+ 137:     # the real debate config could still write. That is a silent
+ 138:     # weakening in the dangerous direction, so the clause is pinned.
+ 139:     # normalized, not raw: a pure re-wrap of this bullet is not a
+ 140:     # semantic change and should not false-red the pin
+ 141:     assert ("in a fresh disposable session with the exact debate "
+ 142:             "configuration") in body
+ 143:     assert ("explicit refusal in the reply, marker absent on disk, "
+ 144:             "mirror status delta empty") in body
+ 145:     assert "Never run `kimi export` inside a repo" in body
+ 146: 
+ 147: 
+ 148: def test_backup_lane_workspace_is_a_mirror_not_a_clone():
+ 149:     # 0.14.2, found live 2026-07-26 (KitnEssentials): the lane's
+ 150:     # workspace was specified as a `git clone`, which carries TRACKED
+ 151:     # FILES ONLY - and the review inputs are routinely gitignored (the
+ 152:     # frozen plan under a project's docs dir, References/ for port
+ 153:     # work). A cloned workspace hands the reviewer a tree with nothing
+ 154:     # to review while every route and containment check stays green.
+ 155:     body = _norm(BACKUP_LANE)
+ 156:     assert "THROWAWAY REVIEW MIRROR" in body
+ 157:     assert ("a FILE COPY of the working tree that PRESERVES `.git`, not "
+ 158:             "a `git clone`") in body
+ 159:     assert "a clone carries TRACKED FILES ONLY" in body
+ 160:     # the failure is named concretely, not left as an abstraction
+ 161:     assert "`dev/docs/` and `References/` are both gitignored" in body
+ 162:     # inputs the mirror cannot inherit are copied in DELIBERATELY and
+ 163:     # enumerated - the containment rule keys off a declared set, so an
+ 164:     # unexpected delta still quarantines
+ 165:     assert ("must equal the BASELINE plus exactly the expected untracked "
+ 166:             "set — the brief plus any review inputs copied in, "
+ 167:             "enumerated before the round — and nothing else") in body
+ 168:     # 0.14.2 Sol round 1, F2/F5: bare porcelain OMITS ignored paths and
+ 169:     # COLLAPSES untracked directories, and ignored content is the whole
+ 170:     # reason this workspace is a mirror - so the flags are the check,
+ 171:     # not decoration. Probed: bare printed only "?? untr/".
+ 172:     assert "`git status --porcelain --ignored -uall`, every" in body
+ 173:     assert ("bare `git status --porcelain` OMITS ignored paths entirely "
+ 174:             "and COLLAPSES an untracked directory to a single entry") in body
+ 175:     assert ("a contained reviewer writing to any ignored path would not "
+ 176:             "appear") in body
+ 177:     # F4: HEAD binds tracked content only, and this lane's inputs are
+ 178:     # deliberately outside it - so identity carries a content manifest
+ 179:     # 0.14.2 Sol round 2, F4 held at FIX: naming a manifest is not
+ 180:     # specifying one. The pin must constrain coverage, recursion,
+ 181:     # ordering, and capture point - otherwise "content manifest" as a
+ 182:     # phrase satisfies it while a driver cannot execute it.
+ 183:     assert "AND a CONTENT MANIFEST" in body
+ 184:     # 0.14.2 Sol round 3: the mirror preserves .git by design and HEAD
+ 185:     # represents none of it, so the coverage test literally swept
+ 186:     # repository metadata - objects, logs, index, hooks. The universe
+ 187:     # must exclude .git, as a file OR a directory (worktree/submodule
+ 188:     # checkouts make it a file).
+ 189:     assert ("excluding the root git administrative entry `.git` entirely"
+ 190:             in body)
+ 191:     assert ("it may be a directory or, in a worktree or submodule "
+ 192:             "checkout, a file — exclude it either way") in body
+ 193:     # coverage is git's own reckoning, not a raw-byte comparison:
+ 194:     # found by EXECUTING this contract 2026-07-26 - with
+ 195:     # core.autocrlf=true a file git calls clean is not byte-identical
+ 196:     # to its blob, and the byte rule ballooned to 283/287 files against
+ 197:     # a 122-entry baseline
+ 198:     assert ("Coverage within that universe is exactly the paths the "
+ 199:             "BASELINE capture lists") in body
+ 200:     assert ('Do NOT define coverage as "bytes differ from the HEAD blob"'
+ 201:             in body)
+ 202:     assert ("git applies clean/smudge filters" in body)
+ 203:     # the classes an enumerated list would have dropped
+ 204:     assert ("inherited untracked files whether ignored or not" in body)
+ 205:     assert ("any tracked file modified relative to HEAD" in body)
+ 206:     # recursion, format, order, timing
+ 207:     assert "Directories expand RECURSIVELY to their files" in body
+ 208:     # separator and encoding are pinned too: without them two captures
+ 209:     # are equivalent but not byte-comparable
+ 210:     assert ("the repo-relative path, a single space, then the SHA-256 of "
+ 211:             "the file's raw bytes as lowercase hex") in body
+ 212:     assert "sorted by path in byte order" in body
+ 213:     assert ("Captured at the same moment as the baseline" in body)
+ 214:     # F8: absence of an override pin proves neither an override nor
+ 215:     # provider-default; the record must not manufacture either
+ 216:     assert ("Record a round with no contemporaneous config evidence as "
+ 217:             "having NO VERIFIED EFFORT PIN") in body
+ 218:     assert ("establishes neither an override nor provider-default "
+ 219:             "operation") in body
+ 220:     assert "is a gap in the review, not a silent omission" in body
+ 221: 
+ 222: 
+
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command 'git diff --unified=18 a621c42329b7fc2de14d003e8e3f483e3e695fca..HEAD -- skills/multi-model-verify/references/backup-lane.md evals/multi-model-verify/test_backup_lane.py' in C:\Users\Brandon\Documents\parallax
+ succeeded in 377ms:
+diff --git a/evals/multi-model-verify/test_backup_lane.py b/evals/multi-model-verify/test_backup_lane.py
+index 0e18199..7ac7775 100644
+--- a/evals/multi-model-verify/test_backup_lane.py
++++ b/evals/multi-model-verify/test_backup_lane.py
+@@ -68,61 +68,93 @@ def test_agent_yaml_allowlist_exact():
+     tools = re.findall(r'-\s+"([^"]+)"', yaml_text)
+     assert tools == ALLOWLIST
+     for marker in FORBIDDEN_TOOL_MARKERS:
+         assert marker not in yaml_text, marker
+     assert "system_prompt_path: ./kimi-reviewer-system.md" in yaml_text
+ 
+ 
+ def test_backup_files_no_backslash_paths():
+     for p in (BACKUP_LANE, AGENT_YAML, SYSTEM_MD):
+         assert "\\" not in _read(p), str(p)
+ 
+ 
+ def test_backup_lane_dispatch_and_resume_pins():
+     body = _read(BACKUP_LANE)
+     # the dispatch pin covers the COMPLETE command through -w and -p:
+     # a dropped -w would dispatch the reviewer in the shell's cwd (the
+     # same class the resume pin below guards), and a bare substring
+     # check would stay green through it (final-review finding, 0.13.0)
++    # 0.14.2 Kimi panel round 1: this pin used to stop at `-p`, and the
++    # brief pointer was covered only by a position-free filename check
++    # that the workspace section also satisfies - so deleting the -p
++    # PAYLOAD from the dispatch line left both green. The payload is
++    # load-bearing (headless stdin does not carry the brief), so the
++    # pin now runs through it, same treatment `-w` already had.
+     assert ("kimi --quiet --thinking -m <canonical-backup-model-id> "
+             "--agent-file <plugin-checkout>/skills/multi-model-verify/"
+-            "references/kimi-reviewer-agent.yaml -w <review-mirror> -p"
++            "references/kimi-reviewer-agent.yaml -w <review-mirror> "
++            '-p "Read the file KIMI-REVIEW-BRIEF.md in this workspace '
++            'and execute the review it describes."'
+             ) in body
+-    assert "KIMI-REVIEW-BRIEF.md" in body
+     # the re-pinned resume is load-bearing: bare -r restores full tools,
+     # model/thinking inherit from CONFIG DEFAULTS, and -w does not
+     # inherit at all (a resume without it runs in the shell's cwd -
+-    # caught live against the real tree), so the pin covers the
+-    # COMPLETE resumed command through -w
++    # caught live against the real tree).
++    # 0.14.2 Kimi panel round 2: this pin stopped at -w while its own
++    # comment claimed it covered the COMPLETE command - asserting
++    # completeness over a command it truncated. The resume payload is
++    # the same load-bearing class as the dispatch payload (headless
++    # stdin carries nothing), so the pin now runs through it.
+     assert ("kimi --quiet -r <session-id> --agent-file <same yaml> -m "
+-            "<canonical-backup-model-id> --thinking -w <same mirror>"
+-            ) in body
++            "<canonical-backup-model-id> --thinking -w <same mirror> "
++            '-p "<rebuttal>"') in body
+     assert "loads the DEFAULT agent with full write and shell tools" in body
+     assert BACKUP_ID not in body  # placeholder discipline
+ 
+ 
+ def test_backup_lane_evidence_pins():
+-    body = _read(BACKUP_LANE)
+-    assert "capture the byte length of" in body
++    # normalized: these pins now span markdown wraps, and a re-wrap is
++    # not a semantic change (same reasoning as the write-probe pin)
++    body = _norm(BACKUP_LANE)
++    # 0.14.2 Kimi panel round 3 (instance 7, the worst of the class):
++    # the rule has two halves - capture the offset, then require the
++    # three lines PAST IT. Only the capture half was pinned, and
++    # "past that offset" appeared in no file under evals/ at all.
++    # Deleting it left every pin green while the check stopped
++    # attributing anything: kimi.log is a shared append stream, so
++    # without the offset the three lines can be satisfied by an earlier
++    # debate's entries - the exact route-attribution failure this rule
++    # exists to prevent.
++    assert ("capture the byte length of `~/.kimi/logs/kimi.log`; after "
++            "the call, past that offset") in body
+     assert ("exactly one new `Using LLM model:` line carrying the "
+             "canonical backup id") in body
+     assert "`Loading agent:` line naming the committed yaml" in body
+     assert "`Loaded tools:` line equal to the allowlist exactly" in body
+     assert "DISCARDED unread" in body
++    # 0.14.2 Kimi panel round 2 (4b): the three PASS conditions were
++    # pinned but the probe's CONFIGURATION FIDELITY was not - a probe
++    # run under a stricter config than the debate's would pass while
++    # the real debate config could still write. That is a silent
++    # weakening in the dangerous direction, so the clause is pinned.
++    # normalized, not raw: a pure re-wrap of this bullet is not a
++    # semantic change and should not false-red the pin
++    assert ("in a fresh disposable session with the exact debate "
++            "configuration") in body
+     assert ("explicit refusal in the reply, marker absent on disk, "
+             "mirror status delta empty") in body
+     assert "Never run `kimi export` inside a repo" in body
+ 
+ 
+ def test_backup_lane_workspace_is_a_mirror_not_a_clone():
+     # 0.14.2, found live 2026-07-26 (KitnEssentials): the lane's
+     # workspace was specified as a `git clone`, which carries TRACKED
+     # FILES ONLY - and the review inputs are routinely gitignored (the
+     # frozen plan under a project's docs dir, References/ for port
+     # work). A cloned workspace hands the reviewer a tree with nothing
+     # to review while every route and containment check stays green.
+     body = _norm(BACKUP_LANE)
+     assert "THROWAWAY REVIEW MIRROR" in body
+     assert ("a FILE COPY of the working tree that PRESERVES `.git`, not "
+             "a `git clone`") in body
+     assert "a clone carries TRACKED FILES ONLY" in body
+     # the failure is named concretely, not left as an abstraction
+@@ -143,48 +175,55 @@ def test_backup_lane_workspace_is_a_mirror_not_a_clone():
+     assert ("a contained reviewer writing to any ignored path would not "
+             "appear") in body
+     # F4: HEAD binds tracked content only, and this lane's inputs are
+     # deliberately outside it - so identity carries a content manifest
+     # 0.14.2 Sol round 2, F4 held at FIX: naming a manifest is not
+     # specifying one. The pin must constrain coverage, recursion,
+     # ordering, and capture point - otherwise "content manifest" as a
+     # phrase satisfies it while a driver cannot execute it.
+     assert "AND a CONTENT MANIFEST" in body
+     # 0.14.2 Sol round 3: the mirror preserves .git by design and HEAD
+     # represents none of it, so the coverage test literally swept
+     # repository metadata - objects, logs, index, hooks. The universe
+     # must exclude .git, as a file OR a directory (worktree/submodule
+     # checkouts make it a file).
+     assert ("excluding the root git administrative entry `.git` entirely"
+             in body)
+     assert ("it may be a directory or, in a worktree or submodule "
+             "checkout, a file — exclude it either way") in body
+-    # coverage by exclusion test, so no file class can be omitted
+-    assert ("Coverage within that universe is one exclusion test, never "
+-            "an enumerated list") in body
+-    assert ("every file whose bytes are not identical to its HEAD blob, "
+-            "plus every file HEAD has no blob for") in body
++    # coverage is git's own reckoning, not a raw-byte comparison:
++    # found by EXECUTING this contract 2026-07-26 - with
++    # core.autocrlf=true a file git calls clean is not byte-identical
++    # to its blob, and the byte rule ballooned to 283/287 files against
++    # a 122-entry baseline
++    assert ("Coverage within that universe is exactly the paths the "
++            "BASELINE capture lists") in body
++    assert ('Do NOT define coverage as "bytes differ from the HEAD blob"'
++            in body)
++    assert ("git applies clean/smudge filters" in body)
+     # the classes an enumerated list would have dropped
+     assert ("inherited untracked files whether ignored or not" in body)
+     assert ("any tracked file modified relative to HEAD" in body)
+     # recursion, format, order, timing
+     assert "Directories expand RECURSIVELY to their files" in body
+-    assert ("repo-relative path plus the SHA-256 of the file's raw bytes"
+-            in body)
++    # separator and encoding are pinned too: without them two captures
++    # are equivalent but not byte-comparable
++    assert ("the repo-relative path, a single space, then the SHA-256 of "
++            "the file's raw bytes as lowercase hex") in body
+     assert "sorted by path in byte order" in body
+     assert ("Captured at the same moment as the baseline" in body)
+     # F8: absence of an override pin proves neither an override nor
+     # provider-default; the record must not manufacture either
+     assert ("Record a round with no contemporaneous config evidence as "
+             "having NO VERIFIED EFFORT PIN") in body
+     assert ("establishes neither an override nor provider-default "
+             "operation") in body
+     assert "is a gap in the review, not a silent omission" in body
+ 
+ 
+ def test_mirror_baseline_closes_the_dirty_tree_hole():
+     # 0.14.2 whole-branch review, Important 1: a clone guaranteed an
+     # empty porcelain; a file copy does not. Without a baseline, the
+     # real tree's untracked files and uncommitted modifications ride
+     # into the mirror and quarantine every round of a review that never
+     # touched them - and a tracked modification can never be absorbed
+     # by any "untracked set" wording.
+@@ -246,36 +285,43 @@ def test_backup_lane_eval_case_matches_the_mirror_contract():
+     assert ("equals that baseline plus exactly KIMI-REVIEW-BRIEF.md and "
+             "any enumerated copied-in review inputs") in joined
+ 
+ 
+ def test_backup_lane_client_config_sweep():
+     # 0.14.2: the primary lane was hardened against instruction
+     # back-channels (SKILL.md preflight 3) while the backup lane's own
+     # client config was never swept. Both keys are recorded, neither
+     # is a stop - and neither is observable from the route evidence.
+     body = _norm(BACKUP_LANE)
+     assert "## Client config surface" in body
+     assert '`[models."<canonical-backup-model-id>".overrides]`' in body
+     assert "runs at PROVIDER DEFAULT with no verifiable effort evidence" in body
+     assert "`merge_all_available_skills`" in body
+     assert ("the same class of instruction back-channel as codex's "
+             "repo-level `.agents/skills` advertisement") in body
+     assert "never a finding" in body
+     assert "do not infer either key's value" in body
++    # instance 8, same shape at lower severity: the comment claims both
++    # keys are RECORDED, but only the disposition half was pinned.
++    # Dropping "and RECORDED" leaves a driver reading the keys and
++    # discarding them, which defeats the section's own justification -
++    # the check is what makes the effort claim true rather than assumed,
++    # and that only holds if the read reaches the record.
++    assert "read and RECORDED in the debate record" in body
+     # the key alone is not the surface - a true key over empty sources
+     # merges nothing, so the check reads key AND sources together
+     # (probed 2026-07-26: true key, every source absent = LATENT)
+     assert "plus the SOURCES it merges from" in body
+     assert "`extra_skill_dirs`" in body
+     assert "a LATENT surface with nothing to merge, not an active one" in body
+     # the populated-source case is honestly marked unprobed rather than
+     # waved through on the tool allowlist
+     assert ("treat a true key with a NON-EMPTY source as unprobed "
+             "territory") in body
+ 
+ 
+ def test_skill_preflight_names_the_remediation():
+     # 0.14.2: preflight 3 said STOP and never said how to clear it.
+     # The tracked/ignored branch is the part that misreads as a bug:
+     # deleting an IGNORED back-channel leaves HEAD untouched and
+     # `nothing to commit`, which looks like a failed remediation and
+     # is in fact the correct one (both observed 2026-07-26).
+diff --git a/skills/multi-model-verify/references/backup-lane.md b/skills/multi-model-verify/references/backup-lane.md
+index 6443ebd..5dfa58f 100644
+--- a/skills/multi-model-verify/references/backup-lane.md
++++ b/skills/multi-model-verify/references/backup-lane.md
+@@ -166,51 +166,64 @@ proceed; do not infer either key's value.
+   its CONTENT changes. That residue is bounded by the tool allowlist and
+   the write-probe, which stay the load-bearing controls, and by the
+   content manifest below for the inputs that matter.
+ - After every round, the status command in the mirror must equal the BASELINE plus exactly the expected untracked set — the brief plus any review inputs copied in, enumerated before the round — and nothing else; any other delta quarantines that round's reply (integrity failure class). Both halves are declared in advance, which is what keeps the check exact rather than adjudicated after the fact.
+ - The mirror's identity in the debate record is its path, its
+   `git rev-parse HEAD`, its baseline, AND a CONTENT MANIFEST. HEAD binds
+   tracked content only, and in this lane the inputs that matter are
+   deliberately outside it, so without the manifest the record names what
+   was reviewed without being able to reconstruct it.
+ - **The manifest, specified to be executable without judgment:**
+   - **Universe first**: the mirror's WORKTREE files, excluding the root
+     git administrative entry `.git` entirely (it may be a directory or,
+     in a worktree or submodule checkout, a file — exclude it either
+     way). The mirror preserves `.git` on purpose, and HEAD represents
+     none of its contents, so without this exclusion the coverage test
+     below would recursively hash repository metadata — objects, logs,
+     index, hooks, config — which is volatile, potentially enormous, and
+     identifies nothing about the reviewed material.
+-  - **Coverage within that universe is one exclusion test, never an
+-    enumerated list**: every FILE present in the mirror that HEAD does
+-    not already bind — i.e.
+-    every file whose bytes are not identical to its HEAD blob, plus
+-    every file HEAD has no blob for. That single rule admits the
++  - **Coverage within that universe is exactly the paths the BASELINE
++    capture lists** — the same `--ignored -uall` output, so manifest and
++    baseline describe one tree state and cannot disagree. Those are, by
++    git's own reckoning, the files whose CURRENT worktree bytes HEAD
++    does not account for — untracked, ignored, or modified-relative-to-
++    HEAD (for a modified tracked file HEAD still binds its committed
++    content; what it does not bind is what the reviewer will actually
++    read). Do NOT
++    define coverage as "bytes differ from the HEAD blob": git applies
++    clean/smudge filters, so on a line-ending-normalizing checkout a
++    file git calls CLEAN is not byte-identical to its blob. Probed
++    2026-07-26 on this repo (`core.autocrlf=true`): `README.md` is
++    25843 bytes in the worktree and 25417 in the blob, reported clean by
++    `git status`; the byte rule classified 283 of 287 files as
++    manifest-worthy against a 122-entry baseline, degenerating to the
++    whole tree. Coverage by baseline admits the
+     copied-in inputs, the gitignored subject material (frozen plan,
+     spec, reference source), inherited untracked files whether ignored
+     or not, and any tracked file modified relative to HEAD (which mode
+     diff bars outright and other modes permit only with disclosure). An
+     enumerated list would omit a class; this cannot.
+   - **Directories expand RECURSIVELY to their files.** A directory
+     subject such as `References/` is never one manifest entry; a hash
+     over a directory name identifies nothing.
+-  - **Entry format**: one line per file, repo-relative path plus the
+-    SHA-256 of the file's raw bytes.
++  - **Entry format**: one line per file — the repo-relative path, a
++    single space, then the SHA-256 of the file's raw bytes as lowercase
++    hex. Fixing the separator and the encoding is what makes two
++    captures byte-comparable instead of merely equivalent.
+   - **Order**: sorted by path in byte order, so the manifest is
+     deterministic and two captures are diffable.
+   - **Captured at the same moment as the baseline** — after construction
+     and any preflight-3 remediation, immediately before the brief is
+     written — so the two describe the same tree state. The brief itself
+     is written after both and is therefore not in either.
+ - If the baseline contains TRACKED modifications the reviewed content is
+   not the committed range: disclose that in the record, and in mode diff
+   take the mirror from a tree whose tracked files are clean instead.
+ - The brief is retained as evidence per the raw-rounds convention.
+ - Never run `kimi export` inside a repo — it writes a session zip into the current directory; export only from a scratch directory. Nothing in this lane uses export.
+ 
+ ## Failure handling
+ 
+ All failure classes, retries, and consent-gate dispositions live in
+ fallbacks.md (the single failure-class namespace) — this file defines
+ none of its own. Record fields for a substituted debate live in
+ frozen-plan-format.md.
+
+codex
+The new command/evidence pins do close the exact truncation/deletion cases described. One manifest edge remains under active attack: porcelain baselines also list deletion-only tracked paths, but those paths have no current bytes to hash. I’m checking the adjacent dirty-tracked rule and pin before deciding whether this is a terminal FIX.
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command '$l=Get-Content '"'skills\\multi-model-verify\\references\\backup-lane.md';for("'$i=184;$i -le 225;$i++){'"'{0,4}: {1}' -f "'$i,$l[$i-1]}' in C:\Users\Brandon\Documents\parallax
+ succeeded in 492ms:
+ 184:   - **Coverage within that universe is exactly the paths the BASELINE
+ 185:     capture lists** — the same `--ignored -uall` output, so manifest and
+ 186:     baseline describe one tree state and cannot disagree. Those are, by
+ 187:     git's own reckoning, the files whose CURRENT worktree bytes HEAD
+ 188:     does not account for — untracked, ignored, or modified-relative-to-
+ 189:     HEAD (for a modified tracked file HEAD still binds its committed
+ 190:     content; what it does not bind is what the reviewer will actually
+ 191:     read). Do NOT
+ 192:     define coverage as "bytes differ from the HEAD blob": git applies
+ 193:     clean/smudge filters, so on a line-ending-normalizing checkout a
+ 194:     file git calls CLEAN is not byte-identical to its blob. Probed
+ 195:     2026-07-26 on this repo (`core.autocrlf=true`): `README.md` is
+ 196:     25843 bytes in the worktree and 25417 in the blob, reported clean by
+ 197:     `git status`; the byte rule classified 283 of 287 files as
+ 198:     manifest-worthy against a 122-entry baseline, degenerating to the
+ 199:     whole tree. Coverage by baseline admits the
+ 200:     copied-in inputs, the gitignored subject material (frozen plan,
+ 201:     spec, reference source), inherited untracked files whether ignored
+ 202:     or not, and any tracked file modified relative to HEAD (which mode
+ 203:     diff bars outright and other modes permit only with disclosure). An
+ 204:     enumerated list would omit a class; this cannot.
+ 205:   - **Directories expand RECURSIVELY to their files.** A directory
+ 206:     subject such as `References/` is never one manifest entry; a hash
+ 207:     over a directory name identifies nothing.
+ 208:   - **Entry format**: one line per file — the repo-relative path, a
+ 209:     single space, then the SHA-256 of the file's raw bytes as lowercase
+ 210:     hex. Fixing the separator and the encoding is what makes two
+ 211:     captures byte-comparable instead of merely equivalent.
+ 212:   - **Order**: sorted by path in byte order, so the manifest is
+ 213:     deterministic and two captures are diffable.
+ 214:   - **Captured at the same moment as the baseline** — after construction
+ 215:     and any preflight-3 remediation, immediately before the brief is
+ 216:     written — so the two describe the same tree state. The brief itself
+ 217:     is written after both and is therefore not in either.
+ 218: - If the baseline contains TRACKED modifications the reviewed content is
+ 219:   not the committed range: disclose that in the record, and in mode diff
+ 220:   take the mirror from a tree whose tracked files are clean instead.
+ 221: - The brief is retained as evidence per the raw-rounds convention.
+ 222: - Never run `kimi export` inside a repo — it writes a session zip into the current directory; export only from a scratch directory. Nothing in this lane uses export.
+ 223: 
+ 224: ## Failure handling
+ 225: 
+
+codex
+1. Manifest coverage
+
+The baseline-based rule correctly eliminates the `core.autocrlf` false positives and covers ignored, untracked, and modified tracked entries (`skills/multi-model-verify/references/backup-lane.md:184-204`).
+
+But it is not executable for tracked deletions. The baseline can list ` D path`, while the manifest requires exactly those paths and a SHA-256 of each file’s current raw bytes; a deleted path has no file or bytes (`backup-lane.md:184-190,205-210`). Other modes explicitly permit tracked modifications with disclosure, so mode diff’s clean-tree requirement does not remove this case (`backup-lane.md:218-220`).
+
+Verdict: FIX — define coverage as currently present worktree files represented by baseline entries; omit deletion-only paths because HEAD plus the baseline already binds their absence. For rename/copy entries, explicitly hash the current destination path. Pin both mappings.
+
+2. Pin-integrity fixes
+
+The dispatch and resume pins now cover their complete `-p` payloads (`evals/multi-model-verify/test_backup_lane.py:80-111`). The evidence pin couples offset capture to inspection past that offset and pins write-probe configuration fidelity (`test_backup_lane.py:114-145`). The config sweep now pins the recording imperative (`test_backup_lane.py:289-319`). These exact weakening cases are closed.
+
+Verdict: PASS.
+
+OVERALL VERDICT: FIX — range `c73ca2f..e719634` still has one executable-contract defect: deletion-only baseline entries cannot produce the required content-manifest hash.
+tokens used
+255,440
+1. Manifest coverage
+
+The baseline-based rule correctly eliminates the `core.autocrlf` false positives and covers ignored, untracked, and modified tracked entries (`skills/multi-model-verify/references/backup-lane.md:184-204`).
+
+But it is not executable for tracked deletions. The baseline can list ` D path`, while the manifest requires exactly those paths and a SHA-256 of each file’s current raw bytes; a deleted path has no file or bytes (`backup-lane.md:184-190,205-210`). Other modes explicitly permit tracked modifications with disclosure, so mode diff’s clean-tree requirement does not remove this case (`backup-lane.md:218-220`).
+
+Verdict: FIX — define coverage as currently present worktree files represented by baseline entries; omit deletion-only paths because HEAD plus the baseline already binds their absence. For rename/copy entries, explicitly hash the current destination path. Pin both mappings.
+
+2. Pin-integrity fixes
+
+The dispatch and resume pins now cover their complete `-p` payloads (`evals/multi-model-verify/test_backup_lane.py:80-111`). The evidence pin couples offset capture to inspection past that offset and pins write-probe configuration fidelity (`test_backup_lane.py:114-145`). The config sweep now pins the recording imperative (`test_backup_lane.py:289-319`). These exact weakening cases are closed.
+
+Verdict: PASS.
+
+OVERALL VERDICT: FIX — range `c73ca2f..e719634` still has one executable-contract defect: deletion-only baseline entries cannot produce the required content-manifest hash.

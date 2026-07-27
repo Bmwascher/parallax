@@ -1,0 +1,130 @@
+GATE OUTPUT - parallax 0.14.4
+Committed head under test: f5ed873d32a537effb58bda80935eeef811ebd99
+Tracked worktree vs HEAD: CLEAN (verified immediately before this run, so these gates ran on exactly the committed bytes)
+Captured: 2026-07-27
+NOTE: the commit that ADDS this artifact is docs-only and touches no
+      file any gate reads, so it cannot change these results.
+
+=== 1/5  python evals/tools/skill_lint.py skills/multi-model-verify --strict ===
+Linting C:\Users\Brandon\Documents\parallax\skills\multi-model-verify (strict=on)
+  PASS — 0 error(s), 0 warning(s)
+exit=0
+
+=== 2/5  python evals/tools/skill_scanner.py skills ===
+agent-skill security scan v1.0.0 — 1 skill(s) under skills
+
+=== multi-model-verify (skills\multi-model-verify) ===
+  clean — no findings
+
+Summary: 0 CRITICAL, 0 WARN, 0 INFO
+Verdict guidance: no pattern hits. Still read SKILL.md end-to-end — natural-language attacks evade pattern scanners (OWASP AST08).
+exit=0
+
+=== 3/5  python evals/tools/run_trigger_evals.py ===
+PASS  multi-model-verify: 5 positives clear 5 near-misses (weakest 0.32 vs strongest 0.00)
+
+trigger & routing: all clear (1 skill)
+exit=0
+
+=== 4/5  python -m pytest evals -q ===
+........................................................................ [ 42%]
+........................................................................ [ 84%]
+................s..........                                              [100%]
+170 passed, 1 skipped in 29.57s
+exit=0
+
+=== 5/5  pwsh evals/tools/drift_statemachine_tests.ps1 (required: tools/check-drift.ps1 changed) ===
+
+SCENARIO carry-forward
+  ok   exit code 1 on findings
+  ok   claude probe failure is CRITICAL
+  ok   failed probe carries last known claude version forward
+  ok   pending: manual-triage-needed
+  ok   manual CRITICAL toast fired
+
+SCENARIO blocked-verdict
+  ok   BLOCKED falls to the manual path
+  ok   unresolved prior run re-toasted
+  ok   old pending entry kept, new one appended
+
+SCENARIO no-verdict
+  ok   verdict-less run is not trusted
+  ok   pending: manual-triage-needed
+
+SCENARIO critical-dismissal
+  ok   trusted NO-ACTION recorded
+  ok   CRITICAL dismissal demands verification
+  ok   manual toast suppressed on trusted dismissal
+  ok   pending: critical-dismissal-needs-verification
+
+SCENARIO warn-only-silence
+  ok   template hash drift is a WARN
+  ok   no CRITICAL finding in this run
+  ok   trusted NO-ACTION recorded
+  ok   WARN-only dismissal is SILENT - no toast at all
+  ok   WARN-only dismissal leaves no pending entry
+
+SCENARIO pending-auto-clear
+  ok   vanished fix branch clears its pending entry
+  ok   no unresolved re-toast after the auto-clear
+  ok   only this run's new entry remains
+
+SCENARIO fixes-applied
+  ok   fix committed on a drift branch
+  ok   script-side cross-review verdict recorded
+  ok   fix-ready toast fired
+  ok   pending: fix-branch-open
+  ok   fix branch exists with the verified commit
+
+SCENARIO gate-failure
+  ok   a fix that breaks the suite is rejected by the script's own gate
+  ok   no commit claim on a failed gate
+  ok   no success toast on a failed gate
+  ok   manual toast on a failed gate
+  ok   no drift branch survives a failed gate
+  ok   pending: manual-triage-needed
+
+SCENARIO malformed-review
+  ok   the verified fix still commits
+  ok   off-grammar review reads as UNAVAILABLE
+  ok   an off-grammar answer is never reported as a reviewer verdict
+  ok   the toast carries the UNAVAILABLE state, not silence
+
+SCENARIO commit-failure
+  ok   failed commit is reported and discarded
+  ok   manual toast on commit failure
+  ok   pending: manual-triage-needed
+  ok   no orphan drift branch survives a failed commit
+
+SCENARIO route-mismatch
+  ok   the verified fix still commits
+  ok   header/canonical disagreement is reported as a route mismatch
+  ok   route mismatch reads as UNAVAILABLE
+  ok   a mismatched route is never reported as a reviewer verdict
+
+SCENARIO auth-preflight-fail
+  ok   the verified fix still commits
+  ok   failed preflight records the auth reason
+  ok   no reviewer verdict without a passed preflight
+
+SCENARIO kimi-flag-drift
+  ok   flag drop raises the agent-file drift finding
+  ok   vocabulary probe stays quiet on a flag-only drop
+
+SCENARIO kimi-short-flag-drift
+  ok   token-boundary probe catches a dropped short flag despite --model remaining
+
+SCENARIO kimi-vocab-drift
+  ok   import failure raises the vocabulary drift finding
+
+SCENARIO kimi-version-carry
+  ok   failed kimi probe carries the last known-good version forward
+  ok   skip note is emitted instead of a cascade
+
+SCENARIO triage-timeout
+  ok   hung agent killed at the cap
+  ok   manual toast after the timeout
+  ok   pending: manual-triage-needed
+
+ALL SCENARIOS PASS
+exit=0

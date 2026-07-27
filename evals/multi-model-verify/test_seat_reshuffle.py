@@ -17,6 +17,16 @@ def _read(p):
     return p.read_text(encoding="utf-8")
 
 
+def _norm(p):
+    """Whitespace-normalized read, for pins that span a markdown wrap.
+
+    Same convention as test_backup_lane.py. A pin that must lock a whole
+    operative sentence cannot be held hostage to where the paragraph
+    happens to wrap - reflowing a file is not a contract change.
+    """
+    return " ".join(_read(p).split())
+
+
 def _frontmatter(text):
     m = re.match(r"---\n(.*?)\n---\n", text, re.DOTALL)
     assert m, "frontmatter block missing"
@@ -49,6 +59,25 @@ def test_fable_panel_reviewer_exists_and_pins():
     assert "the resume surface carries no model parameter" in body
     assert "probed 2026-07-26" in body
     assert "cite the subject revision" in body
+    # 0.14.4 drift triage: the resume property is HARNESS-VERSION
+    # DEPENDENT, not a platform invariant. Before Claude Code 2.1.216 a
+    # resumed background agent silently reverted to the DEFAULT agent,
+    # losing the model pin, this system prompt, AND the read-only tool
+    # restriction - the exact containment the lane's evidence class
+    # rests on. Both probes ran on 2.1.220, after the fix, so the
+    # unqualified wording read as a platform guarantee. The floor must
+    # travel with the claim.
+    assert "Claude Code 2.1.216" in body
+    assert "silently reverted to the default agent" in body
+    # 0.14.4 fable review I1: the two pins above lock the DESCRIPTION of
+    # the hazard. The operative half - that the driver checks the version
+    # and that the lane is unavailable rather than degraded below the
+    # floor - deleted green. Pin-integrity instance twelve, and once
+    # again inside a fix for an overclaim.
+    nbody = _norm(p)
+    assert ("checks `claude --version` against the floor before "
+            "dispatching this seat") in nbody
+    assert "unavailable rather than degraded" in nbody
 
 
 def test_escalation_implementer_exists_and_pins():
@@ -89,6 +118,28 @@ def test_panels_reference_pins():
             "subject revision; a verdict against a stale revision is "
             "input, never terminal.") in body
     assert "hub-and-spoke" in body
+    # 0.14.4 drift triage: panels.md states the Fable lane's failure
+    # mode as "agent death, which is loud". That is true only at or
+    # above the floor - below it the lane had a SILENT failure mode
+    # that defeats the pin and the allowlist together, so the floor
+    # belongs next to the claim it qualifies, not only in the agent file.
+    #
+    # 0.14.4 fable review I1: "Claude Code 2.1.216" occurs TWICE here -
+    # the floor header and the changelog citation - so on its own it does
+    # not even lock the paragraph's EXISTENCE: delete the whole floor and
+    # the citation keeps it green. Pin the operative sentences instead,
+    # and pin the header string by a phrase that occurs exactly once.
+    nbody = _norm(p)
+    assert nbody.count("Harness floor: Claude Code 2.1.216") == 1
+    assert ("Check `claude --version` before dispatching the Fable "
+            "lane") in nbody
+    assert "the lane is UNAVAILABLE, not degraded" in nbody
+    # I2: this file must not state class mechanics. The below-floor case
+    # routes to the consent gate like every other lane loss; the earlier
+    # wording claimed an automatic drop to remaining lanes, contradicting
+    # fallbacks.md AND panels.md's own paragraph 22 lines below it.
+    assert "drops to its remaining lanes" not in nbody
+    assert "panel-lane-unavailable" in nbody
 
 
 def test_backup_lane_panel_participation():
@@ -109,6 +160,17 @@ def test_fallbacks_panel_lane_loss():
             "continuing with fewer lanes never happens "
             "automatically.") in fb
     assert "records DEGRADED" in fb
+    # 0.14.4 fable review I2: panel-lane-loss covers a lane failing
+    # MID-panel. A lane the harness cannot host at all is a different
+    # condition with a different disposition - nothing was dispatched, so
+    # no round is spent and nothing is quarantined - and it had no home
+    # here, which is what pushed class mechanics into panels.md where
+    # they are barred.
+    nfb = _norm(REFERENCES / "fallbacks.md")
+    assert "panel-lane-unavailable" in nfb
+    assert ("no round was dispatched, so nothing is spent and nothing "
+            "is quarantined") in nfb
+    assert ("the panel cannot silently convene without it") in nfb
 
 
 def test_plan_format_panel_and_envelope_pins():
