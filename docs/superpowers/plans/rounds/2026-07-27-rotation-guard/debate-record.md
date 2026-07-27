@@ -109,7 +109,15 @@ gate. CONVERGENT. Seeded as a plan-cycle item.
 `fable-review.md`, `sol-r{1,2,3}-reply.md` + transcripts,
 `kimi-r{1,2,3}-reply.md`, `diff-package.txt`, `gate-output.txt`,
 `base-absence-check.txt`, `probe-record.md`, `mirror-baseline.txt`,
-`mirror-manifest.txt`. Untracked by design.
+`mirror-manifest.txt`. Committed under
+`docs/superpowers/plans/rounds/<date>-<topic>/` per
+frozen-plan-format.md:85, which is where every prior cycle's round
+evidence lives. (An earlier draft of this record said "untracked by
+design" — that is false, and the phrase belongs only to the
+`.git/parallax/` attestations and checkpoints, whose whole point is that
+recording a verdict must not move the head the verdict names. Round
+evidence has the opposite requirement: it must ship with the history it
+describes.)
 
 Application checkpoint:
 `.git/parallax/application-checkpoints/20260727-055732-63fa7156b63c.md`
