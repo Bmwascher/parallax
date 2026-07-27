@@ -178,6 +178,28 @@ def test_skill_preflight_names_the_remediation():
             ) in skill
 
 
+def test_output_encoding_class_is_wired():
+    # 0.14.2, observed live 2026-07-26 (Windows, kimi-cli 1.49.0): the
+    # round completed and UnicodeEncodeError killed the WRITE. The
+    # catch-all would have spent a second real call on a retry that
+    # cannot succeed, and the honest recovery (resume the surviving
+    # session with UTF-8 forced) had no path in the rules at all.
+    lane = _norm(BACKUP_LANE)
+    assert "`PYTHONIOENCODING=utf-8` and `PYTHONUTF8=1`" in lane
+    assert "AFTER the model has already answered" in lane
+    # the unprobed part is marked, not papered over
+    assert ("Which of the two variables is load-bearing, and whether the "
+            "same guard is needed for kimi's own session-log write, is "
+            "UNVERIFIED") in lane
+    fb = _norm(FALLBACKS)
+    assert "class `output-encoding`" in fb
+    assert "**Skip the retry**" in fb
+    # the class must NOT be filed under the two evidence-tainting
+    # classes - nothing reached disk, so nothing is suspect
+    assert ("neither a route-attribution nor an integrity failure" in fb)
+    assert ("Recovery is a RESUME of the surviving session" in fb)
+
+
 def test_fallbacks_backup_wiring():
     fb = _norm(FALLBACKS)
     assert "[run backup lane (cross-vendor preserved)]" in fb

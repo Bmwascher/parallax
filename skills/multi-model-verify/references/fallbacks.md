@@ -151,6 +151,21 @@ choice.
     in the debate record so the debate resumes after the reset.
   - route-attribution failure (offset rule in backup-lane.md): nothing
     transient → no retry, reply DISCARDED unread, consent gate.
+  - output-encoding failure — class `output-encoding`:
+    `UnicodeEncodeError` / `'charmap' codec can't encode character`
+    from the kimi process on a Windows driver. The round COMPLETED and
+    the quota is already spent; only the write failed. **Skip the
+    retry** — a same-parameters retry re-runs the same encode against
+    the same console codepage and fails identically (deterministic,
+    like missing-rollout). Nothing is discarded or quarantined: no
+    reply reached disk, so this is neither a route-attribution nor an
+    integrity failure, and calling it either would wrongly imply
+    tainted evidence. Recovery is a RESUME of the surviving session
+    with all four flags re-pinned AND the UTF-8 environment forced
+    (backup-lane.md) — never a fresh review, which throws away a round
+    the provider already charged for. If the crash also cost the
+    session id, or the forced-UTF-8 resume fails, then the consent
+    gate.
   - resume failure: one same-parameters retry, then the consent gate
     with the fresh-per-round option (full brief re-sent each round).
   - integrity failure (write-probe fail, or a mirror delta beyond the
