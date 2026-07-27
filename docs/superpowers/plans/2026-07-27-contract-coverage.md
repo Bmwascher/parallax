@@ -602,6 +602,18 @@ def test_a_conditional_count_needle_is_not_a_pin(tmp_path):
     assert "Other." not in pins
 
 
+def test_a_count_call_with_more_than_one_argument_is_not_a_pin(tmp_path):
+    """Every artifact states the singular form `body.count("literal")`.
+    Iterating all arguments would have made the code broader than the
+    grammar it documents, which is how the instruction file and the code
+    drifted apart twice before."""
+    src = 'def test_x():\n    assert receiver.count("The rule.", "Other.") == 1\n'
+    p = _write(tmp_path, "test_sample.py", src)
+    pins = collect_pins([p])
+    assert "The rule." not in pins
+    assert "Other." not in pins
+
+
 def test_a_conjunction_of_clauses_collects_both(tmp_path):
     src = (
         'def test_x():\n'
@@ -699,9 +711,19 @@ def _literal(node):
     collects both branches of a conditional: `assert ("x" if flag else
     "y") in body` requires only the selected value, yet a walk returns
     both, so the unselected one becomes a pin the assertion never checks.
+
     Adjacent string literals are already folded into ONE constant by the
-    parser, which is how nearly every pin in this repo is written, so
-    requiring a plain constant costs nothing real.
+    parser, which is how nearly every pin in this repo is written.
+
+    The cost is real but bounded, and worth stating exactly rather than
+    waving away: five fragments are lost, all from runtime-constructed
+    needles such as `"--model " + CANONICAL_ID` and
+    `'model="' + CANONICAL_ID + '"'`. Those assertions DO require their
+    fragments to be present, so these are genuine partial locks, not
+    noise. They are dropped deliberately. The correct claim is that the
+    strict rule costs no CURRENT MARKED COVERAGE - all nine regions in
+    scope and all three history controls are unaffected - not that it
+    costs nothing.
     """
     if isinstance(node, ast.Constant) and isinstance(node.value, str):
         return {_norm(node.value)}
@@ -759,6 +781,8 @@ def _clause_pins(node):
         if isinstance(op, ast.In):
             return _literal(node.left)
         if (_is_count_call(node.left)
+                and len(node.left.args) == 1
+                and not node.left.keywords
                 and isinstance(right, ast.Constant)
                 and isinstance(right.value, int)
                 and not isinstance(right.value, bool)):
@@ -766,16 +790,10 @@ def _clause_pins(node):
             positive = ((isinstance(op, (ast.Eq, ast.GtE)) and n >= 1)
                         or (isinstance(op, ast.Gt) and n >= 0))
             if positive:
-                pins = set()
-                for arg in node.left.args:
-                    pins |= _literal(arg)
-                return pins
+                return _literal(node.left.args[0])
         return set()
-    if _is_count_call(node):
-        pins = set()
-        for arg in node.args:
-            pins |= _literal(arg)
-        return pins
+    if _is_count_call(node) and len(node.args) == 1 and not node.keywords:
+        return _literal(node.args[0])
     return set()
 
 
@@ -831,12 +849,12 @@ def format_failure(misses):
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `python -m pytest evals/multi-model-verify/test_contract_coverage.py -q`
-Expected: 39 passed.
+Expected: 40 passed.
 
 - [ ] **Step 5: Run the full suite**
 
 Run: `python -m pytest evals -q`
-Expected: 209 passed, 1 skipped.
+Expected: 210 passed, 1 skipped.
 
 - [ ] **Step 6: Commit**
 
@@ -1011,7 +1029,7 @@ was built for. Stop and fix the checker, not the test.
 - [ ] **Step 6: Run the full suite**
 
 Run: `python -m pytest evals -q`
-Expected: 213 passed, 1 skipped.
+Expected: 214 passed, 1 skipped.
 
 - [ ] **Step 7: Commit**
 
@@ -1205,7 +1223,7 @@ Expected: all passed.
 - [ ] **Step 7: Run the full suite and the two skill gates**
 
 Run: `python -m pytest evals -q`
-Expected: 215 passed, 1 skipped.
+Expected: 216 passed, 1 skipped.
 
 Run: `python evals/tools/skill_lint.py skills/multi-model-verify --strict`
 Expected: `PASS — 0 error(s), 0 warning(s)`
@@ -1355,7 +1373,7 @@ Expected: all passed.
 - [ ] **Step 8: Run the full suite and both skill gates**
 
 Run: `python -m pytest evals -q`
-Expected: 215 passed, 1 skipped.
+Expected: 216 passed, 1 skipped.
 
 Run: `python evals/tools/skill_lint.py skills/multi-model-verify --strict`
 Expected: `PASS — 0 error(s), 0 warning(s)`
@@ -1505,7 +1523,7 @@ Expected: all passed.
 - [ ] **Step 7: Run the full suite and both skill gates**
 
 Run: `python -m pytest evals -q`
-Expected: 215 passed, 1 skipped.
+Expected: 216 passed, 1 skipped.
 
 Run: `python evals/tools/skill_lint.py skills/multi-model-verify --strict`
 Expected: `PASS — 0 error(s), 0 warning(s)`
@@ -1584,7 +1602,7 @@ In `.claude-plugin/plugin.json`, change `"version": "0.14.4"` to
 - [ ] **Step 4: Run every gate**
 
 Run: `python -m pytest evals -q`
-Expected: 215 passed, 1 skipped.
+Expected: 216 passed, 1 skipped.
 
 Run: `python evals/tools/skill_lint.py skills/multi-model-verify --strict`
 Expected: `PASS — 0 error(s), 0 warning(s)`
@@ -1621,8 +1639,8 @@ to update the two pins extended in Task 4.
 
 ## Counts, and what to do if they differ
 
-Expected `python -m pytest evals -q` after each task: 190, 209, 213, 215,
-215, 215, 215 passed, with 1 skipped throughout. These come from the test
-functions this plan adds: 20 in Task 1, 19 in Task 2, 4 in Task 3, 2 in
+Expected `python -m pytest evals -q` after each task: 190, 210, 214, 216,
+216, 216, 216 passed, with 1 skipped throughout. These come from the test
+functions this plan adds: 20 in Task 1, 20 in Task 2, 4 in Task 3, 2 in
 Task 4, none in Tasks 5 to 7. If a number differs, count the tests you
 actually added before assuming a regression.

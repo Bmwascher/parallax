@@ -146,18 +146,25 @@ checker could never run.
   | `<clause> and <clause>` | the union |
 
   **The needle must be a plain string literal, not an expression
-  containing one.** Adjacent literals fold into one constant at parse
-  time, so nearly every existing pin qualifies. A conditional does not:
-  `assert ("x" if flag else "y") in body` requires only the selected
-  branch, and collecting every constant beneath the operand would pin the
-  other one too.
+  containing one, and a `.count` call takes exactly one such argument.**
+  Adjacent literals fold into one constant at parse time, so nearly every
+  existing pin qualifies. A conditional does not: `assert ("x" if flag
+  else "y") in body` requires only the selected branch, and collecting
+  every constant beneath the operand would pin the other one too.
+
+  This costs five real fragment locks, and the cost is worth stating
+  exactly. All five come from runtime-constructed needles such as
+  `"--model " + CANONICAL_ID`, whose assertions genuinely do require the
+  fragment to be present. They are dropped deliberately. The accurate
+  claim is that the rule costs no CURRENT MARKED COVERAGE, not that it
+  costs nothing.
 
   Everything else contributes nothing: a failure message, `not`,
   `not in`, `or`, `==` against anything but a positive count, a bare
   name, a call that is not `.count`. Measured on the live suite, the
   clause rule takes 715 strings down to 366. All nine regions in scope
   keep the coverage they had, and all three history controls stay
-  covered, so nothing load-bearing is lost.
+  covered.
 
 **Procedure.**
 
@@ -249,13 +256,19 @@ The reader never has to search 633 assertions to find which one is short.
   against the declared inventory, which this plan's task order always
   populates before any document is touched. A different task order would
   not have that protection.
-- **The count form matches any receiver named `count`, not only a
-  document.** `ast` sees a method name, never a type, so
-  `paths.count("The rule stands.")` over a list would register as a pin.
-  Every live `.count` receiver is a document string, and the wording
-  everywhere else says `body.count(...)` because that is the intended
-  use. Checking the receiver's type is not possible from the syntax tree,
-  so the limit is stated rather than closed.
+- **Neither clause form can tell whether its container is a document.**
+  `ast` sees names and method calls, never types. `paths.count("The rule
+  stands.")` over a list registers as a pin, and so does
+  `"The rule stands." in some_subprocess_output`. The live suite really
+  does assert membership against subprocess output and hook context, not
+  only document text, so this is the one accepted limit that could
+  manufacture coverage rather than merely losing it. It needs a genuine
+  coincidence: a non-document container asserted to hold a string that
+  happens to contain a whole marked region. Every live `.count` receiver
+  is a document string, and the wording everywhere else says
+  `body.count(...)` and `in body` because that is the intended use.
+  Checking a container's type is not possible from the syntax tree, so
+  the limit is stated rather than closed.
 - **`body.count("x") == 0` is rejected, not accepted.** An earlier
   revision left it in as a limit, reasoning that the false-coverage path
   needed one document to both contain and exclude the same text. That
