@@ -804,7 +804,7 @@ Run: `python -m pytest evals/multi-model-verify/test_contract_coverage.py -q -k 
 Expected: FAIL, `declared region(s) not found in any document:
 ['panel-floor-agent', 'panel-floor-reference']`
 
-- [ ] **Step 3: Mark the operative sentences in panels.md**
+- [ ] **Step 3: Mark the operative sentence in panels.md**
 
 In `skills/multi-model-verify/references/panels.md`, wrap only the
 operative sentence. The narrative sentences before it, and the changelog
@@ -927,7 +927,7 @@ recorded failures behind them, both `###`-headed, `panel-lane-loss` at
 `fallbacks.md:190` and `panel-lane-unavailable` at `fallbacks.md:210`. The 0.14.4 review
 found that new text contradicted `panel-lane-loss` while inventing
 mechanics for a case that had no class, so these two are where the
-evidence is. The other nine get marked as they are next edited.
+evidence is. The rest get marked as they are next edited.
 
 - [ ] **Step 1: Add the two ids to the declared set**
 
