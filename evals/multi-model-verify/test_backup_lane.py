@@ -151,10 +151,18 @@ def test_backup_lane_evidence_pins():
     # ten in this file.
     assert ("That is a route-attribution failure" in body)
     # F4: the residual gap's CONTINGENCY is the only recorded instruction
-    # for the day rotation starts succeeding. The surrounding caveat prose
-    # is deliberately left unpinned - it is narrative, not a rule.
+    # for the day rotation starts succeeding.
     assert ("compare file identity (creation time) too, not just length"
             in body)
+    # 0.14.3 Sol panel round 1 (claim 6), REVERSING the session's earlier
+    # call that this paragraph was narrative and not worth pinning. It is
+    # not narrative: it states that the detection check has a known
+    # FALSE-NEGATIVE boundary, and a driver who reads only the detection
+    # rule over-trusts the guard. What a driver believes about coverage
+    # is contract.
+    assert ("The size test is necessary, not sufficient: a rotation "
+            "whose replacement file grew back PAST the captured offset "
+            "within the same call would slip through.") in body
     # 0.14.2 Kimi panel round 2 (4b): the three PASS conditions were
     # pinned but the probe's CONFIGURATION FIDELITY was not - a probe
     # run under a stricter config than the debate's would pass while
@@ -431,8 +439,18 @@ def test_fallbacks_backup_wiring():
     # evidence on a re-dispatch. The disposition is still right, for a
     # different reason, and the reason has to be on the record or the two
     # files read as a contradiction.
+    # 0.14.3 Sol panel round 1 (claim 5): the pin below MUST run to the
+    # end of the justification. Stopping at "IS transient" named the
+    # exception while leaving the operative half - WHY the retry is still
+    # skipped, and WHO decides the re-spend - deletable green. That is
+    # pin-integrity instance eleven, reproduced inside the very sentence
+    # added this cycle to fix instance ten.
     assert ("a rotation under the call is the one member that IS "
-            "transient") in fb
+            "transient — a re-dispatch with a freshly captured offset "
+            "would produce clean evidence. It still skips the retry, "
+            "because the round already spent is unattributable and no "
+            "retry can make it attributable after the fact; the user "
+            "decides at the gate whether to spend another.") in fb
     assert "LLM not set" in fb
     assert "access_terminated_error" in fb
 
