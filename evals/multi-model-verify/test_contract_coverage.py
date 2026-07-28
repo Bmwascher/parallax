@@ -204,3 +204,234 @@ def test_collect_regions_records_the_source_file(tmp_path):
         tmp_path, "panels.md",
         "<!-- contract:start id=demo -->\nThe rule.\n<!-- contract:end -->\n")
     assert collect_regions([p]) == {"demo": ("The rule.", "panels.md")}
+
+
+from contract_coverage import collect_pins, format_failure, uncovered
+
+
+def test_collects_membership_pins_and_joins_implicit_concatenation(tmp_path):
+    src = (
+        'def test_x():\n'
+        '    assert ("a rotation under the call is the one member "\n'
+        '            "that IS transient") in body\n'
+    )
+    p = _write(tmp_path, "test_sample.py", src)
+    assert ("a rotation under the call is the one member that IS transient"
+            in collect_pins([p]))
+
+
+def test_a_count_assertion_is_a_pin(tmp_path):
+    """The second positive shape. This repo pins several rules with
+    body.count(...) == 1 to catch a phrase that occurs twice.
+
+    Both branches are exercised: the COMPARED form and the BARE call.
+    They carry separate arity guards, so a test of one proves nothing
+    about the other.
+    """
+    src = (
+        'def test_x():\n'
+        '    assert body.count("Compared rule.") == 1\n'
+        '    assert body.count("Bare rule.")\n'
+        '    assert body.count("At least rule.") >= 2\n'
+    )
+    p = _write(tmp_path, "test_sample.py", src)
+    pins = collect_pins([p])
+    assert "Compared rule." in pins
+    assert "Bare rule." in pins
+    assert "At least rule." in pins
+
+
+def test_a_docstring_is_not_a_pin(tmp_path):
+    """Pin provenance. 47 of 172 string constants in test_backup_lane.py
+    sit in no assertion, so 'every constant is a pin' would let a
+    docstring make a region read as locked while locking nothing."""
+    src = (
+        '"""That is a route-attribution failure."""\n'
+        'def test_x():\n'
+        '    """That is a route-attribution failure."""\n'
+        '    assert True\n'
+    )
+    p = _write(tmp_path, "test_sample.py", src)
+    assert "That is a route-attribution failure." not in collect_pins([p])
+
+
+def test_an_assertion_failure_message_is_not_a_pin(tmp_path):
+    """192 strings in the live suite are reachable only through a failure
+    message. A message checks nothing about any document, so a hermetic
+    assertion carrying contract text must not manufacture coverage."""
+    src = 'def test_x():\n    assert path.is_file(), "The rule stands."\n'
+    p = _write(tmp_path, "test_sample.py", src)
+    assert "The rule stands." not in collect_pins([p])
+
+
+def test_a_negative_membership_assertion_is_not_a_pin(tmp_path):
+    """19 strings in the live suite sit in `not in` comparisons. Those
+    assert the text is ABSENT, so reading them as coverage would be
+    exactly backwards."""
+    src = (
+        'def test_x():\n'
+        '    assert "The rule stands." not in body\n'
+        '    assert not ("The other rule." in body)\n'
+    )
+    p = _write(tmp_path, "test_sample.py", src)
+    pins = collect_pins([p])
+    assert "The rule stands." not in pins
+    assert "The other rule." not in pins
+
+
+def test_a_membership_test_inverted_by_its_parent_is_not_a_pin(tmp_path):
+    """The clause rule exists for this. Matching `in` anywhere in the
+    tree lets an enclosing expression flip its meaning."""
+    src = 'def test_x():\n    assert ("The rule stands." in body) == False\n'
+    p = _write(tmp_path, "test_sample.py", src)
+    assert "The rule stands." not in collect_pins([p])
+
+
+def test_a_membership_test_inside_an_or_is_not_a_pin(tmp_path):
+    """Live shape at evals/multi-model-verify/test_flash_implementer.py:58:
+    the assertion permits EITHER branch, so neither side is required and
+    neither locks anything on its own."""
+    src = (
+        'def test_x():\n'
+        '    assert "stdin" not in body or "The rule stands." in body\n'
+    )
+    p = _write(tmp_path, "test_sample.py", src)
+    assert "The rule stands." not in collect_pins([p])
+
+
+def test_a_zero_count_assertion_is_not_a_pin(tmp_path):
+    """A zero count asserts ABSENCE. Pins and regions are pooled
+    repo-wide, so an absence assertion about one document would otherwise
+    cover identical text in another."""
+    src = 'def test_x():\n    assert body.count("The rule stands.") == 0\n'
+    p = _write(tmp_path, "test_sample.py", src)
+    assert "The rule stands." not in collect_pins([p])
+
+
+def test_a_conditional_membership_operand_is_not_a_pin(tmp_path):
+    """Only one branch is required, so neither is a pin. Walking every
+    constant below the operand would collect both, and the unselected one
+    would lock text the assertion never checks."""
+    src = (
+        'def test_x():\n'
+        '    assert ("The rule." if flag else "The other rule.") in body\n'
+    )
+    p = _write(tmp_path, "test_sample.py", src)
+    pins = collect_pins([p])
+    assert "The rule." not in pins
+    assert "The other rule." not in pins
+
+
+def test_a_conditional_count_needle_is_not_a_pin(tmp_path):
+    src = (
+        'def test_x():\n'
+        '    assert body.count("The rule." if flag else "Other.") >= 1\n'
+    )
+    p = _write(tmp_path, "test_sample.py", src)
+    pins = collect_pins([p])
+    assert "The rule." not in pins
+    assert "Other." not in pins
+
+
+def test_a_count_call_with_more_than_one_argument_is_not_a_pin(tmp_path):
+    """Every artifact states the singular form `body.count("literal")`.
+    Iterating all arguments would have made the code broader than the
+    grammar it documents, which is how the instruction file and the code
+    drifted apart twice before.
+
+    The compared branch and the bare branch have SEPARATE arity and
+    keyword guards. Both are exercised here, in both failing shapes, so
+    the test locks the whole fix rather than half of it.
+    """
+    src = (
+        'def test_x():\n'
+        '    assert receiver.count("Compared a.", "Compared b.") == 1\n'
+        '    assert receiver.count("Bare a.", "Bare b.")\n'
+        '    assert receiver.count("Compared kw.", start=0) == 1\n'
+        '    assert receiver.count("Bare kw.", start=0)\n'
+    )
+    p = _write(tmp_path, "test_sample.py", src)
+    pins = collect_pins([p])
+    for needle in ("Compared a.", "Compared b.", "Bare a.", "Bare b.",
+                   "Compared kw.", "Bare kw."):
+        assert needle not in pins
+
+
+def test_a_conjunction_of_clauses_collects_both(tmp_path):
+    src = (
+        'def test_x():\n'
+        '    assert "First rule." in body and "Second rule." in body\n'
+    )
+    p = _write(tmp_path, "test_sample.py", src)
+    pins = collect_pins([p])
+    assert "First rule." in pins
+    assert "Second rule." in pins
+
+
+def test_an_equality_expectation_is_not_a_pin(tmp_path):
+    """None of the three clause forms. Accepted limit: the failure
+    direction is a red, never false coverage."""
+    src = 'def test_x():\n    assert result == "The rule stands."\n'
+    p = _write(tmp_path, "test_sample.py", src)
+    assert "The rule stands." not in collect_pins([p])
+
+
+def test_a_string_assigned_but_never_asserted_is_not_a_pin(tmp_path):
+    """An accepted limit, tested so it stays deliberate. The failure
+    direction is safe: an uncollected pin makes its region read as
+    uncovered, which is a red. It can never manufacture coverage."""
+    src = (
+        'def test_x():\n'
+        '    required = "The rule stands."\n'
+        '    assert required in body\n'
+    )
+    p = _write(tmp_path, "test_sample.py", src)
+    assert "The rule stands." not in collect_pins([p])
+
+
+def test_pins_are_whitespace_normalized(tmp_path):
+    src = 'def test_x():\n    assert "two   spaces\\nand a newline" in body\n'
+    p = _write(tmp_path, "test_sample.py", src)
+    assert "two spaces and a newline" in collect_pins([p])
+
+
+def test_a_covered_region_reports_nothing():
+    regions = {"demo": ("The rule stands.", "demo.md")}
+    pins = {"the text says The rule stands. right here"}
+    assert uncovered(regions, pins) == []
+
+
+def test_a_region_with_no_pin_at_all_is_reported():
+    """Instance 10: the disposition sentence had no pin."""
+    body = "That is a route-attribution failure."
+    regions = {"demo": (body, "backup-lane.md")}
+    pins = {"Detect it."}
+    assert uncovered(regions, pins) == [("demo", "backup-lane.md", body)]
+
+
+def test_a_pin_that_stops_mid_region_does_not_cover_it():
+    """Instance 11: the pin stopped at 'IS transient'."""
+    body = ("A rotation is the one member that IS transient, so the user "
+            "decides whether to spend another.")
+    regions = {"demo": (body, "fallbacks.md")}
+    pins = {"A rotation is the one member that IS transient"}
+    assert uncovered(regions, pins) == [("demo", "fallbacks.md", body)]
+
+
+def test_two_pins_that_jointly_span_a_region_do_not_cover_it():
+    """The revision-1 silent pass, kept as a regression test. Under
+    per-sentence coverage a mis-split let two fragment pins satisfy both
+    halves while nothing contained the whole rule."""
+    body = "Use U.S. Servers only."
+    regions = {"demo": (body, "demo.md")}
+    pins = {"Use U.S.", "Servers only."}
+    assert uncovered(regions, pins) == [("demo", "demo.md", body)]
+
+
+def test_failure_message_names_region_file_and_body():
+    misses = [("demo", "panels.md", "The lane is UNAVAILABLE, not degraded.")]
+    msg = format_failure(misses)
+    assert "demo" in msg
+    assert "panels.md" in msg
+    assert "The lane is UNAVAILABLE, not degraded." in msg
+    assert "add a pin containing that region whole" in msg

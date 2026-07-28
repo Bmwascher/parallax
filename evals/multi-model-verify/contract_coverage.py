@@ -162,3 +162,151 @@ def collect_regions(paths):
                     f"and {path.name}")
             out[rid] = (body, path.name)
     return out
+
+
+def _literal(node):
+    """The node's own string value, or nothing.
+
+    Deliberately NOT a walk. Walking every constant below an operand
+    collects both branches of a conditional: `assert ("x" if flag else
+    "y") in body` requires only the selected value, yet a walk returns
+    both, so the unselected one becomes a pin the assertion never checks.
+
+    Adjacent string literals are already folded into ONE constant by the
+    parser, which is how nearly every pin in this repo is written.
+
+    The cost is real but bounded, and worth stating exactly rather than
+    waving away: five fragments are lost, all from runtime-constructed
+    needles such as `"--model " + CANONICAL_ID` and
+    `'model="' + CANONICAL_ID + '"'`. Those assertions DO require their
+    fragments to be present, so these are genuine partial locks, not
+    noise. They are dropped deliberately. The correct claim is that the
+    strict rule costs no CURRENT MARKED COVERAGE - all nine regions in
+    scope and all three history controls are unaffected - not that it
+    costs nothing.
+    """
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return {_norm(node.value)}
+    return set()
+
+
+def _is_count_call(node):
+    """Any `<something>.count(...)` call.
+
+    Accepted limit: ast sees a method NAME, never a type, so a
+    `list.count(...)` would register too. Every live receiver is a
+    document string, and checking the type is not possible from the
+    syntax tree, so the limit is stated rather than closed.
+    """
+    return (isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "count")
+
+
+def _clause_pins(node):
+    """Pins from a COMPLETE positive-presence clause, or nothing.
+
+    This function NEVER descends into an expression it does not
+    recognize, and that restraint is the whole point. Matching a shape
+    anywhere in the tree lets an enclosing expression flip its meaning:
+    `assert ("lit" in body) == False` and `assert flag or "lit" in body`
+    both CONTAIN a positive membership test that the assertion as a whole
+    does not require. The second is live, at
+    evals/multi-model-verify/test_flash_implementer.py:58, where the
+    assertion permits either the absence of "stdin" or the presence of
+    "does not reach" - so treating the latter as an unconditional pin
+    would manufacture coverage.
+
+    Three clause forms and no others:
+      "literal" in body
+      body.count("literal"), alone or compared == n / >= n (n >= 1)
+                             or > n (n >= 0)
+      <clause> and <clause>
+
+    Measured on the live suite: an unrestricted walk of `ast.Assert`
+    yields 715 strings, of which 192 are only reachable through a failure
+    message and lock nothing, and 19 sit in `not in` comparisons that
+    assert ABSENCE. The clause rule yields 366, and every region in scope
+    keeps the coverage it had.
+
+    Never called on `Assert.msg`.
+    """
+    if isinstance(node, ast.BoolOp) and isinstance(node.op, ast.And):
+        pins = set()
+        for value in node.values:
+            pins |= _clause_pins(value)
+        return pins
+    if isinstance(node, ast.Compare) and len(node.ops) == 1:
+        op, right = node.ops[0], node.comparators[0]
+        if isinstance(op, ast.In):
+            return _literal(node.left)
+        if (_is_count_call(node.left)
+                and len(node.left.args) == 1
+                and not node.left.keywords
+                and isinstance(right, ast.Constant)
+                and isinstance(right.value, int)
+                and not isinstance(right.value, bool)):
+            n = right.value
+            positive = ((isinstance(op, (ast.Eq, ast.GtE)) and n >= 1)
+                        or (isinstance(op, ast.Gt) and n >= 0))
+            if positive:
+                return _literal(node.left.args[0])
+        return set()
+    if _is_count_call(node) and len(node.args) == 1 and not node.keywords:
+        return _literal(node.args[0])
+    return set()
+
+
+def collect_pins(paths):
+    """Normalized string literals that some assertion checks for.
+
+    Read through ast, not regex: nearly every pin in this repo is written
+    as adjacent string literals across several lines, and the parser
+    joins those into one constant for us.
+
+    Accepted limits, all with the same safe failure direction - the
+    region reads UNCOVERED, which is a red, never false coverage: a
+    string bound to a name and asserted through that name, a regex lock
+    such as `re.search(r"...", text)`, and a literal compared with `==`.
+
+    Some limits run the OTHER way and could in principle manufacture
+    coverage. The design tags every limit by direction and states NO
+    total, because the total was written as "one", corrected to "two",
+    and was still wrong. Read the tags there rather than trusting a count
+    here.
+    """
+    pins = set()
+    for path in paths:
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Assert):
+                pins |= _clause_pins(node.test)
+    return pins
+
+
+def uncovered(regions, pins):
+    """[(region_id, source, body)] for every region no pin contains.
+
+    Containment runs one way only: the PIN must contain the REGION. A pin
+    that the region contains is a fragment, which is exactly the defect
+    this checker exists to catch.
+    """
+    misses = []
+    for rid in sorted(regions):
+        body, source = regions[rid]
+        if not any(body in pin for pin in pins):
+            misses.append((rid, source, body))
+    return misses
+
+
+def format_failure(misses):
+    lines = [
+        f"{len(misses)} contract region(s) are not locked by any pin.",
+        "For each one, add a pin containing that region whole.",
+        "A pin the region contains is a fragment and does not count.",
+        "",
+    ]
+    for rid, source, body in misses:
+        lines.append(f"  region '{rid}' in {source}:")
+        lines.append(f"    {body}")
+    return "\n".join(lines)
