@@ -7,6 +7,19 @@
 - `skills-override-used.txt` — the 2313-byte `skills.config` override this
   debate itself dispatched with.
 
+**Every file here is a RAW RECORD of what was said at the time, and two
+claims inside them are now known to be wrong.** The artifacts are not
+rewritten; the corrections live here.
+
+**Superseded scope claim.** `sol-plan-r1-brief.md` says
+`codex debug prompt-input` reveals the "whole instruction surface". It
+does not. It renders the PROMPT. The reviewer's tool surface, meaning
+configured MCP servers and the memories feature, is not in the prompt and
+is not measured: observed 2026-07-28, an MCP tool ran inside a round that
+passed every check the probe makes. The shipped wording is the
+`client-probe-scope-limit` region in SKILL.md, and the gap is backlog
+item 7.
+
 **Note on `skills-override-used.txt`: it is a HISTORICAL RECORD, not the
 format.** It uses DOUBLE-quoted TOML paths, which is what the debate ran
 with before the format defect was found. The shipped generator

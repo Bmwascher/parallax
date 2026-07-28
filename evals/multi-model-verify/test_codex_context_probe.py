@@ -666,6 +666,107 @@ def test_a_skill_path_that_is_not_a_skill_file_is_unplaceable(tmp_path):
     assert "could not be placed" in json.loads(proc.stdout)["reason"]
 
 
+def test_an_unwritable_override_target_is_never_clean(tmp_path):
+    # Reproduced 2026-07-28 before the fix: with the artifact's parent
+    # directory missing, the probe printed two PowerShell errors to stderr
+    # and then reported `"status":"clean","override_file":null` with a real
+    # hash, and exited 0. The caller was told the machine was verified and
+    # handed an artifact path that does not exist.
+    log = tmp_path / "calls.log"
+    env = dict(os.environ)
+    env["PARALLAX_STUB_FIXTURE"] = str(FIXTURES / "flagged.json")
+    env["PARALLAX_STUB_FIXTURE2"] = str(FIXTURES / "suppressed.json")
+    env["PARALLAX_STUB_LOG"] = str(log)
+    missing = tmp_path / "nope" / "deeper" / "override.txt"
+    proc = subprocess.run(
+        [ps_host(), "-NoProfile", "-NonInteractive", "-File", str(PROBE),
+         "-WorkDir", str(tmp_path), "-Json", "-SuppressSkills",
+         "-OverrideOut", str(missing), "-CodexCommand", str(STUB)],
+        capture_output=True, text=True, env=env)
+    assert proc.returncode == 1, proc.stdout
+    report = json.loads(proc.stdout)
+    assert report["status"] == "blocked"
+    assert "could not be written" in report["reason"]
+
+
+def attributed(tmp_path, tag):
+    fixture = tmp_path / f"attributed-{tag}.json"
+    doc = json.loads((FIXTURES / "flagged.json").read_text(encoding="utf-8"))
+    text = doc[0]["content"][0]["text"]
+    if f"<{tag}>" not in text:
+        text += f'\n<{tag}>\nx\n</{tag}>\n'
+    doc[0]["content"][0]["text"] = text.replace(
+        f"<{tag}>", f'<{tag} version="2">', 1)
+    fixture.write_text(json.dumps(doc), encoding="utf-8")
+    return fixture
+
+
+def test_an_attributed_instructions_block_blocks_as_missing(tmp_path):
+    # INSTRUCTIONS is the one known container whose attributed form is
+    # caught by an OLDER rule first: the exact literal is what the
+    # instruction report looks for, so an attributed one reads as a
+    # missing block. Different message, same direction, and both are
+    # correct. Named separately rather than folded into a looser
+    # assertion, so neither rule can be deleted unnoticed.
+    proc = probe_with(tmp_path, attributed(tmp_path, "INSTRUCTIONS"))
+    assert proc.returncode == 1, proc.stdout
+    assert "block is missing" in json.loads(proc.stdout)["reason"]
+
+
+@pytest.mark.parametrize("tag", [
+    "skills_instructions", "apps_instructions", "plugins_instructions",
+    "recommended_plugins", "environment_context", "multi_agent_mode",
+])
+def test_an_attributed_known_block_blocks(tmp_path, tag):
+    # A known NAME is not enough. Every dedicated parser matches an exact
+    # literal, so `<skills_instructions version="2">` is invisible to them,
+    # and the unknown-block guard skipped it for having a known name.
+    # Reproduced 2026-07-28: a second pass carrying all 29 entries under
+    # that tag reported skills_after 0, status clean, exit 0.
+    proc = probe_with(tmp_path, attributed(tmp_path, tag))
+    assert proc.returncode == 1, proc.stdout
+    assert "exact form this parser reads" in json.loads(proc.stdout)["reason"]
+
+
+def test_an_attributed_block_on_the_second_pass_blocks(tmp_path):
+    # THE reproduced false clean, in its original shape: the suppression
+    # pass carries every skill back under an attributed tag, and the old
+    # code called that absence and reported skills_after 0 with exit 0.
+    proc = probe_with(tmp_path, FIXTURES / "flagged.json",
+                      attributed(tmp_path, "skills_instructions"))
+    assert proc.returncode == 1, proc.stdout
+    assert "exact form this parser reads" in json.loads(proc.stdout)["reason"]
+
+
+def test_the_permissions_container_keeps_its_legitimate_space(tmp_path):
+    # The guard above compares WHOLE literals rather than testing for the
+    # presence of attributes, because `<permissions instructions>` is a
+    # real container whose name parses as `permissions` with ` instructions`
+    # read as an attribute. An attribute test would block every real review.
+    proc = probe_with(tmp_path, FIXTURES / "flagged.json",
+                      FIXTURES / "suppressed.json")
+    assert proc.returncode == 0, proc.stdout
+
+
+def test_two_entries_on_one_line_block(tmp_path):
+    # The greedy path capture reads two rendered entries on ONE line as a
+    # single entry with a merged path, so the FIRST measurement is wrong
+    # and no later suppression check repairs it.
+    fixture = tmp_path / "merged.json"
+    doc = json.loads((FIXTURES / "flagged.json").read_text(encoding="utf-8"))
+    doc[0]["content"][0]["text"] = doc[0]["content"][0]["text"].replace(
+        "- userskill1: A fixture skill for tests."
+        " (file: C:/fixture/home/.agents/skills/u1/SKILL.md)",
+        "- userskill1: A fixture skill for tests."
+        " (file: C:/fixture/home/.agents/skills/u1/SKILL.md)"
+        " - userskill1b: Another. (file:"
+        " C:/fixture/home/.agents/skills/u1b/SKILL.md)", 1)
+    fixture.write_text(json.dumps(doc), encoding="utf-8")
+    proc = probe_with(tmp_path, fixture)
+    assert proc.returncode == 1, proc.stdout
+    assert "whole entry grammar" in json.loads(proc.stdout)["reason"]
+
+
 def test_an_unterminated_known_container_blocks(tmp_path):
     # Masking an unclosed container to end-of-prompt hid every later block
     # from the unknown-surface scan, so one malformed container near the

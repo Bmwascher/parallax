@@ -76,6 +76,7 @@ function Get-SkillReport($text) {
     # same face, and the caller must be able to tell them apart.
     $present = $text.Contains("<skills_instructions>")
     $entries = New-Object System.Collections.ArrayList
+    $malformed = $false
     if ($present) {
         $start = $text.IndexOf("### Available skills")
         if ($start -ge 0) {
@@ -91,15 +92,31 @@ function Get-SkillReport($text) {
             # mode-diff review, 2026-07-28. `Program Files (x86)` is an
             # ordinary Windows path, not a contrived one.
             $rx = [regex]'(?m)^- ([A-Za-z0-9_:-]+):.*?\(file: (.+)\)[ \t]*$'
-            foreach ($m in $rx.Matches($seg)) {
+            # AUDIT EVERY ENTRY-LOOKING LINE. A greedy path capture reads
+            # two entries rendered on ONE line as a single entry with a
+            # merged path, and a line that fails the whole grammar is
+            # dropped in silence - both make the FIRST measurement wrong,
+            # which no later suppression check repairs. Mode-diff round 2,
+            # 2026-07-28.
+            foreach ($line in ($seg -split "`n")) {
+                $trimmed = $line.TrimEnd("`r")
+                if ($trimmed -notmatch '^- [A-Za-z0-9_:-]+:') { continue }
+                $hits = $rx.Matches($trimmed)
+                if ($hits.Count -ne 1) {
+                    $malformed = $true
+                    continue
+                }
+                $starts = ([regex]::Matches($trimmed, [regex]::Escape("(file: "))).Count
+                if ($starts -ne 1) { $malformed = $true; continue }
                 [void]$entries.Add(@{
-                    Name = $m.Groups[1].Value
-                    Path = $m.Groups[2].Value
+                    Name = $hits[0].Groups[1].Value
+                    Path = $hits[0].Groups[2].Value
                 })
             }
         }
     }
-    return @{ BlockPresent = $present; Entries = @($entries) }
+    return @{ BlockPresent = $present; Entries = @($entries)
+              Malformed = $malformed }
 }
 
 function Get-InstructionReport($text) {
@@ -195,10 +212,27 @@ function Get-UnknownPromptBlock($text) {
     # memories_instructions, a hyphenated tag and a self-closing one.
     $masked = Hide-KnownContainer $text
     $found = New-Object System.Collections.ArrayList
+    # The EXACT opening literal of every container this parser can read.
+    # A known NAME is not enough. Every dedicated parser matches an exact
+    # literal, so `<skills_instructions version="2">` is invisible to them
+    # AND was skipped here for having a known name - a second pass
+    # carrying all 29 entries under that tag reported skills_after 0 and
+    # exit 0. Reproduced 2026-07-28, mode-diff round 2. Note that
+    # `<permissions instructions>` is a legitimate literal with a space in
+    # it, which is why this compares whole literals rather than testing
+    # for the presence of attributes.
+    $knownOpen = @()
+    foreach ($c in $script:KnownContainers) { $knownOpen += ("<" + $c + ">") }
     $rx = [regex]'(?m)^[ \t]*<([A-Za-z][A-Za-z0-9_.:\-]*)((?:\s[^>]*?)?)(/?)>'
     foreach ($m in $rx.Matches($masked)) {
         $name = $m.Groups[1].Value
-        if ($script:KnownPromptBlocks -contains $name) { continue }
+        if ($script:KnownPromptBlocks -contains $name) {
+            if ($knownOpen -ccontains $m.Value.Trim()) { continue }
+            throw [System.FormatException]::new(
+                "the known block " + $m.Value.Trim() + " is not in the" +
+                " exact form this parser reads, so every rule about it" +
+                " silently did nothing")
+        }
         $selfClosing = ($m.Groups[3].Value -eq "/")
         if (-not ($selfClosing -or $masked.Contains("</" + $name + ">"))) {
             continue
@@ -410,6 +444,11 @@ if ($skills.Entries.Count -eq 0) {
         " - the entry format changed, so every count below would be a zero" +
         " this parser invented rather than measured") $Json
 }
+if ($skills.Malformed) {
+    Write-Blocked ("an entry line inside the skills block does not satisfy" +
+        " the whole entry grammar, or carries more than one entry - the" +
+        " measurement below would be missing or merging sources") $Json
+}
 
 $repoScoped = @()
 $cacheScoped = @()
@@ -506,10 +545,24 @@ if ($SuppressSkills) {
     # authenticate the corrupted value. This script's own SOURCE stays
     # ASCII; that is a separate rule about the file, not about the data it
     # writes.
+    #
+    # The write and the resolve are GUARDED. Unguarded, a `-OverrideOut`
+    # under a missing parent printed two errors to stderr and then
+    # reported status clean with `override_file: null` and exit 0: the
+    # caller was told the machine was verified and handed an artifact path
+    # that does not exist. Reproduced 2026-07-28, mode-diff round 2.
     $enc = New-Object System.Text.UTF8Encoding($false, $true)
-    $bytes = $enc.GetBytes($override)
-    [System.IO.File]::WriteAllBytes($OverrideOut, $bytes)
-    $overridePath = (Resolve-Path $OverrideOut).Path
+    $bytes = $null
+    try {
+        $bytes = $enc.GetBytes($override)
+        [System.IO.File]::WriteAllBytes($OverrideOut, $bytes)
+        $overridePath = (Resolve-Path $OverrideOut -ErrorAction Stop).Path
+    } catch {
+        Write-Blocked ("the verified override could not be written to " +
+            $OverrideOut + ": " + $_.Exception.Message +
+            " - a verified value nothing can dispatch is not a clean" +
+            " result") $Json
+    }
     $sha = [System.Security.Cryptography.SHA256]::Create()
     $overrideHash = ([System.BitConverter]::ToString(
         $sha.ComputeHash($bytes)) -replace '-', '').ToLower()

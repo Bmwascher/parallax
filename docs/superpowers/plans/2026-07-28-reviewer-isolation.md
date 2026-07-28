@@ -2687,6 +2687,12 @@ Every difference between that blob and this file is listed below. Nothing
 here was reverted: each change is correct and each was forced by a real
 failure. The defect was absorbing them silently.
 
+**Read every fidelity claim about this cycle as "implemented subject to
+the amendments below", never as "every step as specified".** A2 to A6
+each record a deliverable or an ordering that differs from the frozen
+text, so the unqualified form is literally false. Mode-diff round 2
+raised exactly that, 2026-07-28.
+
 | # | amendment | where | why it was made |
 |---|---|---|---|
 | A1 | The plan file itself was edited in commit `e18e24b`, 66 lines added and 17 removed, replacing the single `KnownPromptBlocks` list with separate name and container lists, and changing unmatched-tag semantics to require an open/close pair. | this file, Task 1 and Task 2 | Running the round-4 guard against three real recorded prompts before writing it reported `permissions` as an unknown surface and treated `<payload text>` in a fenced code block as a block. Either would have blocked every genuine review. |
@@ -2696,7 +2702,8 @@ failure. The defect was absorbing them silently.
 | A5 | The frozen Task 3 interface block omits `-OverrideOut` from the probe child call while the same task's prescribed call includes it. | this file, Task 3 | An internal contradiction in the frozen text. Resolved toward including it, because a probe without it verifies a configuration nothing can dispatch. |
 | A6 | SKILL.md's preflight 3 puts mirror remediation before the client probe; the frozen Task 4 ordered them the other way. | `skills/multi-model-verify/SKILL.md` | Presentation order only. The repo half is what the reader is already standing in. |
 | A7 | A sixth contract region `client-probe-scope-limit`, backlog item 7, and narrowed claims in README, the design and the backlog. | several | The plan's own "After the plan" step 1 mandates the behavioral run; that run proved a shipped claim false. The user chose to ship the prompt half with the gap recorded rather than extend scope. |
-| A8 | Four fail-closed fixes in the probe, two path fixes in the mirror, and their tests. | both scripts, both test modules | The mode-diff review of 2026-07-28 found four more false-clean paths and one destructive-path bug. Applied under the checkpoint at `.git/parallax/application-checkpoints/20260728-1552-22dd63311a33.md`. |
+| A8 | Four fail-closed fixes in the probe, and in the mirror BOTH the provider path resolution and a separate change making `-SkipProbe` exit 1 rather than 0, plus their tests. | both scripts, both test modules | Mode-diff round 1, 2026-07-28, found four false-clean paths in the probe and one destructive-path bug in the mirror. The `-SkipProbe` exit change is its own finding, not part of the path fix: a mirror built with no client measurement is not cleared for dispatch and must not share an exit code with one that is. It turned 14 existing mirror assertions red, which now go through one `assert_built` helper requiring exit 1 AND the specific skip line. Applied under the checkpoint at `.git/parallax/application-checkpoints/20260728-1552-22dd63311a33.md`. |
+| A9 | Three more fail-closed fixes in the probe: the override write and resolve are guarded, a known block whose opening literal is not exact stops the run, and an entry line that fails the whole grammar or carries two entries stops the run. `Get-SkillReport` gains a `Malformed` field, which widens the interface the frozen Task 1 declared. | `tools/codex-context-probe.ps1`, `evals/multi-model-verify/test_codex_context_probe.py` | Mode-diff round 2, 2026-07-28. The first two were reproduced before being fixed: an override under a missing parent reported status clean with a null artifact path and exit 0, and a second pass carrying all 29 entries under `<skills_instructions version="2">` reported `skills_after 0` and exit 0. Applied under AMENDMENT 1 of the same checkpoint. |
 
 **Rule for the next cycle:** a frozen plan is read-only. Amendments go in
 a section like this one, dated, with the evidence that forced each. If an

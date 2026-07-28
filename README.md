@@ -166,8 +166,9 @@ flowchart TD
   cross-vendor reviewer's PROMPT.
   `tools/codex-context-probe.ps1` renders the model-visible prompt with
   `codex debug prompt-input` (no tokens, no model call), classifies every
-  instruction source by where it came from, generates the skill-disable
-  override the dispatch then carries, and re-measures. A clean result
+  ADVERTISED SKILL by the directory it came from, checks the instruction
+  and feature blocks around it, generates the skill-disable override the
+  dispatch then carries, and re-measures. A clean result
   means no skill is advertised, no plugin or apps block is present, and
   nothing inside the reviewed tree is instructing the reviewer. An unmade
   or unreadable measurement is never a clean one. **Two things it does
