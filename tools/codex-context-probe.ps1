@@ -80,6 +80,7 @@ function Get-SkillReport($text) {
     $present = $text.Contains("<skills_instructions>")
     $entries = New-Object System.Collections.ArrayList
     $malformed = $false
+    $firstBad = ""
     if ($present) {
         $start = $text.IndexOf("### Available skills")
         if ($start -ge 0) {
@@ -117,9 +118,17 @@ function Get-SkillReport($text) {
             foreach ($line in ($seg -split "`n")) {
                 $trimmed = $line.TrimEnd("`r")
                 if ($trimmed -notmatch '^- [A-Za-z0-9_:-]+:') { continue }
-                if ($joined.IsMatch($trimmed)) { $malformed = $true; continue }
+                if ($joined.IsMatch($trimmed)) {
+                    $malformed = $true
+                    if (-not $firstBad) { $firstBad = $trimmed }
+                    continue
+                }
                 $m = $rx.Match($trimmed)
-                if (-not $m.Success) { $malformed = $true; continue }
+                if (-not $m.Success) {
+                    $malformed = $true
+                    if (-not $firstBad) { $firstBad = $trimmed }
+                    continue
+                }
                 [void]$entries.Add(@{
                     Name = $m.Groups[1].Value
                     Path = $m.Groups[2].Value
@@ -128,7 +137,7 @@ function Get-SkillReport($text) {
         }
     }
     return @{ BlockPresent = $present; Entries = @($entries)
-              Malformed = $malformed }
+              Malformed = $malformed; FirstMalformedLine = $firstBad }
 }
 
 function Get-InstructionReport($text) {
@@ -172,7 +181,10 @@ $script:KnownPromptBlocks = @(
 # project AGENTS.md bodies, verbatim. With it masked later, a house rule
 # that merely mentions `<skills_instructions>` in prose was read as an
 # unterminated container of that name and blocked a legitimate review.
-# Reproduced 2026-07-28, mode-diff round 3.
+# Reproduced 2026-07-28, mode-diff round 3. The order still matters even
+# though the pairing rule below is now count-based: masking the
+# user-authored body first removes any quoted delimiter of ANOTHER
+# container before that container's own count is taken.
 $script:KnownContainers = @(
     "INSTRUCTIONS", "permissions instructions", "skills_instructions",
     "plugins_instructions", "apps_instructions", "recommended_plugins",
@@ -186,46 +198,49 @@ function Hide-KnownContainer($text) {
     # like `<role>`. Scanning the flattened text would call that a new
     # outer surface and block a review that is fine. Replacement is
     # space-for-character so every other offset in the string stays put.
+    #
+    # EACH KNOWN CONTAINER MUST APPEAR EXACTLY ONCE, OR NOT AT ALL.
+    # Anything else is ambiguous and stops the run. Three earlier revisions
+    # each tried to be clever about WHICH delimiter to pair with, and each
+    # traded one wrong answer for another: first-match ended the span at a
+    # closing marker a user had merely quoted, and last-match then ran the
+    # span past a genuine outer block that followed the real close and
+    # erased it before the scan. Both were found by the mode-diff review,
+    # 2026-07-28, rounds 3 to 5. Flattened text cannot tell a quoted
+    # delimiter from a real one, so the honest answer is to refuse the
+    # ambiguity rather than to guess at it. Measured the same day against a
+    # real prompt: every container present in it occurs exactly once, open
+    # and close, so this rule costs nothing on real input.
     $masked = $text
     foreach ($name in $script:KnownContainers) {
         $open = "<" + $name + ">"
         $close = "</" + $name + ">"
-        $from = 0
-        while ($true) {
-            $s = $masked.IndexOf($open, $from, [System.StringComparison]::Ordinal)
-            if ($s -lt 0) { break }
-            $bodyStart = $s + $open.Length
-            if ($name -ceq "INSTRUCTIONS") {
-                # The LAST close, not the first. This is the one container
-                # carrying user-authored text, and a global AGENTS.md that
-                # QUOTES `</INSTRUCTIONS>` would otherwise end the masked
-                # span early, leaving the rest of the user's own file to be
-                # scanned as outer structure. There is one such container
-                # in the prompt, so its real close is the last occurrence,
-                # and over-masking a user-authored body is the safe
-                # direction: the guarantee is over OUTER blocks. Mode-diff
-                # round 4, 2026-07-28, as the closing-literal counterpart
-                # of round 3's opening-literal finding.
-                $e = $masked.LastIndexOf($close, [System.StringComparison]::Ordinal)
-                if ($e -lt $bodyStart) { $e = -1 }
-            } else {
-                $e = $masked.IndexOf($close, $bodyStart, [System.StringComparison]::Ordinal)
-            }
-            if ($e -lt 0) {
-                # An unterminated known container STOPS the run. An earlier
-                # revision masked to end-of-prompt instead, which hid every
-                # later unknown block from the scan: one malformed container
-                # near the top silently disabled the whole guard. Found by
-                # the mode-diff review, 2026-07-28.
-                throw [System.FormatException]::new(
-                    "the <" + $name + "> container never closes - the" +
-                    " remainder of the prompt cannot be scanned")
-            }
-            $len = $e - $bodyStart
-            $masked = $masked.Substring(0, $bodyStart) +
-                (" " * $len) + $masked.Substring($bodyStart + $len)
-            $from = $bodyStart + $len
+        $opens = ([regex]::Matches($masked, [regex]::Escape($open))).Count
+        $closes = ([regex]::Matches($masked, [regex]::Escape($close))).Count
+        if (($opens -eq 0) -and ($closes -eq 0)) { continue }
+        if (($opens -ge 1) -and ($closes -eq 0)) {
+            throw [System.FormatException]::new(
+                "the <" + $name + "> container never closes - the" +
+                " remainder of the prompt cannot be scanned")
         }
+        if (($opens -ne 1) -or ($closes -ne 1)) {
+            throw [System.FormatException]::new(
+                "the <" + $name + "> container's boundaries are ambiguous" +
+                " (" + $opens + " opening and " + $closes + " closing" +
+                " markers) - flattened text cannot tell a quoted delimiter" +
+                " from a real one, so which span is the container is a" +
+                " guess")
+        }
+        $s = $masked.IndexOf($open, [System.StringComparison]::Ordinal)
+        $bodyStart = $s + $open.Length
+        $e = $masked.IndexOf($close, [System.StringComparison]::Ordinal)
+        if ($e -lt $bodyStart) {
+            throw [System.FormatException]::new(
+                "the <" + $name + "> container closes before it opens")
+        }
+        $len = $e - $bodyStart
+        $masked = $masked.Substring(0, $bodyStart) +
+            (" " * $len) + $masked.Substring($bodyStart + $len)
     }
     return $masked
 }
@@ -243,9 +258,15 @@ function Get-UnknownPromptBlock($text) {
     # block that sits in no container. Requiring the pair reported ZERO
     # unknown blocks across three real prompts while still catching
     # memories_instructions, a hyphenated tag and a self-closing one.
-    $masked = Hide-KnownContainer $text
-    $found = New-Object System.Collections.ArrayList
-
+    # EXACTNESS IS CHECKED FIRST, ON THE RAW TEXT, BEFORE MASKING. Masking
+    # now counts delimiters, so a non-exact known tag would otherwise trip
+    # the count rule first and report an ambiguous container instead of the
+    # real problem - and the exactness rule, which is what actually closes
+    # the attributed-tag false clean, could then rot with all of its tests
+    # still green for the wrong reason. Mode-diff round 5, 2026-07-28. A
+    # quoted EXACT literal in a user's own file still passes here, because
+    # it is exact; only a malformed known tag blocks.
+    #
     # KNOWN NAMES ARE CHECKED ANYWHERE, NOT ONLY AT A LINE START. Every
     # dedicated parser matches an EXACT literal, so any other form of a
     # known tag is invisible to all of them. The general scan below is
@@ -261,8 +282,6 @@ function Get-UnknownPromptBlock($text) {
     # ` instructions` read as an attribute. An attribute test would block
     # every real review.
     #
-    # This runs on the MASKED text, so a known literal quoted inside a
-    # user's own AGENTS.md body is already blanked and cannot reach here.
     # NAME RECOGNITION IS CASE-INSENSITIVE, THE LITERAL ALLOWLIST IS NOT.
     # The two must differ. With both case-sensitive,
     # `<SKILLS_INSTRUCTIONS version="2">` matched neither this scan nor the
@@ -276,7 +295,7 @@ function Get-UnknownPromptBlock($text) {
     foreach ($c in $script:KnownContainers) { $knownOpen += ("<" + $c + ">") }
     $names = ($script:KnownPromptBlocks | ForEach-Object { [regex]::Escape($_) }) -join "|"
     $knownRx = [regex]("(?i)<(?:" + $names + ")\b[^>]*>")
-    foreach ($m in $knownRx.Matches($masked)) {
+    foreach ($m in $knownRx.Matches($text)) {
         if ($knownOpen -ccontains $m.Value) { continue }
         throw [System.FormatException]::new(
             "the known block " + $m.Value + " is not in the exact form" +
@@ -284,6 +303,8 @@ function Get-UnknownPromptBlock($text) {
             " nothing")
     }
 
+    $masked = Hide-KnownContainer $text
+    $found = New-Object System.Collections.ArrayList
     $rx = [regex]'(?m)^[ \t]*<([A-Za-z][A-Za-z0-9_.:\-]*)((?:\s[^>]*?)?)(/?)>'
     foreach ($m in $rx.Matches($masked)) {
         $name = $m.Groups[1].Value
@@ -500,9 +521,17 @@ if ($skills.Entries.Count -eq 0) {
         " this parser invented rather than measured") $Json
 }
 if ($skills.Malformed) {
+    # ACCEPTED LIMIT, and it blocks rather than guessing. A skill
+    # DESCRIPTION is free text, so a description that itself contains a
+    # complete file marker followed by another entry start is
+    # indistinguishable, in one flattened line, from two entries the
+    # renderer joined. Mode-diff round 5, 2026-07-28, after round 4 had
+    # already narrowed this detector once. Blocking is the safe direction
+    # and the reason names the line, so a user can see what tripped it.
     Write-Blocked ("an entry line inside the skills block does not satisfy" +
-        " the whole entry grammar, or carries more than one entry - the" +
-        " measurement below would be missing or merging sources") $Json
+        " the whole entry grammar, or reads as two entries on one line - " +
+        " the measurement below would be missing or merging sources." +
+        " First such line: " + $skills.FirstMalformedLine) $Json
 }
 
 $repoScoped = @()

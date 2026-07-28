@@ -309,9 +309,12 @@ reason the contract coverage checker forbids false coverage.
 | the override artifact cannot be written, located, or hashed | transport failure | blocked; a verified value nothing can dispatch is not a clean result |
 | a mirror built with `-SkipProbe` | not verified | exit 1, not cleared for dispatch |
 
-**The six rows above were added on 2026-07-28, after implementation, by
-mode-diff rounds 1 to 4.** They record findings, and they differ in how
-each was established, which the earlier wording of this note got wrong.
+**Five rows above, covering six findings, were added on 2026-07-28, after
+implementation, by mode-diff rounds 1 to 5.** The case-variant finding is
+a fourth condition folded into the non-exact-known-block row rather than a
+row of its own, which is why the counts differ; an earlier version of this
+note said "six rows" and was corrected at round 5. They also differ in how
+each was established, which the first version of this note got wrong too.
 
 - THREE were reproduced against the built script as `status: clean` with
   exit 0: the run with no suppression pass, the unwritable override
@@ -363,6 +366,28 @@ unchanged.
   from inside the reviewed tree. It does NOT mean the reviewer received
   no instructions at all — the global `AGENTS.md` in the limit below
   survives it — and it says nothing about what the reviewer can DO.
+- **A known container's delimiters must appear exactly once, or the run
+  blocks.** Flattened prompt text cannot tell a QUOTED delimiter from a
+  real one, and line-anchoring is not available as a tie-break: measured
+  2026-07-28, the real prompt's `multi_agent_mode` container opens and
+  closes inline, so a line-start rule would block every genuine review.
+  Three revisions each guessed differently and each was wrong. Pairing
+  with the first close ends the span early and exposes the rest of a
+  user's own file to the outer scan; pairing with the last close runs the
+  span past a genuine outer block and erases it before the scan, which
+  turns a false positive into a false CLEAN. So the probe refuses the
+  ambiguity. The cost is real and accepted: a user whose global
+  `AGENTS.md` quotes `</INSTRUCTIONS>` gets a blocked run with an accurate
+  reason rather than a silently wrong measurement. Every container present
+  in the real prompt occurs exactly once, so this costs nothing on real
+  input. Mode-diff rounds 3 to 5.
+- **A skill description that mimics a joined entry blocks, and cannot be
+  distinguished.** A description is free text, so one containing a
+  complete `(file: ...SKILL.md)` marker followed by another entry start is
+  indistinguishable, within one flattened line, from two entries the
+  renderer joined. The probe blocks and names the offending line. Blocking
+  is the safe direction: the alternative is a first measurement that
+  silently merges or drops a source. Mode-diff rounds 4 and 5.
 - **The global `AGENTS.md` cannot be suppressed.** No available lever
   removes `$CODEX_HOME/AGENTS.md`. It is measured, named with its path, and
   recorded. A user whose global instruction file shapes reviews still has a

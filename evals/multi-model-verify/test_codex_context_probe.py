@@ -841,21 +841,68 @@ def test_a_case_variant_known_block_blocks(tmp_path, pass_no):
     assert "exact form this parser reads" in json.loads(proc.stdout)["reason"]
 
 
-def test_a_quoted_closing_marker_in_the_global_body_does_not_block(tmp_path):
-    # The closing-literal counterpart of the opening-literal finding. A
-    # global AGENTS.md that QUOTES `</INSTRUCTIONS>` ended the masked span
-    # early, leaving the rest of the user's own file to be scanned as
-    # outer structure - and the paired tag after it then blocked a
-    # legitimate review. Mode-diff round 4, 2026-07-28.
+def test_a_quoted_closing_marker_in_the_global_body_blocks_as_ambiguous(tmp_path):
+    """A quoted closing delimiter makes the container's span a guess.
+
+    Rounds 4 and 5 of the mode-diff review pulled in opposite directions
+    here, and this is the tie-break. Round 4 found that pairing with the
+    FIRST close ends the span early, exposing the rest of the user's own
+    file to the outer scan. Round 5 found that pairing with the LAST close
+    then runs the span past a genuine outer block and erases it before the
+    scan - trading a false positive for a false CLEAN, which is the worse
+    direction.
+
+    Flattened text cannot tell a quoted delimiter from a real one, and
+    line-anchoring is not available either: measured 2026-07-28, the real
+    prompt's `multi_agent_mode` container opens and closes inline, so a
+    line-start rule would block every genuine review.
+
+    So the probe refuses the ambiguity instead of guessing at it, which is
+    the same rule the whole script is built on: a prompt this parser does
+    not fully understand is never a clean result. Round 5 asked for
+    exactly this - "block when that boundary is missing or ambiguous".
+    """
     fixture = tmp_path / "quoted-close.json"
     doc = json.loads((FIXTURES / "flagged.json").read_text(encoding="utf-8"))
     doc[0]["content"][0]["text"] = doc[0]["content"][0]["text"].replace(
         "<INSTRUCTIONS>",
         "<INSTRUCTIONS>\nHouse rule: never write `</INSTRUCTIONS>` by"
-        " hand.\n<role>reviewer</role>\n", 1)
+        " hand.\n", 1)
     fixture.write_text(json.dumps(doc), encoding="utf-8")
     proc = probe_with(tmp_path, fixture, FIXTURES / "suppressed.json")
-    assert proc.returncode == 0, proc.stdout
+    assert proc.returncode == 1, proc.stdout
+    assert "ambiguous" in json.loads(proc.stdout)["reason"]
+
+
+def test_a_quoted_close_cannot_erase_a_later_genuine_block(tmp_path):
+    # Round 5's shape: a genuine unknown outer block sits after the real
+    # close, and a later line quotes the closing marker. Pairing with the
+    # last close masked the genuine block out of existence and reported
+    # clean. It must block instead.
+    fixture = tmp_path / "erased.json"
+    doc = json.loads((FIXTURES / "flagged.json").read_text(encoding="utf-8"))
+    doc[0]["content"][0]["text"] = doc[0]["content"][0]["text"].replace(
+        "</INSTRUCTIONS>",
+        "</INSTRUCTIONS>\n<memories_instructions>\nreal surface\n"
+        "</memories_instructions>\nlater prose quotes </INSTRUCTIONS>\n", 1)
+    fixture.write_text(json.dumps(doc), encoding="utf-8")
+    proc = probe_with(tmp_path, fixture, FIXTURES / "suppressed.json")
+    assert proc.returncode == 1, proc.stdout
+    assert "ambiguous" in json.loads(proc.stdout)["reason"]
+
+
+def test_two_instruction_containers_block(tmp_path):
+    # A future renderer emitting two exact containers would have had its
+    # first opener paired with the second's close, masking everything
+    # between them.
+    fixture = tmp_path / "doubled.json"
+    doc = json.loads((FIXTURES / "flagged.json").read_text(encoding="utf-8"))
+    doc[0]["content"][0]["text"] += (
+        "\n<INSTRUCTIONS>\nsecond container\n</INSTRUCTIONS>\n")
+    fixture.write_text(json.dumps(doc), encoding="utf-8")
+    proc = probe_with(tmp_path, fixture, FIXTURES / "suppressed.json")
+    assert proc.returncode == 1, proc.stdout
+    assert "ambiguous" in json.loads(proc.stdout)["reason"]
 
 
 def test_a_description_with_a_paren_then_a_dash_is_not_malformed(tmp_path):
