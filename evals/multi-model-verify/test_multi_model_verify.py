@@ -131,16 +131,80 @@ class TestTransportContract:
         text = read(SKILL_MD)
         assert "model_reasoning_effort=<canonical-effort>" in text
 
+    def test_standing_isolation_flags_on_dispatch_and_resume(self):
+        # Measured 2026-07-28 (codex-cli 0.144.1): the default prompt
+        # advertised 60 skills, 31 of them from the user's plugin cache,
+        # including superpowers:using-superpowers, whose DESCRIPTION alone
+        # tells the model to invoke a skill before answering anything. In
+        # another session the reviewer adopted it, roleplayed the
+        # orchestrator, and escalated without opening the plan.
+        # --disable plugins removes all 31 and the recommended-plugins
+        # block; --disable apps removes the apps block.
+        text = read(SKILL_MD)
+        assert text.count("--disable plugins --disable apps") >= 2, (
+            "the isolation flags must ride BOTH the dispatch and the resume"
+            " - nothing carries across a resume by itself, which is the"
+            " same trap --sandbox read-only already documents"
+        )
+
+    def test_the_verified_override_is_what_gets_dispatched(self):
+        # The flags alone leave 29 of the original 60 skills in place: the
+        # user's own skills directory and codex's built-ins. Only the
+        # generated skills.config override removes those, and the probe's
+        # second pass is what verifies it. A probe that verifies a
+        # configuration the reviewer never receives has measured nothing.
+        text = read(SKILL_MD)
+        assert text.count("-c $override") >= 2, (
+            "the VERIFIED override must ride both the dispatch and every"
+            " resume, not only the probe's own second call"
+        )
+        assert "-OverrideOut <verified-override-file>" in text, (
+            "the preflight that produces the artifact must be the one the"
+            " transport consumes; an -OverrideOut nobody passes leaves the"
+            " dispatch reading a file that was never written"
+        )
+        # Two COMPLETE preambles, not two uses of a variable. Rounds are
+        # separate shells: a $override set in round 1 does not exist in
+        # round 3, and one verification does not cover a file that can
+        # change between rounds.
+        assert text.count('ReadAllBytes("<verified-override-file>")') >= 2
+        assert text.count('$seen -cne "<override-sha256>"') >= 2
+        assert text.count("UTF8Encoding($false, $true)).GetString($bytes)") >= 2
+        assert "Encoding]::ASCII.GetBytes($override)" not in text, (
+            "ASCII maps non-ASCII path characters to '?', so the hash would"
+            " authenticate a value the probe never verified"
+        )
+
+    def test_the_plugin_cache_is_no_longer_called_harmless(self):
+        text = read(SKILL_MD)
+        assert "not a stop and never a finding" not in text, (
+            "the claim is measured false: the cache delivered 31 skills"
+            " into the reviewer's context"
+        )
+
+    def test_preflight_measures_the_client_context(self):
+        text = read(SKILL_MD)
+        assert "codex debug prompt-input" in text, (
+            "preflight must read what the reviewer actually receives, not"
+            " only enumerate the reviewed tree"
+        )
+        assert "codex-context-probe.ps1" in text
+        assert "new-review-mirror.ps1" in text
+
     def test_resume_flags_before_subcommand(self):
         text = read(SKILL_MD)
         # Model and effort must be re-pinned on EVERY call including resume -
         # a resume that falls back to config defaults silently changes the
         # debate's model (cross-review finding, 2026-07-12).
         assert re.search(
-            r"codex exec --sandbox read-only -m <canonical-model-id>"
+            r"codex exec --sandbox read-only --disable plugins"
+            r" --disable apps -c \$override -m <canonical-model-id>"
             r" -c model_reasoning_effort=<canonical-effort>"
             r" [^\n]*resume <SESSION_ID>", text
-        ), "resume must re-pin model and effort, flags BEFORE the subcommand"
+        ), (
+            "resume must re-pin model, effort, the isolation flags AND the"
+            " verified override, flags BEFORE the subcommand"
+        )
         assert "resume --last" not in text, (
             "resume --last is fragile under concurrent codex sessions and"
             " must not appear in SKILL.md (prohibition lives in"
