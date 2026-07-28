@@ -8,7 +8,7 @@
 
 **Tech Stack:** Python 3.12 standard library only (`ast`, `re`, `pathlib`), pytest 9.x, `tmp_path` fixtures. No new dependencies.
 
-**This is revision 6 of the plan, after six rounds of cross-vendor review that found nineteen defects.** Revision 1 split regions into sentences with a regex and treated every string constant as a pin; both were refuted by running the code. Revision 2 fixed those but still let an enclosing expression invert a pin, and still let a multi-line marker comment vanish. See the design's "Revision history" before proposing a return to any earlier behaviour. Do not reintroduce sentence splitting, and do not relax the clause rule into a generic tree walk.
+**This is revision 7 of the plan, after six rounds of cross-vendor review that found twenty-one defects.** Revision 1 split regions into sentences with a regex and treated every string constant as a pin; both were refuted by running the code. Revision 2 fixed those but still let an enclosing expression invert a pin, and still let a multi-line marker comment vanish. See the design's "Revision history" before proposing a return to any earlier behaviour. Do not reintroduce sentence splitting, and do not relax the clause rule into a generic tree walk.
 
 ## Global Constraints
 
@@ -504,10 +504,23 @@ def test_collects_membership_pins_and_joins_implicit_concatenation(tmp_path):
 
 def test_a_count_assertion_is_a_pin(tmp_path):
     """The second positive shape. This repo pins several rules with
-    body.count(...) == 1 to catch a phrase that occurs twice."""
-    src = 'def test_x():\n    assert body.count("The rule stands.") == 1\n'
+    body.count(...) == 1 to catch a phrase that occurs twice.
+
+    Both branches are exercised: the COMPARED form and the BARE call.
+    They carry separate arity guards, so a test of one proves nothing
+    about the other.
+    """
+    src = (
+        'def test_x():\n'
+        '    assert body.count("Compared rule.") == 1\n'
+        '    assert body.count("Bare rule.")\n'
+        '    assert body.count("At least rule.") >= 2\n'
+    )
     p = _write(tmp_path, "test_sample.py", src)
-    assert "The rule stands." in collect_pins([p])
+    pins = collect_pins([p])
+    assert "Compared rule." in pins
+    assert "Bare rule." in pins
+    assert "At least rule." in pins
 
 
 def test_a_docstring_is_not_a_pin(tmp_path):
@@ -606,12 +619,24 @@ def test_a_count_call_with_more_than_one_argument_is_not_a_pin(tmp_path):
     """Every artifact states the singular form `body.count("literal")`.
     Iterating all arguments would have made the code broader than the
     grammar it documents, which is how the instruction file and the code
-    drifted apart twice before."""
-    src = 'def test_x():\n    assert receiver.count("The rule.", "Other.") == 1\n'
+    drifted apart twice before.
+
+    The compared branch and the bare branch have SEPARATE arity and
+    keyword guards. Both are exercised here, in both failing shapes, so
+    the test locks the whole fix rather than half of it.
+    """
+    src = (
+        'def test_x():\n'
+        '    assert receiver.count("Compared a.", "Compared b.") == 1\n'
+        '    assert receiver.count("Bare a.", "Bare b.")\n'
+        '    assert receiver.count("Compared kw.", start=0) == 1\n'
+        '    assert receiver.count("Bare kw.", start=0)\n'
+    )
     p = _write(tmp_path, "test_sample.py", src)
     pins = collect_pins([p])
-    assert "The rule." not in pins
-    assert "Other." not in pins
+    for needle in ("Compared a.", "Compared b.", "Bare a.", "Bare b.",
+                   "Compared kw.", "Bare kw."):
+        assert needle not in pins
 
 
 def test_a_conjunction_of_clauses_collects_both(tmp_path):
@@ -809,11 +834,11 @@ def collect_pins(paths):
     string bound to a name and asserted through that name, a regex lock
     such as `re.search(r"...", text)`, and a literal compared with `==`.
 
-    Two limits run the OTHER way and could in principle manufacture
-    coverage, both stated in the design and neither closable from a
-    syntax tree: the container is untyped (nothing here knows whether
-    `body` is a document), and collection is execution-blind (an
-    assertion inside a platform-skipped module still registers as a pin).
+    Some limits run the OTHER way and could in principle manufacture
+    coverage. The design tags every limit by direction and states NO
+    total, because the total was written as "one", corrected to "two",
+    and was still wrong. Read the tags there rather than trusting a count
+    here.
     """
     pins = set()
     for path in paths:

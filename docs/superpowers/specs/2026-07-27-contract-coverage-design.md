@@ -4,8 +4,8 @@ Date: 2026-07-27
 Backlog item: 1 of 6 (docs/superpowers/plans/2026-07-27-0150-backlog.md)
 Target release: 0.15.0
 
-**Revision 6**, after six rounds of cross-vendor plan debate across two
-reviewer lanes, which found nineteen defects between them. The mechanism
+**Revision 7**, after six rounds of cross-vendor plan debate across two
+reviewer lanes, which found twenty-one defects between them. The mechanism
 changed three times: sentence splitting is gone, pin collection is a
 clause-matching rule rather than a tree walk, and marker rejection now
 runs over the whole document text. What changed and why is in "Revision
@@ -217,7 +217,20 @@ The reader never has to search 633 assertions to find which one is short.
 
 ## Accepted limits
 
-- **Every positive assertion outside the three clause forms is rejected,
+**Every limit below is tagged by DIRECTION, and no total is stated.**
+FALSE NEGATIVE means the region reads uncovered — a red, and safe. FALSE
+COVERAGE means a region could read as locked when nothing locks it, which
+is the defect this checker exists to catch, so those are the ones that
+matter.
+
+The tag replaces a count on purpose. The count of false-coverage limits
+was written as "one", corrected to "two", and was still wrong: a reviewer
+then showed cross-region coverage is a third. A decorative number nobody
+re-derives is exactly what this repo has been burned by before, in
+`fallbacks.md`'s invented class total. Tag each limit and let the reader
+count if they care.
+
+- FALSE NEGATIVE. **Every positive assertion outside the three clause forms is rejected,
   whatever it means.** This is the categorical statement, and it is the
   honest way to put it: the checker does not attempt to understand
   assertions, it recognizes three shapes. Reversed count comparisons
@@ -244,7 +257,7 @@ The reader never has to search 633 assertions to find which one is short.
     larger rule than the one it would serve. An author who wants a
     marked region locked writes a membership assertion instead.
   - A literal compared with `==`.
-- **A typo in the comment OPENER makes a marker invisible rather than
+- FALSE NEGATIVE. **A typo in the comment OPENER makes a marker invisible rather than
   rejected.** The detector tolerates a spaced colon, so
   `<!-- contract : start id=x -->` is now rejected rather than ignored.
   What it cannot see is a broken `<!--`, as in
@@ -256,15 +269,12 @@ The reader never has to search 633 assertions to find which one is short.
   against the declared inventory, which this plan's task order always
   populates before any document is touched. A different task order would
   not have that protection.
-- **Neither clause form can tell whether its container is a document.**
+- FALSE COVERAGE. **Neither clause form can tell whether its container is a document.**
   `ast` sees names and method calls, never types. `paths.count("The rule
   stands.")` over a list registers as a pin, and so does
   `"The rule stands." in some_subprocess_output`. The live suite really
   does assert membership against subprocess output and hook context, not
-  only document text, so this is one of the TWO accepted limits that
-  could manufacture coverage rather than merely losing it. The other is
-  its execution-blind sibling below, in this same bullet. It needs a genuine
-  coincidence: a non-document container asserted to hold a string that
+  only document text. It needs a genuine coincidence: a non-document container asserted to hold a string that
   happens to contain a whole marked region. Every live `.count` receiver
   is a document string, and the wording everywhere else says
   `body.count(...)` and `in body` because that is the intended use.
@@ -278,29 +288,29 @@ The reader never has to search 633 assertions to find which one is short.
   runtime. This is live structure, not a hypothetical:
   `test_attestation.py` carries a module-level `skipif` for a missing
   PowerShell host, and `test_multi_model_verify.py` has several
-  `pytest.skip` guards. It shares the container limit's direction: it can
-  manufacture coverage, not merely lose it. Neither is live for the nine
+  `pytest.skip` guards. It is also FALSE COVERAGE. Neither is live for the nine
   regions in scope — all nine planned pins sit in unconditionally-run
   tests — but the suite's own baseline already reports one skip. Like the
   container limit, this cannot be closed from the syntax tree, so it is
   stated.
-- **`body.count("x") == 0` is rejected, not accepted.** An earlier
+- REJECTED, not accepted. **`body.count("x") == 0`.** An earlier
   revision left it in as a limit, reasoning that the false-coverage path
   needed one document to both contain and exclude the same text. That
   reasoning was wrong: pins and regions are pooled repo-wide, so an
   absence assertion about document B can cover identical text in document
   A. The count comparison must therefore be positive.
-- **Cross-region coverage.** A region is covered if any pin anywhere
-  contains it, so two regions could in principle be satisfied by each
-  other's pins. Regions are long enough that this requires a real
-  coincidence. Accepted knowingly when pin discovery was chosen over a
-  registry.
-- **Semantic correctness.** The checker proves a region is locked, not
+- FALSE COVERAGE. **Cross-region coverage.** A region is covered if any
+  pin anywhere contains it, and `uncovered` never binds a pin to the
+  region's own document, so one region can be satisfied by another's pin.
+  Regions are long enough that this requires a real coincidence. Accepted
+  knowingly when pin discovery was chosen over a registry; a registry is
+  the only thing that would close it.
+- OUT OF SCOPE. **Semantic correctness.** The checker proves a region is locked, not
   that the region is right. That remains the reviewer's job.
-- **Unmarked text.** Contract text outside markers is exactly as exposed
+- OUT OF SCOPE. **Unmarked text.** Contract text outside markers is exactly as exposed
   as it is today. The mechanism improves marked regions and worsens
   nothing.
-- **No weakening valve, deliberately.** As regions accumulate, keeping
+- BY DESIGN. **No weakening valve.** As regions accumulate, keeping
   pins in sync costs effort. There is no mechanism to soften a failing
   check, because this repo's demonstrated failure mode is weakening a
   perpetually-red test. If the cost becomes real, that is a debate to
