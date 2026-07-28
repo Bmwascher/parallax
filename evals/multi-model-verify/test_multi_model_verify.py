@@ -721,6 +721,30 @@ class TestEvalFixtures:
             "a missing header block must fail closed"
         )
 
+    @pytest.mark.parametrize("second", ["model:", "model: ", "model:decoy"])
+    def test_a_malformed_duplicate_field_fails_closed(self, second):
+        # "Exactly once" first counted only lines it could PARSE, so a block
+        # holding a valid model line AND a bare `model:` yielded one
+        # recognized value and passed - "exactly one line I could read", not
+        # exactly once. The prior duplicate test used two VALID values and
+        # never reached this boundary, which is a test that cannot fail
+        # against the defect it names. Cross-vendor lane, round 6.
+        mod = self._load_runner()
+        notes = read(REFERENCES / "model-prompting-notes.md")
+        canonical = re.search(r"Canonical model id: `([^`\n]+)`",
+                              notes).group(1)
+        block = (
+            "OpenAI Codex v0.144.1\n--------\n"
+            f"model: {canonical}\n"
+            f"{second}\n"
+            "provider: openai\n"
+            "sandbox: read-only\n"
+            "reasoning effort: high\n--------\n"
+        )
+        assert not mod.effective_route_ok(block, canonical, "high"), (
+            f"a second {second!r} label must fail closed, not be ignored"
+        )
+
     def test_force_color_is_stripped_from_the_grader_env(self):
         # Belt and braces on the input side of the same defect.
         mod = self._load_runner()

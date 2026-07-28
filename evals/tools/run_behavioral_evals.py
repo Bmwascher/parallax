@@ -640,7 +640,14 @@ def effective_route_ok(output, model, effort):
     supplied by a payload line, and stripping turned
     `mo<esc>del: <expected>` into a header line that never existed.
     Parsing is now bound to the startup-header block, and each field must
-    appear EXACTLY ONCE in it - absent and duplicated both fail closed."""
+    appear EXACTLY ONCE in it - absent and duplicated both fail closed.
+
+    LABELS are counted separately from values. Counting only successful
+    `key: value` parses meant a block holding both `model: <expected>` and
+    a bare `model:` produced ONE recognized value and passed, because the
+    malformed line matched nothing - so "exactly once" was really "exactly
+    one line I could read". `model: ` and `model:<value>` did the same. A
+    rule that says exactly once has to count the label."""
     expected = {"model": model, "provider": "openai",
                 "reasoning effort": effort, "sandbox": "read-only"}
     block = header_block(output)
@@ -649,8 +656,10 @@ def effective_route_ok(output, model, effort):
         return False
     header = {}
     for key in expected:
-        found = re.findall(rf"(?m)^{key}: (.+)$", block)
-        header[key] = found[0].strip() if len(found) == 1 else ""
+        labels = re.findall(rf"(?m)^{re.escape(key)}:", block)
+        found = re.findall(rf"(?m)^{re.escape(key)}: (.+)$", block)
+        one_each = len(labels) == 1 and len(found) == 1
+        header[key] = found[0].strip() if one_each else ""
     ok = all(header[key] == want for key, want in expected.items())
     if not ok:
         print(f"    grader route mismatch: header={header};"
@@ -714,9 +723,13 @@ def grade(case, transcript):
             return []
         # ONE ordered stream (stderr merged into stdout, same as the drift
         # watch's 2>&1 capture): the startup header always precedes the
-        # prompt echo, so first-match cannot be shadowed by header-shaped
-        # text quoted later in the echoed transcript. Separate captures
-        # concatenated would break that ordering (Sol diff review, 0.6.0).
+        # prompt echo, and separate captures concatenated would break that
+        # ordering (Sol diff review, 0.6.0). Ordering is what lets the
+        # parser BIND to the header block - it takes the text between the
+        # first two delimiter rules, so header-shaped text quoted later in
+        # the echoed transcript is discarded before any field is read. This
+        # no longer rests on first-match-wins, which protected a field that
+        # was present and did nothing for one the header omitted (0.16.0).
         # Fail closed: a mismatched route means these verdicts came from an
         # unverified grader.
         if not effective_route_ok(proc.stdout or "", model, effort):
