@@ -305,6 +305,15 @@ count if they care.
   Regions are long enough that this requires a real coincidence. Accepted
   knowingly when pin discovery was chosen over a registry; a registry is
   the only thing that would close it.
+- FALSE COVERAGE. **A region and its pin shrunk together in lockstep.**
+  If an edit trims the marked body and its pin in the same change,
+  keeping the shorter pin a superset of the shorter body, the region
+  reads covered before and after, even though the protected text just
+  got smaller. This is instance 11's shape one level up: instance 11 left
+  a fixed region with a pin that stopped short; this is the region and
+  the pin both moving together. The checker compares a pin against the
+  body as both stand now, and has no memory of what either said before,
+  so it cannot see the shrink.
 - OUT OF SCOPE. **Semantic correctness.** The checker proves a region is locked, not
   that the region is right. That remains the reviewer's job.
 - OUT OF SCOPE. **Unmarked text.** Contract text outside markers is exactly as exposed
