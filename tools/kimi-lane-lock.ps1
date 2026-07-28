@@ -100,13 +100,36 @@ function Get-LockAgeMinutes($lock) {
     # lock is breakable instead of permanent.
     if (-not $lock) { return [double]::MaxValue }
     $stamp = $lock.stamp
-    # The type check is load-bearing, not defensive habit. A stamp that
-    # parsed as an OBJECT, an ARRAY or a NUMBER reached TryParse with no
-    # matching overload and threw, which terminated this function before it
-    # could return the intended infinite age - so the caller saw no age at
+    # A stamp that parsed as an OBJECT, an ARRAY or a NUMBER reached TryParse
+    # with no matching overload and THREW, terminating this function before
+    # it could return the intended infinite age - so the caller saw no age at
     # all, `$null -ge 45` was false, and the lock read as "held 0 min"
     # FOREVER. The routine written to stop a malformed lock wedging the lane
-    # was the thing that wedged it.
+    # was the thing that wedged it. Hence the type check.
+    #
+    # But "string or unusable" was wrong about the NORMAL case on the other
+    # host. Windows PowerShell 5.1 hands back the stamp as a String;
+    # PowerShell 7 auto-converts an ISO-8601 string to a DateTime inside
+    # ConvertFrom-Json. So on pwsh EVERY well-formed lock read as unusable,
+    # every lock was instantly breakable, and the lane had no exclusion at
+    # all - while the Windows suite stayed green, because it picks
+    # powershell.exe when both hosts are installed. CI caught it; the
+    # 0.16.0 release did not. A date the parser already produced is the
+    # answer, not a failure: take it, and keep the unusable path for what is
+    # genuinely not a time.
+    if ($stamp -is [System.DateTimeOffset]) {
+        $age = ([System.DateTimeOffset]::Now - $stamp).TotalMinutes
+        if ($age -lt 0) { return [double]::MaxValue }
+        return $age
+    }
+    if ($stamp -is [datetime]) {
+        # Utc, Local and Unspecified all convert to the right instant: the
+        # cast reads Kind, and Unspecified means local, which is what an
+        # offsetless stamp means here too.
+        $age = ([System.DateTimeOffset]::Now - [System.DateTimeOffset]$stamp).TotalMinutes
+        if ($age -lt 0) { return [double]::MaxValue }
+        return $age
+    }
     if ($stamp -isnot [string]) { return [double]::MaxValue }
     # DateTimeOffset, not DateTime. `[datetime]::TryParse` with
     # RoundtripKind converts an OFFSET-bearing stamp (`+00:00`) to local time

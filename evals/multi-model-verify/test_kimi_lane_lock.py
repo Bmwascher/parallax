@@ -19,6 +19,7 @@ Runs wherever a PowerShell host exists: Windows powershell.exe or pwsh
 """
 
 import json
+import os
 import shutil
 import subprocess
 from datetime import datetime, timedelta, timezone
@@ -30,7 +31,15 @@ HERE = Path(__file__).resolve().parent
 PLUGIN_ROOT = HERE.parent.parent
 LOCK = PLUGIN_ROOT / "tools" / "kimi-lane-lock.ps1"
 
-POWERSHELL = shutil.which("powershell") or shutil.which("pwsh")
+# Windows PowerShell 5.1 and PowerShell 7 do NOT agree about this script's
+# input: `ConvertFrom-Json` returns an ISO-8601 stamp as a String on 5.1 and
+# auto-converts it to a DateTime on 7. A lock bug that only appears on one
+# host is therefore possible, and one shipped in 0.16.0 - every lock read as
+# unusable on pwsh while this suite stayed green locally, because it picks
+# powershell.exe when both are installed. PARALLAX_PS_HOST forces the other
+# one so both can be run before pushing; CI has pwsh only.
+POWERSHELL = (os.environ.get("PARALLAX_PS_HOST")
+              or shutil.which("powershell") or shutil.which("pwsh"))
 
 pytestmark = pytest.mark.skipif(
     POWERSHELL is None, reason="no PowerShell host on PATH")
@@ -380,6 +389,22 @@ def test_a_stamp_that_is_not_a_string_is_breakable(tmp_path, stamp):
         "the break notice must describe an unusable age, not print it")
     holder = json.loads(p.read_text(encoding="ascii"))
     assert holder["label"] == "debate-A"
+
+
+def test_a_well_formed_lock_never_reads_as_unusable(tmp_path):
+    # The direct statement of what broke on PowerShell 7: the script's OWN
+    # stamp came back from ConvertFrom-Json as a DateTime rather than a
+    # String, the string-or-unusable check rejected it, and every lock the
+    # script had just written read as infinitely old - so the lane held
+    # nothing. Whichever host runs this, a lock written a moment ago must
+    # report an age.
+    p = tmp_path / "k.lock"
+    assert run_lock(p, "-Acquire", "-Label", "debate-A").returncode == 0
+    s = run_lock(p)
+    assert "age unusable" not in s.stdout, (
+        "the script must be able to read a stamp it wrote itself"
+    )
+    assert "held" in s.stdout and "min" in s.stdout
 
 
 def test_a_current_utc_stamp_still_holds_the_lane(tmp_path):
