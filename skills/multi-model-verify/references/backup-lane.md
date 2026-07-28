@@ -48,7 +48,47 @@ Panel participation: a user-invoked panel per references/panels.md is a second s
 "the line appears somewhere" check attributes nothing. The rule:
 
 - Before every dispatch capture the byte length of `~/.kimi/logs/kimi.log`; after the call, past that offset, require all three: exactly one new `Using LLM model:` line carrying the canonical backup id, a `Loading agent:` line naming the committed yaml, and a `Loaded tools:` line equal to the allowlist exactly.
-- Zero matching new lines, more than one, a wrong id, a wrong agent path, or any extra tool entry is a route-attribution failure: the reply is DISCARDED unread and the failure goes to the fallbacks.md consent gate.
+- Zero matching new lines, a wrong id, a wrong agent path, or any extra tool entry is a route-attribution failure: the reply is DISCARDED unread and the failure goes to the fallbacks.md consent gate.
+- **Attribute by session block, not by position in the window.** Counting
+  matches across the whole post-offset window makes any concurrent kimi
+  session fatal, which is what discarded two of six dispatched rounds on
+  2026-07-27.
+  <!-- contract:start id=session-block-attribution -->
+  The three evidence lines carry no session id of their
+  own, so bind them by ORDER instead: locate the one
+  `Created new session: <id>` or `Resuming session: <id>` line past the
+  offset whose id is THIS round's, and read only the lines from it up to the
+  next session event of any id. Require exactly one of each of the three
+  inside that block. Session events belonging to other ids are ignored, not
+  counted.
+  <!-- contract:end -->
+  Verified against the live log 2026-07-28 over a window holding two foreign
+  startup blocks: the old whole-window rule reported two of each and failed,
+  while block attribution resolved both sessions to exactly one of each.
+  <!-- contract:start id=session-block-kind -->
+  The block's own kind is
+  evidence too: a fresh call must show `Created new session` and a resume
+  must show `Resuming session` carrying the id being resumed. A resume that
+  silently started a new session has lost the reviewer's debate state, and
+  the kind line is where that surfaces.
+  <!-- contract:end -->
+  <!-- contract:start id=session-block-residual -->
+  Residual, accepted: a foreign session that starts INSIDE this round's
+  startup block truncates it, and the round still fails. That window is
+  under a second rather than the whole call, so collisions become rare
+  rather than routine. They are not eliminated.
+  <!-- contract:end -->
+- **Serialize parallax's own dispatches.** Ordering handles foreign
+  sessions; it cannot stop this plugin colliding with itself.
+  <!-- contract:start id=lane-lock -->
+  Before dispatching any
+  round, acquire the lane lock with `tools/kimi-lane-lock.ps1 -Acquire
+  -Label "<debate>"`, and release it after the round's evidence is read. A
+  BUSY result means another parallax debate holds the lane: do not
+  dispatch, because a concurrent round breaks attribution. The lock is
+  advisory and breaks after 45 minutes, so a crashed driver stalls the lane
+  for at most that long.
+  <!-- contract:end -->
 - **Rotation guard.** The offset rule assumes an append-only file, and
   the kimi client does not guarantee one.
   <!-- contract:start id=rotation-guard-detection -->

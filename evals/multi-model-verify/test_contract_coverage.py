@@ -627,6 +627,11 @@ DECLARED_REGIONS = {
     # 0.16.0: was "rotation-guard-residual-gap". Rotation started
     # succeeding, so the gap's own contingency became the rule.
     "rotation-guard-identity",
+    # 0.16.0 backlog item 6: session-block attribution and the lane lock.
+    "session-block-attribution",
+    "session-block-kind",
+    "session-block-residual",
+    "lane-lock",
     "panel-floor-reference",
     "panel-floor-agent",
     "panel-lane-loss-disposition",

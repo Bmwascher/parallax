@@ -131,6 +131,39 @@ def test_backup_lane_evidence_pins():
     assert "`Loading agent:` line naming the committed yaml" in body
     assert "`Loaded tools:` line equal to the allowlist exactly" in body
     assert "DISCARDED unread" in body
+    # 0.16.0 backlog item 6. Counting matches across the whole post-offset
+    # window made ANY concurrent kimi session fatal, which discarded two of
+    # six dispatched rounds on 2026-07-27. The three evidence lines carry no
+    # session id, so ordering is the only available binding.
+    assert ("The three evidence lines carry no session id of their own, so "
+            "bind them by ORDER instead: locate the one `Created new "
+            "session: <id>` or `Resuming session: <id>` line past the "
+            "offset whose id is THIS round's, and read only the lines from "
+            "it up to the next session event of any id. Require exactly one "
+            "of each of the three inside that block. Session events "
+            "belonging to other ids are ignored, not counted.") in body
+    # The kind check catches a resume that silently started fresh - the same
+    # class the primary lane catches by echoing the resumed session id.
+    assert ("The block's own kind is evidence too: a fresh call must show "
+            "`Created new session` and a resume must show `Resuming "
+            "session` carrying the id being resumed. A resume that silently "
+            "started a new session has lost the reviewer's debate state, "
+            "and the kind line is where that surfaces.") in body
+    # The residual is pinned because a driver who reads only the rule
+    # over-trusts it. Ordering makes collisions rare, not impossible.
+    assert ("Residual, accepted: a foreign session that starts INSIDE this "
+            "round's startup block truncates it, and the round still "
+            "fails. That window is under a second rather than the whole "
+            "call, so collisions become rare rather than routine. They are "
+            "not eliminated.") in body
+    # Ordering cannot stop parallax colliding with itself; the lock does.
+    assert ("Before dispatching any round, acquire the lane lock with "
+            "`tools/kimi-lane-lock.ps1 -Acquire -Label \"<debate>\"`, and "
+            "release it after the round's evidence is read. A BUSY result "
+            "means another parallax debate holds the lane: do not dispatch, "
+            "because a concurrent round breaks attribution. The lock is "
+            "advisory and breaks after 45 minutes, so a crashed driver "
+            "stalls the lane for at most that long.") in body
     # 0.14.3: the offset rule assumes an append-only file and kimi's
     # client does not guarantee one. 0.16.0: rotation now SUCCEEDS
     # (observed 2026-07-27, verified still on disk 2026-07-28), so every
