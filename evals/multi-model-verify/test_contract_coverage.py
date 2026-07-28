@@ -115,6 +115,14 @@ def test_a_misspelled_marker_keyword_is_rejected():
         parse_regions(text, "demo.md")
 
 
+def test_a_capitalized_marker_keyword_is_rejected():
+    """MARKERISH is case-insensitive so this shape reaches the preflight,
+    but START is not, so it is rejected rather than silently ignored."""
+    text = "<!-- CONTRACT:START id=demo -->\nThe rule.\n<!-- contract:end -->\n"
+    with pytest.raises(MarkerError, match="malformed contract marker"):
+        parse_regions(text, "demo.md")
+
+
 def test_an_unterminated_marker_is_rejected_not_ignored():
     """No closing '-->'. Detection must not wait for one, or a typo makes
     the marker invisible and the region ceases to exist silently."""
@@ -355,6 +363,25 @@ def test_a_count_call_with_more_than_one_argument_is_not_a_pin(tmp_path):
     for needle in ("Compared a.", "Compared b.", "Bare a.", "Bare b.",
                    "Compared kw.", "Bare kw."):
         assert needle not in pins
+
+
+import ast
+
+from contract_coverage import _clause_pins
+
+
+@pytest.mark.parametrize("src", [
+    "NEEDLE in body",
+    'result == "text"',
+    '"text" not in body',
+    '("a" if flag else "b") in body',
+])
+def test_clause_pins_returns_empty_for_documented_exclusions(src):
+    """Each shape is a documented EXCLUSION with no direct test of
+    `_clause_pins` itself before now, only through `collect_pins` on a
+    whole file."""
+    node = ast.parse(f"assert {src}").body[0]
+    assert _clause_pins(node.test) == set()
 
 
 def test_a_conjunction_of_clauses_collects_both(tmp_path):
