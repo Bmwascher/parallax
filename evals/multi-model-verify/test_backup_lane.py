@@ -457,7 +457,11 @@ def test_skill_preflight_names_the_remediation():
     # is in fact the correct one (both observed 2026-07-26).
     skill = _norm(REPO / "skills" / "multi-model-verify" / "SKILL.md")
     assert "review mirror" in skill
-    assert "empty output is the evidence" in skill
+    # 0.17.0: "empty output" became "empty ENUMERATION output". The mirror
+    # now produces two measurements - the re-enumeration and the client
+    # probe - so an unqualified "empty output" no longer says which one
+    # carries the evidence.
+    assert "empty enumeration output is the evidence" in skill
     assert ("a TRACKED entry's deletion shows as ` D` in "
             "`git status --porcelain`") in skill
     assert ("`nothing to commit` alongside an unchanged HEAD is the "
