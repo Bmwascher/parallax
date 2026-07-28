@@ -407,6 +407,29 @@ def test_a_well_formed_lock_never_reads_as_unusable(tmp_path):
     assert "held" in s.stdout and "min" in s.stdout
 
 
+@pytest.mark.parametrize("stamp", [
+    "9999-12-31T23:59:59.9999999",
+    "0001-01-01T00:00:00",
+    "9999-12-31T23:59:59.9999999Z",
+])
+def test_a_stamp_at_the_type_extremes_is_breakable(tmp_path, stamp):
+    # PowerShell 7 hands these back as DateTime, and converting
+    # `DateTime.MaxValue` with Kind Local or Unspecified pushes the UTC
+    # equivalent out of range in any zone west of UTC - MinValue does the
+    # same east of it. An uncaught throw there is round 3's defect exactly:
+    # the age routine dies, the caller compares nothing against the
+    # threshold, and the lock reads "held 0 min" forever. Reproduced on both
+    # hosts before the guard.
+    p = tmp_path / "k.lock"
+    p.write_text(json.dumps({"label": "ghost", "stamp": stamp}),
+                 encoding="ascii")
+    r = run_lock(p, "-Acquire", "-Label", "debate-A", "-WaitSeconds", "0")
+    assert r.returncode == 0, "an out-of-range stamp must not hold the lane"
+    assert r.stderr == "", "and must not throw on the way"
+    holder = json.loads(p.read_text(encoding="ascii"))
+    assert holder["label"] == "debate-A"
+
+
 def test_a_current_utc_stamp_still_holds_the_lane(tmp_path):
     # `[datetime]::TryParse` with RoundtripKind converts an offset-bearing
     # stamp to local time but leaves a terminal `Z` as Kind=Utc, and

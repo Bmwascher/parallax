@@ -117,35 +117,45 @@ function Get-LockAgeMinutes($lock) {
     # 0.16.0 release did not. A date the parser already produced is the
     # answer, not a failure: take it, and keep the unusable path for what is
     # genuinely not a time.
-    if ($stamp -is [System.DateTimeOffset]) {
-        $age = ([System.DateTimeOffset]::Now - $stamp).TotalMinutes
-        if ($age -lt 0) { return [double]::MaxValue }
-        return $age
-    }
-    if ($stamp -is [datetime]) {
-        # Utc, Local and Unspecified all convert to the right instant: the
-        # cast reads Kind, and Unspecified means local, which is what an
-        # offsetless stamp means here too.
-        $age = ([System.DateTimeOffset]::Now - [System.DateTimeOffset]$stamp).TotalMinutes
-        if ($age -lt 0) { return [double]::MaxValue }
-        return $age
-    }
-    if ($stamp -isnot [string]) { return [double]::MaxValue }
-    # DateTimeOffset, not DateTime. `[datetime]::TryParse` with
-    # RoundtripKind converts an OFFSET-bearing stamp (`+00:00`) to local time
-    # but leaves a `Z` stamp as Kind=Utc - and subtracting two DateTime
+    # ONE conversion, then ONE age computation below. Three separate return
+    # paths each needed their own negative-age guard, which is three chances
+    # to forget one.
+    #
+    # DateTimeOffset, not DateTime, for the string case. `[datetime]::TryParse`
+    # with RoundtripKind converts an OFFSET-bearing stamp (`+00:00`) to local
+    # time but leaves a `Z` stamp as Kind=Utc - and subtracting two DateTime
     # values ignores Kind and compares raw ticks. On a UTC-05:00 machine a
     # CURRENT `Z` stamp therefore read as 300 minutes in the future, became
     # infinitely old, and was broken on sight; a genuinely five-hour-old `Z`
     # stamp read as brand new and held the lane past any threshold. Both
     # reproduced by running them. DateTimeOffset carries the offset into the
-    # subtraction, so every representation of the same instant compares
-    # equal; a stamp with no offset is assumed local, which is what this
-    # script writes.
+    # subtraction, so every representation of one instant compares equal.
     $parsed = [System.DateTimeOffset]::MinValue
-    $styles = [System.Globalization.DateTimeStyles]::None
-    if (-not [System.DateTimeOffset]::TryParse($stamp, [System.Globalization.CultureInfo]::InvariantCulture,
-                                               $styles, [ref]$parsed)) {
+    if ($stamp -is [System.DateTimeOffset]) {
+        $parsed = $stamp
+    } elseif ($stamp -is [datetime]) {
+        # The cast reads Kind. Utc is exact; Local and Unspecified are both
+        # resolved against THIS machine's offset, which is what an offsetless
+        # string means here too - so an ambiguous local time inside a DST
+        # fold picks one of the two instants rather than being exact. The
+        # margin is 45 minutes, so an hour of ambiguity is bounded and
+        # stated rather than claimed away.
+        #
+        # And it can THROW: converting `DateTime.MaxValue` with Kind Local
+        # or Unspecified pushes the UTC equivalent past the type's range, in
+        # any zone west of UTC - MinValue does the same east of it.
+        # Reproduced on both hosts. An uncaught throw here is round 3's
+        # defect exactly: the age routine dies, the caller compares nothing,
+        # and the lock reads "held 0 min" forever.
+        try { $parsed = [System.DateTimeOffset]$stamp }
+        catch { return [double]::MaxValue }
+    } elseif ($stamp -is [string]) {
+        $styles = [System.Globalization.DateTimeStyles]::None
+        if (-not [System.DateTimeOffset]::TryParse($stamp, [System.Globalization.CultureInfo]::InvariantCulture,
+                                                   $styles, [ref]$parsed)) {
+            return [double]::MaxValue
+        }
+    } else {
         return [double]::MaxValue
     }
     $age = ([System.DateTimeOffset]::Now - $parsed).TotalMinutes
