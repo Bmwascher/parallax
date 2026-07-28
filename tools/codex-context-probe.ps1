@@ -232,10 +232,27 @@ function New-SkillDisableOverride($entries) {
     # Forward slashes are load-bearing: with backslashes the value fails
     # TOML parsing, falls back to a raw string, and codex rejects it with
     # `invalid type: string` (probed 2026-07-28).
+    #
+    # SINGLE quotes, which are TOML literal strings, and not double
+    # quotes. Windows PowerShell 5.1 STRIPS embedded double quotes when it
+    # passes an argument to a native command, so a double-quoted value
+    # reached codex as `{path=C:/...}` and was rejected with that same
+    # `invalid type: string`. PowerShell 7 quotes it correctly, so this
+    # failed on one host and passed on the other - the 0.16.1 lesson in a
+    # new place. Probed both hosts 2026-07-28: single quotes work on both.
+    #
+    # A TOML literal string cannot escape its own delimiter, so a path
+    # containing a single quote has no representation here. That blocks
+    # rather than silently emitting a broken override.
     $parts = New-Object System.Collections.ArrayList
     foreach ($e in @($entries)) {
         $p = ([string]$e.Path).Replace("\", "/")
-        [void]$parts.Add('{path="' + $p + '",enabled=false}')
+        if ($p.Contains("'")) {
+            throw [System.FormatException]::new(
+                "skill path contains a single quote and cannot be written" +
+                " as a TOML literal string: " + $p)
+        }
+        [void]$parts.Add("{path='" + $p + "',enabled=false}")
     }
     return ("skills.config=[" + ($parts -join ",") + "]")
 }
@@ -280,19 +297,40 @@ function Invoke-PromptInput($codex, $workDir, $override) {
     $probeArgs += "probe"
     $out = $null
     $code = 0
+    # Decode the child's stdout as UTF-8. Windows PowerShell 5.1 defaults
+    # to the console code page, which turns a non-ASCII character in a
+    # skill path into mojibake BEFORE this script ever sees it - and the
+    # override would then be written, hashed and dispatched in that
+    # corrupted form, with every check passing. Writing the artifact as
+    # strict UTF-8 is pointless if the value arrives already broken.
+    $priorOut = [Console]::OutputEncoding
     Push-Location $workDir
     try {
-        if ($codex -like "*.ps1") {
-            $hostExe = (Get-Process -Id $PID).Path
-            $out = & $hostExe -NoProfile -NonInteractive -File $codex @probeArgs 2>$null
-        } else {
-            $out = & $codex @probeArgs 2>$null
-        }
+        [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
+        # A .ps1 stub is invoked IN-PROCESS. Routing it through
+        # `powershell -File` would serialize the arguments through
+        # command-line parsing, which strips the double quotes inside the
+        # skills.config value - so the test harness, not the real
+        # transport, would decide what the stub received. Native
+        # invocation binds the array as-is; a real codex.exe gets the same
+        # array through PowerShell's native-command quoting.
+        $out = & $codex @probeArgs 2>$null
         $code = $LASTEXITCODE
+        # An in-process .ps1 that returns without calling `exit` leaves
+        # $LASTEXITCODE untouched, which reads as an empty string rather
+        # than 0. A native executable always sets it, so this branch
+        # cannot mask a real non-zero exit.
+        if (($null -eq $code) -or ($code -eq "")) { $code = 0 }
     } finally {
+        [Console]::OutputEncoding = $priorOut
         Pop-Location
     }
-    return @{ Output = ($out | Out-String); ExitCode = $code }
+    # JOIN, never `Out-String`. Out-String formats for a console and WRAPS
+    # at the host width, which inserts newlines into the middle of a skill
+    # entry and breaks the line-anchored parse. Short fixtures never
+    # trigger it; the first live run did. A native command's output is
+    # already an array of lines, so joining reproduces the stream exactly.
+    return @{ Output = (@($out) -join "`n"); ExitCode = $code }
 }
 
 $toplevel = $true
@@ -390,7 +428,13 @@ if ($SuppressSkills) {
         Write-Blocked ("-SuppressSkills without -OverrideOut verifies a" +
             " configuration nothing can dispatch") $Json
     }
-    $override = New-SkillDisableOverride $skills.Entries
+    $override = $null
+    try {
+        $override = New-SkillDisableOverride $skills.Entries
+    } catch {
+        Write-Blocked ("could not build the disable override: " +
+            $_.Exception.Message) $Json
+    }
     $pass2 = Invoke-PromptInput $CodexCommand $WorkDir $override
     if ($pass2.ExitCode -ne 0) {
         Write-Blocked ("the suppression pass exited " + $pass2.ExitCode) $Json

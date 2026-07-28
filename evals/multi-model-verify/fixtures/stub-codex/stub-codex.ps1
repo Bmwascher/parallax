@@ -21,4 +21,9 @@ $fixture = $env:PARALLAX_STUB_FIXTURE
 if ($calls -ge 1 -and $env:PARALLAX_STUB_FIXTURE2) {
     $fixture = $env:PARALLAX_STUB_FIXTURE2
 }
-Get-Content -Raw $fixture
+# Read and emit UTF-8 explicitly. `Get-Content -Raw` on Windows PowerShell
+# 5.1 decodes with the system code page, which is how the real codex
+# output would be mangled too if the caller did not pin the encoding.
+[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
+[System.IO.File]::ReadAllText($fixture,
+    (New-Object System.Text.UTF8Encoding($false)))

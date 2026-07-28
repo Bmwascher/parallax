@@ -4,7 +4,7 @@ Date: 2026-07-28
 Backlog item: 4 of 6 (docs/superpowers/plans/2026-07-27-0150-backlog.md)
 Target release: 0.17.0
 
-**Revision 6.** Converged with amendments at the round cap, after four rounds of cross-vendor plan debate. Every number in
+**Revision 7.** Converged with amendments at the round cap after four rounds of cross-vendor plan debate, then corrected three times during Task 2 by running it. Every number in
 this document was measured on 2026-07-28 against codex-cli 0.144.1 on the
 author's Windows machine, with the commands recorded inline so each claim
 can be re-run rather than believed.
@@ -97,6 +97,15 @@ Four findings follow from the table.
   removed both named skills, 29 to 27. Paths must use forward slashes: with
   backslashes the value fails TOML parsing, falls back to a raw string, and
   codex rejects it with `invalid type: string`.
+- **The override must use TOML LITERAL strings, single-quoted.** Windows
+  PowerShell 5.1 strips embedded double quotes when it passes an argument
+  to a native command, so a double-quoted value reached codex as
+  `{path=C:/...}` and drew the same `invalid type: string`. PowerShell 7
+  quotes it correctly, so the defect appeared on one host and not the
+  other — the 0.16.1 lesson in a new place. Probed on both hosts
+  2026-07-28: single quotes work on both, with identical override hashes.
+  A path containing a single quote has no representation in a TOML literal
+  string, so it blocks rather than emitting a broken override.
 
 Two further results close the design's open questions.
 
@@ -288,6 +297,7 @@ reason the contract coverage checker forbids false coverage.
 | an unrecognised outer block appears on EITHER pass | transport failure | blocked; a new instruction family has no rule yet |
 | a known feature block reappears on the second pass | transport failure | blocked; every shape rule runs on both renders |
 | a caller aims the override artifact at the repo or the mirror | script error | exit 2, before anything is written |
+| a skill path contains a single quote | transport failure | blocked; a TOML literal string cannot escape its own delimiter |
 | the mirror path equals, contains, or sits inside the repo | script error | exit 2 before anything is created or deleted |
 | the baseline or HEAD capture fails, or a baseline entry names no readable file | mirror construction | blocked, never a partial manifest |
 | repo-scoped entry survives remediation | mirror construction | blocked, never a review finding |
@@ -442,6 +452,17 @@ lane's own client surface beyond the `merge_all_available_skills` note
 already in backup-lane.md; and any change to what preflight 3 blocks.
 
 ## Revision history
+
+**Revision 7 (2026-07-28), during Task 2.** Three defects the debate could
+not have found, because all three needed the code to be RUN. The value was
+double-quoted, which Windows PowerShell 5.1 strips on the way to a native
+command, so the whole mechanism failed on one host and passed on the
+other. The child's stdout was decoded with the console code page, so a
+non-ASCII skill path arrived as mojibake before the strict-UTF-8 write
+could matter. And `Out-String` wraps at the console width, which cut every
+long skill entry in half and made the live prompt parse to zero skills
+while every short fixture passed. Each now has a regression test, and the
+live run is green under both hosts with identical override hashes.
 
 **Revision 6 (2026-07-28), converged with amendments at the round cap.**
 Round 4 returned FIX on three claims and stated plainly that all of them
