@@ -195,6 +195,34 @@ Application checkpoint:
 `.git/parallax/application-checkpoints/2026-07-27-2150-23709fa6ec25.md`,
 authorized by the user after emission.
 
+**Round 2, fix re-review** of `23709fa..eecda33`. Reply at
+`sol-diff-0150-r2-reply.md`. Verdict FIX, and the finding was inside the
+round-1 fix, which is this project's base rate rather than a surprise.
+
+The parent-aware rule consumed EVERY `try` body without checking for
+handlers. A `try/finally` runs its cleanup and then lets the
+AssertionError through, so its assertion does lock its text. The design
+already said "a `try` that has any handler"; the code was stricter than
+its own spec. Over-rejection is the safe direction and no live `try`
+block exists in any pin file, so nothing was mis-covered and no lock was
+actually lost — but it discarded real locks in principle for no safety,
+and the code contradicted the artifact that governs it.
+
+It also caught a retention claim in this very file pointing at a
+round-1 reply that was not in this directory. Both diff-round replies are
+now here.
+
+Accepted in full. Fixed in `23709fa..<round-2 fix head>`: the `try` body
+is consumed only when handlers exist, a regression proves a `try/finally`
+pin is retained, and the three prose surfaces say the same thing.
+
+On the round's other questions the lane confirmed: the widened input
+surface matches what is enforced, the broken-opener retag is correct, the
+residual failure-handling limit is correctly tagged, the conjunction
+prose matches the implementation, the instance-10 narrative is now
+consistent across all four surfaces, and the record's corrections are
+honest. It agreed on the record with keeping mixed conjunctions.
+
 ## Carried
 
 - Backlog item 6, the concurrent-session collision, has a live cost: it

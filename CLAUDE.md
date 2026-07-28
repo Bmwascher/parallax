@@ -63,7 +63,8 @@ several lines are fine, because the parser folds them into one.
 The assertion must also be able to FAIL the suite. An assertion whose
 failure is deliberately caught proves the opposite of what it looks
 like, so it pins nothing: inside a `raises(...)` or `suppress(...)`
-block, inside a `try` body, or in a function marked xfail.
+block, inside the body of a `try` that has handlers, or in a function
+marked xfail. A `try/finally` has no handlers, so its body still pins.
 
 Nothing else counts, and the rule matches a COMPLETE clause rather than
 looking for these shapes anywhere in the expression. A string locks

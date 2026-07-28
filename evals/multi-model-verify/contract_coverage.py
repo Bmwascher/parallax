@@ -326,9 +326,10 @@ def _assert_tests(node, consumed=False):
 
     Deliberately conservative on three counts. Any `raises(...)` counts,
     not only `raises(AssertionError)` - narrowing it would mean tracking
-    which exception types an assert can raise. Every statement in a
-    `try` BODY counts, whatever the handlers catch. And an xfail marker
-    disqualifies the whole function. Each over-rejection loses a pin,
+    which exception types an assert can raise. Every statement in the
+    body of a `try` that HAS HANDLERS counts, whatever those handlers
+    catch. And an xfail marker disqualifies the whole function. Each
+    over-rejection loses a pin,
     which reads UNCOVERED, which is a red. Under-rejecting manufactures
     coverage. Only one of those is safe to get wrong.
 
@@ -341,8 +342,14 @@ def _assert_tests(node, consumed=False):
     if _is_consuming_with(node) or _is_xfail_decorated(node):
         consumed = True
     if isinstance(node, (ast.Try, ast.TryStar)):
+        # Only a handler can catch the failure. `try/finally` runs the
+        # cleanup and then lets the AssertionError through, so its body
+        # is ordinary asserting code. Consuming it too was stricter than
+        # this module's own documented rule and cost real locks for no
+        # safety - found in the round-2 fix re-review of this very fix.
+        body_consumed = consumed or bool(node.handlers)
         for child in node.body:
-            yield from _assert_tests(child, True)
+            yield from _assert_tests(child, body_consumed)
         for group in (node.handlers, node.orelse, node.finalbody):
             for child in group:
                 yield from _assert_tests(child, consumed)

@@ -462,6 +462,22 @@ def test_an_assertion_in_an_except_handler_is_still_a_pin(tmp_path):
     assert "Handler region." in collect_pins([p])
 
 
+def test_an_assertion_in_a_try_without_handlers_is_still_a_pin(tmp_path):
+    """`try/finally` runs its cleanup and then lets the AssertionError
+    through, so the failure reaches the runner and the assertion locks
+    its text. The first version of this rule consumed every `try` body
+    and lost such pins, which the round-2 fix re-review caught."""
+    src = (
+        'def test_x():\n'
+        '    try:\n'
+        '        assert "Finally region." in body\n'
+        '    finally:\n'
+        '        cleanup()\n'
+    )
+    p = _write(tmp_path, "test_sample.py", src)
+    assert "Finally region." in collect_pins([p])
+
+
 def test_a_region_locked_only_by_a_swallowed_assertion_is_uncovered(
         tmp_path):
     """The end-to-end statement of the defect: not merely that the pin is

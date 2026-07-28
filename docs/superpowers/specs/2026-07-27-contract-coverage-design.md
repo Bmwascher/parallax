@@ -358,8 +358,10 @@ count if they care.
 - FALSE COVERAGE. **Failure-handling contexts the parent check does not
   enumerate.** An assertion whose failure is deliberately caught proves
   the opposite of what it appears to prove, so pin collection now refuses
-  assertions inside a `raises(...)` or `suppress(...)` block, inside a
-  `try` body, and inside an xfail-marked function. That list is by NAME
+  assertions inside a `raises(...)` or `suppress(...)` block, inside the
+  body of a `try` that has handlers, and inside an xfail-marked function.
+  A `try/finally` has no handler to catch anything, so its body still
+  pins. That list is by NAME
   and cannot be exhaustive: a project-local context manager, a decorator
   that wraps and swallows, or a helper that runs an assertion under its
   own handler would not be recognized, and its assertion would register
