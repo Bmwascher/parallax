@@ -331,7 +331,7 @@ each was established, which the first version of this note got wrong too.
 The table is a record of what was actually caught, not a list of what was
 anticipated. Mode-diff round 4 caught the earlier version of this note
 overstating all six as reproduced false cleans.
-| an unrecognised outer block appears on EITHER pass | transport failure | blocked; a new instruction family has no rule yet |
+| an unrecognised outer block appears on EITHER pass, at a line start or INLINE | transport failure | blocked; a new instruction family has no rule yet. The scan was line-anchored until mode-diff round 6, 2026-07-28, when an inline paired tag was shown to reach exit 0 with status clean. The anchor was never what kept prose out; the open/close pair requirement is |
 | a known feature block reappears on the second pass | transport failure | blocked; every shape rule runs on both renders |
 | a caller aims the override artifact at the repo or the mirror | script error | exit 2, before anything is written |
 | a skill path contains a single quote | transport failure | blocked; a TOML literal string cannot escape its own delimiter |
@@ -381,6 +381,14 @@ unchanged.
   reason rather than a silently wrong measurement. Every container present
   in the real prompt occurs exactly once, so this costs nothing on real
   input. Mode-diff rounds 3 to 5.
+- **A solitary quoted open/close PAIR outside any masked body is
+  indistinguishable from a real container, and is treated as one.** The
+  count rule refuses ambiguity only when the counts differ from one open
+  and one close. A user's own text that quotes a complete, balanced pair
+  of a known container's delimiters, in a position the masking stages do
+  not cover, therefore reads as that container. Nothing in flattened text
+  can separate the two cases, and no fix is proposed. Raised at mode-diff
+  round 6, 2026-07-28, as record-acceptable rather than a defect.
 - **A skill description that mimics a joined entry blocks, and cannot be
   distinguished.** A description is free text, so one containing a
   complete `(file: ...SKILL.md)` marker followed by another entry start is

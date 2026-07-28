@@ -940,6 +940,44 @@ def test_a_joined_entry_whose_path_has_parentheses_still_blocks(tmp_path):
     assert "whole entry grammar" in json.loads(proc.stdout)["reason"]
 
 
+def test_a_malformed_known_tag_quoted_in_the_global_body_does_not_block(tmp_path):
+    # Round 5 moved the exactness scan onto raw text so it, not the count
+    # rule, would catch a malformed known tag. That made a legitimate house
+    # rule block: `Never emit <skills_instructions version="2">.` inside
+    # the user's OWN AGENTS.md. Mode-diff round 6, 2026-07-28. The fix is
+    # two-stage masking, not moving the scan back.
+    fixture = tmp_path / "quoted-malformed.json"
+    doc = json.loads((FIXTURES / "flagged.json").read_text(encoding="utf-8"))
+    doc[0]["content"][0]["text"] = doc[0]["content"][0]["text"].replace(
+        "<INSTRUCTIONS>",
+        '<INSTRUCTIONS>\nNever emit <skills_instructions version="2">.\n', 1)
+    fixture.write_text(json.dumps(doc), encoding="utf-8")
+    proc = probe_with(tmp_path, fixture, FIXTURES / "suppressed.json")
+    assert proc.returncode == 0, proc.stdout
+
+
+@pytest.mark.parametrize("pass_no", [1, 2])
+def test_an_inline_unknown_block_blocks(tmp_path, pass_no):
+    # The unknown-surface scan was line-anchored, so
+    # `prefix <memories_instructions>x</memories_instructions>` returned
+    # zero unknown blocks and reached exit 0 with status clean. Mode-diff
+    # round 6, 2026-07-28. The anchor was never what kept prose out; the
+    # open/close pair requirement is.
+    fixture = tmp_path / f"inline-unknown-{pass_no}.json"
+    doc = json.loads((FIXTURES / "flagged.json").read_text(encoding="utf-8")
+                     if pass_no == 1 else
+                     (FIXTURES / "suppressed.json").read_text(encoding="utf-8"))
+    doc[0]["content"][0]["text"] += (
+        "\nprefix <memories_instructions>x</memories_instructions>\n")
+    fixture.write_text(json.dumps(doc), encoding="utf-8")
+    if pass_no == 1:
+        proc = probe_with(tmp_path, fixture)
+    else:
+        proc = probe_with(tmp_path, FIXTURES / "flagged.json", fixture)
+    assert proc.returncode == 1, proc.stdout
+    assert "memories_instructions" in json.loads(proc.stdout)["reason"]
+
+
 def test_an_unterminated_known_container_blocks(tmp_path):
     # Masking an unclosed container to end-of-prompt hid every later block
     # from the unknown-surface scan, so one malformed container near the

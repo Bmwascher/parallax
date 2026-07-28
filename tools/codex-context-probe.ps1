@@ -191,7 +191,7 @@ $script:KnownContainers = @(
     "environment_context", "multi_agent_mode"
 )
 
-function Hide-KnownContainer($text) {
+function Hide-KnownContainer($text, $only) {
     # Blank the CONTENTS of every known container before scanning for new
     # ones. <INSTRUCTIONS> carries the global and project AGENTS.md bodies
     # verbatim, and a user's AGENTS.md may legitimately contain a line
@@ -211,8 +211,18 @@ function Hide-KnownContainer($text) {
     # ambiguity rather than to guess at it. Measured the same day against a
     # real prompt: every container present in it occurs exactly once, open
     # and close, so this rule costs nothing on real input.
+    # `$only` runs this over a SUBSET, in two stages. The user-authored
+    # body is masked and validated on its own first, so that a house rule
+    # QUOTING a malformed known tag is blanked before the exactness scan
+    # ever sees it, while a malformed tag in real prompt structure still
+    # reaches that scan ahead of the count rule below. Mode-diff round 6,
+    # 2026-07-28: with exactness on fully raw text, the legitimate line
+    # `Never emit <skills_instructions version="2">.` inside a user's own
+    # AGENTS.md blocked the review.
+    $names = $script:KnownContainers
+    if ($only) { $names = @($only) }
     $masked = $text
-    foreach ($name in $script:KnownContainers) {
+    foreach ($name in $names) {
         $open = "<" + $name + ">"
         $close = "</" + $name + ">"
         $opens = ([regex]::Matches($masked, [regex]::Escape($open))).Count
@@ -295,7 +305,11 @@ function Get-UnknownPromptBlock($text) {
     foreach ($c in $script:KnownContainers) { $knownOpen += ("<" + $c + ">") }
     $names = ($script:KnownPromptBlocks | ForEach-Object { [regex]::Escape($_) }) -join "|"
     $knownRx = [regex]("(?i)<(?:" + $names + ")\b[^>]*>")
-    foreach ($m in $knownRx.Matches($text)) {
+    # STAGE 1: mask ONLY the user-authored body, and validate its
+    # boundaries. Everything a user wrote is now blank; everything the
+    # renderer emitted is still visible.
+    $userMasked = Hide-KnownContainer $text "INSTRUCTIONS"
+    foreach ($m in $knownRx.Matches($userMasked)) {
         if ($knownOpen -ccontains $m.Value) { continue }
         throw [System.FormatException]::new(
             "the known block " + $m.Value + " is not in the exact form" +
@@ -303,9 +317,16 @@ function Get-UnknownPromptBlock($text) {
             " nothing")
     }
 
-    $masked = Hide-KnownContainer $text
+    # STAGE 2: mask the rest, then look for surfaces nobody enumerated.
+    $masked = Hide-KnownContainer $userMasked
     $found = New-Object System.Collections.ArrayList
-    $rx = [regex]'(?m)^[ \t]*<([A-Za-z][A-Za-z0-9_.:\-]*)((?:\s[^>]*?)?)(/?)>'
+    # NOT line-anchored. An inline `prefix <memories_instructions>x</...>`
+    # returned zero unknown blocks and reached exit 0 with status clean.
+    # Mode-diff round 6, 2026-07-28. The anchor was never what kept prose
+    # out - the open/close PAIR requirement below is, and the real
+    # prompt's `<payload text>`, `<recipient>` and `<author>` lines are
+    # unpaired, so they are still exempt.
+    $rx = [regex]'<([A-Za-z][A-Za-z0-9_.:\-]*)((?:\s[^>]*?)?)(/?)>'
     foreach ($m in $rx.Matches($masked)) {
         $name = $m.Groups[1].Value
         if ($script:KnownPromptBlocks -contains $name) { continue }
