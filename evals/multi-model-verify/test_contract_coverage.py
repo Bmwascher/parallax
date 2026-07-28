@@ -435,3 +435,46 @@ def test_failure_message_names_region_file_and_body():
     assert "panels.md" in msg
     assert "The lane is UNAVAILABLE, not degraded." in msg
     assert "add a pin containing that region whole" in msg
+
+
+from pathlib import Path
+
+HISTORY = (Path(__file__).resolve().parent / "fixtures"
+           / "contract-coverage-history")
+
+
+def _history_case(stem):
+    regions = collect_regions([HISTORY / f"{stem}-doc.md"])
+    pins = collect_pins([HISTORY / f"{stem}-pins.py"])
+    return regions, uncovered(regions, pins)
+
+
+def test_catches_instance_10_missing_disposition_pin():
+    """4d8a121: 'That is a route-attribution failure' had no pin."""
+    regions, misses = _history_case("instance-10")
+    assert [rid for rid, _, _ in misses] == ["hist-10-defect"]
+
+
+def test_catches_instance_11_pin_stopping_mid_sentence():
+    """8eacc8a: the pin ended at 'IS transient'."""
+    regions, misses = _history_case("instance-11")
+    assert [rid for rid, _, _ in misses] == ["hist-11-defect"]
+
+
+def test_catches_instance_12_bare_phrase_pin():
+    """f9fd9b9: the pin was the bare phrase 'Claude Code 2.1.216'."""
+    regions, misses = _history_case("instance-12")
+    assert [rid for rid, _, _ in misses] == ["hist-12-defect"]
+
+
+def test_history_fixtures_are_not_vacuous():
+    """Each fixture must hold exactly two regions, and its CONTROL must
+    be covered. A fixture whose pins failed to load would report both
+    regions uncovered and the tests above would still be red - for the
+    wrong reason."""
+    for stem in ("instance-10", "instance-11", "instance-12"):
+        regions, misses = _history_case(stem)
+        assert len(regions) == 2, f"{stem} must contain exactly two regions"
+        assert len(misses) == 1, (
+            f"{stem}: expected exactly the defect region uncovered, got "
+            f"{[rid for rid, _, _ in misses]}")
