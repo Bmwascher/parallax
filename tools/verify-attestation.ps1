@@ -50,9 +50,31 @@ function Test-AttestationPasses($att) {
 }
 
 function Get-AttestationRejectReason($att, $label) {
-    return ("attestation for $label is verdict=$($att.verdict)" +
-        " status=$($att.verification_status) route='$($att.route_note)'" +
-        " - a FULL, confirmed-route PASS is required")
+    # Name the field that actually failed. The old message printed all
+    # three values and then said a FULL confirmed-route PASS was
+    # required, which reads as a contradiction whenever two of the three
+    # are fine: verdict=PASS status=FULL and a route note that looks
+    # right, followed by a line saying one of them is missing. The rule
+    # itself was never wrong - only this message was.
+    $bad = @()
+    if ($att.verdict -ne "PASS") {
+        $bad += "verdict is '$($att.verdict)', needs PASS"
+    }
+    if ($att.verification_status -ne "FULL") {
+        $bad += "verification status is '$($att.verification_status)', needs FULL"
+    }
+    if ($att.route_note -ne "effective route confirmed") {
+        # A transport-failure class legitimately lands here, so say that
+        # the token is exact rather than leaving the reader to diff two
+        # similar strings by eye.
+        $bad += ("route note is '$($att.route_note)', needs the exact" +
+            " text 'effective route confirmed'")
+    }
+    if ($bad.Count -eq 0) {
+        return "attestation for $label was rejected but every gate field looks valid - report this, it is a bug in the verifier"
+    }
+    return ("attestation for $label does not satisfy the gate: " +
+        ($bad -join "; ") + " - re-review")
 }
 
 function Get-CheckpointBindingFailure($att, $repo, $commonDir) {
