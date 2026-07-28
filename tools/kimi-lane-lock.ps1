@@ -96,16 +96,36 @@ function Read-Lock($path) {
 }
 
 function Get-LockAgeMinutes($lock) {
-    # An unparseable or missing stamp reads as INFINITELY old, so a
-    # malformed lock is breakable instead of permanent.
-    if (-not $lock -or -not $lock.stamp) { return [double]::MaxValue }
-    $parsed = [datetime]::MinValue
-    $styles = [System.Globalization.DateTimeStyles]::RoundtripKind
-    if (-not [datetime]::TryParse($lock.stamp, [System.Globalization.CultureInfo]::InvariantCulture,
-                                  $styles, [ref]$parsed)) {
+    # An unusable stamp of any kind reads as INFINITELY old, so a malformed
+    # lock is breakable instead of permanent.
+    if (-not $lock) { return [double]::MaxValue }
+    $stamp = $lock.stamp
+    # The type check is load-bearing, not defensive habit. A stamp that
+    # parsed as an OBJECT, an ARRAY or a NUMBER reached TryParse with no
+    # matching overload and threw, which terminated this function before it
+    # could return the intended infinite age - so the caller saw no age at
+    # all, `$null -ge 45` was false, and the lock read as "held 0 min"
+    # FOREVER. The routine written to stop a malformed lock wedging the lane
+    # was the thing that wedged it.
+    if ($stamp -isnot [string]) { return [double]::MaxValue }
+    # DateTimeOffset, not DateTime. `[datetime]::TryParse` with
+    # RoundtripKind converts an OFFSET-bearing stamp (`+00:00`) to local time
+    # but leaves a `Z` stamp as Kind=Utc - and subtracting two DateTime
+    # values ignores Kind and compares raw ticks. On a UTC-05:00 machine a
+    # CURRENT `Z` stamp therefore read as 300 minutes in the future, became
+    # infinitely old, and was broken on sight; a genuinely five-hour-old `Z`
+    # stamp read as brand new and held the lane past any threshold. Both
+    # reproduced by running them. DateTimeOffset carries the offset into the
+    # subtraction, so every representation of the same instant compares
+    # equal; a stamp with no offset is assumed local, which is what this
+    # script writes.
+    $parsed = [System.DateTimeOffset]::MinValue
+    $styles = [System.Globalization.DateTimeStyles]::None
+    if (-not [System.DateTimeOffset]::TryParse($stamp, [System.Globalization.CultureInfo]::InvariantCulture,
+                                               $styles, [ref]$parsed)) {
         return [double]::MaxValue
     }
-    $age = ((Get-Date) - $parsed).TotalMinutes
+    $age = ([System.DateTimeOffset]::Now - $parsed).TotalMinutes
     # A stamp in the FUTURE produced a negative age, which never reached the
     # stale branch: the lane stayed BUSY until the clock caught up, and status
     # cheerfully printed "held -360 min" to a human. Clock skew or a tampered
@@ -132,6 +152,11 @@ function Get-LockOwner($lock) {
 function Format-Lock($lock, $ageMin) {
     $owner = Get-LockOwner $lock
     $who = if ($owner) { $owner } else { "no usable owner" }
+    # An unusable stamp is reported as such. Printing the sentinel verbatim
+    # put "held 1.79769313486232E+308 min" in front of a human, which is the
+    # same class as the "held -360 min" already fixed here: a number that
+    # cannot be true, presented as though it were a measurement.
+    if ($ageMin -ge [double]::MaxValue) { return "$who, age unusable" }
     return "$who, held $([Math]::Round($ageMin, 1)) min"
 }
 
@@ -208,7 +233,14 @@ if ($Acquire) {
             # milliseconds-wide one. Stated rather than papered over.
             $payload | ConvertTo-Json | Set-Content -Path $lockPath -Encoding ASCII
             $note = "kimi lane lock: acquired"
-            if ($stolen) { $note += " (broke a stale lock, $([Math]::Round($age, 1)) min old)" }
+            if ($stolen) {
+                # Same rule as Format-Lock: an unusable stamp is described,
+                # never printed as a measurement. This path built its own
+                # string and so kept saying "broke a stale lock,
+                # 1.79769313486232E+308 min old" after status had stopped.
+                $howOld = if ($age -ge [double]::MaxValue) { "age unusable" } else { "$([Math]::Round($age, 1)) min old" }
+                $note += " (broke a stale lock, $howOld)"
+            }
             elseif ($malformed) { $note += " (broke an unreadable lock)" }
             if ($waited) { $note += " after waiting" }
             Write-Output $note

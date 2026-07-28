@@ -91,7 +91,9 @@ Panel participation: a user-invoked panel per references/panels.md is a second s
   past that mark becomes breakable too, because nothing checks liveness.
   Ownership is a plain string match, so make the label unique to the round:
   two callers passing the same label are indistinguishable, and either can
-  release the other's lane.
+  release the other's lane. A lock whose timestamp cannot be read is
+  breakable at once rather than after 45 minutes, so an unreadable lock never
+  stalls the lane.
   <!-- contract:end -->
 - **Rotation guard.** The offset rule assumes an append-only file, and
   the kimi client does not guarantee one.

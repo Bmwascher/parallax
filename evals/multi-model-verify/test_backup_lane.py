@@ -174,7 +174,9 @@ def test_backup_lane_evidence_pins():
             "too, because nothing checks liveness. Ownership is a plain "
             "string match, so make the label unique to the round: two "
             "callers passing the same label are indistinguishable, and "
-            "either can release the other's lane.") in body
+            "either can release the other's lane. A lock whose timestamp "
+            "cannot be read is breakable at once rather than after 45 "
+            "minutes, so an unreadable lock never stalls the lane.") in body
     # 0.14.3: the offset rule assumes an append-only file and kimi's
     # client does not guarantee one. 0.16.0: rotation now SUCCEEDS
     # (observed 2026-07-27, verified still on disk 2026-07-28), so every

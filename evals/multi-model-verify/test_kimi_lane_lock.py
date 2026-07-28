@@ -334,15 +334,87 @@ def test_a_future_stamp_cannot_wedge_the_lane(tmp_path):
     assert holder["label"] == "debate-A"
 
 
-def test_status_never_reports_a_negative_age(tmp_path):
+def test_status_never_reports_an_impossible_age(tmp_path):
+    # A future stamp printed "held -360 min"; an unusable one printed
+    # "held 1.79769313486232E+308 min". Both are numbers that cannot be true,
+    # presented to a human as measurements.
     p = tmp_path / "k.lock"
     future = (datetime.now(timezone.utc) + timedelta(hours=6)).isoformat()
     p.write_text(json.dumps({"label": "ghost", "stamp": future}),
                  encoding="ascii")
     r = run_lock(p)
     assert r.returncode == 0
-    assert "-" not in r.stdout.split("held")[-1].split("min")[0], (
-        "a negative age is nonsense to a human reader")
+    assert "age unusable" in r.stdout
+    assert "-360" not in r.stdout
+    assert "E+308" not in r.stdout
+
+
+@pytest.mark.parametrize("stamp", [0, 1753689600, {"a": 1}, [1, 2], True, None])
+def test_a_stamp_that_is_not_a_string_is_breakable(tmp_path, stamp):
+    # These reached `[datetime]::TryParse` with no matching overload and
+    # THREW, which killed the age routine before it could return the infinite
+    # age it was written to return. The caller then compared nothing against
+    # the threshold, the lock read as "held 0 min", and it never aged - so
+    # the routine that exists to stop a malformed lock wedging the lane was
+    # itself the wedge. Only -Force could clear it.
+    p = tmp_path / "k.lock"
+    p.write_text(json.dumps({"label": "ghost", "stamp": stamp}),
+                 encoding="ascii")
+    r = run_lock(p, "-Acquire", "-Label", "debate-A", "-WaitSeconds", "0")
+    assert r.returncode == 0, "an unusable stamp must not hold the lane"
+    assert r.stderr == "", "and it must not throw on the way"
+    assert "E+308" not in r.stdout, (
+        "the break notice must describe an unusable age, not print it")
+    holder = json.loads(p.read_text(encoding="ascii"))
+    assert holder["label"] == "debate-A"
+
+
+def test_a_current_utc_stamp_still_holds_the_lane(tmp_path):
+    # `[datetime]::TryParse` with RoundtripKind converts an offset-bearing
+    # stamp to local time but leaves a terminal `Z` as Kind=Utc, and
+    # subtracting two DateTime values ignores Kind. On a UTC-05:00 machine a
+    # CURRENT `Z` stamp therefore read as 300 minutes in the FUTURE, became
+    # infinitely old, and was broken on sight - a fresh lock stolen with no
+    # -Force. Reproduced by running it before the fix.
+    p = tmp_path / "k.lock"
+    now_z = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    p.write_text(json.dumps({"label": "debate-A", "stamp": now_z}),
+                 encoding="ascii")
+    r = run_lock(p, "-Acquire", "-Label", "debate-B", "-WaitSeconds", "0")
+    assert r.returncode == 1, "a current lock must hold, however it is stamped"
+    holder = json.loads(p.read_text(encoding="ascii"))
+    assert holder["label"] == "debate-A"
+
+
+def test_an_old_utc_stamp_is_still_stale(tmp_path):
+    # The other half of the same defect: a genuinely five-hour-old `Z` stamp
+    # read as brand new on this machine and held the lane past any threshold.
+    p = tmp_path / "k.lock"
+    old_z = (datetime.now(timezone.utc) - timedelta(minutes=300)).strftime(
+        "%Y-%m-%dT%H:%M:%S.%fZ")
+    p.write_text(json.dumps({"label": "debate-A", "stamp": old_z}),
+                 encoding="ascii")
+    r = run_lock(p, "-Acquire", "-Label", "debate-B", "-WaitSeconds", "0")
+    assert r.returncode == 0, "an old lock must be stale, however it is stamped"
+    assert "stale" in r.stdout
+
+
+def test_the_same_instant_reads_the_same_in_every_representation(tmp_path):
+    # The real requirement behind both tests above: age must depend on the
+    # INSTANT, not on how the instant was written down.
+    then = datetime.now(timezone.utc) - timedelta(minutes=50)
+    shapes = [
+        then.strftime("%Y-%m-%dT%H:%M:%S.%fZ"),          # terminal Z
+        then.isoformat(),                                 # +00:00
+        then.astimezone().isoformat(),                    # local offset
+    ]
+    for i, stamp in enumerate(shapes):
+        p = tmp_path / f"k{i}.lock"
+        p.write_text(json.dumps({"label": "debate-A", "stamp": stamp}),
+                     encoding="ascii")
+        r = run_lock(p, "-Acquire", "-Label", "debate-B", "-WaitSeconds", "0")
+        assert r.returncode == 0, f"50 minutes must read stale for {stamp}"
+        assert "stale" in r.stdout
 
 
 def test_a_malformed_lock_is_breakable(tmp_path):
