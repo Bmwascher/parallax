@@ -138,8 +138,14 @@ def test_backup_lane_evidence_pins():
     # the earlier measurement is meaningless and the check would read
     # whatever happens to sit there.
     assert ("Rotation guard" in body)
-    assert ("if after the call the file is SMALLER than the captured "
-            "offset, or absent") in body
+    # 0.15.0: extended from a fragment to the whole rule, because the
+    # contract coverage checker proved the fragment left the consequence
+    # half of the detection rule unlocked.
+    assert ("Before trusting the offset, confirm the stream did not "
+            "rotate under the call: if after the call the file is "
+            "SMALLER than the captured offset, or absent, it was rotated "
+            "or replaced and every byte position from the earlier "
+            "measurement is meaningless.") in body
     # re-reading the rotated file from zero is the tempting wrong
     # answer: it attributes lines that may belong to any session
     assert ("not a reason to re-read from zero" in body)
@@ -149,7 +155,13 @@ def test_backup_lane_evidence_pins():
     # satisfied by the pre-existing bullet, so the guard's consequence
     # half needs its own pin or it deletes green - pin-integrity instance
     # ten in this file.
-    assert ("That is a route-attribution failure" in body)
+    # 0.15.0: extended from a fragment to the whole rule. The fragment
+    # named the failure class but locked none of the prohibition.
+    assert ("That is a route-attribution failure — and specifically "
+            "**not a reason to re-read from zero**, which is the "
+            "tempting wrong answer: the new file's opening lines may "
+            "belong to any session, so reading it attributes nothing "
+            "while looking like evidence.") in body
     # F4: the residual gap's CONTINGENCY is the only recorded instruction
     # for the day rotation starts succeeding.
     assert ("compare file identity (creation time) too, not just length"

@@ -478,3 +478,44 @@ def test_history_fixtures_are_not_vacuous():
         assert len(misses) == 1, (
             f"{stem}: expected exactly the defect region uncovered, got "
             f"{[rid for rid, _, _ in misses]}")
+
+
+REPO = Path(__file__).resolve().parents[2]
+
+DOC_PATHS = (
+    sorted((REPO / "skills" / "multi-model-verify" / "references").glob("*.md"))
+    + sorted((REPO / "agents").glob("*.md"))
+)
+
+# This module is excluded from pin collection on purpose. Its own
+# assertions quote whole contract bodies, so including it would let the
+# checker satisfy itself.
+PIN_PATHS = [p for p in sorted((REPO / "evals" / "multi-model-verify")
+                               .glob("test_*.py"))
+             if p.name != Path(__file__).name]
+
+DECLARED_REGIONS = {
+    "rotation-guard-detection",
+    "rotation-guard-disposition",
+    "rotation-guard-residual-gap",
+}
+
+
+def test_declared_regions_match_the_documents():
+    """Deleting a whole region takes its markers with it. Without this
+    check the coverage test would then pass over nothing at all."""
+    found = set(collect_regions(DOC_PATHS))
+    missing = sorted(DECLARED_REGIONS - found)
+    extra = sorted(found - DECLARED_REGIONS)
+    assert not missing, (
+        f"declared region(s) not found in any document: {missing}. "
+        "A region was deleted or renamed.")
+    assert not extra, (
+        f"region(s) found but not declared: {extra}. "
+        "Add them to DECLARED_REGIONS.")
+
+
+def test_every_marked_region_is_locked_by_a_pin():
+    regions = collect_regions(DOC_PATHS)
+    misses = uncovered(regions, collect_pins(PIN_PATHS))
+    assert not misses, format_failure(misses)

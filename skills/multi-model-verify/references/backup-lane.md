@@ -50,20 +50,31 @@ Panel participation: a user-invoked panel per references/panels.md is a second s
 - Before every dispatch capture the byte length of `~/.kimi/logs/kimi.log`; after the call, past that offset, require all three: exactly one new `Using LLM model:` line carrying the canonical backup id, a `Loading agent:` line naming the committed yaml, and a `Loaded tools:` line equal to the allowlist exactly.
 - Zero matching new lines, more than one, a wrong id, a wrong agent path, or any extra tool entry is a route-attribution failure: the reply is DISCARDED unread and the failure goes to the fallbacks.md consent gate.
 - **Rotation guard.** The offset rule assumes an append-only file, and
-  the kimi client does not guarantee one. Before trusting the offset,
+  the kimi client does not guarantee one.
+  <!-- contract:start id=rotation-guard-detection -->
+  Before trusting the offset,
   confirm the stream did not rotate under the call: if after the call the
   file is SMALLER than the captured offset, or absent, it was rotated or
   replaced and every byte position from the earlier measurement is
-  meaningless. That is a route-attribution failure — and specifically
+  meaningless.
+  <!-- contract:end -->
+  <!-- contract:start id=rotation-guard-disposition -->
+  That is a route-attribution failure — and specifically
   **not a reason to re-read from zero**, which is the tempting wrong
   answer: the new file's opening lines may belong to any session, so
-  reading it attributes nothing while looking like evidence. Observed
+  reading it attributes nothing while looking like evidence.
+  <!-- contract:end -->
+  Observed
   2026-07-26 (kimi-cli 1.49.0, Windows): rotation ATTEMPTS fire and fail
   with `PermissionError: [WinError 32]` because the log is still open, so
   offsets have held by accident rather than by design — do not build on
-  that accident. The size test is necessary, not sufficient: a rotation
+  that accident.
+  <!-- contract:start id=rotation-guard-residual-gap -->
+  The size test is necessary, not sufficient: a rotation
   whose replacement file grew back PAST the captured offset within the
-  same call would slip through. That needs the pre-rotation offset to
+  same call would slip through.
+  <!-- contract:end -->
+  That needs the pre-rotation offset to
   have been small, which only follows an immediately preceding rotation,
   so it is not worth a second mechanism — but if rotation ever starts
   succeeding here, compare file identity (creation time) too, not just
