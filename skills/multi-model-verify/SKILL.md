@@ -145,6 +145,18 @@ toggled on, its stop-time review overlaps mode `diff` — expected, not a bug.
    pass is what proves the removal happened.
    <!-- contract:end -->
 
+   <!-- contract:start id=client-probe-scope-limit -->
+   The probe reads the PROMPT. It does not read the reviewer's TOOL
+   surface, because tools are not in the prompt: measured 2026-07-28, the
+   rendered prompt names neither a configured MCP server nor the memories
+   feature, and `codex debug` offers no tool-list view to measure instead.
+   Observed the same day: a round dispatched with the flags and the
+   verified override still logged `mcp: node_repl/js started` three times
+   in its own transcript. A clean probe therefore means the reviewer was
+   TOLD nothing extra, never that it can DO nothing extra. Backlog item 7
+   holds this; do not describe a passing probe as full reviewer isolation.
+   <!-- contract:end -->
+
 ## Mode plan
 
 1. Draft the session position: chosen approach, port-fidelity claims, and the

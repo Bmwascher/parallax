@@ -405,6 +405,24 @@ class TestTransportContract:
             "   measurement then describes a configuration the reviewer never received."
         ) in text
 
+    def test_the_probe_does_not_claim_the_tool_surface(self):
+        # 0.17.0 measures the PROMPT. The behavioral run on 2026-07-28
+        # caught an MCP tool running inside a round that passed every
+        # check the probe makes, so the skill must not let a clean probe
+        # read as full reviewer isolation.
+        text = read(SKILL_MD)
+        assert (
+            "   The probe reads the PROMPT. It does not read the reviewer's TOOL\n"
+            "   surface, because tools are not in the prompt: measured 2026-07-28, the\n"
+            "   rendered prompt names neither a configured MCP server nor the memories\n"
+            "   feature, and `codex debug` offers no tool-list view to measure instead.\n"
+            "   Observed the same day: a round dispatched with the flags and the\n"
+            "   verified override still logged `mcp: node_repl/js started` three times\n"
+            "   in its own transcript. A clean probe therefore means the reviewer was\n"
+            "   TOLD nothing extra, never that it can DO nothing extra. Backlog item 7\n"
+            "   holds this; do not describe a passing probe as full reviewer isolation."
+        ) in text
+
     def test_brief_carries_a_scope_guard(self):
         # The guard is prose, so it is a mitigation. The controls are three
         # and are all mechanical. An earlier draft named only two, and the

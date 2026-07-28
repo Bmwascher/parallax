@@ -309,6 +309,23 @@ unchanged.
 
 ## Accepted limits
 
+- **The design measures the PROMPT, and the reviewer's TOOL surface is out
+  of reach of this mechanism.** Found after implementation, by the 0.17.0
+  behavioral run on 2026-07-28: a review round dispatched with
+  `--sandbox read-only --disable plugins --disable apps` and the verified
+  skill-disable override logged three `mcp: node_repl/js started` lines in
+  codex's own transcript. The machine config carries
+  `[mcp_servers.node_repl]`, `[windows] sandbox = "elevated"`,
+  `[features] memories = true` and `[memories] use_memories = true`. The
+  probe cannot see any of it: measured the same day, the rendered prompt
+  names neither the MCP server nor memories, and `codex debug` exposes
+  `models`, `app-server` and `prompt-input` only, so there is no free
+  tool-list view to measure. `--disable memories` is accepted and
+  `-c mcp_servers={}` parses, but NEITHER is verified to remove the tool,
+  and shipping an unverified lever as a control is the false-clean this
+  design exists to forbid. Recorded as backlog item 7 and stated in
+  SKILL.md as `client-probe-scope-limit`; a clean probe means the reviewer
+  was told nothing extra, never that it can do nothing extra.
 - **The global `AGENTS.md` cannot be suppressed.** No available lever
   removes `$CODEX_HOME/AGENTS.md`. It is measured, named with its path, and
   recorded. A user whose global instruction file shapes reviews still has a

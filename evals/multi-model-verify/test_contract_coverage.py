@@ -644,6 +644,7 @@ DECLARED_REGIONS = {
     "verified-override-dispatch",
     "enumeration-depth-asymmetry",
     "brief-scope-guard",
+    "client-probe-scope-limit",
 }
 
 
