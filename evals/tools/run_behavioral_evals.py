@@ -110,7 +110,7 @@ ALLOWED_TOOLS = (
 # its .git/, where the contract puts the checkpoint artifact) is writable,
 # the harness and plugin cache are not.
 MUTATION_AVAILABLE_TOOLS = "Skill,Read,Glob,Grep,Edit,Write"
-MUTATION_ALLOWED_TOOLS = "Skill,Read(**),Glob,Grep,Edit(**),Write(**)"
+MUTATION_ALLOWED_TOOLS = "Skill,Read(**),Glob,Grep,Edit(**)"
 
 GRADER_PROMPT = """<role>Independent grader in a two-model verification
 protocol. Judge ONLY from the transcript; do not assume unstated work
@@ -558,10 +558,16 @@ CODEX_ENV_DENYLIST = ("CODEX_API_KEY", "OPENAI_API_KEY", "OPENAI_BASE_URL", "COD
 def codex_env():
     """The grader rides the first-party ChatGPT login: strip env overrides
     that could silently reroute the call (API-key auth or a redirected base
-    URL) - mirror of the drift watch's script-scoped hygiene."""
+    URL) - mirror of the drift watch's script-scoped hygiene.
+
+    FORCE_COLOR goes too. It reroutes nothing, but it makes codex colour
+    the startup header the route check parses; the check strips escapes
+    anyway, so this is belt and braces on the input rather than the only
+    guard."""
     env = dict(os.environ)
     for name in CODEX_ENV_DENYLIST:
         env.pop(name, None)
+    env.pop("FORCE_COLOR", None)
     return env
 
 
@@ -580,6 +586,9 @@ def codex_login_ok(env):
     return login.returncode == 0 and "Logged in using ChatGPT" in text
 
 
+ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
+
+
 def effective_route_ok(output, model, effort):
     """codex echoes the RESOLVED config in its startup header, so a
     config.toml override or profile silently swapping the grader surfaces
@@ -587,9 +596,20 @@ def effective_route_ok(output, model, effort):
     quote such lines. Client-resolved metadata: this confirms the
     EFFECTIVE ROUTE, never server-attested runtime identity. The sandbox
     line is checked too (0.8.0): the dispatch pins --sandbox read-only,
-    so anything else means a config default bled through the pin."""
+    so anything else means a config default bled through the pin.
+
+    ANSI escapes are stripped first (0.16.0). codex colours its header
+    whenever FORCE_COLOR is set, which a Claude Code session sets to 3 -
+    so `model: ` arrives as `\x1b[1mmodel:\x1b[0m ` and the anchored regex
+    matches nothing. Every key then reads empty, the route "mismatches",
+    and every graded case fails with no parseable verdicts. This check must
+    fail closed on a WRONG route, not on a COLOURED one, and the evals are
+    run from inside exactly the session that sets the variable. Reproduced
+    2026-07-28: identical calls matched with FORCE_COLOR removed and failed
+    with it present."""
     expected = {"model": model, "provider": "openai",
                 "reasoning effort": effort, "sandbox": "read-only"}
+    output = ANSI_ESCAPE.sub("", output or "")
     header = {}
     for key in expected:
         m = re.search(rf"(?m)^{key}: (.+)$", output or "")

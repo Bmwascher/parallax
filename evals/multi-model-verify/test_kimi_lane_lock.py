@@ -159,6 +159,19 @@ def test_acquire_refuses_a_whitespace_label(tmp_path):
     assert not p.is_file()
 
 
+@pytest.mark.parametrize("label", ["debate-é", "debate-中", "deb—ate"])
+def test_acquire_refuses_a_label_it_cannot_store_faithfully(tmp_path, label):
+    # The lock is written as ASCII, so any other character became `?`. Doing
+    # that to the ownership credential meant the holder's own release no
+    # longer matched its own label and the lane sat stranded until it went
+    # stale. The backup reviewer lane found this.
+    p = tmp_path / "k.lock"
+    r = run_lock(p, "-Acquire", "-Label", label)
+    assert r.returncode == 2
+    assert "printable ASCII" in r.stdout
+    assert not p.is_file(), "a refused acquire must not leave a lock behind"
+
+
 @pytest.mark.parametrize("payload", [
     {"label": 0},
     {"label": None},

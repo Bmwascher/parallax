@@ -634,6 +634,47 @@ class TestEvalFixtures:
     def _load_runner():
         return load_runner_module()
 
+    def test_route_check_survives_a_coloured_header(self):
+        # codex colours its startup header whenever FORCE_COLOR is set, and
+        # a Claude Code session sets it to 3 - which is the session the
+        # evals are run from. The anchored regex then matched nothing, every
+        # key read empty, the route "mismatched", and every graded case
+        # failed with no parseable verdicts. Reproduced 2026-07-28: the same
+        # call matched with FORCE_COLOR removed and failed with it present.
+        # This check must fail closed on a WRONG route, not a COLOURED one.
+        mod = self._load_runner()
+        # The canonical id is parsed, never written here: a hardcoded
+        # literal outside the declaration file re-opens the
+        # partial-migration hole this suite sweeps for elsewhere.
+        notes = read(REFERENCES / "model-prompting-notes.md")
+        declared = re.search(r"Canonical model id: `([^`\n]+)`", notes)
+        assert declared, "canonical declaration missing"
+        canonical = declared.group(1)
+        coloured = (
+            "OpenAI Codex v0.144.1\n--------\n"
+            "\x1b[1mworkdir:\x1b[0m C:\\repo\n"
+            f"\x1b[1mmodel:\x1b[0m {canonical}\n"
+            "\x1b[1mprovider:\x1b[0m openai\n"
+            "\x1b[1msandbox:\x1b[0m read-only\n"
+            "\x1b[1mreasoning effort:\x1b[0m high\n--------\n"
+        )
+        assert mod.effective_route_ok(coloured, canonical, "high"), (
+            "a coloured header is the same route, and must still pass"
+        )
+        wrong = coloured.replace(canonical, canonical + "-decoy")
+        assert not mod.effective_route_ok(wrong, canonical, "high"), (
+            "stripping colour must not stop a wrong model failing closed"
+        )
+
+    def test_force_color_is_stripped_from_the_grader_env(self):
+        # Belt and braces on the input side of the same defect.
+        mod = self._load_runner()
+        os.environ["FORCE_COLOR"] = "3"
+        try:
+            assert "FORCE_COLOR" not in mod.codex_env()
+        finally:
+            os.environ.pop("FORCE_COLOR", None)
+
     def test_compact_stream_binds_results_to_calls(self):
         # The graded transcript is the ONLY thing the grader sees, so a
         # result must carry which call produced it and whether it
@@ -1057,10 +1098,19 @@ class TestApplicationCheckpoint:
             )
         allowed = re.search(r'MUTATION_ALLOWED_TOOLS = "([^"]+)"', runner)
         assert allowed
-        assert "Edit(**)" in allowed.group(1) and \
-            "Write(**)" in allowed.group(1), (
-                "write approvals must be cwd-scoped like the drift agent"
-            )
+        assert "Edit(**)" in allowed.group(1), (
+            "write approvals must be cwd-scoped like the drift agent"
+        )
+        # `Write(**)` is not a valid file-permission rule - `Edit(**)`
+        # already covers every file-editing tool, Write included. This
+        # demanded its PRESENCE while the drift-runner assertion below
+        # demanded its ABSENCE for exactly that reason, so the two lanes
+        # disagreed about the same rule eight hundred lines apart. The
+        # backup reviewer lane found it on the branch that removed the rule
+        # from the drift runner.
+        assert "Write(**)" not in allowed.group(1), (
+            "Write(**) is a no-op rule that only emits a warning"
+        )
         assert not re.search(r"\b(Edit|Write),", allowed.group(1)), (
             "a bare Edit/Write approval must not coexist with the scoped one"
         )

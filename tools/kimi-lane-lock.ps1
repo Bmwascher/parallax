@@ -206,6 +206,16 @@ if ($Acquire) {
         exit 2
     }
     $Label = $Label.Trim()
+    # The lock file is written as ASCII, which silently rewrites any other
+    # character as `?`. Doing that to the OWNERSHIP CREDENTIAL means the
+    # holder's own release no longer matches its own label, and the lane sits
+    # stranded until it goes stale. Refusing a label this file cannot store
+    # faithfully is better than storing a different one, and better than
+    # widening the encoding: the contract's label format is ASCII already.
+    if ($Label -match '[^\x20-\x7E]') {
+        Write-Output "kimi lane lock: -Label must be printable ASCII - the lock file stores it as ASCII, so any other character becomes '?' and the holder could not release its own lane"
+        exit 2
+    }
     if (-not (Test-Path $lockDir)) {
         New-Item -ItemType Directory -Force -Path $lockDir | Out-Null
     }
