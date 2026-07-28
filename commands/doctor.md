@@ -177,7 +177,18 @@ never as a failure: nothing available removes it. Print
 empty, say the prompt carries a global instruction block whose source the
 prompt itself does not name, rather than inventing a path.
 
-A non-zero exit here is BROKEN and a real finding. It means a review
-dispatched from this machine right now would carry instruction sources
-the gate is supposed to have removed. The probe spends no tokens:
-`codex debug prompt-input` renders the prompt and calls no model.
+**Split the non-zero exit by SCOPE — this check reports on the MACHINE,
+and the current directory is not the machine.** A hit whose source is
+`repo_scoped`, or a reported project `AGENTS.md`, is a property of
+whatever repo you happen to be standing in, and preflight 3 already
+handles it through the review mirror: report `N/A (this repo carries
+back-channels — preflight 3 remediates them in the mirror)` and name the
+entries. BROKEN is reserved for machine-scoped hits — a non-zero
+`plugin_cache_scoped`, `unknown_scoped` or `skills_after`, or any other
+blocked reason — because those follow the reviewer everywhere and mean a
+review dispatched from this machine right now would carry instruction
+sources the gate is supposed to have removed. A check that reads BROKEN in
+every normally configured repo teaches the user to ignore BROKEN.
+
+The probe spends no tokens: `codex debug prompt-input` renders the prompt
+and calls no model.

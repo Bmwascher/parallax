@@ -174,10 +174,15 @@ silently inheriting the config default instead.
 ### 2. A client-context probe
 
 Before round 1 of every debate, run `codex debug prompt-input` with the
-same flags the dispatch will use, from the same working directory the
-dispatch will use — the mirror when one was built, the reviewed repo
-otherwise — and sort every instruction source it reveals into three
-buckets.
+same CONTEXT-SHAPING flags the dispatch will use — `--disable plugins`,
+`--disable apps`, and the generated `-c skills.config=[...]` override —
+from the same working directory the dispatch will use, the mirror when one
+was built and the reviewed repo otherwise, and sort every instruction
+source it reveals into three buckets. Full flag parity with the dispatch is
+impossible and is not claimed: measured 2026-07-28, `codex debug
+prompt-input` rejects `--sandbox` and `-m` outright with `unexpected
+argument`. Those two govern execution and routing rather than prompt
+content, so their absence cannot change what the probe reads.
 
 - **Repo-scoped** — any path inside the reviewed tree. STOP and remediate
   in the mirror. This is preflight 3's existing rule, unchanged.
@@ -341,10 +346,16 @@ unchanged.
   the reviewed tree are out of scope. Prompt text is not a control surface.
   The flag, the generated disable list, and the second measurement are the
   controls.
-- **The version floor is the version probed.** codex-cli 0.144.1 is known
-  to support `--disable plugins` and `codex debug prompt-input`. Earlier
-  versions are unprobed. The floor is recorded and enforced, in the shape
-  0.16.0 used for the Claude Code floor on the Fable panel lane.
+- **The version floor is the version probed, and it is RECORDED rather than
+  enforced.** codex-cli 0.144.1 is known to support `--disable plugins` and
+  `codex debug prompt-input`. Earlier versions are unprobed. No explicit
+  floor check ships: an earlier draft of this line claimed the shape 0.16.0
+  used for the Claude Code floor on the Fable panel lane, and the
+  whole-branch review of 2026-07-28 confirmed nothing in the range
+  implements it. Enforcement is implicit and fail-closed instead: a CLI
+  without the flags or without the subcommand makes the probe exit
+  non-zero, which blocks the round. Add a real floor check only if that
+  implicit path is ever found to pass on an unsupported version.
 - **`codex debug prompt-input` is a debug subcommand.** It may change shape
   without notice. That is why its disappearance is a named transport
   failure class rather than an assumption, and why the parser's expectations
