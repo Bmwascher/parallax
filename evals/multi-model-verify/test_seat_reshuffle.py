@@ -180,7 +180,21 @@ def test_fallbacks_panel_lane_loss():
     assert "panel-lane-unavailable" in nfb
     assert ("no round was dispatched, so nothing is spent and nothing "
             "is quarantined") in nfb
-    assert ("the panel cannot silently convene without it") in nfb
+    # 0.15.0: was a fragment. The coverage checker proved all three
+    # rules of the disposition unlocked - including the only place that
+    # says the driver must state the convenable composition BEFORE
+    # round 1, which is what stops a quiet reduction.
+    assert ("The disposition is the same in the one respect that "
+            "matters: the panel cannot silently convene without "
+            "it.") in nfb
+    assert ("Before round 1 the driver states which lanes it can "
+            "actually convene and which it cannot, with the reason, and "
+            "the user chooses - proceed with the convenable "
+            "composition, substitute, or abort.") in nfb
+    assert ("The panel invariant still binds whatever is chosen: at "
+            "least one cross-vendor lane, so a composition reduced to "
+            "Fable alone is not a panel and cannot proceed as "
+            "one.") in nfb
 
 
 def test_plan_format_panel_and_envelope_pins():

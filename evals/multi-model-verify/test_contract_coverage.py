@@ -500,6 +500,10 @@ DECLARED_REGIONS = {
     "rotation-guard-residual-gap",
     "panel-floor-reference",
     "panel-floor-agent",
+    "panel-lane-loss-disposition",
+    "panel-unavailable-principle",
+    "panel-unavailable-procedure",
+    "panel-unavailable-invariant",
 }
 
 
