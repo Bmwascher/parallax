@@ -71,6 +71,25 @@ def run_mirror(repo, mirror, *extra):
         capture_output=True, text=True)
 
 
+SKIP_BLOCK = "BLOCKED: no client measurement was made (-SkipProbe)"
+
+
+def assert_built(proc):
+    """-SkipProbe builds the mirror but VERIFIES nothing, so it exits 1.
+
+    The exit code reports dispatch-readiness, not construction: a mirror
+    with no client measurement is not cleared for dispatch, and must not
+    share an exit code with one that is. The mode-diff review of
+    2026-07-28 found the old exit 0 there.
+
+    Asserting the SPECIFIC skip line is what keeps these tests able to
+    catch a real construction failure, which also exits 1 but with a
+    different reason.
+    """
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert SKIP_BLOCK in proc.stdout, proc.stdout + proc.stderr
+
+
 def read_block(stdout, label):
     """Lines of one labelled block from the record output."""
     lines = stdout.splitlines()
@@ -88,7 +107,7 @@ def test_the_mirror_carries_gitignored_files(tmp_path):
     repo = make_repo(tmp_path)
     mirror = tmp_path / "mirror"
     proc = run_mirror(repo, mirror)
-    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert_built(proc)
     assert (mirror / "ignored" / "secret.txt").exists(), (
         "a clone would have dropped this; the mirror must not"
     )
@@ -103,7 +122,7 @@ def test_a_tracked_agents_md_is_deleted_and_committed(tmp_path):
     before = git(repo, "rev-parse", "HEAD").strip()
     mirror = tmp_path / "mirror"
     proc = run_mirror(repo, mirror)
-    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert_built(proc)
     assert not (mirror / "AGENTS.md").exists()
     assert (repo / "AGENTS.md").exists(), "the real tree is never touched"
     after = git(mirror, "rev-parse", "HEAD").strip()
@@ -126,7 +145,7 @@ def test_an_ignored_agents_drop_is_deleted_without_a_commit(tmp_path):
     before = git(repo, "rev-parse", "HEAD").strip()
     mirror = tmp_path / "mirror"
     proc = run_mirror(repo, mirror)
-    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert_built(proc)
     assert not (mirror / ".agents").exists()
     after = git(mirror, "rev-parse", "HEAD").strip()
     assert after == before, (
@@ -147,7 +166,7 @@ def test_a_gitignored_back_channel_is_found_and_removed(tmp_path):
     (repo / "AGENTS.md").write_text("# ignored but still ingested\n")
     mirror = tmp_path / "mirror"
     proc = run_mirror(repo, mirror)
-    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert_built(proc)
     assert not (mirror / "AGENTS.md").exists()
 
 
@@ -158,7 +177,7 @@ def test_a_nested_agents_md_is_found(tmp_path):
     (deep / "AGENTS.md").write_text("# deep\n")
     mirror = tmp_path / "mirror"
     proc = run_mirror(repo, mirror)
-    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert_built(proc)
     assert list(mirror.rglob("AGENTS.md")) == [], (
         "the *AGENTS.md pathspec carries a leading star, so it reaches any"
         " depth; a root-only check misses a nested drop"
@@ -178,7 +197,7 @@ def test_a_nested_dot_agents_is_a_recorded_gap_not_a_silent_one(tmp_path):
     (deep / "SKILL.md").write_text("---\nname: deep\n---\n")
     mirror = tmp_path / "mirror"
     proc = run_mirror(repo, mirror)
-    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert_built(proc)
     assert (mirror / "sub" / ".agents" / "skills" / "deep" / "SKILL.md").exists(), (
         "the root-anchored pathspec does not reach this entry; if this ever"
         " starts being removed, the enumeration changed and the accepted"
@@ -193,7 +212,7 @@ def test_a_clean_repo_is_not_read_as_a_failed_enumeration(tmp_path):
     repo = make_clean_repo(tmp_path)
     mirror = tmp_path / "mirror"
     proc = run_mirror(repo, mirror)
-    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert_built(proc)
     assert "could not enumerate" not in proc.stdout
 
 
@@ -201,7 +220,7 @@ def test_an_empty_baseline_is_a_legitimate_state(tmp_path):
     repo = make_clean_repo(tmp_path)
     mirror = tmp_path / "mirror"
     proc = run_mirror(repo, mirror)
-    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert_built(proc)
     assert read_block(proc.stdout, "baseline:") == []
     assert read_block(proc.stdout, "manifest:") == []
     assert "baseline capture failed" not in proc.stdout
@@ -223,7 +242,7 @@ def test_force_replaces_an_existing_mirror(tmp_path):
     mirror.mkdir()
     (mirror / "stale.txt").write_text("from a previous debate\n")
     proc = run_mirror(repo, mirror, "-Force")
-    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert_built(proc)
     assert not (mirror / "stale.txt").exists()
 
 
@@ -231,7 +250,7 @@ def test_the_manifest_covers_exactly_the_baseline_paths(tmp_path):
     repo = make_repo(tmp_path)
     mirror = tmp_path / "mirror"
     proc = run_mirror(repo, mirror)
-    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert_built(proc)
     paths = [line.split(" ", 1)[0]
              for line in read_block(proc.stdout, "manifest:")]
     assert "ignored/secret.txt" in paths
@@ -245,7 +264,7 @@ def test_the_manifest_hashes_raw_bytes_and_sorts_by_path(tmp_path):
     repo = make_repo(tmp_path)
     mirror = tmp_path / "mirror"
     proc = run_mirror(repo, mirror)
-    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert_built(proc)
     manifest = read_block(proc.stdout, "manifest:")
     paths = [line.split(" ", 1)[0] for line in manifest]
     assert paths == sorted(paths), "sorted by path in byte order"
@@ -262,7 +281,7 @@ def test_a_directory_expands_recursively(tmp_path):
     (repo / "untr" / "sub" / "two.txt").write_text("2\n")
     mirror = tmp_path / "mirror"
     proc = run_mirror(repo, mirror)
-    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert_built(proc)
     paths = [line.split(" ", 1)[0]
              for line in read_block(proc.stdout, "manifest:")]
     assert "untr/sub/one.txt" in paths
@@ -280,7 +299,7 @@ def test_the_baseline_is_the_raw_status_capture(tmp_path):
     repo = make_repo(tmp_path)
     mirror = tmp_path / "mirror"
     proc = run_mirror(repo, mirror)
-    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert_built(proc)
     baseline = read_block(proc.stdout, "baseline:")
     assert any(line.startswith("?? ") for line in baseline), (
         "status codes are part of the baseline, not decoration"
@@ -375,6 +394,8 @@ def test_the_probe_runs_and_the_default_override_is_recorded(tmp_path):
          "-RepoRoot", str(repo), "-MirrorPath", str(mirror),
          "-CodexCommand", str(STUB)],
         capture_output=True, text=True, env=env)
+    # The ONE mirror test whose run made a real measurement, so exit 0 is
+    # the correct expectation here and nowhere else in this module.
     assert proc.returncode == 0, proc.stdout + proc.stderr
     line = next(l for l in proc.stdout.splitlines()
                 if l.startswith("override: "))
@@ -411,7 +432,55 @@ def test_the_real_tree_is_never_written_to(tmp_path):
                     for p in repo.rglob("*") if p.is_file())
     mirror = tmp_path / "mirror"
     proc = run_mirror(repo, mirror)
-    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert_built(proc)
     after = sorted(p.relative_to(repo).as_posix()
                    for p in repo.rglob("*") if p.is_file())
     assert before == after
+
+
+def test_a_relative_mirror_path_is_resolved_where_it_is_deleted(tmp_path):
+    """The guard and the deletion must resolve the SAME path.
+
+    An earlier revision guarded the process-relative form of MirrorPath,
+    while the later existence check and the forced replacement resolved
+    the same parameter against PowerShell's provider location. Here the
+    two differ: the process working directory puts the relative path
+    outside the repo, so the old guard approved it, and the provider
+    location puts it INSIDE the repo, so the forced replacement then
+    destroyed part of the tree under review.
+
+    Found by the mode-diff review of 2026-07-28, after an earlier review
+    had called it theoretical. It is not: -MirrorPath is a public
+    parameter and a differing session location is ordinary.
+    """
+    repo = make_repo(tmp_path)
+    victim = repo / "inside" / "mirror"
+    victim.mkdir(parents=True)
+    canary = victim / "canary.txt"
+    canary.write_text("part of the tree under review\n")
+
+    script = (
+        f"Set-Location -LiteralPath '{repo.as_posix()}'; "
+        f"& '{MIRROR.as_posix()}' -RepoRoot '{repo.as_posix()}' "
+        "-MirrorPath 'inside/mirror' -Force -SkipProbe; "
+        "exit $LASTEXITCODE"
+    )
+    proc = subprocess.run(
+        [ps_host(), "-NoProfile", "-NonInteractive", "-Command", script],
+        capture_output=True, text=True, cwd=str(tmp_path))
+
+    assert canary.exists(), (
+        "the guard approved one absolute path while the forced replacement"
+        " destroyed another"
+    )
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "inside the repo" in proc.stdout, proc.stdout + proc.stderr
+
+
+def test_skipping_the_probe_is_not_a_passing_outcome(tmp_path):
+    # Named explicitly rather than left implicit inside assert_built: an
+    # unmade measurement must never share an exit code with a made one.
+    repo = make_clean_repo(tmp_path)
+    proc = run_mirror(repo, tmp_path / "mirror")
+    assert proc.returncode == 1
+    assert "not cleared for dispatch" in proc.stdout

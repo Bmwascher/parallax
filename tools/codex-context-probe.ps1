@@ -82,7 +82,15 @@ function Get-SkillReport($text) {
             $seg = $text.Substring($start)
             $stop = $seg.IndexOf("</skills_instructions>")
             if ($stop -gt 0) { $seg = $seg.Substring(0, $stop) }
-            $rx = [regex]'(?m)^- ([A-Za-z0-9_:-]+):.*?\(file: ([^)]*)\)'
+            # The path capture is GREEDY to the LAST `)` on its own line,
+            # not up to the first one. `[^)]*` truncated
+            # `C:/Program Files (x86)/x/SKILL.md` to `C:/Program Files (x86`,
+            # which still looks like a rooted path, so it was filed as a
+            # harmless home note instead of blocking - and the generated
+            # disable entry named a file that does not exist. Found by the
+            # mode-diff review, 2026-07-28. `Program Files (x86)` is an
+            # ordinary Windows path, not a contrived one.
+            $rx = [regex]'(?m)^- ([A-Za-z0-9_:-]+):.*?\(file: (.+)\)[ \t]*$'
             foreach ($m in $rx.Matches($seg)) {
                 [void]$entries.Add(@{
                     Name = $m.Groups[1].Value
@@ -154,9 +162,14 @@ function Hide-KnownContainer($text) {
             $bodyStart = $s + $open.Length
             $e = $masked.IndexOf($close, $bodyStart, [System.StringComparison]::Ordinal)
             if ($e -lt 0) {
-                # An unterminated known container: mask to the end rather
-                # than leaving its body scannable.
-                $e = $masked.Length
+                # An unterminated known container STOPS the run. An earlier
+                # revision masked to end-of-prompt instead, which hid every
+                # later unknown block from the scan: one malformed container
+                # near the top silently disabled the whole guard. Found by
+                # the mode-diff review, 2026-07-28.
+                throw [System.FormatException]::new(
+                    "the <" + $name + "> container never closes - the" +
+                    " remainder of the prompt cannot be scanned")
             }
             $len = $e - $bodyStart
             $masked = $masked.Substring(0, $bodyStart) +
@@ -211,6 +224,10 @@ function Get-SkillScope($path, $workDir) {
     $raw = [string]$path
     if ([string]::IsNullOrWhiteSpace($raw)) { return "unknown" }
     $norm = $raw.Replace("\", "/")
+    # Every advertised entry names a SKILL.md. A capture that does not is a
+    # shape this parser no longer describes - a truncation, or a changed
+    # rendering - and belongs in the bucket that blocks, never in `home`.
+    if ($norm -notmatch '(?i)/SKILL\.md$') { return "unknown" }
     # A locatable source is a rooted local path: `C:/...`. Anything else -
     # relative, UNC, a URI, an environment resource locator - cannot be
     # compared against the work dir at all.
@@ -281,7 +298,15 @@ function Test-PromptShape($text, $asJson) {
         Write-Blocked ("the plugin or apps feature is advertising itself" +
             " despite --disable plugins --disable apps") $asJson
     }
-    $unknown = Get-UnknownPromptBlock $text
+    $unknown = @()
+    try {
+        $unknown = Get-UnknownPromptBlock $text
+    } catch {
+        # An unterminated known container. Masking past it would hide every
+        # later block from the scan, so the malformed prompt stops the run.
+        Write-Blocked ("the prompt could not be scanned for new surfaces: " +
+            $_.Exception.Message) $asJson
+    }
     if ($unknown.Count -gt 0) {
         Write-Blocked ("unrecognized prompt block(s): " +
             ($unknown -join ", ") + " - a new instruction family is" +
@@ -374,6 +399,16 @@ if (-not $skills.BlockPresent) {
     Write-Blocked ("the skills block is missing on the first pass - the" +
         " prompt shape changed, and this parser cannot tell an empty" +
         " machine from one it can no longer read") $Json
+}
+# PRESENT and empty is a parse failure, and it is refused HERE rather than
+# only on the second pass. codex does not render an empty skills block, so
+# zero entries inside a present block means this parser can no longer read
+# the entry lines - and every count downstream would then be a measured
+# zero that measured nothing. Found by the mode-diff review, 2026-07-28.
+if ($skills.Entries.Count -eq 0) {
+    Write-Blocked ("the skills block is present but no entry could be read" +
+        " - the entry format changed, so every count below would be a zero" +
+        " this parser invented rather than measured") $Json
 }
 
 $repoScoped = @()
@@ -478,6 +513,40 @@ if ($SuppressSkills) {
     $sha = [System.Security.Cryptography.SHA256]::Create()
     $overrideHash = ([System.BitConverter]::ToString(
         $sha.ComputeHash($bytes)) -replace '-', '').ToLower()
+}
+
+# A run that performed NO suppression pass has verified nothing, and must
+# not share its exit code or its status word with one that did. Without
+# -SuppressSkills the first pass still measured 29 advertised skills and
+# the old code reported `clean` and exit 0 anyway - the exact false clean
+# every other rule in this script exists to prevent. Found by the mode-diff
+# review, 2026-07-28. The measurement is still printed, because it is
+# useful; only the verdict is withheld.
+if (-not $SuppressSkills) {
+    $partial = @{
+        status = "measured-only"
+        reason = ("no suppression pass was run, so nothing is verified: " +
+            $before + " skill(s) are still advertised. Pass -SuppressSkills" +
+            " with -OverrideOut to verify and to produce a dispatchable" +
+            " override.")
+        skills_before = $before
+        skills_after = $before
+        repo_scoped = $repoScoped.Count
+        plugin_cache_scoped = $cacheScoped.Count
+        home_scoped = $homeScoped.Count
+        unknown_scoped = $unknownScoped.Count
+        global_agents_md = $instructions.BlockPresent
+        global_agents_md_path = $globalPath
+        project_agents_md = $instructions.ProjectDoc
+        override_file = ""
+        override_sha256 = ""
+    }
+    if ($Json) {
+        Write-Output (ConvertTo-Json $partial -Compress)
+    } else {
+        Write-Output ("measured-only: " + $partial.reason)
+    }
+    exit 1
 }
 
 $report = @{

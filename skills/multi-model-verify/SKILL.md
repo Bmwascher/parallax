@@ -146,15 +146,19 @@ toggled on, its stop-time review overlaps mode `diff` — expected, not a bug.
    <!-- contract:end -->
 
    <!-- contract:start id=client-probe-scope-limit -->
-   The probe reads the PROMPT. It does not read the reviewer's TOOL
-   surface, because tools are not in the prompt: measured 2026-07-28, the
-   rendered prompt names neither a configured MCP server nor the memories
-   feature, and `codex debug` offers no tool-list view to measure instead.
-   Observed the same day: a round dispatched with the flags and the
-   verified override still logged `mcp: node_repl/js started` three times
-   in its own transcript. A clean probe therefore means the reviewer was
-   TOLD nothing extra, never that it can DO nothing extra. Backlog item 7
-   holds this; do not describe a passing probe as full reviewer isolation.
+   State what a clean probe means, and never more. It means exactly this:
+   no skill is advertised, no plugin or apps block is present, and no
+   instruction source sits inside the reviewed tree. Two things it does
+   NOT mean. The global `AGENTS.md` above survives a clean probe and is
+   still instructing the reviewer; the probe records it rather than
+   removing it. And the reviewer's TOOL surface is not read at all,
+   because tools are not in the prompt: measured 2026-07-28, the rendered
+   prompt names neither a configured MCP server nor the memories feature,
+   `codex debug` offers no tool-list view to measure instead, and a round
+   dispatched with the flags and the verified override still logged
+   `mcp: node_repl/js started` three times in its own transcript. Backlog
+   item 7 holds the tool half. Do not call a passing probe full reviewer
+   isolation.
    <!-- contract:end -->
 
 ## Mode plan

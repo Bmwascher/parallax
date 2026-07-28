@@ -181,8 +181,12 @@ was built and the reviewed repo otherwise, and sort every instruction
 source it reveals into three buckets. Full flag parity with the dispatch is
 impossible and is not claimed: measured 2026-07-28, `codex debug
 prompt-input` rejects `--sandbox` and `-m` outright with `unexpected
-argument`. Those two govern execution and routing rather than prompt
-content, so their absence cannot change what the probe reads.
+argument`. What that measurement establishes is only that parity cannot
+be REQUESTED. Whether model or sandbox selection could change rendered
+prompt content is UNVERIFIED — there is no way to render the prompt under
+those flags and compare, which is the same missing surface backlog item 7
+describes. Treat the two as an unmeasured difference, not a proven
+irrelevance.
 
 - **Repo-scoped** — any path inside the reviewed tree. STOP and remediate
   in the mirror. This is preflight 3's existing rule, unchanged.
@@ -329,8 +333,11 @@ unchanged.
   `-c mcp_servers={}` parses, but NEITHER is verified to remove the tool,
   and shipping an unverified lever as a control is the false-clean this
   design exists to forbid. Recorded as backlog item 7 and stated in
-  SKILL.md as `client-probe-scope-limit`; a clean probe means the reviewer
-  was told nothing extra, never that it can do nothing extra.
+  SKILL.md as `client-probe-scope-limit`. A clean probe means exactly
+  three things: no skill advertised, no plugin or apps block, nothing
+  from inside the reviewed tree. It does NOT mean the reviewer received
+  no instructions at all — the global `AGENTS.md` in the limit below
+  survives it — and it says nothing about what the reviewer can DO.
 - **The global `AGENTS.md` cannot be suppressed.** No available lever
   removes `$CODEX_HOME/AGENTS.md`. It is measured, named with its path, and
   recorded. A user whose global instruction file shapes reviews still has a

@@ -412,15 +412,19 @@ class TestTransportContract:
         # read as full reviewer isolation.
         text = read(SKILL_MD)
         assert (
-            "   The probe reads the PROMPT. It does not read the reviewer's TOOL\n"
-            "   surface, because tools are not in the prompt: measured 2026-07-28, the\n"
-            "   rendered prompt names neither a configured MCP server nor the memories\n"
-            "   feature, and `codex debug` offers no tool-list view to measure instead.\n"
-            "   Observed the same day: a round dispatched with the flags and the\n"
-            "   verified override still logged `mcp: node_repl/js started` three times\n"
-            "   in its own transcript. A clean probe therefore means the reviewer was\n"
-            "   TOLD nothing extra, never that it can DO nothing extra. Backlog item 7\n"
-            "   holds this; do not describe a passing probe as full reviewer isolation."
+            "   State what a clean probe means, and never more. It means exactly this:\n"
+            "   no skill is advertised, no plugin or apps block is present, and no\n"
+            "   instruction source sits inside the reviewed tree. Two things it does\n"
+            "   NOT mean. The global `AGENTS.md` above survives a clean probe and is\n"
+            "   still instructing the reviewer; the probe records it rather than\n"
+            "   removing it. And the reviewer's TOOL surface is not read at all,\n"
+            "   because tools are not in the prompt: measured 2026-07-28, the rendered\n"
+            "   prompt names neither a configured MCP server nor the memories feature,\n"
+            "   `codex debug` offers no tool-list view to measure instead, and a round\n"
+            "   dispatched with the flags and the verified override still logged\n"
+            "   `mcp: node_repl/js started` three times in its own transcript. Backlog\n"
+            "   item 7 holds the tool half. Do not call a passing probe full reviewer\n"
+            "   isolation."
         ) in text
 
     def test_brief_carries_a_scope_guard(self):

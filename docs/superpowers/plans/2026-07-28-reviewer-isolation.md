@@ -2669,3 +2669,36 @@ None. At the cap the reviewer stated that its remaining verdicts were record-acc
 ### Note on the pattern
 
 Six of the seven substantive rounds in this debate found a defect inside the previous round's fix. That is the project's expected shape rather than a surprise, and it is why the round-4 brief asked the reviewer to attack the newest fix first.
+
+---
+
+## Post-freeze amendments
+
+**This section exists because the frozen plan was edited after it was
+frozen, which it should not have been.** The plan is the authority drift
+is measured against; editing it silently removes the ability to detect
+drift, because the implementation and the spec move together and nothing
+ever reads as different. The mode-diff review of 2026-07-28 found it, by
+diffing this file against its own freeze commit.
+
+The frozen bytes are commit `cd66546`. Read them with
+`git show cd66546:docs/superpowers/plans/2026-07-28-reviewer-isolation.md`.
+Every difference between that blob and this file is listed below. Nothing
+here was reverted: each change is correct and each was forced by a real
+failure. The defect was absorbing them silently.
+
+| # | amendment | where | why it was made |
+|---|---|---|---|
+| A1 | The plan file itself was edited in commit `e18e24b`, 66 lines added and 17 removed, replacing the single `KnownPromptBlocks` list with separate name and container lists, and changing unmatched-tag semantics to require an open/close pair. | this file, Task 1 and Task 2 | Running the round-4 guard against three real recorded prompts before writing it reported `permissions` as an unknown surface and treated `<payload text>` in a fenced code block as a block. Either would have blocked every genuine review. |
+| A2 | `New-SkillDisableOverride` emits SINGLE-quoted TOML literal strings; the frozen Task 1 prescribed double quotes. | `tools/codex-context-probe.ps1` | Windows PowerShell 5.1 strips embedded double quotes when passing an argument to a native command, after which codex rejects the value with `invalid type: string`. Found by the first live run. |
+| A3 | The probe invokes the stub in-process, pins `[Console]::OutputEncoding` to UTF-8, and joins the output array instead of `Out-String`; the frozen Task 2 prescribed `powershell -File` and `Out-String`. | `tools/codex-context-probe.ps1` | Three separate live-run failures: argument serialization stripped the quotes, the console code page turned non-ASCII paths into mojibake, and `Out-String` wrapped long skill lines at the console width so a live prompt parsed to zero skills while every short fixture passed. |
+| A4 | The mirror stages exactly the tracked entries and prunes empty parent directories; the frozen Task 3 staged broad pathspecs and did not prune. | `tools/new-review-mirror.ps1` | `git add -A -- '*AGENTS.md' '.agents'` fails when one pattern matches nothing, and deleting a skill file left its directory standing. |
+| A5 | The frozen Task 3 interface block omits `-OverrideOut` from the probe child call while the same task's prescribed call includes it. | this file, Task 3 | An internal contradiction in the frozen text. Resolved toward including it, because a probe without it verifies a configuration nothing can dispatch. |
+| A6 | SKILL.md's preflight 3 puts mirror remediation before the client probe; the frozen Task 4 ordered them the other way. | `skills/multi-model-verify/SKILL.md` | Presentation order only. The repo half is what the reader is already standing in. |
+| A7 | A sixth contract region `client-probe-scope-limit`, backlog item 7, and narrowed claims in README, the design and the backlog. | several | The plan's own "After the plan" step 1 mandates the behavioral run; that run proved a shipped claim false. The user chose to ship the prompt half with the gap recorded rather than extend scope. |
+| A8 | Four fail-closed fixes in the probe, two path fixes in the mirror, and their tests. | both scripts, both test modules | The mode-diff review of 2026-07-28 found four more false-clean paths and one destructive-path bug. Applied under the checkpoint at `.git/parallax/application-checkpoints/20260728-1552-22dd63311a33.md`. |
+
+**Rule for the next cycle:** a frozen plan is read-only. Amendments go in
+a section like this one, dated, with the evidence that forced each. If an
+amendment is large enough to change the design, the plan is reopened and
+re-debated instead.

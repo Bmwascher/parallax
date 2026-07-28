@@ -590,3 +590,92 @@ def test_a_tag_inside_the_global_instructions_body_does_not_block(tmp_path):
     out.write_text(json.dumps(doc), encoding="utf-8")
     proc = probe_with(tmp_path, out, FIXTURES / "suppressed.json")
     assert proc.returncode == 0, proc.stdout
+
+
+# --- Mode-diff review findings, 2026-07-28. Four more false-clean paths
+# --- that every earlier review missed.
+
+
+def test_a_run_with_no_suppression_pass_is_never_clean(tmp_path):
+    # THE false clean the whole script exists to forbid, sitting in its own
+    # top level: without -SuppressSkills no second pass runs, yet the old
+    # report said `clean` and exited 0 while 29 skills were still
+    # advertised. A run that verified nothing must not look like one that
+    # verified everything.
+    proc, _ = run_probe(tmp_path, tmp_path, "flagged.json", suppress=False)
+    assert proc.returncode == 1, proc.stdout
+    report = json.loads(proc.stdout)
+    assert report["status"] == "measured-only"
+    assert report["skills_after"] == report["skills_before"] == 29
+    assert report["override_file"] == ""
+    assert report["override_sha256"] == ""
+
+
+def test_a_present_but_empty_block_blocks_on_the_first_pass(tmp_path):
+    # codex does not render an empty skills block, so PRESENT with zero
+    # entries means the entry format changed and this parser can no longer
+    # read it. Refusing it only on the second pass left the measurement-only
+    # path reporting a zero it invented rather than measured.
+    proc = probe_with(tmp_path, FIXTURES / "malformed-block.json")
+    assert proc.returncode == 1, proc.stdout
+    assert "no entry could be read" in proc.stdout
+
+
+def test_a_skill_path_containing_a_parenthesis_survives_intact(tmp_path):
+    # `C:/Program Files (x86)/...` is an ordinary Windows path. The old
+    # capture stopped at the FIRST `)`, producing `C:/Program Files (x86`,
+    # which still looks rooted - so it was filed as a harmless home note
+    # and the generated disable entry named a file that does not exist.
+    real = "C:/Program Files (x86)/codex/skills/vendor/SKILL.md"
+    fixture = tmp_path / "parenthesis.json"
+    text = (FIXTURES / "flagged.json").read_text(encoding="utf-8")
+    fixture.write_text(
+        text.replace("C:/fixture/home/.agents/skills/u0/SKILL.md", real),
+        encoding="utf-8")
+    out = tmp_path / "override.txt"
+    log = tmp_path / "calls.log"
+    env = dict(os.environ)
+    env["PARALLAX_STUB_FIXTURE"] = str(fixture)
+    env["PARALLAX_STUB_FIXTURE2"] = str(FIXTURES / "suppressed.json")
+    env["PARALLAX_STUB_LOG"] = str(log)
+    proc = subprocess.run(
+        [ps_host(), "-NoProfile", "-NonInteractive", "-File", str(PROBE),
+         "-WorkDir", str(tmp_path), "-Json", "-SuppressSkills",
+         "-OverrideOut", str(out), "-CodexCommand", str(STUB)],
+        capture_output=True, text=True, env=env)
+    assert proc.returncode == 0, proc.stdout
+    raw = out.read_text(encoding="utf-8")
+    assert real in raw, (
+        "the disable entry must name the whole path, or it disables nothing"
+    )
+    assert "C:/Program Files (x86'" not in raw
+
+
+def test_a_skill_path_that_is_not_a_skill_file_is_unplaceable(tmp_path):
+    # Fail closed on a shape this parser no longer describes. Every
+    # advertised entry names a SKILL.md; anything else is a truncation or a
+    # changed rendering, and belongs in the bucket that blocks.
+    fixture = tmp_path / "not-a-skill.json"
+    text = (FIXTURES / "flagged.json").read_text(encoding="utf-8")
+    fixture.write_text(
+        text.replace("C:/fixture/home/.agents/skills/u0/SKILL.md",
+                     "C:/fixture/home/.agents/skills/u0/README.md"),
+        encoding="utf-8")
+    proc = probe_with(tmp_path, fixture)
+    assert proc.returncode == 1, proc.stdout
+    assert "could not be placed" in json.loads(proc.stdout)["reason"]
+
+
+def test_an_unterminated_known_container_blocks(tmp_path):
+    # Masking an unclosed container to end-of-prompt hid every later block
+    # from the unknown-surface scan, so one malformed container near the
+    # top silently disabled the whole guard.
+    fixture = tmp_path / "unterminated.json"
+    doc = json.loads((FIXTURES / "flagged.json").read_text(encoding="utf-8"))
+    doc[0]["content"][0]["text"] = (
+        doc[0]["content"][0]["text"].replace("</INSTRUCTIONS>", "")
+        + "\n<memories_instructions>\nx\n</memories_instructions>\n")
+    fixture.write_text(json.dumps(doc), encoding="utf-8")
+    proc = probe_with(tmp_path, fixture)
+    assert proc.returncode == 1, proc.stdout
+    assert "never closes" in proc.stdout

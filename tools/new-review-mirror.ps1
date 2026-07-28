@@ -143,13 +143,29 @@ if (-not (Test-Path $RepoRoot)) {
 }
 $RepoRoot = (Resolve-Path $RepoRoot).Path
 
+# RESOLVE ONCE, THROUGH THE PROVIDER, BEFORE ANY GUARD. An earlier
+# revision guarded `[IO.Path]::GetFullPath($MirrorPath)`, which resolves a
+# relative path against the PROCESS working directory, while `Test-Path`
+# and `Remove-Item -Recurse -Force` further down resolve the same parameter
+# against PowerShell's PROVIDER location. When a caller's two locations
+# differ - any in-session use after Set-Location - the guard approved one
+# absolute target and the recursive delete destroyed another. Found by the
+# mode-diff review, 2026-07-28; a prior review had called it theoretical,
+# which was wrong: -MirrorPath is a public parameter and the divergence is
+# an ordinary PowerShell condition. From here down, only the resolved
+# values are used.
+$MirrorPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($MirrorPath)
+if ($OverrideOut) {
+    $OverrideOut = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($OverrideOut)
+}
+
 # OVERLAP GUARD, before anything is created or deleted. -Force recursively
 # deletes MirrorPath, so a MirrorPath equal to, inside, or containing
 # RepoRoot would destroy the user's working tree. robocopy over an
-# overlapping pair is equally unsafe. This runs FIRST, on the string paths,
-# because by the time Remove-Item runs it is too late to check.
+# overlapping pair is equally unsafe. This runs FIRST, because by the time
+# Remove-Item runs it is too late to check.
 $rr = $RepoRoot.Replace("\", "/").TrimEnd("/") + "/"
-$mp = ([System.IO.Path]::GetFullPath($MirrorPath)).Replace("\", "/").TrimEnd("/") + "/"
+$mp = $MirrorPath.Replace("\", "/").TrimEnd("/") + "/"
 $cmp = [System.StringComparison]::OrdinalIgnoreCase
 if ($mp.Equals($rr, $cmp)) {
     Write-Output "ERROR: the mirror path is the repo root itself"
@@ -173,10 +189,10 @@ if ($rr.StartsWith($mp, $cmp)) {
 # or overlapping artifact only after all that work had already happened,
 # and -SkipProbe would bypass the check entirely.
 if (-not $OverrideOut) {
-    $OverrideOut = Join-Path (Split-Path ([System.IO.Path]::GetFullPath($MirrorPath)) -Parent) `
+    $OverrideOut = Join-Path (Split-Path $MirrorPath -Parent) `
         ((Split-Path $MirrorPath -Leaf) + ".skills-override.txt")
 }
-$op = ([System.IO.Path]::GetFullPath($OverrideOut)).Replace("\", "/").TrimEnd("/")
+$op = $OverrideOut.Replace("\", "/").TrimEnd("/")
 foreach ($protected in @($rr, $mp)) {
     if (($op + "/").Equals($protected, $cmp) -or
         ($op + "/").StartsWith($protected, $cmp) -or
@@ -320,4 +336,14 @@ Write-Output "manifest:"
 foreach ($m in $manifest) { Write-Output ("  " + $m) }
 Write-Output ("probe: " + $probeLine)
 Write-Output ("override: " + $overrideFile)
+# A mirror built without the client probe is NOT cleared for dispatch, and
+# must not share its exit code with one that is. -SkipProbe exists for
+# offline construction and for the tests; it is not a way to reach a clean
+# outcome without a measurement. Found by the mode-diff review, 2026-07-28.
+if ($SkipProbe) {
+    Write-Output ("BLOCKED: no client measurement was made (-SkipProbe), so" +
+        " this mirror is not cleared for dispatch and carries no verified" +
+        " override")
+    exit 1
+}
 exit 0
