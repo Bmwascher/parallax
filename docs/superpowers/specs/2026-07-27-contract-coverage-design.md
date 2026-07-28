@@ -22,9 +22,14 @@ Twelve instances across three consecutive cycles: nine in 0.14.2, two in
 0.14.3, one in 0.14.4. Two appeared inside the fix for the previous one.
 The three most recent are the design targets:
 
-- **Instance 10.** The sentence `That is a route-attribution failure` had
-  no pin at all. Detection and a prohibition were pinned; the consequence
-  was not, leaving a driver with no defined action.
+- **Instance 10.** No pin contained the whole disposition sentence
+  beginning `That is a route-attribution failure`. A fragment inside it,
+  `not a reason to re-read from zero`, WAS pinned, which is what made the
+  gap invisible: detection and a prohibition read as locked while the
+  consequence was loose, leaving a driver with no defined action. The
+  earlier wording here said the sentence had no pin at all; the
+  cross-vendor lane and the whole-branch reviewer both corrected it
+  during the 0.15.0 diff debate.
 - **Instance 11.** A pin existed but stopped mid-sentence at
   `IS transient`, leaving the operative justification loose. Found inside
   the fix for instance 10.
@@ -121,13 +126,31 @@ checker could never run.
 
 **Inputs.**
 
-- Regions: every `.md` under `skills/multi-model-verify/references/` and
-  every `.md` under `agents/`. Both trees are required: the panel harness
-  floor is contract text and lives in an agent file.
+- Regions: every `.md` under `skills/`, plus every `.md` directly under
+  `agents/` and under `commands/`. All three trees are required: the
+  panel harness floor is contract text and lives in an agent file, and
+  `SKILL.md` and the command files are contract documents too.
+
+  This surface was widened after the fact and the widening is the reason
+  to state it here. The checker originally scanned
+  `skills/multi-model-verify/references/` and `agents/` only. A marked
+  region — or worse, a MALFORMED marker — anywhere else was silently
+  skipped, so the headline invariant did not hold outside those two
+  directories. No document named the scanned set, which is why six plan
+  rounds and seven task reviews read past it. It is named here, and in
+  `CLAUDE.md`, so the next widening cannot be silent.
 - Pins: every string literal that a POSITIVE-PRESENCE assertion checks
   against a document, in every `.py` under `evals/multi-model-verify/`,
   read through Python's `ast`. The parser joins implicitly concatenated
   literals, which is how nearly every pin in this repo is written.
+
+  **Only assertions whose failure reaches the runner are read.** An
+  assertion locks its text because failing it fails the suite; where that
+  failure is deliberately caught, the assertion proves the opposite. The
+  recognized consuming contexts are a `with` block calling `raises(...)`
+  or `suppress(...)`, the body of a `try` that has any handler, and a
+  function marked xfail. Detection is by enclosing context, not by
+  assertion shape, because the assertion reads identically either way.
 
   **The rule matches a COMPLETE assertion clause, and never descends into
   an expression it does not recognize.** This is the part that took three
@@ -143,7 +166,17 @@ checker could never run.
   |---|---|
   | `"literal" in body` | the left operand |
   | `body.count("literal")`, alone or compared `== n`, `>= n` (n ≥ 1) or `> n` (n ≥ 0) | the call's single argument |
-  | `<clause> and <clause>` | the union |
+  | an `and` | the union of the operands it recognizes |
+
+  The conjunction row says "recognizes" on purpose. A MIXED `and` such as
+  `assert "lit" in body and flag` contributes `"lit"` and drops the rest,
+  rather than being rejected whole. That is sound, because the assertion
+  passes only if every operand is true, so a recognized operand's
+  requirement holds whatever sits beside it. The row previously read
+  `<clause> and <clause>`, which described a narrower rule than the code
+  implements; the cross-vendor lane caught the mismatch in the 0.15.0
+  diff debate. Rejecting mixed conjunctions was the alternative and was
+  refused: it would discard real locks and buy no safety.
 
   **The needle must be a plain string literal, not an expression
   containing one, and a `.count` call takes exactly one such argument.**
@@ -257,7 +290,7 @@ count if they care.
     larger rule than the one it would serve. An author who wants a
     marked region locked writes a membership assertion instead.
   - A literal compared with `==`.
-- FALSE NEGATIVE. **A typo in the comment OPENER makes a marker invisible rather than
+- FALSE COVERAGE, process-mitigated. **A typo in the comment OPENER makes a marker invisible rather than
   rejected.** The detector tolerates a spaced colon, so
   `<!-- contract : start id=x -->` is now rejected rather than ignored.
   What it cannot see is a broken `<!--`, as in
@@ -269,6 +302,14 @@ count if they care.
   against the declared inventory, which this plan's task order always
   populates before any document is touched. A different task order would
   not have that protection.
+
+  The tag on this bullet was FALSE NEGATIVE until the 0.15.0 diff debate
+  corrected it. An invisible marker produces no region at all, so the
+  editor who wrote it believes a rule is locked and no red ever appears.
+  That is the false-coverage direction, and calling it a false negative
+  understated exactly the risk this section exists to surface. The
+  mitigation is real but it is process, not mechanism, so the tag now
+  says so.
 - FALSE COVERAGE. **Neither clause form can tell whether its container is a document.**
   `ast` sees names and method calls, never types. `paths.count("The rule
   stands.")` over a list registers as a pin, and so does
@@ -314,6 +355,24 @@ count if they care.
   the pin both moving together. The checker compares a pin against the
   body as both stand now, and has no memory of what either said before,
   so it cannot see the shrink.
+- FALSE COVERAGE. **Failure-handling contexts the parent check does not
+  enumerate.** An assertion whose failure is deliberately caught proves
+  the opposite of what it appears to prove, so pin collection now refuses
+  assertions inside a `raises(...)` or `suppress(...)` block, inside the
+  body of a `try` that has handlers, and inside an xfail-marked function.
+  A `try/finally` has no handler to catch anything, so its body still
+  pins. That list is by NAME
+  and cannot be exhaustive: a project-local context manager, a decorator
+  that wraps and swallows, or a helper that runs an assertion under its
+  own handler would not be recognized, and its assertion would register
+  as a pin while locking nothing.
+
+  This one is worth its own bullet rather than a line in the container
+  bullet, because it is the only accepted false-coverage limit that
+  arrived as a live defect rather than a design trade. The cross-vendor
+  lane produced it in the 0.15.0 diff debate after three earlier reviews,
+  two of them explicitly hunting false passes, missed it. The named
+  contexts are closed mechanically; the rest is stated.
 - OUT OF SCOPE. **Semantic correctness.** The checker proves a region is locked, not
   that the region is right. That remains the reviewer's job.
 - OUT OF SCOPE. **Unmarked text.** Contract text outside markers is exactly as exposed

@@ -54,10 +54,17 @@ A pin is a string literal in one of exactly three assertion clause forms:
 - `"literal" in body`
 - `body.count("literal")`, alone or compared `== n` or `>= n` with n at
   least 1, or `> n` with n at least 0
-- an `and` of those
+- an `and`, which contributes every operand it recognizes, so
+  `"literal" in body and flag` still pins the literal
 
 The needle must be a plain string literal. Adjacent literals across
 several lines are fine, because the parser folds them into one.
+
+The assertion must also be able to FAIL the suite. An assertion whose
+failure is deliberately caught proves the opposite of what it looks
+like, so it pins nothing: inside a `raises(...)` or `suppress(...)`
+block, inside the body of a `try` that has handlers, or in a function
+marked xfail. A `try/finally` has no handlers, so its body still pins.
 
 Nothing else counts, and the rule matches a COMPLETE clause rather than
 looking for these shapes anywhere in the expression. A string locks

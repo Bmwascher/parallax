@@ -1,5 +1,6 @@
 <!-- Verbatim historical text from parallax 4d8a121, backup-lane.md.
-     Instance 10: the disposition sentence had no pin. Do not edit; this
+     Instance 10: no pin contained the whole disposition sentence, though
+     a fragment inside it was pinned. Do not edit; this
      file is evidence, not documentation. -->
 <!-- contract:start id=hist-10-control -->
 if after the call the file is SMALLER than the captured offset, or absent
