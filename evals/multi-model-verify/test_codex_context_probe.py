@@ -978,6 +978,46 @@ def test_an_inline_unknown_block_blocks(tmp_path, pass_no):
     assert "memories_instructions" in json.loads(proc.stdout)["reason"]
 
 
+def test_a_malformed_known_tag_in_a_skill_description_does_not_block(tmp_path):
+    # A skill DESCRIPTION is free text too, not just the global AGENTS.md.
+    # Masking only INSTRUCTIONS before the exactness scan left this
+    # legitimate entry blocking. Mode-diff round 7, 2026-07-28.
+    fixture = tmp_path / "desc-tag.json"
+    doc = json.loads((FIXTURES / "flagged.json").read_text(encoding="utf-8"))
+    doc[0]["content"][0]["text"] = doc[0]["content"][0]["text"].replace(
+        "- userskill5: A fixture skill for tests.",
+        '- userskill5: Never emit <apps_instructions version="2">.', 1)
+    fixture.write_text(json.dumps(doc), encoding="utf-8")
+    proc = probe_with(tmp_path, fixture, FIXTURES / "suppressed.json")
+    assert proc.returncode == 0, proc.stdout
+
+
+def test_a_reverse_order_tag_pair_in_prose_does_not_block(tmp_path):
+    # `Contains` accepted a closing tag ANYWHERE, so explanatory prose
+    # that names the close before the open read as a paired block. That is
+    # not a pair in document order. Mode-diff round 7, 2026-07-28, a false
+    # positive the unanchored scan exposed.
+    fixture = tmp_path / "reverse.json"
+    doc = json.loads((FIXTURES / "flagged.json").read_text(encoding="utf-8"))
+    doc[0]["content"][0]["text"] += (
+        "\nEnd with </example>; start with <example>\n")
+    fixture.write_text(json.dumps(doc), encoding="utf-8")
+    proc = probe_with(tmp_path, fixture, FIXTURES / "suppressed.json")
+    assert proc.returncode == 0, proc.stdout
+
+
+def test_an_ordered_tag_pair_still_blocks(tmp_path):
+    # And the ordering rule must not blunt the guard: a real pair, in
+    # document order, still stops the run.
+    fixture = tmp_path / "ordered.json"
+    doc = json.loads((FIXTURES / "flagged.json").read_text(encoding="utf-8"))
+    doc[0]["content"][0]["text"] += "\n<example>x</example>\n"
+    fixture.write_text(json.dumps(doc), encoding="utf-8")
+    proc = probe_with(tmp_path, fixture)
+    assert proc.returncode == 1, proc.stdout
+    assert "example" in json.loads(proc.stdout)["reason"]
+
+
 def test_an_unterminated_known_container_blocks(tmp_path):
     # Masking an unclosed container to end-of-prompt hid every later block
     # from the unknown-surface scan, so one malformed container near the

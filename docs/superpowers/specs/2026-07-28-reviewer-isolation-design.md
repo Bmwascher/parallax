@@ -331,7 +331,7 @@ each was established, which the first version of this note got wrong too.
 The table is a record of what was actually caught, not a list of what was
 anticipated. Mode-diff round 4 caught the earlier version of this note
 overstating all six as reproduced false cleans.
-| an unrecognised outer block appears on EITHER pass, at a line start or INLINE | transport failure | blocked; a new instruction family has no rule yet. The scan was line-anchored until mode-diff round 6, 2026-07-28, when an inline paired tag was shown to reach exit 0 with status clean. The anchor was never what kept prose out; the open/close pair requirement is |
+| an unrecognised outer block appears on EITHER pass, at a line start or INLINE | transport failure | blocked; a new instruction family has no rule yet. The scan was line-anchored until mode-diff round 6, 2026-07-28, when an inline paired tag was shown to reach exit 0 with status clean. What keeps ordinary prose out is not the anchor and not the pair requirement alone: it is that every free-text region the renderer wraps is masked first. Prose OUTSIDE any such region that contains an ordered pair, or a self-closing tag, does block - see the accepted limits |
 | a known feature block reappears on the second pass | transport failure | blocked; every shape rule runs on both renders |
 | a caller aims the override artifact at the repo or the mirror | script error | exit 2, before anything is written |
 | a skill path contains a single quote | transport failure | blocked; a TOML literal string cannot escape its own delimiter |
@@ -445,9 +445,19 @@ unchanged.
   root `AGENTS.md` is genuinely ingested by codex, so the coverage matters
   and the existing command has it.
 - **The guarantee is over structurally tagged outer BLOCKS, not over
-  prose.** A block is an open/close pair or a self-closing tag, opening a
-  line outside a known container, whose name the allowlist does not name —
-  hyphens, dots, colons, attributes and indentation included. The pairing
+  prose.** A block is an open/close pair IN DOCUMENT ORDER, or a
+  self-closing tag, appearing anywhere outside a masked known-container
+  body, whose name the allowlist does not name — hyphens, dots, colons,
+  attributes and indentation included. Two parts of that sentence were
+  wrong until mode-diff round 7, 2026-07-28: the rule required the tag to
+  open a LINE, which let an inline block through, and it accepted a
+  closing tag found anywhere, which made the prose
+  `End with </example>; start with <example>` read as a pair.
+  **A consequence, accepted:** an ordered pair or a self-closing tag
+  written in prose that sits OUTSIDE every masked body does block. That
+  is indistinguishable from a real inline surface in flattened text. No
+  fix is proposed; the safe direction is to block.
+  The pairing
   requirement is load-bearing rather than cosmetic: the real prompt's
   multi-agent section documents a message format whose fenced code block
   contains the lines `<payload text>`, `<recipient>` and `<author>`, in no

@@ -191,7 +191,7 @@ $script:KnownContainers = @(
     "environment_context", "multi_agent_mode"
 )
 
-function Hide-KnownContainer($text, $only) {
+function Hide-KnownContainer($text, $only, $quiet) {
     # Blank the CONTENTS of every known container before scanning for new
     # ones. <INSTRUCTIONS> carries the global and project AGENTS.md bodies
     # verbatim, and a user's AGENTS.md may legitimately contain a line
@@ -227,13 +227,25 @@ function Hide-KnownContainer($text, $only) {
         $close = "</" + $name + ">"
         $opens = ([regex]::Matches($masked, [regex]::Escape($open))).Count
         $closes = ([regex]::Matches($masked, [regex]::Escape($close))).Count
+        # `$quiet` masks only what is UNAMBIGUOUS and reports nothing. It
+        # is the pass that runs before the known-tag exactness scan, so
+        # that arbitrary free text inside a validated body - a skill
+        # DESCRIPTION is free text too, not just the global AGENTS.md -
+        # cannot be read as outer structure. A malformed outer tag has no
+        # exact 1/1 span, so its container is not masked here and stays
+        # visible to that scan. Mode-diff round 7, 2026-07-28: with only
+        # INSTRUCTIONS masked first, the legitimate entry
+        # `- example: Never emit <apps_instructions version="2">. (file: ...)`
+        # blocked.
         if (($opens -eq 0) -and ($closes -eq 0)) { continue }
         if (($opens -ge 1) -and ($closes -eq 0)) {
+            if ($quiet) { continue }
             throw [System.FormatException]::new(
                 "the <" + $name + "> container never closes - the" +
                 " remainder of the prompt cannot be scanned")
         }
         if (($opens -ne 1) -or ($closes -ne 1)) {
+            if ($quiet) { continue }
             throw [System.FormatException]::new(
                 "the <" + $name + "> container's boundaries are ambiguous" +
                 " (" + $opens + " opening and " + $closes + " closing" +
@@ -245,6 +257,7 @@ function Hide-KnownContainer($text, $only) {
         $bodyStart = $s + $open.Length
         $e = $masked.IndexOf($close, [System.StringComparison]::Ordinal)
         if ($e -lt $bodyStart) {
+            if ($quiet) { continue }
             throw [System.FormatException]::new(
                 "the <" + $name + "> container closes before it opens")
         }
@@ -305,11 +318,13 @@ function Get-UnknownPromptBlock($text) {
     foreach ($c in $script:KnownContainers) { $knownOpen += ("<" + $c + ">") }
     $names = ($script:KnownPromptBlocks | ForEach-Object { [regex]::Escape($_) }) -join "|"
     $knownRx = [regex]("(?i)<(?:" + $names + ")\b[^>]*>")
-    # STAGE 1: mask ONLY the user-authored body, and validate its
-    # boundaries. Everything a user wrote is now blank; everything the
-    # renderer emitted is still visible.
-    $userMasked = Hide-KnownContainer $text "INSTRUCTIONS"
-    foreach ($m in $knownRx.Matches($userMasked)) {
+    # STAGE 1: mask every known body whose span is UNAMBIGUOUS, reporting
+    # nothing. Every free-text region the renderer wraps - the global
+    # AGENTS.md inside INSTRUCTIONS, and every skill description inside
+    # the skills container - is now blank, while a malformed outer tag,
+    # which has no exact span, is still visible.
+    $bodyMasked = Hide-KnownContainer $text $null $true
+    foreach ($m in $knownRx.Matches($bodyMasked)) {
         if ($knownOpen -ccontains $m.Value) { continue }
         throw [System.FormatException]::new(
             "the known block " + $m.Value + " is not in the exact form" +
@@ -317,8 +332,9 @@ function Get-UnknownPromptBlock($text) {
             " nothing")
     }
 
-    # STAGE 2: mask the rest, then look for surfaces nobody enumerated.
-    $masked = Hide-KnownContainer $userMasked
+    # STAGE 2: mask again, this time VALIDATING every boundary, then look
+    # for surfaces nobody enumerated.
+    $masked = Hide-KnownContainer $text
     $found = New-Object System.Collections.ArrayList
     # NOT line-anchored. An inline `prefix <memories_instructions>x</...>`
     # returned zero unknown blocks and reached exit 0 with status clean.
@@ -331,9 +347,14 @@ function Get-UnknownPromptBlock($text) {
         $name = $m.Groups[1].Value
         if ($script:KnownPromptBlocks -contains $name) { continue }
         $selfClosing = ($m.Groups[3].Value -eq "/")
-        if (-not ($selfClosing -or $masked.Contains("</" + $name + ">"))) {
-            continue
-        }
+        # The close must come AFTER the open. `Contains` accepted a close
+        # anywhere in the document, so the explanatory prose
+        # `End with </example>; start with <example>` was read as a paired
+        # block. That is not a pair in document order. Mode-diff round 7,
+        # 2026-07-28, a false positive the unanchored scan exposed.
+        $closesAfter = ($masked.IndexOf("</" + $name + ">",
+            $m.Index + $m.Length, [System.StringComparison]::Ordinal) -ge 0)
+        if (-not ($selfClosing -or $closesAfter)) { continue }
         if ($found -notcontains $name) { [void]$found.Add($name) }
     }
     return @($found)
