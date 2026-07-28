@@ -767,6 +767,58 @@ def test_two_entries_on_one_line_block(tmp_path):
     assert "whole entry grammar" in json.loads(proc.stdout)["reason"]
 
 
+def test_an_inline_attributed_known_block_blocks(tmp_path):
+    # Round 2's rule was line-anchored, so a known tag with text before it
+    # on the line escaped both the exact parsers and the general scan.
+    # Reproduced 2026-07-28: a second pass carrying all 29 entries under
+    # `prefix <skills_instructions version="2">` reported skills_after 0,
+    # status clean, exit 0.
+    second = tmp_path / "inline.json"
+    doc = json.loads((FIXTURES / "flagged.json").read_text(encoding="utf-8"))
+    doc[0]["content"][0]["text"] = doc[0]["content"][0]["text"].replace(
+        "<skills_instructions>", 'prefix <skills_instructions version="2">', 1)
+    second.write_text(json.dumps(doc), encoding="utf-8")
+    proc = probe_with(tmp_path, FIXTURES / "flagged.json", second)
+    assert proc.returncode == 1, proc.stdout
+    assert "exact form this parser reads" in json.loads(proc.stdout)["reason"]
+
+
+def test_a_known_literal_quoted_in_the_global_body_does_not_block(tmp_path):
+    # The user's own AGENTS.md is carried verbatim inside <INSTRUCTIONS>,
+    # and a house rule may name a marker in prose. With INSTRUCTIONS masked
+    # AFTER the other containers, an unpaired `<skills_instructions>` in
+    # that prose read as an unterminated container of that name and blocked
+    # a legitimate review. Reproduced 2026-07-28; the fix is masking the
+    # user-authored container first.
+    fixture = tmp_path / "house-rule.json"
+    doc = json.loads((FIXTURES / "flagged.json").read_text(encoding="utf-8"))
+    doc[0]["content"][0]["text"] = doc[0]["content"][0]["text"].replace(
+        "<INSTRUCTIONS>",
+        "<INSTRUCTIONS>\nHouse rule: never emit a `<skills_instructions>`"
+        " marker.\n", 1)
+    fixture.write_text(json.dumps(doc), encoding="utf-8")
+    proc = probe_with(tmp_path, fixture, FIXTURES / "suppressed.json")
+    assert proc.returncode == 0, proc.stdout
+
+
+def test_a_description_mentioning_the_file_marker_is_not_malformed(tmp_path):
+    # Skill descriptions are free text. Counting `(file: ` and demanding
+    # exactly one rejected a legitimate entry; the LAST marker on the line
+    # is the path delimiter.
+    fixture = tmp_path / "chatty.json"
+    doc = json.loads((FIXTURES / "flagged.json").read_text(encoding="utf-8"))
+    doc[0]["content"][0]["text"] = doc[0]["content"][0]["text"].replace(
+        "- userskill2: A fixture skill for tests.",
+        "- userskill2: Use when a log line reads (file: something).", 1)
+    fixture.write_text(json.dumps(doc), encoding="utf-8")
+    proc = probe_with(tmp_path, fixture, FIXTURES / "suppressed.json")
+    assert proc.returncode == 0, proc.stdout
+    raw = (tmp_path / "o.txt").read_text(encoding="utf-8")
+    assert "C:/fixture/home/.agents/skills/u2/SKILL.md" in raw, (
+        "the delimiter is the LAST marker, so the real path still wins"
+    )
+
+
 def test_an_unterminated_known_container_blocks(tmp_path):
     # Masking an unclosed container to end-of-prompt hid every later block
     # from the unknown-surface scan, so one malformed container near the

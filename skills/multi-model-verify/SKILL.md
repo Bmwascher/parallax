@@ -123,11 +123,12 @@ toggled on, its stop-time review overlaps mode `diff` — expected, not a bug.
    before round 1, with a FRESH scratch path for the override file (the
    mirror script runs it for you and prints the same result). It renders
    the model-visible prompt with `codex debug prompt-input`, which spends
-   no tokens, and sorts every instruction source it reveals: anything
-   inside the reviewed tree STOPS and is remediated in the mirror,
-   anything from the codex plugin cache must be empty, and the global
-   `AGENTS.md` plus any surviving home-scoped skill is recorded in the
-   debate record with its path.
+   no tokens, sorts every ADVERTISED SKILL by the directory it came from,
+   and checks the named instruction and feature blocks around them:
+   anything inside the reviewed tree STOPS and is remediated in the
+   mirror, anything from the codex plugin cache must be empty, and the
+   global `AGENTS.md` plus any surviving home-scoped skill is recorded in
+   the debate record with its path.
    <!-- contract:start id=client-context-probe -->
    A probe that cannot be taken, that exits non-zero, that returns output
    this parser cannot read, or that finds a named block missing is a

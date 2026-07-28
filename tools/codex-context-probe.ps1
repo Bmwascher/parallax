@@ -1,6 +1,9 @@
 # codex-context-probe.ps1 - render the model-visible prompt codex would be
-# given from a working directory, and classify every instruction source it
-# reveals.
+# given from a working directory, classify every ADVERTISED SKILL by the
+# directory it came from, and check the named instruction and feature
+# blocks around them. It does not classify instruction TEXT, and it does
+# not read the reviewer's tool surface at all - see the
+# `client-probe-scope-limit` region in SKILL.md, and backlog item 7.
 #
 # Preflight 3 has only ever enumerated the REVIEWED TREE. Every source that
 # hijacked a review on 2026-07-28 - the user's codex plugin cache, the
@@ -91,26 +94,30 @@ function Get-SkillReport($text) {
             # disable entry named a file that does not exist. Found by the
             # mode-diff review, 2026-07-28. `Program Files (x86)` is an
             # ordinary Windows path, not a contrived one.
-            $rx = [regex]'(?m)^- ([A-Za-z0-9_:-]+):.*?\(file: (.+)\)[ \t]*$'
-            # AUDIT EVERY ENTRY-LOOKING LINE. A greedy path capture reads
-            # two entries rendered on ONE line as a single entry with a
-            # merged path, and a line that fails the whole grammar is
-            # dropped in silence - both make the FIRST measurement wrong,
-            # which no later suppression check repairs. Mode-diff round 2,
-            # 2026-07-28.
+            # The description prefix is GREEDY, so the LAST `(file: ` on the
+            # line is the path delimiter. Counting the marker instead and
+            # demanding exactly one rejected a legitimate description that
+            # merely mentions `(file: `, since skill descriptions are free
+            # text. Mode-diff round 3, 2026-07-28.
+            $rx = [regex]'^- ([A-Za-z0-9_:-]+):.*\(file: (.+)\)[ \t]*$'
+            # A SECOND entry joined onto the same line is what actually
+            # needs catching: a close paren followed by another entry
+            # start. Without this the greedy prefix silently keeps only the
+            # last of the two.
+            $joined = [regex]'\)[ \t]+- [A-Za-z0-9_:-]+:'
+            # AUDIT EVERY ENTRY-LOOKING LINE. A line that fails the whole
+            # grammar is otherwise dropped in silence, which makes the
+            # FIRST measurement wrong, and no later suppression check
+            # repairs a measurement that was never right.
             foreach ($line in ($seg -split "`n")) {
                 $trimmed = $line.TrimEnd("`r")
                 if ($trimmed -notmatch '^- [A-Za-z0-9_:-]+:') { continue }
-                $hits = $rx.Matches($trimmed)
-                if ($hits.Count -ne 1) {
-                    $malformed = $true
-                    continue
-                }
-                $starts = ([regex]::Matches($trimmed, [regex]::Escape("(file: "))).Count
-                if ($starts -ne 1) { $malformed = $true; continue }
+                if ($joined.IsMatch($trimmed)) { $malformed = $true; continue }
+                $m = $rx.Match($trimmed)
+                if (-not $m.Success) { $malformed = $true; continue }
                 [void]$entries.Add(@{
-                    Name = $hits[0].Groups[1].Value
-                    Path = $hits[0].Groups[2].Value
+                    Name = $m.Groups[1].Value
+                    Path = $m.Groups[2].Value
                 })
             }
         }
@@ -155,10 +162,16 @@ $script:KnownPromptBlocks = @(
     "apps_instructions", "recommended_plugins", "INSTRUCTIONS",
     "environment_context", "multi_agent_mode"
 )
+# INSTRUCTIONS IS MASKED FIRST, and the order here is the masking order.
+# It is the one container carrying USER-AUTHORED text: the global and
+# project AGENTS.md bodies, verbatim. With it masked later, a house rule
+# that merely mentions `<skills_instructions>` in prose was read as an
+# unterminated container of that name and blocked a legitimate review.
+# Reproduced 2026-07-28, mode-diff round 3.
 $script:KnownContainers = @(
-    "permissions instructions", "skills_instructions",
+    "INSTRUCTIONS", "permissions instructions", "skills_instructions",
     "plugins_instructions", "apps_instructions", "recommended_plugins",
-    "INSTRUCTIONS", "environment_context", "multi_agent_mode"
+    "environment_context", "multi_agent_mode"
 )
 
 function Hide-KnownContainer($text) {
@@ -212,27 +225,40 @@ function Get-UnknownPromptBlock($text) {
     # memories_instructions, a hyphenated tag and a self-closing one.
     $masked = Hide-KnownContainer $text
     $found = New-Object System.Collections.ArrayList
-    # The EXACT opening literal of every container this parser can read.
-    # A known NAME is not enough. Every dedicated parser matches an exact
-    # literal, so `<skills_instructions version="2">` is invisible to them
-    # AND was skipped here for having a known name - a second pass
-    # carrying all 29 entries under that tag reported skills_after 0 and
-    # exit 0. Reproduced 2026-07-28, mode-diff round 2. Note that
-    # `<permissions instructions>` is a legitimate literal with a space in
-    # it, which is why this compares whole literals rather than testing
-    # for the presence of attributes.
+
+    # KNOWN NAMES ARE CHECKED ANYWHERE, NOT ONLY AT A LINE START. Every
+    # dedicated parser matches an EXACT literal, so any other form of a
+    # known tag is invisible to all of them. The general scan below is
+    # line-anchored by design, so a tag with text before it on the line
+    # escaped both: a second pass carrying all 29 entries under
+    # `prefix <skills_instructions version="2">` reported skills_after 0
+    # and exit 0. Reproduced 2026-07-28, mode-diff round 3, after round 2's
+    # line-anchored form of this same rule.
+    #
+    # The comparison is against WHOLE LITERALS rather than a test for the
+    # presence of attributes, because `<permissions instructions>` is a
+    # legitimate container whose name parses as `permissions` with
+    # ` instructions` read as an attribute. An attribute test would block
+    # every real review.
+    #
+    # This runs on the MASKED text, so a known literal quoted inside a
+    # user's own AGENTS.md body is already blanked and cannot reach here.
     $knownOpen = @()
     foreach ($c in $script:KnownContainers) { $knownOpen += ("<" + $c + ">") }
+    $names = ($script:KnownPromptBlocks | ForEach-Object { [regex]::Escape($_) }) -join "|"
+    $knownRx = [regex]("<(?:" + $names + ")\b[^>]*>")
+    foreach ($m in $knownRx.Matches($masked)) {
+        if ($knownOpen -ccontains $m.Value) { continue }
+        throw [System.FormatException]::new(
+            "the known block " + $m.Value + " is not in the exact form" +
+            " this parser reads, so every rule about it silently did" +
+            " nothing")
+    }
+
     $rx = [regex]'(?m)^[ \t]*<([A-Za-z][A-Za-z0-9_.:\-]*)((?:\s[^>]*?)?)(/?)>'
     foreach ($m in $rx.Matches($masked)) {
         $name = $m.Groups[1].Value
-        if ($script:KnownPromptBlocks -contains $name) {
-            if ($knownOpen -ccontains $m.Value.Trim()) { continue }
-            throw [System.FormatException]::new(
-                "the known block " + $m.Value.Trim() + " is not in the" +
-                " exact form this parser reads, so every rule about it" +
-                " silently did nothing")
-        }
+        if ($script:KnownPromptBlocks -contains $name) { continue }
         $selfClosing = ($m.Groups[3].Value -eq "/")
         if (-not ($selfClosing -or $masked.Contains("</" + $name + ">"))) {
             continue
@@ -551,21 +577,33 @@ if ($SuppressSkills) {
     # reported status clean with `override_file: null` and exit 0: the
     # caller was told the machine was verified and handed an artifact path
     # that does not exist. Reproduced 2026-07-28, mode-diff round 2.
+    # The hash is computed INSIDE the same guard. Left outside it, a
+    # failure there would leave override_sha256 empty and the run would
+    # continue into the clean report. Mode-diff round 3, 2026-07-28.
     $enc = New-Object System.Text.UTF8Encoding($false, $true)
-    $bytes = $null
     try {
         $bytes = $enc.GetBytes($override)
         [System.IO.File]::WriteAllBytes($OverrideOut, $bytes)
         $overridePath = (Resolve-Path $OverrideOut -ErrorAction Stop).Path
+        $sha = [System.Security.Cryptography.SHA256]::Create()
+        $overrideHash = ([System.BitConverter]::ToString(
+            $sha.ComputeHash($bytes)) -replace '-', '').ToLower()
     } catch {
         Write-Blocked ("the verified override could not be written to " +
             $OverrideOut + ": " + $_.Exception.Message +
             " - a verified value nothing can dispatch is not a clean" +
             " result") $Json
     }
-    $sha = [System.Security.Cryptography.SHA256]::Create()
-    $overrideHash = ([System.BitConverter]::ToString(
-        $sha.ComputeHash($bytes)) -replace '-', '').ToLower()
+    # And the two fields are CHECKED, not assumed. A guard proves no
+    # exception escaped; it does not prove the values are usable.
+    if ([string]::IsNullOrWhiteSpace($overridePath)) {
+        Write-Blocked ("the override artifact could not be located after" +
+            " writing it") $Json
+    }
+    if ($overrideHash -notmatch '^[0-9a-f]{64}$') {
+        Write-Blocked ("the override hash is not a sha-256 digest, so" +
+            " nothing downstream can authenticate the artifact") $Json
+    }
 }
 
 # A run that performed NO suppression pass has verified nothing, and must

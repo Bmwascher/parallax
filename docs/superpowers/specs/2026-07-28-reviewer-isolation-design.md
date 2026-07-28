@@ -303,6 +303,17 @@ reason the contract coverage checker forbids false coverage.
 | the dispatch omits the verified override, or carries an unverified one | transport failure | blocked |
 | the override file's hash differs from the one the probe reported | transport failure | blocked |
 | a prompt content chunk carries no text field | transport failure | blocked, never discarded |
+| a known block appears in any form but its exact opening literal, anywhere on a line | transport failure | blocked; every dedicated parser matches an exact literal, so any other form is invisible to all of them |
+| an entry line fails the whole entry grammar, or two entries share a line | transport failure | blocked, never dropped or merged |
+| a run made no suppression pass at all | not verified | `measured-only`, exit 1, and never the clean status |
+| the override artifact cannot be written, located, or hashed | transport failure | blocked; a verified value nothing can dispatch is not a clean result |
+| a mirror built with `-SkipProbe` | not verified | exit 1, not cleared for dispatch |
+
+**The five rows above the mirror row were added on 2026-07-28, after
+implementation, by mode-diff rounds 1 to 3.** Each names a path that had
+reached `status: clean` with exit 0 in the built script, and each was
+reproduced before it was fixed. The table is therefore a record of what
+was actually caught, not a list of what was anticipated.
 | an unrecognised outer block appears on EITHER pass | transport failure | blocked; a new instruction family has no rule yet |
 | a known feature block reappears on the second pass | transport failure | blocked; every shape rule runs on both renders |
 | a caller aims the override artifact at the repo or the mirror | script error | exit 2, before anything is written |
