@@ -8,7 +8,7 @@
 
 **Tech Stack:** Python 3.12 standard library only (`ast`, `re`, `pathlib`), pytest 9.x, `tmp_path` fixtures. No new dependencies.
 
-**This is revision 4 of the plan, after four rounds of cross-vendor review that found fourteen defects.** Revision 1 split regions into sentences with a regex and treated every string constant as a pin; both were refuted by running the code. Revision 2 fixed those but still let an enclosing expression invert a pin, and still let a multi-line marker comment vanish. See the design's "Revision history" before proposing a return to any earlier behaviour. Do not reintroduce sentence splitting, and do not relax the clause rule into a generic tree walk.
+**This is revision 5 of the plan, after five rounds of cross-vendor review that found eighteen defects.** Revision 1 split regions into sentences with a regex and treated every string constant as a pin; both were refuted by running the code. Revision 2 fixed those but still let an enclosing expression invert a pin, and still let a multi-line marker comment vanish. See the design's "Revision history" before proposing a return to any earlier behaviour. Do not reintroduce sentence splitting, and do not relax the clause rule into a generic tree walk.
 
 ## Global Constraints
 
@@ -808,6 +808,12 @@ def collect_pins(paths):
     region reads UNCOVERED, which is a red, never false coverage: a
     string bound to a name and asserted through that name, a regex lock
     such as `re.search(r"...", text)`, and a literal compared with `==`.
+
+    Two limits run the OTHER way and could in principle manufacture
+    coverage, both stated in the design and neither closable from a
+    syntax tree: the container is untyped (nothing here knows whether
+    `body` is a document), and collection is execution-blind (an
+    assertion inside a platform-skipped module still registers as a pin).
     """
     pins = set()
     for path in paths:

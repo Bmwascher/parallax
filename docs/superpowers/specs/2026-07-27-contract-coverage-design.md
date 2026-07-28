@@ -4,8 +4,8 @@ Date: 2026-07-27
 Backlog item: 1 of 6 (docs/superpowers/plans/2026-07-27-0150-backlog.md)
 Target release: 0.15.0
 
-**Revision 4**, after four rounds of cross-vendor plan debate across two
-reviewer lanes, which found fourteen defects between them. The mechanism
+**Revision 5**, after five rounds of cross-vendor plan debate across two
+reviewer lanes, which found eighteen defects between them. The mechanism
 changed three times: sentence splitting is gone, pin collection is a
 clause-matching rule rather than a tree walk, and marker rejection now
 runs over the whole document text. What changed and why is in "Revision
@@ -142,7 +142,7 @@ checker could never run.
   | clause | pins |
   |---|---|
   | `"literal" in body` | the left operand |
-  | `body.count("literal")`, alone or compared `== n`, `>= n` (n ≥ 1) or `> n` (n ≥ 0) | the call's arguments |
+  | `body.count("literal")`, alone or compared `== n`, `>= n` (n ≥ 1) or `> n` (n ≥ 0) | the call's single argument |
   | `<clause> and <clause>` | the union |
 
   **The needle must be a plain string literal, not an expression
@@ -269,6 +269,18 @@ The reader never has to search 633 assertions to find which one is short.
   `body.count(...)` and `in body` because that is the intended use.
   Checking a container's type is not possible from the syntax tree, so
   the limit is stated rather than closed.
+
+  The same bullet covers a sibling that is easy to miss: **pins are
+  collected from SYNTAX alone, with no awareness of whether the assertion
+  ever runs.** An assertion inside a platform-skipped module or behind a
+  `pytest.skip` guard still registers as a pin, and locks nothing at
+  runtime. This is live structure, not a hypothetical:
+  `test_attestation.py` carries a module-level `skipif` for a missing
+  PowerShell host, and `test_multi_model_verify.py` has several
+  `pytest.skip` guards. Neither is live for the nine regions in scope —
+  all nine planned pins sit in unconditionally-run tests — but the
+  suite's own baseline already reports one skip. Like the container
+  limit, this cannot be closed from the syntax tree, so it is stated.
 - **`body.count("x") == 0` is rejected, not accepted.** An earlier
   revision left it in as a limit, reasoning that the false-coverage path
   needed one document to both contain and exclude the same text. That
@@ -466,8 +478,33 @@ marker-spelling limit that named one spelling out of a class. The spaced
 colon is no longer a limit at all — the opener now tolerates the space so
 the spelling is rejected rather than ignored.
 
-Across four rounds the lane that ran the code found eleven of the
-fourteen. The lane that could only read found the instruction-file
-defects, twice, which running the code would never have surfaced.
-Neither seat was redundant, and every round found something inside the
-previous round's fixes.
+**Revision 4** applied those, and a fifth round found four more. This was
+the first round where nothing in the mechanism's LOGIC was wrong:
+
+15. **The claim that the strict literal rule "costs nothing real" was
+    wrong**, and the reviewer refuted the session's own measurement. All
+    five dropped fragments come from runtime-constructed needles such as
+    `"--model " + CANONICAL_ID`, whose assertions genuinely do require
+    the fragment present. They are real partial locks. The accurate claim
+    is "no current marked coverage".
+16. **The code accepted `.count()` with any number of arguments** while
+    all four artifacts specify the singular form — the same
+    code-versus-documentation drift that produced defects 10 and 14. Now
+    exactly one positional literal argument, matching all seven live
+    count pins.
+17. **The `.count` receiver limit had an unstated twin**: a membership
+    container is equally untyped.
+18. **Pin collection is execution-blind.** An assertion inside a
+    platform-skipped module still registers as a pin. Found by the
+    read-only lane, in the same bullet the other lane had just extended.
+
+Across five rounds the lane that ran the code found thirteen of the
+eighteen, including every mechanism defect. The lane that could only read
+found the instruction-file defects twice, plus a wrong line citation the
+session had copied from the other lane without checking, plus this
+execution-blindness limit. Neither seat was redundant, and every round
+through the fourth found something inside the previous round's fixes.
+
+The fifth round broke that streak: both lanes attacked the round-4 marker
+parser with constructed inputs and neither could make a region vanish.
+What remained were two limit statements and one arity mismatch.
