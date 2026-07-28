@@ -624,7 +624,9 @@ PIN_PATHS = [p for p in sorted((REPO / "evals" / "multi-model-verify")
 DECLARED_REGIONS = {
     "rotation-guard-detection",
     "rotation-guard-disposition",
-    "rotation-guard-residual-gap",
+    # 0.16.0: was "rotation-guard-residual-gap". Rotation started
+    # succeeding, so the gap's own contingency became the rule.
+    "rotation-guard-identity",
     "panel-floor-reference",
     "panel-floor-agent",
     "panel-lane-loss-disposition",

@@ -64,21 +64,28 @@ Panel participation: a user-invoked panel per references/panels.md is a second s
   answer: the new file's opening lines may belong to any session, so
   reading it attributes nothing while looking like evidence.
   <!-- contract:end -->
-  Observed
-  2026-07-26 (kimi-cli 1.49.0, Windows): rotation ATTEMPTS fire and fail
-  with `PermissionError: [WinError 32]` because the log is still open, so
-  offsets have held by accident rather than by design — do not build on
-  that accident.
-  <!-- contract:start id=rotation-guard-residual-gap -->
-  The size test is necessary, not sufficient: a rotation
-  whose replacement file grew back PAST the captured offset within the
-  same call would slip through.
+  Rotation SUCCEEDS on this client. Observed 2026-07-27 (kimi-cli 1.49.0,
+  Windows) during a live write-probe, and still on disk 2026-07-28:
+  `kimi.log` was renamed to `kimi.2026-07-25_14-01-45_182023.log`
+  (459709 bytes, created 2026-07-25 14:01:45) and a fresh `kimi.log` took
+  its place (created 2026-07-27 15:34:43). The guard fired on its first
+  real trigger and classed it correctly. An earlier note here recorded the
+  opposite — that rotation attempts fail with
+  `PermissionError: [WinError 32]` because the log is still open, and that
+  offsets therefore held by accident rather than by design. Both halves
+  were true when observed on 2026-07-26 and are false now. Do not restore
+  them.
+  <!-- contract:start id=rotation-guard-identity -->
+  Because rotation succeeds, the size test alone is not enough: a
+  replacement file that grew back PAST the captured offset inside the same
+  call would pass it. So capture the file's CREATION TIME alongside the
+  byte offset, and treat any later creation time as rotation whatever the
+  length says.
   <!-- contract:end -->
-  That needs the pre-rotation offset to
-  have been small, which only follows an immediately preceding rotation,
-  so it is not worth a second mechanism — but if rotation ever starts
-  succeeding here, compare file identity (creation time) too, not just
-  length.
+  This supersedes the earlier judgement that a second mechanism was not
+  worth building. That judgement rested entirely on rotation always
+  failing, and the paragraph holding it named its own trigger: compare
+  file identity if rotation ever starts succeeding here. It has.
 - This evidence is client-side: report it as "route line verified
   (client-side)" in the record prose. Server-side substitution is not
   detectable from this class; the finish line's normalized
