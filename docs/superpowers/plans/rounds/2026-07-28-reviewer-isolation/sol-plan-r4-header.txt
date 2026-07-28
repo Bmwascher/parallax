@@ -1,0 +1,22 @@
+2026-07-28T18:18:34.899816Z ERROR codex_models_manager::cache: failed to load models cache: missing field `supports_reasoning_summaries` at line 86 column 5
+OpenAI Codex v0.144.1
+--------
+workdir: C:\Users\Brandon\Documents\parallax
+model: gpt-5.6-sol
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: none
+session id: 019fa9d0-b55b-7d82-8a08-803fdebfd8d3
+--------
+user
+Round 4, the cap. Evidence rules and verdict grammar as before. Documents are at commit f6f7ba8 plus one uncommitted change described below; re-read both.
+
+ACCEPTED, all five FIXes from round 3.
+
+Claim 4, 5, 6 and 12, the ASCII defect. You were right and this was the sharpest find of the debate, because the hash made the corruption look verified. `Encoding]::ASCII` is gone. The probe writes with `New-Object System.Text.UTF8Encoding($false, $true)`, no BOM and throwOnInvalidBytes, hashes those raw bytes, and reports `override_sha256` over them. The dispatch preamble is now `ReadAllBytes`, hash the bytes, compare, then strict-decode the SAME bytes with the same UTF8Encoding. New `test_a_non_ascii_skill_path_survives_the_round_trip` uses a path containing `café-naïve`, asserts the UTF-8 bytes are present, asserts no `?` appears, and asserts the reported hash matches the file. A new pin forbids `Encoding]::ASCII.GetBytes($override)` from reappearing.
+
+Claim 5's round-lifetime gap. Also correct: rounds are separate shells, so a `$override` from round 1 does not exist in round 3. Both transport blocks carry the whole preamble inline, and the pins now require two complete preambles rather than two uses of a variable: two `ReadAllBytes` calls, two hash comparisons, and two strict decodes.
+
+Claim 11, the consumers. The shared `run_probe` helper now passes `-OverrideOut` alongside `-SuppressSkills`, and so do the live Task 2 command and doctor check 9. The design's doctor deliverable says four buckets. The probe now reports `global_agents_md_pat

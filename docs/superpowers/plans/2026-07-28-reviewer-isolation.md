@@ -455,26 +455,95 @@ function Get-FeatureReport($text) {
     }
 }
 
-# Instruction-block families this parser understands. Anything else that
-# looks like one is a NEW surface, and the design's claim to catch classes
-# nobody enumerated only holds if an unrecognized family stops the run
-# instead of being ignored. `memories` is the live example: this machine
-# has the memories feature on, so a `<memories_instructions>` block is a
-# realistic addition. Round 3 of the plan debate raised it.
-$script:KnownInstructionBlocks = @(
-    "skills_instructions", "plugins_instructions", "apps_instructions"
+# Every top-level block this parser understands, observed 2026-07-28 in
+# the real rendered prompt. Anything else opening at the start of a line
+# is a NEW surface: the design's claim to catch classes nobody enumerated
+# only holds if an unrecognized block stops the run instead of being
+# ignored. `memories` is the live candidate, since the memories feature is
+# on for this user. Round 3 of the plan debate raised it, for
+# `*_instructions`; the allowlist is the general form of that fix, because
+# `recommended_plugins` and `environment_context` show the families do not
+# share one suffix.
+#
+# Accepted limit: this detects an opening tag at the START OF A LINE. A
+# new surface delivered as untagged prose is invisible to it, as it is to
+# any structural parser.
+$script:KnownPromptBlocks = @(
+    "permissions instructions", "skills_instructions",
+    "plugins_instructions", "apps_instructions", "recommended_plugins",
+    "INSTRUCTIONS", "environment_context", "multi_agent_mode"
 )
 
-function Get-UnknownInstructionBlock($text) {
+function Hide-KnownContainer($text) {
+    # Blank the CONTENTS of every known container before scanning for new
+    # ones. <INSTRUCTIONS> carries the global and project AGENTS.md bodies
+    # verbatim, and a user's AGENTS.md may legitimately contain a line
+    # like `<role>`. Scanning the flattened text would call that a new
+    # outer surface and block a review that is fine. Round 4 of the plan
+    # debate found it. Replacement is space-for-character so every other
+    # offset in the string stays put.
+    $masked = $text
+    foreach ($name in $script:KnownPromptBlocks) {
+        $open = "<" + $name + ">"
+        $close = "</" + $name + ">"
+        $from = 0
+        while ($true) {
+            $s = $masked.IndexOf($open, $from, [System.StringComparison]::Ordinal)
+            if ($s -lt 0) { break }
+            $bodyStart = $s + $open.Length
+            $e = $masked.IndexOf($close, $bodyStart, [System.StringComparison]::Ordinal)
+            if ($e -lt 0) {
+                # An unterminated known container: mask to the end rather
+                # than leaving its body scannable.
+                $e = $masked.Length
+            }
+            $len = $e - $bodyStart
+            $masked = $masked.Substring(0, $bodyStart) +
+                (" " * $len) + $masked.Substring($bodyStart + $len)
+            $from = $bodyStart + $len
+        }
+    }
+    return $masked
+}
+
+function Get-UnknownPromptBlock($text) {
+    # Tag grammar widened past `[A-Za-z0-9_ ]`: a name may carry `-`, `.`
+    # or `:`, the tag may carry attributes, it may be self-closing, and it
+    # may be indented. Those are TAGGED structures, so missing them would
+    # be a gap rather than the accepted untagged-prose limit.
     $found = New-Object System.Collections.ArrayList
-    $rx = [regex]'<([a-z0-9_]+_instructions)>'
-    foreach ($m in $rx.Matches($text)) {
-        $name = $m.Groups[1].Value
-        if ($script:KnownInstructionBlocks -notcontains $name) {
+    $rx = [regex]'(?m)^[ \t]*<([A-Za-z][A-Za-z0-9_.:\- ]*?)(\s[^>]*)?/?>'
+    foreach ($m in $rx.Matches((Hide-KnownContainer $text))) {
+        $name = $m.Groups[1].Value.Trim()
+        if ($script:KnownPromptBlocks -notcontains $name) {
             if ($found -notcontains $name) { [void]$found.Add($name) }
         }
     }
     return @($found)
+}
+
+function Test-PromptShape($text, $asJson) {
+    # Every shape rule, applied to BOTH renders. An earlier revision ran
+    # these on the first pass only, so a block appearing only under the
+    # generated override - or an apps block reappearing on the second pass
+    # - passed silently. Round 4 of the plan debate found it.
+    $instructions = Get-InstructionReport $text
+    if (-not $instructions.BlockPresent) {
+        Write-Blocked ("the <INSTRUCTIONS> block is missing - the prompt" +
+            " shape changed and this parser no longer describes it") $asJson
+    }
+    $features = Get-FeatureReport $text
+    if ($features.Plugins -or $features.RecommendedPlugins -or $features.Apps) {
+        Write-Blocked ("the plugin or apps feature is advertising itself" +
+            " despite --disable plugins --disable apps") $asJson
+    }
+    $unknown = Get-UnknownPromptBlock $text
+    if ($unknown.Count -gt 0) {
+        Write-Blocked ("unrecognized prompt block(s): " +
+            ($unknown -join ", ") + " - a new instruction family is" +
+            " reaching the reviewer and this parser has no rule for it") $asJson
+    }
+    return $instructions
 }
 
 function ConvertTo-ComparablePath($path) {
@@ -568,7 +637,7 @@ git commit -m "0.17.0: parse what the reviewer receives, and classify it by sour
 
 **Interfaces:**
 - Consumes: every function from Task 1.
-- Produces: the script's command-line contract. `-WorkDir <dir> [-SuppressSkills -OverrideOut <file>] [-Json] [-CodexCommand <path>]`, exit 0/1/2, and on `-Json` a single JSON object on stdout with keys `status`, `reason`, `skills_before`, `skills_after`, `repo_scoped`, `plugin_cache_scoped`, `home_scoped`, `unknown_scoped`, `global_agents_md`, `project_agents_md`, `override_file`, `override_sha256`.
+- Produces: the script's command-line contract. `-WorkDir <dir> [-SuppressSkills -OverrideOut <file>] [-Json] [-CodexCommand <path>]`, exit 0/1/2, and on `-Json` a single JSON object on stdout with keys `status`, `reason`, `skills_before`, `skills_after`, `repo_scoped`, `plugin_cache_scoped`, `home_scoped`, `unknown_scoped`, `global_agents_md`, `global_agents_md_path`, `project_agents_md`, `override_file`, `override_sha256`.
 - `-OverrideOut` is REQUIRED whenever `-SuppressSkills` is given, and writes the EXACT bytes of the `skills.config` value the second pass verified, with no trailing terminator. That file is the dispatch's input; nothing else may construct one. `-SuppressSkills` without it blocks, because it would verify a configuration nothing can dispatch.
 - `override_sha256` is the SHA-256 of those bytes. The dispatch preamble reads the file once, checks the hash, and passes the same in-memory value to `codex exec`.
 
@@ -843,6 +912,89 @@ def test_a_non_ascii_skill_path_survives_the_round_trip(tmp_path):
     assert raw.decode("utf-8")  # strict decode must succeed
     assert json.loads(proc.stdout)["override_sha256"] == \
         hashlib.sha256(raw).hexdigest()
+    # And the artifact is what the second pass was actually run with, on
+    # the non-ASCII path too. Checking only the file and its hash would
+    # confirm internal consistency while missing a lossy conversion on the
+    # way to codex.
+    second_call = json.loads(log.read_text().splitlines()[1])
+    passed = second_call[second_call.index("-c") + 1]
+    assert passed.encode("utf-8") == raw
+
+
+def probe_with(tmp_path, fixture_path, fixture2_path=None):
+    env = dict(os.environ)
+    env["PARALLAX_STUB_FIXTURE"] = str(fixture_path)
+    if fixture2_path:
+        env["PARALLAX_STUB_FIXTURE2"] = str(fixture2_path)
+    env["PARALLAX_STUB_LOG"] = str(tmp_path / "calls.log")
+    return subprocess.run(
+        [ps_host(), "-NoProfile", "-NonInteractive", "-File", str(PROBE),
+         "-WorkDir", str(tmp_path), "-Json", "-SuppressSkills",
+         "-OverrideOut", str(tmp_path / "o.txt"), "-CodexCommand", str(STUB)],
+        capture_output=True, text=True, env=env)
+
+
+def with_extra_text(tmp_path, name, base, extra):
+    out = tmp_path / name
+    doc = json.loads((FIXTURES / base).read_text(encoding="utf-8"))
+    doc[0]["content"][0]["text"] += extra
+    out.write_text(json.dumps(doc), encoding="utf-8")
+    return out
+
+
+def test_a_tag_inside_the_global_instructions_body_does_not_block(tmp_path):
+    # The permitted global AGENTS.md is carried verbatim inside
+    # <INSTRUCTIONS>, and a user's own file may contain a line like
+    # <role>. Scanning the flattened text called that a new outer surface
+    # and blocked a review that was fine. Round 4 of the plan debate found
+    # it; the fix masks known container bodies before scanning.
+    out = tmp_path / "role-in-instructions.json"
+    doc = json.loads((FIXTURES / "flagged.json").read_text(encoding="utf-8"))
+    text = doc[0]["content"][0]["text"]
+    doc[0]["content"][0]["text"] = text.replace(
+        "<INSTRUCTIONS>", "<INSTRUCTIONS>\n<role>reviewer</role>\n")
+    out.write_text(json.dumps(doc), encoding="utf-8")
+    proc = probe_with(tmp_path, out, FIXTURES / "suppressed.json")
+    assert proc.returncode == 0, proc.stdout
+
+
+@pytest.mark.parametrize("tag", [
+    "<memories_instructions>",
+    "<agent-context>",       # hyphen
+    "<tool.state>",          # dot
+    "<ns:extra>",            # colon
+    '<beta_block version="2">',  # attributes
+    "<self_closing/>",       # self-closing
+    "   <indented_block>",   # leading whitespace
+])
+def test_an_unrecognized_outer_tag_blocks(tmp_path, tag):
+    # Each of these is a TAGGED structure, so missing it would be a gap
+    # rather than the accepted untagged-prose limit.
+    fixture = with_extra_text(tmp_path, "tagged.json", "flagged.json",
+                              "\n" + tag + "\nsome content\n")
+    proc = probe_with(tmp_path, fixture)
+    assert proc.returncode == 1
+    assert "unrecognized prompt block" in proc.stdout
+
+
+def test_an_unknown_block_appearing_only_on_the_second_pass_blocks(tmp_path):
+    # A surface that appears only under the generated override would have
+    # passed silently while the report said clean.
+    second = with_extra_text(tmp_path, "second.json", "suppressed.json",
+                             "\n<memories_instructions>\nx\n"
+                             "</memories_instructions>\n")
+    proc = probe_with(tmp_path, FIXTURES / "flagged.json", second)
+    assert proc.returncode == 1
+    assert "memories_instructions" in proc.stdout
+
+
+def test_the_apps_block_reappearing_on_the_second_pass_blocks(tmp_path):
+    second = with_extra_text(tmp_path, "apps-again.json", "suppressed.json",
+                             "\n<apps_instructions>\nx\n"
+                             "</apps_instructions>\n")
+    proc = probe_with(tmp_path, FIXTURES / "flagged.json", second)
+    assert proc.returncode == 1
+    assert "apps" in proc.stdout
 
 
 def test_an_unrecognized_instruction_block_blocks(tmp_path):
@@ -946,6 +1098,14 @@ if (-not (Test-Path $WorkDir)) {
     exit 2
 }
 $WorkDir = (Resolve-Path $WorkDir).Path
+# Freshness is checked BEFORE the first codex call, not at write time.
+# WriteAllBytes overwrites silently, so a stale artifact from a previous
+# debate would be replaced without anyone learning it had been there.
+if ($OverrideOut -and (Test-Path $OverrideOut)) {
+    Write-Output ("ERROR: $OverrideOut already exists - a stale override" +
+        " reads exactly like a fresh one")
+    exit 2
+}
 
 $pass1 = Invoke-PromptInput $CodexCommand $WorkDir $null
 if ($pass1.ExitCode -ne 0) {
@@ -961,14 +1121,9 @@ try {
         $_.Exception.Message) $Json
 }
 
+$instructions = Test-PromptShape $text $Json
 $skills = Get-SkillReport $text
-$instructions = Get-InstructionReport $text
-$features = Get-FeatureReport $text
 
-if (-not $instructions.BlockPresent) {
-    Write-Blocked ("the <INSTRUCTIONS> block is missing - the prompt shape" +
-        " changed and this parser no longer describes it") $Json
-}
 # The FIRST pass runs with the feature flags and no override, so the skills
 # block must be there: 29 entries were measured in that state. Its absence
 # here is a shape change, not a success. Absence only means success on the
@@ -977,17 +1132,6 @@ if (-not $skills.BlockPresent) {
     Write-Blocked ("the skills block is missing on the first pass - the" +
         " prompt shape changed, and this parser cannot tell an empty" +
         " machine from one it can no longer read") $Json
-}
-if ($features.Plugins -or $features.RecommendedPlugins -or $features.Apps) {
-    Write-Blocked ("the plugin or apps feature is still advertising itself" +
-        " despite --disable plugins --disable apps - the flags did not" +
-        " take effect") $Json
-}
-$unknownBlocks = Get-UnknownInstructionBlock $text
-if ($unknownBlocks.Count -gt 0) {
-    Write-Blocked ("unrecognized instruction block(s): " +
-        ($unknownBlocks -join ", ") + " - a new instruction family is" +
-        " reaching the reviewer and this parser has no rule for it") $Json
 }
 
 $repoScoped = @()
@@ -1051,6 +1195,7 @@ if ($SuppressSkills) {
         Write-Blocked ("could not read the suppression pass: " +
             $_.Exception.Message) $Json
     }
+    [void](Test-PromptShape $text2 $Json)
     $skills2 = Get-SkillReport $text2
     $after = $skills2.Entries.Count
     # ABSENCE of the block is the proof, not a zero count. A block that is
@@ -1471,23 +1616,46 @@ def test_the_probe_runs_and_the_default_override_is_recorded(tmp_path):
         hashlib.sha256(artifact.read_bytes()).hexdigest()
 
 
-@pytest.mark.parametrize("where", ["same", "inside", "parent"])
-def test_an_overlapping_override_path_is_refused(tmp_path, where):
-    # The override path is caller-supplied, so it gets the mirror path's
-    # guard. Without it the non-mutating workflow could write into the
-    # reviewed repo, or into the mirror after its baseline was captured.
+@pytest.mark.parametrize("tree", ["repo", "mirror"])
+@pytest.mark.parametrize("relation", ["same", "inside", "parent"])
+def test_an_overlapping_override_path_is_refused(tmp_path, tree, relation):
+    # Six cases, not three. The earlier matrix named same/inside/parent
+    # but every entry was an INSIDE case against a different tree, so
+    # equality and containment were never exercised. Round 4 of the plan
+    # debate found it.
     repo = make_repo(tmp_path)
     mirror = tmp_path / "mirror"
-    target = {"same": repo / "o.txt",
-              "inside": repo / "sub" / "o.txt",
-              "parent": mirror / "o.txt"}[where]
+    protected = repo if tree == "repo" else mirror
+    target = {"same": protected,
+              "inside": protected / "sub" / "o.txt",
+              "parent": protected.parent}[relation]
     proc = subprocess.run(
         [ps_host(), "-NoProfile", "-NonInteractive", "-File", str(MIRROR),
          "-RepoRoot", str(repo), "-MirrorPath", str(mirror),
          "-OverrideOut", str(target), "-SkipProbe"],
         capture_output=True, text=True)
     assert proc.returncode == 2, proc.stdout
-    assert not target.exists()
+    assert "overlaps a protected tree" in proc.stdout
+    assert (repo / "kept.txt").exists()
+
+
+def test_a_stale_override_artifact_is_refused_before_any_work(tmp_path):
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    stale = tmp_path / "override.txt"
+    stale.write_text("skills.config=[from a previous debate]")
+    proc = subprocess.run(
+        [ps_host(), "-NoProfile", "-NonInteractive", "-File", str(MIRROR),
+         "-RepoRoot", str(repo), "-MirrorPath", str(mirror),
+         "-OverrideOut", str(stale), "-SkipProbe"],
+        capture_output=True, text=True)
+    assert proc.returncode == 2
+    assert "already exists" in proc.stdout
+    assert not mirror.exists(), (
+        "the check must come before the mirror is built, not after it has"
+        " been copied, remediated and manifested"
+    )
+    assert stale.read_text() == "skills.config=[from a previous debate]"
 
 
 @pytest.mark.parametrize("where", ["same", "inside", "parent"])
@@ -1702,22 +1870,29 @@ if ($rr.StartsWith($mp, $cmp)) {
     exit 2
 }
 
-# A caller-supplied override path gets the SAME guard, checked here rather
-# than beside the probe so that -SkipProbe cannot bypass it. Without this a
-# caller could aim the supposedly non-mutating workflow at the reviewed
-# repo, or write into the mirror after its baseline and manifest were
-# captured.
-if ($OverrideOut) {
-    $op = ([System.IO.Path]::GetFullPath($OverrideOut)).Replace("\", "/")
-    foreach ($protected in @($rr, $mp)) {
-        if (($op + "/").Equals($protected, $cmp) -or
-            ($op + "/").StartsWith($protected, $cmp) -or
-            $protected.StartsWith($op + "/", $cmp)) {
-            Write-Output ("ERROR: the override path overlaps a protected" +
-                " tree ($OverrideOut)")
-            exit 2
-        }
+# Resolve the EFFECTIVE override path here, default included, and guard it
+# beside the mirror guard. Deferring the default until after the mirror is
+# built, copied, remediated and manifested would mean discovering a stale
+# or overlapping artifact only after all that work had already happened,
+# and -SkipProbe would bypass the check entirely.
+if (-not $OverrideOut) {
+    $OverrideOut = Join-Path (Split-Path ([System.IO.Path]::GetFullPath($MirrorPath)) -Parent) `
+        ((Split-Path $MirrorPath -Leaf) + ".skills-override.txt")
+}
+$op = ([System.IO.Path]::GetFullPath($OverrideOut)).Replace("\", "/")
+foreach ($protected in @($rr, $mp)) {
+    if (($op + "/").Equals($protected, $cmp) -or
+        ($op + "/").StartsWith($protected, $cmp) -or
+        $protected.StartsWith($op + "/", $cmp)) {
+        Write-Output ("ERROR: the override path overlaps a protected" +
+            " tree ($OverrideOut)")
+        exit 2
     }
+}
+if (Test-Path $OverrideOut) {
+    Write-Output ("ERROR: $OverrideOut already exists - a stale override" +
+        " reads exactly like a fresh one")
+    exit 2
 }
 
 if (Test-Path $MirrorPath) {
@@ -1802,19 +1977,11 @@ $manifest = $manifestResult.Paths
 $probeLine = "skipped"
 $overrideFile = ""
 if (-not $SkipProbe) {
-    # -OverrideOut is not optional here. The probe's verified value IS the
-    # dispatch's input, so a mirror built without it leaves the transport
-    # with a file that does not exist. Round 2 of the plan debate found
-    # both documented preflight paths calling the probe without it.
-    if (-not $OverrideOut) {
-        $OverrideOut = Join-Path (Split-Path $MirrorPath -Parent) `
-            ((Split-Path $MirrorPath -Leaf) + ".skills-override.txt")
-    }
-    if (Test-Path $OverrideOut) {
-        Write-Output ("ERROR: $OverrideOut already exists - a stale" +
-            " override reads exactly like a fresh one")
-        exit 2
-    }
+    # $OverrideOut was resolved and guarded at the top. The probe's
+    # verified value IS the dispatch's input, so a mirror built without it
+    # leaves the transport with a file that does not exist. Round 2 of the
+    # plan debate found both documented preflight paths calling the probe
+    # without it.
     $probeScript = Join-Path (Split-Path $PSCommandPath -Parent) "codex-context-probe.ps1"
     $probeOut = & powershell -NoProfile -File $probeScript -WorkDir $MirrorPath `
         -SuppressSkills -OverrideOut $OverrideOut -Json -CodexCommand $CodexCommand
@@ -2399,3 +2566,57 @@ git commit -m "0.17.0: report the isolation in doctor, and gate both hosts in CI
 - If the live run in Task 2 Step 6 reports a non-zero `skills_after`, stop.
   That is either a codex behaviour change or a defect in the generated
   override, and both are findings rather than numbers to adjust.
+
+---
+
+## Debate record
+
+**Participants:** claude-opus-5[1m] (session) / gpt-5.6-sol (codex exec, session 019fa9d0-b55b-7d82-8a08-803fdebfd8d3)
+**Rounds used:** 4 of 4
+**Outcome:** converged with amendments
+**Verification status:** FULL
+**Degradation:** none
+**Authorized by:** n/a
+**Raw rounds:** `docs/superpowers/plans/rounds/2026-07-28-reviewer-isolation/` — `sol-plan-r{1,2,3,4}-{brief,reply,header}` for all four rounds, plus `skills-override-used.txt`, the 2313-byte generated override this debate itself dispatched with.
+
+**Route:** effective route confirmed. Every round's header read `model: gpt-5.6-sol`, `provider: openai`, `reasoning effort: high`, `sandbox: read-only`, and rounds 2 to 4 echoed the round-1 `session id:`.
+
+**Environment notes.** `~/.codex/AGENTS.md` is present and is the user's own global instruction file. The repo enumeration returned empty. Every round of this debate was dispatched with `--disable plugins --disable apps` plus the generated skill-disable override — the mechanism under design, exercised on itself, which is why the plugin cache is recorded here as removed rather than merely noted.
+
+### Resolved points
+
+| # | Claim | Raised by | Outcome | Evidence |
+|---|-------|-----------|---------|----------|
+| 1 | The probe verified a zero produced by an override the dispatch never carried | reviewer, r1 | accepted; artifact plus a pinned contract region | plan Task 4, region `verified-override-dispatch` |
+| 2 | The scope classifier defaulted every unplaceable path to a benign `home` note | reviewer, r1 | accepted; `unknown` bucket blocks | `Get-SkillScope`, Task 1 |
+| 3 | The adversarial fixture blocked through the feature check, never testing the missing-block path | reviewer, r1 | accepted; split into two fixtures | Task 1 Step 1 |
+| 4 | A present but unreadable skills block counted zero and read as perfect suppression | reviewer, r1 | accepted; absence of the block is the proof | Task 2 top level |
+| 5 | `-Force` deleted the mirror path with no proof it was disjoint from the repo | reviewer, r1 | accepted; overlap guard before any create or delete | Task 3 |
+| 6 | The baseline was printed as stripped paths under a name backup-lane.md defines as the raw capture | reviewer, r1 | accepted; `Get-BaselineRaw` and `Get-ManifestSubject` split | `references/backup-lane.md:234` |
+| 7 | Committing the raw recording would put the author's global `AGENTS.md` and home skills layout into a public repo | reviewer, r1 | accepted; synthetic normalized fixtures | Task 1 Step 1 |
+| 8 | SKILL.md's "at any depth" would ship contradicting the new accepted limit | reviewer, r1 | accepted; corrected in the same step | `skills/multi-model-verify/SKILL.md:69`, region `enumeration-depth-asymmetry` |
+| 9 | `-OverrideOut` existed but neither documented preflight path passed it | reviewer, r2 | accepted; required on both, mirror defaults and records it | Tasks 3 and 4 |
+| 10 | `Set-Content` appended a line ending, so the artifact was not the verified value | reviewer, r2 | accepted; exact bytes, no terminator, SHA-256 reported | Task 2 |
+| 11 | Two functions returned bare `@()`, which PowerShell unrolls to `$null`, so a clean repo read as a failed enumeration | reviewer, r2 | accepted; structured `@{Ok=..}` returns plus clean-repo tests | Task 3 |
+| 12 | `Get-PromptText` silently discarded any content chunk with no `text` field | reviewer, r2 | accepted; throws | Task 1 |
+| 13 | Four pieces of task text were stale after the round-1 edits | reviewer, r2 | accepted | Tasks 2, 4, 5, 6 |
+| 14 | `Encoding]::ASCII` maps non-ASCII to `?`, so the hash would authenticate a corrupted value | reviewer, r3 | accepted; strict UTF-8 both ways, hash over raw bytes, non-ASCII fixture | Task 2 |
+| 15 | The verification preamble ran once, but rounds are separate shells | reviewer, r3 | accepted; each dispatch and resume carries its own, two complete preambles pinned | Task 4 |
+| 16 | An unrecognised instruction family was ignored rather than blocking | reviewer, r3 | accepted, and generalized past the reviewer's `*_instructions` suffix to an allowlist, because `recommended_plugins` and `environment_context` do not share it | `Get-UnknownPromptBlock` |
+| 17 | The caller-supplied override path had no containment guard | reviewer, r3 | accepted; guarded beside the mirror guard so `-SkipProbe` cannot bypass it | Task 3 |
+| 18 | Doctor promised a global `AGENTS.md` path the report did not carry | reviewer, r3 | accepted; `global_agents_md_path` resolved, empty rather than guessed | Tasks 2 and 6 |
+| 19 | The allowlist scanned the flattened prompt, so a `<role>` line inside the permitted global `AGENTS.md` would block a legitimate review | reviewer, r4 | accepted; known container bodies masked before the scan | `Hide-KnownContainer` |
+| 20 | The tag grammar missed hyphens, dots, colons, attributes, self-closing forms and indentation | reviewer, r4 | accepted; grammar widened, seven parametrized cases | Task 2 |
+| 21 | Every shape rule ran on the first render only | reviewer, r4 | accepted; `Test-PromptShape` runs on both, with second-pass fixtures | Task 2 |
+| 22 | The override guard matrix named six cases but tested three, all of them "inside" | reviewer, r4 | accepted; parametrized over tree and relation independently | Task 3 |
+| 23 | Freshness sat behind `WriteAllBytes`, which overwrites, and the mirror resolved its default artifact path only after all its work | reviewer, r4 | accepted; both checks moved ahead of any work | Tasks 2 and 3 |
+| 24 | The nested `.agents/` pathspec gap should be recorded, not widened | session, r1 | confirmed by the reviewer at r3 and r4 | measured: a root entry is advertised, a nested one is not |
+| 25 | The claim that the enumeration misses gitignored files | session, r1 | refuted by measurement, confirmed by the reviewer | `--others` without `--exclude-standard` lists ignored files |
+
+### Escalated points (user-decided)
+
+None. At the cap the reviewer stated that its remaining verdicts were record-acceptable amendments rather than disputes, and each was applied.
+
+### Note on the pattern
+
+Six of the seven substantive rounds in this debate found a defect inside the previous round's fix. That is the project's expected shape rather than a surprise, and it is why the round-4 brief asked the reviewer to attack the newest fix first.
