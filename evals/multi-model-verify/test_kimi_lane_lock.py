@@ -37,7 +37,12 @@ LOCK = PLUGIN_ROOT / "tools" / "kimi-lane-lock.ps1"
 # host is therefore possible, and one shipped in 0.16.0 - every lock read as
 # unusable on pwsh while this suite stayed green locally, because it picks
 # powershell.exe when both are installed. PARALLAX_PS_HOST forces the other
-# one so both can be run before pushing; CI has pwsh only.
+# one so both can be run before pushing, and the workflow's windows-latest
+# job runs this module under each interpreter so neither host can regress
+# unseen. `test_attestation.py` honours the same variable; the hook tests in
+# `test_multi_model_verify.py` deliberately do not, because hooks.json
+# invokes the hook as `pwsh` and testing another host would not match how it
+# runs.
 POWERSHELL = (os.environ.get("PARALLAX_PS_HOST")
               or shutil.which("powershell") or shutil.which("pwsh"))
 
