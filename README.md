@@ -162,6 +162,13 @@ flowchart TD
 - Missing reference material for a port is a **hard stop** (ask the user),
   never a degraded mode — a debate about remembered code is two models
   fabricating at each other.
+- **Reviewer context isolation (0.17.0)**: the gate measures what the
+  cross-vendor reviewer actually receives and requires it to advertise
+  nothing. `tools/codex-context-probe.ps1` renders the model-visible
+  prompt with `codex debug prompt-input` (no tokens, no model call),
+  classifies every instruction source by where it came from, generates
+  the skill-disable override the dispatch then carries, and re-measures.
+  An unmade or unreadable measurement is never a clean one.
 
 ## Panels
 

@@ -157,3 +157,27 @@ version, the parsed id, and the artifact presence. Any failure is
 BROKEN with the state detail "backup lane unavailable (primary lane
 unaffected)"; kimi not installed at all is N/A with the same detail —
 the fix pointer is references/backup-lane.md either way.
+
+## 9. Reviewer context isolation
+
+Same sanitized shell as check 4. Resolve `tools/codex-context-probe.ps1`
+under the `installPath` from check 1 — never a bare relative path — and
+run it with a FRESH scratch file for the override artifact:
+
+```powershell
+$ovr = "$env:TEMP\parallax-doctor-override-$(Get-Random).txt"
+powershell -NoProfile -File <installPath>\tools\codex-context-probe.ps1 -WorkDir . -SuppressSkills -OverrideOut $ovr -Json
+```
+
+Report all four skill buckets and the two instruction flags from the JSON.
+OK is exit 0 with `repo_scoped`, `plugin_cache_scoped`, `unknown_scoped`
+and `skills_after` all 0. Report `global_agents_md` as an environment note,
+never as a failure: nothing available removes it. Print
+`global_agents_md_path` when the probe resolved one; when that field is
+empty, say the prompt carries a global instruction block whose source the
+prompt itself does not name, rather than inventing a path.
+
+A non-zero exit here is BROKEN and a real finding. It means a review
+dispatched from this machine right now would carry instruction sources
+the gate is supposed to have removed. The probe spends no tokens:
+`codex debug prompt-input` renders the prompt and calls no model.
