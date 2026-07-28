@@ -221,7 +221,14 @@ def _clause_pins(node):
       "literal" in body
       body.count("literal"), alone or compared == n / >= n (n >= 1)
                              or > n (n >= 0)
-      <clause> and <clause>
+      an `and`, which contributes each operand it recognizes
+
+    The conjunction rule is stated that way on purpose. A MIXED `and`
+    such as `assert "lit" in body and flag` contributes "lit" and drops
+    the rest, rather than being rejected whole. That is sound: the
+    assertion passes only if every operand is true, so a recognized
+    operand's requirement holds regardless of what sits beside it.
+    Rejecting mixed conjunctions would discard real locks for no gain.
 
     Measured on the live suite: an unrestricted walk of `ast.Assert`
     yields 715 strings, of which 192 are only reachable through a failure
@@ -257,12 +264,102 @@ def _clause_pins(node):
     return set()
 
 
+# Context managers that swallow the exception an assertion raises.
+# Matched by the called NAME, so `pytest.raises(...)`, a bare
+# `raises(...)` from `from pytest import raises`, and the contextlib
+# equivalents are all caught.
+CONSUMING_CALLS = frozenset({"raises", "suppress"})
+
+
+def _is_consuming_with(node):
+    """True for a `with` block whose body's failures are swallowed."""
+    if not isinstance(node, (ast.With, ast.AsyncWith)):
+        return False
+    for item in node.items:
+        call = item.context_expr
+        if not isinstance(call, ast.Call):
+            continue
+        func = call.func
+        if isinstance(func, ast.Attribute) and func.attr in CONSUMING_CALLS:
+            return True
+        if isinstance(func, ast.Name) and func.id in CONSUMING_CALLS:
+            return True
+    return False
+
+
+def _is_xfail_decorated(node):
+    """True for a function marked as expected to fail."""
+    if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+        return False
+    for decorator in node.decorator_list:
+        expr = decorator.func if isinstance(decorator, ast.Call) else decorator
+        while isinstance(expr, ast.Attribute):
+            if expr.attr == "xfail":
+                return True
+            expr = expr.value
+        if isinstance(expr, ast.Name) and expr.id == "xfail":
+            return True
+    return False
+
+
+def _assert_tests(node, consumed=False):
+    """Yield the test of every assertion whose failure reaches the runner.
+
+    An assertion locks its text only because failing it fails the suite.
+    Where that failure is deliberately caught, the assertion proves the
+    OPPOSITE and must contribute nothing.
+
+    The shape that forced this, found by the cross-vendor lane in the
+    0.15.0 diff debate:
+
+        with pytest.raises(AssertionError):
+            assert "Entire marked region." in body
+
+    That test passes when the region text is ABSENT, yet an unrestricted
+    walk registered the literal and the region read as covered - false
+    coverage, the one direction this checker may never produce. It is not
+    the execution-blind limit the design already accepts: the assertion
+    runs, and its failure is eaten.
+
+    Detection is by ENCLOSING CONTEXT, not by assertion shape, because
+    the assertion itself is identical either way.
+
+    Deliberately conservative on three counts. Any `raises(...)` counts,
+    not only `raises(AssertionError)` - narrowing it would mean tracking
+    which exception types an assert can raise. Every statement in a
+    `try` BODY counts, whatever the handlers catch. And an xfail marker
+    disqualifies the whole function. Each over-rejection loses a pin,
+    which reads UNCOVERED, which is a red. Under-rejecting manufactures
+    coverage. Only one of those is safe to get wrong.
+
+    Costs nothing today: no live pin file contains any of these shapes.
+    """
+    if isinstance(node, ast.Assert):
+        if not consumed:
+            yield node.test
+        return
+    if _is_consuming_with(node) or _is_xfail_decorated(node):
+        consumed = True
+    if isinstance(node, (ast.Try, ast.TryStar)):
+        for child in node.body:
+            yield from _assert_tests(child, True)
+        for group in (node.handlers, node.orelse, node.finalbody):
+            for child in group:
+                yield from _assert_tests(child, consumed)
+        return
+    for child in ast.iter_child_nodes(node):
+        yield from _assert_tests(child, consumed)
+
+
 def collect_pins(paths):
     """Normalized string literals that some assertion checks for.
 
     Read through ast, not regex: nearly every pin in this repo is written
     as adjacent string literals across several lines, and the parser
     joins those into one constant for us.
+
+    Only assertions whose failure reaches the runner are read; see
+    `_assert_tests` for why, and for the shape that proved it necessary.
 
     Accepted limits, all with the same safe failure direction - the
     region reads UNCOVERED, which is a red, never false coverage: a
@@ -278,9 +375,8 @@ def collect_pins(paths):
     pins = set()
     for path in paths:
         tree = ast.parse(path.read_text(encoding="utf-8"))
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Assert):
-                pins |= _clause_pins(node.test)
+        for test in _assert_tests(tree):
+            pins |= _clause_pins(test)
     return pins
 
 

@@ -395,6 +395,88 @@ def test_a_conjunction_of_clauses_collects_both(tmp_path):
     assert "Second rule." in pins
 
 
+def test_a_mixed_conjunction_collects_the_operand_it_recognizes(tmp_path):
+    """`A and B` passing means A holds, whatever B is. Dropping the whole
+    conjunction because one operand is unrecognized would discard a real
+    lock. The grammar in every artifact says so explicitly since the
+    0.15.0 diff debate raised the wording."""
+    src = (
+        'def test_x():\n'
+        '    assert "First rule." in body and flag\n'
+        '    assert other and "Second rule." in body\n'
+    )
+    p = _write(tmp_path, "test_sample.py", src)
+    pins = collect_pins([p])
+    assert "First rule." in pins
+    assert "Second rule." in pins
+
+
+CONSUMED_ASSERTIONS = [
+    ('with pytest.raises(AssertionError):\n'
+     '        assert "Raises region." in body\n', "Raises region."),
+    ('with contextlib.suppress(AssertionError):\n'
+     '        assert "Suppress region." in body\n', "Suppress region."),
+    ('try:\n'
+     '        assert "Try region." in body\n'
+     '    except AssertionError:\n'
+     '        pass\n', "Try region."),
+]
+
+
+@pytest.mark.parametrize("stmt,needle", CONSUMED_ASSERTIONS)
+def test_an_assertion_whose_failure_is_swallowed_is_not_a_pin(
+        tmp_path, stmt, needle):
+    """An assertion locks its text only because failing it fails the
+    suite. Each shape here PASSES when the text is absent, so treating it
+    as a lock manufactures coverage - the one direction this checker may
+    never produce. Found by the cross-vendor lane in the 0.15.0 diff
+    debate, after three earlier reviews missed it."""
+    src = f'def test_x():\n    {stmt}'
+    p = _write(tmp_path, "test_sample.py", src)
+    assert needle not in collect_pins([p])
+
+
+def test_an_assertion_in_an_xfail_function_is_not_a_pin(tmp_path):
+    src = (
+        '@pytest.mark.xfail\n'
+        'def test_x():\n'
+        '    assert "Xfail region." in body\n'
+    )
+    p = _write(tmp_path, "test_sample.py", src)
+    assert "Xfail region." not in collect_pins([p])
+
+
+def test_an_assertion_in_an_except_handler_is_still_a_pin(tmp_path):
+    """The rejection is scoped to the `try` BODY. An assertion in a
+    handler runs normally and its failure reaches the runner, so it locks
+    its text. Stated as a test because the conservative rule is easy to
+    widen by accident until it swallows real pins."""
+    src = (
+        'def test_x():\n'
+        '    try:\n'
+        '        something()\n'
+        '    except ValueError:\n'
+        '        assert "Handler region." in body\n'
+    )
+    p = _write(tmp_path, "test_sample.py", src)
+    assert "Handler region." in collect_pins([p])
+
+
+def test_a_region_locked_only_by_a_swallowed_assertion_is_uncovered(
+        tmp_path):
+    """The end-to-end statement of the defect: not merely that the pin is
+    dropped, but that the region it would have covered now reads red."""
+    src = (
+        'def test_x():\n'
+        '    with pytest.raises(AssertionError):\n'
+        '        assert "The rule stands." in body\n'
+    )
+    p = _write(tmp_path, "test_sample.py", src)
+    regions = {"r": ("The rule stands.", "demo.md")}
+    assert uncovered(regions, collect_pins([p])) == [
+        ("r", "demo.md", "The rule stands.")]
+
+
 def test_an_equality_expectation_is_not_a_pin(tmp_path):
     """None of the three clause forms. Accepted limit: the failure
     direction is a red, never false coverage."""
@@ -429,7 +511,7 @@ def test_a_covered_region_reports_nothing():
 
 
 def test_a_region_with_no_pin_at_all_is_reported():
-    """Instance 10: the disposition sentence had no pin."""
+    """Instance 10: no pin contained the whole disposition sentence."""
     body = "That is a route-attribution failure."
     regions = {"demo": (body, "backup-lane.md")}
     pins = {"Detect it."}
@@ -477,7 +559,8 @@ def _history_case(stem):
 
 
 def test_catches_instance_10_missing_disposition_pin():
-    """4d8a121: 'That is a route-attribution failure' had no pin."""
+    """4d8a121: no pin held the whole 'That is a route-attribution
+    failure' sentence; only a fragment inside it was pinned."""
     regions, misses = _history_case("instance-10")
     assert [rid for rid, _, _ in misses] == ["hist-10-defect"]
 
