@@ -36,26 +36,43 @@ pytestmark = pytest.mark.skipif(
     POWERSHELL is None, reason="no PowerShell host on PATH")
 
 
-def run_lock(lock_path, *args, max_age=None):
+def run_lock(lock_path, *args, extra_env=None):
     """Drive the script with the lock redirected into a tmp path.
 
     PARALLAX_KIMI_LOCK is the script's documented test seam, so the real
     per-user lock is never touched by the suite.
 
-    `max_age` shortens the staleness threshold. It is an ENV seam, not a
-    flag, and the script honours it only when the lock path is also
-    redirected. It used to be a `-MaxAgeMinutes` parameter, which made
-    `-Acquire -MaxAgeMinutes 0` a silent way to steal a fresh lock without
-    `-Force`: the ownership guard bypassed by the flag beside it. The
-    cross-vendor lane found that, using this suite's own test as the proof.
+    There is deliberately NO way for a caller to shorten the staleness
+    threshold. Two earlier shapes were both lock-stealing: a
+    `-MaxAgeMinutes` parameter (`-Acquire -MaxAgeMinutes 0` broke a fresh
+    lock with no `-Force`), and an env override honoured whenever the lock
+    path was redirected - which gated on the redirect being present rather
+    than on it differing from the default, so pointing it at the default
+    path stole the real per-user lane. The cross-vendor lane found each of
+    them, the second inside the fix for the first. Tests that need a stale
+    lock write one with a backdated stamp instead; see `write_lock`.
     """
     env = {**dict(__import__("os").environ), "PARALLAX_KIMI_LOCK": str(lock_path)}
-    if max_age is not None:
-        env["PARALLAX_KIMI_LOCK_MAX_AGE_MINUTES"] = str(max_age)
+    if extra_env:
+        env.update(extra_env)
     return subprocess.run(
         [POWERSHELL, "-NoProfile", "-ExecutionPolicy", "Bypass",
          "-File", str(LOCK), *args],
         capture_output=True, text=True, timeout=120, env=env)
+
+
+def write_lock(path, label="debate-A", age_minutes=0.0):
+    """Place a lock owned by `label` and stamped `age_minutes` in the past.
+
+    This is how the suite reaches the stale branch: it backdates its own
+    temporary lock rather than asking the script to lower its guard.
+    """
+    stamp = datetime.now(timezone.utc) - timedelta(minutes=age_minutes)
+    payload = {"stamp": stamp.isoformat()}
+    if label is not None:
+        payload["label"] = label
+    path.write_text(json.dumps(payload), encoding="ascii")
+    return path
 
 
 def test_script_exists():
@@ -131,6 +148,62 @@ def test_acquire_requires_a_label(tmp_path):
     assert not p.is_file(), "a refused acquire must not leave a lock behind"
 
 
+def test_acquire_refuses_a_whitespace_label(tmp_path):
+    # `-Label ""` was already refused, but whitespace was accepted as an
+    # owner. A blank credential is not one a later release can be checked
+    # against, so it must be refused the same way.
+    p = tmp_path / "k.lock"
+    r = run_lock(p, "-Acquire", "-Label", "   ")
+    assert r.returncode == 2
+    assert "nonblank" in r.stdout
+    assert not p.is_file()
+
+
+@pytest.mark.parametrize("payload", [
+    {"label": 0},
+    {"label": None},
+    {"label": ""},
+    {"label": "   "},
+    {},
+])
+def test_a_bare_release_cannot_free_a_lock_with_no_usable_owner(tmp_path, payload):
+    # The first ownership fix tested the parsed field for TRUTHINESS, so a
+    # lock carrying `label: 0`, `label: null`, a blank label, or no label at
+    # all skipped the guard and was removed by a bare release. This script
+    # never writes such a lock, but it can read one - a legacy file, or one
+    # written by hand. No credential exists to present, so only -Force clears
+    # it.
+    p = tmp_path / "k.lock"
+    payload["stamp"] = datetime.now(timezone.utc).isoformat()
+    p.write_text(json.dumps(payload), encoding="ascii")
+    r = run_lock(p, "-Release")
+    assert r.returncode == 1, "an unusable owner must not mean unowned"
+    assert "no usable owner" in r.stdout
+    assert p.is_file()
+    assert run_lock(p, "-Release", "-Force").returncode == 0
+    assert not p.is_file(), "-Force must still be able to clear it"
+
+
+def test_release_ownership_is_case_sensitive(tmp_path):
+    # Ownership is a string match and nothing more, so it is exactly that:
+    # two labels differing only in case are two different callers.
+    p = tmp_path / "k.lock"
+    assert run_lock(p, "-Acquire", "-Label", "debate-A").returncode == 0
+    r = run_lock(p, "-Release", "-Label", "DEBATE-A")
+    assert r.returncode == 1
+    assert p.is_file()
+
+
+def test_surrounding_whitespace_does_not_break_ownership(tmp_path):
+    # Acquire stores the trimmed label, so release must trim too, or a
+    # trailing space in a driver's command would strand the lane.
+    p = tmp_path / "k.lock"
+    assert run_lock(p, "-Acquire", "-Label", " debate-A ").returncode == 0
+    assert json.loads(p.read_text(encoding="ascii"))["label"] == "debate-A"
+    assert run_lock(p, "-Release", "-Label", "debate-A ").returncode == 0
+    assert not p.is_file()
+
+
 def test_a_forced_label_less_release_frees_a_labelled_lock(tmp_path):
     p = tmp_path / "k.lock"
     assert run_lock(p, "-Acquire", "-Label", "debate-A").returncode == 0
@@ -173,11 +246,23 @@ def test_releasing_a_free_lane_is_not_an_error(tmp_path):
 
 
 def test_a_stale_lock_is_broken_and_says_so(tmp_path):
-    p = tmp_path / "k.lock"
-    assert run_lock(p, "-Acquire", "-Label", "debate-A").returncode == 0
-    r = run_lock(p, "-Acquire", "-Label", "debate-B", max_age=0)
+    # 46 minutes past the fixed 45-minute threshold, written by the test.
+    # This used to shorten the threshold instead, which was the very seam the
+    # cross-vendor lane then aimed at the real lane.
+    p = write_lock(tmp_path / "k.lock", "debate-A", age_minutes=46)
+    r = run_lock(p, "-Acquire", "-Label", "debate-B", "-WaitSeconds", "0")
     assert r.returncode == 0
     assert "stale" in r.stdout, "breaking a lock must never be silent"
+
+
+def test_a_fresh_lock_is_not_stale_at_the_threshold_margin(tmp_path):
+    # The other side of the same boundary: 44 minutes still holds the lane.
+    # Without this, a threshold accidentally set to zero would pass every
+    # stale test above and break every real lock.
+    p = write_lock(tmp_path / "k.lock", "debate-A", age_minutes=44)
+    r = run_lock(p, "-Acquire", "-Label", "debate-B", "-WaitSeconds", "0")
+    assert r.returncode == 1, "a lock inside the threshold must still hold"
+    assert "BUSY" in r.stdout
 
 
 def test_the_staleness_threshold_is_not_caller_controlled(tmp_path):
@@ -194,22 +279,44 @@ def test_the_staleness_threshold_is_not_caller_controlled(tmp_path):
     assert holder["label"] == "debate-A", "the fresh lock must survive"
 
 
-def test_the_env_seam_is_ignored_without_a_redirected_lock_path(tmp_path):
-    # The override exists for the suite. It must not be aimable at the real
-    # per-user lane, so it is honoured only alongside a redirected path.
+def test_no_environment_variable_can_shorten_the_threshold(tmp_path):
+    # The override used to be honoured whenever the lock path was redirected.
+    # That gated on the redirect being PRESENT, not on it differing from the
+    # default - so redirecting to the default path stole the real per-user
+    # lane with no -Force. The seam is gone, and setting it must now do
+    # nothing at all.
     p = tmp_path / "k.lock"
     assert run_lock(p, "-Acquire", "-Label", "debate-A").returncode == 0
-    env = {**dict(__import__("os").environ),
-           "PARALLAX_KIMI_LOCK_MAX_AGE_MINUTES": "0"}
+    r = run_lock(p, "-Acquire", "-Label", "debate-B", "-WaitSeconds", "0",
+                 extra_env={"PARALLAX_KIMI_LOCK_MAX_AGE_MINUTES": "0"})
+    assert r.returncode == 1, "no env var may lower the staleness guard"
+    assert "BUSY" in r.stdout
+    holder = json.loads(p.read_text(encoding="ascii"))
+    assert holder["label"] == "debate-A", "the fresh lock must survive"
+
+
+def test_the_default_path_is_derived_from_localappdata(tmp_path):
+    # Replaces a test that read the REAL per-user lane: it passed for the
+    # wrong reason when that lane was free, and failed when it was
+    # legitimately stale. Pointing LOCALAPPDATA at a tmp directory exercises
+    # the default-path branch hermetically, so the suite never touches the
+    # lane a live debate may be holding.
+    env = {**dict(__import__("os").environ), "LOCALAPPDATA": str(tmp_path)}
     env.pop("PARALLAX_KIMI_LOCK", None)
-    r = subprocess.run(
-        [POWERSHELL, "-NoProfile", "-ExecutionPolicy", "Bypass",
-         "-File", str(LOCK), "-Status"],
-        capture_output=True, text=True, timeout=120, env=env)
-    # Reading the REAL lane here, which the suite must not modify - status
-    # only. The point is that the override did not apply to it.
-    assert r.returncode == 0
-    assert "STALE" not in r.stdout or "free" in r.stdout
+
+    def default_path_run(*args):
+        return subprocess.run(
+            [POWERSHELL, "-NoProfile", "-ExecutionPolicy", "Bypass",
+             "-File", str(LOCK), *args],
+            capture_output=True, text=True, timeout=120, env=env)
+
+    assert default_path_run("-Acquire", "-Label", "debate-A").returncode == 0
+    s = default_path_run("-Status")
+    assert s.returncode == 0
+    assert "debate-A" in s.stdout
+    assert str(tmp_path) in s.stdout, (
+        "the default lock must sit under LOCALAPPDATA, and this run must not "
+        "have touched the real lane")
 
 
 def test_a_future_stamp_cannot_wedge_the_lane(tmp_path):
@@ -256,9 +363,8 @@ def test_a_lock_with_no_stamp_is_breakable(tmp_path):
 
 
 def test_status_marks_an_expired_lock_stale(tmp_path):
-    p = tmp_path / "k.lock"
-    assert run_lock(p, "-Acquire", "-Label", "debate-A").returncode == 0
-    r = run_lock(p, max_age=0)
+    p = write_lock(tmp_path / "k.lock", "debate-A", age_minutes=60)
+    r = run_lock(p)
     assert r.returncode == 0
     assert "STALE" in r.stdout
 

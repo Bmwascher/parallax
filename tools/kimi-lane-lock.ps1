@@ -21,8 +21,13 @@
 #     that cannot happen.
 #   - Acquire is last-writer-wins (see the write site), so this narrows a
 #     minutes-wide race to a milliseconds-wide one rather than closing it.
-#   - The label is the ownership credential. It is required on acquire, and
-#     a release must present it or -Force.
+#   - The label is the ownership credential. A nonblank one is required on
+#     acquire, and a release must present the same string or -Force.
+#   - Ownership is therefore a STRING MATCH and nothing more. Two debates
+#     that pass the same label are indistinguishable here, so either can
+#     release the other's lane. The contract requires a label unique to the
+#     round; this script cannot enforce that, and says so rather than
+#     implying an identity check it does not perform.
 #
 # Windows PowerShell 5.1 compatible, ASCII ONLY.
 #
@@ -55,18 +60,17 @@ if (-not $lockPath) {
 }
 $lockDir = Split-Path $lockPath -Parent
 
-# The staleness threshold is NOT caller-controlled. It used to be a
-# parameter, which made `-Acquire -MaxAgeMinutes 0` a silent way to steal a
-# fresh lock without -Force - the ownership guard bypassed by the flag next
-# to it. The override now exists only alongside a redirected lock path, so it
-# cannot be aimed at the real per-user lane.
+# The staleness threshold is a CONSTANT, with no override of any kind.
+# Two earlier shapes both turned out to be lock-stealing:
+#   - a `-MaxAgeMinutes` parameter, so `-Acquire -MaxAgeMinutes 0` broke a
+#     fresh lock without -Force: the ownership guard bypassed by the flag
+#     next to it.
+#   - an env override honoured "whenever the lock path is redirected", which
+#     gated on the redirect being PRESENT and not on it differing from the
+#     default. Pointing it at the default path stole the real per-user lane.
+# A test that needs a stale lock writes one with a backdated stamp; it does
+# not ask the script to lower its own guard.
 $MaxAgeMinutes = 45
-if ($env:PARALLAX_KIMI_LOCK -and $env:PARALLAX_KIMI_LOCK_MAX_AGE_MINUTES) {
-    $parsedAge = 0
-    if ([int]::TryParse($env:PARALLAX_KIMI_LOCK_MAX_AGE_MINUTES, [ref]$parsedAge) -and $parsedAge -ge 0) {
-        $MaxAgeMinutes = $parsedAge
-    }
-}
 
 function Read-Lock($path) {
     # Returns the parsed lock, or $null when there is nothing usable there.
@@ -111,8 +115,23 @@ function Get-LockAgeMinutes($lock) {
     return $age
 }
 
+function Get-LockOwner($lock) {
+    # The owner credential, or $null when the file carries nothing usable as
+    # one. ConvertFrom-Json will happily hand back `label = 0`, `label =
+    # $null`, or no label at all, and every one of those is FALSY - which used
+    # to short-circuit the release guard and let a bare `-Release` free a
+    # recent lock. A number is not a credential a later release can present,
+    # so anything that is not a nonblank string reads as "no owner".
+    if (-not $lock) { return $null }
+    $label = $lock.label
+    if ($label -isnot [string]) { return $null }
+    if (-not $label.Trim()) { return $null }
+    return $label.Trim()
+}
+
 function Format-Lock($lock, $ageMin) {
-    $who = if ($lock.label) { $lock.label } else { "unlabelled" }
+    $owner = Get-LockOwner $lock
+    $who = if ($owner) { $owner } else { "no usable owner" }
     return "$who, held $([Math]::Round($ageMin, 1)) min"
 }
 
@@ -125,13 +144,26 @@ if ($Release) {
     # A release that names NO label used to skip this check entirely, which
     # made a bare `-Release` an undeclared -Force: it silently freed a lane
     # another debate was holding, and two rounds could then dispatch at once
-    # - the exact case this lock exists to prevent. So an unlabelled release
-    # of a LABELLED lock is refused too. Releasing an unlabelled lock, or
-    # releasing with the matching label, still works.
-    if (-not $Force -and $lock.label -and ($lock.label -ne $Label)) {
-        $who = if ($Label) { "a different caller" } else { "another caller and this release names no label" }
-        Write-Output "kimi lane lock: held by $who ($($lock.label)) - not released; pass the acquiring -Label, or -Force to override"
-        exit 1
+    # - the exact case this lock exists to prevent. Only -Force, or the
+    # matching label, frees a held lane.
+    $owner = Get-LockOwner $lock
+    if (-not $Force) {
+        if (-not $owner) {
+            # No credential exists to present, so there is no correct label to
+            # pass and the guard cannot be satisfied. The first fix let these
+            # through by testing the raw field for truthiness, which made
+            # `label = 0` and `label = null` bare-releasable.
+            Write-Output "kimi lane lock: held by a lock with no usable owner label - not released; only -Force can clear it"
+            exit 1
+        }
+        # Case-SENSITIVE, and both sides trimmed. Ownership is a string match
+        # and nothing more, so the comparison is exactly that: two labels
+        # differing only in case are two different callers.
+        if ($owner -cne $Label.Trim()) {
+            $who = if ($Label.Trim()) { "a different caller" } else { "another caller and this release names no label" }
+            Write-Output "kimi lane lock: held by $who ($owner) - not released; pass the acquiring -Label, or -Force to override"
+            exit 1
+        }
     }
     Remove-Item $lockPath -Force
     Write-Output "kimi lane lock: released"
@@ -139,13 +171,16 @@ if ($Release) {
 }
 
 if ($Acquire) {
-    # The label IS the ownership credential, so an unlabelled lock has no
-    # holder to protect and any bare release frees it. Requiring it on
-    # acquire means an unlabelled lock cannot exist in the first place.
-    if (-not $Label) {
-        Write-Output "kimi lane lock: -Label is required on acquire - it is the ownership credential a later release is checked against"
+    # The label IS the ownership credential, so a lock without a usable one
+    # has no holder to protect. Requiring a NONBLANK label here means this
+    # script never writes such a lock. It can still READ one - a legacy file,
+    # or one written by hand - which is why release checks the field too.
+    # Whitespace was accepted as an owner until round 2 of the 0.16.0 debate.
+    if (-not $Label -or -not $Label.Trim()) {
+        Write-Output "kimi lane lock: a nonblank -Label is required on acquire - it is the ownership credential a later release is checked against"
         exit 2
     }
+    $Label = $Label.Trim()
     if (-not (Test-Path $lockDir)) {
         New-Item -ItemType Directory -Force -Path $lockDir | Out-Null
     }

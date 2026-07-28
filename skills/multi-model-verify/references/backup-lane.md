@@ -83,12 +83,15 @@ Panel participation: a user-invoked panel per references/panels.md is a second s
   <!-- contract:start id=lane-lock -->
   Before dispatching any
   round, acquire the lane lock with `tools/kimi-lane-lock.ps1 -Acquire
-  -Label "<debate>"`, and release it with the SAME label after the round's
-  evidence is read. A BUSY result means another parallax debate holds the
-  lane: do not dispatch, because a concurrent round breaks attribution. The
-  lock is advisory and breaks after 45 minutes, so a crashed driver stalls
-  the lane for at most that long — and a LIVE round still running past that
-  mark becomes breakable too, because nothing checks liveness.
+  -Label "<debate>-<round>"`, and release it with the SAME label after the
+  round's evidence is read. A BUSY result means another parallax debate holds
+  the lane: do not dispatch, because a concurrent round breaks attribution.
+  The lock is advisory and breaks after 45 minutes, so a crashed driver
+  stalls the lane for at most that long — and a LIVE round still running
+  past that mark becomes breakable too, because nothing checks liveness.
+  Ownership is a plain string match, so make the label unique to the round:
+  two callers passing the same label are indistinguishable, and either can
+  release the other's lane.
   <!-- contract:end -->
 - **Rotation guard.** The offset rule assumes an append-only file, and
   the kimi client does not guarantee one.
