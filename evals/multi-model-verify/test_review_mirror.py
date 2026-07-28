@@ -1,0 +1,417 @@
+"""Review mirror construction (0.17.0, backlog item 4).
+
+The mirror is a FILE COPY preserving .git, never a clone: the review inputs
+are routinely gitignored, and a clone carries tracked files only. Probed
+2026-07-26 in KitnEssentials, where a cloned workspace dropped the frozen
+plan, the spec and the reference source while every route and containment
+check stayed green.
+"""
+import hashlib
+import json
+import os
+import subprocess
+from pathlib import Path
+
+import pytest
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+MIRROR = REPO_ROOT / "tools" / "new-review-mirror.ps1"
+FIXTURES = Path(__file__).parent / "fixtures" / "codex-prompt-input"
+STUB = Path(__file__).parent / "fixtures" / "stub-codex" / "stub-codex.ps1"
+
+
+def ps_host():
+    return os.environ.get("PARALLAX_PS_HOST", "powershell.exe")
+
+
+def git(repo, *args):
+    return subprocess.run(["git", "-C", str(repo), *args],
+                          capture_output=True, text=True, check=True).stdout
+
+
+def commit(repo, message):
+    git(repo, "-c", "user.email=t@t", "-c", "user.name=t",
+        "commit", "-q", "-m", message)
+
+
+def make_repo(tmp_path):
+    """A scratch repo with one tracked file, one ignored file, and one
+    untracked file, so the baseline has something to carry."""
+    repo = tmp_path / "src"
+    repo.mkdir()
+    git(tmp_path, "init", "-q", str(repo))
+    (repo / "kept.txt").write_text("tracked\n")
+    (repo / ".gitignore").write_text("ignored/\n")
+    (repo / "ignored").mkdir()
+    (repo / "ignored" / "secret.txt").write_text("gitignored input\n")
+    (repo / "untracked.txt").write_text("untracked\n")
+    git(repo, "add", "kept.txt", ".gitignore")
+    commit(repo, "base")
+    return repo
+
+
+def make_clean_repo(tmp_path):
+    """A repo with NOTHING for the baseline to carry: no back-channels, no
+    untracked files, no ignored files. The ordinary case, and the one an
+    empty-array return would have misread as an enumeration failure."""
+    repo = tmp_path / "clean"
+    repo.mkdir()
+    git(tmp_path, "init", "-q", str(repo))
+    (repo / "only.txt").write_text("tracked\n")
+    git(repo, "add", "only.txt")
+    commit(repo, "base")
+    return repo
+
+
+def run_mirror(repo, mirror, *extra):
+    return subprocess.run(
+        [ps_host(), "-NoProfile", "-NonInteractive", "-File", str(MIRROR),
+         "-RepoRoot", str(repo), "-MirrorPath", str(mirror),
+         "-SkipProbe", *extra],
+        capture_output=True, text=True)
+
+
+def read_block(stdout, label):
+    """Lines of one labelled block from the record output."""
+    lines = stdout.splitlines()
+    start = next(i for i, line in enumerate(lines) if line.startswith(label))
+    out = []
+    for line in lines[start + 1:]:
+        if line and not line.startswith("  "):
+            break
+        if line.strip():
+            out.append(line.strip())
+    return out
+
+
+def test_the_mirror_carries_gitignored_files(tmp_path):
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    proc = run_mirror(repo, mirror)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert (mirror / "ignored" / "secret.txt").exists(), (
+        "a clone would have dropped this; the mirror must not"
+    )
+    assert (mirror / ".git").exists()
+
+
+def test_a_tracked_agents_md_is_deleted_and_committed(tmp_path):
+    repo = make_repo(tmp_path)
+    (repo / "AGENTS.md").write_text("# planted\n")
+    git(repo, "add", "AGENTS.md")
+    commit(repo, "plant")
+    before = git(repo, "rev-parse", "HEAD").strip()
+    mirror = tmp_path / "mirror"
+    proc = run_mirror(repo, mirror)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert not (mirror / "AGENTS.md").exists()
+    assert (repo / "AGENTS.md").exists(), "the real tree is never touched"
+    after = git(mirror, "rev-parse", "HEAD").strip()
+    assert after != before, (
+        "a tracked deletion left uncommitted is a tracked modification in"
+        " the baseline, which bars mode diff and breaks"
+        " HEAD-identifies-content"
+    )
+    assert "AGENTS.md" not in git(mirror, "status", "--porcelain")
+
+
+def test_an_ignored_agents_drop_is_deleted_without_a_commit(tmp_path):
+    repo = make_repo(tmp_path)
+    (repo / ".gitignore").write_text("ignored/\n.agents/\n")
+    git(repo, "add", ".gitignore")
+    commit(repo, "ignore agents")
+    skill = repo / ".agents" / "skills" / "planted"
+    skill.mkdir(parents=True)
+    (skill / "SKILL.md").write_text("---\nname: planted\n---\n")
+    before = git(repo, "rev-parse", "HEAD").strip()
+    mirror = tmp_path / "mirror"
+    proc = run_mirror(repo, mirror)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert not (mirror / ".agents").exists()
+    after = git(mirror, "rev-parse", "HEAD").strip()
+    assert after == before, (
+        "nothing to commit alongside an unchanged HEAD is the CORRECT"
+        " observation for an ignored entry, not an inconsistency to chase"
+    )
+
+
+def test_a_gitignored_back_channel_is_found_and_removed(tmp_path):
+    # Checked 2026-07-28 against a claim that the enumeration misses
+    # ignored files: it does not. `--others` WITHOUT `--exclude-standard`
+    # lists ignored files too, and a gitignored root AGENTS.md IS ingested
+    # by codex.
+    repo = make_repo(tmp_path)
+    (repo / ".gitignore").write_text("ignored/\n.agents/\nAGENTS.md\n")
+    git(repo, "add", ".gitignore")
+    commit(repo, "ignore the back-channels")
+    (repo / "AGENTS.md").write_text("# ignored but still ingested\n")
+    mirror = tmp_path / "mirror"
+    proc = run_mirror(repo, mirror)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert not (mirror / "AGENTS.md").exists()
+
+
+def test_a_nested_agents_md_is_found(tmp_path):
+    repo = make_repo(tmp_path)
+    deep = repo / "a" / "b" / "c"
+    deep.mkdir(parents=True)
+    (deep / "AGENTS.md").write_text("# deep\n")
+    mirror = tmp_path / "mirror"
+    proc = run_mirror(repo, mirror)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert list(mirror.rglob("AGENTS.md")) == [], (
+        "the *AGENTS.md pathspec carries a leading star, so it reaches any"
+        " depth; a root-only check misses a nested drop"
+    )
+
+
+def test_a_nested_dot_agents_is_a_recorded_gap_not_a_silent_one(tmp_path):
+    # `.agents/*` is anchored at the repo root, so a nested drop is NOT
+    # enumerated. Measured 2026-07-28: codex-cli 0.144.1 advertises a ROOT
+    # .agents/skills entry and does NOT advertise a nested one, so this is
+    # unreachable today. The client probe covers it regardless. This test
+    # records the boundary so a future change turns it red instead of
+    # passing silently.
+    repo = make_repo(tmp_path)
+    deep = repo / "sub" / ".agents" / "skills" / "deep"
+    deep.mkdir(parents=True)
+    (deep / "SKILL.md").write_text("---\nname: deep\n---\n")
+    mirror = tmp_path / "mirror"
+    proc = run_mirror(repo, mirror)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert (mirror / "sub" / ".agents" / "skills" / "deep" / "SKILL.md").exists(), (
+        "the root-anchored pathspec does not reach this entry; if this ever"
+        " starts being removed, the enumeration changed and the accepted"
+        " limit in the design must be updated in the same commit"
+    )
+
+
+def test_a_clean_repo_is_not_read_as_a_failed_enumeration(tmp_path):
+    # PowerShell unrolls an empty array returned from a function, so the
+    # caller's variable becomes $null and a clean repo looks exactly like a
+    # git failure.
+    repo = make_clean_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    proc = run_mirror(repo, mirror)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "could not enumerate" not in proc.stdout
+
+
+def test_an_empty_baseline_is_a_legitimate_state(tmp_path):
+    repo = make_clean_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    proc = run_mirror(repo, mirror)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert read_block(proc.stdout, "baseline:") == []
+    assert read_block(proc.stdout, "manifest:") == []
+    assert "baseline capture failed" not in proc.stdout
+
+
+def test_an_existing_mirror_is_refused_without_force(tmp_path):
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    mirror.mkdir()
+    (mirror / "stale.txt").write_text("from a previous debate\n")
+    proc = run_mirror(repo, mirror)
+    assert proc.returncode == 2
+    assert "already exists" in proc.stdout
+
+
+def test_force_replaces_an_existing_mirror(tmp_path):
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    mirror.mkdir()
+    (mirror / "stale.txt").write_text("from a previous debate\n")
+    proc = run_mirror(repo, mirror, "-Force")
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert not (mirror / "stale.txt").exists()
+
+
+def test_the_manifest_covers_exactly_the_baseline_paths(tmp_path):
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    proc = run_mirror(repo, mirror)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    paths = [line.split(" ", 1)[0]
+             for line in read_block(proc.stdout, "manifest:")]
+    assert "ignored/secret.txt" in paths
+    assert "untracked.txt" in paths
+    assert "kept.txt" not in paths, (
+        "kept.txt is clean at HEAD, so HEAD already binds it"
+    )
+
+
+def test_the_manifest_hashes_raw_bytes_and_sorts_by_path(tmp_path):
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    proc = run_mirror(repo, mirror)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    manifest = read_block(proc.stdout, "manifest:")
+    paths = [line.split(" ", 1)[0] for line in manifest]
+    assert paths == sorted(paths), "sorted by path in byte order"
+    for line in manifest:
+        path, digest = line.split(" ", 1)
+        raw = (mirror / path).read_bytes()
+        assert digest == hashlib.sha256(raw).hexdigest()
+
+
+def test_a_directory_expands_recursively(tmp_path):
+    repo = make_repo(tmp_path)
+    (repo / "untr" / "sub").mkdir(parents=True)
+    (repo / "untr" / "sub" / "one.txt").write_text("1\n")
+    (repo / "untr" / "sub" / "two.txt").write_text("2\n")
+    mirror = tmp_path / "mirror"
+    proc = run_mirror(repo, mirror)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    paths = [line.split(" ", 1)[0]
+             for line in read_block(proc.stdout, "manifest:")]
+    assert "untr/sub/one.txt" in paths
+    assert "untr/sub/two.txt" in paths
+    assert "untr/" not in paths, (
+        "a hash over a directory name identifies nothing"
+    )
+
+
+def test_the_baseline_is_the_raw_status_capture(tmp_path):
+    # backup-lane.md defines the baseline as the status command's output.
+    # An earlier revision printed stripped paths under that label, which
+    # would have put a different object into the debate record under a
+    # name the contract already owns.
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    proc = run_mirror(repo, mirror)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    baseline = read_block(proc.stdout, "baseline:")
+    assert any(line.startswith("?? ") for line in baseline), (
+        "status codes are part of the baseline, not decoration"
+    )
+    assert any(line.startswith("!! ") for line in baseline), (
+        "--ignored is why this workspace is a mirror at all"
+    )
+
+
+def test_a_rename_whose_destination_was_deleted_blocks(tmp_path):
+    # Probed 2026-07-28: `git mv a.txt b.txt` then deleting b.txt reports
+    # `RD a.txt -> b.txt`. The destination the manifest rule points at is
+    # gone, so there is nothing to hash and skipping it would be a silent
+    # hole.
+    repo = make_repo(tmp_path)
+    git(repo, "mv", "kept.txt", "moved.txt")
+    (repo / "moved.txt").unlink()
+    mirror = tmp_path / "mirror"
+    proc = run_mirror(repo, mirror)
+    assert proc.returncode == 1
+    assert "deleted" in proc.stdout
+
+
+@pytest.mark.parametrize("tree", ["repo", "mirror"])
+@pytest.mark.parametrize("relation", ["same", "inside", "parent"])
+def test_an_overlapping_override_path_is_refused(tmp_path, tree, relation):
+    # Six cases, not three. An earlier matrix named same/inside/parent but
+    # every entry was an INSIDE case against a different tree, so equality
+    # and containment were never exercised.
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    protected = repo if tree == "repo" else mirror
+    target = {"same": protected,
+              "inside": protected / "sub" / "o.txt",
+              "parent": protected.parent}[relation]
+    proc = subprocess.run(
+        [ps_host(), "-NoProfile", "-NonInteractive", "-File", str(MIRROR),
+         "-RepoRoot", str(repo), "-MirrorPath", str(mirror),
+         "-OverrideOut", str(target), "-SkipProbe"],
+        capture_output=True, text=True)
+    assert proc.returncode == 2, proc.stdout
+    assert "overlaps a protected tree" in proc.stdout
+    assert (repo / "kept.txt").exists(), "the repo must still be there"
+
+
+def test_a_stale_override_artifact_is_refused_before_any_work(tmp_path):
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    stale = tmp_path / "override.txt"
+    stale.write_text("skills.config=[from a previous debate]")
+    proc = subprocess.run(
+        [ps_host(), "-NoProfile", "-NonInteractive", "-File", str(MIRROR),
+         "-RepoRoot", str(repo), "-MirrorPath", str(mirror),
+         "-OverrideOut", str(stale), "-SkipProbe"],
+        capture_output=True, text=True)
+    assert proc.returncode == 2
+    assert "already exists" in proc.stdout
+    assert not mirror.exists(), (
+        "the check must come before the mirror is built, not after it has"
+        " been copied, remediated and manifested"
+    )
+    assert stale.read_text() == "skills.config=[from a previous debate]"
+
+
+@pytest.mark.parametrize("relation", ["same", "inside", "parent"])
+def test_an_overlapping_mirror_path_is_refused(tmp_path, relation):
+    # -Force recursively deletes MirrorPath. An overlapping pair would
+    # delete the tree under review. The guard runs before anything is
+    # created or removed.
+    repo = make_repo(tmp_path)
+    target = {"same": repo,
+              "inside": repo / "nested" / "mirror",
+              "parent": tmp_path}[relation]
+    proc = run_mirror(repo, target, "-Force")
+    assert proc.returncode == 2, proc.stdout
+    assert (repo / "kept.txt").exists(), "the repo must still be there"
+    assert (repo / "ignored" / "secret.txt").exists()
+
+
+def test_the_probe_runs_and_the_default_override_is_recorded(tmp_path):
+    # The only mirror test that does NOT pass -SkipProbe. It proves the
+    # default artifact path is allocated, written, hashed and printed,
+    # which is the whole handoff the transport depends on.
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    env = dict(os.environ)
+    env["PARALLAX_STUB_FIXTURE"] = str(FIXTURES / "flagged.json")
+    env["PARALLAX_STUB_FIXTURE2"] = str(FIXTURES / "suppressed.json")
+    env["PARALLAX_STUB_LOG"] = str(tmp_path / "calls.log")
+    proc = subprocess.run(
+        [ps_host(), "-NoProfile", "-NonInteractive", "-File", str(MIRROR),
+         "-RepoRoot", str(repo), "-MirrorPath", str(mirror),
+         "-CodexCommand", str(STUB)],
+        capture_output=True, text=True, env=env)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    line = next(l for l in proc.stdout.splitlines()
+                if l.startswith("override: "))
+    artifact = Path(line[len("override: "):].strip())
+    assert artifact.exists()
+    raw = artifact.read_bytes()
+    assert raw.startswith(b"skills.config=[")
+    probe_line = next(l for l in proc.stdout.splitlines()
+                      if l.startswith("probe: "))
+    report = json.loads(probe_line[len("probe: "):])
+    assert report["override_sha256"] == hashlib.sha256(raw).hexdigest()
+    assert report["skills_after"] == 0
+
+
+def test_a_failing_probe_blocks_the_mirror(tmp_path):
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    env = dict(os.environ)
+    env["PARALLAX_STUB_FIXTURE"] = str(FIXTURES / "full.json")
+    env["PARALLAX_STUB_FIXTURE2"] = str(FIXTURES / "full.json")
+    env["PARALLAX_STUB_LOG"] = str(tmp_path / "calls.log")
+    proc = subprocess.run(
+        [ps_host(), "-NoProfile", "-NonInteractive", "-File", str(MIRROR),
+         "-RepoRoot", str(repo), "-MirrorPath", str(mirror),
+         "-CodexCommand", str(STUB)],
+        capture_output=True, text=True, env=env)
+    assert proc.returncode == 1
+    assert "client context probe did not pass" in proc.stdout
+
+
+def test_the_real_tree_is_never_written_to(tmp_path):
+    repo = make_repo(tmp_path)
+    before = sorted(p.relative_to(repo).as_posix()
+                    for p in repo.rglob("*") if p.is_file())
+    mirror = tmp_path / "mirror"
+    proc = run_mirror(repo, mirror)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    after = sorted(p.relative_to(repo).as_posix()
+                   for p in repo.rglob("*") if p.is_file())
+    assert before == after
