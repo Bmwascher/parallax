@@ -48,7 +48,7 @@ Panel participation: a user-invoked panel per references/panels.md is a second s
 "the line appears somewhere" check attributes nothing. The rule:
 
 - Before every dispatch capture the byte length of `~/.kimi/logs/kimi.log`; after the call, past that offset, require all three: exactly one new `Using LLM model:` line carrying the canonical backup id, a `Loading agent:` line naming the committed yaml, and a `Loaded tools:` line equal to the allowlist exactly.
-- Zero matching new lines, a wrong id, a wrong agent path, or any extra tool entry is a route-attribution failure: the reply is DISCARDED unread and the failure goes to the fallbacks.md consent gate.
+- Zero matching new lines, anything other than exactly one of each inside this round's block, a wrong id, a wrong agent path, or any extra tool entry is a route-attribution failure: the reply is DISCARDED unread and the failure goes to the fallbacks.md consent gate.
 - **Attribute by session block, not by position in the window.** Counting
   matches across the whole post-offset window makes any concurrent kimi
   session fatal, which is what discarded two of six dispatched rounds on
@@ -83,11 +83,11 @@ Panel participation: a user-invoked panel per references/panels.md is a second s
   <!-- contract:start id=lane-lock -->
   Before dispatching any
   round, acquire the lane lock with `tools/kimi-lane-lock.ps1 -Acquire
-  -Label "<debate>"`, and release it after the round's evidence is read. A
-  BUSY result means another parallax debate holds the lane: do not
-  dispatch, because a concurrent round breaks attribution. The lock is
-  advisory and breaks after 45 minutes, so a crashed driver stalls the lane
-  for at most that long.
+  -Label "<debate>"`, and release it with the SAME label after the round's
+  evidence is read. A BUSY result means another parallax debate holds the
+  lane: do not dispatch, because a concurrent round breaks attribution. The
+  lock is advisory and breaks after 45 minutes, so a crashed driver stalls
+  the lane for at most that long.
   <!-- contract:end -->
 - **Rotation guard.** The offset rule assumes an append-only file, and
   the kimi client does not guarantee one.

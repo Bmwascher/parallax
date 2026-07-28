@@ -420,6 +420,17 @@ Assert-True ($script:LastReport -match "Auto-triage not trusted \(exit 0; verdic
 Assert-True ((Get-Toasts) -match 'UNRESOLVED prior') "unresolved prior run re-toasted"
 $pend = Get-Pending
 Assert-True ($pend.Count -eq 2) "old pending entry kept, new one appended"
+# BLOCKED is the innocent case: the agent read every finding and stopped on
+# purpose. Nothing is broken, so it must NOT record a runner failure -
+# commands/drift-triage.md defines a non-empty `failure` as the automation
+# never having looked at the findings, and tells a triage session to report
+# the lane as down. It still gets its own toast, because a deliberate handoff
+# is not a routine week either.
+$toasts = Get-Toasts
+Assert-True ($toasts -match 'auto-triage BLOCKED') "BLOCKED gets its own toast"
+Assert-True (-not ($toasts -match 'AUTO-TRIAGE FAILED')) "BLOCKED is never reported as a runner failure"
+$newEntry = $pend[$pend.Count - 1]
+Assert-True (-not $newEntry.failure) "BLOCKED records no runner failure on the pending entry"
 Complete-Scenario $b
 
 # --- scenario: no-verdict --------------------------------------------------------

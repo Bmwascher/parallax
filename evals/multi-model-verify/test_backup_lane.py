@@ -157,13 +157,16 @@ def test_backup_lane_evidence_pins():
             "call, so collisions become rare rather than routine. They are "
             "not eliminated.") in body
     # Ordering cannot stop parallax colliding with itself; the lock does.
+    # The SAME label on release is load-bearing, not politeness: a release
+    # naming no label is refused against a labelled lock precisely because a
+    # bare release would otherwise free another debate's lane silently.
     assert ("Before dispatching any round, acquire the lane lock with "
             "`tools/kimi-lane-lock.ps1 -Acquire -Label \"<debate>\"`, and "
-            "release it after the round's evidence is read. A BUSY result "
-            "means another parallax debate holds the lane: do not dispatch, "
-            "because a concurrent round breaks attribution. The lock is "
-            "advisory and breaks after 45 minutes, so a crashed driver "
-            "stalls the lane for at most that long.") in body
+            "release it with the SAME label after the round's evidence is "
+            "read. A BUSY result means another parallax debate holds the "
+            "lane: do not dispatch, because a concurrent round breaks "
+            "attribution. The lock is advisory and breaks after 45 minutes, "
+            "so a crashed driver stalls the lane for at most that long.") in body
     # 0.14.3: the offset rule assumes an append-only file and kimi's
     # client does not guarantee one. 0.16.0: rotation now SUCCEEDS
     # (observed 2026-07-27, verified still on disk 2026-07-28), so every
@@ -175,6 +178,13 @@ def test_backup_lane_evidence_pins():
     # grammar - it is a restoration guard, not a lock.
     assert "offsets have held by accident" not in body
     assert "WinError 32]` because the log is still open, so" not in body
+    # Those two guard the exact old sentence, not the claim, which is
+    # inherent to an absence check - a restoration in fresh words trips
+    # neither. So lock the CORRECTION positively instead: this sentence
+    # cannot be deleted to make room for a restored falsehood without
+    # failing here.
+    assert ("Both halves were true when observed on 2026-07-26 and are "
+            "false now. Do not restore them.") in body
     # 0.15.0: extended from a fragment to the whole rule, because the
     # contract coverage checker proved the fragment left the consequence
     # half of the detection rule unlocked.

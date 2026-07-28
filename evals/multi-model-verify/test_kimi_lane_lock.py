@@ -96,6 +96,47 @@ def test_release_by_a_different_label_is_refused(tmp_path):
     assert p.is_file(), "a refused release must leave the lock in place"
 
 
+def test_a_label_less_release_cannot_free_a_labelled_lock(tmp_path):
+    # A bare -Release used to skip the ownership check entirely, making it an
+    # undeclared -Force: it silently freed a lane another debate held, and
+    # two rounds could then dispatch at once. That is the exact case the lock
+    # exists to prevent, so it must be refused.
+    p = tmp_path / "k.lock"
+    assert run_lock(p, "-Acquire", "-Label", "debate-A").returncode == 0
+    r = run_lock(p, "-Release")
+    assert r.returncode == 1, "a bare release must not silently force"
+    assert "this release names no label" in r.stdout
+    assert p.is_file(), "the holder's lane must survive a bare release"
+
+
+def test_a_label_less_release_frees_an_unlabelled_lock(tmp_path):
+    # The refusal is about protecting a KNOWN holder. An unlabelled lock has
+    # no holder to protect, so cleanup must still work.
+    p = tmp_path / "k.lock"
+    assert run_lock(p, "-Acquire").returncode == 0
+    r = run_lock(p, "-Release")
+    assert r.returncode == 0
+    assert not p.is_file()
+
+
+def test_a_forced_label_less_release_frees_a_labelled_lock(tmp_path):
+    p = tmp_path / "k.lock"
+    assert run_lock(p, "-Acquire", "-Label", "debate-A").returncode == 0
+    r = run_lock(p, "-Release", "-Force")
+    assert r.returncode == 0
+    assert not p.is_file()
+
+
+def test_breaking_a_malformed_lock_is_announced(tmp_path):
+    # Breaking a stale lock says so; breaking an unreadable one used to be
+    # silent. Same act, so it gets the same visibility.
+    p = tmp_path / "k.lock"
+    p.write_text("{not json", encoding="ascii")
+    r = run_lock(p, "-Acquire", "-Label", "debate-A", "-WaitSeconds", "0")
+    assert r.returncode == 0
+    assert "unreadable" in r.stdout
+
+
 def test_force_releases_another_callers_lock(tmp_path):
     p = tmp_path / "k.lock"
     assert run_lock(p, "-Acquire", "-Label", "debate-A").returncode == 0

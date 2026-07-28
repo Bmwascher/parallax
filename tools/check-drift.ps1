@@ -383,6 +383,11 @@ $criticalDismissed = $false
 # manual path except the deliberate -NoAutoTriage one, and the plain
 # "N finding(s)" toast now fires only there.
 $autotriageFailure = ""
+# Set instead of the above when the agent itself reported BLOCKED. That is a
+# deliberate handoff, not a broken runner: the findings WERE read. Kept
+# separate because the two states need different words to a human and
+# different handling in /parallax:drift-triage.
+$autotriageBlocked = ""
 
 # --- headless auto-triage (findings-weeks only) --------------------------------
 # The weekly loop must not depend on a human running /parallax:drift-triage,
@@ -722,9 +727,16 @@ $guide
                 # lines, nonzero exit: record and fall back to manual.
                 Add-Content -Path $ReportFile -Value "`r`nAuto-triage not trusted (exit $agentExit; verdict '$verdictLine'; diff: $(if ($diffStat) { 'yes' } else { 'no' })) - transcript: $Stamp-autotriage.txt"
                 if ($verdictLine -like "BLOCKED*") {
-                    # The agent reported its own blocker. That is the
-                    # designed path, not a broken runner.
-                    $autotriageFailure = "agent reported $verdictLine"
+                    # The agent read every finding and reported a blocker.
+                    # Nothing is broken, so this must NOT set the runner
+                    # failure: commands/drift-triage.md defines a non-empty
+                    # `failure` as the automation never having looked at the
+                    # findings, and tells a triage session to report the lane
+                    # as down and fix the runner. For BLOCKED that would be
+                    # false on both counts. It still deserves its own toast,
+                    # because a deliberate handoff is not a routine week
+                    # either.
+                    $autotriageBlocked = $verdictLine
                 } else {
                     $autotriageFailure = "not trusted (exit $agentExit, verdict '$verdictLine')"
                     # Name the causes that recur and have a specific
@@ -774,9 +786,13 @@ if ($manualToast) {
     # A dead automation must not look like a routine findings week. Before
     # this split, an out-of-credits death and ten ordinary WARNs produced
     # the same toast text, so the death read as deferrable.
+    $sev = if ($critical -gt 0) { "$critical CRITICAL" } else { "$($findings.Count) finding(s)" }
     if ($autotriageFailure) {
-        $sev = if ($critical -gt 0) { "$critical CRITICAL" } else { "$($findings.Count) finding(s)" }
         Show-Toast "parallax drift: AUTO-TRIAGE FAILED" "$autotriageFailure. $sev still need triage - run /parallax:drift-triage (report: tools\drift-reports\$Stamp.txt)"
+    } elseif ($autotriageBlocked) {
+        # Distinct from both a runner failure and a routine week: the agent
+        # did its job and handed the work back on purpose.
+        Show-Toast "parallax drift: auto-triage BLOCKED" "The agent read the findings and stopped: $autotriageBlocked. $sev need triage - run /parallax:drift-triage (report: tools\drift-reports\$Stamp.txt)"
     } elseif ($critical -gt 0) {
         Show-Toast "parallax drift: $critical CRITICAL" "Contract-breaking drift found. Triage with /parallax:drift-triage (report: tools\drift-reports\$Stamp.txt)"
     } else {

@@ -50,14 +50,24 @@ if (-not $lockPath) {
 $lockDir = Split-Path $lockPath -Parent
 
 function Read-Lock($path) {
+    # Returns the parsed lock, or $null when there is nothing usable there.
+    # $script:LockWasMalformed records the difference between "no lock" and
+    # "a lock I could not read", so acquiring over a corrupt one can say so.
+    # Breaking a stale lock announces itself; breaking a malformed one used
+    # to be silent, which is the same act reported two different ways.
+    $script:LockWasMalformed = $false
     if (-not (Test-Path $path)) { return $null }
     try {
         $raw = Get-Content $path -Raw
-        if (-not $raw -or -not $raw.Trim()) { return $null }
+        if (-not $raw -or -not $raw.Trim()) {
+            $script:LockWasMalformed = $true
+            return $null
+        }
         return $raw | ConvertFrom-Json
     } catch {
         # An unparseable lock is treated as absent rather than as a wedge:
         # a half-written file must never block the lane forever.
+        $script:LockWasMalformed = $true
         return $null
     }
 }
@@ -86,8 +96,15 @@ if ($Release) {
         Write-Output "kimi lane lock: already free"
         exit 0
     }
-    if (-not $Force -and $Label -and $lock.label -and ($lock.label -ne $Label)) {
-        Write-Output "kimi lane lock: held by a different caller ($($lock.label)) - not released; use -Force to override"
+    # A release that names NO label used to skip this check entirely, which
+    # made a bare `-Release` an undeclared -Force: it silently freed a lane
+    # another debate was holding, and two rounds could then dispatch at once
+    # - the exact case this lock exists to prevent. So an unlabelled release
+    # of a LABELLED lock is refused too. Releasing an unlabelled lock, or
+    # releasing with the matching label, still works.
+    if (-not $Force -and $lock.label -and ($lock.label -ne $Label)) {
+        $who = if ($Label) { "a different caller" } else { "another caller and this release names no label" }
+        Write-Output "kimi lane lock: held by $who ($($lock.label)) - not released; pass the acquiring -Label, or -Force to override"
         exit 1
     }
     Remove-Item $lockPath -Force
@@ -103,6 +120,7 @@ if ($Acquire) {
     $waited = $false
     while ($true) {
         $lock = Read-Lock $lockPath
+        $malformed = $script:LockWasMalformed
         $age = Get-LockAgeMinutes $lock
         $free = ($null -eq $lock)
         $stolen = $false
@@ -123,6 +141,7 @@ if ($Acquire) {
             $payload | ConvertTo-Json | Set-Content -Path $lockPath -Encoding ASCII
             $note = "kimi lane lock: acquired"
             if ($stolen) { $note += " (broke a stale lock, $([Math]::Round($age, 1)) min old)" }
+            elseif ($malformed) { $note += " (broke an unreadable lock)" }
             if ($waited) { $note += " after waiting" }
             Write-Output $note
             exit 0
