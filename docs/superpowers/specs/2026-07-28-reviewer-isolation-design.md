@@ -4,7 +4,7 @@ Date: 2026-07-28
 Backlog item: 4 of 6 (docs/superpowers/plans/2026-07-27-0150-backlog.md)
 Target release: 0.17.0
 
-**Revision 4.** Two rounds of cross-vendor plan debate so far. Every number in
+**Revision 5.** Three rounds of cross-vendor plan debate so far. Every number in
 this document was measured on 2026-07-28 against codex-cli 0.144.1 on the
 author's Windows machine, with the commands recorded inline so each claim
 can be re-run rather than believed.
@@ -283,6 +283,8 @@ reason the contract coverage checker forbids false coverage.
 | the dispatch omits the verified override, or carries an unverified one | transport failure | blocked |
 | the override file's hash differs from the one the probe reported | transport failure | blocked |
 | a prompt content chunk carries no text field | transport failure | blocked, never discarded |
+| an unrecognised `<*_instructions>` block appears | transport failure | blocked; a new instruction family has no rule yet |
+| a caller aims the override artifact at the repo or the mirror | script error | exit 2, before anything is written |
 | the mirror path equals, contains, or sits inside the repo | script error | exit 2 before anything is created or deleted |
 | the baseline or HEAD capture fails, or a baseline entry names no readable file | mirror construction | blocked, never a partial manifest |
 | repo-scoped entry survives remediation | mirror construction | blocked, never a review finding |
@@ -405,8 +407,9 @@ unchanged.
 5. backup-lane.md mirror construction points at the script and keeps the
    manifest rules as the script's specification
 6. The brief's scope-guard paragraph, in the brief conventions
-7. `/parallax:doctor` gains a check that runs the probe and reports the
-   three buckets
+7. `/parallax:doctor` gains a check that runs the probe and reports all
+   four skill buckets, the two instruction flags, and the resolved global
+   `AGENTS.md` path when there is one
 8. New and updated eval modules, plus the CI dual-host job
 9. New contract regions and the updated `DECLARED_REGIONS`
 
@@ -419,6 +422,22 @@ lane's own client surface beyond the `merge_all_available_skills` note
 already in backup-lane.md; and any change to what preflight 3 blocks.
 
 ## Revision history
+
+**Revision 5 (2026-07-28).** After round 3, which again found a defect
+inside the previous round's fix. The artifact was written with
+`Encoding]::ASCII`, which maps every non-ASCII character to `?`, so a
+skill path carrying one would be silently corrupted and the SHA-256 would
+then faithfully authenticate the corrupted bytes: the check passing while
+the dispatched configuration differed from the verified one. Writing and
+reading are now strict UTF-8 with the hash taken over the raw bytes. Also
+from that round: the verification preamble ran once while rounds are
+separate shells, so each dispatch and resume now carries its own; an
+unrecognised `<*_instructions>` family was ignored rather than blocking,
+which is exactly the "catches classes nobody enumerated" claim failing;
+the shared test helper, the live gate command and the doctor check all
+called the probe in the one combination the probe now refuses; the
+caller-supplied override path had no containment guard; and doctor
+promised a global `AGENTS.md` path the report did not carry.
 
 **Revision 4 (2026-07-28).** After round 2, which found defects inside
 round 1's fix — the fifth time in six rounds on this project that a fix

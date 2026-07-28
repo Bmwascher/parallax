@@ -455,6 +455,28 @@ function Get-FeatureReport($text) {
     }
 }
 
+# Instruction-block families this parser understands. Anything else that
+# looks like one is a NEW surface, and the design's claim to catch classes
+# nobody enumerated only holds if an unrecognized family stops the run
+# instead of being ignored. `memories` is the live example: this machine
+# has the memories feature on, so a `<memories_instructions>` block is a
+# realistic addition. Round 3 of the plan debate raised it.
+$script:KnownInstructionBlocks = @(
+    "skills_instructions", "plugins_instructions", "apps_instructions"
+)
+
+function Get-UnknownInstructionBlock($text) {
+    $found = New-Object System.Collections.ArrayList
+    $rx = [regex]'<([a-z0-9_]+_instructions)>'
+    foreach ($m in $rx.Matches($text)) {
+        $name = $m.Groups[1].Value
+        if ($script:KnownInstructionBlocks -notcontains $name) {
+            if ($found -notcontains $name) { [void]$found.Add($name) }
+        }
+    }
+    return @($found)
+}
+
 function ConvertTo-ComparablePath($path) {
     # Compare on forward slashes with a trailing separator, so a sibling
     # directory whose name merely starts with the work dir - `repo-old`
@@ -605,7 +627,11 @@ def run_probe(tmp_path, workdir, fixture, fixture2=None, exit_code=None,
             "-WorkDir", str(workdir), "-Json",
             "-CodexCommand", str(STUB)]
     if suppress:
-        args.append("-SuppressSkills")
+        # -OverrideOut rides with -SuppressSkills everywhere. The probe
+        # blocks the pair without it, so a helper that omitted it would
+        # fail every suppression test before its own assertion ran.
+        args += ["-SuppressSkills", "-OverrideOut",
+                 str(tmp_path / "override.txt")]
     proc = subprocess.run(args, capture_output=True, text=True, env=env)
     calls = log.read_text().splitlines() if log.exists() else []
     return proc, calls
@@ -788,6 +814,59 @@ def test_suppress_without_an_override_target_blocks(tmp_path):
     assert "OverrideOut" in proc.stdout
 
 
+def test_a_non_ascii_skill_path_survives_the_round_trip(tmp_path):
+    # ASCII encoding maps every non-ASCII character to '?', so the file
+    # would differ from the value the second pass verified while the hash
+    # authenticated the corrupted bytes. Round 3 of the plan debate found
+    # it, and the earlier byte test could not: it used ASCII paths only.
+    weird = "C:/fixture/home/.agents/skills/caf\u00e9-na\u00efve/SKILL.md"
+    fixture = tmp_path / "nonascii.json"
+    text = (FIXTURES / "flagged.json").read_text(encoding="utf-8")
+    fixture.write_text(
+        text.replace("C:/fixture/home/.agents/skills/grilling/SKILL.md",
+                     weird), encoding="utf-8")
+    out = tmp_path / "override.txt"
+    log = tmp_path / "calls.log"
+    env = dict(os.environ)
+    env["PARALLAX_STUB_FIXTURE"] = str(fixture)
+    env["PARALLAX_STUB_FIXTURE2"] = str(FIXTURES / "suppressed.json")
+    env["PARALLAX_STUB_LOG"] = str(log)
+    proc = subprocess.run(
+        [ps_host(), "-NoProfile", "-NonInteractive", "-File", str(PROBE),
+         "-WorkDir", str(tmp_path), "-Json", "-SuppressSkills",
+         "-OverrideOut", str(out), "-CodexCommand", str(STUB)],
+        capture_output=True, text=True, env=env)
+    assert proc.returncode == 0, proc.stdout
+    raw = out.read_bytes()
+    assert weird.encode("utf-8") in raw
+    assert b"?" not in raw, "a '?' means the encoder ate a character"
+    assert raw.decode("utf-8")  # strict decode must succeed
+    assert json.loads(proc.stdout)["override_sha256"] == \
+        hashlib.sha256(raw).hexdigest()
+
+
+def test_an_unrecognized_instruction_block_blocks(tmp_path):
+    # The design claims the probe catches classes nobody enumerated. That
+    # only holds if a NEW instruction family stops the run. `memories` is
+    # the realistic case: the feature is on on this machine.
+    fixture = tmp_path / "memories.json"
+    doc = json.loads((FIXTURES / "flagged.json").read_text(encoding="utf-8"))
+    doc[0]["content"][0]["text"] += (
+        "\n<memories_instructions>\nRemember the user prefers X.\n"
+        "</memories_instructions>\n")
+    fixture.write_text(json.dumps(doc), encoding="utf-8")
+    env = dict(os.environ)
+    env["PARALLAX_STUB_FIXTURE"] = str(fixture)
+    env["PARALLAX_STUB_LOG"] = str(tmp_path / "calls.log")
+    proc = subprocess.run(
+        [ps_host(), "-NoProfile", "-NonInteractive", "-File", str(PROBE),
+         "-WorkDir", str(tmp_path), "-Json", "-SuppressSkills",
+         "-OverrideOut", str(tmp_path / "o.txt"), "-CodexCommand", str(STUB)],
+        capture_output=True, text=True, env=env)
+    assert proc.returncode == 1
+    assert "memories_instructions" in proc.stdout
+
+
 def test_a_content_chunk_without_text_blocks(tmp_path):
     # An unknown chunk family must not be discarded just because one valid
     # text chunk survives beside it.
@@ -904,6 +983,12 @@ if ($features.Plugins -or $features.RecommendedPlugins -or $features.Apps) {
         " despite --disable plugins --disable apps - the flags did not" +
         " take effect") $Json
 }
+$unknownBlocks = Get-UnknownInstructionBlock $text
+if ($unknownBlocks.Count -gt 0) {
+    Write-Blocked ("unrecognized instruction block(s): " +
+        ($unknownBlocks -join ", ") + " - a new instruction family is" +
+        " reaching the reviewer and this parser has no rule for it") $Json
+}
 
 $repoScoped = @()
 $cacheScoped = @()
@@ -936,6 +1021,18 @@ if ($cacheScoped.Count -gt 0) {
     Write-Blocked ("skill(s) still advertised from the codex plugin cache: " +
         (($cacheScoped | ForEach-Object { $_.Path }) -join "; ")) $Json
 }
+
+# The prompt does NOT state where its global instruction text came from,
+# and the reviewer's own self-report of that path was wrong on 2026-07-28.
+# So resolve the conventional location ourselves and report it only when
+# the file is actually there; otherwise report nothing rather than a guess.
+$globalPath = ""
+$codexHome = $env:CODEX_HOME
+if (-not $codexHome) {
+    $codexHome = Join-Path $env:USERPROFILE ".codex"
+}
+$candidate = Join-Path $codexHome "AGENTS.md"
+if (Test-Path $candidate) { $globalPath = (Resolve-Path $candidate).Path }
 
 $before = $skills.Entries.Count
 $after = $before
@@ -980,7 +1077,16 @@ if ($SuppressSkills) {
     # ending, so the file would differ from the string the second pass was
     # actually run with, and the earlier test hid that with .strip().
     # Round 2 of the plan debate found it.
-    $bytes = [System.Text.Encoding]::ASCII.GetBytes($override)
+    #
+    # STRICT UTF-8, no BOM. ASCII encoding maps every non-ASCII character
+    # to `?`, so a skill path carrying one would be silently corrupted and
+    # the hash would then faithfully authenticate the corrupted value -
+    # the check passing while the dispatched configuration differs from
+    # the verified one. Round 3 of the plan debate found it. This script's
+    # own SOURCE stays ASCII; that is a separate rule about the file, not
+    # about the data it writes.
+    $enc = New-Object System.Text.UTF8Encoding($false, $true)
+    $bytes = $enc.GetBytes($override)
     [System.IO.File]::WriteAllBytes($OverrideOut, $bytes)
     $overridePath = (Resolve-Path $OverrideOut).Path
     $sha = [System.Security.Cryptography.SHA256]::Create()
@@ -998,6 +1104,7 @@ $report = @{
     home_scoped = $homeScoped.Count
     unknown_scoped = $unknownScoped.Count
     global_agents_md = $instructions.BlockPresent
+    global_agents_md_path = $globalPath
     project_agents_md = $instructions.ProjectDoc
     override_file = $overridePath
     override_sha256 = $overrideHash
@@ -1019,8 +1126,8 @@ Expected: PASS, all tests.
 
 - [ ] **Step 6: Run the probe live against this repo**
 
-Run: `powershell -NoProfile -File tools/codex-context-probe.ps1 -WorkDir . -SuppressSkills -Json`
-Expected: exit 0, `"skills_before":29`, `"skills_after":0`, `"plugin_cache_scoped":0`, `"global_agents_md":true`.
+Run: `powershell -NoProfile -File tools/codex-context-probe.ps1 -WorkDir . -SuppressSkills -OverrideOut <fresh-scratch-file> -Json`
+Expected: exit 0, `"skills_before":29`, `"skills_after":0`, `"plugin_cache_scoped":0`, `"unknown_scoped":0`, `"global_agents_md":true`, and a non-empty `override_sha256`.
 
 Record the exact output in the commit message. Stubs do not prove a live contract here.
 
@@ -1056,6 +1163,7 @@ plan, the spec and the reference source while every route and containment
 check stayed green.
 """
 import hashlib
+import json
 import os
 import subprocess
 from pathlib import Path
@@ -1335,6 +1443,53 @@ def test_a_rename_whose_destination_was_deleted_blocks(tmp_path):
     assert "deleted" in proc.stdout
 
 
+def test_the_probe_runs_and_the_default_override_is_recorded(tmp_path):
+    # The only mirror test that does NOT pass -SkipProbe. It proves the
+    # default artifact path is allocated, written, hashed and printed,
+    # which is the whole handoff the transport depends on.
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    env = dict(os.environ)
+    fixtures = Path(__file__).parent / "fixtures" / "codex-prompt-input"
+    env["PARALLAX_STUB_FIXTURE"] = str(fixtures / "flagged.json")
+    env["PARALLAX_STUB_FIXTURE2"] = str(fixtures / "suppressed.json")
+    env["PARALLAX_STUB_LOG"] = str(tmp_path / "calls.log")
+    proc = subprocess.run(
+        [ps_host(), "-NoProfile", "-NonInteractive", "-File", str(MIRROR),
+         "-RepoRoot", str(repo), "-MirrorPath", str(mirror),
+         "-CodexCommand", str(STUB)],
+        capture_output=True, text=True, env=env)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    line = next(l for l in proc.stdout.splitlines()
+                if l.startswith("override: "))
+    artifact = Path(line[len("override: "):].strip())
+    assert artifact.exists()
+    assert artifact.read_bytes().startswith(b"skills.config=[")
+    probe_line = next(l for l in proc.stdout.splitlines()
+                      if l.startswith("probe: "))
+    assert json.loads(probe_line[len("probe: "):])["override_sha256"] == \
+        hashlib.sha256(artifact.read_bytes()).hexdigest()
+
+
+@pytest.mark.parametrize("where", ["same", "inside", "parent"])
+def test_an_overlapping_override_path_is_refused(tmp_path, where):
+    # The override path is caller-supplied, so it gets the mirror path's
+    # guard. Without it the non-mutating workflow could write into the
+    # reviewed repo, or into the mirror after its baseline was captured.
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    target = {"same": repo / "o.txt",
+              "inside": repo / "sub" / "o.txt",
+              "parent": mirror / "o.txt"}[where]
+    proc = subprocess.run(
+        [ps_host(), "-NoProfile", "-NonInteractive", "-File", str(MIRROR),
+         "-RepoRoot", str(repo), "-MirrorPath", str(mirror),
+         "-OverrideOut", str(target), "-SkipProbe"],
+        capture_output=True, text=True)
+    assert proc.returncode == 2, proc.stdout
+    assert not target.exists()
+
+
 @pytest.mark.parametrize("where", ["same", "inside", "parent"])
 def test_an_overlapping_mirror_path_is_refused(tmp_path, where):
     # -Force recursively deletes MirrorPath. An overlapping pair would
@@ -1547,6 +1702,24 @@ if ($rr.StartsWith($mp, $cmp)) {
     exit 2
 }
 
+# A caller-supplied override path gets the SAME guard, checked here rather
+# than beside the probe so that -SkipProbe cannot bypass it. Without this a
+# caller could aim the supposedly non-mutating workflow at the reviewed
+# repo, or write into the mirror after its baseline and manifest were
+# captured.
+if ($OverrideOut) {
+    $op = ([System.IO.Path]::GetFullPath($OverrideOut)).Replace("\", "/")
+    foreach ($protected in @($rr, $mp)) {
+        if (($op + "/").Equals($protected, $cmp) -or
+            ($op + "/").StartsWith($protected, $cmp) -or
+            $protected.StartsWith($op + "/", $cmp)) {
+            Write-Output ("ERROR: the override path overlaps a protected" +
+                " tree ($OverrideOut)")
+            exit 2
+        }
+    }
+}
+
 if (Test-Path $MirrorPath) {
     if (-not $Force) {
         Write-Output ("ERROR: $MirrorPath already exists - a stale mirror" +
@@ -1730,6 +1903,17 @@ Add to the transport class in `test_multi_model_verify.py`:
             "the VERIFIED override must ride both the dispatch and every"
             " resume, not only the probe's own second call"
         )
+        # Two COMPLETE preambles, not two uses of a variable. Rounds are
+        # separate shells: a $override set in round 1 does not exist in
+        # round 3, and one verification does not cover a file that can
+        # change between rounds.
+        assert text.count("ReadAllBytes(\"<verified-override-file>\")") >= 2
+        assert text.count("$seen -cne \"<override-sha256>\"") >= 2
+        assert text.count("UTF8Encoding($false, $true)).GetString($bytes)") >= 2
+        assert "Encoding]::ASCII.GetBytes($override)" not in text, (
+            "ASCII maps non-ASCII path characters to '?', so the hash would"
+            " authenticate a value the probe never verified"
+        )
         assert "-OverrideOut <verified-override-file>" in text, (
             "the preflight that produces the artifact must be the one the"
             " transport consumes; an -OverrideOut nobody passes leaves the"
@@ -1770,22 +1954,37 @@ dispatch preamble reads the file ONCE, checks the hash, and passes that
 same in-memory value to `codex exec`:
 
 ```powershell
-$override = [System.IO.File]::ReadAllText("<verified-override-file>")
-$seen = ([System.BitConverter]::ToString(([System.Security.Cryptography.SHA256]::Create()).ComputeHash([System.Text.Encoding]::ASCII.GetBytes($override))) -replace '-', '').ToLower()
+$bytes = [System.IO.File]::ReadAllBytes("<verified-override-file>")
+$seen = ([System.BitConverter]::ToString(([System.Security.Cryptography.SHA256]::Create()).ComputeHash($bytes)) -replace '-', '').ToLower()
 if ($seen -cne "<override-sha256>") { throw "the override file changed after the probe verified it" }
+$override = (New-Object System.Text.UTF8Encoding($false, $true)).GetString($bytes)
 ```
+
+The hash covers the RAW BYTES, and the string is decoded from those same
+bytes with a strict UTF-8 decoder. Hashing a re-encoding instead would
+authenticate whatever the encoder produced rather than what is on disk,
+which is how an ASCII round-trip could have passed the check while
+dispatching a corrupted value.
 
 The hash check is what makes the file an artifact rather than a mutable
 scratch note: without it, anything that edited the file between the probe
 and the dispatch would silently change what the reviewer receives.
 
-In `skills/multi-model-verify/SKILL.md`, mode plan step 2:
+**This preamble runs in EVERY round, immediately before its own
+`codex exec`.** Rounds are separate shell invocations, so a `$override`
+set in round 1 does not exist in round 3, and a verification performed
+once does not cover a file that can change between rounds. Both transport
+blocks below carry the preamble inline for that reason.
+
+In `skills/multi-model-verify/SKILL.md`, mode plan step 2, with the
+preamble above on the two lines before it:
 
 ```powershell
 Get-Content -Raw <brief-file> | codex exec --sandbox read-only --disable plugins --disable apps -c $override -m <canonical-model-id> -c model_reasoning_effort=<canonical-effort> --output-last-message <reply-file> - > <transcript-file> 2>&1
 ```
 
-and step 3:
+and step 3, which repeats the whole preamble rather than assuming round
+1's variable survived:
 
 ```powershell
 codex exec --sandbox read-only --disable plugins --disable apps -c $override -m <canonical-model-id> -c model_reasoning_effort=<canonical-effort> --output-last-message <reply-file> resume <SESSION_ID> "<rebuttal-brief>" > <transcript-file> 2>&1
@@ -2084,13 +2283,16 @@ Append a check to `commands/doctor.md`, numbered after the existing last one:
 Run:
 
 ```powershell
-powershell -NoProfile -File <plugin-root>/tools/codex-context-probe.ps1 -WorkDir . -SuppressSkills -Json
+powershell -NoProfile -File <plugin-root>/tools/codex-context-probe.ps1 -WorkDir . -SuppressSkills -OverrideOut <fresh-scratch-file> -Json
 ```
 
 Report all four skill buckets and the two instruction flags from the JSON.
 PASS is exit 0 with `repo_scoped`, `plugin_cache_scoped`, `unknown_scoped`
-and `skills_after` all 0. Report `global_agents_md` as an environment note
-with its path, never as a failure: nothing available removes it.
+and `skills_after` all 0. Report `global_agents_md` as an environment note,
+never as a failure: nothing available removes it. Print
+`global_agents_md_path` when the probe resolved one; when that field is
+empty, say the prompt carries a global instruction block whose source the
+prompt itself does not name, rather than inventing a path.
 
 A non-zero exit here is a real finding. It means a review dispatched from
 this machine right now would carry instruction sources the gate is
