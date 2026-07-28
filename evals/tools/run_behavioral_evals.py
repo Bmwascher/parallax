@@ -586,34 +586,71 @@ def codex_login_ok(env):
     return login.returncode == 0 and "Logged in using ChatGPT" in text
 
 
-ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
+# Full CSI (parameter bytes, intermediate bytes, final byte) plus the
+# two-character escapes, not just the colour subset.
+ANSI_ESCAPE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]|\x1b[@-Z\\-_]")
+
+
+def header_block(output):
+    """The startup header ONLY, or None when it cannot be located.
+
+    codex prints its version, a `--------` rule, the resolved config, and a
+    closing rule - all before it echoes the prompt. Binding the route check
+    to that block is load-bearing, not tidiness: the grader prompt EMBEDS
+    the executor's transcript, so any line the agent wrote reaches this
+    output. Searching the whole output meant a header field codex OMITTED
+    could be supplied by a payload line further down, and once escapes were
+    stripped globally, `mo<esc>del: <expected>` became a valid `model:`
+    line that no header ever contained. First-match-wins protects a field
+    that IS in the header and does nothing for one that is absent. Found by
+    the cross-vendor lane inside the previous fix.
+
+    Escapes are stripped before the rules are located, so a coloured
+    delimiter still finds its block; everything after the closing rule is
+    discarded, so stripping cannot manufacture a header line.
+    """
+    lines = ANSI_ESCAPE.sub("", output or "").splitlines()
+    rules = [i for i, ln in enumerate(lines)
+             if len(ln.strip()) >= 8 and set(ln.strip()) == {"-"}]
+    if len(rules) < 2:
+        return None
+    return "\n".join(lines[rules[0] + 1:rules[1]])
 
 
 def effective_route_ok(output, model, effort):
     """codex echoes the RESOLVED config in its startup header, so a
     config.toml override or profile silently swapping the grader surfaces
-    here. First match wins - the header precedes any body text that could
-    quote such lines. Client-resolved metadata: this confirms the
-    EFFECTIVE ROUTE, never server-attested runtime identity. The sandbox
-    line is checked too (0.8.0): the dispatch pins --sandbox read-only,
-    so anything else means a config default bled through the pin.
+    here. Client-resolved metadata: this confirms the EFFECTIVE ROUTE,
+    never server-attested runtime identity. The sandbox line is checked too
+    (0.8.0): the dispatch pins --sandbox read-only, so anything else means
+    a config default bled through the pin.
 
-    ANSI escapes are stripped first (0.16.0). codex colours its header
-    whenever FORCE_COLOR is set, which a Claude Code session sets to 3 -
-    so `model: ` arrives as `\x1b[1mmodel:\x1b[0m ` and the anchored regex
-    matches nothing. Every key then reads empty, the route "mismatches",
-    and every graded case fails with no parseable verdicts. This check must
-    fail closed on a WRONG route, not on a COLOURED one, and the evals are
-    run from inside exactly the session that sets the variable. Reproduced
-    2026-07-28: identical calls matched with FORCE_COLOR removed and failed
-    with it present."""
+    Two 0.16.0 changes, the second correcting the first:
+
+    codex colours its header whenever FORCE_COLOR is set, which a Claude
+    Code session sets to 3 - so `model: ` arrived as
+    `\x1b[1mmodel:\x1b[0m ` and the anchored regex matched nothing. Every
+    key read empty, the route "mismatched", and every graded case failed
+    with no parseable verdicts: this suite was inert in the environment it
+    is run from. Escapes are therefore stripped.
+
+    But stripping the WHOLE output and searching it per field was worse
+    than the bug. The grader prompt embeds the executor's transcript, so
+    agent-authored lines reach this text; a field codex OMITTED could be
+    supplied by a payload line, and stripping turned
+    `mo<esc>del: <expected>` into a header line that never existed.
+    Parsing is now bound to the startup-header block, and each field must
+    appear EXACTLY ONCE in it - absent and duplicated both fail closed."""
     expected = {"model": model, "provider": "openai",
                 "reasoning effort": effort, "sandbox": "read-only"}
-    output = ANSI_ESCAPE.sub("", output or "")
+    block = header_block(output)
+    if block is None:
+        print("    grader route mismatch: no startup-header block found")
+        return False
     header = {}
     for key in expected:
-        m = re.search(rf"(?m)^{key}: (.+)$", output or "")
-        header[key] = m.group(1).strip() if m else ""
+        found = re.findall(rf"(?m)^{key}: (.+)$", block)
+        header[key] = found[0].strip() if len(found) == 1 else ""
     ok = all(header[key] == want for key, want in expected.items())
     if not ok:
         print(f"    grader route mismatch: header={header};"

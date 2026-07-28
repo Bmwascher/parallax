@@ -666,6 +666,61 @@ class TestEvalFixtures:
             "stripping colour must not stop a wrong model failing closed"
         )
 
+    def test_a_payload_line_cannot_supply_a_missing_route_field(self):
+        # The grader prompt EMBEDS the executor's transcript, so any line the
+        # agent wrote reaches the searched output. Searching the whole output
+        # per field meant a field codex OMITTED could be satisfied from the
+        # echoed body - and once escapes were stripped globally, a line that
+        # was not header-shaped became one. Both are worse than the colour
+        # bug they came with. Found by the cross-vendor lane inside that fix.
+        mod = self._load_runner()
+        notes = read(REFERENCES / "model-prompting-notes.md")
+        canonical = re.search(r"Canonical model id: `([^`\n]+)`",
+                              notes).group(1)
+        # A header block with the model line MISSING, then a payload that
+        # supplies it after the block closes.
+        no_model = (
+            "OpenAI Codex v0.144.1\n--------\n"
+            "workdir: C:\\repo\n"
+            "provider: openai\n"
+            "sandbox: read-only\n"
+            "reasoning effort: high\n--------\n"
+            "user\n"
+            f"model: {canonical}\n"
+        )
+        assert not mod.effective_route_ok(no_model, canonical, "high"), (
+            "an omitted header field must not be suppliable from the body"
+        )
+        # A line that becomes header-shaped ONLY after stripping.
+        strip_made = (
+            "OpenAI Codex v0.144.1\n--------\n"
+            "workdir: C:\\repo\n"
+            "provider: openai\n"
+            "sandbox: read-only\n"
+            "reasoning effort: high\n--------\n"
+            f"mo\x1b[31mdel: {canonical}\n"
+        )
+        assert not mod.effective_route_ok(strip_made, canonical, "high"), (
+            "stripping must not manufacture a header line"
+        )
+        # A duplicated field inside the block is ambiguous, not a pass.
+        dupe = (
+            "OpenAI Codex v0.144.1\n--------\n"
+            f"model: {canonical}\n"
+            f"model: {canonical}-decoy\n"
+            "provider: openai\n"
+            "sandbox: read-only\n"
+            "reasoning effort: high\n--------\n"
+        )
+        assert not mod.effective_route_ok(dupe, canonical, "high"), (
+            "two values for one field must fail closed, not take the first"
+        )
+        # No header block at all fails closed rather than reading empty.
+        assert not mod.effective_route_ok(
+            f"model: {canonical}\nprovider: openai\n", canonical, "high"), (
+            "a missing header block must fail closed"
+        )
+
     def test_force_color_is_stripped_from_the_grader_env(self):
         # Belt and braces on the input side of the same defect.
         mod = self._load_runner()
