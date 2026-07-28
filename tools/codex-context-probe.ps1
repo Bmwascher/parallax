@@ -100,11 +100,16 @@ function Get-SkillReport($text) {
             # merely mentions `(file: `, since skill descriptions are free
             # text. Mode-diff round 3, 2026-07-28.
             $rx = [regex]'^- ([A-Za-z0-9_:-]+):.*\(file: (.+)\)[ \t]*$'
-            # A SECOND entry joined onto the same line is what actually
-            # needs catching: a close paren followed by another entry
-            # start. Without this the greedy prefix silently keeps only the
-            # last of the two.
-            $joined = [regex]'\)[ \t]+- [A-Za-z0-9_:-]+:'
+            # A SECOND entry joined onto the same line is what needs
+            # catching, and the detector must match a COMPLETE earlier
+            # entry - its own file marker ending in SKILL.md - followed by
+            # the next entry start. A bare close paren followed by
+            # bullet-like prose is not that: the description
+            # `Use when output is (done) - next: retry.` matched the
+            # earlier form and was marked malformed. Mode-diff round 4,
+            # 2026-07-28. The non-greedy `.*?` is what lets a path
+            # containing its own parentheses reach the SKILL.md anchor.
+            $joined = [regex]'(?i)\(file: .*?SKILL\.md\)[ \t]+- [A-Za-z0-9_:-]+:'
             # AUDIT EVERY ENTRY-LOOKING LINE. A line that fails the whole
             # grammar is otherwise dropped in silence, which makes the
             # FIRST measurement wrong, and no later suppression check
@@ -190,7 +195,22 @@ function Hide-KnownContainer($text) {
             $s = $masked.IndexOf($open, $from, [System.StringComparison]::Ordinal)
             if ($s -lt 0) { break }
             $bodyStart = $s + $open.Length
-            $e = $masked.IndexOf($close, $bodyStart, [System.StringComparison]::Ordinal)
+            if ($name -ceq "INSTRUCTIONS") {
+                # The LAST close, not the first. This is the one container
+                # carrying user-authored text, and a global AGENTS.md that
+                # QUOTES `</INSTRUCTIONS>` would otherwise end the masked
+                # span early, leaving the rest of the user's own file to be
+                # scanned as outer structure. There is one such container
+                # in the prompt, so its real close is the last occurrence,
+                # and over-masking a user-authored body is the safe
+                # direction: the guarantee is over OUTER blocks. Mode-diff
+                # round 4, 2026-07-28, as the closing-literal counterpart
+                # of round 3's opening-literal finding.
+                $e = $masked.LastIndexOf($close, [System.StringComparison]::Ordinal)
+                if ($e -lt $bodyStart) { $e = -1 }
+            } else {
+                $e = $masked.IndexOf($close, $bodyStart, [System.StringComparison]::Ordinal)
+            }
             if ($e -lt 0) {
                 # An unterminated known container STOPS the run. An earlier
                 # revision masked to end-of-prompt instead, which hid every
@@ -243,10 +263,19 @@ function Get-UnknownPromptBlock($text) {
     #
     # This runs on the MASKED text, so a known literal quoted inside a
     # user's own AGENTS.md body is already blanked and cannot reach here.
+    # NAME RECOGNITION IS CASE-INSENSITIVE, THE LITERAL ALLOWLIST IS NOT.
+    # The two must differ. With both case-sensitive,
+    # `<SKILLS_INSTRUCTIONS version="2">` matched neither this scan nor the
+    # exact parsers, and the general scan below then skipped it because
+    # PowerShell's `-contains` is case-INSENSITIVE and called the name
+    # known. Confirmed mechanically 2026-07-28, mode-diff round 4: for the
+    # list @("skills_instructions"), `-contains "SKILLS_INSTRUCTIONS"` is
+    # True while `-ccontains` is False. Recognizing the name loosely and
+    # then demanding the exact literal is what closes it.
     $knownOpen = @()
     foreach ($c in $script:KnownContainers) { $knownOpen += ("<" + $c + ">") }
     $names = ($script:KnownPromptBlocks | ForEach-Object { [regex]::Escape($_) }) -join "|"
-    $knownRx = [regex]("<(?:" + $names + ")\b[^>]*>")
+    $knownRx = [regex]("(?i)<(?:" + $names + ")\b[^>]*>")
     foreach ($m in $knownRx.Matches($masked)) {
         if ($knownOpen -ccontains $m.Value) { continue }
         throw [System.FormatException]::new(

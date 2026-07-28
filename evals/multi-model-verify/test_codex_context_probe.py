@@ -819,6 +819,80 @@ def test_a_description_mentioning_the_file_marker_is_not_malformed(tmp_path):
     )
 
 
+@pytest.mark.parametrize("pass_no", [1, 2])
+def test_a_case_variant_known_block_blocks(tmp_path, pass_no):
+    # Two rules disagreed about case. The anywhere scan was case-SENSITIVE
+    # and missed `<SKILLS_INSTRUCTIONS version="2">`, while the general
+    # scan skipped it because PowerShell's `-contains` is
+    # case-INSENSITIVE and called the name known. Confirmed mechanically
+    # 2026-07-28: for @("skills_instructions"), `-contains
+    # "SKILLS_INSTRUCTIONS"` is True and `-ccontains` is False. Name
+    # recognition is now loose and the literal allowlist is strict.
+    variant = tmp_path / f"case-{pass_no}.json"
+    doc = json.loads((FIXTURES / "flagged.json").read_text(encoding="utf-8"))
+    doc[0]["content"][0]["text"] = doc[0]["content"][0]["text"].replace(
+        "<skills_instructions>", '<SKILLS_INSTRUCTIONS version="2">', 1)
+    variant.write_text(json.dumps(doc), encoding="utf-8")
+    if pass_no == 1:
+        proc = probe_with(tmp_path, variant)
+    else:
+        proc = probe_with(tmp_path, FIXTURES / "flagged.json", variant)
+    assert proc.returncode == 1, proc.stdout
+    assert "exact form this parser reads" in json.loads(proc.stdout)["reason"]
+
+
+def test_a_quoted_closing_marker_in_the_global_body_does_not_block(tmp_path):
+    # The closing-literal counterpart of the opening-literal finding. A
+    # global AGENTS.md that QUOTES `</INSTRUCTIONS>` ended the masked span
+    # early, leaving the rest of the user's own file to be scanned as
+    # outer structure - and the paired tag after it then blocked a
+    # legitimate review. Mode-diff round 4, 2026-07-28.
+    fixture = tmp_path / "quoted-close.json"
+    doc = json.loads((FIXTURES / "flagged.json").read_text(encoding="utf-8"))
+    doc[0]["content"][0]["text"] = doc[0]["content"][0]["text"].replace(
+        "<INSTRUCTIONS>",
+        "<INSTRUCTIONS>\nHouse rule: never write `</INSTRUCTIONS>` by"
+        " hand.\n<role>reviewer</role>\n", 1)
+    fixture.write_text(json.dumps(doc), encoding="utf-8")
+    proc = probe_with(tmp_path, fixture, FIXTURES / "suppressed.json")
+    assert proc.returncode == 0, proc.stdout
+
+
+def test_a_description_with_a_paren_then_a_dash_is_not_malformed(tmp_path):
+    # The joined-entry detector matched any close paren followed by
+    # bullet-like prose, so `Use when output is (done) - next: retry.`
+    # was marked malformed. It must match a COMPLETE earlier entry.
+    fixture = tmp_path / "dashy.json"
+    doc = json.loads((FIXTURES / "flagged.json").read_text(encoding="utf-8"))
+    doc[0]["content"][0]["text"] = doc[0]["content"][0]["text"].replace(
+        "- userskill3: A fixture skill for tests.",
+        "- userskill3: Use when output is (done) - next: retry.", 1)
+    fixture.write_text(json.dumps(doc), encoding="utf-8")
+    proc = probe_with(tmp_path, fixture, FIXTURES / "suppressed.json")
+    assert proc.returncode == 0, proc.stdout
+    raw = (tmp_path / "o.txt").read_text(encoding="utf-8")
+    assert "C:/fixture/home/.agents/skills/u3/SKILL.md" in raw
+
+
+def test_a_joined_entry_whose_path_has_parentheses_still_blocks(tmp_path):
+    # And the narrowed detector must still catch the real shape, including
+    # when the first entry's path carries its own parentheses - which is
+    # why the marker match is non-greedy up to the SKILL.md anchor.
+    fixture = tmp_path / "joined-parens.json"
+    doc = json.loads((FIXTURES / "flagged.json").read_text(encoding="utf-8"))
+    doc[0]["content"][0]["text"] = doc[0]["content"][0]["text"].replace(
+        "- userskill4: A fixture skill for tests."
+        " (file: C:/fixture/home/.agents/skills/u4/SKILL.md)",
+        "- userskill4: A fixture skill for tests."
+        " (file: C:/Program Files (x86)/skills/u4/SKILL.md)"
+        " - userskill4b: Another."
+        " (file: C:/fixture/home/.agents/skills/u4b/SKILL.md)", 1)
+    fixture.write_text(json.dumps(doc), encoding="utf-8")
+    proc = probe_with(tmp_path, fixture)
+    assert proc.returncode == 1, proc.stdout
+    assert "whole entry grammar" in json.loads(proc.stdout)["reason"]
+
+
 def test_an_unterminated_known_container_blocks(tmp_path):
     # Masking an unclosed container to end-of-prompt hid every later block
     # from the unknown-surface scan, so one malformed container near the
