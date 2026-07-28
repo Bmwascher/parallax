@@ -75,9 +75,13 @@ def test_fable_panel_reviewer_exists_and_pins():
     # floor - deleted green. Pin-integrity instance twelve, and once
     # again inside a fix for an overclaim.
     nbody = _norm(p)
-    assert ("checks `claude --version` against the floor before "
-            "dispatching this seat") in nbody
-    assert "unavailable rather than degraded" in nbody
+    # 0.15.0: was two fragments; neither locked the reason, which is the
+    # sentence's whole point.
+    assert ("The driver checks `claude --version` against the floor "
+            "before dispatching this seat; below it, the Fable lane is "
+            "unavailable rather than degraded, because a silently "
+            "unpinned fully-tooled agent is not a weaker reviewer, it "
+            "is a different one.") in nbody
 
 
 def test_escalation_implementer_exists_and_pins():
@@ -131,9 +135,15 @@ def test_panels_reference_pins():
     # and pin the header string by a phrase that occurs exactly once.
     nbody = _norm(p)
     assert nbody.count("Harness floor: Claude Code 2.1.216") == 1
+    # 0.15.0: was two fragments. The coverage checker proved neither
+    # locked the routing half, which is the part that stops a quiet
+    # reduction to a smaller panel.
     assert ("Check `claude --version` before dispatching the Fable "
-            "lane") in nbody
-    assert "the lane is UNAVAILABLE, not degraded" in nbody
+            "lane; below the floor the lane is UNAVAILABLE, not "
+            "degraded, and the case routes to fallbacks.md's "
+            "`panel-lane-unavailable` - which, like every other lane "
+            "loss, stops at the consent gate rather than quietly "
+            "convening a smaller panel.") in nbody
     # I2: this file must not state class mechanics. The below-floor case
     # routes to the consent gate like every other lane loss; the earlier
     # wording claimed an automatic drop to remaining lanes, contradicting

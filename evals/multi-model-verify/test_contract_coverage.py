@@ -498,6 +498,8 @@ DECLARED_REGIONS = {
     "rotation-guard-detection",
     "rotation-guard-disposition",
     "rotation-guard-residual-gap",
+    "panel-floor-reference",
+    "panel-floor-agent",
 }
 
 
