@@ -61,7 +61,7 @@ Nothing else counts, and the rule matches a COMPLETE clause rather than
 looking for these shapes anywhere in the expression. A string locks
 nothing if it sits in a docstring, in an assertion's failure message,
 under `not`, in a `not in` comparison, on either side of an `or`, in a
-zero or negative count comparison, in a plain equality such as
+count comparison outside the positive bounds above, such as `== 0` or `>= 0`, in a plain equality such as
 `result == "text"`, in a regex such as `re.search(...)`, in either branch
 of a conditional, or is reached through a variable name. Any positive
 assertion outside the three forms above is rejected, whatever it means.
