@@ -124,6 +124,7 @@ tree, while every source that hijacked a review on 2026-07-28 lived on the
 reviewer's own machine. These tests lock the parser against recordings of
 the real CLI so a shape change is a red, never a silent empty result.
 """
+import hashlib
 import json
 import subprocess
 from pathlib import Path
@@ -194,6 +195,24 @@ def test_full_fixture_buckets_are_all_asserted():
     present, (total, repo, cache, home, unknown) = bucket_counts("full.json")
     assert present == "True"
     assert (total, repo, cache, home, unknown) == (60, 0, 31, 29, 0)
+
+
+def test_the_two_home_sources_are_counted_separately():
+    # The fixture contract fixes 24 user-directory entries and 5 built-in
+    # ones. Asserting only `home == 29` would let a 23/6 normalization
+    # pass, which round 2 of the plan debate pointed out.
+    out = run_functions(
+        f'$t = Get-PromptText (Get-Content -Raw "{(FIXTURES / "full.json").as_posix()}");'
+        ' $r = Get-SkillReport $t;'
+        ' $u = 0; $s = 0;'
+        ' foreach ($e in $r.Entries) {'
+        '   $p = $e.Path.Replace("\\","/");'
+        '   if ($p -like "*/.agents/skills/*") { $u += 1 }'
+        '   elseif ($p -like "*/.codex/skills/.system/*") { $s += 1 } };'
+        ' "{0} {1}" -f $u, $s'
+    )
+    user, builtin = (int(v) for v in out.split())
+    assert (user, builtin) == (24, 5)
 
 
 def test_flagged_fixture_has_no_cache_entries():
@@ -368,9 +387,15 @@ function Get-PromptText($raw) {
                 "prompt-input message has no content list")
         }
         foreach ($chunk in @($item.content)) {
-            if ($chunk.PSObject.Properties.Name -contains "text") {
-                [void]$parts.Add([string]$chunk.text)
+            # A chunk with no text is NOT skipped. Skipping it would let an
+            # unknown chunk family carry instructions past this parser
+            # while one surviving text chunk kept the run looking clean.
+            # Round 2 of the plan debate found the earlier silent skip.
+            if ($chunk.PSObject.Properties.Name -notcontains "text") {
+                throw [System.FormatException]::new(
+                    "prompt-input carried a content chunk with no text field")
             }
+            [void]$parts.Add([string]$chunk.text)
         }
     }
     if ($parts.Count -eq 0) {
@@ -521,8 +546,9 @@ git commit -m "0.17.0: parse what the reviewer receives, and classify it by sour
 
 **Interfaces:**
 - Consumes: every function from Task 1.
-- Produces: the script's command-line contract. `-WorkDir <dir> [-SuppressSkills] [-OverrideOut <file>] [-Json] [-CodexCommand <path>]`, exit 0/1/2, and on `-Json` a single JSON object on stdout with keys `status`, `reason`, `skills_before`, `skills_after`, `repo_scoped`, `plugin_cache_scoped`, `home_scoped`, `unknown_scoped`, `global_agents_md`, `project_agents_md`, `override_file`.
-- `-OverrideOut` writes the EXACT `skills.config` value the second pass verified. That file is the dispatch's input; nothing else may construct one.
+- Produces: the script's command-line contract. `-WorkDir <dir> [-SuppressSkills -OverrideOut <file>] [-Json] [-CodexCommand <path>]`, exit 0/1/2, and on `-Json` a single JSON object on stdout with keys `status`, `reason`, `skills_before`, `skills_after`, `repo_scoped`, `plugin_cache_scoped`, `home_scoped`, `unknown_scoped`, `global_agents_md`, `project_agents_md`, `override_file`, `override_sha256`.
+- `-OverrideOut` is REQUIRED whenever `-SuppressSkills` is given, and writes the EXACT bytes of the `skills.config` value the second pass verified, with no trailing terminator. That file is the dispatch's input; nothing else may construct one. `-SuppressSkills` without it blocks, because it would verify a configuration nothing can dispatch.
+- `override_sha256` is the SHA-256 of those bytes. The dispatch preamble reads the file once, checks the hash, and passes the same in-memory value to `codex exec`.
 
 - [ ] **Step 1: Write the stub codex CLI**
 
@@ -539,7 +565,10 @@ Create `evals/multi-model-verify/fixtures/stub-codex/stub-codex.ps1`:
 # PARALLAX_STUB_EXIT     - exit code to return instead of 0
 param()
 $log = $env:PARALLAX_STUB_LOG
-if ($log) { Add-Content -Path $log -Value ($args -join " ") }
+# One JSON array per call, so a test can pull the EXACT -c value back out.
+# Joining with spaces flattened the argument boundaries, which let a
+# substring match stand in for byte identity.
+if ($log) { Add-Content -Path $log -Value (ConvertTo-Json @($args) -Compress) }
 if ($env:PARALLAX_STUB_EXIT) { exit [int]$env:PARALLAX_STUB_EXIT }
 $calls = 0
 if ($log -and (Test-Path $log)) {
@@ -726,14 +755,56 @@ def test_the_verified_override_is_written_out_for_the_dispatch(tmp_path):
          "-OverrideOut", str(out), "-CodexCommand", str(STUB)],
         capture_output=True, text=True, env=env)
     assert proc.returncode == 0, proc.stdout
-    written = out.read_text(encoding="utf-8").strip()
-    assert written.startswith("skills.config=[")
-    assert written.count("enabled=false") == 29
-    # The value written out is byte-identical to the one the second pass
-    # was actually run with.
-    second_call = log.read_text().splitlines()[1]
-    assert written in second_call
-    assert json.loads(proc.stdout)["override_file"] == str(out)
+    raw = out.read_bytes()
+    assert raw.startswith(b"skills.config=[")
+    assert raw.count(b"enabled=false") == 29
+    assert not raw.endswith(b"\n"), (
+        "no trailing terminator: the second pass was run with the string,"
+        " not with the string plus a line ending"
+    )
+    # BYTE identity against a structured capture of the second call's
+    # arguments, not a substring match on a flattened log line.
+    second_call = json.loads(log.read_text().splitlines()[1])
+    passed = second_call[second_call.index("-c") + 1]
+    assert passed.encode("ascii") == raw
+
+    report = json.loads(proc.stdout)
+    assert report["override_file"] == str(out)
+    assert report["override_sha256"] == hashlib.sha256(raw).hexdigest()
+
+
+def test_suppress_without_an_override_target_blocks(tmp_path):
+    # Verifying a configuration nothing can dispatch measures nothing.
+    env = dict(os.environ)
+    env["PARALLAX_STUB_FIXTURE"] = str(FIXTURES / "flagged.json")
+    env["PARALLAX_STUB_FIXTURE2"] = str(FIXTURES / "suppressed.json")
+    env["PARALLAX_STUB_LOG"] = str(tmp_path / "calls.log")
+    proc = subprocess.run(
+        [ps_host(), "-NoProfile", "-NonInteractive", "-File", str(PROBE),
+         "-WorkDir", str(tmp_path), "-Json", "-SuppressSkills",
+         "-CodexCommand", str(STUB)],
+        capture_output=True, text=True, env=env)
+    assert proc.returncode == 1
+    assert "OverrideOut" in proc.stdout
+
+
+def test_a_content_chunk_without_text_blocks(tmp_path):
+    # An unknown chunk family must not be discarded just because one valid
+    # text chunk survives beside it.
+    fixture = tmp_path / "odd-chunk.json"
+    doc = json.loads((FIXTURES / "flagged.json").read_text(encoding="utf-8"))
+    doc[0]["content"].append({"type": "input_image", "image_url": "x"})
+    fixture.write_text(json.dumps(doc), encoding="utf-8")
+    env = dict(os.environ)
+    env["PARALLAX_STUB_FIXTURE"] = str(fixture)
+    env["PARALLAX_STUB_LOG"] = str(tmp_path / "calls.log")
+    proc = subprocess.run(
+        [ps_host(), "-NoProfile", "-NonInteractive", "-File", str(PROBE),
+         "-WorkDir", str(tmp_path), "-Json", "-SuppressSkills",
+         "-OverrideOut", str(tmp_path / "o.txt"), "-CodexCommand", str(STUB)],
+        capture_output=True, text=True, env=env)
+    assert proc.returncode == 1
+    assert "no text field" in proc.stdout
 
 
 def test_the_global_agents_md_is_recorded_not_blocked(tmp_path):
@@ -747,15 +818,9 @@ def test_the_global_agents_md_is_recorded_not_blocked(tmp_path):
     )
 ```
 
-Define `RECORDED_REPO_DIR` near the top of the module, as the working
-directory the `repo-agents.json` fixture was recorded from. Read it from a
-sidecar written at record time rather than hard-coding a path:
-
-```python
-RECORDED_REPO_DIR = (FIXTURES / "repo-agents.workdir").read_text().strip()
-```
-
-Write that sidecar in Task 1 Step 1 with the scratch repo's absolute path.
+There is no recorded-workdir sidecar and no module-level absolute path.
+Every test that needs a repo-scoped fixture calls `localized()`, which
+rewrites the fabricated `C:/fixture/repo` to that test's own `tmp_path`.
 
 - [ ] **Step 3: Run the tests to verify they fail**
 
@@ -875,6 +940,7 @@ if ($cacheScoped.Count -gt 0) {
 $before = $skills.Entries.Count
 $after = $before
 $overridePath = ""
+$overrideHash = ""
 if ($SuppressSkills) {
     $override = New-SkillDisableOverride $skills.Entries
     $pass2 = Invoke-PromptInput $CodexCommand $WorkDir $override
@@ -902,13 +968,24 @@ if ($SuppressSkills) {
         Write-Blocked ("the reviewer still advertises " + $after +
             " skill(s) after suppression; the declared residue is empty") $Json
     }
-    if ($OverrideOut) {
-        # THE HANDOFF. The dispatch must carry this exact value. A probe
-        # that verifies a configuration the reviewer never receives has
-        # measured nothing.
-        Set-Content -LiteralPath $OverrideOut -Value $override -Encoding ASCII
-        $overridePath = (Resolve-Path $OverrideOut).Path
+    if (-not $OverrideOut) {
+        Write-Blocked ("-SuppressSkills without -OverrideOut verifies a" +
+            " configuration nothing can dispatch") $Json
     }
+    # THE HANDOFF. The dispatch must carry this exact value. A probe that
+    # verifies a configuration the reviewer never receives has measured
+    # nothing.
+    #
+    # EXACT BYTES, no terminator. `Set-Content -Value` appends a line
+    # ending, so the file would differ from the string the second pass was
+    # actually run with, and the earlier test hid that with .strip().
+    # Round 2 of the plan debate found it.
+    $bytes = [System.Text.Encoding]::ASCII.GetBytes($override)
+    [System.IO.File]::WriteAllBytes($OverrideOut, $bytes)
+    $overridePath = (Resolve-Path $OverrideOut).Path
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    $overrideHash = ([System.BitConverter]::ToString(
+        $sha.ComputeHash($bytes)) -replace '-', '').ToLower()
 }
 
 $report = @{
@@ -923,6 +1000,7 @@ $report = @{
     global_agents_md = $instructions.BlockPresent
     project_agents_md = $instructions.ProjectDoc
     override_file = $overridePath
+    override_sha256 = $overrideHash
 }
 if ($Json) {
     Write-Output (ConvertTo-Json $report -Compress)
@@ -963,7 +1041,8 @@ git commit -m "0.17.0: require a measured zero, and block every other direction"
 
 **Interfaces:**
 - Consumes: `tools/codex-context-probe.ps1` by path, invoked as a child process with `-WorkDir <mirror> -SuppressSkills -Json`.
-- Produces: `-RepoRoot <dir> -MirrorPath <dir> [-Force] [-SkipProbe] [-CodexCommand <path>]`, exit 0/1/2, and a record block on stdout with the labelled lines `mirror:`, `head:`, `baseline:`, `manifest:`, `probe:`.
+- Produces: `-RepoRoot <dir> -MirrorPath <dir> [-OverrideOut <file>] [-Force] [-SkipProbe] [-CodexCommand <path>]`, exit 0/1/2, and a record block on stdout with the labelled lines `mirror:`, `head:`, `baseline:`, `manifest:`, `probe:`, `override:`.
+- `-OverrideOut` defaults to `<MirrorPath>.skills-override.txt`. The script refuses an existing one, for the same reason it refuses an existing mirror.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1088,6 +1167,41 @@ def test_a_nested_agents_md_is_found(tmp_path):
     assert list(mirror.rglob("AGENTS.md")) == [], (
         "a root-only check misses a nested drop"
     )
+
+
+def make_clean_repo(tmp_path):
+    """A repo with NOTHING for the baseline to carry: no back-channels, no
+    untracked files, no ignored files. The ordinary case, and the one an
+    empty-array return would have misread as an enumeration failure."""
+    repo = tmp_path / "clean"
+    repo.mkdir()
+    git(repo.parent, "init", "-q", str(repo))
+    (repo / "only.txt").write_text("tracked\n")
+    git(repo, "add", "only.txt")
+    git(repo, "-c", "user.email=t@t", "-c", "user.name=t",
+        "commit", "-q", "-m", "base")
+    return repo
+
+
+def test_a_clean_repo_is_not_read_as_a_failed_enumeration(tmp_path):
+    # PowerShell unrolls an empty array returned from a function, so the
+    # caller's variable becomes $null and a clean repo looks exactly like a
+    # git failure. Round 2 of the plan debate found both call sites.
+    repo = make_clean_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    proc = run_mirror(repo, mirror)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "could not enumerate" not in proc.stdout
+
+
+def test_an_empty_baseline_is_a_legitimate_state(tmp_path):
+    repo = make_clean_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    proc = run_mirror(repo, mirror)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert read_block(proc.stdout, "baseline:") == []
+    assert read_block(proc.stdout, "manifest:") == []
+    assert "baseline capture failed" not in proc.stdout
 
 
 def test_a_gitignored_back_channel_is_found_and_removed(tmp_path):
@@ -1280,17 +1394,27 @@ Create `tools/new-review-mirror.ps1`:
 param(
     [Parameter(Mandatory = $true)][string]$RepoRoot,
     [Parameter(Mandatory = $true)][string]$MirrorPath,
+    [string]$OverrideOut,
     [switch]$Force,
     [switch]$SkipProbe,
     [string]$CodexCommand = "codex"
 )
 
 function Get-BackChannelEntry($repo) {
-    # One listing covering tracked, untracked AND ignored files at any
-    # depth. A root-only or tracked-only check misses a nested drop.
+    # One listing covering tracked, untracked AND ignored files. `--others`
+    # without `--exclude-standard` includes ignored paths. `*AGENTS.md`
+    # reaches any depth; `.agents/*` is anchored at the repo ROOT and does
+    # NOT, which is the asymmetry recorded in SKILL.md's
+    # enumeration-depth-asymmetry region. Do not restate "at any depth"
+    # here: round 2 of the plan debate caught this comment reintroducing
+    # the very claim the contract edit was correcting.
+    #
+    # Returns @{Ok=..; Entries=..}. A function returning a bare @() has its
+    # empty array unrolled by PowerShell, so the caller's variable becomes
+    # $null and a CLEAN repo reads exactly like a FAILED enumeration.
     $out = & git -C $repo ls-files --cached --others '*AGENTS.md' '.agents/*' 2>$null
-    if ($LASTEXITCODE -ne 0) { return $null }
-    return @($out | Where-Object { $_ })
+    if ($LASTEXITCODE -ne 0) { return @{ Ok = $false; Entries = @() } }
+    return @{ Ok = $true; Entries = @($out | Where-Object { $_ }) }
 }
 
 function Test-Tracked($repo, $path) {
@@ -1310,9 +1434,13 @@ function Get-BaselineRaw($repo) {
     # revision printed stripped paths under the label `baseline`, which
     # would have put something else into the debate record under a name
     # the contract already defines.
+    #
+    # Same structured shape and same reason as Get-BackChannelEntry: an
+    # empty baseline is a legitimate state, and a bare @() return would be
+    # indistinguishable from a failed capture.
     $lines = & git -C $repo status --porcelain --ignored -uall 2>$null
-    if ($LASTEXITCODE -ne 0) { return $null }
-    return @($lines | Where-Object { $_ })
+    if ($LASTEXITCODE -ne 0) { return @{ Ok = $false; Lines = @() } }
+    return @{ Ok = $true; Lines = @($lines | Where-Object { $_ }) }
 }
 
 function Get-ManifestSubject($baselineRaw) {
@@ -1436,11 +1564,12 @@ if ($LASTEXITCODE -ge 8) {
     exit 2
 }
 
-$entries = Get-BackChannelEntry $MirrorPath
-if ($null -eq $entries) {
+$found = Get-BackChannelEntry $MirrorPath
+if (-not $found.Ok) {
     Write-Output "ERROR: could not enumerate back-channels in the mirror"
     exit 2
 }
+$entries = $found.Entries
 $trackedCount = 0
 foreach ($entry in $entries) {
     if (Test-Tracked $MirrorPath $entry) { $trackedCount++ }
@@ -1461,13 +1590,13 @@ if ($trackedCount -gt 0) {
 }
 
 $after = Get-BackChannelEntry $MirrorPath
-if ($null -eq $after) {
+if (-not $after.Ok) {
     Write-Output "ERROR: could not re-enumerate back-channels in the mirror"
     exit 2
 }
-if ($after.Count -gt 0) {
+if ($after.Entries.Count -gt 0) {
     Write-Output ("BLOCKED: back-channel(s) survived remediation: " +
-        ($after -join "; "))
+        ($after.Entries -join "; "))
     exit 1
 }
 
@@ -1477,13 +1606,14 @@ if (($LASTEXITCODE -ne 0) -or -not $head) {
         " mirror's identity in the debate record would be blank")
     exit 1
 }
-$baseline = Get-BaselineRaw $MirrorPath
-if ($null -eq $baseline) {
-    Write-Output ("BLOCKED: the baseline capture failed. An empty baseline" +
+$captured = Get-BaselineRaw $MirrorPath
+if (-not $captured.Ok) {
+    Write-Output ("BLOCKED: the baseline capture failed. A failed capture" +
         " printed as success would quarantine every round of the review" +
         " that follows, or absorb changes it should have caught.")
     exit 1
 }
+$baseline = $captured.Lines
 $subjects = Get-ManifestSubject $baseline
 if ($subjects.ContainsKey("Error")) {
     Write-Output ("BLOCKED: " + $subjects.Error)
@@ -1497,16 +1627,31 @@ if ($manifestResult.ContainsKey("Error")) {
 $manifest = $manifestResult.Paths
 
 $probeLine = "skipped"
+$overrideFile = ""
 if (-not $SkipProbe) {
+    # -OverrideOut is not optional here. The probe's verified value IS the
+    # dispatch's input, so a mirror built without it leaves the transport
+    # with a file that does not exist. Round 2 of the plan debate found
+    # both documented preflight paths calling the probe without it.
+    if (-not $OverrideOut) {
+        $OverrideOut = Join-Path (Split-Path $MirrorPath -Parent) `
+            ((Split-Path $MirrorPath -Leaf) + ".skills-override.txt")
+    }
+    if (Test-Path $OverrideOut) {
+        Write-Output ("ERROR: $OverrideOut already exists - a stale" +
+            " override reads exactly like a fresh one")
+        exit 2
+    }
     $probeScript = Join-Path (Split-Path $PSCommandPath -Parent) "codex-context-probe.ps1"
     $probeOut = & powershell -NoProfile -File $probeScript -WorkDir $MirrorPath `
-        -SuppressSkills -Json -CodexCommand $CodexCommand
+        -SuppressSkills -OverrideOut $OverrideOut -Json -CodexCommand $CodexCommand
     if ($LASTEXITCODE -ne 0) {
         Write-Output ("BLOCKED: the client context probe did not pass: " +
             ($probeOut | Out-String).Trim())
         exit 1
     }
     $probeLine = ($probeOut | Out-String).Trim()
+    $overrideFile = $OverrideOut
 }
 
 Write-Output ("mirror: " + $MirrorPath)
@@ -1516,6 +1661,7 @@ foreach ($b in $baseline) { Write-Output ("  " + $b) }
 Write-Output "manifest:"
 foreach ($m in $manifest) { Write-Output ("  " + $m) }
 Write-Output ("probe: " + $probeLine)
+Write-Output ("override: " + $overrideFile)
 exit 0
 ```
 
@@ -1580,9 +1726,18 @@ Add to the transport class in `test_multi_model_verify.py`:
         # configuration the reviewer never receives has measured nothing.
         # Found by the plan debate's round 1, 2026-07-28.
         text = read(SKILL_MD)
-        assert text.count("<verified-override-file>") >= 2, (
+        assert text.count("-c $override") >= 2, (
             "the VERIFIED override must ride both the dispatch and every"
             " resume, not only the probe's own second call"
+        )
+        assert "-OverrideOut <verified-override-file>" in text, (
+            "the preflight that produces the artifact must be the one the"
+            " transport consumes; an -OverrideOut nobody passes leaves the"
+            " dispatch reading a file that was never written"
+        )
+        assert "<override-sha256>" in text, (
+            "an unhashed scratch file is mutable between the probe and the"
+            " dispatch"
         )
 
     def test_the_plugin_cache_is_no_longer_called_harmless(self):
@@ -1605,23 +1760,35 @@ Add to the transport class in `test_multi_model_verify.py`:
 - [ ] **Step 2: Run to verify they fail**
 
 Run: `python -m pytest evals/multi-model-verify/test_multi_model_verify.py -q`
-Expected: FAIL, three tests.
+Expected: FAIL, four tests.
 
 - [ ] **Step 3: Add the flags to both transport commands**
 
-`<verified-override-file>` is the file the probe wrote with `-OverrideOut`.
-It is read at dispatch time, never retyped and never rebuilt.
+`<verified-override-file>` is the file the probe wrote with `-OverrideOut`,
+and `<override-sha256>` is the hash the probe reported for it. The
+dispatch preamble reads the file ONCE, checks the hash, and passes that
+same in-memory value to `codex exec`:
+
+```powershell
+$override = [System.IO.File]::ReadAllText("<verified-override-file>")
+$seen = ([System.BitConverter]::ToString(([System.Security.Cryptography.SHA256]::Create()).ComputeHash([System.Text.Encoding]::ASCII.GetBytes($override))) -replace '-', '').ToLower()
+if ($seen -cne "<override-sha256>") { throw "the override file changed after the probe verified it" }
+```
+
+The hash check is what makes the file an artifact rather than a mutable
+scratch note: without it, anything that edited the file between the probe
+and the dispatch would silently change what the reviewer receives.
 
 In `skills/multi-model-verify/SKILL.md`, mode plan step 2:
 
 ```powershell
-Get-Content -Raw <brief-file> | codex exec --sandbox read-only --disable plugins --disable apps -c "$(Get-Content -Raw <verified-override-file>)" -m <canonical-model-id> -c model_reasoning_effort=<canonical-effort> --output-last-message <reply-file> - > <transcript-file> 2>&1
+Get-Content -Raw <brief-file> | codex exec --sandbox read-only --disable plugins --disable apps -c $override -m <canonical-model-id> -c model_reasoning_effort=<canonical-effort> --output-last-message <reply-file> - > <transcript-file> 2>&1
 ```
 
 and step 3:
 
 ```powershell
-codex exec --sandbox read-only --disable plugins --disable apps -c "$(Get-Content -Raw <verified-override-file>)" -m <canonical-model-id> -c model_reasoning_effort=<canonical-effort> --output-last-message <reply-file> resume <SESSION_ID> "<rebuttal-brief>" > <transcript-file> 2>&1
+codex exec --sandbox read-only --disable plugins --disable apps -c $override -m <canonical-model-id> -c model_reasoning_effort=<canonical-effort> --output-last-message <reply-file> resume <SESSION_ID> "<rebuttal-brief>" > <transcript-file> 2>&1
 ```
 
 Add the contract region that states why, immediately below the dispatch block:
@@ -1647,8 +1814,7 @@ and the override between them:
 ```python
         assert re.search(
             r"codex exec --sandbox read-only --disable plugins"
-            r" --disable apps -c \"\$\(Get-Content -Raw"
-            r" <verified-override-file>\)\" -m <canonical-model-id>"
+            r" --disable apps -c \$override -m <canonical-model-id>"
             r" -c model_reasoning_effort=<canonical-effort>"
             r" [^\n]*resume <SESSION_ID>", text
         ), (
@@ -1666,8 +1832,9 @@ Replace the paragraph beginning `Files above the repo's git root are NOT ingeste
 
    **The reviewer's own machine is the second half of this check, and the
    enumeration above cannot see it.** Run
-   `tools/codex-context-probe.ps1 -WorkDir <dispatch cwd> -SuppressSkills`
-   before round 1. It renders the model-visible prompt with
+   `tools/codex-context-probe.ps1 -WorkDir <dispatch cwd> -SuppressSkills -OverrideOut <verified-override-file> -Json`
+   before round 1, with a FRESH scratch path for the override file. It
+   renders the model-visible prompt with
    `codex debug prompt-input`, which spends no tokens, and sorts every
    instruction source it reveals: anything inside the reviewed tree STOPS
    and is remediated in the mirror, anything from the codex plugin cache
@@ -1768,8 +1935,8 @@ git commit -m "0.17.0: isolate the reviewer's client, and stop calling the cache
 - Modify: `skills/multi-model-verify/references/backup-lane.md`
 
 **Interfaces:**
-- Consumes: the two region ids created in Task 4.
-- Produces: `DECLARED_REGIONS` entries `client-context-probe`, `plugin-cache-reclassified`, `brief-scope-guard`.
+- Consumes: the four region ids created in Task 4 (`client-context-probe`, `plugin-cache-reclassified`, `verified-override-dispatch`, `enumeration-depth-asymmetry`).
+- Produces: five `DECLARED_REGIONS` entries, those four plus `brief-scope-guard`, each locked by a whole-body pin.
 
 - [ ] **Step 1: Add the scope-guard region to the notes**
 
@@ -1920,10 +2087,10 @@ Run:
 powershell -NoProfile -File <plugin-root>/tools/codex-context-probe.ps1 -WorkDir . -SuppressSkills -Json
 ```
 
-Report the three buckets and the two instruction flags from the JSON.
-PASS is exit 0 with `plugin_cache_scoped` 0, `repo_scoped` 0 and
-`skills_after` 0. Report `global_agents_md` as an environment note with
-its path, never as a failure: nothing available removes it.
+Report all four skill buckets and the two instruction flags from the JSON.
+PASS is exit 0 with `repo_scoped`, `plugin_cache_scoped`, `unknown_scoped`
+and `skills_after` all 0. Report `global_agents_md` as an environment note
+with its path, never as a failure: nothing available removes it.
 
 A non-zero exit here is a real finding. It means a review dispatched from
 this machine right now would carry instruction sources the gate is
@@ -2018,12 +2185,12 @@ git commit -m "0.17.0: report the isolation in doctor, and gate both hosts in CI
 
 - Baseline before Task 1: `284 passed, 1 skipped`.
 - The fixtures are synthetic and their counts are fixed by hand: 60 total,
-  31 plugin-cache, 29 home (24 from the user's skills directory plus 5
-  built-in, which the classifier does not separate), 0 repo, 0 unknown.
-  Every one of those is asserted, not just the total, so a re-normalization
-  that moves entries between buckets while keeping the total cannot pass
-  unchanged. If a fixture is rebuilt, update the assertions in the same
-  commit. Do not weaken an assertion to tolerate both.
+  31 plugin-cache, 29 home, 0 repo, 0 unknown, and the home 29 splits 24
+  user-directory to 5 built-in. Every one of those, the split included, is
+  asserted. A re-normalization that moves entries between buckets, or
+  between the two home prefixes, cannot pass unchanged. If a fixture is
+  rebuilt, update the assertions in the same commit. Do not weaken an
+  assertion to tolerate both.
 - The live numbers from the author's machine on 2026-07-28 (60 by default,
   29 with the flags, 0 after the override, 32069 to 8130 characters) live
   in the design document only. They are provenance, not test inputs.

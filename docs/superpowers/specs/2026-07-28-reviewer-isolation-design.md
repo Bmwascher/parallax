@@ -4,7 +4,7 @@ Date: 2026-07-28
 Backlog item: 4 of 6 (docs/superpowers/plans/2026-07-27-0150-backlog.md)
 Target release: 0.17.0
 
-**Revision 3.** One round of cross-vendor plan debate so far. Every number in
+**Revision 4.** Two rounds of cross-vendor plan debate so far. Every number in
 this document was measured on 2026-07-28 against codex-cli 0.144.1 on the
 author's Windows machine, with the commands recorded inline so each claim
 can be re-run rather than believed.
@@ -196,8 +196,12 @@ remaining skills, built-in ones included, and removed the whole
 the empty set, and any advertised skill at all blocks the round.
 
 **The verified override is the dispatched override.** The value the second
-pass proved empty is written out as an artifact, and the review dispatch
-carries that exact value on round 1 and on every resume. Without that, the
+pass proved empty is written out as an artifact — exact bytes, no trailing
+terminator, with its SHA-256 reported — and the review dispatch reads it
+once, checks the hash, and carries that same in-memory value on round 1
+and on every resume. `-OverrideOut` is required whenever suppression runs,
+and both documented preflight paths pass it, because an artifact nobody
+produces leaves the transport reading a file that was never written. Without that, the
 flags alone leave 29 of the original 60 skills in place and the probe
 verifies a configuration the reviewer never receives. The plan debate's
 round 1 found precisely that gap in revision 2 of this design, where the
@@ -277,6 +281,8 @@ reason the contract coverage checker forbids false coverage.
 | a skill source path cannot be placed in a bucket | transport failure | blocked; an unplaceable source is never a note |
 | second probe advertises any skill at all | transport failure | blocked |
 | the dispatch omits the verified override, or carries an unverified one | transport failure | blocked |
+| the override file's hash differs from the one the probe reported | transport failure | blocked |
+| a prompt content chunk carries no text field | transport failure | blocked, never discarded |
 | the mirror path equals, contains, or sits inside the repo | script error | exit 2 before anything is created or deleted |
 | the baseline or HEAD capture fails, or a baseline entry names no readable file | mirror construction | blocked, never a partial manifest |
 | repo-scoped entry survives remediation | mirror construction | blocked, never a review finding |
@@ -413,6 +419,21 @@ lane's own client surface beyond the `merge_all_available_skills` note
 already in backup-lane.md; and any change to what preflight 3 blocks.
 
 ## Revision history
+
+**Revision 4 (2026-07-28).** After round 2, which found defects inside
+round 1's fix — the fifth time in six rounds on this project that a fix
+has carried the next defect. The override artifact was specified but no
+documented path produced it, so the transport would have read a file that
+was never written. `Set-Content` appended a line ending, so the artifact
+was not byte-identical to the value the second pass ran with, and the test
+hid that with `.strip()` plus a substring match on a flattened argument
+log. Two PowerShell functions returned bare empty arrays, which the
+language unrolls to `$null`, so a CLEAN repo and an empty baseline both
+read as capture failures. `Get-PromptText` silently discarded any content
+chunk without a text field. The mirror script's own comment reintroduced
+the "at any depth" claim the contract edit had just corrected. Four pieces
+of task text were stale after revision 3's edits. The fixture contract
+fixed a 24/5 split that no assertion checked.
 
 **Revision 3 (2026-07-28).** After round 1 of the cross-vendor plan
 debate, which returned FIX on nine of fourteen claims. The decisive one:

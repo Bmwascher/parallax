@@ -1,0 +1,24 @@
+2026-07-28T17:57:47.579050Z ERROR codex_models_manager::cache: failed to load models cache: missing field `supports_reasoning_summaries` at line 86 column 5
+OpenAI Codex v0.144.1
+--------
+workdir: C:\Users\Brandon\Documents\parallax
+model: gpt-5.6-sol
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: none
+session id: 019fa9d0-b55b-7d82-8a08-803fdebfd8d3
+--------
+user
+Round 2. Evidence rules and verdict grammar as before.
+
+ACCEPTED, all nine FIXes. Each is now in the documents at HEAD of branch 0.17.0-reviewer-isolation. Re-read both files and check whether the fixes hold, and whether any of them introduced a new defect. This project's history says four of its last five review rounds found a defect INSIDE the previous round's fix, so treat "the fix is clean" as the claim under test.
+
+Your claim 4/5/12, the isolation handoff, was the decisive one and it was correct. Verified against my own plan text: the generated override existed only inside the probe's second call and the transport commands carried only the two feature flags, so the reviewer would have received all 29 home and built-in skills while the report said zero. What changed:
+
+- The probe gains `-OverrideOut <file>`, writing the exact value the second pass verified, and reports `override_file`.
+- Both transport commands now carry `-c "$(Get-Content -Raw <verified-override-file>)"`, dispatch and resume alike.
+- New contract region `verified-override-dispatch` states that a dispatch omitting the override, or carrying a value the probe did not verify, is a transport failure.
+- New test `test_the_verified_override_is_written_out_for_the_dispatch` asserts the written value is byte-identical to the one the second pass actually ran with, and `test_the_verified_override_is_what_gets_dispatched` pins the two occurrences in SKILL.md.
+- Note: this very debate round was dispatched with `--disable plugins --disable apps` plus the generated override, so 
