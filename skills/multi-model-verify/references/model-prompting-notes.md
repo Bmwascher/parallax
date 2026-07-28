@@ -197,19 +197,28 @@ Canonical reasoning effort: `high`
   preserved debate memory either way. NEVER `resume --last` — it grabs
   whatever codex session ran most recently, which may be a concurrent
   /codex:review, not your debate.
-- **Concurrency: safe across DISTINCT sessions, never within one.** This
-  lane's route evidence is the calling process's OWN startup header plus its
-  own `--output-last-message` file, so nothing shared is parsed and parallel
-  rounds cannot cross-contaminate each other's evidence. That is the
-  structural difference from the backup lane, whose evidence comes out of one
-  user-global log and therefore needs `tools/kimi-lane-lock.ps1`; no such
-  lock is needed here. Probed 2026-07-28 (codex-cli 0.144.1): three
-  simultaneous `codex exec` calls, plus a fourth review already running, each
-  returned its own distinct `session id:` with the canonical model and effort
-  and its own correct reply. What is NOT safe is resuming the SAME session id
-  twice at once — one conversation, one rollout, two writers — so run
-  parallel rounds as separate debates, never as two turns of one. Quota is
-  shared, which makes parallel rounds faster and not cheaper.
+- **Concurrency: safe across DISTINCT sessions THAT ALSO USE DISTINCT
+  FILES, never within one session.** This lane's route evidence is the
+  calling process's OWN startup header plus its OWN
+  `--output-last-message` file, so NO SHARED GLOBAL OUTPUT LOG is parsed
+  for route attribution — the structural difference from the backup lane,
+  whose evidence comes out of one user-global log and therefore needs
+  `tools/kimi-lane-lock.ps1`. No such lock is needed here. codex does still
+  share auth, config, session storage and quota; none of that is read as
+  evidence.
+  Distinct session ids are necessary and NOT sufficient. Each concurrent
+  invocation must also write to its own transcript and reply paths: the
+  round-numbered names the freshness rule requires are unique within a
+  debate and NOT across two debates running at once, so two callers using
+  `reply-r1.md` can truncate or overwrite each other and pair one session's
+  header with another session's reply. Probed 2026-07-28 (codex-cli
+  0.144.1) in exactly that distinct-path arrangement: three simultaneous
+  `codex exec` calls, plus a fourth review already running, each returned
+  its own `session id:` with the canonical model and effort and its own
+  correct reply. Resuming the SAME session id twice at once is never safe —
+  one conversation, one rollout, two writers — so run parallel rounds as
+  separate debates, never as two turns of one. Quota is shared, which makes
+  parallel rounds faster and not cheaper.
 - **Lost-rollout resume failure is deterministic with a stable
   signature**: probed 2026-07-24 (codex-cli 0.144.1): `codex exec
   --sandbox read-only -m gpt-5.6-sol -c model_reasoning_effort=low
