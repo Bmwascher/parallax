@@ -42,3 +42,49 @@ jobs:
         run: |
           python -m pip install --quiet pytest
           python -m pytest evals -q
+
+  # The PowerShell scripts under test behave DIFFERENTLY on the two hosts
+  # they support, and the difference is not cosmetic: `ConvertFrom-Json`
+  # returns an ISO-8601 stamp as a String on Windows PowerShell 5.1 and
+  # auto-converts it to a DateTime on PowerShell 7. 0.16.0 shipped a lane
+  # lock that read every lock as unusable on pwsh - no exclusion at all -
+  # while the author's local runs stayed green, because the suite picks
+  # powershell.exe when both are installed. The ubuntu job above found it,
+  # after release. This job is the other half: it runs the PowerShell-facing
+  # tests under BOTH interpreters, so a 5.1-only regression cannot ship
+  # either.
+  powershell-hosts:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Install pytest
+        run: python -m pip install --quiet pytest
+
+      # BOTH dual-host modules, not just the lock: the attestation scripts
+      # are driven by the pre-push hook through powershell.exe and by a
+      # pwsh-only machine through PowerShell 7, so they carry the same
+      # exposure. The hook tests are deliberately absent - hooks.json
+      # invokes the hook as `pwsh`, so another host would not match how it
+      # runs.
+      - name: PowerShell-facing tests under Windows PowerShell 5.1
+        env:
+          PARALLAX_PS_HOST: powershell.exe
+        run: >
+          python -m pytest
+          evals/multi-model-verify/test_kimi_lane_lock.py
+          evals/multi-model-verify/test_attestation.py -q
+
+      - name: PowerShell-facing tests under PowerShell 7
+        env:
+          PARALLAX_PS_HOST: pwsh.exe
+        run: >
+          python -m pytest
+          evals/multi-model-verify/test_kimi_lane_lock.py
+          evals/multi-model-verify/test_attestation.py -q

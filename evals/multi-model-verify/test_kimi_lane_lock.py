@@ -19,6 +19,7 @@ Runs wherever a PowerShell host exists: Windows powershell.exe or pwsh
 """
 
 import json
+import os
 import shutil
 import subprocess
 from datetime import datetime, timedelta, timezone
@@ -30,7 +31,20 @@ HERE = Path(__file__).resolve().parent
 PLUGIN_ROOT = HERE.parent.parent
 LOCK = PLUGIN_ROOT / "tools" / "kimi-lane-lock.ps1"
 
-POWERSHELL = shutil.which("powershell") or shutil.which("pwsh")
+# Windows PowerShell 5.1 and PowerShell 7 do NOT agree about this script's
+# input: `ConvertFrom-Json` returns an ISO-8601 stamp as a String on 5.1 and
+# auto-converts it to a DateTime on 7. A lock bug that only appears on one
+# host is therefore possible, and one shipped in 0.16.0 - every lock read as
+# unusable on pwsh while this suite stayed green locally, because it picks
+# powershell.exe when both are installed. PARALLAX_PS_HOST forces the other
+# one so both can be run before pushing, and the workflow's windows-latest
+# job runs this module under each interpreter so neither host can regress
+# unseen. `test_attestation.py` honours the same variable; the hook tests in
+# `test_multi_model_verify.py` deliberately do not, because hooks.json
+# invokes the hook as `pwsh` and testing another host would not match how it
+# runs.
+POWERSHELL = (os.environ.get("PARALLAX_PS_HOST")
+              or shutil.which("powershell") or shutil.which("pwsh"))
 
 pytestmark = pytest.mark.skipif(
     POWERSHELL is None, reason="no PowerShell host on PATH")
@@ -378,6 +392,45 @@ def test_a_stamp_that_is_not_a_string_is_breakable(tmp_path, stamp):
     assert r.stderr == "", "and it must not throw on the way"
     assert "E+308" not in r.stdout, (
         "the break notice must describe an unusable age, not print it")
+    holder = json.loads(p.read_text(encoding="ascii"))
+    assert holder["label"] == "debate-A"
+
+
+def test_a_well_formed_lock_never_reads_as_unusable(tmp_path):
+    # The direct statement of what broke on PowerShell 7: the script's OWN
+    # stamp came back from ConvertFrom-Json as a DateTime rather than a
+    # String, the string-or-unusable check rejected it, and every lock the
+    # script had just written read as infinitely old - so the lane held
+    # nothing. Whichever host runs this, a lock written a moment ago must
+    # report an age.
+    p = tmp_path / "k.lock"
+    assert run_lock(p, "-Acquire", "-Label", "debate-A").returncode == 0
+    s = run_lock(p)
+    assert "age unusable" not in s.stdout, (
+        "the script must be able to read a stamp it wrote itself"
+    )
+    assert "held" in s.stdout and "min" in s.stdout
+
+
+@pytest.mark.parametrize("stamp", [
+    "9999-12-31T23:59:59.9999999",
+    "0001-01-01T00:00:00",
+    "9999-12-31T23:59:59.9999999Z",
+])
+def test_a_stamp_at_the_type_extremes_is_breakable(tmp_path, stamp):
+    # PowerShell 7 hands these back as DateTime, and converting
+    # `DateTime.MaxValue` with Kind Local or Unspecified pushes the UTC
+    # equivalent out of range in any zone west of UTC - MinValue does the
+    # same east of it. An uncaught throw there is round 3's defect exactly:
+    # the age routine dies, the caller compares nothing against the
+    # threshold, and the lock reads "held 0 min" forever. Reproduced on both
+    # hosts before the guard.
+    p = tmp_path / "k.lock"
+    p.write_text(json.dumps({"label": "ghost", "stamp": stamp}),
+                 encoding="ascii")
+    r = run_lock(p, "-Acquire", "-Label", "debate-A", "-WaitSeconds", "0")
+    assert r.returncode == 0, "an out-of-range stamp must not hold the lane"
+    assert r.stderr == "", "and must not throw on the way"
     holder = json.loads(p.read_text(encoding="ascii"))
     assert holder["label"] == "debate-A"
 

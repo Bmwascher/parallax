@@ -13,6 +13,7 @@ Runs wherever a PowerShell host exists: Windows powershell.exe or pwsh
 
 import hashlib
 import json
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -24,7 +25,15 @@ PLUGIN_ROOT = HERE.parent.parent
 WRITE = PLUGIN_ROOT / "tools" / "write-attestation.ps1"
 VERIFY = PLUGIN_ROOT / "tools" / "verify-attestation.ps1"
 
-POWERSHELL = shutil.which("powershell") or shutil.which("pwsh")
+# Same selector as the lane-lock suite, and for the same reason: these
+# scripts run under whichever host the caller has. The pre-push hook invokes
+# the verifier through `powershell.exe`, while a machine with only
+# PowerShell 7 runs it there - and the two hosts do not agree about
+# `ConvertFrom-Json`, which is how 0.16.0 shipped a lane lock that read
+# every lock as unusable on pwsh. This file hard-selected `powershell` and
+# ignored the variable, so a "both hosts" run silently tested 5.1 twice.
+POWERSHELL = (os.environ.get("PARALLAX_PS_HOST")
+              or shutil.which("powershell") or shutil.which("pwsh"))
 
 pytestmark = pytest.mark.skipif(
     POWERSHELL is None, reason="no PowerShell host on PATH")

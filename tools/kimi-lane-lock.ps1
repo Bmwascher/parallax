@@ -100,29 +100,62 @@ function Get-LockAgeMinutes($lock) {
     # lock is breakable instead of permanent.
     if (-not $lock) { return [double]::MaxValue }
     $stamp = $lock.stamp
-    # The type check is load-bearing, not defensive habit. A stamp that
-    # parsed as an OBJECT, an ARRAY or a NUMBER reached TryParse with no
-    # matching overload and threw, which terminated this function before it
-    # could return the intended infinite age - so the caller saw no age at
+    # A stamp that parsed as an OBJECT, an ARRAY or a NUMBER reached TryParse
+    # with no matching overload and THREW, terminating this function before
+    # it could return the intended infinite age - so the caller saw no age at
     # all, `$null -ge 45` was false, and the lock read as "held 0 min"
     # FOREVER. The routine written to stop a malformed lock wedging the lane
-    # was the thing that wedged it.
-    if ($stamp -isnot [string]) { return [double]::MaxValue }
-    # DateTimeOffset, not DateTime. `[datetime]::TryParse` with
-    # RoundtripKind converts an OFFSET-bearing stamp (`+00:00`) to local time
-    # but leaves a `Z` stamp as Kind=Utc - and subtracting two DateTime
+    # was the thing that wedged it. Hence the type check.
+    #
+    # But "string or unusable" was wrong about the NORMAL case on the other
+    # host. Windows PowerShell 5.1 hands back the stamp as a String;
+    # PowerShell 7 auto-converts an ISO-8601 string to a DateTime inside
+    # ConvertFrom-Json. So on pwsh EVERY well-formed lock read as unusable,
+    # every lock was instantly breakable, and the lane had no exclusion at
+    # all - while the Windows suite stayed green, because it picks
+    # powershell.exe when both hosts are installed. CI caught it; the
+    # 0.16.0 release did not. A date the parser already produced is the
+    # answer, not a failure: take it, and keep the unusable path for what is
+    # genuinely not a time.
+    # ONE conversion, then ONE age computation below. Three separate return
+    # paths each needed their own negative-age guard, which is three chances
+    # to forget one.
+    #
+    # DateTimeOffset, not DateTime, for the string case. `[datetime]::TryParse`
+    # with RoundtripKind converts an OFFSET-bearing stamp (`+00:00`) to local
+    # time but leaves a `Z` stamp as Kind=Utc - and subtracting two DateTime
     # values ignores Kind and compares raw ticks. On a UTC-05:00 machine a
     # CURRENT `Z` stamp therefore read as 300 minutes in the future, became
     # infinitely old, and was broken on sight; a genuinely five-hour-old `Z`
     # stamp read as brand new and held the lane past any threshold. Both
     # reproduced by running them. DateTimeOffset carries the offset into the
-    # subtraction, so every representation of the same instant compares
-    # equal; a stamp with no offset is assumed local, which is what this
-    # script writes.
+    # subtraction, so every representation of one instant compares equal.
     $parsed = [System.DateTimeOffset]::MinValue
-    $styles = [System.Globalization.DateTimeStyles]::None
-    if (-not [System.DateTimeOffset]::TryParse($stamp, [System.Globalization.CultureInfo]::InvariantCulture,
-                                               $styles, [ref]$parsed)) {
+    if ($stamp -is [System.DateTimeOffset]) {
+        $parsed = $stamp
+    } elseif ($stamp -is [datetime]) {
+        # The cast reads Kind. Utc is exact; Local and Unspecified are both
+        # resolved against THIS machine's offset, which is what an offsetless
+        # string means here too - so an ambiguous local time inside a DST
+        # fold picks one of the two instants rather than being exact. The
+        # margin is 45 minutes, so an hour of ambiguity is bounded and
+        # stated rather than claimed away.
+        #
+        # And it can THROW: converting `DateTime.MaxValue` with Kind Local
+        # or Unspecified pushes the UTC equivalent past the type's range, in
+        # any zone west of UTC - MinValue does the same east of it.
+        # Reproduced on both hosts. An uncaught throw here is round 3's
+        # defect exactly: the age routine dies, the caller compares nothing,
+        # and the lock reads "held 0 min" forever.
+        try { $parsed = [System.DateTimeOffset]$stamp }
+        catch { return [double]::MaxValue }
+    } elseif ($stamp -is [string]) {
+        $styles = [System.Globalization.DateTimeStyles]::None
+        if (-not [System.DateTimeOffset]::TryParse($stamp, [System.Globalization.CultureInfo]::InvariantCulture,
+                                                   $styles, [ref]$parsed)) {
+            return [double]::MaxValue
+        }
+    } else {
         return [double]::MaxValue
     }
     $age = ([System.DateTimeOffset]::Now - $parsed).TotalMinutes
