@@ -203,15 +203,24 @@ Canonical reasoning effort: `high`
   `--output-last-message` file, so NO SHARED GLOBAL OUTPUT LOG is parsed
   for route attribution — the structural difference from the backup lane,
   whose evidence comes out of one user-global log and therefore needs
-  `tools/kimi-lane-lock.ps1`. No such lock is needed here. codex does still
-  share auth, config, session storage and quota; none of that is read as
-  evidence.
+  `tools/kimi-lane-lock.ps1`. No such lock is needed here once the files
+  below are isolated. codex does still share auth, config, session storage
+  and quota — and two of those ARE consulted, so "not evidence" would be
+  wrong: `codex login status` is the auth preflight, and config resolution
+  is what the header reports. The precise claim is narrower: none of those
+  stores is a shared global output log, and none is parsed to attribute one
+  invocation's transcript or reply to another.
   Distinct session ids are necessary and NOT sufficient. Each concurrent
-  invocation must also write to its own transcript and reply paths: the
-  round-numbered names the freshness rule requires are unique within a
-  debate and NOT across two debates running at once, so two callers using
-  `reply-r1.md` can truncate or overwrite each other and pair one session's
-  header with another session's reply. Probed 2026-07-28 (codex-cli
+  debate needs its own scratch DIRECTORY, or its own `<brief-file>`,
+  `<reply-file>` and `<transcript-file>` paths — all three, because the
+  brief is READ back by the dispatch and a second debate can overwrite it
+  before that read even when the output paths differ. The round-numbered
+  names the freshness rule requires are unique within a debate and NOT
+  across two debates running at once, so two callers using `reply-r1.md`
+  can truncate or overwrite each other and pair one session's header with
+  another session's reply. Later rounds send the rebuttal inline, so from
+  round 2 only the reply and transcript paths need to be unique. Probed
+  2026-07-28 (codex-cli
   0.144.1) in exactly that distinct-path arrangement: three simultaneous
   `codex exec` calls, plus a fourth review already running, each returned
   its own `session id:` with the canonical model and effort and its own
