@@ -1,0 +1,22 @@
+[
+ {
+  "type": "message",
+  "role": "developer",
+  "content": [
+   {
+    "type": "input_text",
+    "text": "<permissions instructions>\nFilesystem sandboxing defines which files can be read or written.\n</permissions instructions>\n<multi_agent_mode>Do not spawn sub-agents unless asked.\nYou will receive messages in the form:\n```\nTask name: <recipient>\nSender: <author>\nPayload:\n<payload text>\n```\n</multi_agent_mode>\n<skills_instructions>\n## Skills\n### Available skills\n* userskill0 -> C:/fixture/home/.agents/skills/u0/SKILL.md\n* userskill1 -> C:/fixture/home/.agents/skills/u1/SKILL.md\n</skills_instructions>\n<INSTRUCTIONS>\n# Fixture global rules\nBe concise.\n</INSTRUCTIONS>\n<environment_context>\n  <cwd>C:/fixture/repo</cwd>\n  <shell>pwsh</shell>\n</environment_context>"
+   }
+  ]
+ },
+ {
+  "type": "message",
+  "role": "user",
+  "content": [
+   {
+    "type": "input_text",
+    "text": "probe"
+   }
+  ]
+ }
+]
