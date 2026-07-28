@@ -18,7 +18,7 @@
 - **A pin is a string literal in one of exactly three positive-presence CLAUSE forms:** `"literal" in body`; `body.count("literal")` alone or compared `== n` / `>= n` (n ≥ 1) / `> n` (n ≥ 0); or an `and` of those. Nothing else counts.
 - **The rule matches a complete clause and NEVER descends into an unrecognized expression.** Matching `in` anywhere in the tree lets an enclosing expression flip its meaning: `assert ("lit" in body) == False` and `assert flag or "lit" in body` both contain a membership test the assertion does not require. The second shape is live at `evals/multi-model-verify/test_flash_implementer.py:58`.
 - **The needle must be a plain string literal, not an expression containing one.** Adjacent literals across several lines fold into one constant at parse time, so nearly every existing pin qualifies. A conditional operand does not: `assert ("x" if flag else "y") in body` requires only the selected branch, so collecting both would pin text the assertion never checks.
-- **Any positive assertion outside the three forms is rejected, whatever it means.** Excluded, every one an accepted limit whose failure direction is safe — the region reads UNCOVERED, which is a red, never false coverage: a docstring, an assertion's failure message, anything under `not`, anything in a `not in` comparison, anything under `or`, a zero or negative count comparison, a reversed count comparison such as `1 == body.count("x")`, a chained comparison, an `all(...)` comprehension, a walrus, either branch of a conditional, a plain equality such as `result == "text"`, a regex lock such as `re.search(...)`, and a string reached through a variable name.
+- **Any positive assertion outside the three forms is rejected, whatever it means.** Excluded, every one an accepted limit whose failure direction is safe — the region reads UNCOVERED, which is a red, never false coverage: a docstring, an assertion's failure message, anything under `not`, anything in a `not in` comparison, anything under `or`, a count comparison outside the positive bounds above, such as `== 0` or `>= 0`, a reversed count comparison such as `1 == body.count("x")`, a chained comparison, an `all(...)` comprehension, a walrus, either branch of a conditional, a plain equality such as `result == "text"`, a regex lock such as `re.search(...)`, and a string reached through a variable name.
 - Region ids are lowercase letters, digits and hyphens, and unique across the whole repo, not per file.
 - All marker and coverage problems are hard test failures. Never warnings, never skips.
 - **A marker owns its line.** Any line whose comment keyword is `contract:` must strip to exactly the start or end syntax, or it is a hard failure. Detection does not require a closing `-->`, because an unterminated marker would otherwise be invisible, which is the same silent-deletion hole in a different shape.
@@ -1604,7 +1604,7 @@ Nothing else counts, and the rule matches a COMPLETE clause rather than
 looking for these shapes anywhere in the expression. A string locks
 nothing if it sits in a docstring, in an assertion's failure message,
 under `not`, in a `not in` comparison, on either side of an `or`, in a
-zero or negative count comparison, in a plain equality such as
+count comparison outside the positive bounds above, such as `== 0` or `>= 0`, in a plain equality such as
 `result == "text"`, in a regex such as `re.search(...)`, in either branch
 of a conditional, or is reached through a variable name. Any positive
 assertion outside the three forms above is rejected, whatever it means.

@@ -193,7 +193,9 @@ A reviewer lane failing mid-panel (references/panels.md) first
 resolves through its own transport classes above (codex classes for
 Sol, the backup-lane classes for Kimi; a dead Fable panel subagent is
 directly this class). If the lane cannot continue:
+<!-- contract:start id=panel-lane-loss-disposition -->
 A lost lane stops the panel at the consent gate - continuing with fewer lanes never happens automatically.
+<!-- contract:end -->
 The gate offers: continue with the remaining lanes; substitute the
 lost lane (the substitution machinery above, where applicable); or
 abort. A single-lane remainder proceeds as a bilateral debate and is
@@ -217,13 +219,22 @@ its machinery (carrying OPEN findings forward, never adjudicating an
 incomplete round) has nothing to act on here, because no round was
 dispatched, so nothing is spent and nothing is quarantined.
 
+<!-- contract:start id=panel-unavailable-principle -->
 The disposition is the same in the one respect that matters: the
-panel cannot silently convene without it. Before round 1 the driver
+panel cannot silently convene without it.
+<!-- contract:end -->
+<!-- contract:start id=panel-unavailable-procedure -->
+Before round 1 the driver
 states which lanes it can actually convene and which it cannot, with
 the reason, and the user chooses - proceed with the convenable
-composition, substitute, or abort. The panel invariant still binds
+composition, substitute, or abort.
+<!-- contract:end -->
+<!-- contract:start id=panel-unavailable-invariant -->
+The panel invariant still binds
 whatever is chosen: at least one cross-vendor lane, so a composition
-reduced to Fable alone is not a panel and cannot proceed as one. An
+reduced to Fable alone is not a panel and cannot proceed as one.
+<!-- contract:end -->
+An
 unavailable lane is recorded in the debate record by name and reason;
 a composition the user was never shown is never the one that ran.
 

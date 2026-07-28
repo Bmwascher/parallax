@@ -43,3 +43,35 @@ The multi-model-verify skill's transport commands (codex exec flags, resume
 syntax) are LIVE-VERIFIED contracts locked by evals/multi-model-verify/
 test_multi_model_verify.py — change the tests first (they encode review
 findings), then the skill.
+
+Contract text inside `contract:start` / `contract:end` HTML comment
+markers must sit WHOLE inside a single pin in `evals/multi-model-verify/`.
+The checker scans all Markdown under `skills/`, plus `agents/*.md` and
+`commands/*.md`.
+
+A pin is a string literal in one of exactly three assertion clause forms:
+
+- `"literal" in body`
+- `body.count("literal")`, alone or compared `== n` or `>= n` with n at
+  least 1, or `> n` with n at least 0
+- an `and` of those
+
+The needle must be a plain string literal. Adjacent literals across
+several lines are fine, because the parser folds them into one.
+
+Nothing else counts, and the rule matches a COMPLETE clause rather than
+looking for these shapes anywhere in the expression. A string locks
+nothing if it sits in a docstring, in an assertion's failure message,
+under `not`, in a `not in` comparison, on either side of an `or`, in a
+count comparison outside the positive bounds above, such as `== 0` or
+`>= 0`, in a plain equality such as `result == "text"`, in a regex such
+as `re.search(...)`, in either branch of a conditional, or is reached
+through a variable name. Any positive assertion outside the three forms
+above is rejected, whatever it means.
+In every one of those cases the checker reports the region as unlocked,
+which is a red; it never reads as covered.
+
+`test_contract_coverage.py` enforces this and lists any region that is
+not locked. A region too long for one pin is two regions. Adding or
+removing a marked region also means editing `DECLARED_REGIONS` in that
+file, which is what makes deleting a region visible.

@@ -70,11 +70,14 @@ A terminal verdict counts only when it cites the FINAL subject revision; a verdi
   step - so "the failure mode is agent death, which is loud" was false
   there, and the silent mode defeated the pin and the allowlist
   together. Both probes ran on 2.1.220, after the fix, which is why the
-  original wording read as a platform guarantee. Check `claude
-  --version` before dispatching the Fable lane; below the floor the lane
-  is UNAVAILABLE, not degraded, and the case routes to fallbacks.md's
-  `panel-lane-unavailable` - which, like every other lane loss, stops
-  at the consent gate rather than quietly convening a smaller panel.
+  original wording read as a platform guarantee.
+  <!-- contract:start id=panel-floor-reference -->
+  Check `claude --version` before dispatching the Fable lane; below the
+  floor the lane is UNAVAILABLE, not degraded, and the case routes to
+  fallbacks.md's `panel-lane-unavailable` - which, like every other lane
+  loss, stops at the consent gate rather than quietly convening a
+  smaller panel.
+  <!-- contract:end -->
   (Source: Claude Code 2.1.216 changelog, "Fixed resumed background
   agent sessions reverting to the default agent: the agent's prompt and
   tool restrictions are now restored"; surfaced by the drift watch,

@@ -138,43 +138,12 @@ def test_backup_lane_evidence_pins():
     # the earlier measurement is meaningless and the check would read
     # whatever happens to sit there.
     assert ("Rotation guard" in body)
-    # 0.15.0: extended from a fragment to the whole rule, because the
-    # contract coverage checker proved the fragment left the consequence
-    # half of the detection rule unlocked.
-    assert ("Before trusting the offset, confirm the stream did not "
-            "rotate under the call: if after the call the file is "
-            "SMALLER than the captured offset, or absent, it was rotated "
-            "or replaced and every byte position from the earlier "
-            "measurement is meaningless.") in body
+    assert ("if after the call the file is SMALLER than the captured "
+            "offset, or absent") in body
     # re-reading the rotated file from zero is the tempting wrong
     # answer: it attributes lines that may belong to any session
     assert ("not a reason to re-read from zero" in body)
     assert ("offsets have held by accident rather than by design" in body)
-    # 0.14.3 fable review F1: DETECTION without a DISPOSITION leaves the
-    # driver to invent a rule. The nearby "DISCARDED unread" pin above is
-    # satisfied by the pre-existing bullet, so the guard's consequence
-    # half needs its own pin or it deletes green - pin-integrity instance
-    # ten in this file.
-    # 0.15.0: extended from a fragment to the whole rule. The fragment
-    # named the failure class but locked none of the prohibition.
-    assert ("That is a route-attribution failure — and specifically "
-            "**not a reason to re-read from zero**, which is the "
-            "tempting wrong answer: the new file's opening lines may "
-            "belong to any session, so reading it attributes nothing "
-            "while looking like evidence.") in body
-    # F4: the residual gap's CONTINGENCY is the only recorded instruction
-    # for the day rotation starts succeeding.
-    assert ("compare file identity (creation time) too, not just length"
-            in body)
-    # 0.14.3 Sol panel round 1 (claim 6), REVERSING the session's earlier
-    # call that this paragraph was narrative and not worth pinning. It is
-    # not narrative: it states that the detection check has a known
-    # FALSE-NEGATIVE boundary, and a driver who reads only the detection
-    # rule over-trusts the guard. What a driver believes about coverage
-    # is contract.
-    assert ("The size test is necessary, not sufficient: a rotation "
-            "whose replacement file grew back PAST the captured offset "
-            "within the same call would slip through.") in body
     # 0.14.2 Kimi panel round 2 (4b): the three PASS conditions were
     # pinned but the probe's CONFIGURATION FIDELITY was not - a probe
     # run under a stricter config than the debate's would pass while
@@ -445,24 +414,6 @@ def test_fallbacks_backup_wiring():
     assert "codex-missing" in fb and "model-rejected" in fb
     assert "quota-exhausted" in fb and "auth-expired" in fb
     assert "route-attribution" in fb
-    # 0.14.3 fable review F3: the class's stated no-retry rationale is
-    # "nothing transient", which is true of a wrong id or a stray tool but
-    # NOT of a rotation under the call - that one would yield clean
-    # evidence on a re-dispatch. The disposition is still right, for a
-    # different reason, and the reason has to be on the record or the two
-    # files read as a contradiction.
-    # 0.14.3 Sol panel round 1 (claim 5): the pin below MUST run to the
-    # end of the justification. Stopping at "IS transient" named the
-    # exception while leaving the operative half - WHY the retry is still
-    # skipped, and WHO decides the re-spend - deletable green. That is
-    # pin-integrity instance eleven, reproduced inside the very sentence
-    # added this cycle to fix instance ten.
-    assert ("a rotation under the call is the one member that IS "
-            "transient — a re-dispatch with a freshly captured offset "
-            "would produce clean evidence. It still skips the retry, "
-            "because the round already spent is unattributable and no "
-            "retry can make it attributable after the fact; the user "
-            "decides at the gate whether to spend another.") in fb
     assert "LLM not set" in fb
     assert "access_terminated_error" in fb
 
@@ -495,8 +446,7 @@ def test_skill_and_readme_route_the_lane():
 # requirement this sweep enforces is placeholder discipline on DISPATCH
 # surfaces - the files an agent reads to build a command. docs/ holds
 # design specs, plans, and retained round evidence that legitimately
-# QUOTE model ids as historical record (92 occurrences across 20 files
-# as of 63fa715); sweeping
+# QUOTE model ids as historical record (~40 occurrences today); sweeping
 # them would manufacture false reds, and the predictable response to a
 # perpetually red test is to weaken it. Raised and correctly declined
 # during the 0.14.2 panel; recorded here so it is not re-litigated.
@@ -512,24 +462,12 @@ SWEEP_GLOBS = [
 ]
 ALLOWED = {NOTES.resolve(), Path(__file__).resolve()}
 
-# evals/multi-model-verify/fixtures/contract-coverage-history/ is EXCLUDED
-# by directory, not by file, so a fixture added there later does not
-# reopen this. Same reasoning as docs/** above: this sweep's subject is
-# DISPATCH surfaces, the files an agent reads to build a command. That
-# directory holds frozen historical evidence - verbatim old test-file
-# snapshots - which cannot drift and is not read to build anything.
-# Raised and ruled on during the 0.15.0 contract-coverage work.
-EXCLUDED_DIRS = (REPO / "evals" / "multi-model-verify" / "fixtures"
-                  / "contract-coverage-history",)
-
 
 def test_backup_literal_single_source():
     offenders = []
     for pattern in SWEEP_GLOBS:
         for p in REPO.glob(pattern):
             if not p.is_file() or p.resolve() in ALLOWED:
-                continue
-            if any(p.resolve().is_relative_to(d) for d in EXCLUDED_DIRS):
                 continue
             if BACKUP_ID in p.read_text(encoding="utf-8",
                                         errors="replace"):
