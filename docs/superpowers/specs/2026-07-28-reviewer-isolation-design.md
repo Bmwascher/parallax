@@ -4,7 +4,7 @@ Date: 2026-07-28
 Backlog item: 4 of 6 (docs/superpowers/plans/2026-07-27-0150-backlog.md)
 Target release: 0.17.0
 
-**Revision 2.** Not yet through a cross-vendor plan debate. Every number in
+**Revision 3.** One round of cross-vendor plan debate so far. Every number in
 this document was measured on 2026-07-28 against codex-cli 0.144.1 on the
 author's Windows machine, with the commands recorded inline so each claim
 can be re-run rather than believed.
@@ -195,9 +195,19 @@ remaining skills, built-in ones included, and removed the whole
 `<skills_instructions>` block. The declared allowed residue is therefore
 the empty set, and any advertised skill at all blocks the round.
 
+**The verified override is the dispatched override.** The value the second
+pass proved empty is written out as an artifact, and the review dispatch
+carries that exact value on round 1 and on every resume. Without that, the
+flags alone leave 29 of the original 60 skills in place and the probe
+verifies a configuration the reviewer never receives. The plan debate's
+round 1 found precisely that gap in revision 2 of this design, where the
+override existed only inside the probe's second call and was then
+discarded.
+
 Because the second probe asserts the outcome, the design does not need to
 understand how `-c skills.config` merges with the user's existing entries.
-Whatever the merge semantics, a measured set is a measured set.
+Whatever the merge semantics, a measured set is a measured set — provided
+the measured configuration is the dispatched one.
 
 ### 3. One script for the mirror
 
@@ -262,7 +272,13 @@ reason the contract coverage checker forbids false coverage.
 | probe output unparseable | transport failure | blocked, never read as empty |
 | plugin-cache bucket non-empty after `--disable plugins` | transport failure | blocked |
 | a named block is missing or has an unrecognised shape | transport failure | blocked, never read as empty |
+| the skills block is missing on the FIRST pass | transport failure | blocked; absence proves suppression only after it |
+| the skills block is still PRESENT on the second pass | transport failure | blocked, even when it parses to zero entries |
+| a skill source path cannot be placed in a bucket | transport failure | blocked; an unplaceable source is never a note |
 | second probe advertises any skill at all | transport failure | blocked |
+| the dispatch omits the verified override, or carries an unverified one | transport failure | blocked |
+| the mirror path equals, contains, or sits inside the repo | script error | exit 2 before anything is created or deleted |
+| the baseline or HEAD capture fails, or a baseline entry names no readable file | mirror construction | blocked, never a partial manifest |
 | repo-scoped entry survives remediation | mirror construction | blocked, never a review finding |
 | mirror commit fails on the project's pre-commit hooks | mirror construction | blocked, never a review finding |
 | mirror path already exists | script error | exit 2 |
@@ -397,6 +413,22 @@ lane's own client surface beyond the `merge_all_available_skills` note
 already in backup-lane.md; and any change to what preflight 3 blocks.
 
 ## Revision history
+
+**Revision 3 (2026-07-28).** After round 1 of the cross-vendor plan
+debate, which returned FIX on nine of fourteen claims. The decisive one:
+the probe verified a zero produced by an override the review dispatch
+never carried, so the measurement described a configuration the reviewer
+would never receive. The verified override is now an artifact the dispatch
+must carry on round 1 and every resume. Also from that round: the
+classifier now fails closed on any source path it cannot place, absence of
+the skills block proves suppression only on the second pass, a present but
+unreadable block blocks rather than counting zero, the mirror script
+rejects every overlap between its target and the repo before creating or
+deleting anything, the baseline is preserved as the raw status capture
+rather than stripped to paths, committed fixtures are synthetic instead of
+raw recordings carrying the author's home layout into a public repo, and
+SKILL.md's "at any depth" sentence is corrected rather than shipped beside
+a limit that contradicts it.
 
 **Revision 2 (2026-07-28).** The open question is closed. The allowed
 residue is zero: the generated disable list removes all 29 remaining
