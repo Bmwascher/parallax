@@ -105,6 +105,7 @@ The debate rules that keep this honest
 | `evals/multi-model-verify/contract_coverage.py` | Contract coverage: every marked document region must sit whole inside some test pin. Closes the pin-integrity class that produced twelve instances across three cycles |
 | `tools/check-drift.ps1` | Weekly drift watch over the upstreams the contract depends on — see [Drift protection](#drift-protection) |
 | `tools/write-attestation.ps1` · `tools/verify-attestation.ps1` | SHA-bound review attestations — see [Attestation lane](#attestation-lane) |
+| `tools/kimi-lane-lock.ps1` | Serializes the backup lane's dispatches: its route evidence comes from one user-global log, so two concurrent debates interleave and neither can be attributed. Advisory, age-bounded, breaks after 45 min |
 | `.githooks/pre-push` | Non-blocking attestation check on `main` pushes (`git config core.hooksPath .githooks` to enable) |
 
 ## Fails loud, never silent

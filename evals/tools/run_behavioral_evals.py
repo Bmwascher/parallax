@@ -110,7 +110,7 @@ ALLOWED_TOOLS = (
 # its .git/, where the contract puts the checkpoint artifact) is writable,
 # the harness and plugin cache are not.
 MUTATION_AVAILABLE_TOOLS = "Skill,Read,Glob,Grep,Edit,Write"
-MUTATION_ALLOWED_TOOLS = "Skill,Read(**),Glob,Grep,Edit(**),Write(**)"
+MUTATION_ALLOWED_TOOLS = "Skill,Read(**),Glob,Grep,Edit(**)"
 
 GRADER_PROMPT = """<role>Independent grader in a two-model verification
 protocol. Judge ONLY from the transcript; do not assume unstated work
@@ -558,10 +558,16 @@ CODEX_ENV_DENYLIST = ("CODEX_API_KEY", "OPENAI_API_KEY", "OPENAI_BASE_URL", "COD
 def codex_env():
     """The grader rides the first-party ChatGPT login: strip env overrides
     that could silently reroute the call (API-key auth or a redirected base
-    URL) - mirror of the drift watch's script-scoped hygiene."""
+    URL) - mirror of the drift watch's script-scoped hygiene.
+
+    FORCE_COLOR goes too. It reroutes nothing, but it makes codex colour
+    the startup header the route check parses; the check strips escapes
+    anyway, so this is belt and braces on the input rather than the only
+    guard."""
     env = dict(os.environ)
     for name in CODEX_ENV_DENYLIST:
         env.pop(name, None)
+    env.pop("FORCE_COLOR", None)
     return env
 
 
@@ -580,20 +586,80 @@ def codex_login_ok(env):
     return login.returncode == 0 and "Logged in using ChatGPT" in text
 
 
+# Full CSI (parameter bytes, intermediate bytes, final byte) plus the
+# two-character escapes, not just the colour subset.
+ANSI_ESCAPE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]|\x1b[@-Z\\-_]")
+
+
+def header_block(output):
+    """The startup header ONLY, or None when it cannot be located.
+
+    codex prints its version, a `--------` rule, the resolved config, and a
+    closing rule - all before it echoes the prompt. Binding the route check
+    to that block is load-bearing, not tidiness: the grader prompt EMBEDS
+    the executor's transcript, so any line the agent wrote reaches this
+    output. Searching the whole output meant a header field codex OMITTED
+    could be supplied by a payload line further down, and once escapes were
+    stripped globally, `mo<esc>del: <expected>` became a valid `model:`
+    line that no header ever contained. First-match-wins protects a field
+    that IS in the header and does nothing for one that is absent. Found by
+    the cross-vendor lane inside the previous fix.
+
+    Escapes are stripped before the rules are located, so a coloured
+    delimiter still finds its block; everything after the closing rule is
+    discarded, so stripping cannot manufacture a header line.
+    """
+    lines = ANSI_ESCAPE.sub("", output or "").splitlines()
+    rules = [i for i, ln in enumerate(lines)
+             if len(ln.strip()) >= 8 and set(ln.strip()) == {"-"}]
+    if len(rules) < 2:
+        return None
+    return "\n".join(lines[rules[0] + 1:rules[1]])
+
+
 def effective_route_ok(output, model, effort):
     """codex echoes the RESOLVED config in its startup header, so a
     config.toml override or profile silently swapping the grader surfaces
-    here. First match wins - the header precedes any body text that could
-    quote such lines. Client-resolved metadata: this confirms the
-    EFFECTIVE ROUTE, never server-attested runtime identity. The sandbox
-    line is checked too (0.8.0): the dispatch pins --sandbox read-only,
-    so anything else means a config default bled through the pin."""
+    here. Client-resolved metadata: this confirms the EFFECTIVE ROUTE,
+    never server-attested runtime identity. The sandbox line is checked too
+    (0.8.0): the dispatch pins --sandbox read-only, so anything else means
+    a config default bled through the pin.
+
+    Two 0.16.0 changes, the second correcting the first:
+
+    codex colours its header whenever FORCE_COLOR is set, which a Claude
+    Code session sets to 3 - so `model: ` arrived as
+    `\x1b[1mmodel:\x1b[0m ` and the anchored regex matched nothing. Every
+    key read empty, the route "mismatched", and every graded case failed
+    with no parseable verdicts: this suite was inert in the environment it
+    is run from. Escapes are therefore stripped.
+
+    But stripping the WHOLE output and searching it per field was worse
+    than the bug. The grader prompt embeds the executor's transcript, so
+    agent-authored lines reach this text; a field codex OMITTED could be
+    supplied by a payload line, and stripping turned
+    `mo<esc>del: <expected>` into a header line that never existed.
+    Parsing is now bound to the startup-header block, and each field must
+    appear EXACTLY ONCE in it - absent and duplicated both fail closed.
+
+    LABELS are counted separately from values. Counting only successful
+    `key: value` parses meant a block holding both `model: <expected>` and
+    a bare `model:` produced ONE recognized value and passed, because the
+    malformed line matched nothing - so "exactly once" was really "exactly
+    one line I could read". `model: ` and `model:<value>` did the same. A
+    rule that says exactly once has to count the label."""
     expected = {"model": model, "provider": "openai",
                 "reasoning effort": effort, "sandbox": "read-only"}
+    block = header_block(output)
+    if block is None:
+        print("    grader route mismatch: no startup-header block found")
+        return False
     header = {}
     for key in expected:
-        m = re.search(rf"(?m)^{key}: (.+)$", output or "")
-        header[key] = m.group(1).strip() if m else ""
+        labels = re.findall(rf"(?m)^{re.escape(key)}:", block)
+        found = re.findall(rf"(?m)^{re.escape(key)}: (.+)$", block)
+        one_each = len(labels) == 1 and len(found) == 1
+        header[key] = found[0].strip() if one_each else ""
     ok = all(header[key] == want for key, want in expected.items())
     if not ok:
         print(f"    grader route mismatch: header={header};"
@@ -657,9 +723,13 @@ def grade(case, transcript):
             return []
         # ONE ordered stream (stderr merged into stdout, same as the drift
         # watch's 2>&1 capture): the startup header always precedes the
-        # prompt echo, so first-match cannot be shadowed by header-shaped
-        # text quoted later in the echoed transcript. Separate captures
-        # concatenated would break that ordering (Sol diff review, 0.6.0).
+        # prompt echo, and separate captures concatenated would break that
+        # ordering (Sol diff review, 0.6.0). Ordering is what lets the
+        # parser BIND to the header block - it takes the text between the
+        # first two delimiter rules, so header-shaped text quoted later in
+        # the echoed transcript is discarded before any field is read. This
+        # no longer rests on first-match-wins, which protected a field that
+        # was present and did nothing for one the header omitted (0.16.0).
         # Fail closed: a mismatched route means these verdicts came from an
         # unverified grader.
         if not effective_route_ok(proc.stdout or "", model, effort):

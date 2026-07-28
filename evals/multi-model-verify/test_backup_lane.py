@@ -131,13 +131,70 @@ def test_backup_lane_evidence_pins():
     assert "`Loading agent:` line naming the committed yaml" in body
     assert "`Loaded tools:` line equal to the allowlist exactly" in body
     assert "DISCARDED unread" in body
+    # 0.16.0 backlog item 6. Counting matches across the whole post-offset
+    # window made ANY concurrent kimi session fatal, which discarded two of
+    # six dispatched rounds on 2026-07-27. The three evidence lines carry no
+    # session id, so ordering is the only available binding.
+    assert ("The three evidence lines carry no session id of their own, so "
+            "bind them by ORDER instead: locate the one `Created new "
+            "session: <id>` or `Resuming session: <id>` line past the "
+            "offset whose id is THIS round's, and read only the lines from "
+            "it up to the next session event of any id. Require exactly one "
+            "of each of the three inside that block. Session events "
+            "belonging to other ids are ignored, not counted.") in body
+    # The kind check catches a resume that silently started fresh - the same
+    # class the primary lane catches by echoing the resumed session id.
+    assert ("The block's own kind is evidence too: a fresh call must show "
+            "`Created new session` and a resume must show `Resuming "
+            "session` carrying the id being resumed. A resume that silently "
+            "started a new session has lost the reviewer's debate state, "
+            "and the kind line is where that surfaces.") in body
+    # The residual is pinned because a driver who reads only the rule
+    # over-trusts it. Ordering makes collisions rare, not impossible.
+    assert ("Residual, accepted: a foreign session that starts INSIDE this "
+            "round's startup block truncates it, and the round still "
+            "fails. That window is under a second rather than the whole "
+            "call, so collisions become rare rather than routine. They are "
+            "not eliminated.") in body
+    # Ordering cannot stop parallax colliding with itself; the lock does.
+    # The SAME label on release is load-bearing, not politeness: a release
+    # naming no label is refused against a labelled lock precisely because a
+    # bare release would otherwise free another debate's lane silently.
+    # The label must be unique to the round: ownership is a string match, so
+    # two debates sharing a label can each release the other's lane. The
+    # script cannot enforce uniqueness, so the contract states it.
+    assert ("Before dispatching any round, acquire the lane lock with "
+            "`tools/kimi-lane-lock.ps1 -Acquire -Label \"<debate>-<round>\"`, "
+            "and release it with the SAME label after the round's evidence is "
+            "read. A BUSY result means another parallax debate holds the "
+            "lane: do not dispatch, because a concurrent round breaks "
+            "attribution. The lock is advisory and breaks after 45 minutes, "
+            "so a crashed driver stalls the lane for at most that long — and "
+            "a LIVE round still running past that mark becomes breakable "
+            "too, because nothing checks liveness. Ownership is a plain "
+            "string match, so make the label unique to the round: two "
+            "callers passing the same label are indistinguishable, and "
+            "either can release the other's lane. A lock whose timestamp "
+            "cannot be read is breakable at once rather than after 45 "
+            "minutes, so an unreadable lock never stalls the lane.") in body
     # 0.14.3: the offset rule assumes an append-only file and kimi's
-    # client does not guarantee one. Rotation currently FAILS on
-    # Windows (WinError 32, log still open), so offsets have held by
-    # accident - if rotation ever succeeds, every byte position from
-    # the earlier measurement is meaningless and the check would read
-    # whatever happens to sit there.
+    # client does not guarantee one. 0.16.0: rotation now SUCCEEDS
+    # (observed 2026-07-27, verified still on disk 2026-07-28), so every
+    # byte position from an earlier measurement can be meaningless and the
+    # check would read whatever happens to sit there.
     assert ("Rotation guard" in body)
+    # The old claim that rotation always fails is now FALSE and must not
+    # return. This asserts absence, so it pins nothing by the contract
+    # grammar - it is a restoration guard, not a lock.
+    assert "offsets have held by accident" not in body
+    assert "WinError 32]` because the log is still open, so" not in body
+    # Those two guard the exact old sentence, not the claim, which is
+    # inherent to an absence check - a restoration in fresh words trips
+    # neither. So lock the CORRECTION positively instead: this sentence
+    # cannot be deleted to make room for a restored falsehood without
+    # failing here.
+    assert ("Both halves were true when observed on 2026-07-26 and are "
+            "false now. Do not restore them.") in body
     # 0.15.0: extended from a fragment to the whole rule, because the
     # contract coverage checker proved the fragment left the consequence
     # half of the detection rule unlocked.
@@ -149,7 +206,10 @@ def test_backup_lane_evidence_pins():
     # re-reading the rotated file from zero is the tempting wrong
     # answer: it attributes lines that may belong to any session
     assert ("not a reason to re-read from zero" in body)
-    assert ("offsets have held by accident rather than by design" in body)
+    # 0.16.0: the corrected observation carries the on-disk evidence, so a
+    # future reader can tell a stale claim from a current one.
+    assert "Rotation SUCCEEDS on this client" in body
+    assert "kimi.2026-07-25_14-01-45_182023.log" in body
     # 0.14.3 fable review F1: DETECTION without a DISPOSITION leaves the
     # driver to invent a rule. The nearby "DISCARDED unread" pin above is
     # satisfied by the pre-existing bullet, so the guard's consequence
@@ -162,19 +222,26 @@ def test_backup_lane_evidence_pins():
             "tempting wrong answer: the new file's opening lines may "
             "belong to any session, so reading it attributes nothing "
             "while looking like evidence.") in body
-    # F4: the residual gap's CONTINGENCY is the only recorded instruction
-    # for the day rotation starts succeeding.
-    assert ("compare file identity (creation time) too, not just length"
-            in body)
     # 0.14.3 Sol panel round 1 (claim 6), REVERSING the session's earlier
     # call that this paragraph was narrative and not worth pinning. It is
     # not narrative: it states that the detection check has a known
     # FALSE-NEGATIVE boundary, and a driver who reads only the detection
     # rule over-trusts the guard. What a driver believes about coverage
     # is contract.
-    assert ("The size test is necessary, not sufficient: a rotation "
-            "whose replacement file grew back PAST the captured offset "
-            "within the same call would slip through.") in body
+    #
+    # 0.16.0 replaces the residual-gap region with the identity rule it
+    # promised. The 0.14.3 F4 pin held the CONTINGENCY - "compare file
+    # identity (creation time) too, not just length" - which was the only
+    # recorded instruction for the day rotation started succeeding. That
+    # day arrived, so the contingency became the rule and the region was
+    # renamed. The region id change is deliberately visible in
+    # DECLARED_REGIONS.
+    assert ("Because rotation succeeds, the size test alone is not "
+            "enough: a replacement file that grew back PAST the captured "
+            "offset inside the same call would pass it. So capture the "
+            "file's CREATION TIME alongside the byte offset, and treat "
+            "any later creation time as rotation whatever the length "
+            "says.") in body
     # 0.14.2 Kimi panel round 2 (4b): the three PASS conditions were
     # pinned but the probe's CONFIGURATION FIDELITY was not - a probe
     # run under a stricter config than the debate's would pass while

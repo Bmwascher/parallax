@@ -634,6 +634,126 @@ class TestEvalFixtures:
     def _load_runner():
         return load_runner_module()
 
+    def test_route_check_survives_a_coloured_header(self):
+        # codex colours its startup header whenever FORCE_COLOR is set, and
+        # a Claude Code session sets it to 3 - which is the session the
+        # evals are run from. The anchored regex then matched nothing, every
+        # key read empty, the route "mismatched", and every graded case
+        # failed with no parseable verdicts. Reproduced 2026-07-28: the same
+        # call matched with FORCE_COLOR removed and failed with it present.
+        # This check must fail closed on a WRONG route, not a COLOURED one.
+        mod = self._load_runner()
+        # The canonical id is parsed, never written here: a hardcoded
+        # literal outside the declaration file re-opens the
+        # partial-migration hole this suite sweeps for elsewhere.
+        notes = read(REFERENCES / "model-prompting-notes.md")
+        declared = re.search(r"Canonical model id: `([^`\n]+)`", notes)
+        assert declared, "canonical declaration missing"
+        canonical = declared.group(1)
+        coloured = (
+            "OpenAI Codex v0.144.1\n--------\n"
+            "\x1b[1mworkdir:\x1b[0m C:\\repo\n"
+            f"\x1b[1mmodel:\x1b[0m {canonical}\n"
+            "\x1b[1mprovider:\x1b[0m openai\n"
+            "\x1b[1msandbox:\x1b[0m read-only\n"
+            "\x1b[1mreasoning effort:\x1b[0m high\n--------\n"
+        )
+        assert mod.effective_route_ok(coloured, canonical, "high"), (
+            "a coloured header is the same route, and must still pass"
+        )
+        wrong = coloured.replace(canonical, canonical + "-decoy")
+        assert not mod.effective_route_ok(wrong, canonical, "high"), (
+            "stripping colour must not stop a wrong model failing closed"
+        )
+
+    def test_a_payload_line_cannot_supply_a_missing_route_field(self):
+        # The grader prompt EMBEDS the executor's transcript, so any line the
+        # agent wrote reaches the searched output. Searching the whole output
+        # per field meant a field codex OMITTED could be satisfied from the
+        # echoed body - and once escapes were stripped globally, a line that
+        # was not header-shaped became one. Both are worse than the colour
+        # bug they came with. Found by the cross-vendor lane inside that fix.
+        mod = self._load_runner()
+        notes = read(REFERENCES / "model-prompting-notes.md")
+        canonical = re.search(r"Canonical model id: `([^`\n]+)`",
+                              notes).group(1)
+        # A header block with the model line MISSING, then a payload that
+        # supplies it after the block closes.
+        no_model = (
+            "OpenAI Codex v0.144.1\n--------\n"
+            "workdir: C:\\repo\n"
+            "provider: openai\n"
+            "sandbox: read-only\n"
+            "reasoning effort: high\n--------\n"
+            "user\n"
+            f"model: {canonical}\n"
+        )
+        assert not mod.effective_route_ok(no_model, canonical, "high"), (
+            "an omitted header field must not be suppliable from the body"
+        )
+        # A line that becomes header-shaped ONLY after stripping.
+        strip_made = (
+            "OpenAI Codex v0.144.1\n--------\n"
+            "workdir: C:\\repo\n"
+            "provider: openai\n"
+            "sandbox: read-only\n"
+            "reasoning effort: high\n--------\n"
+            f"mo\x1b[31mdel: {canonical}\n"
+        )
+        assert not mod.effective_route_ok(strip_made, canonical, "high"), (
+            "stripping must not manufacture a header line"
+        )
+        # A duplicated field inside the block is ambiguous, not a pass.
+        dupe = (
+            "OpenAI Codex v0.144.1\n--------\n"
+            f"model: {canonical}\n"
+            f"model: {canonical}-decoy\n"
+            "provider: openai\n"
+            "sandbox: read-only\n"
+            "reasoning effort: high\n--------\n"
+        )
+        assert not mod.effective_route_ok(dupe, canonical, "high"), (
+            "two values for one field must fail closed, not take the first"
+        )
+        # No header block at all fails closed rather than reading empty.
+        assert not mod.effective_route_ok(
+            f"model: {canonical}\nprovider: openai\n", canonical, "high"), (
+            "a missing header block must fail closed"
+        )
+
+    @pytest.mark.parametrize("second", ["model:", "model: ", "model:decoy"])
+    def test_a_malformed_duplicate_field_fails_closed(self, second):
+        # "Exactly once" first counted only lines it could PARSE, so a block
+        # holding a valid model line AND a bare `model:` yielded one
+        # recognized value and passed - "exactly one line I could read", not
+        # exactly once. The prior duplicate test used two VALID values and
+        # never reached this boundary, which is a test that cannot fail
+        # against the defect it names. Cross-vendor lane, round 6.
+        mod = self._load_runner()
+        notes = read(REFERENCES / "model-prompting-notes.md")
+        canonical = re.search(r"Canonical model id: `([^`\n]+)`",
+                              notes).group(1)
+        block = (
+            "OpenAI Codex v0.144.1\n--------\n"
+            f"model: {canonical}\n"
+            f"{second}\n"
+            "provider: openai\n"
+            "sandbox: read-only\n"
+            "reasoning effort: high\n--------\n"
+        )
+        assert not mod.effective_route_ok(block, canonical, "high"), (
+            f"a second {second!r} label must fail closed, not be ignored"
+        )
+
+    def test_force_color_is_stripped_from_the_grader_env(self):
+        # Belt and braces on the input side of the same defect.
+        mod = self._load_runner()
+        os.environ["FORCE_COLOR"] = "3"
+        try:
+            assert "FORCE_COLOR" not in mod.codex_env()
+        finally:
+            os.environ.pop("FORCE_COLOR", None)
+
     def test_compact_stream_binds_results_to_calls(self):
         # The graded transcript is the ONLY thing the grader sees, so a
         # result must carry which call produced it and whether it
@@ -1057,10 +1177,19 @@ class TestApplicationCheckpoint:
             )
         allowed = re.search(r'MUTATION_ALLOWED_TOOLS = "([^"]+)"', runner)
         assert allowed
-        assert "Edit(**)" in allowed.group(1) and \
-            "Write(**)" in allowed.group(1), (
-                "write approvals must be cwd-scoped like the drift agent"
-            )
+        assert "Edit(**)" in allowed.group(1), (
+            "write approvals must be cwd-scoped like the drift agent"
+        )
+        # `Write(**)` is not a valid file-permission rule - `Edit(**)`
+        # already covers every file-editing tool, Write included. This
+        # demanded its PRESENCE while the drift-runner assertion below
+        # demanded its ABSENCE for exactly that reason, so the two lanes
+        # disagreed about the same rule eight hundred lines apart. The
+        # backup reviewer lane found it on the branch that removed the rule
+        # from the drift runner.
+        assert "Write(**)" not in allowed.group(1), (
+            "Write(**) is a no-op rule that only emits a warning"
+        )
         assert not re.search(r"\b(Edit|Write),", allowed.group(1)), (
             "a bare Edit/Write approval must not coexist with the scoped one"
         )
@@ -1394,8 +1523,20 @@ class TestDriftProtection:
             )
         allowed = re.search(r'"--allowedTools", "([^"]+)"\)', text)
         assert allowed, "auto-triage agent approval list not found"
-        assert "Edit(**)" in allowed.group(1) and "Write(**)" in allowed.group(1), (
+        # Write approvals must be scoped to the worktree (cwd-relative), and
+        # `Edit(**)` is what does that: Edit rules cover every file-editing
+        # tool, Write included. This assertion used to demand `Write(**)`
+        # too. The CLI rejects that rule outright - its own stderr on
+        # 2026-07-21: "Write(**) is not matched by file permission checks -
+        # only Edit(path) rules are. Use Edit(**) instead." So the extra rule
+        # was a no-op printing a warning into a sidecar file nobody read, and
+        # asserting it locked the runner into being wrong every week.
+        assert "Edit(**)" in allowed.group(1), (
             "write approvals must be scoped to the worktree (cwd-relative)"
+        )
+        assert "Write(**)" not in allowed.group(1), (
+            "Write(**) is not a valid file-permission rule - Edit(**) already"
+            " covers Write, and the CLI warns on every run if it is present"
         )
         assert "Read(**)" in allowed.group(1), (
             "unscoped Read is an out-of-tree egress path - the template is"

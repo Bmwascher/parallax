@@ -351,8 +351,15 @@ if (Test-Path $PendingFile) {
     $pendingList = $kept
     if ($pendingList.Count -gt 0) {
         $newest = $pendingList[$pendingList.Count - 1]
-        Add-Content -Path $ReportFile -Value "`r`nUNRESOLVED prior drift: $($pendingList.Count) run(s), newest $($newest.stamp) ($($newest.status)) - run /parallax:drift-triage"
-        Show-Toast "parallax drift: UNRESOLVED prior run(s)" "$($pendingList.Count) unresolved run(s), newest $($newest.stamp) ($($newest.status)) - run /parallax:drift-triage"
+        # Carry the newest entry's failure reason into the re-surfacing text.
+        # A runner that died is still dead a week later, and the whole point
+        # of this record is that a missed toast gets a second chance.
+        $newestWhy = ""
+        if ($newest.PSObject.Properties.Name -contains "failure" -and $newest.failure) {
+            $newestWhy = ", AUTO-TRIAGE FAILED: $($newest.failure)"
+        }
+        Add-Content -Path $ReportFile -Value "`r`nUNRESOLVED prior drift: $($pendingList.Count) run(s), newest $($newest.stamp) ($($newest.status)$newestWhy) - run /parallax:drift-triage"
+        Show-Toast "parallax drift: UNRESOLVED prior run(s)" "$($pendingList.Count) unresolved run(s), newest $($newest.stamp) ($($newest.status)$newestWhy) - run /parallax:drift-triage"
         ConvertTo-Json -InputObject @($pendingList) -Depth 3 | Set-Content -Path $PendingFile
     } else {
         Remove-Item $PendingFile -Force
@@ -364,6 +371,28 @@ if ($findings.Count -eq 0) { exit 0 }
 $critical = @($findings | Where-Object { $_ -like "*CRITICAL*" }).Count
 $manualToast = $true
 $criticalDismissed = $false
+# Why the automation did not finish, empty when it did. A dead auto-triage
+# used to toast the SAME text as an ordinary findings week, so the 2026-07-21
+# out-of-credits death read as routine and sat six days across five releases.
+# The required human action is the same either way - manual triage - so the
+# pending STATUS stays the same and the reason rides alongside it.
+#
+# Worth stating because it is easy to misread: with auto-triage ENABLED,
+# every trusted outcome silences the manual toast, so a manual fallback means
+# the automation either broke or handed the work back deliberately. Exactly
+# ONE of the two variables below is non-empty on every enabled manual path,
+# and both are empty only under the deliberate -NoAutoTriage - which is the
+# one case where the plain "N finding(s)" toast still fires.
+#
+# An earlier version of this comment said the failure variable was non-empty
+# on every such path. Splitting BLOCKED out made that false, and it stayed
+# stale for one commit until the cross-vendor lane caught it.
+$autotriageFailure = ""
+# Set instead of the above when the agent reported BLOCKED on a CLEAN exit.
+# That is a deliberate handoff, not a broken runner: the findings WERE read.
+# Kept separate because the two states need different words to a human and
+# different handling in /parallax:drift-triage.
+$autotriageBlocked = ""
 
 # --- headless auto-triage (findings-weeks only) --------------------------------
 # The weekly loop must not depend on a human running /parallax:drift-triage,
@@ -458,9 +487,16 @@ $guide
         # out-of-tree matches pass through the model provider, which is the
         # trust baseline of every Claude session, and land only in the
         # local transcript and the human-reviewed branch.
+        # No `Write(**)` approval rule: the CLI rejects it. Its own stderr,
+        # 2026-07-21: "Write(**) is not matched by file permission checks -
+        # only Edit(path) rules are. Use Edit(**) instead (Edit rules cover
+        # all file-editing tools)." So the rule was a no-op that printed a
+        # warning into a sidecar file nobody read, while `Edit(**)` was
+        # already granting Write all along. Write stays in --tools, which is
+        # AVAILABILITY; approval comes from Edit(**).
         $claudeArgs = @("-p", "--strict-mcp-config",
             "--tools", "Read,Glob,Grep,Edit,Write",
-            "--allowedTools", "Read(**),Glob,Grep,Edit(**),Write(**)")
+            "--allowedTools", "Read(**),Glob,Grep,Edit(**)")
         # The agent runs via a generated wrapper .cmd that writes
         # %errorlevel% to a sidecar file, because PS 5.1's Start-Process
         # (file-redirect form) never retains a native process handle:
@@ -508,6 +544,7 @@ $guide
             try { $proc.Kill() } catch {}
             $triageTimeoutMin = [Math]::Round($triageTimeoutMs / 60000.0, 1)
             Add-Content -Path $ReportFile -Value "`r`nAuto-triage TIMED OUT after $triageTimeoutMin min - killed (transcript: $Stamp-autotriage.txt)"
+            $autotriageFailure = "timed out after $triageTimeoutMin min"
         } else {
             # Exit code comes from the wrapper's sidecar, never from
             # $proc.ExitCode (see the launch above). A missing or garbled
@@ -684,27 +721,92 @@ $guide
                         # A failed commit must never toast success and keep
                         # an empty branch (Sol round-3 MAJOR).
                         Add-Content -Path $ReportFile -Value "`r`nAuto-triage gate passed but the commit FAILED - changes discarded (transcript: $Stamp-autotriage.txt)"
+                        $autotriageFailure = "gate passed but the commit failed - changes discarded"
                     }
                 } else {
                     Add-Content -Path $ReportFile -Value "`r`nAuto-triage claimed FIXES-APPLIED but the gate FAILED - changes discarded (transcript: $Stamp-autotriage.txt)"
+                    $autotriageFailure = "claimed FIXES-APPLIED but the pytest gate failed - changes discarded"
                 }
             } else {
                 # BLOCKED, verdict/diff mismatch, multiple or missing verdict
                 # lines, nonzero exit: record and fall back to manual.
                 Add-Content -Path $ReportFile -Value "`r`nAuto-triage not trusted (exit $agentExit; verdict '$verdictLine'; diff: $(if ($diffStat) { 'yes' } else { 'no' })) - transcript: $Stamp-autotriage.txt"
+                if ($verdictLine -like "BLOCKED*" -and $agentExit -eq 0) {
+                    # CLEAN exit required. A crashed or killed run that
+                    # happened to print a BLOCKED line is not a deliberate
+                    # handoff, and classifying it as one would record an
+                    # empty failure - telling /parallax:drift-triage the
+                    # automation finished on purpose when it died. Caught by
+                    # the cross-vendor lane in the 0.16.0 diff debate, inside
+                    # the fix for the whole-branch reviewer's finding.
+                    #
+                    # The agent read every finding and reported a blocker.
+                    # Nothing is broken, so this must NOT set the runner
+                    # failure: commands/drift-triage.md defines a non-empty
+                    # `failure` as the automation never having looked at the
+                    # findings, and tells a triage session to report the lane
+                    # as down and fix the runner. For BLOCKED that would be
+                    # false on both counts. It still deserves its own toast,
+                    # because a deliberate handoff is not a routine week
+                    # either.
+                    $autotriageBlocked = $verdictLine
+                } else {
+                    $autotriageFailure = "not trusted (exit $agentExit, verdict '$verdictLine')"
+                    # Name the causes that recur and have a specific
+                    # remedy, so the toast says what to DO. The 2026-07-21
+                    # death was this first one and read as routine.
+                    $head = ""
+                    if (Test-Path $triageFile) {
+                        $head = (Get-Content $triageFile -TotalCount 40 | Out-String)
+                    }
+                    if ($head -match "out of usage credits") {
+                        $autotriageFailure = "OUT OF USAGE CREDITS - top up or switch model, then re-run triage"
+                    } elseif ($head -match "Not logged in|Invalid API key|authentication") {
+                        $autotriageFailure = "claude auth not ready - log in, then re-run triage"
+                    }
+                }
             }
         }
     } else {
         Add-Content -Path $ReportFile -Value "`r`nAuto-triage skipped: git worktree add failed"
+        $autotriageFailure = "git worktree add failed - auto-triage never started"
+    }
+    # The runner's own stderr into the report. The Write(**) rule above was
+    # rejected on every run for weeks and said so ONLY here, in a sidecar
+    # file with no reader. A runner complaining about itself now lands where
+    # a human already looks.
+    if (Test-Path $errFile) {
+        $errText = (Get-Content $errFile -Raw)
+        if ($errText -and $errText.Trim()) {
+            $errHead = $errText.Trim()
+            if ($errHead.Length -gt 600) { $errHead = $errHead.Substring(0, 600) + " [...]" }
+            Add-Content -Path $ReportFile -Value "`r`nAuto-triage runner stderr (not necessarily fatal):`r`n$errHead"
+        }
     }
     # Cleanup: the worktree always goes; the branch survives ONLY when a
     # gate-verified commit landed on it.
     git -C $RepoRoot worktree remove --force $worktree 2>&1 | Out-Null
     if (-not $committed) { git -C $RepoRoot branch -D $branch 2>&1 | Out-Null }
+} elseif (-not $NoAutoTriage) {
+    # claude is not on PATH, so the unattended lane silently degrades to
+    # manual every week. -NoAutoTriage is a deliberate choice and stays
+    # quiet; a missing binary is breakage and does not.
+    Add-Content -Path $ReportFile -Value "`r`nAuto-triage unavailable: the claude CLI is not on PATH"
+    $autotriageFailure = "the claude CLI is not on PATH - auto-triage cannot run at all"
 }
 
 if ($manualToast) {
-    if ($critical -gt 0) {
+    # A dead automation must not look like a routine findings week. Before
+    # this split, an out-of-credits death and ten ordinary WARNs produced
+    # the same toast text, so the death read as deferrable.
+    $sev = if ($critical -gt 0) { "$critical CRITICAL" } else { "$($findings.Count) finding(s)" }
+    if ($autotriageFailure) {
+        Show-Toast "parallax drift: AUTO-TRIAGE FAILED" "$autotriageFailure. $sev still need triage - run /parallax:drift-triage (report: tools\drift-reports\$Stamp.txt)"
+    } elseif ($autotriageBlocked) {
+        # Distinct from both a runner failure and a routine week: the agent
+        # did its job and handed the work back on purpose.
+        Show-Toast "parallax drift: auto-triage BLOCKED" "The agent read the findings and stopped: $autotriageBlocked. $sev need triage - run /parallax:drift-triage (report: tools\drift-reports\$Stamp.txt)"
+    } elseif ($critical -gt 0) {
         Show-Toast "parallax drift: $critical CRITICAL" "Contract-breaking drift found. Triage with /parallax:drift-triage (report: tools\drift-reports\$Stamp.txt)"
     } else {
         Show-Toast "parallax drift watch" "$($findings.Count) finding(s). Triage with /parallax:drift-triage (report: tools\drift-reports\$Stamp.txt)"
@@ -718,8 +820,14 @@ if ($manualToast) {
 # the only chance to see it).
 $newEntry = $null
 if ($manualToast) {
+    # `failure` carries WHY the automation did not finish, empty when it
+    # finished and simply handed findings over. The status is the same
+    # because the human action is the same; the reason is what a later run,
+    # the doctor, and /parallax:drift-triage need in order to say whether
+    # the runner itself is broken.
     $newEntry = @{ status = "manual-triage-needed"; stamp = $Stamp
-                   report = "tools\drift-reports\$Stamp.txt"; branch = "" }
+                   report = "tools\drift-reports\$Stamp.txt"; branch = ""
+                   failure = $autotriageFailure }
 } elseif ($committed) {
     $newEntry = @{ status = "fix-branch-open"; stamp = $Stamp
                    report = "tools\drift-reports\$Stamp.txt"; branch = $branch }

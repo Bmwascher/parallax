@@ -128,12 +128,18 @@ class TestAttestationLane:
         assert v.returncode == 1 and "no attestation" in v.stdout
 
     def test_non_pass_verdict_rejected(self, tmp_path):
+        # The message must name the field that failed. It used to print
+        # all three gate values beside a generic requirement, which read
+        # as a contradiction whenever two of them were fine.
         repo = make_repo(tmp_path)
         base = rev(repo)
         head = feature_head(repo, base)
         assert attest(repo, base, head, verdict="FIX").returncode == 0
         v = verify(repo, head)
-        assert v.returncode == 1 and "FULL, confirmed-route PASS" in v.stdout
+        assert v.returncode == 1
+        assert "verdict is 'FIX', needs PASS" in v.stdout
+        assert "verification status" not in v.stdout
+        assert "route note" not in v.stdout
 
     def test_degraded_status_rejected(self, tmp_path):
         # A DEGRADED PASS must never satisfy the gate - the poisoning rule
@@ -143,7 +149,9 @@ class TestAttestationLane:
         head = feature_head(repo, base)
         assert attest(repo, base, head, status="DEGRADED").returncode == 0
         v = verify(repo, head)
-        assert v.returncode == 1 and "status=DEGRADED" in v.stdout
+        assert v.returncode == 1
+        assert "verification status is 'DEGRADED', needs FULL" in v.stdout
+        assert "verdict is" not in v.stdout
 
     def test_unconfirmed_route_rejected(self, tmp_path):
         repo = make_repo(tmp_path)
@@ -153,7 +161,25 @@ class TestAttestationLane:
                       route="route-mismatch (header model differed)"
                       ).returncode == 0
         v = verify(repo, head)
-        assert v.returncode == 1 and "confirmed-route" in v.stdout
+        assert v.returncode == 1
+        assert "route note is 'route-mismatch (header model differed)'" in v.stdout
+        assert "needs the exact text 'effective route confirmed'" in v.stdout
+        assert "verdict is" not in v.stdout
+
+    def test_reject_reason_names_every_failing_field(self, tmp_path):
+        # All three wrong at once: the reader gets the whole list, not
+        # the first failure only.
+        repo = make_repo(tmp_path)
+        base = rev(repo)
+        head = feature_head(repo, base)
+        assert attest(repo, base, head, verdict="ESCALATE",
+                      status="DEGRADED",
+                      route="quota-exhausted").returncode == 0
+        v = verify(repo, head)
+        assert v.returncode == 1
+        assert "verdict is 'ESCALATE', needs PASS" in v.stdout
+        assert "verification status is 'DEGRADED', needs FULL" in v.stdout
+        assert "route note is 'quota-exhausted'" in v.stdout
 
     def test_wrong_mode_rejected(self, tmp_path):
         # Only mode=diff records are gate input; a tampered mode field is
