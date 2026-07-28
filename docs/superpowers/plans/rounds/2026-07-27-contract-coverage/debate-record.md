@@ -212,7 +212,7 @@ It also caught a retention claim in this very file pointing at a
 round-1 reply that was not in this directory. Both diff-round replies are
 now here.
 
-Accepted in full. Fixed in `23709fa..<round-2 fix head>`: the `try` body
+Accepted in full. Fixed in `eecda33..ce887dc`: the `try` body
 is consumed only when handlers exist, a regression proves a `try/finally`
 pin is retained, and the three prose surfaces say the same thing.
 
@@ -222,6 +222,46 @@ residual failure-handling limit is correctly tagged, the conjunction
 prose matches the implementation, the instance-10 narrative is now
 consistent across all four surfaces, and the record's corrections are
 honest. It agreed on the record with keeping mixed conjunctions.
+
+**Round 3, fix re-review** of `eecda33..ce887dc`. Reply at
+`sol-diff-0150-r3-reply.md`. R1 PASS, R3 PASS, R2 FIX — and the FIX was a
+literal unreplaced placeholder, `<round-2 fix head>`, left in this file by
+the round-2 commit. No code change required. Converged with amendments
+under debate-protocol.md: the lane named the exact correction and it was
+applied.
+
+The lane confirmed the `try` rule in both directions and named the
+boundaries it tested: a bare `except:` still consumes, `try/finally` pins,
+`else` and `finally` blocks inherit the OUTER consumed state rather than
+the handled body's, and a nested `try` inside a consuming `with` stays
+consumed.
+
+**Session final adjudication.** Each round-3 claim was verified against
+the live repo rather than accepted. The four boundary behaviours were
+re-derived by running the collector over a fixture holding all four
+shapes: `BARE-EXCEPT` dropped, `ELSE-BLOCK` pinned, `FINALLY-BLOCK`
+pinned, `NESTED-IN-WITH` dropped. That matches the lane's description
+exactly. The placeholder was corrected and the whole rounds directory
+swept for others; none remain.
+
+## Terminal verdict
+
+**PASS.** Three rounds. The debate earned its cost in round 1: it found a
+false-coverage path that three prior reviews had each hunted for and
+missed, in the exact defect class this release exists to close. Rounds 2
+and 3 were the fix loop, and round 2 found a defect inside round 1's fix,
+which is this project's established base rate rather than a surprise.
+
+Verification status FULL. The reviewer lane is cross-vendor, no
+substitution occurred, and no degraded mode was entered. Route note:
+effective route confirmed — every round's header matched the canonical
+declarations, and both resumes echoed the round-1 session id.
+
+Recorded honestly: this debate ran AFTER the 0.15.0 merge and push, on a
+release the pre-push hook had already flagged as unattested. The gate
+worked; the sequence did not. The attestation therefore covers the fix
+range that is about to be pushed, while the debate's actual subject was
+the wider `8d54f6c..23709fa` implementation plus these fixes.
 
 ## Carried
 
