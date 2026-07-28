@@ -28,6 +28,8 @@
 #   carry-forward      failed version probe keeps the snapshot value
 #   blocked-verdict    BLOCKED falls to manual; prior pending re-toasts
 #   no-verdict         a verdict-less agent run is not trusted
+#   credits-death      an out-of-credits death toasts AUTO-TRIAGE FAILED
+#   failure-resurfaces a missed failure toast re-surfaces next run
 #   critical-dismissal trusted NO-ACTION on a CRITICAL toasts VERIFY
 #   warn-only-silence  WARN-only noise dismissed by triage toasts NOTHING
 #   pending-auto-clear a vanished fix branch clears its pending entry
@@ -121,6 +123,7 @@ if "%CLAUDE_STUB_MODE%"=="blocked" goto blocked
 if "%CLAUDE_STUB_MODE%"=="noaction" goto noaction
 if "%CLAUDE_STUB_MODE%"=="fixes" goto fixes
 if "%CLAUDE_STUB_MODE%"=="badfix" goto badfix
+if "%CLAUDE_STUB_MODE%"=="credits" goto credits
 echo stub agent ran and produced no verdict line
 exit /b 0
 
@@ -152,6 +155,11 @@ echo stub fix marker> STUB-FIX.txt
 echo Applied stub fix.
 echo VERDICT: FIXES-APPLIED stub state-machine fix
 exit /b 0
+
+:credits
+echo You're out of usage credits. Run /usage-credits to keep using Fable 5 or /model to switch models.
+echo stub runner warning on stderr 1>&2
+exit /b 1
 
 :badfix
 echo def test_stub_planted_failure():> evals\multi-model-verify\test_zz_stub_planted.py
@@ -424,6 +432,52 @@ Invoke-Drift "no-verdict" "" "drop-config" 60000
 Assert-True ($script:LastReport -match "Auto-triage not trusted \(exit 0; verdict ''") "verdict-less run is not trusted"
 $pend = Get-Pending
 Assert-True ($pend.Count -eq 1 -and $pend[0].status -eq "manual-triage-needed") "pending: manual-triage-needed"
+# An agent that produces no parseable verdict has not done its job either,
+# so this counts as a runner failure - just a generic one, with no specific
+# remedy to name. With auto-triage enabled, ANY manual fallback means the
+# automation did not finish; the plain findings toast now fires only under
+# -NoAutoTriage.
+Assert-True ($pend[0].failure -match "not trusted \(exit 0, verdict ''\)") "a verdict-less run records a generic runner failure"
+Complete-Scenario $b
+
+# --- scenario: credits-death -----------------------------------------------------
+# Reproduces the 2026-07-21 silent death: the agent dies on out-of-credits,
+# the run falls to manual, and the toast used to be WORD FOR WORD an ordinary
+# findings week - so it read as deferrable and sat six days across five
+# releases. The toast must now name the automation as the thing that broke,
+# the reason must ride on the pending entry, and the runner's own stderr must
+# reach the report instead of a sidecar file nobody opens.
+
+$b = $script:failCount
+Reset-State
+Invoke-Drift "credits-death" "credits" "drop-config" 60000
+Assert-True ($script:LastReport -match "Auto-triage not trusted \(exit 1") "out-of-credits run is not trusted"
+Assert-True ($script:LastReport -match "Auto-triage runner stderr") "runner stderr reaches the report"
+Assert-True ($script:LastReport -match "stub runner warning on stderr") "the stderr TEXT reaches the report"
+$toasts = Get-Toasts
+Assert-True ($toasts -match 'AUTO-TRIAGE FAILED') "toast names the automation, not just the findings"
+Assert-True ($toasts -match 'OUT OF USAGE CREDITS') "toast names the recurring cause"
+$pend = Get-Pending
+Assert-True ($pend.Count -eq 1 -and $pend[0].status -eq "manual-triage-needed") "pending: manual-triage-needed"
+Assert-True ($pend[0].failure -match 'OUT OF USAGE CREDITS') "pending entry carries the failure reason"
+Complete-Scenario $b
+
+# --- scenario: failure-resurfaces ------------------------------------------------
+# A missed AUTO-TRIAGE FAILED toast gets a second chance: the reason rides on
+# the pending entry, so the NEXT run's unresolved-prior toast says the lane
+# was down rather than just naming a stale stamp.
+
+$b = $script:failCount
+Reset-State
+$old = @(
+    @{ status = "manual-triage-needed"; stamp = "2026-01-03_000000"
+       report = "tools\drift-reports\2026-01-03_000000.txt"; branch = ""
+       failure = "OUT OF USAGE CREDITS - top up or switch model, then re-run triage" }
+)
+ConvertTo-Json -InputObject $old -Depth 3 | Set-Content -Path $PendingFile
+Invoke-Drift "failure-resurfaces" "noaction" "drop-config" 60000
+Assert-True ($script:LastReport -match "AUTO-TRIAGE FAILED: OUT OF USAGE CREDITS") "prior runner failure re-surfaces in the report"
+Assert-True ((Get-Toasts) -match 'AUTO-TRIAGE FAILED: OUT OF USAGE CREDITS') "prior runner failure re-surfaces in the toast"
 Complete-Scenario $b
 
 # --- scenario: critical-dismissal ------------------------------------------------

@@ -1394,8 +1394,20 @@ class TestDriftProtection:
             )
         allowed = re.search(r'"--allowedTools", "([^"]+)"\)', text)
         assert allowed, "auto-triage agent approval list not found"
-        assert "Edit(**)" in allowed.group(1) and "Write(**)" in allowed.group(1), (
+        # Write approvals must be scoped to the worktree (cwd-relative), and
+        # `Edit(**)` is what does that: Edit rules cover every file-editing
+        # tool, Write included. This assertion used to demand `Write(**)`
+        # too. The CLI rejects that rule outright - its own stderr on
+        # 2026-07-21: "Write(**) is not matched by file permission checks -
+        # only Edit(path) rules are. Use Edit(**) instead." So the extra rule
+        # was a no-op printing a warning into a sidecar file nobody read, and
+        # asserting it locked the runner into being wrong every week.
+        assert "Edit(**)" in allowed.group(1), (
             "write approvals must be scoped to the worktree (cwd-relative)"
+        )
+        assert "Write(**)" not in allowed.group(1), (
+            "Write(**) is not a valid file-permission rule - Edit(**) already"
+            " covers Write, and the CLI warns on every run if it is present"
         )
         assert "Read(**)" in allowed.group(1), (
             "unscoped Read is an out-of-tree egress path - the template is"

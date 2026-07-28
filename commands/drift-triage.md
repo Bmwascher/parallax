@@ -28,6 +28,14 @@ newest report may be a later clean week). Resolve entries individually:
 rewrite the file without the resolved ones, and delete it when none
 remain.
 
+A `manual-triage-needed` entry may also carry a `failure` field. When it is
+non-empty the AUTOMATION itself did not finish — it ran out of credits,
+timed out, could not commit, or was never able to start — and the findings
+were never looked at by anything. Fix the runner problem it names before
+trusting the next weekly run, and say in your reply that the lane was down,
+not merely that findings were pending. An empty or absent `failure` means
+the automation finished and handed the findings over deliberately.
+
 Otherwise read the newest report. If it says "No findings.", report that
 and stop.
 
