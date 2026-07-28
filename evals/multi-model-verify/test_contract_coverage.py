@@ -483,8 +483,9 @@ def test_history_fixtures_are_not_vacuous():
 REPO = Path(__file__).resolve().parents[2]
 
 DOC_PATHS = (
-    sorted((REPO / "skills" / "multi-model-verify" / "references").glob("*.md"))
+    sorted((REPO / "skills").glob("**/*.md"))
     + sorted((REPO / "agents").glob("*.md"))
+    + sorted((REPO / "commands").glob("*.md"))
 )
 
 # This module is excluded from pin collection on purpose. Its own

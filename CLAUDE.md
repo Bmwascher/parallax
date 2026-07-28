@@ -46,6 +46,8 @@ findings), then the skill.
 
 Contract text inside `contract:start` / `contract:end` HTML comment
 markers must sit WHOLE inside a single pin in `evals/multi-model-verify/`.
+The checker scans all Markdown under `skills/`, plus `agents/*.md` and
+`commands/*.md`.
 
 A pin is a string literal in one of exactly three assertion clause forms:
 
