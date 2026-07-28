@@ -8,7 +8,7 @@
 
 **Tech Stack:** Python 3.12 standard library only (`ast`, `re`, `pathlib`), pytest 9.x, `tmp_path` fixtures. No new dependencies.
 
-**This is revision 5 of the plan, after five rounds of cross-vendor review that found eighteen defects.** Revision 1 split regions into sentences with a regex and treated every string constant as a pin; both were refuted by running the code. Revision 2 fixed those but still let an enclosing expression invert a pin, and still let a multi-line marker comment vanish. See the design's "Revision history" before proposing a return to any earlier behaviour. Do not reintroduce sentence splitting, and do not relax the clause rule into a generic tree walk.
+**This is revision 6 of the plan, after six rounds of cross-vendor review that found nineteen defects.** Revision 1 split regions into sentences with a regex and treated every string constant as a pin; both were refuted by running the code. Revision 2 fixed those but still let an enclosing expression invert a pin, and still let a multi-line marker comment vanish. See the design's "Revision history" before proposing a return to any earlier behaviour. Do not reintroduce sentence splitting, and do not relax the clause rule into a generic tree walk.
 
 ## Global Constraints
 

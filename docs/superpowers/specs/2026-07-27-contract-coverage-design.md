@@ -4,8 +4,8 @@ Date: 2026-07-27
 Backlog item: 1 of 6 (docs/superpowers/plans/2026-07-27-0150-backlog.md)
 Target release: 0.15.0
 
-**Revision 5**, after five rounds of cross-vendor plan debate across two
-reviewer lanes, which found eighteen defects between them. The mechanism
+**Revision 6**, after six rounds of cross-vendor plan debate across two
+reviewer lanes, which found nineteen defects between them. The mechanism
 changed three times: sentence splitting is gone, pin collection is a
 clause-matching rule rather than a tree walk, and marker rejection now
 runs over the whole document text. What changed and why is in "Revision
@@ -261,8 +261,9 @@ The reader never has to search 633 assertions to find which one is short.
   stands.")` over a list registers as a pin, and so does
   `"The rule stands." in some_subprocess_output`. The live suite really
   does assert membership against subprocess output and hook context, not
-  only document text, so this is the one accepted limit that could
-  manufacture coverage rather than merely losing it. It needs a genuine
+  only document text, so this is one of the TWO accepted limits that
+  could manufacture coverage rather than merely losing it. The other is
+  its execution-blind sibling below, in this same bullet. It needs a genuine
   coincidence: a non-document container asserted to hold a string that
   happens to contain a whole marked region. Every live `.count` receiver
   is a document string, and the wording everywhere else says
@@ -277,10 +278,12 @@ The reader never has to search 633 assertions to find which one is short.
   runtime. This is live structure, not a hypothetical:
   `test_attestation.py` carries a module-level `skipif` for a missing
   PowerShell host, and `test_multi_model_verify.py` has several
-  `pytest.skip` guards. Neither is live for the nine regions in scope —
-  all nine planned pins sit in unconditionally-run tests — but the
-  suite's own baseline already reports one skip. Like the container
-  limit, this cannot be closed from the syntax tree, so it is stated.
+  `pytest.skip` guards. It shares the container limit's direction: it can
+  manufacture coverage, not merely lose it. Neither is live for the nine
+  regions in scope — all nine planned pins sit in unconditionally-run
+  tests — but the suite's own baseline already reports one skip. Like the
+  container limit, this cannot be closed from the syntax tree, so it is
+  stated.
 - **`body.count("x") == 0` is rejected, not accepted.** An earlier
   revision left it in as a limit, reasoning that the false-coverage path
   needed one document to both contain and exclude the same text. That
