@@ -468,7 +468,18 @@ function Get-FeatureReport($text) {
 # Accepted limit: this detects an opening tag at the START OF A LINE. A
 # new surface delivered as untagged prose is invisible to it, as it is to
 # any structural parser.
+# Two lists, because the tag NAME and the container's literal delimiters
+# are not the same string. `<permissions instructions>` opens with a
+# space, so the grammar reads its name as `permissions` while masking
+# needs the full literal. Running the round-4 rule against the real
+# prompt reported `permissions` as an unknown surface, which would have
+# blocked every real review.
 $script:KnownPromptBlocks = @(
+    "permissions", "skills_instructions", "plugins_instructions",
+    "apps_instructions", "recommended_plugins", "INSTRUCTIONS",
+    "environment_context", "multi_agent_mode"
+)
+$script:KnownContainers = @(
     "permissions instructions", "skills_instructions",
     "plugins_instructions", "apps_instructions", "recommended_plugins",
     "INSTRUCTIONS", "environment_context", "multi_agent_mode"
@@ -483,7 +494,7 @@ function Hide-KnownContainer($text) {
     # debate found it. Replacement is space-for-character so every other
     # offset in the string stays put.
     $masked = $text
-    foreach ($name in $script:KnownPromptBlocks) {
+    foreach ($name in $script:KnownContainers) {
         $open = "<" + $name + ">"
         $close = "</" + $name + ">"
         $from = 0
@@ -511,13 +522,25 @@ function Get-UnknownPromptBlock($text) {
     # or `:`, the tag may carry attributes, it may be self-closing, and it
     # may be indented. Those are TAGGED structures, so missing them would
     # be a gap rather than the accepted untagged-prose limit.
+    #
+    # A BLOCK is an open/close pair or a self-closing tag. An opening tag
+    # with no matching close is prose, not a surface: the real prompt's
+    # multi-agent section documents a message format containing the lines
+    # `<payload text>`, `<recipient>` and `<author>` inside a fenced code
+    # block that sits in no container. Requiring the pair reported ZERO
+    # unknown blocks across three real prompts while still catching
+    # memories_instructions, a hyphenated tag and a self-closing one.
+    $masked = Hide-KnownContainer $text
     $found = New-Object System.Collections.ArrayList
-    $rx = [regex]'(?m)^[ \t]*<([A-Za-z][A-Za-z0-9_.:\- ]*?)(\s[^>]*)?/?>'
-    foreach ($m in $rx.Matches((Hide-KnownContainer $text))) {
-        $name = $m.Groups[1].Value.Trim()
-        if ($script:KnownPromptBlocks -notcontains $name) {
-            if ($found -notcontains $name) { [void]$found.Add($name) }
+    $rx = [regex]'(?m)^[ \t]*<([A-Za-z][A-Za-z0-9_.:\-]*)((?:\s[^>]*?)?)(/?)>'
+    foreach ($m in $rx.Matches($masked)) {
+        $name = $m.Groups[1].Value
+        if ($script:KnownPromptBlocks -contains $name) { continue }
+        $selfClosing = ($m.Groups[3].Value -eq "/")
+        if (-not ($selfClosing -or $masked.Contains("</" + $name + ">"))) {
+            continue
         }
+        if ($found -notcontains $name) { [void]$found.Add($name) }
     }
     return @($found)
 }
@@ -958,23 +981,49 @@ def test_a_tag_inside_the_global_instructions_body_does_not_block(tmp_path):
     assert proc.returncode == 0, proc.stdout
 
 
-@pytest.mark.parametrize("tag", [
-    "<memories_instructions>",
-    "<agent-context>",       # hyphen
-    "<tool.state>",          # dot
-    "<ns:extra>",            # colon
-    '<beta_block version="2">',  # attributes
-    "<self_closing/>",       # self-closing
-    "   <indented_block>",   # leading whitespace
+@pytest.mark.parametrize("snippet,name", [
+    ("<memories_instructions>\nx\n</memories_instructions>", "memories_instructions"),
+    ("<agent-context>\nx\n</agent-context>", "agent-context"),
+    ("<tool.state>\nx\n</tool.state>", "tool.state"),
+    ("<ns:extra>\nx\n</ns:extra>", "ns:extra"),
+    ('<beta_block version="2">\nx\n</beta_block>', "beta_block"),
+    ("<self_closing/>", "self_closing"),
+    ("   <indented_block>\nx\n</indented_block>", "indented_block"),
 ])
-def test_an_unrecognized_outer_tag_blocks(tmp_path, tag):
+def test_an_unrecognized_outer_block_blocks(tmp_path, snippet, name):
     # Each of these is a TAGGED structure, so missing it would be a gap
     # rather than the accepted untagged-prose limit.
     fixture = with_extra_text(tmp_path, "tagged.json", "flagged.json",
-                              "\n" + tag + "\nsome content\n")
+                              "\n" + snippet + "\n")
     proc = probe_with(tmp_path, fixture)
     assert proc.returncode == 1
-    assert "unrecognized prompt block" in proc.stdout
+    assert name in proc.stdout
+
+
+@pytest.mark.parametrize("snippet", [
+    "<payload text>",   # the real prompt's documented message format
+    "<recipient>",
+    "Task name: <author>",
+])
+def test_an_unpaired_tag_in_prose_does_not_block(tmp_path, snippet):
+    # An opening tag with no matching close is prose, not a surface. The
+    # real prompt carries all three of these inside a fenced code block
+    # that sits in no container, so requiring the PAIR is what keeps the
+    # guard from blocking every genuine review. Found by running the
+    # round-4 rule against the recorded prompt.
+    fixture = with_extra_text(tmp_path, "prose.json", "flagged.json",
+                              "\n```\n" + snippet + "\n```\n")
+    proc = probe_with(tmp_path, fixture, FIXTURES / "suppressed.json")
+    assert proc.returncode == 0, proc.stdout
+
+
+def test_the_permissions_block_is_not_reported_as_unknown(tmp_path):
+    # `<permissions instructions>` opens with a SPACE, so the grammar
+    # reads its name as `permissions` while masking needs the full
+    # literal. Two lists, or every real review blocks.
+    proc = probe_with(tmp_path, FIXTURES / "flagged.json",
+                      FIXTURES / "suppressed.json")
+    assert proc.returncode == 0, proc.stdout
 
 
 def test_an_unknown_block_appearing_only_on_the_second_pass_blocks(tmp_path):

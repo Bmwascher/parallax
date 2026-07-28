@@ -341,10 +341,17 @@ unchanged.
   listed both, and adding `--exclude-standard` listed neither. A gitignored
   root `AGENTS.md` is genuinely ingested by codex, so the coverage matters
   and the existing command has it.
-- **The guarantee is over structurally tagged outer surfaces, not over
-  prose.** The probe blocks on any tag opening a line outside a known
-  container that the allowlist does not name — hyphens, dots, colons,
-  attributes, self-closing forms and indentation included. A new surface
+- **The guarantee is over structurally tagged outer BLOCKS, not over
+  prose.** A block is an open/close pair or a self-closing tag, opening a
+  line outside a known container, whose name the allowlist does not name —
+  hyphens, dots, colons, attributes and indentation included. The pairing
+  requirement is load-bearing rather than cosmetic: the real prompt's
+  multi-agent section documents a message format whose fenced code block
+  contains the lines `<payload text>`, `<recipient>` and `<author>`, in no
+  container at all. Without the pair rule those read as new surfaces and
+  every genuine review blocks. With it, three recorded real prompts report
+  zero unknown blocks while `memories_instructions`, a hyphenated tag and
+  a self-closing tag are all still caught. A new surface
   delivered as untagged prose inside an existing block is invisible to it,
   as it is to any structural parser, and no honest widening of the rule
   catches that without blocking legitimate reviews. Bodies of known
