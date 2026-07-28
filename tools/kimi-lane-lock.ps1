@@ -11,9 +11,18 @@
 # handle, because the holder is a driver agent whose shell invocations are
 # each short-lived - a PID recorded here would be dead by the time the next
 # caller looked, and every lock would read as stale immediately. So
-# staleness is decided by AGE alone: a lock older than -MaxAgeMinutes is
-# breakable. A crashed driver therefore blocks the lane for at most that
-# long, which is the accepted cost of not tracking liveness.
+# staleness is decided by AGE alone: a lock 45 minutes old is breakable.
+#
+# What that buys and what it costs, stated exactly rather than as a slogan:
+#   - A crashed driver blocks the lane for at most 45 minutes.
+#   - A LIVE round still running past 45 minutes also becomes breakable,
+#     because nothing here can tell the two apart. Rounds take minutes, so
+#     the margin is wide, but this is a real residual and not a corner case
+#     that cannot happen.
+#   - Acquire is last-writer-wins (see the write site), so this narrows a
+#     minutes-wide race to a milliseconds-wide one rather than closing it.
+#   - The label is the ownership credential. It is required on acquire, and
+#     a release must present it or -Force.
 #
 # Windows PowerShell 5.1 compatible, ASCII ONLY.
 #
@@ -30,9 +39,6 @@ param(
     # How long to wait for a busy lane before giving up. A single review
     # round is minutes; the default tolerates one queued round ahead.
     [int]$WaitSeconds = 900,
-    # A lock at least this old is breakable. Longer than any one round,
-    # shorter than a working session.
-    [int]$MaxAgeMinutes = 45,
     # Release a lock this caller does not own. Only for a human clearing a
     # known-dead holder.
     [switch]$Force
@@ -48,6 +54,19 @@ if (-not $lockPath) {
     $lockPath = Join-Path $env:LOCALAPPDATA "parallax\kimi-lane.lock"
 }
 $lockDir = Split-Path $lockPath -Parent
+
+# The staleness threshold is NOT caller-controlled. It used to be a
+# parameter, which made `-Acquire -MaxAgeMinutes 0` a silent way to steal a
+# fresh lock without -Force - the ownership guard bypassed by the flag next
+# to it. The override now exists only alongside a redirected lock path, so it
+# cannot be aimed at the real per-user lane.
+$MaxAgeMinutes = 45
+if ($env:PARALLAX_KIMI_LOCK -and $env:PARALLAX_KIMI_LOCK_MAX_AGE_MINUTES) {
+    $parsedAge = 0
+    if ([int]::TryParse($env:PARALLAX_KIMI_LOCK_MAX_AGE_MINUTES, [ref]$parsedAge) -and $parsedAge -ge 0) {
+        $MaxAgeMinutes = $parsedAge
+    }
+}
 
 function Read-Lock($path) {
     # Returns the parsed lock, or $null when there is nothing usable there.
@@ -82,7 +101,14 @@ function Get-LockAgeMinutes($lock) {
                                   $styles, [ref]$parsed)) {
         return [double]::MaxValue
     }
-    return ((Get-Date) - $parsed).TotalMinutes
+    $age = ((Get-Date) - $parsed).TotalMinutes
+    # A stamp in the FUTURE produced a negative age, which never reached the
+    # stale branch: the lane stayed BUSY until the clock caught up, and status
+    # cheerfully printed "held -360 min" to a human. Clock skew or a tampered
+    # file, either way not a lock to respect - so it reads as infinitely old
+    # and is breakable, like any other unusable stamp.
+    if ($age -lt 0) { return [double]::MaxValue }
+    return $age
 }
 
 function Format-Lock($lock, $ageMin) {
@@ -113,6 +139,13 @@ if ($Release) {
 }
 
 if ($Acquire) {
+    # The label IS the ownership credential, so an unlabelled lock has no
+    # holder to protect and any bare release frees it. Requiring it on
+    # acquire means an unlabelled lock cannot exist in the first place.
+    if (-not $Label) {
+        Write-Output "kimi lane lock: -Label is required on acquire - it is the ownership credential a later release is checked against"
+        exit 2
+    }
     if (-not (Test-Path $lockDir)) {
         New-Item -ItemType Directory -Force -Path $lockDir | Out-Null
     }

@@ -21,6 +21,7 @@ Runs wherever a PowerShell host exists: Windows powershell.exe or pwsh
 import json
 import shutil
 import subprocess
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -35,13 +36,22 @@ pytestmark = pytest.mark.skipif(
     POWERSHELL is None, reason="no PowerShell host on PATH")
 
 
-def run_lock(lock_path, *args):
+def run_lock(lock_path, *args, max_age=None):
     """Drive the script with the lock redirected into a tmp path.
 
     PARALLAX_KIMI_LOCK is the script's documented test seam, so the real
     per-user lock is never touched by the suite.
+
+    `max_age` shortens the staleness threshold. It is an ENV seam, not a
+    flag, and the script honours it only when the lock path is also
+    redirected. It used to be a `-MaxAgeMinutes` parameter, which made
+    `-Acquire -MaxAgeMinutes 0` a silent way to steal a fresh lock without
+    `-Force`: the ownership guard bypassed by the flag beside it. The
+    cross-vendor lane found that, using this suite's own test as the proof.
     """
     env = {**dict(__import__("os").environ), "PARALLAX_KIMI_LOCK": str(lock_path)}
+    if max_age is not None:
+        env["PARALLAX_KIMI_LOCK_MAX_AGE_MINUTES"] = str(max_age)
     return subprocess.run(
         [POWERSHELL, "-NoProfile", "-ExecutionPolicy", "Bypass",
          "-File", str(LOCK), *args],
@@ -109,14 +119,16 @@ def test_a_label_less_release_cannot_free_a_labelled_lock(tmp_path):
     assert p.is_file(), "the holder's lane must survive a bare release"
 
 
-def test_a_label_less_release_frees_an_unlabelled_lock(tmp_path):
-    # The refusal is about protecting a KNOWN holder. An unlabelled lock has
-    # no holder to protect, so cleanup must still work.
+def test_acquire_requires_a_label(tmp_path):
+    # The label is the ownership credential. An UNLABELLED lock has no holder
+    # to protect, so any bare release frees it - which the cross-vendor lane
+    # named as a hole in the ownership claim. Requiring the label on acquire
+    # means an unlabelled lock cannot exist to be exploited.
     p = tmp_path / "k.lock"
-    assert run_lock(p, "-Acquire").returncode == 0
-    r = run_lock(p, "-Release")
-    assert r.returncode == 0
-    assert not p.is_file()
+    r = run_lock(p, "-Acquire")
+    assert r.returncode == 2
+    assert "required on acquire" in r.stdout
+    assert not p.is_file(), "a refused acquire must not leave a lock behind"
 
 
 def test_a_forced_label_less_release_frees_a_labelled_lock(tmp_path):
@@ -163,9 +175,67 @@ def test_releasing_a_free_lane_is_not_an_error(tmp_path):
 def test_a_stale_lock_is_broken_and_says_so(tmp_path):
     p = tmp_path / "k.lock"
     assert run_lock(p, "-Acquire", "-Label", "debate-A").returncode == 0
-    r = run_lock(p, "-Acquire", "-Label", "debate-B", "-MaxAgeMinutes", "0")
+    r = run_lock(p, "-Acquire", "-Label", "debate-B", max_age=0)
     assert r.returncode == 0
     assert "stale" in r.stdout, "breaking a lock must never be silent"
+
+
+def test_the_staleness_threshold_is_not_caller_controlled(tmp_path):
+    # It was a -MaxAgeMinutes parameter, which meant `-Acquire
+    # -MaxAgeMinutes 0` stole a fresh lock without -Force: the ownership
+    # guard bypassed by the flag next to it. Passing it must now fail rather
+    # than quietly work.
+    p = tmp_path / "k.lock"
+    assert run_lock(p, "-Acquire", "-Label", "debate-A").returncode == 0
+    r = run_lock(p, "-Acquire", "-Label", "debate-B", "-MaxAgeMinutes", "0")
+    assert r.returncode != 0, "the threshold must not be settable by a flag"
+    assert p.is_file()
+    holder = json.loads(p.read_text(encoding="ascii"))
+    assert holder["label"] == "debate-A", "the fresh lock must survive"
+
+
+def test_the_env_seam_is_ignored_without_a_redirected_lock_path(tmp_path):
+    # The override exists for the suite. It must not be aimable at the real
+    # per-user lane, so it is honoured only alongside a redirected path.
+    p = tmp_path / "k.lock"
+    assert run_lock(p, "-Acquire", "-Label", "debate-A").returncode == 0
+    env = {**dict(__import__("os").environ),
+           "PARALLAX_KIMI_LOCK_MAX_AGE_MINUTES": "0"}
+    env.pop("PARALLAX_KIMI_LOCK", None)
+    r = subprocess.run(
+        [POWERSHELL, "-NoProfile", "-ExecutionPolicy", "Bypass",
+         "-File", str(LOCK), "-Status"],
+        capture_output=True, text=True, timeout=120, env=env)
+    # Reading the REAL lane here, which the suite must not modify - status
+    # only. The point is that the override did not apply to it.
+    assert r.returncode == 0
+    assert "STALE" not in r.stdout or "free" in r.stdout
+
+
+def test_a_future_stamp_cannot_wedge_the_lane(tmp_path):
+    # A stamp in the future produced a NEGATIVE age, which never reached the
+    # stale branch: the lane stayed BUSY until the clock caught up, and status
+    # printed "held -360 min" to a human. Clock skew or tampering, either way
+    # not a lock to respect.
+    p = tmp_path / "k.lock"
+    future = (datetime.now(timezone.utc) + timedelta(hours=6)).isoformat()
+    p.write_text(json.dumps({"label": "ghost", "stamp": future}),
+                 encoding="ascii")
+    r = run_lock(p, "-Acquire", "-Label", "debate-A", "-WaitSeconds", "0")
+    assert r.returncode == 0, "a future-stamped lock must not hold the lane"
+    holder = json.loads(p.read_text(encoding="ascii"))
+    assert holder["label"] == "debate-A"
+
+
+def test_status_never_reports_a_negative_age(tmp_path):
+    p = tmp_path / "k.lock"
+    future = (datetime.now(timezone.utc) + timedelta(hours=6)).isoformat()
+    p.write_text(json.dumps({"label": "ghost", "stamp": future}),
+                 encoding="ascii")
+    r = run_lock(p)
+    assert r.returncode == 0
+    assert "-" not in r.stdout.split("held")[-1].split("min")[0], (
+        "a negative age is nonsense to a human reader")
 
 
 def test_a_malformed_lock_is_breakable(tmp_path):
@@ -188,7 +258,7 @@ def test_a_lock_with_no_stamp_is_breakable(tmp_path):
 def test_status_marks_an_expired_lock_stale(tmp_path):
     p = tmp_path / "k.lock"
     assert run_lock(p, "-Acquire", "-Label", "debate-A").returncode == 0
-    r = run_lock(p, "-MaxAgeMinutes", "0")
+    r = run_lock(p, max_age=0)
     assert r.returncode == 0
     assert "STALE" in r.stdout
 

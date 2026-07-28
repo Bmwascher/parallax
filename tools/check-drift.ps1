@@ -377,15 +377,20 @@ $criticalDismissed = $false
 # The required human action is the same either way - manual triage - so the
 # pending STATUS stays the same and the reason rides alongside it.
 #
-# Worth stating because it is easy to misread: with auto-triage ENABLED, a
-# manual fallback always means the automation did not finish, since every
-# trusted outcome silences the manual toast. So this is non-empty on every
-# manual path except the deliberate -NoAutoTriage one, and the plain
-# "N finding(s)" toast now fires only there.
+# Worth stating because it is easy to misread: with auto-triage ENABLED,
+# every trusted outcome silences the manual toast, so a manual fallback means
+# the automation either broke or handed the work back deliberately. Exactly
+# ONE of the two variables below is non-empty on every enabled manual path,
+# and both are empty only under the deliberate -NoAutoTriage - which is the
+# one case where the plain "N finding(s)" toast still fires.
+#
+# An earlier version of this comment said the failure variable was non-empty
+# on every such path. Splitting BLOCKED out made that false, and it stayed
+# stale for one commit until the cross-vendor lane caught it.
 $autotriageFailure = ""
-# Set instead of the above when the agent itself reported BLOCKED. That is a
-# deliberate handoff, not a broken runner: the findings WERE read. Kept
-# separate because the two states need different words to a human and
+# Set instead of the above when the agent reported BLOCKED on a CLEAN exit.
+# That is a deliberate handoff, not a broken runner: the findings WERE read.
+# Kept separate because the two states need different words to a human and
 # different handling in /parallax:drift-triage.
 $autotriageBlocked = ""
 
@@ -726,7 +731,15 @@ $guide
                 # BLOCKED, verdict/diff mismatch, multiple or missing verdict
                 # lines, nonzero exit: record and fall back to manual.
                 Add-Content -Path $ReportFile -Value "`r`nAuto-triage not trusted (exit $agentExit; verdict '$verdictLine'; diff: $(if ($diffStat) { 'yes' } else { 'no' })) - transcript: $Stamp-autotriage.txt"
-                if ($verdictLine -like "BLOCKED*") {
+                if ($verdictLine -like "BLOCKED*" -and $agentExit -eq 0) {
+                    # CLEAN exit required. A crashed or killed run that
+                    # happened to print a BLOCKED line is not a deliberate
+                    # handoff, and classifying it as one would record an
+                    # empty failure - telling /parallax:drift-triage the
+                    # automation finished on purpose when it died. Caught by
+                    # the cross-vendor lane in the 0.16.0 diff debate, inside
+                    # the fix for the whole-branch reviewer's finding.
+                    #
                     # The agent read every finding and reported a blocker.
                     # Nothing is broken, so this must NOT set the runner
                     # failure: commands/drift-triage.md defines a non-empty

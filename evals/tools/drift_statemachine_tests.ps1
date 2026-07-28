@@ -28,6 +28,7 @@
 #   carry-forward      failed version probe keeps the snapshot value
 #   blocked-verdict    BLOCKED falls to manual; prior pending re-toasts
 #   no-verdict         a verdict-less agent run is not trusted
+#   blocked-crash      a BLOCKED line on a nonzero exit is a runner failure
 #   credits-death      an out-of-credits death toasts AUTO-TRIAGE FAILED
 #   failure-resurfaces a missed failure toast re-surfaces next run
 #   critical-dismissal trusted NO-ACTION on a CRITICAL toasts VERIFY
@@ -124,6 +125,7 @@ if "%CLAUDE_STUB_MODE%"=="noaction" goto noaction
 if "%CLAUDE_STUB_MODE%"=="fixes" goto fixes
 if "%CLAUDE_STUB_MODE%"=="badfix" goto badfix
 if "%CLAUDE_STUB_MODE%"=="credits" goto credits
+if "%CLAUDE_STUB_MODE%"=="blocked-crash" goto blockedcrash
 echo stub agent ran and produced no verdict line
 exit /b 0
 
@@ -155,6 +157,11 @@ echo stub fix marker> STUB-FIX.txt
 echo Applied stub fix.
 echo VERDICT: FIXES-APPLIED stub state-machine fix
 exit /b 0
+
+:blockedcrash
+echo Findings reviewed; cannot resolve offline.
+echo VERDICT: BLOCKED stub cannot resolve this class of drift
+exit /b 1
 
 :credits
 echo You're out of usage credits. Run /usage-credits to keep using Fable 5 or /model to switch models.
@@ -449,6 +456,24 @@ Assert-True ($pend.Count -eq 1 -and $pend[0].status -eq "manual-triage-needed") 
 # automation did not finish; the plain findings toast now fires only under
 # -NoAutoTriage.
 Assert-True ($pend[0].failure -match "not trusted \(exit 0, verdict ''\)") "a verdict-less run records a generic runner failure"
+Complete-Scenario $b
+
+# --- scenario: blocked-crash -----------------------------------------------------
+# A BLOCKED line on a NONZERO exit is not a deliberate handoff. The agent
+# died; it merely happened to print the grammar line first. Classifying that
+# as BLOCKED would record an empty failure and tell /parallax:drift-triage the
+# automation finished on purpose. Found by the cross-vendor lane in the 0.16.0
+# diff debate, inside the fix for the whole-branch reviewer's own finding.
+
+$b = $script:failCount
+Reset-State
+Invoke-Drift "blocked-crash" "blocked-crash" "drop-config" 60000
+Assert-True ($script:LastReport -match "Auto-triage not trusted \(exit 1; verdict 'BLOCKED") "a crashed run carrying a BLOCKED line is not trusted"
+$toasts = Get-Toasts
+Assert-True ($toasts -match 'AUTO-TRIAGE FAILED') "nonzero-exit BLOCKED reports as a runner failure"
+Assert-True (-not ($toasts -match 'auto-triage BLOCKED')) "a crashed run is never reported as a deliberate handoff"
+$pend = Get-Pending
+Assert-True ($pend[$pend.Count - 1].failure -match "not trusted \(exit 1") "the crash is recorded as the failure reason"
 Complete-Scenario $b
 
 # --- scenario: credits-death -----------------------------------------------------

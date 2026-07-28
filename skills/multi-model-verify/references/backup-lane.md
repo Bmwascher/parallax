@@ -87,7 +87,8 @@ Panel participation: a user-invoked panel per references/panels.md is a second s
   evidence is read. A BUSY result means another parallax debate holds the
   lane: do not dispatch, because a concurrent round breaks attribution. The
   lock is advisory and breaks after 45 minutes, so a crashed driver stalls
-  the lane for at most that long.
+  the lane for at most that long — and a LIVE round still running past that
+  mark becomes breakable too, because nothing checks liveness.
   <!-- contract:end -->
 - **Rotation guard.** The offset rule assumes an append-only file, and
   the kimi client does not guarantee one.
