@@ -248,6 +248,47 @@ function ConvertTo-StatusRecord($fields) {
     return @{ Records = @($records) }
 }
 
+function Format-StatusPathname($path) {
+    # Reproduce the porcelain LINE form's quoting for one pathname, so a
+    # recorded baseline is byte-comparable with a capture taken by running
+    # THE STATUS COMMAND directly - which is what
+    # references/backup-lane.md requires of every round.
+    #
+    # The rule is one condition because the guard has already removed every
+    # other trigger. Measured 2026-07-29: `git status --porcelain` quotes
+    # each pathname independently and, once `"` , `\` and the control
+    # characters are refused, a SPACE is the only remaining trigger. In the
+    # same measurement a rename with a spaced source and a plain
+    # destination printed `R  "with space/a.lua" -> plain/a.lua`, and the
+    # reverse printed `R  plain/b.lua -> "with space/b.lua"` - each side on
+    # its own.
+    #
+    # Non-ASCII is deliberately NOT quoted. The old captures set
+    # `core.quotepath=false`, so an accented pathname was recorded raw, and
+    # this render must keep that shape rather than introduce quoting the
+    # baseline never had.
+    if ([string]$path -match ' ') { return ('"' + $path + '"') }
+    return [string]$path
+}
+
+function Format-StatusRecord($record) {
+    # Render one record in git's own DISPLAY order, `R  <old> -> <new>`, so
+    # the recorded baseline keeps the shape references/backup-lane.md
+    # already describes and two captures stay comparable across this
+    # change.
+    #
+    # ONE WAY ONLY. Nothing re-parses this text: the manifest's subjects
+    # come from the RECORDS. That separation is the whole reason the arrow
+    # is safe to write here at all, and Test-SupportedPathname refusing `>`
+    # is what keeps it unambiguous.
+    $head = [string]$record.X + [string]$record.Y + " "
+    if ($record.Source) {
+        return ($head + (Format-StatusPathname $record.Source) + " -> " +
+                (Format-StatusPathname $record.Path))
+    }
+    return ($head + (Format-StatusPathname $record.Path))
+}
+
 function Invoke-GitLines($repo, $gitArgs) {
     # Every git capture that produces PATHNAMES goes through here, so both
     # of them answer the same two questions the same way.

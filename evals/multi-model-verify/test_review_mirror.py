@@ -792,3 +792,68 @@ def test_an_empty_status_field_stops():
     out = run_functions(
         '$r = ConvertTo-StatusRecord @(""); $r.Error')
     assert "shorter than" in out, out
+
+
+def test_a_rename_renders_in_gits_display_order_with_its_quoting():
+    # The recorded baseline must stay byte-comparable with a capture taken
+    # by running THE STATUS COMMAND directly, which is what
+    # references/backup-lane.md requires of every round. Measured
+    # 2026-07-29, that command prints both spaced names QUOTED. The arrow
+    # is unambiguous because Test-SupportedPathname refuses `>`.
+    out = run_functions(
+        '$r = ConvertTo-StatusRecord @("R  M+ Timer/new name.lua",\n'
+        '                              "M+ Timer/old name.lua")\n'
+        'Format-StatusRecord $r.Records[0]')
+    assert out == ('R  "M+ Timer/old name.lua" -> "M+ Timer/new name.lua"'), out
+
+
+def test_each_side_of_a_rename_is_quoted_independently():
+    # Measured 2026-07-29: a spaced source with a plain destination prints
+    # `R  "with space/a.lua" -> plain/a.lua`. Quoting the pair together, or
+    # quoting both whenever either has a space, would both be wrong.
+    out = run_functions(
+        '$r = ConvertTo-StatusRecord @("R  plain/a.lua",\n'
+        '                              "with space/a.lua")\n'
+        'Format-StatusRecord $r.Records[0]')
+    assert out == 'R  "with space/a.lua" -> plain/a.lua', out
+
+
+def test_a_plain_entry_renders_unquoted():
+    out = run_functions(
+        '$r = ConvertTo-StatusRecord @("!! ignored/note.txt")\n'
+        'Format-StatusRecord $r.Records[0]')
+    assert out == "!! ignored/note.txt", out
+
+
+def test_a_spaced_entry_renders_quoted():
+    out = run_functions(
+        '$r = ConvertTo-StatusRecord @("!! ignored dir/note.txt")\n'
+        'Format-StatusRecord $r.Records[0]')
+    assert out == '!! "ignored dir/note.txt"', out
+
+
+def test_a_non_ascii_entry_renders_unquoted():
+    # The old captures set core.quotepath=false, so an accented pathname
+    # was recorded RAW. This render must keep that shape rather than
+    # introduce quoting the baseline never had.
+    #
+    # Asserted as CHARACTER CODES, not as a literal. run_functions decodes
+    # the host's stdout with the locale, so comparing an accented literal
+    # here would test the harness's decoding rather than the renderer. The
+    # codes are 63,63,32 for "?? " then 99,97,102,233 for "caf" and the
+    # accented letter.
+    out = run_functions(
+        '$e = [char]233\n'
+        '$r = ConvertTo-StatusRecord @("?? caf$e.txt")\n'
+        '$line = Format-StatusRecord $r.Records[0]\n'
+        '(([int[]][char[]]$line) -join ",")')
+    assert out == "63,63,32,99,97,102,233,46,116,120,116", out
+
+
+def test_a_status_code_with_a_leading_space_survives_rendering():
+    # ` M` and ` D` are ordinary porcelain codes. Trimming the render would
+    # change what the record says happened.
+    out = run_functions(
+        '$r = ConvertTo-StatusRecord @(" M kept.txt")\n'
+        '"[{0}]" -f (Format-StatusRecord $r.Records[0])')
+    assert out == "[ M kept.txt]", out
