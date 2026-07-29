@@ -100,6 +100,18 @@ filename:
 | `>` | REFUSED | not a trigger |
 | tab, newline, CR, bell, backspace, form feed, vertical tab | REFUSED | quoted |
 
+**The set above is EXHAUSTIVE over ASCII, by sweep rather than by
+argument.** Measured 2026-07-29: a file `x<c>y.txt` was created for every
+code 1 to 127 except the path separator. Windows accepted 87 of them, and
+`git -c core.quotepath=false status --porcelain` quoted exactly TWO: the
+space and 0x7F. The other 59 distinct entries came back bare. (87 creatable
+against 61 distinct entries is the case-insensitive filesystem folding the
+26 lowercase letters onto their uppercase twins; neither case is a
+trigger.) This is what licenses the render's one-condition rule: the space
+is the only trigger the render must reproduce, and 0x7F is the only other
+one, which the guard refuses. Non-ASCII is outside the sweep and is
+handled by the `core.quotepath=false` reasoning above, not by it.
+
 **0x7F is the row that matters and it was missing from the first draft.**
 It was found by the backup reviewer lane in plan debate round 2 and
 settled by measurement: Windows creates `a<0x7F>b.txt`, and
