@@ -988,10 +988,11 @@ function Get-BackChannelEntry($repo) {
         return @{ Ok = $false; Entries = @(); Reason = $r.Reason }
     }
     # An entry this script cannot handle exactly is a stop, on either of
-    # the guard's two grounds - a name it cannot resolve to a file, or a
-    # name it could resolve but could not record. Reporting either as
-    # clean is the one outcome the whole preflight exists to prevent, and
-    # a back-channel is the case where that matters most.
+    # the guard's two grounds - a name whose resolution would risk the
+    # WRONG file, or a name it could resolve but could not record.
+    # Reporting either as clean is the one outcome the whole preflight
+    # exists to prevent, and a back-channel is the case where that matters
+    # most.
     foreach ($e in @($r.Fields)) {
         if (-not (Test-SupportedPathname $e)) {
             return @{ Ok = $false; Entries = @()
@@ -1482,10 +1483,13 @@ Then add this sentence at the end of that bullet:
 
 ```markdown
   `core.quotepath=false` is load-bearing for COMPARABILITY, not for
-  correctness of any single capture: git's default quotes a non-ASCII
-  pathname as `"caf\303\251.txt"` while the mirror's recorded baseline
-  carries it raw, so a per-round capture taken without the flag reports a
-  difference that does not exist. Measured 2026-07-29.
+  correctness of any single capture: git's default renders a non-ASCII
+  pathname as a quoted display form carrying octal escapes, while the
+  mirror's recorded baseline carries the same pathname raw, so a per-round
+  capture taken without the flag reports a difference that does not exist.
+  The escaped form is not written out here, because this file is checked
+  for the absence of backslashes; it is in the design record. Measured
+  2026-07-29.
 ```
 
 Update the two pins in `evals/multi-model-verify/test_backup_lane.py` that
@@ -1500,9 +1504,9 @@ with:
 ```python
     assert ("`git -c core.quotepath=false status --porcelain --ignored "
             "-uall`, every") in body
-    assert ("git's default quotes a non-ASCII pathname as "
-            '`"caf\\303\\251.txt"` while the mirror\'s recorded baseline '
-            "carries it raw") in body
+    assert ("git's default renders a non-ASCII pathname as a quoted "
+            "display form carrying octal escapes, while the mirror's "
+            "recorded baseline carries the same pathname raw") in body
 ```
 
 `body` in that test is `_norm(...)`, a whitespace-normalized read
@@ -1745,6 +1749,11 @@ Same session resumed, route line verified (client-side), at head
   `Test-SupportedPathname` and now states what it actually decides: can
   this tool handle the pathname EXACTLY, both as a file it can delete and
   hash AND as a name `Format-StatusPathname` can record in the line form.
+  [Corrected by A19 in round 4: "a file it can delete and hash" is still
+  too broad, and is the same overclaim in a smaller form. The first ground
+  is narrower - would resolving the name risk the WRONG file. The guard
+  validates no other Windows naming rule. Annotated in place rather than
+  rewritten, for the reason given under the octal annotation below.]
   Windows legality was never the real question, and the old name was the
   same class of defect A1 fixed - a declaration that did not match what
   the code decides.
@@ -1777,6 +1786,11 @@ R5, R7 PASS; R3, R4, R6 FIX. Amendments A10 to A12 above, plus:
   eleven characters and the test's own assertion expects length 15.
   Corrected to eleven and four. Same class as A8, one test away from it,
   and A8 did not look sideways.
+  [SUPERSEDED by A17 in round 4: "four" was itself wrong. The old decoder
+  turns those eleven characters into FIVE, and the full fifteen-character
+  field into NINE. "Four" is the length of the CORRECT decode, which is
+  the one result that defect never produced. Annotated in place, not
+  rewritten.]
 - **A14 — the octal claim was overgeneral (both lanes).** Both said it
   independently. "Git records every other trigger with an OCTAL ESCAPE" is
   false: tab, newline, `"` and `\` get NAMED escapes. True only of the one
@@ -1832,8 +1846,8 @@ S5 PASS; S4, S6 FIX.
   future snippet fail loudly. Task 1 renumbered to 1-8.
 - **A17 - the count correction was itself miscounted, twice (both
   lanes).** A13 said "eleven characters into four". The old decoder turns
-  `cafÃ©` (11 characters) into FIVE, and the full field
-  `cafÃ©.txt` (15) into NINE; "four" is the length of the CORRECT
+  `caf\303\251` (11 characters) into FIVE, and the full field
+  `caf\303\251.txt` (15) into NINE; "four" is the length of the CORRECT
   decode, which is the one thing the defect never produced. A second stale
   "nine" survived two lines below, describing the 15-character field. The
   whole comment is rewritten. This is the fourth consecutive round to find
@@ -1863,3 +1877,44 @@ reply, which is exactly what that claim was. The case was RUN: exit code 0
 on both hosts, output `'|1'`. Sol is right and the finding is adopted. The
 lane that could not run it did not get the benefit of the doubt, and the
 lane that was right did not get it for being right - the run decided.
+
+### Round 5, primary lane, 2026-07-29
+
+At head `1d77f92`. T1, T5 PASS; T2, T3, T4, T6, T7 FIX.
+
+- **A21 - THE PLAN WOULD HAVE ENDED RED AT ITS OWN LAST STEP (T6, T7).**
+  The sharpest finding since A9, and the only one in this debate that was
+  fatal to execution rather than to a claim. `test_backup_files_no_backslash_paths`
+  (`evals/multi-model-verify/test_backup_lane.py:75`) asserts that
+  `backup-lane.md`, the agent yaml and the system prompt contain NO
+  backslash at all. A12's new sentence wrote git's escaped display form,
+  backslashes included, straight into `backup-lane.md`. Task 7 Step 6 runs
+  the full suite and states PASS; it would have been red, and the cause
+  would have looked like an unrelated pre-existing test.
+  The sentence is rewritten to describe the escaped form without writing
+  one, and it says why in the file itself so a later editor does not
+  re-add it. The pin is rewritten to match. Weakening the no-backslash
+  test was considered and rejected: it guards against Windows path
+  separators reaching a document that documents commands, which is worth
+  more than one worked example.
+- **A22 - the mojibake I introduced survived into the record (T2).** My
+  own scripted edit had octal-collapsed `caf\303\251` into an accented
+  literal inside A17's amendment text, so the record labelled a
+  five-character string as eleven. Restored.
+- **A23 - two historical records needed annotating, not rewriting (T2,
+  T4).** A13's "corrected to eleven and four" is superseded by A17, and
+  A9's "a file it can delete and hash" is the same overclaim A19 narrowed.
+  Both annotated in place, matching the treatment A19 gave the octal
+  sentence. The rule this cycle is settling on: an amendment log that
+  edits its own history stops being evidence, so corrections are appended
+  inside the entry they correct.
+- **A24 - the spec claimed a stop for all three routes (T3).** Its "What
+  the guard does NOT claim" paragraph said a syntactically fine name with
+  no file behind it "is caught downstream, where `Get-ContentManifest`
+  already stops". True only when the entry becomes a manifest SUBJECT.
+  Deletion-only entries are omitted before that, and back-channel matches
+  take the remediation path. Now stated as three routes with two of them
+  unmeasured, matching A18 in the plan.
+- **A25 - one more overbroad ground (T4).** `Get-BackChannelEntry`'s
+  comment described the first ground as "a name it cannot resolve to a
+  file", which is wider than "would risk the WRONG file". Narrowed.

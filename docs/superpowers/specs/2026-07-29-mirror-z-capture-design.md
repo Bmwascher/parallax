@@ -214,11 +214,21 @@ between the two.
 does not check for reserved device names, trailing dots or spaces, length
 limits, or the other characters Windows refuses. Two grounds are all it
 decides: a name the script could resolve to the wrong file, and a name the
-render cannot reproduce. A syntactically fine name with no file behind it
-is caught downstream, where `Get-ContentManifest` already stops on
-"baseline path has no file behind it". Stating the narrow contract is the
-point: the first two drafts of this guard each advertised more than the
-code did, and both times a reviewer found the gap.
+render cannot reproduce.
+
+A syntactically fine name with no file behind it is handled downstream,
+and the exact scope of that matters. If the entry becomes a MANIFEST
+SUBJECT, `Get-ContentManifest` stops on "baseline path has no file behind
+it". If it arrives as a DELETION-ONLY entry it is omitted before the
+manifest sees any subject, and if it matches the back-channel pathspec it
+takes the remediation path instead. Neither of those two routes is a stop
+and neither was measured; they are the accepted limits recorded with the
+declined index-residue finding in the plan. An earlier draft of this
+paragraph claimed the manifest catches all three, which is not true.
+
+Stating the narrow contract is the point: the first two drafts of this
+guard each advertised more than the code did, and both times a reviewer
+found the gap.
 
 The guard exists because deleting the old blanket refusal with nothing in
 its place would remove a safety property, not just noise. It fires on two
