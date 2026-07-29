@@ -1241,6 +1241,35 @@ def test_a_nested_attributed_known_block_is_not_the_exact_form(tmp_path):
     assert "exact form" in json.loads(proc.stdout)["reason"]
 
 
+def test_a_self_closing_known_block_nested_in_a_body_still_blocks(tmp_path):
+    # A self-closing tag is a complete surface everywhere else in this
+    # script, but the raw backstop only recognized an open/close pair, so
+    # `<INSTRUCTIONS><apps_instructions/></INSTRUCTIONS>` was no surface
+    # at all and reached clean. Reproduced on both hosts. Mode-diff PANEL
+    # round 5, 2026-07-28.
+    first = rewritten(
+        tmp_path, "nested-self-closing.json", "flagged.json",
+        "# Fixture global rules",
+        "# Fixture global rules\n<apps_instructions/>")
+    proc = probe_with(tmp_path, first, FIXTURES / "suppressed.json")
+    assert proc.returncode == 1, proc.stdout
+    assert "exact form" in json.loads(proc.stdout)["reason"]
+
+
+def test_a_non_exact_closing_delimiter_nested_in_a_body_still_blocks(tmp_path):
+    # The opener was matched by grammar and the CLOSE by exact literal, so
+    # one space inside the closing tag made the whole surface vanish from
+    # a masked body. Reproduced on both hosts, same round.
+    first = rewritten(
+        tmp_path, "nested-spaced-close.json", "flagged.json",
+        "# Fixture global rules",
+        "# Fixture global rules\n<apps_instructions>live"
+        "</apps_instructions >")
+    proc = probe_with(tmp_path, first, FIXTURES / "suppressed.json")
+    assert proc.returncode == 1, proc.stdout
+    assert "exact form" in json.loads(proc.stdout)["reason"]
+
+
 def test_an_undeterminable_global_file_blocks_rather_than_reporting_absent(
         tmp_path):
     # Building and testing the candidate path sat outside the guard and

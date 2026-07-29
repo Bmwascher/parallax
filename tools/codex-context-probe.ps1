@@ -72,30 +72,55 @@ function Get-PromptText($raw) {
     return ($parts -join "`n")
 }
 
-function Get-RawContainerPair($text, $name) {
-    # The FIRST opener of `$name` in RAW text that has a later close,
-    # recognized by known-name grammar: case-insensitive, attributes
-    # allowed. Returns the literal that matched, so the caller can tell an
-    # exact opener from an attributed or case-variant one.
+function Get-RawContainerSurface($text, $name) {
+    # EVERY complete surface of `$name` in RAW text, in document order. A
+    # surface is an ordered open/close pair OR a self-closing tag - the
+    # same definition the unknown-block scan uses. Each is returned with
+    # the literal that matched and whether that literal is the exact form
+    # the dedicated parsers read.
     #
-    # Ordered, and on RAW text, because this is the backstop for everything
-    # masking hides. Masking blanks a container's BODY, so a container
-    # NESTED inside another one loses its own delimiters with that body and
-    # becomes invisible to every masked test.
-    # EVERY paired opener is returned, not the first. The real prompt
-    # carries a genuine `<skills_instructions>` ahead of `<INSTRUCTIONS>`,
-    # so a first-match rule found the exact one, called the family fine,
-    # and walked past an attributed pair nested further down. Caught by
-    # this function's own regression before it shipped.
+    # ON RAW TEXT, because this is the backstop for everything masking
+    # hides: masking blanks a container's BODY, so a container NESTED
+    # inside another one loses its own delimiters with that body and is
+    # invisible to every masked test.
+    #
+    # EVERY surface, not the first. The real prompt carries a genuine
+    # `<skills_instructions>` ahead of `<INSTRUCTIONS>`, so a first-match
+    # rule found the exact one, called the family fine, and walked past an
+    # attributed pair nested further down.
+    #
+    # BOTH DELIMITERS ARE GRAMMAR, not literals. An earlier revision
+    # matched the opener loosely and then searched for the exact
+    # `</name>`, so `<apps_instructions>live</apps_instructions >` was no
+    # surface at all, and a self-closing `<apps_instructions/>` was none
+    # either. Both reached a clean report from inside a masked body, on
+    # both hosts. Mode-diff PANEL round 5, 2026-07-28.
     $openRx = [regex]("(?i)<" + [regex]::Escape($name) + "\b[^>]*>")
-    $closeLit = "</" + $name + ">"
-    $openers = New-Object System.Collections.ArrayList
+    $closeRx = [regex]("(?i)</" + [regex]::Escape($name) + "\s*>")
+    $exactOpen = "<" + $name + ">"
+    $exactClose = "</" + $name + ">"
+    $found = New-Object System.Collections.ArrayList
     foreach ($m in $openRx.Matches($text)) {
-        $idx = $text.IndexOf($closeLit, $m.Index + $m.Length,
-            [System.StringComparison]::OrdinalIgnoreCase)
-        if ($idx -ge 0) { [void]$openers.Add($m.Value) }
+        # A self-closing tag is a complete surface on its own, and it can
+        # never be the exact opening literal, so it always reports as a
+        # non-exact shape.
+        if ($m.Value.EndsWith("/>")) {
+            [void]$found.Add(@{ Literal = $m.Value; Exact = $false })
+            continue
+        }
+        $c = $closeRx.Match($text, $m.Index + $m.Length)
+        if (-not $c.Success) { continue }
+        # Report the delimiter that is wrong, so the message names the
+        # thing the reader has to go and look at.
+        if ($m.Value -cne $exactOpen) {
+            [void]$found.Add(@{ Literal = $m.Value; Exact = $false })
+        } elseif ($c.Value -cne $exactClose) {
+            [void]$found.Add(@{ Literal = $c.Value; Exact = $false })
+        } else {
+            [void]$found.Add(@{ Literal = $m.Value; Exact = $true })
+        }
     }
-    return @{ Paired = ($openers.Count -gt 0); Openers = @($openers) }
+    return @{ Present = ($found.Count -gt 0); Surfaces = @($found) }
 }
 
 function Test-ContainerPresent($raw, $masked, $name) {
@@ -105,8 +130,8 @@ function Test-ContainerPresent($raw, $masked, $name) {
     # sees a container that is really there while ignoring a name written
     # inside somebody's prose - the user's own AGENTS.md is carried
     # verbatim inside <INSTRUCTIONS>, and every skill description is free
-    # text. The RAW ORDERED PAIR sees a container nested inside another
-    # one, which masking erases wholesale.
+    # text. The RAW SURFACE sees a container nested inside another one,
+    # which masking erases wholesale.
     #
     # Three separate false-clean paths were found in this order, each in
     # the fix for the one before it, over three panel rounds on
@@ -116,12 +141,15 @@ function Test-ContainerPresent($raw, $masked, $name) {
     # function away. Every family goes through this function now, so the
     # next family cannot be forgotten.
     #
-    # ACCEPTED LIMIT: a user who quotes a complete, balanced block of any
-    # known family blocks the run. Flattened text cannot tell that from a
+    # ACCEPTED LIMIT: a user who writes a complete surface of any known
+    # family inside their own text blocks the run - a balanced quoted
+    # block, a self-closing mention, or an opener and a close written as
+    # unrelated prose in two different wrapped bodies. The raw search
+    # ignores masking by design, so it cannot tell any of those from a
     # real nested container, and of the two answers only this one fails
     # closed.
     if ($masked.Contains("<" + $name + ">")) { return $true }
-    return (Get-RawContainerPair $raw $name).Paired
+    return (Get-RawContainerSurface $raw $name).Present
 }
 
 function Get-SkillReport($text, $structural) {
@@ -614,11 +642,11 @@ function Test-PromptShape($text, $asJson) {
     # about it silently did nothing.
     foreach ($fam in @("skills_instructions", "plugins_instructions",
                        "apps_instructions", "recommended_plugins")) {
-        foreach ($op in (Get-RawContainerPair $text $fam).Openers) {
-            if ($op -cne ("<" + $fam + ">")) {
-                Write-Blocked ("the known block " + $op + " is not in the" +
-                    " exact form this parser reads, so every rule about it" +
-                    " silently did nothing") $asJson
+        foreach ($s in (Get-RawContainerSurface $text $fam).Surfaces) {
+            if (-not $s.Exact) {
+                Write-Blocked ("the known block " + $s.Literal + " is not" +
+                    " in the exact form this parser reads, so every rule" +
+                    " about it silently did nothing") $asJson
             }
         }
     }
@@ -798,9 +826,6 @@ if ($cacheScoped.Count -gt 0) {
 # the user's file. Found by the mode-diff PANEL, 2026-07-28.
 $globalPath = ""
 $codexHome = $env:CODEX_HOME
-if (-not $codexHome) {
-    $codexHome = Join-Path $env:USERPROFILE ".codex"
-}
 $candidate = ""
 # `-PathType Leaf` and `-LiteralPath` are each load-bearing, and both were
 # measured on this machine 2026-07-28 (mode-diff PANEL). Without the type
@@ -818,6 +843,13 @@ $candidate = ""
 # that came back negative are not the same fact, and only one of them is
 # safe to publish.
 try {
+    # The default-location fallback is INSIDE the guard too. Left outside,
+    # the comment above claimed every cmdlet was guarded while one was
+    # not, and a description that overstates its own coverage is the class
+    # of defect this cycle kept finding.
+    if (-not $codexHome) {
+        $codexHome = Join-Path $env:USERPROFILE ".codex" -ErrorAction Stop
+    }
     $candidate = Join-Path $codexHome "AGENTS.md" -ErrorAction Stop
     if (Test-Path -LiteralPath $candidate -PathType Leaf -ErrorAction Stop) {
         $globalPath = (Resolve-Path -LiteralPath $candidate `

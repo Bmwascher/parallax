@@ -391,19 +391,38 @@ unchanged.
   from inside the reviewed tree. It does NOT mean the reviewer received
   no instructions at all — the global `AGENTS.md` in the limit below
   survives it — and it says nothing about what the reviewer can DO.
-- **A complete, balanced `<skills_instructions>` pair blocks wherever it
-  sits, including inside a user's own instruction file.** Presence is read
-  from the masked structural text so that a house rule NAMING the opener
-  is not mistaken for the container, but masking alone bought a false
-  clean: `<INSTRUCTIONS>` is masked first, so a skills container NESTED
-  inside it lost its delimiters and its entries with that body, and a
-  render carrying a live skills container passed suppression. Reproduced
-  on both hosts 2026-07-28. The ordered PAIR is what separates the two
-  cases - the legitimate house rule opens and never closes, a real
-  container does both - so a raw ordered pair counts as presence whatever
-  the masking says. A user who quotes a whole balanced block is
-  indistinguishable from a real nested one in flattened text, and of the
-  two available answers only blocking fails closed.
+- **A complete SURFACE of any known family blocks wherever it sits,
+  including inside a user's own instruction file.** The four families are
+  `skills_instructions`, `plugins_instructions`, `recommended_plugins`
+  and `apps_instructions`, and a surface is an ordered open/close pair or
+  a self-closing tag - the same definition the unknown-block scan uses.
+  Presence is read from the masked structural text so that a house rule
+  merely NAMING an opener is not mistaken for the container, but masking
+  alone bought a false clean: `<INSTRUCTIONS>` is masked first, so a
+  container NESTED inside it lost its delimiters with that body and a
+  render carrying a live one passed suppression. What separates the two
+  cases is completeness - the legitimate house rule opens and never
+  closes - so a raw surface counts as presence whatever the masking says.
+  Both delimiters are matched as grammar rather than as literals, and a
+  surface whose literals are not exact is refused as an unreadable shape
+  rather than measured.
+
+  This was reached over three panel rounds on 2026-07-28, each finding
+  the same defect in the previous round's fix: presence on raw text
+  blocked legitimate prose, presence on masked text hid a nested skills
+  container, a raw backstop added for skills only hid a nested apps
+  container, and an exact-close backstop hid both a self-closing tag and
+  a close carrying one extra space. Every one was reproduced on both
+  hosts before it was fixed. The families now share one rule, which is
+  the actual remedy: four separate rules produced four separate holes.
+
+  The cost is stated plainly. A user writing a complete surface of any
+  known family inside their own text blocks the run - a balanced quoted
+  block, a self-closing mention, or an opener and a close written as
+  unrelated prose in two different wrapped bodies, because the raw search
+  ignores masking by design. Flattened text cannot tell any of those from
+  a real nested container, and of the two available answers only blocking
+  fails closed.
 - **A global `AGENTS.md` that puts `--- project-doc ---` alone on a line
   blocks.** It is byte-identical to the renderer's own separator in the
   one region that carries the user's file verbatim. Narrowing the rule
