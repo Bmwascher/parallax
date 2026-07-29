@@ -1535,6 +1535,62 @@ def test_a_close_without_an_opener_is_reported_ambiguous(tmp_path):
     assert out.split() == ["False", "True", "0", "1"], out
 
 
+def test_a_description_quoting_a_known_tag_does_not_refuse_the_render(
+        tmp_path):
+    # TWO FUNCTIONS, ONE ANSWER. The locator skipped the skills family
+    # when blanking, so a skill DESCRIPTION carrying a solitary exact
+    # `<environment_context>` literal was counted as structure here and
+    # treated as free text by the shape scanner one line earlier.
+    # Reproduced on both hosts: the scan passed while this function called
+    # the SKILLS boundaries ambiguous at one opener and one close, which
+    # refused a legitimate render and named the wrong container doing it.
+    # Mode-diff PANEL round 6, Kimi lane, 2026-07-28.
+    doc = json.loads((FIXTURES / "flagged.json").read_text(encoding="utf-8"))
+    text = doc[0]["content"][0]["text"]
+    assert text.count("<environment_context>") == 1, "fixture changed"
+    doc[0]["content"][0]["text"] = text.replace(
+        "- userskill7:",
+        "- userskill7x: never emit <environment_context> yourself"
+        " (file: C:/fixture/home/.agents/skills/u7x/SKILL.md)\n"
+        "- userskill7:", 1)
+    path = tmp_path / "desc-quotes-known-tag.json"
+    path.write_text(json.dumps(doc), encoding="utf-8")
+    out = run_functions(
+        f'$t = Get-PromptText (Get-Content -Raw "{path.as_posix()}");'
+        ' $r = Get-SkillReport $t;'
+        ' "{0} {1} {2}" -f $r.Ambiguous, $r.Entries.Count, $r.OpenCount'
+    )
+    assert out.split() == ["False", "30", "1"], out
+
+
+def test_another_containers_failure_travels_with_the_verdict(tmp_path):
+    # The counts in the ambiguity message belong to the skills container.
+    # When the blanking pass is what failed, they describe a container
+    # that is fine, and a reader sent to the skills block finds nothing
+    # wrong with it. Mode-diff PANEL round 6, Kimi lane, 2026-07-28.
+    #
+    # ASSERTED AT THE FUNCTION, like the other ambiguity cases, and for
+    # the same reason: `Test-PromptShape` refuses this text one line
+    # earlier with its own message, so the end-to-end run never reaches
+    # the branch. A first draft of this test asserted the probe's exit
+    # reason instead and passed on the UPSTREAM message, proving nothing
+    # about the field it was written for.
+    doc = json.loads((FIXTURES / "flagged.json").read_text(encoding="utf-8"))
+    text = doc[0]["content"][0]["text"]
+    assert "</environment_context>" in text, "fixture changed"
+    doc[0]["content"][0]["text"] = text.replace(
+        "</environment_context>", "", 1)
+    path = tmp_path / "unclosed-other.json"
+    path.write_text(json.dumps(doc), encoding="utf-8")
+    out = run_functions(
+        f'$t = Get-PromptText (Get-Content -Raw "{path.as_posix()}");'
+        ' $r = Get-SkillReport $t;'
+        ' "" + $r.Ambiguous + " " + $r.AmbiguousCause'
+    )
+    assert out.startswith("True "), out
+    assert "environment_context" in out, out
+
+
 def test_an_undeterminable_global_file_blocks_rather_than_reporting_absent(
         tmp_path):
     # Building and testing the candidate path sat outside the guard and

@@ -186,18 +186,38 @@ function Get-SkillReport($text) {
     # `Test-PromptShape` refuses the same shapes on the same text one line
     # earlier, and this cycle has already shown five times what happens
     # when a measurement leans on a rule that lives somewhere else.
+    # THE SKILLS BODY IS BLANKED TOO, and the loop covers the same list in
+    # the same order as `Test-PromptShape`. An earlier revision skipped
+    # this one family, so a skill DESCRIPTION - free text, and the shape
+    # scanner says so in its own comment - could carry a solitary exact
+    # `<environment_context>` literal that this loop counted as structure
+    # and the scanner did not. Reproduced on both hosts, mode-diff PANEL
+    # round 6, Kimi lane, 2026-07-28: the scan passed while this function
+    # reported the SKILLS boundaries ambiguous at one opener and one
+    # close, refusing a legitimate render and naming the wrong container
+    # while it did. Two functions cannot hold two answers about the same
+    # text; that disagreement is what the last four rounds were made of.
+    #
+    # Blanking this body costs nothing the raw slice above did not already
+    # pay for. The delimiters survive - only the body between them is
+    # blanked - so locating is unchanged, and a SECOND skills container
+    # nested in the body is still refused, because the count rule inside
+    # `Hide-KnownContainer` runs before that body is blanked.
     $scan = $text
     $ambiguous = $false
+    $cause = ""
     try {
         foreach ($name in $script:KnownContainers) {
-            if ($name -eq "skills_instructions") { continue }
             $scan = Hide-KnownContainer $scan $name
         }
     } catch {
-        # A malformed OTHER container. Its body cannot be blanked, so this
-        # search cannot be trusted, and an untrustworthy measurement of the
-        # override's own input is never a clean one.
+        # A malformed container. Its body cannot be blanked, so this search
+        # cannot be trusted, and an untrustworthy measurement of the
+        # override's own input is never a clean one. THE CAUSE TRAVELS WITH
+        # THE VERDICT: without it the caller reported the skills
+        # container's own counts for a failure another container caused.
         $ambiguous = $true
+        $cause = $_.Exception.Message
     }
     $open = "<skills_instructions>"
     $close = "</skills_instructions>"
@@ -282,7 +302,7 @@ function Get-SkillReport($text) {
     return @{ BlockPresent = $present; Entries = @($entries)
               Malformed = $malformed; FirstMalformedLine = $firstBad
               Ambiguous = $ambiguous; OpenCount = $opens
-              CloseCount = $closes }
+              CloseCount = $closes; AmbiguousCause = $cause }
 }
 
 function Get-InstructionReport($text) {
@@ -752,12 +772,22 @@ if ($skills.Ambiguous) {
     # when these numbers are taken, so the message says "as far as they
     # could be blanked" rather than claiming a completed blanking. Raised
     # as a non-finding by the Kimi lane, PANEL round 5, 2026-07-28.
+    #
+    # AND THE CAUSE IS NAMED. When another container is what failed, these
+    # counts belong to a container that is fine, and a reader sent to the
+    # skills block by this message would find nothing wrong with it.
+    # Mode-diff PANEL round 6, Kimi lane, 2026-07-28.
+    $detail = ""
+    if ($skills.AmbiguousCause) {
+        $detail = " The blanking pass could not finish: " +
+            $skills.AmbiguousCause + "."
+    }
     Write-Blocked ("the skills container's boundaries on the first pass" +
         " are ambiguous (" + $skills.OpenCount + " opening and " +
         $skills.CloseCount + " closing markers, counted after blanking" +
-        " the other known containers' bodies as far as they could be" +
-        " blanked) - which span is the container is a guess, and the" +
-        " override is built from what is inside it") $Json
+        " the known containers' bodies as far as they could be blanked)" +
+        " - which span is the container is a guess, and the override is" +
+        " built from what is inside it." + $detail) $Json
 }
 # PRESENT and empty is a parse failure, and it is refused HERE rather than
 # only on the second pass. codex does not render an empty skills block, so
