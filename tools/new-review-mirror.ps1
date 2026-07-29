@@ -125,6 +125,71 @@ function ConvertFrom-NulCapture($bytes) {
     return @{ Ok = $true; Fields = @($fields) }
 }
 
+function Test-SupportedPathname($value) {
+    # Under `-z` git never quotes, so whatever arrives IS the pathname.
+    # The question this answers is whether this tool can handle that
+    # pathname EXACTLY, in both senses:
+    #
+    #   1. Would resolving it risk naming the WRONG file? This is NOT a
+    #      Windows name validator: it does not check reserved device
+    #      names, trailing dots, length limits, or the other characters
+    #      Windows refuses. A syntactically fine name with no file
+    #      behind it is not this function's business; where it lands
+    #      depends on its status shape, and only ONE of those routes is
+    #      a stop. See the design record - the manifest stops on a
+    #      subject with no file, deletion-only entries are omitted
+    #      before that, and a back-channel match goes to remediation.
+    #   2. Can Format-StatusPathname record it in the porcelain line form
+    #      the baseline contract already uses?
+    #
+    # The admitted set is therefore an ordinary pathname, or one whose ONLY
+    # line-form quoting trigger is a SPACE - the one trigger the renderer
+    # reproduces. Everything else the line form quotes or escapes some
+    # other way is refused, and so is `>`.
+    #
+    # REFUSING rather than rendering is the deliberate choice for that
+    # residue. Git records it with git's own C-style encoder - NAMED
+    # escapes for tab, newline, `"` and `\`, and OCTAL for the rest,
+    # including the one reachable case, 0x7F as `\177`. Reproducing any
+    # of that would mean writing back the encoder this cycle deletes. A
+    # loud stop on a pathological name is the cheaper failure.
+    #
+    # The BACKSLASH refusal carries a second, heavier reason. git separates
+    # path components with a forward slash, so a backslash in a field is a
+    # literal character in a NAME - and `Join-Path` would then read it as a
+    # separator and resolve a DIFFERENT file, which the script would delete
+    # or hash under the name the baseline gave. That is false coverage
+    # rather than a refusal, which is the one outcome this preflight exists
+    # to prevent.
+    #
+    # `>` is refused for a reason of its own: Format-StatusRecord renders a
+    # rename as `<old> -> <new>`, and that arrow is only unambiguous while
+    # no pathname can contain `>`. The guard is what makes that true rather
+    # than assumed.
+    #
+    # 0x7F is refused, and it is the case that shows why this function is
+    # NOT named for Windows. Measured 2026-07-29: Windows CREATES
+    # `a<0x7F>b.txt`, and `git status --porcelain` prints it as
+    # `?? "a\177b.txt"` with AND without `core.quotepath=false`, while `-z`
+    # returns the byte raw. It is legal on disk and a quoting trigger this
+    # renderer cannot reproduce, so admitting it would put a bare name into
+    # a baseline the direct capture quotes.
+    #
+    # Non-ASCII is NOT refused. The old captures set `core.quotepath=false`
+    # and recorded an accented pathname raw, so it is not a trigger for the
+    # form this baseline uses.
+    $text = [string]$value
+    if ($text.Length -eq 0) { return $false }
+    foreach ($ch in $text.ToCharArray()) {
+        if ([int]$ch -lt 32) { return $false }
+        if ([int]$ch -eq 127) { return $false }
+        if ($ch -eq [char]34) { return $false }
+        if ($ch -eq '\') { return $false }
+        if ($ch -eq '>') { return $false }
+    }
+    return $true
+}
+
 function Invoke-GitLines($repo, $gitArgs) {
     # Every git capture that produces PATHNAMES goes through here, so both
     # of them answer the same two questions the same way.

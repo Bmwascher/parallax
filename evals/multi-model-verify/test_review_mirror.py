@@ -693,3 +693,27 @@ def test_an_empty_field_before_the_end_is_kept_for_the_parser_to_refuse():
         '$r = ConvertFrom-NulCapture $b\n'
         '"{0}|{1}" -f (@($r.Fields).Count), (@($r.Fields) -join ",")')
     assert out == "3|a.txt,,b.txt", out
+
+
+def test_the_supported_pathname_guard_is_pinned_in_both_directions():
+    # The guard admits exactly what Format-StatusPathname can record
+    # exactly: an ordinary name, and a name whose ONLY quoting trigger is a
+    # space. Everything the porcelain line form would quote or escape some
+    # other way is refused, plus `>` for the arrow separator. Pinned in
+    # both directions so a future edit cannot make the guard constant.
+    out = run_functions(
+        '$q = [char]34\n'
+        '$results = @(\n'
+        '  (Test-SupportedPathname "M+ Timer/core.lua"),\n'
+        '  (Test-SupportedPathname "caf' + "é" + '/input.txt"),\n'
+        '  (Test-SupportedPathname "a$([char]9)b.txt"),\n'
+        '  (Test-SupportedPathname "a$([char]10)b.txt"),\n'
+        '  (Test-SupportedPathname "a$([char]127)b.txt"),\n'
+        '  (Test-SupportedPathname ("a" + $q + "b.txt")),\n'
+        '  (Test-SupportedPathname "a\\b.txt"),\n'
+        '  (Test-SupportedPathname "a>b.txt"),\n'
+        '  (Test-SupportedPathname "")\n'
+        ')\n'
+        '($results -join ",")')
+    assert out == ("True,True,False,False,False,"
+                   "False,False,False,False"), out
