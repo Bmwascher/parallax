@@ -174,9 +174,12 @@ def test_invalid_utf8_stops_instead_of_being_replaced():
 
 def test_a_non_ascii_field_arrives_as_one_character_not_two_bytes():
     # THE DECODER DEFECT THIS CYCLE DELETES, pinned so it cannot return.
-    # The old ConvertFrom-GitQuotedPath turned `caf\303\251` into character
-    # codes 195,169 - two characters - instead of 233. Reading raw bytes and
-    # decoding once from UTF-8 is what makes that impossible.
+    # The old ConvertFrom-GitQuotedPath turned the ESCAPE PAIR
+    # `\303\251` into character codes 195,169 - two characters -
+    # where the byte pair names one, code 233. (The surrounding name
+    # decoded normally: `caf\303\251` came out five characters, not
+    # two. The two here are the escapes' own output.) Reading raw bytes
+    # and decoding once from UTF-8 is what makes that impossible.
     out = run_functions(
         '$b = [byte[]]@(99, 97, 102, 195, 169, 0)\n'
         '$r = ConvertFrom-NulCapture $b\n'
@@ -1918,3 +1921,40 @@ At head `1d77f92`. T1, T5 PASS; T2, T3, T4, T6, T7 FIX.
 - **A25 - one more overbroad ground (T4).** `Get-BackChannelEntry`'s
   comment described the first ground as "a name it cannot resolve to a
   file", which is wider than "would risk the WRONG file". Narrowed.
+
+### Round 5, backup lane, 2026-07-29
+
+Same session resumed, route line verified (client-side), at head
+`1d77f92`. **All seven claims PASS**, with two non-striking observations
+and an explicit refusal to manufacture a finding: "Given this debate's
+record, I state that plainly rather than manufacture one."
+
+- **A26 - a loose antecedent (observation a).** The comment on
+  `test_a_non_ascii_field_arrives_as_one_character_not_two_bytes` said the
+  decoder "turned `caf\303\251` into character codes 195,169 - two
+  characters". The two characters are the ESCAPE PAIR's output; the whole
+  name decoded to five. Rewritten to say which is which. Taken because
+  this cycle has now produced three separate defects inside comments about
+  character counts, and a loose antecedent is how the next one starts.
+- Its second observation, that A13's record lacked an A17 annotation, was
+  already addressed by A23 in the same round from the other lane.
+- Its T4 observation, the `Get-BackChannelEntry` ground-1 wording, was
+  raised as a FIX by the primary lane and is A25. The backup lane called
+  it "a misdescription in the safe direction" and did not strike it. Both
+  readings are recorded; the narrowing was made.
+
+**Where the lanes split, round 5, and it is the reason this debate is not
+finished.** The backup lane passed T6 and T7 - "executable as written" and
+"nothing left to end the final run red" - after checking every cited line
+number, every definition-before-use ordering, and every pin's whitespace
+normalization. It even verified the new status-command pin as correct. It
+did not check whether the TEXT that pin quotes is allowed in the file it
+goes into. The primary lane did, and found
+`test_backup_files_no_backslash_paths` (A21), which would have turned the
+plan's own last step red.
+
+The lesson is not that one lane is better. It is that a pin can be
+verified correct against the text it quotes and still be fatal, because
+the constraint lived in a different test than the one being reasoned
+about. Both lanes reasoned carefully about the same edit and only one
+looked outward from it.
