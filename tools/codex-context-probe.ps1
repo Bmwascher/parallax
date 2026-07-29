@@ -91,11 +91,34 @@ function Get-SkillReport($text, $structural) {
     # the mode-diff PANEL, 2026-07-28. Masking leaves every container's own
     # delimiters in place, so a real block is still seen.
     #
+    # A COMPLETE RAW PAIR COUNTS TOO, wherever it sits. Masking alone was
+    # not enough: a skills container NESTED inside <INSTRUCTIONS> has its
+    # delimiters and its entries erased with that body, so the structural
+    # text showed no block and a render carrying a live skills container
+    # passed suppression as clean. Reproduced on both hosts 2026-07-28,
+    # mode-diff PANEL, inside this function's own previous fix. The pair is
+    # what separates the two cases: the legitimate house rule NAMES the
+    # opener and never closes it, while a container that is really there
+    # opens and closes in order.
+    #
+    # ACCEPTED LIMIT: a user who quotes a complete, balanced skills block
+    # inside their own AGENTS.md blocks the run. Flattened text cannot tell
+    # that from a real nested container, and of the two answers only this
+    # one fails closed.
+    #
     # `$structural` is optional only so the parser functions stay
     # dot-sourceable one at a time; every caller in this script passes it.
     $presenceText = $text
     if ($null -ne $structural) { $presenceText = $structural }
-    $present = $presenceText.Contains("<skills_instructions>")
+    $open = $text.IndexOf("<skills_instructions>",
+        [System.StringComparison]::Ordinal)
+    $rawPair = $false
+    if ($open -ge 0) {
+        $rawPair = ($text.IndexOf("</skills_instructions>",
+            $open + "<skills_instructions>".Length,
+            [System.StringComparison]::Ordinal) -ge 0)
+    }
+    $present = ($presenceText.Contains("<skills_instructions>") -or $rawPair)
     $entries = New-Object System.Collections.ArrayList
     $malformed = $false
     $firstBad = ""
@@ -514,7 +537,22 @@ function Test-PromptShape($text, $asJson) {
         Write-Blocked ("the <INSTRUCTIONS> block is missing - the prompt" +
             " shape changed and this parser no longer describes it") $asJson
     }
-    $features = Get-FeatureReport $text
+    # The feature markers are judged on the QUIETLY masked text, for the
+    # same reason the skills marker is: a container name is an ordinary
+    # thing to write inside a house rule, and the user's own AGENTS.md is
+    # carried verbatim inside <INSTRUCTIONS>, as is every skill
+    # description. On raw text, a global file naming
+    # `<apps_instructions>` in prose blocked with "the plugin or apps
+    # feature is advertising itself despite --disable plugins --disable
+    # apps" - a wrong diagnosis with no remediation, one function away
+    # from the same defect already fixed for skills. Mode-diff PANEL,
+    # 2026-07-28.
+    #
+    # The QUIET mask, not the validating one, because this runs before the
+    # unknown-surface scan validates anything and must not pre-empt that
+    # scan's own error. Masking blanks bodies only, so a real feature
+    # container's delimiters survive and are still seen.
+    $features = Get-FeatureReport (Hide-KnownContainer $text $null $true)
     if ($features.Plugins -or $features.RecommendedPlugins -or $features.Apps) {
         Write-Blocked ("the plugin or apps feature is advertising itself" +
             " despite --disable plugins --disable apps") $asJson
@@ -694,7 +732,24 @@ if (-not $codexHome) {
     $codexHome = Join-Path $env:USERPROFILE ".codex"
 }
 $candidate = Join-Path $codexHome "AGENTS.md"
-if (Test-Path $candidate) { $globalPath = (Resolve-Path $candidate).Path }
+# `-PathType Leaf` and `-LiteralPath` are each load-bearing, and both were
+# measured on this machine 2026-07-28 (mode-diff PANEL). Without the type
+# test, a DIRECTORY named AGENTS.md answers Test-Path and is reported as
+# the user's global instruction file. Without -LiteralPath, a CODEX_HOME
+# carrying a wildcard character is read as a pattern: a real
+# `home[1]/AGENTS.md` answered False bare and True literal.
+if (Test-Path -LiteralPath $candidate -PathType Leaf) {
+    try {
+        $globalPath = (Resolve-Path -LiteralPath $candidate `
+            -ErrorAction Stop).Path
+    } catch {
+        # The file is there and its path could not be produced. Reporting
+        # it as absent would put a fact in the record that nothing
+        # measured, which is the same class as every other rule here.
+        Write-Blocked ("the global AGENTS.md at " + $candidate + " exists" +
+            " but could not be resolved: " + $_.Exception.Message) $Json
+    }
+}
 
 $before = $skills.Entries.Count
 $after = $before

@@ -391,6 +391,24 @@ unchanged.
   from inside the reviewed tree. It does NOT mean the reviewer received
   no instructions at all — the global `AGENTS.md` in the limit below
   survives it — and it says nothing about what the reviewer can DO.
+- **A complete, balanced `<skills_instructions>` pair blocks wherever it
+  sits, including inside a user's own instruction file.** Presence is read
+  from the masked structural text so that a house rule NAMING the opener
+  is not mistaken for the container, but masking alone bought a false
+  clean: `<INSTRUCTIONS>` is masked first, so a skills container NESTED
+  inside it lost its delimiters and its entries with that body, and a
+  render carrying a live skills container passed suppression. Reproduced
+  on both hosts 2026-07-28. The ordered PAIR is what separates the two
+  cases - the legitimate house rule opens and never closes, a real
+  container does both - so a raw ordered pair counts as presence whatever
+  the masking says. A user who quotes a whole balanced block is
+  indistinguishable from a real nested one in flattened text, and of the
+  two available answers only blocking fails closed.
+- **A global `AGENTS.md` that puts `--- project-doc ---` alone on a line
+  blocks.** It is byte-identical to the renderer's own separator in the
+  one region that carries the user's file verbatim. Narrowing the rule
+  further would let a real reviewed-tree `AGENTS.md` through, which is the
+  direction this design forbids.
 - **A known container's delimiters must appear exactly once, or the run
   blocks.** Flattened prompt text cannot tell a QUOTED delimiter from a
   real one, and line-anchoring is not available as a tie-break: measured

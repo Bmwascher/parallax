@@ -52,9 +52,13 @@ def run_functions(snippet):
 
 def bucket_counts(fixture, workdir="C:/fixture/repo"):
     path = (FIXTURES / fixture).as_posix()
+    # The structural argument is passed here exactly as the script passes
+    # it. Calling with one argument exercised a fallback the script never
+    # takes, so this helper's coverage did not describe shipped behaviour.
+    # Mode-diff PANEL, 2026-07-28.
     out = run_functions(
         f'$t = Get-PromptText (Get-Content -Raw "{path}");'
-        ' $r = Get-SkillReport $t;'
+        ' $r = Get-SkillReport $t (Hide-KnownContainer $t);'
         ' $b = @{repo=0;"plugin-cache"=0;home=0;unknown=0};'
         ' foreach ($e in $r.Entries) {'
         f'   $b[(Get-SkillScope $e.Path "{workdir}")] += 1 }};'
@@ -80,7 +84,7 @@ def test_the_two_home_sources_are_counted_separately():
     # pass.
     out = run_functions(
         f'$t = Get-PromptText (Get-Content -Raw "{(FIXTURES / "full.json").as_posix()}");'
-        ' $r = Get-SkillReport $t;'
+        ' $r = Get-SkillReport $t (Hide-KnownContainer $t);'
         ' $u = 0; $s = 0;'
         ' foreach ($e in $r.Entries) {'
         '   $p = $e.Path.Replace("\\","/");'
@@ -1145,6 +1149,92 @@ def test_an_inline_mention_of_the_project_doc_delimiter_does_not_block(
     proc = probe_with(tmp_path, first, FIXTURES / "suppressed.json")
     assert proc.returncode == 0, proc.stdout
     assert json.loads(proc.stdout)["project_agents_md"] is False
+
+
+def test_a_skills_block_nested_inside_instructions_still_blocks(tmp_path):
+    # The false clean that judging presence on masked text alone bought.
+    # <INSTRUCTIONS> is masked FIRST, so a skills container nested inside
+    # it loses its delimiters and its entries with that body, and the
+    # suppression pass saw nothing left. Reproduced on both hosts inside
+    # the previous fix. Mode-diff PANEL, 2026-07-28.
+    second = rewritten(
+        tmp_path, "nested-skills.json", "suppressed.json",
+        "# Fixture global rules",
+        "# Fixture global rules\n<skills_instructions>\n### Available skills\n"
+        "- planted: survives (file: C:/fixture/home/.agents/skills/planted"
+        "/SKILL.md)\n</skills_instructions>")
+    proc = probe_with(tmp_path, FIXTURES / "flagged.json", second)
+    assert proc.returncode == 1, proc.stdout
+    assert "still present" in json.loads(proc.stdout)["reason"]
+
+
+def test_an_unclosed_quoted_opener_is_still_not_a_block(tmp_path):
+    # The polarity guard for the pair rule, and the case that made the
+    # masking necessary in the first place: a house rule NAMES the opener
+    # and never closes it. Only a complete ordered pair counts.
+    second = rewritten(
+        tmp_path, "opener-only.json", "suppressed.json",
+        "# Fixture global rules",
+        "# Fixture global rules\nHouse rule: never emit"
+        " `<skills_instructions>` on its own.")
+    proc = probe_with(tmp_path, FIXTURES / "flagged.json", second)
+    assert proc.returncode == 0, proc.stdout
+
+
+def test_a_feature_marker_quoted_in_the_global_body_does_not_block(tmp_path):
+    # The same defect as the skills marker, one function away. On raw text
+    # a global AGENTS.md naming `<apps_instructions>` in prose blocked with
+    # "the plugin or apps feature is advertising itself", which is a wrong
+    # diagnosis and has no remediation short of editing the user's own
+    # file. Mode-diff PANEL, 2026-07-28.
+    first = rewritten(
+        tmp_path, "quoting-features.json", "flagged.json",
+        "# Fixture global rules",
+        "# Fixture global rules\nHouse rule: never emit"
+        " `<apps_instructions>` or `<recommended_plugins>`.")
+    proc = probe_with(tmp_path, first, FIXTURES / "suppressed.json")
+    assert proc.returncode == 0, proc.stdout
+
+
+def test_a_real_apps_block_still_blocks(tmp_path):
+    # The polarity guard. Masking blanks bodies only, so a genuine feature
+    # container's own delimiters survive and must still be seen.
+    first = with_extra_text(
+        tmp_path, "real-apps.json", "flagged.json",
+        "\n<apps_instructions>\nuse the app\n</apps_instructions>\n")
+    proc = probe_with(tmp_path, first, FIXTURES / "suppressed.json")
+    assert proc.returncode == 1, proc.stdout
+    assert "advertising itself" in json.loads(proc.stdout)["reason"]
+
+
+def test_a_directory_named_agents_md_is_not_the_global_file(tmp_path):
+    # Test-Path without -PathType Leaf answers True for a directory, so a
+    # folder called AGENTS.md was reported as the user's global
+    # instruction file. Measured on this machine. Mode-diff PANEL,
+    # 2026-07-28.
+    home = tmp_path / "dir-codex-home"
+    (home / "AGENTS.md").mkdir(parents=True)
+    proc, _ = run_probe(tmp_path, tmp_path, "flagged.json", "suppressed.json",
+                        extra_env={"CODEX_HOME": str(home)})
+    assert proc.returncode == 0, proc.stdout
+    report = json.loads(proc.stdout)
+    assert report["global_agents_md"] is False
+    assert report["global_agents_md_path"] == ""
+
+
+def test_a_codex_home_holding_a_wildcard_character_still_resolves(tmp_path):
+    # Without -LiteralPath the path is read as a PATTERN. Measured the same
+    # day: a real `home[1]/AGENTS.md` answered False bare and True literal,
+    # so this direction is a false NEGATIVE about the user's own file.
+    home = tmp_path / "home[1]"
+    home.mkdir()
+    (home / "AGENTS.md").write_text("global rules\n", encoding="utf-8")
+    proc, _ = run_probe(tmp_path, tmp_path, "flagged.json", "suppressed.json",
+                        extra_env={"CODEX_HOME": str(home)})
+    assert proc.returncode == 0, proc.stdout
+    report = json.loads(proc.stdout)
+    assert report["global_agents_md"] is True
+    assert report["global_agents_md_path"] == str(home / "AGENTS.md")
 
 
 def test_the_project_doc_delimiter_on_its_own_line_still_blocks(tmp_path):
