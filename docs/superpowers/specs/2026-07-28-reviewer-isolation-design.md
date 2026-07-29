@@ -416,8 +416,11 @@ unchanged.
 
   **What it buys.** No false clean is possible on this check. There is no
   shape to find, no boundary to get wrong, and no masking to see past.
-  The only failure it can produce is a false BLOCK, which is loud, names
-  its own cause in the message, and the user clears by rewording one line.
+  The only failure it can produce is a false BLOCK, which is loud and
+  names its own cause in the message. Some of those blocks the user
+  clears by rewording one line; some cannot be cleared at all. The source
+  list below says which is which, and an earlier version of this
+  paragraph promised the one-line fix for every one of them.
 
   **What it costs.** The search covers EVERY text chunk of every prompt
   message, not one file. Any rendered text naming one of the four
@@ -448,9 +451,24 @@ unchanged.
   - **Client-generated prose** naming a family - nothing the user can do;
     the block message's "a prompt this parser no longer describes" is the
     honest reading, and a client change is what would be required.
+  - **A skill DESCRIPTION naming one of the three FEATURE families** -
+    reword the description. This is the middle row the asymmetry above
+    leaves out: a description naming the SKILLS family costs nothing,
+    because the description disappears with its container before the
+    second render, but the feature families are refused on BOTH renders,
+    so the same sentence about apps or plugins stops every review until
+    it is reworded.
+  - **A family name spelled across a LINE BREAK** in any rendered text -
+    a wrapped path such as a line ending `.../plugins_` followed by
+    `instructions/...`, or prose broken at the same point. Line breaks
+    are removed before the search, which is what repairs a name split
+    across a transport chunk boundary, and the same removal joins two
+    ordinary lines that happen to spell a family name. Rewordable when
+    the text is the user's; not when the client wraps it.
 
   Every one fails in the loud, safe direction. The gap was in this
-  record's claim of completeness, not in the gate.
+  record's claim of completeness, not in the gate. The last two rows were
+  added after the record had already declared itself complete once.
 
   **What keeps its precision.** The FIRST render still uses the full
   parser: it enumerates every advertised skill, classifies each by the
@@ -468,11 +486,29 @@ unchanged.
   entries only from inside it; a renderer that stops emitting it fails
   that test and the run stops with the honest report.
 
+  Requiring the exact container was not enough on its own, and the second
+  half took another round. The first render looked for that container in
+  the RAW prompt while the shape scanner blanked every known container's
+  body before interpreting markers, so the two disagreed about the same
+  text, and the render puts `<permissions instructions>` ahead of the
+  skills container. A quoted five-line example inside that earlier body
+  therefore won the search: 29 real entries became one fake entry, the
+  shape check passed, and end to end the probe reported `status: clean`
+  with `skills_before: 1` and wrote an override that disabled the fake
+  and left every real skill loaded. The same defect in the other
+  direction stopped a review that was fine, when the quoted example
+  carried no entry heading of its own. Both reproduced on both hosts.
+  The first render now blanks every OTHER known container's body before
+  it looks, space for character so the offsets still hold, and refuses
+  the measurement outright unless exactly one opener and one close
+  remain, in that order.
+
   **One transport rule the blunt search needs.** The prompt arrives as
   text chunks that the parser joins with a newline, so a family name
   split across a chunk boundary was destroyed by the join itself. Line
   breaks are removed before the search. Restoring adjacency can only
-  create matches, never remove one, so the direction is safe.
+  create matches, never remove one, so the direction is safe for false
+  cleans; its cost is the wrapped-name block listed in the sources above.
 - **A global `AGENTS.md` that puts `--- project-doc ---` alone on a line
   blocks.** It is byte-identical to the renderer's own separator in the
   one region that carries the user's file verbatim. Narrowing the rule

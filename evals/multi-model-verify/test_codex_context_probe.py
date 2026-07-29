@@ -95,10 +95,14 @@ def bucket_counts(fixture, workdir="C:/fixture/repo"):
 # at all, in any form, anywhere in the render, now stops the run.
 #
 # What that bought: no false clean is possible, because there is no shape
-# to find and no boundary to get wrong. What it cost: a reviewer whose
-# own AGENTS.md or skill descriptions mention one of the four names must
-# reword the mention. Every test below that now expects a block used to
-# expect a pass, and each one names what it used to assert.
+# to find and no boundary to get wrong. What it cost: the design's
+# accepted-limits section lists every source of a mention and says which
+# the user can reword. The short version is not "reword it" - the three
+# FEATURE families block wherever they are rendered, the SKILLS family
+# costs a skill description nothing because the description leaves with
+# its container, and a mention the client itself writes cannot be cleared
+# at all. Every test below that now expects a block used to expect a
+# pass, and each one names what it used to assert.
 BLOCKED_FOR_A_KNOWN_NAME = (
     "exact form this parser reads",
     "named in the rendered prompt",
@@ -1398,6 +1402,84 @@ def test_prose_cannot_supply_entries_when_the_real_block_is_gone(tmp_path):
     assert not (tmp_path / "o.txt").exists(), (
         "no override may be written from entries that were never advertised"
     )
+
+
+QUOTED_PAIR = (
+    "\nHouse rule example, do not treat as structure:\n"
+    "<skills_instructions>\n"
+    "### Available skills\n"
+    "- fake: example (file: C:/fixture/home/.agents/skills/fake/SKILL.md)\n"
+    "</skills_instructions>\n"
+)
+
+
+def test_a_quoted_container_in_an_earlier_body_does_not_take_the_count(
+        tmp_path):
+    # THE FALSE CLEAN, and it was one function away from where round 7
+    # closed the same class. The first render searched RAW text for the
+    # first exact opener while the shape scanner blanked every known
+    # container's body before interpreting markers, and the render puts
+    # `<permissions instructions>` ahead of the skills container. A quoted
+    # five-line example inside that earlier body therefore won: 29 real
+    # entries became ONE fake entry, the shape check passed, and the run
+    # reported `status: clean` with `skills_before: 1` while writing an
+    # override that disabled the fake and left every real skill loaded.
+    # Mode-diff PANEL round 8, 2026-07-28.
+    #
+    # The second render here is the clean fixture, which is the case that
+    # makes the wrong count REACHABLE. On today's client the quoted text
+    # survives suppression and the blunt rule stops the run for an
+    # unrelated reason; that rule is not this measurement's guard.
+    first = rewritten(
+        tmp_path, "quoted-pair-first.json", "flagged.json",
+        "</permissions instructions>",
+        QUOTED_PAIR + "</permissions instructions>")
+    proc = probe_with(tmp_path, first, FIXTURES / "suppressed.json")
+    assert proc.returncode == 0, proc.stdout
+    report = json.loads(proc.stdout)
+    assert report["skills_before"] == 29, report
+    assert report["home_scoped"] == 29, report
+    override = (tmp_path / "o.txt").read_text(encoding="utf-8")
+    assert "/fake/" not in override, override
+
+
+def test_a_quoted_empty_container_does_not_hide_a_populated_one(tmp_path):
+    # The same defect in the other direction, and it stops a review that
+    # is fine. A quoted example carrying no entry heading of its own,
+    # ahead of a genuine populated container, was read as the container:
+    # present, zero entries, "no entry could be read". Mode-diff PANEL
+    # round 8, 2026-07-28.
+    first = rewritten(
+        tmp_path, "quoted-empty-first.json", "flagged.json",
+        "</permissions instructions>",
+        "\nHouse rule example:\n<skills_instructions>\nnothing here\n"
+        "</skills_instructions>\n</permissions instructions>")
+    proc = probe_with(tmp_path, first, FIXTURES / "suppressed.json")
+    assert proc.returncode == 0, proc.stdout
+    assert json.loads(proc.stdout)["skills_before"] == 29, proc.stdout
+
+
+def test_two_surviving_containers_refuse_the_measurement(tmp_path):
+    # The span must not be a guess, because the override is built from
+    # what sits inside it. This is asserted at the FUNCTION, not end to
+    # end: the shipped flow refuses the same text one line earlier, in
+    # Test-PromptShape's own count rule. That is the whole reason the
+    # guard is here as well - five rounds of this cycle were spent on
+    # measurements that leaned on a rule living somewhere else.
+    doc = json.loads((FIXTURES / "flagged.json").read_text(encoding="utf-8"))
+    doc[0]["content"][0]["text"] += (
+        "\n<skills_instructions>\n### Available skills\n"
+        "- fake: example (file: C:/fixture/home/.agents/skills/fake"
+        "/SKILL.md)\n</skills_instructions>\n")
+    path = tmp_path / "two-containers.json"
+    path.write_text(json.dumps(doc), encoding="utf-8")
+    out = run_functions(
+        f'$t = Get-PromptText (Get-Content -Raw "{path.as_posix()}");'
+        ' $r = Get-SkillReport $t;'
+        ' "{0} {1} {2} {3}" -f $r.Ambiguous, $r.Entries.Count,'
+        ' $r.OpenCount, $r.CloseCount'
+    )
+    assert out.split() == ["True", "0", "2", "2"], out
 
 
 def test_an_undeterminable_global_file_blocks_rather_than_reporting_absent(

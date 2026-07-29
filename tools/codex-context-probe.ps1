@@ -91,8 +91,11 @@ function Test-FamilyMentioned($text, $name) {
     #
     # This rule cannot produce a false clean. There is no shape to find,
     # no boundary to get wrong, and no masking to see past. It can only
-    # produce a false BLOCK, which is loud, names its own cause, and the
-    # user fixes by rewording one line of their own file.
+    # produce a false BLOCK, which is loud and names its own cause. Some
+    # of those blocks the user clears by rewording one line of their own
+    # file, and some they cannot clear at all; the design's accepted-limits
+    # section lists every source and says which is which. An earlier
+    # version of this comment promised the one-line fix for all of them.
     #
     # ACCEPTED LIMIT, and it is a real one: any rendered text naming one
     # of these four families stops the run, and not every source of that
@@ -117,10 +120,15 @@ function Test-FamilyMentioned($text, $name) {
 }
 
 function Get-SkillReport($text) {
-    # BlockPresent and Entries are reported separately on purpose. An
-    # ABSENT block is the success state once suppression has run; a
-    # PRESENT block that yields no entries is a parse failure wearing the
-    # same face, and the caller must be able to tell them apart.
+    # BlockPresent and Entries are reported separately on purpose, and the
+    # two pass-1 callers are why. An ABSENT container is a shape change and
+    # stops the run; a PRESENT container that yields no entry is a parse
+    # failure wearing a different face and stops it with a different
+    # reason. Both stop, so the two facts would collapse into one if they
+    # did not have to name their own cause. This motivation used to point
+    # at the suppression render, where absence WAS the success state; that
+    # caller was deleted and the comment was left behind describing it.
+    # Mode-diff PANEL round 4, Kimi lane, 2026-07-28.
     #
     # THIS FUNCTION IS FIRST-RENDER ONLY, and it is deliberately the
     # STRICT one. The blunt rule governs the suppression proof, where the
@@ -141,17 +149,61 @@ function Get-SkillReport($text) {
     # BOUNDED by it. A renderer that stops emitting it fails this test and
     # the caller stops with "the skills block is missing on the first
     # pass", which is the honest report and the fail-closed direction.
+    #
+    # EVERY OTHER KNOWN CONTAINER'S BODY IS BLANKED FIRST, space for
+    # character, so every offset still points where it did in the raw
+    # render. Without that, this function searched RAW text for the first
+    # opener while the shape scanner masked known bodies before
+    # interpreting markers - the two disagreed, and the render puts
+    # `<permissions instructions>` ahead of the skills container.
+    # Reproduced on both hosts, mode-diff PANEL round 8, 2026-07-28: a
+    # five-line quoted example inside the permissions body took the
+    # measurement from 29 real entries to ONE fake entry, the shape check
+    # passed, the fake was classified `home`, and end to end the probe
+    # reported `status: clean` with `skills_before: 1` and wrote an
+    # override that disabled the fake and left all 29 real skills loaded.
+    # The opposite polarity came from the same defect: a quoted example
+    # carrying no entry heading, ahead of a genuine populated container,
+    # reported present with zero entries and stopped a review that was
+    # fine.
+    #
+    # THE SPAN MUST NOT BE A GUESS. Exactly one opener and one close, in
+    # that order, after the blanking - anything else and the caller stops.
+    # `Test-PromptShape` refuses the same shapes on the same text one line
+    # earlier, and this cycle has already shown five times what happens
+    # when a measurement leans on a rule that lives somewhere else.
+    $scan = $text
+    $ambiguous = $false
+    try {
+        foreach ($name in $script:KnownContainers) {
+            if ($name -eq "skills_instructions") { continue }
+            $scan = Hide-KnownContainer $scan $name
+        }
+    } catch {
+        # A malformed OTHER container. Its body cannot be blanked, so this
+        # search cannot be trusted, and an untrustworthy measurement of the
+        # override's own input is never a clean one.
+        $ambiguous = $true
+    }
     $open = "<skills_instructions>"
-    $openAt = $text.IndexOf($open, [System.StringComparison]::Ordinal)
+    $close = "</skills_instructions>"
+    $opens = ([regex]::Matches($scan, [regex]::Escape($open))).Count
+    $closes = ([regex]::Matches($scan, [regex]::Escape($close))).Count
+    $openAt = $scan.IndexOf($open, [System.StringComparison]::Ordinal)
+    $closeAt = $scan.IndexOf($close, [System.StringComparison]::Ordinal)
     $present = ($openAt -ge 0)
     $entries = New-Object System.Collections.ArrayList
     $malformed = $false
     $firstBad = ""
-    if ($present) {
-        $body = $text.Substring($openAt + $open.Length)
-        $closeAt = $body.IndexOf("</skills_instructions>",
-            [System.StringComparison]::Ordinal)
-        if ($closeAt -ge 0) { $body = $body.Substring(0, $closeAt) }
+    if ($present -and -not $ambiguous) {
+        if (($opens -ne 1) -or ($closes -ne 1) -or
+            ($closeAt -lt ($openAt + $open.Length))) {
+            $ambiguous = $true
+        }
+    }
+    if ($present -and -not $ambiguous) {
+        $bodyStart = $openAt + $open.Length
+        $body = $scan.Substring($bodyStart, $closeAt - $bodyStart)
         # The heading is looked for INSIDE the container's body only, so a
         # heading written anywhere else in the prompt cannot supply
         # entries.
@@ -208,7 +260,9 @@ function Get-SkillReport($text) {
         }
     }
     return @{ BlockPresent = $present; Entries = @($entries)
-              Malformed = $malformed; FirstMalformedLine = $firstBad }
+              Malformed = $malformed; FirstMalformedLine = $firstBad
+              Ambiguous = $ambiguous; OpenCount = $opens
+              CloseCount = $closes }
 }
 
 function Get-InstructionReport($text) {
@@ -668,25 +722,38 @@ if (-not $skills.BlockPresent) {
         " prompt shape changed, and this parser cannot tell an empty" +
         " machine from one it can no longer read") $Json
 }
+# THE SPAN IS A GUESS, so nothing is measured from it. The override is
+# built from what sits inside this container, so a span this parser had to
+# choose between candidates would put chosen entries into the reviewer's
+# configuration. Mode-diff PANEL round 8, 2026-07-28.
+if ($skills.Ambiguous) {
+    Write-Blocked ("the skills container's boundaries on the first pass" +
+        " are ambiguous (" + $skills.OpenCount + " opening and " +
+        $skills.CloseCount + " closing markers once every other known" +
+        " container's body was blanked) - which span is the container is" +
+        " a guess, and the override is built from what is inside it") $Json
+}
 # PRESENT and empty is a parse failure, and it is refused HERE rather than
 # only on the second pass. codex does not render an empty skills block, so
 # zero entries inside a present block means this parser can no longer read
 # the entry lines - and every count downstream would then be a measured
 # zero that measured nothing. Found by the mode-diff review, 2026-07-28.
 #
-# The message names BOTH causes, because presence is now a mention. If the
-# real block is absent and something in the reviewer's own instruction
-# text merely names the family, this branch is where the run stops, and
-# saying only "the entry format changed" would send the reader after
-# client drift that did not happen. Mode-diff PANEL round 3, Kimi lane,
-# 2026-07-28.
+# The message names BOTH causes. The second one was written when presence
+# was a bare mention, and it survives the return to an exact container in
+# ONE narrowed shape: text that sits outside every known container and
+# writes the container's literal delimiters as a matched pair. Every
+# quoted pair INSIDE a known body is blanked before the search, so it can
+# no longer reach here. Saying only "the entry format changed" would send
+# the reader after client drift that did not happen. Mode-diff PANEL round
+# 3, Kimi lane, 2026-07-28; narrowed at round 8.
 if ($skills.Entries.Count -eq 0) {
-    Write-Blocked ("the skills family is named on the first pass but no" +
-        " entry could be read. Either the entry format changed, in which" +
-        " case every count below would be a zero this parser invented" +
-        " rather than measured, or there is no skills block at all and" +
-        " the name comes from the reviewer's own instruction text - in" +
-        " which case reword that mention") $Json
+    Write-Blocked ("the skills container is present on the first pass but" +
+        " no entry could be read. Either the entry format changed, in" +
+        " which case every count below would be a zero this parser" +
+        " invented rather than measured, or the real block is gone and" +
+        " some text outside every known container writes the container's" +
+        " own delimiters as a pair - in which case reword that text") $Json
 }
 if ($skills.Malformed) {
     # ACCEPTED LIMIT, and it blocks rather than guessing. A skill
