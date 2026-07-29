@@ -32,18 +32,32 @@ BODY_START = "function Get-PromptText"
 BODY_END = "$toplevel ="
 
 
-# CI RUNS ON LINUX, where there is no PowerShell at all. This module drove
-# `powershell.exe` unconditionally and every case in it failed there with
-# "No such file or directory". A green Windows suite proves one
-# interpreter on one operating system, which is the 0.16.1 lesson one step
-# further out: that release's lock passed on Windows PowerShell and did not
-# lock on pwsh. The older PowerShell-driven modules already resolve the
-# host and skip when it is absent; this one and the mirror's did not.
+# WINDOWS ONLY, and the reason is the subject, not the harness. The probe
+# resolves the reviewer's global instruction file under `$env:USERPROFILE`
+# and the mirror uses `$env:LOCALAPPDATA`; neither exists on Linux, so the
+# probe correctly refuses to report a measurement it could not make. That
+# is the script working, not failing, and there is nothing for these cases
+# to assert there.
+#
+# Two failures got here in sequence, and both were mine. First the module
+# drove `powershell.exe` unconditionally and all 155 cases failed on CI
+# with "No such file or directory". Guarding on the presence of a
+# PowerShell host was not enough: the runner ships `pwsh`, so the cases
+# then RAN on Linux and failed on the null `USERPROFILE`. A green suite
+# proves the platform it ran on, which is the 0.16.1 lesson - a lock that
+# passed on Windows PowerShell and did not lock on pwsh - one step out.
+#
+# COVERAGE COST, recorded rather than left quiet: CI is Linux, so CI does
+# not exercise these 155 cases at all. A green CI badge on this repo says
+# nothing about the probe or the mirror. Backlog item 10 carries the fix,
+# which is a Windows job, not a looser test.
 POWERSHELL = (os.environ.get("PARALLAX_PS_HOST")
               or shutil.which("powershell") or shutil.which("pwsh"))
 
 pytestmark = pytest.mark.skipif(
-    POWERSHELL is None, reason="no PowerShell host on PATH")
+    os.name != "nt" or POWERSHELL is None,
+    reason="the probe is a Windows tool: it needs a PowerShell host and "
+           "the Windows profile variables it measures")
 
 
 def ps_host():

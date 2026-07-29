@@ -22,17 +22,23 @@ FIXTURES = Path(__file__).parent / "fixtures" / "codex-prompt-input"
 STUB = Path(__file__).parent / "fixtures" / "stub-codex" / "stub-codex.ps1"
 
 
-# CI RUNS ON LINUX, where there is no PowerShell at all. This module drove
-# `powershell.exe` unconditionally and every case in it failed there with
-# "No such file or directory" - a green Windows suite says nothing about
-# the host CI actually uses. Same shape as 0.16.1's lock, which passed on
-# Windows PowerShell and did not lock on pwsh. The other PowerShell-driven
-# modules already resolve the host and skip; these two did not.
+# WINDOWS ONLY, for the same reason as the probe's suite: the mirror runs
+# the probe, which resolves the reviewer's global instruction file under
+# `$env:USERPROFILE`, and the lane lock lives under `$env:LOCALAPPDATA`.
+# Neither exists on Linux, so the run refuses to report a measurement it
+# could not make - the script working, not failing.
+#
+# Guarding only on a PowerShell host being present was not enough: the CI
+# runner ships `pwsh`, so these cases ran on Linux and failed there for a
+# second, different reason. See the probe suite's header for the full
+# sequence and for the coverage cost this skip accepts.
 POWERSHELL = (os.environ.get("PARALLAX_PS_HOST")
               or shutil.which("powershell") or shutil.which("pwsh"))
 
 pytestmark = pytest.mark.skipif(
-    POWERSHELL is None, reason="no PowerShell host on PATH")
+    os.name != "nt" or POWERSHELL is None,
+    reason="the review mirror is a Windows tool: it needs a PowerShell "
+           "host and the Windows profile variables it measures")
 
 
 def ps_host():
