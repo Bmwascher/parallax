@@ -164,7 +164,7 @@ def test_an_empty_field_before_the_end_is_kept_for_the_parser_to_refuse():
     assert out == "3|a.txt,,b.txt", out
 ```
 
-- [ ] **Step 3: Run the tests to verify they fail**
+- [ ] **Step 2: Run the tests to verify they fail**
 
 Run:
 
@@ -183,7 +183,7 @@ the tests EXPLICITLY rather than selecting on `-k`. The old selector
 so the stated count of 6 would have been 7. Naming the node ids cannot
 drift as tests are added.
 
-- [ ] **Step 4: Write the implementation**
+- [ ] **Step 3: Write the implementation**
 
 Insert into `tools/new-review-mirror.ps1` immediately above
 `function Invoke-GitLines`:
