@@ -503,6 +503,15 @@ unchanged.
   the measurement outright unless exactly one opener and one close
   remain, in that order.
 
+  The blanked text LOCATES the container and nothing else. Reading the
+  entries out of it as well removed real skills in silence: with the
+  genuine permissions container absent from the render, a skill
+  description quoting that pair around a later entry blanked the entry
+  along with it, and the report came back with 28 of 29 skills and
+  nothing to say one had gone missing. The entries are read from the raw
+  render at the located offsets, which is what the length-preserving
+  replacement was always for.
+
   **One transport rule the blunt search needs.** The prompt arrives as
   text chunks that the parser joins with a newline, so a family name
   split across a chunk boundary was destroyed by the join itself. Line

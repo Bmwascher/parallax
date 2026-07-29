@@ -121,14 +121,16 @@ function Test-FamilyMentioned($text, $name) {
 
 function Get-SkillReport($text) {
     # BlockPresent and Entries are reported separately on purpose, and the
-    # two pass-1 callers are why. An ABSENT container is a shape change and
-    # stops the run; a PRESENT container that yields no entry is a parse
-    # failure wearing a different face and stops it with a different
-    # reason. Both stop, so the two facts would collapse into one if they
-    # did not have to name their own cause. This motivation used to point
-    # at the suppression render, where absence WAS the success state; that
-    # caller was deleted and the comment was left behind describing it.
-    # Mode-diff PANEL round 4, Kimi lane, 2026-07-28.
+    # caller's two checks on this one report are why. An ABSENT container
+    # is a shape change and stops the run; a PRESENT container that yields
+    # no entry is a parse failure wearing a different face and stops it
+    # with a different reason. Both stop, so the two facts would collapse
+    # into one if they did not have to name their own cause. This
+    # motivation used to point at the suppression render, where absence
+    # WAS the success state; that caller was deleted and the comment was
+    # left behind describing it. Mode-diff PANEL round 4, Kimi lane,
+    # 2026-07-28. There is ONE production call site, not two; an earlier
+    # version of this paragraph said two callers and meant two checks.
     #
     # THIS FUNCTION IS FIRST-RENDER ONLY, and it is deliberately the
     # STRICT one. The blunt rule governs the suppression proof, where the
@@ -167,6 +169,18 @@ function Get-SkillReport($text) {
     # reported present with zero entries and stopped a review that was
     # fine.
     #
+    # THE BLANKED TEXT LOCATES THE SPAN AND NOTHING ELSE. The entries are
+    # then read from the RAW render at the same offsets, which is what the
+    # length-preserving replacement is for. Parsing the blanked text
+    # instead removed real entries in silence: with the genuine
+    # `<permissions instructions>` container absent, a skill DESCRIPTION
+    # quoting that pair around a later entry blanked the entry with it, and
+    # the report came back with 28 of 29 skills, `Malformed` false and
+    # nothing to show that anything had gone missing. The entry loop audits
+    # every entry-looking line it SEES; it cannot audit a line that was
+    # erased before it ran. Reproduced on both hosts, mode-diff PANEL round
+    # 9, 2026-07-28.
+    #
     # THE SPAN MUST NOT BE A GUESS. Exactly one opener and one close, in
     # that order, after the blanking - anything else and the caller stops.
     # `Test-PromptShape` refuses the same shapes on the same text one line
@@ -195,15 +209,21 @@ function Get-SkillReport($text) {
     $entries = New-Object System.Collections.ArrayList
     $malformed = $false
     $firstBad = ""
-    if ($present -and -not $ambiguous) {
-        if (($opens -ne 1) -or ($closes -ne 1) -or
-            ($closeAt -lt ($openAt + $open.Length))) {
-            $ambiguous = $true
-        }
+    # EVERY shape is judged, not only the ones carrying an opener. A
+    # close-only render used to return `Ambiguous` false with one closing
+    # marker counted, so the report contradicted the rule stated above
+    # while the caller still stopped for the other reason. A field that is
+    # wrong whenever nobody reads it is a field that will be read one day.
+    # Mode-diff PANEL round 9, 2026-07-28.
+    if (-not $ambiguous) {
+        $none = (($opens -eq 0) -and ($closes -eq 0))
+        $one = (($opens -eq 1) -and ($closes -eq 1) -and
+            ($closeAt -ge ($openAt + $open.Length)))
+        if (-not ($none -or $one)) { $ambiguous = $true }
     }
     if ($present -and -not $ambiguous) {
         $bodyStart = $openAt + $open.Length
-        $body = $scan.Substring($bodyStart, $closeAt - $bodyStart)
+        $body = $text.Substring($bodyStart, $closeAt - $bodyStart)
         # The heading is looked for INSIDE the container's body only, so a
         # heading written anywhere else in the prompt cannot supply
         # entries.
@@ -727,11 +747,17 @@ if (-not $skills.BlockPresent) {
 # choose between candidates would put chosen entries into the reviewer's
 # configuration. Mode-diff PANEL round 8, 2026-07-28.
 if ($skills.Ambiguous) {
+    # The count is reported as counted, not as it would have been counted.
+    # When the blanking loop itself throws, some bodies are still visible
+    # when these numbers are taken, so the message says "as far as they
+    # could be blanked" rather than claiming a completed blanking. Raised
+    # as a non-finding by the Kimi lane, PANEL round 5, 2026-07-28.
     Write-Blocked ("the skills container's boundaries on the first pass" +
         " are ambiguous (" + $skills.OpenCount + " opening and " +
-        $skills.CloseCount + " closing markers once every other known" +
-        " container's body was blanked) - which span is the container is" +
-        " a guess, and the override is built from what is inside it") $Json
+        $skills.CloseCount + " closing markers, counted after blanking" +
+        " the other known containers' bodies as far as they could be" +
+        " blanked) - which span is the container is a guess, and the" +
+        " override is built from what is inside it") $Json
 }
 # PRESENT and empty is a parse failure, and it is refused HERE rather than
 # only on the second pass. codex does not render an empty skills block, so

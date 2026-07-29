@@ -1482,6 +1482,59 @@ def test_two_surviving_containers_refuse_the_measurement(tmp_path):
     assert out.split() == ["True", "0", "2", "2"], out
 
 
+def test_a_known_pair_quoted_inside_the_body_does_not_erase_an_entry(
+        tmp_path):
+    # The blanked text LOCATES the container; the entries are read from
+    # the raw render. Reading them from the blanked text removed real
+    # skills in silence: with the genuine permissions container absent, a
+    # description quoting that pair around a later entry took the count
+    # from 29 to 28 with `Malformed` false and nothing else to show for
+    # it. The entry loop audits every entry-looking line it sees and
+    # cannot audit one erased before it ran. Mode-diff PANEL round 9,
+    # 2026-07-28.
+    doc = json.loads((FIXTURES / "flagged.json").read_text(encoding="utf-8"))
+    text = doc[0]["content"][0]["text"]
+    start = text.index("<permissions instructions>")
+    end = text.index("</permissions instructions>") + len(
+        "</permissions instructions>")
+    text = text[:start] + text[end:]
+    at = text.index("- userskill5:")
+    text = text[:at] + "Continuation quotes <permissions instructions>\n" + \
+        text[at:]
+    at = text.index("- userskill6:")
+    text = text[:at] + "</permissions instructions>\n" + text[at:]
+    doc[0]["content"][0]["text"] = text
+    path = tmp_path / "pair-in-body.json"
+    path.write_text(json.dumps(doc), encoding="utf-8")
+    out = run_functions(
+        f'$t = Get-PromptText (Get-Content -Raw "{path.as_posix()}");'
+        ' $r = Get-SkillReport $t;'
+        ' $n = @($r.Entries | Where-Object'
+        '   { $_.Name -eq "userskill5" }).Count;'
+        ' "{0} {1} {2}" -f $r.Entries.Count, $r.Ambiguous, [bool]$n'
+    )
+    assert out.split() == ["29", "False", "True"], out
+
+
+def test_a_close_without_an_opener_is_reported_ambiguous(tmp_path):
+    # The stated rule is exactly one opener and one close. A close-only
+    # render returned `Ambiguous` false with one closing marker counted,
+    # so the report contradicted the rule while the caller stopped for the
+    # other reason. Mode-diff PANEL round 9, 2026-07-28.
+    doc = json.loads((FIXTURES / "suppressed.json").read_text(
+        encoding="utf-8"))
+    doc[0]["content"][0]["text"] += "\n</skills_instructions>\n"
+    path = tmp_path / "close-only.json"
+    path.write_text(json.dumps(doc), encoding="utf-8")
+    out = run_functions(
+        f'$t = Get-PromptText (Get-Content -Raw "{path.as_posix()}");'
+        ' $r = Get-SkillReport $t;'
+        ' "{0} {1} {2} {3}" -f $r.BlockPresent, $r.Ambiguous,'
+        ' $r.OpenCount, $r.CloseCount'
+    )
+    assert out.split() == ["False", "True", "0", "1"], out
+
+
 def test_an_undeterminable_global_file_blocks_rather_than_reporting_absent(
         tmp_path):
     # Building and testing the candidate path sat outside the guard and
