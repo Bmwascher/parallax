@@ -92,9 +92,40 @@ edit used to be Step 1, BEFORE the function it names exists. That makes
 red run, so the red would have been the harness failing to slice the
 script rather than the function being undefined - a red for the wrong
 reason, and the plan's stated expected result would not have happened. It
-now runs AFTER the implementation, as Step 4.
+now runs AFTER the implementation, as Step 5.
 
-- [ ] **Step 1: Write the failing tests**
+**Amendment A16, plan debate round 4, Sol lane (S3).** Step 1 below is
+new. Measured 2026-07-29 on BOTH hosts: a snippet calling an undefined
+function returns exit code **0**, and `run_functions` returns the snippet's
+partial output, so a missing function surfaces as a confusing VALUE
+mismatch (`'|1'` against `'True|0'`) rather than as an error. That made the
+old stated red - "the snippet exits non-zero and `run_functions` trips its
+own assert" - simply untrue. Making the generated file stop on the first
+error fixes every red in this plan at once, and makes a mistyped function
+name in any future snippet fail loudly instead of quietly.
+
+- [ ] **Step 1: Make the dot-source harness fail loudly**
+
+In `evals/multi-model-verify/test_review_mirror.py`, inside
+`run_functions`, change:
+
+```python
+        fh.write(body + "\n" + snippet)
+```
+
+to:
+
+```python
+        # Stop on the FIRST error. Measured 2026-07-29 on both hosts: an
+        # undefined function is NON-terminating here, the host exits 0, and
+        # the snippet's partial output comes back - so a missing or
+        # mistyped function reads as a wrong VALUE instead of an error.
+        # These snippets exercise pathname handling; a quiet failure is the
+        # one outcome this module must not produce.
+        fh.write('$ErrorActionPreference = "Stop"\n' + body + "\n" + snippet)
+```
+
+- [ ] **Step 2: Write the failing tests**
 
 Append to `evals/multi-model-verify/test_review_mirror.py`:
 
@@ -164,7 +195,7 @@ def test_an_empty_field_before_the_end_is_kept_for_the_parser_to_refuse():
     assert out == "3|a.txt,,b.txt", out
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [ ] **Step 3: Run the tests to verify they fail**
 
 Run:
 
@@ -172,9 +203,14 @@ Run:
 python -m pytest evals/multi-model-verify/test_review_mirror.py::test_an_empty_capture_is_a_legitimate_state evals/multi-model-verify/test_review_mirror.py::test_fields_split_on_nul_and_keep_their_spaces evals/multi-model-verify/test_review_mirror.py::test_a_capture_without_a_trailing_nul_stops evals/multi-model-verify/test_review_mirror.py::test_invalid_utf8_stops_instead_of_being_replaced evals/multi-model-verify/test_review_mirror.py::test_a_non_ascii_field_arrives_as_one_character_not_two_bytes evals/multi-model-verify/test_review_mirror.py::test_an_empty_field_before_the_end_is_kept_for_the_parser_to_refuse -v
 ```
 
-Expected: FAIL, all 6. `ConvertFrom-NulCapture` is not defined, so the
-dot-sourced snippet exits non-zero and `run_functions` trips its own
-assert.
+Expected: FAIL, all 6, with the harness's own assert firing because the
+generated file now stops on the first error and the host exits non-zero.
+
+WITHOUT Step 1 this red would look different, and the difference is worth
+knowing: measured 2026-07-29 on both hosts, an undefined function is
+non-terminating, the host exits 0, and `run_functions` returns the
+snippet's partial output - so the first case would fail on `'|1'` against
+`'True|0'` rather than on anything naming the missing function.
 
 **Amendment A11, plan debate round 3, backup lane (R6).** These steps name
 the tests EXPLICITLY rather than selecting on `-k`. The old selector
@@ -183,7 +219,7 @@ the tests EXPLICITLY rather than selecting on `-k`. The old selector
 so the stated count of 6 would have been 7. Naming the node ids cannot
 drift as tests are added.
 
-- [ ] **Step 3: Write the implementation**
+- [ ] **Step 4: Write the implementation**
 
 Insert into `tools/new-review-mirror.ps1` immediately above
 `function Invoke-GitLines`:
@@ -289,7 +325,7 @@ function ConvertFrom-NulCapture($bytes) {
 }
 ```
 
-- [ ] **Step 4: Point the dot-source slice at the new first function**
+- [ ] **Step 5: Point the dot-source slice at the new first function**
 
 `run_functions` slices the script between `BODY_START` and `BODY_END`, and
 the two new functions sit ABOVE `Invoke-GitLines`, so the slice must start
@@ -311,7 +347,7 @@ BODY_END = "$toplevel ="
 
 This comes AFTER the implementation on purpose. See amendment A10 above.
 
-- [ ] **Step 5: Run the tests to verify they pass**
+- [ ] **Step 6: Run the tests to verify they pass**
 
 Run:
 
@@ -321,7 +357,7 @@ python -m pytest evals/multi-model-verify/test_review_mirror.py::test_an_empty_c
 
 Expected: PASS, 6 tests.
 
-- [ ] **Step 6: Run the whole module to prove nothing regressed**
+- [ ] **Step 7: Run the whole module to prove nothing regressed**
 
 Run: `python -m pytest evals/multi-model-verify/test_review_mirror.py -q`
 
@@ -329,7 +365,7 @@ Expected: the one pre-existing failure
 (`test_a_quoted_baseline_entry_stops_instead_of_being_unquoted`) and
 nothing new. Task 6 replaces that test.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
 git add tools/new-review-mirror.ps1 evals/multi-model-verify/test_review_mirror.py
@@ -420,7 +456,11 @@ function Test-SupportedPathname($value) {
     # The question this answers is whether this tool can handle that
     # pathname EXACTLY, in both senses:
     #
-    #   1. Can it name a file the script can delete and hash?
+    #   1. Would resolving it risk naming the WRONG file? This is NOT a
+    #      Windows name validator: it does not check reserved device
+    #      names, trailing dots, length limits, or the other characters
+    #      Windows refuses. A syntactically fine name with no file behind
+    #      it is caught downstream, not here.
     #   2. Can Format-StatusPathname record it in the porcelain line form
     #      the baseline contract already uses?
     #
@@ -1260,10 +1300,14 @@ def test_a_rename_renders_in_the_baseline_as_source_arrow_destination(tmp_path):
 
 
 def test_escape_looking_field_text_is_never_interpreted():
-    # `caf\303\251` is the exact string the deleted decoder mishandled: it
-    # turned those eleven characters into four, none of them the accented
-    # letter the real name holds. Under -z the bytes are the pathname, so
-    # the field must come back as the nine literal characters it is.
+    # `caf\303\251` is the exact string the deleted decoder mishandled.
+    # On the quoted form it turned the 15 characters of
+    # `caf\303\251.txt` into NINE: three ordinary, two produced by the
+    # octal escapes, and four from `.txt`. Neither produced character is
+    # the accented letter the real name holds.
+    #
+    # Under -z the bytes ARE the pathname, so the field must come back as
+    # the 15 literal characters it is.
     #
     # This is a FIELD-level case and not an end-to-end one on purpose. A
     # file with this name cannot exist on Windows, because the backslash is
@@ -1687,6 +1731,12 @@ Same session resumed, route line verified (client-side), at head
   Refusing 0x7F rather than rendering it is deliberate: git records the
   other triggers with OCTAL ESCAPES, and reproducing those would mean
   writing the encoder this cycle exists to delete.
+  [Corrected by A14 in round 3: "the other triggers" is too broad. Tab,
+  newline, `"` and `\` get NAMED escapes; octal is used for the rest,
+  including the one reachable case, 0x7F as `\177`. The conclusion is
+  unchanged. This record is left standing and annotated rather than
+  rewritten, because an amendment log that edits its own history stops
+  being evidence.]
 
 **Where the lanes split, round 2.** Sol found three declaration defects A2
 introduced and passed A2's substance; Kimi passed the declarations and
@@ -1732,6 +1782,63 @@ different path into the index and was NOT measured. And independently of
 that, none of those characters is a C-style quoting trigger, so even if
 one arrived it would come back BARE from both the line form and `-z`, and
 the render would match - the completeness claim concerns quoting and is
-untouched. What such an entry would do is name a file with no bytes behind
-it, which `Get-ContentManifest` already stops on. Recorded as an accepted
+untouched. What such an entry would do downstream was stated too
+strongly in the first draft of this paragraph and both lanes corrected
+it in round 4: it does NOT reach a guaranteed stop. A cloned index entry
+whose name the filesystem cannot create has no worktree file, so status
+reports it as a deletion-only entry, and those are deliberately OMITTED
+before `Get-ContentManifest` sees any subject. A name matching the
+back-channel pathspec takes the remediation path instead. Neither route
+was measured. The omission is benign on its own terms - HEAD binds the
+content and there are no bytes to hash - but "the manifest already stops
+on it" was not true, and is not claimed here. Recorded as an accepted
 limit, not closed.
+
+### Round 4, both lanes, 2026-07-29
+
+At head `d731c05`. Sol: S1, S2 PASS; S3, S4, S5, S6 FIX. Kimi: S1, S2, S3,
+S5 PASS; S4, S6 FIX.
+
+- **A16 - the stated red was not the red that would happen (Sol, S3).**
+  Every "run it to see it fail" step in Task 1 claimed the dot-sourced
+  snippet exits non-zero and `run_functions` trips its own assert.
+  Measured 2026-07-29 on BOTH hosts: an undefined function is
+  NON-terminating, the host exits **0**, and `run_functions` returns the
+  snippet's partial output, so the case would have failed on `'|1'`
+  against `'True|0'` - a red that names nothing. New Task 1 Step 1 makes
+  the generated file set `$ErrorActionPreference = "Stop"`, which fixes
+  every red in the plan at once and makes a mistyped function name in any
+  future snippet fail loudly. Task 1 renumbered to 1-8.
+- **A17 - the count correction was itself miscounted, twice (both
+  lanes).** A13 said "eleven characters into four". The old decoder turns
+  `cafÃ©` (11 characters) into FIVE, and the full field
+  `cafÃ©.txt` (15) into NINE; "four" is the length of the CORRECT
+  decode, which is the one thing the defect never produced. A second stale
+  "nine" survived two lines below, describing the 15-character field. The
+  whole comment is rewritten. This is the fourth consecutive round to find
+  a defect inside the previous round's fix, and the second inside a
+  correction to a count.
+- **A18 - the declined finding claimed a stop that does not happen (both
+  lanes).** Its text said a foreign index entry "would name a file with no
+  bytes behind it, which `Get-ContentManifest` already stops on". Both
+  lanes traced the same counter-path: such an entry has no worktree file,
+  so status reports it as deletion-only, and those are OMITTED before the
+  manifest sees any subject; a back-channel match takes the remediation
+  path instead. Neither route was measured. The guarantee is removed and
+  the two routes are recorded.
+- **A19 - two residual overclaims (Sol, S4).** The guard's first ground
+  still read "can it name a file the script can delete and hash", which is
+  the broad file-legality claim A15's own disclaimer contradicts, in both
+  the spec and the implementation comment. Both narrowed to "would
+  resolving it risk naming the WRONG file". A9's historical record still
+  carried the pre-A14 octal sentence; it is annotated in place rather than
+  rewritten, because an amendment log that edits its own history stops
+  being evidence.
+
+**Where the lanes split, round 4, and how it was settled.** Sol called S3
+a FIX; Kimi called it a PASS and stated that the snippet "exits non-zero".
+Kimi listed every execution-dependent claim as UNVERIFIED in the same
+reply, which is exactly what that claim was. The case was RUN: exit code 0
+on both hosts, output `'|1'`. Sol is right and the finding is adopted. The
+lane that could not run it did not get the benefit of the doubt, and the
+lane that was right did not get it for being right - the run decided.

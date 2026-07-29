@@ -178,9 +178,10 @@ else is a stop.
 ### Guard
 
 `Test-SupportedPathname` decides whether this tool can handle a pathname
-EXACTLY, in both senses: can it name a file the script can delete and
-hash, and can the render below record it in the porcelain line form the
-baseline contract already uses.
+EXACTLY, on two narrow grounds: would resolving it risk naming the WRONG
+file, and can the render below record it in the porcelain line form the
+baseline contract already uses. Nothing wider. See "What the guard does
+NOT claim" below, which this sentence must not outrun.
 
 It admits an ordinary pathname, or one whose ONLY line-form quoting
 trigger is a SPACE, which is the single trigger the render reproduces. It
