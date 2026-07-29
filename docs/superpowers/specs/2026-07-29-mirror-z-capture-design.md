@@ -198,21 +198,33 @@ render cannot reproduce, so admitting it would put a bare name into a
 baseline that the direct capture quotes.
 
 Refusing that residue rather than rendering it is deliberate. Git records
-every other trigger with an OCTAL ESCAPE, and reproducing those would mean
-writing the encoder this cycle exists to delete. A loud stop on a
-pathological name is the cheaper failure.
+it with its own C-style encoder: NAMED escapes for tab, newline, `"` and
+`\`, and OCTAL for the rest, including the one reachable case, 0x7F as
+`\177`. Reproducing any of that would mean writing back the encoder this
+cycle exists to delete. A loud stop on a pathological name is the cheaper
+failure.
 
 Amended twice on 2026-07-29 during the plan debate: first because `>` was
 argued for and not enforced, then because the guard was named for Windows
 legality while deciding something else, and 0x7F fell through the gap
 between the two.
 
-This exists because deleting the old blanket refusal with nothing in its
-place would remove a safety property, not just noise. Git reads names
-from its INDEX, which can carry a name created on Linux that Windows
-cannot represent. Without the guard the script would try to delete or
-hash a file that cannot exist and would report success. The guard can
-only fire on that case, and it stops rather than guessing.
+**What the guard does NOT claim.** It is not a Windows name validator. It
+does not check for reserved device names, trailing dots or spaces, length
+limits, or the other characters Windows refuses. Two grounds are all it
+decides: a name the script could resolve to the wrong file, and a name the
+render cannot reproduce. A syntactically fine name with no file behind it
+is caught downstream, where `Get-ContentManifest` already stops on
+"baseline path has no file behind it". Stating the narrow contract is the
+point: the first two drafts of this guard each advertised more than the
+code did, and both times a reviewer found the gap.
+
+The guard exists because deleting the old blanket refusal with nothing in
+its place would remove a safety property, not just noise. It fires on two
+kinds of input, not one: a name that cannot be resolved without guessing,
+and a name that is perfectly resolvable but cannot be recorded exactly.
+0x7F is the second kind, which is why "the guard can only fire on an
+impossible path" - the wording of an earlier draft - was false.
 
 ### Parse
 
@@ -288,7 +300,7 @@ as a clean result.
 - a byte is not valid UTF-8
 - a required field is empty
 - a rename or copy record has no second field
-- a pathname fails the Windows-path guard
+- a pathname fails the supported-pathname guard
 - a status field is shorter than the four characters `XY` plus a space
   plus at least one pathname character
 - an `RD` destination no longer exists

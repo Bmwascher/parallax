@@ -86,23 +86,15 @@ dot-source slice keeps covering everything.
     `@{ Ok = $true; Fields = [string[]] }` or
     `@{ Ok = $false; Reason = [string]; Fields = @() }`.
 
-- [ ] **Step 1: Point the dot-source slice at the new first function**
+**Amendment A10, plan debate round 3, Sol lane (R6).** The `BODY_START`
+edit used to be Step 1, BEFORE the function it names exists. That makes
+`text.index(BODY_START)` in `run_functions` raise `ValueError` on the
+red run, so the red would have been the harness failing to slice the
+script rather than the function being undefined - a red for the wrong
+reason, and the plan's stated expected result would not have happened. It
+now runs AFTER the implementation, as Step 4.
 
-In `evals/multi-model-verify/test_review_mirror.py`, change:
-
-```python
-BODY_START = "function Invoke-GitLines"
-BODY_END = "$toplevel ="
-```
-
-to:
-
-```python
-BODY_START = "function Invoke-GitProcess"
-BODY_END = "$toplevel ="
-```
-
-- [ ] **Step 2: Write the failing tests**
+- [ ] **Step 1: Write the failing tests**
 
 Append to `evals/multi-model-verify/test_review_mirror.py`:
 
@@ -174,10 +166,22 @@ def test_an_empty_field_before_the_end_is_kept_for_the_parser_to_refuse():
 
 - [ ] **Step 3: Run the tests to verify they fail**
 
-Run: `python -m pytest evals/multi-model-verify/test_review_mirror.py -k "capture or field or utf8" -v`
+Run:
 
-Expected: FAIL. `ConvertFrom-NulCapture` is not defined, so the dot-sourced
-snippet exits non-zero and `run_functions` trips its own assert.
+```bash
+python -m pytest evals/multi-model-verify/test_review_mirror.py::test_an_empty_capture_is_a_legitimate_state evals/multi-model-verify/test_review_mirror.py::test_fields_split_on_nul_and_keep_their_spaces evals/multi-model-verify/test_review_mirror.py::test_a_capture_without_a_trailing_nul_stops evals/multi-model-verify/test_review_mirror.py::test_invalid_utf8_stops_instead_of_being_replaced evals/multi-model-verify/test_review_mirror.py::test_a_non_ascii_field_arrives_as_one_character_not_two_bytes evals/multi-model-verify/test_review_mirror.py::test_an_empty_field_before_the_end_is_kept_for_the_parser_to_refuse -v
+```
+
+Expected: FAIL, all 6. `ConvertFrom-NulCapture` is not defined, so the
+dot-sourced snippet exits non-zero and `run_functions` trips its own
+assert.
+
+**Amendment A11, plan debate round 3, backup lane (R6).** These steps name
+the tests EXPLICITLY rather than selecting on `-k`. The old selector
+`-k "capture or field or utf8"` also matched the pre-existing
+`test_the_baseline_is_the_raw_status_capture`, which passes at this point,
+so the stated count of 6 would have been 7. Naming the node ids cannot
+drift as tests are added.
 
 - [ ] **Step 4: Write the implementation**
 
@@ -285,9 +289,35 @@ function ConvertFrom-NulCapture($bytes) {
 }
 ```
 
+- [ ] **Step 4: Point the dot-source slice at the new first function**
+
+`run_functions` slices the script between `BODY_START` and `BODY_END`, and
+the two new functions sit ABOVE `Invoke-GitLines`, so the slice must start
+at the new first function or it will not contain them.
+
+In `evals/multi-model-verify/test_review_mirror.py`, change:
+
+```python
+BODY_START = "function Invoke-GitLines"
+BODY_END = "$toplevel ="
+```
+
+to:
+
+```python
+BODY_START = "function Invoke-GitProcess"
+BODY_END = "$toplevel ="
+```
+
+This comes AFTER the implementation on purpose. See amendment A10 above.
+
 - [ ] **Step 5: Run the tests to verify they pass**
 
-Run: `python -m pytest evals/multi-model-verify/test_review_mirror.py -k "capture or field or utf8" -v`
+Run:
+
+```bash
+python -m pytest evals/multi-model-verify/test_review_mirror.py::test_an_empty_capture_is_a_legitimate_state evals/multi-model-verify/test_review_mirror.py::test_fields_split_on_nul_and_keep_their_spaces evals/multi-model-verify/test_review_mirror.py::test_a_capture_without_a_trailing_nul_stops evals/multi-model-verify/test_review_mirror.py::test_invalid_utf8_stops_instead_of_being_replaced evals/multi-model-verify/test_review_mirror.py::test_a_non_ascii_field_arrives_as_one_character_not_two_bytes evals/multi-model-verify/test_review_mirror.py::test_an_empty_field_before_the_end_is_kept_for_the_parser_to_refuse -v
+```
 
 Expected: PASS, 6 tests.
 
@@ -400,9 +430,11 @@ function Test-SupportedPathname($value) {
     # other way is refused, and so is `>`.
     #
     # REFUSING rather than rendering is the deliberate choice for that
-    # residue. Git records the other triggers with OCTAL ESCAPES, and
-    # reproducing those would mean writing the encoder this cycle deleted.
-    # A loud stop on a pathological name is the cheaper failure.
+    # residue. Git records it with git's own C-style encoder - NAMED
+    # escapes for tab, newline, `"` and `\`, and OCTAL for the rest,
+    # including the one reachable case, 0x7F as `\177`. Reproducing any
+    # of that would mean writing back the encoder this cycle deletes. A
+    # loud stop on a pathological name is the cheaper failure.
     #
     # The BACKSLASH refusal carries a second, heavier reason. git separates
     # path components with a forward slash, so a backslash in a field is a
@@ -561,7 +593,11 @@ def test_an_empty_status_field_stops():
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
-Run: `python -m pytest evals/multi-model-verify/test_review_mirror.py -k "status_record or rename or copy_in_the_second or status_field or status_pathname" -v`
+Run:
+
+```bash
+python -m pytest evals/multi-model-verify/test_review_mirror.py::test_a_rename_record_reads_destination_first_then_source evals/multi-model-verify/test_review_mirror.py::test_a_plain_entry_has_no_source_and_keeps_its_spaces evals/multi-model-verify/test_review_mirror.py::test_a_rename_with_no_source_field_stops evals/multi-model-verify/test_review_mirror.py::test_a_copy_in_the_second_column_also_consumes_a_source evals/multi-model-verify/test_review_mirror.py::test_a_control_character_in_a_status_pathname_stops evals/multi-model-verify/test_review_mirror.py::test_a_del_character_in_a_status_pathname_stops evals/multi-model-verify/test_review_mirror.py::test_a_status_field_too_short_to_carry_a_pathname_stops evals/multi-model-verify/test_review_mirror.py::test_a_status_field_with_no_space_after_the_code_stops evals/multi-model-verify/test_review_mirror.py::test_an_empty_status_field_stops -v
+```
 
 Expected: FAIL, `ConvertTo-StatusRecord` is not recognized.
 
@@ -630,7 +666,11 @@ function ConvertTo-StatusRecord($fields) {
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
-Run: `python -m pytest evals/multi-model-verify/test_review_mirror.py -k "status_record or rename or copy_in_the_second or status_field or status_pathname" -v`
+Run:
+
+```bash
+python -m pytest evals/multi-model-verify/test_review_mirror.py::test_a_rename_record_reads_destination_first_then_source evals/multi-model-verify/test_review_mirror.py::test_a_plain_entry_has_no_source_and_keeps_its_spaces evals/multi-model-verify/test_review_mirror.py::test_a_rename_with_no_source_field_stops evals/multi-model-verify/test_review_mirror.py::test_a_copy_in_the_second_column_also_consumes_a_source evals/multi-model-verify/test_review_mirror.py::test_a_control_character_in_a_status_pathname_stops evals/multi-model-verify/test_review_mirror.py::test_a_del_character_in_a_status_pathname_stops evals/multi-model-verify/test_review_mirror.py::test_a_status_field_too_short_to_carry_a_pathname_stops evals/multi-model-verify/test_review_mirror.py::test_a_status_field_with_no_space_after_the_code_stops evals/multi-model-verify/test_review_mirror.py::test_an_empty_status_field_stops -v
+```
 
 Expected: PASS, 9 tests.
 
@@ -731,7 +771,11 @@ def test_a_status_code_with_a_leading_space_survives_rendering():
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
-Run: `python -m pytest evals/multi-model-verify/test_review_mirror.py -k "renders or rendering or quoted_independently" -v`
+Run:
+
+```bash
+python -m pytest evals/multi-model-verify/test_review_mirror.py::test_a_rename_renders_in_gits_display_order_with_its_quoting evals/multi-model-verify/test_review_mirror.py::test_each_side_of_a_rename_is_quoted_independently evals/multi-model-verify/test_review_mirror.py::test_a_plain_entry_renders_unquoted evals/multi-model-verify/test_review_mirror.py::test_a_spaced_entry_renders_quoted evals/multi-model-verify/test_review_mirror.py::test_a_non_ascii_entry_renders_unquoted evals/multi-model-verify/test_review_mirror.py::test_a_status_code_with_a_leading_space_survives_rendering -v
+```
 
 Expected: FAIL, `Format-StatusRecord` is not recognized.
 
@@ -795,7 +839,11 @@ same run, which printed `M+ Timer/input.txt <sha256>`.
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
-Run: `python -m pytest evals/multi-model-verify/test_review_mirror.py -k "renders or rendering or quoted_independently" -v`
+Run:
+
+```bash
+python -m pytest evals/multi-model-verify/test_review_mirror.py::test_a_rename_renders_in_gits_display_order_with_its_quoting evals/multi-model-verify/test_review_mirror.py::test_each_side_of_a_rename_is_quoted_independently evals/multi-model-verify/test_review_mirror.py::test_a_plain_entry_renders_unquoted evals/multi-model-verify/test_review_mirror.py::test_a_spaced_entry_renders_quoted evals/multi-model-verify/test_review_mirror.py::test_a_non_ascii_entry_renders_unquoted evals/multi-model-verify/test_review_mirror.py::test_a_status_code_with_a_leading_space_survives_rendering -v
+```
 
 Expected: PASS, 6 tests.
 
@@ -891,15 +939,18 @@ function Get-BackChannelEntry($repo) {
     if (-not $r.Ok) {
         return @{ Ok = $false; Entries = @(); Reason = $r.Reason }
     }
-    # An entry this platform cannot name is a stop: a back-channel this
-    # script cannot name is a back-channel it cannot delete, and reporting
-    # it as clean is the one outcome the whole preflight exists to prevent.
+    # An entry this script cannot handle exactly is a stop, on either of
+    # the guard's two grounds - a name it cannot resolve to a file, or a
+    # name it could resolve but could not record. Reporting either as
+    # clean is the one outcome the whole preflight exists to prevent, and
+    # a back-channel is the case where that matters most.
     foreach ($e in @($r.Fields)) {
         if (-not (Test-SupportedPathname $e)) {
             return @{ Ok = $false; Entries = @()
                       Reason = ("the back-channel entry '" + $e + "' names" +
-                        " a path that cannot be recorded exactly, so it" +
-                        " cannot be deleted") }
+                        " a path this script cannot handle exactly, so it" +
+                        " cannot be enumerated, deleted and recorded as a" +
+                        " single consistent fact") }
         }
     }
     return @{ Ok = $true; Entries = @($r.Fields) }
@@ -1210,7 +1261,7 @@ def test_a_rename_renders_in_the_baseline_as_source_arrow_destination(tmp_path):
 
 def test_escape_looking_field_text_is_never_interpreted():
     # `caf\303\251` is the exact string the deleted decoder mishandled: it
-    # turned those nine characters into two, neither of them the accented
+    # turned those eleven characters into four, none of them the accented
     # letter the real name holds. Under -z the bytes are the pathname, so
     # the field must come back as the nine literal characters it is.
     #
@@ -1277,9 +1328,13 @@ git commit -m "cover spaces, the inverted rename order and literal escape text"
 ### Task 7: Prove it on both hosts and update the reference
 
 **Files:**
+- Modify: `skills/multi-model-verify/references/backup-lane.md:225-235`,
+  where THE STATUS COMMAND gains `-c core.quotepath=false`
 - Modify: `skills/multi-model-verify/references/backup-lane.md:299-301`
-- Modify: `evals/multi-model-verify/test_backup_lane.py:335-337` — the pin
-  that quotes the sentence being replaced
+- Modify: `evals/multi-model-verify/test_backup_lane.py:283-286`, the pins
+  that quote the status command
+- Modify: `evals/multi-model-verify/test_backup_lane.py:335-337`, the pin
+  that quotes the rename sentence
 - Test: the whole repo suite
 
 **Interfaces:**
@@ -1323,6 +1378,75 @@ python -m pytest evals -q
 ```
 
 Expected: all four green. These are what CI runs on every push.
+
+- [ ] **Step 3b: Put `core.quotepath=false` into THE STATUS COMMAND**
+
+**Amendment A12, plan debate round 3, both lanes (R7).** The primary lane
+called this a FIX and the backup lane recorded it as an observation that
+predates the amendments. Both are right, and it is a real hole either way.
+
+`references/backup-lane.md:225` mandates
+`git status --porcelain --ignored -uall` for every capture, with no
+`core.quotepath` flag, and requires each round's output to EQUAL the
+baseline. Git's default `core.quotepath` is TRUE. Measured 2026-07-29:
+with the default, a `café.txt` untracked file prints
+`?? "caf\303\251.txt"`; with `-c core.quotepath=false` it prints raw.
+
+The script has recorded the raw form since 0.17.0, because its own capture
+set the flag. So the documented command and the recorded baseline have
+disagreed for non-ASCII paths all along. This plan does not create the
+hole, but it is the plan that removes the flag from the script, so it is
+the plan that must state the comparison command exactly.
+
+In `skills/multi-model-verify/references/backup-lane.md`, change the
+opening of THE STATUS COMMAND bullet from:
+
+```markdown
+- **THE STATUS COMMAND — `git status --porcelain --ignored -uall`, every
+  capture without exception**
+```
+
+to:
+
+```markdown
+- **THE STATUS COMMAND — `git -c core.quotepath=false status --porcelain
+  --ignored -uall`, every capture without exception**
+```
+
+Then add this sentence at the end of that bullet:
+
+```markdown
+  `core.quotepath=false` is load-bearing for COMPARABILITY, not for
+  correctness of any single capture: git's default quotes a non-ASCII
+  pathname as `"caf\303\251.txt"` while the mirror's recorded baseline
+  carries it raw, so a per-round capture taken without the flag reports a
+  difference that does not exist. Measured 2026-07-29.
+```
+
+Update the two pins in `evals/multi-model-verify/test_backup_lane.py` that
+quote the command. Replace:
+
+```python
+    assert "`git status --porcelain --ignored -uall`, every" in body
+```
+
+with:
+
+```python
+    assert ("`git -c core.quotepath=false status --porcelain --ignored "
+            "-uall`, every") in body
+    assert ("git's default quotes a non-ASCII pathname as "
+            '`"caf\\303\\251.txt"` while the mirror\'s recorded baseline '
+            "carries it raw") in body
+```
+
+`body` in that test is `_norm(...)`, a whitespace-normalized read
+(`test_backup_lane.py:36-38`), so both pins are written as single-spaced
+text and the markdown wrap does not matter.
+
+Leave the second pin at `:284` alone. It quotes
+``bare `git status --porcelain` OMITS ignored paths entirely``, which is
+about the missing FLAGS, and that sentence is unchanged.
 
 - [ ] **Step 4: Update the rename wording in the reference**
 
@@ -1570,3 +1694,44 @@ found A2's completeness argument false. Neither lane reached the other's
 finding. Both were settled by running the case: Sol's by reading the
 amended plan against itself, Kimi's by creating a 0x7F file on this disk
 and capturing git's output three ways.
+
+### Round 3, both lanes, 2026-07-29
+
+At head `eb9f5e9`. Sol: R4, R5 PASS; R1, R2, R3, R6, R7 FIX. Kimi: R1, R2,
+R5, R7 PASS; R3, R4, R6 FIX. Amendments A10 to A12 above, plus:
+
+- **A13 — an off-by-count in a sibling comment (Kimi, R4).** The comment
+  in `test_escape_looking_field_text_is_never_interpreted` said the
+  decoder "turned those nine characters into two". `caf\303\251` is
+  eleven characters and the test's own assertion expects length 15.
+  Corrected to eleven and four. Same class as A8, one test away from it,
+  and A8 did not look sideways.
+- **A14 — the octal claim was overgeneral (both lanes).** Both said it
+  independently. "Git records every other trigger with an OCTAL ESCAPE" is
+  false: tab, newline, `"` and `\` get NAMED escapes. True only of the one
+  reachable case, 0x7F. Reworded in the plan and the spec.
+- **A15 — three stale contract sites survived the rename (both lanes).**
+  The spec's error list still said "Windows-path guard"; the spec still
+  said the guard "can only fire" on an impossible Windows path, which A9
+  made false; and `Get-BackChannelEntry`'s comment and message still
+  reasoned from what the platform can name. All three rewritten. The spec
+  also gains an explicit statement of what the guard does NOT claim,
+  because two consecutive drafts of it advertised more than the code did.
+
+**One finding NOT adopted, with the measurement that settles it.** Sol's
+R1 asked for index-only coverage of every guard-admitted ASCII character
+Windows cannot create, on the grounds that git's index can carry names the
+filesystem cannot. Measured 2026-07-29: `git update-index --add
+--cacheinfo` REFUSES every one of them on this platform - `x<y.txt`,
+`x:y.txt`, `x|y.txt`, `x?y.txt`, `x*y.txt` each returned
+`error: Invalid path`. There is no such residue to sweep here.
+
+Two things keep that from being the whole answer, and both are recorded
+rather than argued away. A clone of a repository authored elsewhere is a
+different path into the index and was NOT measured. And independently of
+that, none of those characters is a C-style quoting trigger, so even if
+one arrived it would come back BARE from both the line form and `-z`, and
+the render would match - the completeness claim concerns quoting and is
+untouched. What such an entry would do is name a file with no bytes behind
+it, which `Get-ContentManifest` already stops on. Recorded as an accepted
+limit, not closed.
