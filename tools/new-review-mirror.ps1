@@ -190,6 +190,64 @@ function Test-SupportedPathname($value) {
     return $true
 }
 
+function ConvertTo-StatusRecord($fields) {
+    # Parse the `-z` status capture STRUCTURALLY. Returns @{Records=..} or
+    # @{Error=..}; a caller that cannot parse an entry must BLOCK, never
+    # skip, because a skipped entry is a silent hole in the manifest.
+    #
+    # THE RENAME FIELD ORDER IS INVERTED FROM THE LINE FORM. Measured
+    # 2026-07-29: the line form reads `R  <old> -> <new>`, and the same
+    # rename under `-z` reads `R  <new>` NUL `<old>` NUL - DESTINATION
+    # first, SOURCE second. Nothing about the record hints at the order,
+    # which is why it is stated here rather than left to a reader.
+    #
+    # Each field is the two status columns, one space, then the pathname.
+    $records = New-Object System.Collections.ArrayList
+    $all = @($fields)
+    $i = 0
+    while ($i -lt $all.Count) {
+        $field = [string]$all[$i]
+        $i++
+        if ($field.Length -lt 4) {
+            return @{ Error = ("status field '" + $field + "' is shorter" +
+                " than two status columns, a space and a pathname") }
+        }
+        if ($field[2] -ne ' ') {
+            return @{ Error = ("status field '" + $field + "' has no space" +
+                " where the status code ends, so this capture is not the" +
+                " porcelain format this parser reads") }
+        }
+        $x = $field[0]
+        $y = $field[1]
+        $path = $field.Substring(3)
+        if (-not (Test-SupportedPathname $path)) {
+            return @{ Error = ("status entry '" + $field + "' names a" +
+                " path this script cannot handle exactly, on one of the" +
+                " guard's two grounds: resolving it would risk naming the" +
+                " WRONG file, or it cannot be recorded unambiguously in" +
+                " the baseline's line form") }
+        }
+        $source = $null
+        if ($x -eq "R" -or $x -eq "C" -or $y -eq "R" -or $y -eq "C") {
+            if ($i -ge $all.Count) {
+                return @{ Error = ("rename or copy entry '" + $field +
+                    "' has no source field after it, so the capture is" +
+                    " truncated") }
+            }
+            $source = [string]$all[$i]
+            $i++
+            if (-not (Test-SupportedPathname $source)) {
+                return @{ Error = ("rename or copy entry '" + $field +
+                    "' names a source this script cannot handle" +
+                    " exactly, on the same two grounds") }
+            }
+        }
+        [void]$records.Add(@{ X = $x; Y = $y; Path = $path
+                              Source = $source })
+    }
+    return @{ Records = @($records) }
+}
+
 function Invoke-GitLines($repo, $gitArgs) {
     # Every git capture that produces PATHNAMES goes through here, so both
     # of them answer the same two questions the same way.

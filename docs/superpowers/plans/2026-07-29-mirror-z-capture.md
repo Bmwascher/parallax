@@ -587,8 +587,8 @@ def test_a_rename_record_reads_destination_first_then_source():
         '$r = ConvertTo-StatusRecord @("R  M+ Timer/new name.lua",\n'
         '                              "M+ Timer/old name.lua")\n'
         '$rec = $r.Records[0]\n'
-        '"{0}|{1}|{2}{3}" -f $rec.Path, $rec.Source, $rec.X, $rec.Y')
-    assert out == "M+ Timer/new name.lua|M+ Timer/old name.lua|R ", out
+        '"{0}|{1}|[{2}{3}]" -f $rec.Path, $rec.Source, $rec.X, $rec.Y')
+    assert out == "M+ Timer/new name.lua|M+ Timer/old name.lua|[R ]", out
 
 
 def test_a_plain_entry_has_no_source_and_keeps_its_spaces():
@@ -652,6 +652,17 @@ def test_an_empty_status_field_stops():
         '$r = ConvertTo-StatusRecord @(""); $r.Error')
     assert "shorter than" in out, out
 ```
+
+**Amendment A31, build, self-caught at Task 3 Step 4.** The rename test's
+expected value ended with a SPACE, because the record's `Y` column is a
+space for a rename staged in the index. `run_functions` returns
+`proc.stdout.strip()` (`test_review_mirror.py:606`), so a trailing space
+can never survive and the assertion could not pass whatever the parser
+did. Wrapping the two columns in brackets keeps exactly what the test
+means to pin - `X` is `R` and `Y` is a space - and puts the space where
+stripping cannot reach it. The implementation was correct as written and
+did not change. Swept the whole plan for the same shape: this was the
+only assertion whose expected literal ends in whitespace.
 
 - [ ] **Step 2: Run the tests to verify they fail**
 

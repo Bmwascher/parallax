@@ -717,3 +717,78 @@ def test_the_supported_pathname_guard_is_pinned_in_both_directions():
         '($results -join ",")')
     assert out == ("True,True,False,False,False,"
                    "False,False,False,False"), out
+
+
+def test_a_rename_record_reads_destination_first_then_source():
+    # THE INVERSION. Measured 2026-07-29 against a real git: the line form
+    # reads `R  <old> -> <new>`, and the same rename under -z reads
+    # `R  <new>` NUL `<old>` NUL. A parse that carries the line form's order
+    # across hashes and deletes the wrong file and says nothing.
+    out = run_functions(
+        '$r = ConvertTo-StatusRecord @("R  M+ Timer/new name.lua",\n'
+        '                              "M+ Timer/old name.lua")\n'
+        '$rec = $r.Records[0]\n'
+        '"{0}|{1}|[{2}{3}]" -f $rec.Path, $rec.Source, $rec.X, $rec.Y')
+    assert out == "M+ Timer/new name.lua|M+ Timer/old name.lua|[R ]", out
+
+
+def test_a_plain_entry_has_no_source_and_keeps_its_spaces():
+    out = run_functions(
+        '$r = ConvertTo-StatusRecord @("?? untracked file.txt")\n'
+        '$rec = $r.Records[0]\n'
+        '"{0}|{1}" -f $rec.Path, ($null -eq $rec.Source)')
+    assert out == "untracked file.txt|True", out
+
+
+def test_a_rename_with_no_source_field_stops():
+    # A truncated capture. The record claims a source that is not there.
+    out = run_functions(
+        '$r = ConvertTo-StatusRecord @("R  new.lua"); $r.Error')
+    assert "no source field" in out, out
+
+
+def test_a_copy_in_the_second_column_also_consumes_a_source():
+    # EITHER column can carry R or C, which is why both are tested.
+    out = run_functions(
+        '$r = ConvertTo-StatusRecord @(" C dest.lua", "src.lua")\n'
+        '"{0}|{1}|{2}" -f $r.Records.Count, $r.Records[0].Path,'
+        ' $r.Records[0].Source')
+    assert out == "1|dest.lua|src.lua", out
+
+
+def test_a_control_character_in_a_status_pathname_stops():
+    out = run_functions(
+        '$r = ConvertTo-StatusRecord @("?? a$([char]9)b.txt"); $r.Error')
+    assert "cannot handle" in out, out
+
+
+def test_a_del_character_in_a_status_pathname_stops():
+    # 0x7F is the case the guard's old name got wrong. Windows CREATES
+    # `a<0x7F>b.txt` - measured 2026-07-29 - and `git status --porcelain`
+    # prints it as `?? "a\177b.txt"` with and without core.quotepath=false,
+    # while -z returns the byte raw. It is above the control range, so a
+    # `< 32` test admits it, and the render would then record it bare where
+    # the direct capture quotes it.
+    out = run_functions(
+        '$r = ConvertTo-StatusRecord @("?? a$([char]127)b.txt"); $r.Error')
+    assert "cannot handle" in out, out
+
+
+def test_a_status_field_too_short_to_carry_a_pathname_stops():
+    out = run_functions(
+        '$r = ConvertTo-StatusRecord @("?? "); $r.Error')
+    assert "shorter than" in out, out
+
+
+def test_a_status_field_with_no_space_after_the_code_stops():
+    out = run_functions(
+        '$r = ConvertTo-StatusRecord @("??x.txt"); $r.Error')
+    assert "no space where the status code ends" in out, out
+
+
+def test_an_empty_status_field_stops():
+    # ConvertFrom-NulCapture deliberately passes an interior empty field
+    # through. This is where it is refused.
+    out = run_functions(
+        '$r = ConvertTo-StatusRecord @(""); $r.Error')
+    assert "shorter than" in out, out
