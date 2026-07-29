@@ -466,8 +466,12 @@ function Test-SupportedPathname($value) {
     #   1. Would resolving it risk naming the WRONG file? This is NOT a
     #      Windows name validator: it does not check reserved device
     #      names, trailing dots, length limits, or the other characters
-    #      Windows refuses. A syntactically fine name with no file behind
-    #      it is caught downstream, not here.
+    #      Windows refuses. A syntactically fine name with no file
+    #      behind it is not this function's business; where it lands
+    #      depends on its status shape, and only ONE of those routes is
+    #      a stop. See the design record - the manifest stops on a
+    #      subject with no file, deletion-only entries are omitted
+    #      before that, and a back-channel match goes to remediation.
     #   2. Can Format-StatusPathname record it in the porcelain line form
     #      the baseline contract already uses?
     #
@@ -607,7 +611,7 @@ def test_a_copy_in_the_second_column_also_consumes_a_source():
 def test_a_control_character_in_a_status_pathname_stops():
     out = run_functions(
         '$r = ConvertTo-StatusRecord @("?? a$([char]9)b.txt"); $r.Error')
-    assert "cannot be recorded exactly" in out, out
+    assert "cannot handle" in out, out
 
 
 def test_a_del_character_in_a_status_pathname_stops():
@@ -619,7 +623,7 @@ def test_a_del_character_in_a_status_pathname_stops():
     # the direct capture quotes it.
     out = run_functions(
         '$r = ConvertTo-StatusRecord @("?? a$([char]127)b.txt"); $r.Error')
-    assert "cannot be recorded exactly" in out, out
+    assert "cannot handle" in out, out
 
 
 def test_a_status_field_too_short_to_carry_a_pathname_stops():
@@ -689,10 +693,10 @@ function ConvertTo-StatusRecord($fields) {
         $path = $field.Substring(3)
         if (-not (Test-SupportedPathname $path)) {
             return @{ Error = ("status entry '" + $field + "' names a" +
-                " path that cannot be recorded exactly: it either names no" +
-                " file this script can resolve without guessing, or it" +
-                " carries a quoting trigger the baseline render cannot" +
-                " reproduce") }
+                " path this script cannot handle exactly, on one of the" +
+                " guard's two grounds: resolving it would risk naming the" +
+                " WRONG file, or it cannot be recorded unambiguously in" +
+                " the baseline's line form") }
         }
         $source = $null
         if ($x -eq "R" -or $x -eq "C" -or $y -eq "R" -or $y -eq "C") {
@@ -705,7 +709,8 @@ function ConvertTo-StatusRecord($fields) {
             $i++
             if (-not (Test-SupportedPathname $source)) {
                 return @{ Error = ("rename or copy entry '" + $field +
-                    "' names a source that cannot be recorded exactly") }
+                    "' names a source this script cannot handle" +
+                    " exactly, on the same two grounds") }
             }
         }
         [void]$records.Add(@{ X = $x; Y = $y; Path = $path
@@ -1026,8 +1031,14 @@ Replace the function in full:
 ```powershell
 function Get-ManifestSubject($records) {
     # Coverage is exactly the baseline's paths. Returns @{Paths=..} or
-    # @{Error=..}; a caller that cannot resolve an entry must BLOCK, never
-    # skip, because a skipped entry is a silent hole in the manifest.
+    # @{Error=..}.
+    #
+    # Two dispositions are DEFINED and are not the same thing as skipping.
+    # A deletion-only entry is OMITTED, deliberately, because it has no
+    # bytes; an `RD` destination is a STOP. What must never happen is a
+    # third thing: an entry passed over because this function could not
+    # make sense of it. That is the silent hole in the manifest, and it is
+    # what the stops below exist to prevent.
     #
     # Takes RECORDS, never rendered text. A rename's destination is already
     # the record's Path under `-z`, so there is no arrow to search for and
@@ -1357,7 +1368,7 @@ def test_a_backslash_bearing_index_entry_stops_the_enumeration():
     # delete or hash under the name the baseline gave.
     out = run_functions(
         '$r = ConvertTo-StatusRecord @("?? caf\\303\\251.txt"); $r.Error')
-    assert "cannot be recorded exactly" in out, out
+    assert "cannot handle" in out, out
 ```
 
 - [ ] **Step 4: Run the new tests to verify they pass**
@@ -1400,7 +1411,7 @@ git commit -m "cover spaces, the inverted rename order and literal escape text"
 - Modify: `skills/multi-model-verify/references/backup-lane.md:225-235`,
   where THE STATUS COMMAND gains `-c core.quotepath=false`
 - Modify: `skills/multi-model-verify/references/backup-lane.md:299-301`
-- Modify: `evals/multi-model-verify/test_backup_lane.py:283-286`, the pins
+- Modify: `evals/multi-model-verify/test_backup_lane.py:283-285`, the pins
   that quote the status command
 - Modify: `evals/multi-model-verify/test_backup_lane.py:335-337`, the pin
   that quotes the rename sentence
@@ -1515,6 +1526,16 @@ with:
 `body` in that test is `_norm(...)`, a whitespace-normalized read
 (`test_backup_lane.py:36-38`), so both pins are written as single-spaced
 text and the markdown wrap does not matter.
+
+**TWO suites ban backslashes in this file, not one.**
+`test_backup_files_no_backslash_paths`
+(`evals/multi-model-verify/test_backup_lane.py:75`) covers it as one of
+three backup-lane artifacts, and `test_no_backslash_paths_anywhere`
+(`evals/multi-model-verify/test_multi_model_verify.py:89`) covers it as
+one of the required reference files. Both ban the same character, so the
+backslash-free wording above satisfies both - but an editor who finds and
+satisfies only one of them is still exposed. Found by the backup lane in
+round 6 while sweeping for the class A21 belongs to.
 
 Leave the second pin at `:284` alone. It quotes
 ``bare `git status --porcelain` OMITS ignored paths entirely``, which is
@@ -1958,3 +1979,47 @@ verified correct against the text it quotes and still be fatal, because
 the constraint lived in a different test than the one being reasoned
 about. Both lanes reasoned carefully about the same edit and only one
 looked outward from it.
+
+### Round 6, both lanes, 2026-07-29
+
+At head `c1228cc`. Sol: U1, U2, U4, U5 PASS; U3 FIX. Kimi: all five PASS,
+with one observation. **No execution defect was found by either lane.**
+
+Both lanes swept U2 - every live test constraining every file the plan
+edits - and both reported no new violation. Both independently found the
+same thing while sweeping, which is worth recording on its own:
+
+- **A27 - there are TWO whole-file backslash bans on `backup-lane.md`, not
+  one.** `test_backup_files_no_backslash_paths` covers it as a backup-lane
+  artifact; `test_no_backslash_paths_anywhere`
+  (`evals/multi-model-verify/test_multi_model_verify.py:89`) covers it as a
+  required reference file. A21's wording satisfies both, so this changes no
+  verdict - but an editor who finds and satisfies only one is still
+  exposed, and Task 7 now says so in the step itself.
+
+Sol's U3, three wording defects, all adopted:
+
+- **A28 - a universal claim survived in the code comment.** A24 fixed the
+  spec's "a name with no file behind it is caught downstream" and left the
+  same sentence in the guard's implementation comment. Only one of the
+  three routes is a stop. Rewritten to name all three.
+- **A29 - `Get-ManifestSubject`'s header contradicted its own body.** It
+  said a caller "must BLOCK, never skip" immediately above a deliberate
+  `continue` for deletion-only entries. Rewritten to distinguish the two
+  DEFINED dispositions, omit and stop, from the third thing that must
+  never happen: an entry passed over because the function could not make
+  sense of it.
+- **A30 - the parser error misdescribed the `>` case.** It reduced every
+  render refusal to "a quoting trigger the baseline render cannot
+  reproduce". `>` is NOT a quoting trigger; the sweep in this spec
+  measured that directly. It is refused to keep the ` -> ` separator
+  unambiguous. The message now names the guard's actual two grounds.
+
+**Self-caught while applying A30.** Changing that message broke three of
+the plan's own assertions, which pinned the old substring. Both messages
+and all three assertions now share one stable phrase. This is the class
+the lanes have caught four times - a message edited without its pins - and
+it appeared inside the fix for it.
+
+Kimi's observation, a one-line slack in a cited line range, was corrected
+in the same pass.
