@@ -280,7 +280,11 @@ def test_backup_lane_workspace_is_a_mirror_not_a_clone():
     # COLLAPSES untracked directories, and ignored content is the whole
     # reason this workspace is a mirror - so the flags are the check,
     # not decoration. Probed: bare printed only "?? untr/".
-    assert "`git status --porcelain --ignored -uall`, every" in body
+    assert ("`git -c core.quotepath=false status --porcelain --ignored "
+            "-uall`, every") in body
+    assert ("git's default renders a non-ASCII pathname as a quoted "
+            "display form carrying octal escapes, while the mirror's "
+            "recorded baseline carries the same pathname raw") in body
     assert ("bare `git status --porcelain` OMITS ignored paths entirely "
             "and COLLAPSES an untracked directory to a single entry") in body
     assert ("a contained reviewer writing to any ignored path would not "
@@ -332,9 +336,15 @@ def test_backup_lane_workspace_is_a_mirror_not_a_clone():
     # `R` source is not literally a ` D` entry, so without that sentence
     # a driver has a defined action for `new` and an invented one for
     # `old`. The class applies to new text the day it lands.
-    assert ("**Rename or copy entries** (`R`/`C`, `old -> new`): hash "
-            "the CURRENT DESTINATION path. The source path is a "
-            "deletion and falls under the rule above.") in body
+    assert ("**Rename or copy entries** (`R`/`C`, recorded as "
+            "`old -> new`): hash the CURRENT DESTINATION path. The "
+            "source path is a deletion and falls under the rule "
+            "above.") in body
+    # The wire order is the opposite of the recorded order, so the
+    # sentence that says so is pinned in its own right: a driver reading
+    # only the display form would build a parser that hashes the source.
+    assert ("the `-z` capture the mirror script reads emits the two "
+            "pathnames in the opposite order, destination first") in body
     # separator and encoding are pinned too: without them two captures
     # are equivalent but not byte-comparable
     assert ("the repo-relative path, a single space, then the SHA-256 of "

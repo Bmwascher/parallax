@@ -222,8 +222,9 @@ proceed; do not infer either key's value.
   above the repo root, an assignment PDF, a spec kept outside the tree —
   is copied in deliberately and enumerated before the round. An input the
   reviewer cannot read is a gap in the review, not a silent omission.
-- **THE STATUS COMMAND — `git status --porcelain --ignored -uall`, every
-  capture without exception** (baseline, per-round, and the write-probe
+- **THE STATUS COMMAND — `git -c core.quotepath=false status --porcelain
+  --ignored -uall`, every capture without exception** (baseline,
+  per-round, and the write-probe
   delta). The flags are load-bearing, not tidiness: bare
   `git status --porcelain` OMITS ignored paths entirely and COLLAPSES an
   untracked directory to a single entry. Probed 2026-07-26 in a scratch
@@ -233,6 +234,14 @@ proceed; do not infer either key's value.
   entire reason this workspace is a mirror, so a bare-porcelain check is
   blind to precisely the class the mirror exists to carry: a contained
   reviewer writing to any ignored path would not appear.
+  `core.quotepath=false` is load-bearing for COMPARABILITY, not for
+  correctness of any single capture: git's default renders a non-ASCII
+  pathname as a quoted display form carrying octal escapes, while the
+  mirror's recorded baseline carries the same pathname raw, so a per-round
+  capture taken without the flag reports a difference that does not exist.
+  The escaped form is not written out here, because this file is checked
+  for the absence of backslashes; it is in the design record. Measured
+  2026-07-29.
 - **BASELINE, captured after construction AND after any preflight-3 remediation, immediately before the brief is written**:
   the status command above, in the mirror. A clone would have guaranteed
   this empty; a file copy does NOT — the real tree's untracked files
@@ -296,9 +305,12 @@ proceed; do not infer either key's value.
     - **Deletion-only entries** (` D` / `D `): OMIT them. There are no
       bytes to hash, and nothing is lost — HEAD plus the baseline
       already bind the absence, which is the whole content of the fact.
-    - **Rename or copy entries** (`R`/`C`, `old -> new`): hash the
-      CURRENT DESTINATION path. The source path is a deletion and falls
-      under the rule above.
+    - **Rename or copy entries** (`R`/`C`, recorded as `old -> new`):
+      hash the CURRENT DESTINATION path. The source path is a deletion
+      and falls under the rule above. The recorded form is git's DISPLAY
+      order; the `-z` capture the mirror script reads emits the two
+      pathnames in the opposite order, destination first, and the script
+      renders them back into this form. Measured 2026-07-29.
   - **Entry format**: one line per file — the repo-relative path, a
     single space, then the SHA-256 of the file's raw bytes as lowercase
     hex. Fixing the separator and the encoding is what makes two
