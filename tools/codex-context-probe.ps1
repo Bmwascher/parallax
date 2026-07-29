@@ -72,6 +72,58 @@ function Get-PromptText($raw) {
     return ($parts -join "`n")
 }
 
+function Get-RawContainerPair($text, $name) {
+    # The FIRST opener of `$name` in RAW text that has a later close,
+    # recognized by known-name grammar: case-insensitive, attributes
+    # allowed. Returns the literal that matched, so the caller can tell an
+    # exact opener from an attributed or case-variant one.
+    #
+    # Ordered, and on RAW text, because this is the backstop for everything
+    # masking hides. Masking blanks a container's BODY, so a container
+    # NESTED inside another one loses its own delimiters with that body and
+    # becomes invisible to every masked test.
+    # EVERY paired opener is returned, not the first. The real prompt
+    # carries a genuine `<skills_instructions>` ahead of `<INSTRUCTIONS>`,
+    # so a first-match rule found the exact one, called the family fine,
+    # and walked past an attributed pair nested further down. Caught by
+    # this function's own regression before it shipped.
+    $openRx = [regex]("(?i)<" + [regex]::Escape($name) + "\b[^>]*>")
+    $closeLit = "</" + $name + ">"
+    $openers = New-Object System.Collections.ArrayList
+    foreach ($m in $openRx.Matches($text)) {
+        $idx = $text.IndexOf($closeLit, $m.Index + $m.Length,
+            [System.StringComparison]::OrdinalIgnoreCase)
+        if ($idx -ge 0) { [void]$openers.Add($m.Value) }
+    }
+    return @{ Paired = ($openers.Count -gt 0); Openers = @($openers) }
+}
+
+function Test-ContainerPresent($raw, $masked, $name) {
+    # ONE presence rule for every known container this script judges.
+    #
+    # Two tests, and each covers what the other cannot. The MASKED test
+    # sees a container that is really there while ignoring a name written
+    # inside somebody's prose - the user's own AGENTS.md is carried
+    # verbatim inside <INSTRUCTIONS>, and every skill description is free
+    # text. The RAW ORDERED PAIR sees a container nested inside another
+    # one, which masking erases wholesale.
+    #
+    # Three separate false-clean paths were found in this order, each in
+    # the fix for the one before it, over three panel rounds on
+    # 2026-07-28: presence on raw text blocked legitimate prose; presence
+    # on masked text alone hid a nested skills container; a raw-pair
+    # backstop added for skills only hid a nested apps container one
+    # function away. Every family goes through this function now, so the
+    # next family cannot be forgotten.
+    #
+    # ACCEPTED LIMIT: a user who quotes a complete, balanced block of any
+    # known family blocks the run. Flattened text cannot tell that from a
+    # real nested container, and of the two answers only this one fails
+    # closed.
+    if ($masked.Contains("<" + $name + ">")) { return $true }
+    return (Get-RawContainerPair $raw $name).Paired
+}
+
 function Get-SkillReport($text, $structural) {
     # BlockPresent and Entries are reported separately on purpose. An
     # ABSENT block is the success state once suppression has run; a
@@ -110,15 +162,7 @@ function Get-SkillReport($text, $structural) {
     # dot-sourceable one at a time; every caller in this script passes it.
     $presenceText = $text
     if ($null -ne $structural) { $presenceText = $structural }
-    $open = $text.IndexOf("<skills_instructions>",
-        [System.StringComparison]::Ordinal)
-    $rawPair = $false
-    if ($open -ge 0) {
-        $rawPair = ($text.IndexOf("</skills_instructions>",
-            $open + "<skills_instructions>".Length,
-            [System.StringComparison]::Ordinal) -ge 0)
-    }
-    $present = ($presenceText.Contains("<skills_instructions>") -or $rawPair)
+    $present = Test-ContainerPresent $text $presenceText "skills_instructions"
     $entries = New-Object System.Collections.ArrayList
     $malformed = $false
     $firstBad = ""
@@ -210,11 +254,19 @@ function Get-InstructionReport($text) {
     return @{ BlockPresent = $present; ProjectDoc = $project }
 }
 
-function Get-FeatureReport($text) {
+function Get-FeatureReport($text, $structural) {
+    # Same two-part presence rule as the skills block. A feature container
+    # nested inside another one is erased by masking exactly as the skills
+    # one was, and `<INSTRUCTIONS><apps_instructions>live</apps_instructions>
+    # </INSTRUCTIONS>` reported no apps feature on both hosts until this
+    # went through Test-ContainerPresent. Mode-diff PANEL round 4,
+    # 2026-07-28, inside round 3's own fix.
+    $presenceText = $text
+    if ($null -ne $structural) { $presenceText = $structural }
     return @{
-        Plugins = $text.Contains("<plugins_instructions>")
-        RecommendedPlugins = $text.Contains("<recommended_plugins>")
-        Apps = $text.Contains("<apps_instructions>")
+        Plugins = Test-ContainerPresent $text $presenceText "plugins_instructions"
+        RecommendedPlugins = Test-ContainerPresent $text $presenceText "recommended_plugins"
+        Apps = Test-ContainerPresent $text $presenceText "apps_instructions"
     }
 }
 
@@ -552,7 +604,25 @@ function Test-PromptShape($text, $asJson) {
     # unknown-surface scan validates anything and must not pre-empt that
     # scan's own error. Masking blanks bodies only, so a real feature
     # container's delimiters survive and are still seen.
-    $features = Get-FeatureReport (Hide-KnownContainer $text $null $true)
+    $quiet = Hide-KnownContainer $text $null $true
+    # A NESTED known container is erased with the body that wraps it, so
+    # the quiet mask never sees it and the exactness scan above never sees
+    # it either. An ordered raw pair whose opener is not the exact literal
+    # is therefore checked here, where nesting cannot hide it. Same rule,
+    # same message, same reason as the masked scan: a known block in any
+    # other form is invisible to every dedicated parser, so every rule
+    # about it silently did nothing.
+    foreach ($fam in @("skills_instructions", "plugins_instructions",
+                       "apps_instructions", "recommended_plugins")) {
+        foreach ($op in (Get-RawContainerPair $text $fam).Openers) {
+            if ($op -cne ("<" + $fam + ">")) {
+                Write-Blocked ("the known block " + $op + " is not in the" +
+                    " exact form this parser reads, so every rule about it" +
+                    " silently did nothing") $asJson
+            }
+        }
+    }
+    $features = Get-FeatureReport $text $quiet
     if ($features.Plugins -or $features.RecommendedPlugins -or $features.Apps) {
         Write-Blocked ("the plugin or apps feature is advertising itself" +
             " despite --disable plugins --disable apps") $asJson
@@ -731,24 +801,32 @@ $codexHome = $env:CODEX_HOME
 if (-not $codexHome) {
     $codexHome = Join-Path $env:USERPROFILE ".codex"
 }
-$candidate = Join-Path $codexHome "AGENTS.md"
+$candidate = ""
 # `-PathType Leaf` and `-LiteralPath` are each load-bearing, and both were
 # measured on this machine 2026-07-28 (mode-diff PANEL). Without the type
 # test, a DIRECTORY named AGENTS.md answers Test-Path and is reported as
 # the user's global instruction file. Without -LiteralPath, a CODEX_HOME
 # carrying a wildcard character is read as a pattern: a real
 # `home[1]/AGENTS.md` answered False bare and True literal.
-if (Test-Path -LiteralPath $candidate -PathType Leaf) {
-    try {
+# THE WHOLE MEASUREMENT SITS IN ONE GUARD, and every cmdlet in it stops on
+# error. Building the path and testing it were previously outside the
+# guard, and neither stopped: a CODEX_HOME naming a provider that does not
+# exist made `Join-Path` emit a non-terminating error and return empty,
+# `Test-Path` then emit another, and the run continue to a clean report
+# saying the user has no global AGENTS.md. Reproduced on both hosts,
+# mode-diff PANEL round 4, 2026-07-28. A measurement that failed and one
+# that came back negative are not the same fact, and only one of them is
+# safe to publish.
+try {
+    $candidate = Join-Path $codexHome "AGENTS.md" -ErrorAction Stop
+    if (Test-Path -LiteralPath $candidate -PathType Leaf -ErrorAction Stop) {
         $globalPath = (Resolve-Path -LiteralPath $candidate `
             -ErrorAction Stop).Path
-    } catch {
-        # The file is there and its path could not be produced. Reporting
-        # it as absent would put a fact in the record that nothing
-        # measured, which is the same class as every other rule here.
-        Write-Blocked ("the global AGENTS.md at " + $candidate + " exists" +
-            " but could not be resolved: " + $_.Exception.Message) $Json
     }
+} catch {
+    Write-Blocked ("whether the reviewer has a global AGENTS.md under " +
+        $codexHome + " could not be determined: " + $_.Exception.Message +
+        " - an unmade measurement is not an absent file") $Json
 }
 
 $before = $skills.Entries.Count

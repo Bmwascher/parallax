@@ -14,6 +14,7 @@ import hashlib
 import json
 import os
 import subprocess
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -38,14 +39,27 @@ def ps_host():
 
 
 def run_functions(snippet):
-    """Dot-source the probe's function block, then run `snippet`."""
+    """Dot-source the probe's function block, then run `snippet`.
+
+    The block goes through a FILE, not `-Command`. Passed inline it
+    outgrew the Windows command-line limit as the parser gained rules, and
+    every dot-source test then failed with WinError 206 - a harness limit
+    wearing the face of 35 broken tests. The BOM is what makes Windows
+    PowerShell 5.1 read the file as UTF-8.
+    """
     text = PROBE.read_text(encoding="utf-8")
     body = text[text.index(BODY_START):text.index(BODY_END)]
-    proc = subprocess.run(
-        [ps_host(), "-NoProfile", "-NonInteractive", "-Command",
-         body + "\n" + snippet],
-        capture_output=True, text=True,
-    )
+    with tempfile.NamedTemporaryFile("w", suffix=".ps1", delete=False,
+                                     encoding="utf-8-sig") as fh:
+        fh.write(body + "\n" + snippet)
+        path = fh.name
+    try:
+        proc = subprocess.run(
+            [ps_host(), "-NoProfile", "-NonInteractive", "-File", path],
+            capture_output=True, text=True,
+        )
+    finally:
+        os.unlink(path)
     assert proc.returncode == 0, proc.stdout + proc.stderr
     return proc.stdout.strip()
 
@@ -201,28 +215,17 @@ def test_a_path_containing_a_single_quote_is_refused():
     # A TOML literal string cannot escape its own delimiter, so there is
     # no representation for this path. Emitting a broken override would be
     # worse than stopping.
-    text = PROBE.read_text(encoding="utf-8")
-    body = text[text.index(BODY_START):text.index(BODY_END)]
-    proc = subprocess.run(
-        [ps_host(), "-NoProfile", "-NonInteractive", "-Command",
-         body + '\ntry { New-SkillDisableOverride'
-                ' @(@{Name="a";Path="C:/x/o' + "'" + 'clock/SKILL.md"});'
-                ' "NO-THROW" } catch { "THREW" }'],
-        capture_output=True, text=True,
-    )
-    assert "THREW" in proc.stdout
+    out = run_functions(
+        'try { New-SkillDisableOverride'
+        ' @(@{Name="a";Path="C:/x/o' + "'" + 'clock/SKILL.md"});'
+        ' "NO-THROW" } catch { "THREW" }')
+    assert "THREW" in out
 
 
 def test_unparseable_json_raises_rather_than_returning_empty():
-    text = PROBE.read_text(encoding="utf-8")
-    body = text[text.index(BODY_START):text.index(BODY_END)]
-    proc = subprocess.run(
-        [ps_host(), "-NoProfile", "-NonInteractive", "-Command",
-         body + '\ntry { Get-PromptText "not json" ; "NO-THROW" }'
-                ' catch { "THREW" }'],
-        capture_output=True, text=True,
-    )
-    assert "THREW" in proc.stdout, (
+    out = run_functions(
+        'try { Get-PromptText "not json" ; "NO-THROW" } catch { "THREW" }')
+    assert "THREW" in out, (
         "an unreadable measurement must never return an empty one"
     )
 
@@ -1205,6 +1208,51 @@ def test_a_real_apps_block_still_blocks(tmp_path):
     proc = probe_with(tmp_path, first, FIXTURES / "suppressed.json")
     assert proc.returncode == 1, proc.stdout
     assert "advertising itself" in json.loads(proc.stdout)["reason"]
+
+
+def test_a_feature_container_nested_inside_instructions_still_blocks(tmp_path):
+    # The same false clean as the nested skills container, reproduced one
+    # function away after the skills fix went in. Masking blanks the body
+    # that WRAPS a nested container, so its own delimiters go with it and
+    # every masked test loses it. Reproduced on both hosts. Mode-diff
+    # PANEL round 4, 2026-07-28.
+    first = rewritten(
+        tmp_path, "nested-apps.json", "flagged.json",
+        "# Fixture global rules",
+        "# Fixture global rules\n<apps_instructions>live</apps_instructions>")
+    proc = probe_with(tmp_path, first, FIXTURES / "suppressed.json")
+    assert proc.returncode == 1, proc.stdout
+    assert "advertising itself" in json.loads(proc.stdout)["reason"]
+
+
+def test_a_nested_attributed_known_block_is_not_the_exact_form(tmp_path):
+    # The raw-pair backstop matched an exact literal only, so an
+    # ATTRIBUTED nested opener stayed invisible to it as well as to the
+    # masked tests and to the exactness scan, which runs on masked text.
+    # Reproduced on both hosts: BlockPresent false, zero entries.
+    first = rewritten(
+        tmp_path, "nested-attributed.json", "flagged.json",
+        "# Fixture global rules",
+        '# Fixture global rules\n<skills_instructions version="2">\n'
+        "### Available skills\n- p: x (file: C:/h/.agents/skills/p/SKILL.md)\n"
+        "</skills_instructions>")
+    proc = probe_with(tmp_path, first, FIXTURES / "suppressed.json")
+    assert proc.returncode == 1, proc.stdout
+    assert "exact form" in json.loads(proc.stdout)["reason"]
+
+
+def test_an_undeterminable_global_file_blocks_rather_than_reporting_absent(
+        tmp_path):
+    # Building and testing the candidate path sat outside the guard and
+    # neither stopped on error, so a CODEX_HOME naming a provider that
+    # does not exist produced two non-terminating errors and a clean
+    # report saying the user has no global AGENTS.md. A measurement that
+    # failed and one that came back negative are not the same fact.
+    # Reproduced on both hosts. Mode-diff PANEL round 4, 2026-07-28.
+    proc, _ = run_probe(tmp_path, tmp_path, "flagged.json", "suppressed.json",
+                        extra_env={"CODEX_HOME": "NoSuchProvider::\\x"})
+    assert proc.returncode == 1, proc.stdout
+    assert "could not be determined" in json.loads(proc.stdout)["reason"]
 
 
 def test_a_directory_named_agents_md_is_not_the_global_file(tmp_path):

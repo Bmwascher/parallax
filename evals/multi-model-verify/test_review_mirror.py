@@ -10,6 +10,7 @@ import hashlib
 import json
 import os
 import subprocess
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -556,13 +557,25 @@ def run_functions(snippet):
     whatever `core.quotepath` says - and Windows permits none of those in a
     filename, so the guard for that residue cannot be reached by building a
     real repo.
+
+    The block goes through a FILE, not `-Command`, for the same reason the
+    probe's copy does: passed inline it outgrows the Windows command-line
+    limit as the script gains rules, and the failure then looks like the
+    code under test rather than like the harness. The BOM is what makes
+    Windows PowerShell 5.1 read the file as UTF-8.
     """
     text = MIRROR.read_text(encoding="utf-8")
     body = text[text.index(BODY_START):text.index(BODY_END)]
-    proc = subprocess.run(
-        [ps_host(), "-NoProfile", "-NonInteractive", "-Command",
-         body + "\n" + snippet],
-        capture_output=True, text=True)
+    with tempfile.NamedTemporaryFile("w", suffix=".ps1", delete=False,
+                                     encoding="utf-8-sig") as fh:
+        fh.write(body + "\n" + snippet)
+        path = fh.name
+    try:
+        proc = subprocess.run(
+            [ps_host(), "-NoProfile", "-NonInteractive", "-File", path],
+            capture_output=True, text=True)
+    finally:
+        os.unlink(path)
     assert proc.returncode == 0, proc.stdout + proc.stderr
     return proc.stdout.strip()
 
