@@ -9,6 +9,7 @@ check stayed green.
 import hashlib
 import json
 import os
+import shutil
 import subprocess
 import tempfile
 from pathlib import Path
@@ -21,8 +22,21 @@ FIXTURES = Path(__file__).parent / "fixtures" / "codex-prompt-input"
 STUB = Path(__file__).parent / "fixtures" / "stub-codex" / "stub-codex.ps1"
 
 
+# CI RUNS ON LINUX, where there is no PowerShell at all. This module drove
+# `powershell.exe` unconditionally and every case in it failed there with
+# "No such file or directory" - a green Windows suite says nothing about
+# the host CI actually uses. Same shape as 0.16.1's lock, which passed on
+# Windows PowerShell and did not lock on pwsh. The other PowerShell-driven
+# modules already resolve the host and skip; these two did not.
+POWERSHELL = (os.environ.get("PARALLAX_PS_HOST")
+              or shutil.which("powershell") or shutil.which("pwsh"))
+
+pytestmark = pytest.mark.skipif(
+    POWERSHELL is None, reason="no PowerShell host on PATH")
+
+
 def ps_host():
-    return os.environ.get("PARALLAX_PS_HOST", "powershell.exe")
+    return POWERSHELL
 
 
 def git(repo, *args):
