@@ -25,6 +25,50 @@ param(
     [string]$CodexCommand = "codex"
 )
 
+function Invoke-GitLines($repo, $gitArgs) {
+    # Every git capture that produces PATHNAMES goes through here, so both
+    # of them answer the same two questions the same way.
+    #
+    # `core.quotepath=false`: by default git returns a DISPLAY form rather
+    # than a pathname - a directory named `cafe` with an acute accent on
+    # the last letter comes back as `"caf\303\251/AGENTS.md"`. This comment
+    # spells it out because this file is ASCII only, which is itself the
+    # rule that keeps both hosts reading the script identically. Verified
+    # live 2026-07-28 against both
+    # `ls-files` and `status --porcelain`. A caller that treats the display
+    # form as a path deletes nothing, hashes nothing, or - worse - hashes
+    # whatever the escapes happen to name once Windows reads the
+    # backslashes as separators. Found by the mode-diff PANEL, 2026-07-28,
+    # raised independently by two lanes.
+    #
+    # The console encoding guard is the OTHER half, and neither half works
+    # alone. Turning the quoting off makes git emit raw UTF-8, and Windows
+    # PowerShell 5.1 decodes a native command's output with the console
+    # code page - so the flag by itself trades octal escapes for mojibake.
+    # The probe script carries the same guard for the same reason.
+    $prior = [Console]::OutputEncoding
+    $lines = $null
+    $code = 0
+    try {
+        [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
+        $lines = & git -C $repo -c core.quotepath=false @gitArgs 2>$null
+        $code = $LASTEXITCODE
+    } finally {
+        [Console]::OutputEncoding = $prior
+    }
+    if ($code -ne 0) { return @{ Ok = $false; Lines = @() } }
+    return @{ Ok = $true; Lines = @($lines | Where-Object { $_ }) }
+}
+
+function Test-GitQuotedPath($value) {
+    # git still quotes a name carrying a double quote, a backslash or a
+    # control character, whatever `core.quotepath` says. Such an entry is a
+    # STOP rather than something to unquote: stripping the delimiters
+    # leaves the escapes in place, and resolving that text is how a
+    # different file gets hashed under the right file's name.
+    return ([string]$value).StartsWith('"')
+}
+
 function Get-BackChannelEntry($repo) {
     # One listing covering tracked, untracked AND ignored files. `--others`
     # without `--exclude-standard` includes ignored paths. `*AGENTS.md`
@@ -36,9 +80,10 @@ function Get-BackChannelEntry($repo) {
     # Returns @{Ok=..; Entries=..}. A function returning a bare @() has its
     # empty array unrolled by PowerShell, so the caller's variable becomes
     # $null and a CLEAN repo reads exactly like a FAILED enumeration.
-    $out = & git -C $repo ls-files --cached --others '*AGENTS.md' '.agents/*' 2>$null
-    if ($LASTEXITCODE -ne 0) { return @{ Ok = $false; Entries = @() } }
-    return @{ Ok = $true; Entries = @($out | Where-Object { $_ }) }
+    $r = Invoke-GitLines $repo @("ls-files", "--cached", "--others",
+                                 "*AGENTS.md", ".agents/*")
+    if (-not $r.Ok) { return @{ Ok = $false; Entries = @() } }
+    return @{ Ok = $true; Entries = $r.Lines }
 }
 
 function Test-Tracked($repo, $path) {
@@ -59,9 +104,8 @@ function Get-BaselineRaw($repo) {
     # Same structured shape and same reason as Get-BackChannelEntry: an
     # empty baseline is a legitimate state, and a bare @() return would be
     # indistinguishable from a failed capture.
-    $lines = & git -C $repo status --porcelain --ignored -uall 2>$null
-    if ($LASTEXITCODE -ne 0) { return @{ Ok = $false; Lines = @() } }
-    return @{ Ok = $true; Lines = @($lines | Where-Object { $_ }) }
+    return (Invoke-GitLines $repo @("status", "--porcelain", "--ignored",
+                                    "-uall"))
 }
 
 function Get-ManifestSubject($baselineRaw) {
@@ -97,7 +141,19 @@ function Get-ManifestSubject($baselineRaw) {
                 " that has been deleted; the mirror is not in a state this" +
                 " manifest rule can describe") }
         }
-        [void]$paths.Add($rest.Trim('"'))
+        # A path still in git's quoted form names nothing this script can
+        # resolve. Trimming the delimiters and resolving what is left was
+        # the previous behaviour, and it is the dangerous one: the escapes
+        # survive the trim, Windows reads `caf\303\251/x` as
+        # `caf\303\251\x`, and a colliding real path is then hashed under
+        # the entry the baseline actually named. That is false coverage,
+        # not a refusal. Found by the mode-diff PANEL, 2026-07-28.
+        if (Test-GitQuotedPath $rest) {
+            return @{ Error = ("baseline entry '$line' arrives in git's" +
+                " quoted form, so the file it names cannot be resolved" +
+                " without guessing at the escape sequences") }
+        }
+        [void]$paths.Add($rest)
     }
     return @{ Paths = @($paths) }
 }
@@ -231,6 +287,17 @@ if (-not $found.Ok) {
     exit 2
 }
 $entries = $found.Entries
+# A quoted entry here would silently delete nothing and then surface as
+# "survived remediation", which reads as a back-channel that refused to go
+# rather than as a name this script could not resolve.
+foreach ($entry in $entries) {
+    if (Test-GitQuotedPath $entry) {
+        Write-Output ("BLOCKED: the back-channel entry " + $entry +
+            " arrives in git's quoted form, so remediation cannot name the" +
+            " file it points at")
+        exit 1
+    }
+}
 $tracked = New-Object System.Collections.ArrayList
 foreach ($entry in $entries) {
     if (Test-Tracked $MirrorPath $entry) { [void]$tracked.Add($entry) }

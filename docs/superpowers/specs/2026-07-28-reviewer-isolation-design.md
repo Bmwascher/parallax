@@ -138,7 +138,13 @@ makes it a parser against a stated shape rather than a keyword hunt.
 
 `--- project-doc ---` appears if and only if the working directory's repo
 carries an `AGENTS.md`. Verified both ways on 2026-07-28: absent in this
-repo, present in a scratch repo carrying a planted one.
+repo, present in a scratch repo carrying a planted one. It is matched
+ONLY where it stands alone on its own line, which is the shape the
+renderer emits. The region searched is the one carrying the user's own
+global `AGENTS.md` verbatim, so a substring match made a global file that
+merely mentions the delimiter report a project document in the reviewed
+tree - the wrong tree and the wrong remediation. Masking is not available
+here, because the real delimiter lives inside that same body.
 
 If any of these markers stops appearing in a shape the parser recognises,
 the run is blocked as a transport failure. A parser that cannot find the
@@ -308,6 +314,25 @@ reason the contract coverage checker forbids false coverage.
 | a run made no suppression pass at all | not verified | `measured-only`, exit 1, and never the clean status |
 | the override artifact cannot be written, located, or hashed | transport failure | blocked; a verified value nothing can dispatch is not a clean result |
 | a mirror built with `-SkipProbe` | not verified | exit 1, not cleared for dispatch |
+| the reviewed tree's `AGENTS.md` is ingested in EITHER render | transport failure | blocked; the suppression pass keeps its own instruction report, because the generated override is an input present only on that render and nothing here may assume it cannot change what renders |
+| a baseline or back-channel path arrives in git's quoted display form | transport failure | blocked, never unquoted and resolved; trimming the delimiters leaves the escapes, and a colliding real path would then be hashed under the entry the baseline named |
+
+Two rows above were added on 2026-07-28 by the mode-diff PANEL, after
+round 8 had reported no remaining false-clean path. The first WAS one:
+the second render measured the project document and the return value was
+discarded, so the clean report published the first render's answer. The
+second is the only defect in this cycle whose dangerous direction is
+false COVERAGE rather than a false clean or a false block.
+
+Two rules elsewhere in this table were also narrowed the same day, both
+because they blocked legitimate input rather than admitting bad input.
+The skills-block PRESENCE test now reads the masked structural text, so a
+house rule naming `<skills_instructions>` inside the user's own
+`AGENTS.md` no longer reads as a block surviving suppression; the entries
+are still parsed from the raw text. And `global_agents_md` now reports
+whether the resolved global file exists. It previously carried the
+instructions block's presence, which the shape check has already refused
+to let be false, so the field was a constant with a measurement's name.
 
 **Five rows above, covering six findings, were added on 2026-07-28, after
 implementation, by mode-diff rounds 1 to 5.** The case-variant finding is

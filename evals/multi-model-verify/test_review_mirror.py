@@ -484,3 +484,105 @@ def test_skipping_the_probe_is_not_a_passing_outcome(tmp_path):
     proc = run_mirror(repo, tmp_path / "mirror")
     assert proc.returncode == 1
     assert "not cleared for dispatch" in proc.stdout
+
+
+# Non-ASCII pathnames. git returns a DISPLAY form for them unless
+# `core.quotepath=false` is set: `café/AGENTS.md` comes back as
+# `"caf\303\251/AGENTS.md"`. Verified live 2026-07-28 against both the
+# enumeration and the status capture. Raised independently by two lanes of
+# the mode-diff PANEL that day.
+CAFE = "café"
+
+
+def run_mirror_utf8(repo, mirror, *extra):
+    """run_mirror, decoding stdout as UTF-8 rather than the locale.
+
+    These cases assert PATHNAMES, so the test must not introduce a decoding
+    step of its own that could hide, or invent, a mangled path.
+    """
+    proc = subprocess.run(
+        [ps_host(), "-NoProfile", "-NonInteractive", "-File", str(MIRROR),
+         "-RepoRoot", str(repo), "-MirrorPath", str(mirror),
+         "-SkipProbe", *extra],
+        capture_output=True)
+    proc.stdout = proc.stdout.decode("utf-8", errors="replace")
+    proc.stderr = proc.stderr.decode("utf-8", errors="replace")
+    return proc
+
+
+def test_a_non_ascii_back_channel_is_removed_not_left_behind(tmp_path):
+    # With the display form treated as a path, the delete silently found
+    # nothing, the re-enumeration still saw the entry, and the run stopped
+    # with "back-channel(s) survived remediation" - which reads as a
+    # back-channel that refused to go rather than as a name the script
+    # could not resolve.
+    repo = make_repo(tmp_path)
+    (repo / CAFE).mkdir()
+    (repo / CAFE / "AGENTS.md").write_text("# planted\n", encoding="utf-8")
+    mirror = tmp_path / "mirror"
+    proc = run_mirror_utf8(repo, mirror)
+    assert "survived remediation" not in proc.stdout, proc.stdout
+    assert_built(proc)
+    assert not (mirror / CAFE / "AGENTS.md").exists()
+    assert (repo / CAFE / "AGENTS.md").exists(), (
+        "the real tree is never touched")
+
+
+def test_a_non_ascii_baseline_entry_reaches_the_manifest(tmp_path):
+    # The other consumer of the same capture. An unresolvable display form
+    # stopped the build at "baseline path ... has no file behind it", so a
+    # repo carrying any non-ASCII untracked or ignored file could not be
+    # mirrored at all.
+    repo = make_repo(tmp_path)
+    (repo / CAFE).mkdir()
+    body = b"subject material\n"
+    (repo / CAFE / "input.txt").write_bytes(body)
+    proc = run_mirror_utf8(repo, tmp_path / "mirror")
+    assert_built(proc)
+    expected = hashlib.sha256(body).hexdigest()
+    assert f"{CAFE}/input.txt {expected}" in proc.stdout, proc.stdout
+    assert f"?? {CAFE}/input.txt" in proc.stdout, proc.stdout
+
+
+BODY_START = "function Invoke-GitLines"
+BODY_END = "$toplevel ="
+
+
+def run_functions(snippet):
+    """Dot-source the mirror script's function block, then run `snippet`.
+
+    Same slicing the probe tests use. It exists here because git quotes a
+    pathname containing a double quote, a backslash or a control character
+    whatever `core.quotepath` says - and Windows permits none of those in a
+    filename, so the guard for that residue cannot be reached by building a
+    real repo.
+    """
+    text = MIRROR.read_text(encoding="utf-8")
+    body = text[text.index(BODY_START):text.index(BODY_END)]
+    proc = subprocess.run(
+        [ps_host(), "-NoProfile", "-NonInteractive", "-Command",
+         body + "\n" + snippet],
+        capture_output=True, text=True)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    return proc.stdout.strip()
+
+
+def test_a_quoted_baseline_entry_stops_instead_of_being_unquoted(tmp_path):
+    # THE SILENT ONE. Trimming the delimiters leaves the escapes, Windows
+    # reads the backslashes as separators, and a colliding real path is
+    # hashed under the name the baseline gave. That is false coverage
+    # rather than a refusal, which is why this entry shape is a stop.
+    out = run_functions(
+        '$r = Get-ManifestSubject @(' + "'" + '?? "caf\\303\\251/input.txt"'
+        + "'" + '); $r.Error')
+    assert "quoted form" in out, out
+    assert "guessing at the escape sequences" in out, out
+
+
+def test_the_quoted_form_is_recognized_and_a_plain_path_is_not():
+    # The predicate both guards share, pinned in both directions so a
+    # future edit cannot make it constant.
+    out = run_functions(
+        '"{0} {1}" -f (Test-GitQuotedPath ' + "'" + '"a/b"' + "'" +
+        '), (Test-GitQuotedPath ' + "'" + 'a/b' + "'" + ')')
+    assert out == "True False", out

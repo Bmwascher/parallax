@@ -72,12 +72,30 @@ function Get-PromptText($raw) {
     return ($parts -join "`n")
 }
 
-function Get-SkillReport($text) {
+function Get-SkillReport($text, $structural) {
     # BlockPresent and Entries are reported separately on purpose. An
     # ABSENT block is the success state once suppression has run; a
     # PRESENT block that yields no entries is a parse failure wearing the
     # same face, and the caller must be able to tell them apart.
-    $present = $text.Contains("<skills_instructions>")
+    #
+    # PRESENCE IS JUDGED ON THE STRUCTURAL TEXT, THE ENTRIES ON THE RAW
+    # TEXT. `<skills_instructions>` is an ordinary thing to write inside a
+    # house rule, and the user's own AGENTS.md is carried verbatim inside
+    # <INSTRUCTIONS>. With presence taken from raw text, such a machine had
+    # its suppression pass report the block as SURVIVING, and every review
+    # stopped with "suppression did not take" - a wrong diagnosis with no
+    # remediation short of editing the user's personal file. The branch's
+    # own `test_a_known_literal_quoted_in_the_global_body_does_not_block`
+    # declares that configuration legitimate, but its suppression fixture
+    # carries no such quote, so no test reached the second pass. Found by
+    # the mode-diff PANEL, 2026-07-28. Masking leaves every container's own
+    # delimiters in place, so a real block is still seen.
+    #
+    # `$structural` is optional only so the parser functions stay
+    # dot-sourceable one at a time; every caller in this script passes it.
+    $presenceText = $text
+    if ($null -ne $structural) { $presenceText = $structural }
+    $present = $presenceText.Contains("<skills_instructions>")
     $entries = New-Object System.Collections.ArrayList
     $malformed = $false
     $firstBad = ""
@@ -145,6 +163,17 @@ function Get-InstructionReport($text) {
     # separated by `--- project-doc ---`. The delimiter appears if and only
     # if the working directory's repo carries an AGENTS.md (verified both
     # ways 2026-07-28).
+    #
+    # The delimiter counts only where it STANDS ALONE ON ITS OWN LINE. The
+    # segment searched is exactly the region that carries the user's global
+    # AGENTS.md verbatim, so a `Contains` test made a global file that
+    # merely mentions the delimiter report a project doc, and the run then
+    # stopped with "the reviewed tree's AGENTS.md is being ingested" - the
+    # wrong tree and the wrong diagnosis. Found by the mode-diff PANEL,
+    # 2026-07-28. Masking is not available here: the real delimiter lives
+    # inside this same body, so blanking the body would erase the
+    # measurement itself. Both fixtures place the real delimiter alone on
+    # its own line, which is how the renderer emits it.
     $present = $text.Contains("<INSTRUCTIONS>")
     $project = $false
     if ($present) {
@@ -152,7 +181,8 @@ function Get-InstructionReport($text) {
         $seg = $text.Substring($start)
         $stop = $seg.IndexOf("</INSTRUCTIONS>")
         if ($stop -gt 0) { $seg = $seg.Substring(0, $stop) }
-        $project = $seg.Contains("--- project-doc ---")
+        $project = [regex]::IsMatch($seg,
+            "(?m)^[ \t]*--- project-doc ---[ \t]*\r?$")
     }
     return @{ BlockPresent = $present; ProjectDoc = $project }
 }
@@ -378,6 +408,27 @@ function Get-UnknownPromptBlock($text) {
     return @($found)
 }
 
+function Get-StructuralText($text, $asJson) {
+    # The render with every VALIDATED known-container body blanked: what is
+    # left is prompt structure rather than anybody's prose. Presence tests
+    # run on this, so a marker a user wrote inside their own instruction
+    # file is not mistaken for the container it names.
+    #
+    # Callers run this only after Test-PromptShape has already scanned the
+    # same text, and that scan performs this exact masking and stops the
+    # run on any ambiguity. So the throw below is unreachable in the
+    # script's own flow. It is caught anyway rather than left to escape,
+    # because an unhandled exception here would surface as a script error
+    # rather than as a blocked measurement, and the whole point of this
+    # file is that an unmade measurement reports as blocked.
+    try {
+        return (Hide-KnownContainer $text)
+    } catch {
+        Write-Blocked ("the prompt could not be masked for the presence" +
+            " checks: " + $_.Exception.Message) $asJson
+    }
+}
+
 function ConvertTo-ComparablePath($path) {
     # Compare on forward slashes with a trailing separator, so a sibling
     # directory whose name merely starts with the work dir - `repo-old`
@@ -560,7 +611,8 @@ try {
 }
 
 $instructions = Test-PromptShape $text $Json
-$skills = Get-SkillReport $text
+$structural = Get-StructuralText $text $Json
+$skills = Get-SkillReport $text $structural
 
 # The FIRST pass runs with the feature flags and no override, so the skills
 # block must be there. Its absence here is a shape change, not a success.
@@ -629,6 +681,13 @@ if ($cacheScoped.Count -gt 0) {
 # and the reviewer's own self-report of that path was wrong on 2026-07-28.
 # So resolve the conventional location ourselves and report it only when
 # the file is actually there; otherwise report nothing rather than a guess.
+#
+# THIS RESOLUTION IS THE ONLY MEASUREMENT OF THE GLOBAL FILE, so both
+# report fields below are derived from it. They used to carry the
+# instruction BLOCK's presence instead - a value Test-PromptShape has
+# already refused to let be false, which made `global_agents_md` a
+# constant dressed as a measurement while its name claimed a fact about
+# the user's file. Found by the mode-diff PANEL, 2026-07-28.
 $globalPath = ""
 $codexHome = $env:CODEX_HOME
 if (-not $codexHome) {
@@ -664,8 +723,17 @@ if ($SuppressSkills) {
         Write-Blocked ("could not read the suppression pass: " +
             $_.Exception.Message) $Json
     }
-    [void](Test-PromptShape $text2 $Json)
-    $skills2 = Get-SkillReport $text2
+    # THE SECOND PASS KEEPS ITS OWN INSTRUCTION REPORT. An earlier revision
+    # voided this return value, so the project-doc fact was measured on the
+    # suppression render and thrown away, and the clean report below then
+    # published the FIRST pass's stale value. A `--- project-doc ---` that
+    # appears only under the generated override reached status clean and
+    # exit 0 - the false-clean direction this script may never produce.
+    # Found by the mode-diff PANEL, 2026-07-28; the both-renders rule this
+    # violated is stated in Test-PromptShape's own opening comment.
+    $instructions2 = Test-PromptShape $text2 $Json
+    $structural2 = Get-StructuralText $text2 $Json
+    $skills2 = Get-SkillReport $text2 $structural2
     $after = $skills2.Entries.Count
     # ABSENCE of the block is the proof, not a zero count. A block that is
     # present but unreadable also counts zero, and calling that clean is
@@ -678,6 +746,14 @@ if ($SuppressSkills) {
     if ($after -ne 0) {
         Write-Blocked ("the reviewer still advertises " + $after +
             " skill(s) after suppression; the declared residue is empty") $Json
+    }
+    # The suppression render's OWN project-doc answer. It is checked after
+    # the two suppression rules above so that a run which both failed to
+    # suppress and carries a project doc still reports the suppression
+    # failure first, exactly as it did before this check existed.
+    if ($instructions2.ProjectDoc) {
+        Write-Blocked ("the reviewed tree's AGENTS.md is being ingested as" +
+            " instructions - remediate in the mirror") $Json
     }
     # THE HANDOFF. The dispatch must carry this exact value. A probe that
     # verifies a configuration the reviewer never receives has measured
@@ -744,7 +820,7 @@ if (-not $SuppressSkills) {
         plugin_cache_scoped = $cacheScoped.Count
         home_scoped = $homeScoped.Count
         unknown_scoped = $unknownScoped.Count
-        global_agents_md = $instructions.BlockPresent
+        global_agents_md = ($globalPath -ne "")
         global_agents_md_path = $globalPath
         project_agents_md = $instructions.ProjectDoc
         override_file = ""
@@ -767,7 +843,7 @@ $report = @{
     plugin_cache_scoped = $cacheScoped.Count
     home_scoped = $homeScoped.Count
     unknown_scoped = $unknownScoped.Count
-    global_agents_md = $instructions.BlockPresent
+    global_agents_md = ($globalPath -ne "")
     global_agents_md_path = $globalPath
     project_agents_md = $instructions.ProjectDoc
     override_file = $overridePath
@@ -778,6 +854,6 @@ if ($Json) {
 } else {
     Write-Output ("clean: " + $before + " skill(s) measured, " + $after +
         " after suppression; global AGENTS.md present: " +
-        $instructions.BlockPresent)
+        ($globalPath -ne ""))
 }
 exit 0
