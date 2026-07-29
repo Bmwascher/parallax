@@ -272,7 +272,7 @@ def test_the_manifest_covers_exactly_the_baseline_paths(tmp_path):
     mirror = tmp_path / "mirror"
     proc = run_mirror(repo, mirror)
     assert_built(proc)
-    paths = [line.split(" ", 1)[0]
+    paths = [line.rsplit(" ", 1)[0]
              for line in read_block(proc.stdout, "manifest:")]
     assert "ignored/secret.txt" in paths
     assert "untracked.txt" in paths
@@ -287,10 +287,10 @@ def test_the_manifest_hashes_raw_bytes_and_sorts_by_path(tmp_path):
     proc = run_mirror(repo, mirror)
     assert_built(proc)
     manifest = read_block(proc.stdout, "manifest:")
-    paths = [line.split(" ", 1)[0] for line in manifest]
+    paths = [line.rsplit(" ", 1)[0] for line in manifest]
     assert paths == sorted(paths), "sorted by path in byte order"
     for line in manifest:
-        path, digest = line.split(" ", 1)
+        path, digest = line.rsplit(" ", 1)
         raw = (mirror / path).read_bytes()
         assert digest == hashlib.sha256(raw).hexdigest()
 
@@ -303,7 +303,7 @@ def test_a_directory_expands_recursively(tmp_path):
     mirror = tmp_path / "mirror"
     proc = run_mirror(repo, mirror)
     assert_built(proc)
-    paths = [line.split(" ", 1)[0]
+    paths = [line.rsplit(" ", 1)[0]
              for line in read_block(proc.stdout, "manifest:")]
     assert "untr/sub/one.txt" in paths
     assert "untr/sub/two.txt" in paths
@@ -606,27 +606,6 @@ def run_functions(snippet):
     return proc.stdout.strip()
 
 
-def test_a_quoted_baseline_entry_stops_instead_of_being_unquoted(tmp_path):
-    # THE SILENT ONE. Trimming the delimiters leaves the escapes, Windows
-    # reads the backslashes as separators, and a colliding real path is
-    # hashed under the name the baseline gave. That is false coverage
-    # rather than a refusal, which is why this entry shape is a stop.
-    out = run_functions(
-        '$r = Get-ManifestSubject @(' + "'" + '?? "caf\\303\\251/input.txt"'
-        + "'" + '); $r.Error')
-    assert "quoted form" in out, out
-    assert "guessing at the escape sequences" in out, out
-
-
-def test_the_quoted_form_is_recognized_and_a_plain_path_is_not():
-    # The predicate both guards share, pinned in both directions so a
-    # future edit cannot make it constant.
-    out = run_functions(
-        '"{0} {1}" -f (Test-GitQuotedPath ' + "'" + '"a/b"' + "'" +
-        '), (Test-GitQuotedPath ' + "'" + 'a/b' + "'" + ')')
-    assert out == "True False", out
-
-
 def test_an_empty_capture_is_a_legitimate_state():
     # A repo with nothing to list produces no bytes. That is not a failure,
     # and the wrapper is what keeps it from reading as one.
@@ -857,3 +836,146 @@ def test_a_status_code_with_a_leading_space_survives_rendering():
         '$r = ConvertTo-StatusRecord @(" M kept.txt")\n'
         '"[{0}]" -f (Format-StatusRecord $r.Records[0])')
     assert out == "[ M kept.txt]", out
+
+
+# A path with a SPACE. This is the whole reason for the -z change: git
+# quotes any pathname containing a space, the old capture refused every
+# quoted entry, and a repo using the `References/<name with spaces>/`
+# convention could not be mirrored at all. Measured 2026-07-29 against a
+# throwaway repo, a directory named `M+ Timer` came back as `?? "M+ Timer/"`
+# from `status --porcelain`, quoted for the space and nothing else.
+SPACED = "M+ Timer"
+
+
+def test_a_back_channel_under_a_spaced_directory_is_removed(tmp_path):
+    repo = make_repo(tmp_path)
+    (repo / SPACED).mkdir()
+    (repo / SPACED / "AGENTS.md").write_text("# planted\n")
+    mirror = tmp_path / "mirror"
+    proc = run_mirror(repo, mirror)
+    assert "survived remediation" not in proc.stdout, proc.stdout
+    assert_built(proc)
+    assert not (mirror / SPACED / "AGENTS.md").exists()
+    assert (repo / SPACED / "AGENTS.md").exists(), (
+        "the real tree is never touched")
+
+
+def test_a_spaced_baseline_entry_reaches_the_manifest(tmp_path):
+    repo = make_repo(tmp_path)
+    (repo / SPACED).mkdir()
+    body = b"subject material\n"
+    (repo / SPACED / "input.txt").write_bytes(body)
+    proc = run_mirror(repo, tmp_path / "mirror")
+    assert_built(proc)
+    expected = hashlib.sha256(body).hexdigest()
+    # The MANIFEST is unquoted and the BASELINE is quoted. Both shapes are
+    # what the current script already records for a spaced path; run
+    # 2026-07-29 it printed `?? "M+ Timer/input.txt"` under `baseline:` and
+    # `M+ Timer/input.txt <sha256>` under `manifest:`.
+    assert f"{SPACED}/input.txt {expected}" in proc.stdout, proc.stdout
+    assert f'?? "{SPACED}/input.txt"' in proc.stdout, proc.stdout
+
+
+def test_a_spaced_ignored_entry_reaches_the_manifest(tmp_path):
+    # Ignored content is the entire reason this workspace is a mirror.
+    repo = make_repo(tmp_path)
+    (repo / ".gitignore").write_text("ignored/\nrefs with spaces/\n")
+    git(repo, "add", ".gitignore")
+    commit(repo, "ignore a spaced directory")
+    (repo / "refs with spaces").mkdir()
+    body = b"reference source\n"
+    (repo / "refs with spaces" / "note.txt").write_bytes(body)
+    proc = run_mirror(repo, tmp_path / "mirror")
+    assert_built(proc)
+    expected = hashlib.sha256(body).hexdigest()
+    assert f"refs with spaces/note.txt {expected}" in proc.stdout, proc.stdout
+    assert '!! "refs with spaces/note.txt"' in proc.stdout, proc.stdout
+
+
+def test_a_rename_with_spaces_hashes_the_destination_not_the_source(tmp_path):
+    # THE INVERSION, end to end. Under -z the destination arrives FIRST and
+    # the source second, the opposite of the line form. A parse that keeps
+    # the old order would hash the source, which no longer exists, and the
+    # run would stop with the wrong reason - or worse, hash a file that
+    # happens to be there.
+    repo = make_repo(tmp_path)
+    (repo / SPACED).mkdir()
+    body = b"renamed content\n"
+    (repo / SPACED / "old name.lua").write_bytes(body)
+    git(repo, "add", "--", f"{SPACED}/old name.lua")
+    commit(repo, "add the spaced file")
+    git(repo, "mv", f"{SPACED}/old name.lua", f"{SPACED}/new name.lua")
+    proc = run_mirror(repo, tmp_path / "mirror")
+    assert_built(proc)
+    expected = hashlib.sha256(body).hexdigest()
+    assert f"{SPACED}/new name.lua {expected}" in proc.stdout, proc.stdout
+    assert f"{SPACED}/old name.lua {expected}" not in proc.stdout, (
+        "the source of a rename no longer exists; hashing it would be a"
+        " hash of whatever happened to take its place")
+
+
+def test_a_rename_renders_in_the_baseline_as_source_arrow_destination(tmp_path):
+    # references/backup-lane.md describes the baseline as the status
+    # command's output, and every earlier baseline reads `old -> new`. The
+    # -z wire order is the opposite, so the render is what keeps two
+    # captures comparable across this change.
+    repo = make_repo(tmp_path)
+    (repo / SPACED).mkdir()
+    (repo / SPACED / "old name.lua").write_bytes(b"x\n")
+    git(repo, "add", "--", f"{SPACED}/old name.lua")
+    commit(repo, "add the spaced file")
+    git(repo, "mv", f"{SPACED}/old name.lua", f"{SPACED}/new name.lua")
+    proc = run_mirror(repo, tmp_path / "mirror")
+    assert_built(proc)
+    baseline = read_block(proc.stdout, "baseline:")
+    assert (f'R  "{SPACED}/old name.lua" -> "{SPACED}/new name.lua"'
+            in baseline), baseline
+
+
+def test_escape_looking_field_text_is_never_interpreted():
+    # `caf\303\251` is the exact string the deleted decoder mishandled.
+    # On the quoted form it turned the 15 characters of
+    # `caf\303\251.txt` into NINE: three ordinary, two produced by the
+    # octal escapes, and four from `.txt`. Neither produced character is
+    # the accented letter the real name holds.
+    #
+    # Under -z the bytes ARE the pathname, so the field must come back as
+    # the 15 literal characters it is.
+    #
+    # This is a FIELD-level case and not an end-to-end one on purpose. A
+    # file with this name cannot exist on Windows, because the backslash is
+    # a path separator there - measured 2026-07-29. The bytes can still
+    # arrive from git's INDEX, which is what Test-SupportedPathname then
+    # refuses, so the two halves are tested where each can actually be
+    # reached.
+    out = run_functions(
+        '$b = [System.Text.Encoding]::UTF8.GetBytes("caf\\303\\251.txt`0")\n'
+        '$r = ConvertFrom-NulCapture $b\n'
+        '"{0}|{1}" -f $r.Fields[0], $r.Fields[0].Length')
+    assert out == "caf\\303\\251.txt|15", out
+
+
+def test_uppercase_escape_looking_field_text_is_never_interpreted():
+    # THE SECOND DECODER DEFECT, pinned so it cannot return. PowerShell's
+    # `switch` is case-INSENSITIVE by default, so the deleted decoder turned
+    # `a\Tb.txt` into a TAB and `a\Nb.txt` into a NEWLINE - escapes C-style
+    # quoting leaves undefined. Under -z the bytes are the pathname, so both
+    # must arrive as their eight literal characters.
+    out = run_functions(
+        '$b = [System.Text.Encoding]::UTF8.GetBytes("a\\Tb.txt`0a\\Nb.txt`0")\n'
+        '$r = ConvertFrom-NulCapture $b\n'
+        '(@($r.Fields | ForEach-Object { ([int[]][char[]]$_) -join "," })'
+        ' -join "|")')
+    # a \ T b . t x t  and  a \ N b . t x t
+    assert out == ("97,92,84,98,46,116,120,116|"
+                   "97,92,78,98,46,116,120,116"), out
+
+
+def test_a_backslash_bearing_index_entry_stops_the_enumeration():
+    # The other half. git reads names from its INDEX, which can carry a
+    # name Windows cannot represent. Join-Path would read the backslash as
+    # a separator and resolve a DIFFERENT file, which the script would then
+    # delete or hash under the name the baseline gave.
+    out = run_functions(
+        '$r = ConvertTo-StatusRecord @("?? caf\\303\\251.txt"); $r.Error')
+    assert "cannot handle" in out, out
