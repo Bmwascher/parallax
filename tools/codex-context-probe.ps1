@@ -281,23 +281,34 @@ function Get-UnknownPromptBlock($text) {
     # block that sits in no container. Requiring the pair reported ZERO
     # unknown blocks across three real prompts while still catching
     # memories_instructions, a hyphenated tag and a self-closing one.
-    # EXACTNESS IS CHECKED FIRST, ON THE RAW TEXT, BEFORE MASKING. Masking
-    # now counts delimiters, so a non-exact known tag would otherwise trip
-    # the count rule first and report an ambiguous container instead of the
-    # real problem - and the exactness rule, which is what actually closes
-    # the attributed-tag false clean, could then rot with all of its tests
-    # still green for the wrong reason. Mode-diff round 5, 2026-07-28. A
-    # quoted EXACT literal in a user's own file still passes here, because
-    # it is exact; only a malformed known tag blocks.
+    # THE PIPELINE IS: quiet mask -> exactness -> validating mask -> scan.
+    #
+    # Exactness runs on the QUIETLY MASKED text, not on raw text and not
+    # on the validated mask. Each position is load-bearing and each was
+    # established by a reproduction:
+    #
+    # - Ahead of the VALIDATING mask, because that mask counts delimiters,
+    #   so a non-exact known tag would trip the count rule first and report
+    #   an ambiguous container instead of the real problem - and the
+    #   exactness rule, which is what closes the attributed-tag false
+    #   clean, could then rot with all of its tests still green for the
+    #   wrong reason (round 5).
+    # - Behind the QUIET mask, because every free-text region the renderer
+    #   wraps - the global AGENTS.md, and every skill description - may
+    #   legitimately quote a malformed tag, and did (rounds 6 and 7).
+    #
+    # A malformed OUTER tag has no exact 1/1 span, so the quiet mask
+    # leaves its container alone and the tag is still visible here.
     #
     # KNOWN NAMES ARE CHECKED ANYWHERE, NOT ONLY AT A LINE START. Every
     # dedicated parser matches an EXACT literal, so any other form of a
-    # known tag is invisible to all of them. The general scan below is
-    # line-anchored by design, so a tag with text before it on the line
-    # escaped both: a second pass carrying all 29 entries under
+    # known tag is invisible to all of them. This rule was line-anchored
+    # until round 3, and a tag with text before it on the line escaped
+    # both it and the parsers: a second pass carrying all 29 entries under
     # `prefix <skills_instructions version="2">` reported skills_after 0
     # and exit 0. Reproduced 2026-07-28, mode-diff round 3, after round 2's
-    # line-anchored form of this same rule.
+    # line-anchored form of this same rule. The general scan below lost
+    # its own anchor at round 6, for the same reason.
     #
     # The comparison is against WHOLE LITERALS rather than a test for the
     # presence of attributes, because `<permissions instructions>` is a
@@ -338,10 +349,17 @@ function Get-UnknownPromptBlock($text) {
     $found = New-Object System.Collections.ArrayList
     # NOT line-anchored. An inline `prefix <memories_instructions>x</...>`
     # returned zero unknown blocks and reached exit 0 with status clean.
-    # Mode-diff round 6, 2026-07-28. The anchor was never what kept prose
-    # out - the open/close PAIR requirement below is, and the real
-    # prompt's `<payload text>`, `<recipient>` and `<author>` lines are
-    # unpaired, so they are still exempt.
+    # Mode-diff round 6, 2026-07-28.
+    #
+    # What keeps ordinary prose out is the MASKING above, not this scan's
+    # shape: every free-text region the renderer wraps is already blank by
+    # the time this runs. The pair requirement only handles prose that
+    # sits outside all of them, and it handles exactly one case - an
+    # UNPAIRED mention, such as the real prompt's `<payload text>`,
+    # `<recipient>` and `<author>` lines, which sit in no container.
+    # Prose outside every masked body that carries an ORDERED pair, or a
+    # self-closing tag, does block. That is an accepted limit recorded in
+    # the design, not a claim that this scan never fires on prose.
     $rx = [regex]'<([A-Za-z][A-Za-z0-9_.:\-]*)((?:\s[^>]*?)?)(/?)>'
     foreach ($m in $rx.Matches($masked)) {
         $name = $m.Groups[1].Value

@@ -961,8 +961,10 @@ def test_an_inline_unknown_block_blocks(tmp_path, pass_no):
     # The unknown-surface scan was line-anchored, so
     # `prefix <memories_instructions>x</memories_instructions>` returned
     # zero unknown blocks and reached exit 0 with status clean. Mode-diff
-    # round 6, 2026-07-28. The anchor was never what kept prose out; the
-    # open/close pair requirement is.
+    # round 6, 2026-07-28. What keeps ordinary prose out is the masking of
+    # every wrapped free-text region, not the anchor and not the pair rule
+    # alone: an ordered pair outside all of them does block, and that is a
+    # recorded accepted limit.
     fixture = tmp_path / f"inline-unknown-{pass_no}.json"
     doc = json.loads((FIXTURES / "flagged.json").read_text(encoding="utf-8")
                      if pass_no == 1 else
