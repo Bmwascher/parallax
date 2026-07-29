@@ -22,6 +22,13 @@ pytest driving both hosts.
 
 **Spec:** `docs/superpowers/specs/2026-07-29-mirror-z-capture-design.md`
 
+**STATUS: FROZEN 2026-07-29 at commit 8d14934.** Six rounds of cross-vendor
+debate on two lanes, 30 amendments, nothing contested. Round 6 returned no
+execution defect from either lane after both swept every live test
+constraining every file this plan edits. From here the plan is the
+specification: an implementer follows it as written, and a disagreement
+with it is raised rather than resolved at the keyboard.
+
 ## Global Constraints
 
 - `tools/new-review-mirror.ps1` is **Windows PowerShell 5.1 compatible and
