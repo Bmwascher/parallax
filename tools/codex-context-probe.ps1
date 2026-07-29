@@ -152,7 +152,7 @@ function Get-SkillReport($text) {
     # the caller stops with "the skills block is missing on the first
     # pass", which is the honest report and the fail-closed direction.
     #
-    # EVERY OTHER KNOWN CONTAINER'S BODY IS BLANKED FIRST, space for
+    # EVERY KNOWN CONTAINER'S BODY IS BLANKED FIRST, space for
     # character, so every offset still points where it did in the raw
     # render. Without that, this function searched RAW text for the first
     # opener while the shape scanner masked known bodies before
@@ -303,6 +303,34 @@ function Get-SkillReport($text) {
               Malformed = $malformed; FirstMalformedLine = $firstBad
               Ambiguous = $ambiguous; OpenCount = $opens
               CloseCount = $closes; AmbiguousCause = $cause }
+}
+
+function Get-AmbiguityReason($skills) {
+    # TWO CAUSES, TWO MESSAGES. The skills counts describe the skills
+    # container, so printing them for a failure ANOTHER container caused
+    # tells the reader that a block which is fine is the broken one. An
+    # earlier revision appended the real cause to the end of the skills
+    # sentence and left the sentence itself claiming ambiguous skills
+    # boundaries at one opener and one close, which is a contradiction in
+    # the same message. Mode-diff PANEL round 11, 2026-07-28.
+    #
+    # THIS IS A FUNCTION so it can be tested. The caller that emits it sits
+    # behind `Test-PromptShape`, which refuses the same text one line
+    # earlier, so no end-to-end run reaches the branch; the wording would
+    # otherwise be the one thing in this script asserted by reading alone.
+    if ($skills.AmbiguousCause) {
+        return ("the first-pass skills measurement could not be made:" +
+            " the blanking pass that locates the container did not" +
+            " finish, so no span was established and nothing was" +
+            " measured. " + $skills.AmbiguousCause)
+    }
+    # The count is reported as counted, not as it would have been counted.
+    # Raised as a non-finding by the Kimi lane, PANEL round 5, 2026-07-28.
+    return ("the skills container's boundaries on the first pass are" +
+        " ambiguous (" + $skills.OpenCount + " opening and " +
+        $skills.CloseCount + " closing markers, counted after blanking" +
+        " the known containers' bodies) - which span is the container is" +
+        " a guess, and the override is built from what is inside it")
 }
 
 function Get-InstructionReport($text) {
@@ -767,27 +795,7 @@ if (-not $skills.BlockPresent) {
 # choose between candidates would put chosen entries into the reviewer's
 # configuration. Mode-diff PANEL round 8, 2026-07-28.
 if ($skills.Ambiguous) {
-    # The count is reported as counted, not as it would have been counted.
-    # When the blanking loop itself throws, some bodies are still visible
-    # when these numbers are taken, so the message says "as far as they
-    # could be blanked" rather than claiming a completed blanking. Raised
-    # as a non-finding by the Kimi lane, PANEL round 5, 2026-07-28.
-    #
-    # AND THE CAUSE IS NAMED. When another container is what failed, these
-    # counts belong to a container that is fine, and a reader sent to the
-    # skills block by this message would find nothing wrong with it.
-    # Mode-diff PANEL round 6, Kimi lane, 2026-07-28.
-    $detail = ""
-    if ($skills.AmbiguousCause) {
-        $detail = " The blanking pass could not finish: " +
-            $skills.AmbiguousCause + "."
-    }
-    Write-Blocked ("the skills container's boundaries on the first pass" +
-        " are ambiguous (" + $skills.OpenCount + " opening and " +
-        $skills.CloseCount + " closing markers, counted after blanking" +
-        " the known containers' bodies as far as they could be blanked)" +
-        " - which span is the container is a guess, and the override is" +
-        " built from what is inside it." + $detail) $Json
+    Write-Blocked (Get-AmbiguityReason $skills) $Json
 }
 # PRESENT and empty is a parse failure, and it is refused HERE rather than
 # only on the second pass. codex does not render an empty skills block, so

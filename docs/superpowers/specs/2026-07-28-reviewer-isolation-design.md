@@ -498,10 +498,12 @@ unchanged.
   and left every real skill loaded. The same defect in the other
   direction stopped a review that was fine, when the quoted example
   carried no entry heading of its own. Both reproduced on both hosts.
-  The first render now blanks every OTHER known container's body before
-  it looks, space for character so the offsets still hold, and refuses
-  the measurement outright unless exactly one opener and one close
-  remain, in that order.
+  The first render now blanks every known container's body before it
+  looks, space for character so the offsets still hold, and refuses the
+  measurement outright unless exactly one opener and one close remain,
+  in that order. That list and its order are the shape scanner's, exactly:
+  an earlier revision skipped the skills family here and nowhere else,
+  and the two functions then gave different answers about the same text.
 
   The blanked text LOCATES the container and nothing else. Reading the
   entries out of it as well removed real skills in silence: with the

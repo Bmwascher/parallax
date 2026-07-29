@@ -1591,6 +1591,37 @@ def test_another_containers_failure_travels_with_the_verdict(tmp_path):
     assert "environment_context" in out, out
 
 
+def test_a_blanking_failure_is_not_reported_as_ambiguous_skills():
+    # The skills counts describe the skills container. Printing them for
+    # a failure ANOTHER container caused tells the reader a block that is
+    # fine is the broken one. The earlier wording appended the real cause
+    # to a sentence that still claimed ambiguous skills boundaries at one
+    # opener and one close, which contradicts itself in one message.
+    # Mode-diff PANEL round 11, 2026-07-28.
+    out = run_functions(
+        ' $r = @{ Ambiguous = $true; OpenCount = 1; CloseCount = 1;'
+        '   AmbiguousCause = "the <environment_context> container never'
+        ' closes" };'
+        ' Get-AmbiguityReason $r'
+    )
+    assert "environment_context" in out, out
+    assert "could not be made" in out, out
+    assert "ambiguous" not in out, out
+    assert "1 opening" not in out, out
+
+
+def test_a_genuine_span_ambiguity_still_reports_the_counts():
+    # The polarity guard. With no blanking failure the counts ARE the
+    # diagnosis, and they stay in the message.
+    out = run_functions(
+        ' $r = @{ Ambiguous = $true; OpenCount = 2; CloseCount = 2;'
+        '   AmbiguousCause = "" };'
+        ' Get-AmbiguityReason $r'
+    )
+    assert "2 opening and 2 closing" in out, out
+    assert "ambiguous" in out, out
+
+
 def test_an_undeterminable_global_file_blocks_rather_than_reporting_absent(
         tmp_path):
     # Building and testing the candidate path sat outside the guard and
