@@ -94,12 +94,25 @@ function Test-FamilyMentioned($text, $name) {
     # produce a false BLOCK, which is loud, names its own cause, and the
     # user fixes by rewording one line of their own file.
     #
-    # ACCEPTED LIMIT, and it is a real one: a reviewer whose global
-    # AGENTS.md or whose skill descriptions mention any of these four
-    # names cannot run a review until the mention is reworded. Measured
-    # 2026-07-28 on this machine, the author's own global file contains
-    # none of the four in 1009 characters.
-    return ($text.IndexOf($name,
+    # ACCEPTED LIMIT, and it is a real one: any rendered text naming one
+    # of these four families stops the run, and not every source of that
+    # text is something the user can reword. The design's accepted-limits
+    # section carries the full list. Measured 2026-07-28 on this machine,
+    # the author's own global file contains none of the four in 1009
+    # characters.
+    #
+    # LINE BREAKS ARE REMOVED FIRST. `Get-PromptText` joins the prompt's
+    # text chunks with a newline, so a family name split across a chunk
+    # boundary - `skills_instru` then `ctions` - became
+    # `skills_instru\nctions` and the only occurrence of the name was
+    # destroyed by the parser's own join. That is a false clean produced
+    # by the transport shape rather than by any structural ambiguity.
+    # Mode-diff PANEL round 7, 2026-07-28. Restoring adjacency can only
+    # ever create matches, never remove one, so this direction is safe:
+    # the worst it can do is block a render whose two lines happen to
+    # spell a family name across the break.
+    $flat = $text -replace "[\r\n]", ""
+    return ($flat.IndexOf($name,
         [System.StringComparison]::OrdinalIgnoreCase) -ge 0)
 }
 
@@ -109,22 +122,42 @@ function Get-SkillReport($text) {
     # PRESENT block that yields no entries is a parse failure wearing the
     # same face, and the caller must be able to tell them apart.
     #
-    # PRESENCE IS A MENTION, NOT A STRUCTURE. See Test-FamilyMentioned for
-    # why the structural answer was abandoned. On the FIRST render the
-    # block is genuinely there, so a stray mention costs nothing: the
-    # entry parse below either finds entries or the caller stops on a
-    # present-but-empty block. On the SECOND render a mention is exactly
-    # what must not be there, and that is the check this rule exists for.
-    $present = Test-FamilyMentioned $text "skills_instructions"
+    # THIS FUNCTION IS FIRST-RENDER ONLY, and it is deliberately the
+    # STRICT one. The blunt rule governs the suppression proof, where the
+    # question is "did anything survive" and a false block is the safe
+    # answer. Here the question is "what exactly is loaded, and from
+    # where", and the answer feeds the generated override - so precision
+    # is the whole job.
+    #
+    # An earlier revision made presence a bare mention here too, and then
+    # searched the WHOLE render for `### Available skills`. On a machine
+    # whose renderer had stopped emitting the block, prose in the user's
+    # own AGENTS.md naming the family, followed by that heading and
+    # entry-shaped lines, defeated the missing-block guard and put FAKE
+    # entries into the override. Mode-diff PANEL round 7, 2026-07-28: a
+    # shape-change detector cannot assume the shape it exists to verify.
+    #
+    # So the container is required in its exact form and the body is
+    # BOUNDED by it. A renderer that stops emitting it fails this test and
+    # the caller stops with "the skills block is missing on the first
+    # pass", which is the honest report and the fail-closed direction.
+    $open = "<skills_instructions>"
+    $openAt = $text.IndexOf($open, [System.StringComparison]::Ordinal)
+    $present = ($openAt -ge 0)
     $entries = New-Object System.Collections.ArrayList
     $malformed = $false
     $firstBad = ""
     if ($present) {
-        $start = $text.IndexOf("### Available skills")
+        $body = $text.Substring($openAt + $open.Length)
+        $closeAt = $body.IndexOf("</skills_instructions>",
+            [System.StringComparison]::Ordinal)
+        if ($closeAt -ge 0) { $body = $body.Substring(0, $closeAt) }
+        # The heading is looked for INSIDE the container's body only, so a
+        # heading written anywhere else in the prompt cannot supply
+        # entries.
+        $start = $body.IndexOf("### Available skills")
         if ($start -ge 0) {
-            $seg = $text.Substring($start)
-            $stop = $seg.IndexOf("</skills_instructions>")
-            if ($stop -gt 0) { $seg = $seg.Substring(0, $stop) }
+            $seg = $body.Substring($start)
             # The path capture is GREEDY to the LAST `)` on its own line,
             # not up to the first one. `[^)]*` truncated
             # `C:/Program Files (x86)/x/SKILL.md` to `C:/Program Files (x86`,
@@ -640,10 +673,20 @@ if (-not $skills.BlockPresent) {
 # zero entries inside a present block means this parser can no longer read
 # the entry lines - and every count downstream would then be a measured
 # zero that measured nothing. Found by the mode-diff review, 2026-07-28.
+#
+# The message names BOTH causes, because presence is now a mention. If the
+# real block is absent and something in the reviewer's own instruction
+# text merely names the family, this branch is where the run stops, and
+# saying only "the entry format changed" would send the reader after
+# client drift that did not happen. Mode-diff PANEL round 3, Kimi lane,
+# 2026-07-28.
 if ($skills.Entries.Count -eq 0) {
-    Write-Blocked ("the skills block is present but no entry could be read" +
-        " - the entry format changed, so every count below would be a zero" +
-        " this parser invented rather than measured") $Json
+    Write-Blocked ("the skills family is named on the first pass but no" +
+        " entry could be read. Either the entry format changed, in which" +
+        " case every count below would be a zero this parser invented" +
+        " rather than measured, or there is no skills block at all and" +
+        " the name comes from the reviewer's own instruction text - in" +
+        " which case reword that mention") $Json
 }
 if ($skills.Malformed) {
     # ACCEPTED LIMIT, and it blocks rather than guessing. A skill
@@ -774,30 +817,29 @@ if ($SuppressSkills) {
     # Found by the mode-diff PANEL, 2026-07-28; the both-renders rule this
     # violated is stated in Test-PromptShape's own opening comment.
     $instructions2 = Test-PromptShape $text2 $Json
-    $skills2 = Get-SkillReport $text2
-    $after = $skills2.Entries.Count
-    # ABSENCE OF THE NAME is the proof, not a zero count and not the
-    # absence of a well-formed block. A block that is present but
-    # unreadable also counts zero, and every structural way of asking
-    # "is a block still here" was defeated by a shape nobody had thought
-    # of - five times, each inside the previous fix, over six panel
-    # rounds on 2026-07-28. The name either appears in this render or it
-    # does not, and that question has no edge cases.
-    if ($skills2.BlockPresent) {
+    # ABSENCE OF THE NAME is the proof, and this render is NOT parsed for
+    # it. `Get-SkillReport` is the first-render measurement and is strict
+    # on purpose; running it here would have the suppression proof depend
+    # on a container parse again, which is the dependency six panel rounds
+    # spent defeating. The name either appears in this render or it does
+    # not, and that question has no edge cases.
+    #
+    # A zero entry count was never the proof either: a block that is
+    # present but unreadable also counts zero, and calling that clean is
+    # the false-clean direction this script may never produce. With the
+    # name absent there is no container, so the count is zero by
+    # construction rather than by measurement.
+    if (Test-FamilyMentioned $text2 "skills_instructions") {
         Write-Blocked ("the skills family is still named in the render" +
-            " after suppression (" + $after + " entries parsed) -" +
-            " suppression did not take, the block can no longer be read," +
-            " or one of the reviewer's own instruction sources mentions" +
-            " skills_instructions. A mention is enough to stop the run:" +
-            " this check does not parse structure, because flattened text" +
-            " cannot tell a real block from a quoted one. If it is a" +
-            " mention in your own AGENTS.md or in a skill description," +
-            " reword it") $Json
+            " after suppression - suppression did not take, the block can" +
+            " no longer be read, or some rendered text names the family." +
+            " A mention is enough to stop the run: this check does not" +
+            " parse structure, because flattened text cannot tell a real" +
+            " block from a quoted one. If the mention is in your own" +
+            " AGENTS.md, reword it; the design's accepted-limits section" +
+            " lists the sources you cannot reword") $Json
     }
-    if ($after -ne 0) {
-        Write-Blocked ("the reviewer still advertises " + $after +
-            " skill(s) after suppression; the declared residue is empty") $Json
-    }
+    $after = 0
     # The suppression render's OWN project-doc answer. It is checked after
     # the two suppression rules above so that a run which both failed to
     # suppress and carries a project doc still reports the suppression

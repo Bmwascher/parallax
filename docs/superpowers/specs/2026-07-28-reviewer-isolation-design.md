@@ -326,13 +326,17 @@ false COVERAGE rather than a false clean or a false block.
 
 Two rules elsewhere in this table were also narrowed the same day, both
 because they blocked legitimate input rather than admitting bad input.
-The skills-block PRESENCE test now reads the masked structural text, so a
-house rule naming `<skills_instructions>` inside the user's own
-`AGENTS.md` no longer reads as a block surviving suppression; the entries
-are still parsed from the raw text. And `global_agents_md` now reports
-whether the resolved global file exists. It previously carried the
-instructions block's presence, which the shape check has already refused
-to let be false, so the field was a constant with a measurement's name.
+The skills-block PRESENCE test was moved to the masked structural text,
+so that a house rule naming `<skills_instructions>` inside the user's own
+`AGENTS.md` no longer read as a block surviving suppression. **That
+narrowing was later REVERSED**: it bought three rounds of false cleans,
+and the blunt rule replaced it. The paragraph is kept because the
+reasoning is what the reversal has to be read against; see the blunt rule
+in the accepted limits below for what the code does now. The second
+narrowing stands: `global_agents_md` reports whether the resolved global
+file exists. It previously carried the instructions block's presence,
+which the shape check has already refused to let be false, so the field
+was a constant with a measurement's name.
 
 **Five rows above, covering six findings, were added on 2026-07-28, after
 implementation, by mode-diff rounds 1 to 5.** The case-variant finding is
@@ -415,21 +419,60 @@ unchanged.
   The only failure it can produce is a false BLOCK, which is loud, names
   its own cause in the message, and the user clears by rewording one line.
 
-  **What it costs, stated in full.** A reviewer whose global `AGENTS.md`,
-  or any skill description on their machine, mentions one of the four
-  names cannot run a review until the mention is reworded. This includes
-  a mention that is plainly prose, a mention inside a longer word, and a
-  different tag name that merely begins with a family name, such as
-  `<apps_instructions-extra/>`. Measured 2026-07-28 on the author's
-  machine: the global file contains none of the four names in 1009
-  characters.
+  **What it costs.** The search covers EVERY text chunk of every prompt
+  message, not one file. Any rendered text naming one of the four
+  families stops the run, including a mention that is plainly prose, a
+  mention inside a longer word, and a different tag name that merely
+  begins with a family name such as `<apps_instructions-extra/>`.
+
+  The two halves are not symmetric, and an earlier version of this
+  paragraph got that wrong. The THREE FEATURE families are refused on
+  both renders, so a mention of one blocks outright. The SKILLS family is
+  expected on the first render and refused only on the second, so a skill
+  DESCRIPTION naming it does not prevent a review at all - the
+  description disappears with the container before the second render.
+
+  Sources, and whether the user can clear them:
+
+  - **The reviewer's own global `AGENTS.md`** - reword it. Measured
+    2026-07-28 on the author's machine: none of the four names appear, in
+    1009 characters.
+  - **The REVIEWED TREE's `AGENTS.md`** - the remediation is mirror
+    remediation, not rewording, and the block message names the wrong
+    tree. Blocking is right; the project-doc rule would stop it anyway.
+  - **A skill's NAME or PATH** containing a feature-family substring -
+    it lands on the entry line, and there is no rewording short of
+    uninstalling or moving the skill.
+  - **The rendered environment**, such as a working-directory path
+    containing a family name - clearing it means relocating the mirror.
+  - **Client-generated prose** naming a family - nothing the user can do;
+    the block message's "a prompt this parser no longer describes" is the
+    honest reading, and a client change is what would be required.
+
+  Every one fails in the loud, safe direction. The gap was in this
+  record's claim of completeness, not in the gate.
 
   **What keeps its precision.** The FIRST render still uses the full
   parser: it enumerates every advertised skill, classifies each by the
   directory it came from, and refuses an entry it cannot place. That is
-  where precision is needed and where a mistake is a wrong report rather
-  than a broken gate. The blunt rule governs only the question of whether
-  anything survived.
+  where precision is needed, because the result feeds the generated
+  override. The blunt rule governs only the question of whether anything
+  survived.
+
+  That separation is load-bearing and was briefly lost. The first render
+  was given the blunt presence rule too, and the entry heading was
+  searched across the whole prompt, so on a machine whose renderer had
+  stopped emitting the block, prose in the user's own `AGENTS.md` could
+  supply FAKE entries that were classified and written into the override.
+  The first render now requires the container in its exact form and reads
+  entries only from inside it; a renderer that stops emitting it fails
+  that test and the run stops with the honest report.
+
+  **One transport rule the blunt search needs.** The prompt arrives as
+  text chunks that the parser joins with a newline, so a family name
+  split across a chunk boundary was destroyed by the join itself. Line
+  breaks are removed before the search. Restoring adjacency can only
+  create matches, never remove one, so the direction is safe.
 - **A global `AGENTS.md` that puts `--- project-doc ---` alone on a line
   blocks.** It is byte-identical to the renderer's own separator in the
   one region that carries the user's file verbatim. Narrowing the rule

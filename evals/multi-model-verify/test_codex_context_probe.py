@@ -66,13 +66,16 @@ def run_functions(snippet):
 
 def bucket_counts(fixture, workdir="C:/fixture/repo"):
     path = (FIXTURES / fixture).as_posix()
-    # The structural argument is passed here exactly as the script passes
-    # it. Calling with one argument exercised a fallback the script never
-    # takes, so this helper's coverage did not describe shipped behaviour.
-    # Mode-diff PANEL, 2026-07-28.
+    # ONE argument, exactly as the script calls it. This helper briefly
+    # passed a second one, to exercise the shipped call shape at the time;
+    # the blunt rule removed that parameter one commit later and the extra
+    # argument became inert, silently collected into $args while the
+    # comment here still claimed it matched the script. That is the same
+    # defect this helper had been changed to fix, re-introduced by the fix
+    # for something else. Mode-diff PANEL round 3, Kimi lane, 2026-07-28.
     out = run_functions(
         f'$t = Get-PromptText (Get-Content -Raw "{path}");'
-        ' $r = Get-SkillReport $t (Hide-KnownContainer $t);'
+        ' $r = Get-SkillReport $t;'
         ' $b = @{repo=0;"plugin-cache"=0;home=0;unknown=0};'
         ' foreach ($e in $r.Entries) {'
         f'   $b[(Get-SkillScope $e.Path "{workdir}")] += 1 }};'
@@ -133,7 +136,7 @@ def test_the_two_home_sources_are_counted_separately():
     # pass.
     out = run_functions(
         f'$t = Get-PromptText (Get-Content -Raw "{(FIXTURES / "full.json").as_posix()}");'
-        ' $r = Get-SkillReport $t (Hide-KnownContainer $t);'
+        ' $r = Get-SkillReport $t;'
         ' $u = 0; $s = 0;'
         ' foreach ($e in $r.Entries) {'
         '   $p = $e.Path.Replace("\\","/");'
@@ -1348,6 +1351,53 @@ def test_a_tag_name_that_merely_starts_with_a_known_family_blocks(
         "# Fixture global rules\nHouse rule: never write " + tag + ".")
     proc = probe_with(tmp_path, first, FIXTURES / "suppressed.json")
     assert_blocked_for_a_known_name(proc)
+
+
+def test_a_family_name_split_across_text_chunks_still_blocks(tmp_path):
+    # Get-PromptText joins the prompt's text chunks with a newline, so a
+    # family name split across a chunk boundary became
+    # `skills_instru\\nctions` and the only occurrence of the name was
+    # destroyed by the parser's own join - a false clean produced by the
+    # transport shape rather than by any structural ambiguity. Mode-diff
+    # PANEL round 7, 2026-07-28.
+    doc = json.loads((FIXTURES / "suppressed.json").read_text(
+        encoding="utf-8"))
+    text = doc[0]["content"][0]["text"].replace(
+        "# Fixture global rules",
+        "# Fixture global rules\n<skills_instructions/>", 1)
+    cut = text.index("skills_instru") + len("skills_instru")
+    doc[0]["content"] = [
+        {"type": "input_text", "text": text[:cut]},
+        {"type": "input_text", "text": text[cut:]},
+    ]
+    second = tmp_path / "split-chunks.json"
+    second.write_text(json.dumps(doc), encoding="utf-8")
+    proc = probe_with(tmp_path, FIXTURES / "flagged.json", second)
+    assert_blocked_for_a_known_name(proc)
+
+
+def test_prose_cannot_supply_entries_when_the_real_block_is_gone(tmp_path):
+    # The first render is measured, not merely gated, and its result feeds
+    # the generated override. With presence taken as a bare mention and
+    # the heading searched across the whole render, a machine whose
+    # renderer had stopped emitting the block could have FAKE entries
+    # lifted out of the user's own AGENTS.md and written into the
+    # override. A shape-change detector cannot assume the shape it exists
+    # to verify. Mode-diff PANEL round 7, 2026-07-28.
+    first = rewritten(
+        tmp_path, "prose-entries.json", "suppressed.json",
+        "# Fixture global rules",
+        "# Fixture global rules\nDocumentation for skills_instructions.\n"
+        "### Available skills\n"
+        "- fake: example (file: C:/fixture/home/.agents/skills/fake"
+        "/SKILL.md)")
+    proc = probe_with(tmp_path, first, FIXTURES / "suppressed.json")
+    assert proc.returncode == 1, proc.stdout
+    reason = json.loads(proc.stdout)["reason"]
+    assert "missing on the first pass" in reason, reason
+    assert not (tmp_path / "o.txt").exists(), (
+        "no override may be written from entries that were never advertised"
+    )
 
 
 def test_an_undeterminable_global_file_blocks_rather_than_reporting_absent(
