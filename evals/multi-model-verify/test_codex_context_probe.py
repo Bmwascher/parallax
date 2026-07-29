@@ -13,6 +13,7 @@ plus the whole layout of their home skills directory.
 import hashlib
 import json
 import os
+import shutil
 import subprocess
 import tempfile
 from pathlib import Path
@@ -31,11 +32,25 @@ BODY_START = "function Get-PromptText"
 BODY_END = "$toplevel ="
 
 
+# CI RUNS ON LINUX, where there is no PowerShell at all. This module drove
+# `powershell.exe` unconditionally and every case in it failed there with
+# "No such file or directory". A green Windows suite proves one
+# interpreter on one operating system, which is the 0.16.1 lesson one step
+# further out: that release's lock passed on Windows PowerShell and did not
+# lock on pwsh. The older PowerShell-driven modules already resolve the
+# host and skip when it is absent; this one and the mirror's did not.
+POWERSHELL = (os.environ.get("PARALLAX_PS_HOST")
+              or shutil.which("powershell") or shutil.which("pwsh"))
+
+pytestmark = pytest.mark.skipif(
+    POWERSHELL is None, reason="no PowerShell host on PATH")
+
+
 def ps_host():
     """PARALLAX_PS_HOST selects the interpreter. A green suite on one
     Windows host proves ONE interpreter - 0.16.1 shipped a lock that did
     not lock on pwsh because every local run used powershell.exe."""
-    return os.environ.get("PARALLAX_PS_HOST", "powershell.exe")
+    return POWERSHELL
 
 
 def run_functions(snippet):
