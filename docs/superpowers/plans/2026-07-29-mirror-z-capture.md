@@ -1701,6 +1701,53 @@ OS refused the setup.
 
 ---
 
+## Whole-branch review adjudication
+
+The `agents/fable-reviewer.md` seat reviewed
+`f464b00..61b4937` on 2026-07-29, after the build and before the diff
+debate. Retained artifact: `fable-review-f464b00-61b4937.md`. Verdict:
+Ready to merge YES, no Critical, no Important, two Minor. Both minors are
+adjudicated below, and BOTH were settled by running the case.
+
+**Minor 1, design-promised coverage not delivered. FIXED BEFORE MERGE.**
+The design record at `2026-07-29-mirror-z-capture-design.md:334` claims
+the tracked AND untracked spaced back-channel are both covered. The suite
+had the tracked case only at the repo root without a space, and the spaced
+case only untracked, so the tracked-spaced STAGING route had never run.
+The reviewer graded it Minor because that route cannot fail silently -
+staging failure blocks, and an entry that survives blocks - and that
+grading is right. It is still a route the suite claimed and did not
+exercise. Added `test_a_tracked_back_channel_under_a_spaced_directory_is_committed`,
+which runs the whole route: delete, prune the emptied directory, stage,
+commit, and assert the mirror HEAD moved. PASS.
+
+**Minor 2, the `-C <path>` residue. MEASURED, NOT CONVERTED; CONSTRAINT
+SCOPE NARROWED.** Four call sites still pass the repo as `-C $MirrorPath`
+through PowerShell's native invocation: `Test-Tracked`, staging, the
+commit, and `rev-parse`. The Global Constraint reads plan-wide, so on its
+own wording these are violations.
+
+They are not, and the reason is a scope the constraint failed to state.
+The constraint exists because `ProcessStartInfo` in .NET Framework has no
+`ArgumentList`, so `Invoke-GitProcess` must build ONE command-line string
+by hand, and hand-quoting a path that can contain spaces is the defect
+class this cycle removes. PowerShell's own native-argument passing does
+that quoting itself, so the four sites never had the defect. The
+constraint governs the hand-built command line, and nothing else.
+
+Argument was not the way to settle it. Measured 2026-07-29: a full mirror
+run with a SPACE in both the repo root and the mirror path enumerated a
+tracked back-channel under `M+ Timer/`, deleted it, pruned the directory,
+staged, committed, and resolved the new HEAD - every one of the four
+sites, all green. Locked as `test_a_spaced_mirror_path_builds` so the
+residue cannot rot into a real defect unnoticed.
+
+The four sites are LEFT ALONE. Converting them would be a rewrite outside
+every task in this plan with no defect behind it, which is the change
+class this repo refuses.
+
+---
+
 ## Amendments
 
 Plan debate round 1, both lanes, 2026-07-29, at head `012fdf8`. Sol

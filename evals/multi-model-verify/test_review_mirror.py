@@ -860,6 +860,60 @@ def test_a_back_channel_under_a_spaced_directory_is_removed(tmp_path):
         "the real tree is never touched")
 
 
+def test_a_tracked_back_channel_under_a_spaced_directory_is_committed(tmp_path):
+    # The STAGING route, which the untracked case above never reaches. A
+    # tracked back-channel is deleted, staged and committed, and a spaced
+    # pathname is exactly what the old capture refused before it could get
+    # here. Fail-closed either way - staging failure and survival both
+    # block - but a route that only fails loudly is still a route that has
+    # never been run.
+    repo = make_repo(tmp_path)
+    (repo / SPACED).mkdir()
+    (repo / SPACED / "AGENTS.md").write_text("# planted\n")
+    git(repo, "add", "--", f"{SPACED}/AGENTS.md")
+    commit(repo, "plant a tracked back-channel under a spaced directory")
+    before = git(repo, "rev-parse", "HEAD").strip()
+    mirror = tmp_path / "mirror"
+    proc = run_mirror(repo, mirror)
+    assert "survived remediation" not in proc.stdout, proc.stdout
+    assert_built(proc)
+    assert not (mirror / SPACED / "AGENTS.md").exists()
+    assert not (mirror / SPACED).exists(), (
+        "the empty directory is pruned; an empty shell of the surface this"
+        " step removes is not remediation")
+    assert (repo / SPACED / "AGENTS.md").exists(), (
+        "the real tree is never touched")
+    after = git(mirror, "rev-parse", "HEAD").strip()
+    assert after != before, (
+        "a tracked deletion left uncommitted is a tracked modification in"
+        " the baseline, which bars mode diff")
+    assert "AGENTS.md" not in git(mirror, "status", "--porcelain")
+
+
+def test_a_spaced_mirror_path_builds(tmp_path):
+    # The paths this script is GIVEN can carry spaces too, not only the
+    # pathnames it reads out of git. Four call sites still pass the repo as
+    # `-C <path>` through PowerShell's native invocation rather than
+    # through the byte capture, so this is the case that says whether that
+    # residue holds: staging, the commit and `rev-parse` all run against a
+    # spaced mirror here, and a failure in any of them blocks.
+    repo = tmp_path / "src repo"
+    repo.mkdir()
+    git(tmp_path, "init", "-q", str(repo))
+    (repo / "kept.txt").write_text("tracked\n")
+    (repo / SPACED).mkdir()
+    (repo / SPACED / "AGENTS.md").write_text("# planted\n")
+    git(repo, "add", "kept.txt", "--", f"{SPACED}/AGENTS.md")
+    commit(repo, "base")
+    mirror = tmp_path / "mirror dir"
+    proc = run_mirror(repo, mirror)
+    assert_built(proc)
+    assert not (mirror / SPACED / "AGENTS.md").exists()
+    assert (mirror / "kept.txt").exists()
+    assert git(mirror, "status", "--porcelain").strip() == "", (
+        "the remediation commit landed, so the mirror is clean")
+
+
 def test_a_spaced_baseline_entry_reaches_the_manifest(tmp_path):
     repo = make_repo(tmp_path)
     (repo / SPACED).mkdir()
