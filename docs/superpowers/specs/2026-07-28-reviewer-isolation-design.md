@@ -93,8 +93,10 @@ Four findings follow from the table.
   accepted and all no-ops, leaving 60. `--disable skills` errors with
   `Unknown feature flag: skills`.
 - **Per-skill disabling does work, by path.** Passing
-  `-c 'skills.config=[{path="C:/Users/Brandon/.agents/skills/localhost/SKILL.md",enabled=false},{path="C:/Users/Brandon/.agents/skills/grilling/SKILL.md",enabled=false}]'`
-  removed both named skills, 29 to 27. Paths must use forward slashes: with
+  `-c 'skills.config=[{path="<home>/.agents/skills/<skill-a>/SKILL.md",enabled=false},{path="<home>/.agents/skills/<skill-b>/SKILL.md",enabled=false}]'`
+  removed both named skills, 29 to 27. The measurement was made with two
+  real installed skills; their names are held out of this public record,
+  as is the generated override itself. Paths must use forward slashes: with
   backslashes the value fails TOML parsing, falls back to a raw string, and
   codex rejects it with `invalid type: string`.
 - **The override must use TOML LITERAL strings, single-quoted.** Windows
