@@ -10,7 +10,8 @@ file.
 **Architecture:** Six small functions replace one. `Invoke-GitProcess`
 runs git and returns raw bytes. `ConvertFrom-NulCapture` turns those bytes
 into fields, failing closed on a missing trailing NUL or invalid UTF-8.
-`Test-WindowsPathname` refuses a name no Windows file can carry.
+`Test-SupportedPathname` refuses a name this tool cannot handle
+exactly.
 `ConvertTo-StatusRecord` builds structured records, consuming a rename's
 source from the NEXT field. `Format-StatusPathname` reproduces git's
 quoting for one pathname, and `Format-StatusRecord` uses it to render one
@@ -307,7 +308,7 @@ git commit -m "read git pathname captures as raw NUL-separated bytes"
 
 ---
 
-### Task 2: The Windows pathname guard
+### Task 2: The supported-pathname guard
 
 **Files:**
 - Modify: `tools/new-review-mirror.ps1` — one function below
@@ -316,43 +317,58 @@ git commit -m "read git pathname captures as raw NUL-separated bytes"
 
 **Interfaces:**
 - Consumes: nothing.
-- Produces: `Test-WindowsPathname($value)` returns `$true` or `$false`.
+- Produces: `Test-SupportedPathname($value)` returns `$true` or `$false`.
 
 - [ ] **Step 1: Write the failing test**
 
 Append to `evals/multi-model-verify/test_review_mirror.py`:
 
 ```python
-def test_the_windows_pathname_guard_is_pinned_in_both_directions():
-    # Measured 2026-07-29: of every character that makes git quote a path,
-    # Windows permits only a SPACE and non-ASCII in a real filename. A name
-    # carrying any of the refusals names no file this script can delete or
-    # hash, and git reads names from its INDEX, which can carry one authored
-    # elsewhere. Pinned in both directions so a future edit cannot make the
-    # guard constant.
+def test_the_supported_pathname_guard_is_pinned_in_both_directions():
+    # The guard admits exactly what Format-StatusPathname can record
+    # exactly: an ordinary name, and a name whose ONLY quoting trigger is a
+    # space. Everything the porcelain line form would quote or escape some
+    # other way is refused, plus `>` for the arrow separator. Pinned in
+    # both directions so a future edit cannot make the guard constant.
     out = run_functions(
         '$q = [char]34\n'
         '$results = @(\n'
-        '  (Test-WindowsPathname "M+ Timer/core.lua"),\n'
-        '  (Test-WindowsPathname "caf' + "é" + '/input.txt"),\n'
-        '  (Test-WindowsPathname "a$([char]9)b.txt"),\n'
-        '  (Test-WindowsPathname "a$([char]10)b.txt"),\n'
-        '  (Test-WindowsPathname ("a" + $q + "b.txt")),\n'
-        '  (Test-WindowsPathname "a\\b.txt"),\n'
-        '  (Test-WindowsPathname "a>b.txt"),\n'
-        '  (Test-WindowsPathname "")\n'
+        '  (Test-SupportedPathname "M+ Timer/core.lua"),\n'
+        '  (Test-SupportedPathname "caf' + "é" + '/input.txt"),\n'
+        '  (Test-SupportedPathname "a$([char]9)b.txt"),\n'
+        '  (Test-SupportedPathname "a$([char]10)b.txt"),\n'
+        '  (Test-SupportedPathname "a$([char]127)b.txt"),\n'
+        '  (Test-SupportedPathname ("a" + $q + "b.txt")),\n'
+        '  (Test-SupportedPathname "a\\b.txt"),\n'
+        '  (Test-SupportedPathname "a>b.txt"),\n'
+        '  (Test-SupportedPathname "")\n'
         ')\n'
         '($results -join ",")')
-    assert out == "True,True,False,False,False,False,False,False", out
+    assert out == ("True,True,False,False,False,"
+                   "False,False,False,False"), out
 ```
 
 **Amendment A1, plan debate round 1, Sol lane (P2, P4).** The `>` case is
 in this list because the guard refuses `>`. The first draft named `>` in
 the guard's own comment as a character Windows refuses and then did not
-check it, so a `>`-bearing index entry passed a function advertised as
-refusing impossible Windows names. It also mattered downstream: Task 4
-justifies the ` -> ` render as unambiguous BECAUSE `>` cannot appear, and
-that argument is empty unless the guard enforces it.
+check it, so a `>`-bearing entry passed a function advertised as refusing
+impossible names. It also mattered downstream: Task 4 justifies the ` -> `
+render as unambiguous BECAUSE `>` cannot appear, and that argument is
+empty unless the guard enforces it.
+
+**Amendment A9, plan debate round 2, Kimi lane (Q2).** The 0x7F case is in
+this list, and the function is renamed, because the earlier contract was
+false. It claimed to refuse names Windows cannot hold, and argued from
+that to the completeness of the one-condition quoting rule. Measured
+2026-07-29: Windows CREATES `a<0x7F>b.txt`, and
+`git status --porcelain` prints it as `?? "a\177b.txt"` with AND without
+`core.quotepath=false`, while `-z` returns the byte raw. So a legal file
+on a real disk passed the old guard and would have rendered bare where a
+direct capture quotes it - the same defect class A2 exists to remove, in
+the residue A2's own completeness argument claimed to have excluded.
+Refusing it is right rather than rendering it: git's recorded form for
+0x7F is the octal escape `\177`, and reproducing that would mean writing
+the encoder this cycle deleted.
 
 Note: this test file is read as UTF-8 by pytest, so the accented literal is
 fine here. The SCRIPT stays ASCII; nothing above adds a non-ASCII character
@@ -360,41 +376,63 @@ to it.
 
 - [ ] **Step 2: Run the test to verify it fails**
 
-Run: `python -m pytest evals/multi-model-verify/test_review_mirror.py -k windows_pathname_guard -v`
+Run: `python -m pytest evals/multi-model-verify/test_review_mirror.py -k supported_pathname_guard -v`
 
-Expected: FAIL, `Test-WindowsPathname` is not recognized.
+Expected: FAIL, `Test-SupportedPathname` is not recognized.
 
 - [ ] **Step 3: Write the implementation**
 
 Insert into `tools/new-review-mirror.ps1` below `ConvertFrom-NulCapture`:
 
 ```powershell
-function Test-WindowsPathname($value) {
+function Test-SupportedPathname($value) {
     # Under `-z` git never quotes, so whatever arrives IS the pathname.
-    # This answers a different question: can it BE a Windows pathname at
-    # all? git reads names from its INDEX, which can carry a name authored
-    # on a platform with looser rules.
+    # The question this answers is whether this tool can handle that
+    # pathname EXACTLY, in both senses:
     #
-    # Measured 2026-07-29 on this machine: of every character that makes
-    # git quote a path, Windows permits only a SPACE and non-ASCII in a
-    # real filename. It refuses a double quote, a backslash, `>` and every
-    # control character.
+    #   1. Can it name a file the script can delete and hash?
+    #   2. Can Format-StatusPathname record it in the porcelain line form
+    #      the baseline contract already uses?
     #
-    # The BACKSLASH refusal is the load-bearing one. git separates path
-    # components with a forward slash, so a backslash in a field is a
+    # The admitted set is therefore an ordinary pathname, or one whose ONLY
+    # line-form quoting trigger is a SPACE - the one trigger the renderer
+    # reproduces. Everything else the line form quotes or escapes some
+    # other way is refused, and so is `>`.
+    #
+    # REFUSING rather than rendering is the deliberate choice for that
+    # residue. Git records the other triggers with OCTAL ESCAPES, and
+    # reproducing those would mean writing the encoder this cycle deleted.
+    # A loud stop on a pathological name is the cheaper failure.
+    #
+    # The BACKSLASH refusal carries a second, heavier reason. git separates
+    # path components with a forward slash, so a backslash in a field is a
     # literal character in a NAME - and `Join-Path` would then read it as a
     # separator and resolve a DIFFERENT file, which the script would delete
     # or hash under the name the baseline gave. That is false coverage
     # rather than a refusal, which is the one outcome this preflight exists
     # to prevent.
-    # `>` is refused for a second reason as well. Format-StatusRecord
-    # renders a rename as `<old> -> <new>`, and that arrow is only
-    # unambiguous while no pathname can contain `>`. The guard is what
-    # makes that true rather than assumed.
+    #
+    # `>` is refused for a reason of its own: Format-StatusRecord renders a
+    # rename as `<old> -> <new>`, and that arrow is only unambiguous while
+    # no pathname can contain `>`. The guard is what makes that true rather
+    # than assumed.
+    #
+    # 0x7F is refused, and it is the case that shows why this function is
+    # NOT named for Windows. Measured 2026-07-29: Windows CREATES
+    # `a<0x7F>b.txt`, and `git status --porcelain` prints it as
+    # `?? "a\177b.txt"` with AND without `core.quotepath=false`, while `-z`
+    # returns the byte raw. It is legal on disk and a quoting trigger this
+    # renderer cannot reproduce, so admitting it would put a bare name into
+    # a baseline the direct capture quotes.
+    #
+    # Non-ASCII is NOT refused. The old captures set `core.quotepath=false`
+    # and recorded an accented pathname raw, so it is not a trigger for the
+    # form this baseline uses.
     $text = [string]$value
     if ($text.Length -eq 0) { return $false }
     foreach ($ch in $text.ToCharArray()) {
         if ([int]$ch -lt 32) { return $false }
+        if ([int]$ch -eq 127) { return $false }
         if ($ch -eq [char]34) { return $false }
         if ($ch -eq '\') { return $false }
         if ($ch -eq '>') { return $false }
@@ -405,7 +443,7 @@ function Test-WindowsPathname($value) {
 
 - [ ] **Step 4: Run the test to verify it passes**
 
-Run: `python -m pytest evals/multi-model-verify/test_review_mirror.py -k windows_pathname_guard -v`
+Run: `python -m pytest evals/multi-model-verify/test_review_mirror.py -k supported_pathname_guard -v`
 
 Expected: PASS.
 
@@ -423,7 +461,7 @@ Expected: `ascii ok []`
 
 ```bash
 git add tools/new-review-mirror.ps1 evals/multi-model-verify/test_review_mirror.py
-git commit -m "refuse a pathname no Windows file can carry"
+git commit -m "refuse a pathname this tool cannot handle exactly"
 ```
 
 ---
@@ -432,11 +470,11 @@ git commit -m "refuse a pathname no Windows file can carry"
 
 **Files:**
 - Modify: `tools/new-review-mirror.ps1` — one function below
-  `Test-WindowsPathname`
+  `Test-SupportedPathname`
 - Test: `evals/multi-model-verify/test_review_mirror.py`
 
 **Interfaces:**
-- Consumes: `Test-WindowsPathname($value)` from Task 2.
+- Consumes: `Test-SupportedPathname($value)` from Task 2.
 - Produces: `ConvertTo-StatusRecord($fields)` returns
   `@{ Records = @(@{ X; Y; Path; Source }) }` or `@{ Error = [string] }`.
   `Source` is `$null` for every record that is not a rename or a copy.
@@ -486,7 +524,19 @@ def test_a_copy_in_the_second_column_also_consumes_a_source():
 def test_a_control_character_in_a_status_pathname_stops():
     out = run_functions(
         '$r = ConvertTo-StatusRecord @("?? a$([char]9)b.txt"); $r.Error')
-    assert "cannot exist on this platform" in out, out
+    assert "cannot be recorded exactly" in out, out
+
+
+def test_a_del_character_in_a_status_pathname_stops():
+    # 0x7F is the case the guard's old name got wrong. Windows CREATES
+    # `a<0x7F>b.txt` - measured 2026-07-29 - and `git status --porcelain`
+    # prints it as `?? "a\177b.txt"` with and without core.quotepath=false,
+    # while -z returns the byte raw. It is above the control range, so a
+    # `< 32` test admits it, and the render would then record it bare where
+    # the direct capture quotes it.
+    out = run_functions(
+        '$r = ConvertTo-StatusRecord @("?? a$([char]127)b.txt"); $r.Error')
+    assert "cannot be recorded exactly" in out, out
 
 
 def test_a_status_field_too_short_to_carry_a_pathname_stops():
@@ -517,7 +567,7 @@ Expected: FAIL, `ConvertTo-StatusRecord` is not recognized.
 
 - [ ] **Step 3: Write the implementation**
 
-Insert into `tools/new-review-mirror.ps1` below `Test-WindowsPathname`:
+Insert into `tools/new-review-mirror.ps1` below `Test-SupportedPathname`:
 
 ```powershell
 function ConvertTo-StatusRecord($fields) {
@@ -550,10 +600,12 @@ function ConvertTo-StatusRecord($fields) {
         $x = $field[0]
         $y = $field[1]
         $path = $field.Substring(3)
-        if (-not (Test-WindowsPathname $path)) {
-            return @{ Error = ("status entry '" + $field + "' names a path" +
-                " that cannot exist on this platform, so the file it points" +
-                " at cannot be resolved without guessing") }
+        if (-not (Test-SupportedPathname $path)) {
+            return @{ Error = ("status entry '" + $field + "' names a" +
+                " path that cannot be recorded exactly: it either names no" +
+                " file this script can resolve without guessing, or it" +
+                " carries a quoting trigger the baseline render cannot" +
+                " reproduce") }
         }
         $source = $null
         if ($x -eq "R" -or $x -eq "C" -or $y -eq "R" -or $y -eq "C") {
@@ -564,9 +616,9 @@ function ConvertTo-StatusRecord($fields) {
             }
             $source = [string]$all[$i]
             $i++
-            if (-not (Test-WindowsPathname $source)) {
+            if (-not (Test-SupportedPathname $source)) {
                 return @{ Error = ("rename or copy entry '" + $field +
-                    "' names a source that cannot exist on this platform") }
+                    "' names a source that cannot be recorded exactly") }
             }
         }
         [void]$records.Add(@{ X = $x; Y = $y; Path = $path
@@ -580,7 +632,7 @@ function ConvertTo-StatusRecord($fields) {
 
 Run: `python -m pytest evals/multi-model-verify/test_review_mirror.py -k "status_record or rename or copy_in_the_second or status_field or status_pathname" -v`
 
-Expected: PASS, 8 tests.
+Expected: PASS, 9 tests.
 
 - [ ] **Step 5: Commit**
 
@@ -617,7 +669,7 @@ def test_a_rename_renders_in_gits_display_order_with_its_quoting():
     # by running THE STATUS COMMAND directly, which is what
     # references/backup-lane.md requires of every round. Measured
     # 2026-07-29, that command prints both spaced names QUOTED. The arrow
-    # is unambiguous because Test-WindowsPathname refuses `>`.
+    # is unambiguous because Test-SupportedPathname refuses `>`.
     out = run_functions(
         '$r = ConvertTo-StatusRecord @("R  M+ Timer/new name.lua",\n'
         '                              "M+ Timer/old name.lua")\n'
@@ -719,7 +771,7 @@ function Format-StatusRecord($record) {
     #
     # ONE WAY ONLY. Nothing re-parses this text: the manifest's subjects
     # come from the RECORDS. That separation is the whole reason the arrow
-    # is safe to write here at all, and Test-WindowsPathname refusing `>`
+    # is safe to write here at all, and Test-SupportedPathname refusing `>`
     # is what keeps it unambiguous.
     $head = [string]$record.X + [string]$record.Y + " "
     if ($record.Source) {
@@ -769,7 +821,7 @@ git commit -m "render one status record for the evidence, one way only"
 
 **Interfaces:**
 - Consumes: `Invoke-GitProcess`, `ConvertFrom-NulCapture` (Task 1),
-  `Test-WindowsPathname` (Task 2), `ConvertTo-StatusRecord` (Task 3),
+  `Test-SupportedPathname` (Task 2), `ConvertTo-StatusRecord` (Task 3),
   `Format-StatusRecord` (Task 4).
 - Produces:
   - `Invoke-GitFields($repo, $gitArgs)` returns
@@ -843,10 +895,10 @@ function Get-BackChannelEntry($repo) {
     # script cannot name is a back-channel it cannot delete, and reporting
     # it as clean is the one outcome the whole preflight exists to prevent.
     foreach ($e in @($r.Fields)) {
-        if (-not (Test-WindowsPathname $e)) {
+        if (-not (Test-SupportedPathname $e)) {
             return @{ Ok = $false; Entries = @()
                       Reason = ("the back-channel entry '" + $e + "' names" +
-                        " a path that cannot exist on this platform, so it" +
+                        " a path that cannot be recorded exactly, so it" +
                         " cannot be deleted") }
         }
     }
@@ -917,7 +969,7 @@ $entries = $found.Entries
 ```
 
 The quoted-entry loop that followed is DELETED. Under `-z` nothing is
-quoted, and `Test-WindowsPathname` inside `Get-BackChannelEntry` now covers
+quoted, and `Test-SupportedPathname` inside `Get-BackChannelEntry` now covers
 the residue that loop was reaching for.
 
 Replace the re-enumeration failure line (currently 427-430) the same way:
@@ -1165,7 +1217,7 @@ def test_escape_looking_field_text_is_never_interpreted():
     # This is a FIELD-level case and not an end-to-end one on purpose. A
     # file with this name cannot exist on Windows, because the backslash is
     # a path separator there - measured 2026-07-29. The bytes can still
-    # arrive from git's INDEX, which is what Test-WindowsPathname then
+    # arrive from git's INDEX, which is what Test-SupportedPathname then
     # refuses, so the two halves are tested where each can actually be
     # reached.
     out = run_functions(
@@ -1198,7 +1250,7 @@ def test_a_backslash_bearing_index_entry_stops_the_enumeration():
     # delete or hash under the name the baseline gave.
     out = run_functions(
         '$r = ConvertTo-StatusRecord @("?? caf\\303\\251.txt"); $r.Error')
-    assert "cannot exist on this platform" in out, out
+    assert "cannot be recorded exactly" in out, out
 ```
 
 - [ ] **Step 4: Run the new tests to verify they pass**
@@ -1365,7 +1417,7 @@ git commit -m "record the -z rename field order in the baseline contract"
 |---|---|
 | Capture: raw bytes, trailing NUL, split on NUL, strict UTF-8 | 1 |
 | Empty trailing field discarded, interior empty field is a stop | 1 |
-| Guard: not empty, no control character, no `"`, no `\`, no `>` | 2 |
+| Guard: not empty, no control character, no 0x7F, no `"`, no `\`, no `>` | 2 |
 | Parse: structural, `XY` + space + path, four-character minimum | 3 |
 | Parse: rename consumes the NEXT field as source | 3 |
 | Parse: missing second field is a stop | 3 |
@@ -1479,4 +1531,42 @@ that stopped matching the code beside it.
   whose stated expected result is not what would happen.
 - **A8 — an off-by-one in a comment.** A3 called `a\Tb.txt` "seven
   literal characters" while its own assertion lists eight character
-  codes. Corrected to eight.
+  codes. Corrected to eight. Kimi raised the same nit independently.
+
+### Round 2, Kimi lane, 2026-07-29
+
+Same session resumed, route line verified (client-side), at head
+`a9a788c`. Q1, Q3, Q4 and Q5 PASS; Q2 FIX.
+
+- **A9 — 0x7F broke A2's completeness argument, and the guard's name was
+  false.** THE SHARPEST FINDING OF THE CYCLE. A2 argued the one-condition
+  quoting rule was complete "because the guard has already refused `"`,
+  `\`, `>` and every control character". The guard tested `< 32`, which
+  admits 0x7F. Measured 2026-07-29 to settle it, exactly as A1 and A2 were
+  settled: Windows CREATES `a<0x7F>b.txt`; `git status --porcelain` prints
+  it `?? "a\177b.txt"` with AND without `core.quotepath=false`; `-z`
+  returns the byte raw and it is valid single-byte UTF-8, so the strict
+  decode passes it through. A legal file on a real disk therefore rendered
+  bare where the direct capture quotes it - the P11 defect class, inside
+  the residue A2 claimed to have excluded, and reachable from disk rather
+  than only from the index.
+
+  The repair is larger than one character test, because the CONTRACT was
+  wrong and not just the code. `Test-WindowsPathname` is renamed
+  `Test-SupportedPathname` and now states what it actually decides: can
+  this tool handle the pathname EXACTLY, both as a file it can delete and
+  hash AND as a name `Format-StatusPathname` can record in the line form.
+  Windows legality was never the real question, and the old name was the
+  same class of defect A1 fixed - a declaration that did not match what
+  the code decides.
+
+  Refusing 0x7F rather than rendering it is deliberate: git records the
+  other triggers with OCTAL ESCAPES, and reproducing those would mean
+  writing the encoder this cycle exists to delete.
+
+**Where the lanes split, round 2.** Sol found three declaration defects A2
+introduced and passed A2's substance; Kimi passed the declarations and
+found A2's completeness argument false. Neither lane reached the other's
+finding. Both were settled by running the case: Sol's by reading the
+amended plan against itself, Kimi's by creating a 0x7F file on this disk
+and capturing git's output three ways.

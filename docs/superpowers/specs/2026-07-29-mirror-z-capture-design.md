@@ -87,23 +87,51 @@ fail-closed check rather than an assumption.
 ### Most of git's quoting cannot occur on Windows
 
 This script is Windows-only. Measured 2026-07-29, of every character
-that makes git quote a pathname, Windows permits exactly two in a real
+that makes git quote a pathname, Windows permits these in a real
 filename:
 
-| trigger | Windows |
-|---|---|
-| space | CREATED |
-| non-ASCII (e-acute) | CREATED |
-| `"` | REFUSED |
-| `\` | REFUSED |
-| `>` | REFUSED |
-| tab, newline, CR, bell, backspace, form feed, vertical tab | REFUSED |
+| trigger | Windows | git line form |
+|---|---|---|
+| space | CREATED | quoted |
+| non-ASCII (e-acute) | CREATED | raw under `core.quotepath=false` |
+| **0x7F (DEL)** | **CREATED** | **quoted, escaped `\177`** |
+| `"` | REFUSED | quoted |
+| `\` | REFUSED | quoted |
+| `>` | REFUSED | not a trigger |
+| tab, newline, CR, bell, backspace, form feed, vertical tab | REFUSED | quoted |
+
+**0x7F is the row that matters and it was missing from the first draft.**
+It was found by the backup reviewer lane in plan debate round 2 and
+settled by measurement: Windows creates `a<0x7F>b.txt`, and
+`git status --porcelain` prints `?? "a\177b.txt"` with AND without
+`core.quotepath=false`, while `-z` returns the byte raw. It sits above the
+control range, so a "below 32" test admits it. Any argument of the form
+"the guard has refused every quoting trigger except the space" is false
+unless 0x7F is refused explicitly.
 
 Three consequences, each load-bearing:
 
-1. The nine escapes the decoder implements all name characters that
-   cannot exist in a name this script will ever read. The decoder is not
-   merely wrong; it is unreachable. Deleting it removes dead code.
+1. The nine NAMED escapes the decoder implements (`\a \b \f \n \r \t \v
+   \\ \"`) all name characters Windows refuses, so those branches cannot
+   be reached by a name this script reads from disk.
+
+   The OCTAL branch is a different matter, and the first draft of this
+   spec got it wrong by lumping the two together. 0x7F is creatable on
+   Windows and git escapes it as `\177`, so the octal branch WAS
+   reachable. What that reachable input would have produced is worth
+   stating exactly rather than glossing: `\177` is a single byte below
+   128, so the byte-versus-character defect does not manifest for it and
+   the decoder decoded it correctly. The two measured defects sat on
+   input that could not arrive; the input that could arrive, it happened
+   to get right.
+
+   This narrows an earlier claim in this document and does not change the
+   decision. The case for `-z` never rested on the decoder being dead
+   code. It rests on removing a hand-written grammar from the path that
+   names files this script deletes and hashes, and on the space case,
+   which is common rather than pathological. If anything the 0x7F
+   discovery strengthens it: a guard plus a one-condition render is small
+   enough to reason about completely, and the decoder was not.
 2. A `-z` pathname can never contain a NUL or a newline, so splitting on
    NUL is exact and the recorded evidence can stay one entry per line.
    No new ASCII-safe encoding is needed for the baseline.
@@ -137,18 +165,35 @@ else is a stop.
 
 ### Guard
 
-Checks that each pathname field could be a real Windows path: not empty,
-and free of every control character, `"`, `\` and `>`. Anything else stops
-the run.
+`Test-SupportedPathname` decides whether this tool can handle a pathname
+EXACTLY, in both senses: can it name a file the script can delete and
+hash, and can the render below record it in the porcelain line form the
+baseline contract already uses.
 
-`\` and `>` are in that list for reasons beyond the measured table.
+It admits an ordinary pathname, or one whose ONLY line-form quoting
+trigger is a SPACE, which is the single trigger the render reproduces. It
+refuses an empty field, every control character, 0x7F, `"`, `\` and `>`.
+Non-ASCII is admitted, because the recorded form used
+`core.quotepath=false` and is therefore raw.
+
+Three of those refusals carry their own reason beyond the table above.
 A backslash is a path SEPARATOR on Windows, so a field carrying one would
 make `Join-Path` resolve a different file, which the script would then
-delete or hash under the name the baseline gave. And `>` is what keeps the
-render below unambiguous: the ` -> ` separator is only safe while no
-pathname can contain `>`, and the guard is what makes that true rather
-than assumed. Amended 2026-07-29 after the plan debate found the `>` case
-argued for and not enforced.
+delete or hash under the name the baseline gave. `>` is what keeps the
+render unambiguous: the ` -> ` separator is only safe while no pathname
+can contain `>`. And 0x7F is legal on disk yet is a quoting trigger the
+render cannot reproduce, so admitting it would put a bare name into a
+baseline that the direct capture quotes.
+
+Refusing that residue rather than rendering it is deliberate. Git records
+every other trigger with an OCTAL ESCAPE, and reproducing those would mean
+writing the encoder this cycle exists to delete. A loud stop on a
+pathological name is the cheaper failure.
+
+Amended twice on 2026-07-29 during the plan debate: first because `>` was
+argued for and not enforced, then because the guard was named for Windows
+legality while deciding something else, and 0x7F fell through the gap
+between the two.
 
 This exists because deleting the old blanket refusal with nothing in its
 place would remove a safety property, not just noise. Git reads names
