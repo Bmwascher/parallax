@@ -565,7 +565,7 @@ def test_a_non_ascii_baseline_entry_reaches_the_manifest(tmp_path):
     assert f"?? {CAFE}/input.txt" in proc.stdout, proc.stdout
 
 
-BODY_START = "function Invoke-GitLines"
+BODY_START = "function Invoke-GitProcess"
 BODY_END = "$toplevel ="
 
 
@@ -588,7 +588,13 @@ def run_functions(snippet):
     body = text[text.index(BODY_START):text.index(BODY_END)]
     with tempfile.NamedTemporaryFile("w", suffix=".ps1", delete=False,
                                      encoding="utf-8-sig") as fh:
-        fh.write(body + "\n" + snippet)
+        # Stop on the FIRST error. Measured 2026-07-29 on both hosts: an
+        # undefined function is NON-terminating here, the host exits 0, and
+        # the snippet's partial output comes back - so a missing or
+        # mistyped function reads as a wrong VALUE instead of an error.
+        # These snippets exercise pathname handling; a quiet failure is the
+        # one outcome this module must not produce.
+        fh.write('$ErrorActionPreference = "Stop"\n' + body + "\n" + snippet)
         path = fh.name
     try:
         proc = subprocess.run(
@@ -619,3 +625,71 @@ def test_the_quoted_form_is_recognized_and_a_plain_path_is_not():
         '"{0} {1}" -f (Test-GitQuotedPath ' + "'" + '"a/b"' + "'" +
         '), (Test-GitQuotedPath ' + "'" + 'a/b' + "'" + ')')
     assert out == "True False", out
+
+
+def test_an_empty_capture_is_a_legitimate_state():
+    # A repo with nothing to list produces no bytes. That is not a failure,
+    # and the wrapper is what keeps it from reading as one.
+    out = run_functions(
+        '$r = ConvertFrom-NulCapture ([byte[]]@())\n'
+        '"{0}|{1}" -f $r.Ok, (@($r.Fields).Count)')
+    assert out == "True|0", out
+
+
+def test_fields_split_on_nul_and_keep_their_spaces():
+    # THE WHOLE POINT. A space in a pathname is what made git quote it, and
+    # under -z the space is simply part of the field.
+    out = run_functions(
+        '$b = [System.Text.Encoding]::UTF8.GetBytes("M+ Timer/a.lua`0b.lua`0")\n'
+        '$r = ConvertFrom-NulCapture $b\n'
+        '(@($r.Fields) -join "|")')
+    assert out == "M+ Timer/a.lua|b.lua", out
+
+
+def test_a_capture_without_a_trailing_nul_stops():
+    # A truncated capture ends mid-pathname. Accepting it would put a
+    # fragment into the manifest under the name of a real file.
+    out = run_functions(
+        '$b = [byte[]]@(97, 46, 116, 120, 116)\n'
+        '$r = ConvertFrom-NulCapture $b\n'
+        '"{0}|{1}" -f $r.Ok, $r.Reason')
+    assert out.startswith("False|"), out
+    assert "does not end with a NUL" in out, out
+
+
+def test_invalid_utf8_stops_instead_of_being_replaced():
+    # The reason the bytes are read raw. PowerShell's own decode maps a
+    # malformed byte to U+FFFD silently, which on this boundary is a wrong
+    # pathname reported as a good one.
+    out = run_functions(
+        '$b = [byte[]]@(97, 255, 0)\n'
+        '$r = ConvertFrom-NulCapture $b\n'
+        '"{0}|{1}" -f $r.Ok, $r.Reason')
+    assert out.startswith("False|"), out
+    assert "not valid UTF-8" in out, out
+
+
+def test_a_non_ascii_field_arrives_as_one_character_not_two_bytes():
+    # THE DECODER DEFECT THIS CYCLE DELETES, pinned so it cannot return.
+    # The old ConvertFrom-GitQuotedPath turned the ESCAPE PAIR
+    # `\303\251` into character codes 195,169 - two characters -
+    # where the byte pair names one, code 233. (The surrounding name
+    # decoded normally: `caf\303\251` came out five characters, not
+    # two. The two here are the escapes' own output.) Reading raw bytes
+    # and decoding once from UTF-8 is what makes that impossible.
+    out = run_functions(
+        '$b = [byte[]]@(99, 97, 102, 195, 169, 0)\n'
+        '$r = ConvertFrom-NulCapture $b\n'
+        '(([int[]][char[]]$r.Fields[0]) -join ",")')
+    assert out == "99,97,102,233", out
+
+
+def test_an_empty_field_before_the_end_is_kept_for_the_parser_to_refuse():
+    # Only the empty string AFTER the final NUL is dropped. An empty field
+    # anywhere else is a real fault and must reach the caller rather than
+    # being tidied away here.
+    out = run_functions(
+        '$b = [System.Text.Encoding]::UTF8.GetBytes("a.txt`0`0b.txt`0")\n'
+        '$r = ConvertFrom-NulCapture $b\n'
+        '"{0}|{1}" -f (@($r.Fields).Count), (@($r.Fields) -join ",")')
+    assert out == "3|a.txt,,b.txt", out

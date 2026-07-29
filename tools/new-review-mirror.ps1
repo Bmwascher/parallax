@@ -25,6 +25,106 @@ param(
     [string]$CodexCommand = "codex"
 )
 
+function Invoke-GitProcess($repo, $gitArgs) {
+    # Run git and hand back its stdout as RAW BYTES.
+    #
+    # Reading bytes rather than PowerShell's decoded string is the point.
+    # Windows PowerShell 5.1 decodes a native command's output with the
+    # console code page, and even a UTF-8 console override maps a malformed
+    # byte to U+FFFD SILENTLY. On this boundary a substituted character is
+    # a wrong pathname reported as a good one, so the decode happens once,
+    # downstream, and strictly.
+    #
+    # ARGUMENTS ARE WHITESPACE-FREE LITERALS AND THE REPO IS THE WORKING
+    # DIRECTORY. .NET Framework's ProcessStartInfo has no ArgumentList, so
+    # the command line is one string; passing the repo path through it
+    # would mean hand-quoting a value that can contain spaces, which is the
+    # defect class this change removes. The guard below refuses an argument
+    # this command line cannot express rather than trusting the caller.
+    #
+    # Every argument is QUOTED. Git for Windows runs on the MSYS2 runtime,
+    # which glob-expands an unquoted argument, and `*AGENTS.md` must reach
+    # git unexpanded or the back-channel enumeration silently narrows to
+    # whatever happens to sit in the working directory.
+    foreach ($a in @($gitArgs)) {
+        if ([string]$a -match '[\s"]') {
+            return @{ Ok = $false; Bytes = @()
+                      Reason = ("git argument '" + $a + "' carries" +
+                        " whitespace or a quote, which this command line" +
+                        " cannot express") }
+        }
+    }
+    $quoted = @($gitArgs | ForEach-Object { '"' + $_ + '"' })
+    $psi = New-Object System.Diagnostics.ProcessStartInfo
+    $psi.FileName = "git"
+    $psi.Arguments = ($quoted -join " ")
+    $psi.WorkingDirectory = $repo
+    $psi.UseShellExecute = $false
+    $psi.CreateNoWindow = $true
+    $psi.RedirectStandardOutput = $true
+    $psi.RedirectStandardError = $true
+    $mem = New-Object System.IO.MemoryStream
+    $p = $null
+    try {
+        $p = [System.Diagnostics.Process]::Start($psi)
+        # Drain stderr CONCURRENTLY. A full stderr pipe blocks git before
+        # it finishes writing stdout, and the stdout read below would then
+        # never return.
+        $errTask = $p.StandardError.ReadToEndAsync()
+        $p.StandardOutput.BaseStream.CopyTo($mem)
+        $p.WaitForExit()
+        [void]$errTask.Wait(5000)
+    } catch {
+        return @{ Ok = $false; Bytes = @()
+                  Reason = ("git could not be run: " +
+                            $_.Exception.Message) }
+    }
+    if ($p.ExitCode -ne 0) {
+        return @{ Ok = $false; Bytes = @()
+                  Reason = ("git exited " + $p.ExitCode) }
+    }
+    return @{ Ok = $true; Bytes = $mem.ToArray() }
+}
+
+function ConvertFrom-NulCapture($bytes) {
+    # Turn a `-z` capture into its fields. Every failure here is a STOP.
+    #
+    # `-z` is why this exists. Git C-style-quotes a pathname whenever
+    # quoting would change it, and the trigger set is WIDER than the
+    # escapes alone: a plain SPACE is enough. Measured 2026-07-29, a
+    # directory named `M+ Timer` came back from `status --porcelain` as
+    # `?? "M+ Timer/"`, and `core.quotepath=false` did not suppress it.
+    # Under `-z` git emits the pathname verbatim and NUL-terminated and
+    # never quotes, so there is no escape grammar to decode.
+    $raw = [byte[]]@($bytes)
+    if ($raw.Length -eq 0) { return @{ Ok = $true; Fields = @() } }
+    if ($raw[$raw.Length - 1] -ne 0) {
+        return @{ Ok = $false; Fields = @()
+                  Reason = ("the -z capture does not end with a NUL, so it" +
+                    " was truncated and its last pathname is a fragment") }
+    }
+    # throwOnInvalidBytes, deliberately. The permissive decode substitutes
+    # U+FFFD and hands back a pathname that names a different file.
+    $utf8 = New-Object System.Text.UTF8Encoding($false, $true)
+    $text = ""
+    try {
+        $text = $utf8.GetString($raw)
+    } catch {
+        return @{ Ok = $false; Fields = @()
+                  Reason = ("the -z capture is not valid UTF-8, so a" +
+                    " pathname in it cannot be read without guessing") }
+    }
+    # The capture ends with a NUL, so the split's LAST element is the empty
+    # string after it. Drop exactly that one. An empty field anywhere else
+    # is a real fault and belongs to the caller, not to this function.
+    $parts = $text.Split([char]0)
+    $fields = New-Object System.Collections.ArrayList
+    for ($i = 0; $i -lt $parts.Length - 1; $i++) {
+        [void]$fields.Add($parts[$i])
+    }
+    return @{ Ok = $true; Fields = @($fields) }
+}
+
 function Invoke-GitLines($repo, $gitArgs) {
     # Every git capture that produces PATHNAMES goes through here, so both
     # of them answer the same two questions the same way.
