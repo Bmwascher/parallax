@@ -338,11 +338,20 @@ def test_the_windows_pathname_guard_is_pinned_in_both_directions():
         '  (Test-WindowsPathname "a$([char]10)b.txt"),\n'
         '  (Test-WindowsPathname ("a" + $q + "b.txt")),\n'
         '  (Test-WindowsPathname "a\\b.txt"),\n'
+        '  (Test-WindowsPathname "a>b.txt"),\n'
         '  (Test-WindowsPathname "")\n'
         ')\n'
         '($results -join ",")')
-    assert out == "True,True,False,False,False,False,False", out
+    assert out == "True,True,False,False,False,False,False,False", out
 ```
+
+**Amendment A1, plan debate round 1, Sol lane (P2, P4).** The `>` case is
+in this list because the guard refuses `>`. The first draft named `>` in
+the guard's own comment as a character Windows refuses and then did not
+check it, so a `>`-bearing index entry passed a function advertised as
+refusing impossible Windows names. It also mattered downstream: Task 4
+justifies the ` -> ` render as unambiguous BECAUSE `>` cannot appear, and
+that argument is empty unless the guard enforces it.
 
 Note: this test file is read as UTF-8 by pytest, so the accented literal is
 fine here. The SCRIPT stays ASCII; nothing above adds a non-ASCII character
@@ -377,12 +386,17 @@ function Test-WindowsPathname($value) {
     # or hash under the name the baseline gave. That is false coverage
     # rather than a refusal, which is the one outcome this preflight exists
     # to prevent.
+    # `>` is refused for a second reason as well. Format-StatusRecord
+    # renders a rename as `<old> -> <new>`, and that arrow is only
+    # unambiguous while no pathname can contain `>`. The guard is what
+    # makes that true rather than assumed.
     $text = [string]$value
     if ($text.Length -eq 0) { return $false }
     foreach ($ch in $text.ToCharArray()) {
         if ([int]$ch -lt 32) { return $false }
         if ($ch -eq [char]34) { return $false }
         if ($ch -eq '\') { return $false }
+        if ($ch -eq '>') { return $false }
     }
     return $true
 }
@@ -592,24 +606,60 @@ git commit -m "parse the -z status capture structurally"
 Append to `evals/multi-model-verify/test_review_mirror.py`:
 
 ```python
-def test_a_rename_renders_in_gits_display_order():
-    # The recorded baseline keeps the shape references/backup-lane.md
-    # already describes, so this change does not make earlier baselines
-    # unreadable. The arrow is unambiguous because Windows refuses `>` in a
-    # filename and Test-WindowsPathname refuses a name Windows cannot
-    # carry.
+def test_a_rename_renders_in_gits_display_order_with_its_quoting():
+    # The recorded baseline must stay byte-comparable with a capture taken
+    # by running THE STATUS COMMAND directly, which is what
+    # references/backup-lane.md requires of every round. Measured
+    # 2026-07-29, that command prints both spaced names QUOTED. The arrow
+    # is unambiguous because Test-WindowsPathname refuses `>`.
     out = run_functions(
         '$r = ConvertTo-StatusRecord @("R  M+ Timer/new name.lua",\n'
         '                              "M+ Timer/old name.lua")\n'
         'Format-StatusRecord $r.Records[0]')
-    assert out == "R  M+ Timer/old name.lua -> M+ Timer/new name.lua", out
+    assert out == ('R  "M+ Timer/old name.lua" -> "M+ Timer/new name.lua"'), out
 
 
-def test_a_plain_entry_renders_as_the_status_code_and_the_path():
+def test_each_side_of_a_rename_is_quoted_independently():
+    # Measured 2026-07-29: a spaced source with a plain destination prints
+    # `R  "with space/a.lua" -> plain/a.lua`. Quoting the pair together, or
+    # quoting both whenever either has a space, would both be wrong.
+    out = run_functions(
+        '$r = ConvertTo-StatusRecord @("R  plain/a.lua",\n'
+        '                              "with space/a.lua")\n'
+        'Format-StatusRecord $r.Records[0]')
+    assert out == 'R  "with space/a.lua" -> plain/a.lua', out
+
+
+def test_a_plain_entry_renders_unquoted():
+    out = run_functions(
+        '$r = ConvertTo-StatusRecord @("!! ignored/note.txt")\n'
+        'Format-StatusRecord $r.Records[0]')
+    assert out == "!! ignored/note.txt", out
+
+
+def test_a_spaced_entry_renders_quoted():
     out = run_functions(
         '$r = ConvertTo-StatusRecord @("!! ignored dir/note.txt")\n'
         'Format-StatusRecord $r.Records[0]')
-    assert out == "!! ignored dir/note.txt", out
+    assert out == '!! "ignored dir/note.txt"', out
+
+
+def test_a_non_ascii_entry_renders_unquoted():
+    # The old captures set core.quotepath=false, so an accented pathname
+    # was recorded RAW. This render must keep that shape rather than
+    # introduce quoting the baseline never had.
+    #
+    # Asserted as CHARACTER CODES, not as a literal. run_functions decodes
+    # the host's stdout with the locale, so comparing an accented literal
+    # here would test the harness's decoding rather than the renderer. The
+    # codes are 63,63,32 for "?? " then 99,97,102,233 for "caf" and the
+    # accented letter.
+    out = run_functions(
+        '$e = [char]233\n'
+        '$r = ConvertTo-StatusRecord @("?? caf$e.txt")\n'
+        '$line = Format-StatusRecord $r.Records[0]\n'
+        '(([int[]][char[]]$line) -join ",")')
+    assert out == "63,63,32,99,97,102,233,46,116,120,116", out
 
 
 def test_a_status_code_with_a_leading_space_survives_rendering():
@@ -623,7 +673,7 @@ def test_a_status_code_with_a_leading_space_survives_rendering():
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
-Run: `python -m pytest evals/multi-model-verify/test_review_mirror.py -k "renders or rendering" -v`
+Run: `python -m pytest evals/multi-model-verify/test_review_mirror.py -k "renders or rendering or quoted_independently" -v`
 
 Expected: FAIL, `Format-StatusRecord` is not recognized.
 
@@ -632,6 +682,29 @@ Expected: FAIL, `Format-StatusRecord` is not recognized.
 Insert into `tools/new-review-mirror.ps1` below `ConvertTo-StatusRecord`:
 
 ```powershell
+function Format-StatusPathname($path) {
+    # Reproduce the porcelain LINE form's quoting for one pathname, so a
+    # recorded baseline is byte-comparable with a capture taken by running
+    # THE STATUS COMMAND directly - which is what
+    # references/backup-lane.md requires of every round.
+    #
+    # The rule is one condition because the guard has already removed every
+    # other trigger. Measured 2026-07-29: `git status --porcelain` quotes
+    # each pathname independently and, once `"` , `\` and the control
+    # characters are refused, a SPACE is the only remaining trigger. In the
+    # same measurement a rename with a spaced source and a plain
+    # destination printed `R  "with space/a.lua" -> plain/a.lua`, and the
+    # reverse printed `R  plain/b.lua -> "with space/b.lua"` - each side on
+    # its own.
+    #
+    # Non-ASCII is deliberately NOT quoted. The old captures set
+    # `core.quotepath=false`, so an accented pathname was recorded raw, and
+    # this render must keep that shape rather than introduce quoting the
+    # baseline never had.
+    if ([string]$path -match ' ') { return ('"' + $path + '"') }
+    return [string]$path
+}
+
 function Format-StatusRecord($record) {
     # Render one record in git's own DISPLAY order, `R  <old> -> <new>`, so
     # the recorded baseline keeps the shape references/backup-lane.md
@@ -640,18 +713,31 @@ function Format-StatusRecord($record) {
     #
     # ONE WAY ONLY. Nothing re-parses this text: the manifest's subjects
     # come from the RECORDS. That separation is the whole reason the arrow
-    # is safe to write here at all.
+    # is safe to write here at all, and Test-WindowsPathname refusing `>`
+    # is what keeps it unambiguous.
     $head = [string]$record.X + [string]$record.Y + " "
     if ($record.Source) {
-        return ($head + $record.Source + " -> " + $record.Path)
+        return ($head + (Format-StatusPathname $record.Source) + " -> " +
+                (Format-StatusPathname $record.Path))
     }
-    return ($head + $record.Path)
+    return ($head + (Format-StatusPathname $record.Path))
 }
 ```
 
+**Amendment A2, plan debate round 1, Sol lane (P11).** The first draft
+rendered every pathname bare. Run 2026-07-29 against the CURRENT script,
+a spaced untracked file records as `?? "M+ Timer/input.txt"` - quoted. The
+backup-lane contract requires each round's status capture to equal the
+baseline, and a driver running THE STATUS COMMAND still gets the quoted
+line form, so a bare render would have made every space-bearing path read
+as a change on every round. `Format-StatusPathname` is the surgical fix:
+the quoting rule is one condition precisely because the guard removed the
+others. The manifest is NOT affected and stays unquoted - confirmed in the
+same run, which printed `M+ Timer/input.txt <sha256>`.
+
 - [ ] **Step 4: Run the tests to verify they pass**
 
-Run: `python -m pytest evals/multi-model-verify/test_review_mirror.py -k "renders or rendering" -v`
+Run: `python -m pytest evals/multi-model-verify/test_review_mirror.py -k "renders or rendering or quoted_independently" -v`
 
 Expected: PASS, 3 tests.
 
@@ -896,8 +982,11 @@ git commit -m "wire the -z captures through and delete the quoted-path decoder"
 ### Task 6: Replace the stale tests and cover the real cases end to end
 
 **Files:**
-- Modify: `evals/multi-model-verify/test_review_mirror.py:270-296`
-  (manifest splitting), `:603-621` (the two stale tests)
+- Modify: `evals/multi-model-verify/test_review_mirror.py` — the manifest
+  splitting in `test_the_manifest_covers_exactly_the_baseline_paths`
+  (`:270-282`), `test_the_manifest_hashes_raw_bytes_and_sorts_by_path`
+  (`:284-296`) and `test_a_directory_expands_recursively` (`:298-313`),
+  then the two stale tests (`:603-621`)
 - Test: the same file
 
 **Interfaces:**
@@ -997,8 +1086,12 @@ def test_a_spaced_baseline_entry_reaches_the_manifest(tmp_path):
     proc = run_mirror(repo, tmp_path / "mirror")
     assert_built(proc)
     expected = hashlib.sha256(body).hexdigest()
+    # The MANIFEST is unquoted and the BASELINE is quoted. Both shapes are
+    # what the current script already records for a spaced path; run
+    # 2026-07-29 it printed `?? "M+ Timer/input.txt"` under `baseline:` and
+    # `M+ Timer/input.txt <sha256>` under `manifest:`.
     assert f"{SPACED}/input.txt {expected}" in proc.stdout, proc.stdout
-    assert f"?? {SPACED}/input.txt" in proc.stdout, proc.stdout
+    assert f'?? "{SPACED}/input.txt"' in proc.stdout, proc.stdout
 
 
 def test_a_spaced_ignored_entry_reaches_the_manifest(tmp_path):
@@ -1014,7 +1107,7 @@ def test_a_spaced_ignored_entry_reaches_the_manifest(tmp_path):
     assert_built(proc)
     expected = hashlib.sha256(body).hexdigest()
     assert f"refs with spaces/note.txt {expected}" in proc.stdout, proc.stdout
-    assert "!! refs with spaces/note.txt" in proc.stdout, proc.stdout
+    assert '!! "refs with spaces/note.txt"' in proc.stdout, proc.stdout
 
 
 def test_a_rename_with_spaces_hashes_the_destination_not_the_source(tmp_path):
@@ -1053,8 +1146,8 @@ def test_a_rename_renders_in_the_baseline_as_source_arrow_destination(tmp_path):
     proc = run_mirror(repo, tmp_path / "mirror")
     assert_built(proc)
     baseline = read_block(proc.stdout, "baseline:")
-    assert f"R  {SPACED}/old name.lua -> {SPACED}/new name.lua" in baseline, (
-        baseline)
+    assert (f'R  "{SPACED}/old name.lua" -> "{SPACED}/new name.lua"'
+            in baseline), baseline
 
 
 def test_escape_looking_field_text_is_never_interpreted():
@@ -1074,6 +1167,22 @@ def test_escape_looking_field_text_is_never_interpreted():
         '$r = ConvertFrom-NulCapture $b\n'
         '"{0}|{1}" -f $r.Fields[0], $r.Fields[0].Length')
     assert out == "caf\\303\\251.txt|15", out
+
+
+def test_uppercase_escape_looking_field_text_is_never_interpreted():
+    # THE SECOND DECODER DEFECT, pinned so it cannot return. PowerShell's
+    # `switch` is case-INSENSITIVE by default, so the deleted decoder turned
+    # `a\Tb.txt` into a TAB and `a\Nb.txt` into a NEWLINE - escapes C-style
+    # quoting leaves undefined. Under -z the bytes are the pathname, so both
+    # must arrive as their seven literal characters.
+    out = run_functions(
+        '$b = [System.Text.Encoding]::UTF8.GetBytes("a\\Tb.txt`0a\\Nb.txt`0")\n'
+        '$r = ConvertFrom-NulCapture $b\n'
+        '(@($r.Fields | ForEach-Object { ([int[]][char[]]$_) -join "," })'
+        ' -join "|")')
+    # a \ T b . t x t  and  a \ N b . t x t
+    assert out == ("97,92,84,98,46,116,120,116|"
+                   "97,92,78,98,46,116,120,116"), out
 
 
 def test_a_backslash_bearing_index_entry_stops_the_enumeration():
@@ -1111,6 +1220,8 @@ git commit -m "cover spaces, the inverted rename order and literal escape text"
 
 **Files:**
 - Modify: `skills/multi-model-verify/references/backup-lane.md:299-301`
+- Modify: `evals/multi-model-verify/test_backup_lane.py:335-337` — the pin
+  that quotes the sentence being replaced
 - Test: the whole repo suite
 
 **Interfaces:**
@@ -1176,6 +1287,42 @@ Replace with:
       renders them back into this form. Measured 2026-07-29.
 ```
 
+- [ ] **Step 4b: Update the pin that quotes that sentence**
+
+**Amendment A4, plan debate round 1, Kimi lane (P14).** The first draft
+rewrote the sentence and did not update the test that pins it, so its own
+Step 6 full-suite run would have ended red while claiming PASS.
+`test_contract_coverage.py` stays green either way, because the sentence
+sits outside every marked region; the red is in `test_backup_lane.py`.
+
+In `evals/multi-model-verify/test_backup_lane.py`, replace:
+
+```python
+    assert ("**Rename or copy entries** (`R`/`C`, `old -> new`): hash "
+            "the CURRENT DESTINATION path. The source path is a "
+            "deletion and falls under the rule above.") in body
+```
+
+with:
+
+```python
+    assert ("**Rename or copy entries** (`R`/`C`, recorded as "
+            "`old -> new`): hash the CURRENT DESTINATION path. The "
+            "source path is a deletion and falls under the rule "
+            "above.") in body
+    # The wire order is the opposite of the recorded order, so the
+    # sentence that says so is pinned in its own right: a driver reading
+    # only the display form would build a parser that hashes the source.
+    assert ("the `-z` capture the mirror script reads emits the two "
+            "pathnames in the opposite order, destination first") in body
+```
+
+Leave the history fixtures alone.
+`evals/multi-model-verify/fixtures/contract-coverage-history/instance-10-pins.py:237`
+and `instance-11-pins.py:248` quote the same sentence, but they read their
+own FROZEN doc fixtures rather than the live reference, so editing them
+would break the history they exist to record.
+
 - [ ] **Step 5: Confirm the contract regions still lock**
 
 Run: `python -m pytest evals/multi-model-verify/test_contract_coverage.py -q`
@@ -1198,7 +1345,7 @@ disposable worktree.
 - [ ] **Step 7: Commit**
 
 ```bash
-git add skills/multi-model-verify/references/backup-lane.md
+git add skills/multi-model-verify/references/backup-lane.md evals/multi-model-verify/test_backup_lane.py
 git commit -m "record the -z rename field order in the baseline contract"
 ```
 
@@ -1212,12 +1359,12 @@ git commit -m "record the -z rename field order in the baseline contract"
 |---|---|
 | Capture: raw bytes, trailing NUL, split on NUL, strict UTF-8 | 1 |
 | Empty trailing field discarded, interior empty field is a stop | 1 |
-| Guard: not empty, no control character, no `"` | 2 |
+| Guard: not empty, no control character, no `"`, no `\`, no `>` | 2 |
 | Parse: structural, `XY` + space + path, four-character minimum | 3 |
 | Parse: rename consumes the NEXT field as source | 3 |
 | Parse: missing second field is a stop | 3 |
 | Deletion-only omitted, `RD` is a stop, destination hashed | 5 |
-| Render: git display order, one way only | 4 |
+| Render: git display order, its quoting, one way only | 4 |
 | Manifest subjects from records, never from text | 5 |
 | Delete the three decoder functions | 5 |
 | Delete the ` -> ` text search | 5 |
@@ -1256,3 +1403,52 @@ FIELD level, where the bytes can actually arrive, and its refusal is tested
 at the parser, where the index entry would actually be caught. Building it
 as one end-to-end case would have produced a test that passes because the
 OS refused the setup.
+
+---
+
+## Amendments
+
+Plan debate round 1, both lanes, 2026-07-29, at head `012fdf8`. Sol
+session `019faceb-f689-7f72-a6e6-74daa14e3225`, effective route
+confirmed; Kimi session
+`ff776da3-b0a0-4018-9ba7-33e8ba5fb79a`, route line verified
+(client-side), write probe PASS.
+
+Each lane found something the other missed, and both findings were settled
+by RUNNING the case rather than by weighing the lanes.
+
+- **A1 — the guard did not refuse `>` (Sol, P2 and P4).** Its own comment
+  named `>` as a character Windows refuses and the code did not check it.
+  Task 4 also justified the ` -> ` render as unambiguous BECAUSE `>`
+  cannot appear, so the argument was empty until the guard enforced it.
+  Task 2 now refuses `>` and pins that direction.
+- **A2 — the render dropped git's quoting (Sol, P11).** THE FINDING THAT
+  WOULD HAVE SHIPPED A BROKEN CONTRACT. Run 2026-07-29 against the current
+  script, a spaced untracked file records as `?? "M+ Timer/input.txt"`.
+  `references/backup-lane.md` requires each round's status capture to equal
+  the baseline, and a driver running THE STATUS COMMAND still gets the
+  quoted line form, so a bare render would have made every space-bearing
+  path read as a change on every round. Measured in the same session: git
+  quotes each side of a rename INDEPENDENTLY, and once the guard has
+  refused `"`, `\` and the control characters, a SPACE is the only
+  remaining trigger. `Format-StatusPathname` is one condition for that
+  reason. The manifest is unaffected and stays unquoted.
+- **A3 — the second decoder defect was untested (Sol, P12).** The plan
+  pinned the byte-versus-character defect and not the case-insensitive
+  `\T` and `\N` one. Task 6 now pins both at field level.
+- **A4 — the reference edit broke a pin in another suite (Kimi, P14).**
+  Task 7 rewrote a sentence in `backup-lane.md` that
+  `evals/multi-model-verify/test_backup_lane.py:335-337` quotes verbatim,
+  while Step 6 claimed the full suite would pass. It would have ended red.
+  Step 4b now updates that pin in the same step, and adds a second pin for
+  the new wire-order sentence. The history fixtures that quote the same
+  text read frozen doc copies and are deliberately left alone.
+- **A5 — a stale line-range citation (Kimi, non-blocking).** Task 6's
+  Files header cited `:270-296` for three edits, one of which lives at
+  `:298-313`. Corrected to name each function with its own range.
+
+**Where the lanes split.** Sol raised P11 and Kimi passed it; Kimi raised
+P14 and Sol did not reach it. Kimi's P11 PASS checked the arrow shape
+against the contract and did not check the quoting, which is what the run
+settled. Neither lane is treated as authoritative: the current script was
+executed against a spaced path, and the recorded output decided it.

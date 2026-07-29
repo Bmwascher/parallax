@@ -108,9 +108,11 @@ Three consequences, each load-bearing:
    NUL is exact and the recorded evidence can stay one entry per line.
    No new ASCII-safe encoding is needed for the baseline.
 3. ` -> ` cannot appear inside a Windows filename, because `>` is
-   refused. The reviewer's third finding is real as a contract violation
-   and is NOT reachable here. Recorded as such rather than claimed as a
-   fix.
+   refused by the OS. The reviewer's third finding is real as a contract
+   violation and is NOT reachable from a real file. Recorded as such
+   rather than claimed as a fix. The guard refuses `>` anyway, because git
+   reads names from its INDEX rather than from disk and the render depends
+   on the property holding.
 
 ## Architecture
 
@@ -136,7 +138,17 @@ else is a stop.
 ### Guard
 
 Checks that each pathname field could be a real Windows path: not empty,
-no control character, no `"`. Anything else stops the run.
+and free of every control character, `"`, `\` and `>`. Anything else stops
+the run.
+
+`\` and `>` are in that list for reasons beyond the measured table.
+A backslash is a path SEPARATOR on Windows, so a field carrying one would
+make `Join-Path` resolve a different file, which the script would then
+delete or hash under the name the baseline gave. And `>` is what keeps the
+render below unambiguous: the ` -> ` separator is only safe while no
+pathname can contain `>`, and the guard is what makes that true rather
+than assumed. Amended 2026-07-29 after the plan debate found the `>` case
+argued for and not enforced.
 
 This exists because deleting the old blanket refusal with nothing in its
 place would remove a safety property, not just noise. Git reads names
@@ -167,13 +179,33 @@ The existing disposition rules are unchanged and move here intact:
 ### Render
 
 Prints each record in git's familiar display form, `R  old -> new`,
-for the evidence record. This keeps the recorded baseline format
-identical to today's, so `references/backup-lane.md` and every earlier
-baseline stay readable and comparable. The render is unambiguous because
-`>` cannot occur in a Windows filename.
+INCLUDING git's quoting, for the evidence record. This keeps the recorded
+baseline byte-comparable with a capture taken by running THE STATUS
+COMMAND directly, which is what `references/backup-lane.md` requires of
+every round.
+
+The quoting is not cosmetic. Run 2026-07-29 against the current script, a
+spaced untracked file records as `?? "M+ Timer/input.txt"`. A bare render
+would make every space-bearing path read as a change on every round.
+Measured in the same session: git quotes each side of a rename
+INDEPENDENTLY, printing `R  "with space/a.lua" -> plain/a.lua` for a
+spaced source with a plain destination and the mirror image for the
+reverse. Once the guard has refused `"`, `\` and the control characters, a
+SPACE is the only remaining trigger, so the rule is one condition.
+Non-ASCII is deliberately NOT quoted: the old captures set
+`core.quotepath=false` and recorded an accented pathname raw, and this
+render keeps that shape.
+
+The MANIFEST is unaffected and stays unquoted. Confirmed in the same run,
+which printed `M+ Timer/input.txt <sha256>`.
+
+The render is unambiguous because the guard refuses `>`.
 
 Rendering is one-way. Manifest subjects come from the RECORDS, never from
 the rendered text. Nothing re-parses what this step prints.
+
+Amended 2026-07-29 after the plan debate; the first draft rendered every
+pathname bare.
 
 ## What is deleted
 
