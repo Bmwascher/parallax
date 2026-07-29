@@ -1,0 +1,49 @@
+2026-07-28T17:40:54.953450Z ERROR codex_models_manager::cache: failed to load models cache: missing field `supports_reasoning_summaries` at line 86 column 5
+OpenAI Codex v0.144.1
+--------
+workdir: C:\Users\Brandon\Documents\parallax
+model: gpt-5.6-sol
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: none
+session id: 019fa9d0-b55b-7d82-8a08-803fdebfd8d3
+--------
+user
+<role>Adversarial reviewer, equal weight, in a two-model debate. Neither side's claim outranks the other's; only evidence does.</role>
+
+<task>Refute or confirm each numbered claim below about a plan for parallax 0.17.0. You are running read-only inside the parallax repo at C:/Users/Brandon/Documents/parallax. Read these two files first, in full:
+
+- docs/superpowers/specs/2026-07-28-reviewer-isolation-design.md
+- docs/superpowers/plans/2026-07-28-reviewer-isolation.md
+
+Then read whatever else you need: skills/multi-model-verify/SKILL.md (preflight 3), skills/multi-model-verify/references/backup-lane.md, evals/multi-model-verify/test_multi_model_verify.py, evals/multi-model-verify/test_contract_coverage.py, tools/verify-attestation.ps1 and tools/kimi-lane-lock.ps1 for the house style the new scripts must match.</task>
+
+<rules>
+Cite `path:line` in this repo for every claim you make or contest, anchoring each file with its full repo-relative path the first time you cite it. An uncited claim is struck, not debated.
+
+Do not manufacture objections. If a claim stands, say PASS and move on. A sound plan converging in round 1 is the system working, not a skipped review.
+
+Give a verdict per claim: PASS, FIX (with the specific fix), or ESCALATE (a disagreement evidence cannot settle). End with one overall verdict.
+
+You cannot run commands. Where a claim rests on a measurement taken outside this repo, say so and treat it as UNVERIFIED rather than folding it into a verdict.
+</rules>
+
+<context>
+parallax is a Claude Code plugin providing cross-model verification. This plan is backlog item 4 of `docs/superpowers/plans/2026-07-27-0150-backlog.md`.
+
+Two problems, filed separately in the backlog, treated here as one:
+
+- Preflight 3 (skills/multi-model-verify/SKILL.md:61-107) stops the gate when the reviewed repo carries an `AGENTS.md` or `.agents/skills/*/SKILL.md`. The stop is correct, but the remediation is driver-executed prose rebuilt by hand every run, so the cheap path is to abort into a weaker gate.
+- The same preflight says the user's codex plugin cache is "not a stop and never a finding" (SKILL.md:103-107). Measured on 2026-07-28 that is false.
+
+Numbers below were measured on the author's Windows machine, codex-cli 0.144.1, using `codex debug prompt-input`, which renders the model-visible prompt and calls no model. You cannot re-run them. Treat them as UNVERIFIED and attack the reasoning built on them, not the numbers themselves.
+</context>
+
+<claims>
+1. Measurement, not enumeration, is the right basis for the check. `codex debug prompt-input` reveals the reviewer's whole instruction surface in one command, including classes nobody enumerated. Evidence: with a planted `AGENTS.md` and a planted `.agents/skills/planted/SKILL.md` in a scratch repo, the rendered prompt carried both. The existing check (SKILL.md:68) can only ever see the reviewed tree, and every source that hijacked a review on 2026-07-28 lived outside it.
+
+2. The plugin cache must be reclassified from a non-blocking note to a blocking condition. Measured: 60 advertised skills by default, 31 of them from `~/.codex/plugins/cache`, including `superpowers:using-superpowers`, whose description alone instructs the model to invoke a skill before answering anything.
+
+3. `--disable plugins --disable apps` is the correct lever, and `--ignore-user-config` is not. Measured: the flags take 60 skills to 29 and remove the recommended-plugins and apps blocks; `--ignore-user-config` reaches the same 31 but re-enables three skills the use

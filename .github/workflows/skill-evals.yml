@@ -67,19 +67,24 @@ jobs:
       - name: Install pytest
         run: python -m pip install --quiet pytest
 
-      # BOTH dual-host modules, not just the lock: the attestation scripts
+      # EVERY dual-host module, not just the lock: the attestation scripts
       # are driven by the pre-push hook through powershell.exe and by a
-      # pwsh-only machine through PowerShell 7, so they carry the same
-      # exposure. The hook tests are deliberately absent - hooks.json
-      # invokes the hook as `pwsh`, so another host would not match how it
-      # runs.
+      # pwsh-only machine through PowerShell 7, and the 0.17.0 probe and
+      # mirror run from whichever host the driver happens to have, so they
+      # all carry the same exposure. A green Windows suite proves ONE
+      # interpreter - 0.16.1 shipped a lock that did not lock on pwsh for
+      # exactly this reason. The hook tests are deliberately absent -
+      # hooks.json invokes the hook as `pwsh`, so another host would not
+      # match how it runs.
       - name: PowerShell-facing tests under Windows PowerShell 5.1
         env:
           PARALLAX_PS_HOST: powershell.exe
         run: >
           python -m pytest
           evals/multi-model-verify/test_kimi_lane_lock.py
-          evals/multi-model-verify/test_attestation.py -q
+          evals/multi-model-verify/test_attestation.py
+          evals/multi-model-verify/test_codex_context_probe.py
+          evals/multi-model-verify/test_review_mirror.py -q
 
       - name: PowerShell-facing tests under PowerShell 7
         env:
@@ -87,4 +92,6 @@ jobs:
         run: >
           python -m pytest
           evals/multi-model-verify/test_kimi_lane_lock.py
-          evals/multi-model-verify/test_attestation.py -q
+          evals/multi-model-verify/test_attestation.py
+          evals/multi-model-verify/test_codex_context_probe.py
+          evals/multi-model-verify/test_review_mirror.py -q

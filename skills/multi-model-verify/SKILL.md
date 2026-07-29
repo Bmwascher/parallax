@@ -66,17 +66,31 @@ toggled on, its stop-time review overlaps mode `diff` — expected, not a bug.
    its context; see model-prompting-notes.md) — back-channels into the
    auditor that break independence. Enumerate the whole tree in one
    listing — `git ls-files --cached --others '*AGENTS.md' '.agents/*'` —
-   which covers tracked, untracked, AND ignored files at any depth
-   (`.git` itself is never listed); a root-only or tracked-only check
-   misses a nested drop.
+   which covers tracked, untracked, AND ignored files: `--others` without
+   `--exclude-standard` lists ignored paths, re-verified 2026-07-28, and
+   `.git` itself is never listed.
+   <!-- contract:start id=enumeration-depth-asymmetry -->
+   The two pathspecs do not reach equally far. `*AGENTS.md` carries a
+   leading star, so it lists a nested AGENTS.md at any depth. `.agents/*`
+   is anchored at the repo ROOT, so a nested `sub/.agents/skills/x/` is
+   NOT listed. Measured 2026-07-28 on codex-cli 0.144.1: the harness
+   advertises a ROOT `.agents/skills` entry and does not advertise a
+   nested one, so the asymmetry is not reachable today, and the client
+   probe below reads what was loaded rather than where it might live.
+   Widen the pathspec if that ever changes.
+   <!-- contract:end -->
    If present: STOP and surface it to the user — never dispatch a review
    over an instruction back-channel.
 
-   Clearing it — only on the user's choice, never automatically: build
-   the **review mirror** (references/backup-lane.md owns its
+   Clearing it — only on the user's choice, never automatically: run
+   `tools/new-review-mirror.ps1 -RepoRoot <repo> -MirrorPath <scratch>`.
+   It builds the **review mirror** (references/backup-lane.md owns its
    construction, its baseline, and its identity fields — a file copy
-   preserving `.git`, NOT a clone), delete the offending entries THERE,
-   and re-run the enumeration above inside the mirror; empty output is
+   preserving `.git`, NOT a clone), deletes the offending entries THERE,
+   commits when any were tracked, re-runs the enumeration above inside
+   the mirror, captures the baseline and the content manifest, runs the
+   client probe below with the mirror as the working directory, and
+   prints the record block; empty enumeration output is
    the evidence, and the mirror's identity fields go in the debate
    record. The mirror is then the reviewed tree for every lane in that
    debate — dispatch codex with the mirror as cwd, and keep citations
@@ -101,10 +115,52 @@ toggled on, its stop-time review overlaps mode `diff` — expected, not a bug.
    Files above the repo's git root are NOT ingested (same probe), and
    `~/.codex/AGENTS.md` is the user's own
    global instruction file — note it in the debate record if it exists,
-   but it is not a stop. Skills from the user's own codex plugin cache
-   load the same way — record them in the debate record as a
-   non-blocking environment note with the cache path cited, like the
-   global AGENTS.md; not a stop and never a finding.
+   but it is not a stop.
+
+   **The reviewer's own machine is the second half of this check, and the
+   enumeration above cannot see it.** Run
+   `tools/codex-context-probe.ps1 -WorkDir <dispatch cwd> -SuppressSkills -OverrideOut <verified-override-file> -Json`
+   before round 1, with a FRESH scratch path for the override file (the
+   mirror script runs it for you and prints the same result). It renders
+   the model-visible prompt with `codex debug prompt-input`, which spends
+   no tokens, sorts every ADVERTISED SKILL by the directory it came from,
+   and checks the named instruction and feature blocks around them:
+   anything inside the reviewed tree STOPS and is remediated in the
+   mirror, anything from the codex plugin cache must be empty, and the
+   global `AGENTS.md` plus any surviving home-scoped skill is recorded in
+   the debate record with its path.
+   <!-- contract:start id=client-context-probe -->
+   A probe that cannot be taken, that exits non-zero, that returns output
+   this parser cannot read, or that finds a named block missing is a
+   transport failure and stops the round. It is never read as a clean
+   result: an unmade measurement and a clean one must never look alike.
+   <!-- contract:end -->
+
+   <!-- contract:start id=plugin-cache-reclassified -->
+   The user's codex plugin cache is NOT a harmless environment note.
+   Measured 2026-07-28 on codex-cli 0.144.1, it delivered 31 skills into
+   the reviewer's context, one of whose descriptions alone instructs the
+   model to invoke a skill before answering anything; a reviewer in
+   another session adopted it and answered without opening the plan.
+   `--disable plugins --disable apps` removes it, and the probe's second
+   pass is what proves the removal happened.
+   <!-- contract:end -->
+
+   <!-- contract:start id=client-probe-scope-limit -->
+   State what a clean probe means, and never more. It means exactly this:
+   no skill is advertised, no plugin or apps block is present, and no
+   instruction source sits inside the reviewed tree. Two things it does
+   NOT mean. The global `AGENTS.md` above survives a clean probe and is
+   still instructing the reviewer; the probe records it rather than
+   removing it. And the reviewer's TOOL surface is not read at all,
+   because tools are not in the prompt: measured 2026-07-28, the rendered
+   prompt names neither a configured MCP server nor the memories feature,
+   `codex debug` offers no tool-list view to measure instead, and a round
+   dispatched with the flags and the verified override still logged
+   `mcp: node_repl/js started` three times in its own transcript. Backlog
+   item 7 holds the tool half. Do not call a passing probe full reviewer
+   isolation.
+   <!-- contract:end -->
 
 ## Mode plan
 
@@ -121,8 +177,24 @@ toggled on, its stop-time review overlaps mode `diff` — expected, not a bug.
    it to a scratchpad file, then run round 1:
 
    ```powershell
-   Get-Content -Raw <brief-file> | codex exec --sandbox read-only -m <canonical-model-id> -c model_reasoning_effort=<canonical-effort> --output-last-message <reply-file> - > <transcript-file> 2>&1
+   $bytes = [System.IO.File]::ReadAllBytes("<verified-override-file>")
+   $seen = ([System.BitConverter]::ToString(([System.Security.Cryptography.SHA256]::Create()).ComputeHash($bytes)) -replace '-', '').ToLower()
+   if ($seen -cne "<override-sha256>") { throw "the override file changed after the probe verified it" }
+   $override = (New-Object System.Text.UTF8Encoding($false, $true)).GetString($bytes)
+   Get-Content -Raw <brief-file> | codex exec --sandbox read-only --disable plugins --disable apps -c $override -m <canonical-model-id> -c model_reasoning_effort=<canonical-effort> --output-last-message <reply-file> - > <transcript-file> 2>&1
    ```
+
+   <!-- contract:start id=verified-override-dispatch -->
+   The `-c` value MUST be the file the probe wrote with `-OverrideOut`, on
+   round 1 and on every resume, read as raw bytes whose hash is checked
+   against the probe's report before use. The two feature flags alone
+   still leave the user's own skills directory and codex's built-in skills
+   advertised, which was 29 of the original 60 when this was measured;
+   only the generated override removes those, and only the probe's second
+   pass proves it did. A dispatch that omits the override, or carries a
+   value the probe did not verify, is a transport failure, because the
+   measurement then describes a configuration the reviewer never received.
+   <!-- contract:end -->
 
    `<canonical-model-id>` and `<canonical-effort>` are the two declarations
    in references/model-prompting-notes.md — read the literal values from
@@ -150,8 +222,17 @@ toggled on, its stop-time review overlaps mode `diff` — expected, not a bug.
    precede the resume subcommand (flags after it are a usage error):
 
    ```powershell
-   codex exec --sandbox read-only -m <canonical-model-id> -c model_reasoning_effort=<canonical-effort> --output-last-message <reply-file> resume <SESSION_ID> "<rebuttal-brief>" > <transcript-file> 2>&1
+   $bytes = [System.IO.File]::ReadAllBytes("<verified-override-file>")
+   $seen = ([System.BitConverter]::ToString(([System.Security.Cryptography.SHA256]::Create()).ComputeHash($bytes)) -replace '-', '').ToLower()
+   if ($seen -cne "<override-sha256>") { throw "the override file changed after the probe verified it" }
+   $override = (New-Object System.Text.UTF8Encoding($false, $true)).GetString($bytes)
+   codex exec --sandbox read-only --disable plugins --disable apps -c $override -m <canonical-model-id> -c model_reasoning_effort=<canonical-effort> --output-last-message <reply-file> resume <SESSION_ID> "<rebuttal-brief>" > <transcript-file> 2>&1
    ```
+
+   The preamble repeats in full every round. Rounds are separate shell
+   invocations, so a `$override` set in round 1 does not exist in round 3,
+   and one verification does not cover a file that can change between
+   rounds.
 
    Each resume's header must echo the resumed `session id:` and the same
    effective route — the round-1 check repeated, `sandbox:` included (a

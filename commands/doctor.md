@@ -157,3 +157,38 @@ version, the parsed id, and the artifact presence. Any failure is
 BROKEN with the state detail "backup lane unavailable (primary lane
 unaffected)"; kimi not installed at all is N/A with the same detail —
 the fix pointer is references/backup-lane.md either way.
+
+## 9. Reviewer context isolation
+
+Same sanitized shell as check 4. Resolve `tools/codex-context-probe.ps1`
+under the `installPath` from check 1 — never a bare relative path — and
+run it with a FRESH scratch file for the override artifact:
+
+```powershell
+$ovr = "$env:TEMP\parallax-doctor-override-$(Get-Random).txt"
+powershell -NoProfile -File <installPath>\tools\codex-context-probe.ps1 -WorkDir . -SuppressSkills -OverrideOut $ovr -Json
+```
+
+Report all four skill buckets and the two instruction flags from the JSON.
+OK is exit 0 with `repo_scoped`, `plugin_cache_scoped`, `unknown_scoped`
+and `skills_after` all 0. Report `global_agents_md` as an environment note,
+never as a failure: nothing available removes it. Print
+`global_agents_md_path` when the probe resolved one; when that field is
+empty, say the prompt carries a global instruction block whose source the
+prompt itself does not name, rather than inventing a path.
+
+**Split the non-zero exit by SCOPE — this check reports on the MACHINE,
+and the current directory is not the machine.** A hit whose source is
+`repo_scoped`, or a reported project `AGENTS.md`, is a property of
+whatever repo you happen to be standing in, and preflight 3 already
+handles it through the review mirror: report `N/A (this repo carries
+back-channels — preflight 3 remediates them in the mirror)` and name the
+entries. BROKEN is reserved for machine-scoped hits — a non-zero
+`plugin_cache_scoped`, `unknown_scoped` or `skills_after`, or any other
+blocked reason — because those follow the reviewer everywhere and mean a
+review dispatched from this machine right now would carry instruction
+sources the gate is supposed to have removed. A check that reads BROKEN in
+every normally configured repo teaches the user to ignore BROKEN.
+
+The probe spends no tokens: `codex debug prompt-input` renders the prompt
+and calls no model.

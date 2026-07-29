@@ -1,0 +1,28 @@
+REDACTED 2026-07-29, before the first public push of this cycle.
+
+This file held the exact override the probe generated on the author's
+machine: 29 entries, each naming a real installed skill under the
+author's home directory. That is the layout of a private skills
+directory, and this repo is public. The same rule already keeps raw
+`codex debug prompt-input` recordings out of the tree; it reached this
+artifact one step late.
+
+What the artifact is evidence FOR is preserved:
+
+- entry count: 29
+- sources: 5 under `<home>/.codex/skills/.system/`, 24 under
+  `<home>/.agents/skills/`
+- shape: one `skills.config=[...]` value whose every element is
+  `{path="<...>/SKILL.md",enabled=false}`
+- sha256 of the UNREDACTED value, exactly as the probe wrote it and as
+  every round of this debate cites it:
+  180f09f50d282b5603f1c0d0621f2913ff66c8b7798e7a2f3b7fe8d41f432bb8
+
+That hash is the binding one. It appears in the plan, the design, the
+application checkpoint and every round brief, and it is what makes "the
+verified override is the dispatched override" checkable. It belongs to
+the REAL value, not to this redacted file, and a hash taken of this file
+must never be read as that hash.
+
+The synthetic equivalents the suite asserts against live under
+`C:/fixture/home/...` in `evals/multi-model-verify/fixtures/`.

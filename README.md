@@ -162,6 +162,22 @@ flowchart TD
 - Missing reference material for a port is a **hard stop** (ask the user),
   never a degraded mode — a debate about remembered code is two models
   fabricating at each other.
+- **Reviewer context isolation (0.17.0)**: the gate measures the
+  cross-vendor reviewer's PROMPT.
+  `tools/codex-context-probe.ps1` renders the model-visible prompt with
+  `codex debug prompt-input` (no tokens, no model call), classifies every
+  ADVERTISED SKILL by the directory it came from, checks the instruction
+  and feature blocks around it, generates the skill-disable override the
+  dispatch then carries, and re-measures. A clean result
+  means no skill is advertised, no plugin or apps block is present, and
+  nothing inside the reviewed tree is instructing the reviewer. An unmade
+  or unreadable measurement is never a clean one. **Two things it does
+  not mean.** The user's global `AGENTS.md` survives a clean result and
+  is recorded rather than removed — nothing available removes it. And the
+  reviewer's TOOL surface (configured MCP servers, the memories feature)
+  is not in the prompt and is not measured: observed 2026-07-28, an MCP
+  tool ran inside a round that passed every check above. Tracked as
+  backlog item 7.
 
 ## Panels
 

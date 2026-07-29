@@ -210,9 +210,11 @@ proceed; do not infer either key's value.
   source, handing the reviewer a tree with nothing to review while every
   route and containment check stays green. `.git` rides along because the
   containment check below is a git command.
-- SKILL.md preflight-3 remediation is performed HERE, in the mirror,
-  never in the real tree — see that section for the procedure and for
-  which cases need a commit inside the mirror.
+- SKILL.md preflight-3 remediation is performed HERE, in the mirror, never
+  in the real tree. `tools/new-review-mirror.ps1` performs construction,
+  remediation, the re-enumeration, the baseline, the manifest and the
+  client probe as one step; the rules below remain its specification, and
+  a driver building a mirror by hand still follows them.
 - The brief is written into the mirror as the untracked
   `KIMI-REVIEW-BRIEF.md`; the `-p` pointer tells the reviewer to read
   it (headless stdin does not carry the brief).

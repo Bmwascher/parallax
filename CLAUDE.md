@@ -44,6 +44,14 @@ syntax) are LIVE-VERIFIED contracts locked by evals/multi-model-verify/
 test_multi_model_verify.py — change the tests first (they encode review
 findings), then the skill.
 
+The reviewer's isolation flags (`--disable plugins --disable apps`) and the
+context probe's failure directions are live-verified contracts locked by
+`evals/multi-model-verify/test_multi_model_verify.py` and
+`test_codex_context_probe.py`. Change the tests first. Every failure
+direction in the probe lands on BLOCKED; a change that lets an unmade
+measurement read as clean is the one outcome these scripts may never
+produce.
+
 Contract text inside `contract:start` / `contract:end` HTML comment
 markers must sit WHOLE inside a single pin in `evals/multi-model-verify/`.
 The checker scans all Markdown under `skills/`, plus `agents/*.md` and

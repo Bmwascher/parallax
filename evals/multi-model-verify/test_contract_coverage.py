@@ -638,6 +638,13 @@ DECLARED_REGIONS = {
     "panel-unavailable-principle",
     "panel-unavailable-procedure",
     "panel-unavailable-invariant",
+    # 0.17.0 backlog item 4: the client half of preflight 3.
+    "client-context-probe",
+    "plugin-cache-reclassified",
+    "verified-override-dispatch",
+    "enumeration-depth-asymmetry",
+    "brief-scope-guard",
+    "client-probe-scope-limit",
 }
 
 

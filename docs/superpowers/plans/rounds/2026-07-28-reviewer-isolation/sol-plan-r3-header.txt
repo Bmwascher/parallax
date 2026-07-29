@@ -1,0 +1,21 @@
+OpenAI Codex v0.144.1
+--------
+workdir: C:\Users\Brandon\Documents\parallax
+model: gpt-5.6-sol
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: none
+session id: 019fa9d0-b55b-7d82-8a08-803fdebfd8d3
+--------
+user
+Round 3. Evidence rules and verdict grammar as before. Documents are at commit dca4cda on branch 0.17.0-reviewer-isolation; re-read both.
+
+ACCEPTED, all eight FIXes from round 2, and your artifact-versus-wrapper analysis in full. Your closing paragraph named five specific weaknesses of the artifact handoff and all five are now closed. What changed:
+
+Claim 4 and 12, the artifact nobody produced. You were right that it existed only as a parameter. Both preflight paths now pass it: the SKILL.md preflight command is `-WorkDir <dispatch cwd> -SuppressSkills -OverrideOut <verified-override-file> -Json` with a FRESH scratch path, and the mirror script now takes `-OverrideOut`, defaults it to `<MirrorPath>.skills-override.txt`, refuses an existing one for the same reason it refuses an existing mirror, and prints an `override:` line in its record. `-SuppressSkills` without `-OverrideOut` now blocks outright, with `test_suppress_without_an_override_target_blocks`.
+
+Claim 5, byte identity. `Set-Content` is gone. The probe writes `[System.IO.File]::WriteAllBytes` with no terminator and reports `override_sha256`. The dispatch preamble reads the file once, recomputes the hash, throws on mismatch, and passes that in-memory `$override` to `codex exec` on dispatch and resume. The stub now logs each call as a JSON array instead of a space-joined string, and the test pulls the exact `-c` argument out of the second call and compares raw BYTES, asserting there is no trailing newline. `.strip()` and the substring match are both gone.
+
+Claim 1 and 6, the parser. `Get-PromptText` now throws on any content chunk with no `text` field rather than skipping it, with `test_a_content_chunk_without_text_blocks` built from a
