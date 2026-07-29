@@ -442,7 +442,11 @@ to it.
 
 - [ ] **Step 2: Run the test to verify it fails**
 
-Run: `python -m pytest evals/multi-model-verify/test_review_mirror.py -k supported_pathname_guard -v`
+Run:
+
+```bash
+python -m pytest evals/multi-model-verify/test_review_mirror.py::test_the_supported_pathname_guard_is_pinned_in_both_directions -v
+```
 
 Expected: FAIL, `Test-SupportedPathname` is not recognized.
 
@@ -515,7 +519,11 @@ function Test-SupportedPathname($value) {
 
 - [ ] **Step 4: Run the test to verify it passes**
 
-Run: `python -m pytest evals/multi-model-verify/test_review_mirror.py -k supported_pathname_guard -v`
+Run:
+
+```bash
+python -m pytest evals/multi-model-verify/test_review_mirror.py::test_the_supported_pathname_guard_is_pinned_in_both_directions -v
+```
 
 Expected: PASS.
 
@@ -1350,9 +1358,22 @@ def test_a_backslash_bearing_index_entry_stops_the_enumeration():
 
 - [ ] **Step 4: Run the new tests to verify they pass**
 
-Run: `python -m pytest evals/multi-model-verify/test_review_mirror.py -k "spaced or rename or escape_looking or backslash_bearing" -v`
+Run:
 
-Expected: PASS.
+```bash
+python -m pytest evals/multi-model-verify/test_review_mirror.py::test_a_back_channel_under_a_spaced_directory_is_removed evals/multi-model-verify/test_review_mirror.py::test_a_spaced_baseline_entry_reaches_the_manifest evals/multi-model-verify/test_review_mirror.py::test_a_spaced_ignored_entry_reaches_the_manifest evals/multi-model-verify/test_review_mirror.py::test_a_rename_with_spaces_hashes_the_destination_not_the_source evals/multi-model-verify/test_review_mirror.py::test_a_rename_renders_in_the_baseline_as_source_arrow_destination evals/multi-model-verify/test_review_mirror.py::test_escape_looking_field_text_is_never_interpreted evals/multi-model-verify/test_review_mirror.py::test_uppercase_escape_looking_field_text_is_never_interpreted evals/multi-model-verify/test_review_mirror.py::test_a_backslash_bearing_index_entry_stops_the_enumeration -v
+```
+
+Expected: PASS, 8 tests.
+
+**Amendment A20, self-caught before plan debate round 5.** A11 converted
+Tasks 1, 3 and 4 from `-k` selectors to explicit node ids and left Tasks 2
+and 6 behind. Task 6's selector was the dangerous one: `-k "spaced or
+rename or ..."` also matches the pre-existing
+`test_a_rename_whose_destination_was_deleted_blocks`, so the step would
+have reported 9 where it verified 8. The same class as A7, A11 and A17,
+found this time by checking the plan against itself rather than by
+spending a round on it.
 
 - [ ] **Step 5: Run the whole module**
 
