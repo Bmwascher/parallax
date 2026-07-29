@@ -1270,6 +1270,52 @@ def test_a_non_exact_closing_delimiter_nested_in_a_body_still_blocks(tmp_path):
     assert "exact form" in json.loads(proc.stdout)["reason"]
 
 
+def test_a_quoted_angle_bracket_does_not_truncate_a_known_tag(tmp_path):
+    # `[^>]*` stopped at a `>` sitting inside an attribute value, so
+    # `<apps_instructions note="a>b"/>` matched only as far as `note="a`,
+    # was discarded as an unpaired opener, and a complete nested surface
+    # reached a clean report. Reproduced on both hosts. Mode-diff PANEL
+    # round 6, 2026-07-28.
+    first = rewritten(
+        tmp_path, "quoted-gt.json", "flagged.json",
+        "# Fixture global rules",
+        '# Fixture global rules\n<apps_instructions note="a>b"/>')
+    proc = probe_with(tmp_path, first, FIXTURES / "suppressed.json")
+    assert proc.returncode == 1, proc.stdout
+    assert "exact form" in json.loads(proc.stdout)["reason"]
+
+
+def test_a_quoted_slash_gt_is_not_read_as_self_closing(tmp_path):
+    # The other direction of the same missing rule. The truncated match
+    # ended in `/>`, so a legitimate unpaired mention was reported as a
+    # complete non-exact surface and blocked.
+    first = rewritten(
+        tmp_path, "quoted-slash.json", "flagged.json",
+        "# Fixture global rules",
+        '# Fixture global rules\nHouse rule: never write'
+        ' <apps_instructions note="literal/> only">.')
+    proc = probe_with(tmp_path, first, FIXTURES / "suppressed.json")
+    assert proc.returncode == 0, proc.stdout
+
+
+@pytest.mark.parametrize("tag", [
+    "<apps_instructions-extra/>",
+    "<apps_instructions.foo/>",
+    "<apps_instructions:foo/>",
+])
+def test_a_different_tag_name_is_not_a_member_of_a_known_family(tmp_path, tag):
+    # `\b` ends at `-`, `.` and `:`, and all three are legal in a tag NAME
+    # under this file's own grammar. These are different tags, and inside
+    # the user's own instruction body they are free text; they were being
+    # rejected as malformed members of the apps family.
+    first = rewritten(
+        tmp_path, "other-name.json", "flagged.json",
+        "# Fixture global rules",
+        "# Fixture global rules\nHouse rule: never write " + tag + ".")
+    proc = probe_with(tmp_path, first, FIXTURES / "suppressed.json")
+    assert proc.returncode == 0, proc.stdout
+
+
 def test_an_undeterminable_global_file_blocks_rather_than_reporting_absent(
         tmp_path):
     # Building and testing the candidate path sat outside the guard and

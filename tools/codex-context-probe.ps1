@@ -95,8 +95,28 @@ function Get-RawContainerSurface($text, $name) {
     # surface at all, and a self-closing `<apps_instructions/>` was none
     # either. Both reached a clean report from inside a masked body, on
     # both hosts. Mode-diff PANEL round 5, 2026-07-28.
-    $openRx = [regex]("(?i)<" + [regex]::Escape($name) + "\b[^>]*>")
-    $closeRx = [regex]("(?i)</" + [regex]::Escape($name) + "\s*>")
+    # THE NAME NEEDS A REAL BOUNDARY, NOT `\b`. A word boundary ends at
+    # `-`, `.`, `:` and `=`, and the first three are legal characters in a
+    # tag NAME under this file's own grammar, so `<apps_instructions-extra/>`
+    # - a different tag entirely - was rejected as a malformed member of
+    # the apps family. Only whitespace, `/` or `>` may follow the name.
+    #
+    # ATTRIBUTE VALUES ARE TOKENIZED, because `[^>]*` stops at the first
+    # `>` even when it is inside quotes: `<apps_instructions note="a>b"/>`
+    # matched as far as `note="a` and was then discarded as an unpaired
+    # opener, so a complete nested surface reached a clean report. The
+    # same truncation made the legitimate unpaired mention
+    # `<apps_instructions note="literal/> only">` look self-closing and
+    # blocked it. Both directions from one missing rule. Mode-diff PANEL
+    # round 6, 2026-07-28.
+    #
+    # The self-closing slash is CAPTURED at the real tag terminator rather
+    # than inferred from the end of the match, which is what made the
+    # truncated form above read as self-closing.
+    $attr = '(?:"[^"]*"|''[^'']*''|[^>"''])*?'
+    $openRx = [regex]("(?i)<" + [regex]::Escape($name) +
+        '(?=[\s/>])' + $attr + '(/?)>')
+    $closeRx = [regex]("(?i)</" + [regex]::Escape($name) + '\s*>')
     $exactOpen = "<" + $name + ">"
     $exactClose = "</" + $name + ">"
     $found = New-Object System.Collections.ArrayList
@@ -104,7 +124,7 @@ function Get-RawContainerSurface($text, $name) {
         # A self-closing tag is a complete surface on its own, and it can
         # never be the exact opening literal, so it always reports as a
         # non-exact shape.
-        if ($m.Value.EndsWith("/>")) {
+        if ($m.Groups[1].Value -eq "/") {
             [void]$found.Add(@{ Literal = $m.Value; Exact = $false })
             continue
         }
