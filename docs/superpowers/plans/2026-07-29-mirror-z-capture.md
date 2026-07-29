@@ -7,13 +7,14 @@ captures to `-z`, delete the hand-written C-style decoder, and parse the
 status capture structurally so a rename can never resolve to the wrong
 file.
 
-**Architecture:** Five small functions replace one. `Invoke-GitProcess`
+**Architecture:** Six small functions replace one. `Invoke-GitProcess`
 runs git and returns raw bytes. `ConvertFrom-NulCapture` turns those bytes
 into fields, failing closed on a missing trailing NUL or invalid UTF-8.
 `Test-WindowsPathname` refuses a name no Windows file can carry.
 `ConvertTo-StatusRecord` builds structured records, consuming a rename's
-source from the NEXT field. `Format-StatusRecord` renders one record in
-git's display order for the evidence record, one way only.
+source from the NEXT field. `Format-StatusPathname` reproduces git's
+quoting for one pathname, and `Format-StatusRecord` uses it to render one
+record in git's display order for the evidence record, one way only.
 
 **Tech Stack:** Windows PowerShell 5.1 and PowerShell 7, git for Windows,
 pytest driving both hosts.
@@ -593,13 +594,18 @@ git commit -m "parse the -z status capture structurally"
 ### Task 4: Rendering one record for the evidence
 
 **Files:**
-- Modify: `tools/new-review-mirror.ps1` — one function below
+- Modify: `tools/new-review-mirror.ps1` — TWO functions below
   `ConvertTo-StatusRecord`
 - Test: `evals/multi-model-verify/test_review_mirror.py`
 
 **Interfaces:**
 - Consumes: a record from `ConvertTo-StatusRecord($fields)` (Task 3).
-- Produces: `Format-StatusRecord($record)` returns a `[string]`.
+- Produces:
+  - `Format-StatusPathname($path)` returns a `[string]`: the pathname,
+    wrapped in double quotes if and only if it contains a space.
+  - `Format-StatusRecord($record)` returns a `[string]`, calling
+    `Format-StatusPathname` for the destination and, on a rename or copy,
+    for the source independently.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -739,7 +745,7 @@ same run, which printed `M+ Timer/input.txt <sha256>`.
 
 Run: `python -m pytest evals/multi-model-verify/test_review_mirror.py -k "renders or rendering or quoted_independently" -v`
 
-Expected: PASS, 3 tests.
+Expected: PASS, 6 tests.
 
 - [ ] **Step 5: Commit**
 
@@ -1174,7 +1180,7 @@ def test_uppercase_escape_looking_field_text_is_never_interpreted():
     # `switch` is case-INSENSITIVE by default, so the deleted decoder turned
     # `a\Tb.txt` into a TAB and `a\Nb.txt` into a NEWLINE - escapes C-style
     # quoting leaves undefined. Under -z the bytes are the pathname, so both
-    # must arrive as their seven literal characters.
+    # must arrive as their eight literal characters.
     out = run_functions(
         '$b = [System.Text.Encoding]::UTF8.GetBytes("a\\Tb.txt`0a\\Nb.txt`0")\n'
         '$r = ConvertFrom-NulCapture $b\n'
@@ -1394,8 +1400,10 @@ N". Every code step carries the code.
 `Reason`; `Get-BaselineRaw` returns the `Invoke-GitFields` shape;
 `ConvertTo-StatusRecord` takes `Fields` and returns `Records`;
 `Get-ManifestSubject` takes `Records` and returns `Paths`;
-`Format-StatusRecord` takes one record and returns a string. Checked
-against every call site named in Task 5.
+`Format-StatusPathname` takes one pathname string and returns a string;
+`Format-StatusRecord` takes one record, calls `Format-StatusPathname` per
+pathname, and returns a string. Checked against every call site named in
+Task 5.
 
 **One case deliberately not end to end.** A filename containing a literal
 backslash cannot exist on Windows, so `caf\303\251.txt` is tested at the
@@ -1452,3 +1460,23 @@ P14 and Sol did not reach it. Kimi's P11 PASS checked the arrow shape
 against the contract and did not check the quoting, which is what the run
 settled. Neither lane is treated as authoritative: the current script was
 executed against a spaced path, and the recorded output decided it.
+
+### Round 2, Sol lane, 2026-07-29
+
+Same session, effective route confirmed, at head `a9a788c`. Q2, Q4 and Q5
+PASS; Q1 and Q3 FIX. All three findings are bookkeeping defects that
+amendment A2 introduced, and all three are the same class: a declaration
+that stopped matching the code beside it.
+
+- **A6 — the sixth function was never declared.** A2 added
+  `Format-StatusPathname` and left the Architecture paragraph saying five
+  functions, Task 4's Files line saying one function, Task 4's Interfaces
+  exposing only `Format-StatusRecord`, and the self-review type list
+  without it. All four now name it.
+- **A7 — a stale expected count.** Task 4 Step 4 still said "PASS, 3
+  tests" after A2 took the render cases from three to six. Corrected to
+  six. This is the class the plan is meant to catch in itself: a step
+  whose stated expected result is not what would happen.
+- **A8 — an off-by-one in a comment.** A3 called `a\Tb.txt` "seven
+  literal characters" while its own assertion lists eight character
+  codes. Corrected to eight.
