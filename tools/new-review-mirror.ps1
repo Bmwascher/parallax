@@ -61,12 +61,89 @@ function Invoke-GitLines($repo, $gitArgs) {
 }
 
 function Test-GitQuotedPath($value) {
-    # git still quotes a name carrying a double quote, a backslash or a
-    # control character, whatever `core.quotepath` says. Such an entry is a
-    # STOP rather than something to unquote: stripping the delimiters
-    # leaves the escapes in place, and resolving that text is how a
-    # different file gets hashed under the right file's name.
+    # git quotes a pathname whenever C-style quoting would change it, and
+    # the trigger set is WIDER than the escapes alone: a plain SPACE is
+    # enough. Measured 2026-07-29 on a real tree, 5810 of 11874 baseline
+    # entries came back quoted and all but one were pure ASCII quoted for
+    # a space and nothing else. So "quoted" cannot mean "unresolvable" -
+    # treating it that way stops the mirror on half a normal repo.
     return ([string]$value).StartsWith('"')
+}
+
+function ConvertFrom-GitQuotedPath($value) {
+    # Decode git's C-style quoting into the pathname it names. Returns
+    # $null when the text carries an escape this decoder does not define,
+    # which the caller must treat as a STOP - that is the safety property
+    # the previous blanket refusal was reaching for, kept for the input
+    # that actually needs it and dropped for the input that does not.
+    #
+    # TRIMMING the delimiters is the dangerous operation this replaces:
+    # the escapes survive a trim, Windows then reads `caf\303\251/x` as
+    # `caf\303\251\x`, and a colliding real path is hashed under the entry
+    # the baseline actually named. Decoding has no such failure - either
+    # the escape is defined and the byte is exact, or the decode refuses.
+    # Found by the mode-diff PANEL 2026-07-28; corrected 2026-07-29.
+    #
+    # `core.quotepath=false` is set on every capture, so high bytes arrive
+    # RAW and octal escapes are left naming control characters only. The
+    # octal branch below is still implemented, because the flag guards the
+    # display form and not the quoting itself.
+    $text = [string]$value
+    if (-not $text.StartsWith('"') -or -not $text.EndsWith('"') -or
+        $text.Length -lt 2) {
+        return $null
+    }
+    $body = $text.Substring(1, $text.Length - 2)
+    $out = New-Object System.Text.StringBuilder
+    $i = 0
+    while ($i -lt $body.Length) {
+        $c = $body[$i]
+        if ($c -ne '\') {
+            [void]$out.Append($c)
+            $i++
+            continue
+        }
+        $i++
+        if ($i -ge $body.Length) { return $null }
+        $e = $body[$i]
+        $i++
+        switch ($e) {
+            'a'  { [void]$out.Append([char]7);  continue }
+            'b'  { [void]$out.Append([char]8);  continue }
+            'f'  { [void]$out.Append([char]12); continue }
+            'n'  { [void]$out.Append([char]10); continue }
+            'r'  { [void]$out.Append([char]13); continue }
+            't'  { [void]$out.Append([char]9);  continue }
+            'v'  { [void]$out.Append([char]11); continue }
+            '\'  { [void]$out.Append('\');      continue }
+            '"'  { [void]$out.Append('"');      continue }
+            default {
+                # Three octal digits, or nothing this decoder defines.
+                if ($e -lt '0' -or $e -gt '7') { return $null }
+                if ($i + 1 -gt $body.Length - 1) { return $null }
+                $d2 = $body[$i]
+                $d3 = $body[$i + 1]
+                if ($d2 -lt '0' -or $d2 -gt '7' -or
+                    $d3 -lt '0' -or $d3 -gt '7') { return $null }
+                $code = (([int][string]$e) * 64) + (([int][string]$d2) * 8) +
+                        ([int][string]$d3)
+                [void]$out.Append([char]$code)
+                $i += 2
+                continue
+            }
+        }
+    }
+    return $out.ToString()
+}
+
+function Resolve-GitPathname($value) {
+    # One entry point for every pathname read out of a git capture: quoted
+    # entries decode, unquoted entries pass through unchanged. $null means
+    # the caller must BLOCK.
+    if (Test-GitQuotedPath $value) {
+        return (ConvertFrom-GitQuotedPath $value)
+    }
+    return ([string]$value)
 }
 
 function Get-BackChannelEntry($repo) {
@@ -83,7 +160,18 @@ function Get-BackChannelEntry($repo) {
     $r = Invoke-GitLines $repo @("ls-files", "--cached", "--others",
                                  "*AGENTS.md", ".agents/*")
     if (-not $r.Ok) { return @{ Ok = $false; Entries = @() } }
-    return @{ Ok = $true; Entries = $r.Lines }
+    # `ls-files` quotes on the same trigger set as `status`, so its entries
+    # go through the same decoder. An entry that will not decode is a stop
+    # here too: a back-channel this script cannot name is a back-channel it
+    # cannot delete, and reporting it as clean is the one outcome the whole
+    # preflight exists to prevent.
+    $entries = New-Object System.Collections.ArrayList
+    foreach ($e in @($r.Lines)) {
+        $resolved = Resolve-GitPathname $e
+        if ($null -eq $resolved) { return @{ Ok = $false; Entries = @() } }
+        [void]$entries.Add($resolved)
+    }
+    return @{ Ok = $true; Entries = @($entries) }
 }
 
 function Test-Tracked($repo, $path) {
@@ -141,19 +229,16 @@ function Get-ManifestSubject($baselineRaw) {
                 " that has been deleted; the mirror is not in a state this" +
                 " manifest rule can describe") }
         }
-        # A path still in git's quoted form names nothing this script can
-        # resolve. Trimming the delimiters and resolving what is left was
-        # the previous behaviour, and it is the dangerous one: the escapes
-        # survive the trim, Windows reads `caf\303\251/x` as
-        # `caf\303\251\x`, and a colliding real path is then hashed under
-        # the entry the baseline actually named. That is false coverage,
-        # not a refusal. Found by the mode-diff PANEL, 2026-07-28.
-        if (Test-GitQuotedPath $rest) {
-            return @{ Error = ("baseline entry '$line' arrives in git's" +
-                " quoted form, so the file it names cannot be resolved" +
-                " without guessing at the escape sequences") }
+        # A quoted entry DECODES; only an escape the decoder does not
+        # define is a stop. See ConvertFrom-GitQuotedPath for why decoding
+        # is safe where the previous trim-and-hope was not.
+        $resolved = Resolve-GitPathname $rest
+        if ($null -eq $resolved) {
+            return @{ Error = ("baseline entry '$line' carries an escape" +
+                " sequence this script does not define, so the file it" +
+                " names cannot be resolved without guessing") }
         }
-        [void]$paths.Add($rest)
+        [void]$paths.Add($resolved)
     }
     return @{ Paths = @($paths) }
 }
