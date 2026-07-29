@@ -391,38 +391,45 @@ unchanged.
   from inside the reviewed tree. It does NOT mean the reviewer received
   no instructions at all — the global `AGENTS.md` in the limit below
   survives it — and it says nothing about what the reviewer can DO.
-- **A complete SURFACE of any known family blocks wherever it sits,
-  including inside a user's own instruction file.** The four families are
+- **THE BLUNT RULE. A known family name occurring at all, in any form,
+  anywhere in the render, stops the run.** The four families are
   `skills_instructions`, `plugins_instructions`, `recommended_plugins`
-  and `apps_instructions`, and a surface is an ordered open/close pair or
-  a self-closing tag - the same definition the unknown-block scan uses.
-  Presence is read from the masked structural text so that a house rule
-  merely NAMING an opener is not mistaken for the container, but masking
-  alone bought a false clean: `<INSTRUCTIONS>` is masked first, so a
-  container NESTED inside it lost its delimiters with that body and a
-  render carrying a live one passed suppression. What separates the two
-  cases is completeness - the legitimate house rule opens and never
-  closes - so a raw surface counts as presence whatever the masking says.
-  Both delimiters are matched as grammar rather than as literals, and a
-  surface whose literals are not exact is refused as an unreadable shape
-  rather than measured.
+  and `apps_instructions`. The three feature families are refused on both
+  renders; the skills family is expected on the first render and refused
+  on the second. There is no structure to match: not a tag, not a pair,
+  not a boundary, not an attribute. A case-insensitive substring test is
+  the whole check.
 
-  This was reached over three panel rounds on 2026-07-28, each finding
-  the same defect in the previous round's fix: presence on raw text
-  blocked legitimate prose, presence on masked text hid a nested skills
-  container, a raw backstop added for skills only hid a nested apps
-  container, and an exact-close backstop hid both a self-closing tag and
-  a close carrying one extra space. Every one was reproduced on both
-  hosts before it was fixed. The families now share one rule, which is
-  the actual remedy: four separate rules produced four separate holes.
+  **Why the structural answer was abandoned.** Six panel rounds on
+  2026-07-28 each found a new shape that slipped past the previous
+  round's rule, and five of those shapes reached a CLEAN report: a
+  container nested inside a masked body, the same nested in another
+  family, a self-closing tag, a close carrying one extra space, and a tag
+  whose attribute value contained a closing bracket. Every one was a
+  defect in telling a real block from a quoted one. Flattened text does
+  not carry that distinction, so the parser was being asked a question
+  its input cannot answer, and each answer bought exactly one more round.
 
-  The cost is stated plainly. A user writing a complete surface of any
-  known family inside their own text blocks the run - a balanced quoted
-  block, a self-closing mention, or an opener and a close written as
-  unrelated prose in two different wrapped bodies, because the raw search
-  ignores masking by design. Flattened text cannot tell any of those from
-  a real nested container, and of the two available answers only blocking
-  fails closed.
+  **What it buys.** No false clean is possible on this check. There is no
+  shape to find, no boundary to get wrong, and no masking to see past.
+  The only failure it can produce is a false BLOCK, which is loud, names
+  its own cause in the message, and the user clears by rewording one line.
+
+  **What it costs, stated in full.** A reviewer whose global `AGENTS.md`,
+  or any skill description on their machine, mentions one of the four
+  names cannot run a review until the mention is reworded. This includes
+  a mention that is plainly prose, a mention inside a longer word, and a
+  different tag name that merely begins with a family name, such as
+  `<apps_instructions-extra/>`. Measured 2026-07-28 on the author's
+  machine: the global file contains none of the four names in 1009
+  characters.
+
+  **What keeps its precision.** The FIRST render still uses the full
+  parser: it enumerates every advertised skill, classifies each by the
+  directory it came from, and refuses an entry it cannot place. That is
+  where precision is needed and where a mistake is a wrong report rather
+  than a broken gate. The blunt rule governs only the question of whether
+  anything survived.
 - **A global `AGENTS.md` that puts `--- project-doc ---` alone on a line
   blocks.** It is byte-identical to the renderer's own separator in the
   one region that carries the user's file verbatim. Narrowing the rule

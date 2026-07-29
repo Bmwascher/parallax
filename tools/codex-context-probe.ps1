@@ -72,145 +72,50 @@ function Get-PromptText($raw) {
     return ($parts -join "`n")
 }
 
-function Get-RawContainerSurface($text, $name) {
-    # EVERY complete surface of `$name` in RAW text, in document order. A
-    # surface is an ordered open/close pair OR a self-closing tag - the
-    # same definition the unknown-block scan uses. Each is returned with
-    # the literal that matched and whether that literal is the exact form
-    # the dedicated parsers read.
+function Test-FamilyMentioned($text, $name) {
+    # THE BLUNT RULE, and the whole point of it is that there is nothing
+    # to parse. Not "is there a container of this family", which is a
+    # question about structure, but "does this name occur at all",
+    # case-insensitively, anywhere in the render.
     #
-    # ON RAW TEXT, because this is the backstop for everything masking
-    # hides: masking blanks a container's BODY, so a container NESTED
-    # inside another one loses its own delimiters with that body and is
-    # invisible to every masked test.
+    # WHY THE STRUCTURAL ANSWER WAS ABANDONED. Six panel rounds on
+    # 2026-07-28 each found a new shape that slipped past the previous
+    # round's structural rule, and five of those shapes reached a CLEAN
+    # report: a container nested inside a masked body, the same nested in
+    # another family, a self-closing tag, a close carrying one extra
+    # space, and a tag whose attribute value contained a closing bracket.
+    # Every one was a defect in telling a real block from a quoted one.
+    # Flattened text does not carry that distinction, so the parser was
+    # being asked a question its input cannot answer, and each answer
+    # bought one more round.
     #
-    # EVERY surface, not the first. The real prompt carries a genuine
-    # `<skills_instructions>` ahead of `<INSTRUCTIONS>`, so a first-match
-    # rule found the exact one, called the family fine, and walked past an
-    # attributed pair nested further down.
+    # This rule cannot produce a false clean. There is no shape to find,
+    # no boundary to get wrong, and no masking to see past. It can only
+    # produce a false BLOCK, which is loud, names its own cause, and the
+    # user fixes by rewording one line of their own file.
     #
-    # BOTH DELIMITERS ARE GRAMMAR, not literals. An earlier revision
-    # matched the opener loosely and then searched for the exact
-    # `</name>`, so `<apps_instructions>live</apps_instructions >` was no
-    # surface at all, and a self-closing `<apps_instructions/>` was none
-    # either. Both reached a clean report from inside a masked body, on
-    # both hosts. Mode-diff PANEL round 5, 2026-07-28.
-    # THE NAME NEEDS A REAL BOUNDARY, NOT `\b`. A word boundary ends at
-    # `-`, `.`, `:` and `=`, and the first three are legal characters in a
-    # tag NAME under this file's own grammar, so `<apps_instructions-extra/>`
-    # - a different tag entirely - was rejected as a malformed member of
-    # the apps family. Only whitespace, `/` or `>` may follow the name.
-    #
-    # ATTRIBUTE VALUES ARE TOKENIZED, because `[^>]*` stops at the first
-    # `>` even when it is inside quotes: `<apps_instructions note="a>b"/>`
-    # matched as far as `note="a` and was then discarded as an unpaired
-    # opener, so a complete nested surface reached a clean report. The
-    # same truncation made the legitimate unpaired mention
-    # `<apps_instructions note="literal/> only">` look self-closing and
-    # blocked it. Both directions from one missing rule. Mode-diff PANEL
-    # round 6, 2026-07-28.
-    #
-    # The self-closing slash is CAPTURED at the real tag terminator rather
-    # than inferred from the end of the match, which is what made the
-    # truncated form above read as self-closing.
-    $attr = '(?:"[^"]*"|''[^'']*''|[^>"''])*?'
-    $openRx = [regex]("(?i)<" + [regex]::Escape($name) +
-        '(?=[\s/>])' + $attr + '(/?)>')
-    $closeRx = [regex]("(?i)</" + [regex]::Escape($name) + '\s*>')
-    $exactOpen = "<" + $name + ">"
-    $exactClose = "</" + $name + ">"
-    $found = New-Object System.Collections.ArrayList
-    foreach ($m in $openRx.Matches($text)) {
-        # A self-closing tag is a complete surface on its own, and it can
-        # never be the exact opening literal, so it always reports as a
-        # non-exact shape.
-        if ($m.Groups[1].Value -eq "/") {
-            [void]$found.Add(@{ Literal = $m.Value; Exact = $false })
-            continue
-        }
-        $c = $closeRx.Match($text, $m.Index + $m.Length)
-        if (-not $c.Success) { continue }
-        # Report the delimiter that is wrong, so the message names the
-        # thing the reader has to go and look at.
-        if ($m.Value -cne $exactOpen) {
-            [void]$found.Add(@{ Literal = $m.Value; Exact = $false })
-        } elseif ($c.Value -cne $exactClose) {
-            [void]$found.Add(@{ Literal = $c.Value; Exact = $false })
-        } else {
-            [void]$found.Add(@{ Literal = $m.Value; Exact = $true })
-        }
-    }
-    return @{ Present = ($found.Count -gt 0); Surfaces = @($found) }
+    # ACCEPTED LIMIT, and it is a real one: a reviewer whose global
+    # AGENTS.md or whose skill descriptions mention any of these four
+    # names cannot run a review until the mention is reworded. Measured
+    # 2026-07-28 on this machine, the author's own global file contains
+    # none of the four in 1009 characters.
+    return ($text.IndexOf($name,
+        [System.StringComparison]::OrdinalIgnoreCase) -ge 0)
 }
 
-function Test-ContainerPresent($raw, $masked, $name) {
-    # ONE presence rule for every known container this script judges.
-    #
-    # Two tests, and each covers what the other cannot. The MASKED test
-    # sees a container that is really there while ignoring a name written
-    # inside somebody's prose - the user's own AGENTS.md is carried
-    # verbatim inside <INSTRUCTIONS>, and every skill description is free
-    # text. The RAW SURFACE sees a container nested inside another one,
-    # which masking erases wholesale.
-    #
-    # Three separate false-clean paths were found in this order, each in
-    # the fix for the one before it, over three panel rounds on
-    # 2026-07-28: presence on raw text blocked legitimate prose; presence
-    # on masked text alone hid a nested skills container; a raw-pair
-    # backstop added for skills only hid a nested apps container one
-    # function away. Every family goes through this function now, so the
-    # next family cannot be forgotten.
-    #
-    # ACCEPTED LIMIT: a user who writes a complete surface of any known
-    # family inside their own text blocks the run - a balanced quoted
-    # block, a self-closing mention, or an opener and a close written as
-    # unrelated prose in two different wrapped bodies. The raw search
-    # ignores masking by design, so it cannot tell any of those from a
-    # real nested container, and of the two answers only this one fails
-    # closed.
-    if ($masked.Contains("<" + $name + ">")) { return $true }
-    return (Get-RawContainerSurface $raw $name).Present
-}
-
-function Get-SkillReport($text, $structural) {
+function Get-SkillReport($text) {
     # BlockPresent and Entries are reported separately on purpose. An
     # ABSENT block is the success state once suppression has run; a
     # PRESENT block that yields no entries is a parse failure wearing the
     # same face, and the caller must be able to tell them apart.
     #
-    # PRESENCE IS JUDGED ON THE STRUCTURAL TEXT, THE ENTRIES ON THE RAW
-    # TEXT. `<skills_instructions>` is an ordinary thing to write inside a
-    # house rule, and the user's own AGENTS.md is carried verbatim inside
-    # <INSTRUCTIONS>. With presence taken from raw text, such a machine had
-    # its suppression pass report the block as SURVIVING, and every review
-    # stopped with "suppression did not take" - a wrong diagnosis with no
-    # remediation short of editing the user's personal file. The branch's
-    # own `test_a_known_literal_quoted_in_the_global_body_does_not_block`
-    # declares that configuration legitimate, but its suppression fixture
-    # carries no such quote, so no test reached the second pass. Found by
-    # the mode-diff PANEL, 2026-07-28. Masking leaves every container's own
-    # delimiters in place, so a real block is still seen.
-    #
-    # A COMPLETE RAW PAIR COUNTS TOO, wherever it sits. Masking alone was
-    # not enough: a skills container NESTED inside <INSTRUCTIONS> has its
-    # delimiters and its entries erased with that body, so the structural
-    # text showed no block and a render carrying a live skills container
-    # passed suppression as clean. Reproduced on both hosts 2026-07-28,
-    # mode-diff PANEL, inside this function's own previous fix. The pair is
-    # what separates the two cases: the legitimate house rule NAMES the
-    # opener and never closes it, while a container that is really there
-    # opens and closes in order.
-    #
-    # ACCEPTED LIMIT: a user who quotes a complete, balanced skills block
-    # inside their own AGENTS.md blocks the run. Flattened text cannot tell
-    # that from a real nested container, and of the two answers only this
-    # one fails closed.
-    #
-    # `$structural` is optional only so the parser functions stay
-    # dot-sourceable one at a time; every caller in this script passes it.
-    $presenceText = $text
-    if ($null -ne $structural) { $presenceText = $structural }
-    $present = Test-ContainerPresent $text $presenceText "skills_instructions"
+    # PRESENCE IS A MENTION, NOT A STRUCTURE. See Test-FamilyMentioned for
+    # why the structural answer was abandoned. On the FIRST render the
+    # block is genuinely there, so a stray mention costs nothing: the
+    # entry parse below either finds entries or the caller stops on a
+    # present-but-empty block. On the SECOND render a mention is exactly
+    # what must not be there, and that is the check this rule exists for.
+    $present = Test-FamilyMentioned $text "skills_instructions"
     $entries = New-Object System.Collections.ArrayList
     $malformed = $false
     $firstBad = ""
@@ -302,19 +207,16 @@ function Get-InstructionReport($text) {
     return @{ BlockPresent = $present; ProjectDoc = $project }
 }
 
-function Get-FeatureReport($text, $structural) {
-    # Same two-part presence rule as the skills block. A feature container
-    # nested inside another one is erased by masking exactly as the skills
-    # one was, and `<INSTRUCTIONS><apps_instructions>live</apps_instructions>
-    # </INSTRUCTIONS>` reported no apps feature on both hosts until this
-    # went through Test-ContainerPresent. Mode-diff PANEL round 4,
-    # 2026-07-28, inside round 3's own fix.
-    $presenceText = $text
-    if ($null -ne $structural) { $presenceText = $structural }
+function Get-FeatureReport($text) {
+    # Same blunt rule as the skills block, and here it applies to BOTH
+    # renders: the two flags are supposed to remove these three families
+    # outright, so any mention of one is either the feature still being
+    # advertised or a prompt this parser no longer describes. Neither is a
+    # clean result.
     return @{
-        Plugins = Test-ContainerPresent $text $presenceText "plugins_instructions"
-        RecommendedPlugins = Test-ContainerPresent $text $presenceText "recommended_plugins"
-        Apps = Test-ContainerPresent $text $presenceText "apps_instructions"
+        Plugins = Test-FamilyMentioned $text "plugins_instructions"
+        RecommendedPlugins = Test-FamilyMentioned $text "recommended_plugins"
+        Apps = Test-FamilyMentioned $text "apps_instructions"
     }
 }
 
@@ -531,27 +433,6 @@ function Get-UnknownPromptBlock($text) {
     return @($found)
 }
 
-function Get-StructuralText($text, $asJson) {
-    # The render with every VALIDATED known-container body blanked: what is
-    # left is prompt structure rather than anybody's prose. Presence tests
-    # run on this, so a marker a user wrote inside their own instruction
-    # file is not mistaken for the container it names.
-    #
-    # Callers run this only after Test-PromptShape has already scanned the
-    # same text, and that scan performs this exact masking and stops the
-    # run on any ambiguity. So the throw below is unreachable in the
-    # script's own flow. It is caught anyway rather than left to escape,
-    # because an unhandled exception here would surface as a script error
-    # rather than as a blocked measurement, and the whole point of this
-    # file is that an unmade measurement reports as blocked.
-    try {
-        return (Hide-KnownContainer $text)
-    } catch {
-        Write-Blocked ("the prompt could not be masked for the presence" +
-            " checks: " + $_.Exception.Message) $asJson
-    }
-}
-
 function ConvertTo-ComparablePath($path) {
     # Compare on forward slashes with a trailing separator, so a sibling
     # directory whose name merely starts with the work dir - `repo-old`
@@ -637,43 +518,20 @@ function Test-PromptShape($text, $asJson) {
         Write-Blocked ("the <INSTRUCTIONS> block is missing - the prompt" +
             " shape changed and this parser no longer describes it") $asJson
     }
-    # The feature markers are judged on the QUIETLY masked text, for the
-    # same reason the skills marker is: a container name is an ordinary
-    # thing to write inside a house rule, and the user's own AGENTS.md is
-    # carried verbatim inside <INSTRUCTIONS>, as is every skill
-    # description. On raw text, a global file naming
-    # `<apps_instructions>` in prose blocked with "the plugin or apps
-    # feature is advertising itself despite --disable plugins --disable
-    # apps" - a wrong diagnosis with no remediation, one function away
-    # from the same defect already fixed for skills. Mode-diff PANEL,
-    # 2026-07-28.
-    #
-    # The QUIET mask, not the validating one, because this runs before the
-    # unknown-surface scan validates anything and must not pre-empt that
-    # scan's own error. Masking blanks bodies only, so a real feature
-    # container's delimiters survive and are still seen.
-    $quiet = Hide-KnownContainer $text $null $true
-    # A NESTED known container is erased with the body that wraps it, so
-    # the quiet mask never sees it and the exactness scan above never sees
-    # it either. An ordered raw pair whose opener is not the exact literal
-    # is therefore checked here, where nesting cannot hide it. Same rule,
-    # same message, same reason as the masked scan: a known block in any
-    # other form is invisible to every dedicated parser, so every rule
-    # about it silently did nothing.
-    foreach ($fam in @("skills_instructions", "plugins_instructions",
-                       "apps_instructions", "recommended_plugins")) {
-        foreach ($s in (Get-RawContainerSurface $text $fam).Surfaces) {
-            if (-not $s.Exact) {
-                Write-Blocked ("the known block " + $s.Literal + " is not" +
-                    " in the exact form this parser reads, so every rule" +
-                    " about it silently did nothing") $asJson
-            }
-        }
-    }
-    $features = Get-FeatureReport $text $quiet
+    # The feature markers use the blunt mention rule on RAW text. Six
+    # panel rounds of structural rules for this same question each bought
+    # one more round; see Test-FamilyMentioned. These three families are
+    # supposed to be gone outright, so there is nothing here worth being
+    # clever about.
+    $features = Get-FeatureReport $text
     if ($features.Plugins -or $features.RecommendedPlugins -or $features.Apps) {
-        Write-Blocked ("the plugin or apps feature is advertising itself" +
-            " despite --disable plugins --disable apps") $asJson
+        Write-Blocked ("the plugin or apps feature is named in the" +
+            " rendered prompt despite --disable plugins --disable apps." +
+            " A mention is enough to stop the run: this check does not" +
+            " parse structure, because six review rounds showed that" +
+            " flattened text cannot tell a real block from a quoted one." +
+            " If one of these names appears in your own AGENTS.md or in" +
+            " a skill description, reword it") $asJson
     }
     $unknown = @()
     try {
@@ -767,8 +625,7 @@ try {
 }
 
 $instructions = Test-PromptShape $text $Json
-$structural = Get-StructuralText $text $Json
-$skills = Get-SkillReport $text $structural
+$skills = Get-SkillReport $text
 
 # The FIRST pass runs with the feature flags and no override, so the skills
 # block must be there. Its absence here is a shape change, not a success.
@@ -917,16 +774,25 @@ if ($SuppressSkills) {
     # Found by the mode-diff PANEL, 2026-07-28; the both-renders rule this
     # violated is stated in Test-PromptShape's own opening comment.
     $instructions2 = Test-PromptShape $text2 $Json
-    $structural2 = Get-StructuralText $text2 $Json
-    $skills2 = Get-SkillReport $text2 $structural2
+    $skills2 = Get-SkillReport $text2
     $after = $skills2.Entries.Count
-    # ABSENCE of the block is the proof, not a zero count. A block that is
-    # present but unreadable also counts zero, and calling that clean is
-    # the false-clean direction this script may never produce.
+    # ABSENCE OF THE NAME is the proof, not a zero count and not the
+    # absence of a well-formed block. A block that is present but
+    # unreadable also counts zero, and every structural way of asking
+    # "is a block still here" was defeated by a shape nobody had thought
+    # of - five times, each inside the previous fix, over six panel
+    # rounds on 2026-07-28. The name either appears in this render or it
+    # does not, and that question has no edge cases.
     if ($skills2.BlockPresent) {
-        Write-Blocked ("the skills block is still present after suppression" +
-            " (" + $after + " entries parsed) - suppression did not take," +
-            " or the block can no longer be read") $Json
+        Write-Blocked ("the skills family is still named in the render" +
+            " after suppression (" + $after + " entries parsed) -" +
+            " suppression did not take, the block can no longer be read," +
+            " or one of the reviewer's own instruction sources mentions" +
+            " skills_instructions. A mention is enough to stop the run:" +
+            " this check does not parse structure, because flattened text" +
+            " cannot tell a real block from a quoted one. If it is a" +
+            " mention in your own AGENTS.md or in a skill description," +
+            " reword it") $Json
     }
     if ($after -ne 0) {
         Write-Blocked ("the reviewer still advertises " + $after +

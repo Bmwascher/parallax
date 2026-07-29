@@ -83,6 +83,41 @@ def bucket_counts(fixture, workdir="C:/fixture/repo"):
     return parts[0], [int(p) for p in parts[1:]]
 
 
+# THE BLUNT RULE reversed a group of these tests on 2026-07-28, and the
+# reversal is deliberate. Six panel rounds each found a new shape that
+# slipped past the previous round's structural rule for "is this a real
+# block or somebody quoting one", and five of those shapes reached a
+# CLEAN report. Flattened text does not carry that distinction, so the
+# check after suppression stopped asking. A known family name occurring
+# at all, in any form, anywhere in the render, now stops the run.
+#
+# What that bought: no false clean is possible, because there is no shape
+# to find and no boundary to get wrong. What it cost: a reviewer whose
+# own AGENTS.md or skill descriptions mention one of the four names must
+# reword the mention. Every test below that now expects a block used to
+# expect a pass, and each one names what it used to assert.
+BLOCKED_FOR_A_KNOWN_NAME = (
+    "exact form this parser reads",
+    "named in the rendered prompt",
+    "still named in the render",
+)
+
+
+def assert_blocked_for_a_known_name(proc):
+    """The run stopped because a known family name reached the render.
+
+    Which message it stops with depends on the family and the render: the
+    three feature families are refused outright on both, the skills
+    family only after suppression, and a non-exact form of any OTHER
+    known container still comes from the exactness scan. The tests using
+    this helper care that the outcome is a stop, not which sentence
+    produced it.
+    """
+    assert proc.returncode == 1, proc.stdout
+    reason = json.loads(proc.stdout)["reason"]
+    assert any(p in reason for p in BLOCKED_FOR_A_KNOWN_NAME), reason
+
+
 def test_full_fixture_buckets_are_all_asserted():
     # All four counts are named, not just the total. A re-normalized
     # fixture that shifts entries between buckets while keeping the total
@@ -430,13 +465,13 @@ def test_a_present_but_malformed_block_blocks_on_the_second_pass(tmp_path):
     proc, _ = run_probe(tmp_path, tmp_path, "flagged.json",
                         "malformed-block.json")
     assert proc.returncode == 1
-    assert "still present" in json.loads(proc.stdout)["reason"]
+    assert "still named in the render" in json.loads(proc.stdout)["reason"]
 
 
 def test_a_surviving_skill_after_suppression_blocks(tmp_path):
     proc, _ = run_probe(tmp_path, tmp_path, "flagged.json", "flagged.json")
     assert proc.returncode == 1
-    assert "still present" in json.loads(proc.stdout)["reason"]
+    assert "still named in the render" in json.loads(proc.stdout)["reason"]
 
 
 def test_the_global_agents_md_is_recorded_not_blocked(tmp_path):
@@ -758,8 +793,7 @@ def test_an_attributed_known_block_blocks(tmp_path, tag):
     # Reproduced 2026-07-28: a second pass carrying all 29 entries under
     # that tag reported skills_after 0, status clean, exit 0.
     proc = probe_with(tmp_path, attributed(tmp_path, tag))
-    assert proc.returncode == 1, proc.stdout
-    assert "exact form this parser reads" in json.loads(proc.stdout)["reason"]
+    assert_blocked_for_a_known_name(proc)
 
 
 def test_an_attributed_block_on_the_second_pass_blocks(tmp_path):
@@ -768,8 +802,7 @@ def test_an_attributed_block_on_the_second_pass_blocks(tmp_path):
     # code called that absence and reported skills_after 0 with exit 0.
     proc = probe_with(tmp_path, FIXTURES / "flagged.json",
                       attributed(tmp_path, "skills_instructions"))
-    assert proc.returncode == 1, proc.stdout
-    assert "exact form this parser reads" in json.loads(proc.stdout)["reason"]
+    assert_blocked_for_a_known_name(proc)
 
 
 def test_the_permissions_container_keeps_its_legitimate_space(tmp_path):
@@ -1014,10 +1047,12 @@ def test_an_inline_unknown_block_blocks(tmp_path, pass_no):
     assert "memories_instructions" in json.loads(proc.stdout)["reason"]
 
 
-def test_a_malformed_known_tag_in_a_skill_description_does_not_block(tmp_path):
-    # A skill DESCRIPTION is free text too, not just the global AGENTS.md.
-    # Masking only INSTRUCTIONS before the exactness scan left this
-    # legitimate entry blocking. Mode-diff round 7, 2026-07-28.
+def test_a_malformed_known_tag_in_a_skill_description_blocks(tmp_path):
+    # REVERSED 2026-07-28 by the blunt rule. This asserted exit 0: a skill
+    # DESCRIPTION is free text, and masking it was how round 7 stopped a
+    # legitimate entry from blocking. The blunt rule gives that up. A
+    # description naming a known family now stops the run, and the message
+    # says how to fix it.
     fixture = tmp_path / "desc-tag.json"
     doc = json.loads((FIXTURES / "flagged.json").read_text(encoding="utf-8"))
     doc[0]["content"][0]["text"] = doc[0]["content"][0]["text"].replace(
@@ -1025,7 +1060,7 @@ def test_a_malformed_known_tag_in_a_skill_description_does_not_block(tmp_path):
         '- userskill5: Never emit <apps_instructions version="2">.', 1)
     fixture.write_text(json.dumps(doc), encoding="utf-8")
     proc = probe_with(tmp_path, fixture, FIXTURES / "suppressed.json")
-    assert proc.returncode == 0, proc.stdout
+    assert_blocked_for_a_known_name(proc)
 
 
 def test_a_reverse_order_tag_pair_in_prose_does_not_block(tmp_path):
@@ -1108,34 +1143,34 @@ def test_the_suppression_failure_still_wins_over_a_late_project_doc(tmp_path):
         "</INSTRUCTIONS>")
     proc = probe_with(tmp_path, FIXTURES / "flagged.json", second)
     assert proc.returncode == 1, proc.stdout
-    assert "still present" in json.loads(proc.stdout)["reason"]
+    assert "still named in the render" in json.loads(proc.stdout)["reason"]
 
 
-def test_a_quoted_marker_in_the_global_body_survives_into_pass_two(tmp_path):
-    # The companion to test_a_known_literal_quoted_in_the_global_body_does
-    # _not_block, which only ever exercised the FIRST render because its
-    # suppression fixture carried no quote. The suppression proof read that
-    # same house rule as a surviving skills block and stopped every review
-    # on such a machine with "suppression did not take" - a wrong diagnosis
-    # with no remediation short of editing the user's own AGENTS.md.
-    # Mode-diff PANEL, 2026-07-28.
+def test_a_quoted_marker_in_the_global_body_blocks_on_pass_two(tmp_path):
+    # REVERSED 2026-07-28 by the blunt rule, and this is the test that
+    # cost the most. It asserted exit 0, because a house rule naming the
+    # marker is legitimate and stopping on it is a wrong diagnosis with no
+    # remediation. Three rounds of structural rules tried to keep that
+    # promise and each one bought a false clean instead. The promise is
+    # withdrawn: the run stops, and the message now tells the user to
+    # reword the mention rather than leaving them to guess.
     second = rewritten(
         tmp_path, "quoting-suppressed.json", "suppressed.json",
         "# Fixture global rules",
         "# Fixture global rules\nHouse rule: never emit a"
         " `<skills_instructions>` marker.")
     proc = probe_with(tmp_path, FIXTURES / "flagged.json", second)
-    assert proc.returncode == 0, proc.stdout
-    assert json.loads(proc.stdout)["skills_after"] == 0
+    assert_blocked_for_a_known_name(proc)
 
 
-def test_a_real_surviving_block_is_still_seen_through_the_masking(tmp_path):
-    # The polarity guard for the test above. Masking must erase the user's
-    # prose and nothing else: a genuine skills container in the suppression
-    # render still blocks.
+def test_a_real_surviving_block_is_still_seen(tmp_path):
+    # The polarity guard: a genuine skills container in the suppression
+    # render still blocks. It survives the rule change unchanged, which is
+    # the point - the blunt rule gave up precision about quotations, not
+    # about real blocks.
     proc, _ = run_probe(tmp_path, tmp_path, "flagged.json", "flagged.json")
     assert proc.returncode == 1, proc.stdout
-    assert "still present" in json.loads(proc.stdout)["reason"]
+    assert "still named in the render" in json.loads(proc.stdout)["reason"]
 
 
 def test_an_inline_mention_of_the_project_doc_delimiter_does_not_block(
@@ -1168,46 +1203,43 @@ def test_a_skills_block_nested_inside_instructions_still_blocks(tmp_path):
         "/SKILL.md)\n</skills_instructions>")
     proc = probe_with(tmp_path, FIXTURES / "flagged.json", second)
     assert proc.returncode == 1, proc.stdout
-    assert "still present" in json.loads(proc.stdout)["reason"]
+    assert "still named in the render" in json.loads(proc.stdout)["reason"]
 
 
-def test_an_unclosed_quoted_opener_is_still_not_a_block(tmp_path):
-    # The polarity guard for the pair rule, and the case that made the
-    # masking necessary in the first place: a house rule NAMES the opener
-    # and never closes it. Only a complete ordered pair counts.
+def test_an_unclosed_quoted_opener_also_blocks(tmp_path):
+    # REVERSED 2026-07-28 by the blunt rule. It asserted exit 0 under the
+    # pair rule, where an opener that never closed was prose. There is no
+    # pair rule any more, so a bare mention stops the run too.
     second = rewritten(
         tmp_path, "opener-only.json", "suppressed.json",
         "# Fixture global rules",
         "# Fixture global rules\nHouse rule: never emit"
         " `<skills_instructions>` on its own.")
     proc = probe_with(tmp_path, FIXTURES / "flagged.json", second)
-    assert proc.returncode == 0, proc.stdout
+    assert_blocked_for_a_known_name(proc)
 
 
-def test_a_feature_marker_quoted_in_the_global_body_does_not_block(tmp_path):
-    # The same defect as the skills marker, one function away. On raw text
-    # a global AGENTS.md naming `<apps_instructions>` in prose blocked with
-    # "the plugin or apps feature is advertising itself", which is a wrong
-    # diagnosis and has no remediation short of editing the user's own
-    # file. Mode-diff PANEL, 2026-07-28.
+def test_a_feature_marker_quoted_in_the_global_body_blocks(tmp_path):
+    # REVERSED 2026-07-28 by the blunt rule, same trade as the skills
+    # marker. It asserted exit 0. A feature family is meant to be gone
+    # outright, so a mention of one is either the feature advertising
+    # itself or a prompt this parser no longer describes.
     first = rewritten(
         tmp_path, "quoting-features.json", "flagged.json",
         "# Fixture global rules",
         "# Fixture global rules\nHouse rule: never emit"
         " `<apps_instructions>` or `<recommended_plugins>`.")
     proc = probe_with(tmp_path, first, FIXTURES / "suppressed.json")
-    assert proc.returncode == 0, proc.stdout
+    assert_blocked_for_a_known_name(proc)
 
 
 def test_a_real_apps_block_still_blocks(tmp_path):
-    # The polarity guard. Masking blanks bodies only, so a genuine feature
-    # container's own delimiters survive and must still be seen.
+    # The polarity guard: a genuine feature container still blocks.
     first = with_extra_text(
         tmp_path, "real-apps.json", "flagged.json",
         "\n<apps_instructions>\nuse the app\n</apps_instructions>\n")
     proc = probe_with(tmp_path, first, FIXTURES / "suppressed.json")
-    assert proc.returncode == 1, proc.stdout
-    assert "advertising itself" in json.loads(proc.stdout)["reason"]
+    assert_blocked_for_a_known_name(proc)
 
 
 def test_a_feature_container_nested_inside_instructions_still_blocks(tmp_path):
@@ -1221,24 +1253,24 @@ def test_a_feature_container_nested_inside_instructions_still_blocks(tmp_path):
         "# Fixture global rules",
         "# Fixture global rules\n<apps_instructions>live</apps_instructions>")
     proc = probe_with(tmp_path, first, FIXTURES / "suppressed.json")
-    assert proc.returncode == 1, proc.stdout
-    assert "advertising itself" in json.loads(proc.stdout)["reason"]
+    assert_blocked_for_a_known_name(proc)
 
 
-def test_a_nested_attributed_known_block_is_not_the_exact_form(tmp_path):
-    # The raw-pair backstop matched an exact literal only, so an
-    # ATTRIBUTED nested opener stayed invisible to it as well as to the
-    # masked tests and to the exactness scan, which runs on masked text.
-    # Reproduced on both hosts: BlockPresent false, zero entries.
-    first = rewritten(
-        tmp_path, "nested-attributed.json", "flagged.json",
+def test_a_nested_attributed_known_block_blocks_after_suppression(tmp_path):
+    # Planted in the SECOND render, which is where this shape is
+    # reachable. Both renders come from the same sources, so anything a
+    # user's own file contributes appears in each; a first-render-only
+    # variant is not a configuration the client can produce. The earlier
+    # version of this test planted it in the first render, where the real
+    # block is present anyway and the entry parse reads that one.
+    second = rewritten(
+        tmp_path, "nested-attributed.json", "suppressed.json",
         "# Fixture global rules",
         '# Fixture global rules\n<skills_instructions version="2">\n'
         "### Available skills\n- p: x (file: C:/h/.agents/skills/p/SKILL.md)\n"
         "</skills_instructions>")
-    proc = probe_with(tmp_path, first, FIXTURES / "suppressed.json")
-    assert proc.returncode == 1, proc.stdout
-    assert "exact form" in json.loads(proc.stdout)["reason"]
+    proc = probe_with(tmp_path, FIXTURES / "flagged.json", second)
+    assert_blocked_for_a_known_name(proc)
 
 
 def test_a_self_closing_known_block_nested_in_a_body_still_blocks(tmp_path):
@@ -1252,8 +1284,7 @@ def test_a_self_closing_known_block_nested_in_a_body_still_blocks(tmp_path):
         "# Fixture global rules",
         "# Fixture global rules\n<apps_instructions/>")
     proc = probe_with(tmp_path, first, FIXTURES / "suppressed.json")
-    assert proc.returncode == 1, proc.stdout
-    assert "exact form" in json.loads(proc.stdout)["reason"]
+    assert_blocked_for_a_known_name(proc)
 
 
 def test_a_non_exact_closing_delimiter_nested_in_a_body_still_blocks(tmp_path):
@@ -1266,8 +1297,7 @@ def test_a_non_exact_closing_delimiter_nested_in_a_body_still_blocks(tmp_path):
         "# Fixture global rules\n<apps_instructions>live"
         "</apps_instructions >")
     proc = probe_with(tmp_path, first, FIXTURES / "suppressed.json")
-    assert proc.returncode == 1, proc.stdout
-    assert "exact form" in json.loads(proc.stdout)["reason"]
+    assert_blocked_for_a_known_name(proc)
 
 
 def test_a_quoted_angle_bracket_does_not_truncate_a_known_tag(tmp_path):
@@ -1281,21 +1311,21 @@ def test_a_quoted_angle_bracket_does_not_truncate_a_known_tag(tmp_path):
         "# Fixture global rules",
         '# Fixture global rules\n<apps_instructions note="a>b"/>')
     proc = probe_with(tmp_path, first, FIXTURES / "suppressed.json")
-    assert proc.returncode == 1, proc.stdout
-    assert "exact form" in json.loads(proc.stdout)["reason"]
+    assert_blocked_for_a_known_name(proc)
 
 
-def test_a_quoted_slash_gt_is_not_read_as_self_closing(tmp_path):
-    # The other direction of the same missing rule. The truncated match
-    # ended in `/>`, so a legitimate unpaired mention was reported as a
-    # complete non-exact surface and blocked.
+def test_a_quoted_slash_gt_mention_also_blocks(tmp_path):
+    # REVERSED 2026-07-28 by the blunt rule. Under the tag grammar this
+    # asserted exit 0, because the mention is unpaired prose once quoted
+    # attribute values are tokenized. There is no tag grammar in this
+    # check any more.
     first = rewritten(
         tmp_path, "quoted-slash.json", "flagged.json",
         "# Fixture global rules",
         '# Fixture global rules\nHouse rule: never write'
         ' <apps_instructions note="literal/> only">.')
     proc = probe_with(tmp_path, first, FIXTURES / "suppressed.json")
-    assert proc.returncode == 0, proc.stdout
+    assert_blocked_for_a_known_name(proc)
 
 
 @pytest.mark.parametrize("tag", [
@@ -1303,17 +1333,21 @@ def test_a_quoted_slash_gt_is_not_read_as_self_closing(tmp_path):
     "<apps_instructions.foo/>",
     "<apps_instructions:foo/>",
 ])
-def test_a_different_tag_name_is_not_a_member_of_a_known_family(tmp_path, tag):
-    # `\b` ends at `-`, `.` and `:`, and all three are legal in a tag NAME
-    # under this file's own grammar. These are different tags, and inside
-    # the user's own instruction body they are free text; they were being
-    # rejected as malformed members of the apps family.
+def test_a_tag_name_that_merely_starts_with_a_known_family_blocks(
+        tmp_path, tag):
+    # REVERSED 2026-07-28 by the blunt rule. These are DIFFERENT tag names
+    # - `-`, `.` and `:` are all legal inside a name - and this asserted
+    # exit 0 so that a user writing one in their own file was not accused
+    # of a malformed apps tag. The blunt rule does not read names, only
+    # occurrences, so a string that contains a known family name is a
+    # mention. This is the widest cost of the trade and it is stated
+    # rather than papered over.
     first = rewritten(
         tmp_path, "other-name.json", "flagged.json",
         "# Fixture global rules",
         "# Fixture global rules\nHouse rule: never write " + tag + ".")
     proc = probe_with(tmp_path, first, FIXTURES / "suppressed.json")
-    assert proc.returncode == 0, proc.stdout
+    assert_blocked_for_a_known_name(proc)
 
 
 def test_an_undeterminable_global_file_blocks_rather_than_reporting_absent(
