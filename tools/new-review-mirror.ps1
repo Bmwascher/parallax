@@ -289,125 +289,25 @@ function Format-StatusRecord($record) {
     return ($head + (Format-StatusPathname $record.Path))
 }
 
-function Invoke-GitLines($repo, $gitArgs) {
+function Invoke-GitFields($repo, $gitArgs) {
     # Every git capture that produces PATHNAMES goes through here, so both
-    # of them answer the same two questions the same way.
+    # of them answer the same questions the same way.
     #
-    # `core.quotepath=false`: by default git returns a DISPLAY form rather
-    # than a pathname - a directory named `cafe` with an acute accent on
-    # the last letter comes back as `"caf\303\251/AGENTS.md"`. This comment
-    # spells it out because this file is ASCII only, which is itself the
-    # rule that keeps both hosts reading the script identically. Verified
-    # live 2026-07-28 against both
-    # `ls-files` and `status --porcelain`. A caller that treats the display
-    # form as a path deletes nothing, hashes nothing, or - worse - hashes
-    # whatever the escapes happen to name once Windows reads the
-    # backslashes as separators. Found by the mode-diff PANEL, 2026-07-28,
-    # raised independently by two lanes.
+    # `core.quotepath=false` is GONE from these captures and its absence is
+    # deliberate. The flag governed the DISPLAY form, and `-z` has no
+    # display form: measured 2026-07-29, `git ls-files -z` returned raw
+    # UTF-8 bytes with the flag ABSENT. Keeping a flag that does nothing
+    # invites a later reader to treat it as load-bearing.
     #
-    # The console encoding guard is the OTHER half, and neither half works
-    # alone. Turning the quoting off makes git emit raw UTF-8, and Windows
-    # PowerShell 5.1 decodes a native command's output with the console
-    # code page - so the flag by itself trades octal escapes for mojibake.
-    # The probe script carries the same guard for the same reason.
-    $prior = [Console]::OutputEncoding
-    $lines = $null
-    $code = 0
-    try {
-        [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
-        $lines = & git -C $repo -c core.quotepath=false @gitArgs 2>$null
-        $code = $LASTEXITCODE
-    } finally {
-        [Console]::OutputEncoding = $prior
+    # The console-encoding guard the old capture needed is gone for the
+    # same reason: nothing here goes through PowerShell's decoder. The
+    # bytes are read from the process stream and decoded once, strictly,
+    # in ConvertFrom-NulCapture.
+    $captured = Invoke-GitProcess $repo $gitArgs
+    if (-not $captured.Ok) {
+        return @{ Ok = $false; Fields = @(); Reason = $captured.Reason }
     }
-    if ($code -ne 0) { return @{ Ok = $false; Lines = @() } }
-    return @{ Ok = $true; Lines = @($lines | Where-Object { $_ }) }
-}
-
-function Test-GitQuotedPath($value) {
-    # git quotes a pathname whenever C-style quoting would change it, and
-    # the trigger set is WIDER than the escapes alone: a plain SPACE is
-    # enough. Measured 2026-07-29 on a real tree, 5810 of 11874 baseline
-    # entries came back quoted and all but one were pure ASCII quoted for
-    # a space and nothing else. So "quoted" cannot mean "unresolvable" -
-    # treating it that way stops the mirror on half a normal repo.
-    return ([string]$value).StartsWith('"')
-}
-
-function ConvertFrom-GitQuotedPath($value) {
-    # Decode git's C-style quoting into the pathname it names. Returns
-    # $null when the text carries an escape this decoder does not define,
-    # which the caller must treat as a STOP - that is the safety property
-    # the previous blanket refusal was reaching for, kept for the input
-    # that actually needs it and dropped for the input that does not.
-    #
-    # TRIMMING the delimiters is the dangerous operation this replaces:
-    # the escapes survive a trim, Windows then reads `caf\303\251/x` as
-    # `caf\303\251\x`, and a colliding real path is hashed under the entry
-    # the baseline actually named. Decoding has no such failure - either
-    # the escape is defined and the byte is exact, or the decode refuses.
-    # Found by the mode-diff PANEL 2026-07-28; corrected 2026-07-29.
-    #
-    # `core.quotepath=false` is set on every capture, so high bytes arrive
-    # RAW and octal escapes are left naming control characters only. The
-    # octal branch below is still implemented, because the flag guards the
-    # display form and not the quoting itself.
-    $text = [string]$value
-    if (-not $text.StartsWith('"') -or -not $text.EndsWith('"') -or
-        $text.Length -lt 2) {
-        return $null
-    }
-    $body = $text.Substring(1, $text.Length - 2)
-    $out = New-Object System.Text.StringBuilder
-    $i = 0
-    while ($i -lt $body.Length) {
-        $c = $body[$i]
-        if ($c -ne '\') {
-            [void]$out.Append($c)
-            $i++
-            continue
-        }
-        $i++
-        if ($i -ge $body.Length) { return $null }
-        $e = $body[$i]
-        $i++
-        switch ($e) {
-            'a'  { [void]$out.Append([char]7);  continue }
-            'b'  { [void]$out.Append([char]8);  continue }
-            'f'  { [void]$out.Append([char]12); continue }
-            'n'  { [void]$out.Append([char]10); continue }
-            'r'  { [void]$out.Append([char]13); continue }
-            't'  { [void]$out.Append([char]9);  continue }
-            'v'  { [void]$out.Append([char]11); continue }
-            '\'  { [void]$out.Append('\');      continue }
-            '"'  { [void]$out.Append('"');      continue }
-            default {
-                # Three octal digits, or nothing this decoder defines.
-                if ($e -lt '0' -or $e -gt '7') { return $null }
-                if ($i + 1 -gt $body.Length - 1) { return $null }
-                $d2 = $body[$i]
-                $d3 = $body[$i + 1]
-                if ($d2 -lt '0' -or $d2 -gt '7' -or
-                    $d3 -lt '0' -or $d3 -gt '7') { return $null }
-                $code = (([int][string]$e) * 64) + (([int][string]$d2) * 8) +
-                        ([int][string]$d3)
-                [void]$out.Append([char]$code)
-                $i += 2
-                continue
-            }
-        }
-    }
-    return $out.ToString()
-}
-
-function Resolve-GitPathname($value) {
-    # One entry point for every pathname read out of a git capture: quoted
-    # entries decode, unquoted entries pass through unchanged. $null means
-    # the caller must BLOCK.
-    if (Test-GitQuotedPath $value) {
-        return (ConvertFrom-GitQuotedPath $value)
-    }
-    return ([string]$value)
+    return (ConvertFrom-NulCapture $captured.Bytes)
 }
 
 function Get-BackChannelEntry($repo) {
@@ -418,24 +318,31 @@ function Get-BackChannelEntry($repo) {
     # enumeration-depth-asymmetry region. Do not restate "at any depth"
     # here.
     #
-    # Returns @{Ok=..; Entries=..}. A function returning a bare @() has its
-    # empty array unrolled by PowerShell, so the caller's variable becomes
-    # $null and a CLEAN repo reads exactly like a FAILED enumeration.
-    $r = Invoke-GitLines $repo @("ls-files", "--cached", "--others",
-                                 "*AGENTS.md", ".agents/*")
-    if (-not $r.Ok) { return @{ Ok = $false; Entries = @() } }
-    # `ls-files` quotes on the same trigger set as `status`, so its entries
-    # go through the same decoder. An entry that will not decode is a stop
-    # here too: a back-channel this script cannot name is a back-channel it
-    # cannot delete, and reporting it as clean is the one outcome the whole
-    # preflight exists to prevent.
-    $entries = New-Object System.Collections.ArrayList
-    foreach ($e in @($r.Lines)) {
-        $resolved = Resolve-GitPathname $e
-        if ($null -eq $resolved) { return @{ Ok = $false; Entries = @() } }
-        [void]$entries.Add($resolved)
+    # Returns @{Ok=..; Entries=..; Reason=..}. A function returning a bare
+    # @() has its empty array unrolled by PowerShell, so the caller's
+    # variable becomes $null and a CLEAN repo reads exactly like a FAILED
+    # enumeration.
+    $r = Invoke-GitFields $repo @("ls-files", "--cached", "--others", "-z",
+                                  "*AGENTS.md", ".agents/*")
+    if (-not $r.Ok) {
+        return @{ Ok = $false; Entries = @(); Reason = $r.Reason }
     }
-    return @{ Ok = $true; Entries = @($entries) }
+    # An entry this script cannot handle exactly is a stop, on either of
+    # the guard's two grounds - a name whose resolution would risk the
+    # WRONG file, or a name it could resolve but could not record.
+    # Reporting either as clean is the one outcome the whole preflight
+    # exists to prevent, and a back-channel is the case where that matters
+    # most.
+    foreach ($e in @($r.Fields)) {
+        if (-not (Test-SupportedPathname $e)) {
+            return @{ Ok = $false; Entries = @()
+                      Reason = ("the back-channel entry '" + $e + "' names" +
+                        " a path this script cannot handle exactly, so it" +
+                        " cannot be enumerated, deleted and recorded as a" +
+                        " single consistent fact") }
+        }
+    }
+    return @{ Ok = $true; Entries = @($r.Fields) }
 }
 
 function Test-Tracked($repo, $path) {
@@ -456,53 +363,43 @@ function Get-BaselineRaw($repo) {
     # Same structured shape and same reason as Get-BackChannelEntry: an
     # empty baseline is a legitimate state, and a bare @() return would be
     # indistinguishable from a failed capture.
-    return (Invoke-GitLines $repo @("status", "--porcelain", "--ignored",
-                                    "-uall"))
+    return (Invoke-GitFields $repo @("status", "--porcelain", "--ignored",
+                                     "-uall", "-z"))
 }
 
-function Get-ManifestSubject($baselineRaw) {
+function Get-ManifestSubject($records) {
     # Coverage is exactly the baseline's paths. Returns @{Paths=..} or
-    # @{Error=..}; a caller that cannot resolve an entry must BLOCK, never
-    # skip, because a skipped entry is a silent hole in the manifest.
+    # @{Error=..}.
+    #
+    # Two dispositions are DEFINED and are not the same thing as skipping.
+    # A deletion-only entry is OMITTED, deliberately, because it has no
+    # bytes; an `RD` destination is a STOP. What must never happen is a
+    # third thing: an entry passed over because this function could not
+    # make sense of it. That is the silent hole in the manifest, and it is
+    # what the stops below exist to prevent.
+    #
+    # Takes RECORDS, never rendered text. A rename's destination is already
+    # the record's Path under `-z`, so there is no arrow to search for and
+    # no chance of splitting inside a pathname.
     $paths = New-Object System.Collections.ArrayList
-    foreach ($line in @($baselineRaw)) {
-        if ($line.Length -lt 4) {
-            return @{ Error = "unparseable status line: '$line'" }
-        }
-        $x = $line[0]
-        $y = $line[1]
-        $rest = $line.Substring(3)
+    foreach ($r in @($records)) {
+        $x = $r.X
+        $y = $r.Y
         # Deletion-only entries have no bytes to hash. HEAD plus the
         # baseline already bind the absence, which is the whole content of
         # the fact, so OMIT them.
         if (($x -eq " " -and $y -eq "D") -or ($x -eq "D" -and $y -eq " ")) {
             continue
         }
-        # Rename and copy entries hash the CURRENT DESTINATION. EITHER
-        # column can carry R or C, so both are tested. Probed 2026-07-28:
-        # a staged rename reports `R  a.txt -> b.txt`, and the same rename
-        # whose destination is then deleted reports `RD a.txt -> b.txt`.
-        if ($x -eq "R" -or $x -eq "C" -or $y -eq "R" -or $y -eq "C") {
-            $idx = $rest.IndexOf(" -> ")
-            if ($idx -ge 0) { $rest = $rest.Substring($idx + 4) }
-        }
         # An `RD` destination no longer exists. That entry names no
         # readable file, so it is a stop rather than a silent omission.
         if ($y -eq "D" -and ($x -eq "R" -or $x -eq "C")) {
-            return @{ Error = ("baseline entry '$line' names a destination" +
-                " that has been deleted; the mirror is not in a state this" +
-                " manifest rule can describe") }
+            return @{ Error = ("baseline entry '" +
+                (Format-StatusRecord $r) + "' names a destination that has" +
+                " been deleted; the mirror is not in a state this manifest" +
+                " rule can describe") }
         }
-        # A quoted entry DECODES; only an escape the decoder does not
-        # define is a stop. See ConvertFrom-GitQuotedPath for why decoding
-        # is safe where the previous trim-and-hope was not.
-        $resolved = Resolve-GitPathname $rest
-        if ($null -eq $resolved) {
-            return @{ Error = ("baseline entry '$line' carries an escape" +
-                " sequence this script does not define, so the file it" +
-                " names cannot be resolved without guessing") }
-        }
-        [void]$paths.Add($resolved)
+        [void]$paths.Add($r.Path)
     }
     return @{ Paths = @($paths) }
 }
@@ -632,21 +529,11 @@ if ($LASTEXITCODE -ge 8) {
 
 $found = Get-BackChannelEntry $MirrorPath
 if (-not $found.Ok) {
-    Write-Output "ERROR: could not enumerate back-channels in the mirror"
+    Write-Output ("ERROR: could not enumerate back-channels in the" +
+        " mirror: " + $found.Reason)
     exit 2
 }
 $entries = $found.Entries
-# A quoted entry here would silently delete nothing and then surface as
-# "survived remediation", which reads as a back-channel that refused to go
-# rather than as a name this script could not resolve.
-foreach ($entry in $entries) {
-    if (Test-GitQuotedPath $entry) {
-        Write-Output ("BLOCKED: the back-channel entry " + $entry +
-            " arrives in git's quoted form, so remediation cannot name the" +
-            " file it points at")
-        exit 1
-    }
-}
 $tracked = New-Object System.Collections.ArrayList
 foreach ($entry in $entries) {
     if (Test-Tracked $MirrorPath $entry) { [void]$tracked.Add($entry) }
@@ -689,7 +576,8 @@ if ($tracked.Count -gt 0) {
 
 $after = Get-BackChannelEntry $MirrorPath
 if (-not $after.Ok) {
-    Write-Output "ERROR: could not re-enumerate back-channels in the mirror"
+    Write-Output ("ERROR: could not re-enumerate back-channels in the" +
+        " mirror: " + $after.Reason)
     exit 2
 }
 if ($after.Entries.Count -gt 0) {
@@ -706,13 +594,20 @@ if (($LASTEXITCODE -ne 0) -or -not $head) {
 }
 $captured = Get-BaselineRaw $MirrorPath
 if (-not $captured.Ok) {
-    Write-Output ("BLOCKED: the baseline capture failed. A failed capture" +
-        " printed as success would quarantine every round of the review" +
-        " that follows, or absorb changes it should have caught.")
+    Write-Output ("BLOCKED: the baseline capture failed (" +
+        $captured.Reason + "). A failed capture printed as success would" +
+        " quarantine every round of the review that follows, or absorb" +
+        " changes it should have caught.")
     exit 1
 }
-$baseline = $captured.Lines
-$subjects = Get-ManifestSubject $baseline
+$parsed = ConvertTo-StatusRecord $captured.Fields
+if ($parsed.ContainsKey("Error")) {
+    Write-Output ("BLOCKED: " + $parsed.Error)
+    exit 1
+}
+$baseline = @(@($parsed.Records) |
+    ForEach-Object { Format-StatusRecord $_ })
+$subjects = Get-ManifestSubject $parsed.Records
 if ($subjects.ContainsKey("Error")) {
     Write-Output ("BLOCKED: " + $subjects.Error)
     exit 1
