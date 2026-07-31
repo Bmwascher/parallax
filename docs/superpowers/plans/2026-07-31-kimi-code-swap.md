@@ -2,52 +2,70 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Move the backup reviewer lane from `kimi-cli` 1.49.0 to kimi-code 0.31.1, delete the machinery that the new client's per-session logging makes unnecessary, and keep the one function of that machinery which per-session logging does NOT replace.
+**Goal:** Move the backup reviewer lane from `kimi-cli` 1.49.0 to kimi-code 0.31.1, delete the machinery that per-session logging makes unnecessary, and keep the parts of it that per-session logging does NOT replace.
 
-**Architecture:** Each debate runs under an isolated `KIMI_CODE_HOME` built from a committed config template plus a copied credential, with a single Markdown agent file carrying the tool allowlist. Route evidence is read from that debate's own session directory by an executable validator. Those files are CUMULATIVE across rounds, so every call still captures a freshness offset first — that is the one job the old byte-offset rule was doing that a per-session file does not do for you.
+**Architecture:** Each debate runs under an isolated `KIMI_CODE_HOME` built from a committed config template plus a copied credential, with one Markdown agent file carrying the tool allowlist. An executable validator reads route evidence from that debate's own session directory. Those files are cumulative and their records split into two classes — session-scoped, written once at session creation, and per-call — so the validator checks each class where it actually appears, behind a freshness boundary that proves the prefix was not replaced.
 
 **Tech Stack:** PowerShell 5.1+ and 7 (both hosts), Python 3.12 + pytest, Markdown contract regions with the `contract:start`/`contract:end` checker.
 
-## Revision note
+## Revision history
 
-Revised after Sol plan-debate round 1 (session `019fb913-1b73-7ab0-961d-ff2ae3a6b4f7`, 2026-07-31; reply retained at `docs/superpowers/plans/rounds/2026-07-31-kimi-code-swap/sol-plan-r1-reply.md`). Round 1 returned 1 PASS and 10 FIX. The structural finding was that revision 1 deleted the byte-offset rule on the reasoning that its only job was cross-session attribution; it also provided per-call freshness inside a session, and the probe record's own resume evidence shows two `llm config` lines accumulating in one session log. Four defects would have failed the build outright and are fixed here.
+- **r1** — first draft, unreviewed.
+- **r2** — after Sol round 1 (10 FIX). Restored the freshness boundary that r1 deleted along with the offset rule; added a validator and credential handling.
+- **r3, this one** — after Sol round 2 (5 FIX) and a six-call measurement session recorded in `rounds/2026-07-31-kimi-code-swap/probe-record-2.md`. r2's central evidence rule was **measured to be wrong in both directions**: it fails a clean round 1 and every resumed round. Sol round 2's fourteen defects are fixed here, and three of its objections are resolved by measurement rather than argument.
+
+Sol plan-debate session `019fb913-1b73-7ab0-961d-ff2ae3a6b4f7`. Round replies retained beside this plan.
 
 ## Global Constraints
 
-- Design spec: `docs/superpowers/specs/2026-07-31-kimi-code-swap-design.md`. Probe evidence: `docs/superpowers/plans/rounds/2026-07-31-kimi-code-swap/probe-record.md` and `probe-record-2.md`.
-- Canonical backup model id is `kimi-code/k3-256k`, UNCHANGED. It may appear ONLY in `references/model-prompting-notes.md` and `evals/multi-model-verify/test_backup_lane.py`. `SWEEP_GLOBS` in that test includes `tools/*.ps1`, so no script under `tools/` may carry the literal, not even as a parameter default.
-- The new binary is `~/.kimi-code/bin/kimi.exe`, version 0.31.1. Always invoke it by ABSOLUTE PATH; bare `kimi` is a PATH accident this cycle removes. The old CLI survives as `kimi-legacy.exe` (1.49.0) and is the rollback. Do NOT `pip uninstall kimi-cli`.
-- `-r` is a HIDDEN alias on this client and does NOT appear in `--help`. The public resume flag is `-S/--session`. Any help-text assertion must use `--session`.
+- Design spec: `docs/superpowers/specs/2026-07-31-kimi-code-swap-design.md`. Measured evidence: `rounds/2026-07-31-kimi-code-swap/probe-record.md` and `probe-record-2.md`. **Every cardinality and flag claim below is measured; do not re-derive it from the client's docs, which do not state any of it.**
+- Canonical backup model id is `kimi-code/k3-256k`, UNCHANGED. It may appear ONLY in `references/model-prompting-notes.md` and `evals/multi-model-verify/test_backup_lane.py`. `SWEEP_GLOBS` covers `tools/*.ps1`, so no script under `tools/` may carry the literal, not even as a parameter default.
+- The binary is `~/.kimi-code/bin/kimi.exe`, 0.31.1, always invoked by ABSOLUTE PATH. Bare `kimi` is a PATH accident this cycle removes. The old CLI survives as `kimi-legacy.exe` (1.49.0) and is the rollback. Do NOT `pip uninstall kimi-cli`.
+- `-r` is a HIDDEN alias absent from `--help`. The public resume flag is `-S/--session`. Any help-text assertion must use `--session`.
 - Never `git add -A` and never `git add -u`. Stage by explicit path, every commit.
-- Files under `skills/multi-model-verify/references/` are checked for the ABSENCE of backslashes by `test_backup_files_no_backslash_paths`. Write every path in those files with forward slashes.
-- Contract regions must sit WHOLE inside a single pin, and a pin is only one of the three clause forms in `CLAUDE.md`. Adding or removing a region means editing `DECLARED_REGIONS` in `evals/multi-model-verify/test_contract_coverage.py`.
+- Files under `skills/multi-model-verify/references/` are checked for the ABSENCE of backslashes. Use forward slashes in those files.
+- Contract regions must sit WHOLE inside a single pin, and a pin is only one of the three clause forms in `CLAUDE.md`. Adding or removing a region means editing `DECLARED_REGIONS`.
 - Tests change FIRST for every live-verified contract, then the skill text.
-- Verification gate, all four, from the repo root:
+- Gate, all four, from the repo root:
   `python evals/tools/skill_lint.py skills/multi-model-verify --strict`
   `python evals/tools/skill_scanner.py skills`
   `python evals/tools/run_trigger_evals.py`
   `python -m pytest evals -q`
-- The invariant that governs every new check: an unmade, failed, or unreadable measurement is never a clean one.
+- The invariant governing every check: an unmade, failed, or unreadable measurement is never a clean one.
+
+## Measured facts the plan is built on
+
+Stated once, here, because five tasks depend on them.
+
+**Record classes.** Session-scoped records are emitted ONCE, at session creation, and never again: `config.update` ×2 (first carries `profileName` and `systemPrompt`, second carries `modelAlias` and `thinkingEffort`), `tools.set_active_tools` ×1, `llm.tools_snapshot` ×1, `permission.set_mode` ×1. Per-call records: `turn.prompt` ×1, `llm.request` ×N where N tracks the tool loop (measured 4 on a fresh review, 2 on a resumed one), and exactly one new `llm config` line in the per-session log.
+
+**`systemPromptChars` equals the agent file's body length exactly** (431 in every measured session). `toolCount` equalled the allowlist length on every call.
+
+**Resume accepts** `-m`, `--skills-dir` and `--add-dir`; it REJECTS `--agent-file` at parse time with `the agent is bound at session creation`.
+
+**`--skills-dir` changes nothing measurable** in this configuration: with two canary skills planted at both documented project roots, runs with and without it were identical and the reviewer reported `NONE` available. It is a mitigation, not a control.
+
+**Effort is pinnable**: `default_effort = "low"` produced `thinkingEffort=low`. **Thinking-enabled is not observable**: `enabled = false` produced output identical to `true`.
+
+**`subagents: []` resolves to an empty array.**
 
 ---
 
-### Task 1: Repair drift watch, including its own test suite
+### Task 1: Repair drift watch, including its own test harness
 
-`tools/check-drift.ps1` invokes bare `kimi` and asserts the help lists `--quiet`, `--thinking` and `-w`. Since the installer renamed the Python binary, bare `kimi` resolves to kimi-code 0.31.1, which has none of them. Drift watch is currently broken and would report findings that describe nothing. Its offline state-machine suite stubs the same old surface and must move with it.
+`tools/check-drift.ps1` invokes bare `kimi` and asserts the help lists `--quiet`, `--thinking` and `-w`. Bare `kimi` now resolves to kimi-code, which has none of them, so drift watch currently reports findings that describe nothing. Its offline state-machine harness stubs the same dead surface and must move with it.
 
 **Files:**
-- Modify: `tools/check-drift.ps1:133-136` (version capture), `tools/check-drift.ps1:197-216` (check 2b)
+- Modify: `tools/check-drift.ps1:133-136`, `:197-216`
 - Modify: `tools/drift-snapshot.json:4`
-- Modify: `evals/tools/drift_statemachine_tests.ps1:233`, `:250`, `:254`, `:257`, `:263`, `:270`, `:686`, `:706`
+- Modify: `evals/tools/drift_statemachine_tests.ps1:110-117`, `:233`, `:243-276`, `:287-315`, `:686`, `:700-720`
 - Test: `evals/multi-model-verify/test_backup_lane.py` (appended)
 
 **Interfaces:**
 - Consumes: nothing.
-- Produces: `$kimiExe` and `$kimiVersion` in `check-drift.ps1`; the snapshot key stays named `kimi`.
+- Produces: `$kimiExe`, `$kimiVersion` in `check-drift.ps1`. Snapshot key stays `kimi`.
 
-- [ ] **Step 1: Write the failing test**
-
-Append to `evals/multi-model-verify/test_backup_lane.py`:
+- [ ] **Step 1: Write the failing tests**
 
 ```python
 DRIFT = REPO / "tools" / "check-drift.ps1"
@@ -56,9 +74,6 @@ KIMI_CODE_FLOOR = "0.31.1"
 
 
 def test_drift_probes_the_new_cli_not_the_old_one():
-    """The installer renamed the Python binary, so bare `kimi` is now
-    kimi-code. Probing for --quiet/--thinking/-w against it produces
-    findings that describe nothing real."""
     body = _read(DRIFT)
     assert '"--agent-file", "--skills-dir", "-m", "-p", "--session"' in body
     assert "--quiet" not in body
@@ -67,36 +82,40 @@ def test_drift_probes_the_new_cli_not_the_old_one():
 
 
 def test_drift_does_not_assert_a_hidden_alias():
-    """`-r` works but is a HIDDEN alias: it is absent from --help on
-    0.31.1. Asserting it would manufacture the exact false finding this
-    task exists to remove."""
-    body = _read(DRIFT)
-    assert '"-r"' not in body
+    """`-r` works but is absent from --help on 0.31.1. Asserting it would
+    manufacture the exact false finding this task removes."""
+    assert '"-r"' not in _read(DRIFT)
 
 
-def test_drift_carries_a_kimi_code_version_floor():
-    """`kimi upgrade` self-updates, so a recorded version string is not
-    protection. The Fable panel seat has a floor; this lane needs one."""
+def test_the_version_probe_can_actually_reach_its_failure_branch():
+    """r2's floor check was unreachable: $kimiVersion was assigned only
+    inside a successful numeric regex, so TryParse could never see a
+    malformed value and the fail-closed branch was dead code. A check
+    that cannot fail is the defect this whole task is repairing."""
     body = _read(DRIFT)
+    assert "$kimiVersion = $kimiRaw" in body
     assert "KimiCodeFloor" in body
     assert KIMI_CODE_FLOOR in body
 
 
 def test_the_state_machine_stubs_moved_with_the_probe():
-    """The offline suite stubs the CLI it drives. Leaving kimi-cli stubs
-    behind makes the suite assert a surface the script no longer probes,
-    which is a green suite proving nothing."""
     body = _read(STATEMACHINE)
     assert "kimi_cli" not in body
     assert "--thinking" not in body
+    # the production lookup is an absolute path under the fake profile,
+    # not a PATH entry, so the harness must place the stub there or every
+    # kimi scenario silently takes the "absent" branch and asserts nothing
+    assert ".kimi-code" in body
+    assert "--session" in body
+    assert "KIMI_STUB_MODE" in body
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `python -m pytest evals/multi-model-verify/test_backup_lane.py -k "drift or state_machine or hidden_alias" -v`
+Run: `python -m pytest evals/multi-model-verify/test_backup_lane.py -k "drift or state_machine or hidden_alias or failure_branch" -v`
 Expected: FAIL, all four.
 
-- [ ] **Step 3: Resolve the binary explicitly**
+- [ ] **Step 3: Resolve the binary and capture the version fail-closed**
 
 Replace `tools/check-drift.ps1:133-136`:
 
@@ -107,27 +126,28 @@ $kimiExe = Join-Path $env:USERPROFILE ".kimi-code\bin\kimi.exe"
 if (-not (Test-Path $kimiExe)) { $kimiExe = "" }
 if ($kimiExe) {
     try { $kimiRaw = (& $kimiExe --version 2>&1 | Out-String).Trim() } catch {}
-    if ($kimiRaw -match '(\d+\.\d+\.\d+)') { $kimiVersion = $Matches[1] }
+    # Assign the RAW value. r2 filtered through a numeric regex first,
+    # which meant a malformed version could never reach the floor check
+    # and fell into the "absent" note instead of failing.
+    $kimiVersion = $kimiRaw
 }
 ```
 
-Bare `kimi` is deliberately NOT a fallback. Two CLIs have carried that name on this machine, so a name-resolved probe can silently measure the wrong binary — which is the failure this whole task is repairing.
+Bare `kimi` is deliberately NOT a fallback: two CLIs have carried that name here, so a name-resolved probe can measure the wrong binary.
 
 - [ ] **Step 4: Replace check 2b**
 
-Replace `tools/check-drift.ps1:197-216`:
-
 ```powershell
 # --- check 2b (every run): kimi-code backup transport surface ------------------
-# Short flags (-m/-p) substring-match trivially inside long-flag help text;
-# the long flags carry the real detection. `-r` is deliberately absent: it
-# works but is a HIDDEN alias and never appears in --help, so asserting it
-# would report a break that is not one. `kimi upgrade` self-updates, so a
-# floor is checked as well as a version recorded.
+# Short flags (-m/-p) substring-match inside long-flag help text; the long
+# flags carry the real detection. `-r` is deliberately absent: it works but
+# is a HIDDEN alias that never appears in --help, so asserting it would
+# report a break that is not one. `kimi upgrade` self-updates, so the floor
+# is checked as well as the version recorded.
 
 $KimiCodeFloor = "0.31.1"
 
-if ($kimiVersion) {
+if ($kimiExe -and $kimiVersion) {
     $kimiHelp = (& $kimiExe --help 2>&1 | Out-String)
     foreach ($flag in @("--agent-file", "--skills-dir", "-m", "-p", "--session")) {
         $flagPattern = '(^|[\s,\[])' + [regex]::Escape($flag) + '($|[\s,\]=])'
@@ -137,8 +157,9 @@ if ($kimiVersion) {
     }
     $parsedFloor = $null
     $parsedSeen = $null
-    if ([version]::TryParse($KimiCodeFloor, [ref]$parsedFloor) -and
-        [version]::TryParse($kimiVersion, [ref]$parsedSeen)) {
+    $okFloor = [version]::TryParse($KimiCodeFloor, [ref]$parsedFloor)
+    $okSeen  = [version]::TryParse(($kimiVersion -replace '^\D*', ''), [ref]$parsedSeen)
+    if ($okFloor -and $okSeen) {
         if ($parsedSeen -lt $parsedFloor) {
             $findings += "[CRITICAL] kimi-code $kimiVersion is below the lane floor $KimiCodeFloor - the backup lane is UNAVAILABLE, not degraded; see references/backup-lane.md"
         }
@@ -146,52 +167,104 @@ if ($kimiVersion) {
         $findings += "[CRITICAL] kimi-code version '$kimiVersion' is unparseable against floor $KimiCodeFloor - an unmade floor check is never a passing one"
     }
 } else {
-    $notes += "kimi-code absent or version unparseable - backup-lane probes skipped (lane optional; primary unaffected)"
+    $notes += "kimi-code absent - backup-lane probes skipped (lane optional; primary unaffected)"
 }
 ```
 
-`TryParse` rather than a bare `[version]` cast: a cast throws on a non-numeric string, and an exception here would abort the whole drift run rather than report a finding.
+Note the split: an ABSENT binary is a note, an UNPARSEABLE version is a finding. r2 collapsed both into the note, which is how the failure branch became unreachable.
 
-- [ ] **Step 5: Move the state-machine stubs**
+- [ ] **Step 5: Move the state-machine harness**
 
 In `evals/tools/drift_statemachine_tests.ps1`:
 
-- Lines 250, 254, 257: replace each stub usage line so it echoes the new surface, e.g.
-  `echo usage: kimi [-m MODEL] [--agent-file FILE] [--skills-dir DIR] [-p PROMPT] [-S ID]`
-  Keep the three variants' EXISTING differences (which flag each one drops) so the scenarios still distinguish a full surface from a degraded one — just express them in the new flag vocabulary.
-- Lines 263 and 270: delete the `kimi_cli` import-probe branch entirely. The new check has no module-import step.
-- Line 686: change the assertion's subject from `kimi_cli tool modules` to the floor finding, so the scenario still asserts the vocabulary probe stays quiet on a flag-only drop.
-- Line 706: replace the import-failure scenario with a BELOW-FLOOR scenario asserting `is below the lane floor`.
-- Line 233's comment: rewrite to describe forwarding everything except the floor check.
+- The harness builds stubs in `$StubDir` and puts them on PATH (`:110-117`). The production lookup is now an ABSOLUTE path under `$env:USERPROFILE`. Create the stub at `<fake profile>/.kimi-code/bin/kimi.exe` — a `.cmd` shim named `kimi.exe` will not be executed by `& $kimiExe`, so create it as a `.cmd` and have the production path probe find it, or point the fake profile at a directory holding a real `.cmd` named exactly as the production code looks for. Verify by running one scenario and confirming the report is NOT the "absent" note.
+- Stub usage lines (`:243-276`): re-express in the new vocabulary, advertising `--session` and NOT `-S`, since the production regex matches `--session`. Keep each variant's existing dropped-flag difference so the scenarios still distinguish a full surface from a degraded one.
+- Delete the `kimi_cli` import-probe branch and its forwarding comment at `:233`.
+- Add a `KIMI_STUB_MODE` value that emits a BELOW-FLOOR version (e.g. `0.30.0`); the existing stub always emits `9.9.9` except on total failure, so the new floor scenario has nothing to trigger it.
+- `:686`: keep the scenario asserting the vocabulary probe stays quiet on a flag-only drop, retargeted off `kimi_cli tool modules`.
+- `:700-720`: replace the import-failure scenario with a below-floor scenario asserting `is below the lane floor`, and add one asserting the unparseable-version finding.
 
 - [ ] **Step 6: Run the tests**
 
-Run: `python -m pytest evals/multi-model-verify/test_backup_lane.py -k "drift or state_machine or hidden_alias" -v`
-Expected: PASS, all four.
+Run: `python -m pytest evals/multi-model-verify/test_backup_lane.py -k "drift or state_machine or hidden_alias or failure_branch" -v`
+Expected: PASS.
 
-- [ ] **Step 7: Update the snapshot**
+- [ ] **Step 7: Snapshot, then run the state machine**
 
 `tools/drift-snapshot.json:4` becomes `"kimi": "0.31.1",`.
 
-- [ ] **Step 8: Run the drift state machine**
-
 Run: `pwsh -File evals/tools/drift_statemachine_tests.ps1`
-Expected: ALL SCENARIOS PASS. Slow — four scenarios re-run the full pytest suite in a disposable worktree.
+Expected: ALL SCENARIOS PASS. Confirm in the output that the kimi scenarios exercised the probe rather than the absent branch — a green run where every kimi scenario skipped is the silent-skip failure this repo treats as worst.
 
-- [ ] **Step 9: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
 git add tools/check-drift.ps1 tools/drift-snapshot.json evals/tools/drift_statemachine_tests.ps1 evals/multi-model-verify/test_backup_lane.py
-git commit -m "point drift watch at kimi-code and move its state-machine stubs"
+git commit -m "point drift watch at kimi-code and move its state-machine harness"
 ```
 
 ---
 
-### Task 2: The debate home builder
+### Task 2: Declare the lane's canonical values
 
-Built BEFORE the probes, because every probe in Task 3 needs a home to run in. Revision 1 had this backwards.
+Moved ahead of the validator, which compares against them. r2 had the validator requiring a "canonical provider" that no task ever declared.
 
-Note the naming, which revision 1 got wrong: the home is per-DEBATE, not per-round. It is built once before round 1 and used by every call of that debate, because the rounds of one debate are one session and the evidence files are that session's.
+**Files:**
+- Modify: `skills/multi-model-verify/references/model-prompting-notes.md:298-315`
+- Modify: `evals/multi-model-verify/test_backup_lane.py:46-61`
+
+**Interfaces:**
+- Produces: four backup declarations, read by Tasks 6 and 7.
+
+- [ ] **Step 1: Update the declaration test**
+
+In `test_notes_backup_declarations`, keep every existing primary-parser ordering assertion untouched — those protect the primary lane's runtime parsers — and add:
+
+```python
+    assert "Canonical backup provider: `kimi`" in notes
+    assert "Canonical backup reasoning effort: `high`" in notes
+    assert ("Canonical backup thinking declaration: `[thinking] enabled = true`"
+            in notes)
+    assert "Canonical backup thinking flag: `--thinking`" not in notes
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `python -m pytest evals/multi-model-verify/test_backup_lane.py -k notes_backup -v`
+Expected: FAIL.
+
+- [ ] **Step 3: Write the declarations**
+
+Under the existing `Canonical backup reviewer model id` line, replace the `--thinking` flag line with the three above, plus this note:
+
+```
+This client has no thinking or effort flag. Both are written into the
+debate home by tools/new-kimi-lane-home.ps1. Effort is confirmed per call
+from the session log's `thinkingEffort` field; thinking-enabled is NOT
+confirmable — measured 2026-07-31, `enabled = false` produced output
+identical to `enabled = true` in both the log and the wire transcript, so
+it is config-asserted only and the debate record says so.
+```
+
+Change the section heading to name kimi-code rather than kimi-cli.
+
+- [ ] **Step 4: Run the test**
+
+Run: `python -m pytest evals/multi-model-verify/test_backup_lane.py -k notes_backup -v`
+Expected: PASS.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add skills/multi-model-verify/references/model-prompting-notes.md evals/multi-model-verify/test_backup_lane.py
+git commit -m "declare the backup lane's provider, effort and thinking values"
+```
+
+---
+
+### Task 3: The debate home builder
+
+Per-DEBATE, not per-round: built once before round 1 and used by every call of that debate, because the rounds of one debate are one session.
 
 **Files:**
 - Create: `tools/new-kimi-lane-home.ps1`
@@ -199,25 +272,17 @@ Note the naming, which revision 1 got wrong: the home is per-DEBATE, not per-rou
 
 **Interfaces:**
 - Consumes: nothing.
-- Produces: `tools/new-kimi-lane-home.ps1 -Path <dir> -Model <id> [-Effort <level>]`. `-Model` is MANDATORY with no default — a default would put the canonical literal in `tools/*.ps1`, which `test_backup_literal_single_source` fails. Prints the home's absolute path as its only stdout output. Exits non-zero on any refusal.
+- Produces: `tools/new-kimi-lane-home.ps1 -Path <dir> -Model <id> [-Effort <level>]` builds and prints the absolute path; `-Path <dir> -Remove` deletes a home it built. `-Model` is MANDATORY with no default. Exits non-zero on any refusal.
 
-- [ ] **Step 1: Write the failing test**
-
-Create `evals/multi-model-verify/test_kimi_lane_home.py`:
+- [ ] **Step 1: Write the failing tests**
 
 ```python
-"""Contract pins for the per-debate kimi-code lane home.
-
-The home is what makes the lane's effort and thinking pins verifiable by
-construction instead of by a later read of a user-global file, and what
-keeps the user's own config hooks off the reviewer's approval path. It
-also holds a copied OAuth credential, so its handling rules are part of
-the contract rather than left to the caller.
-"""
+"""Contract pins for the per-debate kimi-code lane home."""
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
 BUILDER = REPO / "tools" / "new-kimi-lane-home.ps1"
+SENTINEL = ".parallax-lane-home"
 
 
 def _read(p):
@@ -229,203 +294,95 @@ def test_builder_exists():
 
 
 def test_model_has_no_default_literal():
-    """SWEEP_GLOBS covers tools/*.ps1, so a parameter default carrying
-    the canonical id would fail test_backup_literal_single_source. The
-    caller reads the id from model-prompting-notes.md and passes it."""
+    """SWEEP_GLOBS covers tools/*.ps1, so a parameter default carrying the
+    canonical id would fail test_backup_literal_single_source."""
     body = _read(BUILDER)
     assert "[Parameter(Mandatory = $true)][string]$Model" in body
     assert "k3-256k" not in body
 
 
 def test_builder_refuses_without_a_credential():
-    """An unauthenticated lane must stop, not degrade. A home built with
-    no credential fails at dispatch, after the mirror is built and the
-    brief written, which reads as a transport flake rather than setup."""
-    body = _read(BUILDER)
-    assert "the lane is UNAVAILABLE" in body
+    assert "the lane is UNAVAILABLE" in _read(BUILDER)
 
 
 def test_builder_refuses_a_reused_or_unsafe_destination():
-    """A reused home carries stale sessions, and stale sessions are
-    exactly what the freshness rule exists to exclude - so reuse would
-    undermine the evidence, not merely the tidiness. A destination inside
-    any git work tree would put an OAuth credential in a repo."""
+    """A reused home carries stale sessions, which is exactly what the
+    freshness rule exists to exclude, so reuse corrupts the evidence
+    rather than merely being untidy."""
     body = _read(BUILDER)
     assert "destination already exists" in body
     assert "inside a git work tree" in body
-    assert "rev-parse --is-inside-work-tree" in body
 
 
-def test_builder_restricts_and_can_revoke_the_credential():
+def test_the_git_check_fails_closed():
+    """r2 treated any nonzero `git rev-parse` as 'not in a work tree', so
+    git being absent or erroring placed an OAuth credential in a repo."""
     body = _read(BUILDER)
-    assert "SetAccessRuleProtection" in body
-    assert "Remove-KimiLaneHome" in body
+    assert "$LASTEXITCODE" in body
+    assert "could not determine" in body
+
+
+def test_removal_is_callable_and_guarded():
+    """r2 defined a function inside a script invoked with `pwsh -File`,
+    which no caller can ever reach. Removal is a switch on the same
+    script, and it refuses any directory this builder did not create."""
+    body = _read(BUILDER)
+    assert "[switch]$Remove" in body
+    assert SENTINEL in body
+
+
+def test_a_failed_build_leaves_no_credential_behind():
+    body = _read(BUILDER)
+    assert "try {" in body
+    assert "Remove-Item $Path -Recurse -Force" in body
 
 
 def test_builder_writes_no_hooks():
-    """The user's real ~/.kimi-code/config.toml carries seven Orca
-    lifecycle hooks, including PreToolUse and PermissionRequest, each
-    running a shell script. A hook block sits on the reviewer's approval
-    path and executes commands; it is not an environment note."""
+    """The user's real config carries seven Orca lifecycle hooks including
+    PreToolUse and PermissionRequest, each running a shell script."""
     body = _read(BUILDER)
     assert "[[hooks]]" not in body
     assert "carries no hooks by construction" in body
 
 
-def test_builder_pins_thinking_effort_and_the_empty_skill_sources():
+def test_builder_pins_effort_and_empties_the_skill_sources():
     body = _read(BUILDER)
     assert "extra_skill_dirs = []" in body
-    assert "[thinking]" in body
     assert "default_effort" in body
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [ ] **Step 2: Run tests to verify they fail**
 
 Run: `python -m pytest evals/multi-model-verify/test_kimi_lane_home.py -v`
-Expected: FAIL on `test_builder_exists`, the rest erroring.
+Expected: FAIL.
 
 - [ ] **Step 3: Write the builder**
 
-Create `tools/new-kimi-lane-home.ps1`:
+Create `tools/new-kimi-lane-home.ps1` implementing, in order:
 
-```powershell
-<#
-.SYNOPSIS
-  Build an isolated KIMI_CODE_HOME for one backup-lane debate.
-
-.DESCRIPTION
-  The reviewer never runs in the user's real kimi-code home. Two reasons,
-  either sufficient alone:
-
-  1. That config can declare lifecycle hooks. A PreToolUse or
-     PermissionRequest hook executes a shell command on the reviewer's
-     approval path. This home carries no hooks by construction.
-  2. Effort and thinking have no CLI flag on this client. Writing the
-     config here makes both verifiable by construction, then confirmed
-     per call from the session log, instead of inferred from a later
-     read of a user-global file.
-
-  The home holds a COPY OF AN OAUTH CREDENTIAL, so this script refuses an
-  existing destination, refuses any path inside a git work tree, and
-  locks the directory to the current user. Remove-KimiLaneHome deletes it
-  when the debate ends.
-
-  Prints the home's absolute path on stdout and nothing else.
-
-.PARAMETER Model
-  Mandatory, no default. The canonical id lives in
-  skills/multi-model-verify/references/model-prompting-notes.md and is
-  read from there by the caller; a default here would place the literal
-  in tools/*.ps1, which the single-source sweep forbids.
-#>
-[CmdletBinding()]
-param(
-    [Parameter(Mandatory = $true)][string]$Path,
-    [Parameter(Mandatory = $true)][string]$Model,
-    [string]$Effort = "high"
-)
-
-$ErrorActionPreference = "Stop"
-
-function Remove-KimiLaneHome {
-    param([Parameter(Mandatory = $true)][string]$Path)
-    if (Test-Path $Path) { Remove-Item $Path -Recurse -Force }
-}
-
-if (Test-Path $Path) {
-    Write-Error "destination already exists: $Path. A reused home carries stale sessions, and the freshness rule exists to exclude exactly those. Pass a fresh path."
-    exit 1
-}
-
-$parent = Split-Path -Parent $Path
-if (-not (Test-Path $parent)) {
-    Write-Error "parent directory does not exist: $parent"
-    exit 1
-}
-Push-Location $parent
-try {
-    $inRepo = (& git rev-parse --is-inside-work-tree 2>$null)
-} finally {
-    Pop-Location
-}
-if ($inRepo -eq "true") {
-    Write-Error "refusing to build a lane home inside a git work tree: $Path. It would place an OAuth credential in a repository."
-    exit 1
-}
-
-$srcHome = Join-Path $env:USERPROFILE ".kimi-code"
-$srcCred = Join-Path $srcHome "credentials/kimi-code.json"
-if (-not (Test-Path $srcCred)) {
-    Write-Error "no kimi-code credential at $srcCred - the lane is UNAVAILABLE, not degraded. Run 'kimi login' first."
-    exit 1
-}
-
-New-Item -ItemType Directory -Path $Path | Out-Null
-
-# Lock the home to the current user BEFORE the credential is written into
-# it: inheritance is disabled and inherited rules are dropped, not copied.
-$acl = Get-Acl $Path
-$acl.SetAccessRuleProtection($true, $false)
-$me = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
-$rule = New-Object System.Security.AccessControl.FileSystemAccessRule(
-    $me, "FullControl",
-    "ContainerInherit,ObjectInherit", "None", "Allow")
-$acl.SetAccessRule($rule)
-Set-Acl -Path $Path -AclObject $acl
-
-New-Item -ItemType Directory -Path (Join-Path $Path "credentials") | Out-Null
-New-Item -ItemType Directory -Path (Join-Path $Path "skills") | Out-Null
-Copy-Item $srcCred (Join-Path $Path "credentials/kimi-code.json")
-
-$shortModel = $Model -replace '^[^/]+/', ''
-$config = @"
-# Written by tools/new-kimi-lane-home.ps1 for one review debate.
-# Carries no hooks by construction - see the script header.
-default_model = "$Model"
-extra_skill_dirs = []
-telemetry = false
-
-[thinking]
-enabled = true
-
-[providers."managed:kimi-code"]
-type = "kimi"
-api_key = ""
-base_url = "https://api.kimi.com/coding/v1"
-
-[providers."managed:kimi-code".oauth]
-storage = "file"
-key = "oauth/kimi-code"
-
-[models."$Model"]
-provider = "managed:kimi-code"
-model = "$shortModel"
-max_context_size = 262144
-capabilities = [ "thinking", "always_thinking", "image_in", "tool_use" ]
-support_efforts = [ "low", "high", "max" ]
-default_effort = "$Effort"
-"@
-
-$config | Out-File (Join-Path $Path "config.toml") -Encoding utf8
-
-(Resolve-Path $Path).Path
-```
+1. `-Remove` mode: refuse unless `<Path>/.parallax-lane-home` exists, then delete recursively. The sentinel is what stops a mistyped path from recursively deleting something else.
+2. Refuse an existing `-Path`.
+3. Resolve whether the parent is inside a git work tree. Run `git rev-parse --is-inside-work-tree`, then check `$LASTEXITCODE`: `true` refuses with the work-tree message; a nonzero exit refuses with `could not determine whether <path> is inside a git work tree`. Only an explicit `false` proceeds. Fail closed — an unmade measurement is never a clean one, and the consequence here is a credential in a repository.
+4. Refuse if the source credential is absent, with the UNAVAILABLE message.
+5. Wrap everything from directory creation onward in `try { } catch { Remove-Item $Path -Recurse -Force; throw }`, so a failure after the credential copy cannot leave the secret on disk.
+6. Create the directory, write the sentinel, then set the ACL BEFORE the credential is copied: `SetAccessRuleProtection($true, $false)` to drop inherited rules, remove every existing explicit ACE, then add one FullControl rule for the current identity.
+7. Copy the credential, write `config.toml` from the template (no hooks, `extra_skill_dirs = []`, `telemetry = false`, `[thinking] enabled = true`, the model table with `default_effort`), create the empty `skills/` directory.
+8. Print `(Resolve-Path $Path).Path` as the only stdout output.
 
 - [ ] **Step 4: Run the tests**
 
 Run: `python -m pytest evals/multi-model-verify/test_kimi_lane_home.py -v`
-Expected: PASS, all seven.
+Expected: PASS.
 
-- [ ] **Step 5: Verify it builds a working home, on both hosts**
+- [ ] **Step 5: Verify live on both hosts**
 
-```powershell
-$h = & <host> -NoProfile -File tools/new-kimi-lane-home.ps1 -Path "<fresh scratch>/lanehome-check" -Model "<id read from model-prompting-notes.md>"
-$env:KIMI_CODE_HOME = $h
-& "$env:USERPROFILE\.kimi-code\bin\kimi.exe" provider list
-Remove-Item Env:\KIMI_CODE_HOME
-```
+Under BOTH `powershell.exe` and `pwsh` — 0.16.1's lock defect was green on one interpreter and broken on the other:
 
-Expected: `managed:kimi-code  type=kimi  models=1  source=oauth`. Run under BOTH `powershell.exe` and `pwsh` — 0.16.1's lock defect was green on one interpreter and broken on the other. Then re-run against the same path and confirm it REFUSES.
+- Build a home, set `KIMI_CODE_HOME`, run `provider list` by absolute binary path, expect `source=oauth`.
+- Re-run the build against the same path: expect refusal.
+- Build inside a git work tree: expect refusal.
+- **Inspect the effective ACL** with `Get-Acl <home> | Format-List`, and confirm only the current identity has access. r2 asserted the ACL API call existed and never looked at the result.
+- Run `-Remove`, confirm the directory is gone. Run `-Remove` on a directory with no sentinel, confirm refusal.
 
 - [ ] **Step 6: Commit**
 
@@ -436,118 +393,62 @@ git commit -m "add the per-debate kimi-code lane home builder"
 
 ---
 
-### Task 3: Probe the five unknowns that gate design claims
+### Task 4: Close the two remaining probes
 
-Five, not three. Revision 1 referenced an encoding probe in a later task that it never defined, and never checked which flags a resume actually accepts.
+Five of seven unknowns were settled in `probe-record-2.md`. Two remain, and neither blocks the contract's structure.
 
 **Files:**
-- Create: `docs/superpowers/plans/rounds/2026-07-31-kimi-code-swap/probe-record-2.md`
+- Modify: `docs/superpowers/plans/rounds/2026-07-31-kimi-code-swap/probe-record-2.md`
 
-**Interfaces:**
-- Consumes: `tools/new-kimi-lane-home.ps1` from Task 2.
-- Produces: five settled answers. Task 4 uses the subagent answer, Task 6 uses the skills-dir, effort, thinking and resume-flag answers, Task 9 uses the encoding answer.
+- [ ] **Step 1: Probe the cp1252 output hazard**
 
-Build one home for the whole task: `$h = pwsh -File tools/new-kimi-lane-home.ps1 -Path "<fresh scratch>/probe2-home" -Model "<canonical id>"`, then set `$env:KIMI_CODE_HOME = $h` for every probe below.
+Build a home. From a console forced to cp1252 (`chcp 1252`), dispatch a prompt asking for a reply containing an em-dash, an arrow and a non-Latin character, redirecting stdout to a file. Confirm the file holds the characters and the process exits 0. This gates whether Task 10 deletes the Python UTF-8 guard or replaces it with one describing this client.
 
-- [ ] **Step 1: Probe whether `--skills-dir` suppresses a planted project skill**
+- [ ] **Step 2: Probe whether a session file can be replaced and regrow**
 
-Plant a canary at `<ws>/.kimi-code/skills/canary/SKILL.md` whose description and body both instruct the model to begin every reply with `CANARY-FIRED`. Dispatch with `--skills-dir <home>/skills`, then again WITHOUT it, and compare. Read the reply AND grep the session `wire.jsonl` for `canary`.
+Sol round 2's surviving objection: the freshness boundary detects absence and shrinkage but not a file replaced, truncated and regrown past the old offset. Check whether per-session files rotate at all: dispatch enough rounds, or append enough bulk, to pass any plausible rotation threshold, and watch for `.1` files beside the per-session log the way the global log has them.
 
-Repeat with the canary at `<ws>/.agents/skills/canary/SKILL.md`, because the client documents both roots and suppressing one proves nothing about the other.
+Whatever the answer, Task 7's freshness region captures a PREFIX HASH, so the rule does not depend on rotation being absent. Record the result so the contract can state whether rotation is known-absent or merely guarded against.
 
-Verdict to record: does `--skills-dir` suppress BOTH project roots. If it suppresses neither or only one, it is a mitigation and Task 6's contract text must say so, with preflight-3 remediation carrying the load instead.
+- [ ] **Step 3: Append both results and remove the probe homes**
 
-- [ ] **Step 2: Probe whether `subagents: []` empties the catalog**
+Append to `probe-record-2.md` under a new heading, with exact commands and outputs. Then `-Remove` every probe home and confirm no credential copy survives.
 
-Dispatch any one-line prompt with an agent file carrying `subagents: []`, then read:
-
-```powershell
-Get-Content "$h/sessions/wd_*/session_*/state.json" | ConvertFrom-Json |
-  ForEach-Object { $_.agentProfileCatalog.profiles[0].subagents }
-```
-
-Expected if it works: an empty array. The default observed without the key was `agent, coder, explore, plan, parallax-readonly-reviewer`.
-
-If it does NOT empty: record that, and Task 4 must state the negative branch — the lane relies on `Agent` and `AgentSwarm` being denied, which is one control rather than two, and the debate record says so.
-
-- [ ] **Step 3: Probe whether the home's effort pin actually overrides**
-
-Both the home config and the model default currently read `high`, so agreement proves nothing. Rebuild the home with `-Effort low`, dispatch one prompt, and read:
-
-```powershell
-Select-String "llm config" "$h/sessions/wd_*/session_*/logs/kimi-code.log"
-```
-
-Expected if the pin works: `thinkingEffort=low`. If it still reads `high`, effort is provider-declared and NOT pinnable, and Task 6 must drop the "verifiable by construction" claim for effort.
-
-- [ ] **Step 4: Probe for a differentiating signal for thinking-enabled**
-
-The evidence rule verifies `thinkingEffort` but nothing proves `[thinking] enabled = true` took effect — a value that is always present proves nothing about the setting. Build a second home with `enabled = false`, dispatch the same prompt to each, and diff the per-session log and `wire.jsonl` for any field that differs (`thinkingKeep` on `llm.request` is the first candidate).
-
-Record the differentiating field, or record that none exists. If none exists, Task 6 must NOT claim thinking is runtime-verified; it is config-asserted only, and the record says which.
-
-- [ ] **Step 5: Probe which flags a resume accepts**
-
-Measured so far: `--agent-file` is rejected with `--session`. Untested: `-m`, `--skills-dir`, `--add-dir`. Anything a resume ACCEPTS can be re-pinned for free, and free defence in depth against a future release that changes inheritance should be taken.
-
-For each of `-m`, `--skills-dir`: run a resume carrying it and record whether the call is accepted, and whether the resulting `llm.request` still shows the canonical values.
-
-- [ ] **Step 6: Probe the cp1252 output hazard**
-
-kimi-cli was Python and raised `UnicodeEncodeError` AFTER the model answered, losing a paid round on the way to disk. kimi-code is a Node binary, which should write UTF-8 regardless of console codepage, but should is not measured.
-
-From a console forced to cp1252 (`chcp 1252`), dispatch a prompt asking the reviewer to reply with an em-dash, an arrow and a non-Latin character, redirecting stdout to a file. Confirm the file holds the characters and the process exits 0.
-
-If a hazard exists, Task 9 keeps a guard describing THIS client instead of deleting the section.
-
-- [ ] **Step 7: Confirm the freshness observation directly**
-
-The whole of Task 6's freshness rule rests on the files being cumulative. Confirm it rather than inferring it from revision 1's record: capture `(Get-Content wire.jsonl).Count` and the log's byte length, run a resume, and capture both again. Record both pairs.
-
-- [ ] **Step 8: Write the record and clean up**
-
-Create `probe-record-2.md` with, for each of the seven steps: the exact command, the exact output, and a one-line verdict. State every negative answer as a constraint later tasks must honour.
-
-Then `Remove-KimiLaneHome -Path <probe2-home>` and confirm the credential copy is gone.
-
-- [ ] **Step 9: Commit**
+- [ ] **Step 4: Commit**
 
 ```bash
 git add docs/superpowers/plans/rounds/2026-07-31-kimi-code-swap/probe-record-2.md
-git commit -m "probe skill suppression, subagents, effort, thinking, resume flags and encoding"
+git commit -m "close the encoding and session-file-rotation probes"
 ```
 
 ---
 
-### Task 4: The agent file
+### Task 5: The agent file
 
 **Files:**
 - Create: `skills/multi-model-verify/references/kimi-reviewer-agent.md`
-- Delete: `skills/multi-model-verify/references/kimi-reviewer-agent.yaml`
-- Delete: `skills/multi-model-verify/references/kimi-reviewer-system.md`
-- Modify: `evals/multi-model-verify/test_backup_lane.py:14-15, 20-29, 41-43, 64-72, 75-77`
+- Delete: `skills/multi-model-verify/references/kimi-reviewer-agent.yaml`, `kimi-reviewer-system.md`
+- Modify: `evals/multi-model-verify/test_backup_lane.py:14-15, 20-29, 41-43, 64-77`
 
 **Interfaces:**
-- Consumes: Task 3's subagent verdict.
-- Produces: `AGENT_MD`, `ALLOWLIST`, `DENYLIST` in `test_backup_lane.py`, used by Task 5's validator tests and Task 6's pins.
+- Produces: `AGENT_MD`, `ALLOWLIST`, `DENYLIST`, `KNOWN_TOOLS` in `test_backup_lane.py`.
 
-- [ ] **Step 1: Rewrite the test constants**
-
-Replace line 14-15 with `AGENT_MD = REFS / "kimi-reviewer-agent.md"`, and lines 20-29 with:
+- [ ] **Step 1: Rewrite the constants**
 
 ```python
+AGENT_MD = REFS / "kimi-reviewer-agent.md"
 ALLOWLIST = ["Read", "Grep", "Glob", "ReadMediaFile", "TodoList"]
-# Every built-in tool on 0.31.1 that is NOT in the allowlist. CronList was
-# missing from revision 1, which left one tool neither allowed nor denied.
 DENYLIST = ["Bash", "Write", "Edit", "WebSearch", "FetchURL",
             "EnterPlanMode", "ExitPlanMode", "Agent", "AgentSwarm",
             "AskUserQuestion", "Skill", "TaskList", "TaskOutput",
             "TaskStop", "CronCreate", "CronList", "CronDelete"]
+# Every built-in tool documented for 0.31.1. Frozen deliberately: this is
+# the client's inventory as MEASURED, and a release that adds a tool must
+# edit this constant, which is what makes the addition a reviewed event.
+KNOWN_TOOLS = set(ALLOWLIST) | set(DENYLIST)
 ```
 
-- [ ] **Step 2: Rewrite the artifact and allowlist tests**
-
-Replace `test_backup_artifacts_exist` (41-43):
+- [ ] **Step 2: Rewrite the artifact and list tests**
 
 ```python
 def test_backup_artifacts_exist():
@@ -555,15 +456,12 @@ def test_backup_artifacts_exist():
         assert p.is_file(), str(p)
     assert not (REFS / "kimi-reviewer-agent.yaml").exists()
     assert not (REFS / "kimi-reviewer-system.md").exists()
-```
 
-Replace `test_agent_yaml_allowlist_exact` (64-72):
 
-```python
 def test_agent_allowlist_and_denylist_exact():
-    """Exact LIST equality: extra, missing, or reordered entries all fail.
-    Omitting `tools:` entirely means ALL tools on this client, so a silent
-    parse failure is PERMISSIVE - which is why the denylist exists too."""
+    """Exact LIST equality. Omitting `tools:` means ALL tools on this
+    client, so a silent parse failure is PERMISSIVE - hence the denylist
+    as well."""
     import re
     body = _read(AGENT_MD)
     tools = re.search(r"^tools:\n((?:  - \w+\n)+)", body, re.M)
@@ -576,51 +474,52 @@ def test_agent_allowlist_and_denylist_exact():
             for t in denied.group(1).strip().splitlines()] == DENYLIST
 
 
-def test_the_two_lists_together_cover_every_known_tool():
-    """The denylist defends only against tools it NAMES. Stating that
-    explicitly is the point: a client release adding a tool leaves it
-    neither allowed nor denied, and only the allowlist would contain it.
-    This test is what makes a new tool visible at upgrade time."""
+def test_the_two_lists_partition_the_known_inventory():
+    """Set equality, not a count. r2 asserted len(A)+len(B)==22, which
+    stayed green if a real name were swapped for a nonexistent one.
+
+    Accepted limit, stated so it stays deliberate: this cannot see a tool
+    a FUTURE client adds. Nothing offline can. The floor check in
+    check-drift.ps1 is what forces a re-probe at upgrade."""
     assert not (set(ALLOWLIST) & set(DENYLIST))
-    assert len(ALLOWLIST) + len(DENYLIST) == 22
+    assert set(ALLOWLIST) | set(DENYLIST) == KNOWN_TOOLS
 
 
 def test_agent_empties_the_subagent_list():
-    """Probed: `subagents` defaults to ALL, including `coder`. That was
-    inert only because Agent and AgentSwarm are denied. Relying on the
+    """Measured: `subagents` defaults to ALL, including `coder`. That was
+    inert only because Agent and AgentSwarm are denied, and the
     coincidence of two controls is not a control."""
     assert "subagents: []" in _read(AGENT_MD)
-```
 
-Replace the file tuple at 75-77 with `for p in (BACKUP_LANE, AGENT_MD):`.
+
+def test_backup_files_no_backslash_paths():
+    for p in (BACKUP_LANE, AGENT_MD):
+        assert "\\" not in _read(p), str(p)
+```
 
 - [ ] **Step 3: Run tests to verify they fail**
 
-Run: `python -m pytest evals/multi-model-verify/test_backup_lane.py -k "artifacts or allowlist or subagent or known_tool" -v`
-Expected: FAIL — the file does not exist.
+Run: `python -m pytest evals/multi-model-verify/test_backup_lane.py -k "artifacts or allowlist or partition or subagent or backslash" -v`
+Expected: FAIL.
 
 - [ ] **Step 4: Write the agent file**
 
-Create `skills/multi-model-verify/references/kimi-reviewer-agent.md` with frontmatter listing `name: parallax-readonly-reviewer`, a description, `tools:` in ALLOWLIST order, `disallowedTools:` in DENYLIST order, and `subagents: []`. The body is the exact former contents of `kimi-reviewer-system.md`, unchanged — do not reword it, because Task 6's evidence rule compares the wire log's recorded `systemPrompt` against this body byte for byte.
+Frontmatter: `name: parallax-readonly-reviewer`, a description, `tools:` in ALLOWLIST order, `disallowedTools:` in DENYLIST order, `subagents: []`. Body: the exact former contents of `kimi-reviewer-system.md`, unchanged — Task 7's evidence rule compares the recorded `systemPrompt` against this body byte for byte, and `systemPromptChars` against its length.
 
-If Task 3 Step 2 found that `subagents: []` does NOT empty the catalog, still write the key, and add a line to the debate-record guidance in Task 6 stating that subagent containment rests on the `Agent`/`AgentSwarm` denial alone.
-
-- [ ] **Step 5: Delete the superseded pair**
+- [ ] **Step 5: Delete the superseded pair, run the tests**
 
 ```bash
 git rm skills/multi-model-verify/references/kimi-reviewer-agent.yaml skills/multi-model-verify/references/kimi-reviewer-system.md
 ```
 
-- [ ] **Step 6: Run the tests**
-
-Run: `python -m pytest evals/multi-model-verify/test_backup_lane.py -k "artifacts or allowlist or subagent or known_tool or backslash" -v`
+Run: `python -m pytest evals/multi-model-verify/test_backup_lane.py -k "artifacts or allowlist or partition or subagent or backslash" -v`
 Expected: PASS.
 
-- [ ] **Step 7: Re-run the write-probe against the committed file**
+- [ ] **Step 6: Re-run the write-probe against the committed file**
 
-Build a fresh home, run the marker-creation prompt with the committed agent file and `--skills-dir`, from a throwaway git workspace. PASS requires all three: explicit refusal in the reply, marker absent on disk, and `git -c core.quotepath=false status --porcelain --ignored -uall` unchanged from baseline. Anything else means the lane is BROKEN — stop the plan. Then confirm `state.json` shows the expected `subagents` value and remove the home.
+Build a fresh home; from a throwaway git workspace run the marker-creation prompt with the committed agent file. PASS requires all three: explicit refusal, marker absent, `git -c core.quotepath=false status --porcelain --ignored -uall` unchanged from baseline. Anything else means the lane is BROKEN — stop. Confirm `state.json` shows `subagents: []`, then remove the home.
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add skills/multi-model-verify/references/kimi-reviewer-agent.md evals/multi-model-verify/test_backup_lane.py
@@ -629,65 +528,82 @@ git commit -m "replace the kimi reviewer agent pair with one markdown agent file
 
 ---
 
-### Task 5: The evidence validator and its fixtures
-
-Revision 1 promised fixtures and a parser in the design's Testing section and delivered neither — it pinned Markdown prose and called that coverage. A rule that is only prose is executed by a human reading it, differently each time. This task makes it a script with tests.
+### Task 6: The evidence validator and its fixtures
 
 **Files:**
 - Create: `tools/read-kimi-round-evidence.ps1`
-- Create: `evals/multi-model-verify/fixtures/kimi-round/wire-clean.jsonl`
-- Create: `evals/multi-model-verify/fixtures/kimi-round/wire-resumed.jsonl`
-- Create: `evals/multi-model-verify/fixtures/kimi-round/log-clean.txt`
+- Create: `evals/multi-model-verify/fixtures/kimi-round/` (fixtures)
 - Create: `evals/multi-model-verify/test_kimi_round_evidence.py`
 
 **Interfaces:**
-- Consumes: `ALLOWLIST` and `DENYLIST` from Task 4; the freshness measurements from Task 3 Step 7.
-- Produces: `tools/read-kimi-round-evidence.ps1 -SessionDir <dir> -WireOffset <n> -LogOffset <n> -Model <id> -Effort <level> -AgentFile <path> -BriefFile <path> -Json`. Exits 0 and prints `{"status":"clean",...}` only when every check passes; exits non-zero with `"status":"failed"` and a `reason` otherwise. Task 6's contract text cites this script.
+- Consumes: Task 2's declarations, Task 3's builder, Task 5's agent file.
+- Produces:
+  `tools/read-kimi-round-evidence.ps1 -SessionDir <dir> -Kind <fresh|resume> -WireOffset <n> -LogOffset <n> -PrefixSha256 <hex> -Model <id> -Provider <name> -Effort <level> -AgentFile <path> -ExpectedBriefSha256 <hex> -Json`
+  Exits 0 printing `{"status":"clean",...}` only when every check passes; otherwise exits non-zero with `"status":"failed"` and a `reason`. On success it also emits `wireOffset`, `logOffset` and `prefixSha256` for the NEXT call, plus `toolsHash` and `systemPromptHash`.
 
-- [ ] **Step 1: Capture the fixtures**
+Two interface points are direct round-2 fixes: `-ExpectedBriefSha256` rather than a brief FILE, because a file re-read after the call is mutable and would silently redefine the expected value; and `-Provider`, which r2's rule compared against but never received.
 
-From the Task 3 probe home, copy one clean round's `wire.jsonl` and per-session `kimi-code.log` into the fixtures directory, then hand-normalize them: replace absolute user paths with `C:/fixture/...`, and replace the session id with a fixed placeholder. The repo is PUBLIC and raw captures carry the user's home layout — only hand-normalized synthetic fixtures are committed, the same rule the codex probe fixtures follow.
+- [ ] **Step 1: Capture and normalize fixtures**
 
-`wire-resumed.jsonl` is the same session AFTER a resume, so it holds two rounds' records and is what the freshness tests run against.
+From a home built for this purpose, capture a fresh tool-using round and a resumed round in one session, then hand-normalize: replace absolute user paths with `C:/fixture/...` and the session id with a fixed placeholder. The repo is PUBLIC and raw captures carry the user's home layout — only hand-normalized synthetic fixtures are committed, the same rule the codex probe fixtures follow.
+
+Build these fixture files: a clean fresh wire and log, a clean resumed wire and log, plus mutated copies for each failure case below.
 
 - [ ] **Step 2: Write the failing tests**
 
-Create `evals/multi-model-verify/test_kimi_round_evidence.py` covering, at minimum, one test each for:
+One test per case. Each asserts on `status` and on the `reason` field, never on an exact message string, so the invariant is pinned and the wording stays free.
 
-- a clean fresh round returns `status: clean`
-- a clean resumed round with a correct `-WireOffset` returns `status: clean`
-- a resumed round with `-WireOffset 0` FAILS, because round 1's records would otherwise satisfy it — the stale-evidence case, and the reason this script exists
-- a missing session directory fails with a named reason
-- a missing `tools.set_active_tools` record fails
-- a duplicated `llm.request` record inside one slice fails
-- a malformed (non-JSON) line inside the slice fails rather than being skipped
-- `names` unequal to the allowlist fails
-- `disallowedNames` unequal to the denylist fails
-- `modelAlias`, `thinkingEffort` or `provider` unequal fails
-- `toolCount` unequal to the allowlist length fails
-- a `systemPrompt` that differs from the agent file's body fails
-- a `turn.prompt` whose text does not hash to the brief's hash fails
-- a wire file SHORTER than `-WireOffset` fails as truncation rather than being read from zero
+Clean cases:
+- fresh round with correct offsets returns `clean`
+- resumed round with correct offsets returns `clean`
+- a resumed round is clean **even though its slice contains no `config.update`, `tools.set_active_tools` or `llm.tools_snapshot`** — the measured shape, and the case r2 would have failed
+- a fresh round with `llm.request` ×4 is clean — the count is not fixed
 
-Each test asserts on the `status` and the `reason` field, not on an exact message string, so the invariant is pinned and the wording stays free.
+Freshness cases:
+- resumed round validated with `-WireOffset 0` FAILS: round 1's records would otherwise satisfy it. This is the stale-evidence case and the reason the script exists.
+- same for `-LogOffset 0`, so wire and log are covered symmetrically
+- wire file shorter than `-WireOffset` fails as truncation, and specifically is not re-read from zero
+- log file shorter than `-LogOffset` fails the same way
+- a wire file whose PREFIX no longer hashes to `-PrefixSha256` fails as replacement, even when it is longer than the offset — Sol round 2's surviving objection
+- `-Kind fresh` against a session directory that already existed fails
+
+Missing and malformed:
+- missing session directory; missing wire file; missing log file
+- a non-JSON line inside the slice fails rather than being skipped
+- missing `turn.prompt`; two `turn.prompt` in one slice
+- zero `llm.request` in a slice
+- missing `llm config` line; two `llm config` lines in one log slice
+- session-scoped records missing from a FRESH round's slice: absent `config.update`, absent `tools.set_active_tools`, absent `llm.tools_snapshot`
+- duplicated `tools.set_active_tools` or `llm.tools_snapshot` in a fresh slice
+
+Inequality:
+- `names` unequal to the allowlist; `disallowedNames` unequal to the denylist
+- `llm.tools_snapshot` tool names unequal to the allowlist while `names` is correct — the two are separate records and one can be right while the other is wrong
+- `profileName` mismatch
+- `systemPrompt` differing from the agent file's body
+- `systemPromptChars` differing from the body's length
+- `toolCount` unequal to the allowlist length
+- `modelAlias`, `provider` or `thinkingEffort` wrong on ANY `llm.request` in the slice, not merely the first
+- `turn.prompt` text not hashing to `-ExpectedBriefSha256`
 
 - [ ] **Step 3: Run tests to verify they fail**
 
 Run: `python -m pytest evals/multi-model-verify/test_kimi_round_evidence.py -v`
-Expected: FAIL, all — the script does not exist.
+Expected: FAIL, all.
 
 - [ ] **Step 4: Write the validator**
 
-Create `tools/read-kimi-round-evidence.ps1`. Rules it must implement, in order:
+Rules, in this order:
 
-1. If `-SessionDir` is absent or unreadable: fail, reason `session-dir-missing`.
-2. Read `agents/main/wire.jsonl`. If its line count is LESS than `-WireOffset`, fail with reason `wire-truncated` — and specifically do NOT re-read from zero. Same for the log against `-LogOffset`.
-3. Take only lines past `-WireOffset` and log bytes past `-LogOffset`. This slice is the round.
-4. Any line in the slice that is not parseable JSON: fail, reason `wire-malformed`.
-5. Require EXACTLY ONE of each of `config.update` carrying `profileName`, `tools.set_active_tools`, `llm.tools_snapshot` and `llm.request` in the slice. Zero or more than one: fail, reason `record-count`.
-6. Compare every value: `profileName` and `systemPrompt` against `-AgentFile`'s parsed name and body; `names`/`disallowedNames` against the agent file's two lists; the snapshot's tool names against the allowlist; `modelAlias`, `provider`, `thinkingEffort` against `-Model`, the canonical provider and `-Effort`; the log slice's `llm config` line's `toolCount` against the allowlist length.
-7. Hash the concatenation of every `turn.prompt` `input[]` element's `text` field, UTF-8, with CRLF normalized to LF, and compare to the SHA-256 of `-BriefFile` normalized identically. Mismatch: fail, reason `brief-hash`.
-8. On success emit `status: clean` plus `toolsHash`, `systemPromptHash`, and the new wire and log offsets, so the caller can pass them as the NEXT round's offsets.
+1. Session directory absent or unreadable: fail `session-dir-missing`.
+2. Wire or log file absent: fail `evidence-file-missing`.
+3. Either file shorter than its offset: fail `truncated`. Do NOT re-read from zero — a replacement's opening records may belong to any round while looking like evidence.
+4. Re-hash the wire file's first `-WireOffset` lines; unequal to `-PrefixSha256`: fail `prefix-replaced`. This is what makes the boundary prove identity rather than mere length.
+5. Slice = wire lines past `-WireOffset`, log bytes past `-LogOffset`. Any unparseable line in the slice: fail `wire-malformed`.
+6. **Session-scoped checks, only when `-Kind fresh`**: require exactly two `config.update`, one `tools.set_active_tools`, one `llm.tools_snapshot`, one `permission.set_mode`. Compare `profileName` and `systemPrompt` against `-AgentFile`'s parsed name and body; `names`/`disallowedNames` against its two lists; the snapshot's tool names against the allowlist. When `-Kind resume`, require these records to be ABSENT from the slice — their presence means the resume started a new session and the debate state is lost, which is the failure the old lane caught with its session-kind check.
+7. **Per-call checks, both kinds**: exactly one `turn.prompt`; at least one `llm.request`, with EVERY one carrying `-Provider`, `-Model` and `-Effort`; exactly one new `llm config` line in the log slice carrying the same three plus `toolCount` equal to the allowlist length and `systemPromptChars` equal to the agent body's length.
+8. Hash the concatenation of every `turn.prompt` `input[]` element's `text`, UTF-8, CRLF normalized to LF; unequal to `-ExpectedBriefSha256`: fail `brief-hash`.
+9. On success emit `status: clean`, the next call's `wireOffset`, `logOffset` and `prefixSha256`, and `toolsHash` and `systemPromptHash` for the caller to compare across rounds and record.
 
 - [ ] **Step 5: Run the tests**
 
@@ -703,7 +619,7 @@ git commit -m "add an executable validator for kimi-code round evidence"
 
 ---
 
-### Task 6: Rewrite the lane's transport and evidence contract
+### Task 7: Rewrite the lane's transport and evidence contract
 
 **Files:**
 - Modify: `skills/multi-model-verify/references/backup-lane.md:18-140`, `:159-198`
@@ -711,75 +627,54 @@ git commit -m "add an executable validator for kimi-code round evidence"
 - Modify: `evals/multi-model-verify/test_contract_coverage.py:624-648`
 
 **Interfaces:**
-- Consumes: everything from Tasks 2-5, plus all five probe verdicts.
-- Produces: regions `lane-home-isolation`, `round-freshness-boundary`, `per-round-session-evidence`, `evidence-hash-continuity`, `brief-hash-binding`, `resume-inheritance`.
+- Produces regions: `lane-home-isolation`, `round-freshness-boundary`, `per-round-session-evidence`, `evidence-hash-continuity`, `brief-hash-binding`, `resume-inheritance`.
 
 - [ ] **Step 1: Update DECLARED_REGIONS first**
 
-Remove the seven: `rotation-guard-detection`, `rotation-guard-disposition`, `rotation-guard-identity`, `session-block-attribution`, `session-block-kind`, `session-block-residual`, `lane-lock`. Add the six named above, with a comment recording that the freshness region is the surviving half of the deleted offset rule.
+Remove `rotation-guard-detection`, `rotation-guard-disposition`, `rotation-guard-identity`, `session-block-attribution`, `session-block-kind`, `session-block-residual`, `lane-lock`. Add the six above, with a comment recording that `round-freshness-boundary` is the surviving half of the deleted offset rule and that the session-kind check survives inside `per-round-session-evidence`.
 
 - [ ] **Step 2: Run the coverage test to verify it fails**
 
 Run: `python -m pytest evals/multi-model-verify/test_contract_coverage.py -k declared -v`
-Expected: FAIL both directions — six declared and absent, seven present and undeclared.
+Expected: FAIL both directions.
 
 - [ ] **Step 3: Rewrite Transport**
 
-Replace `## Transport` (lines 18-43). It must contain, as prose plus four marked regions:
+Command lines use `<kimi-code-binary>` as the placeholder, never a bare `kimi`, so the pin and the absolute-path instruction agree — r2 said one and pinned the other.
 
-- The absolute-path rule and the floor. The dispatch and resume command lines use `<kimi-code-binary>` as the placeholder, NOT a bare `kimi`, so the pin and the instruction agree. Revision 1 said "absolute path" in prose and then pinned a bare-name command.
-- Region `lane-home-isolation`: build once before round 1 with `tools/new-kimi-lane-home.ps1`, set `KIMI_CODE_HOME` on every call of the debate, the two independent reasons (hooks on the approval path; effort and thinking having no CLI flag), and that an unbuildable home or missing credential makes the lane UNAVAILABLE. Say per-DEBATE, not per-round. Remove the home when the debate ends, because it holds a copied credential.
-- Dispatch line: `<kimi-code-binary> -m <canonical-backup-model-id> --agent-file <plugin-checkout>/skills/multi-model-verify/references/kimi-reviewer-agent.md --skills-dir <debate-home>/skills -p "<the whole brief>"`, run with the working directory set to the review mirror.
-- Resume line: `<kimi-code-binary> --session <session-id> -p "<rebuttal>"`, plus whichever of `-m` and `--skills-dir` Task 3 Step 5 found a resume ACCEPTS — re-pin those, because free defence in depth against a future release changing inheritance is worth taking.
-- Region `resume-inheritance`: what a bare resume was measured to inherit ON 0.31.1, that a wrong-directory resume is refused, that `--agent-file` is rejected with a resume, and that this observation is VERSION-BOUND — which is why the floor exists and why anything re-pinnable is re-pinned. It must not read as an indefinite guarantee.
-- The brief is passed INLINE, never planted as a file with a pointer, because the hash rule can only detect truncation if the recorded prompt IS the brief. State the oversized fallback: if a brief ever exceeds what the inline transport carries, that is a transport failure to be diagnosed, not a reason to switch silently to a pointer whose hash proves nothing.
+- Dispatch: `<kimi-code-binary> -m <canonical-backup-model-id> --agent-file <plugin-checkout>/skills/multi-model-verify/references/kimi-reviewer-agent.md --skills-dir <debate-home>/skills -p "<the whole brief>"`, working directory set to the review mirror.
+- Resume: `<kimi-code-binary> --session <session-id> -m <canonical-backup-model-id> --skills-dir <debate-home>/skills -p "<rebuttal>"`. Measured: resume ACCEPTS `-m`, `--skills-dir` and `--add-dir`, and rejects only `--agent-file`. Re-pin everything it accepts; it is free and it narrows the inheritance risk to the one flag that cannot be re-pinned.
+- Region `lane-home-isolation`: build once before round 1, set `KIMI_CODE_HOME` on every call of the debate, the two independent reasons, and that an unbuildable home or missing credential makes the lane UNAVAILABLE. Remove the home when the debate ends, because it holds a copied credential.
+- Region `resume-inheritance`: what a bare resume was measured to inherit ON 0.31.1, that a wrong-directory resume is refused, that `--agent-file` is rejected because the agent is bound at session creation, and that this is VERSION-BOUND — which is why the floor exists, why what can be re-pinned is re-pinned, and why the evidence check is what actually establishes the surface each round.
+- The brief is passed INLINE, never planted as a file with a pointer, because the hash rule can only detect truncation if the recorded prompt IS the brief. A brief that exceeds the inline transport is a transport failure to diagnose, not a reason to switch to a pointer whose hash proves nothing.
 
 - [ ] **Step 4: Rewrite Per-round evidence**
 
-Replace lines 45-139. It must contain:
+- Region `round-freshness-boundary`: the files are cumulative, so before every call capture the wire line count, the log byte length, AND a SHA-256 of the wire file's existing lines; after the call read only past the offsets, and require the prefix hash to be unchanged. A fresh call's session directory must not exist beforehand and its offsets are zero. A file shorter than its offset, or absent, or whose prefix hash changed, was replaced: that is a route-attribution failure and specifically not a reason to re-read from zero. The prefix hash is what makes this prove identity rather than length — length alone passes a file replaced, truncated and regrown.
 
-- Region `round-freshness-boundary`, the heart of this revision:
+- Region `per-round-session-evidence`: state the TWO RECORD CLASSES explicitly, because one rule cannot cover both and a rule that assumed it could was measured to fail a clean round 1 and every resumed round. Session-scoped records — `config.update` twice, `tools.set_active_tools`, `llm.tools_snapshot` and `permission.set_mode` once each — appear ONLY in the session-creating call's slice; require them there and require their ABSENCE from a resume's slice, since their presence means the resume silently started a new session. Per-call records — exactly one `turn.prompt`, one or more `llm.request` with every one carrying the canonical provider, model and effort, and exactly one new `llm config` log line carrying those plus `toolCount` and `systemPromptChars` — appear in every slice. `llm.request` tracks the tool loop and is bounded from below, never fixed. Run `tools/read-kimi-round-evidence.ps1` with the captured offsets and require `status: clean`; a missing directory, a missing or miscounted record, an unreadable file, a malformed line, or any inequality is a route-attribution failure, the reply is DISCARDED unread, and the failure goes to the fallbacks.md consent gate.
 
-  ```
-  The session's log and wire transcript are CUMULATIVE: a resumed round
-  appends to the same files, so round 1's records remain able to satisfy
-  a later round's checks. Before every call capture the wire transcript's
-  line count and the session log's byte length, and after the call read
-  ONLY past both. A fresh call's session directory must not exist
-  beforehand, and its captured offsets are zero. If either file is
-  SHORTER afterwards than the captured offset, or absent, it was replaced
-  and every position from the earlier measurement is meaningless: that is
-  a route-attribution failure and specifically not a reason to re-read
-  from zero, because the replacement's opening records may belong to any
-  round while looking like evidence.
-  ```
+- Region `evidence-hash-continuity`: record `toolsHash` and `systemPromptHash` in round 1, require every later round of the debate to match, and RECORD BOTH VALUES IN THE DEBATE RECORD. They are deliberately not pinned to a literal in this repo, because they cover tool schemas any client release may reword and a committed literal would fail every round for a reason that is not a route problem. Recording them is what makes a client upgrade's change visible instead of silently rebaselined at the next round 1.
 
-  This is the surviving half of the deleted byte-offset rule. Per-session files removed its cross-session job, not its per-call one.
+- Region `brief-hash-binding`: hash the brief before dispatch and require the recorded prompt to match, canonicalized as UTF-8 with CRLF normalized to LF over the concatenation of every `turn.prompt` `input[]` element's `text` field. r2 said "hashes to the same value" while its own evidence matched only after newline normalization — an undefined step a driver would have to invent.
 
-- Region `per-round-session-evidence`: run `tools/read-kimi-round-evidence.ps1` with the captured offsets after every call, and require `status: clean`. Enumerate what it checks so the contract does not depend on reading the script. State that a missing session directory, a missing or duplicated record, an unreadable file, a malformed line, or any inequality is a route-attribution failure: the reply is DISCARDED unread and the failure goes to the fallbacks.md consent gate.
-
-- Region `evidence-hash-continuity`, which revision 1 left as unmarked prose that pinned only two fragments: record `toolsHash` and `systemPromptHash` in round 1, require every later round of the debate to match, and record BOTH VALUES IN THE DEBATE RECORD. They are deliberately not pinned to a literal in this repo, because they cover tool schemas that any client release may reword, and a committed literal would fail every round for a reason that is not a route problem. Recording them in the record is what makes a client upgrade's change visible instead of silently rebaselined at the next round 1.
-
-- Region `brief-hash-binding`: hash the brief before dispatch and require the recorded prompt to match. Specify the canonicalization exactly — UTF-8, CRLF normalized to LF, over the concatenation of every `turn.prompt` `input[]` element's `text` field — because revision 1 said "hashes to the same value" while its own evidence matched only after newline normalization, which is an undefined step a driver would have to invent.
-
-- Prose, unmarked: why positive equalities beat the old `Loaded tools:` grep, stated NARROWLY. A failed allowlist does not necessarily change the effective tool set, since the denylist may exclude the same tools by name; what the check actually guarantees is that the CONFIGURED lists and the resolved snapshot are all compared against committed text, so a divergence in any of them surfaces. Revision 1 overclaimed here.
-
-- The client-side vocabulary rule, unchanged.
+- Unmarked prose, stated NARROWLY: what these checks do and do not guarantee. A failed allowlist does not necessarily change the effective tool set, because the denylist can exclude the same tools by name. What the checks guarantee is that the configured lists, the resolved snapshot, the system prompt and its length are all compared against committed text, so a divergence in any of them surfaces. r2 overclaimed here.
 
 - [ ] **Step 5: Rewrite the Client config surface section**
 
-Replace the effort bullet with one describing the home-written pin and its per-call confirmation, hedged by Task 3 Step 3's verdict. Replace the `merge_all_available_skills` bullet with the skill-discovery bullet naming all four roots — `.kimi-code/skills/`, `.agents/skills/`, `$KIMI_CODE_HOME/skills/`, `~/.agents/skills/` — noting that the home relocation does not cover `~/.agents/skills/`, and stating `--skills-dir`'s measured effect from Task 3 Step 1. If it was not proven to suppress both project roots, say so and route the load to preflight-3 remediation.
-
-Add the thinking sentence per Task 3 Step 4: name the differentiating field if one exists, or state plainly that thinking-enabled is config-asserted and not runtime-verified.
+- Effort: written into the debate home and confirmed per call. Measured: `default_effort = "low"` produced `thinkingEffort=low`.
+- Thinking: config-asserted and NOT runtime-verified. Measured: `enabled = false` produced output identical to `true`. Say exactly that; do not list it beside effort.
+- Skill discovery: name all four roots — `.kimi-code/skills/`, `.agents/skills/`, `<debate-home>/skills/`, `~/.agents/skills/` — and state that `--skills-dir` is a MITIGATION whose effect is unmeasurable in this configuration. Measured: with canaries planted at both project roots, runs with and without it were identical and the reviewer reported no skills available, most likely because `Skill` is absent from the allowlist. The load-bearing controls are the allowlist and preflight-3 remediation. Keep passing `--skills-dir` because it costs nothing and covers a future release that advertises regardless, but claim nothing for it.
+- Record that a planted `SKILL.md` remains readable as ordinary workspace content: in the measured round the reviewer read both canaries with `Read` and declined on judgment. Prompt text is never a control, which is why remediation removes the files.
 
 - [ ] **Step 6: Rewrite the pins**
 
-Replace `test_backup_lane_dispatch_and_resume_pins` and `test_backup_lane_evidence_pins` with one test per region, each asserting the region's text WHOLE via `_norm`, plus a `test_deleted_machinery_does_not_return` holding absence checks for `kimi-lane-lock.ps1`, `Rotation guard` and `Created new session:`. Absence checks lock nothing under the grammar and are restoration guards, not pins — say so in the comment so a later reader does not mistake them for coverage.
+One test per region, each asserting the region WHOLE via `_norm`. Plus `test_deleted_machinery_does_not_return` holding absence checks for `kimi-lane-lock.ps1`, `Rotation guard` and `Created new session:`, with a comment saying absence checks lock nothing under the grammar and are restoration guards, not coverage.
 
 - [ ] **Step 7: Run the whole suite**
 
 Run: `python -m pytest evals -q`
-Expected: PASS. `test_declared_regions_match_the_documents` and `test_every_marked_region_is_locked_by_a_pin` are the two that prove the region edit landed. A region reporting uncovered means the pin does not contain it WHOLE — fix the pin, not the region.
+Expected: PASS. A region reporting uncovered means the pin does not contain it WHOLE — fix the pin, not the region.
 
 - [ ] **Step 8: Commit**
 
@@ -790,42 +685,36 @@ git commit -m "rewrite the backup lane's transport and evidence for kimi-code"
 
 ---
 
-### Task 7: Delete the lane lock
+### Task 8: Delete the lane lock
 
 **Files:**
 - Delete: `tools/kimi-lane-lock.ps1`, `evals/multi-model-verify/test_kimi_lane_lock.py`
 
-**Interfaces:**
-- Consumes: Task 6's removal of the `lane-lock` region.
-- Produces: nothing.
-
 - [ ] **Step 1: Find every reference**
 
-Run: `Select-String -Path (Get-ChildItem -Recurse -File -Exclude *.git*) -Pattern "kimi-lane-lock" -List`
-PowerShell, not `grep` — the declared stack for this repo's tooling.
+```powershell
+Get-ChildItem -Recurse -File | Where-Object { $_.FullName -notmatch '\\\.git\\' } |
+  Select-String -Pattern "kimi-lane-lock" -List | Select-Object Path
+```
 
-- [ ] **Step 2: Delete**
+Filter on the full path, not `-Exclude`: `-Exclude` matches file NAMES and does not stop traversal into `.git`, which is r2's defect here.
+
+- [ ] **Step 2: Delete and clean prose**
 
 ```bash
 git rm tools/kimi-lane-lock.ps1 evals/multi-model-verify/test_kimi_lane_lock.py
 ```
 
-- [ ] **Step 3: Remove surviving prose references**
-
 Edit each remaining non-`docs/**` file the search found, deleting the lock sentence rather than rewording it.
 
-- [ ] **Step 4: Verify**
+- [ ] **Step 3: Verify and run the suite**
 
-Re-run the search. Expected: only `docs/**` matches, which are historical records and stay.
+Re-run the search: only `docs/**` should match, being historical records.
+Run: `python -m pytest evals -q` — PASS, with 41 fewer tests collected.
 
-- [ ] **Step 5: Run the whole suite**
+- [ ] **Step 4: Commit**
 
-Run: `python -m pytest evals -q`
-Expected: PASS, with 41 fewer tests collected.
-
-- [ ] **Step 6: Commit**
-
-Stage by explicit path — list each deleted and edited file. Do NOT use `git add -u`.
+Stage by explicit path, listing each deleted and edited file. Do NOT use `git add -u`.
 
 ```bash
 git add tools/kimi-lane-lock.ps1 evals/multi-model-verify/test_kimi_lane_lock.py <each edited file>
@@ -834,24 +723,19 @@ git commit -m "delete the kimi lane lock, which guarded a shared log that no lon
 
 ---
 
-### Task 8: Extend preflight 3 to `.kimi-code/`
+### Task 9: Extend preflight 3 to `.kimi-code/`
 
 **Files:**
-- Modify: `skills/multi-model-verify/SKILL.md:61-77`
-- Modify: `tools/new-review-mirror.ps1` (enumeration pathspecs)
-- Modify: `evals/multi-model-verify/test_review_mirror.py`
-
-**Interfaces:**
-- Consumes: Task 3 Step 1's verdict on which discovery roots are live.
-- Produces: an enumeration pathspec list including `.kimi-code/*`.
+- Modify: `skills/multi-model-verify/SKILL.md:61-77`, `tools/new-review-mirror.ps1`, `evals/multi-model-verify/test_review_mirror.py`
 
 - [ ] **Step 1: Write the failing test**
 
 ```python
 def test_enumeration_sweeps_the_kimi_code_back_channel():
-    """kimi-code auto-discovers agents from .kimi-code/agents/ and skills
-    from .kimi-code/skills/ in the REVIEWED tree - the same class as
-    codex's .agents/skills/ advertisement, on the backup lane's side."""
+    """kimi-code discovers agents from .kimi-code/agents/ and skills from
+    .kimi-code/skills/ in the REVIEWED tree. Measured: the reviewer read a
+    planted SKILL.md there as ordinary file content, so removal - not the
+    reviewer's judgment - is the control."""
     body = (REPO / "tools" / "new-review-mirror.ps1").read_text(
         encoding="utf-8")
     assert "'.kimi-code/*'" in body
@@ -864,16 +748,13 @@ Expected: FAIL.
 
 - [ ] **Step 3: Add the pathspec and update the preflight text**
 
-Add `'.kimi-code/*'` to the `git ls-files --cached --others` pathspec list in `tools/new-review-mirror.ps1`, and extend SKILL.md's preflight-3 sentence and listing command to name it. Keep the existing root-anchoring behaviour and the existing note about the depth asymmetry, which applies identically to the new pathspec.
+Add `'.kimi-code/*'` to the `git ls-files --cached --others` pathspec list, and extend SKILL.md's preflight-3 sentence and listing command to name it. Keep root anchoring and the existing depth-asymmetry note, which applies identically.
 
-**Both branches, stated:** if Task 3 Step 1 found `--skills-dir` suppresses both project roots, this sweep is defence in depth and the text says so. If it does not, this sweep is the PRIMARY control for the reviewed tree's skills and the text must say that instead — a mitigation described as a control is the failure this repo removes.
+Because Task 4's measurement showed `--skills-dir` suppresses nothing observable, this sweep is the PRIMARY control for the reviewed tree's skills and agents, and the text must say so. Describing it as defence in depth would be describing a mitigation as a control.
 
-- [ ] **Step 4: Run the tests**
+- [ ] **Step 4: Run the tests and commit**
 
-Run: `python -m pytest evals -q`
-Expected: PASS.
-
-- [ ] **Step 5: Commit**
+Run: `python -m pytest evals -q` — PASS.
 
 ```bash
 git add tools/new-review-mirror.ps1 skills/multi-model-verify/SKILL.md evals/multi-model-verify/test_review_mirror.py
@@ -882,113 +763,93 @@ git commit -m "sweep .kimi-code back-channels in preflight 3"
 
 ---
 
-### Task 9: Declarations, failure routing and the doctor
+### Task 10: Failure routing, the doctor and the README
 
 **Files:**
-- Modify: `skills/multi-model-verify/references/model-prompting-notes.md:298-330`
-- Modify: `skills/multi-model-verify/references/fallbacks.md:152-179`
-- Modify: `commands/doctor.md`, `README.md`
-- Modify: `evals/multi-model-verify/test_backup_lane.py:46-61, 489-512`
+- Modify: `skills/multi-model-verify/references/fallbacks.md:152-179`, `commands/doctor.md`, `README.md`
+- Modify: `evals/multi-model-verify/test_backup_lane.py:489-512, 546`
 
-**Interfaces:**
-- Consumes: Task 3 Step 6's encoding verdict; Task 6's contract.
-- Produces: canonical provider and effort declarations that Task 5's validator arguments are checked against.
+- [ ] **Step 1: Rewrite the route-attribution entry**
 
-- [ ] **Step 1: Add the two missing declarations**
+`fallbacks.md:152-161` names "offset rule in backup-lane.md". Retarget it to the freshness boundary and the validator. Keep the disposition: no retry, reply DISCARDED unread, consent gate. Keep the transient-member carve-out, which still has a member — a session file replaced under the call would yield clean evidence on a re-dispatch.
 
-Revision 1's evidence rule required a "canonical provider" and a "canonical effort" for the backup lane, and neither was declared anywhere — an equality with no single source. Add to the backup block in `model-prompting-notes.md`, beside the existing model id:
+`test_backup_lane.py:546` currently pins the old rotation sentence and must be rewritten in this same step, or the suite fails.
 
-```
-Canonical backup provider: `kimi`
+- [ ] **Step 2: Resolve the encoding class per Task 4 Step 1**
 
-Canonical backup reasoning effort: `high`
+If no hazard was measured: delete the `output-encoding` class from `fallbacks.md:162-179`, delete the four-flags-re-pinned recovery, and remove the Python guard bullet from `backup-lane.md`. If a hazard WAS measured: keep the class and rewrite it to describe this client's failure and recovery.
 
-Canonical backup thinking declaration: `[thinking] enabled = true`
-```
+Replace `test_output_encoding_class_is_wired` with a test matching whichever branch was taken, asserting in both cases that `PYTHONIOENCODING` and `PYTHONUTF8` are gone from the lane.
 
-Replace the old `Canonical backup thinking flag: --thinking` line. Add one sentence noting this client has no thinking or effort flag, so both are written into the debate home and confirmed per call from the session log.
+- [ ] **Step 3: Update the doctor and the README**
 
-- [ ] **Step 2: Update the declaration test**
+Rewrite `commands/doctor.md`'s backup-lane section to check: the binary at the absolute path exists and reports at or above the floor; `provider list` under a freshly built home reports `source=oauth`; the committed agent file's allowlist is present. Drop every reference to `kimi_cli` module imports, `--quiet`, `--thinking` and the lane lock. Fix any `README.md` row naming the deleted yaml or system file.
 
-In `test_backup_lane.py`, update `test_notes_backup_declarations` to assert all four backup declarations, keeping the existing primary-parser ordering assertions untouched — those protect the primary lane's runtime parsers and are not part of this change.
+- [ ] **Step 4: Run the full gate and commit**
 
-- [ ] **Step 3: Rewrite the stale fallbacks entries**
-
-`fallbacks.md:152-161` names "offset rule in backup-lane.md" and a rotation exception; `:162-179` requires "all four flags re-pinned AND the UTF-8 environment forced". Both describe machinery this cycle deletes.
-
-- Rewrite the route-attribution entry to name the freshness boundary and the validator instead of the offset rule. Keep the disposition unchanged: no retry, reply DISCARDED unread, consent gate. Keep the transient-member carve-out only if a transient member still exists under the new rule — a file replaced under the call still qualifies, so it does.
-- Rewrite or delete the `output-encoding` entry per Task 3 Step 6. If no hazard was measured, delete the class and its `fallbacks.md` entry, and remove the four-flags-re-pinned recovery. If a hazard was measured, keep the class and describe THIS client's failure and recovery.
-
-Note that `test_fallbacks_backup_wiring` currently pins the old rotation sentence at `test_backup_lane.py:546`; that pin must be rewritten in the same step or the suite fails.
-
-- [ ] **Step 4: Update the encoding test**
-
-Replace `test_output_encoding_class_is_wired` with a test matching whichever branch Task 3 Step 6 selected, asserting the Python guard is gone from the lane either way.
-
-- [ ] **Step 5: Update the doctor and the README**
-
-Rewrite `commands/doctor.md`'s backup-lane section to check: the binary at the absolute path exists and reports at or above the floor; `provider list` under a freshly built home reports `source=oauth`; and the committed agent file's allowlist is present. Drop every reference to `kimi_cli` module imports, `--quiet`, `--thinking` and the lane lock. Fix any `README.md` row naming the deleted yaml or system file.
-
-- [ ] **Step 6: Run the full gate**
-
-All four commands from Global Constraints.
-Expected: all PASS.
-
-- [ ] **Step 7: Commit**
+All four gate commands — PASS.
 
 ```bash
-git add skills/multi-model-verify/references/model-prompting-notes.md skills/multi-model-verify/references/fallbacks.md commands/doctor.md README.md evals/multi-model-verify/test_backup_lane.py
-git commit -m "declare the backup lane's provider and effort, and retire the stale failure routing"
+git add skills/multi-model-verify/references/fallbacks.md skills/multi-model-verify/references/backup-lane.md commands/doctor.md README.md evals/multi-model-verify/test_backup_lane.py
+git commit -m "retire the stale failure routing and update the doctor for kimi-code"
 ```
 
 ---
 
-### Task 10: Close the backlog and ship
-
-**Files:**
-- Modify: `docs/superpowers/plans/2026-07-27-0150-backlog.md`, `.claude-plugin/plugin.json`, `.claude/state/handoff.md`
+### Task 11: Prove the lane, close the backlog, ship
 
 - [ ] **Step 1: Run the opt-in behavioral suite**
 
 Run: `python evals/tools/run_behavioral_evals.py`
-Expected: PASS. Record any failing case by name; do not proceed without deciding explicitly whether it is a real regression.
+Expected: PASS. Record any failing case by name; do not proceed without deciding whether it is a real regression.
 
-- [ ] **Step 2: Run a real backup-lane round end to end**
+- [ ] **Step 2: Run a real two-round debate end to end**
 
-The lane has not reviewed anything until it has. Run one round against a small real diff: build a home, build a mirror, dispatch, capture offsets, run the validator, confirm `status: clean`, then resume for a second round and confirm the validator still reports clean against the SECOND round's offsets and not round 1's. Retain the evidence under `docs/superpowers/plans/rounds/2026-07-31-kimi-code-swap/`.
+The lane has reviewed nothing until it has. Against a small real diff:
+
+1. Build the debate home. Build the mirror.
+2. **Capture the offsets and the prefix hash BEFORE dispatching** — r2 wrote "dispatch, capture offsets", reversing the one rule the whole design rests on.
+3. Dispatch round 1. Run the validator with `-Kind fresh`. Require `status: clean`.
+4. Resume for round 2 with `-m` and `--skills-dir` re-pinned, using the offsets the validator returned. Run it with `-Kind resume`. Require `status: clean`, and confirm it is validating round 2's records and not round 1's — the validator's own stale test covers the logic, and this confirms it on live data.
+5. Confirm `toolsHash` and `systemPromptHash` match between rounds.
+6. Retain every artifact under `rounds/2026-07-31-kimi-code-swap/`, then remove the home.
 
 This is also what item 15 requires before `kimi-cli` may be removed in a later cycle.
 
-- [ ] **Step 3: Mark the backlog items**
+- [ ] **Step 3: Mark the backlog**
 
-Item 13 DONE, item 8 DONE (brief-hash rule; truncation did not reproduce at 9033 characters), item 16 GONE (the lock it describes no longer exists), item 6's residual answered. Item 15 gains a note: the installer renamed the binary to `kimi-legacy.exe`, so the shadowing hazard is gone and the rollback survives; removal still deferred. Update the `**Status.**` line.
+Item 13 DONE. Item 8 DONE, by the brief-hash rule; truncation did not reproduce at 9033 characters. Item 16 GONE — the lock it describes no longer exists. Item 6's residual answered YES. Item 15 gains a note: the installer renamed the binary to `kimi-legacy.exe`, so the shadowing hazard is gone and the rollback survives; removal still deferred. Update the `**Status.**` line.
 
-- [ ] **Step 4: Bump the version and rewrite the handoff**
+- [ ] **Step 4: Bump and rewrite the handoff**
 
-`.claude-plugin/plugin.json` to `0.18.0`. Rewrite `.claude/state/handoff.md`'s "What just shipped" and "What is next" with this cycle's facts, including the three that are not derivable from the code: per-session files are cumulative so the offset rule's freshness half survived while its attribution half was deleted; the real kimi-code home carried seven Orca lifecycle hooks including PermissionRequest; and a bare resume inherits everything while a wrong-directory resume is refused, the inverse of the old rule. Update the standing-rules list — remove the `PYTHONIOENCODING` and lane-lock bullets, add the absolute-path binary rule and the debate-home rule.
+`.claude-plugin/plugin.json` to `0.18.0`. Rewrite `.claude/state/handoff.md` with this cycle's facts, including the four not derivable from the code:
+
+- Session evidence records split into session-scoped and per-call classes; a rule that assumed one class failed a clean round 1 and every resumed round, and only measurement caught it.
+- `--skills-dir` suppresses nothing measurable; the allowlist and preflight-3 remediation are the controls.
+- Thinking-enabled has no observable signal; effort does.
+- Resume accepts every flag but `--agent-file`, because the agent is bound at session creation.
+
+Update the standing rules: remove the `PYTHONIOENCODING` and lane-lock bullets, add the absolute-path binary rule and the debate-home rule.
 
 - [ ] **Step 5: Final gate**
 
 All four gate commands, plus `pwsh -File evals/tools/drift_statemachine_tests.ps1`.
-Expected: all PASS.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 6: Commit and update the cache**
 
 ```bash
 git add docs/superpowers/plans/2026-07-27-0150-backlog.md .claude-plugin/plugin.json .claude/state/handoff.md
 git commit -m "0.18.0: close backlog items 13, 8 and 16"
 ```
 
-- [ ] **Step 7: Update the installed cache**
-
-Checkout edits are not live. Run `claude plugin update parallax@parallax`, then restart the session, because `skills/`, `commands/` and `tools/` all changed.
+Then `claude plugin update parallax@parallax` and restart the session, because `skills/`, `commands/` and `tools/` all changed.
 
 ---
 
 ## Self-review notes
 
-Every FIX from Sol round 1 maps to a step: freshness to Task 6 Step 4's new region and Task 5's stale-evidence tests; the missing validator and fixtures to Task 5; the hash rule's region and recording to Task 6 Step 4; brief canonicalization and the oversized fallback to Task 6 Steps 3-4; the subagent negative branch to Task 4 Step 4; the narrowed denylist claim to Task 4 Step 2's coverage test; per-debate naming and thinking evidence to Task 3 Step 4 and Task 6; credential handling to Task 2; resume re-pinning to Task 3 Step 5 and Task 6 Step 3; the `-r` help assertion, the state-machine stubs, the model-literal sweep, `git add -u`, `grep`, the dangling encoding probe and the Task 2/3 ordering to Tasks 1, 2, 3, 7 and 9.
+Every round-2 FIX maps to a step. Freshness identity to Task 7 Step 4's prefix hash and Task 6's `prefix-replaced` case. The missing negative tests to Task 6 Step 2, now enumerated at thirty-one cases across five groups. Mutable brief file to `-ExpectedBriefSha256`. Missing `-Provider` to Task 6's interface. Record cardinality to the measured two-class rule in Task 7 Step 4. Unreachable `TryParse` to Task 1 Step 3. State-machine stub location, `-S` versus `--session`, and the missing below-floor mode to Task 1 Step 5. Uncallable and unguarded removal, non-transactional build, fail-open git check and unverified ACL to Task 3. The count-not-inventory test to Task 5 Step 2. `-Exclude` traversal to Task 8 Step 1. Reversed offset capture to Task 11 Step 2. Forward references to canonical declarations and to a deleted probe home resolved by moving declarations to Task 2 and having Task 6 capture its own fixtures.
 
-Two of Sol's fixes are declined with reasons stated in Task 6 Step 4 and Task 3 Step 5: binding `toolsHash` to a client version, which reintroduces the brittleness the rule exists to avoid and is replaced by recording both hashes in the debate record; and a sacrificial resume write-probe every debate, which spends a call per debate against a hypothetical future-version risk, replaced by re-pinning every flag a resume accepts plus the version floor.
+Two of Sol's fixes remain declined, with reasons in Task 7 Step 4 and Task 7 Step 3: binding `toolsHash` to a client version, replaced by recording both hashes in the debate record; and a sacrificial resume write-probe every debate, replaced by re-pinning every flag a resume accepts — which measurement showed is everything except the agent — plus the floor and the per-round evidence check.
 
-One defect Sol did not find is fixed in Task 4 Step 2: `CronList` was in neither list, so one built-in tool was neither allowed nor denied.
+Three of Sol's round-2 objections were settled by measurement rather than argument: record cardinality, which was worse than Sol supposed; `--skills-dir`, which turned out to control nothing; and thinking-enabled, which has no observable signal and so cannot be claimed.
