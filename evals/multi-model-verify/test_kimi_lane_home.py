@@ -1,6 +1,8 @@
 """Contract pins for the per-debate kimi-code lane home."""
+import re
 import shutil
 import subprocess
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -174,3 +176,65 @@ def test_a_model_with_a_trailing_newline_is_refused(tmp_path):
         capture_output=True, text=True, timeout=60)
     assert proc.returncode != 0, proc.stdout + proc.stderr
     assert not target.exists(), "a -Model with a trailing newline must be refused before any directory is created"
+
+
+def _render_config_template(model, provider_model_name, max_context_size, effort):
+    """Extract the ACTUAL config.toml here-string from the committed
+    script and substitute its interpolated variables the same way
+    PowerShell's simple `"$Var"` string interpolation would - so any
+    future edit to the real template is what this test parses, not a
+    copy that can silently drift from it."""
+    body = _read(BUILDER)
+    match = re.search(r'\$configToml = @"\r?\n(.*?)\r?\n"@', body, re.DOTALL)
+    assert match, "could not locate the config.toml here-string in the builder"
+    template = match.group(1)
+    return (template
+            .replace("$Model", model)
+            .replace("$providerModelName", provider_model_name)
+            .replace("$maxContextSize", str(max_context_size))
+            .replace("$Effort", effort))
+
+
+def test_rendered_config_places_root_keys_at_the_document_root():
+    """Fix-round-3 finding: in TOML, a table header claims every
+    key-value pair that follows it until the NEXT header - a blank line
+    does NOT end a table. An earlier template put
+    default_model/extra_skill_dirs/telemetry AFTER [models."$Model"], so
+    all three silently became keys of the MODEL table instead of the
+    document root: extra_skill_dirs is a containment setting that then
+    suppressed nothing while looking like it did, and telemetry was
+    observed resolving to true despite this file saying false. A test
+    asserting the file merely CONTAINS "default_model" would have passed
+    against the broken template - it is not this test. This one parses
+    the real template with an actual TOML parser (not a text/substring
+    check, which cannot distinguish a root key from a same-named key
+    nested under a table) and asserts where the keys actually resolve."""
+    rendered = _render_config_template(
+        model="kimi-code/test-model", provider_model_name="test-model",
+        max_context_size=262144, effort="high")
+    parsed = tomllib.loads(rendered)
+
+    assert parsed["default_model"] == "kimi-code/test-model"
+    assert parsed["extra_skill_dirs"] == []
+    assert parsed["telemetry"] is False
+
+    model_table = parsed["models"]["kimi-code/test-model"]
+    assert model_table["default_effort"] == "high"
+    # default_effort is the ONE key that belongs inside the model table;
+    # the other three must not be duplicated or misplaced there.
+    assert "default_model" not in model_table
+    assert "extra_skill_dirs" not in model_table
+    assert "telemetry" not in model_table
+
+    # The providers table and its .oauth sub-table sit BETWEEN the root
+    # keys and the model table in the source - confirm nothing intended
+    # for one drifted into another.
+    provider_table = parsed["providers"]["managed:kimi-code"]
+    assert provider_table["type"] == "kimi"
+    assert "storage" not in provider_table
+    assert "key" not in provider_table
+    oauth_table = provider_table["oauth"]
+    assert oauth_table["storage"] == "file"
+    assert oauth_table["key"] == "oauth/kimi-code"
+    assert "type" not in oauth_table
+    assert "api_key" not in oauth_table

@@ -318,7 +318,21 @@ try {
     # it (see model-prompting-notes.md for that identity).
     $maxContextSize = 262144
 
+    # Root-level keys MUST appear BEFORE any table header: a TOML table
+    # header claims every key-value pair that follows it, up to the NEXT
+    # header - a blank line does not end a table. An earlier version put
+    # default_model/extra_skill_dirs/telemetry AFTER [models."$Model"],
+    # so all three silently became keys of the MODEL table instead of the
+    # document root: extra_skill_dirs (a containment setting) never
+    # actually suppressed anything while looking like it did, and
+    # telemetry was observed resolving to true despite this file saying
+    # false. default_effort is the one key that belongs inside the model
+    # table, and stays there.
     $configToml = @"
+default_model = "$Model"
+extra_skill_dirs = []
+telemetry = false
+
 [providers."managed:kimi-code"]
 type = "kimi"
 api_key = ""
@@ -333,10 +347,6 @@ provider = "managed:kimi-code"
 model = "$providerModelName"
 max_context_size = $maxContextSize
 default_effort = "$Effort"
-
-default_model = "$Model"
-extra_skill_dirs = []
-telemetry = false
 
 [thinking]
 enabled = true
