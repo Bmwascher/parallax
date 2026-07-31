@@ -669,7 +669,7 @@ Four interface points are direct review fixes:
 - `-ExpectedBriefSha256` rather than a brief FILE, because a file re-read after the call is mutable and would silently redefine the expected value.
 - `-Provider`, which the r2 rule compared against but never received.
 - **Offsets are BYTE counts, not line counts**, for both files. This removes r3's framing question entirely: a prefix hash over raw bytes through a byte offset has one unambiguous definition, whereas "SHA-256 of the existing lines" leaves encoding and newline framing undefined and two implementations can disagree.
-- **A single `-PriorState` object instead of loose offsets**, carrying `sessionDirExisted` so the fresh-call rule is checkable at all — r3's version asked the validator to know something it was never told — and binding each invocation to the previous one's output so a valid older offset-and-hash pair cannot be replayed.
+- **A single `-PriorState` object instead of loose offsets**, so each invocation is bound to the previous one's output and a valid older offset-and-hash pair cannot be replayed. Its shape depends on the kind, for the reason given above: a fresh call has an inventory, a resume has offsets and an identity.
 
 - [ ] **Step 1: Capture and normalize fixtures**
 
@@ -747,7 +747,7 @@ Expected: FAIL, all.
 
 Rules, in this order:
 
-1. `-PriorState` unreadable, malformed, missing any required field, or carrying a field of the wrong TYPE — a string where a number belongs, a negative offset, a hash that is not 64 hex characters, `sessionDirExisted` as a string: fail `prior-state-unusable`. An unmade measurement is never a clean one, and this object IS the measurement.
+1. `-PriorState` unreadable, malformed, missing any required field, or carrying a field of the wrong TYPE — a string where a number belongs, a negative offset, a hash that is not 64 hex characters, `knownSessionDirs` as a string rather than a list: fail `prior-state-unusable`. An unmade measurement is never a clean one, and this object IS the measurement.
 2. **Establish the session, by kind.**
    - `-Kind fresh`: enumerate the session directories under `<debate-home>/sessions` now, and subtract `-PriorState.knownSessionDirs`. Require EXACTLY ONE new directory: zero means the call created no session, more than one means something else ran concurrently in this home and the round cannot be attributed. Fail `session-not-resolvable`. Require that directory's name to equal `-SessionIdFromStdout`; a mismatch means the id the client reported is not the directory being read, so fail `session-id-mismatch`. This is how a fresh call gets an identity it could not have had beforehand.
    - `-Kind resume`: `-PriorState.sessionDir` must equal the resolved session directory and `-PriorState.sessionId` must equal its name, else fail `state-session-mismatch`. This keeps the exact binding for every call after the first.
@@ -764,7 +764,7 @@ Rules, in this order:
 12. **Per-call checks, both kinds**: exactly one `turn.prompt`; at least one `llm.request`, with EVERY one carrying `-Provider`, `-Model` and `-Effort`, and every one carrying NONEMPTY `toolsHash` and `systemPromptHash` that are identical across all requests in the slice. One request in a tool loop could otherwise run on a different surface while the emitted hashes come from another. On a FRESH slice the requests' `toolsHash` must also equal the `llm.tools_snapshot` record's own `hash`: consistent request hashes that contradict the snapshot describing the sent schemas are a disagreement, not a pass. Exactly one new `llm config` line in the log slice, carrying provider, model alias and effort, plus `toolCount` equal to the allowlist length and `systemPromptChars` equal to the agent body's length.
 13. From round 2 onward, compare this slice's `toolsHash` and `systemPromptHash` against `-PriorState`'s; unequal: fail `hash-discontinuity`. r3 left this to the caller, which made it advice rather than a check.
 14. Hash the concatenation of every `turn.prompt` `input[]` element's `text`, UTF-8, CRLF normalized to LF; unequal to `-ExpectedBriefSha256`: fail `brief-hash`.
-15. On success emit `status: clean` and a `nextState` carrying `sessionDir`, `sessionId`, both byte offsets, both prefix hashes, `sessionDirExisted: true`, and the two hashes.
+15. On success emit `status: clean` and a `nextState` of the RESUME shape — `kind: "resume"`, the resolved `sessionDir` and `sessionId`, both byte offsets, both prefix hashes, and the two continuity hashes — whatever kind this invocation was. A fresh call's output is the next call's resume-shaped input, which is what makes the chain uniform from round 2 onward.
 
 - [ ] **Step 5: Run the tests**
 
