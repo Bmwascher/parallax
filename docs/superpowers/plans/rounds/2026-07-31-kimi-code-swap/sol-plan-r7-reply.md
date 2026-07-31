@@ -1,0 +1,44 @@
+The validator design is now structurally coherent, but freeze condition 3 was not propagated into the contract being rewritten: Task 7 still says “exactly one new directory,” which is false for the measured topology. The destructive test also remains fail-open on an unavailable substituted drive.
+
+1. The two parameter sets are executable and correctly separated: Fresh receives the sessions root and stdout ID but no session directory; Resume receives the session directory and neither fresh-only input ([plan:656](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-07-31-kimi-code-swap.md:656), [plan:658](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-07-31-kimi-code-swap.md:658), [plan:659](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-07-31-kimi-code-swap.md:659)). Kind equality is explicit ([plan:760](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-07-31-kimi-code-swap.md:760)), the clean first-call topology has a dedicated case ([plan:710](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-07-31-kimi-code-swap.md:710)), and rules 7–9 and 16 are correctly cross-referenced ([plan:767](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-07-31-kimi-code-swap.md:767), [plan:777](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-07-31-kimi-code-swap.md:777)).
+
+However, the load-bearing member definition is absent from the contract instruction. Task 6 correctly says the first call creates both a `wd_` container and a `session_` leaf, with only the leaf counted ([plan:665](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-07-31-kimi-code-swap.md:665), [plan:667](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-07-31-kimi-code-swap.md:667)). Rule 3 likewise requires exactly one new leaf ([plan:762](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-07-31-kimi-code-swap.md:762)). But the marked `round-freshness-boundary` region still says “exactly one new directory must appear” without the leaf definition ([plan:824](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-07-31-kimi-code-swap.md:824)). That restates the very rule that rejects every clean first call and would be locked into the contract pin.
+
+Low severity: Task 11 still ends its bullet walkthrough with a stray numbered `6.` item ([plan:984](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-07-31-kimi-code-swap.md:984), [plan:990](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-07-31-kimi-code-swap.md:990)).
+
+**FIX — Put the exact `session_`-leaf member definition into `round-freshness-boundary`, change “one new directory” to “one new session leaf,” and normalize the Task 11 bullet.**
+
+2. The target isolation is materially improved: it uses a fake profile, substituted temporary storage, a scratch repository, verified mapping, and `finally` cleanup ([plan:475](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-07-31-kimi-code-swap.md:475), [plan:477](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-07-31-kimi-code-swap.md:477), [plan:479](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-07-31-kimi-code-swap.md:479)).
+
+Two failure paths remain:
+
+- A failed drive-letter selection or mapping is allowed to “skip the branch loudly” ([plan:477](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-07-31-kimi-code-swap.md:477)). That is not fail-closed and does not exercise the drive-root guard. It directly contradicts the plan’s rule that an unmade measurement is never clean ([plan:38](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-07-31-kimi-code-swap.md:38)).
+- The profile test says to create a temporary profile directory and then target its parent ([plan:476](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-07-31-kimi-code-swap.md:476)). If that profile is an ordinary child of the system temporary directory, its parent is shared and not disposable. The safe construction must explicitly be `<new disposable sandbox>/profile`, with both the child and sandbox owned by this test.
+
+**FIX — Treat inability to establish the substituted drive as a failed live gate, not a skip, and explicitly create a disposable sandbox containing a child fake profile before testing equality and ancestry.**
+
+3. Most evidence-width corrections now stand:
+
+- Resume claims remain limited to four tested flags ([plan:48](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-07-31-kimi-code-swap.md:48), [plan:817](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-07-31-kimi-code-swap.md:817), [plan:1005](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-07-31-kimi-code-swap.md:1005)).
+- Task 9 now distinguishes measured readability from unverified discovery ([plan:905](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-07-31-kimi-code-swap.md:905), [plan:911](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-07-31-kimi-code-swap.md:911)).
+- Fresh and resume validation forms are described separately in the contract and walkthrough ([plan:826](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-07-31-kimi-code-swap.md:826), [plan:986](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-07-31-kimi-code-swap.md:986)).
+
+The remaining overclaim is the contract’s “exactly one new directory” statement ([plan:824](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-07-31-kimi-code-swap.md:824)). The same plan says the measured first call creates two directories ([plan:667](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-07-31-kimi-code-swap.md:667)). Only “exactly one new session leaf” is supported.
+
+Low severity: Task 9 attributes the `--skills-dir` measurement to future Task 4 ([plan:927](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-07-31-kimi-code-swap.md:927)), although Task 4 is the cp1252 and rotation probe task ([plan:492](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-07-31-kimi-code-swap.md:492)). Attribute it to `probe-record-2.md`.
+
+**FIX — Narrow the contract to one new `session_` leaf and correct Task 9’s measurement attribution.**
+
+4. The freeze criterion has not changed. The parameter sets, sessions-root input, and validator’s leaf-aware inventory rule are now structurally correct ([plan:656](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-07-31-kimi-code-swap.md:656), [plan:762](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-07-31-kimi-code-swap.md:762)). But the third condition is not fully applied because the marked contract region still contains the rejected directory-level rule ([plan:824](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-07-31-kimi-code-swap.md:824)). That is the contract implementation will pin, so it is not merely historical prose.
+
+The destructive live gate also cannot fail correctly: failure to establish its test environment becomes an allowed skip rather than blocking completion ([plan:477](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-07-31-kimi-code-swap.md:477)). This falls within the requested structural distinction—a required safety measurement has no failing outcome when it cannot be made.
+
+These require a small final edit, not another test-list debate or architectural redesign.
+
+**FIX — Freeze after propagating the leaf definition into the marked contract and making substituted-drive setup failure block the live gate.**
+
+UNVERIFIED
+
+- The retained probe describes `<session-id>` generically and does not record that real session directory names begin `session_`; that prefix is asserted by the plan but was not independently verifiable from the files read ([plan:667](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-07-31-kimi-code-swap.md:667), [probe-record.md:167](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/rounds/2026-07-31-kimi-code-swap/probe-record.md:167)).
+- The stdout marker’s exact extraction behavior remains for the live walkthrough to establish ([plan:670](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-07-31-kimi-code-swap.md:670), [plan:986](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-07-31-kimi-code-swap.md:986)).
+- ACL enforcement, cleanup, removal guards, cp1252 behavior, and rotation remain implementation-time live checks ([plan:465](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-07-31-kimi-code-swap.md:465), [plan:492](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-07-31-kimi-code-swap.md:492)).

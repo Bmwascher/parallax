@@ -46,6 +46,24 @@ call's slice. Measured against that rule:
 `llm.request` count tracks the tool loop — one per model round trip — so it is
 inherently variable and can never be pinned to a constant.
 
+**Session storage NAMING, added 2026-07-31 after Sol plan-debate round 7 noted
+that the earlier record wrote `<session-id>` generically and never established
+the prefix the plan's inventory rule depends on.** Read from disk:
+
+```
+sessions/
+  wd_ws_3aa434a78a27/                                  <- workspace container
+    session_1a2cfd21-fba0-4e99-891e-fd681edc1267/      <- session leaf
+    session_ec645aec-2c14-47ad-a975-3d469d0464b4/      <- session leaf
+```
+
+Containers are `wd_`-prefixed, leaves are `session_`-prefixed, and the id the
+client prints on its `To resume this session:` line is the leaf's name exactly.
+Both sessions in this home share ONE container, so the container is created per
+WORKSPACE and not per session: only a debate's first call in a given workspace
+creates one. That is why a first call adds two directories and later calls add
+one, and why the inventory rule counts `session_` leaves only.
+
 **Record ORDER, added 2026-07-31 after Sol plan-debate round 4 pointed out that
 the counts above establish no ordering.** Read from the same session's
 `wire.jsonl`, a fresh session's first six records are, in order:
