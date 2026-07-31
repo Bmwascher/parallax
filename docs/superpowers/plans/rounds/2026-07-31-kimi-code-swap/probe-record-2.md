@@ -17,17 +17,78 @@ canary skills planted, one per documented project discovery root:
 `.kimi-code/skills/canary/SKILL.md` and `.agents/skills/canary2/SKILL.md`, each
 instructing the model to prefix every reply with a distinct token.
 
-Agent file: the five-tool allowlist, the full denylist including `CronList`,
-and `subagents: []`. System prompt body 431 characters.
+Agent file: the five-tool allowlist, the seventeen-name denylist (sixteen
+tools plus `CronList`), and `subagents: []`. System prompt body 431
+characters.
 
 **Count corrected 2026-07-31** after the fable-reviewer whole-branch review:
 this line first said "sixteen-name", which agrees with neither the plan's
 seventeen-name denylist nor `probe-record.md:151-155`, whose enumeration lists
 21 distinct tools and does not include `CronList` at all. `CronList` entered
 during Sol plan-debate round 2 as a built-in found in neither list. The bare
-count is removed here rather than guessed at; the plan's Task 5 Step 3b
+count was removed here rather than guessed at; the plan's Task 5 Step 3b
 re-enumerates the inventory from the client and writes the reconciled result
-below.
+below, and the corrected count above ("seventeen-name") is that
+reconciliation's result, not a restored guess.
+
+### Task 5 Step 3b reconciliation: `CronList` exists, `KNOWN_TOOLS` stays at 22
+
+Reconciled 2026-07-31, offline against documentation only — no additional
+model dispatch was spent on this reconciliation. Quota for Task 5 was
+reserved for Step 6's single write-probe call, and a version-pinned
+documentation source settles the question for free without spending it.
+`llm.tools_snapshot` for a session running the COMMITTED (restricted) agent
+file only ever lists the 5 allowed tools (confirmed again in Step 6 below,
+and consistent with Finding 2's `toolCount=5` above) — it cannot enumerate
+the denied portion of the inventory, so it is not a route to this answer
+without dispatching a session on a DEFAULT, unrestricted agent, which this
+task's quota does not provide for.
+
+**Source**: the official Kimi Code CLI documentation for release 0.31.1,
+fetched raw (via `curl`, not the WebFetch summarizer, specifically so the
+tool table below is a direct quote rather than a paraphrase) from
+`https://moonshotai.github.io/kimi-code/llms-full.txt`, section
+"Built-in Tools" (heading at that document's line 1247, "Scheduled Tasks"
+subsection at line 1362). Version match: the installed binary
+(`C:\Users\Brandon\.kimi-code\bin\kimi.exe --version`) reports `0.31.1`
+exactly, and the same document's own changelog entry `## 0.31.1
+(2026-07-31)` lists only TUI/web polish and bug fixes — no tool additions
+or removals — so the reference describes the installed build unmodified.
+`KIMI_DISABLE_CRON` was checked and is unset in this environment, so the
+scheduled-task tools are not suppressed here either.
+
+**Full enumeration, 22 names in 8 documented groups**, quoted from the
+tool tables:
+
+- File Tools (6): `Read`, `Write`, `Edit`, `Grep`, `Glob`, `ReadMediaFile`
+- Shell (1): `Bash`
+- Web Tools (2): `WebSearch`, `FetchURL`
+- Plan Mode (2): `EnterPlanMode`, `ExitPlanMode`
+- State Management (1): `TodoList`
+- Collaboration Tools (4): `Agent`, `AgentSwarm`, `AskUserQuestion`, `Skill`
+- Background Tasks (3): `TaskList`, `TaskOutput`, `TaskStop`
+- Scheduled Tasks (3): `CronCreate`, `CronList`, `CronDelete`
+
+`CronList` IS documented, verbatim: "`CronList` | Auto-allow | List
+scheduled tasks" in the Scheduled Tasks table, with its own paragraph:
+"`CronList` is a read-only tool that accepts no parameters. It returns one
+record per active task with fields: `id`, `cron`, `humanSchedule`,
+`nextFireAt`, `recurring`, `ageDays`, and `stale`."
+
+**Verdict: `CronList` exists. `KNOWN_TOOLS` stays at 22.** The File Tools
+group plus `TodoList` is exactly the plan's 5-name `ALLOWLIST`; the
+remaining 17 names (Shell, Web Tools, Plan Mode, the rest of Collaboration
+Tools, Background Tasks, and Scheduled Tasks) are exactly the plan's
+17-name `DENYLIST` as already written in Task 5 Step 1. No edit to
+`ALLOWLIST`, `DENYLIST`, or `KNOWN_TOOLS` was needed — the reconciliation
+confirms the plan's Step 1 constants rather than changing them.
+
+`probe-record.md:151-155`'s 21-name enumeration, which predates this
+reconciliation, undercounted by exactly `CronList`. It was assembled from
+the tool names the earlier restricted-agent probe session happened to name
+in passing while describing the allowlist/denylist it built, not from a
+version-pinned documentation sweep, so it never claimed completeness and is
+superseded here for inventory purposes.
 
 ## FINDING 1 — record cardinality. The rule in revision 2 is wrong.
 
@@ -339,8 +400,6 @@ therefore neither `credentials/kimi-code.json` copy) exists on disk.
 
 ## Still unmeasured
 
-- The real built-in tool inventory for 0.31.1, and specifically whether
-  `CronList` exists. See the correction under Setup above.
 - Whether per-session files can be replaced and regrow past a captured offset.
   Sol round 2 is right that length-plus-absence does not prove prefix identity;
   the plan should capture a hash of the pre-call prefix rather than trusting
@@ -355,3 +414,9 @@ hazard (not observed, single dispatch, three specific characters), and
 per-session log rotation (not observed up to 18,863 bytes / 40 calls; the 1,
 5 and 10 MB thresholds were not reached). See the new section above for
 exact commands, output, and the dispatch count spent.
+
+**Closed by Task 5 Step 3b, 2026-07-31:** the real built-in tool inventory
+for 0.31.1, and specifically whether `CronList` exists — YES, confirmed
+against the version-pinned CLI documentation, zero additional model
+dispatches spent. See "Task 5 Step 3b reconciliation" under Setup above for
+the full 22-name enumeration and source.

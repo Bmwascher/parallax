@@ -11,22 +11,34 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[2]
 REFS = REPO / "skills" / "multi-model-verify" / "references"
 BACKUP_LANE = REFS / "backup-lane.md"
-AGENT_YAML = REFS / "kimi-reviewer-agent.yaml"
-SYSTEM_MD = REFS / "kimi-reviewer-system.md"
+AGENT_MD = REFS / "kimi-reviewer-agent.md"
 NOTES = REFS / "model-prompting-notes.md"
 FALLBACKS = REFS / "fallbacks.md"
 PLAN_FORMAT = REFS / "frozen-plan-format.md"
 BACKUP_ID = "kimi-code/k3-256k"
-ALLOWLIST = [
-    "kimi_cli.tools.todo:SetTodoList",
-    "kimi_cli.tools.file:ReadFile",
-    "kimi_cli.tools.file:ReadMediaFile",
-    "kimi_cli.tools.file:Glob",
-    "kimi_cli.tools.file:Grep",
-]
-FORBIDDEN_TOOL_MARKERS = ["WriteFile", "StrReplaceFile", "Shell",
-                          "SearchWeb", "FetchURL", "tools.web",
-                          "tools.shell"]
+ALLOWLIST = ["Read", "Grep", "Glob", "ReadMediaFile", "TodoList"]
+DENYLIST = ["Bash", "Write", "Edit", "WebSearch", "FetchURL",
+            "EnterPlanMode", "ExitPlanMode", "Agent", "AgentSwarm",
+            "AskUserQuestion", "Skill", "TaskList", "TaskOutput",
+            "TaskStop", "CronCreate", "CronList", "CronDelete"]
+# Every built-in tool documented for 0.31.1, written out INDEPENDENTLY of
+# the two lists above. r3 defined this as their union and then compared the
+# union back to it, which is a tautology that detects neither a swapped
+# name nor an omission.
+#
+# Accepted limit, stated plainly because r4 caught the earlier wording
+# overclaiming: NOTHING here detects a tool a future client adds. The
+# floor check is a LOWER BOUND - it rejects releases below 0.31.1 and
+# accepts every newer one, so it does not force a re-probe at upgrade.
+# Re-probing the inventory is a manual step at any deliberate version
+# bump, and the drift snapshot's recorded version is what makes such a
+# bump visible.
+KNOWN_TOOLS = {
+    "Read", "Write", "Edit", "Grep", "Glob", "ReadMediaFile", "Bash",
+    "WebSearch", "FetchURL", "EnterPlanMode", "ExitPlanMode", "TodoList",
+    "Agent", "AgentSwarm", "AskUserQuestion", "Skill", "TaskList",
+    "TaskOutput", "TaskStop", "CronCreate", "CronList", "CronDelete",
+}
 
 
 def _read(p):
@@ -39,8 +51,10 @@ def _norm(p):
 
 
 def test_backup_artifacts_exist():
-    for p in (BACKUP_LANE, AGENT_YAML, SYSTEM_MD):
+    for p in (BACKUP_LANE, AGENT_MD):
         assert p.is_file(), str(p)
+    assert not (REFS / "kimi-reviewer-agent.yaml").exists()
+    assert not (REFS / "kimi-reviewer-system.md").exists()
 
 
 def test_notes_backup_declarations():
@@ -65,19 +79,44 @@ def test_notes_backup_declarations():
         "Canonical backup reviewer model id:")
 
 
-def test_agent_yaml_allowlist_exact():
-    yaml_text = _read(AGENT_YAML)
-    # exact LIST equality: extra, missing, or reordered tool entries all
-    # fail - presence checks alone would tolerate an added WriteFile
-    tools = re.findall(r'-\s+"([^"]+)"', yaml_text)
-    assert tools == ALLOWLIST
-    for marker in FORBIDDEN_TOOL_MARKERS:
-        assert marker not in yaml_text, marker
-    assert "system_prompt_path: ./kimi-reviewer-system.md" in yaml_text
+def test_agent_allowlist_and_denylist_exact():
+    """Exact LIST equality. Omitting `tools:` means ALL tools on this
+    client, so a silent parse failure is PERMISSIVE - hence the denylist
+    as well."""
+    import re
+    body = _read(AGENT_MD)
+    tools = re.search(r"^tools:\n((?:  - \w+\n)+)", body, re.M)
+    assert tools
+    assert [t.strip("- ").strip()
+            for t in tools.group(1).strip().splitlines()] == ALLOWLIST
+    denied = re.search(r"^disallowedTools:\n((?:  - \w+\n)+)", body, re.M)
+    assert denied
+    assert [t.strip("- ").strip()
+            for t in denied.group(1).strip().splitlines()] == DENYLIST
+
+
+def test_the_two_lists_partition_the_known_inventory():
+    """Set equality, not a count. r2 asserted len(A)+len(B)==22, which
+    stayed green if a real name were swapped for a nonexistent one.
+
+    Accepted limit, stated so it stays deliberate: this cannot see a tool
+    a FUTURE client adds, and nothing offline can. The floor is a LOWER
+    bound and accepts every newer release, so it does not force a
+    re-probe either - re-probing is a manual step at a deliberate version
+    bump, made visible by the drift snapshot's recorded version."""
+    assert not (set(ALLOWLIST) & set(DENYLIST))
+    assert set(ALLOWLIST) | set(DENYLIST) == KNOWN_TOOLS
+
+
+def test_agent_empties_the_subagent_list():
+    """Measured: `subagents` defaults to ALL, including `coder`. That was
+    inert only because Agent and AgentSwarm are denied, and the
+    coincidence of two controls is not a control."""
+    assert "subagents: []" in _read(AGENT_MD)
 
 
 def test_backup_files_no_backslash_paths():
-    for p in (BACKUP_LANE, AGENT_YAML, SYSTEM_MD):
+    for p in (BACKUP_LANE, AGENT_MD):
         assert "\\" not in _read(p), str(p)
 
 
