@@ -193,21 +193,154 @@ So the lane should re-pin `-m` and `--skills-dir` on every resume. It is free,
 and it narrows the version-bound inheritance risk Sol raised in round 2 to the
 one flag that genuinely cannot be re-pinned.
 
+## Task 4 probes — cp1252 output, toolsHash equality, per-session rotation
+
+Measured 2026-07-31, kimi-code 0.31.1, Windows, same day as the findings
+above. Two isolated `KIMI_CODE_HOME` directories, built with
+`tools/new-kimi-lane-home.ps1 -Model kimi-code/k3-256k -Effort high`, under
+the session scratchpad, never in the real tree and never in this repo. Both
+removed with `-Remove` at the end of this work; see the removal log below.
+
+**Setup note — a live bug in the home-builder's rendered `config.toml`.**
+`new-kimi-lane-home.ps1`'s template writes `default_model`, `extra_skill_dirs`
+and `telemetry` AFTER the `[models."<id>"]` table header and before the next
+`[thinking]` header, with no table header of their own in between. Under TOML
+rules a bare key-value pair after a table header belongs to THAT table until
+the next header, so all three keys land inside `models."kimi-code/k3-256k"`
+rather than at the document root. `kimi doctor` reports the file valid (it is
+syntactically valid TOML) and `kimi provider list` reports the provider and
+model resolved, but a plain `-p` dispatch with no `-m` failed every time with
+`error: failed to run prompt: No model configured.` Every dispatch below
+therefore passed `-m kimi-code/k3-256k` explicitly on the command line as a
+caller-side workaround. This is a finding about the tool built in an earlier
+task, not a change to it — Task 4 touches only this file under `docs/`, so no
+script was edited to fix it. One throwaway "reply OK" call was spent
+confirming the workaround before the real cp1252 probe was run with it; that
+call is included in the dispatch count below.
+
+### Step 1 — cp1252 console output hazard: NOT OBSERVED
+
+Console forced to cp1252 with `chcp 1252` in a `cmd.exe` batch script, then
+`KIMI_CODE_HOME` set to the isolated home and:
+
+```
+kimi.exe -p "Reply with exactly one line containing only three characters
+and nothing else, in this order: an em dash (Unicode code point U+2014), a
+rightwards arrow (Unicode code point U+2192), and the katakana letter A
+(Unicode code point U+30A2). Do not output any words, spaces, quotes, or
+explanation before or after them - output only those three characters
+concatenated, nothing else." -m "kimi-code/k3-256k" --agent-file <read-only
+agent file> > cp1252-out.bin 2> cp1252-err.txt
+```
+
+Result: `EXITCODE=0`. Redirected stdout is 15 bytes; hex dump:
+
+```
+e280 a220 e280 94e2 8692 e382 a20a 0a
+```
+
+Decoded: `e2 80 a2` (the CLI's own `•` reply-line prefix) `20` (space)
+`e2 80 94` = U+2014 EM DASH, `e2 86 92` = U+2192 RIGHTWARDS ARROW,
+`e3 82 a2` = U+30A2 KATAKANA LETTER A, then two newlines. All three
+requested characters are present, byte-exact valid UTF-8, and unaffected by
+the console's active code page. Forcing `chcp 1252` before the dispatch did
+not corrupt the redirected-to-file output and the process exited 0. This
+gates Task 10's choice between deleting the Python UTF-8 guard and replacing
+it with one describing this client — the measured answer supports deletion,
+not replacement, for THIS hazard as tested (a single dispatch, three specific
+characters, stdout redirected to a file).
+
+### Step 1b — `llm.request.toolsHash` vs `llm.tools_snapshot.hash`: EQUAL
+
+Free, offline, read from Step 1's own session `wire.jsonl`
+(`sessions/wd_ws-cp1252_*/session_e8e29860-2060-4f86-94ad-c59cc6c35f2d/agents/main/wire.jsonl`,
+no extra model call). The session held exactly one `llm.tools_snapshot`
+record and one `llm.request` record (a single-turn, no-tool-call reply):
+
+- `llm.tools_snapshot.hash` =
+  `3d2530e113e94d4b1531edea8545bc8d2d505e381f3586948fd944eb5784597b`
+- `llm.request.toolsHash` =
+  `3d2530e113e94d4b1531edea8545bc8d2d505e381f3586948fd944eb5784597b`
+
+The two strings are identical. **Verdict: EQUAL.** Per the brief, Task 6 rule
+13 keeps the cross-record comparison as written; it does not need to fall
+back to presence-and-nonempty-only.
+
+### Step 2 — per-session log rotation: NOT OBSERVED up to 18,863 bytes
+
+Second isolated home. One session, five initial cheap dispatches
+(`kimi.exe -p "Reply with exactly one word: OK" -m "kimi-code/k3-256k"` for
+the first call, `kimi.exe -c -p "Reply with exactly one word: OK" -m
+"kimi-code/k3-256k"` continuing the same session for every call after),
+`kimi-code.log` size read from disk after each call:
+
+| call | log size (bytes) | delta from prior call |
+| --- | --- | --- |
+| 1 | 405 | (fresh session) |
+| 2 | 876 | 471 |
+| 3 | 1347 | 471 |
+| 4 | 1818 | 471 |
+| 5 | 2289 | 471 |
+
+`R` (bytes per call) measured from these five, per the brief's method:
+`(2289 - 405) / 4 = 471` bytes/call, exactly, across all four deltas.
+Target depth = `min(16 MB, 40 x 471) = min(16777216, 18840) = 18840` bytes —
+far short of 16 MB, so the full 40-dispatch hard budget was spent (not
+stopped early) to reach the maximum depth the budget affords, per the
+brief's instruction to state the achieved depth and stop there. Calls 6-40
+continued the same session, checking for a `kimi-code.log.*` sibling and for
+`kimi-code.log` shrinking after every call:
+
+| call | size | call | size | call | size | call | size | call | size |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 6 | 2760 | 14 | 6540 | 22 | 10332 | 30 | 14123 | 38 | 17915 |
+| 7 | 3231 | 15 | 7014 | 23 | 10806 | 31 | 14597 | 39 | 18389 |
+| 8 | 3702 | 16 | 7488 | 24 | 11280 | 32 | 15071 | 40 | 18863 |
+| 9 | 4173 | 17 | 7962 | 25 | 11754 | 33 | 15545 |  |  |
+| 10 | 4644 | 18 | 8436 | 26 | 12228 | 34 | 16019 |  |  |
+| 11 | 5118 | 19 | 8910 | 27 | 12702 | 35 | 16493 |  |  |
+| 12 | 5592 | 20 | 9384 | 28 | 13176 | 36 | 16967 |  |  |
+| 13 | 6066 | 21 | 9858 | 29 | 13649 | 37 | 17441 |  |  |
+
+Per-call delta held at exactly 471 bytes for calls 1-10, then shifted to a
+steady 474 bytes/call from call 11 onward (one call, 29, delta 473) — the
+mechanism was not investigated (plausibly a field in the log line, such as
+elapsed-ms or `turnStep`, gaining a digit), and this record states only what
+was measured, not why. Every one of the 40 calls exited 0. **After all 40
+calls: `kimi-code.log` is 18,863 bytes, no sibling matching
+`kimi-code.log.*` exists (verified by a direct directory listing, not by
+`Get-ChildItem -Filter`, which has a known Win32 `FindFirstFile` quirk where
+a `"name.*"` filter also matches the bare `"name"` file — this false
+positive was hit once, at call 6, and corrected before continuing), and the
+file never shrank between any two consecutive calls.**
+
+**Stated at exactly the width of the measurement:** no rotation was observed
+up to 18,863 bytes (≈18.4 KB). The probe did NOT reach the 1 MB, 5 MB, or
+10 MB thresholds — none of them. This is not evidence that rotation is
+absent; it is evidence only up to the depth the 40-dispatch budget reached
+at the measured growth rate. Task 7's freshness region hashes both files'
+prefixes regardless, so this shallow negative result does not block it.
+
+### Dispatch accounting for this section
+
+- Step 1: 2 dispatches (1 throwaway "reply OK" call confirming the `-m`
+  workaround, 1 the actual cp1252 probe).
+- Step 1b: 0 dispatches (read from Step 1's `wire.jsonl`).
+- Step 2: 40 dispatches (5 to measure `R`, 35 more to reach the achieved
+  depth) — exactly the hard budget, never exceeded.
+- Total for this section: 42 real model calls.
+
+### Probe home removal
+
+Both homes removed with `tools/new-kimi-lane-home.ps1 -Remove -Path <dir>`
+after the measurements above were taken; both printed `removed <path>` and
+exited 0. Confirmed with `Test-Path` afterward that neither directory (and
+therefore neither `credentials/kimi-code.json` copy) exists on disk.
+
 ## Still unmeasured
 
-- **Whether `llm.request.toolsHash` equals `llm.tools_snapshot.hash`.** Added
-  2026-07-31 after the fable-reviewer whole-branch review found the plan's
-  validator requiring that equality with nothing measuring it.
-  `probe-record.md:180-183` lists the snapshot's `hash` field and
-  `probe-record.md:229-230` gives a request's `toolsHash` value, but the two
-  were never compared, and the client may hash them over different
-  serializations. Plan Task 4 Step 1b measures it offline from a probe already
-  scheduled, and the validator rule branches on the answer. Until then the
-  equality is an assumption, not a finding.
 - The real built-in tool inventory for 0.31.1, and specifically whether
   `CronList` exists. See the correction under Setup above.
-- The cp1252 output hazard. It gates only whether a documentation bullet is
-  deleted, so it does not block the contract's structure.
 - Whether per-session files can be replaced and regrow past a captured offset.
   Sol round 2 is right that length-plus-absence does not prove prefix identity;
   the plan should capture a hash of the pre-call prefix rather than trusting
@@ -215,3 +348,10 @@ one flag that genuinely cannot be re-pinned.
 - Record cardinality for a review that uses far more tool calls than these did.
   The counts above scale with the tool loop, which is exactly why the corrected
   rule bounds `llm.request` from below rather than fixing it.
+
+**Closed by Task 4, 2026-07-31:** the `llm.request.toolsHash` /
+`llm.tools_snapshot.hash` equality (EQUAL — see above), the cp1252 output
+hazard (not observed, single dispatch, three specific characters), and
+per-session log rotation (not observed up to 18,863 bytes / 40 calls; the 1,
+5 and 10 MB thresholds were not reached). See the new section above for
+exact commands, output, and the dispatch count spent.
