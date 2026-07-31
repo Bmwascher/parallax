@@ -4,33 +4,34 @@ validator that reads a kimi-code debate round's OWN session files
 attributed to the declared model, agent and tool set.
 
 The fixtures under fixtures/kimi-round/ are a single real captured
-session (one fresh tool-using call, one resumed call, kimi-code 0.31.1,
-2026-07-31), hand-normalized per the task-6 brief: the canonical model
-alias is replaced everywhere with "fixture-model/x" (and its bare
-provider-side form "k3-256k" with "x"), the session id with a fixed
-placeholder, and the one real absolute path that leaked into a tool-call
-event with "C:/fixture/ws". manifest.json records the exact byte
-offsets and hashes measured at the boundary between the two calls, so
-every number below is measured, never invented.
+session (one fresh tool-using call, one resumed call, kimi-code 0.31.1),
+normalized by a generator that applies three literal replacements to the
+captured bytes: the canonical model alias becomes "fixture-model/x" (and
+its bare provider-side form "x"), the session id a fixed placeholder, and
+the one real absolute path that leaked into a tool-call event
+"C:/fixture/ws". No fixture byte is hand-typed. manifest.json records the
+exact byte offsets and hashes measured at the boundary between the two
+calls, so every number below is measured, never invented.
 
-TOOLCOUNT CORRECTION. Measured live (Task 6 Step 1, confirmed
-independently by Task 5's Step 3b/Step 6): the committed
-kimi-reviewer-agent.md declares a 5-tool allowlist, but every real
-dispatch's llm.tools_snapshot and per-session-log toolCount reads 4 -
-ReadMediaFile is silently excluded from the sent tool schemas (plausibly
-a vision-capability gate). A literal "toolCount == allowlist length"
-check would fail every real clean round, including these fixtures. The
-validator instead checks toolCount against llm.tools_snapshot's own tool
-count on a fresh slice, and on both kinds requires
-0 < toolCount <= allowlist length. See tools/read-kimi-round-evidence.ps1's
-header comment and the task-6 report for the full measurement.
+RECAPTURED 2026-07-31 (fix round 1), through a home built by the CURRENT
+tools/new-kimi-lane-home.ps1. The first capture came from a home built
+before commit b645810, whose model table carried no `capabilities` array:
+the client then declared no `thinking` capability (thinkingEffort read
+`off` despite the config pinning the canonical effort) and no `image_in`
+capability (ReadMediaFile was gated out of the sent schema, so a five-tool
+allowlist arrived as toolCount=4). Both symptoms are gone from this
+capture - it reads thinkingEffort=high and toolCount=5 against the
+five-entry allowlist - so rule 12's tool-name EQUALITY and rule 13's
+literal toolCount equality are both satisfiable by a real clean round and
+are pinned as equalities here.
 
-Each test asserts on `status` and on a distinguishing substring of
-`reason`, never on an exact message string.
+Each test asserts on `status`, on the process EXIT CODE, and on a
+distinguishing substring of `reason`, never on an exact message string.
 """
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -44,10 +45,25 @@ AGENT_FILE = REPO / "skills" / "multi-model-verify" / "references" / "kimi-revie
 
 FIXTURE_MODEL = "fixture-model/x"
 FIXTURE_PROVIDER = "kimi"
-FIXTURE_EFFORT = "off"
+FIXTURE_EFFORT = "high"
 FIXTURE_SESSION_ID = "session_00000000-0000-4000-8000-000000000001"
 
 MANIFEST = json.loads((FIXTURES / "manifest.json").read_text(encoding="utf-8"))
+
+
+def _agent_tools():
+    """The agent file's `tools:` allowlist, parsed from the committed file
+    at run time. Never a hardcoded count: the validator derives the same
+    list the same way, and a test that typed the number would stop
+    tracking the file it is meant to pin."""
+    text = AGENT_FILE.read_text(encoding="utf-8").replace("\r\n", "\n")
+    front = text.split("\n---\n", 1)[0]
+    m = re.search(r"(?m)^tools:[ \t]*$((?:\n[ \t]+-[^\n]*)*)", front)
+    assert m, "could not parse the agent file's tools list"
+    return [l.strip().lstrip("-").strip() for l in m.group(1).split("\n") if l.strip()]
+
+
+AGENT_TOOLS = _agent_tools()
 
 POWERSHELL = os.environ.get("PARALLAX_PS_HOST") or shutil.which("powershell") or shutil.which("pwsh")
 
@@ -238,6 +254,10 @@ def assert_clean(proc):
     p = parsed(proc)
     assert p.get("status") == "clean", (p, proc.stderr)
     assert "nextState" in p
+    # The EXIT CODE is half the contract: the dispatch flow gates on it,
+    # so a script that printed "clean" while exiting nonzero (or the
+    # reverse) would break every caller that never parses stdout.
+    assert proc.returncode == 0, (proc.returncode, p, proc.stderr)
     return p
 
 
@@ -245,6 +265,7 @@ def assert_failed(proc, reason_substring):
     p = parsed(proc)
     assert p.get("status") == "failed", (p, proc.stderr)
     assert reason_substring in p.get("reason", ""), p
+    assert proc.returncode == 1, (proc.returncode, p, proc.stderr)
     return p
 
 
@@ -261,6 +282,33 @@ def test_fresh_round_is_clean(tmp_path):
     p = assert_clean(proc)
     assert p["nextState"]["kind"] == "resume"
     assert p["nextState"]["wireBytes"] == MANIFEST["wireOffsetAfterRound1"]
+
+
+def test_a_fresh_calls_next_state_is_the_resume_calls_prior_state(tmp_path):
+    """The design property that makes the two parameter sets compose: a
+    fresh call's own nextState IS the next call's -PriorState, with
+    nothing from manifest.json involved.
+
+    Every other resume test feeds a state built from the manifest, which
+    the FIXTURE GENERATOR wrote - so the two prefix hashes and the two
+    continuity hashes the validator emits in rule 16 are never checked
+    against what a subsequent resume actually needs, and an error in rule
+    16 would pass the whole suite. Here round 1's own output is written to
+    disk verbatim, the session's two files are advanced to their
+    post-round-2 contents, and round 2 is validated against it."""
+    root, sess_dir = build_fresh_layout(tmp_path, fresh_wire(), fresh_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+    next_state = assert_clean(run_fresh(root, FIXTURE_SESSION_ID, state_path))["nextState"]
+
+    # The same session, one round later: the client appended round 2's
+    # records to both files.
+    write_lines(sess_dir / "agents" / "main" / "wire.jsonl", resume_wire())
+    write_lines(sess_dir / "logs" / "kimi-code.log", resume_log())
+
+    chained_path = tmp_path / "next-state.json"
+    write_json(chained_path, next_state)
+    assert_clean(run_resume(sess_dir, chained_path))
 
 
 def test_resumed_round_with_correct_offsets_is_clean(tmp_path):
@@ -883,12 +931,34 @@ def test_active_tools_disallowed_names_unequal_to_denylist_fails(tmp_path):
 
 
 def test_snapshot_tool_names_unequal_while_active_names_correct_fails(tmp_path):
-    """Separate records, and one can be right while the other is wrong."""
+    """Separate records, and one can be right while the other is wrong.
+    The ADDITION direction: a name in the snapshot that the allowlist does
+    not carry."""
     wire = fresh_wire()
     idx = find_index(wire, "llm.tools_snapshot", 1)
     wire = mutate(wire, idx, lambda o: o["tools"].append(
         {"name": "Bash", "description": "x", "parameters": {}}))
     root, sess_dir = build_fresh_layout(tmp_path, wire, fresh_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+    assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path), "session-scoped-content")
+
+
+def test_snapshot_missing_a_tool_the_allowlist_carries_fails(tmp_path):
+    """The REMOVAL direction, which a one-sided comparison reports clean.
+    Rule 12 mandates equality: a snapshot missing tools describes a sent
+    surface that collapsed, and that is the permissive direction - the one
+    where an unverified round reads as verified. The log's toolCount is
+    lowered to match, so the mutation is internally consistent and this
+    case cannot be caught by the toolCount checks instead."""
+    wire = fresh_wire()
+    idx = find_index(wire, "llm.tools_snapshot", 1)
+    wire = mutate(wire, idx, lambda o: o["tools"].pop())
+    log = fresh_log()
+    log_idx = next(i for i, l in enumerate(log) if "llm config" in l)
+    log[log_idx] = re.sub(r"toolCount=\d+", f"toolCount={len(AGENT_TOOLS) - 1}",
+                          log[log_idx])
+    root, sess_dir = build_fresh_layout(tmp_path, wire, log)
     state_path = tmp_path / "state.json"
     write_json(state_path, fresh_prior_state())
     assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path), "session-scoped-content")
@@ -918,34 +988,43 @@ def test_system_prompt_differing_from_agent_body_fails(tmp_path):
 def test_system_prompt_chars_differing_from_body_length_fails(tmp_path):
     log = fresh_log()
     idx = next(i for i, l in enumerate(log) if "llm config" in l)
-    log[idx] = log[idx].replace("systemPromptChars=462", "systemPromptChars=999")
+    log[idx] = re.sub(r"systemPromptChars=\d+", "systemPromptChars=999", log[idx])
     root, sess_dir = build_fresh_layout(tmp_path, fresh_wire(), log)
     state_path = tmp_path / "state.json"
     write_json(state_path, fresh_prior_state())
     assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path), "log-config-field")
 
 
-def test_tool_count_exceeding_allowlist_length_fails(tmp_path):
-    """See the TOOLCOUNT CORRECTION note at the top of this file: exact
-    equality to the allowlist length is measured-false on every real
-    dispatch (ReadMediaFile is vision-gated out), so the check this script
-    implements is 0 < toolCount <= allowlist length. The failure this
-    check exists for - "the allowlist failed to apply" - shows up as
-    toolCount reading as the FULL unrestricted set, i.e. EXCEEDING the
-    allowlist length, which is the mutation used here.
+def test_clean_round_tool_count_equals_the_allowlist_length(tmp_path):
+    """The premise rule 13's literal equality stands on. Both the fresh
+    and the resume log lines carry the agent file's full allowlist length,
+    so the equality below is satisfiable by a real clean round rather than
+    being a rule that rejects one."""
+    for lines in (fresh_log(), resume_log()):
+        for line in lines:
+            if "llm config" in line:
+                assert f"toolCount={len(AGENT_TOOLS)}" in line, line
 
-    Uses the RESUME fixture deliberately, not fresh: on a fresh slice the
-    (stronger, exact-equality) llm.tools_snapshot cross-check would catch
-    a toolCount of 22 on its own, which was confirmed by mutation testing
-    to make this case prove nothing about the allowlist-upper-bound check
-    it exists to cover - that cross-check does not exist in a resume
-    slice at all (no llm.tools_snapshot record there), so the resume
-    fixture isolates the bound check as the only thing that can catch
-    this mutation."""
+
+@pytest.mark.parametrize("wrong_count_offset", [1, -1])
+def test_tool_count_unequal_to_allowlist_length_fails(tmp_path, wrong_count_offset):
+    """Rule 13's literal equality, pinned in BOTH directions: a toolCount
+    ABOVE the allowlist length is "the allowlist failed to apply", and one
+    BELOW it is "part of the sent surface silently vanished". A one-sided
+    bound would report the second clean.
+
+    Uses the RESUME fixture deliberately: a resume slice carries no
+    llm.tools_snapshot at all, so the (independent, stronger) fresh-only
+    cross-check against the snapshot's own tool count cannot catch this
+    mutation instead. That isolates the agent-file equality as the only
+    check under test - the fresh fixture was measured (mutation testing,
+    task-6 round 0) to let the snapshot cross-check catch the same
+    mutation first, which made the case prove nothing."""
     log = resume_log()
     idx = max(i for i, l in enumerate(log) if "llm config" in l)  # round 2's own line
-    assert "toolCount=4" in log[idx]
-    log[idx] = log[idx].replace("toolCount=4", "toolCount=22")
+    assert f"toolCount={len(AGENT_TOOLS)}" in log[idx]
+    log[idx] = re.sub(r"toolCount=\d+",
+                      f"toolCount={len(AGENT_TOOLS) + wrong_count_offset}", log[idx])
     sess_dir = build_resume_layout(tmp_path, resume_wire(), log)
     state_path = tmp_path / "state.json"
     write_json(state_path, resume_prior_state(sess_dir))
@@ -1067,10 +1146,11 @@ def test_snapshot_hash_empty_fails(tmp_path):
 def test_requests_toolshash_disagreeing_with_snapshot_hash_fails(tmp_path):
     """Written only because Step 1b measured the two fields EQUAL on this
     client (llm.request.toolsHash == llm.tools_snapshot.hash, confirmed
-    2026-07-31; see the manifest's toolsHashRound1 and the fresh
-    fixture's own llm.tools_snapshot.hash - both
-    3d2530e1...4597b). Consistent request hashes that disagree with the
-    snapshot describing the sent schemas are a disagreement, not a pass."""
+    2026-07-31 and reconfirmed on the fix-round-1 recapture; see the
+    manifest's toolsHashRound1 and the fresh fixture's own
+    llm.tools_snapshot.hash - both 3174a328...8777). Consistent request
+    hashes that disagree with the snapshot describing the sent schemas are
+    a disagreement, not a pass."""
     wire = fresh_wire()
     snap_idx = find_index(wire, "llm.tools_snapshot", 1)
     snapshot = json.loads(wire[snap_idx])
@@ -1101,7 +1181,7 @@ def test_system_prompt_hash_differing_from_prior_state_on_later_round_fails(tmp_
 @pytest.mark.parametrize("field,broken", [
     ("provider=kimi", "provider=notkimi"),
     ("modelAlias=fixture-model/x", "modelAlias=wrong-model/y"),
-    ("thinkingEffort=off", "thinkingEffort=max"),
+    ("thinkingEffort=high", "thinkingEffort=max"),
 ])
 def test_log_line_field_wrong_while_requests_correct_fails(tmp_path, field, broken):
     """r3's inequality cases covered requests only."""

@@ -45,27 +45,25 @@
 # Offsets are BYTE counts, not line counts, for both files - a prefix hash
 # over raw bytes through a byte offset has one unambiguous definition.
 #
-# TOOLCOUNT CORRECTION (applied, not a literal reading of the frozen
-# plan's rule 13 prose). The plan's rule 13 says "toolCount equal to the
-# allowlist length". Measured directly this cycle (Task 6 Step 1, and
-# independently by Task 5's Step 3b/Step 6): the committed
-# kimi-reviewer-agent.md's tools: allowlist has 5 entries, but every real
-# dispatch's llm.tools_snapshot and per-session-log toolCount reads 4 -
-# ReadMediaFile is silently excluded from the sent tool schemas, plausibly
-# gated by the model's vision capability. That is not something the
-# validator can predict by reading the agent file offline; it is only
-# knowable from the client's own runtime snapshot. A literal
-# "toolCount == allowlist.Count" check would therefore fail every real
-# clean round, including this script's own committed fixtures - the exact
-# "rule that rejects a legitimate round" failure mode this task's brief
-# warns against. So this script checks toolCount against
-# llm.tools_snapshot.tools.Count on a FRESH slice (self-consistent, always
-# in-slice there), and on BOTH kinds additionally requires
-# 0 < toolCount <= (the agent file's allowlist length) - an upper bound,
-# not exact equality, which still catches the failure this check exists
-# for ("the allowlist failed to apply", where toolCount would read as the
-# full unrestricted tool set) while tolerating a gated subset. See the
-# task-6 report for the full measurement.
+# TOOLCOUNT is checked for EXACT equality against the -AgentFile allowlist
+# length, on BOTH kinds of slice - the frozen plan's rule 13 text, verbatim.
+# Fix round 1 history, for anyone reading this later: Task 6's first pass
+# measured toolCount=4 against a 5-tool allowlist and loosened this to an
+# upper bound, reasoning that a runtime vision-capability gate excluded
+# ReadMediaFile from the sent schema. That measurement was of a DEFECT in
+# tools/new-kimi-lane-home.ps1, not of client behavior: the home builder was
+# hand-writing the model table and omitting the `capabilities` and
+# `support_efforts` keys the real config declares. Without them, thinking
+# has nothing to resolve against (toolCount 4, thinkingEffort "off"); with
+# them (fixed at commit b645810, carrying the real model table verbatim),
+# toolCount is 5 and thinkingEffort resolves to the configured value - both
+# measured live, twice, once per state, same agent file and model. The
+# loosened bound was quietly dangerous on its own terms, independent of
+# whether the measurement behind it was right: a resume slice carries no
+# llm.tools_snapshot at all, so on resume the bound was the ONLY tool-count
+# check, and it would have passed a round running with as few as one tool.
+# The fresh-slice cross-check against llm.tools_snapshot.tools.Count is kept
+# below as an ADDITIONAL check, not a substitute for the equality.
 #
 # Exit codes: 0 clean, 1 failed (reason on stdout, see -Json).
 param(
@@ -650,10 +648,17 @@ if ($Fresh) {
     if ([string]::IsNullOrEmpty($snapshot.hash)) {
         Fail "session-scoped-content: llm.tools_snapshot.hash is missing or empty"
     }
+    # EQUALITY, in both directions. A one-sided comparison (keeping only
+    # the "<=" side indicator) would let a snapshot that is MISSING tools
+    # pass clean - the permissive direction, and the one that matters: a
+    # round whose sent tool surface collapsed would then be reported
+    # clean. Compare-Object with no -SyncWindow is set-based, so a
+    # different ORDER is still equal, which is what the measured client
+    # emits (the snapshot orders its tools differently from
+    # tools.set_active_tools.names).
     $snapshotToolNames = @($snapshot.tools | ForEach-Object { $_.name })
-    if (@(Compare-Object $snapshotToolNames $activeNames |
-          Where-Object { $_.SideIndicator -eq "<=" }).Count -ne 0) {
-        Fail "session-scoped-content: llm.tools_snapshot tool names are not a subset of the active tool allowlist"
+    if (@(Compare-Object $snapshotToolNames $activeNames).Count -ne 0) {
+        Fail "session-scoped-content: llm.tools_snapshot tool names do not equal the active tool allowlist"
     }
 
     $permMode = $permModes[0]
@@ -721,7 +726,6 @@ if ($Fresh) {
     }
 }
 
-# toolCount, per the TOOLCOUNT CORRECTION in the header comment.
 $logConfigLines = @($logLines | Where-Object { $_ -match "llm config" })
 if ($logConfigLines.Count -ne 1) {
     Fail ("log-config-count: expected exactly 1 new llm config line, found " + $logConfigLines.Count)
@@ -739,9 +743,12 @@ if ($parsedLog.ModelAlias -ne $Model) {
 if ($parsedLog.ThinkingEffort -ne $Effort) {
     Fail "log-config-field: the llm config line's thinkingEffort does not match -Effort"
 }
-if ($parsedLog.ToolCount -le 0 -or $parsedLog.ToolCount -gt $agentInfo.Tools.Count) {
-    Fail "log-config-field: toolCount is not a positive count within the agent file's allowlist"
+if ($parsedLog.ToolCount -ne $agentInfo.Tools.Count) {
+    Fail "log-config-field: toolCount does not equal the agent file's allowlist length"
 }
+# The fresh-slice cross-check is strictly stronger than the equality above
+# and independently correct: it binds the logged count to the client's OWN
+# snapshot of the schemas it sent, not just to the agent file.
 if ($Fresh) {
     $snapshot = @($records | Where-Object { $_.type -eq "llm.tools_snapshot" })[0]
     if ($parsedLog.ToolCount -ne @($snapshot.tools).Count) {

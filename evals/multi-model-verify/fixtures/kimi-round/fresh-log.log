@@ -1,6 +1,5 @@
-2026-07-31T21:42:31.446Z INFO  llm config  turnStep=0.1 provider=kimi model=x modelAlias=fixture-model/x thinkingEffort=off systemPromptChars=462 toolCount=4
-2026-07-31T21:42:31.446Z INFO  llm request  turnStep=0.1
-2026-07-31T21:42:39.138Z INFO  llm response  turnStep=0/1 ttftMs=6054 requestBuildMs=2 serverFirstTokenMs=6052 streamDurationMs=387 serverDecodeMs=387 clientConsumeMs=0 outputTokens=90
-2026-07-31T21:42:39.140Z INFO  llm request  turnStep=0.2
-2026-07-31T21:42:41.350Z INFO  llm response  turnStep=0/2 ttftMs=1796 requestBuildMs=1 serverFirstTokenMs=1795 streamDurationMs=413 serverDecodeMs=412 clientConsumeMs=1 outputTokens=49
-2026-07-31T21:43:23.829Z INFO  session resume  app_version=0.31.1
+2026-07-31T23:20:21.958Z INFO  llm config  turnStep=0.1 provider=kimi model=x modelAlias=fixture-model/x thinkingEffort=high systemPromptChars=462 toolCount=5
+2026-07-31T23:20:21.958Z INFO  llm request  turnStep=0.1
+2026-07-31T23:20:25.912Z INFO  llm response  turnStep=0/1 ttftMs=2756 requestBuildMs=2 serverFirstTokenMs=2754 streamDurationMs=647 serverDecodeMs=647 clientConsumeMs=0 outputTokens=89
+2026-07-31T23:20:25.914Z INFO  llm request  turnStep=0.2
+2026-07-31T23:20:28.623Z INFO  llm response  turnStep=0/2 ttftMs=2106 requestBuildMs=1 serverFirstTokenMs=2105 streamDurationMs=603 serverDecodeMs=601 clientConsumeMs=2 outputTokens=58
