@@ -616,3 +616,64 @@ def test_backup_literal_single_source():
                                         errors="replace"):
                 offenders.append(str(p))
     assert offenders == []
+
+
+DRIFT = REPO / "tools" / "check-drift.ps1"
+STATEMACHINE = REPO / "evals" / "tools" / "drift_statemachine_tests.ps1"
+KIMI_CODE_FLOOR = "0.31.1"
+
+
+def test_drift_probes_the_new_cli_not_the_old_one():
+    body = _read(DRIFT)
+    assert '"--agent-file", "--skills-dir", "-m", "-p", "--session"' in body
+    assert "--quiet" not in body
+    assert "--thinking" not in body
+    assert "import kimi_cli.tools.file" not in body
+
+
+def test_drift_does_not_assert_a_hidden_alias():
+    """`-r` works but is absent from --help on 0.31.1. Asserting it would
+    manufacture the exact false finding this task removes."""
+    assert '"-r"' not in _read(DRIFT)
+
+
+def test_the_version_probe_can_actually_reach_its_failure_branch():
+    """r2's floor check was unreachable: $kimiVersion was assigned only
+    inside a successful numeric regex, so TryParse could never see a
+    malformed value and the fail-closed branch was dead code. A check
+    that cannot fail is the defect this whole task is repairing."""
+    body = _read(DRIFT)
+    assert "$kimiVersion = $kimiRaw" in body
+    assert "KimiCodeFloor" in body
+    assert KIMI_CODE_FLOOR in body
+
+
+def test_the_production_lookup_accepts_a_cmd_stub():
+    """A .cmd renamed .exe does not execute on Windows, so an absolute
+    .exe-only lookup cannot be stubbed offline at all. Production
+    therefore resolves either name in that directory - which is also true
+    of real Windows CLIs - and the harness stubs the .cmd."""
+    body = _read(DRIFT)
+    assert "kimi.exe" in body
+    assert "kimi.cmd" in body
+
+
+def test_the_state_machine_stubs_moved_with_the_probe():
+    body = _read(STATEMACHINE)
+    assert "kimi_cli" not in body
+    assert "--thinking" not in body
+    # the production lookup is an absolute path under the fake profile,
+    # not a PATH entry, so the harness must place the stub there or every
+    # kimi scenario silently takes the "absent" branch and asserts nothing
+    assert ".kimi-code" in body
+    assert "--session" in body
+    assert "KIMI_STUB_MODE" in body
+
+
+def test_a_present_but_unusable_binary_is_a_finding_not_a_note():
+    """r3 fixed the regex pre-filter but left a second path open: a binary
+    that exists while --version fails or prints nothing still fell into
+    the 'absent' note. Absent is a note; present-and-broken is a finding."""
+    body = _read(DRIFT)
+    assert "$versionExit" in body
+    assert "did not report a usable version" in body
