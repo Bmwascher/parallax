@@ -1,0 +1,1126 @@
+"""Contract pins for tools/read-kimi-round-evidence.ps1, the executable
+validator that reads a kimi-code debate round's OWN session files
+(wire.jsonl, kimi-code.log) and decides whether the round can be
+attributed to the declared model, agent and tool set.
+
+The fixtures under fixtures/kimi-round/ are a single real captured
+session (one fresh tool-using call, one resumed call, kimi-code 0.31.1,
+2026-07-31), hand-normalized per the task-6 brief: the canonical model
+alias is replaced everywhere with "fixture-model/x" (and its bare
+provider-side form "k3-256k" with "x"), the session id with a fixed
+placeholder, and the one real absolute path that leaked into a tool-call
+event with "C:/fixture/ws". manifest.json records the exact byte
+offsets and hashes measured at the boundary between the two calls, so
+every number below is measured, never invented.
+
+TOOLCOUNT CORRECTION. Measured live (Task 6 Step 1, confirmed
+independently by Task 5's Step 3b/Step 6): the committed
+kimi-reviewer-agent.md declares a 5-tool allowlist, but every real
+dispatch's llm.tools_snapshot and per-session-log toolCount reads 4 -
+ReadMediaFile is silently excluded from the sent tool schemas (plausibly
+a vision-capability gate). A literal "toolCount == allowlist length"
+check would fail every real clean round, including these fixtures. The
+validator instead checks toolCount against llm.tools_snapshot's own tool
+count on a fresh slice, and on both kinds requires
+0 < toolCount <= allowlist length. See tools/read-kimi-round-evidence.ps1's
+header comment and the task-6 report for the full measurement.
+
+Each test asserts on `status` and on a distinguishing substring of
+`reason`, never on an exact message string.
+"""
+import hashlib
+import json
+import os
+import shutil
+import subprocess
+from pathlib import Path
+
+import pytest
+
+REPO = Path(__file__).resolve().parents[2]
+SCRIPT = REPO / "tools" / "read-kimi-round-evidence.ps1"
+FIXTURES = Path(__file__).parent / "fixtures" / "kimi-round"
+AGENT_FILE = REPO / "skills" / "multi-model-verify" / "references" / "kimi-reviewer-agent.md"
+
+FIXTURE_MODEL = "fixture-model/x"
+FIXTURE_PROVIDER = "kimi"
+FIXTURE_EFFORT = "off"
+FIXTURE_SESSION_ID = "session_00000000-0000-4000-8000-000000000001"
+
+MANIFEST = json.loads((FIXTURES / "manifest.json").read_text(encoding="utf-8"))
+
+POWERSHELL = os.environ.get("PARALLAX_PS_HOST") or shutil.which("powershell") or shutil.which("pwsh")
+
+pytestmark = pytest.mark.skipif(
+    POWERSHELL is None, reason="no PowerShell host on PATH")
+
+
+# ---------------------------------------------------------------------
+# Fixture line helpers
+# ---------------------------------------------------------------------
+
+def _read_lines(name):
+    text = (FIXTURES / name).read_text(encoding="utf-8")
+    return [l for l in text.split("\n") if l.strip()]
+
+
+def fresh_wire():
+    return _read_lines("fresh-wire.jsonl")
+
+
+def fresh_log():
+    return _read_lines("fresh-log.log")
+
+
+def resume_wire():
+    return _read_lines("resume-wire.jsonl")
+
+
+def resume_log():
+    return _read_lines("resume-log.log")
+
+
+def write_lines(path, lines):
+    path.write_bytes(("\n".join(lines) + "\n").encode("utf-8"))
+
+
+def find_index(lines, rec_type, nth=1):
+    count = 0
+    for i, l in enumerate(lines):
+        if json.loads(l).get("type") == rec_type:
+            count += 1
+            if count == nth:
+                return i
+    raise AssertionError(f"no {rec_type} #{nth} in these lines")
+
+
+def mutate(lines, idx, fn):
+    """Return a NEW list with line idx's JSON object mutated by fn (in
+    place on the dict). One field changed - the rest of the fixture is
+    untouched, so every negative case is the clean fixture with ONE thing
+    different."""
+    new_lines = list(lines)
+    obj = json.loads(new_lines[idx])
+    fn(obj)
+    new_lines[idx] = json.dumps(obj)
+    return new_lines
+
+
+def remove_line(lines, idx):
+    return lines[:idx] + lines[idx + 1:]
+
+
+def insert_line(lines, idx, obj):
+    new_lines = list(lines)
+    new_lines.insert(idx, json.dumps(obj))
+    return new_lines
+
+
+def duplicate_line(lines, idx):
+    return insert_line(lines, idx + 1, json.loads(lines[idx]))
+
+
+def brief_sha256(text):
+    return hashlib.sha256(text.replace("\r\n", "\n").encode("utf-8")).hexdigest()
+
+
+EMPTY_SHA256 = hashlib.sha256(b"").hexdigest()
+
+ROUND1_BRIEF_SHA = MANIFEST["round1BriefSha256"]
+ROUND2_BRIEF_SHA = MANIFEST["round2BriefSha256"]
+
+
+# ---------------------------------------------------------------------
+# Session-directory construction
+# ---------------------------------------------------------------------
+
+def build_fresh_layout(tmp_path, wire_lines, log_lines, session_id=FIXTURE_SESSION_ID,
+                        workspace="wd_x"):
+    """Build <tmp_path>/sessions/<workspace>/<session_id>/... and return
+    (sessions_root, session_dir)."""
+    root = tmp_path / "sessions"
+    sess_dir = root / workspace / session_id
+    (sess_dir / "agents" / "main").mkdir(parents=True)
+    (sess_dir / "logs").mkdir(parents=True)
+    write_lines(sess_dir / "agents" / "main" / "wire.jsonl", wire_lines)
+    write_lines(sess_dir / "logs" / "kimi-code.log", log_lines)
+    return root, sess_dir
+
+
+def build_resume_layout(tmp_path, wire_lines, log_lines, session_id=FIXTURE_SESSION_ID,
+                         workspace="wd_x"):
+    """Build a session directory directly (no sessions/ root enumeration
+    needed for a resume call) and return the session dir."""
+    root = tmp_path / "sessions"
+    sess_dir = root / workspace / session_id
+    (sess_dir / "agents" / "main").mkdir(parents=True)
+    (sess_dir / "logs").mkdir(parents=True)
+    write_lines(sess_dir / "agents" / "main" / "wire.jsonl", wire_lines)
+    write_lines(sess_dir / "logs" / "kimi-code.log", log_lines)
+    return sess_dir
+
+
+def write_json(path, obj):
+    path.write_text(json.dumps(obj), encoding="utf-8")
+
+
+def fresh_prior_state(known_session_dirs=None):
+    return {"kind": "fresh", "knownSessionDirs": list(known_session_dirs or [])}
+
+
+def resume_prior_state_round1():
+    """The genuine nextState round 1 produced - the correct -PriorState
+    for validating round 2."""
+    return {
+        "kind": "resume",
+        "sessionDir": str(FIXTURES),  # overwritten by callers that need a real dir; see resume_prior_state()
+        "sessionId": FIXTURE_SESSION_ID,
+        "wireBytes": MANIFEST["wireOffsetAfterRound1"],
+        "logBytes": MANIFEST["logOffsetAfterRound1"],
+        "wirePrefixSha256": MANIFEST["wirePrefixSha256AfterRound1"],
+        "logPrefixSha256": MANIFEST["logPrefixSha256AfterRound1"],
+        "toolsHash": MANIFEST["toolsHashRound1"],
+        "systemPromptHash": MANIFEST["systemPromptHashRound1"],
+    }
+
+
+def resume_prior_state(sess_dir, **overrides):
+    state = resume_prior_state_round1()
+    state["sessionDir"] = str(sess_dir)
+    state.update(overrides)
+    return state
+
+
+# ---------------------------------------------------------------------
+# Invocation helpers
+# ---------------------------------------------------------------------
+
+def run_fresh(sessions_root, session_id, prior_state_path, agent_file=AGENT_FILE,
+              model=FIXTURE_MODEL, provider=FIXTURE_PROVIDER, effort=FIXTURE_EFFORT,
+              expected_brief_sha=ROUND1_BRIEF_SHA):
+    args = [
+        POWERSHELL, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(SCRIPT),
+        "-Fresh", "-SessionsRoot", str(sessions_root),
+        "-SessionIdFromStdout", session_id,
+        "-PriorState", str(prior_state_path),
+        "-Model", model, "-Provider", provider, "-Effort", effort,
+        "-AgentFile", str(agent_file), "-ExpectedBriefSha256", expected_brief_sha,
+        "-Json",
+    ]
+    proc = subprocess.run(args, capture_output=True, text=True, timeout=60)
+    return proc
+
+
+def run_resume(session_dir, prior_state_path, agent_file=AGENT_FILE,
+               model=FIXTURE_MODEL, provider=FIXTURE_PROVIDER, effort=FIXTURE_EFFORT,
+               expected_brief_sha=ROUND2_BRIEF_SHA):
+    args = [
+        POWERSHELL, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(SCRIPT),
+        "-Resume", "-SessionDir", str(session_dir),
+        "-PriorState", str(prior_state_path),
+        "-Model", model, "-Provider", provider, "-Effort", effort,
+        "-AgentFile", str(agent_file), "-ExpectedBriefSha256", expected_brief_sha,
+        "-Json",
+    ]
+    proc = subprocess.run(args, capture_output=True, text=True, timeout=60)
+    return proc
+
+
+def parsed(proc):
+    assert proc.stdout.strip(), proc.stdout + proc.stderr
+    try:
+        return json.loads(proc.stdout.strip().splitlines()[-1])
+    except json.JSONDecodeError:
+        raise AssertionError("stdout was not JSON: " + proc.stdout + proc.stderr)
+
+
+def assert_clean(proc):
+    p = parsed(proc)
+    assert p.get("status") == "clean", (p, proc.stderr)
+    assert "nextState" in p
+    return p
+
+
+def assert_failed(proc, reason_substring):
+    p = parsed(proc)
+    assert p.get("status") == "failed", (p, proc.stderr)
+    assert reason_substring in p.get("reason", ""), p
+    return p
+
+
+# =======================================================================
+# CLEAN CASES
+# =======================================================================
+
+def test_fresh_round_is_clean(tmp_path):
+    """An inventory and no offsets - the only shape a fresh state has."""
+    root, sess_dir = build_fresh_layout(tmp_path, fresh_wire(), fresh_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+    proc = run_fresh(root, FIXTURE_SESSION_ID, state_path)
+    p = assert_clean(proc)
+    assert p["nextState"]["kind"] == "resume"
+    assert p["nextState"]["wireBytes"] == MANIFEST["wireOffsetAfterRound1"]
+
+
+def test_resumed_round_with_correct_offsets_is_clean(tmp_path):
+    sess_dir = build_resume_layout(tmp_path, resume_wire(), resume_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, resume_prior_state(sess_dir))
+    proc = run_resume(sess_dir, state_path)
+    assert_clean(proc)
+
+
+def test_resumed_round_is_clean_with_no_session_scoped_records_in_its_slice(tmp_path):
+    """The measured shape: a resumed call's slice carries no config.update,
+    tools.set_active_tools or llm.tools_snapshot at all - r2 would have
+    failed this. Confirmed directly: the resume fixture's round-2 slice
+    (from wireOffsetAfterRound1 onward) has none of the four session-scoped
+    record types, and the round is still clean."""
+    round2_wire = resume_wire()[len(fresh_wire()):]
+    for rec_type in ("config.update", "tools.set_active_tools",
+                      "llm.tools_snapshot", "permission.set_mode"):
+        assert not any(json.loads(l).get("type") == rec_type for l in round2_wire), rec_type
+    sess_dir = build_resume_layout(tmp_path, resume_wire(), resume_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, resume_prior_state(sess_dir))
+    assert_clean(run_resume(sess_dir, state_path))
+
+
+def test_fresh_round_with_four_llm_requests_is_clean(tmp_path):
+    """llm.request count tracks the tool loop and is variable - bounded
+    from below, never fixed. Built by duplicating the two real llm.request
+    records (plus their usage.record) once each, so all toolsHash/
+    systemPromptHash stay identical across all four - exactly what a
+    longer real tool loop would look like."""
+    wire = fresh_wire()
+    req1 = find_index(wire, "llm.request", 1)
+    wire = duplicate_line(wire, req1)
+    req2 = find_index(wire, "llm.request", 3)  # the original second request, now index 3
+    wire = duplicate_line(wire, req2)
+    assert sum(1 for l in wire if json.loads(l).get("type") == "llm.request") == 4
+    root, sess_dir = build_fresh_layout(tmp_path, wire, fresh_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+    assert_clean(run_fresh(root, FIXTURE_SESSION_ID, state_path))
+
+
+def test_first_call_of_a_debate_creates_container_and_leaf_and_is_clean(tmp_path):
+    """A debate's FIRST call creates BOTH a wd_<workspace> container and
+    the session inside it - two new directories, but only one is a
+    session_-prefixed leaf. Without the leaf-only rule this would report
+    session-not-resolvable on the clean first call of every debate."""
+    root, sess_dir = build_fresh_layout(tmp_path, fresh_wire(), fresh_log(),
+                                         workspace="wd_ws_first-call")
+    assert not (root / "wd_ws_first-call").exists() is False  # sanity: dir exists
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state(known_session_dirs=[]))
+    assert_clean(run_fresh(root, FIXTURE_SESSION_ID, state_path))
+
+
+def test_system_prompt_with_different_line_endings_is_still_clean(tmp_path):
+    """Rule 12's canonicalization (CRLF -> LF on both sides before
+    comparing) is what makes this pass. Without it, an autocrlf checkout
+    breaks the lane on one machine and not another."""
+    wire = fresh_wire()
+    idx = find_index(wire, "config.update", 1)
+    wire = mutate(wire, idx, lambda o: o.__setitem__(
+        "systemPrompt", o["systemPrompt"].replace("\n", "\r\n")))
+    root, sess_dir = build_fresh_layout(tmp_path, wire, fresh_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+    assert_clean(run_fresh(root, FIXTURE_SESSION_ID, state_path))
+
+
+# =======================================================================
+# FRESHNESS CASES
+# =======================================================================
+
+def test_resume_with_zero_wire_offset_fails(tmp_path):
+    """Round 1's records would otherwise satisfy every later check - the
+    stale-evidence case, and the reason the script exists."""
+    sess_dir = build_resume_layout(tmp_path, resume_wire(), resume_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, resume_prior_state(
+        sess_dir, wireBytes=0, wirePrefixSha256=EMPTY_SHA256))
+    # offset 0 means the slice starts at "metadata", not "turn.prompt".
+    assert_failed(run_resume(sess_dir, state_path), "slice-misaligned")
+
+
+def test_resume_with_zero_log_offset_fails(tmp_path):
+    """Symmetric with the wire case."""
+    sess_dir = build_resume_layout(tmp_path, resume_wire(), resume_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, resume_prior_state(
+        sess_dir, logBytes=0, logPrefixSha256=EMPTY_SHA256))
+    # The wire offset is still correct, so this reaches the log-specific
+    # symptom: TWO llm config lines now fall inside the slice (round 1's
+    # and round 2's), since the log offset no longer excludes round 1's.
+    assert_failed(run_resume(sess_dir, state_path), "log-config-count")
+
+
+def test_stale_offset_landing_mid_previous_call_fails_slice_misaligned(tmp_path):
+    """A stale offset landing AFTER round 1's turn.prompt but BEFORE its
+    trailing llm.request records passes every count and value check while
+    mixing two calls - the shape r3 never tested."""
+    wire = resume_wire()
+    fresh = fresh_wire()
+    turn_prompt_idx = find_index(fresh, "turn.prompt", 1)
+    # Byte offset landing just past round 1's turn.prompt line.
+    mid_offset = len(("\n".join(fresh[:turn_prompt_idx + 1]) + "\n").encode("utf-8"))
+    prefix_bytes = ("\n".join(fresh[:turn_prompt_idx + 1]) + "\n").encode("utf-8")
+    prefix_hash = hashlib.sha256(prefix_bytes).hexdigest()
+    sess_dir = build_resume_layout(tmp_path, wire, resume_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, resume_prior_state(
+        sess_dir, wireBytes=mid_offset, wirePrefixSha256=prefix_hash))
+    assert_failed(run_resume(sess_dir, state_path), "slice-misaligned")
+
+
+def test_wire_shorter_than_offset_fails_truncated_not_rereadfromzero(tmp_path):
+    """The written wire.jsonl is genuinely SHORTER than the claimed prior
+    offset (the real resume-wire.jsonl's total byte length, used as a
+    stand-in for "the file used to be this long"), not merely equal to
+    it - a length equal to the offset is a legitimate empty slice, not a
+    truncation."""
+    sess_dir = build_resume_layout(tmp_path, fresh_wire(), resume_log())
+    larger_offset = len((FIXTURES / "resume-wire.jsonl").read_bytes())
+    assert larger_offset > len((FIXTURES / "fresh-wire.jsonl").read_bytes())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, resume_prior_state(sess_dir, wireBytes=larger_offset))
+    assert_failed(run_resume(sess_dir, state_path), "truncated")
+
+
+def test_log_shorter_than_offset_fails_truncated(tmp_path):
+    sess_dir = build_resume_layout(tmp_path, resume_wire(), fresh_log())
+    larger_offset = len((FIXTURES / "resume-log.log").read_bytes())
+    assert larger_offset > len((FIXTURES / "fresh-log.log").read_bytes())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, resume_prior_state(sess_dir, logBytes=larger_offset))
+    assert_failed(run_resume(sess_dir, state_path), "truncated")
+
+
+def test_wire_prefix_hash_mismatch_fails_prefix_replaced(tmp_path):
+    sess_dir = build_resume_layout(tmp_path, resume_wire(), resume_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, resume_prior_state(sess_dir, wirePrefixSha256="a" * 64))
+    assert_failed(run_resume(sess_dir, state_path), "prefix-replaced")
+
+
+def test_log_prefix_hash_mismatch_fails_prefix_replaced(tmp_path):
+    """The rotation question is about the log; length-only protection
+    there was r3's asymmetry - this pins that the log gets a real hash
+    check too, not just the wire."""
+    sess_dir = build_resume_layout(tmp_path, resume_wire(), resume_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, resume_prior_state(sess_dir, logPrefixSha256="b" * 64))
+    assert_failed(run_resume(sess_dir, state_path), "prefix-replaced")
+
+
+# =======================================================================
+# SESSION-IDENTITY CASES
+# =======================================================================
+
+def test_fresh_call_with_zero_new_session_dirs_fails(tmp_path):
+    root = tmp_path / "sessions"
+    root.mkdir()
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+    assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path), "session-not-resolvable")
+
+
+def test_fresh_call_with_two_new_session_dirs_fails(tmp_path):
+    """A concurrent run in the same home - the one collision an isolated
+    home does not prevent."""
+    root, sess_dir = build_fresh_layout(tmp_path, fresh_wire(), fresh_log())
+    other = root / "wd_x" / "session_11111111-1111-4111-8111-111111111111"
+    (other / "agents" / "main").mkdir(parents=True)
+    (other / "logs").mkdir(parents=True)
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+    assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path), "session-not-resolvable")
+
+
+def test_fresh_call_whose_new_dir_does_not_match_stdout_id_fails(tmp_path):
+    root, sess_dir = build_fresh_layout(tmp_path, fresh_wire(), fresh_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+    proc = run_fresh(root, "session_ffffffff-ffff-4fff-8fff-ffffffffffff", state_path)
+    assert_failed(proc, "session-id-mismatch")
+
+
+def test_fresh_state_with_stale_known_session_dirs_fails(tmp_path):
+    """A pre-existing directory absent from knownSessionDirs reads as new,
+    so a genuinely fresh call now sees two "new" leaves."""
+    root, sess_dir = build_fresh_layout(tmp_path, fresh_wire(), fresh_log())
+    preexisting = root / "wd_x" / "session_22222222-2222-4222-8222-222222222222"
+    (preexisting / "agents" / "main").mkdir(parents=True)
+    (preexisting / "logs").mkdir(parents=True)
+    state_path = tmp_path / "state.json"
+    # knownSessionDirs is stale: it does not list `preexisting`, even
+    # though it existed before this dispatch.
+    write_json(state_path, fresh_prior_state(known_session_dirs=[]))
+    assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path), "session-not-resolvable")
+
+
+def test_prior_state_kind_disagreeing_with_invocation_fails(tmp_path):
+    sess_dir = build_resume_layout(tmp_path, resume_wire(), resume_log())
+    state_path = tmp_path / "state.json"
+    # A fresh-shaped state handed to a -Resume invocation.
+    write_json(state_path, fresh_prior_state())
+    assert_failed(run_resume(sess_dir, state_path), "state-kind-mismatch")
+
+
+def test_prior_state_kind_mismatch_the_other_direction(tmp_path):
+    root, sess_dir = build_fresh_layout(tmp_path, fresh_wire(), fresh_log())
+    state_path = tmp_path / "state.json"
+    # A resume-shaped state handed to a -Fresh invocation.
+    write_json(state_path, resume_prior_state(sess_dir))
+    assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path), "state-kind-mismatch")
+
+
+def test_resume_prior_state_naming_a_different_session_dir_fails(tmp_path):
+    sess_dir = build_resume_layout(tmp_path, resume_wire(), resume_log())
+    other_dir = tmp_path / "elsewhere"
+    other_dir.mkdir()
+    state_path = tmp_path / "state.json"
+    write_json(state_path, resume_prior_state(other_dir))
+    assert_failed(run_resume(sess_dir, state_path), "state-session-mismatch")
+
+
+def test_resume_prior_state_naming_a_different_session_id_fails(tmp_path):
+    sess_dir = build_resume_layout(tmp_path, resume_wire(), resume_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, resume_prior_state(sess_dir, sessionId="session_not-this-one"))
+    assert_failed(run_resume(sess_dir, state_path), "state-session-mismatch")
+
+
+def test_prior_state_missing_is_unusable(tmp_path):
+    sess_dir = build_resume_layout(tmp_path, resume_wire(), resume_log())
+    state_path = tmp_path / "does-not-exist.json"
+    assert_failed(run_resume(sess_dir, state_path), "prior-state-unusable")
+
+
+def test_prior_state_malformed_json_is_unusable(tmp_path):
+    sess_dir = build_resume_layout(tmp_path, resume_wire(), resume_log())
+    state_path = tmp_path / "state.json"
+    state_path.write_text("{not json", encoding="utf-8")
+    assert_failed(run_resume(sess_dir, state_path), "prior-state-unusable")
+
+
+def test_prior_state_missing_a_field_is_unusable(tmp_path):
+    """A generic case from the brief's list ("-PriorState that is missing,
+    malformed, or missing a field fails"), not tied to one specific
+    reason token. With EVERY field but kind absent, rule 3 (session
+    establishment) is reached before rule 4 (state-inconsistent) - the
+    resume branch compares -PriorState.sessionDir/sessionId against the
+    resolved session first, and a wholly-absent sessionDir/sessionId
+    cannot match, so this fails there. See
+    test_resume_state_missing_an_offset_is_inconsistent below for the
+    complementary case that DOES reach rule 4 directly, by supplying a
+    correct sessionDir/sessionId and omitting only an offset field."""
+    sess_dir = build_resume_layout(tmp_path, resume_wire(), resume_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, {"kind": "resume"})  # everything else absent
+    assert_failed(run_resume(sess_dir, state_path), "state-session-mismatch")
+
+
+def test_prior_state_with_string_offset_is_unusable(tmp_path):
+    sess_dir = build_resume_layout(tmp_path, resume_wire(), resume_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, resume_prior_state(sess_dir, wireBytes="19491"))
+    assert_failed(run_resume(sess_dir, state_path), "prior-state-unusable")
+
+
+def test_prior_state_with_negative_offset_is_unusable(tmp_path):
+    sess_dir = build_resume_layout(tmp_path, resume_wire(), resume_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, resume_prior_state(sess_dir, wireBytes=-1))
+    assert_failed(run_resume(sess_dir, state_path), "prior-state-unusable")
+
+
+def test_prior_state_with_63_char_hash_is_unusable(tmp_path):
+    sess_dir = build_resume_layout(tmp_path, resume_wire(), resume_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, resume_prior_state(sess_dir, wirePrefixSha256="a" * 63))
+    assert_failed(run_resume(sess_dir, state_path), "prior-state-unusable")
+
+
+def test_prior_state_with_known_session_dirs_as_a_string_is_unusable(tmp_path):
+    root, sess_dir = build_fresh_layout(tmp_path, fresh_wire(), fresh_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, {"kind": "fresh", "knownSessionDirs": "not-a-list"})
+    assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path), "prior-state-unusable")
+
+
+def test_replaying_an_older_rounds_state_fails(tmp_path):
+    """A well-formed, internally self-consistent resume state (offset 0,
+    hash of the empty prefix, and round 1's real continuity hashes) is
+    exactly what would have been fed INTO round 1, not what came out of
+    it. Replaying it against round 2's slice is not a malformed object -
+    every field is well-typed and hash-consistent AT ITS OWN offset - so
+    it must still fail, not validate. It resolves to the same
+    slice-misaligned symptom as the zero-offset freshness cases (the slice
+    starts at "metadata" instead of "turn.prompt"), which is the point:
+    even a well-formed but stale state does not get a pass merely for
+    being well-formed."""
+    sess_dir = build_resume_layout(tmp_path, resume_wire(), resume_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, resume_prior_state(
+        sess_dir, wireBytes=0, wirePrefixSha256=EMPTY_SHA256,
+        logBytes=0, logPrefixSha256=EMPTY_SHA256))
+    assert_failed(run_resume(sess_dir, state_path), "slice-misaligned")
+
+
+def test_fresh_state_carrying_a_session_dir_is_inconsistent(tmp_path):
+    root, sess_dir = build_fresh_layout(tmp_path, fresh_wire(), fresh_log())
+    state_path = tmp_path / "state.json"
+    state = fresh_prior_state()
+    state["sessionDir"] = str(sess_dir)
+    write_json(state_path, state)
+    assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path), "state-inconsistent")
+
+
+def test_fresh_state_carrying_offsets_is_inconsistent(tmp_path):
+    root, sess_dir = build_fresh_layout(tmp_path, fresh_wire(), fresh_log())
+    state_path = tmp_path / "state.json"
+    state = fresh_prior_state()
+    state["wireBytes"] = 0
+    write_json(state_path, state)
+    assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path), "state-inconsistent")
+
+
+def test_resume_state_missing_an_offset_is_inconsistent(tmp_path):
+    sess_dir = build_resume_layout(tmp_path, resume_wire(), resume_log())
+    state_path = tmp_path / "state.json"
+    state = resume_prior_state(sess_dir)
+    del state["wireBytes"]
+    write_json(state_path, state)
+    assert_failed(run_resume(sess_dir, state_path), "state-inconsistent")
+
+
+def test_fresh_slice_not_beginning_with_metadata_fails_slice_misaligned(tmp_path):
+    wire = fresh_wire()
+    wire = remove_line(wire, 0)  # drop the leading "metadata" record
+    root, sess_dir = build_fresh_layout(tmp_path, wire, fresh_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+    assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path), "slice-misaligned")
+
+
+def test_resume_slice_not_beginning_with_turn_prompt_fails_slice_misaligned(tmp_path):
+    """Covered mechanically by test_resume_with_zero_wire_offset_fails
+    too; this is the direct, minimal form: the resume fixture's OWN
+    second turn.prompt line is removed, so the (correctly-offset) slice
+    now opens on a context.append_message instead."""
+    wire = resume_wire()
+    idx = find_index(wire, "turn.prompt", 2)
+    wire = remove_line(wire, idx)
+    sess_dir = build_resume_layout(tmp_path, wire, resume_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, resume_prior_state(sess_dir))
+    assert_failed(run_resume(sess_dir, state_path), "slice-misaligned")
+
+
+# =======================================================================
+# MISSING AND MALFORMED
+# =======================================================================
+
+def test_missing_session_directory_fails(tmp_path):
+    sess_dir = tmp_path / "sessions" / "wd_x" / FIXTURE_SESSION_ID
+    state_path = tmp_path / "state.json"
+    write_json(state_path, resume_prior_state(sess_dir))
+    assert_failed(run_resume(sess_dir, state_path), "session-dir-missing")
+
+
+def test_missing_wire_file_fails(tmp_path):
+    sess_dir = build_resume_layout(tmp_path, resume_wire(), resume_log())
+    (sess_dir / "agents" / "main" / "wire.jsonl").unlink()
+    state_path = tmp_path / "state.json"
+    write_json(state_path, resume_prior_state(sess_dir))
+    assert_failed(run_resume(sess_dir, state_path), "evidence-file-missing")
+
+
+def test_missing_log_file_fails(tmp_path):
+    sess_dir = build_resume_layout(tmp_path, resume_wire(), resume_log())
+    (sess_dir / "logs" / "kimi-code.log").unlink()
+    state_path = tmp_path / "state.json"
+    write_json(state_path, resume_prior_state(sess_dir))
+    assert_failed(run_resume(sess_dir, state_path), "evidence-file-missing")
+
+
+def test_non_json_line_in_slice_fails_wire_malformed(tmp_path):
+    wire = fresh_wire()
+    wire.insert(6, "this is not json")
+    root, sess_dir = build_fresh_layout(tmp_path, wire, fresh_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+    assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path), "wire-malformed")
+
+
+def test_turn_prompt_input_not_an_array_fails_record_malformed(tmp_path):
+    wire = fresh_wire()
+    idx = find_index(wire, "turn.prompt", 1)
+    wire = mutate(wire, idx, lambda o: o.__setitem__("input", "not-an-array"))
+    root, sess_dir = build_fresh_layout(tmp_path, wire, fresh_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+    assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path), "record-malformed")
+
+
+def test_turn_prompt_input_element_with_no_text_fails_record_malformed(tmp_path):
+    wire = fresh_wire()
+    idx = find_index(wire, "turn.prompt", 1)
+    wire = mutate(wire, idx, lambda o: o.__setitem__("input", [{"type": "text"}]))
+    root, sess_dir = build_fresh_layout(tmp_path, wire, fresh_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+    assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path), "record-malformed")
+
+
+def test_llm_request_toolshash_not_a_string_fails_record_malformed(tmp_path):
+    wire = fresh_wire()
+    idx = find_index(wire, "llm.request", 1)
+    wire = mutate(wire, idx, lambda o: o.__setitem__("toolsHash", 12345))
+    root, sess_dir = build_fresh_layout(tmp_path, wire, fresh_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+    assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path), "record-malformed")
+
+
+def test_missing_agent_file_fails(tmp_path):
+    root, sess_dir = build_fresh_layout(tmp_path, fresh_wire(), fresh_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+    proc = run_fresh(root, FIXTURE_SESSION_ID, state_path,
+                      agent_file=tmp_path / "no-such-agent.md")
+    assert_failed(proc, "agent-file-unusable")
+
+
+def test_agent_file_with_unparseable_frontmatter_fails(tmp_path):
+    bad_agent = tmp_path / "bad-agent.md"
+    bad_agent.write_text("not even frontmatter\n", encoding="utf-8")
+    root, sess_dir = build_fresh_layout(tmp_path, fresh_wire(), fresh_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+    proc = run_fresh(root, FIXTURE_SESSION_ID, state_path, agent_file=bad_agent)
+    assert_failed(proc, "agent-file-unusable")
+
+
+def test_expected_brief_sha_not_64_hex_fails_bad_argument(tmp_path):
+    root, sess_dir = build_fresh_layout(tmp_path, fresh_wire(), fresh_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+    proc = run_fresh(root, FIXTURE_SESSION_ID, state_path, expected_brief_sha="not-a-hash")
+    assert_failed(proc, "bad-argument")
+
+
+def test_missing_turn_prompt_fails(tmp_path):
+    """turn.prompt is the fresh slice's 6th record (metadata,
+    config.update x2, tools.set_active_tools, permission.set_mode, THEN
+    turn.prompt), not its first, so removing it does not touch the
+    slice-boundary check - it is caught directly by the per-call count."""
+    wire = fresh_wire()
+    idx = find_index(wire, "turn.prompt", 1)
+    wire = remove_line(wire, idx)
+    root, sess_dir = build_fresh_layout(tmp_path, wire, fresh_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+    assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path), "turn-prompt-count")
+
+
+def test_two_turn_prompts_in_one_slice_fails_turn_prompt_count(tmp_path):
+    wire = fresh_wire()
+    idx = find_index(wire, "turn.prompt", 1)
+    wire = duplicate_line(wire, idx)
+    root, sess_dir = build_fresh_layout(tmp_path, wire, fresh_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+    assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path), "turn-prompt-count")
+
+
+def test_zero_llm_requests_in_slice_fails(tmp_path):
+    wire = fresh_wire()
+    while True:
+        idxs = [i for i, l in enumerate(wire) if json.loads(l).get("type") == "llm.request"]
+        if not idxs:
+            break
+        wire = remove_line(wire, idxs[0])
+    root, sess_dir = build_fresh_layout(tmp_path, wire, fresh_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+    assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path), "llm-request-count")
+
+
+def test_missing_llm_config_line_fails(tmp_path):
+    log = [l for l in fresh_log() if "llm config" not in l]
+    root, sess_dir = build_fresh_layout(tmp_path, fresh_wire(), log)
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+    assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path), "log-config-count")
+
+
+def test_two_llm_config_lines_in_one_log_slice_fails(tmp_path):
+    log = fresh_log()
+    config_idx = next(i for i, l in enumerate(log) if "llm config" in l)
+    log.insert(config_idx + 1, log[config_idx])
+    root, sess_dir = build_fresh_layout(tmp_path, fresh_wire(), log)
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+    assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path), "log-config-count")
+
+
+@pytest.mark.parametrize("rec_type", [
+    "config.update", "tools.set_active_tools", "llm.tools_snapshot", "permission.set_mode",
+])
+def test_session_scoped_record_absent_from_fresh_slice_fails(tmp_path, rec_type):
+    wire = fresh_wire()
+    idxs = [i for i, l in enumerate(wire) if json.loads(l).get("type") == rec_type]
+    for i in reversed(idxs):
+        wire = remove_line(wire, i)
+    root, sess_dir = build_fresh_layout(tmp_path, wire, fresh_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+    assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path), "session-scoped-count")
+
+
+def test_duplicated_config_update_three_of_them_fails(tmp_path):
+    wire = fresh_wire()
+    idx = find_index(wire, "config.update", 1)
+    wire = duplicate_line(wire, idx)
+    root, sess_dir = build_fresh_layout(tmp_path, wire, fresh_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+    assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path), "session-scoped-count")
+
+
+@pytest.mark.parametrize("rec_type", [
+    "tools.set_active_tools", "llm.tools_snapshot", "permission.set_mode",
+])
+def test_duplicated_singleton_session_scoped_record_fails(tmp_path, rec_type):
+    wire = fresh_wire()
+    idx = find_index(wire, rec_type, 1)
+    wire = duplicate_line(wire, idx)
+    root, sess_dir = build_fresh_layout(tmp_path, wire, fresh_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+    assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path), "session-scoped-count")
+
+
+def test_two_copies_of_first_config_update_shape_second_absent_fails(tmp_path):
+    """The count is right (2 config.update records) and the content is
+    not (both are the profileName/systemPrompt shape; the
+    modelAlias/thinkingEffort shape never appears)."""
+    wire = fresh_wire()
+    first_idx = find_index(wire, "config.update", 1)
+    second_idx = find_index(wire, "config.update", 2)
+    first_obj = json.loads(wire[first_idx])
+    wire[second_idx] = json.dumps(first_obj)
+    root, sess_dir = build_fresh_layout(tmp_path, wire, fresh_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+    assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path), "session-scoped-content")
+
+
+def test_two_copies_of_second_config_update_shape_first_absent_fails(tmp_path):
+    wire = fresh_wire()
+    first_idx = find_index(wire, "config.update", 1)
+    second_idx = find_index(wire, "config.update", 2)
+    second_obj = json.loads(wire[second_idx])
+    wire[first_idx] = json.dumps(second_obj)
+    root, sess_dir = build_fresh_layout(tmp_path, wire, fresh_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+    assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path), "session-scoped-content")
+
+
+@pytest.mark.parametrize("rec_type", [
+    "config.update", "tools.set_active_tools", "llm.tools_snapshot", "permission.set_mode",
+])
+def test_resume_slice_containing_a_session_scoped_record_fails(tmp_path, rec_type):
+    """The resume branch's whole reason for existing - r3 gave it no
+    negative test at all. Take round 1's copy of the record and splice it
+    into round 2's slice."""
+    fresh = fresh_wire()
+    resume = resume_wire()
+    idx_in_fresh = find_index(fresh, rec_type, 1)
+    injected = fresh[idx_in_fresh]
+    # Inserted AFTER round 2's own turn.prompt (its first record), not
+    # before it - otherwise the injected record becomes the slice's
+    # first record and this trips the boundary check (slice-misaligned)
+    # instead of reaching the check this case exists to exercise.
+    round2_start = len(fresh)
+    insert_at = round2_start + 1
+    wire = resume[:insert_at] + [injected] + resume[insert_at:]
+    sess_dir = build_resume_layout(tmp_path, wire, resume_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, resume_prior_state(sess_dir))
+    assert_failed(run_resume(sess_dir, state_path), "session-scoped-on-resume")
+
+
+# =======================================================================
+# INEQUALITY CASES
+# =======================================================================
+
+def test_active_tools_names_unequal_to_allowlist_fails(tmp_path):
+    wire = fresh_wire()
+    idx = find_index(wire, "tools.set_active_tools", 1)
+    wire = mutate(wire, idx, lambda o: o["names"].append("ExtraTool"))
+    root, sess_dir = build_fresh_layout(tmp_path, wire, fresh_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+    assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path), "session-scoped-content")
+
+
+def test_active_tools_disallowed_names_unequal_to_denylist_fails(tmp_path):
+    wire = fresh_wire()
+    idx = find_index(wire, "tools.set_active_tools", 1)
+    wire = mutate(wire, idx, lambda o: o["disallowedNames"].pop())
+    root, sess_dir = build_fresh_layout(tmp_path, wire, fresh_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+    assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path), "session-scoped-content")
+
+
+def test_snapshot_tool_names_unequal_while_active_names_correct_fails(tmp_path):
+    """Separate records, and one can be right while the other is wrong."""
+    wire = fresh_wire()
+    idx = find_index(wire, "llm.tools_snapshot", 1)
+    wire = mutate(wire, idx, lambda o: o["tools"].append(
+        {"name": "Bash", "description": "x", "parameters": {}}))
+    root, sess_dir = build_fresh_layout(tmp_path, wire, fresh_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+    assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path), "session-scoped-content")
+
+
+def test_profile_name_mismatch_fails(tmp_path):
+    wire = fresh_wire()
+    idx = find_index(wire, "config.update", 1)
+    wire = mutate(wire, idx, lambda o: o.__setitem__("profileName", "someone-else"))
+    root, sess_dir = build_fresh_layout(tmp_path, wire, fresh_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+    assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path), "session-scoped-content")
+
+
+def test_system_prompt_differing_from_agent_body_fails(tmp_path):
+    wire = fresh_wire()
+    idx = find_index(wire, "config.update", 1)
+    wire = mutate(wire, idx, lambda o: o.__setitem__(
+        "systemPrompt", o["systemPrompt"] + " extra unauthorized text"))
+    root, sess_dir = build_fresh_layout(tmp_path, wire, fresh_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+    assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path), "session-scoped-content")
+
+
+def test_system_prompt_chars_differing_from_body_length_fails(tmp_path):
+    log = fresh_log()
+    idx = next(i for i, l in enumerate(log) if "llm config" in l)
+    log[idx] = log[idx].replace("systemPromptChars=462", "systemPromptChars=999")
+    root, sess_dir = build_fresh_layout(tmp_path, fresh_wire(), log)
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+    assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path), "log-config-field")
+
+
+def test_tool_count_exceeding_allowlist_length_fails(tmp_path):
+    """See the TOOLCOUNT CORRECTION note at the top of this file: exact
+    equality to the allowlist length is measured-false on every real
+    dispatch (ReadMediaFile is vision-gated out), so the check this script
+    implements is 0 < toolCount <= allowlist length. The failure this
+    check exists for - "the allowlist failed to apply" - shows up as
+    toolCount reading as the FULL unrestricted set, i.e. EXCEEDING the
+    allowlist length, which is the mutation used here.
+
+    Uses the RESUME fixture deliberately, not fresh: on a fresh slice the
+    (stronger, exact-equality) llm.tools_snapshot cross-check would catch
+    a toolCount of 22 on its own, which was confirmed by mutation testing
+    to make this case prove nothing about the allowlist-upper-bound check
+    it exists to cover - that cross-check does not exist in a resume
+    slice at all (no llm.tools_snapshot record there), so the resume
+    fixture isolates the bound check as the only thing that can catch
+    this mutation."""
+    log = resume_log()
+    idx = max(i for i, l in enumerate(log) if "llm config" in l)  # round 2's own line
+    assert "toolCount=4" in log[idx]
+    log[idx] = log[idx].replace("toolCount=4", "toolCount=22")
+    sess_dir = build_resume_layout(tmp_path, resume_wire(), log)
+    state_path = tmp_path / "state.json"
+    write_json(state_path, resume_prior_state(sess_dir))
+    assert_failed(run_resume(sess_dir, state_path), "log-config-field")
+
+
+def test_model_alias_wrong_in_second_config_update_fails(tmp_path):
+    wire = fresh_wire()
+    idx = find_index(wire, "config.update", 2)
+    wire = mutate(wire, idx, lambda o: o.__setitem__("modelAlias", "wrong-model/y"))
+    root, sess_dir = build_fresh_layout(tmp_path, wire, fresh_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+    assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path), "session-scoped-content")
+
+
+def test_thinking_effort_wrong_in_second_config_update_fails(tmp_path):
+    wire = fresh_wire()
+    idx = find_index(wire, "config.update", 2)
+    wire = mutate(wire, idx, lambda o: o.__setitem__("thinkingEffort", "max"))
+    root, sess_dir = build_fresh_layout(tmp_path, wire, fresh_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+    assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path), "session-scoped-content")
+
+
+def test_permission_mode_not_auto_fails(tmp_path):
+    wire = fresh_wire()
+    idx = find_index(wire, "permission.set_mode", 1)
+    wire = mutate(wire, idx, lambda o: o.__setitem__("mode", "manual"))
+    root, sess_dir = build_fresh_layout(tmp_path, wire, fresh_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+    assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path), "session-scoped-content")
+
+
+@pytest.mark.parametrize("field,value", [
+    ("modelAlias", "wrong-model/y"),
+    ("provider", "not-kimi"),
+    ("thinkingEffort", "max"),
+])
+def test_llm_request_field_wrong_on_second_request_not_just_first(tmp_path, field, value):
+    """Not merely the first - the SECOND llm.request in the slice."""
+    wire = fresh_wire()
+    idx = find_index(wire, "llm.request", 2)
+    wire = mutate(wire, idx, lambda o: o.__setitem__(field, value))
+    root, sess_dir = build_fresh_layout(tmp_path, wire, fresh_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+    assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path), "llm-request-field")
+
+
+def test_llm_request_tools_hash_empty_fails(tmp_path):
+    wire = fresh_wire()
+    idx = find_index(wire, "llm.request", 1)
+    wire = mutate(wire, idx, lambda o: o.__setitem__("toolsHash", ""))
+    root, sess_dir = build_fresh_layout(tmp_path, wire, fresh_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+    assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path), "llm-request-field")
+
+
+def test_llm_request_system_prompt_hash_empty_fails(tmp_path):
+    wire = fresh_wire()
+    idx = find_index(wire, "llm.request", 1)
+    wire = mutate(wire, idx, lambda o: o.__setitem__("systemPromptHash", ""))
+    root, sess_dir = build_fresh_layout(tmp_path, wire, fresh_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+    assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path), "llm-request-field")
+
+
+def test_tools_hash_differing_between_requests_in_one_slice_fails(tmp_path):
+    """One request in a tool loop could otherwise run on a different
+    surface while the emitted hashes come from another."""
+    wire = fresh_wire()
+    idx = find_index(wire, "llm.request", 2)
+    wire = mutate(wire, idx, lambda o: o.__setitem__("toolsHash", "f" * 64))
+    root, sess_dir = build_fresh_layout(tmp_path, wire, fresh_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+    assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path), "llm-request-hash-inconsistent")
+
+
+def test_system_prompt_hash_differing_between_requests_in_one_slice_fails(tmp_path):
+    wire = fresh_wire()
+    idx = find_index(wire, "llm.request", 2)
+    wire = mutate(wire, idx, lambda o: o.__setitem__("systemPromptHash", "e" * 64))
+    root, sess_dir = build_fresh_layout(tmp_path, wire, fresh_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+    assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path), "llm-request-hash-inconsistent")
+
+
+def test_snapshot_hash_absent_fails(tmp_path):
+    """Required in BOTH branches of Task 4 Step 1b."""
+    wire = fresh_wire()
+    idx = find_index(wire, "llm.tools_snapshot", 1)
+
+    def drop_hash(o):
+        del o["hash"]
+    wire = mutate(wire, idx, drop_hash)
+    root, sess_dir = build_fresh_layout(tmp_path, wire, fresh_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+    assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path), "record-malformed")
+
+
+def test_snapshot_hash_empty_fails(tmp_path):
+    wire = fresh_wire()
+    idx = find_index(wire, "llm.tools_snapshot", 1)
+    wire = mutate(wire, idx, lambda o: o.__setitem__("hash", ""))
+    root, sess_dir = build_fresh_layout(tmp_path, wire, fresh_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+    assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path), "session-scoped-content")
+
+
+def test_requests_toolshash_disagreeing_with_snapshot_hash_fails(tmp_path):
+    """Written only because Step 1b measured the two fields EQUAL on this
+    client (llm.request.toolsHash == llm.tools_snapshot.hash, confirmed
+    2026-07-31; see the manifest's toolsHashRound1 and the fresh
+    fixture's own llm.tools_snapshot.hash - both
+    3d2530e1...4597b). Consistent request hashes that disagree with the
+    snapshot describing the sent schemas are a disagreement, not a pass."""
+    wire = fresh_wire()
+    snap_idx = find_index(wire, "llm.tools_snapshot", 1)
+    snapshot = json.loads(wire[snap_idx])
+    assert snapshot["hash"] == MANIFEST["toolsHashRound1"], "Step 1b measurement did not hold"
+    for n in (1, 2):
+        idx = find_index(wire, "llm.request", n)
+        wire = mutate(wire, idx, lambda o: o.__setitem__("toolsHash", "d" * 64))
+    root, sess_dir = build_fresh_layout(tmp_path, wire, fresh_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+    assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path), "snapshot-hash-mismatch")
+
+
+def test_tools_hash_differing_from_prior_state_on_later_round_fails(tmp_path):
+    sess_dir = build_resume_layout(tmp_path, resume_wire(), resume_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, resume_prior_state(sess_dir, toolsHash="c" * 64))
+    assert_failed(run_resume(sess_dir, state_path), "hash-discontinuity")
+
+
+def test_system_prompt_hash_differing_from_prior_state_on_later_round_fails(tmp_path):
+    sess_dir = build_resume_layout(tmp_path, resume_wire(), resume_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, resume_prior_state(sess_dir, systemPromptHash="9" * 64))
+    assert_failed(run_resume(sess_dir, state_path), "hash-discontinuity")
+
+
+@pytest.mark.parametrize("field,broken", [
+    ("provider=kimi", "provider=notkimi"),
+    ("modelAlias=fixture-model/x", "modelAlias=wrong-model/y"),
+    ("thinkingEffort=off", "thinkingEffort=max"),
+])
+def test_log_line_field_wrong_while_requests_correct_fails(tmp_path, field, broken):
+    """r3's inequality cases covered requests only."""
+    log = fresh_log()
+    idx = next(i for i, l in enumerate(log) if "llm config" in l)
+    assert field in log[idx]
+    log[idx] = log[idx].replace(field, broken)
+    root, sess_dir = build_fresh_layout(tmp_path, fresh_wire(), log)
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+    assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path), "log-config-field")
+
+
+def test_turn_prompt_text_not_hashing_to_expected_brief_fails(tmp_path):
+    wire = fresh_wire()
+    idx = find_index(wire, "turn.prompt", 1)
+    wire = mutate(wire, idx, lambda o: o.__setitem__(
+        "input", [{"type": "text", "text": "a completely different brief"}]))
+    root, sess_dir = build_fresh_layout(tmp_path, wire, fresh_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+    assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path), "brief-hash")

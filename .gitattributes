@@ -1,2 +1,9 @@
 # bash hooks must stay LF - CRLF breaks the shebang under git-bash
 .githooks/* text eol=lf
+
+# kimi-round evidence fixtures are captured wire/log bytes whose SHA-256
+# prefix hashes and byte offsets (evals/multi-model-verify/fixtures/kimi-round/manifest.json)
+# are computed over LF content. core.autocrlf=true on this repo would
+# rewrite them to CRLF on checkout, silently invalidating every offset
+# and hash the test suite depends on.
+evals/multi-model-verify/fixtures/kimi-round/* text eol=lf
