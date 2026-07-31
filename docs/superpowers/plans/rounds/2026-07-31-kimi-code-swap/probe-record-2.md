@@ -17,8 +17,17 @@ canary skills planted, one per documented project discovery root:
 `.kimi-code/skills/canary/SKILL.md` and `.agents/skills/canary2/SKILL.md`, each
 instructing the model to prefix every reply with a distinct token.
 
-Agent file: the five-tool allowlist, the full sixteen-name denylist including
-`CronList`, and `subagents: []`. System prompt body 431 characters.
+Agent file: the five-tool allowlist, the full denylist including `CronList`,
+and `subagents: []`. System prompt body 431 characters.
+
+**Count corrected 2026-07-31** after the fable-reviewer whole-branch review:
+this line first said "sixteen-name", which agrees with neither the plan's
+seventeen-name denylist nor `probe-record.md:151-155`, whose enumeration lists
+21 distinct tools and does not include `CronList` at all. `CronList` entered
+during Sol plan-debate round 2 as a built-in found in neither list. The bare
+count is removed here rather than guessed at; the plan's Task 5 Step 3b
+re-enumerates the inventory from the client and writes the reconciled result
+below.
 
 ## FINDING 1 — record cardinality. The rule in revision 2 is wrong.
 
@@ -186,6 +195,17 @@ one flag that genuinely cannot be re-pinned.
 
 ## Still unmeasured
 
+- **Whether `llm.request.toolsHash` equals `llm.tools_snapshot.hash`.** Added
+  2026-07-31 after the fable-reviewer whole-branch review found the plan's
+  validator requiring that equality with nothing measuring it.
+  `probe-record.md:180-183` lists the snapshot's `hash` field and
+  `probe-record.md:229-230` gives a request's `toolsHash` value, but the two
+  were never compared, and the client may hash them over different
+  serializations. Plan Task 4 Step 1b measures it offline from a probe already
+  scheduled, and the validator rule branches on the answer. Until then the
+  equality is an assumption, not a finding.
+- The real built-in tool inventory for 0.31.1, and specifically whether
+  `CronList` exists. See the correction under Setup above.
 - The cp1252 output hazard. It gates only whether a documentation bullet is
   deleted, so it does not block the contract's structure.
 - Whether per-session files can be replaced and regrow past a captured offset.

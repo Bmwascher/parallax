@@ -12,7 +12,8 @@
 
 - **r1** — first draft, unreviewed.
 - **r2** — after Sol round 1 (10 FIX). Restored the freshness boundary that r1 deleted along with the offset rule; added a validator and credential handling.
-- **r8, this one** — after Sol round 7, which called the design structurally coherent and asked for a small final edit rather than another round. The load-bearing one: the marked `round-freshness-boundary` REGION still said "exactly one new directory" while the validator rule said one session LEAF. That region is the pinned contract, so the rejected rule — the one that would fail every clean first call — was about to be locked in. It now carries the leaf definition. Also: a failed substituted-drive setup was allowed to skip the branch, which is fail-open and contradicts this plan's own invariant, and now fails the live gate; the fake profile is now nested inside a disposable sandbox so the ancestor case cannot target the shared temp directory; the stray numbered walkthrough item and a wrong Task 4 attribution are fixed. The `session_` prefix Sol listed as unverified was confirmed on disk and added to the probe record, along with the fact that the `wd_` container is per WORKSPACE, not per session.
+- **r9, this one** — after the fable-reviewer whole-branch review over `6201e30..f46be73`, which read the plan start to finish rather than round by round and found what seven adversarial rounds did not. Four material fixes. **Task 6 rule 13 asserted an equality nothing had measured**: fresh-slice `llm.request.toolsHash` equal to `llm.tools_snapshot.hash`. Neither probe record compares those two fields, and if the client hashes them over different serializations the rule fails EVERY clean fresh round — the fails-every-clean-call class rounds 3 through 7 kept removing, re-entering through a rule written to catch it. Task 4 now measures it for free from a probe already being run, and rule 13 has two branches. **Task 7's surface was too narrow to leave a coherent contract**: the intro, Containment, the Workspace section's planted-brief rule, the graded `evals.json` case, and the client-config sweep pin were all unowned, so the rewrite would have shipped `backup-lane.md` carrying the inline-brief rule and the file-planted rule at once, with the deleted agent pair still named as "the ONLY agent configuration" and the dead `Loaded tools:` grep still called the load-bearing control. None of it fails a test, which is why no round caught it. **Task 7 Step 7 could not pass as scoped**, because two pins outside its declared test range cover text it edits. **The 16 MB rotation probe had no feasibility basis**: no per-dispatch growth rate was ever measured and the only recorded scale is 359 KB per day, so the depth is now derived from a measured rate under a 40-call budget and the result is stated at the achieved depth. Also fixed: an unstated CRLF canonicalization on the `systemPrompt` comparison in a repo with `core.autocrlf=true`; fixtures that would have carried the canonical model literal into a path `SWEEP_GLOBS` cannot see; a `-k` filter selecting four of six tests; a missing deletion instruction in Task 2; a `KNOWN_TOOLS` entry three artifacts disagree about; and Task 10's Files block omitting a file its own steps edit and stage.
+- **r8** — after Sol round 7, which called the design structurally coherent and asked for a small final edit rather than another round. The load-bearing one: the marked `round-freshness-boundary` REGION still said "exactly one new directory" while the validator rule said one session LEAF. That region is the pinned contract, so the rejected rule — the one that would fail every clean first call — was about to be locked in. It now carries the leaf definition. Also: a failed substituted-drive setup was allowed to skip the branch, which is fail-open and contradicts this plan's own invariant, and now fails the live gate; the fake profile is now nested inside a disposable sandbox so the ancestor case cannot target the shared temp directory; the stray numbered walkthrough item and a wrong Task 4 attribution are fixed. The `session_` prefix Sol listed as unverified was confirmed on disk and added to the probe record, along with the fact that the `wd_` container is per WORKSPACE, not per session.
 - **r7** — after Sol round 6. The fresh/resume split was right but its INTERFACE was not: the published signature still demanded `-SessionDir` unconditionally and never listed `-SessionIdFromStdout` or a sessions root, so the fresh branch was asked to be handed the very directory it exists to discover. The validator now has explicit Fresh and Resume parameter sets. Worse, and caught from the retained probe topology: the measured layout is `sessions/wd_<workspace>/<session-id>/`, so a debate's FIRST call creates TWO new directories and a naive inventory diff would have rejected the clean first call of every debate. Inventory members are now defined as `session_`-prefixed leaves only. Also added a `state-kind-mismatch` rule; made the substituted-drive test pick and verify an unused letter and unmap with the drive argument; added the ancestor-of-profile branch; narrowed Task 9's justification from unverified discovery to measured readability; and fixed the stale fresh-offset wording.
 - **r6** — after Sol round 5, which found ONE structural flaw and it was created by r5's own fix. Binding the prior state to `sessionDir` and `sessionId` made the clean FRESH case impossible to instantiate: a fresh call's session does not exist until the client creates it during that call, so the pre-dispatch state could never carry those fields. Fresh and resume now have different identity semantics — a fresh state captures the session-directory INVENTORY and the validator requires exactly one new directory matching the id the client printed, while resume keeps the exact path-and-id comparison. Also fixed: the destructive removal test planted authorizing sentinels on the REAL user profile and a REAL drive root before exercising new deletion code, which would have destroyed what it was testing had the guard been defective; it now uses a subprocess with a temporary profile, a substituted drive, and cleanup in a `finally`. Two surviving "every flag" overclaims narrowed, the stale boundary wording replaced with `metadata`, and the sub-step numbering made unambiguous.
 - **r5** — after Sol round 4 (1 PASS, 4 FIX). Sol WITHDREW its demand that the plan prescribe the validator's parsing algorithm, agreeing that an independently written test suite covering every observable invariant is the better specification. Fixed: a failed `--help` still ran the flag loop and emitted five findings describing nothing; an uncaught `--help` throw; `-PriorState` claiming a binding while carrying nothing identifying its session; destructive root guards never exercised with a well-formed sentinel; an unclear fault seam; step misnumbering; and eight missing test cases. Three overclaims narrowed: the floor is a lower bound and forces no re-probe; resume results hold for the four flags tested, not all flags; and record ORDER is now measured rather than assumed — a fresh slice opens with `metadata`, which is not what the rule first said.
@@ -138,8 +139,8 @@ def test_a_present_but_unusable_binary_is_a_finding_not_a_note():
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `python -m pytest evals/multi-model-verify/test_backup_lane.py -k "drift or state_machine or hidden_alias or failure_branch" -v`
-Expected: FAIL, all four.
+Run: `python -m pytest evals/multi-model-verify/test_backup_lane.py -k "drift or state_machine or hidden_alias or failure_branch or cmd_stub or unusable" -v`
+Expected: FAIL, all SIX. The filter must select every test Step 1 wrote: `drift or state_machine or hidden_alias or failure_branch` alone selects four and silently omits `test_the_production_lookup_accepts_a_cmd_stub` and `test_a_present_but_unusable_binary_is_a_finding_not_a_note`, so two of the six would never be seen to fail or to pass inside this task.
 
 - [ ] **Step 3: Resolve the binary and capture the version fail-closed**
 
@@ -271,7 +272,11 @@ Moved ahead of the validator, which compares against them. r2 had the validator 
 
 - [ ] **Step 1: Update the declaration test**
 
-In `test_notes_backup_declarations`, keep every existing primary-parser ordering assertion untouched — those protect the primary lane's runtime parsers — and add:
+In `test_notes_backup_declarations`, keep every existing primary-parser ordering assertion untouched — those protect the primary lane's runtime parsers.
+
+**DELETE the existing positive assertion at `test_backup_lane.py:49`**, ``assert "Canonical backup thinking flag: `--thinking`" in notes``. Step 3 removes that line from the notes, so leaving the positive assertion in place makes Step 4's PASS unreachable and forces the executor to infer a deletion the plan never stated. The `not in` assertion below replaces it.
+
+Then add:
 
 ```python
     assert "Canonical backup provider: `kimi`" in notes
@@ -490,9 +495,9 @@ git commit -m "add the per-debate kimi-code lane home builder"
 
 ---
 
-### Task 4: Close the two remaining probes
+### Task 4: Close the two remaining probes, and the one equality the validator assumes
 
-Five of seven unknowns were settled in `probe-record-2.md`. Two remain, and neither blocks the contract's structure.
+Five of seven unknowns were settled in `probe-record-2.md`. Two remain, and neither blocks the contract's structure. A third measurement is added here because the whole-branch review found Task 6 rule 13 asserting an equality nothing ever measured.
 
 **Files:**
 - Modify: `docs/superpowers/plans/rounds/2026-07-31-kimi-code-swap/probe-record-2.md`
@@ -501,17 +506,36 @@ Five of seven unknowns were settled in `probe-record-2.md`. Two remain, and neit
 
 Build a home. From a console forced to cp1252 (`chcp 1252`), dispatch a prompt asking for a reply containing an em-dash, an arrow and a non-Latin character, redirecting stdout to a file. Confirm the file holds the characters and the process exits 0. This gates whether Task 10 deletes the Python UTF-8 guard or replaces it with one describing this client.
 
+- [ ] **Step 1b: Measure whether `llm.request.toolsHash` equals `llm.tools_snapshot.hash`**
+
+Free, offline, from Step 1's own `wire.jsonl` — no extra model call. Read the fresh session's single `llm.tools_snapshot` record's `hash` field and every `llm.request` record's `toolsHash` field, and compare them as strings.
+
+This is measured rather than assumed because Task 6 rule 13 requires the equality, and neither probe record establishes it. `probe-record.md:180-183` lists the snapshot's `hash` and `probe-record.md:229-230` gives a request's `toolsHash`, but the two were never compared. If the client hashes the two over different serializations, the rule as written would fail EVERY clean fresh round — the exact fails-every-clean-call class rounds 3 through 7 kept removing.
+
+Record the verdict in one of two forms, and Task 6 rule 13 takes the matching branch:
+
+- **EQUAL**: rule 13 keeps the cross-record comparison as written.
+- **NOT EQUAL**: rule 13 drops the comparison and instead requires only that `llm.tools_snapshot.hash` is present and nonempty. Record both observed values so the record shows what the fields actually are.
+
+Reaching Task 6 without this measurement is not permitted: an unmade measurement is never a clean one, and this one is free.
+
 - [ ] **Step 2: Probe whether a session file can be replaced and regrow**
 
 Does the per-session log rotate the way the global log does? `kimi export --no-include-global-log` documents rotated `.1` files for the global log; per-session behaviour is unstated.
 
-**Finite success criterion**, because "enough to pass any plausible threshold" gives an engineer nothing to stop at: grow one session's per-session log past **16 MB**, then check for any sibling matching `kimi-code.log.*` and whether `kimi-code.log` itself shrank. 16 MB is chosen as an order of magnitude above the largest log this lane has produced (359 KB across a full day of real use on the old client) and above the common 1, 5 and 10 MB defaults. Reaching it without rotation is a NEGATIVE result and is recorded as such; the probe is not required to find rotation, only to look at a stated depth.
+**Measure the growth rate before choosing a depth.** Dispatch five cheap prompts into one session, recording `kimi-code.log`'s byte size after each. That gives bytes-per-call, `R`. Without it, "grow the log past 16 MB" is an instruction with no known cost: nothing has ever measured what one dispatch appends, the only recorded scale is 359 KB across a full day of real use on the old client, and 16 MB could therefore mean hundreds of quota-charged calls on a lane whose quota windows have been exhausted before.
+
+**Call budget: 40 dispatches, hard.** Target depth is `min(16 MB, 40 x R)`. State the achieved depth in bytes and stop there.
+
+Then check for any sibling matching `kimi-code.log.*` and whether `kimi-code.log` itself shrank.
 
 Grow it with repeated cheap dispatches into one session rather than by writing to the file directly — a hand-appended file proves nothing about what the client does.
 
-Whatever the answer, Task 7's freshness region hashes BOTH files' prefixes, so the rule does not depend on rotation being absent. Record the result so the contract can say whether rotation is known-absent at this depth or merely guarded against.
+**Record the result at exactly the width of the measurement.** "No rotation observed up to `<achieved depth>` bytes" is the only claim the probe can support; "rotation is absent" is not, and neither is silence. If the achieved depth falls short of the common 1, 5 and 10 MB defaults, say which of them the probe did NOT reach.
 
-- [ ] **Step 3: Append both results and remove the probe homes**
+Whatever the answer, Task 7's freshness region hashes BOTH files' prefixes, so the rule does not depend on rotation being absent. That is why a shallow negative result is acceptable here and an unstated one is not.
+
+- [ ] **Step 3: Append all three results and remove the probe homes**
 
 Append to `probe-record-2.md` under a new heading, with exact commands and outputs. Then `-Remove` every probe home and confirm no credential copy survives.
 
@@ -519,7 +543,7 @@ Append to `probe-record-2.md` under a new heading, with exact commands and outpu
 
 ```bash
 git add docs/superpowers/plans/rounds/2026-07-31-kimi-code-swap/probe-record-2.md
-git commit -m "close the encoding and session-file-rotation probes"
+git commit -m "close the encoding, rotation and tools-hash-equality probes"
 ```
 
 ---
@@ -619,9 +643,21 @@ def test_backup_files_no_backslash_paths():
 Run: `python -m pytest evals/multi-model-verify/test_backup_lane.py -k "artifacts or allowlist or partition or subagent or backslash" -v`
 Expected: FAIL.
 
+- [ ] **Step 3b: Re-enumerate the client's tool inventory and reconcile `KNOWN_TOOLS`**
+
+`KNOWN_TOOLS` above claims to be every built-in tool documented for 0.31.1, and one of its 22 names is not carried by either probe record's enumeration: `probe-record.md:151-155` lists 21 distinct names and `CronList` is not among them. It entered during Sol round 2 as a tool found in neither list. `probe-record-2.md:20-21` then described the measured denylist as "sixteen-name including `CronList`" while the list here holds seventeen. Three artifacts, three inventories, and the partition test is self-consistent under any of them — so nothing in the suite can report the disagreement.
+
+Enumerate the real inventory from the client itself: read the `llm.tools_snapshot` record and the tool documentation for 0.31.1 from a home built for the purpose, listing every built-in name. Then:
+
+- If `CronList` exists, record that and leave `KNOWN_TOOLS` at 22.
+- If it does not, remove it from both `DENYLIST` and `KNOWN_TOOLS` and leave 21.
+- Either way, append the enumeration and its source to `probe-record-2.md` and correct that file's "sixteen-name" count to the number actually used.
+
+Denying a tool that does not exist is harmless in itself; claiming a measured inventory that was never measured is not, and it is the claim this step removes.
+
 - [ ] **Step 4: Write the agent file**
 
-Frontmatter: `name: parallax-readonly-reviewer`, a description, `tools:` in ALLOWLIST order, `disallowedTools:` in DENYLIST order, `subagents: []`. Body: the exact former contents of `kimi-reviewer-system.md`, unchanged — Task 7's evidence rule compares the recorded `systemPrompt` against this body byte for byte, and `systemPromptChars` against its length.
+Frontmatter: `name: parallax-readonly-reviewer`, a description, `tools:` in ALLOWLIST order, `disallowedTools:` in DENYLIST order, `subagents: []`. Body: the exact former contents of `kimi-reviewer-system.md`, unchanged — Task 7's evidence rule compares the recorded `systemPrompt` against this body under the CRLF-to-LF canonicalization stated in Task 6 rule 12, and `systemPromptChars` against that canonicalized length.
 
 - [ ] **Step 5: Delete the superseded pair, run the tests**
 
@@ -681,7 +717,15 @@ Four interface points are direct review fixes:
 
 - [ ] **Step 1: Capture and normalize fixtures**
 
-From a home built for this purpose, capture a fresh tool-using round and a resumed round in one session, then hand-normalize: replace absolute user paths with `C:/fixture/...` and the session id with a fixed placeholder. The repo is PUBLIC and raw captures carry the user's home layout — only hand-normalized synthetic fixtures are committed, the same rule the codex probe fixtures follow.
+From a home built for this purpose, capture a fresh tool-using round and a resumed round in one session, then hand-normalize three things:
+
+- absolute user paths, to `C:/fixture/...`
+- the session id, to a fixed placeholder that still begins `session_`
+- **the canonical model literal, to `fixture-model/x`**, everywhere it appears in the captured `.jsonl` and `.log` bytes, with the tests passing that same placeholder as `-Model`
+
+The third is not cosmetic. The Global Constraint says the canonical literal may appear ONLY in `model-prompting-notes.md` and `test_backup_lane.py`, and `SWEEP_GLOBS` carries no `.jsonl` or `.log` pattern, so a captured fixture would carry the literal into the repo while every test stayed green — the constraint textually violated with nothing able to report it. The validator's correctness does not depend on the id's value, only on the comparison, so a placeholder tests exactly the same rule.
+
+The repo is PUBLIC and raw captures carry the user's home layout — only hand-normalized synthetic fixtures are committed, the same rule the codex probe fixtures follow.
 
 Build these fixture files: a clean fresh wire and log, a clean resumed wire and log, plus mutated copies for each failure case below.
 
@@ -743,7 +787,9 @@ Inequality:
 - **`permission.set_mode.mode` not `auto`**
 - `modelAlias`, `provider` or `thinkingEffort` wrong on ANY `llm.request` in the slice, not merely the first
 - **`toolsHash` or `systemPromptHash` missing, empty, or differing BETWEEN requests inside one slice**
-- **requests carrying a consistent `toolsHash` that DISAGREES with `llm.tools_snapshot.hash`**, and a snapshot whose `hash` field is absent
+- a snapshot whose `hash` field is absent or empty — required in BOTH branches of Task 4 Step 1b
+- **requests carrying a consistent `toolsHash` that DISAGREES with `llm.tools_snapshot.hash`** — written only if Step 1b measured the two fields EQUAL. If it measured them unequal, this case is dropped and the fact is recorded in the test file's comment, because a test asserting an equality the client does not produce would fail every clean round
+- `systemPrompt` matching the agent body but differing in LINE ENDINGS returns `clean` — the canonicalization in rule 12 is what makes this pass, and without a test for it an `autocrlf` checkout breaks the lane on one machine and not another
 - **`toolsHash` or `systemPromptHash` differing from `-PriorState`'s** on a later round
 - provider, model or effort wrong in the LOG line while correct in the requests — r3's inequality cases covered requests only
 - `turn.prompt` text not hashing to `-ExpectedBriefSha256`
@@ -770,9 +816,10 @@ Rules, in this order:
 9. Re-hash each file's first N raw bytes, N being its prior offset, and compare to `wirePrefixSha256` and `logPrefixSha256` INDEPENDENTLY. Either unequal: fail `prefix-replaced`. Both files get this, not just the wire: the open rotation question is specifically about the log, and r3 protected the log by length alone.
 10. Slice = bytes past each file's offset, wire slice then parsed as lines. Any unparseable line in the wire slice: fail `wire-malformed`. A line that IS valid JSON but structurally wrong for its type — `input` not an array, a missing `text`, a hash that is not a string — must also fail, with `record-malformed`, never throw and never silently coerce.
 11. **Slice boundary check.** The wire slice's FIRST record must be `metadata` on a FRESH call, and `turn.prompt` on a RESUME. Measured 2026-07-31: a fresh session's records open `metadata`, `config.update`, `tools.set_active_tools`, `config.update`, `permission.set_mode`, `turn.prompt`. An offset landing mid-call otherwise yields a slice holding the previous call's trailing `llm.request` records plus this call's prompt and requests, which satisfies every count and value check while mixing two calls. Fail `slice-misaligned`.
-12. **Session-scoped checks, FRESH calls only**: exactly two `config.update`, one `tools.set_active_tools`, one `llm.tools_snapshot`, one `permission.set_mode`. Compare, on the FIRST `config.update` shape, `profileName` and `systemPrompt` against `-AgentFile`'s parsed name and body; on the SECOND shape, `modelAlias` against `-Model` and `thinkingEffort` against `-Effort` — r3 counted both and compared neither. Compare `names`/`disallowedNames` against the agent file's two lists, the snapshot's tool names against the allowlist, and `permission.set_mode`'s `mode` against `auto` — r3 counted that record without ever reading its value, which is a check that cannot fail. The two `config.update` shapes are distinguished by which keys they carry, not by their order.
+12. **Session-scoped checks, FRESH calls only**: exactly two `config.update`, one `tools.set_active_tools`, one `llm.tools_snapshot`, one `permission.set_mode`. Compare, on the FIRST `config.update` shape, `profileName` and `systemPrompt` against `-AgentFile`'s parsed name and body; on the SECOND shape, `modelAlias` against `-Model` and `thinkingEffort` against `-Effort` — r3 counted both and compared neither.
+   **The `systemPrompt` comparison is canonicalized, not raw.** Normalize BOTH sides to UTF-8 with CRLF collapsed to LF before comparing, and compare `systemPromptChars` against the length of the RECORDED prompt after that same normalization rather than against the agent file's raw byte or character count. This repo checks out with `core.autocrlf=true`, so the committed agent file's worktree bytes carry CRLF while the measured `systemPromptChars=431` came from a scratchpad file that did not; "byte for byte" against an unnormalized worktree file would fail on the line endings alone, on a machine-dependent basis. The brief hash got exactly this treatment in rule 15 and the agent body must get it too. Compare `names`/`disallowedNames` against the agent file's two lists, the snapshot's tool names against the allowlist, and `permission.set_mode`'s `mode` against `auto` — r3 counted that record without ever reading its value, which is a check that cannot fail. The two `config.update` shapes are distinguished by which keys they carry, not by their order.
    On a RESUME, require all four record types ABSENT from the slice. Their presence means the resume started a new session and the debate state is lost — the failure the old lane caught with its session-kind check.
-13. **Per-call checks, both kinds**: exactly one `turn.prompt`; at least one `llm.request`, with EVERY one carrying `-Provider`, `-Model` and `-Effort`, and every one carrying NONEMPTY `toolsHash` and `systemPromptHash` that are identical across all requests in the slice. One request in a tool loop could otherwise run on a different surface while the emitted hashes come from another. On a FRESH slice the requests' `toolsHash` must also equal the `llm.tools_snapshot` record's own `hash`: consistent request hashes that contradict the snapshot describing the sent schemas are a disagreement, not a pass. Exactly one new `llm config` line in the log slice, carrying provider, model alias and effort, plus `toolCount` equal to the allowlist length and `systemPromptChars` equal to the agent body's length.
+13. **Per-call checks, both kinds**: exactly one `turn.prompt`; at least one `llm.request`, with EVERY one carrying `-Provider`, `-Model` and `-Effort`, and every one carrying NONEMPTY `toolsHash` and `systemPromptHash` that are identical across all requests in the slice. One request in a tool loop could otherwise run on a different surface while the emitted hashes come from another. **On a FRESH slice, take the branch Task 4 Step 1b measured**: if the two hashes were measured EQUAL, require the requests' `toolsHash` to equal the `llm.tools_snapshot` record's own `hash`, because consistent request hashes that contradict the snapshot describing the sent schemas are a disagreement, not a pass; if they were measured UNEQUAL, require only that the snapshot's `hash` is present and nonempty. Writing the equality in without the measurement would make every clean fresh round fail if the client hashes the two fields differently. Exactly one new `llm config` line in the log slice, carrying provider, model alias and effort, plus `toolCount` equal to the allowlist length and `systemPromptChars` equal to the agent body's length, both compared under the canonicalization stated in rule 12.
 14. From round 2 onward, compare this slice's `toolsHash` and `systemPromptHash` against `-PriorState`'s; unequal: fail `hash-discontinuity`. r3 left this to the caller, which made it advice rather than a check.
 15. Hash the concatenation of every `turn.prompt` `input[]` element's `text`, UTF-8, CRLF normalized to LF; unequal to `-ExpectedBriefSha256`: fail `brief-hash`.
 16. On success emit `status: clean` and a `nextState` of the RESUME shape — `kind: "resume"`, the resolved `sessionDir` and `sessionId`, both byte offsets, both prefix hashes, and the two continuity hashes — whatever kind this invocation was. A fresh call's output is the next call's resume-shaped input, which is what makes the chain uniform from round 2 onward.
@@ -794,12 +841,20 @@ git commit -m "add an executable validator for kimi-code round evidence"
 ### Task 7: Rewrite the lane's transport and evidence contract
 
 **Files:**
-- Modify: `skills/multi-model-verify/references/backup-lane.md:18-140`, `:159-198`
-- Modify: `evals/multi-model-verify/test_backup_lane.py:80-257`
+- Modify: `skills/multi-model-verify/references/backup-lane.md:1-16` (intro), `:18-140` (Transport, Per-round evidence), `:141-155` (Containment), `:159-198` (Client config surface), `:218-220` and `:263` (the brief's delivery), `:328` (the export note)
+- Modify: `evals/multi-model-verify/test_backup_lane.py:80-257`, `:419-426`, `:429-459`
+- Modify: `evals/multi-model-verify/evals.json`, case `backup-lane-consented-substitution`
 - Modify: `evals/multi-model-verify/test_contract_coverage.py:624-648`
 
 **Interfaces:**
 - Produces regions: `lane-home-isolation`, `round-freshness-boundary`, `per-round-session-evidence`, `evidence-hash-continuity`, `brief-hash-binding`, `resume-inheritance`.
+
+**Why the surface is wider than the two evidence sections.** The whole-branch review found that a rewrite scoped to `:18-140` and `:159-198` would ship a contract carrying BOTH the new rules and the old ones, with nothing able to report it, because none of the leftover text is pinned in a way this rewrite breaks:
+
+- The intro (`:1-16`) says the lane runs "via kimi-cli" and that the canonical model id and THINKING FLAG are declared in `model-prompting-notes.md` — a flag Task 2 deletes from that file.
+- Containment (`:141-155`) names `kimi-reviewer-agent.yaml` + `kimi-reviewer-system.md` as "the ONLY agent configuration", both deleted by Task 5; lists the old Python-derived five-tool names; and calls the dead `Loaded tools:` grep the load-bearing verification. That grep is the exact check backlog item 13 named as unable to fail.
+- The Workspace section (`:218-220`, and the expected-set sentence at `:263`) plants the brief as `KIMI-REVIEW-BRIEF.md` with a `-p` pointer, which directly contradicts Step 3's inline-brief rule — and the inline rule is what makes the brief hash meaningful.
+- `evals.json`'s manual case pins the file-planted form in its graded expectation, and `test_backup_lane.py:419-426` pins that expectation string. A superseded manual case is the same class the 0.14.2 review caught.
 
 - [ ] **Step 1: Update DECLARED_REGIONS first**
 
@@ -819,6 +874,22 @@ Command lines use `<kimi-code-binary>` as the placeholder, never a bare `kimi`, 
 - Region `lane-home-isolation`: build once before round 1, set `KIMI_CODE_HOME` on every call of the debate, the two independent reasons, and that an unbuildable home or missing credential makes the lane UNAVAILABLE. Remove the home when the debate ends, because it holds a copied credential.
 - Region `resume-inheritance`: what a bare resume was measured to inherit ON 0.31.1, that a wrong-directory resume is refused, that `--agent-file` is rejected because the agent is bound at session creation, and that this is VERSION-BOUND — which is why the floor exists, why what can be re-pinned is re-pinned, and why the evidence check is what actually establishes the surface each round.
 - The brief is passed INLINE, never planted as a file with a pointer, because the hash rule can only detect truncation if the recorded prompt IS the brief. A brief that exceeds the inline transport is a transport failure to diagnose, not a reason to switch to a pointer whose hash proves nothing.
+- **PRESERVE the environment bullet at `:20-32` verbatim in this step**, `PYTHONIOENCODING`/`PYTHONUTF8` guard and UNVERIFIED note included, even though it describes the old Python client. `test_output_encoding_class_is_wired` (`test_backup_lane.py:489-512`) pins three of its strings and is outside this task's test range, so deleting the bullet here fails Step 7's whole-suite run for a reason that looks unrelated to the edit. Task 10 Step 2 owns its disposition and takes the branch Task 4 Step 1 measured — it is the task that rewrites the pin alongside the text. Removing text whose pin lives in another task is how a suite fails far from its cause.
+
+- [ ] **Step 3b: Rewrite the intro and Containment**
+
+Both sections describe the deleted client and the deleted agent pair, and neither is inside the two evidence sections.
+
+- Intro (`:1-16`): name kimi-code rather than kimi-cli, and say the canonical model id, PROVIDER, EFFORT and THINKING DECLARATION are read from `model-prompting-notes.md`. The current sentence names a `--thinking` flag that Task 2 removes from that file, so leaving it makes the intro point at a declaration that no longer exists.
+- Containment (`:141-155`): the ONLY agent configuration is now the single `kimi-reviewer-agent.md`. State the five-tool allowlist in the new names, state that `disallowedTools` and `subagents: []` are controls in their own right rather than a coincidence of two lists, and **delete the `Loaded tools:` sentence entirely rather than retargeting it** — that grep is the check backlog item 13 opened this cycle to remove, because it could match nothing and read as clean. Its replacement is the validator's exact-list comparison in `per-round-session-evidence`, which is named there. Keep the WRITE-PROBE paragraph, which is unchanged in substance; update it to name the new agent file.
+
+- [ ] **Step 3c: Make the brief inline in the Workspace section and in the graded case**
+
+- `backup-lane.md:218-220`: replace the planted-file rule with the inline rule, cross-referencing Step 3's justification.
+- `backup-lane.md:263`: the post-round expected untracked set no longer contains the brief. It is now the baseline plus exactly the enumerated copied-in review inputs, and on a debate that copies nothing in, the baseline exactly. Say that, because "baseline plus nothing" is where a driver would otherwise assume an error.
+- `backup-lane.md:328`: keep the `kimi export` warning but retarget it to the new client's export subcommand, or delete it if 0.31.1 has none. Verify which before choosing; do not carry a warning about a command that does not exist.
+- `evals.json`, case `backup-lane-consented-substitution`: rewrite the expectation that names `KIMI-REVIEW-BRIEF.md` to the inline form, keeping the equality half of the sentence, which is the half that grades containment.
+- `test_backup_lane.py:419-426`: update the two pins to the rewritten expectation strings. The comment at `:422-424` records WHY the equality half is pinned separately — keep that reasoning and repoint it.
 
 - [ ] **Step 4: Rewrite Per-round evidence**
 
@@ -832,7 +903,15 @@ Command lines use `<kimi-code-binary>` as the placeholder, never a bare `kimi`, 
 
 - Unmarked prose, stated NARROWLY: what these checks do and do not guarantee. A failed allowlist does not necessarily change the effective tool set, because the denylist can exclude the same tools by name. What the checks guarantee is that the configured lists, the resolved snapshot, the system prompt and its length are all compared against committed text, so a divergence in any of them surfaces. r2 overclaimed here.
 
-- [ ] **Step 5: Rewrite the Client config surface section**
+- [ ] **Step 5: Rewrite the Client config surface section, and its pin in the same step**
+
+`test_backup_lane_client_config_sweep` (`test_backup_lane.py:429-459`) pins eleven exact sentences of the section being rewritten — `runs at PROVIDER DEFAULT with no verifiable effort evidence`, `merge_all_available_skills`, `extra_skill_dirs`, `a LATENT surface with nothing to merge`, and the rest. It sits OUTSIDE this task's declared test range of `:80-257`, so rewriting the prose alone fails Step 7's whole-suite run. Rewrite the test in this step, keeping each pin's recorded justification and repointing it at the new client's equivalent:
+
+- the effort pin moves from `~/.kimi/config.toml`'s override block to the debate home's `config.toml`, and becomes CONFIRMED PER CALL rather than config-validation only, so the "no verifiable effort evidence" sentence is replaced by the measurement, not merely deleted.
+- the `merge_all_available_skills` back-channel pin becomes the four skill roots and the `--skills-dir` mitigation wording below. The class of concern is identical and the pin must survive the rename; dropping it would leave the lane's own client config unswept, which is what 0.14.2 added it to fix.
+- keep `read and RECORDED in the debate record`, `never a finding`, and `do not infer either key's value` — the disposition half, unchanged in substance.
+
+Content of the rewritten section:
 
 - Effort: written into the debate home and confirmed per call. Measured: `default_effort = "low"` produced `thinkingEffort=low`.
 - Thinking: config-asserted and NOT runtime-verified. Measured: `enabled = false` produced output identical to `true`. Say exactly that; do not list it beside effort.
@@ -848,10 +927,12 @@ One test per region, each asserting the region WHOLE via `_norm`. Plus `test_del
 Run: `python -m pytest evals -q`
 Expected: PASS. A region reporting uncovered means the pin does not contain it WHOLE — fix the pin, not the region.
 
+This step can only pass because Steps 3 through 6 rewrote every pin whose text this task edits, including the three that live outside `:80-257`: the graded-case pins at `:419-426`, the client-config sweep at `:429-459`, and the encoding pin at `:489-512`, which this task deliberately does not disturb. If any of them fails here, the cause is a text edit in this task whose pin was left in another — repair the pin in the step that made the edit rather than at this step.
+
 - [ ] **Step 8: Commit**
 
 ```bash
-git add skills/multi-model-verify/references/backup-lane.md evals/multi-model-verify/test_backup_lane.py evals/multi-model-verify/test_contract_coverage.py
+git add skills/multi-model-verify/references/backup-lane.md evals/multi-model-verify/test_backup_lane.py evals/multi-model-verify/evals.json evals/multi-model-verify/test_contract_coverage.py
 git commit -m "rewrite the backup lane's transport and evidence for kimi-code"
 ```
 
@@ -941,7 +1022,7 @@ git commit -m "sweep .kimi-code back-channels in preflight 3"
 ### Task 10: Failure routing, the doctor and the README
 
 **Files:**
-- Modify: `skills/multi-model-verify/references/fallbacks.md:152-179`, `commands/doctor.md`, `README.md`
+- Modify: `skills/multi-model-verify/references/fallbacks.md:152-179`, `skills/multi-model-verify/references/backup-lane.md` (the environment bullet Task 7 Step 3 preserved), `commands/doctor.md`, `README.md`
 - Modify: `evals/multi-model-verify/test_backup_lane.py:489-512, 546`
 
 - [ ] **Step 1: Rewrite the route-attribution entry**
@@ -1029,3 +1110,8 @@ Every round-2 FIX maps to a step. Freshness identity to Task 7 Step 4's prefix h
 Two of Sol's fixes remain declined, with reasons in Task 7 Step 4 and Task 7 Step 3: binding `toolsHash` to a client version, replaced by recording both hashes in the debate record; and a sacrificial resume write-probe every debate, replaced by re-pinning the flags a resume was MEASURED to accept — three of the four tested — plus the floor and the per-round evidence check.
 
 Three of Sol's round-2 objections were settled by measurement rather than argument: record cardinality, which was worse than Sol supposed; `--skills-dir`, which turned out to control nothing; and thinking-enabled, which has no observable signal and so cannot be claimed.
+
+Two of the whole-branch review's findings are REFUTED, with the evidence, so they are not re-raised:
+
+- **The printed session-id token is not in dispute.** The review read `kimi -r <uuid>` as a probe record contradicting `probe-record-2.md:60-61`. That string is `backup-lane.md:38-39`, the OLD lane's contract for the OLD client, not a measurement of this one. `probe-record.md:126` records only that `-r` survives as a hidden alias and is what the CLI prints; `probe-record-2.md:60-61` separately measured the printed ID to be the leaf's name exactly. One is about the flag, the other about the id, and they agree.
+- **The unused-`-k`-selector concern about `test_the_two_lists_partition_the_known_inventory` being unable to fail loudly is accepted as a limit, not a defect.** Nothing offline can see a tool a future client adds; that limit is stated in the test's own docstring and in the plan, deliberately, and Task 5 Step 3b now closes the one part that IS measurable today.
