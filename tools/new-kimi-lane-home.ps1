@@ -235,6 +235,85 @@ if (-not (Test-Path -LiteralPath $credentialSource)) {
     throw "the lane is UNAVAILABLE: no credential at $credentialSource"
 }
 
+# 4b. Carry the model table for -Model out of the user's REAL config,
+# rather than hand-writing an approximation of it here.
+#
+# WHY, measured: a hand-written table that named only provider/model/
+# max_context_size/default_effort silently disabled two things this lane's
+# evidence contract depends on. With no `capabilities` array the client
+# declares no `thinking` capability, so the session log reads
+# thinkingEffort=off while config.toml says "high"; and with no
+# `support_efforts` array the pinned effort has nothing to resolve
+# against. With no `image_in` capability the ReadMediaFile tool is gated
+# out of the schema sent to the model, so a five-tool allowlist arrives as
+# toolCount=4. One omission, two failures, both previously reported as
+# separate unexplained anomalies. A faithful copy of the real table cannot
+# drift that way; a hand-written one drifts every time a field is added.
+#
+# FAIL CLOSED on every direction: a missing, unreadable, or unparseable
+# real config, or one carrying no table for this -Model, refuses the
+# build. A home built on a guessed model table is an unmade measurement,
+# and an unmade measurement is never a clean one - never fall back to
+# defaults.
+#
+# NOTHING outside that one table is carried. The whole reason this script
+# renders its own file instead of copying the user's is that the user's
+# carries the hooks; the scan below stops at the next table header, so no
+# hooks entry, no other model, and no services block can follow the
+# fields in.
+$realConfigPath = Join-Path $env:USERPROFILE ".kimi-code\config.toml"
+if (-not (Test-Path -LiteralPath $realConfigPath)) {
+    throw "refusing to build: no kimi-code config at $realConfigPath, so the model table for $Model cannot be read"
+}
+try {
+    $realConfigLines = @(Get-Content -LiteralPath $realConfigPath)
+} catch {
+    throw "refusing to build: could not read $realConfigPath ($($_.Exception.Message))"
+}
+
+# A field line the render can carry: a bare key, then a quoted string, an
+# integer, a boolean, or a single-line array of quoted strings. Every
+# character class here is ASCII, which is what keeps the -Encoding ascii
+# write below sound now that content reaches it from a file rather than
+# only from this script's own literals. Anything else in the table is
+# UNPARSEABLE to this reader, and unparseable refuses.
+$FieldLinePattern = '\A[A-Za-z0-9_-]+ = (?:"[A-Za-z0-9 ._/:+-]*"|-?[0-9]+|true|false|\[ *(?:"[A-Za-z0-9 ._/:+-]*" *, *)*(?:"[A-Za-z0-9 ._/:+-]*" *)?\])\z'
+$wantedHeader = '[models."' + $Model + '"]'
+$modelTableFieldLines = New-Object System.Collections.Generic.List[string]
+$insideWantedTable = $false
+$foundWantedTable = $false
+foreach ($rawLine in $realConfigLines) {
+    $line = ("$rawLine").Trim()
+    if ($line.StartsWith("[")) {
+        if ($line -eq $wantedHeader) {
+            if ($foundWantedTable) {
+                throw "refusing to build: $realConfigPath declares the model table for $Model more than once"
+            }
+            $insideWantedTable = $true
+            $foundWantedTable = $true
+        } else {
+            $insideWantedTable = $false
+        }
+        continue
+    }
+    if (-not $insideWantedTable) { continue }
+    if ($line -eq "" -or $line.StartsWith("#")) { continue }
+    if (-not ($line -match $FieldLinePattern)) {
+        throw "refusing to build: unparseable line in the $Model model table of ${realConfigPath}: $line"
+    }
+    # default_effort is deliberately NOT carried: -Effort is the pinned
+    # per-debate value and must win over whatever the real config says.
+    if ($line -match '\Adefault_effort *=') { continue }
+    $modelTableFieldLines.Add($line)
+}
+if (-not $foundWantedTable) {
+    throw "refusing to build: $realConfigPath declares no model table for $Model"
+}
+if ($modelTableFieldLines.Count -eq 0) {
+    throw "refusing to build: the model table for $Model in $realConfigPath carries no usable fields"
+}
+$modelTableFields = ($modelTableFieldLines -join [System.Environment]::NewLine)
+
 # 5. $createdByThisInvocation is set ONLY after this invocation has
 # created the directory and written the sentinel, so a refusal path above
 # can never delete a directory the script declined to touch, and the catch
@@ -304,20 +383,14 @@ try {
         throw "PARALLAX_LANE_HOME_FAULT injected: simulated post-credential-copy failure"
     }
 
-    # The model table's `model` field is the provider-side name, which is
-    # everything after the first "/" of the alias - derived, never
-    # hardcoded, so this file names no specific backup model id.
-    $slashIndex = $Model.IndexOf([char]47)
-    if ($slashIndex -lt 0) {
-        $providerModelName = $Model
-    } else {
-        $providerModelName = $Model.Substring($slashIndex + 1)
-    }
-    # The canonical backup model's real context window, kept as a bare
-    # number so this file never carries the model id literal that names
-    # it (see model-prompting-notes.md for that identity).
-    $maxContextSize = 262144
-
+    # `provider`, `model`, `max_context_size`, `capabilities`,
+    # `support_efforts` and `display_name` all arrive in $modelTableFields,
+    # read from the real config at step 4b. Nothing about the model is
+    # derived or hardcoded here any more - the earlier version derived the
+    # provider-side name from the alias and carried a literal 262144
+    # context window, and a hand-maintained list like that is exactly what
+    # dropped `capabilities` and `support_efforts` in the first place.
+    #
     # Root-level keys MUST appear BEFORE any table header: a TOML table
     # header claims every key-value pair that follows it, up to the NEXT
     # header - a blank line does not end a table. An earlier version put
@@ -343,9 +416,7 @@ storage = "file"
 key = "oauth/kimi-code"
 
 [models."$Model"]
-provider = "managed:kimi-code"
-model = "$providerModelName"
-max_context_size = $maxContextSize
+$modelTableFields
 default_effort = "$Effort"
 
 [thinking]
@@ -360,7 +431,11 @@ enabled = true
     # $SafeTokenPattern above before being interpolated into it: neither
     # can carry a quote, a newline, or any non-ASCII byte, so nothing this
     # file writes can close the TOML string it is quoted inside or open an
-    # attacker-chosen table.
+    # attacker-chosen table. $modelTableFields reaches this render from a
+    # FILE rather than from a literal, so it is held to the same standard:
+    # every line was matched against $FieldLinePattern at step 4b, whose
+    # character classes are ASCII-only and admit no line break and no
+    # table header.
     Set-Content -LiteralPath (Join-Path $resolved "config.toml") -Value $configToml -Encoding ascii
 
     New-Item -ItemType Directory -Path (Join-Path $resolved "skills") | Out-Null

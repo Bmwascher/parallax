@@ -1,4 +1,5 @@
 """Contract pins for the per-debate kimi-code lane home."""
+import os
 import re
 import shutil
 import subprocess
@@ -178,7 +179,7 @@ def test_a_model_with_a_trailing_newline_is_refused(tmp_path):
     assert not target.exists(), "a -Model with a trailing newline must be refused before any directory is created"
 
 
-def _render_config_template(model, provider_model_name, max_context_size, effort):
+def _render_config_template(model, effort, model_table_fields):
     """Extract the ACTUAL config.toml here-string from the committed
     script and substitute its interpolated variables the same way
     PowerShell's simple `"$Var"` string interpolation would - so any
@@ -189,9 +190,8 @@ def _render_config_template(model, provider_model_name, max_context_size, effort
     assert match, "could not locate the config.toml here-string in the builder"
     template = match.group(1)
     return (template
+            .replace("$modelTableFields", model_table_fields)
             .replace("$Model", model)
-            .replace("$providerModelName", provider_model_name)
-            .replace("$maxContextSize", str(max_context_size))
             .replace("$Effort", effort))
 
 
@@ -210,8 +210,10 @@ def test_rendered_config_places_root_keys_at_the_document_root():
     check, which cannot distinguish a root key from a same-named key
     nested under a table) and asserts where the keys actually resolve."""
     rendered = _render_config_template(
-        model="kimi-code/test-model", provider_model_name="test-model",
-        max_context_size=262144, effort="high")
+        model="kimi-code/test-model", effort="high",
+        model_table_fields=('provider = "managed:kimi-code"\n'
+                            'model = "test-model"\n'
+                            "max_context_size = 262144"))
     parsed = tomllib.loads(rendered)
 
     assert parsed["default_model"] == "kimi-code/test-model"
@@ -238,3 +240,213 @@ def test_rendered_config_places_root_keys_at_the_document_root():
     assert oauth_table["key"] == "oauth/kimi-code"
     assert "type" not in oauth_table
     assert "api_key" not in oauth_table
+
+
+# --- Fix round 4: the model table must be a FAITHFUL copy of the real one ---
+#
+# The template used to hand-write four fields (provider, model,
+# max_context_size, default_effort) and omit `capabilities` and
+# `support_efforts`. Measured, one dispatch per state, same agent file,
+# same model, same effort:
+#
+#     WITHOUT the two keys:  thinkingEffort=off   toolCount=4
+#     WITH the two keys:     thinkingEffort=high  toolCount=5
+#
+# No `thinking` capability means thinking is off and the pinned effort has
+# nothing to resolve against, so the log reads `off` while config.toml
+# says `high`; no `image_in` capability gates ReadMediaFile out of the
+# schema, so a five-tool allowlist arrives as four. One omission, two
+# silently broken evidence claims.
+#
+# These tests drive the REAL script against a FAKE USERPROFILE carrying a
+# fake real-config, then parse the file it actually wrote. A test asserting
+# the rendered text merely CONTAINS "capabilities" is not this test - that
+# would pass against a template writing the key into the wrong table,
+# which is the exact mistake fix round 3 had to repair. tomllib resolves
+# where each key actually lands.
+
+PLACEHOLDER_MODEL = "kimi-code/test-placeholder-model"
+
+# Shaped like the user's real config: root key, hooks, OTHER model tables,
+# a [thinking] table and [services.*] blocks after the wanted table. Only
+# the one wanted table may reach the rendered home.
+FAKE_REAL_CONFIG = '''default_model = "kimi-code/some-other-model"
+
+[[hooks]]
+event = "PreToolUse"
+command = "/bin/sh /some/hook.sh"
+timeout = 10
+
+[providers."managed:kimi-code"]
+type = "kimi"
+api_key = ""
+base_url = "https://api.kimi.com/coding/v1"
+
+[models."kimi-code/some-other-model"]
+provider = "managed:kimi-code"
+model = "some-other-model"
+max_context_size = 1048576
+capabilities = [ "thinking", "tool_use" ]
+display_name = "Some Other"
+
+[models."%s"]
+provider = "managed:kimi-code"
+model = "test-placeholder-model"
+max_context_size = 262144
+capabilities = [ "thinking", "always_thinking", "image_in", "tool_use" ]
+display_name = "Test Placeholder"
+support_efforts = [ "low", "high", "max" ]
+default_effort = "low"
+
+[thinking]
+enabled = true
+
+[services.moonshot_search]
+base_url = "https://api.kimi.com/coding/v1/search"
+api_key = ""
+''' % PLACEHOLDER_MODEL
+
+
+def _fake_profile(tmp_path, config_text):
+    """A stand-in USERPROFILE carrying a .kimi-code with a config and a
+    credential, so the builder can be driven end to end offline."""
+    profile = tmp_path / "fake-profile"
+    kimi = profile / ".kimi-code"
+    (kimi / "credentials").mkdir(parents=True)
+    (kimi / "credentials" / "kimi-code.json").write_text(
+        '{"access_token": "not-a-real-token"}', encoding="ascii")
+    if config_text is not None:
+        (kimi / "config.toml").write_text(config_text, encoding="ascii")
+    return profile
+
+
+def _build(tmp_path, target, profile, model=PLACEHOLDER_MODEL, effort="high"):
+    env = dict(os.environ)
+    env["USERPROFILE"] = str(profile)
+    # This pytest process inherits a PowerShell 7 flavoured PSModulePath
+    # whose `...\PowerShell\7\Modules` entry shadows the 5.1 copy of
+    # Microsoft.PowerShell.Security, so Get-Acl fails to load inside a
+    # powershell.exe child. Dropping the variable lets each host compute
+    # its own default. Nothing under test depends on it. Popped
+    # case-insensitively: Windows os.environ normalizes keys to upper
+    # case, so a plain pop("PSModulePath") silently removes nothing.
+    for key in [k for k in env if k.lower() == "psmodulepath"]:
+        del env[key]
+    return subprocess.run(
+        [POWERSHELL, "-NoProfile", "-ExecutionPolicy", "Bypass",
+         "-File", str(BUILDER), "-Path", str(target),
+         "-Model", model, "-Effort", effort],
+        capture_output=True, text=True, timeout=120, env=env)
+
+
+@pytest.mark.skipif(POWERSHELL is None, reason="no PowerShell host on PATH")
+def test_capabilities_and_support_efforts_land_inside_the_model_table(tmp_path):
+    """The rendered model table must carry the real table's capabilities
+    and support_efforts, INSIDE the model table - not at the document
+    root, not under [thinking], not under the provider table."""
+    target = tmp_path / "carried-home"
+    profile = _fake_profile(tmp_path, FAKE_REAL_CONFIG)
+    proc = _build(tmp_path, target, profile)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+
+    with open(target / "config.toml", "rb") as fh:
+        parsed = tomllib.load(fh)
+
+    model_table = parsed["models"][PLACEHOLDER_MODEL]
+    assert model_table["capabilities"] == [
+        "thinking", "always_thinking", "image_in", "tool_use"]
+    assert model_table["support_efforts"] == ["low", "high", "max"]
+    # Placement, not mere presence: neither key may resolve anywhere else.
+    assert "capabilities" not in parsed
+    assert "support_efforts" not in parsed
+    assert "capabilities" not in parsed["thinking"]
+    assert "support_efforts" not in parsed["thinking"]
+    assert "capabilities" not in parsed["providers"]["managed:kimi-code"]
+
+    # The rest of the real table comes across too, including the context
+    # window that used to be a hardcoded literal in the script.
+    assert model_table["provider"] == "managed:kimi-code"
+    assert model_table["model"] == "test-placeholder-model"
+    assert model_table["max_context_size"] == 262144
+    assert model_table["display_name"] == "Test Placeholder"
+
+
+@pytest.mark.skipif(POWERSHELL is None, reason="no PowerShell host on PATH")
+def test_effort_is_the_argument_not_the_real_configs_value(tmp_path):
+    """Pinning effort per debate is the whole point of -Effort, so the
+    real config's own default_effort must never win. The fake config says
+    "low"; the build asks for "max"."""
+    target = tmp_path / "effort-home"
+    profile = _fake_profile(tmp_path, FAKE_REAL_CONFIG)
+    proc = _build(tmp_path, target, profile, effort="max")
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+
+    with open(target / "config.toml", "rb") as fh:
+        parsed = tomllib.load(fh)
+
+    model_table = parsed["models"][PLACEHOLDER_MODEL]
+    assert model_table["default_effort"] == "max"
+    # A carried duplicate would make the file invalid TOML, so reaching
+    # here at all proves the real config's own line was dropped, not
+    # appended alongside; assert the resolved value anyway.
+    assert model_table["default_effort"] != "low"
+
+
+@pytest.mark.skipif(POWERSHELL is None, reason="no PowerShell host on PATH")
+def test_nothing_outside_the_model_table_is_carried(tmp_path):
+    """Isolation is why this script renders its own file. The fake config
+    carries hooks, a second model, and a services block; none may follow
+    the model table's fields into the home."""
+    target = tmp_path / "isolation-home"
+    profile = _fake_profile(tmp_path, FAKE_REAL_CONFIG)
+    proc = _build(tmp_path, target, profile)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+
+    with open(target / "config.toml", "rb") as fh:
+        parsed = tomllib.load(fh)
+
+    assert "hooks" not in parsed
+    assert "services" not in parsed
+    assert list(parsed["models"].keys()) == [PLACEHOLDER_MODEL]
+    # The real config's root default_model must not override the home's.
+    assert parsed["default_model"] == PLACEHOLDER_MODEL
+
+
+@pytest.mark.skipif(POWERSHELL is None, reason="no PowerShell host on PATH")
+def test_a_missing_model_table_refuses_instead_of_guessing(tmp_path):
+    """A home built on a guessed model table is an unmade measurement, and
+    an unmade measurement is never a clean one. No fallback to defaults."""
+    target = tmp_path / "no-table-home"
+    profile = _fake_profile(tmp_path, FAKE_REAL_CONFIG)
+    proc = _build(tmp_path, target, profile,
+                  model="kimi-code/model-not-in-the-config")
+    assert proc.returncode != 0, proc.stdout + proc.stderr
+    assert "declares no model table" in proc.stdout + proc.stderr
+    assert not target.exists(), (
+        "the refusal must land before any directory is created")
+
+
+@pytest.mark.skipif(POWERSHELL is None, reason="no PowerShell host on PATH")
+def test_a_missing_real_config_refuses_instead_of_guessing(tmp_path):
+    target = tmp_path / "no-config-home"
+    profile = _fake_profile(tmp_path, None)
+    proc = _build(tmp_path, target, profile)
+    assert proc.returncode != 0, proc.stdout + proc.stderr
+    assert "no kimi-code config at" in proc.stdout + proc.stderr
+    assert not target.exists()
+
+
+@pytest.mark.skipif(POWERSHELL is None, reason="no PowerShell host on PATH")
+def test_an_unparseable_model_table_refuses_instead_of_guessing(tmp_path):
+    """A field this reader cannot account for is unparseable, and
+    unparseable refuses - it is never silently dropped, because a silently
+    dropped field is exactly the defect this whole round exists to fix."""
+    broken = FAKE_REAL_CONFIG.replace(
+        'display_name = "Test Placeholder"',
+        "display_name = { first = 'nested inline table' }")
+    target = tmp_path / "unparseable-home"
+    profile = _fake_profile(tmp_path, broken)
+    proc = _build(tmp_path, target, profile)
+    assert proc.returncode != 0, proc.stdout + proc.stderr
+    assert "unparseable line" in proc.stdout + proc.stderr
+    assert not target.exists()
