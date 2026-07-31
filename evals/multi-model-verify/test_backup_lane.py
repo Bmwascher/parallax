@@ -46,7 +46,11 @@ def test_backup_artifacts_exist():
 def test_notes_backup_declarations():
     notes = _read(NOTES)
     assert "Canonical backup reviewer model id: `" + BACKUP_ID + "`" in notes
-    assert "Canonical backup thinking flag: `--thinking`" in notes
+    assert "Canonical backup provider: `kimi`" in notes
+    assert "Canonical backup reasoning effort: `high`" in notes
+    assert ("Canonical backup thinking declaration: `[thinking] enabled = true`"
+            in notes)
+    assert "Canonical backup thinking flag: `--thinking`" not in notes
     # primary parse must survive the amendment, in BOTH parser dialects
     m = re.search(r"Canonical model id: `([^`]+)`", notes)
     assert m and m.group(1) and m.group(1) != BACKUP_ID
