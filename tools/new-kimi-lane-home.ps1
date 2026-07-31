@@ -39,6 +39,20 @@ $ErrorActionPreference = "Stop"
 $SentinelName = ".parallax-lane-home"
 $SentinelMagic = "PARALLAX-LANE-HOME-V1"
 
+# -Model and -Effort are caller-supplied and are interpolated directly
+# into config.toml below. Unvalidated, a -Model carrying a double quote
+# and a newline breaks out of the `[models."$Model"]` quoting and can
+# write an attacker-chosen table - including a fabricated hooks array
+# of tables - into the rendered config: exactly the command-executing
+# back-channel this script exists to keep out of the reviewer's config.
+# Everything this pattern allows is also everything the render below
+# needs: letters, digits, dot, dash, underscore, slash. Nothing outside
+# it can close a TOML string or open a new table.
+$SafeTokenPattern = '^[A-Za-z0-9][A-Za-z0-9._/-]*$'
+function Test-SafeConfigToken([string]$Value) {
+    return ($Value -match $SafeTokenPattern)
+}
+
 if ($Remove) {
     # 1. Refuse unless the sentinel exists, and its two lines authorize
     # THIS resolved path. The sentinel's file NAME is not the credential -
@@ -66,25 +80,39 @@ if ($Remove) {
     $pathRoot = [System.IO.Path]::GetPathRoot($resolved)
     $normalizedResolved = $resolved.TrimEnd('\', '/')
     $normalizedRoot = $pathRoot.TrimEnd('\', '/')
+    # IsPathRooted($resolved) is always true here - $resolved comes out of
+    # Resolve-Path, which never returns a relative string. Kept anyway:
+    # removing it would drop the literal a live pin depends on
+    # (test_removal_refuses_dangerous_roots), and it documents the
+    # invariant this comparison relies on rather than asserting it silently.
     $isDriveRoot = [System.IO.Path]::IsPathRooted($resolved) -and
                    ($normalizedResolved -ieq $normalizedRoot)
     if ($isDriveRoot) {
         throw "refusing to remove: $resolved is a drive root"
     }
 
-    if ($env:USERPROFILE -and (Test-Path -LiteralPath $env:USERPROFILE)) {
-        $resolvedProfile = (Resolve-Path -LiteralPath $env:USERPROFILE).Path
-        $normalizedProfile = $resolvedProfile.TrimEnd('\', '/')
-        $sep = [System.IO.Path]::DirectorySeparatorChar
-        # "or above it": equal to the profile, OR an ANCESTOR of it (the
-        # profile sits somewhere under $resolved). Equality alone never
-        # exercises the ancestor half.
-        $isProfileOrAbove = ($normalizedProfile -ieq $normalizedResolved) -or
-            $normalizedProfile.StartsWith($normalizedResolved + $sep,
-                [System.StringComparison]::OrdinalIgnoreCase)
-        if ($isProfileOrAbove) {
-            throw "refusing to remove: $resolved is the user profile or above it"
-        }
+    # The profile guard must FAIL CLOSED, not skip, when it cannot be
+    # evaluated: this project deliberately runs subprocesses with
+    # minimized environments, so an unset or unresolvable USERPROFILE is
+    # reachable in real use, not just in a test. An unmade measurement is
+    # never a clean one - if the guard cannot be evaluated, refuse.
+    if (-not $env:USERPROFILE) {
+        throw "refusing to remove: could not evaluate the user-profile guard (USERPROFILE is not set)"
+    }
+    if (-not (Test-Path -LiteralPath $env:USERPROFILE)) {
+        throw "refusing to remove: could not evaluate the user-profile guard (USERPROFILE path does not exist: $env:USERPROFILE)"
+    }
+    $resolvedProfile = (Resolve-Path -LiteralPath $env:USERPROFILE).Path
+    $normalizedProfile = $resolvedProfile.TrimEnd('\', '/')
+    $sep = [System.IO.Path]::DirectorySeparatorChar
+    # "or above it": equal to the profile, OR an ANCESTOR of it (the
+    # profile sits somewhere under $resolved). Equality alone never
+    # exercises the ancestor half.
+    $isProfileOrAbove = ($normalizedProfile -ieq $normalizedResolved) -or
+        $normalizedProfile.StartsWith($normalizedResolved + $sep,
+            [System.StringComparison]::OrdinalIgnoreCase)
+    if ($isProfileOrAbove) {
+        throw "refusing to remove: $resolved is the user profile or above it"
     }
 
     if (Test-Path -LiteralPath (Join-Path $resolved ".git")) {
@@ -104,14 +132,41 @@ if (Test-Path -LiteralPath $Path) {
     throw "refusing to build: destination already exists: $Path"
 }
 
+# 2b. Refuse a -Model or -Effort that cannot be safely rendered into
+# config.toml. This runs before ANYTHING touches the filesystem or the
+# network, so a hostile value is rejected before any side effect, not
+# merely before the render.
+if (-not (Test-SafeConfigToken $Model)) {
+    throw "refusing to build: -Model contains characters outside the allowed set (letters, digits, dot, dash, underscore, slash)"
+}
+if (-not (Test-SafeConfigToken $Effort)) {
+    throw "refusing to build: -Effort contains characters outside the allowed set (letters, digits, dot, dash, underscore, slash)"
+}
+
 # 3. Resolve whether the PARENT is inside a git work tree (the target
 # itself does not exist yet). Fail closed: an unmade or unreadable
 # measurement is never a clean one, and the consequence here is an OAuth
 # credential landing inside a repository.
-$parent = Split-Path -Path $Path -Parent
-if (-not $parent) { $parent = "." }
-if (-not (Test-Path -LiteralPath $parent)) {
-    New-Item -ItemType Directory -Force -Path $parent | Out-Null
+#
+# No directory is created for this check. An earlier version created the
+# parent unconditionally here, before this and the credential gate below
+# had run, and outside the try/catch that owns cleanup - so a refusal from
+# either gate left that directory orphaned on disk. Git's own work-tree
+# detection walks up from a directory looking for a `.git` entry in itself
+# or an ancestor; a not-yet-created directory cannot itself carry one, so
+# querying the NEAREST EXISTING ancestor gives the exact same answer the
+# real parent would give once it exists, with no directory created before
+# every refusal gate below has passed.
+$fullPath = [System.IO.Path]::GetFullPath($Path)
+$parent = Split-Path -Path $fullPath -Parent
+$gitCheckDir = $parent
+while ($gitCheckDir -and -not (Test-Path -LiteralPath $gitCheckDir)) {
+    $next = Split-Path -Path $gitCheckDir -Parent
+    if (-not $next -or $next -eq $gitCheckDir) { break }
+    $gitCheckDir = $next
+}
+if (-not $gitCheckDir -or -not (Test-Path -LiteralPath $gitCheckDir)) {
+    throw "could not determine whether $parent is inside a git work tree (no existing ancestor directory found)"
 }
 
 # Windows PowerShell 5.1 turns ANY native-command stderr line into a
@@ -122,13 +177,24 @@ if (-not (Test-Path -LiteralPath $parent)) {
 # both failure directions land on our own message, never a bypass.
 $previousEap = $ErrorActionPreference
 $ErrorActionPreference = "Continue"
+$previousLcAll = $env:LC_ALL
+# Pin git's message language for this call. The "not a git repository"
+# match a few lines down depends on that exact English text; a localized
+# git under a non-English LC_ALL/LANG would translate it, and the
+# unrecognized string would then fail the match - which still fails
+# CLOSED (the catch-all below refuses on anything unrecognized), but
+# pinning the locale here means the common case is decided correctly
+# rather than by falling through to the conservative refusal every time.
+$env:LC_ALL = "C"
 try {
-    $gitOutput = & git -C $parent rev-parse --is-inside-work-tree 2>&1
+    $gitOutput = & git -C $gitCheckDir rev-parse --is-inside-work-tree 2>&1
     $gitExit = $LASTEXITCODE
 } catch {
+    $env:LC_ALL = $previousLcAll
     $ErrorActionPreference = $previousEap
     throw "could not determine whether $parent is inside a git work tree (git invocation failed: $($_.Exception.Message))"
 }
+$env:LC_ALL = $previousLcAll
 $ErrorActionPreference = $previousEap
 $gitAnswer = ("$gitOutput").Trim()
 if ($gitExit -eq 0 -and $gitAnswer -eq "true") {
@@ -140,11 +206,12 @@ if ($gitExit -eq 0 -and $gitAnswer -eq "true") {
 # every such directory tried. A strict "$LASTEXITCODE -ne 0 always
 # refuses" reading therefore refuses in the overwhelmingly ordinary case
 # this script exists to allow, and Build mode could never succeed
-# anywhere. Git's own "fatal: not a git repository" text is the
-# positive, well-known signal for that state, so it is treated the same
-# as an explicit "false". Every OTHER nonzero exit - a real git error, a
-# corrupted repository, git missing from PATH - still fails closed below,
-# which is the case the fails-closed rule and its test guard against.
+# anywhere. Git's own "fatal: not a git repository" text (LC_ALL=C above)
+# is the positive, well-known signal for that state, so it is treated the
+# same as an explicit "false". Every OTHER nonzero exit - a real git
+# error, a corrupted repository, git missing from PATH - still fails
+# closed below, which is the case the fails-closed rule and its test
+# guard against.
 $definitelyNoRepositoryAnywhere = ($gitExit -ne 0) -and
     ($gitAnswer -match "fatal: not a git repository")
 $explicitlyOutsideTheWorkTree = ($gitExit -eq 0) -and ($gitAnswer -eq "false")
@@ -165,7 +232,12 @@ if (-not (Test-Path -LiteralPath $credentialSource)) {
 # below can never delete a directory some OTHER invocation created.
 $createdByThisInvocation = $false
 try {
-    New-Item -ItemType Directory -Path $Path | Out-Null
+    # This is the ONLY directory-creation in Build mode, and everything
+    # above it is read-only. -Force also creates the parent chain if it is
+    # still missing - the sole place that happens, now that every refusal
+    # gate has already passed and this creation lives inside the scope the
+    # catch below cleans up.
+    New-Item -ItemType Directory -Force -Path $Path | Out-Null
     $resolved = (Resolve-Path -LiteralPath $Path).Path
 
     # 6. Sentinel first, then $createdByThisInvocation, then the ACL -
@@ -185,18 +257,21 @@ try {
     $acl.AddAccessRule($fullControlRule)
     Set-Acl -LiteralPath $resolved -AclObject $acl
 
-    # Test seam for Task 3 Step 5's live fault test: prove the catch below
-    # actually runs and actually cleans up, by injecting a failure right
-    # after the point the credential is about to be copied.
-    if ($env:PARALLAX_LANE_HOME_FAULT) {
-        throw "PARALLAX_LANE_HOME_FAULT injected: simulated post-credential failure"
-    }
-
     # 7. Copy the credential, then render config.toml. Unlike the
     # user's real ~/.kimi-code/config.toml, this template carries no hooks by construction.
     $credentialDir = Join-Path $resolved "credentials"
     New-Item -ItemType Directory -Path $credentialDir | Out-Null
     Copy-Item -LiteralPath $credentialSource -Destination (Join-Path $credentialDir "kimi-code.json")
+
+    # Test seam for Task 3 Step 5's live fault test: prove the catch below
+    # actually runs and actually cleans up a home that ALREADY HAS a
+    # credential copied onto disk, by injecting a failure right after the
+    # copy above completes. An earlier version threw this fault before the
+    # copy ran, so the live test it exists to prove never actually
+    # exercised cleanup with a credential present.
+    if ($env:PARALLAX_LANE_HOME_FAULT) {
+        throw "PARALLAX_LANE_HOME_FAULT injected: simulated post-credential-copy failure"
+    }
 
     # The model table's `model` field is the provider-side name, which is
     # everything after the first "/" of the alias - derived, never
@@ -238,8 +313,13 @@ enabled = true
     # ASCII, not utf8: Windows PowerShell 5.1's -Encoding utf8 prepends a
     # byte-order mark, which kimi-code's TOML parser rejects outright
     # ("only letter, numbers, dashes and underscores are allowed in
-    # keys" on the very first line). Measured live. Config content here
-    # is plain ASCII by construction, so no information is lost.
+    # keys" on the very first line). Measured live. ASCII is sound here -
+    # not merely because this template's own literals are ASCII, but
+    # because $Model and $Effort were both checked against
+    # $SafeTokenPattern above before being interpolated into it: neither
+    # can carry a quote, a newline, or any non-ASCII byte, so nothing this
+    # file writes can close the TOML string it is quoted inside or open an
+    # attacker-chosen table.
     Set-Content -LiteralPath (Join-Path $resolved "config.toml") -Value $configToml -Encoding ascii
 
     New-Item -ItemType Directory -Path (Join-Path $resolved "skills") | Out-Null

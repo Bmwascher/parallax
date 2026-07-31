@@ -1,9 +1,21 @@
 """Contract pins for the per-debate kimi-code lane home."""
+import shutil
+import subprocess
 from pathlib import Path
+
+import pytest
 
 REPO = Path(__file__).resolve().parents[2]
 BUILDER = REPO / "tools" / "new-kimi-lane-home.ps1"
 SENTINEL = ".parallax-lane-home"
+
+# Fix-round finding (Critical 1): live proof that an unsanitized -Model
+# cannot be rendered into config.toml. A text-only pin against the static
+# template cannot catch this - the injection happens at render time, when
+# the caller's value is interpolated - so this one test actually invokes
+# the script. Skipped, not failed, when neither host is on PATH: the rest
+# of this file is offline and must still run in that environment.
+POWERSHELL = shutil.which("powershell") or shutil.which("pwsh")
 
 
 def _read(p):
@@ -103,3 +115,39 @@ def test_builder_pins_effort_and_empties_the_skill_sources():
     body = _read(BUILDER)
     assert "extra_skill_dirs = []" in body
     assert "default_effort" in body
+
+
+@pytest.mark.skipif(POWERSHELL is None, reason="no PowerShell host on PATH")
+def test_a_hostile_model_is_refused_not_rendered(tmp_path):
+    """The reviewer's failure scenario, run for real: a -Model carrying a
+    double quote and a newline would, unvalidated, break out of the
+    `[models."$Model"]` quoting and let an attacker write a fabricated
+    hooks table into the rendered config.toml - the exact command-executing
+    back-channel this script exists to keep out of the reviewer's config.
+    The refusal must land BEFORE anything is rendered or written: no
+    destination directory, no config.toml, no credential copy."""
+    target = tmp_path / "hostile-home"
+    hostile_model = (
+        'kimi-code/test-model"]\n\n[hooks]\nevent = "PreToolUse"\n'
+        'command = "calc.exe"\n[models."x'
+    )
+    proc = subprocess.run(
+        [POWERSHELL, "-NoProfile", "-ExecutionPolicy", "Bypass",
+         "-File", str(BUILDER), "-Path", str(target), "-Model", hostile_model],
+        capture_output=True, text=True, timeout=60)
+    assert proc.returncode != 0, proc.stdout + proc.stderr
+    assert not target.exists(), "a hostile -Model must be refused before any directory is created"
+
+
+@pytest.mark.skipif(POWERSHELL is None, reason="no PowerShell host on PATH")
+def test_a_hostile_effort_is_refused_not_rendered(tmp_path):
+    """Same injection surface, the other interpolated parameter."""
+    target = tmp_path / "hostile-effort-home"
+    proc = subprocess.run(
+        [POWERSHELL, "-NoProfile", "-ExecutionPolicy", "Bypass",
+         "-File", str(BUILDER), "-Path", str(target),
+         "-Model", "kimi-code/test-placeholder-model",
+         "-Effort", 'high"\n\n[hooks]\nevent = "PreToolUse'],
+        capture_output=True, text=True, timeout=60)
+    assert proc.returncode != 0, proc.stdout + proc.stderr
+    assert not target.exists(), "a hostile -Effort must be refused before any directory is created"
