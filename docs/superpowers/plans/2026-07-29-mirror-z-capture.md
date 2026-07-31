@@ -2088,3 +2088,15 @@ it appeared inside the fix for it.
 
 Kimi's observation, a one-line slack in a cited line range, was corrected
 in the same pass.
+
+**Amendment A32, mode-diff debate round 1, both lanes.** The built
+`Invoke-GitProcess` initializes the process variable to `$null` before its
+`try` block; the Task 1 Step 4 listing above does not. The line has no
+behavioral effect - every exception path returns from inside `catch`, so
+the exit-code test is reached only after a successful start, and an unset
+variable would fail closed there anyway. It is one-line defensive
+initialization in the safe direction. Both lanes named it independently
+and both called it non-gating: the primary lane as the sole code-block
+difference in the range, the backup lane as unrecorded drift. Recorded
+here rather than removed, because the code is right and the listing was
+the incomplete record. No code, test or contract change follows from it.
