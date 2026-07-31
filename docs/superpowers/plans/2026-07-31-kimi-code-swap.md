@@ -12,7 +12,8 @@
 
 - **r1** — first draft, unreviewed.
 - **r2** — after Sol round 1 (10 FIX). Restored the freshness boundary that r1 deleted along with the offset rule; added a validator and credential handling.
-- **r3, this one** — after Sol round 2 (5 FIX) and a six-call measurement session recorded in `rounds/2026-07-31-kimi-code-swap/probe-record-2.md`. r2's central evidence rule was **measured to be wrong in both directions**: it fails a clean round 1 and every resumed round. Sol round 2's fourteen defects are fixed here, and three of its objections are resolved by measurement rather than argument.
+- **r4, this one** — after Sol round 3 (1 PASS, 5 FIX). `--skills-dir`-as-mitigation passed and is settled. Fixed: a tautological `KNOWN_TOOLS`; an uncallable `-Remove` (now parameter sets); an impossible drift stub (production resolves `kimi.exe` or `kimi.cmd`); a present-but-unusable binary falling into the "absent" note; a plantable bare-filename sentinel; the log protected by length while the wire got a hash; an undefined prefix-hash framing (offsets are now BYTES); an offset landing mid-call passing every check; and the uncompared second `config.update`, `permission.set_mode.mode`, and per-request hash identity. The validator now takes a single `-PriorState` object and enforces hash continuity itself.
+- **r3** — after Sol round 2 (5 FIX) and a six-call measurement session recorded in `rounds/2026-07-31-kimi-code-swap/probe-record-2.md`. r2's central evidence rule was **measured to be wrong in both directions**: it fails a clean round 1 and every resumed round. Sol round 2's fourteen defects are fixed here, and three of its objections are resolved by measurement rather than argument.
 
 Sol plan-debate session `019fb913-1b73-7ab0-961d-ff2ae3a6b4f7`. Round replies retained beside this plan.
 
@@ -98,6 +99,16 @@ def test_the_version_probe_can_actually_reach_its_failure_branch():
     assert KIMI_CODE_FLOOR in body
 
 
+def test_the_production_lookup_accepts_a_cmd_stub():
+    """A .cmd renamed .exe does not execute on Windows, so an absolute
+    .exe-only lookup cannot be stubbed offline at all. Production
+    therefore resolves either name in that directory - which is also true
+    of real Windows CLIs - and the harness stubs the .cmd."""
+    body = _read(DRIFT)
+    assert "kimi.exe" in body
+    assert "kimi.cmd" in body
+
+
 def test_the_state_machine_stubs_moved_with_the_probe():
     body = _read(STATEMACHINE)
     assert "kimi_cli" not in body
@@ -108,6 +119,15 @@ def test_the_state_machine_stubs_moved_with_the_probe():
     assert ".kimi-code" in body
     assert "--session" in body
     assert "KIMI_STUB_MODE" in body
+
+
+def test_a_present_but_unusable_binary_is_a_finding_not_a_note():
+    """r3 fixed the regex pre-filter but left a second path open: a binary
+    that exists while --version fails or prints nothing still fell into
+    the 'absent' note. Absent is a note; present-and-broken is a finding."""
+    body = _read(DRIFT)
+    assert "$versionExit" in body
+    assert "did not report a usable version" in body
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
@@ -122,18 +142,30 @@ Replace `tools/check-drift.ps1:133-136`:
 ```powershell
 $kimiVersion = ""
 $kimiRaw = ""
-$kimiExe = Join-Path $env:USERPROFILE ".kimi-code\bin\kimi.exe"
-if (-not (Test-Path $kimiExe)) { $kimiExe = "" }
+$versionExit = $null
+$kimiExe = ""
+$kimiBin = Join-Path $env:USERPROFILE ".kimi-code\bin"
+# Either name: a real Windows CLI may ship as .exe or as a .cmd shim, and
+# an .exe-only lookup is also impossible to stub offline, which is what
+# left every state-machine kimi scenario asserting nothing.
+foreach ($n in @("kimi.exe", "kimi.cmd")) {
+    $candidate = Join-Path $kimiBin $n
+    if (Test-Path $candidate) { $kimiExe = $candidate; break }
+}
 if ($kimiExe) {
-    try { $kimiRaw = (& $kimiExe --version 2>&1 | Out-String).Trim() } catch {}
-    # Assign the RAW value. r2 filtered through a numeric regex first,
-    # which meant a malformed version could never reach the floor check
-    # and fell into the "absent" note instead of failing.
+    try {
+        $kimiRaw = (& $kimiExe --version 2>&1 | Out-String).Trim()
+        $versionExit = $LASTEXITCODE
+    } catch { $versionExit = -1 }
+    # Assign the RAW value. r2 filtered through a numeric regex first, so a
+    # malformed version could never reach the floor check.
     $kimiVersion = $kimiRaw
 }
 ```
 
 Bare `kimi` is deliberately NOT a fallback: two CLIs have carried that name here, so a name-resolved probe can measure the wrong binary.
+
+Three outcomes, kept distinct. No binary is a NOTE — the lane is optional. A binary present whose `--version` exits nonzero or prints nothing is a FINDING, not a note: something is installed and broken, which is not the same as nothing being installed. A usable version goes to the floor check.
 
 - [ ] **Step 4: Replace check 2b**
 
@@ -147,8 +179,16 @@ Bare `kimi` is deliberately NOT a fallback: two CLIs have carried that name here
 
 $KimiCodeFloor = "0.31.1"
 
-if ($kimiExe -and $kimiVersion) {
+if (-not $kimiExe) {
+    $notes += "kimi-code absent - backup-lane probes skipped (lane optional; primary unaffected)"
+} elseif ($versionExit -ne 0 -or -not $kimiVersion) {
+    $findings += "[CRITICAL] kimi-code is installed at $kimiExe but did not report a usable version (exit $versionExit) - an unmade version check is never a passing one; the backup lane is UNAVAILABLE"
+} else {
     $kimiHelp = (& $kimiExe --help 2>&1 | Out-String)
+    $helpExit = $LASTEXITCODE
+    if ($helpExit -ne 0 -or -not $kimiHelp.Trim()) {
+        $findings += "[CRITICAL] kimi-code --help exited $helpExit or printed nothing - the transport surface could not be measured"
+    }
     foreach ($flag in @("--agent-file", "--skills-dir", "-m", "-p", "--session")) {
         $flagPattern = '(^|[\s,\[])' + [regex]::Escape($flag) + '($|[\s,\]=])'
         if (-not [regex]::IsMatch($kimiHelp, $flagPattern)) {
@@ -166,18 +206,17 @@ if ($kimiExe -and $kimiVersion) {
     } else {
         $findings += "[CRITICAL] kimi-code version '$kimiVersion' is unparseable against floor $KimiCodeFloor - an unmade floor check is never a passing one"
     }
-} else {
-    $notes += "kimi-code absent - backup-lane probes skipped (lane optional; primary unaffected)"
 }
 ```
 
-Note the split: an ABSENT binary is a note, an UNPARSEABLE version is a finding. r2 collapsed both into the note, which is how the failure branch became unreachable.
+Note the three-way split: an ABSENT binary is a note; a PRESENT binary that cannot be measured is a finding; only a usable version reaches the floor. r2 collapsed all three into the note, which is how the failure branch became unreachable.
 
 - [ ] **Step 5: Move the state-machine harness**
 
 In `evals/tools/drift_statemachine_tests.ps1`:
 
-- The harness builds stubs in `$StubDir` and puts them on PATH (`:110-117`). The production lookup is now an ABSOLUTE path under `$env:USERPROFILE`. Create the stub at `<fake profile>/.kimi-code/bin/kimi.exe` — a `.cmd` shim named `kimi.exe` will not be executed by `& $kimiExe`, so create it as a `.cmd` and have the production path probe find it, or point the fake profile at a directory holding a real `.cmd` named exactly as the production code looks for. Verify by running one scenario and confirming the report is NOT the "absent" note.
+- The harness builds stubs in `$StubDir` and puts them on PATH (`:110-117`). The production lookup is now an ABSOLUTE path under `$env:USERPROFILE`, so a PATH stub is invisible to it and every kimi scenario would take the "absent" branch. Create the stub at `<fake profile>/.kimi-code/bin/kimi.cmd`. This is why Step 3's lookup tries `kimi.exe` then `kimi.cmd`: a `.cmd` renamed `.exe` does not execute on Windows, so an `.exe`-only lookup cannot be stubbed offline at all, and real Windows CLIs legitimately ship either form. The scenarios already set `USERPROFILE` to the fake profile, so no new seam is introduced — in particular, no environment variable is added that could redirect the REAL lookup, which is the lock-stealing shape this repo has already been bitten by twice.
+- **Verify the stub is actually reached** before trusting any scenario: run one and confirm the report contains a flag finding or a floor finding rather than the "absent" note. A green suite in which every kimi scenario silently skipped is the failure this task exists to remove, wearing a passing badge.
 - Stub usage lines (`:243-276`): re-express in the new vocabulary, advertising `--session` and NOT `-S`, since the production regex matches `--session`. Keep each variant's existing dropped-flag difference so the scenarios still distinguish a full surface from a degraded one.
 - Delete the `kimi_cli` import-probe branch and its forwarding comment at `:233`.
 - Add a `KIMI_STUB_MODE` value that emits a BELOW-FLOOR version (e.g. `0.30.0`); the existing stub always emits `9.9.9` except on total failure, so the new floor scenario has nothing to trigger it.
@@ -272,7 +311,10 @@ Per-DEBATE, not per-round: built once before round 1 and used by every call of t
 
 **Interfaces:**
 - Consumes: nothing.
-- Produces: `tools/new-kimi-lane-home.ps1 -Path <dir> -Model <id> [-Effort <level>]` builds and prints the absolute path; `-Path <dir> -Remove` deletes a home it built. `-Model` is MANDATORY with no default. Exits non-zero on any refusal.
+- Produces two PARAMETER SETS on `tools/new-kimi-lane-home.ps1`, because a globally mandatory `-Model` makes the removal form uncallable:
+  - `Build` (default): `-Path <dir> -Model <id> [-Effort <level>]` — builds and prints the absolute path. `-Model` is mandatory WITHIN THIS SET and has no default.
+  - `Remove`: `-Path <dir> -Remove` — deletes a home this script built, and takes no `-Model`.
+  Exits non-zero on any refusal.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -293,11 +335,14 @@ def test_builder_exists():
     assert BUILDER.is_file(), str(BUILDER)
 
 
-def test_model_has_no_default_literal():
+def test_model_is_mandatory_within_the_build_set_only():
     """SWEEP_GLOBS covers tools/*.ps1, so a parameter default carrying the
-    canonical id would fail test_backup_literal_single_source."""
+    canonical id would fail test_backup_literal_single_source. But a
+    GLOBALLY mandatory -Model makes `-Remove` uncallable, so the two forms
+    are separate parameter sets."""
     body = _read(BUILDER)
-    assert "[Parameter(Mandatory = $true)][string]$Model" in body
+    assert 'DefaultParameterSetName = "Build"' in body
+    assert 'ParameterSetName = "Build", Mandatory = $true)][string]$Model' in body
     assert "k3-256k" not in body
 
 
@@ -324,17 +369,43 @@ def test_the_git_check_fails_closed():
 
 def test_removal_is_callable_and_guarded():
     """r2 defined a function inside a script invoked with `pwsh -File`,
-    which no caller can ever reach. Removal is a switch on the same
-    script, and it refuses any directory this builder did not create."""
+    which no caller can ever reach. Removal is a parameter set on the same
+    script, and it refuses any directory this builder did not create.
+
+    The sentinel's NAME is not the credential: a bare filename can be
+    planted in any directory and would then authorize a recursive delete.
+    It carries a magic string and the resolved path it was written for,
+    and removal refuses a mismatch."""
     body = _read(BUILDER)
     assert "[switch]$Remove" in body
     assert SENTINEL in body
+    assert "PARALLAX-LANE-HOME-V1" in body
+    assert "sentinel does not match this path" in body
+
+
+def test_removal_refuses_dangerous_roots():
+    """Belt and braces on top of the sentinel: even a correctly-formed
+    sentinel must not authorize deleting a drive root, the user profile,
+    or a repository root."""
+    body = _read(BUILDER)
+    assert "refusing to remove" in body
+    assert "$env:USERPROFILE" in body
 
 
 def test_a_failed_build_leaves_no_credential_behind():
+    """Cleanup runs only for a directory THIS invocation created and
+    marked - an unconditional recursive delete in a catch block would
+    delete a directory the script had refused to touch."""
     body = _read(BUILDER)
     assert "try {" in body
-    assert "Remove-Item $Path -Recurse -Force" in body
+    assert "$createdByThisInvocation" in body
+
+
+def test_cleanup_is_fault_tested_live():
+    """A cleanup path with no test asserting it runs is a cleanup path
+    that has never run. Task 3 Step 5 injects a post-credential failure."""
+    body = _read(BUILDER)
+    assert "PARALLAX_LANE_HOME_FAULT" in body
 
 
 def test_builder_writes_no_hooks():
@@ -360,12 +431,12 @@ Expected: FAIL.
 
 Create `tools/new-kimi-lane-home.ps1` implementing, in order:
 
-1. `-Remove` mode: refuse unless `<Path>/.parallax-lane-home` exists, then delete recursively. The sentinel is what stops a mistyped path from recursively deleting something else.
+1. `-Remove` mode. Refuse unless `<Path>/.parallax-lane-home` exists AND its first line is `PARALLAX-LANE-HOME-V1` AND its second line is the resolved `-Path` it was written for; otherwise fail with `sentinel does not match this path`. Then refuse outright — message beginning `refusing to remove` — if the resolved path is a drive root, is `$env:USERPROFILE` or above it, or contains a `.git` entry. Only then delete recursively. A bare filename sentinel is plantable anywhere, so the CONTENT is the credential, and the root guards are the backstop for a correctly-formed sentinel in the wrong place.
 2. Refuse an existing `-Path`.
 3. Resolve whether the parent is inside a git work tree. Run `git rev-parse --is-inside-work-tree`, then check `$LASTEXITCODE`: `true` refuses with the work-tree message; a nonzero exit refuses with `could not determine whether <path> is inside a git work tree`. Only an explicit `false` proceeds. Fail closed — an unmade measurement is never a clean one, and the consequence here is a credential in a repository.
 4. Refuse if the source credential is absent, with the UNAVAILABLE message.
-5. Wrap everything from directory creation onward in `try { } catch { Remove-Item $Path -Recurse -Force; throw }`, so a failure after the credential copy cannot leave the secret on disk.
-6. Create the directory, write the sentinel, then set the ACL BEFORE the credential is copied: `SetAccessRuleProtection($true, $false)` to drop inherited rules, remove every existing explicit ACE, then add one FullControl rule for the current identity.
+5. Set `$createdByThisInvocation = $false`, then wrap everything from directory creation onward in `try { } catch { if ($createdByThisInvocation) { Remove-Item $Path -Recurse -Force } ; throw }`. The flag is set only after this invocation has created the directory and written the sentinel, so a refusal path can never delete a directory the script declined to touch. To make the path testable, honour a `PARALLAX_LANE_HOME_FAULT` environment variable that throws immediately after the credential copy; Step 5 uses it to prove the cleanup runs.
+6. Create the directory, write the sentinel (`PARALLAX-LANE-HOME-V1` then the resolved path), set `$createdByThisInvocation = $true`, then set the ACL BEFORE the credential is copied: `SetAccessRuleProtection($true, $false)` to drop inherited rules, remove every existing explicit ACE, then add one FullControl rule for the current identity.
 7. Copy the credential, write `config.toml` from the template (no hooks, `extra_skill_dirs = []`, `telemetry = false`, `[thinking] enabled = true`, the model table with `default_effort`), create the empty `skills/` directory.
 8. Print `(Resolve-Path $Path).Path` as the only stdout output.
 
@@ -381,8 +452,10 @@ Under BOTH `powershell.exe` and `pwsh` — 0.16.1's lock defect was green on one
 - Build a home, set `KIMI_CODE_HOME`, run `provider list` by absolute binary path, expect `source=oauth`.
 - Re-run the build against the same path: expect refusal.
 - Build inside a git work tree: expect refusal.
-- **Inspect the effective ACL** with `Get-Acl <home> | Format-List`, and confirm only the current identity has access. r2 asserted the ACL API call existed and never looked at the result.
-- Run `-Remove`, confirm the directory is gone. Run `-Remove` on a directory with no sentinel, confirm refusal.
+- **Inspect the effective ACL** with `Get-Acl <home> | Format-List`, and confirm only the current identity appears. r2 asserted the ACL API call existed and never looked at the result.
+- **Fault-test the cleanup**: build with `PARALLAX_LANE_HOME_FAULT=1` set, confirm the command fails AND the directory is gone, so no credential copy survives a mid-build failure.
+- Run `-Remove` on a real home: gone. On a directory with no sentinel: refused. On a directory carrying a sentinel whose second line names a DIFFERENT path: refused. On `$env:USERPROFILE`: refused.
+- Confirm `-Remove` works without `-Model`, which is the whole reason for the parameter sets.
 
 - [ ] **Step 6: Commit**
 
@@ -406,9 +479,13 @@ Build a home. From a console forced to cp1252 (`chcp 1252`), dispatch a prompt a
 
 - [ ] **Step 2: Probe whether a session file can be replaced and regrow**
 
-Sol round 2's surviving objection: the freshness boundary detects absence and shrinkage but not a file replaced, truncated and regrown past the old offset. Check whether per-session files rotate at all: dispatch enough rounds, or append enough bulk, to pass any plausible rotation threshold, and watch for `.1` files beside the per-session log the way the global log has them.
+Does the per-session log rotate the way the global log does? `kimi export --no-include-global-log` documents rotated `.1` files for the global log; per-session behaviour is unstated.
 
-Whatever the answer, Task 7's freshness region captures a PREFIX HASH, so the rule does not depend on rotation being absent. Record the result so the contract can state whether rotation is known-absent or merely guarded against.
+**Finite success criterion**, because "enough to pass any plausible threshold" gives an engineer nothing to stop at: grow one session's per-session log past **16 MB**, then check for any sibling matching `kimi-code.log.*` and whether `kimi-code.log` itself shrank. 16 MB is chosen as an order of magnitude above the largest log this lane has produced (359 KB across a full day of real use on the old client) and above the common 1, 5 and 10 MB defaults. Reaching it without rotation is a NEGATIVE result and is recorded as such; the probe is not required to find rotation, only to look at a stated depth.
+
+Grow it with repeated cheap dispatches into one session rather than by writing to the file directly — a hand-appended file proves nothing about what the client does.
+
+Whatever the answer, Task 7's freshness region hashes BOTH files' prefixes, so the rule does not depend on rotation being absent. Record the result so the contract can say whether rotation is known-absent at this depth or merely guarded against.
 
 - [ ] **Step 3: Append both results and remove the probe homes**
 
@@ -442,10 +519,17 @@ DENYLIST = ["Bash", "Write", "Edit", "WebSearch", "FetchURL",
             "EnterPlanMode", "ExitPlanMode", "Agent", "AgentSwarm",
             "AskUserQuestion", "Skill", "TaskList", "TaskOutput",
             "TaskStop", "CronCreate", "CronList", "CronDelete"]
-# Every built-in tool documented for 0.31.1. Frozen deliberately: this is
-# the client's inventory as MEASURED, and a release that adds a tool must
-# edit this constant, which is what makes the addition a reviewed event.
-KNOWN_TOOLS = set(ALLOWLIST) | set(DENYLIST)
+# Every built-in tool documented for 0.31.1, written out INDEPENDENTLY of
+# the two lists above. r3 defined this as their union and then compared the
+# union back to it, which is a tautology that detects neither a swapped
+# name nor an omission. A release that adds a tool must edit this literal,
+# which is what makes the addition a reviewed event.
+KNOWN_TOOLS = {
+    "Read", "Write", "Edit", "Grep", "Glob", "ReadMediaFile", "Bash",
+    "WebSearch", "FetchURL", "EnterPlanMode", "ExitPlanMode", "TodoList",
+    "Agent", "AgentSwarm", "AskUserQuestion", "Skill", "TaskList",
+    "TaskOutput", "TaskStop", "CronCreate", "CronList", "CronDelete",
+}
 ```
 
 - [ ] **Step 2: Rewrite the artifact and list tests**
@@ -538,10 +622,16 @@ git commit -m "replace the kimi reviewer agent pair with one markdown agent file
 **Interfaces:**
 - Consumes: Task 2's declarations, Task 3's builder, Task 5's agent file.
 - Produces:
-  `tools/read-kimi-round-evidence.ps1 -SessionDir <dir> -Kind <fresh|resume> -WireOffset <n> -LogOffset <n> -PrefixSha256 <hex> -Model <id> -Provider <name> -Effort <level> -AgentFile <path> -ExpectedBriefSha256 <hex> -Json`
-  Exits 0 printing `{"status":"clean",...}` only when every check passes; otherwise exits non-zero with `"status":"failed"` and a `reason`. On success it also emits `wireOffset`, `logOffset` and `prefixSha256` for the NEXT call, plus `toolsHash` and `systemPromptHash`.
+  `tools/read-kimi-round-evidence.ps1 -SessionDir <dir> -Kind <fresh|resume> -PriorState <path-to-json> -Model <id> -Provider <name> -Effort <level> -AgentFile <path> -ExpectedBriefSha256 <hex> -Json`
 
-Two interface points are direct round-2 fixes: `-ExpectedBriefSha256` rather than a brief FILE, because a file re-read after the call is mutable and would silently redefine the expected value; and `-Provider`, which r2's rule compared against but never received.
+  `-PriorState` is a JSON file, written by the previous invocation or by the pre-dispatch capture step, carrying: `sessionDirExisted` (bool), `wireBytes`, `logBytes`, `wirePrefixSha256`, `logPrefixSha256`, and — from round 2 onward — `toolsHash` and `systemPromptHash`. Exits 0 printing `{"status":"clean", "nextState": {...}}` only when every check passes; otherwise exits non-zero with `"status":"failed"` and a `reason`. `nextState` has the same shape and is fed to the next call.
+
+Four interface points are direct review fixes:
+
+- `-ExpectedBriefSha256` rather than a brief FILE, because a file re-read after the call is mutable and would silently redefine the expected value.
+- `-Provider`, which the r2 rule compared against but never received.
+- **Offsets are BYTE counts, not line counts**, for both files. This removes r3's framing question entirely: a prefix hash over raw bytes through a byte offset has one unambiguous definition, whereas "SHA-256 of the existing lines" leaves encoding and newline framing undefined and two implementations can disagree.
+- **A single `-PriorState` object instead of loose offsets**, carrying `sessionDirExisted` so the fresh-call rule is checkable at all — r3's version asked the validator to know something it was never told — and binding each invocation to the previous one's output so a valid older offset-and-hash pair cannot be replayed.
 
 - [ ] **Step 1: Capture and normalize fixtures**
 
@@ -560,12 +650,16 @@ Clean cases:
 - a fresh round with `llm.request` ×4 is clean — the count is not fixed
 
 Freshness cases:
-- resumed round validated with `-WireOffset 0` FAILS: round 1's records would otherwise satisfy it. This is the stale-evidence case and the reason the script exists.
-- same for `-LogOffset 0`, so wire and log are covered symmetrically
-- wire file shorter than `-WireOffset` fails as truncation, and specifically is not re-read from zero
-- log file shorter than `-LogOffset` fails the same way
-- a wire file whose PREFIX no longer hashes to `-PrefixSha256` fails as replacement, even when it is longer than the offset — Sol round 2's surviving objection
-- `-Kind fresh` against a session directory that already existed fails
+- resumed round validated with a zero wire offset FAILS: round 1's records would otherwise satisfy it. The stale-evidence case, and the reason the script exists.
+- same for a zero log offset, so wire and log are covered symmetrically
+- **a stale offset landing MID previous call** — after its `turn.prompt`, before its trailing `llm.request` records — fails `slice-misaligned`. r3 tested only offset zero, and this is the shape that passes every count and value check while mixing two calls.
+- wire file shorter than its offset fails as truncation, and specifically is not re-read from zero
+- log file shorter than its offset fails the same way
+- a wire file whose prefix no longer hashes to `wirePrefixSha256` fails as replacement, even when longer than the offset
+- **a LOG whose prefix no longer hashes** fails the same way — the rotation question is about the log, and length-only protection there was r3's asymmetry
+- `-Kind fresh` with `sessionDirExisted: true` fails
+- a `-PriorState` that is missing, malformed, or missing a field fails
+- a prior state from an OLDER round, replayed, fails rather than validating
 
 Missing and malformed:
 - missing session directory; missing wire file; missing log file
@@ -573,17 +667,24 @@ Missing and malformed:
 - missing `turn.prompt`; two `turn.prompt` in one slice
 - zero `llm.request` in a slice
 - missing `llm config` line; two `llm config` lines in one log slice
-- session-scoped records missing from a FRESH round's slice: absent `config.update`, absent `tools.set_active_tools`, absent `llm.tools_snapshot`
-- duplicated `tools.set_active_tools` or `llm.tools_snapshot` in a fresh slice
+- session-scoped records missing from a FRESH slice: absent `config.update`, absent `tools.set_active_tools`, absent `llm.tools_snapshot`, absent `permission.set_mode`
+- duplicated `config.update` (three of them), duplicated `tools.set_active_tools`, duplicated `llm.tools_snapshot`, duplicated `permission.set_mode` in a fresh slice
+- two copies of the FIRST `config.update` shape with the second shape absent — the count is right and the content is not
+- **a RESUME slice containing any session-scoped record**, one case per record type. This is the resume branch's whole reason for existing and r3 gave it no negative test at all.
 
 Inequality:
 - `names` unequal to the allowlist; `disallowedNames` unequal to the denylist
-- `llm.tools_snapshot` tool names unequal to the allowlist while `names` is correct — the two are separate records and one can be right while the other is wrong
+- `llm.tools_snapshot` tool names unequal to the allowlist while `names` is correct — separate records, and one can be right while the other is wrong
 - `profileName` mismatch
 - `systemPrompt` differing from the agent file's body
 - `systemPromptChars` differing from the body's length
 - `toolCount` unequal to the allowlist length
+- **`modelAlias` or `thinkingEffort` wrong in the SECOND `config.update`**
+- **`permission.set_mode.mode` not `auto`**
 - `modelAlias`, `provider` or `thinkingEffort` wrong on ANY `llm.request` in the slice, not merely the first
+- **`toolsHash` or `systemPromptHash` missing, empty, or differing BETWEEN requests inside one slice**
+- **`toolsHash` or `systemPromptHash` differing from `-PriorState`'s** on a later round
+- provider, model or effort wrong in the LOG line while correct in the requests — r3's inequality cases covered requests only
 - `turn.prompt` text not hashing to `-ExpectedBriefSha256`
 
 - [ ] **Step 3: Run tests to verify they fail**
@@ -595,15 +696,19 @@ Expected: FAIL, all.
 
 Rules, in this order:
 
-1. Session directory absent or unreadable: fail `session-dir-missing`.
-2. Wire or log file absent: fail `evidence-file-missing`.
-3. Either file shorter than its offset: fail `truncated`. Do NOT re-read from zero — a replacement's opening records may belong to any round while looking like evidence.
-4. Re-hash the wire file's first `-WireOffset` lines; unequal to `-PrefixSha256`: fail `prefix-replaced`. This is what makes the boundary prove identity rather than mere length.
-5. Slice = wire lines past `-WireOffset`, log bytes past `-LogOffset`. Any unparseable line in the slice: fail `wire-malformed`.
-6. **Session-scoped checks, only when `-Kind fresh`**: require exactly two `config.update`, one `tools.set_active_tools`, one `llm.tools_snapshot`, one `permission.set_mode`. Compare `profileName` and `systemPrompt` against `-AgentFile`'s parsed name and body; `names`/`disallowedNames` against its two lists; the snapshot's tool names against the allowlist. When `-Kind resume`, require these records to be ABSENT from the slice — their presence means the resume started a new session and the debate state is lost, which is the failure the old lane caught with its session-kind check.
-7. **Per-call checks, both kinds**: exactly one `turn.prompt`; at least one `llm.request`, with EVERY one carrying `-Provider`, `-Model` and `-Effort`; exactly one new `llm config` line in the log slice carrying the same three plus `toolCount` equal to the allowlist length and `systemPromptChars` equal to the agent body's length.
-8. Hash the concatenation of every `turn.prompt` `input[]` element's `text`, UTF-8, CRLF normalized to LF; unequal to `-ExpectedBriefSha256`: fail `brief-hash`.
-9. On success emit `status: clean`, the next call's `wireOffset`, `logOffset` and `prefixSha256`, and `toolsHash` and `systemPromptHash` for the caller to compare across rounds and record.
+1. `-PriorState` unreadable, malformed, or missing any required field: fail `prior-state-unusable`. An unmade measurement is never a clean one, and this object IS the measurement.
+2. `-Kind fresh` while `sessionDirExisted` is true: fail `stale-session-dir`. The pre-dispatch capture supplies that fact; the validator cannot observe it after the call, which is why it is an input.
+3. Session directory absent or unreadable: fail `session-dir-missing`. Wire or log file absent: fail `evidence-file-missing`.
+4. Either file shorter in BYTES than its prior offset: fail `truncated`. Do NOT re-read from zero — a replacement's opening records may belong to any round while looking like evidence.
+5. Re-hash each file's first N raw bytes, N being its prior offset, and compare to `wirePrefixSha256` and `logPrefixSha256` INDEPENDENTLY. Either unequal: fail `prefix-replaced`. Both files get this, not just the wire: the open rotation question is specifically about the log, and r3 protected the log by length alone.
+6. Slice = bytes past each file's offset, wire slice then parsed as lines. Any unparseable line in the wire slice: fail `wire-malformed`.
+7. **Slice boundary check.** The wire slice's FIRST record must be a session-creation record when `-Kind fresh`, or a `turn.prompt` when `-Kind resume`. An offset landing mid-call otherwise yields a slice holding the previous call's trailing `llm.request` records plus this call's prompt and requests, which satisfies every count and value check while mixing two calls. Fail `slice-misaligned`.
+8. **Session-scoped checks, only when `-Kind fresh`**: exactly two `config.update`, one `tools.set_active_tools`, one `llm.tools_snapshot`, one `permission.set_mode`. Compare, on the FIRST `config.update` shape, `profileName` and `systemPrompt` against `-AgentFile`'s parsed name and body; on the SECOND shape, `modelAlias` against `-Model` and `thinkingEffort` against `-Effort` — r3 counted both and compared neither. Compare `names`/`disallowedNames` against the agent file's two lists, the snapshot's tool names against the allowlist, and `permission.set_mode`'s `mode` against `auto` — r3 counted that record without ever reading its value, which is a check that cannot fail. The two `config.update` shapes are distinguished by which keys they carry, not by their order.
+   When `-Kind resume`, require all four record types ABSENT from the slice. Their presence means the resume started a new session and the debate state is lost — the failure the old lane caught with its session-kind check.
+9. **Per-call checks, both kinds**: exactly one `turn.prompt`; at least one `llm.request`, with EVERY one carrying `-Provider`, `-Model` and `-Effort`, and every one carrying NONEMPTY `toolsHash` and `systemPromptHash` that are identical across all requests in the slice. One request in a tool loop could otherwise run on a different surface while the emitted hashes come from another. Exactly one new `llm config` line in the log slice, carrying provider, model alias and effort, plus `toolCount` equal to the allowlist length and `systemPromptChars` equal to the agent body's length.
+10. From round 2 onward, compare this slice's `toolsHash` and `systemPromptHash` against `-PriorState`'s; unequal: fail `hash-discontinuity`. r3 left this to the caller, which made it advice rather than a check.
+11. Hash the concatenation of every `turn.prompt` `input[]` element's `text`, UTF-8, CRLF normalized to LF; unequal to `-ExpectedBriefSha256`: fail `brief-hash`.
+12. On success emit `status: clean` and a `nextState` carrying both byte offsets, both prefix hashes, `sessionDirExisted: true`, and the two hashes.
 
 - [ ] **Step 5: Run the tests**
 
@@ -650,11 +755,11 @@ Command lines use `<kimi-code-binary>` as the placeholder, never a bare `kimi`, 
 
 - [ ] **Step 4: Rewrite Per-round evidence**
 
-- Region `round-freshness-boundary`: the files are cumulative, so before every call capture the wire line count, the log byte length, AND a SHA-256 of the wire file's existing lines; after the call read only past the offsets, and require the prefix hash to be unchanged. A fresh call's session directory must not exist beforehand and its offsets are zero. A file shorter than its offset, or absent, or whose prefix hash changed, was replaced: that is a route-attribution failure and specifically not a reason to re-read from zero. The prefix hash is what makes this prove identity rather than length — length alone passes a file replaced, truncated and regrown.
+- Region `round-freshness-boundary`: the files are cumulative, so before every call capture, for BOTH the wire transcript and the per-session log, the BYTE length and a SHA-256 over exactly those bytes, together with whether the session directory already existed; after the call read only past the byte offsets and require both prefix hashes unchanged. A fresh call's session directory must not exist beforehand and its offsets are zero. A file shorter than its offset, or absent, or whose prefix hash changed, was replaced: that is a route-attribution failure and specifically not a reason to re-read from zero. Byte offsets and a hash over raw bytes are what make this unambiguous, and hashing BOTH files is what makes it prove identity rather than length, since length alone passes a file replaced, truncated and regrown. The slice must also BEGIN at a call boundary — a session-creation record for a fresh call, a `turn.prompt` for a resume — because an offset landing mid-call yields a slice mixing the previous call's trailing records with this one's while satisfying every count and value check.
 
 - Region `per-round-session-evidence`: state the TWO RECORD CLASSES explicitly, because one rule cannot cover both and a rule that assumed it could was measured to fail a clean round 1 and every resumed round. Session-scoped records — `config.update` twice, `tools.set_active_tools`, `llm.tools_snapshot` and `permission.set_mode` once each — appear ONLY in the session-creating call's slice; require them there and require their ABSENCE from a resume's slice, since their presence means the resume silently started a new session. Per-call records — exactly one `turn.prompt`, one or more `llm.request` with every one carrying the canonical provider, model and effort, and exactly one new `llm config` log line carrying those plus `toolCount` and `systemPromptChars` — appear in every slice. `llm.request` tracks the tool loop and is bounded from below, never fixed. Run `tools/read-kimi-round-evidence.ps1` with the captured offsets and require `status: clean`; a missing directory, a missing or miscounted record, an unreadable file, a malformed line, or any inequality is a route-attribution failure, the reply is DISCARDED unread, and the failure goes to the fallbacks.md consent gate.
 
-- Region `evidence-hash-continuity`: record `toolsHash` and `systemPromptHash` in round 1, require every later round of the debate to match, and RECORD BOTH VALUES IN THE DEBATE RECORD. They are deliberately not pinned to a literal in this repo, because they cover tool schemas any client release may reword and a committed literal would fail every round for a reason that is not a route problem. Recording them is what makes a client upgrade's change visible instead of silently rebaselined at the next round 1.
+- Region `evidence-hash-continuity`: record `toolsHash` and `systemPromptHash` in round 1; the validator itself requires every later round to match, rather than leaving the comparison to a driver who might not make it, and both values are RECORDED IN THE DEBATE RECORD. They are deliberately not pinned to a literal in this repo, because they cover tool schemas any client release may reword and a committed literal would fail every round for a reason that is not a route problem. Recording them is what makes a client upgrade's change visible instead of silently rebaselined at the next round 1.
 
 - Region `brief-hash-binding`: hash the brief before dispatch and require the recorded prompt to match, canonicalized as UTF-8 with CRLF normalized to LF over the concatenation of every `turn.prompt` `input[]` element's `text` field. r2 said "hashes to the same value" while its own evidence matched only after newline normalization — an undefined step a driver would have to invent.
 
@@ -808,10 +913,11 @@ Expected: PASS. Record any failing case by name; do not proceed without deciding
 The lane has reviewed nothing until it has. Against a small real diff:
 
 1. Build the debate home. Build the mirror.
-2. **Capture the offsets and the prefix hash BEFORE dispatching** — r2 wrote "dispatch, capture offsets", reversing the one rule the whole design rests on.
-3. Dispatch round 1. Run the validator with `-Kind fresh`. Require `status: clean`.
-4. Resume for round 2 with `-m` and `--skills-dir` re-pinned, using the offsets the validator returned. Run it with `-Kind resume`. Require `status: clean`, and confirm it is validating round 2's records and not round 1's — the validator's own stale test covers the logic, and this confirms it on live data.
-5. Confirm `toolsHash` and `systemPromptHash` match between rounds.
+2. **Write the prior-state file BEFORE dispatching** — both byte offsets, both prefix hashes, and `sessionDirExisted`. r2 wrote "dispatch, capture offsets", reversing the one rule the whole design rests on. For round 1 the session directory does not exist, so offsets are zero, the prefix hashes are the SHA-256 of the empty byte string, and `sessionDirExisted` is false.
+3. Dispatch round 1. Run the validator with `-Kind fresh` and that prior-state file. Require `status: clean`. **Persist the returned `nextState` to disk** — it carries both offsets AND both prefix hashes AND the two continuity hashes, and round 2 cannot be validated without all of them.
+4. Resume for round 2 with `-m` and `--skills-dir` re-pinned, passing the persisted `nextState` as `-PriorState`. Run with `-Kind resume`. Require `status: clean`, and confirm it is validating round 2's records and not round 1's.
+5. Confirm the validator itself rejected nothing on hash continuity, and record both hashes in the debate record.
+6. **Negative confirmation on live data**: re-run the round-2 validation with round 1's ORIGINAL prior state instead of the persisted one, and confirm it FAILS. A freshness rule that has never been seen to reject anything on real data is untested where it matters.
 6. Retain every artifact under `rounds/2026-07-31-kimi-code-swap/`, then remove the home.
 
 This is also what item 15 requires before `kimi-cli` may be removed in a later cycle.
