@@ -151,3 +151,26 @@ def test_a_hostile_effort_is_refused_not_rendered(tmp_path):
         capture_output=True, text=True, timeout=60)
     assert proc.returncode != 0, proc.stdout + proc.stderr
     assert not target.exists(), "a hostile -Effort must be refused before any directory is created"
+
+
+@pytest.mark.skipif(POWERSHELL is None, reason="no PowerShell host on PATH")
+def test_a_model_with_a_trailing_newline_is_refused(tmp_path):
+    """Fix-round-2 finding (Open 1 from Critical 1): in .NET regex, $
+    matches before a single trailing newline at the end of the string even
+    without multiline mode, so the original '^[...]*$' pattern let a
+    -Model ending in exactly one literal newline through despite the
+    newline itself not being in the documented allowed set - confirmed
+    live, both in isolation against the pattern and by running the real
+    script, which sailed past validation and went on to create
+    directories. The anchors are now \\A and \\z, which admit no such
+    exception. This does not reopen the hooks-injection attack (quotes and
+    brackets are still excluded), but the requirement was to reject
+    anything outside the strict set, and a trailing newline is outside it."""
+    target = tmp_path / "trailing-newline-home"
+    proc = subprocess.run(
+        [POWERSHELL, "-NoProfile", "-ExecutionPolicy", "Bypass",
+         "-File", str(BUILDER), "-Path", str(target),
+         "-Model", "kimi-code/test-placeholder-model\n"],
+        capture_output=True, text=True, timeout=60)
+    assert proc.returncode != 0, proc.stdout + proc.stderr
+    assert not target.exists(), "a -Model with a trailing newline must be refused before any directory is created"

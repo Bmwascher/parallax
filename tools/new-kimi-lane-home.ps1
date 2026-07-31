@@ -48,7 +48,16 @@ $SentinelMagic = "PARALLAX-LANE-HOME-V1"
 # Everything this pattern allows is also everything the render below
 # needs: letters, digits, dot, dash, underscore, slash. Nothing outside
 # it can close a TOML string or open a new table.
-$SafeTokenPattern = '^[A-Za-z0-9][A-Za-z0-9._/-]*$'
+#
+# \A and \z, not ^ and $: in .NET regex, $ matches before a single
+# trailing newline at the end of the string even without multiline mode,
+# so '^[...]*$' let a value ending in exactly one literal newline through
+# despite the newline itself not being in the allowed set - reproduced
+# live (a hostile -Model ending in "\n" passed this check and the script
+# went on to create directories). \A and \z mean absolute start and
+# absolute end of the string, with no such exception, so nothing outside
+# the allowed set can pass, trailing newline included.
+$SafeTokenPattern = '\A[A-Za-z0-9][A-Za-z0-9._/-]*\z'
 function Test-SafeConfigToken([string]$Value) {
     return ($Value -match $SafeTokenPattern)
 }
@@ -233,10 +242,32 @@ if (-not (Test-Path -LiteralPath $credentialSource)) {
 $createdByThisInvocation = $false
 try {
     # This is the ONLY directory-creation in Build mode, and everything
-    # above it is read-only. -Force also creates the parent chain if it is
-    # still missing - the sole place that happens, now that every refusal
-    # gate has already passed and this creation lives inside the scope the
-    # catch below cleans up.
+    # above it is read-only. New-Item -Force creates the WHOLE missing
+    # ancestor chain silently when $Path is nested under directories that
+    # do not exist yet, not just the leaf - reproduced live via
+    # PARALLAX_LANE_HOME_FAULT against a target several levels below an
+    # existing directory: the leaf was correctly removed on failure, but
+    # the missing ancestors New-Item had also created were left behind,
+    # because the catch below removed only $resolved.
+    #
+    # So the chain New-Item is ABOUT TO create is recorded BEFORE it runs,
+    # by walking up from $Path to the nearest directory that already
+    # exists - recorded rather than inferred afterwards, because inferring
+    # is how a cleanup deletes something that was already there. The
+    # SHALLOWEST missing directory is what cleanup actually removes:
+    # everything New-Item creates lands inside it, so removing it
+    # recursively removes exactly what this invocation created and
+    # nothing that existed beforehand.
+    $missingChain = New-Object System.Collections.Generic.List[string]
+    $walk = $fullPath
+    while ($walk -and -not (Test-Path -LiteralPath $walk)) {
+        $missingChain.Insert(0, $walk)
+        $nextUp = Split-Path -Path $walk -Parent
+        if (-not $nextUp -or $nextUp -eq $walk) { break }
+        $walk = $nextUp
+    }
+    $cleanupRoot = $missingChain[0]
+
     New-Item -ItemType Directory -Force -Path $Path | Out-Null
     $resolved = (Resolve-Path -LiteralPath $Path).Path
 
@@ -325,7 +356,11 @@ enabled = true
     New-Item -ItemType Directory -Path (Join-Path $resolved "skills") | Out-Null
 } catch {
     if ($createdByThisInvocation) {
-        Remove-Item -LiteralPath $resolved -Recurse -Force
+        # $cleanupRoot, not $resolved: $resolved is only the leaf, and a
+        # nested target can leave empty ancestor directories above it that
+        # this invocation also created. Removing $cleanupRoot removes the
+        # whole chain this invocation created in one shot.
+        Remove-Item -LiteralPath $cleanupRoot -Recurse -Force
     }
     throw
 }
