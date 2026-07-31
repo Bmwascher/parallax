@@ -12,7 +12,8 @@
 
 - **r1** — first draft, unreviewed.
 - **r2** — after Sol round 1 (10 FIX). Restored the freshness boundary that r1 deleted along with the offset rule; added a validator and credential handling.
-- **r4, this one** — after Sol round 3 (1 PASS, 5 FIX). `--skills-dir`-as-mitigation passed and is settled. Fixed: a tautological `KNOWN_TOOLS`; an uncallable `-Remove` (now parameter sets); an impossible drift stub (production resolves `kimi.exe` or `kimi.cmd`); a present-but-unusable binary falling into the "absent" note; a plantable bare-filename sentinel; the log protected by length while the wire got a hash; an undefined prefix-hash framing (offsets are now BYTES); an offset landing mid-call passing every check; and the uncompared second `config.update`, `permission.set_mode.mode`, and per-request hash identity. The validator now takes a single `-PriorState` object and enforces hash continuity itself.
+- **r5, this one** — after Sol round 4 (1 PASS, 4 FIX). Sol WITHDREW its demand that the plan prescribe the validator's parsing algorithm, agreeing that an independently written test suite covering every observable invariant is the better specification. Fixed: a failed `--help` still ran the flag loop and emitted five findings describing nothing; an uncaught `--help` throw; `-PriorState` claiming a binding while carrying nothing identifying its session; destructive root guards never exercised with a well-formed sentinel; an unclear fault seam; step misnumbering; and eight missing test cases. Three overclaims narrowed: the floor is a lower bound and forces no re-probe; resume results hold for the four flags tested, not all flags; and record ORDER is now measured rather than assumed — a fresh slice opens with `metadata`, which is not what the rule first said.
+- **r4** — after Sol round 3 (1 PASS, 5 FIX). `--skills-dir`-as-mitigation passed and is settled. Fixed: a tautological `KNOWN_TOOLS`; an uncallable `-Remove` (now parameter sets); an impossible drift stub (production resolves `kimi.exe` or `kimi.cmd`); a present-but-unusable binary falling into the "absent" note; a plantable bare-filename sentinel; the log protected by length while the wire got a hash; an undefined prefix-hash framing (offsets are now BYTES); an offset landing mid-call passing every check; and the uncompared second `config.update`, `permission.set_mode.mode`, and per-request hash identity. The validator now takes a single `-PriorState` object and enforces hash continuity itself.
 - **r3** — after Sol round 2 (5 FIX) and a six-call measurement session recorded in `rounds/2026-07-31-kimi-code-swap/probe-record-2.md`. r2's central evidence rule was **measured to be wrong in both directions**: it fails a clean round 1 and every resumed round. Sol round 2's fourteen defects are fixed here, and three of its objections are resolved by measurement rather than argument.
 
 Sol plan-debate session `019fb913-1b73-7ab0-961d-ff2ae3a6b4f7`. Round replies retained beside this plan.
@@ -42,7 +43,9 @@ Stated once, here, because five tasks depend on them.
 
 **`systemPromptChars` equals the agent file's body length exactly** (431 in every measured session). `toolCount` equalled the allowlist length on every call.
 
-**Resume accepts** `-m`, `--skills-dir` and `--add-dir`; it REJECTS `--agent-file` at parse time with `the agent is bound at session creation`.
+**Of the four flags tested with a resume**, `-m`, `--skills-dir` and `--add-dir` are accepted and `--agent-file` is REJECTED at parse time with `the agent is bound at session creation`. Nothing is established about flags outside that set.
+
+**Record ORDER in a fresh session** is `metadata`, `config.update`, `tools.set_active_tools`, `config.update`, `permission.set_mode`, `turn.prompt`. A resumed call's slice opens with `turn.prompt`.
 
 **`--skills-dir` changes nothing measurable** in this configuration: with two canary skills planted at both documented project roots, runs with and without it were identical and the reviewer reported `NONE` available. It is a mitigation, not a control.
 
@@ -184,15 +187,23 @@ if (-not $kimiExe) {
 } elseif ($versionExit -ne 0 -or -not $kimiVersion) {
     $findings += "[CRITICAL] kimi-code is installed at $kimiExe but did not report a usable version (exit $versionExit) - an unmade version check is never a passing one; the backup lane is UNAVAILABLE"
 } else {
-    $kimiHelp = (& $kimiExe --help 2>&1 | Out-String)
-    $helpExit = $LASTEXITCODE
+    $kimiHelp = ""
+    $helpExit = -1
+    try {
+        $kimiHelp = (& $kimiExe --help 2>&1 | Out-String)
+        $helpExit = $LASTEXITCODE
+    } catch { $helpExit = -1 }
     if ($helpExit -ne 0 -or -not $kimiHelp.Trim()) {
-        $findings += "[CRITICAL] kimi-code --help exited $helpExit or printed nothing - the transport surface could not be measured"
-    }
-    foreach ($flag in @("--agent-file", "--skills-dir", "-m", "-p", "--session")) {
-        $flagPattern = '(^|[\s,\[])' + [regex]::Escape($flag) + '($|[\s,\]=])'
-        if (-not [regex]::IsMatch($kimiHelp, $flagPattern)) {
-            $findings += "[CRITICAL] kimi-code --help ($kimiVersion) no longer lists $flag - the backup lane's transport commands are broken; update references/backup-lane.md"
+        # STOP here. Running the flag loop against missing or error output
+        # emits five more findings that describe nothing - the same
+        # false-finding class this task exists to remove.
+        $findings += "[CRITICAL] kimi-code --help exited $helpExit or printed nothing - the transport surface could not be measured, so no flag conclusion is available"
+    } else {
+        foreach ($flag in @("--agent-file", "--skills-dir", "-m", "-p", "--session")) {
+            $flagPattern = '(^|[\s,\[])' + [regex]::Escape($flag) + '($|[\s,\]=])'
+            if (-not [regex]::IsMatch($kimiHelp, $flagPattern)) {
+                $findings += "[CRITICAL] kimi-code --help ($kimiVersion) no longer lists $flag - the backup lane's transport commands are broken; update references/backup-lane.md"
+            }
         }
     }
     $parsedFloor = $null
@@ -386,10 +397,14 @@ def test_removal_is_callable_and_guarded():
 def test_removal_refuses_dangerous_roots():
     """Belt and braces on top of the sentinel: even a correctly-formed
     sentinel must not authorize deleting a drive root, the user profile,
-    or a repository root."""
+    or a repository root. Task 3 Step 5 exercises all three live, each
+    with a correctly-formed sentinel - a guard that has only ever seen a
+    malformed sentinel has not been tested."""
     body = _read(BUILDER)
     assert "refusing to remove" in body
     assert "$env:USERPROFILE" in body
+    assert "IsPathRooted" in body
+    assert ".git" in body
 
 
 def test_a_failed_build_leaves_no_credential_behind():
@@ -453,8 +468,8 @@ Under BOTH `powershell.exe` and `pwsh` — 0.16.1's lock defect was green on one
 - Re-run the build against the same path: expect refusal.
 - Build inside a git work tree: expect refusal.
 - **Inspect the effective ACL** with `Get-Acl <home> | Format-List`, and confirm only the current identity appears. r2 asserted the ACL API call existed and never looked at the result.
-- **Fault-test the cleanup**: build with `PARALLAX_LANE_HOME_FAULT=1` set, confirm the command fails AND the directory is gone, so no credential copy survives a mid-build failure.
-- Run `-Remove` on a real home: gone. On a directory with no sentinel: refused. On a directory carrying a sentinel whose second line names a DIFFERENT path: refused. On `$env:USERPROFILE`: refused.
+- **Fault-test the cleanup**: build with `PARALLAX_LANE_HOME_FAULT=1` set, confirm the command fails AND the directory is gone, so no credential copy survives a mid-build failure. **Then clear the variable** — leaving it set makes every later build in that shell fail for a reason nobody will look for.
+- Run `-Remove` on a real home: gone. On a directory with no sentinel: refused. On a directory carrying a sentinel whose second line names a DIFFERENT path: refused. Then exercise the destructive guards themselves, each with a CORRECTLY formed sentinel planted for that exact path, because a guard that only ever sees a malformed sentinel has never been tested: on `$env:USERPROFILE`, refused; on a drive root, refused; on a directory containing a `.git` entry, refused.
 - Confirm `-Remove` works without `-Model`, which is the whole reason for the parameter sets.
 
 - [ ] **Step 6: Commit**
@@ -522,8 +537,15 @@ DENYLIST = ["Bash", "Write", "Edit", "WebSearch", "FetchURL",
 # Every built-in tool documented for 0.31.1, written out INDEPENDENTLY of
 # the two lists above. r3 defined this as their union and then compared the
 # union back to it, which is a tautology that detects neither a swapped
-# name nor an omission. A release that adds a tool must edit this literal,
-# which is what makes the addition a reviewed event.
+# name nor an omission.
+#
+# Accepted limit, stated plainly because r4 caught the earlier wording
+# overclaiming: NOTHING here detects a tool a future client adds. The
+# floor check is a LOWER BOUND - it rejects releases below 0.31.1 and
+# accepts every newer one, so it does not force a re-probe at upgrade.
+# Re-probing the inventory is a manual step at any deliberate version
+# bump, and the drift snapshot's recorded version is what makes such a
+# bump visible.
 KNOWN_TOOLS = {
     "Read", "Write", "Edit", "Grep", "Glob", "ReadMediaFile", "Bash",
     "WebSearch", "FetchURL", "EnterPlanMode", "ExitPlanMode", "TodoList",
@@ -563,8 +585,10 @@ def test_the_two_lists_partition_the_known_inventory():
     stayed green if a real name were swapped for a nonexistent one.
 
     Accepted limit, stated so it stays deliberate: this cannot see a tool
-    a FUTURE client adds. Nothing offline can. The floor check in
-    check-drift.ps1 is what forces a re-probe at upgrade."""
+    a FUTURE client adds, and nothing offline can. The floor is a LOWER
+    bound and accepts every newer release, so it does not force a
+    re-probe either - re-probing is a manual step at a deliberate version
+    bump, made visible by the drift snapshot's recorded version."""
     assert not (set(ALLOWLIST) & set(DENYLIST))
     assert set(ALLOWLIST) | set(DENYLIST) == KNOWN_TOOLS
 
@@ -624,7 +648,7 @@ git commit -m "replace the kimi reviewer agent pair with one markdown agent file
 - Produces:
   `tools/read-kimi-round-evidence.ps1 -SessionDir <dir> -Kind <fresh|resume> -PriorState <path-to-json> -Model <id> -Provider <name> -Effort <level> -AgentFile <path> -ExpectedBriefSha256 <hex> -Json`
 
-  `-PriorState` is a JSON file, written by the previous invocation or by the pre-dispatch capture step, carrying: `sessionDirExisted` (bool), `wireBytes`, `logBytes`, `wirePrefixSha256`, `logPrefixSha256`, and — from round 2 onward — `toolsHash` and `systemPromptHash`. Exits 0 printing `{"status":"clean", "nextState": {...}}` only when every check passes; otherwise exits non-zero with `"status":"failed"` and a `reason`. `nextState` has the same shape and is fed to the next call.
+  `-PriorState` is a JSON file, written by the previous invocation or by the pre-dispatch capture step, carrying: `sessionDir` (the resolved path this state describes), `sessionId`, `sessionDirExisted` (bool), `wireBytes`, `logBytes`, `wirePrefixSha256`, `logPrefixSha256`, and — from round 2 onward — `toolsHash` and `systemPromptHash`. The first two are what make the binding real: r3's state object claimed to bind an invocation to its predecessor while carrying nothing that identified WHICH session it described, so a state from another debate would have been rejected only incidentally, by a prefix hash that happened not to match. Exits 0 printing `{"status":"clean", "nextState": {...}}` only when every check passes; otherwise exits non-zero with `"status":"failed"` and a `reason`. `nextState` has the same shape and is fed to the next call.
 
 Four interface points are direct review fixes:
 
@@ -659,17 +683,25 @@ Freshness cases:
 - **a LOG whose prefix no longer hashes** fails the same way — the rotation question is about the log, and length-only protection there was r3's asymmetry
 - `-Kind fresh` with `sessionDirExisted: true` fails
 - a `-PriorState` that is missing, malformed, or missing a field fails
+- a `-PriorState` with a WRONG-TYPED field fails: a string offset, a negative offset, a 63-character hash, `sessionDirExisted` as `"false"`
 - a prior state from an OLDER round, replayed, fails rather than validating
+- a prior state whose `sessionDir` or `sessionId` names a DIFFERENT session fails `state-session-mismatch`, rather than being caught incidentally by a prefix hash
+- internally inconsistent states fail: `-Kind fresh` with nonzero offsets; `-Kind fresh` carrying continuity hashes; `-Kind resume` with `sessionDirExisted: false`
+- the slice-boundary case in both directions: a fresh slice not beginning with `metadata`, and a resume slice not beginning with `turn.prompt`
 
 Missing and malformed:
 - missing session directory; missing wire file; missing log file
 - a non-JSON line inside the slice fails rather than being skipped
+- a VALID-JSON record with a structurally invalid field fails `record-malformed` rather than throwing or coercing: `input` not an array, `input[0]` with no `text`, `toolsHash` not a string
+- a missing or unreadable `-AgentFile`, and one whose frontmatter does not parse, fail `agent-file-unusable`
+- an `-ExpectedBriefSha256` that is not 64 hex characters fails `bad-argument`
 - missing `turn.prompt`; two `turn.prompt` in one slice
 - zero `llm.request` in a slice
 - missing `llm config` line; two `llm config` lines in one log slice
 - session-scoped records missing from a FRESH slice: absent `config.update`, absent `tools.set_active_tools`, absent `llm.tools_snapshot`, absent `permission.set_mode`
 - duplicated `config.update` (three of them), duplicated `tools.set_active_tools`, duplicated `llm.tools_snapshot`, duplicated `permission.set_mode` in a fresh slice
 - two copies of the FIRST `config.update` shape with the second shape absent — the count is right and the content is not
+- the symmetric case: two copies of the SECOND shape with the first absent
 - **a RESUME slice containing any session-scoped record**, one case per record type. This is the resume branch's whole reason for existing and r3 gave it no negative test at all.
 
 Inequality:
@@ -683,6 +715,7 @@ Inequality:
 - **`permission.set_mode.mode` not `auto`**
 - `modelAlias`, `provider` or `thinkingEffort` wrong on ANY `llm.request` in the slice, not merely the first
 - **`toolsHash` or `systemPromptHash` missing, empty, or differing BETWEEN requests inside one slice**
+- **requests carrying a consistent `toolsHash` that DISAGREES with `llm.tools_snapshot.hash`**, and a snapshot whose `hash` field is absent
 - **`toolsHash` or `systemPromptHash` differing from `-PriorState`'s** on a later round
 - provider, model or effort wrong in the LOG line while correct in the requests — r3's inequality cases covered requests only
 - `turn.prompt` text not hashing to `-ExpectedBriefSha256`
@@ -696,19 +729,22 @@ Expected: FAIL, all.
 
 Rules, in this order:
 
-1. `-PriorState` unreadable, malformed, or missing any required field: fail `prior-state-unusable`. An unmade measurement is never a clean one, and this object IS the measurement.
-2. `-Kind fresh` while `sessionDirExisted` is true: fail `stale-session-dir`. The pre-dispatch capture supplies that fact; the validator cannot observe it after the call, which is why it is an input.
-3. Session directory absent or unreadable: fail `session-dir-missing`. Wire or log file absent: fail `evidence-file-missing`.
-4. Either file shorter in BYTES than its prior offset: fail `truncated`. Do NOT re-read from zero — a replacement's opening records may belong to any round while looking like evidence.
-5. Re-hash each file's first N raw bytes, N being its prior offset, and compare to `wirePrefixSha256` and `logPrefixSha256` INDEPENDENTLY. Either unequal: fail `prefix-replaced`. Both files get this, not just the wire: the open rotation question is specifically about the log, and r3 protected the log by length alone.
-6. Slice = bytes past each file's offset, wire slice then parsed as lines. Any unparseable line in the wire slice: fail `wire-malformed`.
-7. **Slice boundary check.** The wire slice's FIRST record must be a session-creation record when `-Kind fresh`, or a `turn.prompt` when `-Kind resume`. An offset landing mid-call otherwise yields a slice holding the previous call's trailing `llm.request` records plus this call's prompt and requests, which satisfies every count and value check while mixing two calls. Fail `slice-misaligned`.
-8. **Session-scoped checks, only when `-Kind fresh`**: exactly two `config.update`, one `tools.set_active_tools`, one `llm.tools_snapshot`, one `permission.set_mode`. Compare, on the FIRST `config.update` shape, `profileName` and `systemPrompt` against `-AgentFile`'s parsed name and body; on the SECOND shape, `modelAlias` against `-Model` and `thinkingEffort` against `-Effort` — r3 counted both and compared neither. Compare `names`/`disallowedNames` against the agent file's two lists, the snapshot's tool names against the allowlist, and `permission.set_mode`'s `mode` against `auto` — r3 counted that record without ever reading its value, which is a check that cannot fail. The two `config.update` shapes are distinguished by which keys they carry, not by their order.
+1. `-PriorState` unreadable, malformed, missing any required field, or carrying a field of the wrong TYPE — a string where a number belongs, a negative offset, a hash that is not 64 hex characters, `sessionDirExisted` as a string: fail `prior-state-unusable`. An unmade measurement is never a clean one, and this object IS the measurement.
+2. `-PriorState.sessionDir` not equal to the resolved `-SessionDir`, or its `sessionId` not equal to that directory's name: fail `state-session-mismatch`. This is what makes the binding explicit rather than incidental.
+3. Internally inconsistent state: `-Kind fresh` with nonzero offsets or with continuity hashes present, or `-Kind resume` with `sessionDirExisted: false`. Fail `state-inconsistent`. Each describes a history that cannot have happened, and a validator that proceeds from one is reasoning from a fiction.
+4. `-AgentFile` missing, unreadable, or whose frontmatter does not parse into a name, a `tools` list and a `disallowedTools` list: fail `agent-file-unusable`. The validator compares against it, so an unreadable one makes every comparison vacuous. `-ExpectedBriefSha256` that is not 64 hex characters: fail `bad-argument`.
+5. `-Kind fresh` while `sessionDirExisted` is true: fail `stale-session-dir`. The pre-dispatch capture supplies that fact; the validator cannot observe it after the call, which is why it is an input.
+6. Session directory absent or unreadable: fail `session-dir-missing`. Wire or log file absent: fail `evidence-file-missing`.
+7. Either file shorter in BYTES than its prior offset: fail `truncated`. Do NOT re-read from zero — a replacement's opening records may belong to any round while looking like evidence.
+8. Re-hash each file's first N raw bytes, N being its prior offset, and compare to `wirePrefixSha256` and `logPrefixSha256` INDEPENDENTLY. Either unequal: fail `prefix-replaced`. Both files get this, not just the wire: the open rotation question is specifically about the log, and r3 protected the log by length alone.
+9. Slice = bytes past each file's offset, wire slice then parsed as lines. Any unparseable line in the wire slice: fail `wire-malformed`. A line that IS valid JSON but structurally wrong for its type — `input` not an array, a missing `text`, a hash that is not a string — must also fail, with `record-malformed`, never throw and never silently coerce.
+10. **Slice boundary check.** The wire slice's FIRST record must be `metadata` when `-Kind fresh`, and `turn.prompt` when `-Kind resume`. Measured 2026-07-31: a fresh session's records open `metadata`, `config.update`, `tools.set_active_tools`, `config.update`, `permission.set_mode`, `turn.prompt`. An offset landing mid-call otherwise yields a slice holding the previous call's trailing `llm.request` records plus this call's prompt and requests, which satisfies every count and value check while mixing two calls. Fail `slice-misaligned`.
+11. **Session-scoped checks, only when `-Kind fresh`**: exactly two `config.update`, one `tools.set_active_tools`, one `llm.tools_snapshot`, one `permission.set_mode`. Compare, on the FIRST `config.update` shape, `profileName` and `systemPrompt` against `-AgentFile`'s parsed name and body; on the SECOND shape, `modelAlias` against `-Model` and `thinkingEffort` against `-Effort` — r3 counted both and compared neither. Compare `names`/`disallowedNames` against the agent file's two lists, the snapshot's tool names against the allowlist, and `permission.set_mode`'s `mode` against `auto` — r3 counted that record without ever reading its value, which is a check that cannot fail. The two `config.update` shapes are distinguished by which keys they carry, not by their order.
    When `-Kind resume`, require all four record types ABSENT from the slice. Their presence means the resume started a new session and the debate state is lost — the failure the old lane caught with its session-kind check.
-9. **Per-call checks, both kinds**: exactly one `turn.prompt`; at least one `llm.request`, with EVERY one carrying `-Provider`, `-Model` and `-Effort`, and every one carrying NONEMPTY `toolsHash` and `systemPromptHash` that are identical across all requests in the slice. One request in a tool loop could otherwise run on a different surface while the emitted hashes come from another. Exactly one new `llm config` line in the log slice, carrying provider, model alias and effort, plus `toolCount` equal to the allowlist length and `systemPromptChars` equal to the agent body's length.
-10. From round 2 onward, compare this slice's `toolsHash` and `systemPromptHash` against `-PriorState`'s; unequal: fail `hash-discontinuity`. r3 left this to the caller, which made it advice rather than a check.
-11. Hash the concatenation of every `turn.prompt` `input[]` element's `text`, UTF-8, CRLF normalized to LF; unequal to `-ExpectedBriefSha256`: fail `brief-hash`.
-12. On success emit `status: clean` and a `nextState` carrying both byte offsets, both prefix hashes, `sessionDirExisted: true`, and the two hashes.
+12. **Per-call checks, both kinds**: exactly one `turn.prompt`; at least one `llm.request`, with EVERY one carrying `-Provider`, `-Model` and `-Effort`, and every one carrying NONEMPTY `toolsHash` and `systemPromptHash` that are identical across all requests in the slice. One request in a tool loop could otherwise run on a different surface while the emitted hashes come from another. On a FRESH slice the requests' `toolsHash` must also equal the `llm.tools_snapshot` record's own `hash`: consistent request hashes that contradict the snapshot describing the sent schemas are a disagreement, not a pass. Exactly one new `llm config` line in the log slice, carrying provider, model alias and effort, plus `toolCount` equal to the allowlist length and `systemPromptChars` equal to the agent body's length.
+13. From round 2 onward, compare this slice's `toolsHash` and `systemPromptHash` against `-PriorState`'s; unequal: fail `hash-discontinuity`. r3 left this to the caller, which made it advice rather than a check.
+14. Hash the concatenation of every `turn.prompt` `input[]` element's `text`, UTF-8, CRLF normalized to LF; unequal to `-ExpectedBriefSha256`: fail `brief-hash`.
+15. On success emit `status: clean` and a `nextState` carrying `sessionDir`, `sessionId`, both byte offsets, both prefix hashes, `sessionDirExisted: true`, and the two hashes.
 
 - [ ] **Step 5: Run the tests**
 
@@ -748,7 +784,7 @@ Expected: FAIL both directions.
 Command lines use `<kimi-code-binary>` as the placeholder, never a bare `kimi`, so the pin and the absolute-path instruction agree — r2 said one and pinned the other.
 
 - Dispatch: `<kimi-code-binary> -m <canonical-backup-model-id> --agent-file <plugin-checkout>/skills/multi-model-verify/references/kimi-reviewer-agent.md --skills-dir <debate-home>/skills -p "<the whole brief>"`, working directory set to the review mirror.
-- Resume: `<kimi-code-binary> --session <session-id> -m <canonical-backup-model-id> --skills-dir <debate-home>/skills -p "<rebuttal>"`. Measured: resume ACCEPTS `-m`, `--skills-dir` and `--add-dir`, and rejects only `--agent-file`. Re-pin everything it accepts; it is free and it narrows the inheritance risk to the one flag that cannot be re-pinned.
+- Resume: `<kimi-code-binary> --session <session-id> -m <canonical-backup-model-id> --skills-dir <debate-home>/skills -p "<rebuttal>"`. Measured, and stated at exactly the width of the measurement: of the FOUR flags tested, resume accepts `-m`, `--skills-dir` and `--add-dir`, and rejects `--agent-file`. Nothing was established about flags not in that set. Re-pin the ones measured to be accepted; it is free and it narrows the inheritance risk to the one flag known not to be re-pinnable.
 - Region `lane-home-isolation`: build once before round 1, set `KIMI_CODE_HOME` on every call of the debate, the two independent reasons, and that an unbuildable home or missing credential makes the lane UNAVAILABLE. Remove the home when the debate ends, because it holds a copied credential.
 - Region `resume-inheritance`: what a bare resume was measured to inherit ON 0.31.1, that a wrong-directory resume is refused, that `--agent-file` is rejected because the agent is bound at session creation, and that this is VERSION-BOUND — which is why the floor exists, why what can be re-pinned is re-pinned, and why the evidence check is what actually establishes the surface each round.
 - The brief is passed INLINE, never planted as a file with a pointer, because the hash rule can only detect truncation if the recorded prompt IS the brief. A brief that exceeds the inline transport is a transport failure to diagnose, not a reason to switch to a pointer whose hash proves nothing.

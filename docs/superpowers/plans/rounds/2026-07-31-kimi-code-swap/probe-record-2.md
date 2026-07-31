@@ -46,6 +46,23 @@ call's slice. Measured against that rule:
 `llm.request` count tracks the tool loop — one per model round trip — so it is
 inherently variable and can never be pinned to a constant.
 
+**Record ORDER, added 2026-07-31 after Sol plan-debate round 4 pointed out that
+the counts above establish no ordering.** Read from the same session's
+`wire.jsonl`, a fresh session's first six records are, in order:
+
+```
+metadata
+config.update
+tools.set_active_tools
+config.update
+permission.set_mode
+turn.prompt
+```
+
+So a fresh call's slice opens with `metadata`, NOT with a `config.update` or
+any "session-creation" record — the plan's first wording of the slice-boundary
+rule named the wrong record. A resumed call's slice opens with `turn.prompt`.
+
 **The corrected structure, which the plan must adopt.** Records fall into two
 classes, and one rule cannot cover both:
 
@@ -128,10 +145,11 @@ must say exactly that and must not list thinking beside effort as though both
 were confirmed per call. The model's `capabilities` include `always_thinking`,
 which may be why the key has no observable effect, but that is unconfirmed.
 
-## FINDING 6 — resume accepts every flag except the agent
+## FINDING 6 — of four flags tested, resume rejects only the agent file
 
-Tested for free against a nonexistent session id, so flag validation is reached
-without a model call:
+Four flags were tested, not every flag the CLI has. Nothing below establishes
+anything about a flag outside this set. Tested for free against a nonexistent
+session id, so flag validation is reached without a model call:
 
 | flag with `-r` | result |
 | --- | --- |
