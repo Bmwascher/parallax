@@ -450,3 +450,97 @@ def test_an_unparseable_model_table_refuses_instead_of_guessing(tmp_path):
     assert proc.returncode != 0, proc.stdout + proc.stderr
     assert "unparseable line" in proc.stdout + proc.stderr
     assert not target.exists()
+
+
+# --- Fix round 5: a non-empty carried table is not a DISPATCHABLE one ---
+#
+# The count gate only guarded total emptiness. A reviewer reached both of
+# these live against probe tables: a table carrying only display_name and
+# default_effort BUILT, rendering a model with no provider and no model
+# name; and a table naming `managed:some-other-provider` BUILT, rendering
+# a model table that references a provider absent from its own providers
+# table. Both are dormant against today's real config and neither stays
+# dormant once that config grows a second provider. Both failed the same
+# bad way - silent success at build time, confusing client error
+# mid-debate - which is the class of failure every gate in this script
+# exists to convert into a clean build-time refusal.
+
+
+@pytest.mark.skipif(POWERSHELL is None, reason="no PowerShell host on PATH")
+def test_a_model_table_without_a_provider_key_refuses(tmp_path):
+    without_provider = FAKE_REAL_CONFIG.replace(
+        '[models."%s"]\nprovider = "managed:kimi-code"\n' % PLACEHOLDER_MODEL,
+        '[models."%s"]\n' % PLACEHOLDER_MODEL)
+    assert 'provider = "managed:kimi-code"\nmodel = "test-placeholder-model"' \
+        not in without_provider
+    target = tmp_path / "no-provider-home"
+    profile = _fake_profile(tmp_path, without_provider)
+    proc = _build(tmp_path, target, profile)
+    assert proc.returncode != 0, proc.stdout + proc.stderr
+    assert "carries no provider key" in proc.stdout + proc.stderr
+    assert not target.exists()
+
+
+@pytest.mark.skipif(POWERSHELL is None, reason="no PowerShell host on PATH")
+def test_a_model_table_without_a_model_key_refuses(tmp_path):
+    without_model = FAKE_REAL_CONFIG.replace(
+        '\nmodel = "test-placeholder-model"\n', "\n")
+    assert 'model = "test-placeholder-model"' not in without_model
+    target = tmp_path / "no-model-home"
+    profile = _fake_profile(tmp_path, without_model)
+    proc = _build(tmp_path, target, profile)
+    assert proc.returncode != 0, proc.stdout + proc.stderr
+    assert "carries no model key" in proc.stdout + proc.stderr
+    assert not target.exists()
+
+
+@pytest.mark.skipif(POWERSHELL is None, reason="no PowerShell host on PATH")
+def test_a_model_table_naming_an_undeclared_provider_refuses(tmp_path):
+    """The rendered home declares exactly one provider table. A carried
+    `provider` value naming anything else renders a dangling reference."""
+    other_provider = FAKE_REAL_CONFIG.replace(
+        '[models."%s"]\nprovider = "managed:kimi-code"' % PLACEHOLDER_MODEL,
+        '[models."%s"]\nprovider = "managed:some-other-provider"'
+        % PLACEHOLDER_MODEL)
+    assert "managed:some-other-provider" in other_provider
+    target = tmp_path / "other-provider-home"
+    profile = _fake_profile(tmp_path, other_provider)
+    proc = _build(tmp_path, target, profile)
+    assert proc.returncode != 0, proc.stdout + proc.stderr
+    assert "which this home does not declare" in proc.stdout + proc.stderr
+    assert not target.exists()
+
+
+# --- Fix round 5, the two minors: refusals that were structurally sound
+# but exercised by nothing. Each needs only a fake config to drive it.
+
+
+@pytest.mark.skipif(POWERSHELL is None, reason="no PowerShell host on PATH")
+def test_an_unreadable_real_config_refuses(tmp_path):
+    """Present but unreadable is not the same as absent, and it must not
+    fall through to the absent branch's message or to a raw client error.
+    A directory standing where the file belongs passes Test-Path and then
+    fails to read, which is the cheapest real instance of the condition."""
+    target = tmp_path / "unreadable-config-home"
+    profile = _fake_profile(tmp_path, None)
+    (profile / ".kimi-code" / "config.toml").mkdir()
+    proc = _build(tmp_path, target, profile)
+    assert proc.returncode != 0, proc.stdout + proc.stderr
+    assert "could not read" in proc.stdout + proc.stderr
+    assert not target.exists()
+
+
+@pytest.mark.skipif(POWERSHELL is None, reason="no PowerShell host on PATH")
+def test_a_duplicate_model_table_refuses(tmp_path):
+    """Two tables for the same model make which one was carried a matter
+    of scan order, so neither is carried."""
+    duplicated = FAKE_REAL_CONFIG + (
+        '\n[models."%s"]\nprovider = "managed:kimi-code"\n'
+        'model = "test-placeholder-model"\n' % PLACEHOLDER_MODEL)
+    assert duplicated.count('[models."%s"]' % PLACEHOLDER_MODEL) == 2
+    target = tmp_path / "duplicate-table-home"
+    profile = _fake_profile(tmp_path, duplicated)
+    proc = _build(tmp_path, target, profile)
+    assert proc.returncode != 0, proc.stdout + proc.stderr
+    assert "more than once" in proc.stdout + proc.stderr
+    assert not target.exists()

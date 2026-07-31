@@ -312,6 +312,46 @@ if (-not $foundWantedTable) {
 if ($modelTableFieldLines.Count -eq 0) {
     throw "refusing to build: the model table for $Model in $realConfigPath carries no usable fields"
 }
+
+# 4c. A non-empty table is not the same as a DISPATCHABLE one. The count
+# check above only guards total emptiness: a table carrying, say, only
+# display_name passes it while rendering a model with no provider and no
+# model name at all, and a table naming a provider this file does not
+# declare renders a dangling reference. Both build cleanly and then fail
+# mid-debate as a confusing client error, which is exactly the class of
+# failure every other gate here exists to convert into a clean build-time
+# refusal. Both were reached live by a reviewer against probe tables;
+# both are dormant against today's real config, and neither stays dormant
+# once that config grows a second provider.
+#
+# The render below declares exactly ONE provider table. A carried
+# `provider` value naming anything else is a reference to a provider the
+# rendered file does not contain, so it is refused here rather than
+# written out.
+$RenderedProviders = @("managed:kimi-code")
+$hasProviderKey = $false
+$hasModelKey = $false
+$carriedProvider = $null
+foreach ($fieldLine in $modelTableFieldLines) {
+    if ($fieldLine -match '\Aprovider = ') {
+        $hasProviderKey = $true
+        if ($fieldLine -match '\Aprovider = "([^"]*)"\z') {
+            $carriedProvider = $matches[1]
+        }
+    } elseif ($fieldLine -match '\Amodel = ') {
+        $hasModelKey = $true
+    }
+}
+if (-not $hasProviderKey) {
+    throw "refusing to build: the model table for $Model in $realConfigPath carries no provider key, so the rendered home would name no provider to dispatch through"
+}
+if (-not $hasModelKey) {
+    throw "refusing to build: the model table for $Model in $realConfigPath carries no model key, so the rendered home would name no provider-side model to dispatch to"
+}
+if ($RenderedProviders -notcontains $carriedProvider) {
+    throw "refusing to build: the model table for $Model in $realConfigPath names provider '$carriedProvider', which this home does not declare (it declares only: $($RenderedProviders -join ', '))"
+}
+
 $modelTableFields = ($modelTableFieldLines -join [System.Environment]::NewLine)
 
 # 5. $createdByThisInvocation is set ONLY after this invocation has
