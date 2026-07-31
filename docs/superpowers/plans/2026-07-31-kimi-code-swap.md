@@ -1114,4 +1114,73 @@ Three of Sol's round-2 objections were settled by measurement rather than argume
 Two of the whole-branch review's findings are REFUTED, with the evidence, so they are not re-raised:
 
 - **The printed session-id token is not in dispute.** The review read `kimi -r <uuid>` as a probe record contradicting `probe-record-2.md:60-61`. That string is `backup-lane.md:38-39`, the OLD lane's contract for the OLD client, not a measurement of this one. `probe-record.md:126` records only that `-r` survives as a hidden alias and is what the CLI prints; `probe-record-2.md:60-61` separately measured the printed ID to be the leaf's name exactly. One is about the flag, the other about the id, and they agree.
-- **The unused-`-k`-selector concern about `test_the_two_lists_partition_the_known_inventory` being unable to fail loudly is accepted as a limit, not a defect.** Nothing offline can see a tool a future client adds; that limit is stated in the test's own docstring and in the plan, deliberately, and Task 5 Step 3b now closes the one part that IS measurable today.
+- **The concern that `test_the_two_lists_partition_the_known_inventory` cannot fail loudly is accepted as a limit, not a defect.** Nothing offline can see a tool a future client adds; that limit is stated in the test's own docstring and in the plan, deliberately, and Task 5 Step 3b now closes the one part that IS measurable today.
+
+---
+
+## Debate record
+
+**Participants:** Opus 5 (session) / gpt-5.6-sol (codex exec, session `019fb913-1b73-7ab0-961d-ff2ae3a6b4f7`) / Fable (parallax:fable-reviewer, whole-branch seat over `6201e30..f46be73`)
+**Rounds used:** Sol 7 of 8, plus one whole-branch fable review
+**Outcome:** converged with amendments
+**Verification status:** FULL
+**Degradation:** none
+**Authorized by:** n/a
+**Raw rounds:** `docs/superpowers/plans/rounds/2026-07-31-kimi-code-swap/` — `sol-plan-r1..r7-{brief,reply}.md`, `fable-wholebranch-6201e30-f46be73.md`, plus the measured evidence both sides argued from in `probe-record.md` and `probe-record-2.md`
+
+Mode `plan`. The backup lane declined at the user's choice, so this was a
+Sol-only debate under the primary transport, followed by the required
+whole-branch fable seat before the freeze.
+
+### Resolved points
+
+Round-by-round detail is in the revision history above. This table records the
+structural findings, which are the ones a later dispute would need.
+
+| # | Claim | Raised by | Outcome | Evidence |
+|---|-------|-----------|---------|----------|
+| 1 | Deleting the byte-offset rule also deleted per-call FRESHNESS, not only cross-session attribution | reviewer | accepted — restored as region `round-freshness-boundary` | `sol-plan-r1-reply.md` |
+| 2 | `-r` must not be asserted in `--help`; it is a hidden alias | reviewer | accepted into Task 1 | `probe-record.md:126` |
+| 3 | A builder default carrying the canonical model literal would fail the single-source sweep | reviewer | accepted — `-Model` has no default | `test_backup_lane.py:588-593` |
+| 4 | "Exactly one of each session record per slice" | session | REFUTED BY MEASUREMENT — fails a clean round 1 twice and every resumed round three times | `probe-record-2.md:25-47` |
+| 5 | `--skills-dir` is a control | session | REFUTED BY MEASUREMENT — nothing loads either way; it is a mitigation | `probe-record-2.md:110-133` |
+| 6 | Thinking-enabled is verifiable per call | session | REFUTED BY MEASUREMENT — `enabled = false` is byte-identical to `true` | `probe-record-2.md:150-164` |
+| 7 | `KNOWN_TOOLS` defined as the union of the lists it tests is a tautology | reviewer | accepted into Task 5 | `sol-plan-r3-reply.md` |
+| 8 | Binding prior state to `sessionDir`/`sessionId` makes the FRESH case impossible to instantiate — a defect created by the previous round's own fix | reviewer | accepted — Fresh and Resume parameter sets | `sol-plan-r5-reply.md` |
+| 9 | The destructive test planted authorizing sentinels on the REAL user profile and drive root before running new deletion code | reviewer | accepted — disposable sandbox, verified substituted drive, fail-closed setup | `sol-plan-r5-reply.md`, `sol-plan-r7-reply.md` |
+| 10 | "Exactly one new directory" would reject the clean FIRST call of every debate, because the measured topology nests `session_` leaves inside a `wd_` workspace container | reviewer, from the session's own retained probe | accepted — members are `session_` leaves only | `probe-record-2.md:49-65` |
+| 11 | The marked `round-freshness-boundary` REGION still carried the rejected directory-level rule while the validator rule said leaf | reviewer | accepted — the region is the pinned contract, so the rejected rule was about to be frozen in | `sol-plan-r7-reply.md` |
+| 12 | The plan must prescribe the validator's parsing algorithm | reviewer | WITHDRAWN by the reviewer — an independently written test suite is the better specification | `sol-plan-r4-reply.md` |
+| 13 | `toolsHash` should be bound to a client version | reviewer | DECLINED — replaced by recording both hashes in the debate record; a committed literal would fail every round for a reason that is not a route problem | Task 7 Step 4 |
+| 14 | A sacrificial resume write-probe every debate | reviewer | DECLINED — replaced by re-pinning the three flags a resume was measured to accept, plus the floor and the per-round evidence check | Task 7 Step 3 |
+| 15 | Rule 13 asserts a `toolsHash` = snapshot `hash` equality nothing measured, and would fail every clean fresh round if the client hashes them differently | fable | accepted — Task 4 Step 1b measures it free; rule 13 branches on the answer | `fable-wholebranch-6201e30-f46be73.md` |
+| 16 | Four sections of `backup-lane.md` are owned by no task, so the rewrite ships the inline-brief rule and the file-planted rule at once, with nothing able to report it | fable | accepted — Task 7's surface widened, Steps 3b and 3c added | same |
+| 17 | Task 7 Step 7's whole-suite PASS is unreachable: two pins outside its declared range cover text it edits | fable | accepted — Step 3 preserves the encoding bullet, Step 5 rewrites its pin in place | same |
+| 18 | The 16 MB rotation probe has no measured growth rate behind it and could cost hundreds of quota-charged calls | fable | accepted — rate measured first, 40-call budget, achieved depth is the claim's width | same |
+| 19 | The probe records disagree on the printed session-id token | fable | REFUTED — the cited string is the OLD lane's contract at `backup-lane.md:38-39`, not a probe record | `probe-record-2.md:60-61` |
+
+### Escalated points (user-decided)
+
+| # | Question | Session position | Reviewer position | Owner's call |
+|---|----------|------------------|-------------------|--------------|
+| 1 | Conservative port, or full simplification deleting four mechanisms | full simplification | n/a — decided before round 1 | full simplification; Orca hooks removable if they become an issue |
+| 2 | Keep arguing on paper, or measure | measure | n/a | measure — six model calls, recorded in `probe-record-2.md` |
+
+Nothing was escalated unresolved. Every point above is closed.
+
+### Note on the failure mode this cycle exercised
+
+The recurring pattern in this repo — a fix carrying the next round's defect —
+occurred four rounds running (r4 through r7), and each instance was caught by
+the reviewer reading the PREVIOUS round's fix rather than the original plan.
+The whole-branch fable seat then found four more that no round-by-round
+reading could reach, because none of them fails a test and each is visible
+only when the plan is read start to finish against the files it edits.
+
+---
+
+**FROZEN 2026-07-31 at revision 9.** Both lanes converged, the final round's
+FIXes are accepted on the record above, no escalation is open, and the
+writing-plans self-review has run. Changes from here require reopening the
+debate with a new round appended to this record. The implementer never edits
+the plan.
