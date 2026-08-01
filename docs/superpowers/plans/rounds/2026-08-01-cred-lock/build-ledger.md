@@ -7,7 +7,9 @@ verdict, so where a report did not arrive the evidence is the session's
 own and must not later be attributed to the implementer.
 
 Plan: `docs/superpowers/plans/2026-08-01-lane-credential-and-lock.md`,
-FROZEN at revision 28 after 29 cross-vendor rounds.
+FROZEN at revision 29 after 30 cross-vendor rounds. Round 30 reopened
+the frozen recovery command during building; the remediation row below
+is the result.
 
 | Task | Commit | Implementer report | Session verification | Evidence provenance |
 |---|---|---|---|---|
@@ -17,6 +19,8 @@ FROZEN at revision 28 after 29 cross-vendor rounds.
 | 4 live protocol gate | `00168a5` | full, accurate | read the acceptance and timeout paths, ran all three host modes | BOTH |
 | 5 login wrapper | `74f57ab` | full, accurate | ran the non-directory row and the probe seam, checked the ACE shape, verified `kimi login` against the real client | BOTH |
 | 6 builder stops copying | `165e809` | **NONE — agent returned twice with only "I'll wait for the notification"** | copy absence, junction, seam message, terminating deletion, deleted-test audit, first-use live test, both hosts, full suite | **SESSION ONLY** |
+| 5+6 fail-closed remediation | `8e5dcaf` | full, accurate | byte-compared the stored template against the frozen line, re-ran the round-30 fail-closed reproduction on both hosts, read all four caller fixes, checked the nine-row matrix and row 9's fixture, 113 tests per host | BOTH |
+| 7 live gates | `29f975b` | full, accurate | ran the support suite on both hosts, verified the helper imports with no live check, drove the refusal direction with the opt-in set, traced the guard ahead of the record write | **BOTH, live half UNRUN** |
 
 ## Task 6, stated plainly
 
@@ -38,6 +42,30 @@ session ran and can name:
 - the two deleted tests audited individually and both confirmed
   superseded rather than dropped, one re-pointed at the fixture that
   replaced its subject
+
+## Task 7, stated plainly
+
+The offline half is fully verified: 23 tests per host, driving the same
+production helper the live suite imports, with no opt-in and no real
+credential.
+
+The LIVE half has never run. It needs three pre-provisioned lane homes,
+and `PARALLAX_LANE_LIVE_HOME_A`, `_B` and `_C` do not exist, because
+creating them needs a one-time interactive login this suite is forbidden
+to perform. **Task 7 step 2 requires all pass and ZERO skipped, so that
+gate is UNSATISFIED.** Nothing in this branch may claim measurements 5,
+6, 7, 10, 11, 16 or 17 are re-verified by an executed gate.
+
+What IS verified is the refusal direction, which is the safe one: with
+the opt-in set and the homes absent, all nine tests ERROR rather than
+skip, naming the login wrapper and the missing variables. Without the
+opt-in they skip.
+
+One open finding, carried to cross-vendor review: the absolute-key
+`probe-record.md` is only ever written, never read back and asserted, so
+a changed client message cannot fail the suite. The load-bearing fact is
+still checked by the nonzero-exit assertion; the exact message is not
+pinned.
 
 ## Standing note for the whole-branch review
 
