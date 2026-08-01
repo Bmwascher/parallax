@@ -202,10 +202,9 @@ Canonical reasoning effort: `high`
   calling process's OWN startup header plus its OWN
   `--output-last-message` file, so NO SHARED GLOBAL OUTPUT LOG is parsed
   for route attribution — the structural difference from the backup lane,
-  whose evidence comes out of one user-global log and therefore needs
-  `tools/kimi-lane-lock.ps1`. No such lock is needed here once the files
-  below are isolated. codex does still share auth, config, session storage
-  and quota — and two of those ARE consulted, so "not evidence" would be
+  whose evidence comes out of one user-global log. codex does still share
+  auth, config, session storage and quota — and two of those ARE
+  consulted, so "not evidence" would be
   wrong: `codex login status` is the auth preflight, and config resolution
   is what the header reports. The precise claim is narrower: none of those
   stores is a shared global output log, and none is parsed to attribute one
