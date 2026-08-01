@@ -81,7 +81,6 @@ jobs:
           PARALLAX_PS_HOST: powershell.exe
         run: >
           python -m pytest
-          evals/multi-model-verify/test_kimi_lane_lock.py
           evals/multi-model-verify/test_attestation.py
           evals/multi-model-verify/test_codex_context_probe.py
           evals/multi-model-verify/test_review_mirror.py
@@ -92,7 +91,6 @@ jobs:
           PARALLAX_PS_HOST: pwsh.exe
         run: >
           python -m pytest
-          evals/multi-model-verify/test_kimi_lane_lock.py
           evals/multi-model-verify/test_attestation.py
           evals/multi-model-verify/test_codex_context_probe.py
           evals/multi-model-verify/test_review_mirror.py

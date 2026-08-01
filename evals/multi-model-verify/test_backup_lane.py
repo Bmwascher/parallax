@@ -950,3 +950,152 @@ def test_a_present_but_unusable_binary_is_a_finding_not_a_note():
     body = _read(DRIFT)
     assert "$versionExit" in body
     assert "did not report a usable version" in body
+
+
+# --- Task 1: the workflow path/host-parity checker -------------------------
+#
+# `775472c` deleted evals/multi-model-verify/test_kimi_lane_lock.py and
+# tools/kimi-lane-lock.ps1 without touching the workflow, which still named
+# the dead test path at .github/workflows/skill-evals.yml:84 and :95 - a
+# merge-blocking break `python -m pytest <dead path> -q` reproduces (exit 4,
+# "file or directory not found"). evals/tools/check_workflow_paths.py is the
+# repair: pure Python (the ubuntu job runs it, no PowerShell, no platform
+# branch) checking every referenced evals/...py token resolves to a READABLE
+# REGULAR FILE (exists()/is_file() are both insufficient - only an actual
+# open for binary reading establishes readability) and that a declared set
+# of dual-host modules is present in BOTH Windows pytest steps.
+import importlib.util as _importlib_util
+
+CHECK_WORKFLOW_PATHS = REPO / "evals" / "tools" / "check_workflow_paths.py"
+WORKFLOW = REPO / ".github" / "workflows" / "skill-evals.yml"
+
+
+def _load_check_workflow_paths():
+    spec = _importlib_util.spec_from_file_location(
+        "check_workflow_paths", CHECK_WORKFLOW_PATHS)
+    module = _importlib_util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_check_workflow_paths_flags_nonexistent_path(tmp_path):
+    cwp = _load_check_workflow_paths()
+    text = (
+        "        run: >\n"
+        "          python -m pytest\n"
+        "          evals/multi-model-verify/test_does_not_exist.py -q\n"
+    )
+    errors = cwp.check_paths_readable(
+        cwp.extract_py_tokens(text), tmp_path)
+    assert any("test_does_not_exist.py" in e for e in errors)
+
+
+def test_check_workflow_paths_flags_directory_named_like_py_file(tmp_path):
+    """A DIRECTORY whose name ends in `.py` exists happily, so a checker
+    that stopped at exists() or is_file() would pass it. Only opening it
+    for binary reading catches this."""
+    cwp = _load_check_workflow_paths()
+    (tmp_path / "evals" / "multi-model-verify").mkdir(parents=True)
+    trap = tmp_path / "evals" / "multi-model-verify" / "test_trap.py"
+    trap.mkdir()
+    assert trap.exists() and not trap.is_file()
+    errors = cwp.check_paths_readable(
+        ["evals/multi-model-verify/test_trap.py"], tmp_path)
+    assert any("test_trap.py" in e for e in errors)
+
+
+def test_check_workflow_paths_flags_unreadable_file_deterministically(
+        tmp_path, monkeypatch):
+    """Simulated, never a real Windows ACL denial - machine ACL behaviour
+    is not something a test may depend on. An is_file()-only implementation
+    that never opens anything would pass this; opening it must not."""
+    cwp = _load_check_workflow_paths()
+    (tmp_path / "evals" / "multi-model-verify").mkdir(parents=True)
+    real_file = tmp_path / "evals" / "multi-model-verify" / "test_real.py"
+    real_file.write_text("# fixture\n", encoding="utf-8")
+    assert real_file.is_file()
+
+    def _raise_open(path):
+        if Path(path).name == "test_real.py":
+            raise PermissionError(13, "simulated permission denied")
+        return open(path, "rb")
+
+    monkeypatch.setattr(cwp, "_open_binary", _raise_open)
+    errors = cwp.check_paths_readable(
+        ["evals/multi-model-verify/test_real.py"], tmp_path)
+    assert any("test_real.py" in e for e in errors)
+
+
+def test_check_workflow_paths_flags_host_parity_gap():
+    cwp = _load_check_workflow_paths()
+    complete = " ".join(cwp.REQUIRED_DUAL_HOST_MODULES)
+    text = (
+        "      - name: PowerShell-facing tests under Windows PowerShell 5.1\n"
+        "        env:\n"
+        "          PARALLAX_PS_HOST: powershell.exe\n"
+        "        run: >\n"
+        "          python -m pytest " + complete + " -q\n"
+        "\n"
+        "      - name: PowerShell-facing tests under PowerShell 7\n"
+        "        env:\n"
+        "          PARALLAX_PS_HOST: pwsh.exe\n"
+        "        run: >\n"
+        "          python -m pytest "
+        + " ".join(cwp.REQUIRED_DUAL_HOST_MODULES[1:]) + " -q\n"
+    )
+    host_steps = cwp.extract_windows_host_steps(text)
+    assert set(host_steps) == {"powershell.exe", "pwsh.exe"}
+    errors = cwp.check_host_parity(host_steps, cwp.REQUIRED_DUAL_HOST_MODULES)
+    assert any(
+        "pwsh.exe" in e and cwp.REQUIRED_DUAL_HOST_MODULES[0] in e
+        for e in errors)
+    assert not any("powershell.exe" in e for e in errors)
+
+
+def test_check_workflow_paths_refuses_when_host_steps_are_not_found():
+    """An unmade measurement is never a clean one. Renaming
+    PARALLAX_PS_HOST (simulated here, in a synthetic copy of the workflow
+    text - not the real file) makes extract_windows_host_steps find zero
+    host steps; check_host_parity must FAIL and say so, rather than pass
+    vacuously because its loop over an empty dict never ran."""
+    cwp = _load_check_workflow_paths()
+    complete = " ".join(cwp.REQUIRED_DUAL_HOST_MODULES)
+    text = (
+        "      - name: PowerShell-facing tests under Windows PowerShell 5.1\n"
+        "        env:\n"
+        "          PARALLAX_PS_HOST_RENAMED: powershell.exe\n"
+        "        run: >\n"
+        "          python -m pytest " + complete + " -q\n"
+        "\n"
+        "      - name: PowerShell-facing tests under PowerShell 7\n"
+        "        env:\n"
+        "          PARALLAX_PS_HOST_RENAMED: pwsh.exe\n"
+        "        run: >\n"
+        "          python -m pytest " + complete + " -q\n"
+    )
+    host_steps = cwp.extract_windows_host_steps(text)
+    assert host_steps == {}
+    errors = cwp.check_host_parity(host_steps, cwp.REQUIRED_DUAL_HOST_MODULES)
+    assert errors
+    assert any("could not find the expected" in e for e in errors)
+
+
+def test_check_workflow_paths_real_workflow_is_clean():
+    """The checker run against the real workflow, both checks. This is the
+    TDD anchor: written before the orphaned test_kimi_lane_lock.py
+    reference was removed from skill-evals.yml, it failed - confirming the
+    checker catches the real break - and passes once the workflow is
+    fixed."""
+    cwp = _load_check_workflow_paths()
+    assert cwp.check_workflow(WORKFLOW, REPO) == []
+
+
+def test_check_workflow_paths_prints_nothing_and_exits_zero():
+    import subprocess
+    import sys
+    result = subprocess.run(
+        [sys.executable, str(CHECK_WORKFLOW_PATHS)],
+        capture_output=True, text=True, cwd=str(REPO))
+    assert result.returncode == 0
+    assert result.stdout == ""
+    assert result.stderr == ""
