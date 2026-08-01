@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Status: DRAFT at revision 27, awaiting re-review.** The user lifted the round cap and directed that this plan iterate until the cross-vendor reviewer issued an actual PASS rather than stopping at "converged with amendments". It first did at round 13; the required whole-artifact fable review then reopened it, and four more rounds followed. The terminal PASS is round 18, on all ten tasks and on the implementer packet: "PASS. The implementation contract can freeze." Changes now require reopening the debate with a new round appended to the record; the implementer never edits this plan.
+**Status: FROZEN at revision 27.** The user lifted the round cap and directed that this plan iterate until the cross-vendor reviewer issued an actual PASS rather than stopping at "converged with amendments". It reached one three times and was reopened twice, both times by a required whole-artifact fable review reading the frozen text start to finish. The terminal PASS is round 28, on all ten tasks and on the implementer packet: "PASS. A zero-judgment implementer can build this plan from the defined task packet without inventing behavior." The reviewer's judgment on the defect rate is recorded with it: the late findings were local expression failures rather than unresolved choices in the lock state machine, the custody lifecycle or the doctor's aggregation, and that is a static judgment about the plan rather than a prediction that implementation reveals no bugs. Changes now require reopening the debate with a new round appended to the record; the implementer never edits this plan.
 
 **Goal:** Stop the backup lane from copying the user's kimi-code credential. Give the lane its own login, reach it through a junction so one file holds it, guard the shared lane home with a liveness-anchored lock, stop the doctor touching credentials at all, and repair the Windows CI job this branch already broke.
 
@@ -764,8 +764,8 @@ Expected: `clean`. TWO mutations, because the check now has two failure directio
 ## Debate record
 
 **Participants:** Opus 5 (session) / gpt-5.6-sol (codex exec, session `019fbb82-9e35-7b72-a64e-59fb60b981cd`)
-**Rounds used:** 18, cap lifted by the user
-**Outcome:** converged, reviewer PASS on all ten tasks AND on the implementer packet at round 18
+**Rounds used:** 28, cap lifted by the user
+**Outcome:** converged, reviewer PASS on all ten tasks AND on the implementer packet at round 28
 **Verification status:** FULL
 **Degradation:** none
 **Authorized by:** n/a
