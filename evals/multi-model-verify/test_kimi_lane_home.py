@@ -1,4 +1,5 @@
 """Contract pins for the per-debate kimi-code lane home."""
+import json
 import os
 import re
 import shutil
@@ -10,15 +11,29 @@ import pytest
 
 REPO = Path(__file__).resolve().parents[2]
 BUILDER = REPO / "tools" / "new-kimi-lane-home.ps1"
+CREDENTIAL_VALIDATOR = REPO / "tools" / "read-kimi-credential-state.ps1"
 SENTINEL = ".parallax-lane-home"
 
 # Fix-round finding (Critical 1): live proof that an unsanitized -Model
 # cannot be rendered into config.toml. A text-only pin against the static
 # template cannot catch this - the injection happens at render time, when
 # the caller's value is interpolated - so this one test actually invokes
-# the script. Skipped, not failed, when neither host is on PATH: the rest
-# of this file is offline and must still run in that environment.
-POWERSHELL = shutil.which("powershell") or shutil.which("pwsh")
+# the script.
+#
+# WINDOWS ONLY, whole module: the builder manipulates real Windows
+# filesystem behaviour ($env:USERPROFILE-rooted paths, ACLs via Get-Acl,
+# junctions). PARALLAX_PS_HOST selects which host runs these tests, same
+# pattern as test_codex_context_probe.py:35-67 - a selector that merely
+# finds A host would happily collect them on Ubuntu CI too, where pwsh is
+# on PATH but the Windows paths and ACL semantics under test do not
+# exist. A green suite on one Windows host proves ONE interpreter.
+POWERSHELL = (os.environ.get("PARALLAX_PS_HOST")
+              or shutil.which("powershell") or shutil.which("pwsh"))
+
+pytestmark = pytest.mark.skipif(
+    os.name != "nt" or POWERSHELL is None,
+    reason="this suite exercises real Windows filesystem behaviour; it "
+           "needs a PowerShell host and the platform it actually targets")
 
 
 def _read(p):
@@ -314,7 +329,9 @@ def _fake_profile(tmp_path, config_text):
     kimi = profile / ".kimi-code"
     (kimi / "credentials").mkdir(parents=True)
     (kimi / "credentials" / "kimi-code.json").write_text(
-        '{"access_token": "not-a-real-token"}', encoding="ascii")
+        '{"access_token": "not-a-real-token", '
+        '"refresh_token": "not-a-real-refresh-token", '
+        '"expires_at": 900}', encoding="ascii")
     if config_text is not None:
         (kimi / "config.toml").write_text(config_text, encoding="ascii")
     return profile
@@ -544,3 +561,28 @@ def test_a_duplicate_model_table_refuses(tmp_path):
     assert proc.returncode != 0, proc.stdout + proc.stderr
     assert "more than once" in proc.stdout + proc.stderr
     assert not target.exists()
+
+
+# --- Task 2 Step 3c: the fixture's own oracle -----------------------------
+#
+# _fake_profile's credential is a fixture SHARED by every test above, but
+# none of them structurally validate it - they only prove the builder
+# copies the credential across, never that the credential itself is a
+# well-formed kimi-code credential document. Without this test, Task 2
+# Step 3 (adding a fake refresh_token and an integer expires_at to the
+# fixture) could be skipped entirely and every test in this file would
+# still pass, and until Step 3b this module's POWERSHELL selector ignored
+# PARALLAX_PS_HOST entirely, so the advertised two-host gate ran one host.
+
+
+@pytest.mark.skipif(POWERSHELL is None, reason="no PowerShell host on PATH")
+def test_the_fake_profiles_credential_is_structurally_valid(tmp_path):
+    profile = _fake_profile(tmp_path, None)
+    credential_path = profile / ".kimi-code" / "credentials" / "kimi-code.json"
+    proc = subprocess.run(
+        [POWERSHELL, "-NoProfile", "-ExecutionPolicy", "Bypass",
+         "-File", str(CREDENTIAL_VALIDATOR), "-Path", str(credential_path)],
+        capture_output=True, text=True, timeout=60)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    report = json.loads(proc.stdout)
+    assert report["status"] == "ok"
