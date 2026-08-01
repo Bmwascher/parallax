@@ -91,7 +91,7 @@ carry a `Degradation:` class plus `Authorized by: user at round N` when
 a backup cross-vendor lane substituted for the primary — lane substitution is NOT degradation; the Degradation field then names the
 PRIMARY-lane failure that triggered substitution, and the Participants
 line names the actual backup participant, e.g.
-`Kimi K3 (kimi-cli, session <id>)`. This codifies the combination first
+`Kimi K3 (kimi-code, session <id>)`. This codifies the combination first
 used by the 0.12.0 record. The Degraded-mode note stays bound to
 DEGRADED status; a debate in which a backup cross-vendor lane substituted for the primary is recorded with this combination, never as DEGRADED.
 

@@ -67,9 +67,12 @@ Panel participation: a user-invoked panel per references/panels.md is a second s
   sufficient on its own: the real user-global `~/.kimi-code/config.toml`
   can carry lifecycle hooks that run a shell command on the reviewer's
   own approval path, and the home is where this lane's effort pin and
-  this debate's session evidence live. One debate is one home and one
-  session; a home is never reused across debates, because a reused home
-  carries other debates' sessions into this one's evidence. A home that
+  this debate's session evidence live. One debate is ONE home: that
+  debate's ROUNDS are one session, and the only other session the home
+  may hold is the write-probe's own disposable one, which is created
+  before round 1 and is therefore already in the inventory the freshness
+  rule captures. A home is never reused across DEBATES, because a reused
+  home carries another debate's sessions into this one's evidence. A home that
   cannot be built, or a missing credential, makes the lane UNAVAILABLE —
   never a reason to dispatch from the real home. Remove the home with
   `tools/new-kimi-lane-home.ps1 -Path <debate-home> -Remove` when the
@@ -207,8 +210,16 @@ log). There is no shared stream and nothing to attribute by position.
   otherwise defaults to ALL profiles including a writing one. Each is a
   control in its own right rather than a coincidence of two lists:
   measured, the default subagent list was inert only because `Agent`
-  and `AgentSwarm` happened to be denied. All three lists are verified
-  per round by the exact-list comparison in the evidence rules above.
+  and `AgentSwarm` happened to be denied. Each round's evidence checks
+  these lists at the reach that check actually has, and the two reaches
+  are not the same: the SESSION-CREATING call's slice compares the
+  configured allowlist, the denylist and the resolved tool snapshot
+  against this file by EXACT LIST EQUALITY, while a RESUMED call — whose
+  slice carries none of those records at all — is covered instead by
+  `toolCount` equality against this file's allowlist length and by
+  `toolsHash` and `systemPromptHash` continuity with the call that was
+  compared. Both are real checks; only the first is an exact-list
+  comparison, and saying otherwise would claim a reach no round has.
 - WRITE-PROBE (before round 1 of every backup-lane debate): in a fresh
   disposable session with the exact debate configuration — the
   committed `kimi-reviewer-agent.md`, the same debate home, the same
@@ -244,7 +255,19 @@ exactly like the primary lane's `~/.codex/AGENTS.md` — never a finding.
   `.agents/skills/`, `<debate-home>/skills/` and `~/.agents/skills/` —
   which are the same class of instruction back-channel as codex's
   repo-level `.agents/skills` advertisement (SKILL.md preflight 3), on
-  this lane's side of the fence. `--skills-dir` is a MITIGATION whose
+  this lane's side of the fence. The home's own `extra_skill_dirs` is
+  the key recorded alongside them: the builder writes it EMPTY, so a
+  non-empty value in a debate's home was written by something other than
+  the builder and is a finding about the home, not a note. Coverage is
+  NOT uniform across the four roots, and the record must not read as
+  though it were: preflight-3 remediation clears the two project roots
+  because it operates on the MIRROR, and `<debate-home>/skills/` is
+  created empty by the builder — but `~/.agents/skills/` lives in the
+  user's own home, is not relocated by `KIMI_CODE_HOME`, and NOTHING
+  this lane runs removes it. Enumerate that root before round 1 and
+  record what it holds; a non-empty one is unprobed territory, recorded
+  as such rather than assumed absorbed by the tool allowlist.
+  `--skills-dir` is a MITIGATION whose
   effect is UNMEASURABLE in this configuration, not a control. Probed
   2026-07-31 with canaries planted at both project roots: runs with and
   without the flag were indistinguishable, and the reviewer reported no
@@ -311,7 +334,7 @@ proceed; do not infer either key's value.
   The escaped form is not written out here, because this file is checked
   for the absence of backslashes; it is in the design record. Measured
   2026-07-29.
-- **BASELINE, captured after construction AND after any preflight-3 remediation, immediately before the brief is written**:
+- **BASELINE, captured after construction AND after any preflight-3 remediation, immediately before the first round is dispatched**:
   the status command above, in the mirror. A clone would have guaranteed
   this empty; a file copy does NOT — the real tree's untracked files
   and uncommitted modifications ride along, and without a baseline
@@ -387,9 +410,10 @@ proceed; do not infer either key's value.
   - **Order**: sorted by path in byte order, so the manifest is
     deterministic and two captures are diffable.
   - **Captured at the same moment as the baseline** — after construction
-    and any preflight-3 remediation, immediately before the brief is
-    written — so the two describe the same tree state. The brief itself
-    is written after both and is therefore not in either.
+    and any preflight-3 remediation, immediately before the first round
+    is dispatched — so the two describe the same tree state. The brief
+    appears in neither, because it is passed inline and never lands in
+    the mirror at all.
 - If the baseline contains TRACKED modifications the reviewed content is
   not the committed range: disclose that in the record, and in mode diff
   take the mirror from a tree whose tracked files are clean instead.

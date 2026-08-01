@@ -180,14 +180,18 @@ def test_lane_home_isolation_region():
             "`~/.kimi-code/config.toml` can carry lifecycle hooks that run "
             "a shell command on the reviewer's own approval path, and the "
             "home is where this lane's effort pin and this debate's session "
-            "evidence live. One debate is one home and one session; a home "
-            "is never reused across debates, because a reused home carries "
-            "other debates' sessions into this one's evidence. A home that "
-            "cannot be built, or a missing credential, makes the lane "
-            "UNAVAILABLE — never a reason to dispatch from the real home. "
-            "Remove the home with `tools/new-kimi-lane-home.ps1 -Path "
-            "<debate-home> -Remove` when the debate ends, because it holds "
-            "a copied credential.") in _norm(BACKUP_LANE)
+            "evidence live. One debate is ONE home: that debate's ROUNDS "
+            "are one session, and the only other session the home may hold "
+            "is the write-probe's own disposable one, which is created "
+            "before round 1 and is therefore already in the inventory the "
+            "freshness rule captures. A home is never reused across "
+            "DEBATES, because a reused home carries another debate's "
+            "sessions into this one's evidence. A home that cannot be "
+            "built, or a missing credential, makes the lane UNAVAILABLE — "
+            "never a reason to dispatch from the real home. Remove the home "
+            "with `tools/new-kimi-lane-home.ps1 -Path <debate-home> "
+            "-Remove` when the debate ends, because it holds a copied "
+            "credential.") in _norm(BACKUP_LANE)
 
 
 def test_resume_inheritance_region():
@@ -375,8 +379,28 @@ def test_backup_lane_containment_and_probe_pins():
             "it carries THREE controls rather than one.") in body
     assert ("Each is a control in its own right rather than a coincidence "
             "of two lists") in body
-    assert ("All three lists are verified per round by the exact-list "
-            "comparison in the evidence rules above.") in body
+    # Fix round 1: this sentence used to say the three lists are verified
+    # "per round by the exact-list comparison". They are not. Rule 12 of
+    # tools/read-kimi-round-evidence.ps1 is FRESH-ONLY - every
+    # Compare-Object sits inside `if ($Fresh)`, because a resume's slice
+    # carries none of those records - so the claim was wider than any
+    # round's evidence, which is the exact defect class (a check reading
+    # clean without measuring) that retiring the `Loaded tools:` grep was
+    # meant to remove. A resumed round IS covered, by toolCount equality
+    # and by toolsHash/systemPromptHash continuity; the pin now runs
+    # through BOTH reaches and through the sentence that refuses to
+    # conflate them, so neither half can be dropped or widened.
+    assert ("the SESSION-CREATING call's slice compares the configured "
+            "allowlist, the denylist and the resolved tool snapshot "
+            "against this file by EXACT LIST EQUALITY, while a RESUMED "
+            "call — whose slice carries none of those records at all — "
+            "is covered instead by `toolCount` equality against this "
+            "file's allowlist length and by `toolsHash` and "
+            "`systemPromptHash` continuity with the call that was "
+            "compared.") in body
+    assert ("Both are real checks; only the first is an exact-list "
+            "comparison, and saying otherwise would claim a reach no "
+            "round has.") in body
     assert ("in a fresh disposable session with the exact debate "
             "configuration") in body
     assert ("explicit refusal in the reply, marker absent on disk, "
@@ -541,14 +565,20 @@ def test_mirror_baseline_closes_the_dirty_tree_hole():
     # by any "untracked set" wording.
     body = _norm(BACKUP_LANE)
     # timing is load-bearing and was WRONG in the first fix pass:
-    # preflight-3 remediation runs between construction and the brief,
+    # preflight-3 remediation runs between construction and the round,
     # deleting entries and (tracked case) committing - so a baseline
     # taken at construction fails every round of a remediated debate
     # and pins a stale HEAD, reintroducing the false-quarantine on the
-    # one path the mirror exists to support
+    # one path the mirror exists to support.
+    # kimi-code swap, fix round 1: the END of that window used to be "the
+    # brief is written", which was a real event only while the brief was
+    # planted in the mirror. It is passed inline now, so that wording
+    # named a moment that never arrives - the timing rule pointed at
+    # nothing while reading unchanged. The window now closes at the
+    # dispatch, which is the event that could actually change the tree.
     assert ("BASELINE, captured after construction AND after any "
-            "preflight-3 remediation, immediately before the brief is "
-            "written") in body
+            "preflight-3 remediation, immediately before the first round "
+            "is dispatched") in body
     assert ("a baseline taken before it fails every round of a "
             "remediated debate and pins a HEAD the mirror no longer "
             "has") in body
@@ -667,7 +697,27 @@ def test_backup_lane_client_config_sweep():
     # the check is what makes the effort claim true rather than assumed,
     # and that only holds if the read reaches the record.
     assert "read and RECORDED in the debate record" in body
-    assert "`extra_skill_dirs`" in body
+    # `extra_skill_dirs` is named in the section's opening as one of the
+    # two recorded keys, so the bullets have to say what recording it
+    # means. The builder writes it EMPTY, which is what makes a non-empty
+    # value a finding about the home rather than a note about the client.
+    assert ("The home's own `extra_skill_dirs` is the key recorded "
+            "alongside them: the builder writes it EMPTY, so a non-empty "
+            "value in a debate's home was written by something other "
+            "than the builder and is a finding about the home, not a "
+            "note.") in body
+    # The retired "unprobed territory" pin carried a DISPOSITION for the
+    # source this lane cannot clear. Its successor names which roots are
+    # covered by what, and that `~/.agents/skills/` is covered by
+    # nothing: preflight-3 operates on the MIRROR and KIMI_CODE_HOME does
+    # not relocate the user's home, so an uneven coverage claim here
+    # would be the same overclaim in a new place.
+    assert ("`~/.agents/skills/` lives in the user's own home, is not "
+            "relocated by `KIMI_CODE_HOME`, and NOTHING this lane runs "
+            "removes it. Enumerate that root before round 1 and record "
+            "what it holds; a non-empty one is unprobed territory, "
+            "recorded as such rather than assumed absorbed by the tool "
+            "allowlist.") in body
     # The old "LATENT surface" pin recorded that a back-channel key's
     # presence says nothing about whether anything is actually being
     # merged. Its successor is stronger and states the same restraint:
