@@ -58,17 +58,24 @@ toggled on, its stop-time review overlaps mode `diff` — expected, not a bug.
    `References/<name>/<version>/<file>:<line>`.
    For non-port work there is no reference folder — claims ground in the
    project's own source, specs, or upstream docs instead, same strike rule.
-3. The reviewed repo must carry no AGENTS.md and no `.agents/` entries:
-   codex auto-ingests AGENTS.md as instructions, and it advertises
-   repo-level `.agents/skills/*/SKILL.md` to the model, which read a
-   planted one as its FIRST action (both probed 2026-07-24: the planted
-   AGENTS.md controlled the reviewer's reply; the planted skill entered
-   its context; see model-prompting-notes.md) — back-channels into the
-   auditor that break independence. Enumerate the whole tree in one
-   listing — `git ls-files --cached --others '*AGENTS.md' '.agents/*'` —
-   which covers tracked, untracked, AND ignored files: `--others` without
-   `--exclude-standard` lists ignored paths, re-verified 2026-07-28, and
-   `.git` itself is never listed.
+3. The reviewed repo must carry no AGENTS.md, no `.agents/` entries, and no
+   `.kimi-code/` entries: codex auto-ingests AGENTS.md as instructions, and
+   it advertises repo-level `.agents/skills/*/SKILL.md` to the model, which
+   read a planted one as its FIRST action (both probed 2026-07-24: the
+   planted AGENTS.md controlled the reviewer's reply; the planted skill
+   entered its context; see model-prompting-notes.md) — back-channels into
+   the auditor that break independence. kimi-code, the backup lane's
+   client, documents `.kimi-code/skills/` as a project-level discovery
+   root too (references/backup-lane.md), so the sweep covers it
+   identically. Probed 2026-07-31 with canaries planted at both roots: a
+   run with `--skills-dir` and a run without it were indistinguishable,
+   and neither loaded either canary, so that flag suppresses nothing
+   observable — this enumeration is the PRIMARY control for the reviewed
+   tree's skills and agents, not defence in depth. Enumerate the whole
+   tree in one listing — `git ls-files --cached --others '*AGENTS.md'
+   '.agents/*' '.kimi-code/*'` — which covers tracked, untracked, AND
+   ignored files: `--others` without `--exclude-standard` lists ignored
+   paths, re-verified 2026-07-28, and `.git` itself is never listed.
    <!-- contract:start id=enumeration-depth-asymmetry -->
    The two pathspecs do not reach equally far. `*AGENTS.md` carries a
    leading star, so it lists a nested AGENTS.md at any depth. `.agents/*`

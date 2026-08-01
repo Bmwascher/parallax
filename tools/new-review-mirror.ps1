@@ -323,7 +323,7 @@ function Get-BackChannelEntry($repo) {
     # variable becomes $null and a CLEAN repo reads exactly like a FAILED
     # enumeration.
     $r = Invoke-GitFields $repo @("ls-files", "--cached", "--others", "-z",
-                                  "*AGENTS.md", ".agents/*")
+                                  "*AGENTS.md", ".agents/*", '.kimi-code/*')
     if (-not $r.Ok) {
         return @{ Ok = $false; Entries = @(); Reason = $r.Reason }
     }
