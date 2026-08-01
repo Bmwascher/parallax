@@ -244,6 +244,27 @@ function Test-ValidVerdictPair([string]$Status, [string]$Detail) {
 # else - including a nonzero exit carrying a syntactically valid line, or
 # an exit 0 carrying malformed/schema-invalid output - is VALIDATOR
 # FAILURE and is never read as a credential state.
+#
+# Both -File and -Path arguments are individually double-quoted before
+# being handed to Start-Process -ArgumentList: that cmdlet joins its
+# array elements with a plain space and does NOT quote an element that
+# itself contains one, so an unquoted path segment carrying a space
+# mis-tokenizes into two argv entries - measured live, and the reason the
+# dual-host success fixture below combines a space with an apostrophe in
+# one segment.
+#
+# The captured-stream reads are TERMINATING: a failed read is validator
+# failure, never empty-stderr-and-proceed - "-ErrorAction
+# SilentlyContinue" turned a read that could not be made into "stderr was
+# empty", which is the acceptance rule's own governing invariant
+# inverted. Get-Content -Raw on a genuinely EMPTY file still returns
+# $null with no error, so that null is mapped to "" only AFTER the read
+# has succeeded, never as a stand-in for a failed one.
+# PARALLAX_KIMI_CREDENTIAL_VALIDATOR_CAPTURE_READ_FAULT: any nonempty
+# value deletes the real stderr capture file immediately before it is
+# read, producing a genuine (not simulated) Get-Content failure - isolated
+# to stderr, and stdout left untouched, so the oracle cannot be satisfied
+# by a coincidental empty-stdout rejection from a different check.
 # ---------------------------------------------------------------------
 function Invoke-CredentialValidator([string]$CredPath) {
     $hostExe = (Get-Process -Id $PID).Path
@@ -252,27 +273,47 @@ function Invoke-CredentialValidator([string]$CredPath) {
     try {
         try {
             $proc = Start-Process -FilePath $hostExe `
-                -ArgumentList @("-NoProfile", "-NonInteractive", "-File", $ValidatorScript, "-Path", $CredPath) `
+                -ArgumentList @("-NoProfile", "-NonInteractive", "-File", "`"$ValidatorScript`"", "-Path", "`"$CredPath`"") `
                 -RedirectStandardOutput $outFile -RedirectStandardError $errFile `
                 -Wait -PassThru -NoNewWindow
         } catch {
             return @{ Ok = $false }
         }
         $exitCode = $proc.ExitCode
-        $stdoutText = Get-Content -LiteralPath $outFile -Raw -ErrorAction SilentlyContinue
-        $stderrText = Get-Content -LiteralPath $errFile -Raw -ErrorAction SilentlyContinue
+
+        if (-not [string]::IsNullOrEmpty($env:PARALLAX_KIMI_CREDENTIAL_VALIDATOR_CAPTURE_READ_FAULT)) {
+            Remove-Item -LiteralPath $errFile -Force -ErrorAction SilentlyContinue
+        }
+        try {
+            $stdoutText = Get-Content -LiteralPath $outFile -Raw -ErrorAction Stop
+        } catch {
+            return @{ Ok = $false }
+        }
+        try {
+            $stderrText = Get-Content -LiteralPath $errFile -Raw -ErrorAction Stop
+        } catch {
+            return @{ Ok = $false }
+        }
         if ($null -eq $stdoutText) { $stdoutText = "" }
         if ($null -eq $stderrText) { $stderrText = "" }
 
         if ($exitCode -ne 0) { return @{ Ok = $false } }
         if ($stderrText -ne "") { return @{ Ok = $false } }
 
-        $lines = @($stdoutText -split "`r?`n" | Where-Object { $_ -ne "" })
-        if ($lines.Count -ne 1) { return @{ Ok = $false } }
+        # Acceptance is ONE NONEMPTY LINE, optionally followed by exactly
+        # one LF or CRLF - not "discard blank lines, then require one
+        # survivor", which let "\n\n{json}\n\n" pass as a single line.
+        # \A and \z, not ^ and $: $ matches before a single trailing
+        # newline even without multiline mode, which would silently
+        # accept a second trailing blank line here.
+        if ($stdoutText -notmatch '\A(?<singleLine>[^\r\n]+)(\r\n|\n)?\z') {
+            return @{ Ok = $false }
+        }
+        $singleLine = $Matches['singleLine']
 
         $parsed = $null
         try {
-            $parsed = $lines[0] | ConvertFrom-Json -ErrorAction Stop
+            $parsed = $singleLine | ConvertFrom-Json -ErrorAction Stop
         } catch {
             return @{ Ok = $false }
         }
@@ -284,12 +325,17 @@ function Invoke-CredentialValidator([string]$CredPath) {
         if (($propNames -join ",") -ne ($expectedNames -join ",")) { return @{ Ok = $false } }
         if (-not ($parsed.status -is [string])) { return @{ Ok = $false } }
         if (-not ($parsed.detail -is [string])) { return @{ Ok = $false } }
-        foreach ($f in @($parsed.fields)) {
+        # @(...) wraps a bare SCALAR into a one-element array, so a bare
+        # string "fields" value would otherwise pass an "array of
+        # strings" check. The array-ness of the value itself must be
+        # checked BEFORE iterating its (possibly synthesized) elements.
+        if (-not ($parsed.fields -is [System.Array])) { return @{ Ok = $false } }
+        foreach ($f in $parsed.fields) {
             if (-not ($f -is [string])) { return @{ Ok = $false } }
         }
         if (-not (Test-ValidVerdictPair $parsed.status $parsed.detail)) { return @{ Ok = $false } }
 
-        return @{ Ok = $true; Status = $parsed.status; Raw = $lines[0] }
+        return @{ Ok = $true; Status = $parsed.status; Raw = $singleLine }
     } finally {
         Remove-Item -LiteralPath $outFile -Force -ErrorAction SilentlyContinue
         Remove-Item -LiteralPath $errFile -Force -ErrorAction SilentlyContinue

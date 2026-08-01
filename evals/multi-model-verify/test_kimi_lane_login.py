@@ -108,6 +108,16 @@ if ($callNum -eq $failOnCall) {
     } elseif ($failMode -eq "exit0-malformed") {
         Write-Output "not even json"
         exit 0
+    } elseif ($failMode -eq "scalar-fields") {
+        # @(...) wraps a bare SCALAR into a one-element array, so a bare
+        # string "fields" value must not pass an "array of strings" check.
+        Write-Output '{"status":"ok","detail":"valid","fields":"access_token"}'
+        exit 0
+    } elseif ($failMode -eq "blank-line-padded") {
+        # Exactly "\n\n{json}\n\n" - leading, interior and trailing blank
+        # lines must all be rejected, not discarded before counting.
+        [Console]::Out.Write("`n`n{`"status`":`"ok`",`"detail`":`"valid`",`"fields`":[`"access_token`"]}`n`n")
+        exit 0
     }
 }
 
@@ -611,6 +621,74 @@ def test_post_client_validator_failure_exit0_malformed_exits_6_client_ran(
     assert result.returncode == 6, (result.stdout, result.stderr)
     assert not verdict_out.exists()
     assert marker.read_text().strip() == "1"
+
+
+# ---------------------------------------------------------------------
+# Defect 2 (scalar `fields` passes an array check) and defect 3 (blank
+# lines discarded before counting), at BOTH validator call positions -
+# each must FAIL before the fix and pass after.
+# ---------------------------------------------------------------------
+@pytest.mark.parametrize("fail_on_call,client_ran", [(1, False), (2, True)])
+def test_validator_scalar_fields_rejected_at_both_call_positions(
+        stub_tools_dir, lane_home, kimi_stub, tmp_path, fail_on_call, client_ran):
+    verdict_out = tmp_path / "verdict.json"
+    marker = tmp_path / "marker.txt"
+    counter = tmp_path / "counter.txt"
+    result = run_stub_wrapper(
+        stub_tools_dir,
+        ["-LaneHome", str(lane_home), "-OwnerPid", "1", "-OwnerStartTicksUtc", "1",
+         "-KimiBinary", str(kimi_stub), "-VerdictOut", str(verdict_out), "-Force"],
+        env={"PARALLAX_TEST_VALIDATOR_COUNTER_FILE": str(counter),
+             "PARALLAX_TEST_VALIDATOR_FAIL_ON_CALL": str(fail_on_call),
+             "PARALLAX_TEST_VALIDATOR_FAIL_MODE": "scalar-fields",
+             "PARALLAX_TEST_STUB_MARKER_FILE": str(marker)})
+    assert result.returncode == 6, (result.stdout, result.stderr)
+    assert not verdict_out.exists()
+    assert marker.exists() == client_ran
+
+
+@pytest.mark.parametrize("fail_on_call,client_ran", [(1, False), (2, True)])
+def test_validator_blank_line_padded_stdout_rejected_at_both_call_positions(
+        stub_tools_dir, lane_home, kimi_stub, tmp_path, fail_on_call, client_ran):
+    verdict_out = tmp_path / "verdict.json"
+    marker = tmp_path / "marker.txt"
+    counter = tmp_path / "counter.txt"
+    result = run_stub_wrapper(
+        stub_tools_dir,
+        ["-LaneHome", str(lane_home), "-OwnerPid", "1", "-OwnerStartTicksUtc", "1",
+         "-KimiBinary", str(kimi_stub), "-VerdictOut", str(verdict_out), "-Force"],
+        env={"PARALLAX_TEST_VALIDATOR_COUNTER_FILE": str(counter),
+             "PARALLAX_TEST_VALIDATOR_FAIL_ON_CALL": str(fail_on_call),
+             "PARALLAX_TEST_VALIDATOR_FAIL_MODE": "blank-line-padded",
+             "PARALLAX_TEST_STUB_MARKER_FILE": str(marker)})
+    assert result.returncode == 6, (result.stdout, result.stderr)
+    assert not verdict_out.exists()
+    assert marker.exists() == client_ran
+
+
+# ---------------------------------------------------------------------
+# Defect 4 (a failed capture read must be validator failure, not empty
+# stderr). The seam deletes the validator's own real stderr capture file
+# right before Invoke-CredentialValidator reads it (stdout is left
+# genuinely readable), producing a real Get-Content failure rather than a
+# simulated one - isolated to stderr so this oracle cannot be satisfied by
+# a coincidental empty-stdout rejection from the defect-3 fix instead.
+# Both files share one Invoke-CredentialValidator function, so exercising
+# it once proves the fix for every call position that function serves.
+# ---------------------------------------------------------------------
+def test_capture_read_fault_seam_is_validator_failure(lane_home, kimi_stub, tmp_path):
+    verdict_out = tmp_path / "verdict.json"
+    marker = tmp_path / "marker.txt"
+    result = run_wrapper(
+        ["-LaneHome", str(lane_home), "-OwnerPid", "1", "-OwnerStartTicksUtc", "1",
+         "-KimiBinary", str(kimi_stub), "-VerdictOut", str(verdict_out)],
+        env={"PARALLAX_KIMI_CREDENTIAL_VALIDATOR_CAPTURE_READ_FAULT": "1",
+             "PARALLAX_TEST_STUB_MARKER_FILE": str(marker)})
+    assert result.returncode == 6, (result.stdout, result.stderr)
+    assert not verdict_out.exists()
+    # The pre-client validator call is what the wrapper reaches first, so
+    # a read failure there means the client is never invoked.
+    assert not marker.exists()
 
 
 # ---------------------------------------------------------------------

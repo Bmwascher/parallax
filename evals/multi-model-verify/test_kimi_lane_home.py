@@ -645,20 +645,105 @@ def test_the_fake_credentials_are_structurally_valid(tmp_path):
 
 
 # =======================================================================
+# Defects 2 (scalar `fields` passes an array check) and 3 (blank lines
+# discarded before counting), at the builder's one validator call
+# position. A disposable copy of the real builder and lock tool, next to
+# a STUB validator, so $PSScriptRoot resolves the stub instead of the
+# committed one - the builder itself is never rewritten.
+# =======================================================================
+
+STUB_VALIDATOR_SCALAR_FIELDS = (
+    "param([string]$Path)\n"
+    "Write-Output '{\"status\":\"ok\",\"detail\":\"valid\",\"fields\":\"access_token\"}'\n"
+    "exit 0\n"
+)
+STUB_VALIDATOR_BLANK_LINE_PADDED = (
+    "param([string]$Path)\n"
+    '[Console]::Out.Write("`n`n{`"status`":`"ok`",`"detail`":`"valid`",'
+    '`"fields`":[`"access_token`"]}`n`n")\n'
+    "exit 0\n"
+)
+
+
+def _build_with_stub_validator(target, profile, lane_home, validator_stub_text, tmp_path,
+                                model=PLACEHOLDER_MODEL, effort="high", timeout=120):
+    disposable = tmp_path / "stub-validator-tools"
+    tools_dir = disposable / "tools"
+    tools_dir.mkdir(parents=True)
+    shutil.copy(str(BUILDER), str(tools_dir / "new-kimi-lane-home.ps1"))
+    shutil.copy(str(LOCK_TOOL), str(tools_dir / "kimi-lane-lock.ps1"))
+    (tools_dir / "read-kimi-credential-state.ps1").write_text(validator_stub_text, encoding="ascii")
+    debate_id = _new_hex32()
+    self_pid, self_ticks = _self_owner_identity()
+    env = _clean_env(USERPROFILE=str(profile))
+    proc = subprocess.run(
+        [POWERSHELL, "-NoProfile", "-ExecutionPolicy", "Bypass",
+         "-File", str(tools_dir / "new-kimi-lane-home.ps1"), "-Path", str(target),
+         "-Model", model, "-Effort", effort,
+         "-LaneHome", str(lane_home), "-DebateId", debate_id,
+         "-OwnerPid", str(self_pid), "-OwnerStartTicksUtc", str(self_ticks)],
+        capture_output=True, text=True, timeout=timeout, env=env)
+    return proc, debate_id, self_pid, self_ticks
+
+
+def test_builder_rejects_scalar_fields_from_the_validator(tmp_path):
+    target = tmp_path / "scalar-fields-home"
+    profile = _fake_profile(tmp_path, FAKE_REAL_CONFIG)
+    lane_home = _fake_lane_home(tmp_path)
+    proc, debate_id, owner_pid, owner_ticks = _build_with_stub_validator(
+        target, profile, lane_home, STUB_VALIDATOR_SCALAR_FIELDS, tmp_path)
+    assert proc.returncode != 0, proc.stdout + proc.stderr
+    assert proc.stdout == ""
+    assert not target.exists()
+    assert _lock_status(lane_home)["state"] == "free"
+
+
+def test_builder_rejects_blank_line_padded_validator_stdout(tmp_path):
+    target = tmp_path / "blank-line-padded-home"
+    profile = _fake_profile(tmp_path, FAKE_REAL_CONFIG)
+    lane_home = _fake_lane_home(tmp_path)
+    proc, debate_id, owner_pid, owner_ticks = _build_with_stub_validator(
+        target, profile, lane_home, STUB_VALIDATOR_BLANK_LINE_PADDED, tmp_path)
+    assert proc.returncode != 0, proc.stdout + proc.stderr
+    assert proc.stdout == ""
+    assert not target.exists()
+    assert _lock_status(lane_home)["state"] == "free"
+
+
+def test_builder_capture_read_fault_is_validator_failure(tmp_path):
+    """Defect 4: a failed capture read of the validator's own stdout/
+    stderr must be validator failure, never empty-stderr-and-proceed. The
+    seam deletes the real stderr capture file right before it is read
+    (stdout is left genuinely readable, so this cannot be satisfied by a
+    coincidental empty-stdout rejection from the defect-3 fix instead),
+    producing a genuine Get-Content failure."""
+    target = tmp_path / "capture-read-fault-home"
+    profile = _fake_profile(tmp_path, FAKE_REAL_CONFIG)
+    lane_home = _fake_lane_home(tmp_path)
+    proc, *_ = _build2(target, profile, lane_home, extra_env={
+        "PARALLAX_KIMI_CREDENTIAL_VALIDATOR_CAPTURE_READ_FAULT": "1",
+    })
+    assert proc.returncode != 0, proc.stdout + proc.stderr
+    assert proc.stdout == ""
+    assert not target.exists()
+    assert _lock_status(lane_home)["state"] == "free"
+
+
+# =======================================================================
 # Task 6 Step 1: the new behaviour. Every test below drives the real
 # builder (and, where the oracle requires it, the real lock tool
 # directly) - no seam substitutes for a real fixture unless the plan
 # names one.
 # =======================================================================
 
+# The FAIL-CLOSED recovery command (r29 of the plan): a child scriptblock
+# setting $ErrorActionPreference = 'Stop' around a try, so every later
+# step is structurally unreachable after any failure. Extracted
+# byte-for-byte from tools/new-kimi-lane-home.ps1's own
+# $RecoveryCommandTemplate (with its PowerShell '' escaping undone) so
+# this pin cannot silently drift from the emitting production string.
 RECOVERY_COMMAND_TEMPLATE = (
-    "$ownerJson = & 'tools/kimi-lane-lock.ps1' -ResolveOwner; "
-    "if ($LASTEXITCODE -ne 0) { throw \"owner resolution failed with exit $LASTEXITCODE\" }; "
-    "$owner = $ownerJson | ConvertFrom-Json -ErrorAction Stop; "
-    "& 'tools/new-kimi-lane-login.ps1' -LaneHome '<lane-home>' "
-    "-OwnerPid $owner.ownerPid -OwnerStartTicksUtc $owner.ownerStartTicksUtc "
-    "-VerdictOut (Join-Path $env:TEMP 'parallax-kimi-lane-login-verdict.json'); "
-    "if ($LASTEXITCODE -ne 0) { throw \"lane login failed with exit $LASTEXITCODE\" }"
+    '& { $ErrorActionPreference = \'Stop\'; try { $ownerLines = @(& \'tools/kimi-lane-lock.ps1\' -ResolveOwner); $ownerExit = $LASTEXITCODE; if ($ownerExit -ne 0) { throw "owner resolution failed with exit $ownerExit" }; if ($ownerLines.Count -ne 1 -or -not ($ownerLines[0] -is [string]) -or [string]::IsNullOrWhiteSpace([string]$ownerLines[0])) { throw \'owner resolution returned invalid output\' }; $owner = $ownerLines[0] | ConvertFrom-Json -ErrorAction Stop; if (-not ($owner -is [System.Management.Automation.PSCustomObject])) { throw \'owner resolution returned invalid schema\' }; $ownerFields = @($owner.PSObject.Properties.Name); if ($ownerFields.Count -ne 2 -or -not ($ownerFields -ccontains \'ownerPid\') -or -not ($ownerFields -ccontains \'ownerStartTicksUtc\') -or -not (($owner.ownerPid -is [int]) -or ($owner.ownerPid -is [long])) -or [long]$owner.ownerPid -le 0 -or -not ($owner.ownerStartTicksUtc -is [string]) -or $owner.ownerStartTicksUtc -notmatch \'\\A[0-9]+\\z\') { throw \'owner resolution returned invalid schema\' }; if ([string]::IsNullOrWhiteSpace($env:TEMP) -or -not (Test-Path -LiteralPath $env:TEMP -PathType Container -ErrorAction Stop)) { throw \'TEMP is not an existing directory\' }; $verdictOut = Join-Path -Path $env:TEMP -ChildPath \'parallax-kimi-lane-login-verdict.json\' -ErrorAction Stop; & \'tools/new-kimi-lane-login.ps1\' -LaneHome \'<lane-home>\' -OwnerPid ([string]$owner.ownerPid) -OwnerStartTicksUtc $owner.ownerStartTicksUtc -VerdictOut $verdictOut; $loginExit = $LASTEXITCODE; if ($loginExit -ne 0) { throw "lane login failed with exit $loginExit" } } catch { throw } }'
 )
 
 
@@ -668,7 +753,7 @@ def _expected_recovery_command(resolved_lane_home):
 
 
 def _extract_recovery_command(stderr_text):
-    m = re.search(r'^\$ownerJson = &.*$', stderr_text, re.MULTILINE)
+    m = re.search(r'^& \{ \$ErrorActionPreference.*$', stderr_text, re.MULTILINE)
     assert m, "no recovery command found in stderr: %r" % (stderr_text,)
     return m.group(0)
 
@@ -1392,10 +1477,16 @@ def test_the_deletion_failure_oracle_is_real(tmp_path):
 
 # =======================================================================
 # Step 1b: the recovery command is EXECUTED, not just string-compared.
-# Four rows, since the command has three dependent boundaries (the owner
-# command's exit, the owner JSON parse, and the login's exit): a
-# two-row oracle would leave a parse failure and a login failure
-# unexercised.
+# NINE rows (r29 of the plan): three dependent boundaries was itself an
+# under-count. Owner LAUNCH failure, output cardinality, owner SCHEMA and
+# the environment the command reads were all unexercised before, and the
+# old parse row asserted "never invoked" while the shipped command
+# actually invoked the login with a null identity - fixed now by running
+# the whole command inside a child scriptblock that sets
+# $ErrorActionPreference = 'Stop' around a try (see
+# tools/new-kimi-lane-home.ps1's $RecoveryCommandTemplate). Every row
+# BEFORE the login launch asserts the login was NEVER invoked by MARKER
+# ABSENCE, not merely a nonzero exit.
 # =======================================================================
 
 OWNER_STUB_NONZERO = (
@@ -1403,9 +1494,59 @@ OWNER_STUB_NONZERO = (
     '[Console]::Error.WriteLine("stub: owner resolution refused")\n'
     "exit 2\n"
 )
+OWNER_STUB_ZERO_LINES = (
+    "param([switch]$ResolveOwner)\n"
+    "exit 0\n"
+)
+OWNER_STUB_MULTIPLE_LINES = (
+    "param([switch]$ResolveOwner)\n"
+    'Write-Output "line-one"\n'
+    'Write-Output "line-two"\n'
+    "exit 0\n"
+)
 OWNER_STUB_MALFORMED_JSON = (
     "param([switch]$ResolveOwner)\n"
     'Write-Output "not-json-at-all"\n'
+    "exit 0\n"
+)
+OWNER_STUB_NOT_OBJECT = (
+    "param([switch]$ResolveOwner)\n"
+    "Write-Output '[1,2,3]'\n"
+    "exit 0\n"
+)
+OWNER_STUB_MISSING_FIELD = (
+    "param([switch]$ResolveOwner)\n"
+    "Write-Output '{\"ownerPid\": 4321}'\n"
+    "exit 0\n"
+)
+OWNER_STUB_EXTRA_FIELD = (
+    "param([switch]$ResolveOwner)\n"
+    "Write-Output '{\"ownerPid\": 4321, \"ownerStartTicksUtc\": \"123456789\", \"extra\": \"x\"}'\n"
+    "exit 0\n"
+)
+OWNER_STUB_WRONG_PID_TYPE = (
+    "param([switch]$ResolveOwner)\n"
+    "Write-Output '{\"ownerPid\": \"4321\", \"ownerStartTicksUtc\": \"123456789\"}'\n"
+    "exit 0\n"
+)
+OWNER_STUB_PID_ZERO = (
+    "param([switch]$ResolveOwner)\n"
+    "Write-Output '{\"ownerPid\": 0, \"ownerStartTicksUtc\": \"123456789\"}'\n"
+    "exit 0\n"
+)
+OWNER_STUB_PID_NEGATIVE = (
+    "param([switch]$ResolveOwner)\n"
+    "Write-Output '{\"ownerPid\": -5, \"ownerStartTicksUtc\": \"123456789\"}'\n"
+    "exit 0\n"
+)
+OWNER_STUB_WRONG_TICKS_TYPE = (
+    "param([switch]$ResolveOwner)\n"
+    "Write-Output '{\"ownerPid\": 4321, \"ownerStartTicksUtc\": 123456789}'\n"
+    "exit 0\n"
+)
+OWNER_STUB_TICKS_NON_DIGIT = (
+    "param([switch]$ResolveOwner)\n"
+    "Write-Output '{\"ownerPid\": 4321, \"ownerStartTicksUtc\": \"12a456789\"}'\n"
     "exit 0\n"
 )
 OWNER_STUB_VALID_JSON = (
@@ -1423,33 +1564,51 @@ LOGIN_STUB_MARK_AND_FAIL = (
 
 
 def _disposable_tools_cwd(tmp_path, name, owner_stub_text, login_stub_text):
+    """owner_stub_text=None omits tools/kimi-lane-lock.ps1 entirely (row
+    1's launch-failure fixture); login_stub_text=None likewise omits
+    tools/new-kimi-lane-login.ps1 (row 7's)."""
     disposable = tmp_path / name
     tools_dir = disposable / "tools"
     tools_dir.mkdir(parents=True)
-    (tools_dir / "kimi-lane-lock.ps1").write_text(owner_stub_text, encoding="ascii")
-    (tools_dir / "new-kimi-lane-login.ps1").write_text(login_stub_text, encoding="ascii")
+    if owner_stub_text is not None:
+        (tools_dir / "kimi-lane-lock.ps1").write_text(owner_stub_text, encoding="ascii")
+    if login_stub_text is not None:
+        (tools_dir / "new-kimi-lane-login.ps1").write_text(login_stub_text, encoding="ascii")
     return disposable, tools_dir
 
 
 def _get_recovery_command_for(tmp_path, lane_home_name):
     """Drive the REAL builder against a nonexistent lane home to obtain
     an authentic, builder-emitted recovery command."""
-    target = tmp_path / "extraction-debate-home"
-    profile = _fake_profile(tmp_path, FAKE_REAL_CONFIG, name="extraction-profile")
+    target = tmp_path / ("extraction-debate-home-" + lane_home_name)
+    profile = _fake_profile(tmp_path, FAKE_REAL_CONFIG, name="extraction-profile-" + lane_home_name)
     lane_home = tmp_path / lane_home_name
     proc, *_ = _build2(target, profile, lane_home)
     assert proc.returncode != 0, proc.stdout + proc.stderr
     return _extract_recovery_command(proc.stderr)
 
 
-def _run_recovery_row(tmp_path, row, owner_stub_text):
-    cmd_text = _get_recovery_command_for(tmp_path, "stub-row-lane-home")
+def _run_recovery_row(tmp_path, row, owner_stub_text, login_stub_text=LOGIN_STUB_MARK_AND_FAIL,
+                       omit_temp=False, temp_override=None):
+    """temp_override, when given, is used verbatim as $env:TEMP (a
+    nonexistent path or a path to a regular file). omit_temp removes the
+    variable entirely. Neither is a fixture-shaping workaround: both are
+    the row 6 sub-cases the plan's own table names."""
+    cmd_text = _get_recovery_command_for(tmp_path, "stub-row-lane-home-" + row)
     disposable, tools_dir = _disposable_tools_cwd(
-        tmp_path, "disposable-" + row, owner_stub_text, LOGIN_STUB_MARK_AND_FAIL)
+        tmp_path, "disposable-" + row, owner_stub_text, login_stub_text)
     fake_profile_dir = tmp_path / ("run-profile-" + row)
     fake_profile_dir.mkdir()
-    env = _clean_env(USERPROFILE=str(fake_profile_dir), TEMP=str(tmp_path / ("run-temp-" + row)))
-    os.makedirs(env["TEMP"], exist_ok=True)
+    env = _clean_env(USERPROFILE=str(fake_profile_dir))
+    if omit_temp:
+        env.pop("TEMP", None)
+        env.pop("TMP", None)
+    elif temp_override is not None:
+        env["TEMP"] = str(temp_override)
+    else:
+        temp_dir = tmp_path / ("run-temp-" + row)
+        temp_dir.mkdir(parents=True, exist_ok=True)
+        env["TEMP"] = str(temp_dir)
     run = subprocess.run(
         [POWERSHELL, "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", cmd_text],
         capture_output=True, text=True, timeout=60, env=env, cwd=str(disposable))
@@ -1457,80 +1616,141 @@ def _run_recovery_row(tmp_path, row, owner_stub_text):
     return run, marker
 
 
-def test_the_recovery_command_row1_owner_command_nonzero(tmp_path):
-    """Row 1: the owner command itself exits nonzero. The command's own
-    `if ($LASTEXITCODE -ne 0) { throw ... }` guard is an explicit `throw`,
-    which DOES reliably halt the rest of the semicolon chain - confirmed
-    live: exit nonzero, login stub never invoked."""
+def test_the_recovery_command_row1_owner_launch_failure(tmp_path):
+    """Row 1: the owner command has no tools/kimi-lane-lock.ps1 to run at
+    all. PowerShell's own CommandNotFoundException is terminating
+    regardless of $ErrorActionPreference, so it is caught by the outer
+    try/catch: nonzero, login stub never invoked."""
+    run, marker = _run_recovery_row(tmp_path, "owner_launch_fail", owner_stub_text=None)
+    assert run.returncode != 0, run.stdout + run.stderr
+    assert not marker.exists()
+
+
+def test_the_recovery_command_row2_owner_command_nonzero(tmp_path):
+    """Row 2: the owner command itself exits nonzero. The command's own
+    `if ($ownerExit -ne 0) { throw ... }` guard is an explicit `throw`,
+    which reliably halts the rest of the try - confirmed live: exit
+    nonzero, login stub never invoked."""
     run, marker = _run_recovery_row(tmp_path, "owner_nonzero", OWNER_STUB_NONZERO)
     assert run.returncode != 0, run.stdout + run.stderr
     assert not marker.exists()
 
 
-def test_the_recovery_command_row2_owner_json_malformed(tmp_path):
-    """Row 2, per the plan's own four-row table: 'zero | malformed |
-    never invoked | a TERMINATING parse failure'.
+@pytest.mark.parametrize("label,stub", [
+    ("zero_lines", OWNER_STUB_ZERO_LINES),
+    ("multiple_lines", OWNER_STUB_MULTIPLE_LINES),
+])
+def test_the_recovery_command_row3_owner_stdout_cardinality(tmp_path, label, stub):
+    """Row 3: owner stdout is zero lines, or several - both directions,
+    since a two-row oracle would leave one of them unexercised. The
+    command's own `if ($ownerLines.Count -ne 1 -or ...) { throw ... }`
+    guard catches both."""
+    run, marker = _run_recovery_row(tmp_path, "owner_cardinality_" + label, stub)
+    assert run.returncode != 0, run.stdout + run.stderr
+    assert not marker.exists()
 
-    LIVE-VERIFIED FINDING, not a design choice of this test: the frozen
-    command's JSON guard is `$owner = $ownerJson | ConvertFrom-Json
-    -ErrorAction Stop` with NO surrounding try/catch and no
-    `$ErrorActionPreference = 'Stop'` anywhere in the one-liner. Under
-    PowerShell's default $ErrorActionPreference ("Continue"), an
-    uncaught -ErrorAction-Stop-promoted CMDLET error terminates only the
-    one pipeline statement it came from, not the enclosing top-level
-    command - unlike the explicit `throw` the other two dependency
-    checks use, which DOES halt (rows 1 and 3, confirmed by the tests
-    around this one). Reproduced four separate ways, both hosts, both
-    -Command and -File invocation: `$owner = 'bad' | ConvertFrom-Json
-    -ErrorAction Stop; Write-Output 'reached'` prints the ConvertFrom-Json
-    error AND THEN prints 'reached'. So on THIS row, the frozen text as
-    written does NOT keep the login wrapper from being invoked (it runs
-    with $owner.ownerPid/$owner.ownerStartTicksUtc both $null) - it is
-    the LOGIN WRAPPER's own exit code (nonzero, whatever it does with
-    null identity fields) that the command's third statement's `throw`
-    catches, so the overall command still exits nonzero, just not for
-    the reason the plan's row describes, and not before the login stub
-    ran. This is exactly the plan-prose-vs-runtime gap Step 1b exists to
-    catch - a string pin would have shown "a TERMINATING parse failure"
-    text present and passed. Reported to the task owner rather than
-    silently asserting the row's stronger, false claim; see the
-    implementer's final report for Task 6."""
+
+def test_the_recovery_command_row4_owner_json_malformed(tmp_path):
+    """Row 4: owner stdout is malformed JSON.
+
+    LIVE-VERIFIED FIX: the plan's PREVIOUS command (r20/r21) had this
+    exact `$owner = $ownerJson | ConvertFrom-Json -ErrorAction Stop` with
+    NO surrounding try/catch and no `$ErrorActionPreference = 'Stop'`
+    anywhere in the one-liner, so the ConvertFrom-Json terminating error
+    was promoted only for its OWN pipeline statement and the chain
+    continued - the login stub ran with a null identity, reproduced live
+    on both hosts. The r29 replacement wraps the whole command in a
+    child scriptblock that sets $ErrorActionPreference = 'Stop' around a
+    try, so this same ConvertFrom-Json failure now IS caught by the
+    outer catch before the login stub is ever reached - reproduced live
+    on both hosts as part of this task's fix: nonzero, login never
+    invoked, no verdict, no credential mutation."""
     run, marker = _run_recovery_row(tmp_path, "owner_malformed_json", OWNER_STUB_MALFORMED_JSON)
     assert run.returncode != 0, run.stdout + run.stderr
-    # The exact wording differs by host: Windows PowerShell 5.1 says
-    # "Invalid JSON primitive"; PowerShell 7's JSON.NET-backed
-    # implementation says "Conversion from JSON failed with error".
-    assert "ConvertFrom-Json" in run.stderr, run.stderr
-    assert "Invalid JSON" in run.stderr or "Conversion from JSON failed" in run.stderr, run.stderr
-    # NOT asserted: marker absence. The frozen command's -ErrorAction Stop
-    # guard does not halt the chain here - see the finding above.
+    assert not marker.exists(), (
+        "the login stub must never be invoked once the owner JSON fails to "
+        "parse - the previous command's own bug, now fixed")
 
 
-def test_the_recovery_command_row3_login_nonzero(tmp_path):
-    """Row 3: owner resolution succeeds with valid JSON; the login stub
+@pytest.mark.parametrize("label,stub", [
+    ("not_object", OWNER_STUB_NOT_OBJECT),
+    ("missing_field", OWNER_STUB_MISSING_FIELD),
+    ("extra_field", OWNER_STUB_EXTRA_FIELD),
+    ("wrong_pid_type", OWNER_STUB_WRONG_PID_TYPE),
+    ("pid_zero", OWNER_STUB_PID_ZERO),
+    ("pid_negative", OWNER_STUB_PID_NEGATIVE),
+    ("wrong_ticks_type", OWNER_STUB_WRONG_TICKS_TYPE),
+    ("ticks_non_digit", OWNER_STUB_TICKS_NON_DIGIT),
+])
+def test_the_recovery_command_row5_owner_schema(tmp_path, label, stub):
+    """Row 5: owner JSON is valid but the wrong shape - not an object,
+    wrong property set (missing or extra), wrong pid type, a pid <= 0,
+    wrong ticks type, or ticks failing \\A[0-9]+\\z. Every sub-case must
+    independently fail closed: nonzero, login never invoked."""
+    run, marker = _run_recovery_row(tmp_path, "owner_schema_" + label, stub)
+    assert run.returncode != 0, run.stdout + run.stderr
+    assert not marker.exists()
+
+
+@pytest.mark.parametrize("label", ["temp_unset", "temp_nonexistent", "temp_is_a_file"])
+def test_the_recovery_command_row6_temp_unusable(tmp_path, label):
+    """Row 6: TEMP missing or not a directory. (A SEPARATE forced
+    Join-Path failure is not independently constructible without mocking
+    the cmdlet itself: once the command's own preceding check confirms
+    $env:TEMP exists and is a container, Join-Path -ChildPath with a
+    fixed, safe literal child name cannot fail on either host - the
+    guard that would need to fail has already run.) Every sub-case:
+    nonzero, login never invoked."""
+    if label == "temp_unset":
+        run, marker = _run_recovery_row(tmp_path, "temp_unset", OWNER_STUB_VALID_JSON,
+                                         omit_temp=True)
+    elif label == "temp_nonexistent":
+        run, marker = _run_recovery_row(
+            tmp_path, "temp_nonexistent", OWNER_STUB_VALID_JSON,
+            temp_override=tmp_path / "does-not-exist-temp")
+    else:  # temp_is_a_file
+        temp_as_file = tmp_path / "temp-is-a-file.txt"
+        temp_as_file.write_text("not a directory", encoding="ascii")
+        run, marker = _run_recovery_row(tmp_path, "temp_is_a_file", OWNER_STUB_VALID_JSON,
+                                         temp_override=temp_as_file)
+    assert run.returncode != 0, run.stdout + run.stderr
+    assert not marker.exists()
+
+
+def test_the_recovery_command_row7_login_launch_failure(tmp_path):
+    """Row 7: owner resolution succeeds, but tools/new-kimi-lane-login.ps1
+    does not exist to run. PowerShell's CommandNotFoundException is
+    terminating, caught by the outer try/catch: nonzero."""
+    run, marker = _run_recovery_row(tmp_path, "login_launch_fail", OWNER_STUB_VALID_JSON,
+                                     login_stub_text=None)
+    assert run.returncode != 0, run.stdout + run.stderr
+
+
+def test_the_recovery_command_row8_login_nonzero(tmp_path):
+    """Row 8: owner resolution succeeds with valid JSON; the login stub
     is invoked and fails. The command's third statement's explicit
-    `throw` on the login's own nonzero $LASTEXITCODE DOES reliably
-    surface as the overall command's failure."""
+    `throw` on the login's own nonzero $LASTEXITCODE reliably surfaces
+    as the overall command's failure, and no `ok` verdict is ever
+    written because the stub never writes one."""
     run, marker = _run_recovery_row(tmp_path, "login_nonzero", OWNER_STUB_VALID_JSON)
     assert run.returncode != 0, run.stdout + run.stderr
     assert marker.exists(), "the login stub must be invoked once owner resolution is valid"
 
 
-def test_the_recovery_command_success_row_with_an_apostrophe_lane_home(tmp_path):
-    """The escaping needs its own failure direction: all four rows could
-    pass with an ordinary path, so the SUCCESS row specifically uses a
-    resolved lane home CONTAINING AN APOSTROPHE (kept free of a space in
-    the SAME path segment - tools/new-kimi-lane-login.ps1's own
-    Start-Process argument-list construction for the credential
-    validator, a file this task must not rewrite, mis-tokenizes a
-    -File argument that combines a space with an embedded apostrophe;
-    that is a pre-existing property of a script this task only invokes)
-    and requires the emitted command to contain the DOUBLED apostrophe,
-    that it writes only to the intended lane home, and that the
-    resulting credential is structurally ok."""
-    lane_home_name = "o'learys-lane-home"
+def test_the_recovery_command_row9_full_success_with_apostrophe_and_space(tmp_path):
+    """Row 9, and the escaping's own failure direction: every row above
+    could pass with an ordinary path, which would let an implementation
+    that never doubles apostrophes pass all of them. The SUCCESS row
+    therefore uses a resolved lane home containing BOTH AN APOSTROPHE AND
+    A SPACE IN THE SAME PATH SEGMENT - the apostrophe exercises the
+    <lane-home> template's single-quote doubling, the space exercises
+    tools/new-kimi-lane-login.ps1's own Start-Process argument quoting
+    for the credential validator (fixed by this same task). An earlier
+    fixture deliberately avoided combining the two characters; a fixture
+    may not be shaped to avoid a defect in code it drives."""
+    lane_home_name = "o'learys lane home"
     cmd_text = _get_recovery_command_for(tmp_path, lane_home_name)
-    assert "o''learys" in cmd_text, cmd_text
+    assert "o''learys lane home" in cmd_text, cmd_text
 
     disposable = tmp_path / "disposable-success"
     tools_dir = disposable / "tools"
