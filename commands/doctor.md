@@ -143,20 +143,40 @@ declaration is itself BROKEN. Then:
 Report the route language as declared in the agent file: evidence is
 client-side, requested and propagated only.
 
-## 8. Backup reviewer transport (kimi)
+## 8. Backup reviewer transport (kimi-code)
 
-Run `kimi --version`. Resolve the plugin's INSTALLED copy under the
-`installPath` from check 1 — never a bare relative path — then: parse
-the backup id from the line `Canonical backup reviewer model id:` in
-the installed
-`skills/multi-model-verify/references/model-prompting-notes.md` (this
-check carries no model literal), and verify both containment artifacts
-exist in the installed `skills/multi-model-verify/references/`:
-`kimi-reviewer-agent.yaml` and `kimi-reviewer-system.md`. Report the
-version, the parsed id, and the artifact presence. Any failure is
-BROKEN with the state detail "backup lane unavailable (primary lane
-unaffected)"; kimi not installed at all is N/A with the same detail —
-the fix pointer is references/backup-lane.md either way.
+Three checks, none of them a review dispatch:
+
+- **Binary and floor.** Run `~/.kimi-code/bin/kimi.exe --version` — the
+  client's ABSOLUTE path, never a bare `kimi` resolved from PATH (the
+  superseded client can still be installed alongside it). Missing binary
+  is N/A with the detail "backup lane unavailable (primary lane
+  unaffected)" — the fix pointer is references/backup-lane.md. A present
+  binary that does not report a usable version, or reports below the
+  floor `0.31.1`, is BROKEN with the same detail.
+- **Provider reachability.** Build a scratch home with
+  `tools/new-kimi-lane-home.ps1` (remove it after), parse the backup id
+  from the line `Canonical backup reviewer model id:` in the installed
+  `skills/multi-model-verify/references/model-prompting-notes.md` (this
+  check carries no model literal), then run `provider list` under that
+  home (`KIMI_CODE_HOME` set to it). OK requires the output to report
+  `source=oauth`. **This does not prove a dispatch will work** — measured
+  twice this cycle, `provider list` reported a healthy oauth source while
+  an actual round dispatch failed with `auth.login_required`. Report it
+  as exactly what it is: "credential present and OAuth-sourced", never
+  "backup lane confirmed working" or similar. A missing or unreadable
+  home, or output not containing `source=oauth`, is BROKEN.
+- **Containment artifact.** Verify the committed
+  `skills/multi-model-verify/references/kimi-reviewer-agent.md` exists in
+  the installed copy and its `tools:` allowlist is present (do not
+  re-derive the list here; report presence/absence only). Missing file or
+  allowlist is BROKEN.
+
+Report the version, the floor comparison, the parsed id, the
+`provider list` output, and the artifact/allowlist presence. This check
+never imports `kimi_cli` (there is no such module on this client) and
+never passes `--quiet` or `--thinking` (neither flag exists on this
+client).
 
 ## 9. Reviewer context isolation
 

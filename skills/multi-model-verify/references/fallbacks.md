@@ -149,34 +149,17 @@ choice.
     kimi.com quota dashboard (5-hour / 7-day / monthly windows), quoted
     at the consent gate; a mid-debate outage notes the kimi session id
     in the debate record so the debate resumes after the reset.
-  - route-attribution failure (offset rule in backup-lane.md): nothing
-    transient → no retry, reply DISCARDED unread, consent gate. One
-    exception to the RATIONALE, not to the disposition: a rotation under
-    the call is the one member that IS transient — a re-dispatch with a
-    freshly captured offset would produce clean evidence. It still skips
-    the retry, because the round already spent is unattributable and no
-    retry can make it attributable after the fact; the user decides at
-    the gate whether to spend another. Stated here so the class's
-    "nothing transient" premise is not read as covering a member it
-    does not describe.
-  - output-encoding failure — class `output-encoding`:
-    `UnicodeEncodeError` / `'charmap' codec can't encode character`
-    from the kimi process on a Windows driver. The round COMPLETED and
-    the quota is already spent; only the write failed. **Skip the
-    retry** — a same-parameters retry re-runs the same encode against
-    the same console codepage and fails identically (deterministic,
-    like missing-rollout). Nothing is discarded or quarantined: no
-    reply reached disk, so this is neither a route-attribution nor an
-    integrity failure, and calling it either would wrongly imply
-    tainted evidence. Recovery is a RESUME of the surviving session
-    with all four flags re-pinned AND the UTF-8 environment forced
-    (backup-lane.md) — never a fresh review, which throws away a round
-    the provider already charged for. The resume's `-p` carries no
-    rebuttal here — there is nothing to rebut yet — but it is never
-    empty: ask the session to re-emit its previous reply verbatim, and
-    treat what comes back as that round's reply. If the crash also cost
-    the session id, or the forced-UTF-8 resume fails, then the consent
-    gate.
+  - route-attribution failure (the round-freshness boundary and the
+    `tools/read-kimi-round-evidence.ps1` validator in backup-lane.md):
+    nothing transient → no retry, reply DISCARDED unread, consent gate.
+    One exception to the RATIONALE, not to the disposition: a rotation
+    under the call is the one member that IS transient — a re-dispatch
+    with a freshly captured offset would produce clean evidence. It
+    still skips the retry, because the round already spent is
+    unattributable and no retry can make it attributable after the
+    fact; the user decides at the gate whether to spend another. Stated
+    here so the class's "nothing transient" premise is not read as
+    covering a member it does not describe.
   - resume failure: one same-parameters retry, then the consent gate
     with the fresh-per-round option (full brief re-sent each round).
   - integrity failure (write-probe fail, or a mirror delta beyond the

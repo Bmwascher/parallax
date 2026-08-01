@@ -769,28 +769,19 @@ def test_skill_preflight_names_the_remediation():
 
 
 def test_output_encoding_class_is_wired():
-    # 0.14.2, observed live 2026-07-26 (Windows, kimi-cli 1.49.0): the
-    # round completed and UnicodeEncodeError killed the WRITE. The
-    # catch-all would have spent a second real call on a retry that
-    # cannot succeed, and the honest recovery (resume the surviving
-    # session with UTF-8 forced) had no path in the rules at all.
+    # Task 4 Step 1 probed the cp1252 output hazard live, on this client
+    # rather than the old kimi-cli one: from a console forced to code page
+    # 1252, a reply containing an em-dash, an arrow and a katakana
+    # character came back intact as valid UTF-8 and the process exited 0.
+    # No hazard was observed on this client, so the Python-console guard
+    # the old lane needed (PYTHONIOENCODING/PYTHONUTF8), the class that
+    # named its failure, and the four-flags-re-pinned recovery all go with
+    # it - none of them describe this client.
     lane = _norm(BACKUP_LANE)
-    assert "`PYTHONIOENCODING=utf-8` and `PYTHONUTF8=1`" in lane
-    assert "AFTER the model has already answered" in lane
-    # the unprobed part is marked, not papered over
-    assert ("Which of the two variables is load-bearing, and whether the "
-            "same guard is needed for kimi's own session-log write, is "
-            "UNVERIFIED") in lane
+    assert "PYTHONIOENCODING" not in lane
+    assert "PYTHONUTF8" not in lane
     fb = _norm(FALLBACKS)
-    assert "class `output-encoding`" in fb
-    assert "**Skip the retry**" in fb
-    # the resume's -p carries no rebuttal in recovery, but must not be
-    # empty - say what to send (whole-branch review, Minor 2)
-    assert ("ask the session to re-emit its previous reply verbatim" in fb)
-    # the class must NOT be filed under the two evidence-tainting
-    # classes - nothing reached disk, so nothing is suspect
-    assert ("neither a route-attribution nor an integrity failure" in fb)
-    assert ("Recovery is a RESUME of the surviving session" in fb)
+    assert "output-encoding" not in fb
 
 
 def test_fallbacks_backup_wiring():

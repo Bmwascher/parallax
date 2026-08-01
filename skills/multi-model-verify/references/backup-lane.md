@@ -20,19 +20,6 @@ Panel participation: a user-invoked panel per references/panels.md is a second s
 
 ## Transport
 
-- **Environment — every call, fresh or resumed.** On a Windows driver,
-  force UTF-8 for the kimi process: `PYTHONIOENCODING=utf-8` and
-  `PYTHONUTF8=1`. kimi-cli is Python, so on a cp1252 console a reply
-  containing any non-encodable character raises `UnicodeEncodeError`
-  AFTER the model has already answered — the round completes, the
-  quota is spent, and the review is lost on the way to disk. Arrows and
-  em-dashes are routine in review prose, so this is a standing hazard,
-  not an edge case. Observed 2026-07-26 (kimi-cli 1.49.0, Windows):
-  `'charmap' codec can't encode character '→'`. Which of the two
-  variables is load-bearing, and whether the same guard is needed for
-  kimi's own session-log write, is UNVERIFIED — set both. The primary
-  lane does not share this exposure (codex is not Python and writes the
-  reply via `--output-last-message`), so the guard is lane-local.
 - `<kimi-code-binary>` is the client's ABSOLUTE path — `~/.kimi-code/bin/kimi.exe` on Windows — never a bare `kimi` resolved from PATH. The superseded client is still installed alongside it, so a PATH lookup is not evidence of which binary ran.
 - Dispatch (single line):
   `<kimi-code-binary> -m <canonical-backup-model-id> --agent-file <plugin-checkout>/skills/multi-model-verify/references/kimi-reviewer-agent.md --skills-dir <debate-home>/skills -p "<the whole brief>"`
