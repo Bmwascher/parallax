@@ -65,10 +65,20 @@ def _agent_tools():
 
 AGENT_TOOLS = _agent_tools()
 
+# WINDOWS ONLY, same reason as the probe/mirror/lock suites: CI's ubuntu
+# runner ships `pwsh`, so guarding on a PowerShell host being present is
+# not enough by itself - the module would then RUN on Linux instead of
+# skipping, and its `\`-separated evidence-file paths
+# (agents\main\wire.jsonl, logs\kimi-code.log) are ordinary filename
+# characters there, not path separators, so every clean case would fail
+# evidence-file-missing. See test_review_mirror.py's header for the fuller
+# history of this exact mistake.
 POWERSHELL = os.environ.get("PARALLAX_PS_HOST") or shutil.which("powershell") or shutil.which("pwsh")
 
 pytestmark = pytest.mark.skipif(
-    POWERSHELL is None, reason="no PowerShell host on PATH")
+    os.name != "nt" or POWERSHELL is None,
+    reason="the round-evidence validator is a Windows tool: its evidence-file "
+           "paths are backslash-separated")
 
 
 # ---------------------------------------------------------------------
@@ -270,6 +280,27 @@ def assert_failed(proc, reason_substring):
 
 
 # =======================================================================
+# FIXTURE HYGIENE
+# =======================================================================
+
+def test_fixture_files_contain_no_crlf():
+    """The `.gitattributes` `eol=lf` rule for fixtures/kimi-round/* is the
+    ONLY thing standing between these byte-exact offsets/hashes and
+    `core.autocrlf=true` silently rewriting them on a future checkout - a
+    fixture-corrupting bug this task's own report found and fixed once
+    already. Nothing pinned that the WORKING TREE bytes actually stay LF,
+    so a future edit that reintroduced CRLF (or a machine/config where the
+    attribute did not apply) would pass every other test right up until
+    the next checkout broke it. This reads the files exactly as the
+    validator does - raw bytes, not text-mode - the same gap a
+    text-mode read would silently paper over."""
+    for name in ("fresh-wire.jsonl", "fresh-log.log",
+                 "resume-wire.jsonl", "resume-log.log"):
+        raw = (FIXTURES / name).read_bytes()
+        assert b"\r\n" not in raw, name
+
+
+# =======================================================================
 # CLEAN CASES
 # =======================================================================
 
@@ -360,7 +391,7 @@ def test_first_call_of_a_debate_creates_container_and_leaf_and_is_clean(tmp_path
     session-not-resolvable on the clean first call of every debate."""
     root, sess_dir = build_fresh_layout(tmp_path, fresh_wire(), fresh_log(),
                                          workspace="wd_ws_first-call")
-    assert not (root / "wd_ws_first-call").exists() is False  # sanity: dir exists
+    assert (root / "wd_ws_first-call").exists()  # sanity: dir exists
     state_path = tmp_path / "state.json"
     write_json(state_path, fresh_prior_state(known_session_dirs=[]))
     assert_clean(run_fresh(root, FIXTURE_SESSION_ID, state_path))
@@ -509,6 +540,29 @@ def test_fresh_state_with_stale_known_session_dirs_fails(tmp_path):
     # though it existed before this dispatch.
     write_json(state_path, fresh_prior_state(known_session_dirs=[]))
     assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path), "session-not-resolvable")
+
+
+def test_fresh_state_with_forward_slash_spelled_known_session_dir_is_clean(tmp_path):
+    """Fix round 2, Important 2: knownSessionDirs is produced by a
+    DIFFERENT task's dispatch flow, and nothing in the script, the tests,
+    or the header ever pinned its required path spelling. Measured:
+    Get-ChildItem's FullName is backslash-spelled on Windows, and a
+    genuinely pre-existing directory listed in knownSessionDirs with
+    forward slashes instead used to read as session-not-resolvable ("2
+    new session directory(ies) found") - the fresh branch compared raw
+    strings while the resume branch, a few lines below, already
+    normalized both sides with Resolve-Path. Both branches now go through
+    the same Resolve-PathSafe helper, so this is clean: exactly one
+    genuinely new leaf (the fixture session), the forward-slash-spelled
+    directory correctly recognized as already known."""
+    root, sess_dir = build_fresh_layout(tmp_path, fresh_wire(), fresh_log())
+    preexisting = root / "wd_x" / "session_22222222-2222-4222-8222-222222222222"
+    (preexisting / "agents" / "main").mkdir(parents=True)
+    (preexisting / "logs").mkdir(parents=True)
+    state_path = tmp_path / "state.json"
+    forward_spelled = str(preexisting).replace("\\", "/")
+    write_json(state_path, fresh_prior_state(known_session_dirs=[forward_spelled]))
+    assert_clean(run_fresh(root, FIXTURE_SESSION_ID, state_path))
 
 
 def test_prior_state_kind_disagreeing_with_invocation_fails(tmp_path):
@@ -736,6 +790,51 @@ def test_llm_request_toolshash_not_a_string_fails_record_malformed(tmp_path):
     assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path), "record-malformed")
 
 
+# Fix round 2, Important 1: Test-ToolsSnapshotShape used to check only that
+# `tools` was an array, never its elements. Reproduced by the review: an
+# element missing `name`, an element that HAD `name` losing it, and `tools`
+# as a bare list of strings all used to reach rule 12's Compare-Object
+# unvalidated - crashing (a raw binding error, no JSON on stdout) under this
+# script's own $ErrorActionPreference = "Stop", or, measured WITHOUT that
+# preference, silently evaluating the same expression's .Count to 0 - a
+# SILENT PASS on the tool-name equality regardless of what the malformed
+# entry actually was. All three now fail record-malformed at rule 10,
+# before rule 12 ever runs.
+
+def test_tools_snapshot_entry_missing_name_fails_record_malformed(tmp_path):
+    wire = fresh_wire()
+    idx = find_index(wire, "llm.tools_snapshot", 1)
+    wire = mutate(wire, idx, lambda o: o["tools"].append(
+        {"description": "x", "parameters": {}}))
+    root, sess_dir = build_fresh_layout(tmp_path, wire, fresh_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+    assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path), "record-malformed")
+
+
+def test_tools_snapshot_entry_losing_its_name_fails_record_malformed(tmp_path):
+    def drop_name(o):
+        del o["tools"][0]["name"]
+    wire = fresh_wire()
+    idx = find_index(wire, "llm.tools_snapshot", 1)
+    wire = mutate(wire, idx, drop_name)
+    root, sess_dir = build_fresh_layout(tmp_path, wire, fresh_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+    assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path), "record-malformed")
+
+
+def test_tools_snapshot_tools_as_bare_strings_fails_record_malformed(tmp_path):
+    wire = fresh_wire()
+    idx = find_index(wire, "llm.tools_snapshot", 1)
+    wire = mutate(wire, idx, lambda o: o.__setitem__(
+        "tools", [t["name"] for t in o["tools"]]))
+    root, sess_dir = build_fresh_layout(tmp_path, wire, fresh_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+    assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path), "record-malformed")
+
+
 def test_missing_agent_file_fails(tmp_path):
     root, sess_dir = build_fresh_layout(tmp_path, fresh_wire(), fresh_log())
     state_path = tmp_path / "state.json"
@@ -870,16 +969,30 @@ def test_two_copies_of_first_config_update_shape_second_absent_fails(tmp_path):
     assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path), "session-scoped-content")
 
 
-def test_two_copies_of_second_config_update_shape_first_absent_fails(tmp_path):
+def test_two_copies_of_second_config_update_shape_fails(tmp_path):
+    """The mirror of the case above, actually isolating the OTHER count
+    check this time. Simply overwriting the first record with the second
+    record's content (as the case above does for the first shape) makes
+    the FIRST-shape count check (exactly one profileName/systemPrompt
+    record) fail FIRST, since it drops to zero - never exercising the
+    second-shape count check the case's name claims to test, even though
+    both checks share the session-scoped-content token and the test
+    passed regardless. Fixed by MERGING the second shape's keys into the
+    first record instead of replacing it: the first record now satisfies
+    BOTH shape predicates (profileName/systemPrompt survive), so the
+    first-shape count stays exactly 1 and passes - while the
+    second-shape count becomes 2 (the merged record plus the untouched
+    second record), which is the check this case exists to reach."""
     wire = fresh_wire()
     first_idx = find_index(wire, "config.update", 1)
     second_idx = find_index(wire, "config.update", 2)
     second_obj = json.loads(wire[second_idx])
-    wire[first_idx] = json.dumps(second_obj)
+    wire = mutate(wire, first_idx, lambda o: o.update(second_obj))
     root, sess_dir = build_fresh_layout(tmp_path, wire, fresh_log())
     state_path = tmp_path / "state.json"
     write_json(state_path, fresh_prior_state())
-    assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path), "session-scoped-content")
+    assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path),
+                  "expected exactly one modelAlias/thinkingEffort config.update")
 
 
 @pytest.mark.parametrize("rec_type", [
@@ -911,13 +1024,22 @@ def test_resume_slice_containing_a_session_scoped_record_fails(tmp_path, rec_typ
 # =======================================================================
 
 def test_active_tools_names_unequal_to_allowlist_fails(tmp_path):
+    """Appending ExtraTool to tools.set_active_tools.names ALSO breaks the
+    llm.tools_snapshot comparison two checks later (:660), since the
+    snapshot's own tool names no longer equal the now-longer active
+    list - and both checks emit the shared "session-scoped-content" token,
+    so a generic substring assertion would still pass even if THIS check
+    (:640, tools.set_active_tools vs -AgentFile) were neutered and the
+    snapshot check caught the mutation instead. Asserting the check's own
+    distinguishing text closes that gap."""
     wire = fresh_wire()
     idx = find_index(wire, "tools.set_active_tools", 1)
     wire = mutate(wire, idx, lambda o: o["names"].append("ExtraTool"))
     root, sess_dir = build_fresh_layout(tmp_path, wire, fresh_log())
     state_path = tmp_path / "state.json"
     write_json(state_path, fresh_prior_state())
-    assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path), "session-scoped-content")
+    assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path),
+                  "tools.set_active_tools.names does not match -AgentFile's tools list")
 
 
 def test_active_tools_disallowed_names_unequal_to_denylist_fails(tmp_path):

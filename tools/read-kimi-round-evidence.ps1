@@ -62,8 +62,11 @@
 # whether the measurement behind it was right: a resume slice carries no
 # llm.tools_snapshot at all, so on resume the bound was the ONLY tool-count
 # check, and it would have passed a round running with as few as one tool.
-# The fresh-slice cross-check against llm.tools_snapshot.tools.Count is kept
-# below as an ADDITIONAL check, not a substitute for the equality.
+# Fix round 2: fix round 1 also kept a fresh-only cross-check here (toolCount
+# vs llm.tools_snapshot.tools.Count "as an ADDITIONAL check"). Removed: it
+# could never fail on its own, because rule 12's snapshot tool-NAME equality
+# already forces the counts equal first. A check that cannot fail is exactly
+# the defect class this rule exists to prevent.
 #
 # Exit codes: 0 clean, 1 failed (reason on stdout, see -Json).
 param(
@@ -166,6 +169,17 @@ function Get-ByteSuffix([byte[]]$all, [long]$offset) {
 function Get-Utf8BytesNoBom($s) {
     $enc = New-Object System.Text.UTF8Encoding($false)
     return $enc.GetBytes([string]$s)
+}
+
+function Resolve-PathSafe($p) {
+    # Canonicalizes a path so a directory spelled with forward slashes and
+    # the SAME directory spelled with backslashes compare equal. Falls
+    # back to the input unchanged if the path does not (yet, or ever)
+    # exist - Resolve-Path throws on a missing path, and "not found" is a
+    # different failure than "found but spelled differently", so callers
+    # still see a clean miss rather than this function inventing one.
+    if (-not $p) { return $p }
+    try { return (Resolve-Path -LiteralPath $p -ErrorAction Stop).Path } catch { return $p }
 }
 
 # ---------------------------------------------------------------------
@@ -356,6 +370,20 @@ function Test-ToolsSnapshotShape($rec) {
     if (-not ($rec.hash -is [string])) { return $false }
     if (-not ($rec.PSObject.Properties.Name -contains "tools")) { return $false }
     if (-not ($rec.tools -is [array])) { return $false }
+    # Every ELEMENT, not just the array wrapper: a tool entry missing its
+    # `name`, or a bare string in place of an object, both used to reach
+    # rule 12's `Compare-Object` unvalidated. Under this script's own
+    # $ErrorActionPreference = "Stop" that throws a raw binding error
+    # instead of Fail-ing record-malformed; measured WITHOUT that
+    # preference, the same expression instead evaluates to a 0-count diff
+    # - a silent PASS on the equality that rule 12 exists to enforce. Both
+    # failure modes are closed by validating the element shape here,
+    # before rule 12 ever runs.
+    foreach ($t in @($rec.tools)) {
+        if ($null -eq $t) { return $false }
+        if (-not ($t.PSObject.Properties.Name -contains "name")) { return $false }
+        if (-not ($t.name -is [string])) { return $false }
+    }
     return $true
 }
 
@@ -473,9 +501,15 @@ if ($priorStateObj.kind -ne $Kind) {
 $resolvedSessionDir = $null
 $resolvedSessionId = $null
 if ($Fresh) {
-    $known = @($priorStateObj.knownSessionDirs)
+    # Both sides canonicalized before comparing, same as the resume branch
+    # below - the inventory's producer is a different task's dispatch flow
+    # and nothing pins its path spelling. Measured: a knownSessionDirs
+    # entry spelled with forward slashes for a genuinely pre-existing
+    # directory otherwise reads as a SECOND new directory, not the one
+    # already known.
+    $known = @($priorStateObj.knownSessionDirs | ForEach-Object { Resolve-PathSafe $_ })
     $current = Get-SessionLeaves $SessionsRoot
-    $newLeaves = @($current | Where-Object { $known -notcontains $_ })
+    $newLeaves = @($current | Where-Object { $known -notcontains (Resolve-PathSafe $_) })
     if ($newLeaves.Count -ne 1) {
         Fail ("session-not-resolvable: " + $newLeaves.Count +
               " new session directory(ies) found under -SessionsRoot, expected exactly 1")
@@ -493,12 +527,8 @@ if ($Fresh) {
     $priorNames = @($priorStateObj.PSObject.Properties.Name)
     $priorSessionDir = if ($priorNames -contains "sessionDir") { [string]$priorStateObj.sessionDir } else { $null }
     $priorSessionId = if ($priorNames -contains "sessionId") { [string]$priorStateObj.sessionId } else { $null }
-    $resolvedFull = $null
-    try { $resolvedFull = (Resolve-Path -LiteralPath $resolvedSessionDir -ErrorAction Stop).Path } catch { $resolvedFull = $resolvedSessionDir }
-    $priorFull = $priorSessionDir
-    if ($priorSessionDir) {
-        try { $priorFull = (Resolve-Path -LiteralPath $priorSessionDir -ErrorAction Stop).Path } catch { $priorFull = $priorSessionDir }
-    }
+    $resolvedFull = Resolve-PathSafe $resolvedSessionDir
+    $priorFull = Resolve-PathSafe $priorSessionDir
     if (($priorFull -ne $resolvedFull) -or ($priorSessionId -ne $resolvedSessionId)) {
         Fail "state-session-mismatch: -PriorState.sessionDir/sessionId does not name this session"
     }
@@ -746,15 +776,14 @@ if ($parsedLog.ThinkingEffort -ne $Effort) {
 if ($parsedLog.ToolCount -ne $agentInfo.Tools.Count) {
     Fail "log-config-field: toolCount does not equal the agent file's allowlist length"
 }
-# The fresh-slice cross-check is strictly stronger than the equality above
-# and independently correct: it binds the logged count to the client's OWN
-# snapshot of the schemas it sent, not just to the agent file.
-if ($Fresh) {
-    $snapshot = @($records | Where-Object { $_.type -eq "llm.tools_snapshot" })[0]
-    if ($parsedLog.ToolCount -ne @($snapshot.tools).Count) {
-        Fail "log-config-field: toolCount does not match llm.tools_snapshot's tool count"
-    }
-}
+# Fix round 2: removed a fresh-only cross-check that used to sit here
+# (toolCount vs llm.tools_snapshot.tools.Count). It could never fail on
+# its own: rule 12 above already requires the snapshot's tool NAMES to
+# equal the active allowlist by full multiset equality (Compare-Object
+# flags even a duplicate name as a difference), so any mutation that
+# changes the snapshot's tool COUNT changes that name multiset too and is
+# caught there first, before this point is ever reached. A check that
+# cannot fail is the defect class this validator exists to remove.
 $agentBodyNorm = ConvertTo-NormalizedLF $agentInfo.Body
 if ($parsedLog.SystemPromptChars -ne $agentBodyNorm.Length) {
     Fail "log-config-field: systemPromptChars does not match the agent body's length"

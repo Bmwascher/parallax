@@ -84,7 +84,8 @@ jobs:
           evals/multi-model-verify/test_kimi_lane_lock.py
           evals/multi-model-verify/test_attestation.py
           evals/multi-model-verify/test_codex_context_probe.py
-          evals/multi-model-verify/test_review_mirror.py -q
+          evals/multi-model-verify/test_review_mirror.py
+          evals/multi-model-verify/test_kimi_round_evidence.py -q
 
       - name: PowerShell-facing tests under PowerShell 7
         env:
@@ -94,4 +95,5 @@ jobs:
           evals/multi-model-verify/test_kimi_lane_lock.py
           evals/multi-model-verify/test_attestation.py
           evals/multi-model-verify/test_codex_context_probe.py
-          evals/multi-model-verify/test_review_mirror.py -q
+          evals/multi-model-verify/test_review_mirror.py
+          evals/multi-model-verify/test_kimi_round_evidence.py -q
