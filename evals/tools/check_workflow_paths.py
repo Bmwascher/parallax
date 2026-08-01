@@ -33,7 +33,18 @@ Two checks, not one:
    is a reported error, not a vacuous pass. Renaming PARALLAX_PS_HOST,
    breaking the host-step pattern, or deleting the Windows job entirely
    must all fail this check rather than silently verify nothing.
+
+   Discovered steps are kept as a LIST, not a dict keyed by host: a dict
+   lets a SECOND step for the same host name silently overwrite the
+   first, discarding both its module set and the fact that two steps
+   exist under one name before parity is ever checked. The discovered
+   host MULTISET must be exactly one `powershell.exe` and one `pwsh.exe`
+   - the multiset, not the set - because two `powershell.exe` steps plus
+   one `pwsh.exe` step collapse to the same SET as the correct pair while
+   never establishing "both steps" for the doubled host. Required modules
+   are then checked in EACH preserved step, not once per host name.
 """
+import collections
 import re
 import sys
 from pathlib import Path
@@ -82,12 +93,15 @@ def extract_py_tokens(workflow_text):
 
 
 def extract_windows_host_steps(workflow_text):
-    """Maps each PARALLAX_PS_HOST value to the set of .py tokens named in
-    that step's run block."""
-    steps = {}
+    """Every discovered Windows PowerShell-facing step, as a LIST of
+    (host, module-set) pairs - one entry per step found, in document
+    order. Not a dict keyed by host: keying by host would let a second
+    step for the same host silently overwrite the first, losing both its
+    module set and the fact that two steps exist under that name."""
+    steps = []
     for match in _HOST_STEP_RE.finditer(workflow_text):
         host, run_block = match.group(1), match.group(2)
-        steps[host] = set(_PY_TOKEN_RE.findall(run_block))
+        steps.append((host, set(_PY_TOKEN_RE.findall(run_block))))
     return steps
 
 
@@ -110,24 +124,34 @@ def check_paths_readable(tokens, base_dir):
 
 
 def check_host_parity(host_steps, required, required_hosts=REQUIRED_HOST_NAMES):
-    """Every required dual-host module must appear in EVERY Windows
+    """Every required dual-host module must appear in EACH Windows
     PowerShell-facing pytest step.
 
+    `host_steps` is a LIST of (host, module-set) pairs, one per step
+    discovered - never a dict, which would let a second step for the same
+    host silently overwrite the first before parity is ever checked.
+
     Discovering the two host steps is part of the measurement: a guard
-    that cannot be evaluated REFUSES rather than passing vacuously, so
-    finding anything other than exactly `required_hosts` - none, one, or
-    an unexpected host name - is reported as an error and never read as
-    clean parity."""
-    discovered = set(host_steps)
-    if discovered != required_hosts:
+    that cannot be evaluated REFUSES rather than passing vacuously. The
+    discovered host MULTISET must be exactly one of each name in
+    `required_hosts` - the multiset, not the set - because two
+    `powershell.exe` steps plus one `pwsh.exe` step collapse to the same
+    SET as the correct pair while never establishing "both steps" for the
+    doubled host. Anything else - none, one, an unexpected host name, or
+    a duplicated one - is reported as an error and never read as clean
+    parity."""
+    discovered_counts = collections.Counter(host for host, _ in host_steps)
+    required_counts = collections.Counter(required_hosts)
+    if discovered_counts != required_counts:
         return [
             "could not find the expected Windows dual-host pytest steps: "
-            "required hosts {}, discovered {}".format(
-                sorted(required_hosts), sorted(discovered))
+            "required exactly one of each of {}, discovered {}".format(
+                sorted(required_hosts),
+                sorted(discovered_counts.elements()))
         ]
     errors = []
-    for host in sorted(host_steps):
-        missing = sorted(set(required) - host_steps[host])
+    for host, modules in sorted(host_steps, key=lambda pair: pair[0]):
+        missing = sorted(set(required) - modules)
         for token in missing:
             errors.append(
                 "required dual-host module missing from host step {}: {}"

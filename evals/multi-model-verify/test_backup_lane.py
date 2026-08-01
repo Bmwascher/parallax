@@ -1044,7 +1044,8 @@ def test_check_workflow_paths_flags_host_parity_gap():
         + " ".join(cwp.REQUIRED_DUAL_HOST_MODULES[1:]) + " -q\n"
     )
     host_steps = cwp.extract_windows_host_steps(text)
-    assert set(host_steps) == {"powershell.exe", "pwsh.exe"}
+    assert {host for host, _ in host_steps} == {"powershell.exe", "pwsh.exe"}
+    assert len(host_steps) == 2
     errors = cwp.check_host_parity(host_steps, cwp.REQUIRED_DUAL_HOST_MODULES)
     assert any(
         "pwsh.exe" in e and cwp.REQUIRED_DUAL_HOST_MODULES[0] in e
@@ -1057,7 +1058,7 @@ def test_check_workflow_paths_refuses_when_host_steps_are_not_found():
     PARALLAX_PS_HOST (simulated here, in a synthetic copy of the workflow
     text - not the real file) makes extract_windows_host_steps find zero
     host steps; check_host_parity must FAIL and say so, rather than pass
-    vacuously because its loop over an empty dict never ran."""
+    vacuously because its loop over an empty list never ran."""
     cwp = _load_check_workflow_paths()
     complete = " ".join(cwp.REQUIRED_DUAL_HOST_MODULES)
     text = (
@@ -1074,10 +1075,55 @@ def test_check_workflow_paths_refuses_when_host_steps_are_not_found():
         "          python -m pytest " + complete + " -q\n"
     )
     host_steps = cwp.extract_windows_host_steps(text)
-    assert host_steps == {}
+    assert host_steps == []
     errors = cwp.check_host_parity(host_steps, cwp.REQUIRED_DUAL_HOST_MODULES)
     assert errors
     assert any("could not find the expected" in e for e in errors)
+
+
+def test_check_workflow_paths_refuses_a_duplicate_host_step():
+    """A dict keyed by host lets a SECOND step for the same host silently
+    OVERWRITE the first: three steps - an incomplete powershell.exe step,
+    a complete duplicate powershell.exe step, and a complete pwsh.exe step
+    - collapse under such a dict to exactly the correct-looking pair
+    {powershell.exe, pwsh.exe}, both showing the complete module set, and
+    parity reports clean about a step it never examined. The discovered
+    host MULTISET (two powershell.exe, one pwsh.exe) is not the required
+    multiset (one of each) even though the SET matches, so this must fail
+    and name the multiplicity problem."""
+    cwp = _load_check_workflow_paths()
+    complete = " ".join(cwp.REQUIRED_DUAL_HOST_MODULES)
+    incomplete = cwp.REQUIRED_DUAL_HOST_MODULES[0]
+    text = (
+        "      - name: PowerShell-facing tests under Windows PowerShell 5.1"
+        " (incomplete, first)\n"
+        "        env:\n"
+        "          PARALLAX_PS_HOST: powershell.exe\n"
+        "        run: >\n"
+        "          python -m pytest " + incomplete + " -q\n"
+        "\n"
+        "      - name: PowerShell-facing tests under Windows PowerShell 5.1"
+        " (duplicate, complete)\n"
+        "        env:\n"
+        "          PARALLAX_PS_HOST: powershell.exe\n"
+        "        run: >\n"
+        "          python -m pytest " + complete + " -q\n"
+        "\n"
+        "      - name: PowerShell-facing tests under PowerShell 7\n"
+        "        env:\n"
+        "          PARALLAX_PS_HOST: pwsh.exe\n"
+        "        run: >\n"
+        "          python -m pytest " + complete + " -q\n"
+    )
+    host_steps = cwp.extract_windows_host_steps(text)
+    # every step is preserved - nothing collapsed
+    assert len(host_steps) == 3
+    assert {host for host, _ in host_steps} == {"powershell.exe", "pwsh.exe"}
+    errors = cwp.check_host_parity(host_steps, cwp.REQUIRED_DUAL_HOST_MODULES)
+    assert errors
+    assert any("could not find the expected" in e for e in errors)
+    # the message names the multiplicity, not just the set
+    assert any("powershell.exe" in e and "pwsh.exe" in e for e in errors)
 
 
 def test_check_workflow_paths_real_workflow_is_clean():
