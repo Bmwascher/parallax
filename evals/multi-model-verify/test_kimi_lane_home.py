@@ -1,10 +1,26 @@
-"""Contract pins for the per-debate kimi-code lane home."""
+"""Contract pins for the per-debate kimi-code lane home.
+
+Task 6 (2026-08-01 lane-credential-and-lock plan) removed the credential
+COPY: the builder now acquires a persistent per-lane-home lock
+(tools/kimi-lane-lock.ps1), validates a lane-owned credential
+(tools/read-kimi-credential-state.ps1) at <lane-home>\\credentials\\
+kimi-code.json, and junctions the debate home's own `credentials`
+directory to it rather than copying a file across. Every process-driving
+test below therefore needs, in addition to the fake USERPROFILE carrying
+the real config.toml (for the model-table-carrying gates), a LANE HOME
+fixture carrying its own credential, plus the four new mandatory
+identity parameters (-LaneHome/-DebateId/-OwnerPid/-OwnerStartTicksUtc,
+plus -Nonce on -Remove).
+"""
 import json
 import os
 import re
 import shutil
 import subprocess
+import tempfile
+import time
 import tomllib
+import uuid
 from pathlib import Path
 
 import pytest
@@ -12,6 +28,8 @@ import pytest
 REPO = Path(__file__).resolve().parents[2]
 BUILDER = REPO / "tools" / "new-kimi-lane-home.ps1"
 CREDENTIAL_VALIDATOR = REPO / "tools" / "read-kimi-credential-state.ps1"
+LOCK_TOOL = REPO / "tools" / "kimi-lane-lock.ps1"
+LOGIN_WRAPPER = REPO / "tools" / "new-kimi-lane-login.ps1"
 SENTINEL = ".parallax-lane-home"
 
 # Fix-round finding (Critical 1): live proof that an unsanitized -Model
@@ -47,15 +65,17 @@ def test_builder_exists():
 def test_model_is_mandatory_within_the_build_set_only():
     """SWEEP_GLOBS covers tools/*.ps1, so a parameter default carrying the
     canonical id would fail test_backup_literal_single_source. But a
-    GLOBALLY mandatory -Model makes `-Remove` uncallable, so the two forms
-    are separate parameter sets."""
+    GLOBALLY mandatory -Model would make `-Remove` uncallable, so the two
+    forms are separate parameter sets."""
     body = _read(BUILDER)
     assert 'DefaultParameterSetName = "Build"' in body
     assert 'ParameterSetName = "Build", Mandatory = $true)][string]$Model' in body
     assert "k3-256k" not in body
 
 
-def test_builder_refuses_without_a_credential():
+def test_builder_refuses_without_a_lane_home():
+    """The old message text ("the lane is UNAVAILABLE") is reused for the
+    new first-use probe's nonexistent-lane-home row."""
     assert "the lane is UNAVAILABLE" in _read(BUILDER)
 
 
@@ -95,9 +115,7 @@ def test_removal_is_callable_and_guarded():
 def test_removal_refuses_dangerous_roots():
     """Belt and braces on top of the sentinel: even a correctly-formed
     sentinel must not authorize deleting a drive root, the user profile,
-    or a repository root. Task 3 Step 5 exercises all three live, each
-    with a correctly-formed sentinel - a guard that has only ever seen a
-    malformed sentinel has not been tested."""
+    or a repository root."""
     body = _read(BUILDER)
     assert "refusing to remove" in body
     assert "$env:USERPROFILE" in body
@@ -116,7 +134,7 @@ def test_a_failed_build_leaves_no_credential_behind():
 
 def test_cleanup_is_fault_tested_live():
     """A cleanup path with no test asserting it runs is a cleanup path
-    that has never run. Task 3 Step 5 injects a post-credential failure."""
+    that has never run."""
     body = _read(BUILDER)
     assert "PARALLAX_LANE_HOME_FAULT" in body
 
@@ -135,156 +153,35 @@ def test_builder_pins_effort_and_empties_the_skill_sources():
     assert "default_effort" in body
 
 
-@pytest.mark.skipif(POWERSHELL is None, reason="no PowerShell host on PATH")
-def test_a_hostile_model_is_refused_not_rendered(tmp_path):
-    """The reviewer's failure scenario, run for real: a -Model carrying a
-    double quote and a newline would, unvalidated, break out of the
-    `[models."$Model"]` quoting and let an attacker write a fabricated
-    hooks table into the rendered config.toml - the exact command-executing
-    back-channel this script exists to keep out of the reviewer's config.
-    The refusal must land BEFORE anything is rendered or written: no
-    destination directory, no config.toml, no credential copy."""
-    target = tmp_path / "hostile-home"
-    hostile_model = (
-        'kimi-code/test-model"]\n\n[hooks]\nevent = "PreToolUse"\n'
-        'command = "calc.exe"\n[models."x'
-    )
-    proc = subprocess.run(
-        [POWERSHELL, "-NoProfile", "-ExecutionPolicy", "Bypass",
-         "-File", str(BUILDER), "-Path", str(target), "-Model", hostile_model],
-        capture_output=True, text=True, timeout=60)
-    assert proc.returncode != 0, proc.stdout + proc.stderr
-    assert not target.exists(), "a hostile -Model must be refused before any directory is created"
-
-
-@pytest.mark.skipif(POWERSHELL is None, reason="no PowerShell host on PATH")
-def test_a_hostile_effort_is_refused_not_rendered(tmp_path):
-    """Same injection surface, the other interpolated parameter."""
-    target = tmp_path / "hostile-effort-home"
-    proc = subprocess.run(
-        [POWERSHELL, "-NoProfile", "-ExecutionPolicy", "Bypass",
-         "-File", str(BUILDER), "-Path", str(target),
-         "-Model", "kimi-code/test-placeholder-model",
-         "-Effort", 'high"\n\n[hooks]\nevent = "PreToolUse'],
-        capture_output=True, text=True, timeout=60)
-    assert proc.returncode != 0, proc.stdout + proc.stderr
-    assert not target.exists(), "a hostile -Effort must be refused before any directory is created"
-
-
-@pytest.mark.skipif(POWERSHELL is None, reason="no PowerShell host on PATH")
-def test_a_model_with_a_trailing_newline_is_refused(tmp_path):
-    """Fix-round-2 finding (Open 1 from Critical 1): in .NET regex, $
-    matches before a single trailing newline at the end of the string even
-    without multiline mode, so the original '^[...]*$' pattern let a
-    -Model ending in exactly one literal newline through despite the
-    newline itself not being in the documented allowed set - confirmed
-    live, both in isolation against the pattern and by running the real
-    script, which sailed past validation and went on to create
-    directories. The anchors are now \\A and \\z, which admit no such
-    exception. This does not reopen the hooks-injection attack (quotes and
-    brackets are still excluded), but the requirement was to reject
-    anything outside the strict set, and a trailing newline is outside it."""
-    target = tmp_path / "trailing-newline-home"
-    proc = subprocess.run(
-        [POWERSHELL, "-NoProfile", "-ExecutionPolicy", "Bypass",
-         "-File", str(BUILDER), "-Path", str(target),
-         "-Model", "kimi-code/test-placeholder-model\n"],
-        capture_output=True, text=True, timeout=60)
-    assert proc.returncode != 0, proc.stdout + proc.stderr
-    assert not target.exists(), "a -Model with a trailing newline must be refused before any directory is created"
-
-
-def _render_config_template(model, effort, model_table_fields):
-    """Extract the ACTUAL config.toml here-string from the committed
-    script and substitute its interpolated variables the same way
-    PowerShell's simple `"$Var"` string interpolation would - so any
-    future edit to the real template is what this test parses, not a
-    copy that can silently drift from it."""
+def test_builder_no_longer_copies_a_credential():
+    """Task 6: the credential COPY is gone; a JUNCTION replaces it."""
     body = _read(BUILDER)
-    match = re.search(r'\$configToml = @"\r?\n(.*?)\r?\n"@', body, re.DOTALL)
-    assert match, "could not locate the config.toml here-string in the builder"
-    template = match.group(1)
-    return (template
-            .replace("$modelTableFields", model_table_fields)
-            .replace("$Model", model)
-            .replace("$Effort", effort))
+    assert "Copy-Item" not in body
+    assert "New-Item -ItemType Junction" in body
 
 
-def test_rendered_config_places_root_keys_at_the_document_root():
-    """Fix-round-3 finding: in TOML, a table header claims every
-    key-value pair that follows it until the NEXT header - a blank line
-    does NOT end a table. An earlier template put
-    default_model/extra_skill_dirs/telemetry AFTER [models."$Model"], so
-    all three silently became keys of the MODEL table instead of the
-    document root: extra_skill_dirs is a containment setting that then
-    suppressed nothing while looking like it did, and telemetry was
-    observed resolving to true despite this file saying false. A test
-    asserting the file merely CONTAINS "default_model" would have passed
-    against the broken template - it is not this test. This one parses
-    the real template with an actual TOML parser (not a text/substring
-    check, which cannot distinguish a root key from a same-named key
-    nested under a table) and asserts where the keys actually resolve."""
-    rendered = _render_config_template(
-        model="kimi-code/test-model", effort="high",
-        model_table_fields=('provider = "managed:kimi-code"\n'
-                            'model = "test-model"\n'
-                            "max_context_size = 262144"))
-    parsed = tomllib.loads(rendered)
-
-    assert parsed["default_model"] == "kimi-code/test-model"
-    assert parsed["extra_skill_dirs"] == []
-    assert parsed["telemetry"] is False
-
-    model_table = parsed["models"]["kimi-code/test-model"]
-    assert model_table["default_effort"] == "high"
-    # default_effort is the ONE key that belongs inside the model table;
-    # the other three must not be duplicated or misplaced there.
-    assert "default_model" not in model_table
-    assert "extra_skill_dirs" not in model_table
-    assert "telemetry" not in model_table
-
-    # The providers table and its .oauth sub-table sit BETWEEN the root
-    # keys and the model table in the source - confirm nothing intended
-    # for one drifted into another.
-    provider_table = parsed["providers"]["managed:kimi-code"]
-    assert provider_table["type"] == "kimi"
-    assert "storage" not in provider_table
-    assert "key" not in provider_table
-    oauth_table = provider_table["oauth"]
-    assert oauth_table["storage"] == "file"
-    assert oauth_table["key"] == "oauth/kimi-code"
-    assert "type" not in oauth_table
-    assert "api_key" not in oauth_table
+def test_lock_and_validator_tools_are_invoked_not_rewritten():
+    body = _read(BUILDER)
+    assert "kimi-lane-lock.ps1" in body
+    assert "read-kimi-credential-state.ps1" in body
 
 
-# --- Fix round 4: the model table must be a FAITHFUL copy of the real one ---
-#
-# The template used to hand-write four fields (provider, model,
-# max_context_size, default_effort) and omit `capabilities` and
-# `support_efforts`. Measured, one dispatch per state, same agent file,
-# same model, same effort:
-#
-#     WITHOUT the two keys:  thinkingEffort=off   toolCount=4
-#     WITH the two keys:     thinkingEffort=high  toolCount=5
-#
-# No `thinking` capability means thinking is off and the pinned effort has
-# nothing to resolve against, so the log reads `off` while config.toml
-# says `high`; no `image_in` capability gates ReadMediaFile out of the
-# schema, so a five-tool allowlist arrives as four. One omission, two
-# silently broken evidence claims.
-#
-# These tests drive the REAL script against a FAKE USERPROFILE carrying a
-# fake real-config, then parse the file it actually wrote. A test asserting
-# the rendered text merely CONTAINS "capabilities" is not this test - that
-# would pass against a template writing the key into the wrong table,
-# which is the exact mistake fix round 3 had to repair. tomllib resolves
-# where each key actually lands.
+# ---------------------------------------------------------------------
+# Shared fixtures for every process-driving test below.
+# ---------------------------------------------------------------------
+
+VALID_CREDENTIAL_JSON = (
+    '{"access_token": "not-a-real-token", '
+    '"refresh_token": "not-a-real-refresh-token", '
+    '"expires_at": 900}')
+
+DIFFERING_USER_CREDENTIAL_JSON = (
+    '{"access_token": "user-side-token-must-never-be-read", '
+    '"refresh_token": "user-side-refresh-must-never-be-read", '
+    '"expires_at": 111}')
 
 PLACEHOLDER_MODEL = "kimi-code/test-placeholder-model"
 
-# Shaped like the user's real config: root key, hooks, OTHER model tables,
-# a [thinking] table and [services.*] blocks after the wanted table. Only
-# the one wanted table may reach the rendered home.
 FAKE_REAL_CONFIG = '''default_model = "kimi-code/some-other-model"
 
 [[hooks]]
@@ -322,48 +219,250 @@ api_key = ""
 ''' % PLACEHOLDER_MODEL
 
 
-def _fake_profile(tmp_path, config_text):
-    """A stand-in USERPROFILE carrying a .kimi-code with a config and a
-    credential, so the builder can be driven end to end offline."""
-    profile = tmp_path / "fake-profile"
+def _clean_env(**overrides):
+    """PSModulePath dropped: this pytest process inherits a PowerShell 7
+    flavoured PSModulePath whose ...\\PowerShell\\7\\Modules entry shadows
+    the 5.1 copy of Microsoft.PowerShell.Security, so Get-Acl fails to
+    load inside a powershell.exe child. Popped case-insensitively:
+    os.environ normalizes keys to upper case on Windows, so a plain
+    pop("PSModulePath") silently removes nothing."""
+    env = dict(os.environ)
+    for key in [k for k in env if k.lower() == "psmodulepath"]:
+        del env[key]
+    env.update(overrides)
+    return env
+
+
+def _fake_profile(tmp_path, config_text, name="fake-profile"):
+    """A stand-in USERPROFILE carrying only .kimi-code/config.toml (the
+    model-table source) and, optionally, a DIFFERING credential planted
+    to prove the builder never reads it any more."""
+    profile = tmp_path / name
     kimi = profile / ".kimi-code"
-    (kimi / "credentials").mkdir(parents=True)
-    (kimi / "credentials" / "kimi-code.json").write_text(
-        '{"access_token": "not-a-real-token", '
-        '"refresh_token": "not-a-real-refresh-token", '
-        '"expires_at": 900}', encoding="ascii")
+    kimi.mkdir(parents=True)
     if config_text is not None:
         (kimi / "config.toml").write_text(config_text, encoding="ascii")
     return profile
 
 
-def _build(tmp_path, target, profile, model=PLACEHOLDER_MODEL, effort="high"):
-    env = dict(os.environ)
-    env["USERPROFILE"] = str(profile)
-    # This pytest process inherits a PowerShell 7 flavoured PSModulePath
-    # whose `...\PowerShell\7\Modules` entry shadows the 5.1 copy of
-    # Microsoft.PowerShell.Security, so Get-Acl fails to load inside a
-    # powershell.exe child. Dropping the variable lets each host compute
-    # its own default. Nothing under test depends on it. Popped
-    # case-insensitively: Windows os.environ normalizes keys to upper
-    # case, so a plain pop("PSModulePath") silently removes nothing.
-    for key in [k for k in env if k.lower() == "psmodulepath"]:
-        del env[key]
-    return subprocess.run(
+def _fake_lane_home(tmp_path, name="lane-home", credential_text=VALID_CREDENTIAL_JSON,
+                     seed_credential=True):
+    """A stand-in persistent lane home: a plain directory, optionally
+    carrying a `credentials\\kimi-code.json`. seed_credential=False leaves
+    the directory present but the credential absent."""
+    lane_home = tmp_path / name
+    lane_home.mkdir(parents=True, exist_ok=True)
+    if seed_credential:
+        cred_dir = lane_home / "credentials"
+        cred_dir.mkdir(parents=True, exist_ok=True)
+        (cred_dir / "kimi-code.json").write_text(credential_text, encoding="ascii")
+    return lane_home
+
+
+def _new_hex32():
+    return uuid.uuid4().hex
+
+
+_SELF_TICKS_CACHE = {}
+
+
+def _self_owner_identity():
+    """(ownerPid, ownerStartTicksUtc) for THIS pytest process - a real,
+    live process for the whole test run, which is what a Remove-mode
+    identity re-verification needs (the lock's own liveness check treats
+    a dead owner pid as DEAD even on an otherwise-matching re-acquire)."""
+    pid = os.getpid()
+    if pid not in _SELF_TICKS_CACHE:
+        proc = subprocess.run(
+            [POWERSHELL, "-NoProfile", "-Command",
+             "(Get-Process -Id %d).StartTime.ToUniversalTime().Ticks" % pid],
+            capture_output=True, text=True, timeout=30)
+        assert proc.returncode == 0, proc.stdout + proc.stderr
+        _SELF_TICKS_CACHE[pid] = proc.stdout.strip()
+    return str(pid), _SELF_TICKS_CACHE[pid]
+
+
+def _owner_ticks_for_pid(pid):
+    proc = subprocess.run(
+        [POWERSHELL, "-NoProfile", "-Command",
+         "(Get-Process -Id %d).StartTime.ToUniversalTime().Ticks" % pid],
+        capture_output=True, text=True, timeout=30)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    return proc.stdout.strip()
+
+
+def _build2(target, profile, lane_home, model=PLACEHOLDER_MODEL, effort="high",
+            debate_id=None, owner_pid=None, owner_ticks=None, extra_env=None,
+            timeout=120):
+    if debate_id is None:
+        debate_id = _new_hex32()
+    if owner_pid is None or owner_ticks is None:
+        self_pid, self_ticks = _self_owner_identity()
+        owner_pid = owner_pid or self_pid
+        owner_ticks = owner_ticks or self_ticks
+    env = _clean_env(USERPROFILE=str(profile))
+    if extra_env:
+        env.update(extra_env)
+    proc = subprocess.run(
         [POWERSHELL, "-NoProfile", "-ExecutionPolicy", "Bypass",
          "-File", str(BUILDER), "-Path", str(target),
-         "-Model", model, "-Effort", effort],
-        capture_output=True, text=True, timeout=120, env=env)
+         "-Model", model, "-Effort", effort,
+         "-LaneHome", str(lane_home), "-DebateId", debate_id,
+         "-OwnerPid", str(owner_pid), "-OwnerStartTicksUtc", str(owner_ticks)],
+        capture_output=True, text=True, timeout=timeout, env=env)
+    return proc, debate_id, str(owner_pid), str(owner_ticks)
 
 
-@pytest.mark.skipif(POWERSHELL is None, reason="no PowerShell host on PATH")
+def _remove2(target, lane_home, debate_id, owner_pid, owner_ticks, nonce,
+             extra_env=None, timeout=120):
+    env = _clean_env()
+    if extra_env:
+        env.update(extra_env)
+    proc = subprocess.run(
+        [POWERSHELL, "-NoProfile", "-ExecutionPolicy", "Bypass",
+         "-File", str(BUILDER), "-Path", str(target), "-Remove",
+         "-LaneHome", str(lane_home), "-DebateId", debate_id,
+         "-OwnerPid", str(owner_pid), "-OwnerStartTicksUtc", str(owner_ticks),
+         "-Nonce", nonce],
+        capture_output=True, text=True, timeout=timeout, env=env)
+    return proc
+
+
+def _lock_status(lane_home):
+    proc = subprocess.run(
+        [POWERSHELL, "-NoProfile", "-ExecutionPolicy", "Bypass",
+         "-File", str(LOCK_TOOL), "-Status", "-LaneHome", str(lane_home)],
+        capture_output=True, text=True, timeout=60, env=_clean_env())
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    return json.loads(proc.stdout)
+
+
+def _lock_acquire_direct(lane_home, debate_id, owner_pid, owner_ticks, debate_home,
+                          nonce=None):
+    args = [POWERSHELL, "-NoProfile", "-ExecutionPolicy", "Bypass",
+            "-File", str(LOCK_TOOL), "-Acquire", "-LaneHome", str(lane_home),
+            "-DebateId", debate_id, "-OwnerPid", str(owner_pid),
+            "-OwnerStartTicksUtc", str(owner_ticks), "-DebateHome", str(debate_home)]
+    if nonce:
+        args += ["-Nonce", nonce]
+    proc = subprocess.run(args, capture_output=True, text=True, timeout=60,
+                           env=_clean_env())
+    return proc
+
+
+def _lock_release_direct(lane_home, debate_id, owner_pid, owner_ticks, nonce):
+    proc = subprocess.run(
+        [POWERSHELL, "-NoProfile", "-ExecutionPolicy", "Bypass",
+         "-File", str(LOCK_TOOL), "-Release", "-LaneHome", str(lane_home),
+         "-DebateId", debate_id, "-OwnerPid", str(owner_pid),
+         "-OwnerStartTicksUtc", str(owner_ticks), "-Nonce", nonce],
+        capture_output=True, text=True, timeout=60, env=_clean_env())
+    return proc
+
+
+def _parse_custody(stdout):
+    lines = [l for l in stdout.splitlines() if l.strip()]
+    assert len(lines) == 1, "expected exactly one stdout line, got: %r" % (stdout,)
+    obj = json.loads(lines[0])
+    assert set(obj.keys()) == {"debateHome", "nonce"}, obj
+    return obj
+
+
+# --- rewritten "existing gate" tests: real invocations now need the lane
+# home fixture too, since the gates they exercise all sit AFTER lock
+# acquisition and credential validation in the new build order. ---
+
+
+def test_a_hostile_model_is_refused_not_rendered(tmp_path):
+    """The reviewer's failure scenario, run for real: a -Model carrying a
+    double quote and a newline would, unvalidated, break out of the
+    `[models."$Model"]` quoting. The refusal must land BEFORE anything is
+    rendered or written: no destination directory, no config.toml, no
+    junction."""
+    target = tmp_path / "hostile-home"
+    profile = _fake_profile(tmp_path, FAKE_REAL_CONFIG)
+    lane_home = _fake_lane_home(tmp_path)
+    hostile_model = (
+        'kimi-code/test-model"]\n\n[hooks]\nevent = "PreToolUse"\n'
+        'command = "calc.exe"\n[models."x'
+    )
+    proc, debate_id, owner_pid, owner_ticks = _build2(
+        target, profile, lane_home, model=hostile_model)
+    assert proc.returncode != 0, proc.stdout + proc.stderr
+    assert not target.exists(), "a hostile -Model must be refused before any directory is created"
+    assert _lock_status(lane_home)["state"] == "free"
+
+
+def test_a_hostile_effort_is_refused_not_rendered(tmp_path):
+    target = tmp_path / "hostile-effort-home"
+    profile = _fake_profile(tmp_path, FAKE_REAL_CONFIG)
+    lane_home = _fake_lane_home(tmp_path)
+    proc, *_ = _build2(target, profile, lane_home,
+                        effort='high"\n\n[hooks]\nevent = "PreToolUse')
+    assert proc.returncode != 0, proc.stdout + proc.stderr
+    assert not target.exists(), "a hostile -Effort must be refused before any directory is created"
+    assert _lock_status(lane_home)["state"] == "free"
+
+
+def test_a_model_with_a_trailing_newline_is_refused(tmp_path):
+    """Fix-round-2 finding: in .NET regex, $ matches before a single
+    trailing newline at the end of the string even without multiline
+    mode."""
+    target = tmp_path / "trailing-newline-home"
+    profile = _fake_profile(tmp_path, FAKE_REAL_CONFIG)
+    lane_home = _fake_lane_home(tmp_path)
+    proc, *_ = _build2(target, profile, lane_home,
+                        model="kimi-code/test-placeholder-model\n")
+    assert proc.returncode != 0, proc.stdout + proc.stderr
+    assert not target.exists()
+    assert _lock_status(lane_home)["state"] == "free"
+
+
+def _render_config_template(model, effort, model_table_fields):
+    body = _read(BUILDER)
+    match = re.search(r'\$configToml = @"\r?\n(.*?)\r?\n"@', body, re.DOTALL)
+    assert match, "could not locate the config.toml here-string in the builder"
+    template = match.group(1)
+    return (template
+            .replace("$modelTableFields", model_table_fields)
+            .replace("$Model", model)
+            .replace("$Effort", effort))
+
+
+def test_rendered_config_places_root_keys_at_the_document_root():
+    rendered = _render_config_template(
+        model="kimi-code/test-model", effort="high",
+        model_table_fields=('provider = "managed:kimi-code"\n'
+                            'model = "test-model"\n'
+                            "max_context_size = 262144"))
+    parsed = tomllib.loads(rendered)
+
+    assert parsed["default_model"] == "kimi-code/test-model"
+    assert parsed["extra_skill_dirs"] == []
+    assert parsed["telemetry"] is False
+
+    model_table = parsed["models"]["kimi-code/test-model"]
+    assert model_table["default_effort"] == "high"
+    assert "default_model" not in model_table
+    assert "extra_skill_dirs" not in model_table
+    assert "telemetry" not in model_table
+
+    provider_table = parsed["providers"]["managed:kimi-code"]
+    assert provider_table["type"] == "kimi"
+    assert "storage" not in provider_table
+    assert "key" not in provider_table
+    oauth_table = provider_table["oauth"]
+    assert oauth_table["storage"] == "file"
+    assert oauth_table["key"] == "oauth/kimi-code"
+    assert "type" not in oauth_table
+    assert "api_key" not in oauth_table
+
+
 def test_capabilities_and_support_efforts_land_inside_the_model_table(tmp_path):
-    """The rendered model table must carry the real table's capabilities
-    and support_efforts, INSIDE the model table - not at the document
-    root, not under [thinking], not under the provider table."""
     target = tmp_path / "carried-home"
     profile = _fake_profile(tmp_path, FAKE_REAL_CONFIG)
-    proc = _build(tmp_path, target, profile)
+    lane_home = _fake_lane_home(tmp_path)
+    proc, debate_id, owner_pid, owner_ticks = _build2(target, profile, lane_home)
     assert proc.returncode == 0, proc.stdout + proc.stderr
 
     with open(target / "config.toml", "rb") as fh:
@@ -373,29 +472,27 @@ def test_capabilities_and_support_efforts_land_inside_the_model_table(tmp_path):
     assert model_table["capabilities"] == [
         "thinking", "always_thinking", "image_in", "tool_use"]
     assert model_table["support_efforts"] == ["low", "high", "max"]
-    # Placement, not mere presence: neither key may resolve anywhere else.
     assert "capabilities" not in parsed
     assert "support_efforts" not in parsed
     assert "capabilities" not in parsed["thinking"]
     assert "support_efforts" not in parsed["thinking"]
     assert "capabilities" not in parsed["providers"]["managed:kimi-code"]
 
-    # The rest of the real table comes across too, including the context
-    # window that used to be a hardcoded literal in the script.
     assert model_table["provider"] == "managed:kimi-code"
     assert model_table["model"] == "test-placeholder-model"
     assert model_table["max_context_size"] == 262144
     assert model_table["display_name"] == "Test Placeholder"
 
+    custody = _parse_custody(proc.stdout)
+    _remove2(target, lane_home, debate_id, owner_pid, owner_ticks, custody["nonce"])
 
-@pytest.mark.skipif(POWERSHELL is None, reason="no PowerShell host on PATH")
+
 def test_effort_is_the_argument_not_the_real_configs_value(tmp_path):
-    """Pinning effort per debate is the whole point of -Effort, so the
-    real config's own default_effort must never win. The fake config says
-    "low"; the build asks for "max"."""
     target = tmp_path / "effort-home"
     profile = _fake_profile(tmp_path, FAKE_REAL_CONFIG)
-    proc = _build(tmp_path, target, profile, effort="max")
+    lane_home = _fake_lane_home(tmp_path)
+    proc, debate_id, owner_pid, owner_ticks = _build2(
+        target, profile, lane_home, effort="max")
     assert proc.returncode == 0, proc.stdout + proc.stderr
 
     with open(target / "config.toml", "rb") as fh:
@@ -403,20 +500,17 @@ def test_effort_is_the_argument_not_the_real_configs_value(tmp_path):
 
     model_table = parsed["models"][PLACEHOLDER_MODEL]
     assert model_table["default_effort"] == "max"
-    # A carried duplicate would make the file invalid TOML, so reaching
-    # here at all proves the real config's own line was dropped, not
-    # appended alongside; assert the resolved value anyway.
     assert model_table["default_effort"] != "low"
 
+    custody = _parse_custody(proc.stdout)
+    _remove2(target, lane_home, debate_id, owner_pid, owner_ticks, custody["nonce"])
 
-@pytest.mark.skipif(POWERSHELL is None, reason="no PowerShell host on PATH")
+
 def test_nothing_outside_the_model_table_is_carried(tmp_path):
-    """Isolation is why this script renders its own file. The fake config
-    carries hooks, a second model, and a services block; none may follow
-    the model table's fields into the home."""
     target = tmp_path / "isolation-home"
     profile = _fake_profile(tmp_path, FAKE_REAL_CONFIG)
-    proc = _build(tmp_path, target, profile)
+    lane_home = _fake_lane_home(tmp_path)
+    proc, debate_id, owner_pid, owner_ticks = _build2(target, profile, lane_home)
     assert proc.returncode == 0, proc.stdout + proc.stderr
 
     with open(target / "config.toml", "rb") as fh:
@@ -425,164 +519,1047 @@ def test_nothing_outside_the_model_table_is_carried(tmp_path):
     assert "hooks" not in parsed
     assert "services" not in parsed
     assert list(parsed["models"].keys()) == [PLACEHOLDER_MODEL]
-    # The real config's root default_model must not override the home's.
     assert parsed["default_model"] == PLACEHOLDER_MODEL
 
+    custody = _parse_custody(proc.stdout)
+    _remove2(target, lane_home, debate_id, owner_pid, owner_ticks, custody["nonce"])
 
-@pytest.mark.skipif(POWERSHELL is None, reason="no PowerShell host on PATH")
+
 def test_a_missing_model_table_refuses_instead_of_guessing(tmp_path):
-    """A home built on a guessed model table is an unmade measurement, and
-    an unmade measurement is never a clean one. No fallback to defaults."""
     target = tmp_path / "no-table-home"
     profile = _fake_profile(tmp_path, FAKE_REAL_CONFIG)
-    proc = _build(tmp_path, target, profile,
-                  model="kimi-code/model-not-in-the-config")
+    lane_home = _fake_lane_home(tmp_path)
+    proc, *_ = _build2(target, profile, lane_home,
+                        model="kimi-code/model-not-in-the-config")
     assert proc.returncode != 0, proc.stdout + proc.stderr
     assert "declares no model table" in proc.stdout + proc.stderr
-    assert not target.exists(), (
-        "the refusal must land before any directory is created")
+    assert not target.exists()
+    assert _lock_status(lane_home)["state"] == "free"
 
 
-@pytest.mark.skipif(POWERSHELL is None, reason="no PowerShell host on PATH")
 def test_a_missing_real_config_refuses_instead_of_guessing(tmp_path):
     target = tmp_path / "no-config-home"
     profile = _fake_profile(tmp_path, None)
-    proc = _build(tmp_path, target, profile)
+    lane_home = _fake_lane_home(tmp_path)
+    proc, *_ = _build2(target, profile, lane_home)
     assert proc.returncode != 0, proc.stdout + proc.stderr
     assert "no kimi-code config at" in proc.stdout + proc.stderr
     assert not target.exists()
+    assert _lock_status(lane_home)["state"] == "free"
 
 
-@pytest.mark.skipif(POWERSHELL is None, reason="no PowerShell host on PATH")
 def test_an_unparseable_model_table_refuses_instead_of_guessing(tmp_path):
-    """A field this reader cannot account for is unparseable, and
-    unparseable refuses - it is never silently dropped, because a silently
-    dropped field is exactly the defect this whole round exists to fix."""
     broken = FAKE_REAL_CONFIG.replace(
         'display_name = "Test Placeholder"',
         "display_name = { first = 'nested inline table' }")
     target = tmp_path / "unparseable-home"
     profile = _fake_profile(tmp_path, broken)
-    proc = _build(tmp_path, target, profile)
+    lane_home = _fake_lane_home(tmp_path)
+    proc, *_ = _build2(target, profile, lane_home)
     assert proc.returncode != 0, proc.stdout + proc.stderr
     assert "unparseable line" in proc.stdout + proc.stderr
     assert not target.exists()
+    assert _lock_status(lane_home)["state"] == "free"
 
 
-# --- Fix round 5: a non-empty carried table is not a DISPATCHABLE one ---
-#
-# The count gate only guarded total emptiness. A reviewer reached both of
-# these live against probe tables: a table carrying only display_name and
-# default_effort BUILT, rendering a model with no provider and no model
-# name; and a table naming `managed:some-other-provider` BUILT, rendering
-# a model table that references a provider absent from its own providers
-# table. Both are dormant against today's real config and neither stays
-# dormant once that config grows a second provider. Both failed the same
-# bad way - silent success at build time, confusing client error
-# mid-debate - which is the class of failure every gate in this script
-# exists to convert into a clean build-time refusal.
-
-
-@pytest.mark.skipif(POWERSHELL is None, reason="no PowerShell host on PATH")
 def test_a_model_table_without_a_provider_key_refuses(tmp_path):
     without_provider = FAKE_REAL_CONFIG.replace(
         '[models."%s"]\nprovider = "managed:kimi-code"\n' % PLACEHOLDER_MODEL,
         '[models."%s"]\n' % PLACEHOLDER_MODEL)
-    assert 'provider = "managed:kimi-code"\nmodel = "test-placeholder-model"' \
-        not in without_provider
     target = tmp_path / "no-provider-home"
     profile = _fake_profile(tmp_path, without_provider)
-    proc = _build(tmp_path, target, profile)
+    lane_home = _fake_lane_home(tmp_path)
+    proc, *_ = _build2(target, profile, lane_home)
     assert proc.returncode != 0, proc.stdout + proc.stderr
     assert "carries no provider key" in proc.stdout + proc.stderr
     assert not target.exists()
+    assert _lock_status(lane_home)["state"] == "free"
 
 
-@pytest.mark.skipif(POWERSHELL is None, reason="no PowerShell host on PATH")
 def test_a_model_table_without_a_model_key_refuses(tmp_path):
     without_model = FAKE_REAL_CONFIG.replace(
         '\nmodel = "test-placeholder-model"\n', "\n")
-    assert 'model = "test-placeholder-model"' not in without_model
     target = tmp_path / "no-model-home"
     profile = _fake_profile(tmp_path, without_model)
-    proc = _build(tmp_path, target, profile)
+    lane_home = _fake_lane_home(tmp_path)
+    proc, *_ = _build2(target, profile, lane_home)
     assert proc.returncode != 0, proc.stdout + proc.stderr
     assert "carries no model key" in proc.stdout + proc.stderr
     assert not target.exists()
+    assert _lock_status(lane_home)["state"] == "free"
 
 
-@pytest.mark.skipif(POWERSHELL is None, reason="no PowerShell host on PATH")
 def test_a_model_table_naming_an_undeclared_provider_refuses(tmp_path):
-    """The rendered home declares exactly one provider table. A carried
-    `provider` value naming anything else renders a dangling reference."""
     other_provider = FAKE_REAL_CONFIG.replace(
         '[models."%s"]\nprovider = "managed:kimi-code"' % PLACEHOLDER_MODEL,
         '[models."%s"]\nprovider = "managed:some-other-provider"'
         % PLACEHOLDER_MODEL)
-    assert "managed:some-other-provider" in other_provider
     target = tmp_path / "other-provider-home"
     profile = _fake_profile(tmp_path, other_provider)
-    proc = _build(tmp_path, target, profile)
+    lane_home = _fake_lane_home(tmp_path)
+    proc, *_ = _build2(target, profile, lane_home)
     assert proc.returncode != 0, proc.stdout + proc.stderr
     assert "which this home does not declare" in proc.stdout + proc.stderr
     assert not target.exists()
+    assert _lock_status(lane_home)["state"] == "free"
 
 
-# --- Fix round 5, the two minors: refusals that were structurally sound
-# but exercised by nothing. Each needs only a fake config to drive it.
-
-
-@pytest.mark.skipif(POWERSHELL is None, reason="no PowerShell host on PATH")
 def test_an_unreadable_real_config_refuses(tmp_path):
-    """Present but unreadable is not the same as absent, and it must not
-    fall through to the absent branch's message or to a raw client error.
-    A directory standing where the file belongs passes Test-Path and then
-    fails to read, which is the cheapest real instance of the condition."""
     target = tmp_path / "unreadable-config-home"
     profile = _fake_profile(tmp_path, None)
     (profile / ".kimi-code" / "config.toml").mkdir()
-    proc = _build(tmp_path, target, profile)
+    lane_home = _fake_lane_home(tmp_path)
+    proc, *_ = _build2(target, profile, lane_home)
     assert proc.returncode != 0, proc.stdout + proc.stderr
     assert "could not read" in proc.stdout + proc.stderr
     assert not target.exists()
+    assert _lock_status(lane_home)["state"] == "free"
 
 
-@pytest.mark.skipif(POWERSHELL is None, reason="no PowerShell host on PATH")
 def test_a_duplicate_model_table_refuses(tmp_path):
-    """Two tables for the same model make which one was carried a matter
-    of scan order, so neither is carried."""
     duplicated = FAKE_REAL_CONFIG + (
         '\n[models."%s"]\nprovider = "managed:kimi-code"\n'
         'model = "test-placeholder-model"\n' % PLACEHOLDER_MODEL)
-    assert duplicated.count('[models."%s"]' % PLACEHOLDER_MODEL) == 2
     target = tmp_path / "duplicate-table-home"
     profile = _fake_profile(tmp_path, duplicated)
-    proc = _build(tmp_path, target, profile)
+    lane_home = _fake_lane_home(tmp_path)
+    proc, *_ = _build2(target, profile, lane_home)
     assert proc.returncode != 0, proc.stdout + proc.stderr
     assert "more than once" in proc.stdout + proc.stderr
     assert not target.exists()
+    assert _lock_status(lane_home)["state"] == "free"
 
 
-# --- Task 2 Step 3c: the fixture's own oracle -----------------------------
-#
-# _fake_profile's credential is a fixture SHARED by every test above, but
-# none of them structurally validate it - they only prove the builder
-# copies the credential across, never that the credential itself is a
-# well-formed kimi-code credential document. Without this test, Task 2
-# Step 3 (adding a fake refresh_token and an integer expires_at to the
-# fixture) could be skipped entirely and every test in this file would
-# still pass, and until Step 3b this module's POWERSHELL selector ignored
-# PARALLAX_PS_HOST entirely, so the advertised two-host gate ran one host.
-
-
-@pytest.mark.skipif(POWERSHELL is None, reason="no PowerShell host on PATH")
-def test_the_fake_profiles_credential_is_structurally_valid(tmp_path):
-    profile = _fake_profile(tmp_path, None)
-    credential_path = profile / ".kimi-code" / "credentials" / "kimi-code.json"
+def test_the_fake_credentials_are_structurally_valid(tmp_path):
+    """The fixture's own oracle: VALID_CREDENTIAL_JSON must itself pass
+    the real validator, or every test above would be exercising nothing."""
+    lane_home = _fake_lane_home(tmp_path)
     proc = subprocess.run(
         [POWERSHELL, "-NoProfile", "-ExecutionPolicy", "Bypass",
-         "-File", str(CREDENTIAL_VALIDATOR), "-Path", str(credential_path)],
-        capture_output=True, text=True, timeout=60)
+         "-File", str(CREDENTIAL_VALIDATOR), "-Path",
+         str(lane_home / "credentials" / "kimi-code.json")],
+        capture_output=True, text=True, timeout=60, env=_clean_env())
     assert proc.returncode == 0, proc.stdout + proc.stderr
     report = json.loads(proc.stdout)
     assert report["status"] == "ok"
+
+
+# =======================================================================
+# Task 6 Step 1: the new behaviour. Every test below drives the real
+# builder (and, where the oracle requires it, the real lock tool
+# directly) - no seam substitutes for a real fixture unless the plan
+# names one.
+# =======================================================================
+
+RECOVERY_COMMAND_TEMPLATE = (
+    "$ownerJson = & 'tools/kimi-lane-lock.ps1' -ResolveOwner; "
+    "if ($LASTEXITCODE -ne 0) { throw \"owner resolution failed with exit $LASTEXITCODE\" }; "
+    "$owner = $ownerJson | ConvertFrom-Json -ErrorAction Stop; "
+    "& 'tools/new-kimi-lane-login.ps1' -LaneHome '<lane-home>' "
+    "-OwnerPid $owner.ownerPid -OwnerStartTicksUtc $owner.ownerStartTicksUtc "
+    "-VerdictOut (Join-Path $env:TEMP 'parallax-kimi-lane-login-verdict.json'); "
+    "if ($LASTEXITCODE -ne 0) { throw \"lane login failed with exit $LASTEXITCODE\" }"
+)
+
+
+def _expected_recovery_command(resolved_lane_home):
+    escaped = resolved_lane_home.replace("'", "''")
+    return RECOVERY_COMMAND_TEMPLATE.replace("<lane-home>", escaped)
+
+
+def _extract_recovery_command(stderr_text):
+    m = re.search(r'^\$ownerJson = &.*$', stderr_text, re.MULTILINE)
+    assert m, "no recovery command found in stderr: %r" % (stderr_text,)
+    return m.group(0)
+
+
+def _resolved(path):
+    """[System.IO.Path]::GetFullPath equivalent for an existing path,
+    matching what the builder itself resolves -LaneHome to."""
+    return str(Path(path).resolve())
+
+
+def _file_id(path):
+    proc = subprocess.run(["fsutil", "file", "queryfileid", str(path)],
+                           capture_output=True, text=True, timeout=30)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    return proc.stdout.strip()
+
+
+def _fake_profile_with_credential(tmp_path, config_text, credential_text,
+                                   name="fake-profile-with-cred"):
+    profile = _fake_profile(tmp_path, config_text, name=name)
+    cred_dir = profile / ".kimi-code" / "credentials"
+    cred_dir.mkdir(parents=True, exist_ok=True)
+    (cred_dir / "kimi-code.json").write_text(credential_text, encoding="ascii")
+    return profile
+
+
+def _spawn_live_holder():
+    """A REAL, alive process to serve as a lock's owner identity - the
+    plan requires the acquire-failure/acquire-precedes-validation oracles
+    to use a genuine live holder rather than an invented seam, which is
+    the stronger oracle."""
+    proc = subprocess.Popen(
+        [POWERSHELL, "-NoProfile", "-Command", "Start-Sleep -Seconds 120"],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    ticks = _owner_ticks_for_pid(proc.pid)
+    return proc, str(proc.pid), ticks
+
+
+def _kill_holder(proc):
+    try:
+        proc.terminate()
+        proc.wait(timeout=15)
+    except Exception:
+        try:
+            proc.kill()
+        except Exception:
+            pass
+
+
+# --- The junction oracle: three assertions, each with its own failing
+# measurement. ---
+
+
+def test_the_junction_oracle(tmp_path):
+    target = tmp_path / "junction-home"
+    profile = _fake_profile(tmp_path, FAKE_REAL_CONFIG)
+    lane_home = _fake_lane_home(tmp_path)
+    proc, debate_id, owner_pid, owner_ticks = _build2(target, profile, lane_home)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    custody = _parse_custody(proc.stdout)
+
+    lane_cred_file = lane_home / "credentials" / "kimi-code.json"
+    debate_cred_file = target / "credentials" / "kimi-code.json"
+
+    # 1. File identity is primary: the full NTFS file identity, not a
+    # textual resolved path.
+    assert _file_id(lane_cred_file) == _file_id(debate_cred_file)
+
+    # 2. Write-through is required: mutate the lane fixture, observe the
+    # new bytes through the debate path in the SAME test.
+    refreshed = ('{"access_token": "refreshed-access", '
+                 '"refresh_token": "refreshed-refresh", "expires_at": 1800}')
+    lane_cred_file.write_text(refreshed, encoding="ascii")
+    assert debate_cred_file.read_text(encoding="ascii") == refreshed
+
+    # 3. A non-following physical inventory: enumerate the debate home
+    # WITHOUT traversing reparse points and assert no standalone
+    # credential file exists beneath it. Get-ChildItem -Recurse does not
+    # descend into a directory junction by default (measured live) - a
+    # standalone copy would be the only way a "kimi-code.json" shows up
+    # in this listing.
+    inv = subprocess.run(
+        [POWERSHELL, "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command",
+         "Get-ChildItem -LiteralPath '%s' -Recurse -Force -File | "
+         "Where-Object { $_.Name -eq 'kimi-code.json' } | "
+         "ForEach-Object { $_.FullName }" % str(target)],
+        capture_output=True, text=True, timeout=60, env=_clean_env())
+    assert inv.returncode == 0, inv.stdout + inv.stderr
+    assert inv.stdout.strip() == "", (
+        "a standalone credential file must not exist beneath the debate "
+        "home: found %r" % inv.stdout)
+
+    # The credentials directory itself must be the reparse point.
+    attr = subprocess.run(
+        [POWERSHELL, "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command",
+         "(Get-Item -LiteralPath '%s' -Force).Attributes" %
+         str(target / "credentials")],
+        capture_output=True, text=True, timeout=60, env=_clean_env())
+    assert "ReparsePoint" in attr.stdout
+
+    _remove2(target, lane_home, debate_id, owner_pid, owner_ticks, custody["nonce"])
+
+
+def test_custody_json_is_exactly_debate_home_and_nonce(tmp_path):
+    target = tmp_path / "custody-home"
+    profile = _fake_profile(tmp_path, FAKE_REAL_CONFIG)
+    lane_home = _fake_lane_home(tmp_path)
+    proc, debate_id, owner_pid, owner_ticks = _build2(target, profile, lane_home)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    custody = _parse_custody(proc.stdout)
+    assert custody["debateHome"] == str(target.resolve())
+    assert re.match(r'\A[0-9a-f]{32}\Z', custody["nonce"])
+    _remove2(target, lane_home, debate_id, owner_pid, owner_ticks, custody["nonce"])
+
+
+def test_removal_uses_the_returned_nonce_a_wrong_one_is_refused(tmp_path):
+    target = tmp_path / "wrong-nonce-home"
+    profile = _fake_profile(tmp_path, FAKE_REAL_CONFIG)
+    lane_home = _fake_lane_home(tmp_path)
+    proc, debate_id, owner_pid, owner_ticks = _build2(target, profile, lane_home)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    custody = _parse_custody(proc.stdout)
+
+    wrong_nonce = _new_hex32()
+    assert wrong_nonce != custody["nonce"]
+    bad = _remove2(target, lane_home, debate_id, owner_pid, owner_ticks, wrong_nonce)
+    assert bad.returncode != 0, bad.stdout + bad.stderr
+    assert target.exists(), "a wrong nonce must not remove the home"
+    status = _lock_status(lane_home)
+    assert status["state"] == "held"
+    assert status["nonce"] == custody["nonce"]
+
+    good = _remove2(target, lane_home, debate_id, owner_pid, owner_ticks, custody["nonce"])
+    assert good.returncode == 0, good.stdout + good.stderr
+    assert not target.exists()
+    assert _lock_status(lane_home)["state"] == "free"
+
+
+def test_the_credential_source_is_the_lane_home_not_the_user_profile(tmp_path):
+    """A planted, DIFFERING user credential under the fake USERPROFILE
+    must never be read - the lane home's own credential is the only
+    source now."""
+    target = tmp_path / "source-home"
+    profile = _fake_profile_with_credential(
+        tmp_path, FAKE_REAL_CONFIG, DIFFERING_USER_CREDENTIAL_JSON)
+    lane_home = _fake_lane_home(tmp_path)
+    proc, debate_id, owner_pid, owner_ticks = _build2(target, profile, lane_home)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    custody = _parse_custody(proc.stdout)
+
+    debate_cred = (target / "credentials" / "kimi-code.json").read_text(encoding="ascii")
+    assert debate_cred == VALID_CREDENTIAL_JSON
+    assert "user-side-token-must-never-be-read" not in debate_cred
+    assert "user-side-refresh-must-never-be-read" not in debate_cred
+
+    _remove2(target, lane_home, debate_id, owner_pid, owner_ticks, custody["nonce"])
+
+
+# --- FIRST USE: the four-row directory probe of the lane home. ---
+
+
+def test_a_nonexistent_lane_home_refuses_with_the_recovery_command(tmp_path):
+    target = tmp_path / "debate-home"
+    profile = _fake_profile(tmp_path, FAKE_REAL_CONFIG)
+    lane_home = tmp_path / "never-created-lane-home"
+    assert not lane_home.exists()
+
+    proc, *_ = _build2(target, profile, lane_home)
+    assert proc.returncode != 0, proc.stdout + proc.stderr
+    assert proc.stdout == ""
+    assert not target.exists()
+    assert not lane_home.exists(), "the builder must never create the lane home"
+
+    cmd = _extract_recovery_command(proc.stderr)
+    assert cmd == _expected_recovery_command(_resolved_nonexistent(lane_home))
+
+
+def _resolved_nonexistent(path):
+    """os.path.normpath-based GetFullPath equivalent for a path that does
+    NOT exist (Path.resolve() on Windows still normalizes a nonexistent
+    path with strict=False, matching .NET's GetFullPath, which never
+    requires existence either)."""
+    return str(Path(path).resolve())
+
+
+def test_a_regular_file_at_the_lane_home_path_refuses_with_no_recovery_command(tmp_path):
+    target = tmp_path / "debate-home"
+    profile = _fake_profile(tmp_path, FAKE_REAL_CONFIG)
+    lane_home = tmp_path / "lane-home-is-a-file"
+    lane_home.write_text("not a directory", encoding="ascii")
+
+    proc, *_ = _build2(target, profile, lane_home)
+    assert proc.returncode != 0, proc.stdout + proc.stderr
+    assert proc.stdout == ""
+    assert "$ownerJson" not in proc.stderr
+    assert not target.exists()
+    # No lock invocation: no lane.lock can appear beside a file, and the
+    # file itself is untouched.
+    assert lane_home.read_text(encoding="ascii") == "not a directory"
+
+
+def test_the_directory_probe_fault_seam_produces_the_unmeasurable_row(tmp_path):
+    target = tmp_path / "debate-home"
+    profile = _fake_profile(tmp_path, FAKE_REAL_CONFIG)
+    lane_home = _fake_lane_home(tmp_path)
+
+    proc, *_ = _build2(target, profile, lane_home,
+                        extra_env={"PARALLAX_LANE_HOME_DIRECTORY_PROBE_FAULT": "1"})
+    assert proc.returncode == 6, proc.stdout + proc.stderr
+    assert proc.stdout == ""
+    assert ("PARALLAX_LANE_HOME_DIRECTORY_PROBE_FAULT injected: simulated "
+            "lane-home directory probe failure") in proc.stderr
+    assert "$ownerJson" not in proc.stderr
+    assert not target.exists()
+    # No mutation of the (real, existing) lane home's own lock.
+    assert _lock_status(lane_home)["state"] == "free"
+
+
+# --- Absent / unreadable / malformed lane credential: each refuses with
+# the recovery command, asserted whole. ---
+
+
+def test_an_absent_lane_credential_refuses_with_the_recovery_command_acquires_and_releases(tmp_path):
+    target = tmp_path / "debate-home"
+    profile = _fake_profile(tmp_path, FAKE_REAL_CONFIG)
+    lane_home = _fake_lane_home(tmp_path, seed_credential=False)
+
+    proc, *_ = _build2(target, profile, lane_home)
+    assert proc.returncode != 0, proc.stdout + proc.stderr
+    assert proc.stdout == ""
+    assert not target.exists()
+
+    cmd = _extract_recovery_command(proc.stderr)
+    assert cmd == _expected_recovery_command(_resolved(lane_home))
+
+    # Acquired then released: the lane home EXISTED (unlike the
+    # nonexistent-row test above), so Acquire ran, and the refusal
+    # released it back to free.
+    assert _lock_status(lane_home)["state"] == "free"
+
+
+def test_an_unreadable_lane_credential_refuses_with_the_recovery_command(tmp_path):
+    target = tmp_path / "debate-home"
+    profile = _fake_profile(tmp_path, FAKE_REAL_CONFIG)
+    lane_home = _fake_lane_home(tmp_path, seed_credential=False)
+    # A directory standing where the credential file belongs: present but
+    # unreadable as bytes.
+    (lane_home / "credentials" / "kimi-code.json").mkdir(parents=True)
+
+    proc, *_ = _build2(target, profile, lane_home)
+    assert proc.returncode != 0, proc.stdout + proc.stderr
+    assert proc.stdout == ""
+    assert not target.exists()
+
+    cmd = _extract_recovery_command(proc.stderr)
+    assert cmd == _expected_recovery_command(_resolved(lane_home))
+    assert _lock_status(lane_home)["state"] == "free"
+
+
+def test_a_malformed_lane_credential_refuses_with_the_recovery_command(tmp_path):
+    target = tmp_path / "debate-home"
+    profile = _fake_profile(tmp_path, FAKE_REAL_CONFIG)
+    lane_home = _fake_lane_home(tmp_path, credential_text="not json at all")
+
+    proc, *_ = _build2(target, profile, lane_home)
+    assert proc.returncode != 0, proc.stdout + proc.stderr
+    assert proc.stdout == ""
+    assert not target.exists()
+
+    cmd = _extract_recovery_command(proc.stderr)
+    assert cmd == _expected_recovery_command(_resolved(lane_home))
+    assert _lock_status(lane_home)["state"] == "free"
+
+
+def test_validator_failure_is_not_an_actionable_state(tmp_path):
+    """A VALIDATOR FAILURE (the injected PARALLAX_KIMI_CREDENTIAL_STATE_
+    FAULT seam already frozen in Task 2's validator) is not one of the
+    three actionable states: no recovery command, because nothing was
+    measured. The lock is still acquired-then-released."""
+    target = tmp_path / "debate-home"
+    profile = _fake_profile(tmp_path, FAKE_REAL_CONFIG)
+    lane_home = _fake_lane_home(tmp_path)
+
+    proc, *_ = _build2(target, profile, lane_home,
+                        extra_env={"PARALLAX_KIMI_CREDENTIAL_STATE_FAULT": "1"})
+    assert proc.returncode != 0, proc.stdout + proc.stderr
+    assert proc.stdout == ""
+    assert "$ownerJson" not in proc.stderr
+    assert not target.exists()
+    assert _lock_status(lane_home)["state"] == "free"
+
+
+def test_an_existing_lane_home_with_an_absent_credential_acquires_validates_and_releases(tmp_path):
+    """Both directions of the pre-lock/under-lock split: an entirely
+    absent lane home (tested above) never touches the lock; an EXISTING
+    lane home with an absent credential acquires, validates absent,
+    emits the same command, and releases."""
+    target = tmp_path / "debate-home"
+    profile = _fake_profile(tmp_path, FAKE_REAL_CONFIG)
+    lane_home = _fake_lane_home(tmp_path, seed_credential=False)
+    assert lane_home.is_dir()
+
+    proc, *_ = _build2(target, profile, lane_home)
+    assert proc.returncode != 0, proc.stdout + proc.stderr
+    cmd = _extract_recovery_command(proc.stderr)
+    assert cmd == _expected_recovery_command(_resolved(lane_home))
+    assert _lock_status(lane_home)["state"] == "free"
+
+
+# --- Successful build retains the lock; a pre-emission failure releases. ---
+
+
+def test_a_successful_build_retains_the_lock(tmp_path):
+    target = tmp_path / "retain-home"
+    profile = _fake_profile(tmp_path, FAKE_REAL_CONFIG)
+    lane_home = _fake_lane_home(tmp_path)
+    proc, debate_id, owner_pid, owner_ticks = _build2(target, profile, lane_home)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    custody = _parse_custody(proc.stdout)
+
+    status = _lock_status(lane_home)
+    assert status["state"] == "held"
+    assert status["nonce"] == custody["nonce"]
+    assert status["debateId"] == debate_id
+
+    _remove2(target, lane_home, debate_id, owner_pid, owner_ticks, custody["nonce"])
+
+
+def test_a_preemission_fault_runs_cleanup_and_releases(tmp_path):
+    """The relocated PARALLAX_LANE_HOME_FAULT seam, now firing between
+    custody construction and emission. No stdout, the home gone, the
+    lock exactly free - proves $buildCompleted is set only after the
+    success line is out."""
+    target = tmp_path / "preemission-home"
+    profile = _fake_profile(tmp_path, FAKE_REAL_CONFIG)
+    lane_home = _fake_lane_home(tmp_path)
+
+    proc, *_ = _build2(target, profile, lane_home,
+                        extra_env={"PARALLAX_LANE_HOME_FAULT": "1"})
+    assert proc.returncode != 0, proc.stdout + proc.stderr
+    assert proc.stdout == ""
+    assert "PARALLAX_LANE_HOME_FAULT injected: simulated pre-emission failure" in proc.stderr
+    assert not target.exists()
+    assert _lock_status(lane_home)["state"] == "free"
+
+
+def test_an_acquire_failure_does_not_attempt_a_release_and_precedes_validation(tmp_path):
+    """A REAL held-by-a-different-owner fixture, the stronger oracle: the
+    lane home carries NO credential at all, so if credential validation
+    ran before acquisition the failure would be an actionable "absent"
+    refusal (recovery command, exit from the validator path). Acquiring
+    first means this instead contends and fails BEFORE ever looking at
+    the credential - proving both "acquire precedes validation" and
+    "acquire failure does not release" (the holder's own record survives
+    untouched) in one fixture."""
+    profile = _fake_profile(tmp_path, FAKE_REAL_CONFIG)
+    lane_home = _fake_lane_home(tmp_path, seed_credential=False)
+    target = tmp_path / "contended-home"
+
+    holder_proc, holder_pid, holder_ticks = _spawn_live_holder()
+    try:
+        holder_debate_id = _new_hex32()
+        acquire = _lock_acquire_direct(lane_home, holder_debate_id, holder_pid,
+                                        holder_ticks, str(tmp_path / "holder-debate-home"))
+        assert acquire.returncode == 0, acquire.stdout + acquire.stderr
+        holder_nonce = acquire.stdout.strip()
+        before = _lock_status(lane_home)
+        assert before["state"] == "held"
+
+        proc, *_ = _build2(target, profile, lane_home)
+        assert proc.returncode == 3, proc.stdout + proc.stderr  # lock contention
+        assert proc.stdout == ""
+        assert "$ownerJson" not in proc.stderr, (
+            "an absent-credential refusal would have printed the recovery "
+            "command; contention must win, proving acquire precedes "
+            "validation")
+        assert "contended: holder pid %s" % holder_pid in proc.stderr
+        assert not target.exists()
+
+        after = _lock_status(lane_home)
+        assert after == before, "an acquire failure must never mutate the record"
+    finally:
+        _lock_release_direct(lane_home, holder_debate_id, holder_pid, holder_ticks, holder_nonce)
+        _kill_holder(holder_proc)
+
+
+# --- The reclaim/contention integration oracles for the lock boundary. ---
+
+
+def test_a_build_reclaiming_a_dead_holder_succeeds(tmp_path):
+    target = tmp_path / "reclaim-home"
+    profile = _fake_profile(tmp_path, FAKE_REAL_CONFIG)
+    lane_home = _fake_lane_home(tmp_path)
+
+    dead_pid = "999999"
+    dead_ticks = "638000000000000000"
+    dead_debate_id = _new_hex32()
+    acquire = _lock_acquire_direct(lane_home, dead_debate_id, dead_pid, dead_ticks,
+                                    str(tmp_path / "dead-debate-home"))
+    assert acquire.returncode == 0, acquire.stdout + acquire.stderr
+
+    proc, debate_id, owner_pid, owner_ticks = _build2(target, profile, lane_home)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "reclaimed a dead holder: pid %s" % dead_pid in proc.stderr
+    custody = _parse_custody(proc.stdout)
+    assert proc.stdout.strip() == json.dumps(custody, separators=(",", ":"))
+
+    _remove2(target, lane_home, debate_id, owner_pid, owner_ticks, custody["nonce"])
+
+
+def test_a_build_contending_with_a_live_holder_fails(tmp_path):
+    target = tmp_path / "contend-home"
+    profile = _fake_profile(tmp_path, FAKE_REAL_CONFIG)
+    lane_home = _fake_lane_home(tmp_path)
+
+    holder_proc, holder_pid, holder_ticks = _spawn_live_holder()
+    try:
+        holder_debate_id = _new_hex32()
+        acquire = _lock_acquire_direct(lane_home, holder_debate_id, holder_pid,
+                                        holder_ticks, str(tmp_path / "holder-debate-home"))
+        assert acquire.returncode == 0, acquire.stdout + acquire.stderr
+        holder_nonce = acquire.stdout.strip()
+
+        proc, *_ = _build2(target, profile, lane_home)
+        assert proc.returncode == 3, proc.stdout + proc.stderr
+        assert proc.stdout == ""
+        assert "contended: holder pid %s" % holder_pid in proc.stderr
+        assert not target.exists()
+    finally:
+        _lock_release_direct(lane_home, holder_debate_id, holder_pid, holder_ticks, holder_nonce)
+        _kill_holder(holder_proc)
+
+
+# --- Cleanup fault seams: delete and release, independently. ---
+
+
+def test_cleanup_delete_fault_keeps_the_original_failure_primary(tmp_path):
+    target = tmp_path / "cleanup-delete-fault-home"
+    profile = _fake_profile(tmp_path, FAKE_REAL_CONFIG)
+    lane_home = _fake_lane_home(tmp_path)
+
+    proc, *_ = _build2(target, profile, lane_home, extra_env={
+        "PARALLAX_LANE_HOME_FAULT": "1",
+        "PARALLAX_LANE_HOME_CLEANUP_DELETE_FAULT": "1",
+    })
+    assert proc.returncode != 0, proc.stdout + proc.stderr
+    assert ("PARALLAX_LANE_HOME_CLEANUP_DELETE_FAULT injected: simulated "
+            "cleanup deletion failure") in proc.stderr
+    assert target.exists(), "the debate home must remain on disk when its cleanup deletion is skipped"
+    assert _lock_status(lane_home)["state"] == "free", (
+        "the release must still be attempted, and succeed, even though cleanup deletion was skipped")
+
+    shutil.rmtree(target, ignore_errors=True)
+
+
+def test_cleanup_release_fault_keeps_the_original_failure_primary(tmp_path):
+    target = tmp_path / "cleanup-release-fault-home"
+    profile = _fake_profile(tmp_path, FAKE_REAL_CONFIG)
+    lane_home = _fake_lane_home(tmp_path)
+
+    proc, debate_id, owner_pid, owner_ticks = _build2(target, profile, lane_home, extra_env={
+        "PARALLAX_LANE_HOME_FAULT": "1",
+        "PARALLAX_LANE_HOME_CLEANUP_RELEASE_FAULT": "1",
+    })
+    assert proc.returncode != 0, proc.stdout + proc.stderr
+    assert ("PARALLAX_LANE_HOME_CLEANUP_RELEASE_FAULT injected: simulated "
+            "cleanup release refusal") in proc.stderr
+    assert not target.exists(), "deletion is unaffected by the release-only seam"
+
+    status = _lock_status(lane_home)
+    assert status["state"] == "held", "the release was skipped, so the record stays held"
+    assert status["debateId"] == debate_id
+
+    _lock_release_direct(lane_home, debate_id, owner_pid, owner_ticks, status["nonce"])
+
+
+# =======================================================================
+# Remove order, frozen.
+# =======================================================================
+
+
+def _lock_file_bytes(lane_home):
+    return (lane_home / "lane.lock").read_bytes()
+
+
+def test_removes_identity_mismatch_leaves_home_and_lock_byte_identical(tmp_path):
+    target = tmp_path / "mismatch-home"
+    profile = _fake_profile(tmp_path, FAKE_REAL_CONFIG)
+    lane_home = _fake_lane_home(tmp_path)
+    proc, debate_id, owner_pid, owner_ticks = _build2(target, profile, lane_home)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    custody = _parse_custody(proc.stdout)
+
+    lock_before = _lock_file_bytes(lane_home)
+    sentinel_before = (target / SENTINEL).read_bytes()
+
+    wrong_debate_id = _new_hex32()
+    assert wrong_debate_id != debate_id
+    bad = _remove2(target, lane_home, wrong_debate_id, owner_pid, owner_ticks, custody["nonce"])
+    assert bad.returncode != 0, bad.stdout + bad.stderr
+
+    assert target.exists()
+    assert (target / SENTINEL).read_bytes() == sentinel_before
+    assert _lock_file_bytes(lane_home) == lock_before
+
+    _remove2(target, lane_home, debate_id, owner_pid, owner_ticks, custody["nonce"])
+
+
+def test_the_wrong_path_oracle(tmp_path):
+    """Frozen six-step setup, using only the real builder. Building B
+    while A holds the lock would contend and never reach the case, so B's
+    lock is released directly after B is built, before A is built."""
+    profile = _fake_profile(tmp_path, FAKE_REAL_CONFIG)
+    lane_home = _fake_lane_home(tmp_path)
+    home_a = tmp_path / "home-a"
+    home_b = tmp_path / "home-b"
+
+    # 1. Build B normally and capture its nonce.
+    proc_b, debate_b, pid_b, ticks_b = _build2(home_b, profile, lane_home)
+    assert proc_b.returncode == 0, proc_b.stdout + proc_b.stderr
+    custody_b = _parse_custody(proc_b.stdout)
+
+    # 2. Directly -Release B's lock, leaving B on disk.
+    rel_b = _lock_release_direct(lane_home, debate_b, pid_b, ticks_b, custody_b["nonce"])
+    assert rel_b.returncode == 0, rel_b.stdout + rel_b.stderr
+    assert home_b.exists()
+
+    # 3. Build A normally, retaining A's hold.
+    proc_a, debate_a, pid_a, ticks_a = _build2(home_a, profile, lane_home)
+    assert proc_a.returncode == 0, proc_a.stdout + proc_a.stderr
+    custody_a = _parse_custody(proc_a.stdout)
+
+    lock_before = _lock_file_bytes(lane_home)
+    a_sentinel_before = (home_a / SENTINEL).read_bytes()
+    b_sentinel_before = (home_b / SENTINEL).read_bytes()
+
+    # 4. Call -Remove on B carrying A's complete identity and A's nonce.
+    wrong_path_attempt = _remove2(home_b, lane_home, debate_a, pid_a, ticks_a, custody_a["nonce"])
+
+    # 5. Require exit 2 and byte-identical A, B and lock.
+    assert wrong_path_attempt.returncode == 2, (
+        wrong_path_attempt.stdout + wrong_path_attempt.stderr)
+    assert home_a.exists() and home_b.exists()
+    assert (home_a / SENTINEL).read_bytes() == a_sentinel_before
+    assert (home_b / SENTINEL).read_bytes() == b_sentinel_before
+    assert _lock_file_bytes(lane_home) == lock_before
+
+    # 6. Tear down: remove A normally, then acquire a fresh hold for B
+    # and remove B normally.
+    teardown_a = _remove2(home_a, lane_home, debate_a, pid_a, ticks_a, custody_a["nonce"])
+    assert teardown_a.returncode == 0, teardown_a.stdout + teardown_a.stderr
+    assert _lock_status(lane_home)["state"] == "free"
+
+    fresh = _lock_acquire_direct(lane_home, debate_b, pid_b, ticks_b, str(home_b))
+    assert fresh.returncode == 0, fresh.stdout + fresh.stderr
+    fresh_nonce = fresh.stdout.strip()
+    teardown_b = _remove2(home_b, lane_home, debate_b, pid_b, ticks_b, fresh_nonce)
+    assert teardown_b.returncode == 0, teardown_b.stdout + teardown_b.stderr
+    assert not home_b.exists()
+
+
+def test_a_sentinel_refusal_after_identity_check_leaves_home_and_lock_unchanged(tmp_path):
+    target = tmp_path / "sentinel-refusal-home"
+    profile = _fake_profile(tmp_path, FAKE_REAL_CONFIG)
+    lane_home = _fake_lane_home(tmp_path)
+    proc, debate_id, owner_pid, owner_ticks = _build2(target, profile, lane_home)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    custody = _parse_custody(proc.stdout)
+
+    # Corrupt the sentinel AFTER the identity the lock knows about (the
+    # lock's own -DebateHome is unaffected by this) - the lock identity
+    # check (step 1) will still succeed against this same -Path, so the
+    # sentinel guard (step 2) is what refuses.
+    (target / SENTINEL).write_text("not the real sentinel", encoding="ascii")
+    lock_before = _lock_file_bytes(lane_home)
+
+    proc2 = _remove2(target, lane_home, debate_id, owner_pid, owner_ticks, custody["nonce"])
+    assert proc2.returncode != 0, proc2.stdout + proc2.stderr
+    assert "sentinel does not match this path" in proc2.stdout + proc2.stderr
+    assert target.exists()
+    assert _lock_file_bytes(lane_home) == lock_before
+    assert _lock_status(lane_home)["state"] == "held"
+
+    # Repair the sentinel and clean up for real.
+    (target / SENTINEL).write_text("\n".join(["PARALLAX-LANE-HOME-V1", str(target.resolve())]),
+                                    encoding="ascii")
+    _remove2(target, lane_home, debate_id, owner_pid, owner_ticks, custody["nonce"])
+
+
+def test_the_remove_verify_fault_seam_leaves_the_lock_held(tmp_path):
+    target = tmp_path / "remove-verify-fault-home"
+    profile = _fake_profile(tmp_path, FAKE_REAL_CONFIG)
+    lane_home = _fake_lane_home(tmp_path)
+    proc, debate_id, owner_pid, owner_ticks = _build2(target, profile, lane_home)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    custody = _parse_custody(proc.stdout)
+
+    proc2 = _remove2(target, lane_home, debate_id, owner_pid, owner_ticks, custody["nonce"],
+                      extra_env={"PARALLAX_LANE_HOME_REMOVE_VERIFY_FAULT": "1"})
+    assert proc2.returncode == 6, proc2.stdout + proc2.stderr
+    assert proc2.stdout == ""
+    assert ("PARALLAX_LANE_HOME_REMOVE_VERIFY_FAULT injected: simulated "
+            "post-delete verification failure") in proc2.stderr
+    # The deletion itself already happened (the fault fires AFTER
+    # deletion, BEFORE verification) - the home is genuinely gone.
+    assert not target.exists()
+    assert _lock_status(lane_home)["state"] == "held"
+
+    _lock_release_direct(lane_home, debate_id, owner_pid, owner_ticks, custody["nonce"])
+
+
+def test_the_remove_release_fault_seam_is_failure_capable(tmp_path):
+    target = tmp_path / "remove-release-fault-home"
+    profile = _fake_profile(tmp_path, FAKE_REAL_CONFIG)
+    lane_home = _fake_lane_home(tmp_path)
+    proc, debate_id, owner_pid, owner_ticks = _build2(target, profile, lane_home)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    custody = _parse_custody(proc.stdout)
+
+    proc2 = _remove2(target, lane_home, debate_id, owner_pid, owner_ticks, custody["nonce"],
+                      extra_env={"PARALLAX_LANE_HOME_REMOVE_RELEASE_FAULT": "1"})
+    assert proc2.returncode == 5, proc2.stdout + proc2.stderr
+    assert proc2.stdout == ""
+    assert ("PARALLAX_LANE_HOME_REMOVE_RELEASE_FAULT injected: simulated "
+            "post-delete release refusal") in proc2.stderr
+    assert not target.exists()
+    status = _lock_status(lane_home)
+    assert status["state"] == "held"
+    assert status["nonce"] == custody["nonce"]
+
+    _lock_release_direct(lane_home, debate_id, owner_pid, owner_ticks, custody["nonce"])
+
+
+def test_remove_does_not_delete_through_the_junction(tmp_path):
+    target = tmp_path / "remove-no-follow-home"
+    profile = _fake_profile(tmp_path, FAKE_REAL_CONFIG)
+    lane_home = _fake_lane_home(tmp_path)
+    proc, debate_id, owner_pid, owner_ticks = _build2(target, profile, lane_home)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    custody = _parse_custody(proc.stdout)
+
+    proc2 = _remove2(target, lane_home, debate_id, owner_pid, owner_ticks, custody["nonce"])
+    assert proc2.returncode == 0, proc2.stdout + proc2.stderr
+    assert not target.exists()
+    # The lane home's own credential survives the debate home's removal.
+    assert (lane_home / "credentials" / "kimi-code.json").exists()
+    assert (lane_home / "credentials" / "kimi-code.json").read_text(
+        encoding="ascii") == VALID_CREDENTIAL_JSON
+
+
+def test_failed_build_cleanup_does_not_delete_through_the_junction(tmp_path):
+    target = tmp_path / "cleanup-no-follow-home"
+    profile = _fake_profile(tmp_path, FAKE_REAL_CONFIG)
+    lane_home = _fake_lane_home(tmp_path)
+
+    # The junction is created before the PARALLAX_LANE_HOME_FAULT seam
+    # fires (it fires right before custody emission, well after step 5's
+    # junction creation), so this failed build's own cleanup deletion
+    # exercises the same "does not follow" requirement.
+    proc, *_ = _build2(target, profile, lane_home,
+                        extra_env={"PARALLAX_LANE_HOME_FAULT": "1"})
+    assert proc.returncode != 0, proc.stdout + proc.stderr
+    assert not target.exists()
+    assert (lane_home / "credentials" / "kimi-code.json").exists()
+    assert (lane_home / "credentials" / "kimi-code.json").read_text(
+        encoding="ascii") == VALID_CREDENTIAL_JSON
+    assert _lock_status(lane_home)["state"] == "free"
+
+
+def test_the_deletion_failure_oracle_is_real(tmp_path):
+    """An exclusively opened file beneath the debate home blocks the
+    TERMINATING delete: nonzero, the home still present, no success
+    line, and the lock still held. Teardown is frozen: close the handle,
+    release DIRECTLY using the retained identity, then delete the
+    disposable remainder outside the behaviour under test."""
+    target = tmp_path / "deletion-failure-home"
+    profile = _fake_profile(tmp_path, FAKE_REAL_CONFIG)
+    lane_home = _fake_lane_home(tmp_path)
+    proc, debate_id, owner_pid, owner_ticks = _build2(target, profile, lane_home)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    custody = _parse_custody(proc.stdout)
+
+    held_file = target / "_held.txt"
+    held_file.write_text("held", encoding="ascii")
+    ready_signal = tmp_path / "holder-ready"
+    release_signal = tmp_path / "holder-release"
+    holder_script = tmp_path / "holder.ps1"
+    holder_script.write_text(
+        "param($Path, $ReadySignal, $ReleaseSignal)\n"
+        "$fs = [System.IO.File]::Open($Path, [System.IO.FileMode]::Open, "
+        "[System.IO.FileAccess]::ReadWrite, [System.IO.FileShare]::Read)\n"
+        "New-Item -ItemType File -Path $ReadySignal -Force | Out-Null\n"
+        "while (-not (Test-Path -LiteralPath $ReleaseSignal)) { Start-Sleep -Milliseconds 100 }\n"
+        "$fs.Close()\n",
+        encoding="ascii")
+
+    holder = subprocess.Popen(
+        [POWERSHELL, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
+         str(holder_script), "-Path", str(held_file),
+         "-ReadySignal", str(ready_signal), "-ReleaseSignal", str(release_signal)],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=_clean_env())
+    try:
+        deadline = time.time() + 20
+        while not ready_signal.exists():
+            assert time.time() < deadline, "holder process never signalled ready"
+            time.sleep(0.1)
+
+        proc2 = _remove2(target, lane_home, debate_id, owner_pid, owner_ticks, custody["nonce"])
+        assert proc2.returncode != 0, proc2.stdout + proc2.stderr
+        assert "removed " not in proc2.stdout
+        assert target.exists()
+        status = _lock_status(lane_home)
+        assert status["state"] == "held"
+        assert status["nonce"] == custody["nonce"]
+    finally:
+        release_signal.write_text("go", encoding="ascii")
+        holder.wait(timeout=20)
+        _lock_release_direct(lane_home, debate_id, owner_pid, owner_ticks, custody["nonce"])
+        shutil.rmtree(target, ignore_errors=True)
+
+
+# =======================================================================
+# Step 1b: the recovery command is EXECUTED, not just string-compared.
+# Four rows, since the command has three dependent boundaries (the owner
+# command's exit, the owner JSON parse, and the login's exit): a
+# two-row oracle would leave a parse failure and a login failure
+# unexercised.
+# =======================================================================
+
+OWNER_STUB_NONZERO = (
+    "param([switch]$ResolveOwner)\n"
+    '[Console]::Error.WriteLine("stub: owner resolution refused")\n'
+    "exit 2\n"
+)
+OWNER_STUB_MALFORMED_JSON = (
+    "param([switch]$ResolveOwner)\n"
+    'Write-Output "not-json-at-all"\n'
+    "exit 0\n"
+)
+OWNER_STUB_VALID_JSON = (
+    "param([switch]$ResolveOwner)\n"
+    "Write-Output '{\"ownerPid\": 4321, \"ownerStartTicksUtc\": \"123456789\"}'\n"
+    "exit 0\n"
+)
+LOGIN_STUB_MARK_AND_FAIL = (
+    "param([string]$LaneHome, [string]$OwnerPid, [string]$OwnerStartTicksUtc, "
+    "[string]$VerdictOut, [switch]$Force)\n"
+    'Set-Content -LiteralPath (Join-Path $PSScriptRoot "login-invoked.marker") '
+    '-Value "invoked" -Encoding ascii\n'
+    "exit 6\n"
+)
+
+
+def _disposable_tools_cwd(tmp_path, name, owner_stub_text, login_stub_text):
+    disposable = tmp_path / name
+    tools_dir = disposable / "tools"
+    tools_dir.mkdir(parents=True)
+    (tools_dir / "kimi-lane-lock.ps1").write_text(owner_stub_text, encoding="ascii")
+    (tools_dir / "new-kimi-lane-login.ps1").write_text(login_stub_text, encoding="ascii")
+    return disposable, tools_dir
+
+
+def _get_recovery_command_for(tmp_path, lane_home_name):
+    """Drive the REAL builder against a nonexistent lane home to obtain
+    an authentic, builder-emitted recovery command."""
+    target = tmp_path / "extraction-debate-home"
+    profile = _fake_profile(tmp_path, FAKE_REAL_CONFIG, name="extraction-profile")
+    lane_home = tmp_path / lane_home_name
+    proc, *_ = _build2(target, profile, lane_home)
+    assert proc.returncode != 0, proc.stdout + proc.stderr
+    return _extract_recovery_command(proc.stderr)
+
+
+def _run_recovery_row(tmp_path, row, owner_stub_text):
+    cmd_text = _get_recovery_command_for(tmp_path, "stub-row-lane-home")
+    disposable, tools_dir = _disposable_tools_cwd(
+        tmp_path, "disposable-" + row, owner_stub_text, LOGIN_STUB_MARK_AND_FAIL)
+    fake_profile_dir = tmp_path / ("run-profile-" + row)
+    fake_profile_dir.mkdir()
+    env = _clean_env(USERPROFILE=str(fake_profile_dir), TEMP=str(tmp_path / ("run-temp-" + row)))
+    os.makedirs(env["TEMP"], exist_ok=True)
+    run = subprocess.run(
+        [POWERSHELL, "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", cmd_text],
+        capture_output=True, text=True, timeout=60, env=env, cwd=str(disposable))
+    marker = tools_dir / "login-invoked.marker"
+    return run, marker
+
+
+def test_the_recovery_command_row1_owner_command_nonzero(tmp_path):
+    """Row 1: the owner command itself exits nonzero. The command's own
+    `if ($LASTEXITCODE -ne 0) { throw ... }` guard is an explicit `throw`,
+    which DOES reliably halt the rest of the semicolon chain - confirmed
+    live: exit nonzero, login stub never invoked."""
+    run, marker = _run_recovery_row(tmp_path, "owner_nonzero", OWNER_STUB_NONZERO)
+    assert run.returncode != 0, run.stdout + run.stderr
+    assert not marker.exists()
+
+
+def test_the_recovery_command_row2_owner_json_malformed(tmp_path):
+    """Row 2, per the plan's own four-row table: 'zero | malformed |
+    never invoked | a TERMINATING parse failure'.
+
+    LIVE-VERIFIED FINDING, not a design choice of this test: the frozen
+    command's JSON guard is `$owner = $ownerJson | ConvertFrom-Json
+    -ErrorAction Stop` with NO surrounding try/catch and no
+    `$ErrorActionPreference = 'Stop'` anywhere in the one-liner. Under
+    PowerShell's default $ErrorActionPreference ("Continue"), an
+    uncaught -ErrorAction-Stop-promoted CMDLET error terminates only the
+    one pipeline statement it came from, not the enclosing top-level
+    command - unlike the explicit `throw` the other two dependency
+    checks use, which DOES halt (rows 1 and 3, confirmed by the tests
+    around this one). Reproduced four separate ways, both hosts, both
+    -Command and -File invocation: `$owner = 'bad' | ConvertFrom-Json
+    -ErrorAction Stop; Write-Output 'reached'` prints the ConvertFrom-Json
+    error AND THEN prints 'reached'. So on THIS row, the frozen text as
+    written does NOT keep the login wrapper from being invoked (it runs
+    with $owner.ownerPid/$owner.ownerStartTicksUtc both $null) - it is
+    the LOGIN WRAPPER's own exit code (nonzero, whatever it does with
+    null identity fields) that the command's third statement's `throw`
+    catches, so the overall command still exits nonzero, just not for
+    the reason the plan's row describes, and not before the login stub
+    ran. This is exactly the plan-prose-vs-runtime gap Step 1b exists to
+    catch - a string pin would have shown "a TERMINATING parse failure"
+    text present and passed. Reported to the task owner rather than
+    silently asserting the row's stronger, false claim; see the
+    implementer's final report for Task 6."""
+    run, marker = _run_recovery_row(tmp_path, "owner_malformed_json", OWNER_STUB_MALFORMED_JSON)
+    assert run.returncode != 0, run.stdout + run.stderr
+    # The exact wording differs by host: Windows PowerShell 5.1 says
+    # "Invalid JSON primitive"; PowerShell 7's JSON.NET-backed
+    # implementation says "Conversion from JSON failed with error".
+    assert "ConvertFrom-Json" in run.stderr, run.stderr
+    assert "Invalid JSON" in run.stderr or "Conversion from JSON failed" in run.stderr, run.stderr
+    # NOT asserted: marker absence. The frozen command's -ErrorAction Stop
+    # guard does not halt the chain here - see the finding above.
+
+
+def test_the_recovery_command_row3_login_nonzero(tmp_path):
+    """Row 3: owner resolution succeeds with valid JSON; the login stub
+    is invoked and fails. The command's third statement's explicit
+    `throw` on the login's own nonzero $LASTEXITCODE DOES reliably
+    surface as the overall command's failure."""
+    run, marker = _run_recovery_row(tmp_path, "login_nonzero", OWNER_STUB_VALID_JSON)
+    assert run.returncode != 0, run.stdout + run.stderr
+    assert marker.exists(), "the login stub must be invoked once owner resolution is valid"
+
+
+def test_the_recovery_command_success_row_with_an_apostrophe_lane_home(tmp_path):
+    """The escaping needs its own failure direction: all four rows could
+    pass with an ordinary path, so the SUCCESS row specifically uses a
+    resolved lane home CONTAINING AN APOSTROPHE (kept free of a space in
+    the SAME path segment - tools/new-kimi-lane-login.ps1's own
+    Start-Process argument-list construction for the credential
+    validator, a file this task must not rewrite, mis-tokenizes a
+    -File argument that combines a space with an embedded apostrophe;
+    that is a pre-existing property of a script this task only invokes)
+    and requires the emitted command to contain the DOUBLED apostrophe,
+    that it writes only to the intended lane home, and that the
+    resulting credential is structurally ok."""
+    lane_home_name = "o'learys-lane-home"
+    cmd_text = _get_recovery_command_for(tmp_path, lane_home_name)
+    assert "o''learys" in cmd_text, cmd_text
+
+    disposable = tmp_path / "disposable-success"
+    tools_dir = disposable / "tools"
+    tools_dir.mkdir(parents=True)
+    for name in ["kimi-lane-lock.ps1", "new-kimi-lane-login.ps1", "read-kimi-credential-state.ps1"]:
+        shutil.copy(str(REPO / "tools" / name), str(tools_dir / name))
+
+    lane_home = tmp_path / lane_home_name
+    (lane_home / "credentials").mkdir(parents=True)
+    (lane_home / "credentials" / "kimi-code.json").write_text(
+        VALID_CREDENTIAL_JSON, encoding="ascii")
+
+    fake_profile_dir = tmp_path / "success-run-profile"
+    fake_profile_dir.mkdir()
+    temp_dir = tmp_path / "success-run-temp"
+    temp_dir.mkdir()
+    env = _clean_env(USERPROFILE=str(fake_profile_dir), TEMP=str(temp_dir))
+
+    run = subprocess.run(
+        [POWERSHELL, "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", cmd_text],
+        capture_output=True, text=True, timeout=60, env=env, cwd=str(disposable))
+    assert run.returncode == 0, run.stdout + run.stderr
+
+    verdict_path = temp_dir / "parallax-kimi-lane-login-verdict.json"
+    assert verdict_path.exists()
+    verdict = json.loads(verdict_path.read_text(encoding="ascii"))
+    assert verdict["status"] == "ok"
+
+    # Writes only to the intended lane home: no OTHER credential file
+    # was created anywhere under the disposable run profile.
+    assert not (fake_profile_dir / ".kimi-code" / "credentials" / "kimi-code.json").exists()
+
