@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Status: FROZEN at revision 30.** The user lifted the round cap and directed that this plan iterate until the cross-vendor reviewer issued an actual PASS rather than stopping at "converged with amendments". It reached one three times and was reopened twice, both times by a required whole-artifact fable review reading the frozen text start to finish. The terminal PASS is round 28, on all ten tasks and on the implementer packet: "PASS. A zero-judgment implementer can build this plan from the defined task packet without inventing behavior." The reviewer's judgment on the defect rate is recorded with it: the late findings were local expression failures rather than unresolved choices in the lock state machine, the custody lifecycle or the doctor's aggregation, and that is a static judgment about the plan rather than a prediction that implementation reveals no bugs. Changes now require reopening the debate with a new round appended to the record; the implementer never edits this plan.
+**Status: FROZEN at revision 31.** The user lifted the round cap and directed that this plan iterate until the cross-vendor reviewer issued an actual PASS rather than stopping at "converged with amendments". It reached one three times and was reopened twice, both times by a required whole-artifact fable review reading the frozen text start to finish. The terminal PASS is round 28, on all ten tasks and on the implementer packet: "PASS. A zero-judgment implementer can build this plan from the defined task packet without inventing behavior." The reviewer's judgment on the defect rate is recorded with it: the late findings were local expression failures rather than unresolved choices in the lock state machine, the custody lifecycle or the doctor's aggregation, and that is a static judgment about the plan rather than a prediction that implementation reveals no bugs. Changes now require reopening the debate with a new round appended to the record; the implementer never edits this plan.
 
 **Goal:** Stop the backup lane from copying the user's kimi-code credential. Give the lane its own login, reach it through a junction so one file holds it, guard the shared lane home with a liveness-anchored lock, stop the doctor touching credentials at all, and repair the Windows CI job this branch already broke.
 
@@ -662,6 +662,24 @@ So: one helper inspects both captured streams against a RETAINED UNION of **ever
    - **A failed measurement is never represented by an equality-comparable sentinel.** No empty string, no `None`, no zero.
    - Two offline support oracles force the failures: a pre-command HASH failure and a post-command STAT failure. Each must FAIL, still attempt the real `-Remove`, and follow the existing cleanup-precedence matrix.
 
+**Item 4b must exercise the real DELETION, not merely the release. Frozen at r32.** A hostile `-Model` is refused at `tools/new-kimi-lane-home.ps1:613`, which is inside the main `try` and AFTER the acquire at line 573, so it does prove acquisition and release. It does NOT reach the deletion branch: `$createdByThisInvocation` is set at line 828, long after that refusal, and the recursive cleanup at line 927 is conditional on it. So item 4b is three cases:
+
+1. **`PARALLAX_LANE_HOME_FAULT=1` AND `PARALLAX_LANE_HOME_CLEANUP_DELETE_FAULT=1`.** Require the pre-emission fault, the cleanup-deletion sentinel, the debate home still PRESENT with its junction, and the lock exactly `free`. This is what proves the build reached the post-junction cleanup branch at all.
+2. **`PARALLAX_LANE_HOME_FAULT=1` alone.** Require no custody stdout, the debate home ABSENT, the lock exactly `free`, and C's credential BYTE-IDENTICAL. That last clause is what proves the recursive deletion does not traverse the junction.
+3. The hostile-`-Model` case is kept only as an optional release-only control, and its docstring says exactly that.
+
+The failed-build test uses the module's debate id for C like every other operation; generating a fresh one there was an incomplete application of the one-id-per-home rule.
+
+**The post-capture merge is a CALLBACK, not a credential path, and item 6 supplies its own. Frozen at r32.** `dispatch_and_guard(..., post_capture_merge=callback)` invokes the callback after capture and BEFORE scanning, on the normal and the timeout path alike; only after the callback SUCCEEDS may the guard scan and the streams be returned. A, B and C pass the strict `reread_and_merge_credential`. Item 6 passes a fixture-specific callback carrying its EXPECTED state:
+
+- `valid` — the read, the parse and the merge must all succeed;
+- `garbage` — the read must succeed and the parse must fail AS EXPECTED;
+- `absent` — absence must be MEASURED successfully; any other filesystem error fails closed.
+
+A generic lenient mode is forbidden, because `merge_credential_file` returns the same `False` for an unreadable file and for malformed JSON, so a lenient mode would read an unmade measurement as an expected garbage fixture. A plan carve-out letting item 6 merge after its assertions is equally forbidden: the merge-before-guard boundary is a security ordering, and the disposable homes' streams are still scanned against a union holding A, B and C's real values.
+
+The read-failure oracle is repaired with it. It currently calls `dispatch_and_guard` with no credential path and raises the read failure by hand after the helper has already returned, so it exercises the test's own code rather than the helper's promised failure boundary.
+
 Opt-in on `PARALLAX_LANE_LIVE`; module guard `os.name != "nt"`.
 
 - [ ] **Step 1b: Give the locking and the secret guard their OWN oracles, offline.** The seven items above test the CLIENT. None of them proves the runner acquired the intended home's lock, released it afterwards, or caught a credential value in a stream, so a runner with no locking and no helper at all passes every one of them. Create `evals/multi-model-verify/test_lane_credential_live_support.py`, which imports the SAME production helper the live suite uses and drives it against fake commands, with no real credential and no opt-in required:
@@ -817,6 +835,32 @@ if ($hits) { $hits; throw "AI-attribution trailer found; the repo forbids it" }
 "clean"
 ```
 Expected: `clean`. TWO mutations, because the check now has two failure directions: a controlled input string containing `Claude-Session` must throw, and an INVALID REVISION RANGE must throw on the `git log` failure and never print `clean`. The three known carriers are `c79da41`, `9d50196` and `e3f98c2`.
+- [ ] **Step 8: The mechanical exact-line checker from Task 11 runs in the full gate**, added to the four gates in step 4 and to CI.
+
+---
+
+### Task 11: The mechanical exact-line gate
+
+**Files:** create the shared helper and `evals/tools/check_exact_line_oracles.py`, plus its own test module; modify the nine sites below.
+
+Added at r32. The session asked whether "discard blank lines, then require one survivor" could be swept mechanically rather than found one instance at a time, after round 30 fixed the class in two PowerShell callers, r31 fixed one Python instance, and the session then found a second Python instance in the custody-line parser that both earlier passes had missed. Three sweeps, three misses, one algorithm.
+
+**The nine surviving sites, enumerated so that deleting one is visible:**
+
+| File | Line | What it parses |
+|---|---|---|
+| `evals/multi-model-verify/test_kimi_credential_state.py` | 118 | the validator's classification output |
+| `evals/multi-model-verify/test_kimi_lane_home.py` | 364 | the builder's custody line |
+| `evals/multi-model-verify/test_kimi_lane_login.py` | 382, 443, 710, 725, 984, 1013 | six `-VerdictOut` reads |
+| `evals/multi-model-verify/test_lock_protocol_live.py` | 340 | the measured type report |
+
+All nine discard blanks before requiring one survivor, contrary to the frozen caller rule that leading, interior and extra trailing blank lines are all REJECTED.
+
+- [ ] **Step 1: One shared `accept_exactly_one_nonempty_line()`** using `\A([^\r\n]+)(\r\n|\n)?\Z` — the same algorithm as `tools/new-kimi-lane-home.ps1`'s `singleLine` pattern and as `_accept_validator_output`, not merely the same intent. Replace all nine sites with it.
+- [ ] **Step 2: An AST-based repository checker**, `evals/tools/check_exact_line_oracles.py`. It rejects an assignment whose value is a `splitlines()` comprehension filtering on truthiness or on `!= ""` WHEN the assigned name is later tested for length one in the same scope. Both halves are required: an intentional multi-record blank filter is legitimate and must not be flagged.
+- [ ] **Step 3: Mutation-test the checker itself**, three directions: the bad filter-then-count idiom must FAIL it; an intentional multi-record blank filter must PASS; the strict regex helper must PASS. A checker that cannot fail is the defect this plan exists to prevent, and it is the checker's own turn to prove it can.
+- [ ] **Step 4: State the limit in the checker's own docstring.** It catches this SYNTACTIC class. It cannot prove that an arbitrarily-written parser is semantically equivalent, and it must never be described as proving the class is gone.
+- [ ] **Step 5: Verify.** `python evals/tools/check_exact_line_oracles.py` exits 0 with empty output, its own test module passes, and the full suite stays green on both hosts.
 
 ---
 
