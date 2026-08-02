@@ -607,9 +607,15 @@ try {
     }
 
     # Refuse a -Model or -Effort that cannot be safely rendered into
-    # config.toml. This runs before ANYTHING touches the filesystem, so a
-    # hostile value is rejected before any side effect, not merely
-    # before the render.
+    # config.toml. This runs before DESTINATION CREATION OR RENDERING, so
+    # a hostile value is rejected before any of those side effects, not
+    # merely before the render itself.
+    #
+    # It does NOT run before anything touches the filesystem, which is
+    # what this comment used to claim: the lock is already acquired above
+    # and the lane credential is already validated. A refusal here unwinds
+    # to the finally and releases, but it never reaches the recursive
+    # cleanup, because $createdByThisInvocation is still false.
     if (-not (Test-SafeConfigToken $Model)) {
         throw "refusing to build: -Model contains characters outside the allowed set (letters, digits, dot, dash, underscore, slash)"
     }
