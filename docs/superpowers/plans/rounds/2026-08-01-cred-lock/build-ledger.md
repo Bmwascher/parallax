@@ -158,8 +158,22 @@ All eleven tasks are built. What remains is not build work:
   attestation.
 - Remote CI. It has never run on this branch and is unverified until the
   pushed workflow completes.
-- `run_behavioral_evals.py --head`, Task 10 step 6, which is local-only
-  and opt-in.
+
+## The behavioral evaluation HAS RUN. Task 10 step 6.
+
+`python evals/tools/run_behavioral_evals.py --head`, against the checkout
+rather than the installed cache, at `316da38`: **zero failures.** Seven
+cases ran and every one met all of its expectations —
+`plan-mode-debate-runs` 4/4, `diff-mode-spec-fidelity` 4/4,
+`degraded-consent-gate` 4/4, `missing-reference-refusal` 3/3,
+`fix-application-checkpoint` 4/4, `fix-checkpoint-attended-stop` 3/3,
+`no-manufactured-objections` 3/3.
+
+**TWO cases were SKIPPED as manual-only**, and one of them is this
+branch's own subject: `backup-lane-consented-substitution`. The other is
+`panel-blind-relay`. So this suite did NOT exercise the changed lane end
+to end, and nothing here may be read as saying it did. What covers the
+lane is the live gate, at 63 per host with zero skipped.
 
 ## The trailer waiver, recorded rather than buried
 
