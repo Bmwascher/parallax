@@ -1105,108 +1105,95 @@ def test_no_standalone_credential_file_true_when_none_exists(tmp_path):
 
 
 # =======================================================================
-# 14. The probe record: a LOCKING ASSERTION, not documentation (r31). Six
-# required offline oracles.
+# 14. NON_SECRET_CREDENTIAL_FIELDS (fix 3, already committed at 6a6a5f9).
+# `scope` and `token_type` are RFC 6749 response metadata, excluded from
+# the retained union by field NAME at merge time - never an allowlist of
+# secrets, so access_token/refresh_token and every unknown field still
+# enter, and a secret sharing its value with excluded metadata still
+# causes retention and detection.
 # =======================================================================
-def _measurement(exit_code=1, stdout="normalized-stdout", stderr="normalized-stderr"):
-    return support.ProbeMeasurement(exit_code, stdout, stderr)
-
-
-def test_probe_record_gate_matching_record_passes_and_writes_nothing(tmp_path):
-    record_path = tmp_path / "probe-record.md"
-    committed = _measurement(1, "STDOUT-TEXT", "STDERR-TEXT")
-    support.write_probe_record_atomic(
-        record_path, committed, measured_at="2026-01-01T00:00:00+00:00")
-    before = record_path.read_bytes()
-
-    calls = []
-
-    def measure_fn():
-        calls.append(1)
-        return committed
-
-    result = support.run_probe_record_gate(record_path, measure_fn, support.SecretGuard(),
-                                             refresh=False)
-    assert result == committed
-    assert len(calls) == 2, "the ordinary run measures the case TWICE"
-    assert record_path.read_bytes() == before, "an ordinary run never writes"
-
-
-def test_probe_record_gate_mismatching_record_fails_and_writes_nothing(tmp_path):
-    record_path = tmp_path / "probe-record.md"
-    committed = _measurement(1, "STDOUT-TEXT", "OLD-COMMITTED-STDERR")
-    support.write_probe_record_atomic(
-        record_path, committed, measured_at="2026-01-01T00:00:00+00:00")
-    before = record_path.read_bytes()
-
-    current = _measurement(1, "STDOUT-TEXT", "NEW-MEASURED-STDERR")
-
-    with pytest.raises(support.ProbeRecordMismatch):
-        support.run_probe_record_gate(record_path, lambda: current, support.SecretGuard(),
-                                       refresh=False)
-    assert record_path.read_bytes() == before
-
-
-def test_probe_record_gate_absent_record_fails_and_writes_nothing(tmp_path):
-    record_path = tmp_path / "nested" / "does-not-exist" / "probe-record.md"
-    calls = []
-
-    def measure_fn():
-        calls.append(1)
-        return _measurement()
-
-    with pytest.raises(support.ProbeRecordError):
-        support.run_probe_record_gate(record_path, measure_fn, support.SecretGuard(),
-                                       refresh=False)
-    assert calls == [], "a missing record fails BEFORE the case ever measures"
-    assert not record_path.exists()
-
-
-def test_probe_record_gate_explicit_refresh_creates_it(tmp_path):
-    record_path = tmp_path / "probe-record.md"
-    assert not record_path.exists()
-    m = _measurement(1, "STDOUT-TEXT", "STDERR-TEXT")
-
-    result = support.run_probe_record_gate(record_path, lambda: m, support.SecretGuard(),
-                                             refresh=True)
-    assert result == m
-    assert record_path.exists()
-    assert support.read_probe_record(record_path) == m
-
-
-def test_probe_record_gate_unstable_refresh_writes_nothing(tmp_path):
-    record_path = tmp_path / "probe-record.md"
-    sequence = [_measurement(1, "A", "A"), _measurement(1, "B", "B")]
-
-    def measure_fn():
-        return sequence.pop(0)
-
-    with pytest.raises(support.ProbeRecordUnstable):
-        support.run_probe_record_gate(record_path, measure_fn, support.SecretGuard(),
-                                       refresh=True)
-    assert not record_path.exists()
-
-
-def test_probe_record_gate_secret_guard_match_writes_nothing(tmp_path):
-    record_path = tmp_path / "probe-record.md"
+def test_non_secret_fields_in_ordinary_output_do_not_fire():
     guard = support.SecretGuard()
-    guard.merge_values({"access_token": "PROBE-RECORD-SECRET-VALUE"})
-    m = _measurement(1, "PROBE-RECORD-SECRET-VALUE", "STDERR-TEXT")
-
-    with pytest.raises(support.SecretGuardViolation):
-        support.run_probe_record_gate(record_path, lambda: m, guard, refresh=True)
-    assert not record_path.exists()
+    guard.merge_values({"scope": "read write", "token_type": "Bearer"})
+    assert guard.find_match("ordinary output containing read write and Bearer") is None
 
 
-def test_probe_record_refresh_env_rejects_any_other_nonempty_value(monkeypatch):
-    """Fixed name and value: the exact opt-in is '1'; any other nonempty
-    value REFUSES rather than being treated as truthy."""
-    monkeypatch.setenv(support.REFRESH_ENV, "true")
-    with pytest.raises(support.ProbeRecordRefreshRefused):
-        support.probe_record_refresh_requested()
+def test_each_token_field_fires_independently():
+    guard = support.SecretGuard()
+    guard.merge_values({"access_token": "ACCESS-TOKEN-FIELD-VALUE",
+                         "refresh_token": "REFRESH-TOKEN-FIELD-VALUE"})
+    assert guard.find_match("...ACCESS-TOKEN-FIELD-VALUE...") == "access_token"
+    assert guard.find_match("...REFRESH-TOKEN-FIELD-VALUE...") == "refresh_token"
 
-    monkeypatch.setenv(support.REFRESH_ENV, "1")
-    assert support.probe_record_refresh_requested() is True
 
-    monkeypatch.delenv(support.REFRESH_ENV, raising=False)
-    assert support.probe_record_refresh_requested() is False
+def test_an_unknown_string_field_fires():
+    guard = support.SecretGuard()
+    guard.merge_values({"some_future_field": "UNKNOWN-FIELD-VALUE"})
+    assert guard.find_match("...UNKNOWN-FIELD-VALUE...") == "some_future_field"
+
+
+def test_a_token_sharing_its_value_with_excluded_metadata_still_fires():
+    shared_value = "SHARED-VALUE-BETWEEN-METADATA-AND-SECRET"
+    guard = support.SecretGuard()
+    # A single credential document carrying `scope` and `access_token`
+    # with the SAME value: the excluded field must never block the
+    # secret field's own entry.
+    guard.merge_values({"scope": shared_value, "access_token": shared_value})
+    assert guard.find_match(shared_value) == "access_token"
+
+
+# =======================================================================
+# 15. Strict UTF-8 decode (fix 4, already committed at 6a6a5f9). Capture
+# is bytes; both the normal path and the timeout path decode through the
+# ONE strict helper, and invalid UTF-8 raises a fixed, value-free
+# DispatchDecodeFailure exposing neither stream.
+# =======================================================================
+def test_invalid_utf8_normal_path_raises_decode_failure_exposing_neither_stream(tmp_path):
+    fake = _write_fake_command(
+        tmp_path, "fake-invalid-utf8-normal.py",
+        "import sys\n"
+        "sys.stdout.buffer.write(b'\\xff\\xfe not valid utf-8')\n")
+    guard = support.SecretGuard()
+
+    with pytest.raises(support.DispatchDecodeFailure) as excinfo:
+        support.dispatch_and_guard(fake, guard, timeout=30)
+
+    assert str(excinfo.value) == "captured process output could not be decoded as UTF-8"
+    assert not hasattr(excinfo.value, "stdout")
+    assert not hasattr(excinfo.value, "stderr")
+
+
+def test_invalid_utf8_timeout_path_raises_decode_failure_exposing_neither_stream(tmp_path):
+    fake = _write_fake_command(
+        tmp_path, "fake-invalid-utf8-timeout.py",
+        "import sys, time\n"
+        "sys.stdout.buffer.write(b'\\xff\\xfe not valid utf-8')\n"
+        "sys.stdout.buffer.flush()\n"
+        "time.sleep(3600)\n")
+    guard = support.SecretGuard()
+
+    with pytest.raises(support.DispatchDecodeFailure) as excinfo:
+        support.dispatch_and_guard(fake, guard, timeout=2)
+
+    assert str(excinfo.value) == "captured process output could not be decoded as UTF-8"
+    assert not hasattr(excinfo.value, "stdout")
+    assert not hasattr(excinfo.value, "stderr")
+
+
+def test_correctly_encoded_non_ascii_secret_is_still_caught_by_the_guard(tmp_path):
+    secret_value = "sécrèt-tökén-non-ascii"  # valid UTF-8, non-ASCII
+    guard = support.SecretGuard()
+    guard.merge_values({"access_token": secret_value})
+
+    fake = _write_fake_command(
+        tmp_path, "fake-non-ascii-secret.py",
+        "import sys\n"
+        "value = %r\n"
+        "sys.stdout.buffer.write(value.encode('utf-8'))\n" % secret_value)
+
+    with pytest.raises(support.SecretGuardViolation) as excinfo:
+        support.dispatch_and_guard(fake, guard, timeout=30)
+
+    assert excinfo.value.field == "access_token"
+    assert secret_value not in str(excinfo.value)
+

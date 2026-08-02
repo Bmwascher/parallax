@@ -17,6 +17,7 @@ tools/new-kimi-lane-login.ps1, the recovery tool.
 import importlib.util as _importlib_util
 import json
 import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -37,9 +38,6 @@ def _load_support():
 
 
 support = _load_support()
-
-PROBE_RECORD = (REPO / "docs" / "superpowers" / "plans" / "rounds"
-                 / "2026-08-01-cred-lock" / "probe-record.md")
 
 DISPATCH_PROMPT = "Reply with the single word PROBE."
 
@@ -218,68 +216,129 @@ def _build_disposable_home(tmp_path, name, credential_text):
 
 
 # =======================================================================
-# Item 1 (measurement 5): absolute oauth.key. Junction-based control on
-# C, then the same throwaway copy with config.toml hand-edited so
-# `key = "oauth/kimi-code"` becomes an absolute path.
+# Item 1 (measurement 5): absolute oauth.key. FIVE-STEP three-state
+# STRUCTURAL oracle, frozen at r33, replacing the r31 pin protocol
+# entirely. NOTHING about message text is pinned: the client's stderr
+# carries a model-generated summary line (different words each run) and a
+# fresh session id that no normalization removes, so a text pin can never
+# be stable for this command. What IS pinned: zero-versus-nonzero exit,
+# and the presence or absence of PROBE in stdout - never the exact
+# numeric exit code, stdout or stderr text, the session id, or the
+# summary line.
+#
+# All five steps run under C's SAME builder-retained hold, with the
+# strict merge callback and the stream guard applied throughout. No
+# second credential copy is ever created; C's real credential is used in
+# place. The home is built normally and its config.toml is hand-edited in
+# the throwaway copy for steps 3 and 4 - the builder renders only the
+# relative form and gains no parameter for an absolute one.
 # =======================================================================
-def test_absolute_oauth_key_does_not_resolve(tmp_path, host, module_owner, live_homes,
-                                              backup_model, backup_effort, kimi_binary, guard,
-                                              debate_ids):
+def test_absolute_oauth_key_structural_oracle(tmp_path, host, module_owner, live_homes,
+                                               backup_model, backup_effort, kimi_binary, guard,
+                                               debate_ids):
     target = tmp_path / "item1-absolute-key-home"
     with support.custody_of(host, target, backup_model, backup_effort, live_homes.c,
                              debate_ids["C"], module_owner.owner_pid,
                              module_owner.owner_ticks) as custody:
         debate_home = custody.debate_home
         cred_path = _credential_path(debate_home)
+        merge = support.strict_reread_and_merge_callback(guard, cred_path)
+        # C's real credential file, by LANE HOME rather than by the
+        # debate home's (soon-to-be-renamed-away) junction - once step 2
+        # renames the debate home's `credentials` directory, re-reading
+        # through `cred_path` can no longer succeed, but the real file
+        # this whole test is about stays exactly here regardless.
+        real_cred_path = live_homes.c / "credentials" / "kimi-code.json"
+        merge_real = support.strict_reread_and_merge_callback(guard, real_cred_path)
 
-        # Positive control: the SAME credential and config, unmodified.
-        control = _dispatch_probe(
-            kimi_binary, backup_model, debate_home, guard,
-            post_capture_merge=support.strict_reread_and_merge_callback(guard, cred_path))
-        assert control.returncode == 0, control.stderr
-        assert "PROBE" in control.stdout
+        # Step 1: the relative-key positive control, unmodified.
+        step1 = _dispatch_probe(kimi_binary, backup_model, debate_home, guard,
+                                 post_capture_merge=merge)
+        assert step1.returncode == 0, "step 1 (relative-key control) must exit 0"
+        assert "PROBE" in step1.stdout, "step 1 (relative-key control) must contain PROBE"
 
-        # Hand-edit config.toml: the rendered relative key becomes an
-        # absolute path to the same credential file.
+        # Step 2: make the default UNREACHABLE. Rename the `credentials`
+        # junction (tools/new-kimi-lane-home.ps1:858) to a non-default
+        # name, then PROVE the default path is absent while C's real
+        # credential is still measurable through the renamed junction -
+        # renaming a reparse point is a local directory-entry operation
+        # and does not touch what it points at.
+        credentials_dir = Path(debate_home) / "credentials"
+        renamed_name = "credentials-renamed-away"
+        renamed_dir = Path(debate_home) / renamed_name
+        escaped_credentials = str(credentials_dir).replace("'", "''")
+        rename = subprocess.run(
+            [host, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command",
+             "Rename-Item -LiteralPath '%s' -NewName '%s'" % (escaped_credentials, renamed_name)],
+            capture_output=True, text=True, timeout=30, env=support.clean_env())
+        assert rename.returncode == 0, "renaming the credentials junction away failed"
+
+        default_cred_path = credentials_dir / "kimi-code.json"
+        assert not default_cred_path.exists(), (
+            "the default credential path must be unreachable once the "
+            "credentials junction is renamed away")
+        renamed_cred_path = renamed_dir / "kimi-code.json"
+        assert renamed_cred_path.is_file(), (
+            "the renamed junction must still resolve to a real file")
+        still_readable = support.validate_credential(host, real_cred_path)
+        assert still_readable.ok and still_readable.status == "ok", (
+            "C's real credential must still be readable after the debate "
+            "home's junction was renamed away")
+
+        # Step 3: the missing-absolute negative control. Load-bearing:
+        # without it, removing the default and testing one absolute path
+        # cannot distinguish "absolute paths are unsupported" from
+        # unrelated fallback behaviour.
         config_path = Path(debate_home) / "config.toml"
         original_config = config_path.read_text(encoding="ascii")
-        absolute_key = str(cred_path.resolve()).replace("\\", "/")
-        edited_config = original_config.replace(
-            'key = "oauth/kimi-code"', 'key = "%s"' % absolute_key)
-        assert edited_config != original_config, "the relative key line was not found to edit"
-        config_path.write_text(edited_config, encoding="ascii")
+        nonexistent_absolute = str(
+            tmp_path / "item1-does-not-exist-anywhere" / "kimi-code.json").replace("\\", "/")
+        missing_config = original_config.replace(
+            'key = "oauth/kimi-code"', 'key = "%s"' % nonexistent_absolute)
+        assert missing_config != original_config, "the relative key line was not found to edit"
+        config_path.write_text(missing_config, encoding="ascii")
 
-        fixture_root = str(Path(debate_home).resolve())
+        step3 = _dispatch_probe(kimi_binary, backup_model, debate_home, guard,
+                                 post_capture_merge=merge_real)
+        assert step3.returncode != 0, (
+            "step 3 (missing-absolute negative control) must exit nonzero")
+        assert "PROBE" not in step3.stdout, (
+            "step 3 (missing-absolute negative control) must not contain PROBE")
 
-        def _measure():
-            result = _dispatch_probe(
-                kimi_binary, backup_model, debate_home, guard,
-                post_capture_merge=support.strict_reread_and_merge_callback(guard, cred_path))
-            norm_stdout = support.normalize_probe_output(result.stdout, fixture_root)
-            norm_stderr = support.normalize_probe_output(result.stderr, fixture_root)
-            return support.ProbeMeasurement(result.returncode, norm_stdout, norm_stderr)
+        # Step 4: oauth.key set to the absolute path of C's REAL
+        # credential file, taken WITHOUT Path.resolve() - resolve()
+        # FOLLOWS a junction on Windows, which is what made the old
+        # oracle undiscriminating. Run TWICE; either success REFUTES
+        # measurement 5, and that is the finding, not a test to work
+        # around.
+        real_absolute = str(real_cred_path).replace("\\", "/")
+        real_config = original_config.replace(
+            'key = "oauth/kimi-code"', 'key = "%s"' % real_absolute)
+        assert real_config != original_config, "the relative key line was not found to edit"
+        config_path.write_text(real_config, encoding="ascii")
 
-        # The pin is a LOCKING ASSERTION, not documentation (r31): an
-        # ordinary run reads the committed record and compares; only an
-        # explicit PARALLAX_LANE_PROBE_RECORD_REFRESH=1 run measures and
-        # (on success) atomically replaces it.
-        try:
-            refresh = support.probe_record_refresh_requested()
-        except support.ProbeRecordRefreshRefused as exc:
-            pytest.fail(str(exc))
+        for run_index in (1, 2):
+            step4 = _dispatch_probe(kimi_binary, backup_model, debate_home, guard,
+                                     post_capture_merge=merge_real)
+            found_probe = "PROBE" in step4.stdout
+            if step4.returncode == 0 or found_probe:
+                pytest.fail(
+                    "MEASUREMENT 5 IS REFUTED on run %d of 2: an absolute "
+                    "oauth.key pointed at C's real credential file "
+                    "resolved (exit-zero=%s, PROBE-present=%s). This is a "
+                    "finding, not a test defect - do not adjust the test "
+                    "to make it pass."
+                    % (run_index, step4.returncode == 0, found_probe))
 
-        try:
-            support.run_probe_record_gate(PROBE_RECORD, _measure, guard, refresh=refresh)
-        except support.ProbeRecordError as exc:
-            pytest.fail(str(exc))
-        except support.ProbeRecordUnstable as exc:
-            pytest.fail(
-                "the absolute-key case is not stable across two runs; STOP and "
-                "amend the plan rather than selecting one: %s" % exc)
-        except support.ProbeRecordNotFailed as exc:
-            pytest.fail(str(exc))
-        except support.ProbeRecordMismatch as exc:
-            pytest.fail(str(exc))
+        # Step 5: C's credential stays measurable and guarded after every
+        # command.
+        final_check = support.validate_credential(host, real_cred_path)
+        assert final_check.ok and final_check.status == "ok", (
+            "C's credential must still be structurally measurable after "
+            "every command in this test")
+        assert guard.merge_credential_file(real_cred_path), (
+            "C's credential must still be readable and mergeable into "
+            "the secret guard after every command in this test")
 
 
 # =======================================================================
