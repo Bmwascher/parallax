@@ -25,6 +25,8 @@ import json
 import os
 import subprocess
 import sys
+import threading
+import time
 from pathlib import Path
 
 import pytest
@@ -276,7 +278,10 @@ def test_a_successful_seed_reads_the_credential_and_leaves_the_record_free(
 
 # =======================================================================
 # 3. Contention against a builder-retained hold is observed both during
-# the pre-command phase and during the (simulated) client process.
+# the pre-command phase and WHILE the client process is still running -
+# not merely after it has already exited, which is a weaker claim: the
+# fake command below blocks until explicitly released, so the second
+# acquire attempt genuinely lands during the client's execution window.
 # =======================================================================
 def test_contention_against_the_builder_hold_spans_precommand_and_command(
         tmp_path, module_owner):
@@ -285,7 +290,31 @@ def test_contention_against_the_builder_hold_spans_precommand_and_command(
     target = tmp_path / "contended-debate-home"
     guard = support.SecretGuard()
 
+    ready_signal = tmp_path / "fake-client-ready.txt"
+    release_signal = tmp_path / "fake-client-release.txt"
+    fake = _write_fake_command(
+        tmp_path, "fake-client-blocking.py",
+        "import sys, time, pathlib\n"
+        "ready = pathlib.Path(%r)\n"
+        "release = pathlib.Path(%r)\n"
+        "ready.write_text('ready', encoding='ascii')\n"
+        "deadline = time.time() + 60\n"
+        "while not release.exists():\n"
+        "    if time.time() > deadline:\n"
+        "        sys.exit(2)\n"
+        "    time.sleep(0.05)\n"
+        "sys.stdout.write('PROBE\\n')\n"
+        % (str(ready_signal), str(release_signal)))
+
     holder_proc, holder_pid, holder_ticks = _spawn_live_holder()
+    dispatch_outcome = {}
+
+    def _run_dispatch():
+        try:
+            dispatch_outcome["result"] = support.dispatch_and_guard(fake, guard, timeout=30)
+        except BaseException as exc:  # captured and re-raised on the main thread
+            dispatch_outcome["exc"] = exc
+
     try:
         with support.custody_of(
                 POWERSHELL, target, PLACEHOLDER_MODEL, "high", lane_home,
@@ -298,21 +327,35 @@ def test_contention_against_the_builder_hold_spans_precommand_and_command(
                 str(tmp_path / "other-debate-home-1"))
             assert pre_attempt.returncode == 3, pre_attempt.stdout + pre_attempt.stderr
 
-            fake = _write_fake_command(
-                tmp_path, "fake-client-1.py",
-                "import sys; sys.stdout.write('PROBE\\n')")
-            result = support.dispatch_and_guard(fake, guard, timeout=30)
-            assert result.returncode == 0
-            assert "PROBE" in result.stdout
+            dispatch_thread = threading.Thread(target=_run_dispatch)
+            dispatch_thread.start()
 
-            # During/after the "client process": contention must still be
-            # observed against the SAME retained hold.
+            # Wait for the fake command's OWN readiness signal - proof it
+            # has started and is now blocked, not merely "invoked".
+            deadline = time.time() + 30
+            while not ready_signal.exists():
+                if time.time() > deadline:
+                    pytest.fail("the fake command never signaled readiness")
+                time.sleep(0.05)
+
+            # WHILE the client process is still blocked: contention must
+            # be observed against the SAME retained hold.
             during_attempt = support.lock_acquire(
                 POWERSHELL, lane_home, support.new_hex32(), holder_pid, holder_ticks,
                 str(tmp_path / "other-debate-home-2"))
             assert during_attempt.returncode == 3, during_attempt.stdout + during_attempt.stderr
+
+            release_signal.write_text("go", encoding="ascii")
+            dispatch_thread.join(timeout=30)
+            assert not dispatch_thread.is_alive(), "the fake command never finished"
     finally:
         _kill_holder(holder_proc)
+
+    if "exc" in dispatch_outcome:
+        raise dispatch_outcome["exc"]
+    result = dispatch_outcome["result"]
+    assert result.returncode == 0
+    assert "PROBE" in result.stdout
 
     assert _lock_status(lane_home) == {"state": "free"}
     assert not target.exists()
@@ -366,15 +409,59 @@ def test_precedence_main_failure_remove_succeeds(tmp_path, module_owner):
     assert _lock_status(lane_home) == {"state": "free"}
 
 
-def test_precedence_main_failure_remove_also_fails_sentinel_refusal(tmp_path, module_owner):
+def _phase_fail_pre_command(custody, tmp_path):
+    """Stands in for a PRE-COMMAND phase failure - a deliberate
+    credential mutation or measurement gone wrong before any command has
+    even run."""
+    raise RuntimeError("simulated pre-command phase failure")
+
+
+def _phase_fail_command_capture(custody, tmp_path):
+    support.dispatch_and_guard(
+        [str(tmp_path / "does-not-exist.exe")], support.SecretGuard(), timeout=10)
+
+
+def _phase_fail_merge(custody, tmp_path):
+    fake = _write_fake_command(
+        tmp_path, "fake-client-phase-merge.py",
+        "import sys; sys.stdout.write('PROBE\\n')")
+    broken_path = Path(custody.debate_home) / "credentials" / "nonexistent-file.json"
+    support.dispatch_and_guard(fake, support.SecretGuard(), timeout=30, cred_path=broken_path)
+
+
+def _phase_fail_guard(custody, tmp_path):
+    guard = support.SecretGuard()
+    guard.merge_values({"access_token": "PHASE-GUARD-MATCH-VALUE"})
+    fake = _write_fake_command(
+        tmp_path, "fake-client-phase-guard.py",
+        "import sys; sys.stdout.write('PHASE-GUARD-MATCH-VALUE\\n')")
+    support.dispatch_and_guard(fake, guard, timeout=30)
+
+
+# The four main phases inside custody (packet "The MAIN OPERATION is all
+# four phases inside custody"): pre-command, command/capture, the
+# post-command merge, and the stream guard. Each must reach the SAME
+# sentinel-refusal precedence, not only command launch failure.
+_MAIN_PHASE_FAILURES = [
+    ("pre_command", _phase_fail_pre_command, RuntimeError),
+    ("command_capture", _phase_fail_command_capture, support.DispatchLaunchFailure),
+    ("merge", _phase_fail_merge, support.DispatchReadFailure),
+    ("guard", _phase_fail_guard, support.SecretGuardViolation),
+]
+
+
+@pytest.mark.parametrize("phase_name,fail_fn,exc_type", _MAIN_PHASE_FAILURES,
+                          ids=[p[0] for p in _MAIN_PHASE_FAILURES])
+def test_precedence_main_failure_remove_also_fails_sentinel_refusal(
+        tmp_path, module_owner, phase_name, fail_fn, exc_type):
     profile = _fake_profile(tmp_path)
-    lane_home = _fake_lane_home(tmp_path, name="precedence-2")
-    target = tmp_path / "precedence-2-home"
+    lane_home = _fake_lane_home(tmp_path, name="precedence-2-%s" % phase_name)
+    target = tmp_path / ("precedence-2-%s-home" % phase_name)
 
     lock_before = None
     debate_home_seen = None
     try:
-        with pytest.raises(support.DispatchLaunchFailure):
+        with pytest.raises(exc_type):
             with support.custody_of(
                     POWERSHELL, target, PLACEHOLDER_MODEL, "high", lane_home,
                     support.new_hex32(), module_owner.owner_pid, module_owner.owner_ticks,
@@ -382,8 +469,7 @@ def test_precedence_main_failure_remove_also_fails_sentinel_refusal(tmp_path, mo
                 debate_home_seen = custody.debate_home
                 lock_before = _read_lock_bytes(lane_home)
                 _corrupt_sentinel(custody.debate_home)
-                support.dispatch_and_guard(
-                    [str(tmp_path / "does-not-exist.exe")], support.SecretGuard(), timeout=10)
+                fail_fn(custody, tmp_path)
 
         assert Path(debate_home_seen).exists(), "a sentinel refusal must never delete"
         assert _read_lock_bytes(lane_home) == lock_before
@@ -432,6 +518,105 @@ def test_precedence_all_succeed_remove_fails_sentinel_refusal(tmp_path, module_o
                 support.remove_lane_home(
                     POWERSHELL, debate_home_seen, lane_home, status["debateId"],
                     status["ownerPid"], status["ownerStartTicksUtc"], status["nonce"])
+
+
+# =======================================================================
+# 5b. A cleanup call that THROWS (a timeout, a launch failure - not only
+# a nonzero return) may not mask the main failure. custody_of and
+# seed_hold each capture the cleanup invocation's own exception
+# separately so a raise from the remover/release cannot skip the
+# `raise main_exc` that follows.
+# =======================================================================
+def test_custody_remove_throws_timeout_does_not_mask_main_failure(
+        tmp_path, module_owner, monkeypatch):
+    profile = _fake_profile(tmp_path)
+    lane_home = _fake_lane_home(tmp_path, name="remove-throws-timeout")
+    target = tmp_path / "remove-throws-timeout-home"
+    remove_calls = []
+
+    def _throwing_remove(*a, **k):
+        remove_calls.append(1)
+        raise subprocess.TimeoutExpired(cmd=["kimi-lane-lock.ps1"], timeout=1)
+
+    monkeypatch.setattr(support, "remove_lane_home", _throwing_remove)
+
+    with pytest.raises(support.DispatchLaunchFailure):
+        with support.custody_of(
+                POWERSHELL, target, PLACEHOLDER_MODEL, "high", lane_home,
+                support.new_hex32(), module_owner.owner_pid, module_owner.owner_ticks,
+                build_env=_build_env(profile)):
+            support.dispatch_and_guard(
+                [str(tmp_path / "does-not-exist.exe")], support.SecretGuard(), timeout=10)
+
+    assert remove_calls == [1], "the remover must still be ATTEMPTED even though it throws"
+
+
+def test_custody_remove_throws_launch_failure_does_not_mask_main_failure(
+        tmp_path, module_owner, monkeypatch):
+    profile = _fake_profile(tmp_path)
+    lane_home = _fake_lane_home(tmp_path, name="remove-throws-launch")
+    target = tmp_path / "remove-throws-launch-home"
+    remove_calls = []
+
+    def _throwing_remove(*a, **k):
+        remove_calls.append(1)
+        raise FileNotFoundError("simulated remover launch failure")
+
+    monkeypatch.setattr(support, "remove_lane_home", _throwing_remove)
+
+    with pytest.raises(support.DispatchLaunchFailure):
+        with support.custody_of(
+                POWERSHELL, target, PLACEHOLDER_MODEL, "high", lane_home,
+                support.new_hex32(), module_owner.owner_pid, module_owner.owner_ticks,
+                build_env=_build_env(profile)):
+            support.dispatch_and_guard(
+                [str(tmp_path / "does-not-exist.exe")], support.SecretGuard(), timeout=10)
+
+    assert remove_calls == [1], "the remover must still be ATTEMPTED even though it throws"
+
+
+def test_seed_release_throws_timeout_does_not_mask_main_failure(
+        tmp_path, module_owner, monkeypatch):
+    lane_home = _fake_lane_home(tmp_path, name="seed-release-throws-timeout")
+    release_calls = []
+
+    def _throwing_release(*a, **k):
+        release_calls.append(1)
+        raise subprocess.TimeoutExpired(cmd=["kimi-lane-lock.ps1"], timeout=1)
+
+    monkeypatch.setattr(support, "lock_release", _throwing_release)
+
+    class _FakeSeedMainFailureTimeout(Exception):
+        pass
+
+    with pytest.raises(_FakeSeedMainFailureTimeout):
+        with support.seed_hold(POWERSHELL, lane_home, support.new_hex32(),
+                                module_owner.owner_pid, module_owner.owner_ticks):
+            raise _FakeSeedMainFailureTimeout("simulated seed main failure")
+
+    assert release_calls == [1], "the release must still be ATTEMPTED even though it throws"
+
+
+def test_seed_release_throws_launch_failure_does_not_mask_main_failure(
+        tmp_path, module_owner, monkeypatch):
+    lane_home = _fake_lane_home(tmp_path, name="seed-release-throws-launch")
+    release_calls = []
+
+    def _throwing_release(*a, **k):
+        release_calls.append(1)
+        raise FileNotFoundError("simulated release launch failure")
+
+    monkeypatch.setattr(support, "lock_release", _throwing_release)
+
+    class _FakeSeedMainFailureLaunch(Exception):
+        pass
+
+    with pytest.raises(_FakeSeedMainFailureLaunch):
+        with support.seed_hold(POWERSHELL, lane_home, support.new_hex32(),
+                                module_owner.owner_pid, module_owner.owner_ticks):
+            raise _FakeSeedMainFailureLaunch("simulated seed main failure")
+
+    assert release_calls == [1], "the release must still be ATTEMPTED even though it throws"
 
 
 # =======================================================================
@@ -624,27 +809,35 @@ def test_guard_fires_on_a_match_in_stderr():
 # merge-after-command rule; a seed-once implementation would miss it.
 # =======================================================================
 def test_merge_after_command_catches_a_rotated_value(tmp_path):
+    """SECURITY (r31): the post-command merge happens INSIDE
+    dispatch_and_guard, before either stream is scanned. ONE fake command
+    both WRITES a new credential value and EMITS that same new value in
+    the SAME invocation - a command that merely echoes a pre-written
+    value does not reach this path, because a seed-once (or a
+    merge-after-return) implementation would have already missed the
+    value by the time the command's own stdout is scanned."""
     guard = support.SecretGuard()
     guard.merge_values({"access_token": "OLD-VALUE-BEFORE-ROTATION"})
 
     cred_file = tmp_path / "rotated-credential.json"
     cred_file.write_text(
-        json.dumps({"access_token": "NEW-VALUE-AFTER-ROTATION",
+        json.dumps({"access_token": "OLD-VALUE-BEFORE-ROTATION",
                     "refresh_token": "still-here", "expires_at": 1234}),
         encoding="ascii")
 
-    # The "command" that rotated the credential does not itself echo the
-    # new value - a seed-once implementation would have nothing to catch
-    # it with even after this point.
-    support.reread_and_merge_credential(guard, cred_file)
-    assert guard.find_match("NEW-VALUE-AFTER-ROTATION") == "access_token"
+    fake = _write_fake_command(
+        tmp_path, "fake-rotate-and-emit.py",
+        "import json, sys\n"
+        "with open(%r, 'w') as fh:\n"
+        "    json.dump({'access_token': 'NEW-VALUE-AFTER-ROTATION', "
+        "'refresh_token': 'still-here', 'expires_at': 1234}, fh)\n"
+        "sys.stdout.write('NEW-VALUE-AFTER-ROTATION\\n')\n" % str(cred_file))
 
     with pytest.raises(support.SecretGuardViolation) as excinfo:
-        support.dispatch_and_guard(
-            [sys.executable, "-c",
-             "import sys; sys.stdout.write('NEW-VALUE-AFTER-ROTATION\\n')"],
-            guard, timeout=30)
+        support.dispatch_and_guard(fake, guard, timeout=30, cred_path=cred_file)
+
     assert excinfo.value.field == "access_token"
+    assert "NEW-VALUE-AFTER-ROTATION" not in str(excinfo.value)
 
 
 # =======================================================================
@@ -709,3 +902,302 @@ def test_two_failed_snapshots_can_never_compare_equal(tmp_path, monkeypatch):
     assert len(failures) == 2
     # Neither failure is a value; there is nothing here that could
     # compare equal the way two empty strings or two Nones would.
+
+
+# =======================================================================
+# 11. The live homes are SAFETY-CHECKED before any seed or mutation
+# (r31). Checking only "is a directory with an ok credential" let the
+# suite's own deliberate expiry land on the user's real home if a
+# variable were mistyped. Six offline fixtures: C aliasing A, a
+# case-only alias, a junction alias, a drive root, the profile root, and
+# the ordinary .kimi-code tree. Each is read-only up to the point of
+# refusal - resolve_and_validate_live_homes safety-checks BEFORE it ever
+# calls the credential validator, so none of these fixtures needs a real
+# credential.
+# =======================================================================
+def _set_live_env(monkeypatch, a, b, c):
+    monkeypatch.setenv(support.ENV_HOME_A, str(a))
+    monkeypatch.setenv(support.ENV_HOME_B, str(b))
+    monkeypatch.setenv(support.ENV_HOME_C, str(c))
+
+
+def test_live_home_safety_rejects_c_aliasing_a(tmp_path, monkeypatch):
+    home_a = tmp_path / "home-a"
+    home_a.mkdir()
+    home_b = tmp_path / "home-b"
+    home_b.mkdir()
+    _set_live_env(monkeypatch, home_a, home_b, home_a)  # C == A
+
+    with pytest.raises(support.LiveSetupError, match="pairwise distinct"):
+        support.resolve_and_validate_live_homes(POWERSHELL)
+
+
+def test_live_home_safety_rejects_a_case_only_alias(tmp_path, monkeypatch):
+    home_a = tmp_path / "CaseSensitiveHome"
+    home_a.mkdir()
+    home_b = tmp_path / "home-b"
+    home_b.mkdir()
+    home_c_case_alias = tmp_path / "casesensitivehome"  # same dir, different case
+    _set_live_env(monkeypatch, home_a, home_b, home_c_case_alias)
+
+    with pytest.raises(support.LiveSetupError, match="pairwise distinct"):
+        support.resolve_and_validate_live_homes(POWERSHELL)
+
+
+def test_live_home_safety_rejects_a_junction_alias(tmp_path, monkeypatch):
+    home_a = tmp_path / "home-a"
+    home_a.mkdir()
+    home_b = tmp_path / "home-b"
+    home_b.mkdir()
+    home_c_junction = tmp_path / "home-c-junction"
+    proc = subprocess.run(
+        [POWERSHELL, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command",
+         "New-Item -ItemType Junction -Path '%s' -Target '%s' | Out-Null"
+         % (str(home_c_junction), str(home_a))],
+        capture_output=True, text=True, timeout=30)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    _set_live_env(monkeypatch, home_a, home_b, home_c_junction)
+
+    with pytest.raises(support.LiveSetupError, match="pairwise distinct"):
+        support.resolve_and_validate_live_homes(POWERSHELL)
+
+
+def test_live_home_safety_rejects_a_drive_root(tmp_path, monkeypatch):
+    home_a = tmp_path / "home-a"
+    home_a.mkdir()
+    home_b = tmp_path / "home-b"
+    home_b.mkdir()
+    drive_root = Path(os.environ["SystemDrive"] + "\\")
+    _set_live_env(monkeypatch, home_a, home_b, drive_root)
+
+    with pytest.raises(support.LiveSetupError, match="drive root"):
+        support.resolve_and_validate_live_homes(POWERSHELL)
+
+
+def test_live_home_safety_rejects_the_profile_root(tmp_path, monkeypatch):
+    fake_profile = tmp_path / "fake-profile"
+    fake_profile.mkdir()
+    monkeypatch.setenv("USERPROFILE", str(fake_profile))
+    home_a = tmp_path / "home-a"
+    home_a.mkdir()
+    home_b = tmp_path / "home-b"
+    home_b.mkdir()
+    _set_live_env(monkeypatch, home_a, home_b, fake_profile)  # C == fake USERPROFILE
+
+    with pytest.raises(support.LiveSetupError, match="USERPROFILE"):
+        support.resolve_and_validate_live_homes(POWERSHELL)
+
+
+def test_live_home_safety_rejects_the_ordinary_kimi_code_tree(tmp_path, monkeypatch):
+    fake_profile = tmp_path / "fake-profile"
+    fake_profile.mkdir()
+    monkeypatch.setenv("USERPROFILE", str(fake_profile))
+    fake_kimi_code = fake_profile / ".kimi-code"
+    nested = fake_kimi_code / "some-lane-home"
+    nested.mkdir(parents=True)
+    home_a = tmp_path / "home-a"
+    home_a.mkdir()
+    home_b = tmp_path / "home-b"
+    home_b.mkdir()
+    _set_live_env(monkeypatch, home_a, home_b, nested)
+
+    with pytest.raises(support.LiveSetupError, match=r"\.kimi-code"):
+        support.resolve_and_validate_live_homes(POWERSHELL)
+
+
+def test_live_home_safety_passes_for_three_distinct_ordinary_directories(tmp_path, monkeypatch):
+    """The negative control: three genuinely distinct, unrelated
+    directories under neither a drive root nor the (fake) profile must
+    clear the safety check and reach credential validation - proven here
+    by the failure being the NEXT stage (a missing credential file),
+    never a safety refusal."""
+    fake_profile = tmp_path / "fake-profile"
+    fake_profile.mkdir()
+    monkeypatch.setenv("USERPROFILE", str(fake_profile))
+    home_a = tmp_path / "home-a"
+    home_a.mkdir()
+    home_b = tmp_path / "home-b"
+    home_b.mkdir()
+    home_c = tmp_path / "home-c"
+    home_c.mkdir()
+    _set_live_env(monkeypatch, home_a, home_b, home_c)
+
+    with pytest.raises(support.LiveSetupError, match="structurally ok credential"):
+        support.resolve_and_validate_live_homes(POWERSHELL)
+
+
+# =======================================================================
+# 12. validate_credential carries the blank-line acceptance bug no
+# longer: a multi-line reply with a blank separator ("\n\n{json}\n\n")
+# must NOT satisfy "exactly one line" just because blank lines were
+# discarded before counting.
+# =======================================================================
+def test_validate_credential_rejects_a_blank_separated_multiline_reply():
+    result = support._accept_validator_output(
+        0, '\n\n{"status": "ok", "detail": "valid", "fields": []}\n\n', "")
+    assert result.ok is False
+
+
+def test_validate_credential_accepts_a_single_line_with_one_trailing_newline():
+    result = support._accept_validator_output(
+        0, '{"status": "ok", "detail": "valid", "fields": []}\n', "")
+    assert result.ok is True
+    assert result.status == "ok"
+
+
+# =======================================================================
+# 12b. The CUSTODY line carries the same rule, and it matters more: that
+# line carries the NONCE the release is performed with. The fix for the
+# validator left this second instance of the same algorithm in place.
+# =======================================================================
+_CUSTODY_LINE = json.dumps({"debateHome": "D:/lane/debate", "nonce": "abc123"})
+
+
+def test_the_custody_line_rejects_a_blank_separated_multiline_reply():
+    debate_home, nonce = support._accept_custody_line(
+        0, "\n\n" + _CUSTODY_LINE + "\n\n")
+    assert debate_home is None
+    assert nonce is None
+
+
+def test_the_custody_line_accepts_one_line_with_one_trailing_newline():
+    debate_home, nonce = support._accept_custody_line(0, _CUSTODY_LINE + "\n")
+    assert debate_home == "D:/lane/debate"
+    assert nonce == "abc123"
+
+
+def test_the_custody_line_rejects_a_nonzero_exit():
+    assert support._accept_custody_line(1, _CUSTODY_LINE + "\n") == (None, None)
+
+
+# =======================================================================
+# 13. The physical-inventory command escapes every embedded apostrophe -
+# a debate-home path segment carrying BOTH an apostrophe and a space
+# must not corrupt the single-quoted PowerShell literal it is
+# interpolated into.
+# =======================================================================
+def test_no_standalone_credential_file_escapes_apostrophe_and_space_in_the_path(tmp_path):
+    debate_home = tmp_path / "o'brien's lane home"
+    debate_home.mkdir()
+    cred_dir = debate_home / "credentials"
+    cred_dir.mkdir()
+    (cred_dir / "kimi-code.json").write_text("{}", encoding="ascii")
+
+    result = support.no_standalone_credential_file(POWERSHELL, debate_home)
+    assert result is False, "a standalone kimi-code.json must be detected despite the tricky path"
+
+
+def test_no_standalone_credential_file_true_when_none_exists(tmp_path):
+    debate_home = tmp_path / "o'brien's other lane home"
+    debate_home.mkdir()
+
+    result = support.no_standalone_credential_file(POWERSHELL, debate_home)
+    assert result is True
+
+
+# =======================================================================
+# 14. The probe record: a LOCKING ASSERTION, not documentation (r31). Six
+# required offline oracles.
+# =======================================================================
+def _measurement(exit_code=1, stdout="normalized-stdout", stderr="normalized-stderr"):
+    return support.ProbeMeasurement(exit_code, stdout, stderr)
+
+
+def test_probe_record_gate_matching_record_passes_and_writes_nothing(tmp_path):
+    record_path = tmp_path / "probe-record.md"
+    committed = _measurement(1, "STDOUT-TEXT", "STDERR-TEXT")
+    support.write_probe_record_atomic(
+        record_path, committed, measured_at="2026-01-01T00:00:00+00:00")
+    before = record_path.read_bytes()
+
+    calls = []
+
+    def measure_fn():
+        calls.append(1)
+        return committed
+
+    result = support.run_probe_record_gate(record_path, measure_fn, support.SecretGuard(),
+                                             refresh=False)
+    assert result == committed
+    assert len(calls) == 2, "the ordinary run measures the case TWICE"
+    assert record_path.read_bytes() == before, "an ordinary run never writes"
+
+
+def test_probe_record_gate_mismatching_record_fails_and_writes_nothing(tmp_path):
+    record_path = tmp_path / "probe-record.md"
+    committed = _measurement(1, "STDOUT-TEXT", "OLD-COMMITTED-STDERR")
+    support.write_probe_record_atomic(
+        record_path, committed, measured_at="2026-01-01T00:00:00+00:00")
+    before = record_path.read_bytes()
+
+    current = _measurement(1, "STDOUT-TEXT", "NEW-MEASURED-STDERR")
+
+    with pytest.raises(support.ProbeRecordMismatch):
+        support.run_probe_record_gate(record_path, lambda: current, support.SecretGuard(),
+                                       refresh=False)
+    assert record_path.read_bytes() == before
+
+
+def test_probe_record_gate_absent_record_fails_and_writes_nothing(tmp_path):
+    record_path = tmp_path / "nested" / "does-not-exist" / "probe-record.md"
+    calls = []
+
+    def measure_fn():
+        calls.append(1)
+        return _measurement()
+
+    with pytest.raises(support.ProbeRecordError):
+        support.run_probe_record_gate(record_path, measure_fn, support.SecretGuard(),
+                                       refresh=False)
+    assert calls == [], "a missing record fails BEFORE the case ever measures"
+    assert not record_path.exists()
+
+
+def test_probe_record_gate_explicit_refresh_creates_it(tmp_path):
+    record_path = tmp_path / "probe-record.md"
+    assert not record_path.exists()
+    m = _measurement(1, "STDOUT-TEXT", "STDERR-TEXT")
+
+    result = support.run_probe_record_gate(record_path, lambda: m, support.SecretGuard(),
+                                             refresh=True)
+    assert result == m
+    assert record_path.exists()
+    assert support.read_probe_record(record_path) == m
+
+
+def test_probe_record_gate_unstable_refresh_writes_nothing(tmp_path):
+    record_path = tmp_path / "probe-record.md"
+    sequence = [_measurement(1, "A", "A"), _measurement(1, "B", "B")]
+
+    def measure_fn():
+        return sequence.pop(0)
+
+    with pytest.raises(support.ProbeRecordUnstable):
+        support.run_probe_record_gate(record_path, measure_fn, support.SecretGuard(),
+                                       refresh=True)
+    assert not record_path.exists()
+
+
+def test_probe_record_gate_secret_guard_match_writes_nothing(tmp_path):
+    record_path = tmp_path / "probe-record.md"
+    guard = support.SecretGuard()
+    guard.merge_values({"access_token": "PROBE-RECORD-SECRET-VALUE"})
+    m = _measurement(1, "PROBE-RECORD-SECRET-VALUE", "STDERR-TEXT")
+
+    with pytest.raises(support.SecretGuardViolation):
+        support.run_probe_record_gate(record_path, lambda: m, guard, refresh=True)
+    assert not record_path.exists()
+
+
+def test_probe_record_refresh_env_rejects_any_other_nonempty_value(monkeypatch):
+    """Fixed name and value: the exact opt-in is '1'; any other nonempty
+    value REFUSES rather than being treated as truthy."""
+    monkeypatch.setenv(support.REFRESH_ENV, "true")
+    with pytest.raises(support.ProbeRecordRefreshRefused):
+        support.probe_record_refresh_requested()
+
+    monkeypatch.setenv(support.REFRESH_ENV, "1")
+    assert support.probe_record_refresh_requested() is True
+
+    monkeypatch.delenv(support.REFRESH_ENV, raising=False)
+    assert support.probe_record_refresh_requested() is False

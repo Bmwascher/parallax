@@ -17,9 +17,7 @@ tools/new-kimi-lane-login.ps1, the recovery tool.
 import importlib.util as _importlib_util
 import json
 import os
-import subprocess
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -112,15 +110,23 @@ def kimi_binary():
 
 
 @pytest.fixture(scope="module")
-def guard(host, module_owner, live_homes):
+def debate_ids():
+    """One debate id PER HOME for the WHOLE MODULE RUN, not per operation
+    (packet "One debate id PER HOME for the whole module run"): resolved
+    once and used for seeding AND for every later operation against that
+    home."""
+    return {"A": support.new_hex32(), "B": support.new_hex32(), "C": support.new_hex32()}
+
+
+@pytest.fixture(scope="module")
+def guard(host, module_owner, live_homes, debate_ids):
     """The seed step: the sole direct-acquire exception to builder
     custody. Seeds the retained secret union from A, B and C - locked,
     one at a time - before any live command runs. Item 6's disposable
     homes are merged separately, without a lock, at their own point."""
     g = support.SecretGuard()
-    for home in (live_homes.a, live_homes.b, live_homes.c):
-        debate_id = support.new_hex32()
-        with support.seed_hold(host, home, debate_id, module_owner.owner_pid,
+    for label, home in (("A", live_homes.a), ("B", live_homes.b), ("C", live_homes.c)):
+        with support.seed_hold(host, home, debate_ids[label], module_owner.owner_pid,
                                 module_owner.owner_ticks):
             merged = g.merge_credential_file(home / "credentials" / "kimi-code.json")
             if not merged:
@@ -131,19 +137,19 @@ def guard(host, module_owner, live_homes):
 # =======================================================================
 # Small shared helpers.
 # =======================================================================
-def _dispatch_probe(kimi_binary, model, debate_home, guard, timeout=180):
+def _dispatch_probe(kimi_binary, model, debate_home, guard, timeout=180, cred_path=None):
     args = [kimi_binary, "-m", model, "--skills-dir", str(Path(debate_home) / "skills"),
             "-p", DISPATCH_PROMPT]
     env = support.clean_env({"KIMI_CODE_HOME": str(debate_home)})
     return support.dispatch_and_guard(args, guard, timeout=timeout,
-                                       cwd=str(debate_home), env=env)
+                                       cwd=str(debate_home), env=env, cred_path=cred_path)
 
 
-def _provider_list(kimi_binary, debate_home, guard, timeout=60):
+def _provider_list(kimi_binary, debate_home, guard, timeout=60, cred_path=None):
     args = [kimi_binary, "provider", "list"]
     env = support.clean_env({"KIMI_CODE_HOME": str(debate_home)})
     return support.dispatch_and_guard(args, guard, timeout=timeout,
-                                       cwd=str(debate_home), env=env)
+                                       cwd=str(debate_home), env=env, cred_path=cred_path)
 
 
 def _credential_path(debate_home):
@@ -162,34 +168,45 @@ def _force_expiry(debate_home):
 
 
 def _no_standalone_credential_file(host, debate_home):
-    """Get-ChildItem -Recurse does not descend into a directory JUNCTION
-    by default (measured live, test_kimi_lane_home.py's own junction
-    oracle) - a standalone copy would be the only way a second
-    kimi-code.json shows up in this listing."""
-    proc = subprocess.run(
-        [host, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command",
-         "Get-ChildItem -LiteralPath '%s' -Recurse -Force -File | "
-         "Where-Object { $_.Name -eq 'kimi-code.json' } | "
-         "ForEach-Object { $_.FullName }" % str(debate_home)],
-        capture_output=True, text=True, timeout=60, env=support.clean_env())
-    if proc.returncode != 0:
-        pytest.fail("junction inventory check failed: %s" % (proc.stdout + proc.stderr))
-    return proc.stdout.strip() == ""
+    try:
+        return support.no_standalone_credential_file(host, debate_home)
+    except support.PhysicalInventoryError as exc:
+        pytest.fail(str(exc))
+
+
+# Item 6's MINIMAL GENERATED config (r31): only the non-secret managed
+# Kimi provider and OAuth declaration `provider list` needs - the
+# builder's own provider block (tools/new-kimi-lane-home.ps1:867-874) is
+# already explicit and credential-free, so this mirrors that block
+# exactly rather than copying the user's real ~/.kimi-code/config.toml,
+# which can carry lifecycle hooks and is unrelated to what this check
+# exercises.
+_ITEM6_MINIMAL_CONFIG = (
+    '[providers."managed:kimi-code"]\n'
+    'type = "kimi"\n'
+    'api_key = ""\n'
+    'base_url = "https://api.kimi.com/coding/v1"\n'
+    '\n'
+    '[providers."managed:kimi-code".oauth]\n'
+    'storage = "file"\n'
+    'key = "oauth/kimi-code"\n'
+)
+
+# The structurally valid FAKE credential for item 6's positive control -
+# never a real token.
+_ITEM6_VALID_CREDENTIAL_JSON = (
+    '{"access_token": "item6-fake-access-token-not-real", '
+    '"refresh_token": "item6-fake-refresh-token-not-real", '
+    '"expires_at": 9999999999}')
 
 
 def _build_disposable_home(tmp_path, name, credential_text):
     """Item 6 ONLY: an isolated, disposable home built by hand, outside
     the lock/builder pipeline entirely (routing table: custody NONE - no
-    real credential exists to protect). The real ~/.kimi-code/config.toml
-    is copied verbatim so `provider list` has a real provider/model table
-    to read; nothing here ever runs a dispatch through it."""
-    profile = os.environ.get("USERPROFILE")
-    real_config = Path(profile) / ".kimi-code" / "config.toml"
-    if not real_config.is_file():
-        pytest.fail("no real config.toml at %s for item 6's disposable homes" % real_config)
+    real credential exists to protect)."""
     home = tmp_path / name
     home.mkdir(parents=True)
-    (home / "config.toml").write_text(real_config.read_text(encoding="utf-8"), encoding="utf-8")
+    (home / "config.toml").write_text(_ITEM6_MINIMAL_CONFIG, encoding="ascii")
     (home / "skills").mkdir()
     if credential_text is not None:
         cred_dir = home / "credentials"
@@ -204,24 +221,26 @@ def _build_disposable_home(tmp_path, name, credential_text):
 # `key = "oauth/kimi-code"` becomes an absolute path.
 # =======================================================================
 def test_absolute_oauth_key_does_not_resolve(tmp_path, host, module_owner, live_homes,
-                                              backup_model, backup_effort, kimi_binary, guard):
+                                              backup_model, backup_effort, kimi_binary, guard,
+                                              debate_ids):
     target = tmp_path / "item1-absolute-key-home"
     with support.custody_of(host, target, backup_model, backup_effort, live_homes.c,
-                             support.new_hex32(), module_owner.owner_pid,
+                             debate_ids["C"], module_owner.owner_pid,
                              module_owner.owner_ticks) as custody:
         debate_home = custody.debate_home
+        cred_path = _credential_path(debate_home)
 
         # Positive control: the SAME credential and config, unmodified.
-        control = _dispatch_probe(kimi_binary, backup_model, debate_home, guard)
+        control = _dispatch_probe(kimi_binary, backup_model, debate_home, guard,
+                                   cred_path=cred_path)
         assert control.returncode == 0, control.stderr
         assert "PROBE" in control.stdout
-        support.reread_and_merge_credential(guard, _credential_path(debate_home))
 
         # Hand-edit config.toml: the rendered relative key becomes an
         # absolute path to the same credential file.
         config_path = Path(debate_home) / "config.toml"
         original_config = config_path.read_text(encoding="ascii")
-        absolute_key = str(_credential_path(debate_home).resolve()).replace("\\", "/")
+        absolute_key = str(cred_path.resolve()).replace("\\", "/")
         edited_config = original_config.replace(
             'key = "oauth/kimi-code"', 'key = "%s"' % absolute_key)
         assert edited_config != original_config, "the relative key line was not found to edit"
@@ -229,52 +248,49 @@ def test_absolute_oauth_key_does_not_resolve(tmp_path, host, module_owner, live_
 
         fixture_root = str(Path(debate_home).resolve())
 
-        def _run_once():
-            result = _dispatch_probe(kimi_binary, backup_model, debate_home, guard)
+        def _measure():
+            result = _dispatch_probe(kimi_binary, backup_model, debate_home, guard,
+                                      cred_path=cred_path)
             norm_stdout = support.normalize_probe_output(result.stdout, fixture_root)
             norm_stderr = support.normalize_probe_output(result.stderr, fixture_root)
-            return result.returncode, norm_stdout, norm_stderr
+            return support.ProbeMeasurement(result.returncode, norm_stdout, norm_stderr)
 
-        exit1, stdout1, stderr1 = _run_once()
-        assert exit1 != 0, "the absolute oauth.key case must fail"
-        exit2, stdout2, stderr2 = _run_once()
-        assert exit2 != 0
+        # The pin is a LOCKING ASSERTION, not documentation (r31): an
+        # ordinary run reads the committed record and compares; only an
+        # explicit PARALLAX_LANE_PROBE_RECORD_REFRESH=1 run measures and
+        # (on success) atomically replaces it.
+        try:
+            refresh = support.probe_record_refresh_requested()
+        except support.ProbeRecordRefreshRefused as exc:
+            pytest.fail(str(exc))
 
-        if stderr1 != stderr2:
+        try:
+            support.run_probe_record_gate(PROBE_RECORD, _measure, guard, refresh=refresh)
+        except support.ProbeRecordError as exc:
+            pytest.fail(str(exc))
+        except support.ProbeRecordUnstable as exc:
             pytest.fail(
-                "the absolute-key failure message is not stable across two runs; "
-                "STOP and amend the plan rather than selecting one:\nrun 1: %r\nrun 2: %r"
-                % (stderr1, stderr2))
-
-        PROBE_RECORD.parent.mkdir(parents=True, exist_ok=True)
-        PROBE_RECORD.write_text(
-            "# Live probe record: absolute oauth.key rejection\n\n"
-            "Measured %s against the real kimi-code client on this machine "
-            "(Task 7, 2026-08-01 lane-credential-and-lock plan, item 1 / "
-            "measurement 5).\n\n"
-            "- Exit code: `%d`\n"
-            "- Normalization: the resolved fixture root replaced with "
-            "`<fixture-root>` (case-insensitive), CRLF normalized to LF, "
-            "one terminal newline trimmed.\n\n"
-            "## Normalized stdout\n\n```\n%s\n```\n\n"
-            "## Normalized stderr (the pinned value)\n\n```\n%s\n```\n"
-            % (datetime.now(timezone.utc).isoformat(), exit1, stdout1, stderr1),
-            encoding="utf-8")
+                "the absolute-key case is not stable across two runs; STOP and "
+                "amend the plan rather than selecting one: %s" % exc)
+        except support.ProbeRecordNotFailed as exc:
+            pytest.fail(str(exc))
+        except support.ProbeRecordMismatch as exc:
+            pytest.fail(str(exc))
 
 
 # =======================================================================
 # Item 2 (measurement 6): junction read-through, on C.
 # =======================================================================
 def test_junction_read_through(tmp_path, host, module_owner, live_homes,
-                                backup_model, backup_effort, kimi_binary, guard):
+                                backup_model, backup_effort, kimi_binary, guard, debate_ids):
     target = tmp_path / "item2-junction-home"
     with support.custody_of(host, target, backup_model, backup_effort, live_homes.c,
-                             support.new_hex32(), module_owner.owner_pid,
+                             debate_ids["C"], module_owner.owner_pid,
                              module_owner.owner_ticks) as custody:
-        result = _dispatch_probe(kimi_binary, backup_model, custody.debate_home, guard)
+        result = _dispatch_probe(kimi_binary, backup_model, custody.debate_home, guard,
+                                  cred_path=_credential_path(custody.debate_home))
         assert result.returncode == 0, result.stderr
         assert "PROBE" in result.stdout
-        support.reread_and_merge_credential(guard, _credential_path(custody.debate_home))
 
 
 # =======================================================================
@@ -284,10 +300,10 @@ def test_junction_read_through(tmp_path, host, module_owner, live_homes,
 # exists anywhere under the debate home.
 # =======================================================================
 def test_refresh_write_through(tmp_path, host, module_owner, live_homes,
-                                backup_model, backup_effort, kimi_binary, guard):
+                                backup_model, backup_effort, kimi_binary, guard, debate_ids):
     target = tmp_path / "item3-refresh-home"
     with support.custody_of(host, target, backup_model, backup_effort, live_homes.c,
-                             support.new_hex32(), module_owner.owner_pid,
+                             debate_ids["C"], module_owner.owner_pid,
                              module_owner.owner_ticks) as custody:
         debate_home = custody.debate_home
         cred_path = _credential_path(debate_home)
@@ -296,12 +312,12 @@ def test_refresh_write_through(tmp_path, host, module_owner, live_homes,
         before = json.loads(cred_path.read_text(encoding="utf-8"))
         _force_expiry(debate_home)
 
-        result = _dispatch_probe(kimi_binary, backup_model, debate_home, guard)
+        result = _dispatch_probe(kimi_binary, backup_model, debate_home, guard,
+                                  cred_path=cred_path)
         assert result.returncode == 0, result.stderr
         assert "PROBE" in result.stdout
 
         after = json.loads(cred_path.read_text(encoding="utf-8"))
-        support.reread_and_merge_credential(guard, cred_path)
 
         # Token-rotation assertions must not disclose: an ordinary `if` +
         # pytest.fail, never `assert x != y` (which prints both operands
@@ -318,10 +334,10 @@ def test_refresh_write_through(tmp_path, host, module_owner, live_homes,
 # Item 4 (measurement 10): both delete paths, exercised directly.
 # =======================================================================
 def test_the_successful_delete_path(tmp_path, host, module_owner, live_homes,
-                                     backup_model, backup_effort):
+                                     backup_model, backup_effort, debate_ids):
     target = tmp_path / "item4a-delete-home"
     with support.custody_of(host, target, backup_model, backup_effort, live_homes.c,
-                             support.new_hex32(), module_owner.owner_pid,
+                             debate_ids["C"], module_owner.owner_pid,
                              module_owner.owner_ticks):
         assert target.exists()
     assert not target.exists()
@@ -360,25 +376,40 @@ def test_the_failed_build_cleanup_path(tmp_path, host, module_owner, live_homes,
 # after asserting A's marker precedes B's.
 # =======================================================================
 def test_coexistence_a_then_b_then_a(tmp_path, host, module_owner, live_homes,
-                                      backup_model, backup_effort, kimi_binary, guard):
+                                      backup_model, backup_effort, kimi_binary, guard,
+                                      debate_ids):
     assert int(live_homes.marker_a) < int(live_homes.marker_b), (
         "A's login-created marker must precede B's")
 
-    for round_index, home in enumerate((live_homes.a, live_homes.b, live_homes.a)):
+    rounds = (("A", live_homes.a), ("B", live_homes.b), ("A", live_homes.a))
+    for round_index, (label, home) in enumerate(rounds):
         target = tmp_path / ("item5-coexist-home-%d" % round_index)
         with support.custody_of(host, target, backup_model, backup_effort, home,
-                                 support.new_hex32(), module_owner.owner_pid,
+                                 debate_ids[label], module_owner.owner_pid,
                                  module_owner.owner_ticks) as custody:
-            result = _dispatch_probe(kimi_binary, backup_model, custody.debate_home, guard)
+            result = _dispatch_probe(kimi_binary, backup_model, custody.debate_home, guard,
+                                      cred_path=_credential_path(custody.debate_home))
             assert result.returncode == 0, result.stderr
             assert "PROBE" in result.stdout
-            support.reread_and_merge_credential(guard, _credential_path(custody.debate_home))
 
 
 # =======================================================================
 # Item 6 (measurement 16): `provider list` false positives. Isolated
-# disposable homes, no lock, no real credential.
+# disposable homes, no lock, no real credential. The positive control
+# (a structurally VALID fake credential) runs first, so the garbage/
+# absent cases below can be read as "provider list reports source=oauth
+# for these too" - the false positive - rather than as an unexplained
+# baseline.
 # =======================================================================
+def test_provider_list_positive_control_valid_credential(tmp_path, host, kimi_binary, guard):
+    home = _build_disposable_home(tmp_path, "item6-valid-control-home",
+                                   credential_text=_ITEM6_VALID_CREDENTIAL_JSON)
+    result = _provider_list(kimi_binary, home, guard)
+    assert result.returncode == 0, result.stderr
+    assert "source=oauth" in result.stdout
+    guard.merge_credential_file(home / "credentials" / "kimi-code.json")
+
+
 def test_provider_list_false_positive_garbage_credential(tmp_path, host, kimi_binary, guard):
     home = _build_disposable_home(tmp_path, "item6-garbage-home",
                                    credential_text="not valid json at all")
@@ -407,10 +438,11 @@ def test_provider_list_false_positive_absent_credential(tmp_path, host, kimi_bin
 # successfully before the comparison ever runs.
 # =======================================================================
 def test_provider_list_is_not_a_refresh_path(tmp_path, host, module_owner, live_homes,
-                                              backup_model, backup_effort, kimi_binary, guard):
+                                              backup_model, backup_effort, kimi_binary, guard,
+                                              debate_ids):
     target = tmp_path / "item7-provider-list-home"
     with support.custody_of(host, target, backup_model, backup_effort, live_homes.c,
-                             support.new_hex32(), module_owner.owner_pid,
+                             debate_ids["C"], module_owner.owner_pid,
                              module_owner.owner_ticks) as custody:
         debate_home = custody.debate_home
         cred_path = _credential_path(debate_home)
@@ -418,11 +450,10 @@ def test_provider_list_is_not_a_refresh_path(tmp_path, host, module_owner, live_
         _force_expiry(debate_home)
         pre_snapshot = support.measure_file_snapshot(cred_path)
 
-        result = _provider_list(kimi_binary, debate_home, guard)
+        result = _provider_list(kimi_binary, debate_home, guard, cred_path=cred_path)
         assert result.returncode == 0, result.stderr
         assert "source=oauth" in result.stdout
 
-        support.reread_and_merge_credential(guard, cred_path)
         post_snapshot = support.measure_file_snapshot(cred_path)
 
         assert pre_snapshot == post_snapshot, (
