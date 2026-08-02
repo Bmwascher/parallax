@@ -166,34 +166,155 @@ def test_lane_home_isolation_region():
     Two independent reasons are pinned together on purpose: a pin holding
     only the hook reason would let the evidence reason be deleted, and a
     home built for evidence alone would read as optional on a machine
-    whose real config carries no hooks. The removal half is pinned too -
-    the home holds a COPIED CREDENTIAL, so leaving it behind is not
-    untidiness."""
+    whose real config carries no hooks.
+
+    Revised for the credential fix: the home no longer holds a COPY. Its
+    `credentials` directory is a junction to a dedicated lane login, so
+    the removal half is now pinned for a different reason, and the
+    DEBATE home and the LANE home are named as two distinct
+    directories because the superseded text blurred them."""
     assert (
-            "Build the lane home ONCE, before round 1, with "
-            "`tools/new-kimi-lane-home.ps1 -Path <debate-home> -Model "
-            "<canonical-backup-model-id> -Effort "
-            "<canonical-backup-effort>`, and set "
+            "Build the DEBATE home ONCE, before round 1, with "
+            "`tools/new-kimi-lane-home.ps1`, and set "
             "`KIMI_CODE_HOME=<debate-home>` on EVERY call of that debate, "
-            "fresh and resumed alike. Two INDEPENDENT reasons, either one "
-            "sufficient on its own: the real user-global "
-            "`~/.kimi-code/config.toml` can carry lifecycle hooks that run "
-            "a shell command on the reviewer's own approval path, and the "
-            "home is where this lane's effort pin and this debate's session "
-            "evidence live. One debate is ONE home: that debate's ROUNDS "
-            "are one session, and the only other session the home may hold "
-            "is the write-probe's own disposable one, which is created "
-            "before round 1 and is therefore already in the inventory the "
-            "freshness rule captures. A home is never reused across "
+            "fresh and resumed alike. Two directories matter here and the "
+            "shipped text must not blur them: the DEBATE home is this "
+            "debate's throwaway `KIMI_CODE_HOME`, and the LANE home is the "
+            "persistent directory holding the lane's own login and the "
+            "lock. Two INDEPENDENT reasons, either one sufficient: the real "
+            "user-global `~/.kimi-code/config.toml` can carry lifecycle "
+            "hooks that run a shell command on the reviewer's own approval "
+            "path, and the home is where this lane's effort pin and this "
+            "debate's session evidence live. One debate is ONE home: that "
+            "debate's ROUNDS are one session, and the only other session "
+            "the home may hold is the write-probe's own disposable one, "
+            "created before round 1 and therefore already in the inventory "
+            "the freshness rule captures. A home is never reused across "
             "DEBATES, because a reused home carries another debate's "
-            "sessions into this one's evidence. A home that cannot be "
-            "built, or a missing credential, makes the lane UNAVAILABLE — "
-            "never a reason to dispatch from the real home. Remove the home "
-            "with `tools/new-kimi-lane-home.ps1 -Path <debate-home> "
-            "-Remove` when the debate ends, because it holds a copied "
-            "credential.") in _norm(BACKUP_LANE)
+            "sessions into this one's evidence. The home holds NO COPY of "
+            "any credential. Its `credentials` directory is a JUNCTION to a "
+            "DEDICATED LANE LOGIN, distinct from the user's ordinary login, "
+            "so a refresh writes THROUGH to one file and no copy can go "
+            "stale; the lane never falls back to the ordinary credential. A "
+            "home that cannot be built, or a lane credential that is "
+            "absent, unreadable or structurally invalid, makes the lane "
+            "UNAVAILABLE, never a reason to dispatch from the real home. "
+            "Remove the home with `-Remove` when the debate ends. The lock "
+            "protocol every one of those calls follows is the "
+            "call-lifecycle region below.") in _norm(BACKUP_LANE)
 
 
+def test_lane_lock_region():
+    """One persistent file, never unlinked, and staleness that is LIVENESS
+    rather than a clock. A predecessor of this lock decided staleness by
+    AGE, so a live round past the threshold became breakable by anyone.
+
+    The unmeasurable cases are pinned with the reclaimable ones on
+    purpose: `held` is what a foreign-host, unreadable, empty, non-object
+    or schema-violating record all resolve to, and a pin holding only the
+    DEAD-reclaim half would let any of them be quietly reclassified as
+    reclaimable, which is the one outcome this protocol may never
+    produce."""
+    assert (
+            "The lane home is shared between debates and sessions, so one "
+            "PERSISTENT lock file beside the credential guards it. That "
+            "file is NEVER unlinked: acquire, reclaim and release are all "
+            "state transitions written IN PLACE, each under one exclusive "
+            "handle that serializes every writer. Staleness is LIVENESS and "
+            "never a clock. A holder is stale only when no process carries "
+            "its recorded id, or a process carries it with a different "
+            "start time, which is the identity-reuse guard. A predecessor "
+            "of this lock decided staleness by AGE, so a live round past "
+            "the threshold became breakable by anyone; nothing here has a "
+            "time-based expiry, and a wait budget bounds only caller "
+            "patience and never widens what counts as stale. What cannot be "
+            "evaluated is HELD: a record naming another machine, an "
+            "unreadable file, a zero-length file, a file that is not a JSON "
+            "object, or a JSON object that does not exactly satisfy the "
+            "record schema \u2014 version 1, one of the two state literals, that "
+            "state's exact field set, and every field's type and validation "
+            "rule \u2014 are each held and reported rather than reclaimed, "
+            "because an unmade measurement is never a clean one. A "
+            "DEAD-holder reclaim reports the holder it replaced. An "
+            "exhausted wait reports the LIVE or UNMEASURABLE holder it "
+            "refused, or reports handle contention when no record could be "
+            "read. Each confirmed override reports the record or bytes it "
+            "displaced. Contention WAITS up to the caller-supplied budget "
+            "and then refuses; a zero budget refuses at once, and no budget "
+            "ever breaks a holder. Two human overrides exist because one "
+            "cannot cover both states: a well-formed HELD record is freed "
+            "by confirming its complete recorded identity, machine name "
+            "included, and a record too damaged to trust its identity is "
+            "freed by confirming the exact hash of its current bytes. Both "
+            "are guarded human overrides, not authentication, and both "
+            "leave the file in place.") in _norm(BACKUP_LANE)
+
+
+def test_lane_lock_call_lifecycle_region():
+    """Who the owner is, and why it is resolved once and passed rather
+    than derived. The shell exits between calls, so a shell-derived owner
+    makes every lock instantly stale, and under any wrapper the parent is
+    an intermediate process that also exits.
+
+    The four pre-acquisition filesystem interactions are enumerated
+    rather than described, because 'only these' is the claim: each is
+    either read-only or idempotent, and the builder never creates the
+    directory. The nonce half is pinned with them - a hold nobody can
+    release is a lane nobody else can use."""
+    assert (
+            "Ownership is RESOLVED ONCE per debate and PASSED EXPLICITLY "
+            "thereafter. The owner is the harness session process, not the "
+            "shell, which exits between calls and would make every lock "
+            "instantly stale; deriving it from the invoking shell's parent "
+            "is correct only for a DIRECT invocation, and under any wrapper "
+            "it names an intermediate process that also exits. So run "
+            "`tools/kimi-lane-lock.ps1 -ResolveOwner` once at the start of "
+            "the debate, keep its `ownerPid` and `ownerStartTicksUtc`, "
+            "generate one 32-character lowercase hexadecimal debate id, and "
+            "hand all three to every later call. Build with "
+            "`tools/new-kimi-lane-home.ps1 -Path <debate-home> -Model "
+            "<canonical-backup-model-id> -Effort <canonical-backup-effort> "
+            "-LaneHome <lane-home> -DebateId <id> -OwnerPid <pid> "
+            "-OwnerStartTicksUtc <ticks>`; it acquires the lock before it "
+            "validates the credential, because a login could otherwise "
+            "write that credential in between, and it releases only when "
+            "the build itself failed. Build prints one JSON line carrying "
+            "`debateHome` and `nonce`: keep that nonce, because removal "
+            "requires it and a hold nobody can release is a lane nobody "
+            "else can use. Remove with `tools/new-kimi-lane-home.ps1 -Path "
+            "<debate-home> -Remove -LaneHome <lane-home> -DebateId <id> "
+            "-OwnerPid <pid> -OwnerStartTicksUtc <ticks> -Nonce <nonce>`; "
+            "it confirms the complete identity BEFORE it deletes anything, "
+            "so a caller who cannot release also cannot destroy, and it "
+            "releases only after the home is gone. Log the lane in with "
+            "`tools/new-kimi-lane-login.ps1 -LaneHome <lane-home> -OwnerPid "
+            "<pid> -OwnerStartTicksUtc <ticks> -VerdictOut <path>`, passing "
+            "the SAME lane home the build was given, because omitting it "
+            "authenticates the default home while the debate dispatches "
+            "from another; the wrapper generates its own debate id, takes "
+            "the same lock with the lane home as its debate home, and "
+            "releases it on the way out. A login outside that lock would be "
+            "the one writer this protocol never sees. Only these filesystem "
+            "interactions occur before lock acquisition, because the lock "
+            "lives inside the lane directory: the login wrapper's "
+            "fail-closed probe of the lane directory, the login wrapper "
+            "creating that directory when the probe measured it missing, "
+            "the login wrapper applying its access rules, and the builder's "
+            "own read-only fail-closed probe of whether that directory is "
+            "there. All four interactions are safe to repeat: both probes "
+            "only read, and directory creation and ACL application are "
+            "idempotent. The builder NEVER creates the directory: if it is "
+            "missing the builder prints the login command and stops without "
+            "taking the lock, and once the directory is confirmed the "
+            "credentials directory and the credential file are both "
+            "measured UNDER the lock. A debate that ends without removal "
+            "leaves its home on disk and its record still HELD; that record "
+            "is not freed by the session exiting, it merely becomes DEAD by "
+            "liveness and is reclaimable at some later acquire. Read the "
+            "state at any time with `tools/kimi-lane-lock.ps1 -Status "
+            "-LaneHome <lane-home>`, which reports the holder and its "
+            "liveness and reports LIVE to mean the process is running, "
+            "never to mean the debate is still going.") in _norm(BACKUP_LANE)
 def test_resume_inheritance_region():
     """The measured inheritance surface, stated at exactly its width.
 
@@ -434,9 +555,21 @@ def test_deleted_machinery_does_not_return():
     would mean restoring a rule that no longer describes this client.
     """
     body = _norm(BACKUP_LANE)
-    assert "kimi-lane-lock.ps1" not in body
     assert "Rotation guard" not in body
     assert "Created new session:" not in body
+    # `kimi-lane-lock.ps1` used to be forbidden by NAME here. It is back,
+    # for an unrelated reason, so the guard moved to the RULE. The tool
+    # that returned guards the PERSISTENT LANE LOCK FILE beside the
+    # credential; the deleted one serialized rounds against one shared
+    # append log and decided staleness by AGE. Forbidding the name would
+    # now forbid the replacement, and forbidding nothing would let the
+    # age rule come back under the new name - so these four needles are
+    # the deleted rule's own distinctive wording, each verified present
+    # in the superseded text at 79ec79f and absent from the current one.
+    assert "-Acquire -Label" not in body
+    assert "A BUSY result" not in body
+    assert "The lock is advisory" not in body
+    assert "breaks after 45 minutes" not in body
 
 
 def test_backup_lane_workspace_is_a_mirror_not_a_clone():

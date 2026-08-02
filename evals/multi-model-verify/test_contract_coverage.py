@@ -627,6 +627,13 @@ DECLARED_REGIONS = {
     # rotation-guard-identity, session-block-attribution,
     # session-block-kind, session-block-residual and lane-lock - all
     # existed to attribute a round inside ONE user-global append log.
+    #
+    # `lane-lock` below is a REUSED NAME, not a restored region. The
+    # deleted one attributed a round inside that append log. The new one
+    # is an unrelated rule about the PERSISTENT LANE LOCK FILE beside the
+    # credential - liveness-anchored staleness, in-place state
+    # transitions, and the two guarded human overrides. Nothing about the
+    # deleted rule came back.
     # kimi-code writes a per-session wire transcript and a per-session
     # log, so there is nothing left to attribute and every one of those
     # rules lost its subject. The six below replace them.
@@ -642,6 +649,8 @@ DECLARED_REGIONS = {
     # that must not carry them, instead of as a `Created new session:`
     # line.
     "lane-home-isolation",
+    "lane-lock",
+    "lane-lock-call-lifecycle",
     "round-freshness-boundary",
     "per-round-session-evidence",
     "evidence-hash-continuity",
