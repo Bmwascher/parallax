@@ -137,19 +137,21 @@ def guard(host, module_owner, live_homes, debate_ids):
 # =======================================================================
 # Small shared helpers.
 # =======================================================================
-def _dispatch_probe(kimi_binary, model, debate_home, guard, timeout=180, cred_path=None):
+def _dispatch_probe(kimi_binary, model, debate_home, guard, timeout=180, post_capture_merge=None):
     args = [kimi_binary, "-m", model, "--skills-dir", str(Path(debate_home) / "skills"),
             "-p", DISPATCH_PROMPT]
     env = support.clean_env({"KIMI_CODE_HOME": str(debate_home)})
     return support.dispatch_and_guard(args, guard, timeout=timeout,
-                                       cwd=str(debate_home), env=env, cred_path=cred_path)
+                                       cwd=str(debate_home), env=env,
+                                       post_capture_merge=post_capture_merge)
 
 
-def _provider_list(kimi_binary, debate_home, guard, timeout=60, cred_path=None):
+def _provider_list(kimi_binary, debate_home, guard, timeout=60, post_capture_merge=None):
     args = [kimi_binary, "provider", "list"]
     env = support.clean_env({"KIMI_CODE_HOME": str(debate_home)})
     return support.dispatch_and_guard(args, guard, timeout=timeout,
-                                       cwd=str(debate_home), env=env, cred_path=cred_path)
+                                       cwd=str(debate_home), env=env,
+                                       post_capture_merge=post_capture_merge)
 
 
 def _credential_path(debate_home):
@@ -231,8 +233,9 @@ def test_absolute_oauth_key_does_not_resolve(tmp_path, host, module_owner, live_
         cred_path = _credential_path(debate_home)
 
         # Positive control: the SAME credential and config, unmodified.
-        control = _dispatch_probe(kimi_binary, backup_model, debate_home, guard,
-                                   cred_path=cred_path)
+        control = _dispatch_probe(
+            kimi_binary, backup_model, debate_home, guard,
+            post_capture_merge=support.strict_reread_and_merge_callback(guard, cred_path))
         assert control.returncode == 0, control.stderr
         assert "PROBE" in control.stdout
 
@@ -249,8 +252,9 @@ def test_absolute_oauth_key_does_not_resolve(tmp_path, host, module_owner, live_
         fixture_root = str(Path(debate_home).resolve())
 
         def _measure():
-            result = _dispatch_probe(kimi_binary, backup_model, debate_home, guard,
-                                      cred_path=cred_path)
+            result = _dispatch_probe(
+                kimi_binary, backup_model, debate_home, guard,
+                post_capture_merge=support.strict_reread_and_merge_callback(guard, cred_path))
             norm_stdout = support.normalize_probe_output(result.stdout, fixture_root)
             norm_stderr = support.normalize_probe_output(result.stderr, fixture_root)
             return support.ProbeMeasurement(result.returncode, norm_stdout, norm_stderr)
@@ -287,8 +291,10 @@ def test_junction_read_through(tmp_path, host, module_owner, live_homes,
     with support.custody_of(host, target, backup_model, backup_effort, live_homes.c,
                              debate_ids["C"], module_owner.owner_pid,
                              module_owner.owner_ticks) as custody:
-        result = _dispatch_probe(kimi_binary, backup_model, custody.debate_home, guard,
-                                  cred_path=_credential_path(custody.debate_home))
+        result = _dispatch_probe(
+            kimi_binary, backup_model, custody.debate_home, guard,
+            post_capture_merge=support.strict_reread_and_merge_callback(
+                guard, _credential_path(custody.debate_home)))
         assert result.returncode == 0, result.stderr
         assert "PROBE" in result.stdout
 
@@ -312,8 +318,9 @@ def test_refresh_write_through(tmp_path, host, module_owner, live_homes,
         before = json.loads(cred_path.read_text(encoding="utf-8"))
         _force_expiry(debate_home)
 
-        result = _dispatch_probe(kimi_binary, backup_model, debate_home, guard,
-                                  cred_path=cred_path)
+        result = _dispatch_probe(
+            kimi_binary, backup_model, debate_home, guard,
+            post_capture_merge=support.strict_reread_and_merge_callback(guard, cred_path))
         assert result.returncode == 0, result.stderr
         assert "PROBE" in result.stdout
 
@@ -344,14 +351,86 @@ def test_the_successful_delete_path(tmp_path, host, module_owner, live_homes,
     assert support.lock_status(host, live_homes.c)["state"] == "free"
 
 
-def test_the_failed_build_cleanup_path(tmp_path, host, module_owner, live_homes,
-                                        backup_effort, monkeypatch):
-    """A hostile -Effort (carries a double quote) is refused by the
-    builder's own SafeConfigToken gate before anything is rendered - a
-    REAL refusal, not an injected seam. No nonce is ever returned, so
-    -Remove must never be called on this path; Task 6's own internal
-    cleanup already released the lock."""
-    target = tmp_path / "item4b-failed-build-home"
+# =======================================================================
+# Item 4b, three cases (frozen at r32). A hostile -Model is refused at
+# tools/new-kimi-lane-home.ps1:613, which is INSIDE the main try and AFTER
+# the acquire at line 573 - so it proves acquisition and release, but it
+# never reaches the deletion branch at all: $createdByThisInvocation is
+# set only at line 828, long after that refusal, and the recursive
+# cleanup at line 927 is conditional on it. The two cases below exercise
+# the real deletion branch instead, using the seams
+# PARALLAX_LANE_HOME_FAULT (line 909, immediately before the custody line
+# is emitted) and PARALLAX_LANE_HOME_CLEANUP_DELETE_FAULT (line 928,
+# inside the catch's cleanup branch). All three cases use the module's
+# debate id for C, like every other operation against C.
+# =======================================================================
+def test_the_failed_build_cleanup_path_deletion_fault_leaves_home_present(
+        tmp_path, host, module_owner, live_homes, backup_model, backup_effort, debate_ids):
+    """PARALLAX_LANE_HOME_FAULT alone already proves the catch branch
+    runs; this case additionally faults the recursive delete itself, so
+    the delete branch is reached but never actually deletes anything -
+    proving the build genuinely reached the post-junction cleanup branch,
+    with the debate home and its real junction still on disk to show for
+    it, and the lock released back to free."""
+    target = tmp_path / "item4b-delete-fault-home"
+    env = support.clean_env({"PARALLAX_LANE_HOME_FAULT": "1",
+                              "PARALLAX_LANE_HOME_CLEANUP_DELETE_FAULT": "1"})
+    build = support.build_lane_home(host, target, backup_model, backup_effort, live_homes.c,
+                                     debate_ids["C"], module_owner.owner_pid,
+                                     module_owner.owner_ticks, env=env)
+
+    assert build.returncode != 0
+    assert build.nonce is None
+    assert "PARALLAX_LANE_HOME_FAULT injected: simulated pre-emission failure" in build.stderr
+    assert ("PARALLAX_LANE_HOME_CLEANUP_DELETE_FAULT injected: simulated cleanup "
+            "deletion failure") in build.stderr
+
+    assert target.exists(), "the deletion fault must leave the debate home on disk"
+    assert support.is_junction(host, target / "credentials"), (
+        "the debate home's credentials directory must still be the real junction")
+    assert support.lock_status(host, live_homes.c)["state"] == "free"
+
+
+def test_the_failed_build_cleanup_path_deletion_does_not_traverse_the_junction(
+        tmp_path, host, module_owner, live_homes, backup_model, backup_effort, debate_ids):
+    """PARALLAX_LANE_HOME_FAULT alone: no deletion fault this time, so the
+    catch branch's ordinary recursive Remove-Item runs for real. Requiring
+    the debate home ABSENT and C's credential BYTE-IDENTICAL together is
+    what proves the recursive delete does not traverse the junction into
+    the lane home's own credentials directory."""
+    target = tmp_path / "item4b-pre-emission-fault-home"
+    cred_path = live_homes.c / "credentials" / "kimi-code.json"
+    before = cred_path.read_bytes()
+
+    env = support.clean_env({"PARALLAX_LANE_HOME_FAULT": "1"})
+    build = support.build_lane_home(host, target, backup_model, backup_effort, live_homes.c,
+                                     debate_ids["C"], module_owner.owner_pid,
+                                     module_owner.owner_ticks, env=env)
+
+    assert build.returncode != 0
+    assert build.nonce is None
+    assert build.stdout == "", "no custody line may be emitted after the pre-emission fault"
+
+    assert not target.exists(), "with no deletion fault, the real delete must run"
+    assert support.lock_status(host, live_homes.c)["state"] == "free"
+
+    after = cred_path.read_bytes()
+    assert after == before, (
+        "the recursive delete must not traverse the credentials junction "
+        "and delete C's real credential file")
+
+
+def test_the_hostile_model_release_only_control(tmp_path, host, module_owner, live_homes,
+                                                  backup_effort, debate_ids, monkeypatch):
+    """OPTIONAL release-only control. A hostile -Model (carries a double
+    quote) is refused by the builder's own SafeConfigToken gate before
+    anything is rendered - a REAL refusal, not an injected seam. This
+    proves acquisition and release ONLY: the refusal happens before
+    $createdByThisInvocation is ever set, so it never reaches the
+    deletion branch the two cases above exist to exercise. No nonce is
+    ever returned, so -Remove must never be called on this path; Task 6's
+    own internal cleanup already released the lock."""
+    target = tmp_path / "item4b-hostile-model-control-home"
     called_remove = []
     monkeypatch.setattr(support, "remove_lane_home",
                          lambda *a, **k: called_remove.append(1) or pytest.fail(
@@ -359,7 +438,7 @@ def test_the_failed_build_cleanup_path(tmp_path, host, module_owner, live_homes,
 
     with pytest.raises(support.BuildRefusal):
         with support.custody_of(host, target, "kimi-code/hostile\"-model",
-                                 backup_effort, live_homes.c, support.new_hex32(),
+                                 backup_effort, live_homes.c, debate_ids["C"],
                                  module_owner.owner_pid, module_owner.owner_ticks):
             pytest.fail("the build was refused; the with-block body must never run")
 
@@ -387,8 +466,10 @@ def test_coexistence_a_then_b_then_a(tmp_path, host, module_owner, live_homes,
         with support.custody_of(host, target, backup_model, backup_effort, home,
                                  debate_ids[label], module_owner.owner_pid,
                                  module_owner.owner_ticks) as custody:
-            result = _dispatch_probe(kimi_binary, backup_model, custody.debate_home, guard,
-                                      cred_path=_credential_path(custody.debate_home))
+            result = _dispatch_probe(
+                kimi_binary, backup_model, custody.debate_home, guard,
+                post_capture_merge=support.strict_reread_and_merge_callback(
+                    guard, _credential_path(custody.debate_home)))
             assert result.returncode == 0, result.stderr
             assert "PROBE" in result.stdout
 
@@ -400,34 +481,85 @@ def test_coexistence_a_then_b_then_a(tmp_path, host, module_owner, live_homes,
 # absent cases below can be read as "provider list reports source=oauth
 # for these too" - the false positive - rather than as an unexplained
 # baseline.
+#
+# Frozen at r32: the post-capture merge is a CALLBACK carrying each
+# fixture's EXPECTED state, run INSIDE dispatch_and_guard before the
+# stream is returned - never a lenient merge run by hand after the
+# assertions below, which is the exact ordering this rewrite forbids (the
+# merge-before-guard boundary is a security ordering).
 # =======================================================================
+def _item6_garbage_merge_callback(cred_path):
+    """The `garbage` fixture's expected state: the read must succeed and
+    the JSON parse must FAIL as expected. An unexpected read failure fails
+    closed (DispatchReadFailure, the same sanitized failure every other
+    read fault uses); an unexpectedly successful parse means the fixture
+    itself is not garbage, which is a test defect, not a filesystem
+    uncertainty, so it is reported through pytest.fail rather than as a
+    dispatch failure."""
+    def _callback():
+        try:
+            raw = Path(cred_path).read_text(encoding="utf-8")
+        except OSError:
+            raise support.DispatchReadFailure() from None
+        try:
+            json.loads(raw)
+        except ValueError:
+            return
+        pytest.fail(
+            "item 6 garbage fixture: expected the JSON parse to fail, "
+            "but it parsed successfully")
+    return _callback
+
+
+def _item6_absent_merge_callback(cred_path):
+    """The `absent` fixture's expected state: absence must be MEASURED
+    successfully (a FileNotFoundError on the read). Any OTHER filesystem
+    error fails closed, never absence-by-inference; an unexpectedly
+    readable file means the fixture is not absent, a test defect reported
+    through pytest.fail."""
+    def _callback():
+        try:
+            Path(cred_path).read_text(encoding="utf-8")
+        except FileNotFoundError:
+            return
+        except OSError:
+            raise support.DispatchReadFailure() from None
+        pytest.fail(
+            "item 6 absent fixture: expected the credential file to be "
+            "absent, but it was readable")
+    return _callback
+
+
 def test_provider_list_positive_control_valid_credential(tmp_path, host, kimi_binary, guard):
     home = _build_disposable_home(tmp_path, "item6-valid-control-home",
                                    credential_text=_ITEM6_VALID_CREDENTIAL_JSON)
-    result = _provider_list(kimi_binary, home, guard)
+    cred_path = home / "credentials" / "kimi-code.json"
+    result = _provider_list(
+        kimi_binary, home, guard,
+        post_capture_merge=support.strict_reread_and_merge_callback(guard, cred_path))
     assert result.returncode == 0, result.stderr
     assert "source=oauth" in result.stdout
-    guard.merge_credential_file(home / "credentials" / "kimi-code.json")
 
 
 def test_provider_list_false_positive_garbage_credential(tmp_path, host, kimi_binary, guard):
     home = _build_disposable_home(tmp_path, "item6-garbage-home",
                                    credential_text="not valid json at all")
-    result = _provider_list(kimi_binary, home, guard)
+    cred_path = home / "credentials" / "kimi-code.json"
+    result = _provider_list(
+        kimi_binary, home, guard,
+        post_capture_merge=_item6_garbage_merge_callback(cred_path))
     assert result.returncode == 0, result.stderr
     assert "source=oauth" in result.stdout
-    # Re-read and merge WITHOUT a lock: no hold to keep in force for a
-    # disposable, unlocked home. A parse failure here is expected and
-    # harmless - the lenient merge simply finds nothing to add.
-    guard.merge_credential_file(home / "credentials" / "kimi-code.json")
 
 
 def test_provider_list_false_positive_absent_credential(tmp_path, host, kimi_binary, guard):
     home = _build_disposable_home(tmp_path, "item6-absent-home", credential_text=None)
-    result = _provider_list(kimi_binary, home, guard)
+    cred_path = home / "credentials" / "kimi-code.json"
+    result = _provider_list(
+        kimi_binary, home, guard,
+        post_capture_merge=_item6_absent_merge_callback(cred_path))
     assert result.returncode == 0, result.stderr
     assert "source=oauth" in result.stdout
-    guard.merge_credential_file(home / "credentials" / "kimi-code.json")
 
 
 # =======================================================================
@@ -450,7 +582,9 @@ def test_provider_list_is_not_a_refresh_path(tmp_path, host, module_owner, live_
         _force_expiry(debate_home)
         pre_snapshot = support.measure_file_snapshot(cred_path)
 
-        result = _provider_list(kimi_binary, debate_home, guard, cred_path=cred_path)
+        result = _provider_list(
+            kimi_binary, debate_home, guard,
+            post_capture_merge=support.strict_reread_and_merge_callback(guard, cred_path))
         assert result.returncode == 0, result.stderr
         assert "source=oauth" in result.stdout
 

@@ -135,7 +135,13 @@ def _read_model_notes_field(label: str) -> str:
 
 
 def read_canonical_backup_model() -> str:
-    return _read_model_notes_field("Canonical backup model id")
+    # "reviewer" is part of the label. The declaration in
+    # model-prompting-notes.md reads "Canonical backup reviewer model id",
+    # while the effort and provider labels below have no such word. A
+    # shorter guess here read as a missing declaration and failed the
+    # whole live module in its setup, which is the correct direction but
+    # made the gate unrunnable rather than wrong.
+    return _read_model_notes_field("Canonical backup reviewer model id")
 
 
 def read_canonical_backup_effort() -> str:
@@ -669,23 +675,32 @@ class DispatchReadFailure(Exception):
 
 
 def dispatch_and_guard(args, guard: SecretGuard, timeout=60, cwd=None,
-                        env=None, cred_path=None) -> CommandResult:
+                        env=None, post_capture_merge=None) -> CommandResult:
     """Run `args`, then - while still inside this ONE call, before either
-    stream can be returned or rendered - re-read `cred_path` (when given)
-    and merge any new values into `guard`, and only THEN scan both
-    captured streams. Frozen at r31, SECURITY: a token ISSUED BY the
-    command being scanned is not in the guard's union when a scan runs
-    before the re-read, so a value that command just emitted can pass
-    straight through into a pytest assertion or failure message. Capture,
-    the post-command re-read and merge, the stream scan, and the return
-    are ONE indivisible operation - never split across two calls, which
-    is exactly the ordering bug this rewrite closes. `cred_path` is the
-    credential file to re-read; omit it for a command that mutates no
-    credential (e.g. `provider list`). If the re-read fails, NO captured
-    stream is exposed - the sanitized DispatchReadFailure propagates
-    instead, never a stream. The same order governs a timeout's partial
-    streams. A launch failure (nonexistent executable) has no stream to
-    leak and raises a fixed, sanitized message."""
+    stream can be returned or rendered - invoke `post_capture_merge()`
+    (when given) and only THEN scan both captured streams. Frozen at r32:
+    the post-capture merge is a CALLBACK, not a credential path, so each
+    caller supplies exactly the merge behaviour its own fixture needs
+    rather than this helper choosing a lenient default for everyone. A, B
+    and C pass `strict_reread_and_merge_callback(guard, cred_path)` below
+    - read, parse and merge must ALL succeed. Item 6's disposable homes
+    each pass their own fixture-specific callback instead, carrying that
+    fixture's EXPECTED state (valid / garbage / absent); a generic lenient
+    mode is FORBIDDEN, because `merge_credential_file` returns the same
+    `False` for an unreadable file and for malformed JSON, so a lenient
+    mode would read an unmade measurement as an expected garbage fixture.
+
+    The callback runs on the normal path AND the timeout path alike -
+    SECURITY (r31): a token ISSUED BY the command being scanned is not in
+    the guard's union until the callback has run, so scanning before it
+    would let a value that command just emitted pass straight through
+    into a pytest assertion or failure message. Capture, the callback, the
+    stream scan, and the return are ONE indivisible operation - never
+    split across two calls. Only AFTER the callback returns without
+    raising may the guard scan and the streams be returned; if it raises,
+    that exception propagates instead and NO captured stream is exposed.
+    A launch failure (nonexistent executable) has no stream to leak, never
+    calls the callback, and raises a fixed, sanitized message."""
     try:
         proc = subprocess.run(args, capture_output=True, text=True,
                                timeout=timeout, cwd=cwd, env=env)
@@ -694,15 +709,15 @@ def dispatch_and_guard(args, guard: SecretGuard, timeout=60, cwd=None,
             "utf-8", errors="replace")
         err = exc.stderr if isinstance(exc.stderr, str) else (exc.stderr or b"").decode(
             "utf-8", errors="replace")
-        if cred_path is not None:
-            reread_and_merge_credential(guard, cred_path)
+        if post_capture_merge is not None:
+            post_capture_merge()
         guard.scan_or_raise(out)
         guard.scan_or_raise(err)
         raise DispatchTimeout() from None
     except OSError:
         raise DispatchLaunchFailure() from None
-    if cred_path is not None:
-        reread_and_merge_credential(guard, cred_path)
+    if post_capture_merge is not None:
+        post_capture_merge()
     guard.scan_or_raise(proc.stdout)
     guard.scan_or_raise(proc.stderr)
     return CommandResult(proc.returncode, proc.stdout, proc.stderr)
@@ -721,6 +736,17 @@ def reread_and_merge_credential(guard: SecretGuard, cred_path):
         raise DispatchReadFailure() from None
     if not guard.merge_credential_dict(obj):
         raise DispatchReadFailure()
+
+
+def strict_reread_and_merge_callback(guard: SecretGuard, cred_path):
+    """The strict `post_capture_merge` callback A, B and C pass for every
+    operation, per the packet: read, parse and merge must ALL succeed, or
+    DispatchReadFailure propagates and no stream is exposed. Returned as a
+    zero-argument closure so it can be handed straight to
+    dispatch_and_guard's `post_capture_merge` parameter."""
+    def _callback():
+        reread_and_merge_credential(guard, cred_path)
+    return _callback
 
 
 # =======================================================================
@@ -756,6 +782,28 @@ def read_marker(home) -> Optional[str]:
 # test_kimi_lane_home.py's own junction oracle), so a standalone copy is
 # the only way a second kimi-code.json shows up in this listing.
 # =======================================================================
+class JunctionCheckError(Exception):
+    pass
+
+
+def is_junction(host, path, timeout=30) -> bool:
+    """True if `path` is a directory reparse point of type Junction,
+    False if it exists and is an ordinary directory. Any other outcome
+    (the query itself failing) is an unmade measurement and raises rather
+    than reading as either answer - item 4b's deletion-fault case needs
+    this to prove the debate home's `credentials` directory is still the
+    REAL junction, not merely that something exists at that path."""
+    escaped = str(path).replace("'", "''")
+    proc = subprocess.run(
+        [host, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command",
+         "(Get-Item -LiteralPath '%s' -Force).LinkType" % escaped],
+        capture_output=True, text=True, timeout=timeout, env=clean_env())
+    if proc.returncode != 0:
+        raise JunctionCheckError(
+            "junction check failed for %s: %s" % (path, proc.stdout + proc.stderr))
+    return proc.stdout.strip() == "Junction"
+
+
 class PhysicalInventoryError(Exception):
     pass
 

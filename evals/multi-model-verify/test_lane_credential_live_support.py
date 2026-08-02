@@ -426,7 +426,10 @@ def _phase_fail_merge(custody, tmp_path):
         tmp_path, "fake-client-phase-merge.py",
         "import sys; sys.stdout.write('PROBE\\n')")
     broken_path = Path(custody.debate_home) / "credentials" / "nonexistent-file.json"
-    support.dispatch_and_guard(fake, support.SecretGuard(), timeout=30, cred_path=broken_path)
+    guard = support.SecretGuard()
+    support.dispatch_and_guard(
+        fake, guard, timeout=30,
+        post_capture_merge=support.strict_reread_and_merge_callback(guard, broken_path))
 
 
 def _phase_fail_guard(custody, tmp_path):
@@ -755,6 +758,10 @@ def test_a_nonexistent_executable_produces_a_sanitized_launch_failure(tmp_path, 
 
 
 def test_a_postcommand_readorparse_fault_produces_a_value_free_failure(tmp_path, module_owner):
+    """The failure is driven THROUGH dispatch_and_guard's own
+    post_capture_merge call (r32), not raised by hand after the helper has
+    already returned - that older form tested the test's own code rather
+    than the helper's promised failure boundary."""
     profile = _fake_profile(tmp_path)
     lane_home = _fake_lane_home(tmp_path, name="read-parse-fault")
     target = tmp_path / "read-parse-fault-home"
@@ -768,10 +775,10 @@ def test_a_postcommand_readorparse_fault_produces_a_value_free_failure(tmp_path,
             fake = _write_fake_command(
                 tmp_path, "fake-rotate-badly.py",
                 "import sys; sys.stdout.write('PROBE\\n')")
-            result = support.dispatch_and_guard(fake, guard, timeout=30)
-            assert result.returncode == 0
             broken_path = Path(custody.debate_home) / "credentials" / "nonexistent-file.json"
-            support.reread_and_merge_credential(guard, broken_path)
+            support.dispatch_and_guard(
+                fake, guard, timeout=30,
+                post_capture_merge=support.strict_reread_and_merge_callback(guard, broken_path))
 
     assert str(excinfo.value) == "post-command credential read-or-parse failed"
     assert not hasattr(excinfo.value, "field")
@@ -834,7 +841,9 @@ def test_merge_after_command_catches_a_rotated_value(tmp_path):
         "sys.stdout.write('NEW-VALUE-AFTER-ROTATION\\n')\n" % str(cred_file))
 
     with pytest.raises(support.SecretGuardViolation) as excinfo:
-        support.dispatch_and_guard(fake, guard, timeout=30, cred_path=cred_file)
+        support.dispatch_and_guard(
+            fake, guard, timeout=30,
+            post_capture_merge=support.strict_reread_and_merge_callback(guard, cred_file))
 
     assert excinfo.value.field == "access_token"
     assert "NEW-VALUE-AFTER-ROTATION" not in str(excinfo.value)
