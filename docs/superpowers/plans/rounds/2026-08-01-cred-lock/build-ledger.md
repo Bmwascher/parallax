@@ -7,9 +7,17 @@ verdict, so where a report did not arrive the evidence is the session's
 own and must not later be attributed to the implementer.
 
 Plan: `docs/superpowers/plans/2026-08-01-lane-credential-and-lock.md`,
-FROZEN at revision 30 after 31 cross-vendor rounds. Round 30 reopened
-the frozen recovery command during building and round 31 reopened Task 7;
-the two remediation rows below are the result.
+FROZEN at revision 33 after 34 cross-vendor rounds.
+
+Building reopened the plan six times after its round-28 PASS. Round 29
+reopened the frozen recovery command, which was fail-open at its parse
+boundary. Round 30 fixed that class in two PowerShell callers. Round 31
+reopened Task 7 whole and returned ten findings, nine confirmed. Round 32
+added Task 11, after the session found a second Python instance of the
+same defect class that three sweeps had missed. Round 33 replaced Task 7's
+absolute-key oracle, which could never have failed. Round 34 replaced Task
+10's step 7 with the authorized-debt guard and corrected this ledger's own
+provenance. The remediation rows below are the result.
 
 | Task | Commit | Implementer report | Session verification | Evidence provenance |
 |---|---|---|---|---|

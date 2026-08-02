@@ -876,7 +876,71 @@ e3f98c23ee1f14ac14d86d470185af7eaa8db1e4
 
 **Recorded, separately and without softening:** the repository-wide no-attribution convention remains historically unmet; this branch carries three explicit user-authorized exceptions; the rewrite was rejected because it would invalidate the branch's recorded commit provenance; and NO claim is made that `main` is clean or that every attribution format was scanned.
 
+**The exact executable, frozen verbatim.** A description of a guard is not a
+guard. This is the block that produced the results below, parameterized ONLY so
+that the three mutations can be driven without editing it:
+
+```powershell
+param(
+    [string] $Range = '6201e30..HEAD',
+    [string[]] $Authorized = @(
+        'c79da4182a3595c76ba03e3b222021afaf3ab7c3',
+        '9d50196c3215b019b643fd40906966b36f77da30',
+        'e3f98c23ee1f14ac14d86d470185af7eaa8db1e4'
+    )
+)
+
+$ErrorActionPreference = 'Stop'
+
+$ids = & git log --format=%H $Range 2>$null
+if ($LASTEXITCODE -ne 0) { throw "git log failed with exit $LASTEXITCODE for range '$Range'" }
+if ($null -eq $ids) { $ids = @() }
+$ids = @($ids)
+
+$authorizedSet = [System.Collections.Generic.HashSet[string]]::new()
+foreach ($a in $Authorized) { [void] $authorizedSet.Add($a) }
+
+$carriers = @()
+foreach ($id in $ids) {
+    $message = & git log -1 --format=%B $id 2>$null
+    if ($LASTEXITCODE -ne 0) { throw "git log failed with exit $LASTEXITCODE reading message of $id" }
+    $text = ($message -join "`n")
+    if ($text -cmatch 'Claude-Session:') { $carriers += $id }
+}
+
+$unapproved = @($carriers | Where-Object { -not $authorizedSet.Contains($_) })
+if ($unapproved.Count -gt 0) {
+    throw "unapproved commit(s) carrying the literal 'Claude-Session:': $($unapproved -join ', ')"
+}
+
+"authorized Claude-Session debt: $($carriers.Count) known carriers; no unapproved carrier added"
+```
+
+Three details in it are load-bearing rather than incidental. `$ids = @(...)`
+after the null check, because a range yielding ONE commit collapses to a scalar
+and a range yielding none collapses to `$null`. `-cmatch`, because `-match` is
+case-insensitive and would accept `claude-session:`. And the exit check on BOTH
+`git log` calls, because an unreadable message must never be read as a
+non-carrier.
+
+Run it, with `$Range` and `$Authorized` left at their defaults, from the
+repository root. The three mutations, in order:
+
+1. `-Range 'nosuchref..HEAD'`
+2. `-Authorized @('c79da4182a3595c76ba03e3b222021afaf3ab7c3')`
+3. the three authorized ids plus a fourth id that is not a carrier, such as
+   `'0000000000000000000000000000000000000000'`
+
 Expected: the authorized-debt line, with `n` at most 3. THREE mutations, because the guard now has three failure directions: an INVALID REVISION RANGE must throw on `git log`'s exit code and never report debt; a carrier OUTSIDE the authorized set must fail; and a commit id in the authorized set that is not a carrier must not be required to be one.
+
+Measured at `ed5f048`:
+
+```
+default:      authorized Claude-Session debt: 3 known carriers; no unapproved carrier added
+mutation 1:   threw: git log failed with exit 128 for range 'nosuchref..HEAD'
+mutation 2:   threw: unapproved commit(s) carrying the literal 'Claude-Session:': e3f98c2..., 9d50196...
+mutation 3:   authorized Claude-Session debt: 3 known carriers; no unapproved carrier added
+```
 - [ ] **Step 8: The mechanical exact-line checker from Task 11 runs in the full gate**, added to the four gates in step 4 and to CI.
 
 ---
@@ -910,7 +974,7 @@ All nine discard blanks before requiring one survivor, contrary to the frozen ca
 
 **Participants:** Opus 5 (session) / gpt-5.6-sol (codex exec, session `019fbb82-9e35-7b72-a64e-59fb60b981cd`)
 **Rounds used:** 34, cap lifted by the user
-**Outcome:** ELEVEN tasks. Reviewer PASS on Tasks 1 through 9 and 11; Task 10 ESCALATE, narrowly, on one repository-policy gate the user waived. Building reopened the plan five times after the round-28 PASS, each time on a defect that only running the case could reach.
+**Outcome:** ELEVEN tasks. Reviewer PASS on Tasks 1 through 9 and 11; Task 10 ESCALATE, narrowly, on one repository-policy gate the user waived. Building reopened the plan six times after the round-28 PASS, at rounds 29 through 34, each time on a defect that only running the case could reach.
 **Verification status:** FULL. Every round's route matched the canonical declarations and the cross-vendor gate was satisfied throughout; nothing here was degraded by a transport failure.
 **Degradation:** NONE in the verification sense, and the distinction is deliberate. There is one accepted POLICY WAIVER, which is a different thing and must not be read as either: three commits in this branch carry a `Claude-Session:` trailer that `CLAUDE.md` forbids, and they stay. Task 10 step 7 freezes the waiver, names all three commit ids in full, fails on a fourth, and reports authorized debt rather than `clean`.
 **Authorized by:** the user, 2026-08-02, after being shown that this repository merges with merge commits so branch commits do reach `main`, that `main` already carries 65 such commits including this branch's own base, and that removing three would rewrite 44 of 70 commits and invalidate every commit id the build ledger records. Their decision, verbatim: "Don't rewrite."
