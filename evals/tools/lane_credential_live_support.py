@@ -590,7 +590,25 @@ def measure_file_snapshot(path) -> FileSnapshot:
 # captured streams BEFORE any assertion or failure message can surface
 # them. A match fails naming ONLY the field - never the value, never the
 # stream.
+#
+# NON_SECRET_CREDENTIAL_FIELDS, frozen at r33, SECURITY. `scope` and
+# `token_type` are RFC 6749 response metadata, not secrets - measured
+# live, `scope` is a NINE-character value and a literal substring of
+# ordinary `provider list` output, so an unqualified guard fired on a
+# completely clean run. This is an EXCLUSION LIST by field name at merge
+# time, never an allowlist of secrets: access_token and refresh_token
+# always enter, and every unknown future string field still enters too,
+# so the fail-safe direction is preserved for anything not yet seen. It
+# is deliberately not a length or entropy threshold, because a threshold
+# would silently stop protecting a short secret. If a metadata field and
+# a secret field hold the SAME value, the secret field still causes
+# retention and detection - excluding metadata by name, rather than by
+# value, means the secret field's own entry is never blocked by a
+# metadata field that happened to share its value.
 # =======================================================================
+NON_SECRET_CREDENTIAL_FIELDS = frozenset({"scope", "token_type"})
+
+
 class SecretGuardViolation(Exception):
     def __init__(self, field_name: str):
         self.field = field_name
@@ -608,6 +626,8 @@ class SecretGuard:
 
     def merge_values(self, fields: dict):
         for name, value in fields.items():
+            if name in NON_SECRET_CREDENTIAL_FIELDS:
+                continue
             if isinstance(value, str) and value != "" and value not in self._secrets:
                 self._secrets[value] = name
 
@@ -674,6 +694,36 @@ class DispatchReadFailure(Exception):
         super().__init__("post-command credential read-or-parse failed")
 
 
+class DispatchDecodeFailure(Exception):
+    """Frozen at r33. Captured output is decoded as STRICT UTF-8, never
+    the locale, through this ONE helper on both the normal path and the
+    timeout path - the capture used to run with `text=True` and no
+    encoding on the normal path while the timeout path decoded bytes as
+    UTF-8 WITH REPLACEMENT, so the two paths did not share one
+    byte-to-text contract and a live run's captured output arrived
+    mojibaked. Credentials are read as UTF-8, so a non-ASCII secret
+    decoded through a different or lossy codec may not compare equal to
+    itself, which would silently defeat the secret guard for exactly the
+    values it exists to protect. This exception is fixed and value-free
+    and exposes NEITHER stream."""
+
+    def __init__(self):
+        super().__init__("captured process output could not be decoded as UTF-8")
+
+
+def _decode_strict(data: Optional[bytes]) -> str:
+    """The ONE byte-to-text contract both the normal path and the timeout
+    path share. `data` is None when a stream was never captured at all
+    (e.g. a timeout before any output), which decodes to the empty
+    string - a genuine "nothing captured" answer, not a failed one."""
+    if data is None:
+        return ""
+    try:
+        return data.decode("utf-8")
+    except UnicodeDecodeError:
+        raise DispatchDecodeFailure() from None
+
+
 def dispatch_and_guard(args, guard: SecretGuard, timeout=60, cwd=None,
                         env=None, post_capture_merge=None) -> CommandResult:
     """Run `args`, then - while still inside this ONE call, before either
@@ -700,15 +750,18 @@ def dispatch_and_guard(args, guard: SecretGuard, timeout=60, cwd=None,
     raising may the guard scan and the streams be returned; if it raises,
     that exception propagates instead and NO captured stream is exposed.
     A launch failure (nonexistent executable) has no stream to leak, never
-    calls the callback, and raises a fixed, sanitized message."""
+    calls the callback, and raises a fixed, sanitized message.
+
+    Capture is BYTES (frozen at r33, no `text=True`); both paths decode
+    through `_decode_strict` before the callback or the guard ever run, so
+    an invalid-UTF-8 stream raises DispatchDecodeFailure - value-free,
+    exposing neither stream - before the callback or the guard sees it."""
     try:
-        proc = subprocess.run(args, capture_output=True, text=True,
+        proc = subprocess.run(args, capture_output=True,
                                timeout=timeout, cwd=cwd, env=env)
     except subprocess.TimeoutExpired as exc:
-        out = exc.stdout if isinstance(exc.stdout, str) else (exc.stdout or b"").decode(
-            "utf-8", errors="replace")
-        err = exc.stderr if isinstance(exc.stderr, str) else (exc.stderr or b"").decode(
-            "utf-8", errors="replace")
+        out = _decode_strict(exc.stdout)
+        err = _decode_strict(exc.stderr)
         if post_capture_merge is not None:
             post_capture_merge()
         guard.scan_or_raise(out)
@@ -716,11 +769,13 @@ def dispatch_and_guard(args, guard: SecretGuard, timeout=60, cwd=None,
         raise DispatchTimeout() from None
     except OSError:
         raise DispatchLaunchFailure() from None
+    out = _decode_strict(proc.stdout)
+    err = _decode_strict(proc.stderr)
     if post_capture_merge is not None:
         post_capture_merge()
-    guard.scan_or_raise(proc.stdout)
-    guard.scan_or_raise(proc.stderr)
-    return CommandResult(proc.returncode, proc.stdout, proc.stderr)
+    guard.scan_or_raise(out)
+    guard.scan_or_raise(err)
+    return CommandResult(proc.returncode, out, err)
 
 
 def reread_and_merge_credential(guard: SecretGuard, cred_path):
