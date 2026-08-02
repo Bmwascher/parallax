@@ -22,6 +22,7 @@ divergence test in particular needs BOTH powershell.exe and pwsh.exe to
 have actually run before it can assert anything about how they differ -
 an unavailable host there fails the gate outright.
 """
+import importlib.util
 import json
 import os
 import shutil
@@ -34,6 +35,17 @@ import pytest
 
 REPO = Path(__file__).resolve().parents[2]
 SCRIPT = REPO / "tools" / "kimi-lane-lock.ps1"
+
+
+def _load_exact_line_module():
+    path = REPO / "evals" / "tools" / "exact_line.py"
+    spec = importlib.util.spec_from_file_location("exact_line", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+accept_exactly_one_nonempty_line = _load_exact_line_module().accept_exactly_one_nonempty_line
 
 # Same resolution chain as the sibling live-lock suite (PARALLAX_PS_HOST,
 # else whichever host is on PATH), but the module guard below drops the
@@ -337,14 +349,14 @@ def measure_type_report(host, script=TYPE_REPORT_SCRIPT, timeout=30):
         raise AssertionError(
             f"{host} exited {proc.returncode}, never a measurement: "
             f"stdout={proc.stdout!r} stderr={proc.stderr!r}")
-    lines = [ln for ln in proc.stdout.splitlines() if ln.strip()]
-    if len(lines) != 1:
+    line = accept_exactly_one_nonempty_line(proc.stdout)
+    if line is None:
         raise AssertionError(
             f"{host} did not emit exactly one result line: stdout={proc.stdout!r}")
     try:
-        report = json.loads(lines[0])
+        report = json.loads(line)
     except json.JSONDecodeError as exc:
-        raise AssertionError(f"{host} emitted an unparseable line: {lines[0]!r}") from exc
+        raise AssertionError(f"{host} emitted an unparseable line: {line!r}") from exc
     if (not isinstance(report, dict) or "ticksType" not in report
             or "whenType" not in report):
         raise AssertionError(f"{host} result missing the expected shape: {report!r}")

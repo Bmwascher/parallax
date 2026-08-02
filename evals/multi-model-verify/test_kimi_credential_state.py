@@ -43,6 +43,7 @@ os.name guard exists because Ubuntu CI supplies pwsh: a selector that
 merely finds a host would happily collect these tests there too, same
 lesson as test_codex_context_probe.py.
 """
+import importlib.util
 import json
 import os
 import shutil
@@ -53,6 +54,17 @@ import pytest
 
 REPO = Path(__file__).resolve().parents[2]
 VALIDATOR = REPO / "tools" / "read-kimi-credential-state.ps1"
+
+
+def _load_exact_line_module():
+    path = REPO / "evals" / "tools" / "exact_line.py"
+    spec = importlib.util.spec_from_file_location("exact_line", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+accept_exactly_one_nonempty_line = _load_exact_line_module().accept_exactly_one_nonempty_line
 
 POWERSHELL = (os.environ.get("PARALLAX_PS_HOST")
               or shutil.which("powershell") or shutil.which("pwsh"))
@@ -115,9 +127,9 @@ def assert_classification(proc):
     """
     assert proc.returncode == 0, proc.stdout + proc.stderr
     assert proc.stderr == "", f"stderr must be empty on a classification, got {proc.stderr!r}"
-    lines = [l for l in proc.stdout.splitlines() if l.strip()]
-    assert len(lines) == 1, f"expected exactly one output line, got {lines!r}"
-    report = json.loads(lines[0])
+    line = accept_exactly_one_nonempty_line(proc.stdout)
+    assert line is not None, f"expected exactly one output line, got {proc.stdout!r}"
+    report = json.loads(line)
     assert set(report.keys()) == {"status", "detail", "fields"}, report.keys()
     assert isinstance(report["fields"], list)
     assert all(isinstance(f, str) for f in report["fields"])

@@ -15,6 +15,7 @@ fake $env:USERPROFILE passed only through a subprocess's own environment
 - never the real ~/.kimi-code, never a real login, never the real
 $env:USERPROFILE.
 """
+import importlib.util
 import json
 import os
 import re
@@ -30,6 +31,17 @@ REPO = Path(__file__).resolve().parents[2]
 SCRIPT = REPO / "tools" / "new-kimi-lane-login.ps1"
 LOCK_SCRIPT = REPO / "tools" / "kimi-lane-lock.ps1"
 VALIDATOR_SCRIPT = REPO / "tools" / "read-kimi-credential-state.ps1"
+
+
+def _load_exact_line_module():
+    path = REPO / "evals" / "tools" / "exact_line.py"
+    spec = importlib.util.spec_from_file_location("exact_line", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+accept_exactly_one_nonempty_line = _load_exact_line_module().accept_exactly_one_nonempty_line
 
 POWERSHELL = (os.environ.get("PARALLAX_PS_HOST")
               or shutil.which("powershell") or shutil.which("pwsh"))
@@ -379,9 +391,9 @@ def test_fresh_build_creates_home_acquires_logs_in_and_succeeds(
     assert (lane_home / "credentials" / "kimi-code.json").is_file()
     assert marker.read_text().strip() == "1"
 
-    lines = [l for l in verdict_out.read_text(encoding="ascii").splitlines() if l.strip()]
-    assert len(lines) == 1
-    obj = json.loads(lines[0])
+    line = accept_exactly_one_nonempty_line(verdict_out.read_text(encoding="ascii"))
+    assert line is not None
+    obj = json.loads(line)
     assert obj["status"] == "ok"
 
     home_acl = acl_dump(lane_home, acl_dump_script)
@@ -440,9 +452,9 @@ def test_second_run_is_idempotent_and_skips_the_client(
     assert home_acl_before == home_acl_after
     assert cred_acl_before == cred_acl_after
 
-    lines = [l for l in verdict_out.read_text(encoding="ascii").splitlines() if l.strip()]
-    assert len(lines) == 1
-    assert json.loads(lines[0])["status"] == "ok"
+    line = accept_exactly_one_nonempty_line(verdict_out.read_text(encoding="ascii"))
+    assert line is not None
+    assert json.loads(line)["status"] == "ok"
 
 
 def test_home_probe_fault_seam_exits_6_no_mutation(lane_home, kimi_stub, tmp_path):
@@ -707,9 +719,9 @@ def test_client_exit_0_leaving_bad_credential_fails_with_6(lane_home, kimi_stub,
     # Step 8 writes the verdict whenever the post-client validator call
     # itself SUCCEEDED structurally - the exit code is a separate
     # decision from whether -VerdictOut carries the (non-ok) verdict.
-    lines = [l for l in verdict_out.read_text(encoding="ascii").splitlines() if l.strip()]
-    assert len(lines) == 1
-    assert json.loads(lines[0])["status"] == expected_status
+    line = accept_exactly_one_nonempty_line(verdict_out.read_text(encoding="ascii"))
+    assert line is not None
+    assert json.loads(line)["status"] == expected_status
 
 
 def test_client_exit_nonzero_with_ok_credential_succeeds_with_0(lane_home, kimi_stub, tmp_path):
@@ -722,9 +734,9 @@ def test_client_exit_nonzero_with_ok_credential_succeeds_with_0(lane_home, kimi_
         env={"PARALLAX_TEST_STUB_WRITE_CREDENTIAL": "ok",
              "PARALLAX_TEST_STUB_EXIT_CODE": "5"})
     assert result.returncode == 0, (result.stdout, result.stderr)
-    lines = [l for l in verdict_out.read_text(encoding="ascii").splitlines() if l.strip()]
-    assert len(lines) == 1
-    assert json.loads(lines[0])["status"] == "ok"
+    line = accept_exactly_one_nonempty_line(verdict_out.read_text(encoding="ascii"))
+    assert line is not None
+    assert json.loads(line)["status"] == "ok"
 
 
 # ---------------------------------------------------------------------
@@ -981,9 +993,9 @@ def test_release_refusal_propagates_when_main_operation_succeeded(
     # produced) but this wrapper's OWN release then found the record
     # already free - propagated as exit 5.
     assert proc.returncode == 5, (stdout, stderr)
-    lines = [l for l in verdict_out.read_text(encoding="ascii").splitlines() if l.strip()]
-    assert len(lines) == 1
-    assert json.loads(lines[0])["status"] == "ok"
+    line = accept_exactly_one_nonempty_line(verdict_out.read_text(encoding="ascii"))
+    assert line is not None
+    assert json.loads(line)["status"] == "ok"
 
 
 def test_release_refusal_does_not_override_a_preceding_failure(
@@ -1010,9 +1022,9 @@ def test_release_refusal_does_not_override_a_preceding_failure(
     # The credential WAS structurally classified (absent is a completed
     # measurement), so -VerdictOut still carries it; only the exit code
     # reflects the failure.
-    lines = [l for l in verdict_out.read_text(encoding="ascii").splitlines() if l.strip()]
-    assert len(lines) == 1
-    assert json.loads(lines[0])["status"] == "absent"
+    line = accept_exactly_one_nonempty_line(verdict_out.read_text(encoding="ascii"))
+    assert line is not None
+    assert json.loads(line)["status"] == "absent"
 
 
 # ---------------------------------------------------------------------

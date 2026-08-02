@@ -12,6 +12,7 @@ fixture carrying its own credential, plus the four new mandatory
 identity parameters (-LaneHome/-DebateId/-OwnerPid/-OwnerStartTicksUtc,
 plus -Nonce on -Remove).
 """
+import importlib.util
 import json
 import os
 import re
@@ -31,6 +32,17 @@ CREDENTIAL_VALIDATOR = REPO / "tools" / "read-kimi-credential-state.ps1"
 LOCK_TOOL = REPO / "tools" / "kimi-lane-lock.ps1"
 LOGIN_WRAPPER = REPO / "tools" / "new-kimi-lane-login.ps1"
 SENTINEL = ".parallax-lane-home"
+
+
+def _load_exact_line_module():
+    path = REPO / "evals" / "tools" / "exact_line.py"
+    spec = importlib.util.spec_from_file_location("exact_line", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+accept_exactly_one_nonempty_line = _load_exact_line_module().accept_exactly_one_nonempty_line
 
 # Fix-round finding (Critical 1): live proof that an unsanitized -Model
 # cannot be rendered into config.toml. A text-only pin against the static
@@ -361,9 +373,9 @@ def _lock_release_direct(lane_home, debate_id, owner_pid, owner_ticks, nonce):
 
 
 def _parse_custody(stdout):
-    lines = [l for l in stdout.splitlines() if l.strip()]
-    assert len(lines) == 1, "expected exactly one stdout line, got: %r" % (stdout,)
-    obj = json.loads(lines[0])
+    line = accept_exactly_one_nonempty_line(stdout)
+    assert line is not None, "expected exactly one stdout line, got: %r" % (stdout,)
+    obj = json.loads(line)
     assert set(obj.keys()) == {"debateHome", "nonce"}, obj
     return obj
 
