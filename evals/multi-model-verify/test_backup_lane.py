@@ -1145,3 +1145,209 @@ def test_check_workflow_paths_prints_nothing_and_exits_zero():
     assert result.returncode == 0
     assert result.stdout == ""
     assert result.stderr == ""
+
+
+# --- Task 8: the doctor stops touching credentials -------------------------
+#
+# commands/doctor.md check 8 used to build a scratch KIMI_CODE_HOME and run
+# `provider list` against it - measurement 16/17 showed that proves nothing
+# and mutates nothing, and a live round dispatch failed with
+# `auth.login_required` even while `provider list` reported a healthy oauth
+# source. The check now validates the lane credential's STRUCTURE via
+# tools/read-kimi-credential-state.ps1 and reads the lane lock's STATUS via
+# tools/kimi-lane-lock.ps1 -Status, both read-only, and aggregates every
+# substate into ONE row by the total order BROKEN > STALE > N/A > OK.
+
+DOCTOR = REPO / "commands" / "doctor.md"
+
+# The lane login recovery command, from `Fixed names and values` in the
+# frozen plan - the COMPLETE emitted form, not the wrapper's filename. Task 6's
+# builder emits and executes the identical string; the doctor only prints it.
+RECOVERY_COMMAND = '& { $ErrorActionPreference = \'Stop\'; try { $ownerLines = @(& \'tools/kimi-lane-lock.ps1\' -ResolveOwner); $ownerExit = $LASTEXITCODE; if ($ownerExit -ne 0) { throw "owner resolution failed with exit $ownerExit" }; if ($ownerLines.Count -ne 1 -or -not ($ownerLines[0] -is [string]) -or [string]::IsNullOrWhiteSpace([string]$ownerLines[0])) { throw \'owner resolution returned invalid output\' }; $owner = $ownerLines[0] | ConvertFrom-Json -ErrorAction Stop; if (-not ($owner -is [System.Management.Automation.PSCustomObject])) { throw \'owner resolution returned invalid schema\' }; $ownerFields = @($owner.PSObject.Properties.Name); if ($ownerFields.Count -ne 2 -or -not ($ownerFields -ccontains \'ownerPid\') -or -not ($ownerFields -ccontains \'ownerStartTicksUtc\') -or -not (($owner.ownerPid -is [int]) -or ($owner.ownerPid -is [long])) -or [long]$owner.ownerPid -le 0 -or -not ($owner.ownerStartTicksUtc -is [string]) -or $owner.ownerStartTicksUtc -notmatch \'\\A[0-9]+\\z\') { throw \'owner resolution returned invalid schema\' }; if ([string]::IsNullOrWhiteSpace($env:TEMP) -or -not (Test-Path -LiteralPath $env:TEMP -PathType Container -ErrorAction Stop)) { throw \'TEMP is not an existing directory\' }; $verdictOut = Join-Path -Path $env:TEMP -ChildPath \'parallax-kimi-lane-login-verdict.json\' -ErrorAction Stop; & \'tools/new-kimi-lane-login.ps1\' -LaneHome \'<lane-home>\' -OwnerPid ([string]$owner.ownerPid) -OwnerStartTicksUtc $owner.ownerStartTicksUtc -VerdictOut $verdictOut; $loginExit = $LASTEXITCODE; if ($loginExit -ne 0) { throw "lane login failed with exit $loginExit" } } catch { throw } }'
+
+TOTAL_ORDER_RULE = 'row is the WORST substate observed, by `BROKEN > STALE > N/A > OK`, and every substate observed is still named in the detail text. N/A is IN that order'
+BINARY_ABSENT = 'is N/A, short-circuit, "backup lane unavailable, primary unaffected"'
+BINARY_OK_CLEAN = 'reports a usable version AT OR ABOVE the floor `0.31.1` is OK, with the reported version and the floor comparison both named in the detail — the CLEAN row this check used to omit.'
+BINARY_BROKEN = 'A present binary that does not report a usable version, or reports below the floor, is BROKEN.'
+FOUR_PART_RULE = "accept the measurement ONLY under the FOUR-PART ACCEPTANCE RULE: the process launched, it exited 0, stderr was EMPTY, and stdout was exactly one parseable line whose status/detail pairing is one of Task 2's table."
+VALIDATOR_FAILS = 'pairing outside that table is "the validator itself fails to run": BROKEN, and NO credential recovery command is fabricated, because no credential state was measured.'
+CRED_OK = '`ok` is OK — "lane credential structurally present".'
+CRED_ABSENT = '`absent` is N/A, and no hash is taken at all.'
+CRED_UNREADABLE_MALFORMED = '`unreadable` or `malformed` is BROKEN.'
+RECOVERY_PRINT_STATEMENT = 'All three credential-failure rows above — `absent`, `unreadable` and `malformed` — print THE LANE LOGIN RECOVERY COMMAND from `Fixed names and values`, complete and executable, against the configured lane home:'
+HASH_STEP1 = '1. Test existence of the credential file.'
+HASH_STEP2 = '2. If ABSENT: run the validator, require `absent`, take NO hash.'
+HASH_STEP3 = "3. If PRESENT: attempt hash 1 (SHA-256 of the file's bytes) and record success or failure."
+HASH_STEP4 = "4. Run the validator REGARDLESS of hash 1's outcome."
+HASH_STEP5 = '5. If the file is still present, attempt hash 2. Disappearance between the two hashes is BROKEN.'
+HASH_STEP6 = '6. Compare ONLY if both hashes exist. Never compare a missing value to anything.'
+HASH_STEP7 = '7. Any hash failure is BROKEN, and it does NOT suppress the validator detail.'
+HASH_CANNOT_TAKE = 'A hash that cannot be taken on a PRESENT credential is BROKEN.'
+HASH_NARROWED = 'differing hashes are BROKEN, "credential bytes changed during the check; actor not established"; equal hashes are reported as "no net byte change observed", never as proof nothing wrote the file.'
+AUTH_PROBE_LITERAL = "An AUTHENTICATED probe is a SEPARATE operation and is never part of check 8. It acquires the lane lock, it MAY REFRESH the dedicated lane credential, and it never touches the user's ordinary credential. Check 8 reports STRUCTURE only, so a structurally present credential is not a working one."
+LOCK_STATUS_CANNOT_MEASURE = 'status invocation that fails that rule is "lock status cannot be measured": BROKEN, and no recovery command is fabricated from evidence the check does not have.'
+LOCK_FREE = '`free` is OK.'
+LOCK_LIVE = "`held` and LIVE is OK, reported as held with the holder — LIVE means the holder's process is running, and never that a debate was abandoned."
+LOCK_DEAD = '`held` and DEAD is STALE, reclaimable at the next acquire.'
+LOCK_UNKNOWN_SAME_HOST = "`held`, SAME-HOST — the record's `host` equals `$env:COMPUTERNAME`, compared case-insensitively — and UNKNOWN is N/A: liveness could NOT be determined, and every mutating mode therefore treats the holder as alive and will not reclaim it. Same-host is what selects this row, because a foreign-host record also reports UNKNOWN liveness."
+LOCK_FOREIGN_HOST = "foreign-host — the record's `host` differs from `$env:COMPUTERNAME`, compared case-INSENSITIVELY, which is the comparison the doctor makes since `-Status` reports the field — is STALE, with:"
+FORCE_RELEASE_CMD = '`tools/kimi-lane-lock.ps1 -ForceRelease -LaneHome <lane-home> -ConfirmHost <host> -ConfirmOwnerPid <pid> -ConfirmOwnerStartTicksUtc <ticks> -ConfirmDebateId <id> -ConfirmNonce <nonce>`'
+LOCK_MALFORMED = 'MALFORMED is STALE, with:'
+MALFORMED_OVERRIDE_CMD = '`tools/kimi-lane-lock.ps1 -MalformedOverride -LaneHome <lane-home> -ConfirmSha256 <sha256>`'
+CONTAINMENT_UNCHANGED = '**Containment artifact.** Verify the committed `skills/multi-model-verify/references/kimi-reviewer-agent.md` exists in the installed copy and its `tools:` allowlist is present (do not re-derive the list here; report presence/absence only). Missing file or allowlist is BROKEN.'
+
+
+def test_doctor_check8_stops_touching_credentials():
+    """The old check built a scratch home and ran `provider list`; measurement
+    16/17 showed that proves nothing and mutates nothing, and the doctor now
+    never dispatches to the credential at all."""
+    body = _read(DOCTOR)
+    assert "provider list" not in body
+    assert "new-kimi-lane-home.ps1" not in body
+    assert "credential present and OAuth-sourced" not in body
+
+
+def test_doctor_check8_total_order_precedence():
+    assert TOTAL_ORDER_RULE in _norm(DOCTOR)
+
+
+def test_doctor_check8_binary_rows_including_the_clean_ok_row():
+    """r25 (plan history): the substate table called itself total while having
+    no row for the CLEAN binary, so every fixture in this task used to be a
+    failure fixture and an implementation that never emitted OK would have
+    passed all of them. This pin is the CLEAN row the table used to omit."""
+    body = _norm(DOCTOR)
+    assert BINARY_ABSENT in body
+    assert BINARY_OK_CLEAN in body
+    assert BINARY_BROKEN in body
+
+
+def test_doctor_check8_four_part_rule_and_validator_failure_row():
+    body = _norm(DOCTOR)
+    assert FOUR_PART_RULE in body
+    assert VALIDATOR_FAILS in body
+
+
+def test_doctor_check8_a_nonzero_exit_with_a_valid_absent_report_stays_broken():
+    """The plan's first boundary fixture. WHICH ROW FIRES is decided by the
+    four-part acceptance rule, not by the report's contents: a nonzero exit
+    carrying a perfectly valid-looking `absent` report is still "the
+    validator itself fails to run", because nothing was measured. Two
+    mutations, one per half of that claim."""
+    body = _norm(DOCTOR)
+    assert FOUR_PART_RULE in body
+    assert VALIDATOR_FAILS in body
+    # If exit 0 stopped being required, a nonzero exit could reach the
+    # credential table and be read as a measured `absent`.
+    without_exit_zero = body.replace("it exited 0, stderr was EMPTY",
+                                      "stderr was EMPTY")
+    assert FOUR_PART_RULE not in without_exit_zero
+    # If the unmeasured case stopped being BROKEN, an unmade measurement
+    # would read as a clean one.
+    softened = body.replace('fails to run": BROKEN', 'fails to run": N/A')
+    assert VALIDATOR_FAILS not in softened
+
+
+def test_doctor_check8_an_exit_zero_valid_absent_report_is_na_and_takes_no_hash():
+    """The plan's second boundary fixture, the other direction: a report
+    that WAS accepted and says `absent` is an ordinary actionable reading,
+    N/A rather than BROKEN, and it takes no hash at all."""
+    body = _norm(DOCTOR)
+    assert CRED_ABSENT in body
+    assert RECOVERY_PRINT_STATEMENT in body
+    wrong_verdict = body.replace("`absent` is N/A", "`absent` is BROKEN")
+    assert CRED_ABSENT not in wrong_verdict
+    hashing_anyway = body.replace("and no hash is taken at all",
+                                   "and a hash is taken")
+    assert CRED_ABSENT not in hashing_anyway
+
+
+def test_doctor_check8_credential_status_mapping():
+    body = _norm(DOCTOR)
+    assert CRED_OK in body
+    assert CRED_ABSENT in body
+    assert CRED_UNREADABLE_MALFORMED in body
+
+
+def test_doctor_check8_recovery_command_is_the_complete_emitted_form():
+    """The pin covers the COMPLETE command, not the wrapper's filename - a
+    message naming only tools/new-kimi-lane-login.ps1 must fail this pin."""
+    body = _norm(DOCTOR)
+    assert RECOVERY_PRINT_STATEMENT in body
+    # RECOVERY_COMMAND is already single-line, so it needs no normalizing
+    # of its own - normalizing a plain string (not a Path) would break _norm.
+    assert RECOVERY_COMMAND in body
+    # a message naming only the wrapper filename is not the complete command
+    filename_only = body.replace(RECOVERY_COMMAND,
+                                  "tools/new-kimi-lane-login.ps1")
+    assert RECOVERY_COMMAND not in filename_only
+    assert "tools/new-kimi-lane-login.ps1" in filename_only
+
+
+def test_doctor_check8_hash_algorithm_seven_steps():
+    body = _norm(DOCTOR)
+    for step in (HASH_STEP1, HASH_STEP2, HASH_STEP3, HASH_STEP4, HASH_STEP5,
+                 HASH_STEP6, HASH_STEP7):
+        assert step in body
+    # ordering: the seven steps appear in numeric order, not merely present
+    positions = [body.index(step) for step in
+                 (HASH_STEP1, HASH_STEP2, HASH_STEP3, HASH_STEP4, HASH_STEP5,
+                  HASH_STEP6, HASH_STEP7)]
+    assert positions == sorted(positions)
+
+
+def test_doctor_check8_hash_wording_is_narrowed():
+    body = _norm(DOCTOR)
+    assert HASH_CANNOT_TAKE in body
+    assert HASH_NARROWED in body
+
+
+def test_doctor_check8_authenticated_probe_literal_exact():
+    assert AUTH_PROBE_LITERAL in _norm(DOCTOR)
+
+
+def test_doctor_check8_lock_status_measurement_failure_row():
+    assert LOCK_STATUS_CANNOT_MEASURE in _norm(DOCTOR)
+
+
+def test_doctor_check8_lock_free_live_dead_rows():
+    body = _norm(DOCTOR)
+    assert LOCK_FREE in body
+    assert LOCK_LIVE in body
+    assert LOCK_DEAD in body
+
+
+def test_doctor_check8_unknown_same_host_pin_excludes_wrong_mappings():
+    """Explicit pin, per the plan: the UNKNOWN row's N/A verdict TOGETHER WITH
+    its required detail, so an implementation mapping UNKNOWN to OK or STALE
+    fails - a generic "lock-status reporting" pin would not catch that."""
+    body = _norm(DOCTOR)
+    assert LOCK_UNKNOWN_SAME_HOST in body
+    wrong_ok = body.replace("UNKNOWN is N/A:", "UNKNOWN is OK:")
+    assert LOCK_UNKNOWN_SAME_HOST not in wrong_ok
+    wrong_stale = body.replace("UNKNOWN is N/A:", "UNKNOWN is STALE:")
+    assert LOCK_UNKNOWN_SAME_HOST not in wrong_stale
+
+
+def test_doctor_check8_foreign_host_case_insensitive_pin_excludes_case_sensitive_wording():
+    """Explicit pin, per the plan: the foreign-host branch's CASE-INSENSITIVE
+    comparison of the record's host against $env:COMPUTERNAME, together with
+    its complete -ForceRelease recovery command, so a case-sensitive
+    comparison fails."""
+    body = _norm(DOCTOR)
+    assert LOCK_FOREIGN_HOST in body
+    assert FORCE_RELEASE_CMD in body
+    wrong = body.replace("case-INSENSITIVELY", "case-sensitively")
+    assert LOCK_FOREIGN_HOST not in wrong
+
+
+def test_doctor_check8_malformed_lock_row():
+    body = _norm(DOCTOR)
+    assert LOCK_MALFORMED in body
+    assert MALFORMED_OVERRIDE_CMD in body
+
+
+def test_doctor_check8_containment_artifact_is_unchanged():
+    """This bullet is untouched by Task 8 - same text as before the rewrite,
+    pinned in its own right per the plan's explicit instruction."""
+    assert CONTAINMENT_UNCHANGED in _norm(DOCTOR)
