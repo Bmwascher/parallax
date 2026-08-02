@@ -7,10 +7,10 @@ verdict, so where a report did not arrive the evidence is the session's
 own and must not later be attributed to the implementer.
 
 Plan: `docs/superpowers/plans/2026-08-01-lane-credential-and-lock.md`,
-FROZEN at revision 37 after 38 cross-vendor rounds. Revision N was frozen
+FROZEN at revision 37 after 40 cross-vendor rounds. Revision N was frozen
 after round N+1, so the two numbers never match.
 
-Building reopened the plan TEN times after its round-28 PASS. Round 29
+Building reopened the plan TWELVE times after its round-28 PASS. Round 29
 froze the validator's CLI contract, which the plan had left for an
 implementer to invent, and turned acceptance into the four-part rule.
 Round 30 found the recovery command fail-open at its parse boundary, plus
@@ -23,8 +23,11 @@ have failed. Round 34 replaced Task 10's step 7 with the authorized-debt
 guard and corrected this ledger's own provenance. Round 35 found that step
 7 described a guard without containing one. Round 36 found that two of the
 three details the new guard called load-bearing had no failing oracle, and
-that a third was not load-bearing at all. The remediation rows below are
-the result.
+that a third was not load-bearing at all. Round 37 found the mutation
+harness itself only described, and round 38 found that harness printing
+where it should have asserted. Round 39 found the ledger still calling
+the behavioral gate unrun after it had run. Round 40 was the terminal
+PASS. The remediation rows below are the result.
 
 | Task | Commit | Implementer report | Session verification | Evidence provenance |
 |---|---|---|---|---|
