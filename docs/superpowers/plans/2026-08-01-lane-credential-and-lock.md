@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Status: FROZEN at revision 33.** The user lifted the round cap and directed that this plan iterate until the cross-vendor reviewer issued an actual PASS rather than stopping at "converged with amendments". It reached one three times before building and was reopened twice, both times by a required whole-artifact fable review reading the frozen text start to finish. Round 28 was the PASS on the then-ten tasks and on the implementer packet: "PASS. A zero-judgment implementer can build this plan from the defined task packet without inventing behavior."
+**Status: FROZEN at revision 35.** The user lifted the round cap and directed that this plan iterate until the cross-vendor reviewer issued an actual PASS rather than stopping at "converged with amendments". It reached one three times before building and was reopened twice, both times by a required whole-artifact fable review reading the frozen text start to finish. Round 28 was the PASS on the then-ten tasks and on the implementer packet: "PASS. A zero-judgment implementer can build this plan from the defined task packet without inventing behavior."
 
 **That was not the end, and the record should not read as if it were.** Building reopened this plan SIX more times, at rounds 29 through 34, and added an ELEVENTH task. The reviewer's round-28 judgment was that the late findings were local expression failures rather than unresolved choices in the state machines — a static judgment about the text, explicitly not a prediction that implementation would reveal no bugs. Implementation revealed plenty: a recovery command that was fail-open at its parse boundary, four caller defects, a test written around a defect, a security ordering that could print a token, a fixture routing rule that could have expired the user's own credential, an oracle that could never fail, a pin that could never be stable, a guard that fired on non-secret metadata, and nine surviving instances of one defect class that three human sweeps had missed. Every one of those was found AFTER the terminal PASS, and most were found by running the case rather than by reading it. Changes now require reopening the debate with a new round appended to the record; the implementer never edits this plan.
 
@@ -14,6 +14,77 @@
 
 ## Revision history
 
+**A notation warning, because this document uses `r<N>` in two senses.** Here
+and in the status line, `r<N>` is a REVISION of this plan, and revision N was
+frozen after debate ROUND N+1. Inside the task text, several "frozen at r<N>"
+labels use the ROUND number instead. The two are off by one wherever they meet.
+The labels are not being renumbered in this round, because moving them would
+change frozen contract text that pins reference; they are recorded as a known
+inconsistency rather than silently left to be discovered.
+
+- **r35** — after Sol round 36. The r34 guard prose claimed three load-bearing
+  details and could only prove one. TWO had no failing oracle: swapping
+  `-cmatch` for `-match` passed every mutation because none supplied a
+  lowercase-only message, and deleting the second `git log` exit check passed
+  them because the invalid-range mutation never reaches that call. Both now have
+  one, driven by a disposable `git` shim. The third claim was simply FALSE:
+  `$ids = @($ids)` is defensive normalization, not load-bearing, because
+  `foreach` already handles `$null`, a scalar and an array. Writing the mutation
+  also reversed the operator: `-cmatch` is fail-open on a case variant of the
+  trailer, so the guard now uses `-imatch`, and the r34 text had the safety
+  argument backwards. Also corrected here: this revision history had no entries
+  for r30 through r34 at all, while the status line claimed each of them.
+- **r34** — after Sol round 35. Step 7 described a guard without containing one,
+  so it could not be reproduced without being written again; the exact
+  parameterized block is now frozen in the plan with its measured output. Two
+  counts were stale: the outcome line said building reopened this plan five
+  times when it was six, and the build ledger's header still said revision 30
+  after 31 rounds.
+- **r33** — after Sol round 34, on Task 10's last step. The trailer check
+  required `6201e30..HEAD` to print `clean` and it does not; three commits carry
+  the trailer. Re-scoping was rejected, and correctly: the range already
+  excludes the base, so "adds no new carriers" would have been a rename rather
+  than a re-scope. Two facts measured only after the gate was frozen decided it
+  — this repository merges with MERGE COMMITS, so branch commits do reach
+  `main`, and `main` already carries 65 such commits INCLUDING this branch's own
+  base. The user waived the three rather than rewrite 44 of 70 commits and
+  invalidate every commit id the build ledger records. Step 7 became an
+  authorized-debt guard that names all three ids, fails on a fourth, permits
+  fewer, and reports authorized debt rather than `clean`. The claim was narrowed
+  with it, because searching one literal is not an oracle for every form of AI
+  attribution.
+- **r32** — after Sol round 33, the FIRST round with the live gate actually run.
+  It found that Task 7's absolute-key oracle could never have failed: the test
+  built its "absolute" key with `Path.resolve()`, which FOLLOWS a junction on
+  Windows, so the key named the same credential the relative default already
+  reached, and exit 0 was produced identically by "the absolute key resolved"
+  and by "it was ignored". Replaced by a five-step three-state structural oracle
+  that carries its own instruction — a success REFUTES measurement 5 and is a
+  finding, not a test to fix. The probe record and all its machinery were
+  deleted, its stderr pin having been shown unstable by construction. Two
+  further live findings: the secret guard fired on `scope`, a nine-character
+  RFC 6749 response FIELD rather than a secret, so the excluded fields are now
+  frozen by name; and capture decoded with the locale rather than UTF-8, so
+  capture is now strict UTF-8 with its own failure type. Classification is
+  evaluated before stability wherever both exist.
+- **r31** — after Sol round 32. Task 11 was ADDED: the session asked whether
+  "discard blank lines, then require one survivor" could be swept mechanically
+  after three sweeps had each missed an instance, and nine surviving sites were
+  enumerated so that deleting one is visible. Item 4b was made to exercise the
+  real DELETION rather than only the release, and the post-command merge became
+  a callback running inside the capture helper, before any stream can be
+  rendered.
+- **r30** — after Sol round 31, which read Task 7 whole and returned TEN
+  findings. Nine were confirmed and fixed. Two were serious in kind rather than
+  degree: a token issued by the command being scanned could reach pytest output,
+  and the live-home setup had no check preventing the suite's own deliberate
+  expiry from landing on the user's real credential. The tenth did not hold —
+  it claimed the hostile `-Model` refusal fires before any lock interaction,
+  which would have made the failed-build cleanup test vacuous; the refusal is
+  inside the main `try` and after the acquire, and the reviewer accepted the
+  refutation. The session then found a second instance of the blank-line class
+  that neither the reviewer nor round 30 had named: the custody line, which
+  carries the nonce the release is performed with.
 - **r29** — REOPENED during BUILDING again, after Sol plan round 30, on a defect found by RUNNING frozen text rather than reading it. The recovery command hardened at r20 and r21 was NOT fail-closed: `-ErrorAction Stop` promotes an error to terminating for its own statement, but with no `$ErrorActionPreference` and no `try` in a `;`-chain, execution continues to the next statement anyway. Measured on both hosts: after a failed owner parse the login wrapper RAN, with a null identity, where the plan required "never invoked". Fail-closed at two of three dependencies and open at the third is worse than uniformly naive, because it reads as hardened. Task 6's four-row EXECUTION matrix caught it — the oracle Sol specified at r21 precisely because a string pin cannot test a command whose job is to run. The command now runs inside a child scriptblock setting `$ErrorActionPreference = 'Stop'` around a `try`, so later steps are structurally unreachable after any failure and the preference never leaks into the user's shell, and it VALIDATES what it received rather than only that the call returned. Three boundaries was also an under-count: the matrix is now NINE rows, adding owner launch failure, output cardinality, owner schema, and the environment the command reads, each asserting the login was never invoked by MARKER ABSENCE. Sol then found four more defects in already-committed callers, all of the same family — a scalar `fields` passing an array check because `@(...)` wraps it; blank lines discarded before counting, so extra blanks satisfy "exactly one line"; `Get-Content -ErrorAction SilentlyContinue` turning a failed stderr read into empty stderr, which is an unmade measurement satisfying the acceptance rule that exists to forbid exactly that; and unquoted `Start-Process` paths that mis-tokenize a space-plus-apostrophe segment. The last had a test written AROUND it, docstring and all, with the suite green over the bug — so the success fixture now requires both characters in one segment, and shaping a fixture to avoid a defect in code it drives is forbidden outright.
 - **r28** — REOPENED during BUILDING, after Sol plan round 29, for one decision the plan never froze and an implementer therefore had to invent. The validator's OUTPUT line was frozen exactly; its CLI was not, so Task 2's implementer chose `ok` exits 0 and every other status exits 1 — including `absent`. That collides with Task 8's own table, which has `lane credential absent` as `N/A` and `the validator itself fails to run` as `BROKEN` on separate rows: one exit code for both makes a measurement that SUCCEEDED and found nothing indistinguishable from one that could not be made. All four classifications now exit 0 with empty stderr, and only an invocation that cannot classify exits 1. Sol then found the more dangerous half, which I had not: freezing the exit code alone leaves every CALLER free to accept missing or malformed stdout as a completed measurement, which is the same defect inverted. So acceptance is now a FOUR-PART rule — process launched, exit 0, stderr empty, exactly one schema-valid line — binding Tasks 5, 6 and 8, each of which gets TWO OPPOSING oracles: a nonzero exit carrying a valid-looking `absent` line, and an exit 0 carrying malformed output, neither readable as a credential state. Task 6 additionally emits NO recovery command on validator failure, because nothing was measured and nothing can therefore be recommended. Also frozen: `-Path`, resolution through `$PSScriptRoot` so a copied `tools` directory reaches its sibling, the `PARALLAX_KIMI_CREDENTIAL_STATE_FAULT` seam, a binding-refusal oracle, and a blank `-Path` taking the failure path rather than reporting `absent`.
 - **r27** — after Sol plan round 27. Seven tasks PASS, and the `PARALLAX_LANE_LOCK_STARTTIME_FAULT` exception is confirmed right: its injected failure is deliberately CONVERTED into an ordinary `UNMEASURABLE` result with its own decisive oracles, so a seam-specific sentinel would describe something the user never sees. Three blockers, all small and all mine. The credentials-probe seam promised "no mutation" and then required a release in `finally`, which IS a mutation; it now says no mutation of the credentials-path object or its ACL, with the required release named as the only lock mutation. Three of the new seams were given names, sentinels, scopes and firing points but no ACTIVATION CONDITION, and the directory probe had no exit code either because its table said only "refuse nonzero" — all three now activate on any nonempty value, and the directory probe exits 6. And the shipped lifecycle literal, which r26 had just corrected from a wrong COUNT to an enumeration, still said "the first two are safe to repeat" from when the list had three entries: after inserting the probe FIRST, that ordinal silently dropped ACL application, which Task 5 defines as idempotent. It no longer counts or ordinals at all — all four are named safe, with the reason for each. That is the third consecutive round in which a numeric or ordinal reference in this one shipped sentence was wrong, which is the argument for enumerating rather than counting anywhere a list can grow.
@@ -905,7 +976,7 @@ foreach ($id in $ids) {
     $message = & git log -1 --format=%B $id 2>$null
     if ($LASTEXITCODE -ne 0) { throw "git log failed with exit $LASTEXITCODE reading message of $id" }
     $text = ($message -join "`n")
-    if ($text -cmatch 'Claude-Session:') { $carriers += $id }
+    if ($text -imatch 'Claude-Session:') { $carriers += $id }
 }
 
 $unapproved = @($carriers | Where-Object { -not $authorizedSet.Contains($_) })
@@ -916,31 +987,66 @@ if ($unapproved.Count -gt 0) {
 "authorized Claude-Session debt: $($carriers.Count) known carriers; no unapproved carrier added"
 ```
 
-Three details in it are load-bearing rather than incidental. `$ids = @(...)`
-after the null check, because a range yielding ONE commit collapses to a scalar
-and a range yielding none collapses to `$null`. `-cmatch`, because `-match` is
-case-insensitive and would accept `claude-session:`. And the exit check on BOTH
-`git log` calls, because an unreadable message must never be read as a
-non-carrier.
+**Two details are load-bearing, and each has a mutation below that FAILS
+without it.** `-imatch`, because a case variant of the trailer is still an
+attribution trailer, and a guard that silently ignores one is fail-open in the
+only direction that matters here; the r35 text specified `-cmatch` and called it
+load-bearing, which had the safety argument exactly backwards. And the exit
+check on BOTH `git log` calls, because an unreadable message must never be read
+as a non-carrier. The known cost of `-imatch` is a commit message that merely
+DISCUSSES the literal in prose, which this guard will report as a carrier; that
+is a visible false failure a human resolves, not a silent pass.
+
+`$ids = @($ids)` after the null check is DEFENSIVE NORMALIZATION and nothing
+more. `foreach` already iterates `$null`, a scalar and an array correctly, so
+removing it breaks nothing. It is written here so that a later reader who adds
+an indexed or `.Count` use does not have to rediscover that a one-commit range
+returns a scalar.
 
 Run it, with `$Range` and `$Authorized` left at their defaults, from the
-repository root. The three mutations, in order:
+repository root. FIVE mutations, because the guard has five failure directions.
+The first three need only parameters:
 
-1. `-Range 'nosuchref..HEAD'`
-2. `-Authorized @('c79da4182a3595c76ba03e3b222021afaf3ab7c3')`
-3. the three authorized ids plus a fourth id that is not a carrier, such as
-   `'0000000000000000000000000000000000000000'`
+1. `-Range 'nosuchref..HEAD'` — an INVALID REVISION RANGE must throw on `git
+   log`'s exit code and never report debt.
+2. `-Authorized @('c79da4182a3595c76ba03e3b222021afaf3ab7c3')` — a carrier
+   OUTSIDE the authorized set must fail.
+3. the three authorized ids plus a fourth that is not a carrier, such as
+   `'0000000000000000000000000000000000000000'` — an authorized id that is not a
+   carrier must not be required to be one.
 
-Expected: the authorized-debt line, with `n` at most 3. THREE mutations, because the guard now has three failure directions: an INVALID REVISION RANGE must throw on `git log`'s exit code and never report debt; a carrier OUTSIDE the authorized set must fail; and a commit id in the authorized set that is not a carrier must not be required to be one.
+The last two need a DISPOSABLE `git` SHIM, because neither can be reached from
+real history. Define `function global:git` in the session and then invoke the
+guard, which resolves `& git` to the function ahead of the executable; the shim
+distinguishes the two calls by whether its arguments contain `-1`, and sets
+`$global:LASTEXITCODE` itself, because a function does not set it. Nothing in
+either mutation touches the repository.
 
-Measured at `ed5f048`:
+4. The shim enumerates ONE id that is not in the authorized set, and returns a
+   message whose only trailer is lowercase `claude-session:`. The guard must
+   FAIL. Repeat against a copy weakened to `-cmatch`, which must report clean —
+   that contrast is the oracle.
+5. The shim enumerates that id successfully and then FAILS the message read with
+   exit 1. The guard must throw on the read. Repeat against a copy with the
+   second exit check deleted, which must report clean.
+
+Expected: the authorized-debt line, with `n` at most 3, and each mutation as
+stated. Measured at `7527a2c`:
 
 ```
 default:      authorized Claude-Session debt: 3 known carriers; no unapproved carrier added
 mutation 1:   threw: git log failed with exit 128 for range 'nosuchref..HEAD'
 mutation 2:   threw: unapproved commit(s) carrying the literal 'Claude-Session:': e3f98c2..., 9d50196...
 mutation 3:   authorized Claude-Session debt: 3 known carriers; no unapproved carrier added
+mutation 4:   frozen   threw: unapproved commit(s) carrying the literal 'Claude-Session:': aaaa...
+              -cmatch  authorized Claude-Session debt: 0 known carriers; no unapproved carrier added
+mutation 5:   frozen   threw: git log failed with exit 1 reading message of aaaa...
+              no check authorized Claude-Session debt: 0 known carriers; no unapproved carrier added
 ```
+
+Both weakenings report CLEAN on an input that carries a defect. That is the
+shape this plan forbids everywhere else, and it is why these two mutations
+exist.
 - [ ] **Step 8: The mechanical exact-line checker from Task 11 runs in the full gate**, added to the four gates in step 4 and to CI.
 
 ---
@@ -973,8 +1079,8 @@ All nine discard blanks before requiring one survivor, contrary to the frozen ca
 ## Debate record
 
 **Participants:** Opus 5 (session) / gpt-5.6-sol (codex exec, session `019fbb82-9e35-7b72-a64e-59fb60b981cd`)
-**Rounds used:** 34, cap lifted by the user
-**Outcome:** ELEVEN tasks. Reviewer PASS on Tasks 1 through 9 and 11; Task 10 ESCALATE, narrowly, on one repository-policy gate the user waived. Building reopened the plan six times after the round-28 PASS, at rounds 29 through 34, each time on a defect that only running the case could reach.
+**Rounds used:** 36, cap lifted by the user
+**Outcome:** ELEVEN tasks. Reviewer PASS on Tasks 1 through 9 and 11; Task 10 ESCALATE, narrowly, on one repository-policy gate the user waived. Building reopened the plan EIGHT times after the round-28 PASS, at rounds 29 through 36, each time on a defect that only running the case could reach. The last two reopenings found defects in the ROUND-34 REPAIR itself: a guard that was described rather than written, and then two of its three stated load-bearing details having no oracle and one of them being false.
 **Verification status:** FULL. Every round's route matched the canonical declarations and the cross-vendor gate was satisfied throughout; nothing here was degraded by a transport failure.
 **Degradation:** NONE in the verification sense, and the distinction is deliberate. There is one accepted POLICY WAIVER, which is a different thing and must not be read as either: three commits in this branch carry a `Claude-Session:` trailer that `CLAUDE.md` forbids, and they stay. Task 10 step 7 freezes the waiver, names all three commit ids in full, fails on a fourth, and reports authorized debt rather than `clean`.
 **Authorized by:** the user, 2026-08-02, after being shown that this repository merges with merge commits so branch commits do reach `main`, that `main` already carries 65 such commits including this branch's own base, and that removing three would rewrite 44 of 70 commits and invalidate every commit id the build ledger records. Their decision, verbatim: "Don't rewrite."

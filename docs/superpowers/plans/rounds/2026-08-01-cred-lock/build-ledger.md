@@ -7,17 +7,24 @@ verdict, so where a report did not arrive the evidence is the session's
 own and must not later be attributed to the implementer.
 
 Plan: `docs/superpowers/plans/2026-08-01-lane-credential-and-lock.md`,
-FROZEN at revision 33 after 34 cross-vendor rounds.
+FROZEN at revision 35 after 36 cross-vendor rounds. Revision N was frozen
+after round N+1, so the two numbers never match.
 
-Building reopened the plan six times after its round-28 PASS. Round 29
-reopened the frozen recovery command, which was fail-open at its parse
-boundary. Round 30 fixed that class in two PowerShell callers. Round 31
-reopened Task 7 whole and returned ten findings, nine confirmed. Round 32
-added Task 11, after the session found a second Python instance of the
-same defect class that three sweeps had missed. Round 33 replaced Task 7's
-absolute-key oracle, which could never have failed. Round 34 replaced Task
-10's step 7 with the authorized-debt guard and corrected this ledger's own
-provenance. The remediation rows below are the result.
+Building reopened the plan EIGHT times after its round-28 PASS. Round 29
+froze the validator's CLI contract, which the plan had left for an
+implementer to invent, and turned acceptance into the four-part rule.
+Round 30 found the recovery command fail-open at its parse boundary, plus
+four caller defects of the same family, one of which was the blank-line
+class. Round 31 reopened Task 7 whole and returned ten findings, nine
+confirmed and one refuted. Round 32 added Task 11, after the session found
+a second Python instance of the blank-line class that three sweeps had
+missed. Round 33 replaced Task 7's absolute-key oracle, which could never
+have failed. Round 34 replaced Task 10's step 7 with the authorized-debt
+guard and corrected this ledger's own provenance. Round 35 found that step
+7 described a guard without containing one. Round 36 found that two of the
+three details the new guard called load-bearing had no failing oracle, and
+that a third was not load-bearing at all. The remediation rows below are
+the result.
 
 | Task | Commit | Implementer report | Session verification | Evidence provenance |
 |---|---|---|---|---|
