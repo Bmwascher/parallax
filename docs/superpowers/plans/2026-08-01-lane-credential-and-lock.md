@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Status: FROZEN at revision 31.** The user lifted the round cap and directed that this plan iterate until the cross-vendor reviewer issued an actual PASS rather than stopping at "converged with amendments". It reached one three times and was reopened twice, both times by a required whole-artifact fable review reading the frozen text start to finish. The terminal PASS is round 28, on all ten tasks and on the implementer packet: "PASS. A zero-judgment implementer can build this plan from the defined task packet without inventing behavior." The reviewer's judgment on the defect rate is recorded with it: the late findings were local expression failures rather than unresolved choices in the lock state machine, the custody lifecycle or the doctor's aggregation, and that is a static judgment about the plan rather than a prediction that implementation reveals no bugs. Changes now require reopening the debate with a new round appended to the record; the implementer never edits this plan.
+**Status: FROZEN at revision 32.** The user lifted the round cap and directed that this plan iterate until the cross-vendor reviewer issued an actual PASS rather than stopping at "converged with amendments". It reached one three times and was reopened twice, both times by a required whole-artifact fable review reading the frozen text start to finish. The terminal PASS is round 28, on all ten tasks and on the implementer packet: "PASS. A zero-judgment implementer can build this plan from the defined task packet without inventing behavior." The reviewer's judgment on the defect rate is recorded with it: the late findings were local expression failures rather than unresolved choices in the lock state machine, the custody lifecycle or the doctor's aggregation, and that is a static judgment about the plan rather than a prediction that implementation reveals no bugs. Changes now require reopening the debate with a new round appended to the record; the implementer never edits this plan.
 
 **Goal:** Stop the backup lane from copying the user's kimi-code credential. Give the lane its own login, reach it through a junction so one file holds it, guard the shared lane home with a liveness-anchored lock, stop the doctor touching credentials at all, and repair the Windows CI job this branch already broke.
 
@@ -607,17 +607,25 @@ For every case that uses a builder-created debate home, **do NOT acquire separat
 
 Freezing only C's custody, as r5 did, left every A and B dispatch able to refresh a shared credential outside the lock this suite exists to respect.
 
-**Live command oracles are MEASURED ONCE, then pinned, with the normalization fully frozen and no fallback.** The dispatch prompt is `Reply with the single word PROBE.` and the reply must contain `PROBE`. For the absolute-key failure the implementer runs that case once and records, in `docs/superpowers/plans/rounds/2026-08-01-cred-lock/probe-record.md`: the exit code, which must be NONZERO, and stdout and stderr SEPARATELY.
+**The absolute-key case is a THREE-STATE STRUCTURAL oracle, and NOTHING about the message text is pinned. Frozen at r33, replacing the r31 pin protocol entirely.**
 
-The normalization is exactly: replace the resolved fixture root with the literal `<fixture-root>`, case-insensitively; normalize CRLF to LF; trim ONE terminal newline. **The pin is the COMPLETE normalized stderr.** Run the case TWICE. If the two normalized outputs differ, STOP and amend this plan; the implementer does not get to select a line instead. r4 offered "or if that is not stable, the single line matching a stated selector", which handed back the choice this rule exists to remove.
+Two things were wrong at once, and the live run exposed both.
 
-**The pin is a LOCKING ASSERTION, not documentation. Frozen at r31, because "measured once, then pinned" was built as "re-measured and rewritten every run", which cannot fail.** An ordinary live run READS the committed record and compares; it never creates it and never rewrites it.
+The old oracle could not fail. It built the absolute key as `str(cred_path.resolve())`, and `Path.resolve()` FOLLOWS A JUNCTION on Windows (measured: an unresolved `link/f.json` resolves to `real/f.json`). So the "absolute" key named the same credential file the relative default already reached through the junction, and exit 0 with `PROBE` was produced identically by "the absolute key resolved" and by "it was ignored and the default was used". The case established measurement 5 in neither direction.
 
-- **Ordinary run.** A record that is missing, unreadable or malformed FAILS before the absolute-key case runs, and writes nothing. With a record present: run the positive control and the absolute-key case TWICE, require the two COMPLETE `(exit, normalized stdout, normalized stderr)` tuples to match, require nonzero exit independently, require the current normalized stderr to EQUAL the committed pinned stderr, and leave the record BYTE-IDENTICAL.
-- **The full tuple must be stable**, not stderr alone. The record stores exit, stdout and stderr, so a rule comparing only stderr between the two measurements lets the other two drift into a committed record unchecked. Cross-run PINNING stays scoped to normalized stderr, as above.
-- **Explicit refresh**, and only that: `PARALLAX_LANE_PROBE_RECORD_REFRESH=1` exactly. Any other nonempty value REFUSES rather than being treated as truthy. A refresh run measures twice, applies the secret guard, requires full-tuple stability and nonzero exit, then atomically creates or replaces the record. A failure or an unstable measurement writes NOTHING. The resulting diff is reviewed by a human before it is committed.
-- **Required offline oracles**, six: a matching record passes and writes nothing; a mismatching record fails and writes nothing; an absent record fails and writes nothing; an explicit refresh creates it; an unstable refresh writes nothing; a secret-guard match writes nothing.
+The pin could not be stable. The client's stderr carries a MODEL-GENERATED summary line, different words each run, and a FRESH session id. The frozen normalization removes neither, so "the COMPLETE normalized stderr" is unachievable for this command and no amount of re-running fixes it.
 
+And the two hid each other: the gate compared the tuples for stability BEFORE checking whether the supposedly-failing case had exited 0, so "the absolute key unexpectedly SUCCEEDED" was reported as mere stream instability. The graver fact was masked by the trivial one. **Wherever both a classification and a stability check exist, the CLASSIFICATION is evaluated first.**
+
+So item 1 becomes five steps, all under C's builder-retained hold, with the strict merge callback and the stream guard applied throughout. No second credential copy is created; C's real credential is used in place.
+
+1. The relative-key positive control: exit 0 and stdout contains `PROBE`.
+2. **Make the default UNREACHABLE.** Rename the `credentials` junction to a non-default name, then PROVE `<debate-home>/credentials/kimi-code.json` is absent while C's real credential is still readable.
+3. **The missing-absolute negative control.** Set `oauth.key` to a NONEXISTENT absolute path: require nonzero and no `PROBE`. This is load-bearing — without it, removing the default and testing one absolute path cannot distinguish "absolute paths are unsupported" from unrelated fallback behaviour.
+4. Set `oauth.key` to the absolute path of C's REAL credential file. Run TWICE. Both must exit nonzero and neither may contain `PROBE`. Either success REFUTES measurement 5, and that is the finding, not a test failure to work around.
+5. C's credential stays measurable and guarded after every command.
+
+**What is pinned and what is not.** Zero versus nonzero, and the presence or absence of `PROBE`. NOT the exact numeric exit code, which is wider than the design requires; not stdout or stderr text; not the session id; not the model's summary line. `docs/superpowers/plans/rounds/2026-08-01-cred-lock/probe-record.md`, the refresh opt-in `PARALLAX_LANE_PROBE_RECORD_REFRESH`, the stability comparison and every oracle built for them are DELETED rather than left standing beside the replacement, because a dead pin reads as a live one.
 **The live homes are SAFETY-CHECKED before any seed or mutation, frozen at r31.** Checking only "is a directory with an `ok` credential" let the suite's own deliberate expiry land on the user's real home if a variable were mistyped, which is the exact defect this plan exists to remove, reintroduced through the fixture routing. Before anything is seeded or mutated, FAIL unless every one of these MEASUREMENTS SUCCEEDS and passes:
 
 - A, B and C resolve to three pairwise-distinct PHYSICAL directories, compared after full resolution so a case-only difference or a junction alias does not read as distinct;
@@ -634,9 +642,30 @@ A measurement that cannot be made is a failure, never a pass. Offline fixtures c
 
 **Item 6's disposable homes get a MINIMAL GENERATED config, never a copy of the user's real `config.toml`.** It carries only the non-secret managed Kimi provider and OAuth declaration `provider list` needs; the builder's own provider block is already explicit and credential-free. Item 6 also runs its positive control, the structurally valid FAKE credential the routing table names, before the garbage and absent cases.
 
-**SECRET GUARD — one helper, applied to EVERY live command, not only the probe record.** Restricting it to `probe-record.md` was too narrow twice over: other live commands capture client streams as well, and an ordinary pytest failure message can print a captured stream BEFORE any write-time guard runs.
+**SECRET GUARD — one helper, applied to EVERY live command.** It was once scoped to the probe record alone, which was too narrow twice over: other live commands capture client streams as well, and an ordinary pytest failure message can print a captured stream BEFORE any write-time guard runs. The probe record itself is gone as of r33; the helper's scope is unchanged and is now simply every live command.
 
-So: one helper inspects both captured streams against a RETAINED UNION of **every NONEMPTY credential string value** across every fixture home, and it runs BEFORE any assertion or failure message that could surface those streams. On a match it fails naming ONLY the field. The nonempty restriction is load-bearing: `scope` and `token_type` are optional and unconstrained, an empty string is a substring of every output, and a guard comparing against one would fire on everything. The `probe-record.md` write uses this same helper, and that record is COMMITTED to a PUBLIC repo.
+So: one helper inspects both captured streams against a RETAINED UNION of **every NONEMPTY credential string value** across every fixture home, and it runs BEFORE any assertion or failure message that could surface those streams. On a match it fails naming ONLY the field.
+
+**Two fields are EXCLUDED by name, and this is a security decision rather than a helper constant. Frozen at r33.**
+
+```python
+NON_SECRET_CREDENTIAL_FIELDS = frozenset({"scope", "token_type"})
+```
+
+The nonempty restriction was written because "an empty string is a substring of every output". That reasoned about the EMPTY case and missed the SHORT one. Measured live: `scope` is a NINE-character value and a literal substring of ordinary `provider list` output, so the guard fired on a completely clean run and failed four of twelve live tests. `access_token` and `refresh_token` measured 677 and 678 characters and matched nothing.
+
+`scope` and `token_type` are RFC 6749 response METADATA, not secrets. The exclusion is by FIELD NAME at merge time, and it is deliberately not a length or entropy threshold, because a threshold would silently stop protecting a short secret.
+
+The rules, all four:
+
+- those two fields never enter the retained union;
+- `access_token` and `refresh_token` always do;
+- **every unknown future string field still does**, so the fail-safe direction is preserved for anything not yet seen — this is an exclusion list, never an allowlist of secrets, because an allowlist inverts that direction;
+- if a metadata field and a secret field hold the SAME value, the secret field still causes retention and detection.
+
+Four oracles, one per rule: metadata in ordinary output does not fire; each token field fires independently; an unknown string field fires; a token sharing its value with excluded metadata still fires.
+
+**Captured output is decoded as STRICT UTF-8, never the locale. Frozen at r33.** The capture used `text=True` with no encoding while the timeout path decoded bytes as UTF-8 with replacement, so the two paths did not share one byte-to-text contract, and the live run's captured output arrived mojibaked. This is not cosmetic: credentials are read as UTF-8, so a non-ASCII secret decoded through a different or lossy codec may not compare equal to itself, and the guard's claim covers every retained string rather than ASCII tokens only. Capture BYTES, decode both paths through one strict helper, and on invalid UTF-8 raise a fixed value-free `DispatchDecodeFailure` exposing NEITHER stream. Oracles: an invalid-byte normal path, an invalid-byte timeout path, and a correctly encoded NON-ASCII fake secret that must still be caught.
 
 **The secret set's lifecycle, frozen, because a set built once is already stale.** C deliberately rotates, so a value ISSUED BY the command being scanned does not exist when that command starts:
 
@@ -651,7 +680,7 @@ So: one helper inspects both captured streams against a RETAINED UNION of **ever
 
 - [ ] **Step 1: Write the gate.** Each item begins with a POSITIVE CONTROL.
 
-1. **Absolute `oauth.key`** (5): first a junction-based control with the same credential and config requiring exit 0 and `PROBE`, then the absolute-key case asserted to fail with the pinned normalized message. **The absolute-key home is built normally and its `config.toml` is then hand-edited in the throwaway copy** to replace the rendered `key = "oauth/kimi-code"` with an absolute path. The builder renders only the relative form (`tools/new-kimi-lane-home.ps1:456`) and gains no parameter for this; the edit is confined to the disposable home and never touches a real one.
+1. **Absolute `oauth.key`** (5): the FIVE-STEP three-state structural oracle frozen above at r33 — relative control, default made unreachable, missing-absolute negative control, C's real absolute path twice, credential still measurable. **The home is built normally and its `config.toml` is hand-edited in the throwaway copy** to replace the rendered `key = "oauth/kimi-code"`. The builder renders only the relative form (`tools/new-kimi-lane-home.ps1:456`) and gains no parameter for this; the edit is confined to the disposable home and never touches a real one. The absolute path is taken WITHOUT `Path.resolve()`, which follows the junction and was what made the old oracle undiscriminating.
 2. **Junction read-through** (6): a dispatch through a junctioned credentials directory exits 0 and returns `PROBE`.
 3. **Refresh write-through** (7), on C: force expiry IN THE PRE-COMMAND PHASE, dispatch, require exit 0 AND `PROBE`, then assert C's token fields rotated and no second credential file exists anywhere under the debate home.
 4. **Both delete paths** (10): invoke the real `-Remove` and the real failed-build cleanup HERE, directly. This module's verification command runs only this module, so delegating the assertion elsewhere would assert nothing.
