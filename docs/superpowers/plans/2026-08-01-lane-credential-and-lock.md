@@ -4,7 +4,7 @@
 
 **Status: FROZEN at revision 35.** The user lifted the round cap and directed that this plan iterate until the cross-vendor reviewer issued an actual PASS rather than stopping at "converged with amendments". It reached one three times before building and was reopened twice, both times by a required whole-artifact fable review reading the frozen text start to finish. Round 28 was the PASS on the then-ten tasks and on the implementer packet: "PASS. A zero-judgment implementer can build this plan from the defined task packet without inventing behavior."
 
-**That was not the end, and the record should not read as if it were.** Building reopened this plan SIX more times, at rounds 29 through 34, and added an ELEVENTH task. The reviewer's round-28 judgment was that the late findings were local expression failures rather than unresolved choices in the state machines — a static judgment about the text, explicitly not a prediction that implementation would reveal no bugs. Implementation revealed plenty: a recovery command that was fail-open at its parse boundary, four caller defects, a test written around a defect, a security ordering that could print a token, a fixture routing rule that could have expired the user's own credential, an oracle that could never fail, a pin that could never be stable, a guard that fired on non-secret metadata, and nine surviving instances of one defect class that three human sweeps had missed. Every one of those was found AFTER the terminal PASS, and most were found by running the case rather than by reading it. Changes now require reopening the debate with a new round appended to the record; the implementer never edits this plan.
+**That was not the end, and the record should not read as if it were.** Building reopened this plan EIGHT more times, at rounds 29 through 36, and added an ELEVENTH task. The reviewer's round-28 judgment was that the late findings were local expression failures rather than unresolved choices in the state machines — a static judgment about the text, explicitly not a prediction that implementation would reveal no bugs. Implementation revealed plenty: a recovery command that was fail-open at its parse boundary, four caller defects, a test written around a defect, a security ordering that could print a token, a fixture routing rule that could have expired the user's own credential, an oracle that could never fail, a pin that could never be stable, a guard that fired on non-secret metadata, and nine surviving instances of one defect class that three human sweeps had missed. Every one of those was found AFTER the terminal PASS, and most were found by running the case rather than by reading it. The last two reopenings found defects in a REPAIR rather than in the feature: a replacement gate that was described instead of written, and then two of its three stated load-bearing details having no failing oracle while a third was not load-bearing at all. Changes now require reopening the debate with a new round appended to the record; the implementer never edits this plan.
 
 **Goal:** Stop the backup lane from copying the user's kimi-code credential. Give the lane its own login, reach it through a junction so one file holds it, guard the shared lane home with a liveness-anchored lock, stop the doctor touching credentials at all, and repair the Windows CI job this branch already broke.
 
@@ -949,7 +949,7 @@ e3f98c23ee1f14ac14d86d470185af7eaa8db1e4
 
 **The exact executable, frozen verbatim.** A description of a guard is not a
 guard. This is the block that produced the results below, parameterized ONLY so
-that the three mutations can be driven without editing it:
+that the FIRST THREE mutations can be driven without editing it:
 
 ```powershell
 param(
@@ -1016,11 +1016,7 @@ The first three need only parameters:
    carrier must not be required to be one.
 
 The last two need a DISPOSABLE `git` SHIM, because neither can be reached from
-real history. Define `function global:git` in the session and then invoke the
-guard, which resolves `& git` to the function ahead of the executable; the shim
-distinguishes the two calls by whether its arguments contain `-1`, and sets
-`$global:LASTEXITCODE` itself, because a function does not set it. Nothing in
-either mutation touches the repository.
+real history:
 
 4. The shim enumerates ONE id that is not in the authorized set, and returns a
    message whose only trailer is lowercase `claude-session:`. The guard must
@@ -1029,6 +1025,79 @@ either mutation touches the repository.
 5. The shim enumerates that id successfully and then FAILS the message read with
    exit 1. The guard must throw on the read. Repeat against a copy with the
    second exit check deleted, which must report clean.
+
+**The shim harness, frozen verbatim.** Save the block above as a `.ps1` file and
+pass it as `-Guard`. It is written out here for the same reason the guard is:
+its mechanics are consequential, not clerical, and one of them already produced
+a false result once.
+
+```powershell
+param([string] $Guard)
+
+$ErrorActionPreference = 'Stop'
+
+$body = Get-Content -Raw $Guard
+$weakA = Join-Path ([System.IO.Path]::GetTempPath()) 'guard-weak-cmatch.ps1'
+$weakB = Join-Path ([System.IO.Path]::GetTempPath()) 'guard-weak-noexit2.ps1'
+
+$textA = $body.Replace("-imatch 'Claude-Session:'", "-cmatch 'Claude-Session:'")
+if ($textA -ceq $body) { throw 'weakening A did not apply' }
+$textB = $body.Replace(
+    'if ($LASTEXITCODE -ne 0) { throw "git log failed with exit $LASTEXITCODE reading message of $id" }',
+    '')
+if ($textB -ceq $body) { throw 'weakening B did not apply' }
+
+function Show {
+    param([string] $Label, [string] $Script)
+    try { "$Label -> $(& $Script)" }
+    catch { "$Label -> threw: $($_.Exception.Message)" }
+}
+
+try {
+    Set-Content -Path $weakA -Value $textA -NoNewline
+    Set-Content -Path $weakB -Value $textB -NoNewline
+
+    function global:git {
+        if ($args -contains '-1') {
+            if ($global:parallaxShimMode -eq 'message-read-fails') {
+                $global:LASTEXITCODE = 1
+                return
+            }
+            $global:LASTEXITCODE = 0
+            return @('chore: an ordinary subject', '', 'claude-session: https://example.invalid/session_x')
+        }
+        $global:LASTEXITCODE = 0
+        return @('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
+    }
+
+    'MUTATION 4: a lowercase-only `claude-session:` trailer'
+    $global:parallaxShimMode = 'lowercase-carrier'
+    Show 'frozen (-imatch)   ' $Guard
+    Show 'weakened (-cmatch) ' $weakA
+    ''
+    'MUTATION 5: enumeration succeeds, the message read FAILS'
+    $global:parallaxShimMode = 'message-read-fails'
+    Show 'frozen             ' $Guard
+    Show 'weakened (no check)' $weakB
+}
+finally {
+    Remove-Item function:git -ErrorAction SilentlyContinue
+    Remove-Item variable:global:parallaxShimMode -ErrorAction SilentlyContinue
+    Remove-Item $weakA, $weakB -ErrorAction SilentlyContinue
+    if (Test-Path function:git) { throw 'the git shim survived cleanup' }
+}
+```
+
+Four things in the harness are deliberate. The shim is GLOBAL, because `& git`
+resolves a function ahead of the executable only if the function is visible from
+the guard's child scope. Its mode is read from the GLOBAL scope: a global
+function does not see the defining script's `$script:` scope, so a
+`$script:`-held mode silently never changes, and the pair then agrees on both
+runs — which is a pair that cannot discriminate, and it happened. It sets
+`$global:LASTEXITCODE` itself, because a function does not set it. And cleanup
+sits in `finally` with a verification, because a shim left behind would shadow
+real `git` for the rest of the session; after the harness runs, `(Get-Command
+git).Source` must be the real executable again.
 
 Expected: the authorized-debt line, with `n` at most 3, and each mutation as
 stated. Measured at `7527a2c`:
