@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Status: FROZEN at revision 35.** The user lifted the round cap and directed that this plan iterate until the cross-vendor reviewer issued an actual PASS rather than stopping at "converged with amendments". It reached one three times before building and was reopened twice, both times by a required whole-artifact fable review reading the frozen text start to finish. Round 28 was the PASS on the then-ten tasks and on the implementer packet: "PASS. A zero-judgment implementer can build this plan from the defined task packet without inventing behavior."
+**Status: FROZEN at revision 37.** The user lifted the round cap and directed that this plan iterate until the cross-vendor reviewer issued an actual PASS rather than stopping at "converged with amendments". It reached one three times before building and was reopened twice, both times by a required whole-artifact fable review reading the frozen text start to finish. Round 28 was the PASS on the then-ten tasks and on the implementer packet: "PASS. A zero-judgment implementer can build this plan from the defined task packet without inventing behavior."
 
-**That was not the end, and the record should not read as if it were.** Building reopened this plan EIGHT more times, at rounds 29 through 36, and added an ELEVENTH task. The reviewer's round-28 judgment was that the late findings were local expression failures rather than unresolved choices in the state machines — a static judgment about the text, explicitly not a prediction that implementation would reveal no bugs. Implementation revealed plenty: a recovery command that was fail-open at its parse boundary, four caller defects, a test written around a defect, a security ordering that could print a token, a fixture routing rule that could have expired the user's own credential, an oracle that could never fail, a pin that could never be stable, a guard that fired on non-secret metadata, and nine surviving instances of one defect class that three human sweeps had missed. Every one of those was found AFTER the terminal PASS, and most were found by running the case rather than by reading it. The last two reopenings found defects in a REPAIR rather than in the feature: a replacement gate that was described instead of written, and then two of its three stated load-bearing details having no failing oracle while a third was not load-bearing at all. Changes now require reopening the debate with a new round appended to the record; the implementer never edits this plan.
+**That was not the end, and the record should not read as if it were.** Building reopened this plan TEN more times, at rounds 29 through 38, and added an ELEVENTH task. The reviewer's round-28 judgment was that the late findings were local expression failures rather than unresolved choices in the state machines — a static judgment about the text, explicitly not a prediction that implementation would reveal no bugs. Implementation revealed plenty: a recovery command that was fail-open at its parse boundary, four caller defects, a test written around a defect, a security ordering that could print a token, a fixture routing rule that could have expired the user's own credential, an oracle that could never fail, a pin that could never be stable, a guard that fired on non-secret metadata, and nine surviving instances of one defect class that three human sweeps had missed. Every one of those was found AFTER the terminal PASS, and most were found by running the case rather than by reading it. The last FOUR reopenings found defects in a REPAIR rather than in the feature: a replacement gate that was described instead of written; two of its three stated load-bearing details having no failing oracle while a third was not load-bearing at all; a mutation harness that was itself only described; and a harness that printed where it should have asserted, so a pair could agree wrongly and still exit 0. Changes now require reopening the debate with a new round appended to the record; the implementer never edits this plan.
 
 **Goal:** Stop the backup lane from copying the user's kimi-code credential. Give the lane its own login, reach it through a junction so one file holds it, guard the shared lane home with a liveness-anchored lock, stop the doctor touching credentials at all, and repair the Windows CI job this branch already broke.
 
@@ -22,6 +22,21 @@ The labels are not being renumbered in this round, because moving them would
 change frozen contract text that pins reference; they are recorded as a known
 inconsistency rather than silently left to be discovered.
 
+- **r37** — after Sol round 38, on the harness itself rather than on the guard.
+  It PRINTED where it should have ASSERTED, so both members of a pair could
+  agree wrongly and it would still exit 0 — the same fail-open shape the guard
+  exists to prevent, inside the thing testing the guard. It also wrote two
+  FIXED temp filenames, overwriting and then deleting whatever already had those
+  names, and it removed a pre-existing global `git` function rather than
+  restoring it, because `finally` removes and removing is not restoring. It now
+  asserts four exact outcomes, owns a GUID-named directory it verifies is gone,
+  refuses to run at all if a `git` function already exists, and restores
+  `$LASTEXITCODE`, which the shim sets and mutation 5 leaves at 1.
+- **r36** — after Sol round 37. Mutations 4 and 5 described an executable
+  without containing one, which was round 35's finding applied to round 36's
+  repair: a runner would have had to invent the shim, its argument
+  discrimination, its mode storage, the weakened copies and the cleanup. The
+  harness is now frozen verbatim. Two counts corrected with it.
 - **r35** — after Sol round 36. The r34 guard prose claimed three load-bearing
   details and could only prove one. TWO had no failing oracle: swapping
   `-cmatch` for `-match` passed every mutation because none supplied a
@@ -1026,20 +1041,28 @@ real history:
    exit 1. The guard must throw on the read. Repeat against a copy with the
    second exit check deleted, which must report clean.
 
-**The shim harness, frozen verbatim.** Save the block above as a `.ps1` file and
-pass it as `-Guard`. It is written out here for the same reason the guard is:
-its mechanics are consequential, not clerical, and one of them already produced
-a false result once.
+**The shim harness, frozen verbatim.** Save the guard block above as a `.ps1`
+file and pass it as `-Guard`. The harness is written out for the same reason the
+guard is: its mechanics are consequential rather than clerical, and three of
+them have already produced a wrong result or a hazard.
 
 ```powershell
-param([string] $Guard)
+param([Parameter(Mandatory)] [string] $Guard)
+
+# Mutations 4 and 5 of Task 10 step 7. Drives the frozen guard and two
+# WEAKENED copies of it against a disposable `git` shim, and ASSERTS all four
+# outcomes. It touches no repository state and no path it does not own.
 
 $ErrorActionPreference = 'Stop'
 
-$body = Get-Content -Raw $Guard
-$weakA = Join-Path ([System.IO.Path]::GetTempPath()) 'guard-weak-cmatch.ps1'
-$weakB = Join-Path ([System.IO.Path]::GetTempPath()) 'guard-weak-noexit2.ps1'
+if (Test-Path function:git) {
+    throw 'a `git` function already exists in this session; refusing to shadow it'
+}
 
+$FAKE = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+$CLEAN = 'authorized Claude-Session debt: 0 known carriers; no unapproved carrier added'
+
+$body = Get-Content -Raw $Guard
 $textA = $body.Replace("-imatch 'Claude-Session:'", "-cmatch 'Claude-Session:'")
 if ($textA -ceq $body) { throw 'weakening A did not apply' }
 $textB = $body.Replace(
@@ -1047,10 +1070,30 @@ $textB = $body.Replace(
     '')
 if ($textB -ceq $body) { throw 'weakening B did not apply' }
 
-function Show {
-    param([string] $Label, [string] $Script)
-    try { "$Label -> $(& $Script)" }
-    catch { "$Label -> threw: $($_.Exception.Message)" }
+$priorExitCode = $global:LASTEXITCODE
+$owned = Join-Path ([System.IO.Path]::GetTempPath()) ([guid]::NewGuid().ToString())
+New-Item -ItemType Directory -Path $owned | Out-Null
+$weakA = Join-Path $owned 'guard-weak-cmatch.ps1'
+$weakB = Join-Path $owned 'guard-weak-noexit2.ps1'
+
+function Invoke-Case {
+    param([string] $Script)
+    try { [pscustomobject]@{ Threw = $false; Text = (& $Script) -join "`n" } }
+    catch { [pscustomobject]@{ Threw = $true;  Text = $_.Exception.Message } }
+}
+
+$failures = @()
+function Assert-Case {
+    param([string] $Label, $Actual, [bool] $ExpectThrow, [string] $ExpectText)
+    if ($Actual.Threw -ne $ExpectThrow) {
+        $script:failures += "$Label expected threw=$ExpectThrow, got threw=$($Actual.Threw): $($Actual.Text)"
+        return
+    }
+    if ($Actual.Text -cne $ExpectText) {
+        $script:failures += "$Label text mismatch`n  expected: $ExpectText`n  actual:   $($Actual.Text)"
+        return
+    }
+    "$Label OK -> $($Actual.Text)"
 }
 
 try {
@@ -1072,35 +1115,69 @@ try {
 
     'MUTATION 4: a lowercase-only `claude-session:` trailer'
     $global:parallaxShimMode = 'lowercase-carrier'
-    Show 'frozen (-imatch)   ' $Guard
-    Show 'weakened (-cmatch) ' $weakA
+    Assert-Case 'm4 frozen (-imatch)  ' (Invoke-Case $Guard) $true `
+        "unapproved commit(s) carrying the literal 'Claude-Session:': $FAKE"
+    Assert-Case 'm4 weakened (-cmatch)' (Invoke-Case $weakA) $false $CLEAN
     ''
     'MUTATION 5: enumeration succeeds, the message read FAILS'
     $global:parallaxShimMode = 'message-read-fails'
-    Show 'frozen             ' $Guard
-    Show 'weakened (no check)' $weakB
+    Assert-Case 'm5 frozen            ' (Invoke-Case $Guard) $true `
+        "git log failed with exit 1 reading message of $FAKE"
+    Assert-Case 'm5 weakened (no check)' (Invoke-Case $weakB) $false $CLEAN
 }
 finally {
     Remove-Item function:git -ErrorAction SilentlyContinue
     Remove-Item variable:global:parallaxShimMode -ErrorAction SilentlyContinue
-    Remove-Item $weakA, $weakB -ErrorAction SilentlyContinue
+    Remove-Item $owned -Recurse -Force -ErrorAction SilentlyContinue
+    # The shim sets $LASTEXITCODE, so restore what the caller had. Left at the
+    # shim's 1, it becomes a failure the caller never had.
+    $global:LASTEXITCODE = $priorExitCode
     if (Test-Path function:git) { throw 'the git shim survived cleanup' }
+    if (Test-Path $owned) { throw "the harness's own temp directory survived cleanup: $owned" }
 }
+
+if ($failures.Count -gt 0) {
+    throw ("mutation harness FAILED:`n" + ($failures -join "`n"))
+}
+'all four mutation outcomes matched'
 ```
 
-Four things in the harness are deliberate. The shim is GLOBAL, because `& git`
-resolves a function ahead of the executable only if the function is visible from
-the guard's child scope. Its mode is read from the GLOBAL scope: a global
-function does not see the defining script's `$script:` scope, so a
-`$script:`-held mode silently never changes, and the pair then agrees on both
-runs — which is a pair that cannot discriminate, and it happened. It sets
-`$global:LASTEXITCODE` itself, because a function does not set it. And cleanup
-sits in `finally` with a verification, because a shim left behind would shadow
-real `git` for the rest of the session; after the harness runs, `(Get-Command
-git).Source` must be the real executable again.
+Six things in it are deliberate.
+
+**It ASSERTS rather than prints.** Every case returns a structured
+threw/text outcome and is compared against an exact required state and an exact
+required message, and any mismatch throws at the end. A harness that only
+printed could have both members of a pair agree wrongly and still exit 0, which
+is the same fail-open shape the guard itself exists to prevent.
+
+**The shim is GLOBAL**, because `& git` resolves a function ahead of the
+executable only if the function is visible from the guard's child scope.
+
+**Its mode is read from the GLOBAL scope.** A global function does not see the
+defining script's `$script:` scope, so a `$script:`-held mode silently never
+changes, the pair then agrees on both runs, and a pair that cannot discriminate
+is not an oracle. That happened once and was caught only because the two
+variants agreed when they were designed not to.
+
+**It refuses a pre-existing `git` function** instead of overwriting it, because
+`finally` REMOVES the shim, and removing is not restoring; a caller who had
+their own `git` function would silently lose it.
+
+**It owns its temp path.** A GUID-named directory created by this invocation,
+so no unrelated file is overwritten or deleted, and `finally` verifies that
+exact path is gone.
+
+**It restores `$LASTEXITCODE`.** The shim sets it, and mutation 5 sets it to 1;
+left there, the harness hands its caller a failure the caller never had.
+
+Its own three directions were driven: all four outcomes matched; a guard whose
+success wording differed by one word made it FAIL and name both mismatches; and
+with a `git` function already defined it refused before touching anything, and
+that function was still there afterwards.
 
 Expected: the authorized-debt line, with `n` at most 3, and each mutation as
-stated. Measured at `7527a2c`:
+stated, and the harness's own closing line `all four mutation outcomes matched`.
+Measured at `f3247a1`:
 
 ```
 default:      authorized Claude-Session debt: 3 known carriers; no unapproved carrier added
@@ -1111,6 +1188,7 @@ mutation 4:   frozen   threw: unapproved commit(s) carrying the literal 'Claude-
               -cmatch  authorized Claude-Session debt: 0 known carriers; no unapproved carrier added
 mutation 5:   frozen   threw: git log failed with exit 1 reading message of aaaa...
               no check authorized Claude-Session debt: 0 known carriers; no unapproved carrier added
+              all four mutation outcomes matched
 ```
 
 Both weakenings report CLEAN on an input that carries a defect. That is the
@@ -1148,8 +1226,8 @@ All nine discard blanks before requiring one survivor, contrary to the frozen ca
 ## Debate record
 
 **Participants:** Opus 5 (session) / gpt-5.6-sol (codex exec, session `019fbb82-9e35-7b72-a64e-59fb60b981cd`)
-**Rounds used:** 36, cap lifted by the user
-**Outcome:** ELEVEN tasks. Reviewer PASS on Tasks 1 through 9 and 11; Task 10 ESCALATE, narrowly, on one repository-policy gate the user waived. Building reopened the plan EIGHT times after the round-28 PASS, at rounds 29 through 36, each time on a defect that only running the case could reach. The last two reopenings found defects in the ROUND-34 REPAIR itself: a guard that was described rather than written, and then two of its three stated load-bearing details having no oracle and one of them being false.
+**Rounds used:** 38, cap lifted by the user
+**Outcome:** ELEVEN tasks. Reviewer PASS on Tasks 1 through 9 and 11; Task 10 ESCALATE, narrowly, on one repository-policy gate the user waived. Building reopened the plan TEN times after the round-28 PASS, at rounds 29 through 38, each time on a defect that only running the case could reach. The last FOUR reopenings found defects in a REPAIR rather than in the feature: a guard that was described rather than written; two of its three stated load-bearing details having no oracle while one was false; a mutation harness that was itself only described; and then that harness printing where it should have asserted.
 **Verification status:** FULL. Every round's route matched the canonical declarations and the cross-vendor gate was satisfied throughout; nothing here was degraded by a transport failure.
 **Degradation:** NONE in the verification sense, and the distinction is deliberate. There is one accepted POLICY WAIVER, which is a different thing and must not be read as either: three commits in this branch carry a `Claude-Session:` trailer that `CLAUDE.md` forbids, and they stay. Task 10 step 7 freezes the waiver, names all three commit ids in full, fails on a fourth, and reports authorized debt rather than `clean`.
 **Authorized by:** the user, 2026-08-02, after being shown that this repository merges with merge commits so branch commits do reach `main`, that `main` already carries 65 such commits including this branch's own base, and that removing three would rewrite 44 of 70 commits and invalidate every commit id the build ledger records. Their decision, verbatim: "Don't rewrite."

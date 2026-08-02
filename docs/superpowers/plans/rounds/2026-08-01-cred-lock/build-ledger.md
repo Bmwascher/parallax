@@ -7,10 +7,10 @@ verdict, so where a report did not arrive the evidence is the session's
 own and must not later be attributed to the implementer.
 
 Plan: `docs/superpowers/plans/2026-08-01-lane-credential-and-lock.md`,
-FROZEN at revision 35 after 36 cross-vendor rounds. Revision N was frozen
+FROZEN at revision 37 after 38 cross-vendor rounds. Revision N was frozen
 after round N+1, so the two numbers never match.
 
-Building reopened the plan EIGHT times after its round-28 PASS. Round 29
+Building reopened the plan TEN times after its round-28 PASS. Round 29
 froze the validator's CLI contract, which the plan had left for an
 implementer to invent, and turned acceptance into the four-part rule.
 Round 30 found the recovery command fail-open at its parse boundary, plus
