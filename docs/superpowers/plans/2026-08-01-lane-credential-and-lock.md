@@ -2,7 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Status: FROZEN at revision 32.** The user lifted the round cap and directed that this plan iterate until the cross-vendor reviewer issued an actual PASS rather than stopping at "converged with amendments". It reached one three times and was reopened twice, both times by a required whole-artifact fable review reading the frozen text start to finish. The terminal PASS is round 28, on all ten tasks and on the implementer packet: "PASS. A zero-judgment implementer can build this plan from the defined task packet without inventing behavior." The reviewer's judgment on the defect rate is recorded with it: the late findings were local expression failures rather than unresolved choices in the lock state machine, the custody lifecycle or the doctor's aggregation, and that is a static judgment about the plan rather than a prediction that implementation reveals no bugs. Changes now require reopening the debate with a new round appended to the record; the implementer never edits this plan.
+**Status: FROZEN at revision 33.** The user lifted the round cap and directed that this plan iterate until the cross-vendor reviewer issued an actual PASS rather than stopping at "converged with amendments". It reached one three times before building and was reopened twice, both times by a required whole-artifact fable review reading the frozen text start to finish. Round 28 was the PASS on the then-ten tasks and on the implementer packet: "PASS. A zero-judgment implementer can build this plan from the defined task packet without inventing behavior."
+
+**That was not the end, and the record should not read as if it were.** Building reopened this plan SIX more times, at rounds 29 through 34, and added an ELEVENTH task. The reviewer's round-28 judgment was that the late findings were local expression failures rather than unresolved choices in the state machines — a static judgment about the text, explicitly not a prediction that implementation would reveal no bugs. Implementation revealed plenty: a recovery command that was fail-open at its parse boundary, four caller defects, a test written around a defect, a security ordering that could print a token, a fixture routing rule that could have expired the user's own credential, an oracle that could never fail, a pin that could never be stable, a guard that fired on non-secret metadata, and nine surviving instances of one defect class that three human sweeps had missed. Every one of those was found AFTER the terminal PASS, and most were found by running the case rather than by reading it. Changes now require reopening the debate with a new round appended to the record; the implementer never edits this plan.
 
 **Goal:** Stop the backup lane from copying the user's kimi-code credential. Give the lane its own login, reach it through a junction so one file holds it, guard the shared lane home with a liveness-anchored lock, stop the doctor touching credentials at all, and repair the Windows CI job this branch already broke.
 
@@ -854,16 +856,27 @@ $env:PARALLAX_PS_HOST = "pwsh.exe";       python -m pytest evals/multi-model-ver
 ```
 Expected: ZERO skipped.
 - [ ] **Step 6:** Skill text changed, so run `python evals/tools/run_behavioral_evals.py --head`.
-- [ ] **Step 7: The history check, as a FAILING oracle.** `Select-String` prints matches without failing, so it is not an oracle on its own. **`git log`'s own exit code is also fatal BEFORE its output is interpreted**: piping straight into `Select-String` means a `git log` that cannot read the range yields no matches, and no matches prints `clean` — an unmade measurement reading as a clean one, which is the invariant this plan is built on.
-```powershell
-$messages = git log --format=%B 6201e30..HEAD
-$gitExit = $LASTEXITCODE
-if ($gitExit -ne 0) { throw "git log failed with exit $gitExit" }
-$hits = $messages | Select-String -Pattern "Claude-Session"
-if ($hits) { $hits; throw "AI-attribution trailer found; the repo forbids it" }
-"clean"
+- [ ] **Step 7: The known `Claude-Session:` trailer debt guard.** Frozen at r34, replacing "the history check" — the user has AUTHORIZED the three carriers rather than rewrite 44 of the branch's 70 commits and invalidate every commit id the build ledger records.
+
+**Why the original could not simply be re-scoped.** `6201e30..HEAD` already EXCLUDES the base, so it already measures only what this branch adds, and what this branch adds is three. Calling it "no new carriers" would have been a rename, not a re-scope. Pre-existing violations elsewhere establish historical debt; they do not turn three into zero.
+
+**What was measured before deciding**, and neither fact was known when this step was first frozen: this repository merges with MERGE COMMITS rather than squashes, so branch commits do reach `main`; and `main` already carries 65 commits with the trailer, including `6201e30`, the base of this step's own range. Stripping three here would make one branch look clean against a repository that is not.
+
+The guard enumerates each commit in `6201e30..HEAD`, reads its message with FATAL exit handling, and collects every commit whose message contains `Claude-Session:`. It FAILS if any carrier is outside the authorized set. FEWER than three is permitted, so a later rewrite that removes one does not fail this gate. The three authorized commit ids, in full:
+
 ```
-Expected: `clean`. TWO mutations, because the check now has two failure directions: a controlled input string containing `Claude-Session` must throw, and an INVALID REVISION RANGE must throw on the `git log` failure and never print `clean`. The three known carriers are `c79da41`, `9d50196` and `e3f98c2`.
+c79da4182a3595c76ba03e3b222021afaf3ab7c3
+9d50196c3215b019b643fd40906966b36f77da30
+e3f98c23ee1f14ac14d86d470185af7eaa8db1e4
+```
+
+**It reports `authorized Claude-Session debt: <n> known carriers; no unapproved carrier added`, and NEVER `clean`.** The word would claim more than the check can hold.
+
+**The claim is narrowed with it.** Searching for the literal `Claude-Session:` is not an oracle for every form of AI attribution. The old message said "AI-attribution trailer found" while the pattern recognized ONE form, which is a claim wider than its evidence sitting inside a gate. The new message names the literal it actually searched for.
+
+**Recorded, separately and without softening:** the repository-wide no-attribution convention remains historically unmet; this branch carries three explicit user-authorized exceptions; the rewrite was rejected because it would invalidate the branch's recorded commit provenance; and NO claim is made that `main` is clean or that every attribution format was scanned.
+
+Expected: the authorized-debt line, with `n` at most 3. THREE mutations, because the guard now has three failure directions: an INVALID REVISION RANGE must throw on `git log`'s exit code and never report debt; a carrier OUTSIDE the authorized set must fail; and a commit id in the authorized set that is not a carrier must not be required to be one.
 - [ ] **Step 8: The mechanical exact-line checker from Task 11 runs in the full gate**, added to the four gates in step 4 and to CI.
 
 ---
@@ -896,11 +909,12 @@ All nine discard blanks before requiring one survivor, contrary to the frozen ca
 ## Debate record
 
 **Participants:** Opus 5 (session) / gpt-5.6-sol (codex exec, session `019fbb82-9e35-7b72-a64e-59fb60b981cd`)
-**Rounds used:** 30, cap lifted by the user
-**Outcome:** converged, reviewer PASS on all ten tasks AND on the implementer packet at round 28
-**Verification status:** FULL
-**Degradation:** none
-**Authorized by:** n/a
+**Rounds used:** 34, cap lifted by the user
+**Outcome:** ELEVEN tasks. Reviewer PASS on Tasks 1 through 9 and 11; Task 10 ESCALATE, narrowly, on one repository-policy gate the user waived. Building reopened the plan five times after the round-28 PASS, each time on a defect that only running the case could reach.
+**Verification status:** FULL. Every round's route matched the canonical declarations and the cross-vendor gate was satisfied throughout; nothing here was degraded by a transport failure.
+**Degradation:** NONE in the verification sense, and the distinction is deliberate. There is one accepted POLICY WAIVER, which is a different thing and must not be read as either: three commits in this branch carry a `Claude-Session:` trailer that `CLAUDE.md` forbids, and they stay. Task 10 step 7 freezes the waiver, names all three commit ids in full, fails on a fourth, and reports authorized debt rather than `clean`.
+**Authorized by:** the user, 2026-08-02, after being shown that this repository merges with merge commits so branch commits do reach `main`, that `main` already carries 65 such commits including this branch's own base, and that removing three would rewrite 44 of 70 commits and invalidate every commit id the build ledger records. Their decision, verbatim: "Don't rewrite."
+**Not claimed:** that `main` is clean, that every form of AI attribution was scanned rather than the one literal `Claude-Session:`, or that remote CI has run.
 **Raw rounds:** `docs/superpowers/plans/rounds/2026-08-01-cred-lock/`
 
 The user lifted the round cap and directed that this iterate to an actual reviewer PASS. Nothing has been struck and nothing is contested; every FIX in every round was accepted and applied. Rounds 4 and 5 both reported that no finding required design escalation.

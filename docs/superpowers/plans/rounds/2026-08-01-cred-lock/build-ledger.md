@@ -22,6 +22,12 @@ the two remediation rows below are the result.
 | 5+6 fail-closed remediation | `8e5dcaf` | full, accurate | byte-compared the stored template against the frozen line, re-ran the round-30 fail-closed reproduction on both hosts, read all four caller fixes, checked the nine-row matrix and row 9's fixture, 113 tests per host | BOTH |
 | 7 live gates | `29f975b` | full, accurate | ran the support suite on both hosts, verified the helper imports with no live check, drove the refusal direction with the opt-in set, traced the guard ahead of the record write | **BOTH, live half UNRUN** |
 | 7 r31 remediation | `fd712b1` | full, accurate | read the fixed capture order and its call sites, confirmed both new instances of the exact-line rule, ran the old-vs-new custody-line demonstration, listed the six pin oracles and six safety fixtures, 51 tests per host, full suite 840 | BOTH, plus **two session-only findings** |
+| 7 r33 partial | `6a6a5f9` | terminated at the session limit | read the fixed capture order, ran the live gate before and after: 7 passed 5 failed -> 11 passed 1 failed | BOTH |
+| 7 FINISHED | `480d210` | **NONE — agent stopped mid-flight waiting on a backgrounded suite** | read the five-step oracle and all seven new offline oracles, confirmed zero probe-record references remain, ran the live gate on BOTH hosts | **SESSION ONLY** |
+| 8 doctor | `89bcab4` | full, accurate | verified the recovery command byte-identical to the plan AND the builder, listed all 15 pins, added the two missing boundary fixtures and showed all four mutations bite | BOTH, plus a session addition |
+| 9 contract | `ac6e6d8` | n/a, session build | generated regions and pins from one extracted source, proved coverage via parse_regions/collect_pins, deleted a sentence and confirmed the region reads UNLOCKED | SESSION ONLY |
+| 10 CI, version, gate | `ee40db5` | n/a, session build | ran all five gates, the workflow checker with host parity, and the trailer guard's three failure directions | SESSION ONLY |
+| 11 exact-line gate | `a5e3b83` | **arrived late, after a premature idle notification** | ran the checker clean, reintroduced the defect into the REAL tree and confirmed it is caught, confirmed the legitimate filter in the same file is not flagged, 158 tests per host | BOTH |
 | mirror utf-8 output | `51b4554` | n/a, session change | measured IBM437 on both hosts, showed the byte difference, 65 mirror tests per host, clean full suite | SESSION ONLY |
 
 ## Task 6, stated plainly
@@ -102,22 +108,26 @@ suite executed against three real lane homes. This supersedes the "Task
 7, stated plainly" section above, which was written when the gate was
 unrunnable.
 
-**Current live state, `powershell.exe`: 11 passed, 1 failed.** `pwsh.exe`
-has NOT been run. Task 10 requires both hosts with zero skipped at final
-HEAD, so the gate is still UNSATISFIED.
+**FINAL live state: 63 passed on `powershell.exe`, 63 on `pwsh.exe`, ZERO
+skipped and zero failed on both.** Task 7 step 2 is SATISFIED. Task 10
+step 5 re-runs it at final HEAD.
 
 Passing with live evidence: measurements 6 (junction read-through), 7
 (refresh write-through and rotation), 10 (both delete paths, including
 the r32 deletion oracle that is the only thing ever to exercise that
 branch), 11 (coexistence), 16 and 17 (`provider list`).
 
-**Measurement 5 has NO passing live evidence and its old oracle could
-never have produced any.** That test built its "absolute" key with
+**Measurement 5 now HAS live evidence, and it did not before.** Its old
+oracle could never have produced any. That test built its "absolute" key with
 `Path.resolve()`, which follows a junction on Windows, so the key named
 the same credential the relative default already reached. Exit 0 with
 `PROBE` was produced identically by "the absolute key resolved" and by
-"it was ignored". Round 33 replaces it with a five-step three-state
-oracle; that work is NOT done.
+"it was ignored". Round 33 replaced it with a five-step three-state
+oracle, built at `480d210`. Step 4 carries its own instruction — either
+success REFUTES measurement 5 and that is a finding, not a test to fix —
+and it failed on both runs on both hosts. So an absolute `oauth.key`
+genuinely does not resolve, and that is now measured rather than
+assumed.
 
 **One fact worth recording on its own.** Three lane logins now coexist
 with the user's own, and the user's real credential is untouched: still
@@ -127,12 +137,33 @@ approach a lane login could retire the real refresh token.
 
 ## What is NOT done
 
-- Round 33 fixes 1 and 2: the absolute-key oracle rewrite and the
-  deletion of the probe-record machinery. Not started.
-- The oracles for round 33 fixes 3 and 4. Both fixes work and are
-  committed at `6a6a5f9`, but neither is locked by a test.
-- `pwsh.exe` live execution.
-- Tasks 8, 9, 10.
+All eleven tasks are built. What remains is not build work:
+
+- The whole-branch fable review, then the mode-diff debate and the
+  attestation.
+- Remote CI. It has never run on this branch and is unverified until the
+  pushed workflow completes.
+- `run_behavioral_evals.py --head`, Task 10 step 6, which is local-only
+  and opt-in.
+
+## The trailer waiver, recorded rather than buried
+
+Three commits in this branch carry a `Claude-Session:` trailer that
+`CLAUDE.md` forbids. They STAY, by the user's decision on 2026-08-02.
+
+The original gate asked for the range to print `clean`. Two things were
+measured before that was waived, and neither was known when the gate was
+frozen: this repository merges with MERGE COMMITS rather than squashes,
+so branch commits do reach `main`; and `main` already carries 65 such
+commits, including `6201e30`, the base of the gate's own range. Removing
+three would have rewritten 44 of this branch's 70 commits and
+invalidated every commit id in the table above, to make one branch look
+clean against a repository that is not.
+
+The replacement guard names all three commit ids in full, fails on a
+fourth, permits fewer than three, and reports authorized debt rather than
+`clean`. Not claimed: that `main` is clean, or that anything beyond the
+one literal `Claude-Session:` was scanned.
 
 ## Standing note for the whole-branch review
 
