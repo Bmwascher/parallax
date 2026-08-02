@@ -61,6 +61,12 @@ REQUIRED_DUAL_HOST_MODULES = [
     "evals/multi-model-verify/test_codex_context_probe.py",
     "evals/multi-model-verify/test_review_mirror.py",
     "evals/multi-model-verify/test_kimi_round_evidence.py",
+    "evals/multi-model-verify/test_kimi_lane_lock.py",
+    "evals/multi-model-verify/test_lock_protocol_live.py",
+    "evals/multi-model-verify/test_kimi_credential_state.py",
+    "evals/multi-model-verify/test_kimi_lane_login.py",
+    "evals/multi-model-verify/test_kimi_lane_home.py",
+    "evals/multi-model-verify/test_lane_credential_live_support.py",
 ]
 
 # The dual-host pair this workflow runs, and the ONLY set that counts as
