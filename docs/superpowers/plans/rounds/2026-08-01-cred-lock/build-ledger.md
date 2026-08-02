@@ -95,6 +95,45 @@ the next round rather than changed unilaterally.
 Neither side's list contained the other's. That is the argument for
 running both, stated as a fact about this round rather than as a slogan.
 
+## The live gate HAS RUN. Rounds 32 and 33.
+
+The user performed the three manual logins on 2026-08-01 and the live
+suite executed against three real lane homes. This supersedes the "Task
+7, stated plainly" section above, which was written when the gate was
+unrunnable.
+
+**Current live state, `powershell.exe`: 11 passed, 1 failed.** `pwsh.exe`
+has NOT been run. Task 10 requires both hosts with zero skipped at final
+HEAD, so the gate is still UNSATISFIED.
+
+Passing with live evidence: measurements 6 (junction read-through), 7
+(refresh write-through and rotation), 10 (both delete paths, including
+the r32 deletion oracle that is the only thing ever to exercise that
+branch), 11 (coexistence), 16 and 17 (`provider list`).
+
+**Measurement 5 has NO passing live evidence and its old oracle could
+never have produced any.** That test built its "absolute" key with
+`Path.resolve()`, which follows a junction on Windows, so the key named
+the same credential the relative default already reached. Exit 0 with
+`PROBE` was produced identically by "the absolute key resolved" and by
+"it was ignored". Round 33 replaces it with a five-step three-state
+oracle; that work is NOT done.
+
+**One fact worth recording on its own.** Three lane logins now coexist
+with the user's own, and the user's real credential is untouched: still
+`ok`, file unwritten since hours before the three logins. That is the
+first direct evidence that this branch's fix works. Under the copy-based
+approach a lane login could retire the real refresh token.
+
+## What is NOT done
+
+- Round 33 fixes 1 and 2: the absolute-key oracle rewrite and the
+  deletion of the probe-record machinery. Not started.
+- The oracles for round 33 fixes 3 and 4. Both fixes work and are
+  committed at `6a6a5f9`, but neither is locked by a test.
+- `pwsh.exe` live execution.
+- Tasks 8, 9, 10.
+
 ## Standing note for the whole-branch review
 
 Do not read this ledger's "BOTH" rows as two independent verifications of
