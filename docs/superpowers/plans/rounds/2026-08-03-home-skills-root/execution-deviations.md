@@ -225,6 +225,87 @@ and this range adds none.
 
 ---
 
+## Task 2 — three platform facts the plan could not have known
+
+None of these is a departure from frozen text. Each is a defect found by
+running the suite, and each is the case-insensitivity or environment class this
+repo already tracks. They are recorded here because the next task's implementer
+will hit the same ground.
+
+### P1 — `Get-FileHash` disappears under an inherited PowerShell 7 `PSModulePath`
+
+The first draft hashed with `Get-FileHash`. Run by hand from a PowerShell 7
+shell it worked; run as a Windows PowerShell 5.1 child of a Python process it
+died with `The term 'Get-FileHash' is not recognized`.
+
+Measured 2026-08-03. The environment carries a `PSModulePath` seeded by
+PowerShell 7 — `C:\Program Files\PowerShell\Modules` and
+`c:\program files\powershell\7\Modules` ahead of the Windows PowerShell entry —
+and under it a 5.1 child resolves `Microsoft.PowerShell.Utility` to the
+PowerShell 7 copy. Enumerated directly: `ConvertTo-Json`, `ConvertFrom-Json`,
+`Compare-Object`, `Sort-Object`, `Get-ChildItem` and `Set-Content` all resolve;
+`Get-FileHash` alone does not.
+
+**This is the environment the tests and the probe driver both use**, so a tool
+that depends on it is a tool that works only when the right host seeded the
+shell. Hashing is now `[System.Security.Cryptography.SHA256]` over
+`[System.IO.File]::ReadAllBytes`, which depends on no module at all.
+
+### P2 — a local `$state` silently became the `[string]$State` parameter
+
+The state file was written as the literal text
+`"System.Collections.Specialized.OrderedDictionary"`, and every Remove case
+failed downstream on unreadable JSON.
+
+PowerShell variable names are CASE-INSENSITIVE. The script declares
+`[string]$State` for the Remove parameter set, so `$state = [ordered]@{...}` in
+the Plant branch assigned to that same variable — whose `[string]` type
+constraint coerced the hashtable through `ToString()`. The value was destroyed
+before `ConvertTo-Json` ever saw it.
+
+The three `ConvertTo-Json` call forms were checked and are all sound
+(positional, pipeline and `-InputObject` each produce correct JSON on 5.1.26100).
+The collision was the whole defect. The local is now `$stateObj`.
+
+**This is the same family as the `Compare-Object` and allowlist-casing defects
+already on this repo's record**, in a new place: not a comparison folding case,
+but a NAME folding case, with a type constraint turning the collision into
+silent data loss rather than an error.
+
+### P3 — `-notmatch` accepted an uppercase nonce
+
+`$Nonce -notmatch '\A[0-9a-f]{32}\z'` reads as lowercase-only and is not:
+PowerShell's `-match`/`-notmatch` are case-INSENSITIVE by default, so
+`0123456789ABCDEF0123456789ABCDEF` passed. The suite's uppercase case caught it.
+Now `-cnotmatch`.
+
+---
+
+## D8 — Task 2: the exact-canary-path check guards less than the plan says
+
+**Task:** 2. **Class:** plan rationale wider than the mechanism. No code change.
+
+The plan justifies the exact path equality this way: "removal deletes that path
+recursively, so anything short of exact equality lets a hand-edited state file
+aim a recursive delete at a sibling directory the harness never created."
+
+That attack is NOT reachable in the shipped tool, and was not reachable in any
+draft of it. `Remove-Item` targets `$canaryPath`, which is derived from `-Root`
+by `Join-Path $resolvedRoot $CANARY_NAME` — never from the state file. A state
+file cannot aim the delete anywhere, because the delete never reads it.
+
+What the check actually does, stated at its true reach: it refuses a state file
+belonging to a DIFFERENT root, whose `before` list would otherwise be compared
+against this root's contents and would report nonsense. That is worth having and
+the check stays.
+
+The mutation still fails the test it claims — relaxing equality to a
+`StartsWith` prefix test lets the removal proceed and exit 0 where the test
+requires 1 — so the guard is proven meaningful. Only the plan's stated reason for
+it is wider than the code. Recorded rather than silently kept, per D4's lesson.
+
+---
+
 ## Verification state at this point
 
 - `test_backup_lane.py`: 59 passed under `powershell.exe` AND under `pwsh.exe`.
@@ -242,3 +323,28 @@ and this range adds none.
 - **What this review is NOT.** It is one Claude-family seat reviewing one task
   of six. It does not replace the cross-vendor gate, and no mode-diff debate has
   run on this range.
+
+### Task 2
+
+- `test_home_skill_canary.py`: 26 passed under `powershell.exe` AND under
+  `pwsh.exe`. `tools/plant-home-skill-canary.ps1` is 0 non-ASCII bytes.
+- Full suite: 960 passed, 13 skipped. The 26 new cases are the whole delta from
+  Task 1's 934.
+- **Step 2 watched with the script absent: 26 failed, 0 passed.** Every failure
+  was on an exit-code assertion, because PowerShell returns `4294770688` for a
+  missing `-File` target and not `1` — so no "refuses" case passed vacuously
+  against a tool that did not exist yet.
+- **All six guard mutations run**, each failing the test it claims, each
+  reverted, post-revert module clean at 26 passed:
+  M1 dropping `-CaseSensitive`; M2 overwriting a leftover canary silently;
+  M3 removing the profile-root refusal; M4 removing the reparse-point scan;
+  M5 relaxing exact path equality to a prefix test; M6 skipping the
+  contents-and-hash check, which fails BOTH the extra-entry and changed-hash
+  cases as the plan requires.
+- **M3 really did plant a canary in the user's real home**, which is what makes
+  that refusal load-bearing rather than decorative. The harness removed it in a
+  `finally` and the absence was verified afterwards: no
+  `%USERPROFILE%\parallax-home-root-canary`, and `~/.agents/skills/` still holds
+  its 27 directories, untouched throughout.
+- The Task 2 mutation harness reads and writes BYTES, per D3. The working tree
+  after all six carried only the two intended new files.
