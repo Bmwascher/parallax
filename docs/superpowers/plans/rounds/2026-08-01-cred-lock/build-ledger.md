@@ -46,7 +46,7 @@ PASS. The remediation rows below are the result.
 | 9 contract | `ac6e6d8` | n/a, session build | generated regions and pins from one extracted source, proved coverage via parse_regions/collect_pins, deleted a sentence and confirmed the region reads UNLOCKED | SESSION ONLY |
 | 10 CI, version, gate | `ee40db5` | n/a, session build | ran all five gates, the workflow checker with host parity, and the trailer guard's three failure directions | SESSION ONLY |
 | 11 exact-line gate | `a5e3b83` | **arrived late, after a premature idle notification** | ran the checker clean, reintroduced the defect into the REAL tree and confirmed it is caught, confirmed the legitimate filter in the same file is not flagged, 158 tests per host | BOTH |
-| mirror utf-8 output | `51b4554` | n/a, session change | measured IBM437 on both hosts, showed the byte difference, 65 mirror tests per host, clean full suite | SESSION ONLY |
+| mirror utf-8 output **(OUTSIDE the eleven tasks — user-authorized 2026-08-02, see the plan's debate record)** | `51b4554` | n/a, session change | measured IBM437 on both hosts, showed the byte difference, 65 mirror tests per host, clean full suite | SESSION ONLY |
 
 ## Task 6, stated plainly
 
@@ -198,11 +198,52 @@ live gate 70 per host on BOTH hosts with zero skipped; and the user's own
 credential still reads `ok`/`valid`, its file unwritten since before the
 lane logins.
 
+## Round 41, the diff debate, and the family behind one finding
+
+The cross-vendor diff debate REJECTED the session's scope call on the
+review's second finding, and it was right. Case-insensitive comparison
+was not a lock defect; it ran through every foreign-data boundary in the
+branch, and the lock was one instance:
+
+- the credential validator matched required KEY NAMES case-insensitively,
+  and PowerShell property access is case-insensitive too, so
+  `Access_Token` satisfied the required `access_token` twice over;
+- both callers accepted `OK`/`Valid` as the frozen `ok`/`valid` pair and
+  then routed on a status the frozen table does not contain;
+- the round validator accepted `AUTO` for `auto`, case-variant record
+  types, and a tool named `read` where the allowlist says `Read`, because
+  `Compare-Object` is case-INSENSITIVE without `-CaseSensitive`
+  (measured).
+
+The same round found a defect nobody had raised: the credential validator
+decoded bytes with the REPLACEMENT fallback, so a corrupt byte inside a
+token became U+FFFD, still parsed as JSON, and was accepted as
+`ok`/`valid`. Bytes that are not a credential, read as a good one. The
+decode is now strict and lands on the frozen `malformed`/`not-json` pair,
+inventing no new vocabulary.
+
+Hostname comparison and confirmation hashes stay case-insensitive on
+purpose. They are not this class.
+
+**It also found two of the session's OWN new oracles too weak**, which is
+the part worth keeping: the lock case tests covered only FREE records, so
+reverting the held-side comparisons alone left every one of them green;
+and the exact-line gate test called `check_repository()` directly and
+never proved the executable gate returns nonzero. Both are closed, the
+first with a held record carrying a case-variant required key plus a
+non-mutation assertion, the second by driving `main()` end to end on both
+read branches.
+
+All of it at `c34da9c`, and every fix has a mutation that fails without
+it. Re-verified after: full suite **895 passed, 13 skipped**; live gate
+**70 per host on BOTH hosts, zero skipped**; all five gates exit 0; and
+the user's own credential still reads `ok`/`valid`.
+
 ## What is NOT done
 
 All eleven tasks are built. What remains is not build work:
 
-- The mode-diff debate and the attestation.
+- The mode-diff debate's next round, then the attestation.
 - Remote CI. It has never run on this branch and is unverified until the
   pushed workflow completes.
 
