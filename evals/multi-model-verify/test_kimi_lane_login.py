@@ -125,6 +125,12 @@ if ($callNum -eq $failOnCall) {
         # string "fields" value must not pass an "array of strings" check.
         Write-Output '{"status":"ok","detail":"valid","fields":"access_token"}'
         exit 0
+    } elseif ($failMode -eq "case-variant-keys") {
+        # The KEYS, not the values. The frozen interface is exactly
+        # status/detail/fields; the property-set comparison is what
+        # rejects this, and it is a different check from the pair table.
+        Write-Output '{"Status":"ok","Detail":"valid","Fields":["access_token"]}'
+        exit 0
     } elseif ($failMode -eq "case-variant-pair") {
         # "OK"/"Valid" is NOT the frozen "ok"/"valid" pair. -eq is
         # case-insensitive on this platform, so this used to be accepted
@@ -678,6 +684,29 @@ def test_validator_blank_line_padded_stdout_rejected_at_both_call_positions(
         env={"PARALLAX_TEST_VALIDATOR_COUNTER_FILE": str(counter),
              "PARALLAX_TEST_VALIDATOR_FAIL_ON_CALL": str(fail_on_call),
              "PARALLAX_TEST_VALIDATOR_FAIL_MODE": "blank-line-padded",
+             "PARALLAX_TEST_STUB_MARKER_FILE": str(marker)})
+    assert result.returncode == 6, (result.stdout, result.stderr)
+    assert not verdict_out.exists()
+    assert marker.exists() == client_ran
+
+
+@pytest.mark.parametrize("fail_on_call,client_ran", [(1, False), (2, True)])
+def test_validator_case_variant_result_keys_rejected_at_both_call_positions(
+        stub_tools_dir, lane_home, kimi_stub, tmp_path, fail_on_call, client_ran):
+    """The frozen interface is exactly `status`, `detail`, `fields`. The
+    pair-table oracle varies only the VALUES, so it leaves the property-set
+    comparison untested: reverting that comparison to case-insensitive
+    would keep it green. This varies the KEYS."""
+    verdict_out = tmp_path / "verdict.json"
+    marker = tmp_path / "marker.txt"
+    counter = tmp_path / "counter.txt"
+    result = run_stub_wrapper(
+        stub_tools_dir,
+        ["-LaneHome", str(lane_home), "-OwnerPid", "1", "-OwnerStartTicksUtc", "1",
+         "-KimiBinary", str(kimi_stub), "-VerdictOut", str(verdict_out), "-Force"],
+        env={"PARALLAX_TEST_VALIDATOR_COUNTER_FILE": str(counter),
+             "PARALLAX_TEST_VALIDATOR_FAIL_ON_CALL": str(fail_on_call),
+             "PARALLAX_TEST_VALIDATOR_FAIL_MODE": "case-variant-keys",
              "PARALLAX_TEST_STUB_MARKER_FILE": str(marker)})
     assert result.returncode == 6, (result.stdout, result.stderr)
     assert not verdict_out.exists()

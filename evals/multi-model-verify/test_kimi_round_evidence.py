@@ -38,6 +38,19 @@ from pathlib import Path
 
 import pytest
 
+import importlib.util as _importlib_util
+
+
+def _load_exact_line_module():
+    path = Path(__file__).resolve().parents[2] / "evals" / "tools" / "exact_line.py"
+    spec = _importlib_util.spec_from_file_location("exact_line", path)
+    module = _importlib_util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+accept_exactly_one_nonempty_line = _load_exact_line_module().accept_exactly_one_nonempty_line
+
 REPO = Path(__file__).resolve().parents[2]
 SCRIPT = REPO / "tools" / "read-kimi-round-evidence.ps1"
 FIXTURES = Path(__file__).parent / "fixtures" / "kimi-round"
@@ -253,9 +266,17 @@ def run_resume(session_dir, prior_state_path, agent_file=AGENT_FILE,
 
 
 def parsed(proc):
-    assert proc.stdout.strip(), proc.stdout + proc.stderr
+    """EXACTLY ONE nonempty line, through the shared strict helper. This
+    used to parse only the LAST line, so a validator that printed stray
+    output before its JSON passed every test in this module - a helper
+    that could not fail on the cardinality it exists to check."""
+    line = accept_exactly_one_nonempty_line(proc.stdout)
+    if line is None:
+        raise AssertionError(
+            "stdout was not exactly one nonempty line: "
+            + repr(proc.stdout) + proc.stderr)
     try:
-        return json.loads(proc.stdout.strip().splitlines()[-1])
+        return json.loads(line)
     except json.JSONDecodeError:
         raise AssertionError("stdout was not JSON: " + proc.stdout + proc.stderr)
 
@@ -1447,3 +1468,132 @@ def test_an_llm_request_provider_differing_only_in_case_fails(tmp_path):
     state_path = tmp_path / "state.json"
     write_json(state_path, fresh_prior_state())
     assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path), "llm-request-field")
+
+
+def test_parsed_rejects_stray_output_before_the_json():
+    """The helper's own failing direction. It used to take the LAST line,
+    so this exact shape passed."""
+    class _Proc:
+        stdout = 'noise\n{"status":"clean"}\n'
+        stderr = ""
+
+    with pytest.raises(AssertionError, match="exactly one nonempty line"):
+        parsed(_Proc())
+
+
+def test_parsed_accepts_one_line_with_a_trailing_newline():
+    class _Proc:
+        stdout = '{"status":"clean"}\n'
+        stderr = ""
+
+    assert parsed(_Proc()) == {"status": "clean"}
+
+
+# --- strict decoding of the evidence itself ------------------------------
+
+
+def _corrupt_one_byte_inside_a_string(path, marker):
+    raw = path.read_bytes()
+    assert marker in raw, marker
+    path.write_bytes(raw.replace(marker, marker[:2] + b"\x80" + marker[2:], 1))
+
+
+def test_an_invalid_byte_in_the_wire_slice_fails(tmp_path):
+    """A corrupt byte inside a JSON string used to become U+FFFD while the
+    surrounding record still parsed, so evidence that could not be read
+    was reported clean."""
+    root, sess_dir = build_fresh_layout(tmp_path, fresh_wire(), fresh_log())
+    _corrupt_one_byte_inside_a_string(
+        sess_dir / "agents" / "main" / "wire.jsonl", b"turn.prompt")
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+    assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path), "wire-malformed")
+
+
+def test_an_invalid_byte_in_the_log_slice_fails(tmp_path):
+    root, sess_dir = build_fresh_layout(tmp_path, fresh_wire(), fresh_log())
+    _corrupt_one_byte_inside_a_string(
+        sess_dir / "logs" / "kimi-code.log", b"llm config")
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+    assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path), "log-config-malformed")
+
+
+def test_an_invalid_byte_in_the_prior_state_fails(tmp_path):
+    """The invalid byte sits INSIDE a string value, so a substituting
+    decoder still produces parseable JSON and the state is accepted. A
+    byte placed in the structural JSON instead would fail on the parse
+    whatever the decoder does, which measures the parser rather than the
+    decoder - and that is what the first version of this test did."""
+    root, sess_dir = build_fresh_layout(tmp_path, fresh_wire(), fresh_log())
+    state_path = tmp_path / "state.json"
+    known = str(tmp_path / "sessions" / "wd_other" / "session_previously_known")
+    write_json(state_path, fresh_prior_state(known_session_dirs=[known]))
+    raw = state_path.read_bytes()
+    marker = b"session_previously_known"
+    assert marker in raw
+    state_path.write_bytes(raw.replace(marker, marker[:7] + b"\x80" + marker[7:], 1))
+    assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path), "prior-state-unusable")
+
+
+def test_the_same_fixtures_uncorrupted_are_clean(tmp_path):
+    """The positive control for all three above."""
+    root, sess_dir = build_fresh_layout(tmp_path, fresh_wire(), fresh_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+    assert_clean(run_fresh(root, FIXTURE_SESSION_ID, state_path))
+
+
+# --- the remaining case-exactness boundaries ------------------------------
+
+
+def test_a_case_variant_required_key_in_a_record_is_malformed(tmp_path):
+    """Record SHAPE validation used case-insensitive property membership,
+    so a record carrying `Provider` satisfied the required `provider`."""
+    wire = fresh_wire()
+    idx = find_index(wire, "llm.request", 1)
+    wire = mutate(wire, idx, lambda o: o.__setitem__("Provider", o.pop("provider")))
+    root, sess_dir = build_fresh_layout(tmp_path, wire, fresh_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+    assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path), "record-malformed")
+
+
+def test_a_case_variant_first_record_type_misaligns_the_slice(tmp_path):
+    """The slice boundary compared the first record's type
+    case-insensitively, so a slice starting at `Metadata` read as
+    correctly aligned - the reviewer's own named example."""
+    wire = fresh_wire()
+    idx = find_index(wire, "metadata", 1)
+    assert idx == 0, "this oracle must mutate the FIRST record of the slice"
+    wire = mutate(wire, idx, lambda o: o.__setitem__("type", "Metadata"))
+    root, sess_dir = build_fresh_layout(tmp_path, wire, fresh_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+    assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path), "slice-misaligned")
+
+
+def test_a_case_only_profile_name_difference_fails(tmp_path):
+    wire = fresh_wire()
+    idx = find_index(wire, "config.update", 1)
+    original = json.loads(wire[idx]).get("profileName")
+    assert original and original != original.upper()
+    wire = mutate(wire, idx, lambda o: o.__setitem__("profileName", original.upper()))
+    root, sess_dir = build_fresh_layout(tmp_path, wire, fresh_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+    assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path), "profileName")
+
+
+def test_a_case_only_system_prompt_difference_fails(tmp_path):
+    """The recorded system prompt is compared to the agent file's body.
+    A case-only difference is a DIFFERENT prompt."""
+    wire = fresh_wire()
+    idx = find_index(wire, "config.update", 1)
+    original = json.loads(wire[idx]).get("systemPrompt")
+    assert original and original != original.upper()
+    wire = mutate(wire, idx, lambda o: o.__setitem__("systemPrompt", original.upper()))
+    root, sess_dir = build_fresh_layout(tmp_path, wire, fresh_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+    assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path), "systemPrompt")

@@ -669,6 +669,12 @@ STUB_VALIDATOR_SCALAR_FIELDS = (
     "Write-Output '{\"status\":\"ok\",\"detail\":\"valid\",\"fields\":\"access_token\"}'\n"
     "exit 0\n"
 )
+STUB_VALIDATOR_CASE_VARIANT_KEYS = (
+    "param([string]$Path)\n"
+    "Write-Output '{\"Status\":\"ok\",\"Detail\":\"valid\","
+    "\"Fields\":[\"access_token\"]}'\n"
+    "exit 0\n"
+)
 STUB_VALIDATOR_CASE_VARIANT_PAIR = (
     "param([string]$Path)\n"
     "Write-Output '{\"status\":\"OK\",\"detail\":\"Valid\","
@@ -722,6 +728,21 @@ def test_builder_rejects_blank_line_padded_validator_stdout(tmp_path):
     lane_home = _fake_lane_home(tmp_path)
     proc, debate_id, owner_pid, owner_ticks = _build_with_stub_validator(
         target, profile, lane_home, STUB_VALIDATOR_BLANK_LINE_PADDED, tmp_path)
+    assert proc.returncode != 0, proc.stdout + proc.stderr
+    assert proc.stdout == ""
+    assert not target.exists()
+    assert _lock_status(lane_home)["state"] == "free"
+
+
+def test_builder_rejects_case_variant_result_keys(tmp_path):
+    """The frozen interface is exactly `status`, `detail`, `fields`. The
+    pair oracle varies only the VALUES and leaves the property-set
+    comparison untested."""
+    target = tmp_path / "case-variant-keys-home"
+    profile = _fake_profile(tmp_path, FAKE_REAL_CONFIG)
+    lane_home = _fake_lane_home(tmp_path)
+    proc, debate_id, owner_pid, owner_ticks = _build_with_stub_validator(
+        target, profile, lane_home, STUB_VALIDATOR_CASE_VARIANT_KEYS, tmp_path)
     assert proc.returncode != 0, proc.stdout + proc.stderr
     assert proc.stdout == ""
     assert not target.exists()
