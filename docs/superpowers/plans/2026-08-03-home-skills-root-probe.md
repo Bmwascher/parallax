@@ -2,7 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Status: FROZEN at revision 6.** Five cross-vendor rounds across TWO INDEPENDENT LANES, terminal PASS, debate record complete at the foot of this file. Twenty-one findings accepted; six of them were paths by which the probe could have reported "the root does not reach the reviewer" when it does. Changes from here require reopening the debate — the implementer never edits the plan.
+**Status: FROZEN at revision 7. Tasks 1 to 4 are COMPLETE. Task 5 was REPLACED WHOLE and Task 6 amended, after the probe ran and the gate stopped the plan.**
+
+Task 4's gate landed on SUPPRESSED BY THE FLAG. That branch was reserved to a reopened debate by design, because it is a contract change rather than a disposition, and the old Task 5 described the NOT REACHABLE branch that did not occur. The reopened debate ran both lanes again, Sol 4 rounds and Kimi 2, and its record is the last section of this file. **The headline measurement: `~/.agents/skills/` IS reachable by the kimi-code client, and the lane is held closed today by the reviewer agent's `Skill` deny list.** Revision 6's verification stands for Tasks 1 to 4, which executed unchanged; it does not cover the replaced text, which is why revision 7 carries its own status.
+
+**Revision 6's own record, unchanged below.** Five cross-vendor rounds across TWO INDEPENDENT LANES, terminal PASS, debate record complete at the foot of this file. Twenty-one findings accepted; six of them were paths by which the probe could have reported "the root does not reach the reviewer" when it does. Changes from here require reopening the debate — the implementer never edits the plan.
 
 **Revision 6 exists because revision 5's single-lane PASS was too thin to rest on.** Round 4 returned a bare `PASS` with no reasoning, in the round where the session had signalled it wanted to stop. A second cross-vendor lane was then run COLD — given the plan and the question, told nothing about the first lane or its findings — and it found two real defects the first lane did not, while independently reconstructing the gate's soundness with its own citations rather than assenting to it.
 
@@ -581,97 +585,266 @@ git commit -m "record the home skills root probe"
 
 ---
 
-### Task 5: The measured disposition
+### Task 5: The measured disposition and the builder postcondition
 
-**Only reachable through the NOT REACHABLE branch of Task 4's gate.** Under any other branch this task is not executed and the plan is reopened.
+**REPLACED WHOLE at revision 7.** The old Task 5 described the NOT REACHABLE branch, which did not occur. Task 4 landed on SUPPRESSED BY THE FLAG, the plan reopened as it required, and this task is what the reopened debate settled. Its old text asserted the canary "was NOT reachable", which the probe measured to be FALSE; it is not patchable and was deleted rather than edited.
+
+**Read first:** `docs/superpowers/plans/rounds/2026-08-03-home-skills-root/probe-record.md`, including its dated CORRECTION section, and `docs/superpowers/plans/rounds/2026-08-03-home-skills-root/reopened-debate-record.md`.
 
 **Files:**
-- Modify: `evals/multi-model-verify/test_backup_lane.py:848-856` — replace the retired pin
-- Modify: `evals/multi-model-verify/test_contract_coverage.py:624-672` — the `DECLARED_REGIONS` set, whose members run `:651-671`
-- Modify: `skills/multi-model-verify/references/backup-lane.md:341-344`
+- Modify: `evals/multi-model-verify/test_backup_lane.py:842-867` — the two retired pin blocks and their comments
+- Modify: `evals/multi-model-verify/test_contract_coverage.py` — the `DECLARED_REGIONS` set
+- Modify: `evals/multi-model-verify/test_kimi_lane_home.py` — the builder postcondition's tests
+- Modify: `skills/multi-model-verify/references/backup-lane.md:340-354`
+- Modify: `skills/multi-model-verify/SKILL.md:70-74`
+- Modify: `tools/new-kimi-lane-home.ps1` — the postcondition, immediately after the skills directory is created at `:902`
 
-- [ ] **Step 1: Change the tests FIRST.** In `test_backup_lane.py`, delete lines `:842-853` — the retired pin's own comment at `:842-847` AND the assert it explains at `:848-853` — and put in its place the block below.
+**Interfaces:**
+- Consumes: nothing from other tasks. Task 4's record is the evidence.
+- Produces: two contract regions the coverage checker must find, and one builder postcondition that aborts a build before custody JSON is emitted.
 
-  **The range matters and revision 5 had it wrong.** It said `:848-856`, which deletes the assert plus the first three lines of the NEXT pin's comment, leaving a beheaded fragment at `:854-860` above an assert it no longer introduces, and leaving the retired pin's own comment at `:842-847` in place describing an assert that is gone. The suite would still pass, which is what makes it a trap rather than an error.
+**The exact deletion range, and why it is stated to the line.** `:842-847` is the retired "unprobed territory" pin's own comment and `:848-853` is the assert it explains; `:854-860` is the retired "MITIGATION whose effect is UNMEASURABLE" comment and `:861-867` are the three asserts it explains. Delete `:842-867` as ONE block. Deleting an assert without its comment leaves a comment describing an assert that is gone, and deleting a comment without its assert beheads the next one — revision 5 made exactly that mistake with a shorter range and the suite would still have passed, which is what made it a trap rather than an error. Lines `:837-841` and `:868-874` STAY.
+
+- [ ] **Step 1: Change the tests FIRST.** In `test_backup_lane.py`, delete `:842-867` and put this in its place:
 
 ```python
-    # 0.20.0: the retired pin instructed every round to record an
-    # unknown, and the unknown was never resolved. Its successor states a
-    # MEASURED disposition and names the measurement. The two regions are
-    # split because one pin must lock a whole region, and the disposition
-    # and the limit that binds it are each long enough alone.
+    # 0.20.0: two retired pins are replaced here. The first instructed
+    # every round to record an unknown, and the probe resolved it. The
+    # second called `--skills-dir` unmeasurable, which was true only of
+    # the CONFOUNDED configuration it was measured in, where `Skill` was
+    # denied so nothing could load either way.
+    #
+    # The disposition and the limit that binds it are SEPARATE regions
+    # because one pin must lock a whole region, and each is long enough
+    # alone. The prose after them is deliberately OUTSIDE both regions,
+    # so the regions stay pinnable.
     assert ("`~/.agents/skills/` lives in the user's own home, is not "
             "relocated by `KIMI_CODE_HOME`, and NOTHING this lane runs "
             "removes it.") in body
-    assert ("MEASURED 2026-08-03, and no longer unprobed: a canary skill "
-            "planted in that root was NOT reachable by the reviewer. The "
-            "measurement is an INVOCATION, not an absence - a probe run "
-            "that offered the `Skill` tool and asked for the canary by "
-            "its exact name recorded the call and a result that did not "
-            "carry the canary, matching the shape a deliberately absent "
-            "name returned in the same session. The same canary in "
-            "`<debate-home>/skills/`, asked for the same way, returned "
-            "its body. Record: docs/superpowers/plans/rounds/"
-            "2026-08-03-home-skills-root/probe-record.md") in body
+    assert ("Enumerate that root before round 1 and record its COUNT, "
+            "never its contents - the repo is public. MEASURED "
+            "2026-08-03 on kimi-code 0.31.1, and no longer unprobed: a "
+            "canary skill planted in that root was REACHABLE when "
+            "`--skills-dir` was omitted - the wire carried the "
+            "invocation and a `skill_activation` message delivering the "
+            "body - and was NOT found when the flag was passed, the "
+            "lookup returning the calibrated not-found result exactly. "
+            "Treat the enumeration as an environment record of reachable "
+            "external instruction inventory, not as a control and not as "
+            "evidence that any real skill was invoked. Record: "
+            "docs/superpowers/plans/rounds/2026-08-03-home-skills-root/"
+            "probe-record.md") in body
     assert ("The disposition is bound to what the probe reached: one "
-            "skill, named exactly, at one root, on kimi-code 0.31.1. It "
-            "does not establish that a later release leaves that root "
-            "unread, and it is NOT a control - nothing this lane runs "
-            "removes the root. Enumerate it before round 1 and record "
-            "what it holds. A client whose skill delivery changes shape "
+            "skill, named exactly, at the home root, on kimi-code "
+            "0.31.1. Suppression was measured for that root ALONE; the "
+            "two project roots were never canaried, and their exclusion "
+            "rests on the flag's measured replacement semantics and the "
+            "client's own help text, with preflight-3 remediation "
+            "clearing them in the mirror regardless. The flag REPLACES "
+            "discovery with its target rather than adding to it, so it "
+            "does not suppress its own target - it selects it - and its "
+            "suppression of the other roots holds only while "
+            "`<debate-home>/skills/` is EMPTY: the builder creates it "
+            "empty and asserts that as its own postcondition, and no "
+            "per-round check re-verifies it at dispatch. On that client "
+            "`systemPromptChars` equalled the LF-normalized agent body "
+            "in every cell, including both loaded-canary cells, so the "
+            "measured delivery path was `skill_activation` and not "
+            "system-prompt injection: the deny list controls that "
+            "measured path, and the lane's system-prompt equality "
+            "checks, not the deny list, would have to reject any future "
+            "injection path. A client whose skill delivery changes shape "
             "retires this measurement rather than inheriting it.") in body
+    # OUTSIDE the regions, and pinned separately: what actually holds the
+    # lane closed as it ships, and the standing instruction to keep
+    # passing the flag. Both lanes agreed this prose must not sit inside
+    # region 2, because a region has to fit one pin.
+    assert ("The load-bearing control as the lane ships is the `Skill` "
+            "deny list - a discovered skill cannot be invoked, measured "
+            "in cells A and B of the same record.") in body
+    assert ("Keep passing `--skills-dir` on every call, fresh and "
+            "resumed, as a measured second layer, and claim for it "
+            "exactly what was measured: replacement, conditional on an "
+            "empty target, on 0.31.1.") in body
 ```
 
-In `test_contract_coverage.py`, add `"home-skill-root-disposition"` and `"home-skill-root-disposition-limit"` to `DECLARED_REGIONS`, with a comment naming what they replaced.
+In `test_contract_coverage.py`, add both ids to `DECLARED_REGIONS` with a comment naming what they replaced:
 
-- [ ] **Step 2: Run and watch them fail.**
+```python
+    # 0.20.0, from the reopened home-skills-root debate. These replace no
+    # earlier region - the text they cover was ordinary pinned prose that
+    # asserted an UNKNOWN ("unprobed territory") and an unmeasurable
+    # mitigation. The probe resolved both, and a marked region is what
+    # stops a later edit appending "this may be skipped when the driver
+    # considers the home trusted" underneath a still-passing pin.
+    "home-skill-root-disposition",
+    "home-skill-root-disposition-limit",
+```
+
+In `test_kimi_lane_home.py`, add the builder postcondition's cases. Every one of them is a direction the postcondition must be able to FAIL in, and the module already carries the dual-host selector:
+
+```python
+def test_build_asserts_its_skills_directory_is_empty(tmp_path):
+    """The postcondition fires on content the builder did not put there.
+    Driven through the fault seam, because the shipped builder cannot
+    reach this state - which is exactly why the seam exists and why this
+    proves the DETECTOR, never that the state occurs."""
+    # seam plants one ordinary file between New-Item and the assertion
+    proc = _build(tmp_path, fault="PARALLAX_SKILLS_SEED_FILE")
+    assert proc.returncode != 0, proc.stdout
+    assert "skills directory is not empty" in proc.stdout + proc.stderr
+
+
+def test_build_asserts_against_a_hidden_entry(tmp_path):
+    """-Force or the check is blind to the one intruder most worth
+    catching. Watched separately, because a check that sees a visible
+    file and not a hidden one passes the obvious test and fails the real
+    one."""
+    proc = _build(tmp_path, fault="PARALLAX_SKILLS_SEED_HIDDEN")
+    assert proc.returncode != 0, proc.stdout
+    assert "skills directory is not empty" in proc.stdout + proc.stderr
+
+
+def test_build_refuses_before_emitting_custody_json(tmp_path):
+    """A failed build that has already printed the custody nonce hands
+    the caller a home it must release and cannot trust. The refusal must
+    come FIRST."""
+    proc = _build(tmp_path, fault="PARALLAX_SKILLS_SEED_FILE")
+    assert proc.returncode != 0
+    assert "debateHome" not in proc.stdout
+    assert "nonce" not in proc.stdout
+
+
+def test_a_clean_build_still_succeeds(tmp_path):
+    """The positive control. Without it every case above is satisfied by
+    a builder that refuses unconditionally."""
+    proc = _build(tmp_path)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert json.loads(_only_json_line(proc.stdout))["debateHome"]
+```
+
+- [ ] **Step 2: Run and watch every one of them FAIL, for the reason it claims.**
 
 ```
-python -m pytest evals/multi-model-verify/test_backup_lane.py evals/multi-model-verify/test_contract_coverage.py -q
+python -m pytest evals/multi-model-verify/test_backup_lane.py evals/multi-model-verify/test_contract_coverage.py evals/multi-model-verify/test_kimi_lane_home.py -q
 ```
 
-Expected: the two new pins FAIL on the text being absent, and `test_every_declared_region_exists` FAILS naming both new region ids. Both failures are required; if the region test passes, the ids were not added.
+Expected: the four new text pins FAIL on the text being absent; `test_declared_regions_match_the_documents` FAILS naming both new ids as `declared region(s) not found in any document`; the three postcondition cases FAIL because the seam and the check do not exist; `test_a_clean_build_still_succeeds` PASSES already, which is correct and is why it is the control rather than evidence.
 
-- [ ] **Step 3: Replace `backup-lane.md:341-344`** with, verbatim. Forward slashes only — this file is checked for the absence of backslashes:
+**If the region test passes, the ids were not added.** If a text pin passes, it was written against text that is already there and pins nothing new.
+
+- [ ] **Step 3: Replace `backup-lane.md:340-354`** with, verbatim. Forward slashes only; this file is checked for the absence of backslashes:
 
 ```markdown
   `~/.agents/skills/` lives in the user's own home, is not relocated by
   `KIMI_CODE_HOME`, and NOTHING this lane runs removes it.
   <!-- contract:start id=home-skill-root-disposition -->
-  MEASURED 2026-08-03, and no longer unprobed: a canary skill planted in
-  that root was NOT reachable by the reviewer. The measurement is an
-  INVOCATION, not an absence - a probe run that offered the `Skill` tool
-  and asked for the canary by its exact name recorded the call and a
-  result that did not carry the canary, matching the shape a deliberately
-  absent name returned in the same session. The same canary in
-  `<debate-home>/skills/`, asked for the same way, returned its body.
-  Record: docs/superpowers/plans/rounds/2026-08-03-home-skills-root/probe-record.md
+  Enumerate that root before round 1 and record its COUNT, never its
+  contents - the repo is public. MEASURED 2026-08-03 on kimi-code 0.31.1,
+  and no longer unprobed: a canary skill planted in that root was
+  REACHABLE when `--skills-dir` was omitted - the wire carried the
+  invocation and a `skill_activation` message delivering the body - and
+  was NOT found when the flag was passed, the lookup returning the
+  calibrated not-found result exactly. Treat the enumeration as an
+  environment record of reachable external instruction inventory, not as
+  a control and not as evidence that any real skill was invoked. Record:
+  docs/superpowers/plans/rounds/2026-08-03-home-skills-root/probe-record.md
   <!-- contract:end -->
   <!-- contract:start id=home-skill-root-disposition-limit -->
   The disposition is bound to what the probe reached: one skill, named
-  exactly, at one root, on kimi-code 0.31.1. It does not establish that a
-  later release leaves that root unread, and it is NOT a control -
-  nothing this lane runs removes the root. Enumerate it before round 1
-  and record what it holds. A client whose skill delivery changes shape
-  retires this measurement rather than inheriting it.
+  exactly, at the home root, on kimi-code 0.31.1. Suppression was
+  measured for that root ALONE; the two project roots were never
+  canaried, and their exclusion rests on the flag's measured replacement
+  semantics and the client's own help text, with preflight-3 remediation
+  clearing them in the mirror regardless. The flag REPLACES discovery
+  with its target rather than adding to it, so it does not suppress its
+  own target - it selects it - and its suppression of the other roots
+  holds only while `<debate-home>/skills/` is EMPTY: the builder creates
+  it empty and asserts that as its own postcondition, and no per-round
+  check re-verifies it at dispatch. On that client `systemPromptChars`
+  equalled the LF-normalized agent body in every cell, including both
+  loaded-canary cells, so the measured delivery path was
+  `skill_activation` and not system-prompt injection: the deny list
+  controls that measured path, and the lane's system-prompt equality
+  checks, not the deny list, would have to reject any future injection
+  path. A client whose skill delivery changes shape retires this
+  measurement rather than inheriting it.
   <!-- contract:end -->
+  The load-bearing control as the lane ships is the `Skill` deny list - a
+  discovered skill cannot be invoked, measured in cells A and B of the
+  same record. Keep passing `--skills-dir` on every call, fresh and
+  resumed, as a measured second layer, and claim for it exactly what was
+  measured: replacement, conditional on an empty target, on 0.31.1.
 ```
 
-- [ ] **Step 4: Verify.**
+- [ ] **Step 4: Replace `SKILL.md:70-74`**, the sentence beginning `Probed 2026-07-31` and ending `not defence in depth.`, with:
+
+```markdown
+   identically. That 2026-07-31 canary comparison was CONFOUNDED and is
+   superseded: `Skill` was denied, so it measured the deny list rather
+   than the flag. See references/backup-lane.md for the measured
+   discovery controls and their limits. This enumeration is the PRIMARY
+   control for the reviewed tree's skills and agents, not defence in
+   depth. Enumerate the whole
+```
+
+**Why the correction is a SHORTENING and not an expansion.** This file already fails its own lint budget at roughly 5120 tokens against about 5000, and `references/backup-lane.md` is REQUIRED READING before any backup round, so it is the right owner of the measured detail. The old sentence is pinned by NOTHING — verified across `test_backup_lane.py` and `test_multi_model_verify.py` — so there is no old pin to retire, and the replacement gets one direct pin added in Step 1 rather than a third contract region, which would be a scope change this debate did not authorize.
+
+- [ ] **Step 5: Add the builder postcondition** in `tools/new-kimi-lane-home.ps1`, immediately after the `New-Item` that creates the skills directory at `:902`. Windows PowerShell 5.1 compatible, ASCII only:
+
+```powershell
+    # POSTCONDITION on the builder's OWN act, not a guard against unknown
+    # writers, and the contract text says exactly that. The reopened
+    # debate established that this script's New-Item above is the only
+    # site in the repository that writes here, so there is no shipped
+    # writer to defend against and no per-round check is warranted. What
+    # this catches is a future edit to THIS script that seeds content, a
+    # copy that starts following a junction, or a refactor that reorders
+    # creation - the one moment content can legitimately enter.
+    #
+    # -Force, because a hidden intruder is still an intruder. Terminating,
+    # because an enumeration that failed is not an empty directory: an
+    # unmade measurement is never a clean one.
+    $skillsDir = Join-Path $resolved "skills"
+    $seeded = @()
+    try {
+        $seeded = @(Get-ChildItem -LiteralPath $skillsDir -Force -ErrorAction Stop)
+    } catch {
+        Fail ("skills directory could not be enumerated after creation: " +
+              $_.Exception.Message)
+    }
+    if ($seeded.Count -ne 0) {
+        Fail ("skills directory is not empty after creation: " +
+              $seeded.Count + " entry(ies)")
+    }
+```
+
+The refusal MUST reach `Fail` before any custody JSON is written, so a caller never receives a nonce for a home it should not use.
+
+- [ ] **Step 6: Verify, on BOTH hosts**, because a green suite on one host proves one interpreter:
 
 ```
-python -m pytest evals/multi-model-verify/test_backup_lane.py evals/multi-model-verify/test_contract_coverage.py -q
+python -m pytest evals/multi-model-verify/test_backup_lane.py evals/multi-model-verify/test_contract_coverage.py evals/multi-model-verify/test_kimi_lane_home.py -q
 python evals/tools/skill_lint.py skills/multi-model-verify --strict
+$env:PARALLAX_PS_HOST = "powershell.exe"; python -m pytest evals/multi-model-verify/test_kimi_lane_home.py -q
+$env:PARALLAX_PS_HOST = "pwsh.exe";       python -m pytest evals/multi-model-verify/test_kimi_lane_home.py -q
 ```
 
-Expected: PASS, and no unlocked region reported.
+Expected: PASS everywhere, no unlocked region reported, and the lint warning no larger than before.
 
-- [ ] **Step 5: Mutation-test the coverage checker on this edit**, because the pin mechanism is the thing this repo has been bitten by twelve times. Delete the second region's `contract:end` marker and confirm the checker reports it; revert. Delete one sentence from inside the first region and confirm its pin fails; revert. Rename `home-skill-root-disposition-limit` in the document only and confirm `DECLARED_REGIONS` catches it; revert. Record all three messages.
+**Confirm explicitly that BOTH regions are reported as covered.** If either is not, the answer is never a looser pin. If a region will not fit one pin, it is two regions, and a third region id is a scope change this debate did not authorize — stop and raise it.
 
-- [ ] **Step 6: Commit.**
+- [ ] **Step 7: Mutation-test the coverage mechanism on this edit**, because the pin machinery is what the whole change rests on and it is the thing this repo has been bitten by twelve times. Four mutations, each reverted, each observed message recorded:
+
+  - Append `This may be skipped when the driver considers the home trusted.` INSIDE region 2, before its `contract:end`. The coverage test must report region 2 UNCOVERED. **This is the case the reopened debate turned on**, and an ordinary pin would pass it.
+  - Delete region 2's `contract:end` marker. The checker must report it.
+  - Delete one sentence from inside region 1. Its pin must fail.
+  - Rename `home-skill-root-disposition-limit` in the DOCUMENT only. `test_declared_regions_match_the_documents` must fail naming it.
+
+- [ ] **Step 8: Commit.**
 
 ```bash
-git add skills/multi-model-verify/references/backup-lane.md evals/multi-model-verify/test_backup_lane.py evals/multi-model-verify/test_contract_coverage.py
+git add skills/multi-model-verify/references/backup-lane.md skills/multi-model-verify/SKILL.md tools/new-kimi-lane-home.ps1 evals/multi-model-verify/test_backup_lane.py evals/multi-model-verify/test_contract_coverage.py evals/multi-model-verify/test_kimi_lane_home.py
 git commit -m "state the measured disposition for the home skills root"
 ```
 
@@ -682,9 +855,13 @@ git commit -m "state the measured disposition for the home skills root"
 **Files:**
 - Modify: `docs/superpowers/plans/2026-07-27-0150-backlog.md` — item 17
 - Modify: `.claude-plugin/plugin.json`
-- Modify: `CLAUDE.md` if the canary tool needs naming in the verification list
+- Modify: `CLAUDE.md` - the backup-lane contract paragraph names the tests
+  that govern this tool surface and must name the builder postcondition's
+  cases too. NOT conditional at revision 7: Task 5 adds a live-verified
+  check to `tools/new-kimi-lane-home.ps1`, and that file's contract is
+  described there.
 
-- [ ] **Step 1: Close item 17 in the backlog.** Change its heading to `## 17. \`~/.agents/skills/\` reaches the Kimi lane and nothing measures it — DONE, 0.20.0`, insert a `**Resolved.**` paragraph naming the probe record path, the verdict, the readout the verdict rests on, and the cell that served as the positive control, and move `17` from the Open list to the Done list in the `**Status.**` block. Delete the `**Item 17 is FIRST**` paragraph at `:16-19`, which is spent.
+- [ ] **Step 1: Close item 17 in the backlog.** Change its heading to `## 17. \`~/.agents/skills/\` reaches the Kimi lane and nothing measures it — DONE, 0.20.0`, insert a `**Resolved.**` paragraph stating the MEASURED answer at revision 7 - the root IS reachable, `--skills-dir` suppresses it for that root while its target is empty, and the shipped lane is held closed by the `Skill` deny list - naming the probe record path, the verdict, the readout the verdict rests on, and the cell that served as the positive control, and move `17` from the Open list to the Done list in the `**Status.**` block. Delete the `**Item 17 is FIRST**` paragraph at `:16-19`, which is spent.
 
 - [ ] **Step 2: Run the whole local gate.**
 
@@ -728,11 +905,13 @@ Then restart the session and confirm `/parallax:doctor` reports 0.20.0.
 
 ## Self-review against item 17's definition of done
 
+**AMENDED AT REVISION 7.** The reachability bullet below was written for the NOT REACHABLE branch and is corrected in place, because a self-review that still describes an unobserved outcome is worse than none.
+
 - **"`references/backup-lane.md` stops instructing every round to record unprobed territory"** — Task 5 Step 3 deletes that sentence; Task 5 Step 1 deletes the pin that held it, so it cannot come back green.
 - **"states a measured disposition instead, with the measurement named"** — the replacement text names the record path, the invocation the verdict rests on, the not-found comparison it was judged against, and the control cell that returned the canary.
 - **"Break the confound first"** — cells C and D offer `Skill` AND invoke it by exact name, and their silence counts only when the cell is VALID and its result equals the calibrated not-found shape. Offering the tool alone was not enough: rounds 2 and 3 established that a model can decline to call, call wrongly, or hit a tool error, and every one of those would have read as "the root is not read".
 - **"removal has to be guaranteed by the harness, not by a step somebody remembers"** — Task 2 is the harness, and its removal verifies the root against a before-list it captured itself.
-- **"If the root proves reachable, the fix is a control, not a note"** — Task 4's gate stops the plan on that branch, per the user's scope decision of 2026-08-03.
+- **"If the root proves reachable, the fix is a control, not a note"** - the root DID prove reachable. Task 4's gate stopped the plan, the debate reopened, and revision 7's Task 5 is the answer: the control that already existed is named as load-bearing (the `Skill` deny list), the second layer is stated at exactly its measured reach (`--skills-dir`, conditional on an empty target), and the one unguarded moment is closed by a builder postcondition. What was NOT added is a per-round check - both lanes agreed it would guard against no writer anyone can name, and a check that nothing can fail is the defect class this repo keeps finding.
 - **Not covered, on purpose:** item 7 (the codex lane's tool surface), item 9, item 11, item 12 and item 15. Each was considered and excluded in the 2026-08-03 selection.
 
 ## Open questions for the plan debate
@@ -814,3 +993,32 @@ None. The one scope decision — that a REACHABLE result stops this cycle rather
 
 **What this debate did not verify, stated because a claim may not be wider than its evidence:** every finding above is about the PLAN. No probe has been run, no canary has been planted, and the reachability question item 17 exists to answer is still open. Two lanes now agree the gate is sound enough to trust its own answer. Neither has any evidence about what the answer will be.
 
+---
+
+## Revision 7: the reopened debate
+
+**Participants:** Opus 5 (session) / GPT-5.6 Sol (codex exec, session `019fc8c0-5608-71d0-b32b-521248cbee24`) / Kimi K3 (kimi-code 0.31.1, session `session_2fff105c-69d1-4392-b047-7284df795092`)
+**Rounds used:** Sol 4 / Kimi 2
+**Outcome:** converged; both lanes report nothing technical unresolved
+**Verification status:** FULL for the amendment
+**Degradation:** none - the Kimi lane was a user-invoked second lane, not a substitution
+**Authorized by:** user, 2026-08-03, choosing the full version including the builder postcondition
+**Full record:** `docs/superpowers/plans/rounds/2026-08-03-home-skills-root/reopened-debate-record.md`
+**Raw rounds:** `sol-reopen-r1..r4-*` and `kimi-reopen-r1..r2-*` in that directory
+
+**Why revision 6 remains FULL and this is a separate status.** Revision 6 verified the PLAN, and its verification stands for Tasks 1 to 4, which executed unchanged. Revision 7 replaces Task 5 whole and amends Task 6, and those changes are verified by the rounds above, not by the earlier debate. A verification status does not transfer to text the reviewers never saw.
+
+**What the reopened debate changed, one line each.**
+
+- The claim that `--skills-dir` suppresses all four discovery roots is INCOHERENT, not merely unevidenced: the flag names one of those roots as its target, so it selects that root. Found by the backup lane; neither the primary lane nor the session had seen it.
+- No per-call emptiness check. The primary lane proposed one and CONCEDED after the session verified that `tools/new-kimi-lane-home.ps1:902` is the only site in the repository that writes to that directory.
+- One builder postcondition instead, framed as a self-check on the builder's own act and never as a control against unknown writers.
+- Both frozen region ids are kept. Each lane proposed a rename at some point and each withdrew it.
+- Marked regions, not ordinary pins. The backup lane proposed ordinary pins and conceded once shown that a pin catches edits inside its literal but not a weakening sentence appended after it.
+- Suppression is claimed for the home root ALONE. The project roots were never canaried and are cleared by preflight-3 remediation regardless, so the narrow claim costs nothing.
+
+**One transport failure, recorded because it happened.** The first Sol dispatch exited 1 with `The 'gpt-5.6-codex' model is not supported when using Codex with a ChatGPT account`. The cause was the driver's own: a REMEMBERED model id rather than the canonical one read from `references/model-prompting-notes.md`, which is exactly the failure that file exists to prevent. Re-dispatched to FRESH round paths with `gpt-5.6-sol`. The failed call wrote no reply file, so no stale reply could be read as a result.
+
+**A known gap neither mechanism closes**, raised by the backup lane against its own concession: a weakening sentence appended AFTER a region's `contract:end` marker passes every check. Every mechanism on the table shares it and it is strictly smaller than the plain-pin hole, so it changed no decision. Recorded because an unrecorded known gap becomes an unknown one.
+
+**What revision 7 does NOT claim.** The region text Task 5 carries is a SESSION ADJUDICATION of two lanes' proposals, not either lane's wording verbatim, and it has not itself been through a round. It is reviewed as part of executing Task 5, like any other implementation.
