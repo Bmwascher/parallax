@@ -772,8 +772,8 @@ the argument the primary lane won, executed rather than asserted.
 
 ## D20 - Task 6: a behavioural gate failure I could NOT attribute, and did not pretend to
 
-**Task:** 6. **Class:** unresolved, escalated to the user. **Found by:** the
-opt-in behavioural evals. **OPEN.**
+**Task:** 6. **Class:** pre-existing flaky case, NOT a regression. **Found by:**
+the opt-in behavioural evals. **RESOLVED by measurement.**
 
 `python evals/tools/run_behavioral_evals.py --changed --head` returned **1
 failure of 7 cases**: `plan-mode-debate-runs`, on expectation 4, the finish line
@@ -824,3 +824,46 @@ correction is a SHORTENING. After this second revision it is 5126 tokens against
 the 5120 baseline - six tokens LONGER. The claim was true of the first version
 and is false of the shipped one. Behaviour was the priority over the byte count,
 and the plan's sentence is now inaccurate.
+
+### D20 RESOLVED - the case is flaky and this branch is exonerated
+
+The user authorized four more CONTROL runs, which was the missing measurement.
+The unchanged tree at `74baa71` failed **all four**, on the SAME expectations
+this branch failed on: expectation 1 (the transcript truncated before the grader
+could see the codex invocation) and expectation 3 (reference claims in the final
+plan not carrying a full first citation).
+
+**Final tally, thirteen live runs:**
+
+| tree | runs | passes | pass rate |
+|---|---|---|---|
+| unchanged, `74baa71` | 6 | 2 | 33% |
+| this branch | 7 | 1 | 14% |
+
+There is no meaningful difference between those, and the failure modes are
+identical. `plan-mode-debate-runs` is an UNRELIABLE case under this executor;
+it is not a regression, and my first two control runs passing was luck.
+
+**Two things I got wrong, recorded because they are the useful part.**
+
+1. **I read 0-of-4 as a regression on a 2-of-2 baseline.** Two runs is not a
+   baseline, and I said so at the time and acted on the number anyway. The
+   correct move at 0-of-4 was to widen the CONTROL, not to change the product.
+2. **I changed shipped text on a theory that turned out to be false.** The
+   pointer-versus-fact edit was made to fix this failure. It did not fix it,
+   because there was nothing to fix.
+
+**The edit is KEPT, on a different justification than the one that motivated
+it.** Preflight 3 runs on every mode-plan round, including primary-lane rounds
+that need nothing from a 35 KB reference, and a one-line fact belongs where it is
+used rather than behind an instruction to go and read. That reasoning stands on
+its own and does not depend on the eval. Reverting would mean a third rewrite of
+one paragraph for no measured benefit. What is NOT claimed is that it repaired
+anything.
+
+**Left for a future cycle, not fixed here:** `plan-mode-debate-runs` fails about
+two runs in three on an unchanged tree, and expectation 1 fails for a reason that
+is not about the plugin at all - the harness's transcript rendering truncates the
+dispatch before the grader can read it. A gate that fails two thirds of the time
+teaches a reader to ignore it. Raise it as a backlog item rather than leaving it
+to be rediscovered.
