@@ -263,3 +263,39 @@ The repo is public. This record carries counts, hashes, tool names, the run
 nonce and the verdict. It carries no directory listing of the user's home skills
 root, no raw wire transcript, no session archive, and no credential value. The
 raw per-cell material stayed in the session scratchpad and is not committed.
+
+---
+
+## CORRECTION, 2026-08-03, after the reopened debate
+
+Two statements above claim more than the cells measured. They are **retracted
+here rather than edited in place**, because this record separates a header
+written before dispatch from results appended during execution, and silently
+rewriting evidence would destroy that chronology. The original wording stays
+where it is; this section is what governs.
+
+**RETRACTED: "The flag is promoted from an unmeasurable mitigation to a verified
+control."** It is a control only CONDITIONALLY. Cells C and D differ by the flag
+while the directory it names is EMPTY. Cell E shows the same directory loads a
+skill when it has one, so the suppression rests on that emptiness. And the
+emptiness is not verified at dispatch: `tools/read-kimi-round-evidence.ps1`
+contains the substring `skills` **zero times in the whole file**, so this is not
+a weak check, it is an absent concept. The correct phrasing is measured
+suppression with an unverified precondition.
+
+**RETRACTED: "what the flag does is REPLACE discovery, not add to it", read as
+covering all four roots.** The cells establish suppression of `~/.agents/skills/`
+under one condition. No cell exercises either PROJECT root, and no cell passes
+the flag while the directory it names is POPULATED. The client's own help text
+says "instead of auto-discovered directories", but that is text evidence, not a
+four-root measurement, and this record must not launder one into the other.
+
+**NARROWED: "two independent things hold it" (the lane has no hole today).** The
+observation stands for the composition that was tested. The INDEPENDENCE does
+not: cells A and B ran with the deny list AND the flag both in force, and no cell
+isolates the deny list with the flag omitted. What is measured is that the
+shipped composition showed no hole, not that either control would suffice alone.
+
+Everything else in this record survived the debate unchanged, including the
+verdict, the cell validity findings, the frozen not-found comparison, and the
+cross-tool generalization defect.
