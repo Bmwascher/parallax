@@ -84,9 +84,13 @@ refreshes retires the original. Change the tests first.
 The same builder asserts, as a POSTCONDITION on its own act, that the
 `skills/` directory it just created is empty. That is NOT a per-round
 control and must not be described as one: nothing re-checks it at
-dispatch, because the builder's own `New-Item` is the only site in this
-repo that writes there. Its cases are in `test_kimi_lane_home.py`, and
-its two seams are builder contract rather than test scaffolding.
+dispatch, and every writer into that directory sits in the builder
+itself - the `New-Item` that creates it, and the two seams below it. Its
+cases are in `test_kimi_lane_home.py`. Those two seams are builder
+contract rather than test scaffolding. They are gated on environment
+variables, so any parent process can set them; no shipped caller does,
+and either one can only force the build to FAIL, never turn a failing
+build into a successful one.
 
 Contract text inside `contract:start` / `contract:end` HTML comment
 markers must sit WHOLE inside a single pin in `evals/multi-model-verify/`.

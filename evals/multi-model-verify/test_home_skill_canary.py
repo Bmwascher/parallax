@@ -265,21 +265,16 @@ def test_the_fault_seam_reports_and_rolls_back(tmp_path):
     assert not state_out.exists()
 
 
-def test_the_fault_seam_fires_after_the_canary_exists(tmp_path):
-    """The rollback's own positive control.
-
-    Without this, both transactional tests above pass equally against an
-    implementation that never created anything at all - they only observe
-    the root afterwards. The seam is frozen to fire AFTER the directory and
-    its SKILL.md are written, so a run that reports the fault proves the
-    directory existed mid-call and was removed on the way out.
-    """
-    root = make_root(tmp_path)
-    state_out = tmp_path / "state.json"
-    proc = plant(root, state_out, env_overrides={FAULT_VAR: "1"})
-    assert proc.stderr.strip() == FAULT_MESSAGE, (
-        "reaching the seam is what proves creation happened first")
-    assert not (root / CANARY_NAME).exists()
+# DELETED at the mode-diff round 1 on e94c0b5..5b312d8:
+# `test_the_fault_seam_fires_after_the_canary_exists`. It asserted the seam
+# message and the canary's absence, and claimed in its own docstring that
+# "reaching the seam is what proves creation happened first". It does not: a
+# tool that checked the seam BEFORE New-Item emits the same message and
+# leaves the same unchanged root, so both assertions pass either way. The
+# branch had ALREADY written the real observation,
+# `test_the_fault_seam_really_fires_after_creation` below, and left the case
+# it replaces in place; the message and rollback are covered by
+# `test_the_fault_seam_reports_and_rolls_back` above. Do not re-add it.
 
 
 # --------------------------------------------------------------------------

@@ -67,8 +67,8 @@ toggled on, its stop-time review overlaps mode `diff` — expected, not a bug.
    the auditor that break independence. kimi-code, the backup lane's
    client, documents `.kimi-code/skills/` as a project-level discovery
    root too (references/backup-lane.md), so the sweep covers it
-   identically. That 2026-07-31 comparison was CONFOUNDED:
-   `Skill` was denied, so it measured the deny list, not the flag.
+   identically. That 2026-07-31 comparison was CONFOUNDED: `Skill` was
+   denied in both arms, so the comparison did not isolate the flag.
    Re-probed 2026-08-03, the flag DOES suppress the home root while its
    target stays empty (references/backup-lane.md). This enumeration is
    the PRIMARY control for the reviewed tree's skills and agents, not

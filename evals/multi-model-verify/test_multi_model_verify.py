@@ -208,8 +208,17 @@ class TestTransportContract:
         """
         text = " ".join(read(SKILL_MD).split())
         assert "That 2026-07-31 comparison was CONFOUNDED:" in text
-        assert ("`Skill` was denied, so it measured the deny list, not "
-                "the flag.") in text
+        # NARROWED after the mode-diff round 1 on e94c0b5..5b312d8. The
+        # earlier wording, "so it measured the deny list, not the flag",
+        # was itself a claim wider than its evidence: both 2026-07-31 arms
+        # ran with `Skill` denied and nothing loaded in either, so nothing
+        # separated denial from non-discovery, and the 2026-07-31 record
+        # calls denial only "the plausible mechanism". This wording
+        # attributes the null to neither layer.
+        assert ("`Skill` was denied in both arms, so the comparison did "
+                "not isolate the flag.") in text
+        assert "it measured the deny list, not the flag" not in text, (
+            "the causal attribution the round-1 review struck is back")
         assert ("Re-probed 2026-08-03, the flag DOES suppress the home "
                 "root while its target stays empty "
                 "(references/backup-lane.md).") in text

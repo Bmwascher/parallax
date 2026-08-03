@@ -906,11 +906,13 @@ enabled = true
     # POSTCONDITION on the builder's OWN act. NOT a control against unknown
     # writers, and the lane contract says exactly that.
     #
-    # The reopened home-skills-root debate (2026-08-03) established that the
-    # New-Item above is the ONLY site in this repository that writes here, so
-    # there is no shipped writer to defend against and no per-round check is
-    # warranted - a check nothing can fail is indistinguishable from a broken
-    # one on every run forever. What this DOES catch is a future edit to THIS
+    # The reopened home-skills-root debate (2026-08-03) established that no
+    # SHIPPED writer targets this directory: the New-Item above creates it,
+    # and the only other writers are the two env-gated seams just below,
+    # which no shipped caller enables and which can only make a build FAIL.
+    # So there is no shipped writer to defend against and no per-round check
+    # is warranted - a check nothing can fail is indistinguishable from a
+    # broken one on every run forever. What this DOES catch is an edit to THIS
     # script that seeds content, a copy that starts following a junction, or a
     # refactor that reorders creation: the one moment content can legitimately
     # enter.

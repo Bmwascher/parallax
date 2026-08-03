@@ -1,7 +1,11 @@
 # Execution deviations — home skills root probe
 
 The frozen plan is `docs/superpowers/plans/2026-08-03-home-skills-root-probe.md`
-at revision 6. A zero-judgment implementer makes no design decisions, so every
+at revision 7. This line said revision 6 until the mode-diff gate on
+`e94c0b5..5b312d8`: the plan was amended to revision 7 by the reopened debate
+and this header was not moved with it, so the ledger named the wrong version of
+the document it adjudicates against.
+A zero-judgment implementer makes no design decisions, so every
 departure from the frozen text is recorded here as it happens, and the diff
 debate adjudicates each one against the plan.
 
@@ -341,10 +345,18 @@ three hand sweeps already on this repo's record, that is four spellings of one
 defect class that a sweep has missed.
 
 **Widened on the SEPARATOR, not the method name.** A line split is now
-`.splitlines()` OR `.split(<sep>)` where `<sep>` is a string literal containing
-a newline. `.split(",")` is deliberately not matched: that is a field parse, no
-contract there promises one LINE, and a gate that fires on correct code gets
-suppressed.
+`.splitlines()` OR `.split(<sep>)` where `<sep>` is a string literal EQUAL to
+one of the three line terminators, `"\n"`, `"\r\n"` or `"\r"`. `.split(",")` is
+deliberately not matched, and neither is a composite separator such as
+`"\n\n"`: those are field and paragraph parses, no contract there promises one
+LINE, and a gate that fires on correct code gets suppressed.
+
+**CORRECTED at the mode-diff round 1 on `e94c0b5..5b312d8`.** This entry and
+the checker's own docstring both said `<sep>` was any string literal
+*containing* a newline. The code has always tested exact membership in
+`_NEWLINE_SEPARATORS`, so both descriptions were wider than the thing they
+described. The reviewer offered either direction; the words moved, because
+exact membership is the reach the gate should have.
 
 **Tests first, in three directions**, all watched to fail before the checker
 changed: `.split("\n")` is flagged, `.split("\r\n")` is flagged, `.split(",")`
@@ -867,3 +879,159 @@ is not about the plugin at all - the harness's transcript rendering truncates th
 dispatch before the grader can read it. A gate that fails two thirds of the time
 teaches a reader to ignore it. Raise it as a backlog item rather than leaving it
 to be rediscovered.
+
+---
+
+## D21 - Task 5: the frozen test code was not shipped verbatim, and nothing said so
+
+**Task:** 5. **Class:** silent departure from frozen text, caught by review.
+**Found by:** the whole-branch review of `e94c0b5..5b312d8`, finding Minor 4.
+**RECORDED.**
+
+Task 5 Step 1 freezes five test cases. What shipped in
+`test_kimi_lane_home.py` differs in four ways: the cases are renamed, the
+custody-order case asserts `proc.stdout == ""` instead of the frozen substring
+absence, two cases gained `not target.exists()` and lock-state assertions, and
+the positive control gained an emptiness check plus a second removal helper.
+
+Every one of those departures makes the case STRICTER, which is why none of
+them was noticed. That is exactly the reason to record it. D5 and D6 on this
+same branch established that verbatim admits no silent departures, and a
+departure that happens to strengthen is still a judgment call the implementer
+was not authorized to make alone. The departures stand; the silence does not.
+
+## D22 - Task 6: the frozen staging command omits a file Task 6 requires
+
+**Task:** 6. **Class:** frozen text internally inconsistent; implementer chose
+correctly and did not say so. **Found by:** the mode-diff reviewer lane, round 1,
+claim 6. **RECORDED.**
+
+Task 6's Files block lists `Modify: CLAUDE.md` and marks it "NOT conditional at
+revision 7". Task 6 Step 5's frozen `git add` names only the backlog document
+and `.claude-plugin/plugin.json`. The two disagree, and the implementer resolved
+it by staging `CLAUDE.md` as the Files block requires.
+
+That resolution is correct - a Files block entry the plan calls unconditional
+outranks a staging line that forgot it - but resolving a contradiction in frozen
+text is a judgment call, and the ledger is where judgment calls go. Recorded
+rather than left to look like the plan and the branch agreed.
+
+## D23 - Task 6: a heading shipped with a hyphen where the plan froze an em dash
+
+**Task:** 6. **Class:** drift from frozen text. **Found by:** the mode-diff
+reviewer lane, round 1, claim 6. **FIXED, not ridden.**
+
+The plan freezes item 17's heading ending `— DONE, 0.20.0` with U+2014. The
+heading shipped with an ASCII hyphen. Cause: several edit anchors on this branch
+were rewritten to avoid em dashes after `str.replace` anchors failed against
+terminal-rendered text, and this one carried the workaround into the product.
+
+Fixed by restoring the frozen character rather than recording the drift, because
+the surrounding file's own convention is the em dash, so the hyphen was
+inconsistent with the plan AND with the document it landed in. Nothing was
+gained by keeping it.
+
+## D24 - the mode-diff gate found four more claims wider than their evidence
+
+**Task:** whole branch. **Class:** the class this cycle exists to remove, still
+producing instances at the merge gate. **Found by:** the whole-branch review and
+the reviewer lane, round 1. **FIXED.**
+
+Four instances were caught during the branch (D4, D17, D18, D19). The merge gate
+found four more, and two of them were in my own repairs for the first two.
+
+1. `SKILL.md` said the confounded 2026-07-31 comparison "measured the deny list,
+   not the flag". Both arms ran with `Skill` denied and nothing loaded in
+   either, so nothing separated denial from non-discovery; the 2026-07-31 record
+   itself calls denial only "the plausible mechanism". **My own proposed repair
+   was refuted for the same defect**: "so it could not observe the flag" still
+   attributes the failure to observe to the deny list. Shipped wording:
+   "`Skill` was denied in both arms, so the comparison did not isolate the flag."
+
+2. The locked region `home-skill-root-disposition-limit` called the flag's
+   replacement semantics MEASURED and asserted "it does not suppress its own
+   target - it selects it". No cell ever passed the flag against a POPULATED
+   target, and the probe record explicitly retracts the replacement reading as
+   text evidence. **My proposed repair was refuted too**: it said suppression was
+   measured for "the other roots", plural, when only `~/.agents/skills/` was
+   measured.
+
+3. The probe record said "Cell C is identical in every respect except that
+   `--skills-dir` was passed". Every cell used its own freshly built debate home,
+   as the frozen procedure requires, so the flag was the intended differing
+   variable and not the only difference.
+
+4. Three copies of one sentence claimed the builder's `New-Item` is the only site
+   in the repository that writes into the lane's `skills/` directory:
+   `CLAUDE.md`, the builder's own comment, and the backlog close-out. The same
+   change that shipped the sentence added two `Set-Content` seam writers fifteen
+   lines below it. The review cited two sites; grepping the branch found the
+   third, which is recorded as amendment 1 on this cycle's application
+   checkpoint.
+
+**The lesson, and it is the same one the 0.19.0 cycle recorded at rounds 41-47.**
+Once the feature is sound, the remaining defects are claims wider than their
+evidence and checks that cannot fail, and they keep appearing inside the repairs
+for earlier ones. Two of my four repairs at this gate carried the defect they
+were repairing. Writing the narrowest sentence is harder than recognizing a wide
+one, and a second reader is what catches the difference.
+
+## D25 - a test that could not fail for the reason it claimed, next to its own replacement
+
+**Task:** 2. **Class:** check that cannot fail. **Found by:** the mode-diff
+reviewer lane, round 1, claim 5. **FIXED by deletion.**
+
+`test_the_fault_seam_fires_after_the_canary_exists` asserted the seam message
+and the canary's absence, and claimed in its docstring that "reaching the seam is
+what proves creation happened first". It proves nothing of the kind: a tool that
+checked the seam BEFORE `New-Item` emits the same message and leaves the same
+unchanged root, so both assertions pass either way.
+
+**What makes this instance worth reading twice.** The branch had already worked
+this out. `test_the_fault_seam_really_fires_after_creation` sits forty lines
+below it, and its docstring says in as many words that the seam is not proof of
+ordering and that the directory must be observed instead. The session wrote the
+correct replacement, left the broken case in place, and shipped both. A test that
+a later test in the same file explicitly declares insufficient is a stronger
+signal than any reviewer finding, and nothing on this branch read it.
+
+Deleted, with a comment in its place naming what covers each of its two
+assertions, so it cannot be re-added as a gap.
+
+## D26 - the tier-1c checker's stated reach was wider than its code, in two places
+
+**Task:** 3. **Class:** claim wider than evidence, in a gate's own description.
+**Found by:** the mode-diff reviewer lane, round 1, claim 5. **FIXED by
+narrowing the words.**
+
+D10 and the `_is_line_split` docstring both said the checker matches
+`.split(<sep>)` where the separator is a string literal CONTAINING a newline.
+The code tests exact membership in three separators, so a composite separator
+such as a doubled newline is not matched.
+
+The reviewer offered either direction: implement the recorded predicate, or
+correct the record. The words moved, because exact membership is the reach this
+gate should have - a doubled newline is a paragraph split, and the same cry-wolf
+argument that keeps `.split(",")` out keeps it out. Widening the code to match a
+docstring would have made the gate fire on correct code, which is how gates get
+suppressed.
+
+Both descriptions now state the three separators explicitly, and say why a
+composite one is deliberately out of reach.
+
+## D27 - the backlog item kept its pre-measurement text in the present tense
+
+**Task:** 6. **Class:** a resolved record contradicting itself. **Found by:** the
+session, while applying the round-1 fixes. **FIXED.**
+
+Item 17 closes with a Resolved block stating the measurement, and then retains
+the original problem statement beneath it with nothing marking it as historical.
+Read forward, the item asserts that the flag suppresses the home root and then,
+forty lines later and in the present tense, that the flag is "a mitigation with
+unmeasurable effect" that "claims nothing".
+
+Fixed with a rule and a labelled boundary rather than by rewriting five
+paragraphs: the retained text is marked as the item as written BEFORE the probe,
+superseded by the Resolved block wherever the two disagree, with the two
+falsified claims named. Keeping the question as it was asked has value; letting
+it read as current does not.

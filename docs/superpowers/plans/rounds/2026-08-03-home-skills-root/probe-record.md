@@ -149,8 +149,11 @@ skillPath: ~/.agents/skills/parallax-home-root-canary/SKILL.md
 carrying the canary body, nonce included, injected as a `user` message. The
 model then echoed that body back in its reply.
 
-Cell C is identical in every respect except that `--skills-dir` was passed, and
-it got the not-found.
+Cells C and D held the declared model, effort, workspace, agent file, prompt,
+nonce and canary state constant, but each ran in its own freshly built debate
+home, as the frozen procedure requires. The flag was the intended differing
+variable, not the only difference. Cell C, the flag-on member of that pair, got
+the not-found.
 
 ---
 

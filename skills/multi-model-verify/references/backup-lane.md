@@ -356,14 +356,17 @@ exactly like the primary lane's `~/.codex/AGENTS.md` — never a finding.
   The disposition is bound to what the probe reached: one skill, named
   exactly, at the home root, on kimi-code 0.31.1. Suppression was
   measured for that root ALONE; the two project roots were never
-  canaried, and their exclusion rests on the flag's measured replacement
-  semantics and the client's own help text, with preflight-3 remediation
-  clearing them in the mirror regardless. The flag REPLACES discovery
-  with its target rather than adding to it, so it does not suppress its
-  own target - it selects it - and its suppression of the other roots
-  holds only while `<debate-home>/skills/` is EMPTY: the builder creates
-  it empty and asserts that as its own postcondition, and no per-round
-  check re-verifies it at dispatch. On that client `systemPromptChars`
+  canaried, and their exclusion rests on the client's own help text,
+  which says the flag's target is used instead of auto-discovered
+  directories - text evidence, never a measurement - and on preflight-3
+  remediation clearing the project roots in the mirror regardless. No
+  cell passed the flag against a POPULATED target, so what the flag does
+  to its own target is unmeasured; suppression was measured only for
+  `~/.agents/skills/`, with that target EMPTY, and that measurement
+  holds only while `<debate-home>/skills/` stays empty: the builder
+  creates it empty and asserts that as its own postcondition, and no
+  per-round check re-verifies it at dispatch. On that client
+  `systemPromptChars`
   equalled the LF-normalized agent body in every cell, including both
   loaded-canary cells, so the measured delivery path was
   `skill_activation` and not system-prompt injection: the deny list

@@ -97,7 +97,17 @@ _NEWLINE_SEPARATORS = ("\n", "\r\n", "\r")
 
 def _is_line_split(call):
     """True if `call` splits text into LINES: `.splitlines()`, or
-    `.split(<sep>)` where <sep> is a string literal containing a newline.
+    `.split(<sep>)` where <sep> is a string literal equal to one of the
+    three line terminators, "\\n", "\\r\\n" or "\\r".
+
+    STATED AT ITS TRUE REACH, corrected at the mode-diff round 1 on
+    e94c0b5..5b312d8. This docstring and the deviation that recorded the
+    change both said "containing a newline", which is WIDER than the code:
+    membership in `_NEWLINE_SEPARATORS` is exact, so a composite separator
+    like "\\n\\n" is not matched. That exclusion is deliberate and the code
+    is right - "\\n\\n" is a paragraph split, and the cry-wolf reasoning
+    below that excludes `.split(",")` excludes it for the same reason - so
+    the words moved to the code rather than the code to the words.
 
     THE SEPARATOR IS WHAT MATTERS, NOT THE METHOD NAME. Keying on
     `splitlines` alone is how this gate stayed green over a fresh instance
