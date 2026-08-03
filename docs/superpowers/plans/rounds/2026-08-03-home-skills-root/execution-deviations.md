@@ -896,8 +896,10 @@ the positive control gained an emptiness check plus a second removal helper.
 
 None of those departures weakens coverage, and the added assertions are
 strictly stronger; the rename and the second removal helper change no
-assertion at all. That is why none of them was noticed, and exactly the reason
-to record it. D5 and D6 on this
+assertion at all. Those departures therefore did not make the suite fail; the
+whole-branch review found them. That is exactly the reason to record them: a
+green suite is not what noticed this, and nothing in the pipeline before the
+review would have. D5 and D6 on this
 same branch established that verbatim admits no silent departures, and a
 departure that happens to strengthen is still a judgment call the implementer
 was not authorized to make alone. The departures stand; the silence does not.
@@ -979,10 +981,23 @@ found four more, and two of them were in my own repairs for the first two.
    evidence, in the same paragraph that names the pattern. Enumerate a duplicated
    claim's copies by MEANING, not by matching the string a reviewer quoted.
 
-   **A meaning-level sweep afterwards found three MORE occurrences, and all
-   three correctly stay.** They are at `2026-08-03-home-skills-root-probe.md`,
-   in `kimi-reopen-r1-reply.md` and `sol-reopen-r2-brief.md`, and in
-   `reopened-debate-record.md`. Every one of them was TRUE when written: the
+   **A meaning-level sweep afterwards found ADDITIONAL historical occurrences,
+   and they all correctly stay.** No count is claimed here and no inventory is
+   offered as complete, because the first version of this paragraph did claim
+   one and got it wrong three separate ways: it said "three" while listing four
+   artifacts, it named `sol-reopen-r2-brief.md`, which does not make the claim
+   at all, and it omitted `kimi-reopen-r2-brief.md`, `kimi-reopen-r2-reply.md`
+   and `sol-reopen-r4-brief.md`, which do. The reviewer lane caught all three
+   errors at round 3. An inventory written to demonstrate thoroughness about
+   overwide claims was itself overwide, which is the fourth time on this branch
+   that a repair carried the defect it repaired.
+
+   Occurrences found, offered as examples and NOT as a complete list:
+   `2026-08-03-home-skills-root-probe.md:1014`, `kimi-reopen-r1-reply.md:77`,
+   `kimi-reopen-r2-brief.md:6`, `kimi-reopen-r2-reply.md:21` and `:71`,
+   `reopened-debate-record.md:58-60`, and `sol-reopen-r4-brief.md:15`.
+
+   Every one of them was TRUE when written: the
    debate ran and the plan froze before Task 5 added the two seams, so at that
    moment `New-Item` really was the only writer. The plan is frozen and this
    ledger is its correction channel; the reviewer replies and the debate record
