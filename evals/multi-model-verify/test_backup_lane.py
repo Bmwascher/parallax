@@ -1535,3 +1535,94 @@ def test_no_module_claims_ci_skips_the_windows_suites():
         for host, step in steps.items():
             assert step.count(rel) == 1, (
                 rel + " must appear exactly once in the " + host + " step")
+
+
+def _lines(path):
+    r"""Raw read with CRLF folded to LF, for pins that are NEWLINE-ANCHORED.
+
+    _norm is wrong for every assertion below and the frozen plan used it
+    anyway. _norm is `" ".join(text.split())`, so `"\n  - Skill\n"` can
+    never occur in its output: the "must not offer" assertion would be
+    vacuously TRUE and the "must deny" assertion vacuously FALSE, and
+    `re.findall(r"^  - (\w+)$", ..., re.M)` would return [] and make every
+    frontmatter-delta comparison compare two empty sets. Measured
+    2026-08-03. Same class as D4 in the execution-deviation ledger, third
+    instance in this plan.
+
+    On line endings, stated at its true reach: the agent files ARE CRLF on
+    disk here (39 CRLF, 0 bare LF, measured 2026-08-03), and `read_text`
+    already folds them through universal newlines, so the `\n` pins match
+    without help. The explicit fold below is belt-and-braces for a caller
+    that ever switches to `newline=""`; it is NOT what makes the pins work
+    today, and claiming otherwise would be a claim wider than its evidence.
+    """
+    return path.read_text(encoding="utf-8").replace("\r\n", "\n")
+
+
+def test_the_review_agent_still_denies_skill():
+    """The probe agent exists to offer `Skill` for a MEASUREMENT. The one
+    way that becomes a defect instead of a measurement is if the loosened
+    file, or the loosening, reaches a review round. Two separate things
+    must hold, so they are two separate assertions."""
+    review = _lines(REPO / "skills" / "multi-model-verify" / "references"
+                    / "kimi-reviewer-agent.md")
+    tools_block = review.split("disallowedTools:")[0]
+    denied_block = review.split("disallowedTools:")[1].split("subagents:")[0]
+    assert "\n  - Skill\n" not in tools_block, (
+        "the review lane's agent must never offer Skill")
+    assert "\n  - Skill\n" in denied_block, (
+        "the review lane's agent must explicitly deny Skill")
+    assert "\n  - Bash\n" in denied_block
+    assert "\n  - Write\n" in denied_block
+    assert "\n  - Edit\n" in denied_block
+    assert "subagents: []" in review
+
+
+def test_the_probe_agent_is_never_named_by_the_lane_contract():
+    """A probe-only agent file that a dispatch command can reach is not
+    probe-only. The lane contract, the skill and the commands must never
+    name it; only this plan's probe record and the probe's own tests do."""
+    probe_rel = "tools/kimi-probe-agent.md"
+    probe = _lines(REPO / "tools" / "kimi-probe-agent.md")
+    tools_block = probe.split("disallowedTools:")[0]
+    denied_block = probe.split("disallowedTools:")[1].split("subagents:")[0]
+    # The loosening is exactly one tool, and only that one.
+    assert "\n  - Skill\n" in tools_block
+    assert "\n  - Skill\n" not in denied_block
+    # Every containment control the review agent has, this file keeps.
+    for denied in ("Bash", "Write", "Edit", "WebSearch", "FetchURL",
+                   "Agent", "AgentSwarm"):
+        assert "\n  - " + denied + "\n" in denied_block, denied
+    assert "subagents: []" in probe
+    assert "PROBE ONLY" in probe
+    # The ONLY permitted frontmatter delta against the review agent is the
+    # Skill move. A named-document list would have been the defect this
+    # guard exists to catch, in the guard itself: the lane contract is a
+    # whole directory plus the agent and command surfaces, and a list goes
+    # stale the moment a file is added. Sweep, do not enumerate.
+    review = _lines(REPO / "skills" / "multi-model-verify" / "references"
+                    / "kimi-reviewer-agent.md")
+    r_tools = set(re.findall(r"^  - (\w+)$", review.split("disallowedTools:")[0], re.M))
+    p_tools = set(re.findall(r"^  - (\w+)$", probe.split("disallowedTools:")[0], re.M))
+    r_denied = set(re.findall(r"^  - (\w+)$",
+                              review.split("disallowedTools:")[1].split("subagents:")[0], re.M))
+    p_denied = set(re.findall(r"^  - (\w+)$",
+                              probe.split("disallowedTools:")[1].split("subagents:")[0], re.M))
+    # Non-emptiness first: every set difference below is satisfied by two
+    # empty sets, so without this the whole comparison is vacuous - which
+    # is precisely how the frozen version of this test read.
+    assert len(r_tools) == 5, r_tools
+    assert len(p_tools) == 6, p_tools
+    assert r_denied, r_denied
+    assert p_tools - r_tools == {"Skill"}, p_tools - r_tools
+    assert r_tools - p_tools == set()
+    assert r_denied - p_denied == {"Skill"}, r_denied - p_denied
+    assert p_denied - r_denied == set()
+    # And nothing on any dispatch surface may name the probe file.
+    swept = 0
+    for root in ("skills", "agents", "commands"):
+        for path in sorted((REPO / root).rglob("*.md")):
+            swept += 1
+            assert probe_rel not in _lines(path), (
+                str(path.relative_to(REPO)) + " must not name the probe agent file")
+    assert swept > 10, "the sweep found almost nothing; the roots are wrong"

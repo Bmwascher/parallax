@@ -428,6 +428,47 @@ add a failure mode to the probe driver for no measured risk.
 
 ---
 
+## D15 — Task 3: the frozen test code repeats the D4 `_norm` defect, a third time
+
+**Task:** 3. **Class:** plan defect. **Found by:** the session, before running
+the step. **FIXED, and recorded rather than silently repaired — D4 is on this
+ledger precisely because the silent repair was the fault.**
+
+The plan's Task 3 Step 1 code reads both agent files with `_norm` and then pins
+NEWLINE-ANCHORED needles against the result: `"\n  - Skill\n"`,
+`"\ndisallowedTools:\n"`, and a `re.findall` over `^  - (\w+)$` in multiline
+mode. `_norm` is `" ".join(text.split())`, which destroys every newline, so all
+three can only ever be false or empty. Measured before the step ran, on the real
+files: `"\n  - Skill\n" in _norm(text)` is **False**, and the `re.findall`
+returns **[]**. Every pin in the step was vacuous.
+
+This is the same defect as D4 (Task 1's workflow read) and the same root cause:
+the plan reached for the one existing helper without checking that it preserves
+what the needle anchors on. Third instance in one branch.
+
+Fixed with a new `_lines()` helper that reads the file and folds CRLF to LF,
+leaving newlines intact. Its docstring states its reach at true width and no
+wider: the agent files ARE CRLF on disk (39 CRLF, 0 bare LF, measured
+2026-08-03) and `read_text` already folds them through universal newlines, so
+the explicit fold is belt-and-braces for a caller that switches to
+`newline=""`, NOT what makes the pins work today.
+
+**Two guards the frozen code also lacked**, both added: the tool-name lists are
+asserted non-empty at their exact expected counts (5 for the reviewer, 6 for the
+probe) and the reviewer's denied-tool list is asserted non-empty. Without them a
+parse that silently matched nothing would pass a `Skill not in tools` check for
+the wrong reason.
+
+**Watched to fail.** The regression guard was mutated by moving `Skill` from
+`disallowedTools` into `tools` in `kimi-reviewer-agent.md`; it failed with
+`AssertionError: the review lane's agent must never offer Skill`, and the file
+was restored byte-identical. The first mutation attempt silently changed
+nothing, because it used LF byte patterns against a CRLF file — recorded here
+because a mutation that does not mutate reads exactly like a test that cannot
+fail, and it was only caught by checking the byte count changed.
+
+---
+
 ## REFUTED — the empty-root Compare-Object claim
 
 The Fable review stated that with an empty root, `Compare-Object
@@ -521,3 +562,33 @@ verdict, and this one was wider than the behaviour.
   one REFUTED with measurement on both hosts, one (D10) held open for the user.
 - Commit-trailer check extended to `e94c0b5..d0e116a`: zero `Claude-Session`
   trailers.
+
+---
+
+## Task 3 evidence
+
+- `tools/kimi-probe-agent.md` is the reviewer agent with EXACTLY the frozen
+  three changes, proven by diff rather than by claim: the only deletions are
+  `name: parallax-readonly-reviewer` and the `- Skill` line under
+  `disallowedTools`; the only additions outside the `# PROBE ONLY` block are
+  `name: parallax-probe-agent` and the `- Skill` line under `tools`.
+- Written UTF-8, not ASCII. The source agent carries U+2014 and the ASCII-only
+  Global Constraint covers `tools/*.ps1`, not a Markdown agent file.
+- Five-tier gate, whole repo: skill_lint PASS (0 errors, 1 pre-existing token
+  budget warning), skill_scanner clean, tier 1c exit 0, trigger evals all clear,
+  **968 passed / 13 skipped** in 429s.
+- `test_backup_lane.py` alone: **61 passed**.
+
+**Step 5, the leak guard watched to fail.** The guard SWEEPS three roots rather
+than naming documents, so one mutation proves only one root. All three were
+mutated, each by appending the probe path as bytes, each reverted to a
+byte-identical file:
+
+| root mutated | file | observed |
+|---|---|---|
+| `skills` | `skills/multi-model-verify/references/backup-lane.md` | exit 1, `... must not name the probe agent file` |
+| `agents` | `agents/escalation-implementer.md` | exit 1, same assertion naming that file |
+| `commands` | `commands/doctor.md` | exit 1, same assertion naming that file |
+
+Post-revert module clean at 61, working tree carrying only this cycle's own
+three paths.
