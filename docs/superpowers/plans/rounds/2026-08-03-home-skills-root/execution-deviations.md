@@ -84,6 +84,33 @@ read the transcript as a mismatch.
 
 ---
 
+## D3 — Task 1 Step 7: the mutation harness rewrote line endings on revert
+
+**Task:** 1. **Step:** 7. **Class:** driver tooling error, caught before commit,
+no plan defect.
+
+The mutation script read `.github/workflows/skill-evals.yml` with Python's
+`read_text`, which converts CRLF to LF under universal newlines, and wrote the
+original string back with `newline=""`, which writes exactly what it is given.
+The revert therefore restored the CONTENT byte-for-byte while converting all
+112 line endings from CRLF to LF. This repo checks out with `core.autocrlf=true`.
+
+`git diff` reported no content change, because git normalizes line endings when
+comparing, and printed only a warning. `git status --porcelain` DID list the
+file as modified. It was not staged — Task 1 stages by explicit path — so
+nothing entered the commit, and the file was restored with `git checkout --`
+immediately afterwards. Verified after restore: 112 CRLF, 0 bare LF, working
+tree clean, and the oracle still passes.
+
+**Why this is recorded rather than dropped.** It is the same family as the
+autocrlf blob trap this project hit in 0.14.2. A mutation harness that silently
+rewrites every line ending of a file it was only supposed to read and restore
+would, under `git add -A`, have produced a whole-file diff attributed to a
+two-line test change. The standing rule against `git add -A` is what contained
+it, which is worth having on the record as a control that actually fired.
+
+---
+
 ## Verification state at this point
 
 - `test_backup_lane.py`: 59 passed under `powershell.exe` AND under `pwsh.exe`.
