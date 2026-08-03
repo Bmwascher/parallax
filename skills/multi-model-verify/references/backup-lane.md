@@ -337,8 +337,9 @@ exactly like the primary lane's `~/.codex/AGENTS.md` — never a finding.
   NOT uniform across the four roots, and the record must not read as
   though it were: preflight-3 remediation clears the two project roots
   because it operates on the MIRROR, and `<debate-home>/skills/` is
-  created empty by the builder — but   `~/.agents/skills/` lives in the user's own home, is not relocated by
-  `KIMI_CODE_HOME`, and NOTHING this lane runs removes it.
+  created empty by the builder — but `~/.agents/skills/` lives in the
+  user's own home, is not relocated by `KIMI_CODE_HOME`, and NOTHING
+  this lane runs removes it.
   <!-- contract:start id=home-skill-root-disposition -->
   Enumerate that root before round 1 and record its COUNT, never its
   contents - the repo is public. MEASURED 2026-08-03 on kimi-code 0.31.1,
