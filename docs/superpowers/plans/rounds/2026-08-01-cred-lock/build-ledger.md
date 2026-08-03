@@ -239,6 +239,32 @@ it. Re-verified after: full suite **895 passed, 13 skipped**; live gate
 **70 per host on BOTH hosts, zero skipped**; all five gates exit 0; and
 the user's own credential still reads `ok`/`valid`.
 
+## Mutation audit, SESSION-MEASURED
+
+Every fix in rounds 41 through 45 was checked by REVERTING it and running
+the oracle that claims to cover it. This table is review evidence, not a
+product oracle: the committed tests carry the distinguishing fixtures,
+and these results are session-measured rather than independently
+reproducible. Each row is one source replacement in the named file, run
+against the commit in the last column.
+
+| Reverted | Command | Result |
+|---|---|---|
+| `-ErrorAction Stop` -> `SilentlyContinue` in `Get-SessionLeaves` | `-k unreadable` | round reported **clean** at `3a7a133^` |
+| all seven case-exact comparisons in `Get-Classification` | `-k case_variant` | 4 failed, control passed, `c34da9c` |
+| held-side comparisons only | `-k case_variant` | 3 failed, `c34da9c` |
+| strict decode at all four evidence inputs | `-k invalid_byte` | all four reported **`status: clean`**, `82c894e` |
+| `Test-HasKey` made case-insensitive | `-k each_shape_branch` | 6 failed, `82c894e` |
+| `kind` literals, fresh session id, resume session id | per-case | 1 failed each, controls passed, `cd75e2d` |
+| property-set `-cne` in both callers | `-k case_variant_result_keys` | 6 failed (login), 3 failed (builder), `82c894e` |
+| `-StripBom` on both whole-file readers | `-k bom_prefixed` | 2 failed, `cd75e2d` |
+| each ordinal comparison, one at a time | per-case | 1 failed each, this round |
+| `switch -CaseSensitive` | `-k first_record_type` | **0 failed** — recorded as defensive, not claimed |
+
+The last row is the point of keeping this table: one change of the ten
+could not be shown to matter, and it is written down as such rather than
+listed with the rest.
+
 ## What is NOT done
 
 All eleven tasks are built. What remains is not build work:

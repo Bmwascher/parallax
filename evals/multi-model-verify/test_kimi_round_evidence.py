@@ -1750,3 +1750,61 @@ def test_a_bom_prefixed_agent_file_is_clean(tmp_path):
     state_path = tmp_path / "state.json"
     write_json(state_path, fresh_prior_state())
     assert_clean(run_fresh(root, FIXTURE_SESSION_ID, state_path, agent_file=bom_agent))
+
+
+# --- the three ORDINAL comparisons, each driven on its own ---------------
+#
+# Culture-sensitive matching treats several zero-width characters as
+# absent, so each of these comparisons accepts a visually deceptive input
+# without the ordinal overload. The BOM controls above cannot reach them:
+# they prove -StripBom is required, not that the comparison is ordinal.
+
+ZWNJ = "\u200c"
+BOM_CHAR = "\ufeff"
+
+
+def test_a_zero_width_prefixed_agent_file_does_not_open_with_the_marker(tmp_path):
+    """U+200C is NOT stripped by -StripBom (only a leading BOM is), so it
+    reaches the marker check. Culture-sensitive StartsWith ignores it and
+    accepts the file."""
+    agent = tmp_path / "zwnj-agent.md"
+    agent.write_text(ZWNJ + AGENT_FILE.read_text(encoding="utf-8"), encoding="utf-8")
+    root, sess_dir = build_fresh_layout(tmp_path, fresh_wire(), fresh_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+    assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path, agent_file=agent),
+                  "agent-file-unusable")
+
+
+def test_a_zero_width_inside_the_closing_marker_never_closes_the_frontmatter(tmp_path):
+    """The closing search is the second ordinal comparison. A marker
+    spelled `-<BOM>--` is not `---`, but a culture-sensitive IndexOf finds
+    it anyway."""
+    body = AGENT_FILE.read_text(encoding="utf-8").replace("\r\n", "\n")
+    opening, rest = body.split("\n", 1)
+    assert opening == "---", opening
+    closing_at = rest.index("\n---\n")
+    deceptive = rest[:closing_at] + "\n-" + BOM_CHAR + "--\n" + rest[closing_at + 5:]
+    agent = tmp_path / "deceptive-close-agent.md"
+    agent.write_text(opening + "\n" + deceptive, encoding="utf-8")
+
+    root, sess_dir = build_fresh_layout(tmp_path, fresh_wire(), fresh_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+    assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path, agent_file=agent),
+                  "agent-file-unusable")
+
+
+def test_a_zero_width_prefixed_directory_is_not_a_session_leaf(tmp_path):
+    """The third ordinal comparison. The frozen rule says a member's name
+    BEGINS `session_` and nothing else, so `<BOM>session_decoy` is not a
+    member - but a culture-sensitive StartsWith counts it, making two new
+    leaves where there is one."""
+    root, sess_dir = build_fresh_layout(tmp_path, fresh_wire(), fresh_log())
+    decoy = root / "wd_x" / (BOM_CHAR + "session_decoy")
+    decoy.mkdir()
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+
+    p = assert_clean(run_fresh(root, FIXTURE_SESSION_ID, state_path))
+    assert p["nextState"]["sessionId"] == FIXTURE_SESSION_ID, p
