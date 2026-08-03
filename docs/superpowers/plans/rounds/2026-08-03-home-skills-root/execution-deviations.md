@@ -329,24 +329,38 @@ trailing blank line and `test_plant_state_file_shape` fails.
 
 ---
 
-## D10 — the tier-1c sweep does not see `.split("\n")`, and this is NOT fixed
+## D10 — the tier-1c sweep did not see `.split("\n")`
 
-**Class:** gap in an existing CI gate, demonstrated by D9. **Status: OPEN,
-awaiting the user's authorization**, because it is a change outside the frozen
-plan's six tasks.
+**Class:** gap in an existing CI gate, demonstrated by D9. **Status: FIXED,
+USER-AUTHORIZED 2026-08-03, and OUTSIDE the frozen plan's six tasks.**
 
-Widening `check_exact_line_oracles.py` from
-`gen.iter.func.attr == "splitlines"` to
-`gen.iter.func.attr in ("splitlines", "split")` was written and run against the
-whole repo: it flags NOTHING beyond D9's instance, which is already fixed. So
-the change is free and closes a demonstrated hole in a gate this project relies
-on.
+The checker keyed on the attribute name `splitlines` alone, so D9's instance —
+the same discard-then-count idiom written `raw.split("\n")` — passed CI
+untouched. A whole-branch review caught what the gate could not. Counting the
+three hand sweeps already on this repo's record, that is four spellings of one
+defect class that a sweep has missed.
 
-It is not taken here. The plan is frozen, this repo's convention is that
-off-plan changes carry explicit user authorization (precedent: `51b4554`,
-recorded as user-authorized and outside its cycle's eleven tasks), and the last
-review's Important finding was precisely about unrecorded departures from frozen
-text. Recorded for decision rather than done quietly.
+**Widened on the SEPARATOR, not the method name.** A line split is now
+`.splitlines()` OR `.split(<sep>)` where `<sep>` is a string literal containing
+a newline. `.split(",")` is deliberately not matched: that is a field parse, no
+contract there promises one LINE, and a gate that fires on correct code gets
+suppressed.
+
+**Tests first, in three directions**, all watched to fail before the checker
+changed: `.split("\n")` is flagged, `.split("\r\n")` is flagged, `.split(",")`
+is NOT. Verified afterwards that the checker flags the EXACT source that shipped
+at `d0e116a` — `find_violations` returns `[(3, 'lines')]` against it — and that
+the fixed file is clean.
+
+The checker's docstring records the miss and widens its stated LIMIT rather than
+quietly growing its reach: a `for` loop that appends, a `filter()` call, a regex
+split, or a separator built at runtime are all still invisible to it, and that
+is now written down.
+
+**This change is outside the frozen plan.** The user authorized it explicitly on
+2026-08-03 after it was surfaced as an open decision, in the same shape as
+`51b4554` in the 0.19.0 cycle. It is recorded here as authorized off-plan work
+so the diff debate adjudicates it as such rather than as drift.
 
 ---
 
