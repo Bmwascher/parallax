@@ -91,6 +91,9 @@ The debate rules that keep this honest
 |---|---|
 | `skills/multi-model-verify/` | The debate skill: both modes, debate protocol, frozen-plan format, model prompting notes, fallbacks/consent gate |
 | `skills/multi-model-verify/references/backup-lane.md` | The cross-vendor backup reviewer lane — currently Kimi K3 via kimi-code: consent-gated substitution when codex is down — the gate's "run backup lane" option (backup model id pinned in model-prompting-notes.md) |
+| `tools/new-kimi-lane-home.ps1` · `tools/new-kimi-lane-login.ps1` | The lane's credential ownership (0.19.0): a persistent LANE HOME holds one credential from its own login, and each throwaway debate home reaches it through a directory JUNCTION — see [Lane credential ownership](#lane-credential-ownership) |
+| `tools/kimi-lane-lock.ps1` · `tools/read-kimi-credential-state.ps1` | The lane home's liveness-anchored lock, and the credential-state validator every caller reads it through (four statuses, exactly one schema-valid line, never a token value) |
+| `tools/read-kimi-round-evidence.ps1` | Executable round-evidence validator: reads a debate round's OWN session files and decides whether it can be attributed to the declared model, agent and tool set at all |
 | `skills/multi-model-verify/references/panels.md` | Multi-reviewer panels: any lane combination with at least one cross-vendor seat; hub-and-spoke blind relay; subject-revision binding |
 | `hooks/` | PostToolUse + PostToolUseFailure hook (matcher `Task\|Agent`): fingerprints the superpowers code-reviewer dispatch, injects the mode-`diff` reminder with matching SHAs; inert everywhere else |
 | `agents/implementer.md` | Zero-judgment direct-typing executor for frozen-plan tasks (model pinned in the file's frontmatter) |
@@ -103,6 +106,7 @@ The debate rules that keep this honest
 | `commands/intake.md` | `/parallax:intake` — external-reference intake: clone read-only as untrusted subject data, ground every claimed delta on both sides, probe-gate behavior claims, rank dispositions for the user's scope pick, then hand into the multi-model-verify debate |
 | `evals/` | Four gate tiers for the skill itself — see [Verify](#verify) |
 | `evals/multi-model-verify/contract_coverage.py` | Contract coverage: every marked document region must sit whole inside some test pin. Closes the pin-integrity class that produced twelve instances across three cycles |
+| `evals/tools/check_exact_line_oracles.py` | Mechanical sweep for one defect class — "discard blank lines, then require exactly one survivor" — after three human sweeps each missed an instance. Runs in CI as tier 1c |
 | `tools/check-drift.ps1` | Weekly drift watch over the upstreams the contract depends on — see [Drift protection](#drift-protection) |
 | `tools/write-attestation.ps1` · `tools/verify-attestation.ps1` | SHA-bound review attestations — see [Attestation lane](#attestation-lane) |
 | `.githooks/pre-push` | Non-blocking attestation check on `main` pushes (`git config core.hooksPath .githooks` to enable) |
@@ -161,6 +165,10 @@ flowchart TD
 - Missing reference material for a port is a **hard stop** (ask the user),
   never a degraded mode — a debate about remembered code is two models
   fabricating at each other.
+- **Lane credential ownership (0.19.0)**: the backup lane never borrows
+  your ordinary kimi-code login — see
+  [Lane credential ownership](#lane-credential-ownership) for why
+  borrowing it could log you out.
 - **Reviewer context isolation (0.17.0)**: the gate measures the
   cross-vendor reviewer's PROMPT.
   `tools/codex-context-probe.ps1` renders the model-visible prompt with
@@ -177,6 +185,42 @@ flowchart TD
   is not in the prompt and is not measured: observed 2026-07-28, an MCP
   tool ran inside a round that passed every check above. Tracked as
   backlog item 7.
+
+## Lane credential ownership
+
+The backup reviewer lane runs the kimi-code client, and that client
+refreshes its access token routinely — `expires_in` is 900 seconds — and
+a refresh **rotates both tokens**. Until 0.19.0 each debate got a COPY of
+your ordinary credential, so a debate's copy consumed the refresh token
+and the server retired it, leaving your own login holding a token that no
+longer works. Measured, not theorized.
+
+What replaces it:
+
+- A persistent **LANE HOME** holds one credential, produced by its own
+  interactive login. Your ordinary credential is never read, copied or
+  written by the lane.
+- Each debate still gets a throwaway `KIMI_CODE_HOME`, but its
+  `credentials` directory is a **directory junction** into the lane home,
+  so a refresh writes THROUGH to the single file instead of forking a
+  copy.
+- A persistent lock file in the lane home serializes access. **Staleness
+  is decided by process liveness only, never by a clock**, and the owner
+  is identified by pid plus process start time so a reused pid cannot
+  steal a live lock. The file is never unlinked; every transition is
+  written in place under one exclusive handle.
+- First use with no lane credential REFUSES and prints the complete
+  runnable login command. It creates no lane home, no lock and no debate
+  home on that path.
+
+```powershell
+# one-time, interactive
+.\tools\new-kimi-lane-login.ps1 -LaneHome <lane-home> -OwnerPid <pid> -OwnerStartTicksUtc <ticks>
+```
+
+Verified live on 2026-08-02: three lane logins coexist with the user's
+own, and the ordinary credential is untouched — still valid, its file
+unwritten since before the lane logins.
 
 ## Panels
 
@@ -238,9 +282,11 @@ lineup is one configuration:
   `skills/multi-model-verify/references/model-prompting-notes.md`)
 - `pwsh` (PowerShell 7) for the hook; Windows PowerShell 5.1 for the drift
   watch scheduled task; Python 3.10+ for the evals
-- Optional — backup reviewer lane: kimi-code 0.31.1+ authenticated (Kimi
-  K3; backup model id declared in
-  `skills/multi-model-verify/references/model-prompting-notes.md`)
+- Optional — backup reviewer lane: kimi-code 0.31.1+ with its OWN login
+  in a persistent lane home (Kimi K3; backup model id declared in
+  `skills/multi-model-verify/references/model-prompting-notes.md`). The
+  lane never uses your ordinary credential — see
+  [Lane credential ownership](#lane-credential-ownership)
 - Optional — Flash implementer lane: the Antigravity CLI (`agy`)
   authenticated (Gemini 3.6 Flash; model literal pinned in
   `agents/flash-implementer.md`)
@@ -278,12 +324,25 @@ lane, and any unresolved drift — in one table.
 | Tier | Gate | Command | Runs |
 |---|---|---|---|
 | 1 — structure | Spec lint + security scan | `python evals/tools/skill_lint.py skills/multi-model-verify --strict` · `python evals/tools/skill_scanner.py skills` | CI + local |
+| 1c — one defect class | Exact-line oracle gate: rejects "discard blank lines, then require exactly one survivor" wherever the survivor count is what is measured | `python evals/tools/check_exact_line_oracles.py` | CI + local |
 | 2 — routing | Trigger/routing evals | `python evals/tools/run_trigger_evals.py` | CI + local |
 | 2.5 — contract | Structural pytest suite (hook e2e under pwsh, pinned superpowers template fixture, transport/fallback/status-field/seat pins) | `python -m pytest evals -q` | CI + local |
 | 3 — behavior | Real headless `claude -p` executor runs each case in a throwaway workspace (synthetic `References/DemoWidget` fixture; codex stripped from PATH for degraded cases), graded expectation-by-expectation by the cross-vendor reviewer — the executor's vendor never grades itself | `python evals/tools/run_behavioral_evals.py` | local only |
 
 Tier 3 tests the **installed** plugin, not the checkout — run the dev-loop
-re-sync first. Lint/scan/trigger/pytest run in CI on every push.
+re-sync first (or pass `--head` to test the checkout). Lint, scan, the
+exact-line gate, trigger evals and pytest all run in CI on every push, and
+the Windows job runs the PowerShell-facing suites under **both** Windows
+PowerShell 5.1 and PowerShell 7 — a green suite on one host proves one
+interpreter, which is how a lock that did not lock on PowerShell 7 once
+reached `main`.
+
+The backup lane has one more opt-in suite, `PARALLAX_LANE_LIVE=1`, which
+drives the real client against three pre-provisioned lane homes
+(`PARALLAX_LANE_LIVE_HOME_{A,B,C}`). Leave the opt-in unset and the whole
+module skips, which is its one legitimate skip. Set it, and every setup
+failure after that FAILS the gate instead of skipping it, because a
+skipped credential measurement is not a clean one.
 
 Both modes are executed, not just described: the diff-mode case builds a real
 two-commit git history in the workspace (frozen plan → implementation with a
