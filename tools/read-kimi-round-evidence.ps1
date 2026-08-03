@@ -155,15 +155,22 @@ function Get-BytePrefix([byte[]]$all, [long]$n) {
 # and `Get-Content -Encoding UTF8` both substitute U+FFFD per invalid
 # byte, so a corrupt byte inside an unused JSON string, or after a matched
 # log prefix, became a replacement character while the surrounding text
-# still parsed and passed. This tool's own invariant is that unreadable
-# evidence never reports clean, so a decode failure is a FAILURE, not a
-# repaired string. Returns $null on failure; every caller maps that to its
-# own existing fail reason rather than inventing one.
+# still parsed and reported CLEAN. This tool's own invariant is that
+# unreadable evidence never reports clean, so a decode failure is a
+# FAILURE, not a repaired string. Returns $null on failure; every caller
+# maps that to its own existing fail reason rather than inventing one.
 #
-# A leading BOM is stripped, because `Get-Content -Encoding UTF8` stripped
-# it and the byte offsets and prefix hashes recorded elsewhere are taken
-# against text without it.
-function ConvertFrom-StrictUtf8([byte[]]$bytes) {
+# -StripBom is passed by the two WHOLE-FILE readers only, because
+# `Get-Content -Encoding UTF8` stripped a leading BOM and they used it.
+# The wire and log SLICES do not pass it: their old path was a direct
+# `GetString`, which kept the BOM character, and this change is not the
+# place to start tolerating one. Each path keeps exactly the BOM behaviour
+# it had.
+#
+# The recorded byte offsets and prefix hashes are computed from RAW FILE
+# BYTES and therefore include any BOM. Nothing here changes that, and an
+# earlier version of this comment claimed the opposite.
+function ConvertFrom-StrictUtf8([byte[]]$bytes, [switch]$StripBom) {
     if ($null -eq $bytes) { return "" }
     $text = $null
     try {
@@ -171,10 +178,18 @@ function ConvertFrom-StrictUtf8([byte[]]$bytes) {
     } catch {
         return $null
     }
-    if ($text.Length -gt 0 -and [int]$text[0] -eq 0xFEFF) {
+    if ($StripBom -and $text.Length -gt 0 -and [int]$text[0] -eq 0xFEFF) {
         $text = $text.Substring(1)
     }
     return $text
+}
+
+# ONE place decides whether an object carries a key, so ONE mutation
+# covers every shape branch below. -ccontains is case-EXACT: PowerShell's
+# -contains is not, and its property ACCESS is not either, so a record
+# carrying `Provider` satisfied a required `provider` twice over.
+function Test-HasKey($obj, [string]$name) {
+    return (@($obj.PSObject.Properties.Name) -ccontains $name)
 }
 
 function Get-ByteSuffix([byte[]]$all, [long]$offset) {
@@ -225,7 +240,7 @@ function Read-PriorState($path) {
     }
     $raw = $null
     try {
-        $raw = ConvertFrom-StrictUtf8 ([System.IO.File]::ReadAllBytes($path))
+        $raw = ConvertFrom-StrictUtf8 ([System.IO.File]::ReadAllBytes($path)) -StripBom
     } catch {
         Fail ("prior-state-unusable: could not read -PriorState: " + $_.Exception.Message)
     }
@@ -242,16 +257,16 @@ function Read-PriorState($path) {
         Fail "prior-state-unusable: -PriorState parsed to null"
     }
     $propNames = @($obj.PSObject.Properties.Name)
-    if ($propNames -cnotcontains "kind") {
+    if (-not (Test-HasKey $obj "kind")) {
         Fail "prior-state-unusable: -PriorState has no 'kind' field"
     }
     if (-not ($obj.kind -is [string]) -or
-        ($obj.kind -ne "fresh" -and $obj.kind -ne "resume")) {
+        ($obj.kind -cne "fresh" -and $obj.kind -cne "resume")) {
         Fail "prior-state-unusable: -PriorState.kind is not 'fresh' or 'resume'"
     }
 
-    if ($obj.kind -eq "fresh") {
-        if ($propNames -cnotcontains "knownSessionDirs") {
+    if ($obj.kind -ceq "fresh") {
+        if (-not (Test-HasKey $obj "knownSessionDirs")) {
             Fail "prior-state-unusable: fresh -PriorState has no knownSessionDirs"
         }
         $known = $obj.knownSessionDirs
@@ -271,14 +286,14 @@ function Read-PriorState($path) {
     } else {
         # Every field PRESENT must be well-typed. Absence of a required
         # resume field is rule 4's job (state-inconsistent), not rule 1's.
-        if (($propNames -ccontains "sessionDir") -and -not ($obj.sessionDir -is [string])) {
+        if ((Test-HasKey $obj "sessionDir") -and -not ($obj.sessionDir -is [string])) {
             Fail "prior-state-unusable: resume -PriorState.sessionDir is not a string"
         }
-        if (($propNames -ccontains "sessionId") -and -not ($obj.sessionId -is [string])) {
+        if ((Test-HasKey $obj "sessionId") -and -not ($obj.sessionId -is [string])) {
             Fail "prior-state-unusable: resume -PriorState.sessionId is not a string"
         }
         foreach ($f in @("wireBytes", "logBytes")) {
-            if ($propNames -ccontains $f) {
+            if (Test-HasKey $obj $f) {
                 $v = $obj.$f
                 if (-not (($v -is [int]) -or ($v -is [long]))) {
                     Fail "prior-state-unusable: resume -PriorState.$f is not an integer"
@@ -289,7 +304,7 @@ function Read-PriorState($path) {
             }
         }
         foreach ($f in @("wirePrefixSha256", "logPrefixSha256", "toolsHash", "systemPromptHash")) {
-            if ($propNames -ccontains $f) {
+            if (Test-HasKey $obj $f) {
                 if (-not (Test-Sha256Hex $obj.$f)) {
                     Fail "prior-state-unusable: resume -PriorState.$f is not a 64-character hex hash"
                 }
@@ -308,7 +323,7 @@ function Get-AgentFileInfo($path) {
     }
     $raw = $null
     try {
-        $raw = ConvertFrom-StrictUtf8 ([System.IO.File]::ReadAllBytes($path))
+        $raw = ConvertFrom-StrictUtf8 ([System.IO.File]::ReadAllBytes($path)) -StripBom
     } catch {
         Fail ("agent-file-unusable: could not read -AgentFile: " + $_.Exception.Message)
     }
@@ -391,10 +406,10 @@ function Get-SessionLeaves($root) {
 # Record-shape validation (rule 10's "record-malformed").
 # ---------------------------------------------------------------------
 function Test-TurnPromptShape($rec) {
-    if (-not ($rec.PSObject.Properties.Name -ccontains "input")) { return $false }
+    if (-not (Test-HasKey $rec "input")) { return $false }
     if (-not ($rec.input -is [array])) { return $false }
     foreach ($item in @($rec.input)) {
-        if (-not ($item.PSObject.Properties.Name -ccontains "text")) { return $false }
+        if (-not (Test-HasKey $item "text")) { return $false }
         if (-not ($item.text -is [string])) { return $false }
     }
     return $true
@@ -403,16 +418,16 @@ function Test-TurnPromptShape($rec) {
 function Test-LlmRequestShape($rec) {
     foreach ($f in @("provider", "model", "modelAlias", "thinkingEffort",
                      "toolsHash", "systemPromptHash")) {
-        if (-not ($rec.PSObject.Properties.Name -ccontains $f)) { return $false }
+        if (-not (Test-HasKey $rec $f)) { return $false }
         if (-not ($rec.$f -is [string])) { return $false }
     }
     return $true
 }
 
 function Test-ToolsSnapshotShape($rec) {
-    if (-not ($rec.PSObject.Properties.Name -ccontains "hash")) { return $false }
+    if (-not (Test-HasKey $rec "hash")) { return $false }
     if (-not ($rec.hash -is [string])) { return $false }
-    if (-not ($rec.PSObject.Properties.Name -ccontains "tools")) { return $false }
+    if (-not (Test-HasKey $rec "tools")) { return $false }
     if (-not ($rec.tools -is [array])) { return $false }
     # Every ELEMENT, not just the array wrapper: a tool entry missing its
     # `name`, or a bare string in place of an object, both used to reach
@@ -425,7 +440,7 @@ function Test-ToolsSnapshotShape($rec) {
     # before rule 12 ever runs.
     foreach ($t in @($rec.tools)) {
         if ($null -eq $t) { return $false }
-        if (-not ($t.PSObject.Properties.Name -ccontains "name")) { return $false }
+        if (-not (Test-HasKey $t "name")) { return $false }
         if (-not ($t.name -is [string])) { return $false }
     }
     return $true
@@ -433,7 +448,7 @@ function Test-ToolsSnapshotShape($rec) {
 
 function Test-ActiveToolsShape($rec) {
     foreach ($f in @("names", "disallowedNames")) {
-        if (-not ($rec.PSObject.Properties.Name -ccontains $f)) { return $false }
+        if (-not (Test-HasKey $rec $f)) { return $false }
         if (-not ($rec.$f -is [array])) { return $false }
         foreach ($n in @($rec.$f)) { if (-not ($n -is [string])) { return $false } }
     }
@@ -442,21 +457,21 @@ function Test-ActiveToolsShape($rec) {
 
 function Test-ConfigUpdateShape($rec) {
     $names = @($rec.PSObject.Properties.Name)
-    $isFirst = ($names -ccontains "profileName") -or ($names -ccontains "systemPrompt")
-    $isSecond = ($names -ccontains "modelAlias") -or ($names -ccontains "thinkingEffort")
+    $isFirst = (Test-HasKey $rec "profileName") -or (Test-HasKey $rec "systemPrompt")
+    $isSecond = (Test-HasKey $rec "modelAlias") -or (Test-HasKey $rec "thinkingEffort")
     if ($isFirst) {
-        if (-not (($names -ccontains "profileName") -and ($rec.profileName -is [string]))) { return $false }
-        if (-not (($names -ccontains "systemPrompt") -and ($rec.systemPrompt -is [string]))) { return $false }
+        if (-not ((Test-HasKey $rec "profileName") -and ($rec.profileName -is [string]))) { return $false }
+        if (-not ((Test-HasKey $rec "systemPrompt") -and ($rec.systemPrompt -is [string]))) { return $false }
     }
     if ($isSecond) {
-        if (-not (($names -ccontains "modelAlias") -and ($rec.modelAlias -is [string]))) { return $false }
-        if (-not (($names -ccontains "thinkingEffort") -and ($rec.thinkingEffort -is [string]))) { return $false }
+        if (-not ((Test-HasKey $rec "modelAlias") -and ($rec.modelAlias -is [string]))) { return $false }
+        if (-not ((Test-HasKey $rec "thinkingEffort") -and ($rec.thinkingEffort -is [string]))) { return $false }
     }
     return $true
 }
 
 function Test-PermissionModeShape($rec) {
-    if (-not ($rec.PSObject.Properties.Name -ccontains "mode")) { return $false }
+    if (-not (Test-HasKey $rec "mode")) { return $false }
     return ($rec.mode -is [string])
 }
 
@@ -481,7 +496,7 @@ function Read-WireSlice($wirePath, $offset, $expectedFirstType) {
         } catch {
             Fail "wire-malformed: a line in the wire slice is not valid JSON"
         }
-        if ($null -eq $rec -or -not ($rec.PSObject.Properties.Name -ccontains "type")) {
+        if ($null -eq $rec -or -not (Test-HasKey $rec "type")) {
             Fail "wire-malformed: a wire record has no type field"
         }
         $shapeOk = $true
@@ -548,7 +563,7 @@ function Parse-LlmConfigLine($line) {
 $priorStateObj = Read-PriorState $PriorState
 
 # Rule 2
-if ($priorStateObj.kind -ne $Kind) {
+if ($priorStateObj.kind -cne $Kind) {
     Fail ("state-kind-mismatch: -PriorState.kind is '" + $priorStateObj.kind +
           "' but this invocation is -" + ($(if ($Fresh) { "Fresh" } else { "Resume" })))
 }
@@ -571,7 +586,7 @@ if ($Fresh) {
               " new session directory(ies) found under -SessionsRoot, expected exactly 1")
     }
     $leafName = Split-Path -Leaf $newLeaves[0]
-    if ($leafName -ne $SessionIdFromStdout) {
+    if ($leafName -cne $SessionIdFromStdout) {
         Fail ("session-id-mismatch: the new session directory is '" + $leafName +
               "' but -SessionIdFromStdout is '" + $SessionIdFromStdout + "'")
     }
@@ -581,28 +596,32 @@ if ($Fresh) {
     $resolvedSessionDir = $SessionDir
     $resolvedSessionId = Split-Path -Leaf ($SessionDir.TrimEnd('\', '/'))
     $priorNames = @($priorStateObj.PSObject.Properties.Name)
-    $priorSessionDir = if ($priorNames -ccontains "sessionDir") { [string]$priorStateObj.sessionDir } else { $null }
-    $priorSessionId = if ($priorNames -ccontains "sessionId") { [string]$priorStateObj.sessionId } else { $null }
+    $priorSessionDir = if (Test-HasKey $priorStateObj "sessionDir") { [string]$priorStateObj.sessionDir } else { $null }
+    $priorSessionId = if (Test-HasKey $priorStateObj "sessionId") { [string]$priorStateObj.sessionId } else { $null }
+    # $priorFull/$resolvedFull stay case-INSENSITIVE: they are resolved
+    # Windows filesystem paths, where case is not identity. The session ID
+    # beside them is case-EXACT, because it is a token the client issued
+    # and this tool binds a round to.
     $resolvedFull = Resolve-PathSafe $resolvedSessionDir
     $priorFull = Resolve-PathSafe $priorSessionDir
-    if (($priorFull -ne $resolvedFull) -or ($priorSessionId -ne $resolvedSessionId)) {
+    if (($priorFull -ne $resolvedFull) -or ($priorSessionId -cne $resolvedSessionId)) {
         Fail "state-session-mismatch: -PriorState.sessionDir/sessionId does not name this session"
     }
 }
 
 # Rule 4: internally inconsistent state.
 $priorNames = @($priorStateObj.PSObject.Properties.Name)
-if ($priorStateObj.kind -eq "fresh") {
+if ($priorStateObj.kind -ceq "fresh") {
     foreach ($f in @("sessionDir", "wireBytes", "logBytes", "wirePrefixSha256",
                      "logPrefixSha256", "toolsHash", "systemPromptHash")) {
-        if ($priorNames -ccontains $f) {
+        if (Test-HasKey $priorStateObj $f) {
             Fail ("state-inconsistent: a fresh -PriorState carries '" + $f + "'")
         }
     }
 } else {
     foreach ($f in @("sessionDir", "wireBytes", "logBytes", "wirePrefixSha256",
                      "logPrefixSha256", "toolsHash", "systemPromptHash")) {
-        if ($priorNames -cnotcontains $f) {
+        if (-not (Test-HasKey $priorStateObj $f)) {
             Fail ("state-inconsistent: a resume -PriorState is missing '" + $f + "'")
         }
     }
@@ -700,11 +719,11 @@ if ($Fresh) {
     # The two config.update shapes are distinguished by which keys they
     # carry, not by order.
     $firstShapes = @($configUpdates | Where-Object {
-        ($_.PSObject.Properties.Name -ccontains "profileName") -or
-        ($_.PSObject.Properties.Name -ccontains "systemPrompt") })
+        (Test-HasKey $_ "profileName") -or
+        (Test-HasKey $_ "systemPrompt") })
     $secondShapes = @($configUpdates | Where-Object {
-        ($_.PSObject.Properties.Name -ccontains "modelAlias") -or
-        ($_.PSObject.Properties.Name -ccontains "thinkingEffort") })
+        (Test-HasKey $_ "modelAlias") -or
+        (Test-HasKey $_ "thinkingEffort") })
     if ($firstShapes.Count -ne 1) {
         Fail "session-scoped-content: expected exactly one profileName/systemPrompt config.update"
     }

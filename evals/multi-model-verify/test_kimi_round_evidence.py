@@ -1499,24 +1499,59 @@ def _corrupt_one_byte_inside_a_string(path, marker):
 
 
 def test_an_invalid_byte_in_the_wire_slice_fails(tmp_path):
-    """A corrupt byte inside a JSON string used to become U+FFFD while the
-    surrounding record still parsed, so evidence that could not be read
-    was reported clean."""
+    """The byte goes into a string NOTHING later requires - the metadata
+    record's protocol_version - so under replacement decoding every
+    required token survives and the round reports CLEAN. Corrupting a
+    required token instead only proves which failure wins, which is what
+    the first version of this test did."""
     root, sess_dir = build_fresh_layout(tmp_path, fresh_wire(), fresh_log())
     _corrupt_one_byte_inside_a_string(
-        sess_dir / "agents" / "main" / "wire.jsonl", b"turn.prompt")
+        sess_dir / "agents" / "main" / "wire.jsonl", b'"protocol_version":"1.4"')
     state_path = tmp_path / "state.json"
     write_json(state_path, fresh_prior_state())
     assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path), "wire-malformed")
 
 
 def test_an_invalid_byte_in_the_log_slice_fails(tmp_path):
+    """The byte goes into a log line the rules never read - `llm response`
+    - so under replacement decoding the one `llm config` line is still
+    found, still matches, and the round reports CLEAN."""
     root, sess_dir = build_fresh_layout(tmp_path, fresh_wire(), fresh_log())
     _corrupt_one_byte_inside_a_string(
-        sess_dir / "logs" / "kimi-code.log", b"llm config")
+        sess_dir / "logs" / "kimi-code.log", b"llm response")
     state_path = tmp_path / "state.json"
     write_json(state_path, fresh_prior_state())
     assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path), "log-config-malformed")
+
+
+def test_an_invalid_byte_in_the_agent_file_fails(tmp_path):
+    """The fourth strict input. The byte goes into a frontmatter field
+    this tool does not read, so under replacement decoding the name, the
+    body and the tool list are all unchanged and the round reports
+    CLEAN."""
+    agent_bytes = AGENT_FILE.read_bytes()
+    marker = b"description:"
+    assert marker in agent_bytes, "this oracle needs an unread frontmatter field"
+    corrupted = tmp_path / "agent-with-a-bad-byte.md"
+    idx = agent_bytes.index(marker) + len(marker) + 4
+    corrupted.write_bytes(agent_bytes[:idx] + bytes([0x80]) + agent_bytes[idx:])
+
+    root, sess_dir = build_fresh_layout(tmp_path, fresh_wire(), fresh_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+    assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path,
+                            agent_file=corrupted), "agent-file-unusable")
+
+
+def test_the_same_agent_file_without_the_invalid_byte_is_clean(tmp_path):
+    """The control for the case above: the same COPIED file, uncorrupted,
+    so the copy itself is not what fails."""
+    copied = tmp_path / "agent-copy.md"
+    copied.write_bytes(AGENT_FILE.read_bytes())
+    root, sess_dir = build_fresh_layout(tmp_path, fresh_wire(), fresh_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+    assert_clean(run_fresh(root, FIXTURE_SESSION_ID, state_path, agent_file=copied))
 
 
 def test_an_invalid_byte_in_the_prior_state_fails(tmp_path):
@@ -1597,3 +1632,64 @@ def test_a_case_only_system_prompt_difference_fails(tmp_path):
     state_path = tmp_path / "state.json"
     write_json(state_path, fresh_prior_state())
     assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path), "systemPrompt")
+
+
+# --- kind and session identity are case-exact ---------------------------
+
+
+def test_a_case_variant_prior_state_kind_is_rejected(tmp_path):
+    """`Fresh` is not `fresh`. The literal used to be matched
+    case-insensitively, so a state declaring `Fresh` was accepted AND
+    routed as a fresh call."""
+    root, sess_dir = build_fresh_layout(tmp_path, fresh_wire(), fresh_log())
+    state_path = tmp_path / "state.json"
+    state = fresh_prior_state()
+    state["kind"] = "Fresh"
+    write_json(state_path, state)
+    assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path), "prior-state-unusable")
+
+
+def test_a_case_variant_session_id_from_stdout_is_a_mismatch(tmp_path):
+    """The session id is a token the client issued and this tool binds a
+    round to, so its case is identity. The resolved directory PATH beside
+    it stays case-insensitive, because Windows paths are not."""
+    root, sess_dir = build_fresh_layout(tmp_path, fresh_wire(), fresh_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+    assert_failed(run_fresh(root, FIXTURE_SESSION_ID.upper(), state_path),
+                  "session-id-mismatch")
+
+
+def test_the_exact_session_id_is_clean(tmp_path):
+    """The control: the same call with the id spelled exactly."""
+    root, sess_dir = build_fresh_layout(tmp_path, fresh_wire(), fresh_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+    assert_clean(run_fresh(root, FIXTURE_SESSION_ID, state_path))
+
+
+# --- key membership, through the ONE helper that decides it -------------
+
+
+@pytest.mark.parametrize("record_type,key,variant", [
+    ("llm.request", "provider", "Provider"),
+    ("llm.request", "toolsHash", "ToolsHash"),
+    ("turn.prompt", "input", "Input"),
+    ("llm.tools_snapshot", "hash", "Hash"),
+    ("tools.set_active_tools", "names", "Names"),
+    ("permission.set_mode", "mode", "Mode"),
+])
+def test_a_case_variant_required_key_in_each_shape_branch_is_malformed(
+        tmp_path, record_type, key, variant):
+    """Key membership is decided in ONE helper, so one mutation covers
+    every branch - but the branches are still independent expressions, so
+    each is driven here rather than argued about."""
+    wire = fresh_wire()
+    idx = find_index(wire, record_type, 1)
+    wire = mutate(wire, idx, lambda o: o.__setitem__(variant, o.pop(key)))
+    root, sess_dir = build_fresh_layout(tmp_path, wire, fresh_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+    proc = run_fresh(root, FIXTURE_SESSION_ID, state_path)
+    p = parsed(proc)
+    assert p["status"] == "failed", p

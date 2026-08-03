@@ -669,12 +669,16 @@ STUB_VALIDATOR_SCALAR_FIELDS = (
     "Write-Output '{\"status\":\"ok\",\"detail\":\"valid\",\"fields\":\"access_token\"}'\n"
     "exit 0\n"
 )
-STUB_VALIDATOR_CASE_VARIANT_KEYS = (
-    "param([string]$Path)\n"
-    "Write-Output '{\"Status\":\"ok\",\"Detail\":\"valid\","
-    "\"Fields\":[\"access_token\"]}'\n"
-    "exit 0\n"
-)
+def _stub_validator_with_one_variant_key(variant_key):
+    """EXACTLY ONE key varied, the other two canonical. Varying all three
+    at once cannot tell "rejects Status" from "rejects any of the three"."""
+    keys = {"status": "status", "detail": "detail", "fields": "fields"}
+    keys[variant_key] = variant_key.capitalize()
+    body = ('{"%s":"ok","%s":"valid","%s":["access_token"]}'
+            % (keys["status"], keys["detail"], keys["fields"]))
+    return ("param([string]$Path)\n"
+            "Write-Output '" + body + "'\n"
+            "exit 0\n")
 STUB_VALIDATOR_CASE_VARIANT_PAIR = (
     "param([string]$Path)\n"
     "Write-Output '{\"status\":\"OK\",\"detail\":\"Valid\","
@@ -734,15 +738,17 @@ def test_builder_rejects_blank_line_padded_validator_stdout(tmp_path):
     assert _lock_status(lane_home)["state"] == "free"
 
 
-def test_builder_rejects_case_variant_result_keys(tmp_path):
+@pytest.mark.parametrize("variant_key", ["status", "detail", "fields"])
+def test_builder_rejects_case_variant_result_keys(tmp_path, variant_key):
     """The frozen interface is exactly `status`, `detail`, `fields`. The
     pair oracle varies only the VALUES and leaves the property-set
-    comparison untested."""
-    target = tmp_path / "case-variant-keys-home"
+    comparison untested. ONE key at a time."""
+    target = tmp_path / ("case-variant-keys-home-" + variant_key)
     profile = _fake_profile(tmp_path, FAKE_REAL_CONFIG)
     lane_home = _fake_lane_home(tmp_path)
     proc, debate_id, owner_pid, owner_ticks = _build_with_stub_validator(
-        target, profile, lane_home, STUB_VALIDATOR_CASE_VARIANT_KEYS, tmp_path)
+        target, profile, lane_home,
+        _stub_validator_with_one_variant_key(variant_key), tmp_path)
     assert proc.returncode != 0, proc.stdout + proc.stderr
     assert proc.stdout == ""
     assert not target.exists()

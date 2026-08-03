@@ -126,10 +126,18 @@ if ($callNum -eq $failOnCall) {
         Write-Output '{"status":"ok","detail":"valid","fields":"access_token"}'
         exit 0
     } elseif ($failMode -eq "case-variant-keys") {
-        # The KEYS, not the values. The frozen interface is exactly
-        # status/detail/fields; the property-set comparison is what
-        # rejects this, and it is a different check from the pair table.
-        Write-Output '{"Status":"ok","Detail":"valid","Fields":["access_token"]}'
+        # EXACTLY ONE key is varied per run, named by
+        # PARALLAX_TEST_VALIDATOR_VARIANT_KEY, with the other two
+        # canonical. Varying all three at once cannot tell "rejects
+        # Status" from "rejects any of the three".
+        $vk = $env:PARALLAX_TEST_VALIDATOR_VARIANT_KEY
+        if ($vk -ceq "status") {
+            Write-Output '{"Status":"ok","detail":"valid","fields":["access_token"]}'
+        } elseif ($vk -ceq "detail") {
+            Write-Output '{"status":"ok","Detail":"valid","fields":["access_token"]}'
+        } else {
+            Write-Output '{"status":"ok","detail":"valid","Fields":["access_token"]}'
+        }
         exit 0
     } elseif ($failMode -eq "case-variant-pair") {
         # "OK"/"Valid" is NOT the frozen "ok"/"valid" pair. -eq is
@@ -690,13 +698,16 @@ def test_validator_blank_line_padded_stdout_rejected_at_both_call_positions(
     assert marker.exists() == client_ran
 
 
+@pytest.mark.parametrize("variant_key", ["status", "detail", "fields"])
 @pytest.mark.parametrize("fail_on_call,client_ran", [(1, False), (2, True)])
 def test_validator_case_variant_result_keys_rejected_at_both_call_positions(
-        stub_tools_dir, lane_home, kimi_stub, tmp_path, fail_on_call, client_ran):
+        stub_tools_dir, lane_home, kimi_stub, tmp_path, fail_on_call, client_ran,
+        variant_key):
     """The frozen interface is exactly `status`, `detail`, `fields`. The
     pair-table oracle varies only the VALUES, so it leaves the property-set
-    comparison untested: reverting that comparison to case-insensitive
-    would keep it green. This varies the KEYS."""
+    comparison untested. This varies the KEYS, ONE AT A TIME: varying all
+    three together cannot distinguish "rejects Status" from "rejects any
+    of the three"."""
     verdict_out = tmp_path / "verdict.json"
     marker = tmp_path / "marker.txt"
     counter = tmp_path / "counter.txt"
@@ -707,6 +718,7 @@ def test_validator_case_variant_result_keys_rejected_at_both_call_positions(
         env={"PARALLAX_TEST_VALIDATOR_COUNTER_FILE": str(counter),
              "PARALLAX_TEST_VALIDATOR_FAIL_ON_CALL": str(fail_on_call),
              "PARALLAX_TEST_VALIDATOR_FAIL_MODE": "case-variant-keys",
+             "PARALLAX_TEST_VALIDATOR_VARIANT_KEY": variant_key,
              "PARALLAX_TEST_STUB_MARKER_FILE": str(marker)})
     assert result.returncode == 6, (result.stdout, result.stderr)
     assert not verdict_out.exists()
