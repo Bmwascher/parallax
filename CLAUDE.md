@@ -11,11 +11,26 @@ for real work, lowercase imperative commits, no AI attribution).
 ## Verification
 - `python evals/tools/skill_lint.py skills/multi-model-verify --strict`
 - `python evals/tools/skill_scanner.py skills`
+- `python evals/tools/check_exact_line_oracles.py`
 - `python evals/tools/run_trigger_evals.py`
 - `python -m pytest evals -q`
-CI runs all four on every push (.github/workflows/skill-evals.yml).
+CI runs all five on every push (.github/workflows/skill-evals.yml), as
+tiers 1, 1b, 1c, 2 and 2b of the `skill-evals` job.
 
-Two suites are local-only and opt-in, so run them by hand when you touch
+A SECOND job, `powershell-hosts`, re-runs every PowerShell-facing test
+module under BOTH Windows PowerShell 5.1 and PowerShell 7. A green suite
+on one host proves ONE interpreter: 0.16.0 shipped a lane lock that did
+not lock on PowerShell 7 at all, and the Linux job only caught it after
+release. Locally the suite picks whichever host it finds first, so set
+`$env:PARALLAX_PS_HOST` to test the other one.
+
+Tier 1c is a mechanical sweep for one defect class, not a proof: it flags
+the "discard blank lines, then assert exactly one survivor" idiom, which
+accepts a reply the frozen contract must reject. Three hand sweeps each
+missed an instance. Write new single-line parsers through
+`accept_exactly_one_nonempty_line()` in `evals/tools/exact_line.py`.
+
+Three suites are local-only and opt-in, so run them by hand when you touch
 what they cover:
 - skill/prompt changes -> `python evals/tools/run_behavioral_evals.py`
   (real headless runs, graded by the cross-vendor reviewer; `--head` tests
@@ -28,6 +43,12 @@ what they cover:
   PowerShell, so no `VAR=1 cmd` prefix). Drives the real script through its
   whole state machine offline against stub CLIs. Slow: four scenarios
   re-run the full pytest suite inside a disposable worktree.
+- backup-lane credential or lock changes -> set `PARALLAX_LANE_LIVE=1`
+  and `PARALLAX_LANE_LIVE_HOME_{A,B,C}` to the three provisioned lane
+  homes, then `python -m pytest evals -q`. Windows only. It drives the
+  REAL kimi-code client. Unset, the module skips; once opted in, EVERY
+  setup failure FAILS the gate instead of skipping it, because a skipped
+  credential measurement is not a clean one.
 
 ## Dev loop
 The plugin is installed user-scope from a LOCAL marketplace pointing at
@@ -51,6 +72,14 @@ context probe's failure directions are live-verified contracts locked by
 direction in the probe lands on BLOCKED; a change that lets an unmade
 measurement read as clean is the one outcome these scripts may never
 produce.
+
+The backup lane's credential handling is a live-verified contract locked
+by `evals/multi-model-verify/test_kimi_lane_home.py`,
+`test_kimi_lane_login.py`, `test_kimi_lane_lock.py` and
+`test_kimi_credential_state.py`. A debate home reaches the one credential
+through a directory JUNCTION and must never hold a COPY: the access token
+lives 900 seconds and a refresh rotates BOTH tokens, so a copy that
+refreshes retires the original. Change the tests first.
 
 Contract text inside `contract:start` / `contract:end` HTML comment
 markers must sit WHOLE inside a single pin in `evals/multi-model-verify/`.
