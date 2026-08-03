@@ -1897,3 +1897,91 @@ def test_the_recovery_command_row9_full_success_with_apostrophe_and_space(tmp_pa
     # was created anywhere under the disposable run profile.
     assert not (fake_profile_dir / ".kimi-code" / "credentials" / "kimi-code.json").exists()
 
+
+# ---------------------------------------------------------------------
+# 0.20.0: the builder's skills-directory POSTCONDITION.
+#
+# The reopened debate established that the builder's own New-Item is the
+# ONLY site in this repository that writes to <debate-home>/skills, so
+# there is no shipped writer and no per-round check is warranted. These
+# cases therefore prove the DETECTOR fires for the reason it claims -
+# never that the shipped lane can reach the state it detects. Presenting
+# them as threat evidence would be a claim wider than its evidence, and
+# that is why the seam exists rather than a fixture that pre-seeds the
+# directory: the check has to run against content that appeared AFTER
+# creation, which is the only moment it can legitimately catch.
+# ---------------------------------------------------------------------
+
+
+def test_build_asserts_its_skills_directory_is_empty(tmp_path):
+    """A plain file planted between creation and the check must abort."""
+    target = tmp_path / "seeded-home"
+    profile = _fake_profile(tmp_path, FAKE_REAL_CONFIG)
+    lane_home = _fake_lane_home(tmp_path)
+
+    proc, *_ = _build2(target, profile, lane_home,
+                       extra_env={"PARALLAX_SKILLS_SEED_FILE": "1"})
+    assert proc.returncode != 0, proc.stdout + proc.stderr
+    assert "skills directory is not empty after creation" in proc.stderr
+    assert not target.exists()
+    assert _lock_status(lane_home)["state"] == "free"
+
+
+def test_build_asserts_against_a_hidden_entry(tmp_path):
+    """-Force, or the check is blind to the one intruder most worth
+    catching. Watched SEPARATELY from the visible case, because a check
+    that sees a plain file and not a hidden one passes the obvious test
+    and fails the real one - the same -Force gap the canary harness was
+    bitten by at mutations N3 and N4."""
+    target = tmp_path / "hidden-seeded-home"
+    profile = _fake_profile(tmp_path, FAKE_REAL_CONFIG)
+    lane_home = _fake_lane_home(tmp_path)
+
+    proc, *_ = _build2(target, profile, lane_home,
+                       extra_env={"PARALLAX_SKILLS_SEED_HIDDEN": "1"})
+    assert proc.returncode != 0, proc.stdout + proc.stderr
+    assert "skills directory is not empty after creation" in proc.stderr
+    assert not target.exists()
+    assert _lock_status(lane_home)["state"] == "free"
+
+
+def test_the_postcondition_refuses_before_emitting_custody_json(tmp_path):
+    """A refusal that has already printed the custody nonce hands the
+    caller a home it must release and must not trust. Nothing on stdout
+    is the assertion; a nonzero exit alone would pass either way."""
+    target = tmp_path / "custody-order-home"
+    profile = _fake_profile(tmp_path, FAKE_REAL_CONFIG)
+    lane_home = _fake_lane_home(tmp_path)
+
+    proc, *_ = _build2(target, profile, lane_home,
+                       extra_env={"PARALLAX_SKILLS_SEED_FILE": "1"})
+    assert proc.returncode != 0
+    assert proc.stdout == "", proc.stdout
+
+
+def test_a_clean_build_still_succeeds_with_an_empty_skills_dir(tmp_path):
+    """The POSITIVE CONTROL, and it is not optional: without it every
+    case above is satisfied by a builder that refuses unconditionally."""
+    target = tmp_path / "clean-postcondition-home"
+    profile = _fake_profile(tmp_path, FAKE_REAL_CONFIG)
+    lane_home = _fake_lane_home(tmp_path)
+
+    proc, debate_id, owner_pid, owner_ticks = _build2(target, profile, lane_home)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    custody = json.loads(accept_exactly_one_nonempty_line(proc.stdout))
+    assert custody["debateHome"]
+    skills = target / "skills"
+    assert skills.is_dir()
+    assert list(skills.iterdir()) == []
+    _remove2(target, lane_home, debate_id, owner_pid, owner_ticks,
+             custody["nonce"])
+
+
+def test_the_postcondition_seam_is_declared_in_the_builder():
+    """The seams are part of the tool's contract, not test scaffolding
+    someone may delete as dead code."""
+    body = _read(BUILDER)
+    assert "PARALLAX_SKILLS_SEED_FILE" in body
+    assert "PARALLAX_SKILLS_SEED_HIDDEN" in body
+    assert "skills directory is not empty after creation" in body
+    assert "skills directory could not be enumerated after creation" in body

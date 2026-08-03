@@ -337,21 +337,45 @@ exactly like the primary lane's `~/.codex/AGENTS.md` — never a finding.
   NOT uniform across the four roots, and the record must not read as
   though it were: preflight-3 remediation clears the two project roots
   because it operates on the MIRROR, and `<debate-home>/skills/` is
-  created empty by the builder — but `~/.agents/skills/` lives in the
-  user's own home, is not relocated by `KIMI_CODE_HOME`, and NOTHING
-  this lane runs removes it. Enumerate that root before round 1 and
-  record what it holds; a non-empty one is unprobed territory, recorded
-  as such rather than assumed absorbed by the tool allowlist.
-  `--skills-dir` is a MITIGATION whose
-  effect is UNMEASURABLE in this configuration, not a control. Probed
-  2026-07-31 with canaries planted at both project roots: runs with and
-  without the flag were indistinguishable, and the reviewer reported no
-  skills available at all — most likely because `Skill` is absent from
-  the agent's tool allowlist, so nothing is advertised to it either
-  way. The load-bearing controls are that allowlist and preflight-3
-  remediation. Keep passing `--skills-dir`, because it costs nothing
-  and covers a future release that advertises regardless, but claim
-  nothing for it.
+  created empty by the builder — but   `~/.agents/skills/` lives in the user's own home, is not relocated by
+  `KIMI_CODE_HOME`, and NOTHING this lane runs removes it.
+  <!-- contract:start id=home-skill-root-disposition -->
+  Enumerate that root before round 1 and record its COUNT, never its
+  contents - the repo is public. MEASURED 2026-08-03 on kimi-code 0.31.1,
+  and no longer unprobed: a canary skill planted in that root was
+  REACHABLE when `--skills-dir` was omitted - the wire carried the
+  invocation and a `skill_activation` message delivering the body - and
+  was NOT found when the flag was passed, the lookup returning the
+  calibrated not-found result exactly. Treat the enumeration as an
+  environment record of reachable external instruction inventory, not as
+  a control and not as evidence that any real skill was invoked. Record:
+  docs/superpowers/plans/rounds/2026-08-03-home-skills-root/probe-record.md
+  <!-- contract:end -->
+  <!-- contract:start id=home-skill-root-disposition-limit -->
+  The disposition is bound to what the probe reached: one skill, named
+  exactly, at the home root, on kimi-code 0.31.1. Suppression was
+  measured for that root ALONE; the two project roots were never
+  canaried, and their exclusion rests on the flag's measured replacement
+  semantics and the client's own help text, with preflight-3 remediation
+  clearing them in the mirror regardless. The flag REPLACES discovery
+  with its target rather than adding to it, so it does not suppress its
+  own target - it selects it - and its suppression of the other roots
+  holds only while `<debate-home>/skills/` is EMPTY: the builder creates
+  it empty and asserts that as its own postcondition, and no per-round
+  check re-verifies it at dispatch. On that client `systemPromptChars`
+  equalled the LF-normalized agent body in every cell, including both
+  loaded-canary cells, so the measured delivery path was
+  `skill_activation` and not system-prompt injection: the deny list
+  controls that measured path, and the lane's system-prompt equality
+  checks, not the deny list, would have to reject any future injection
+  path. A client whose skill delivery changes shape retires this
+  measurement rather than inheriting it.
+  <!-- contract:end -->
+  The load-bearing control as the lane ships is the `Skill` deny list - a
+  discovered skill cannot be invoked, measured in cells A and B of the
+  same record. Keep passing `--skills-dir` on every call, fresh and
+  resumed, as a measured second layer, and claim for it exactly what was
+  measured: replacement, conditional on an empty target, on 0.31.1.
 - A planted `SKILL.md` remains READABLE as ordinary workspace content
   whatever the discovery configuration does. In the measured round the
   reviewer read both canaries with `Read`, recognized them as injection

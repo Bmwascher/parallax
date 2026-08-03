@@ -669,6 +669,14 @@ DECLARED_REGIONS = {
     "enumeration-depth-asymmetry",
     "brief-scope-guard",
     "client-probe-scope-limit",
+    # 0.20.0, from the reopened home-skills-root debate. These replace
+    # no earlier region - the text they cover was ordinary pinned prose
+    # asserting an UNKNOWN ("unprobed territory") and an unmeasurable
+    # mitigation. The probe resolved both. A marked region is what stops
+    # a later edit appending "this may be skipped when the driver
+    # considers the home trusted" underneath a still-passing pin.
+    "home-skill-root-disposition",
+    "home-skill-root-disposition-limit",
 }
 
 

@@ -839,32 +839,64 @@ def test_backup_lane_client_config_sweep():
             "value in a debate's home was written by something other "
             "than the builder and is a finding about the home, not a "
             "note.") in body
-    # The retired "unprobed territory" pin carried a DISPOSITION for the
-    # source this lane cannot clear. Its successor names which roots are
-    # covered by what, and that `~/.agents/skills/` is covered by
-    # nothing: preflight-3 operates on the MIRROR and KIMI_CODE_HOME does
-    # not relocate the user's home, so an uneven coverage claim here
-    # would be the same overclaim in a new place.
+    # 0.20.0: two retired pins are replaced here. The first instructed
+    # every round to record an unknown, and the probe resolved it. The
+    # second called `--skills-dir` unmeasurable, which was true only of
+    # the CONFOUNDED configuration it was measured in, where `Skill` was
+    # denied so nothing could load either way.
+    #
+    # The disposition and the limit that binds it are SEPARATE regions
+    # because one pin must lock a whole region, and each is long enough
+    # alone. The prose after them is deliberately OUTSIDE both regions,
+    # so the regions stay pinnable.
     assert ("`~/.agents/skills/` lives in the user's own home, is not "
             "relocated by `KIMI_CODE_HOME`, and NOTHING this lane runs "
-            "removes it. Enumerate that root before round 1 and record "
-            "what it holds; a non-empty one is unprobed territory, "
-            "recorded as such rather than assumed absorbed by the tool "
-            "allowlist.") in body
-    # The old "LATENT surface" pin recorded that a back-channel key's
-    # presence says nothing about whether anything is actually being
-    # merged. Its successor is stronger and states the same restraint:
-    # `--skills-dir` is a MITIGATION whose effect is UNMEASURABLE here,
-    # not a control - measured, runs with and without it were
-    # indistinguishable because nothing loaded either way. Claiming it as
-    # a control is the overclaim this pin exists to block.
-    assert ("`--skills-dir` is a MITIGATION whose effect is UNMEASURABLE "
-            "in this configuration, not a control") in body
-    assert ("The load-bearing controls are that allowlist and preflight-3 "
-            "remediation.") in body
-    assert ("Keep passing `--skills-dir`, because it costs nothing and "
-            "covers a future release that advertises regardless, but "
-            "claim nothing for it.") in body
+            "removes it.") in body
+    assert ("Enumerate that root before round 1 and record its COUNT, "
+            "never its contents - the repo is public. MEASURED "
+            "2026-08-03 on kimi-code 0.31.1, and no longer unprobed: a "
+            "canary skill planted in that root was REACHABLE when "
+            "`--skills-dir` was omitted - the wire carried the "
+            "invocation and a `skill_activation` message delivering the "
+            "body - and was NOT found when the flag was passed, the "
+            "lookup returning the calibrated not-found result exactly. "
+            "Treat the enumeration as an environment record of reachable "
+            "external instruction inventory, not as a control and not as "
+            "evidence that any real skill was invoked. Record: "
+            "docs/superpowers/plans/rounds/2026-08-03-home-skills-root/"
+            "probe-record.md") in body
+    assert ("The disposition is bound to what the probe reached: one "
+            "skill, named exactly, at the home root, on kimi-code "
+            "0.31.1. Suppression was measured for that root ALONE; the "
+            "two project roots were never canaried, and their exclusion "
+            "rests on the flag's measured replacement semantics and the "
+            "client's own help text, with preflight-3 remediation "
+            "clearing them in the mirror regardless. The flag REPLACES "
+            "discovery with its target rather than adding to it, so it "
+            "does not suppress its own target - it selects it - and its "
+            "suppression of the other roots holds only while "
+            "`<debate-home>/skills/` is EMPTY: the builder creates it "
+            "empty and asserts that as its own postcondition, and no "
+            "per-round check re-verifies it at dispatch. On that client "
+            "`systemPromptChars` equalled the LF-normalized agent body "
+            "in every cell, including both loaded-canary cells, so the "
+            "measured delivery path was `skill_activation` and not "
+            "system-prompt injection: the deny list controls that "
+            "measured path, and the lane's system-prompt equality "
+            "checks, not the deny list, would have to reject any future "
+            "injection path. A client whose skill delivery changes shape "
+            "retires this measurement rather than inheriting it.") in body
+    # OUTSIDE the regions, and pinned separately: what actually holds the
+    # lane closed as it ships, and the standing instruction to keep
+    # passing the flag. Both lanes agreed this prose must not sit inside
+    # region 2, because a region has to fit one pin.
+    assert ("The load-bearing control as the lane ships is the `Skill` "
+            "deny list - a discovered skill cannot be invoked, measured "
+            "in cells A and B of the same record.") in body
+    assert ("Keep passing `--skills-dir` on every call, fresh and "
+            "resumed, as a measured second layer, and claim for it "
+            "exactly what was measured: replacement, conditional on an "
+            "empty target, on 0.31.1.") in body
     # And the files stay an injection surface by a different route, which
     # is why remediation deletes them rather than trusting the reviewer:
     # in the measured round the reviewer READ both canaries and declined
