@@ -239,6 +239,54 @@ it. Re-verified after: full suite **895 passed, 13 skipped**; live gate
 **70 per host on BOTH hosts, zero skipped**; all five gates exit 0; and
 the user's own credential still reads `ok`/`valid`.
 
+## Rounds 42 to 47, and the FINAL verification totals
+
+The debate did not stop at 41. Five more rounds ran, every one of them on
+the evidence validator this branch carries but did not introduce, and
+every one found something:
+
+- **42** — the case family was still open at the boundaries that matter,
+  and the credential validator decoded with the REPLACEMENT fallback, so
+  a corrupt byte inside a token became U+FFFD, parsed, and was accepted
+  as `ok`/`valid`. It also found two of the session's own new oracles
+  unable to fail.
+- **43** — the strict-decode oracles corrupted tokens the rules require
+  later, so they measured which failure won rather than the danger. The
+  fourth strict input had no oracle at all. `parsed()` took the LAST
+  stdout line, so stray output before the JSON passed every test in that
+  module.
+- **44** — the resume side of the session binding had no case oracle, the
+  BOM behaviour was now owned by this code without a control, and the
+  prior-state decode case had no same-shape clean control.
+- **45** — the three ordinal comparisons had no oracles of their own.
+- **46** — the mutation audit's preamble claimed a precision its own
+  table did not carry.
+- **47** — **PASS. The diff debate is complete.**
+
+One measurement from round 44 is worth keeping outside the table.
+`String.StartsWith(string)` is CULTURE-SENSITIVE by default and silently
+ignores zero-width characters, so a BOM-prefixed agent file satisfied a
+check for how the file must OPEN. That was found only because a control
+added that round failed to discriminate.
+
+**FINAL verification, at `54e1742` unless noted:**
+
+```
+full suite                933 passed, 13 skipped
+live gate powershell.exe  70 passed, ZERO skipped
+live gate pwsh.exe        70 passed, ZERO skipped
+skill_lint --strict       exit 0
+skill_scanner             exit 0
+run_trigger_evals         exit 0
+check_exact_line_oracles  exit 0
+check_workflow_paths      exit 0
+behavioral --head         0 failures, 7 ran, 2 manual-only skipped
+real credential           {"status":"ok","detail":"valid",...}
+```
+
+`fc6b6fa`, the terminal commit, changes one Markdown file; the three
+modules that read the plan and the ledger were re-run there, 124 passed.
+
 ## Mutation audit, SESSION-MEASURED
 
 Selected review mutations from rounds 41 through 46 are summarized below.
