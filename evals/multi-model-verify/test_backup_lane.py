@@ -11,22 +11,34 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[2]
 REFS = REPO / "skills" / "multi-model-verify" / "references"
 BACKUP_LANE = REFS / "backup-lane.md"
-AGENT_YAML = REFS / "kimi-reviewer-agent.yaml"
-SYSTEM_MD = REFS / "kimi-reviewer-system.md"
+AGENT_MD = REFS / "kimi-reviewer-agent.md"
 NOTES = REFS / "model-prompting-notes.md"
 FALLBACKS = REFS / "fallbacks.md"
 PLAN_FORMAT = REFS / "frozen-plan-format.md"
 BACKUP_ID = "kimi-code/k3-256k"
-ALLOWLIST = [
-    "kimi_cli.tools.todo:SetTodoList",
-    "kimi_cli.tools.file:ReadFile",
-    "kimi_cli.tools.file:ReadMediaFile",
-    "kimi_cli.tools.file:Glob",
-    "kimi_cli.tools.file:Grep",
-]
-FORBIDDEN_TOOL_MARKERS = ["WriteFile", "StrReplaceFile", "Shell",
-                          "SearchWeb", "FetchURL", "tools.web",
-                          "tools.shell"]
+ALLOWLIST = ["Read", "Grep", "Glob", "ReadMediaFile", "TodoList"]
+DENYLIST = ["Bash", "Write", "Edit", "WebSearch", "FetchURL",
+            "EnterPlanMode", "ExitPlanMode", "Agent", "AgentSwarm",
+            "AskUserQuestion", "Skill", "TaskList", "TaskOutput",
+            "TaskStop", "CronCreate", "CronList", "CronDelete"]
+# Every built-in tool documented for 0.31.1, written out INDEPENDENTLY of
+# the two lists above. r3 defined this as their union and then compared the
+# union back to it, which is a tautology that detects neither a swapped
+# name nor an omission.
+#
+# Accepted limit, stated plainly because r4 caught the earlier wording
+# overclaiming: NOTHING here detects a tool a future client adds. The
+# floor check is a LOWER BOUND - it rejects releases below 0.31.1 and
+# accepts every newer one, so it does not force a re-probe at upgrade.
+# Re-probing the inventory is a manual step at any deliberate version
+# bump, and the drift snapshot's recorded version is what makes such a
+# bump visible.
+KNOWN_TOOLS = {
+    "Read", "Write", "Edit", "Grep", "Glob", "ReadMediaFile", "Bash",
+    "WebSearch", "FetchURL", "EnterPlanMode", "ExitPlanMode", "TodoList",
+    "Agent", "AgentSwarm", "AskUserQuestion", "Skill", "TaskList",
+    "TaskOutput", "TaskStop", "CronCreate", "CronList", "CronDelete",
+}
 
 
 def _read(p):
@@ -39,14 +51,20 @@ def _norm(p):
 
 
 def test_backup_artifacts_exist():
-    for p in (BACKUP_LANE, AGENT_YAML, SYSTEM_MD):
+    for p in (BACKUP_LANE, AGENT_MD):
         assert p.is_file(), str(p)
+    assert not (REFS / "kimi-reviewer-agent.yaml").exists()
+    assert not (REFS / "kimi-reviewer-system.md").exists()
 
 
 def test_notes_backup_declarations():
     notes = _read(NOTES)
     assert "Canonical backup reviewer model id: `" + BACKUP_ID + "`" in notes
-    assert "Canonical backup thinking flag: `--thinking`" in notes
+    assert "Canonical backup provider: `kimi`" in notes
+    assert "Canonical backup reasoning effort: `high`" in notes
+    assert ("Canonical backup thinking declaration: `[thinking] enabled = true`"
+            in notes)
+    assert "Canonical backup thinking flag: `--thinking`" not in notes
     # primary parse must survive the amendment, in BOTH parser dialects
     m = re.search(r"Canonical model id: `([^`]+)`", notes)
     assert m and m.group(1) and m.group(1) != BACKUP_ID
@@ -61,199 +79,497 @@ def test_notes_backup_declarations():
         "Canonical backup reviewer model id:")
 
 
-def test_agent_yaml_allowlist_exact():
-    yaml_text = _read(AGENT_YAML)
-    # exact LIST equality: extra, missing, or reordered tool entries all
-    # fail - presence checks alone would tolerate an added WriteFile
-    tools = re.findall(r'-\s+"([^"]+)"', yaml_text)
-    assert tools == ALLOWLIST
-    for marker in FORBIDDEN_TOOL_MARKERS:
-        assert marker not in yaml_text, marker
-    assert "system_prompt_path: ./kimi-reviewer-system.md" in yaml_text
+def test_agent_allowlist_and_denylist_exact():
+    """Exact LIST equality. Omitting `tools:` means ALL tools on this
+    client, so a silent parse failure is PERMISSIVE - hence the denylist
+    as well."""
+    import re
+    body = _read(AGENT_MD)
+    tools = re.search(r"^tools:\n((?:  - \w+\n)+)", body, re.M)
+    assert tools
+    assert [t.strip("- ").strip()
+            for t in tools.group(1).strip().splitlines()] == ALLOWLIST
+    denied = re.search(r"^disallowedTools:\n((?:  - \w+\n)+)", body, re.M)
+    assert denied
+    assert [t.strip("- ").strip()
+            for t in denied.group(1).strip().splitlines()] == DENYLIST
+
+
+def test_the_two_lists_partition_the_known_inventory():
+    """Set equality, not a count. r2 asserted len(A)+len(B)==22, which
+    stayed green if a real name were swapped for a nonexistent one.
+
+    Accepted limit, stated so it stays deliberate: this cannot see a tool
+    a FUTURE client adds, and nothing offline can. The floor is a LOWER
+    bound and accepts every newer release, so it does not force a
+    re-probe either - re-probing is a manual step at a deliberate version
+    bump, made visible by the drift snapshot's recorded version."""
+    assert not (set(ALLOWLIST) & set(DENYLIST))
+    assert set(ALLOWLIST) | set(DENYLIST) == KNOWN_TOOLS
+
+
+def test_agent_empties_the_subagent_list():
+    """Measured: `subagents` defaults to ALL, including `coder`. That was
+    inert only because Agent and AgentSwarm are denied, and the
+    coincidence of two controls is not a control."""
+    assert "subagents: []" in _read(AGENT_MD)
 
 
 def test_backup_files_no_backslash_paths():
-    for p in (BACKUP_LANE, AGENT_YAML, SYSTEM_MD):
+    for p in (BACKUP_LANE, AGENT_MD):
         assert "\\" not in _read(p), str(p)
 
 
 def test_backup_lane_dispatch_and_resume_pins():
-    body = _read(BACKUP_LANE)
-    # the dispatch pin covers the COMPLETE command through -w and -p:
-    # a dropped -w would dispatch the reviewer in the shell's cwd (the
-    # same class the resume pin below guards), and a bare substring
-    # check would stay green through it (final-review finding, 0.13.0)
-    # 0.14.2 Kimi panel round 1: this pin used to stop at `-p`, and the
-    # brief pointer was covered only by a position-free filename check
-    # that the workspace section also satisfies - so deleting the -p
-    # PAYLOAD from the dispatch line left both green. The payload is
-    # load-bearing (headless stdin does not carry the brief), so the
-    # pin now runs through it, same treatment `-w` already had.
-    assert ("kimi --quiet --thinking -m <canonical-backup-model-id> "
+    # normalized: the prose pins below span markdown wraps, and the
+    # command lines carry single spaces either way
+    body = _norm(BACKUP_LANE)
+    # The dispatch pin covers the COMPLETE command through the -p
+    # payload. Both halves of that reach are load-bearing history: a
+    # dropped workspace argument used to dispatch the reviewer in the
+    # shell's cwd (0.13.0 final review), and 0.14.2 Kimi panel round 1
+    # found the pin stopping short of the payload while the payload was
+    # covered only by a position-free filename check the workspace
+    # section also satisfied - so deleting it left both green.
+    #
+    # kimi-code takes no workspace flag at all: the session binds to the
+    # directory it was created in, and the client enforces it. So the
+    # placeholder that must not be dropped here is `--agent-file`, which
+    # is the only call in a debate that can carry it.
+    assert ("<kimi-code-binary> -m <canonical-backup-model-id> "
             "--agent-file <plugin-checkout>/skills/multi-model-verify/"
-            "references/kimi-reviewer-agent.yaml -w <review-mirror> "
-            '-p "Read the file KIMI-REVIEW-BRIEF.md in this workspace '
-            'and execute the review it describes."'
-            ) in body
-    # the re-pinned resume is load-bearing: bare -r restores full tools,
-    # model/thinking inherit from CONFIG DEFAULTS, and -w does not
-    # inherit at all (a resume without it runs in the shell's cwd -
-    # caught live against the real tree).
-    # 0.14.2 Kimi panel round 2: this pin stopped at -w while its own
-    # comment claimed it covered the COMPLETE command - asserting
-    # completeness over a command it truncated. The resume payload is
-    # the same load-bearing class as the dispatch payload (headless
-    # stdin carries nothing), so the pin now runs through it.
-    assert ("kimi --quiet -r <session-id> --agent-file <same yaml> -m "
-            "<canonical-backup-model-id> --thinking -w <same mirror> "
-            '-p "<rebuttal>"') in body
-    assert "loads the DEFAULT agent with full write and shell tools" in body
+            "references/kimi-reviewer-agent.md --skills-dir "
+            '<debate-home>/skills -p "<the whole brief>"') in body
+    # The resume pin runs through its own payload for the same reason.
+    # `--agent-file` is absent from it because the client REJECTS it with
+    # --session; see test_resume_inheritance_region for the measurement.
+    assert ("<kimi-code-binary> --session <session-id> -m "
+            "<canonical-backup-model-id> --skills-dir <debate-home>/"
+            'skills -p "<rebuttal>"') in body
+    # The command lines and the absolute-path instruction have to agree,
+    # or the pin says one thing and the prose another.
+    assert ("`<kimi-code-binary>` is the client's ABSOLUTE path" in body)
+    # The brief travels INLINE. This is what makes the brief hash
+    # meaningful - a pointer's hash proves the pointer arrived.
+    assert ("**The brief is passed INLINE**, in the dispatch's own `-p` "
+            "payload") in body
+    assert ("A brief that exceeds what the inline transport carries is a "
+            "TRANSPORT FAILURE to diagnose, not a reason to switch to a "
+            "pointer.") in body
     assert BACKUP_ID not in body  # placeholder discipline
 
 
-def test_backup_lane_evidence_pins():
-    # normalized: these pins now span markdown wraps, and a re-wrap is
-    # not a semantic change (same reasoning as the write-probe pin)
+def test_lane_home_isolation_region():
+    """The home is the lane's isolation boundary, and it is one call away
+    from not existing at all.
+
+    Two independent reasons are pinned together on purpose: a pin holding
+    only the hook reason would let the evidence reason be deleted, and a
+    home built for evidence alone would read as optional on a machine
+    whose real config carries no hooks.
+
+    Revised for the credential fix: the home no longer holds a COPY. Its
+    `credentials` directory is a junction to a dedicated lane login, so
+    the removal half is now pinned for a different reason, and the
+    DEBATE home and the LANE home are named as two distinct
+    directories because the superseded text blurred them."""
+    assert (
+            "Build the DEBATE home ONCE, before round 1, with "
+            "`tools/new-kimi-lane-home.ps1`, and set "
+            "`KIMI_CODE_HOME=<debate-home>` on EVERY call of that debate, "
+            "fresh and resumed alike. Two directories matter here and the "
+            "shipped text must not blur them: the DEBATE home is this "
+            "debate's throwaway `KIMI_CODE_HOME`, and the LANE home is the "
+            "persistent directory holding the lane's own login and the "
+            "lock. Two INDEPENDENT reasons, either one sufficient: the real "
+            "user-global `~/.kimi-code/config.toml` can carry lifecycle "
+            "hooks that run a shell command on the reviewer's own approval "
+            "path, and the home is where this lane's effort pin and this "
+            "debate's session evidence live. One debate is ONE home: that "
+            "debate's ROUNDS are one session, and the only other session "
+            "the home may hold is the write-probe's own disposable one, "
+            "created before round 1 and therefore already in the inventory "
+            "the freshness rule captures. A home is never reused across "
+            "DEBATES, because a reused home carries another debate's "
+            "sessions into this one's evidence. The home holds NO COPY of "
+            "any credential. Its `credentials` directory is a JUNCTION to a "
+            "DEDICATED LANE LOGIN, distinct from the user's ordinary login, "
+            "so a refresh writes THROUGH to one file and no copy can go "
+            "stale; the lane never falls back to the ordinary credential. A "
+            "home that cannot be built, or a lane credential that is "
+            "absent, unreadable or structurally invalid, makes the lane "
+            "UNAVAILABLE, never a reason to dispatch from the real home. "
+            "Remove the home with `-Remove` when the debate ends. The lock "
+            "protocol every one of those calls follows is the "
+            "call-lifecycle region below.") in _norm(BACKUP_LANE)
+
+
+def test_lane_lock_region():
+    """One persistent file, never unlinked, and staleness that is LIVENESS
+    rather than a clock. A predecessor of this lock decided staleness by
+    AGE, so a live round past the threshold became breakable by anyone.
+
+    The unmeasurable cases are pinned with the reclaimable ones on
+    purpose: `held` is what a foreign-host, unreadable, empty, non-object
+    or schema-violating record all resolve to, and a pin holding only the
+    DEAD-reclaim half would let any of them be quietly reclassified as
+    reclaimable, which is the one outcome this protocol may never
+    produce."""
+    assert (
+            "The lane home is shared between debates and sessions, so one "
+            "PERSISTENT lock file beside the credential guards it. That "
+            "file is NEVER unlinked: acquire, reclaim and release are all "
+            "state transitions written IN PLACE, each under one exclusive "
+            "handle that serializes every writer. Staleness is LIVENESS and "
+            "never a clock. A holder is stale only when no process carries "
+            "its recorded id, or a process carries it with a different "
+            "start time, which is the identity-reuse guard. A predecessor "
+            "of this lock decided staleness by AGE, so a live round past "
+            "the threshold became breakable by anyone; nothing here has a "
+            "time-based expiry, and a wait budget bounds only caller "
+            "patience and never widens what counts as stale. What cannot be "
+            "evaluated is HELD: a record naming another machine, an "
+            "unreadable file, a zero-length file, a file that is not a JSON "
+            "object, or a JSON object that does not exactly satisfy the "
+            "record schema \u2014 version 1, one of the two state literals, that "
+            "state's exact field set, and every field's type and validation "
+            "rule \u2014 are each held and reported rather than reclaimed, "
+            "because an unmade measurement is never a clean one. A "
+            "DEAD-holder reclaim reports the holder it replaced. An "
+            "exhausted wait reports the LIVE or UNMEASURABLE holder it "
+            "refused, or reports handle contention when no record could be "
+            "read. Each confirmed override reports the record or bytes it "
+            "displaced. Contention WAITS up to the caller-supplied budget "
+            "and then refuses; a zero budget refuses at once, and no budget "
+            "ever breaks a holder. Two human overrides exist because one "
+            "cannot cover both states: a well-formed HELD record is freed "
+            "by confirming its complete recorded identity, machine name "
+            "included, and a record too damaged to trust its identity is "
+            "freed by confirming the exact hash of its current bytes. Both "
+            "are guarded human overrides, not authentication, and both "
+            "leave the file in place.") in _norm(BACKUP_LANE)
+
+
+def test_lane_lock_call_lifecycle_region():
+    """Who the owner is, and why it is resolved once and passed rather
+    than derived. The shell exits between calls, so a shell-derived owner
+    makes every lock instantly stale, and under any wrapper the parent is
+    an intermediate process that also exits.
+
+    The four pre-acquisition filesystem interactions are enumerated
+    rather than described, because 'only these' is the claim: each is
+    either read-only or idempotent, and the builder never creates the
+    directory. The nonce half is pinned with them - a hold nobody can
+    release is a lane nobody else can use."""
+    assert (
+            "Ownership is RESOLVED ONCE per debate and PASSED EXPLICITLY "
+            "thereafter. The owner is the harness session process, not the "
+            "shell, which exits between calls and would make every lock "
+            "instantly stale; deriving it from the invoking shell's parent "
+            "is correct only for a DIRECT invocation, and under any wrapper "
+            "it names an intermediate process that also exits. So run "
+            "`tools/kimi-lane-lock.ps1 -ResolveOwner` once at the start of "
+            "the debate, keep its `ownerPid` and `ownerStartTicksUtc`, "
+            "generate one 32-character lowercase hexadecimal debate id, and "
+            "hand all three to every later call. Build with "
+            "`tools/new-kimi-lane-home.ps1 -Path <debate-home> -Model "
+            "<canonical-backup-model-id> -Effort <canonical-backup-effort> "
+            "-LaneHome <lane-home> -DebateId <id> -OwnerPid <pid> "
+            "-OwnerStartTicksUtc <ticks>`; it acquires the lock before it "
+            "validates the credential, because a login could otherwise "
+            "write that credential in between, and it releases only when "
+            "the build itself failed. Build prints one JSON line carrying "
+            "`debateHome` and `nonce`: keep that nonce, because removal "
+            "requires it and a hold nobody can release is a lane nobody "
+            "else can use. Remove with `tools/new-kimi-lane-home.ps1 -Path "
+            "<debate-home> -Remove -LaneHome <lane-home> -DebateId <id> "
+            "-OwnerPid <pid> -OwnerStartTicksUtc <ticks> -Nonce <nonce>`; "
+            "it confirms the complete identity BEFORE it deletes anything, "
+            "so a caller who cannot release also cannot destroy, and it "
+            "releases only after the home is gone. Log the lane in with "
+            "`tools/new-kimi-lane-login.ps1 -LaneHome <lane-home> -OwnerPid "
+            "<pid> -OwnerStartTicksUtc <ticks> -VerdictOut <path>`, passing "
+            "the SAME lane home the build was given, because omitting it "
+            "authenticates the default home while the debate dispatches "
+            "from another; the wrapper generates its own debate id, takes "
+            "the same lock with the lane home as its debate home, and "
+            "releases it on the way out. A login outside that lock would be "
+            "the one writer this protocol never sees. Only these filesystem "
+            "interactions occur before lock acquisition, because the lock "
+            "lives inside the lane directory: the login wrapper's "
+            "fail-closed probe of the lane directory, the login wrapper "
+            "creating that directory when the probe measured it missing, "
+            "the login wrapper applying its access rules, and the builder's "
+            "own read-only fail-closed probe of whether that directory is "
+            "there. All four interactions are safe to repeat: both probes "
+            "only read, and directory creation and ACL application are "
+            "idempotent. The builder NEVER creates the directory: if it is "
+            "missing the builder prints the login command and stops without "
+            "taking the lock, and once the directory is confirmed the "
+            "credentials directory and the credential file are both "
+            "measured UNDER the lock. A debate that ends without removal "
+            "leaves its home on disk and its record still HELD; that record "
+            "is not freed by the session exiting, it merely becomes DEAD by "
+            "liveness and is reclaimable at some later acquire. Read the "
+            "state at any time with `tools/kimi-lane-lock.ps1 -Status "
+            "-LaneHome <lane-home>`, which reports the holder and its "
+            "liveness and reports LIVE to mean the process is running, "
+            "never to mean the debate is still going.") in _norm(BACKUP_LANE)
+def test_resume_inheritance_region():
+    """The measured inheritance surface, stated at exactly its width.
+
+    This region REPLACES the old lane's most dangerous rule (a bare `-r`
+    silently restored the default agent with write and shell tools, and a
+    resume without `-w` once landed in the REAL tree). Both halves
+    inverted on this client, so the pin has to carry the new facts AND
+    their bound: four flags were tested, three are accepted, one is
+    rejected because the agent binds at session creation, and nothing is
+    established about any flag outside that set. The version-bound
+    sentence is inside the pin because it is what stops the measurement
+    being read as permanent."""
+    assert (
+            "Measured on kimi-code 0.31.1: from the correct working "
+            "directory, a bare resume carrying no `-m`, no `--agent-file` "
+            "and no `--skills-dir` reproduced round 1's model alias, effort "
+            "and tool count, and BOTH its `toolsHash` and its "
+            "`systemPromptHash` byte for byte. A resume from the WRONG "
+            "directory is REFUSED by the client before anything is "
+            "dispatched, so a resume can no longer land in the real tree by "
+            "omission. `--agent-file` is REJECTED with `--session` — the "
+            "agent is bound at session creation — so it cannot be re-pinned "
+            "at all; of the four flags tested, `-m`, `--skills-dir` and "
+            "`--add-dir` are accepted, and the two the lane uses are "
+            "re-pinned on every resumed call because it is free and it "
+            "narrows the inheritance risk to the one flag that cannot be "
+            "re-pinned. Nothing is established about any flag outside that "
+            "tested set. All of this is VERSION-BOUND, which is why the "
+            "drift floor exists, why what can be re-pinned is re-pinned, "
+            "and why the per-round evidence below — not this paragraph — is "
+            "what establishes the surface actually in force each round.") in _norm(BACKUP_LANE)
+
+
+def test_round_freshness_boundary_region():
+    """The surviving half of the deleted offset rule.
+
+    The files are per-session now, so nothing needs attributing - but
+    they are still CUMULATIVE, so a call still needs a boundary. Length
+    alone is not that boundary: a file replaced, truncated and regrown
+    passes it, which is why both files carry a prefix hash. The fresh
+    branch is pinned in the same region because it is the case with no
+    offset to capture at all, and the leaf-versus-container sentence is
+    pinned because counting directories rejects a CLEAN first call - a
+    false red in the one place the lane cannot afford one."""
+    assert (
+            "Both files are CUMULATIVE, so each call is read as a SLICE of "
+            "them. Before every call capture, for BOTH the wire transcript "
+            "and the per-session log, the file's BYTE length and a SHA-256 "
+            "over exactly those bytes; after the call read only past those "
+            "byte offsets, and require both prefix hashes unchanged. A file "
+            "shorter than its offset, or absent, or whose prefix hash "
+            "changed, was replaced: that is a route-attribution failure, "
+            "and specifically NOT a reason to re-read from zero, because "
+            "the replacement's opening records may belong to anything. Byte "
+            "offsets and a hash over raw bytes are what make the boundary "
+            "unambiguous, and hashing BOTH files is what makes the check "
+            "prove IDENTITY rather than length — length alone passes a file "
+            "that was replaced, truncated and regrown. A FRESH call has no "
+            "offsets to capture, because its session does not exist until "
+            "the client creates it; what is captured before a fresh "
+            "dispatch is the session INVENTORY, and exactly one new SESSION "
+            "LEAF must appear afterwards, matching the session id the "
+            "client printed. A leaf is a directory whose name begins "
+            "`session_`. Counting directories rather than leaves is wrong "
+            "and would reject a clean first call: the measured layout nests "
+            "leaves inside a `wd_`-prefixed workspace container, and a "
+            "debate's first call in a workspace creates the container as "
+            "well as the session. The slice must also BEGIN at a call "
+            "boundary — the record `metadata` for a fresh call, "
+            "`turn.prompt` for a resume, both measured — because an offset "
+            "landing mid-call yields a slice mixing the previous call's "
+            "trailing records with this one's while satisfying every count "
+            "and value check.") in _norm(BACKUP_LANE)
+
+
+def test_per_round_session_evidence_region():
+    """Two record classes, because one rule was measured to fail both.
+
+    Revision 2 of this contract required "exactly one of each" across
+    every slice. Measured, that fails a clean round 1 (`config.update` is
+    2, `llm.request` is 4) and every resumed round (three of the four
+    records do not appear in a resume's slice at all). So the split is
+    the rule, and the ABSENCE requirement on a resume is what now catches
+    a resume that silently started a new session - the check the deleted
+    `Created new session:` line used to carry.
+
+    This region also names the replacement for the dead `Loaded tools:`
+    grep: an exact-list comparison against the committed agent file. That
+    grep is the check backlog item 13 opened this cycle to remove,
+    because it could match nothing and still read as clean."""
+    assert (
+            "The records fall into TWO CLASSES and one rule cannot cover "
+            "both: a rule that assumed it could was measured to fail a "
+            "clean round 1 and every resumed round. SESSION-SCOPED records "
+            "— `config.update` twice, `tools.set_active_tools`, "
+            "`llm.tools_snapshot` and `permission.set_mode` once each — "
+            "appear ONLY in the session-creating call's slice. Require them "
+            "there, checking the agent profile name, the system prompt, the "
+            "model alias, the effort, the permission mode, and the "
+            "configured allowlist, denylist and resolved tool snapshot by "
+            "EXACT LIST EQUALITY against the committed agent file; and "
+            "require their ABSENCE from a resume's slice, because their "
+            "presence there means the resume silently started a new session "
+            "and lost the reviewer's debate state. PER-CALL records appear "
+            "in every slice: exactly one `turn.prompt`, one or more "
+            "`llm.request` with EVERY one carrying the canonical provider, "
+            "model and effort, and exactly one new `llm config` log line "
+            "carrying those plus `toolCount` and `systemPromptChars`. "
+            "`llm.request` tracks the tool loop, so it is bounded from "
+            "below and never fixed. Run "
+            "`tools/read-kimi-round-evidence.ps1` in its FRESH form for the "
+            "session-creating call, passing the pre-dispatch session "
+            "inventory and the session id the client printed, and in its "
+            "RESUME form for every later call, passing the previous call's "
+            "returned state. Require `status: clean`: a missing directory, "
+            "a missing or miscounted record, an unreadable file, a "
+            "malformed line, or any inequality is a route-attribution "
+            "failure, the reply is DISCARDED unread, and the failure goes "
+            "to the fallbacks.md consent gate.") in _norm(BACKUP_LANE)
+
+
+def test_evidence_hash_continuity_region():
+    """Recording the two hashes is the whole mechanism.
+
+    Neither is pinned to a literal here on purpose - they cover tool
+    schemas a client release may reword, and a committed literal would
+    red every round for a reason that is not a route problem. That makes
+    RECORDING them the only thing standing between a client upgrade and a
+    silent rebaseline at the next round 1, so the pin carries the
+    justification as well as the instruction."""
+    assert (
+            "Record round 1's `toolsHash` and `systemPromptHash` IN THE "
+            "DEBATE RECORD and carry them forward: the validator itself "
+            "requires every later round to match them, rather than leaving "
+            "the comparison to a driver who might never make it. They are "
+            "deliberately NOT pinned to a literal in this repo, because "
+            "they cover tool schemas any client release may reword, and a "
+            "committed literal would fail every round for a reason that is "
+            "not a route problem. Recording them is what makes a client "
+            "upgrade's change VISIBLE in the record instead of silently "
+            "rebaselined at the next round 1.") in _norm(BACKUP_LANE)
+
+
+def test_brief_hash_binding_region():
+    """The canonicalization is part of the rule, not an implementation
+    detail.
+
+    The measured evidence matched only after CRLF was normalized to LF,
+    so a contract saying merely that the brief and the recorded prompt
+    "hash to the same value" leaves a driver to invent the step that
+    makes it true. The concatenation over every `input[]` element is
+    pinned for the same reason: hashing only the first element is the
+    obvious wrong reading."""
+    assert (
+            "Hash the brief BEFORE dispatch and require the recorded prompt "
+            "to match: SHA-256 over the brief canonicalized as UTF-8 with "
+            "CRLF normalized to LF, compared against the same hash of the "
+            "concatenation of every `turn.prompt` `input[]` element's "
+            "`text` field. The canonicalization is part of the rule rather "
+            "than an implementation detail: the measured evidence matched "
+            "only after newline normalization, so a rule saying merely that "
+            "the two hash to the same value leaves a driver to invent that "
+            "step.") in _norm(BACKUP_LANE)
+
+
+def test_backup_lane_containment_and_probe_pins():
+    """The containment controls, and the two checks that verify them.
+
+    0.14.2 Kimi panel round 2 (4b): the write-probe's three PASS
+    conditions were pinned but its CONFIGURATION FIDELITY was not - a
+    probe run under a stricter config than the debate's would pass while
+    the real debate config could still write. Normalized, not raw: a pure
+    re-wrap of the bullet is not a semantic change.
+
+    The three-control sentence is pinned because two of the three used to
+    be a coincidence rather than a control: measured, the subagent list
+    defaulted to ALL profiles and was inert only because `Agent` and
+    `AgentSwarm` happened to be denied.
+    """
     body = _norm(BACKUP_LANE)
-    # 0.14.2 Kimi panel round 3 (instance 7, the worst of the class):
-    # the rule has two halves - capture the offset, then require the
-    # three lines PAST IT. Only the capture half was pinned, and
-    # "past that offset" appeared in no file under evals/ at all.
-    # Deleting it left every pin green while the check stopped
-    # attributing anything: kimi.log is a shared append stream, so
-    # without the offset the three lines can be satisfied by an earlier
-    # debate's entries - the exact route-attribution failure this rule
-    # exists to prevent.
-    assert ("capture the byte length of `~/.kimi/logs/kimi.log`; after "
-            "the call, past that offset") in body
-    assert ("exactly one new `Using LLM model:` line carrying the "
-            "canonical backup id") in body
-    assert "`Loading agent:` line naming the committed yaml" in body
-    assert "`Loaded tools:` line equal to the allowlist exactly" in body
-    assert "DISCARDED unread" in body
-    # 0.16.0 backlog item 6. Counting matches across the whole post-offset
-    # window made ANY concurrent kimi session fatal, which discarded two of
-    # six dispatched rounds on 2026-07-27. The three evidence lines carry no
-    # session id, so ordering is the only available binding.
-    assert ("The three evidence lines carry no session id of their own, so "
-            "bind them by ORDER instead: locate the one `Created new "
-            "session: <id>` or `Resuming session: <id>` line past the "
-            "offset whose id is THIS round's, and read only the lines from "
-            "it up to the next session event of any id. Require exactly one "
-            "of each of the three inside that block. Session events "
-            "belonging to other ids are ignored, not counted.") in body
-    # The kind check catches a resume that silently started fresh - the same
-    # class the primary lane catches by echoing the resumed session id.
-    assert ("The block's own kind is evidence too: a fresh call must show "
-            "`Created new session` and a resume must show `Resuming "
-            "session` carrying the id being resumed. A resume that silently "
-            "started a new session has lost the reviewer's debate state, "
-            "and the kind line is where that surfaces.") in body
-    # The residual is pinned because a driver who reads only the rule
-    # over-trusts it. Ordering makes collisions rare, not impossible.
-    assert ("Residual, accepted: a foreign session that starts INSIDE this "
-            "round's startup block truncates it, and the round still "
-            "fails. That window is under a second rather than the whole "
-            "call, so collisions become rare rather than routine. They are "
-            "not eliminated.") in body
-    # Ordering cannot stop parallax colliding with itself; the lock does.
-    # The SAME label on release is load-bearing, not politeness: a release
-    # naming no label is refused against a labelled lock precisely because a
-    # bare release would otherwise free another debate's lane silently.
-    # The label must be unique to the round: ownership is a string match, so
-    # two debates sharing a label can each release the other's lane. The
-    # script cannot enforce uniqueness, so the contract states it.
-    assert ("Before dispatching any round, acquire the lane lock with "
-            "`tools/kimi-lane-lock.ps1 -Acquire -Label \"<debate>-<round>\"`, "
-            "and release it with the SAME label after the round's evidence is "
-            "read. A BUSY result means another parallax debate holds the "
-            "lane: do not dispatch, because a concurrent round breaks "
-            "attribution. The lock is advisory and breaks after 45 minutes, "
-            "so a crashed driver stalls the lane for at most that long — and "
-            "a LIVE round still running past that mark becomes breakable "
-            "too, because nothing checks liveness. Ownership is a plain "
-            "string match, so make the label unique to the round: two "
-            "callers passing the same label are indistinguishable, and "
-            "either can release the other's lane. A lock whose timestamp "
-            "cannot be read is breakable at once rather than after 45 "
-            "minutes, so an unreadable lock never stalls the lane.") in body
-    # 0.14.3: the offset rule assumes an append-only file and kimi's
-    # client does not guarantee one. 0.16.0: rotation now SUCCEEDS
-    # (observed 2026-07-27, verified still on disk 2026-07-28), so every
-    # byte position from an earlier measurement can be meaningless and the
-    # check would read whatever happens to sit there.
-    assert ("Rotation guard" in body)
-    # The old claim that rotation always fails is now FALSE and must not
-    # return. This asserts absence, so it pins nothing by the contract
-    # grammar - it is a restoration guard, not a lock.
-    assert "offsets have held by accident" not in body
-    assert "WinError 32]` because the log is still open, so" not in body
-    # Those two guard the exact old sentence, not the claim, which is
-    # inherent to an absence check - a restoration in fresh words trips
-    # neither. So lock the CORRECTION positively instead: this sentence
-    # cannot be deleted to make room for a restored falsehood without
-    # failing here.
-    assert ("Both halves were true when observed on 2026-07-26 and are "
-            "false now. Do not restore them.") in body
-    # 0.15.0: extended from a fragment to the whole rule, because the
-    # contract coverage checker proved the fragment left the consequence
-    # half of the detection rule unlocked.
-    assert ("Before trusting the offset, confirm the stream did not "
-            "rotate under the call: if after the call the file is "
-            "SMALLER than the captured offset, or absent, it was rotated "
-            "or replaced and every byte position from the earlier "
-            "measurement is meaningless.") in body
-    # re-reading the rotated file from zero is the tempting wrong
-    # answer: it attributes lines that may belong to any session
-    assert ("not a reason to re-read from zero" in body)
-    # 0.16.0: the corrected observation carries the on-disk evidence, so a
-    # future reader can tell a stale claim from a current one.
-    assert "Rotation SUCCEEDS on this client" in body
-    assert "kimi.2026-07-25_14-01-45_182023.log" in body
-    # 0.14.3 fable review F1: DETECTION without a DISPOSITION leaves the
-    # driver to invent a rule. The nearby "DISCARDED unread" pin above is
-    # satisfied by the pre-existing bullet, so the guard's consequence
-    # half needs its own pin or it deletes green - pin-integrity instance
-    # ten in this file.
-    # 0.15.0: extended from a fragment to the whole rule. The fragment
-    # named the failure class but locked none of the prohibition.
-    assert ("That is a route-attribution failure — and specifically "
-            "**not a reason to re-read from zero**, which is the "
-            "tempting wrong answer: the new file's opening lines may "
-            "belong to any session, so reading it attributes nothing "
-            "while looking like evidence.") in body
-    # 0.14.3 Sol panel round 1 (claim 6), REVERSING the session's earlier
-    # call that this paragraph was narrative and not worth pinning. It is
-    # not narrative: it states that the detection check has a known
-    # FALSE-NEGATIVE boundary, and a driver who reads only the detection
-    # rule over-trusts the guard. What a driver believes about coverage
-    # is contract.
-    #
-    # 0.16.0 replaces the residual-gap region with the identity rule it
-    # promised. The 0.14.3 F4 pin held the CONTINGENCY - "compare file
-    # identity (creation time) too, not just length" - which was the only
-    # recorded instruction for the day rotation started succeeding. That
-    # day arrived, so the contingency became the rule and the region was
-    # renamed. The region id change is deliberately visible in
-    # DECLARED_REGIONS.
-    assert ("Because rotation succeeds, the size test alone is not "
-            "enough: a replacement file that grew back PAST the captured "
-            "offset inside the same call would pass it. So capture the "
-            "file's CREATION TIME alongside the byte offset, and treat "
-            "any later creation time as rotation whatever the length "
-            "says.") in body
-    # 0.14.2 Kimi panel round 2 (4b): the three PASS conditions were
-    # pinned but the probe's CONFIGURATION FIDELITY was not - a probe
-    # run under a stricter config than the debate's would pass while
-    # the real debate config could still write. That is a silent
-    # weakening in the dangerous direction, so the clause is pinned.
-    # normalized, not raw: a pure re-wrap of this bullet is not a
-    # semantic change and should not false-red the pin
+    assert ("The committed `kimi-reviewer-agent.md` (this directory) is "
+            "the ONLY agent configuration the lane dispatches with, and "
+            "it carries THREE controls rather than one.") in body
+    assert ("Each is a control in its own right rather than a coincidence "
+            "of two lists") in body
+    # Fix round 1: this sentence used to say the three lists are verified
+    # "per round by the exact-list comparison". They are not. Rule 12 of
+    # tools/read-kimi-round-evidence.ps1 is FRESH-ONLY - every
+    # Compare-Object sits inside `if ($Fresh)`, because a resume's slice
+    # carries none of those records - so the claim was wider than any
+    # round's evidence, which is the exact defect class (a check reading
+    # clean without measuring) that retiring the `Loaded tools:` grep was
+    # meant to remove. A resumed round IS covered, by toolCount equality
+    # and by toolsHash/systemPromptHash continuity; the pin now runs
+    # through BOTH reaches and through the sentence that refuses to
+    # conflate them, so neither half can be dropped or widened.
+    assert ("the SESSION-CREATING call's slice compares the configured "
+            "allowlist, the denylist and the resolved tool snapshot "
+            "against this file by EXACT LIST EQUALITY, while a RESUMED "
+            "call — whose slice carries none of those records at all — "
+            "is covered instead by `toolCount` equality against this "
+            "file's allowlist length and by `toolsHash` and "
+            "`systemPromptHash` continuity with the call that was "
+            "compared.") in body
+    assert ("Both are real checks; only the first is an exact-list "
+            "comparison, and saying otherwise would claim a reach no "
+            "round has.") in body
     assert ("in a fresh disposable session with the exact debate "
             "configuration") in body
     assert ("explicit refusal in the reply, marker absent on disk, "
             "mirror status delta empty") in body
+    # `kimi export` still exists on 0.31.1 (`kimi export [sessionId]`,
+    # read from the client's own help), so the warning is retargeted
+    # rather than deleted - and it now names what the archive carries,
+    # because the default bundles the global diagnostic log too.
     assert "Never run `kimi export` inside a repo" in body
+    assert ("by default it bundles the global diagnostic log into it as "
+            "well") in body
+
+
+def test_deleted_machinery_does_not_return():
+    """Restoration guards for the machinery the kimi-code swap deleted.
+
+    Stated plainly, because it is easy to mistake this for coverage:
+    every assertion here is an ABSENCE check, and an absence check LOCKS
+    NOTHING under the pin grammar in CLAUDE.md. The contract-coverage
+    checker will never read one as covering a region, and it is not
+    meant to. These are restoration guards - they fail if deleted
+    machinery is written back into the contract - and they are kept
+    deliberately for that and nothing else.
+
+    Each name below lost its subject rather than its wording. kimi-code
+    writes a per-session wire transcript and a per-session log, so there
+    is no shared append stream to serialize against
+    (`tools/kimi-lane-lock.ps1`), no rotation of a user-global log to
+    guard (`Rotation guard`), and no session-startup line to bind
+    evidence to by order (`Created new session:`). Restoring any of them
+    would mean restoring a rule that no longer describes this client.
+    """
+    body = _norm(BACKUP_LANE)
+    assert "Rotation guard" not in body
+    assert "Created new session:" not in body
+    # `kimi-lane-lock.ps1` used to be forbidden by NAME here. It is back,
+    # for an unrelated reason, so the guard moved to the RULE. The tool
+    # that returned guards the PERSISTENT LANE LOCK FILE beside the
+    # credential; the deleted one serialized rounds against one shared
+    # append log and decided staleness by AGE. Forbidding the name would
+    # now forbid the replacement, and forbidding nothing would let the
+    # age rule come back under the new name - so these four needles are
+    # the deleted rule's own distinctive wording, each verified present
+    # in the superseded text at 79ec79f and absent from the current one.
+    assert "-Acquire -Label" not in body
+    assert "A BUSY result" not in body
+    assert "The lock is advisory" not in body
+    assert "breaks after 45 minutes" not in body
 
 
 def test_backup_lane_workspace_is_a_mirror_not_a_clone():
@@ -272,10 +588,19 @@ def test_backup_lane_workspace_is_a_mirror_not_a_clone():
     assert "`dev/docs/` and `References/` are both gitignored" in body
     # inputs the mirror cannot inherit are copied in DELIBERATELY and
     # enumerated - the containment rule keys off a declared set, so an
-    # unexpected delta still quarantines
+    # unexpected delta still quarantines.
+    # kimi-code swap: the brief LEFT this set. It is passed inline and
+    # never lands in the mirror, so the expected set is now the copied-in
+    # inputs alone - and on a debate that copies nothing in, the baseline
+    # exactly. The pin runs through that sentence because "baseline plus
+    # nothing" is the case a driver would otherwise read as a broken
+    # capture and start hunting for a missing file.
     assert ("must equal the BASELINE plus exactly the expected untracked "
-            "set — the brief plus any review inputs copied in, "
-            "enumerated before the round — and nothing else") in body
+            "set — the enumerated review inputs copied in before the "
+            "round, and nothing else — so a debate that copies nothing "
+            "in expects the BASELINE EXACTLY.") in body
+    assert ("The brief is not in that set, because the brief is passed "
+            "inline and never lands in the mirror.") in body
     # 0.14.2 Sol round 1, F2/F5: bare porcelain OMITS ignored paths and
     # COLLAPSES untracked directories, and ignored content is the whole
     # reason this workspace is a mirror - so the flags are the check,
@@ -351,12 +676,16 @@ def test_backup_lane_workspace_is_a_mirror_not_a_clone():
             "the file's raw bytes as lowercase hex") in body
     assert "sorted by path in byte order" in body
     assert ("Captured at the same moment as the baseline" in body)
-    # F8: absence of an override pin proves neither an override nor
-    # provider-default; the record must not manufacture either
-    assert ("Record a round with no contemporaneous config evidence as "
-            "having NO VERIFIED EFFORT PIN") in body
-    assert ("establishes neither an override nor provider-default "
-            "operation") in body
+    # 0.14.2 F8's two effort pins used to sit here ("NO VERIFIED EFFORT
+    # PIN", "establishes neither an override nor provider-default
+    # operation"). Their subject was a USER-GLOBAL config read after the
+    # fact, which this lane no longer has: effort is written into the
+    # debate home and read back out of the round's OWN evidence, so a
+    # round can never lack contemporaneous effort evidence and still be
+    # clean. The reasoning they recorded - absence of evidence is not
+    # evidence of a value, and writing one in manufactures a fact the
+    # lane never observed - is repointed onto the measurement in
+    # test_backup_lane_client_config_sweep rather than dropped.
     assert "is a gap in the review, not a silent omission" in body
 
 
@@ -369,14 +698,20 @@ def test_mirror_baseline_closes_the_dirty_tree_hole():
     # by any "untracked set" wording.
     body = _norm(BACKUP_LANE)
     # timing is load-bearing and was WRONG in the first fix pass:
-    # preflight-3 remediation runs between construction and the brief,
+    # preflight-3 remediation runs between construction and the round,
     # deleting entries and (tracked case) committing - so a baseline
     # taken at construction fails every round of a remediated debate
     # and pins a stale HEAD, reintroducing the false-quarantine on the
-    # one path the mirror exists to support
+    # one path the mirror exists to support.
+    # kimi-code swap, fix round 1: the END of that window used to be "the
+    # brief is written", which was a real event only while the brief was
+    # planted in the mirror. It is passed inline now, so that wording
+    # named a moment that never arrives - the timing rule pointed at
+    # nothing while reading unchanged. The window now closes at the
+    # dispatch, which is the event that could actually change the tree.
     assert ("BASELINE, captured after construction AND after any "
-            "preflight-3 remediation, immediately before the brief is "
-            "written") in body
+            "preflight-3 remediation, immediately before the first round "
+            "is dispatched") in body
     assert ("a baseline taken before it fails every round of a "
             "remediated debate and pins a HEAD the mirror no longer "
             "has") in body
@@ -417,25 +752,73 @@ def test_backup_lane_eval_case_matches_the_mirror_contract():
     assert "skills/multi-model-verify/references/backup-lane.md" in case["surface"]
     joined = " ".join(case["expectations"])
     assert "review MIRROR (file copy preserving .git, not a clone)" in joined
-    assert "baseline porcelain was captured before the brief was written" in joined
+    assert "baseline porcelain was captured before the round" in joined
     assert "throwaway clone" not in joined
     # 0.14.2 Sol round 1, F10a: the pin above checks only the mirror
     # VOCABULARY, so deleting the equality half of the expectation left
     # it green - the half that actually grades containment. Pin it.
-    assert ("equals that baseline plus exactly KIMI-REVIEW-BRIEF.md and "
-            "any enumerated copied-in review inputs") in joined
+    # kimi-code swap: the equality half survives, minus the planted brief
+    # file. The brief is passed inline now, so a graded run that finds it
+    # in the mirror is a CONTRACT VIOLATION rather than the expected
+    # state - which is why this pin is repointed instead of relaxed.
+    assert ("equals that baseline plus exactly the enumerated copied-in "
+            "review inputs, and the baseline exactly when none were "
+            "copied in") in joined
+    # the case must not go on grading the superseded transport either:
+    # the agent yaml, the workspace flag, the thinking flag and the
+    # `Loaded tools:` grep are all gone from the contract it declares as
+    # its surface, and a manual case never runs in CI to say so.
+    assert "kimi-reviewer-agent.yaml" not in joined
+    assert "KIMI-REVIEW-BRIEF.md" not in joined
+    assert "Loaded tools:" not in joined
 
 
 def test_backup_lane_client_config_sweep():
     # 0.14.2: the primary lane was hardened against instruction
     # back-channels (SKILL.md preflight 3) while the backup lane's own
     # client config was never swept. Both keys are recorded, neither
-    # is a stop - and neither is observable from the route evidence.
+    # is a stop.
+    #
+    # kimi-code swap: every pin below is REPOINTED, not dropped. The
+    # config being swept is the DEBATE HOME's now, because the lane no
+    # longer runs out of the user-global one - so the class of concern is
+    # identical and the sweep has to move with it. Dropping it would
+    # leave this lane's own client config unswept, which is exactly what
+    # 0.14.2 added it to fix.
     body = _norm(BACKUP_LANE)
     assert "## Client config surface" in body
-    assert '`[models."<canonical-backup-model-id>".overrides]`' in body
-    assert "runs at PROVIDER DEFAULT with no verifiable effort evidence" in body
-    assert "`merge_all_available_skills`" in body
+    # The effort pin moves from the old client's `[models.<id>.overrides]`
+    # block to the home's `default_effort`, and its DISPOSITION inverts:
+    # "runs at PROVIDER DEFAULT with no verifiable effort evidence" is
+    # replaced by the measurement, not merely deleted. Measured
+    # 2026-07-31, a home pinning `low` produced `thinkingEffort=low` in
+    # the session log and in every llm.request, so effort is confirmed
+    # PER CALL rather than by config validation alone.
+    #
+    # This is also where 0.14.2 F8's reasoning lands. That finding said
+    # absence of an override pin establishes neither an override nor
+    # provider-default operation, and that writing either into the record
+    # manufactures a fact the lane never observed. The lane can no longer
+    # reach that state - the value is written by the home builder and
+    # read back out of the round's own evidence - so the pin holds the
+    # measurement and the mechanism that makes the old failure mode
+    # unreachable.
+    assert "EFFORT is written into the debate home and CONFIRMED PER CALL" in body
+    assert ("a home pinning `default_effort = \"low\"` produced "
+            "`thinkingEffort=low` in both surfaces") in body
+    # Thinking is NOT confirmed, and must not be listed beside effort as
+    # though it were. Measured: `enabled = false` produced output
+    # identical to `enabled = true`.
+    assert ("THINKING is CONFIG-ASSERTED AND NOT RUNTIME-VERIFIED" in body)
+    assert ("`[thinking] enabled = false` produced output identical to "
+            "`enabled = true`") in body
+    # The `merge_all_available_skills` back-channel pin becomes the four
+    # skill roots plus the `--skills-dir` wording. Same class, renamed
+    # subject: the question is still what can inject instructions into
+    # this lane's reviewer from outside the brief.
+    assert ("SKILL DISCOVERY has FOUR roots — `.kimi-code/skills/`, "
+            "`.agents/skills/`, `<debate-home>/skills/` and "
+            "`~/.agents/skills/`") in body
     assert ("the same class of instruction back-channel as codex's "
             "repo-level `.agents/skills` advertisement") in body
     assert "never a finding" in body
@@ -447,16 +830,48 @@ def test_backup_lane_client_config_sweep():
     # the check is what makes the effort claim true rather than assumed,
     # and that only holds if the read reaches the record.
     assert "read and RECORDED in the debate record" in body
-    # the key alone is not the surface - a true key over empty sources
-    # merges nothing, so the check reads key AND sources together
-    # (probed 2026-07-26: true key, every source absent = LATENT)
-    assert "plus the SOURCES it merges from" in body
-    assert "`extra_skill_dirs`" in body
-    assert "a LATENT surface with nothing to merge, not an active one" in body
-    # the populated-source case is honestly marked unprobed rather than
-    # waved through on the tool allowlist
-    assert ("treat a true key with a NON-EMPTY source as unprobed "
-            "territory") in body
+    # `extra_skill_dirs` is named in the section's opening as one of the
+    # two recorded keys, so the bullets have to say what recording it
+    # means. The builder writes it EMPTY, which is what makes a non-empty
+    # value a finding about the home rather than a note about the client.
+    assert ("The home's own `extra_skill_dirs` is the key recorded "
+            "alongside them: the builder writes it EMPTY, so a non-empty "
+            "value in a debate's home was written by something other "
+            "than the builder and is a finding about the home, not a "
+            "note.") in body
+    # The retired "unprobed territory" pin carried a DISPOSITION for the
+    # source this lane cannot clear. Its successor names which roots are
+    # covered by what, and that `~/.agents/skills/` is covered by
+    # nothing: preflight-3 operates on the MIRROR and KIMI_CODE_HOME does
+    # not relocate the user's home, so an uneven coverage claim here
+    # would be the same overclaim in a new place.
+    assert ("`~/.agents/skills/` lives in the user's own home, is not "
+            "relocated by `KIMI_CODE_HOME`, and NOTHING this lane runs "
+            "removes it. Enumerate that root before round 1 and record "
+            "what it holds; a non-empty one is unprobed territory, "
+            "recorded as such rather than assumed absorbed by the tool "
+            "allowlist.") in body
+    # The old "LATENT surface" pin recorded that a back-channel key's
+    # presence says nothing about whether anything is actually being
+    # merged. Its successor is stronger and states the same restraint:
+    # `--skills-dir` is a MITIGATION whose effect is UNMEASURABLE here,
+    # not a control - measured, runs with and without it were
+    # indistinguishable because nothing loaded either way. Claiming it as
+    # a control is the overclaim this pin exists to block.
+    assert ("`--skills-dir` is a MITIGATION whose effect is UNMEASURABLE "
+            "in this configuration, not a control") in body
+    assert ("The load-bearing controls are that allowlist and preflight-3 "
+            "remediation.") in body
+    assert ("Keep passing `--skills-dir`, because it costs nothing and "
+            "covers a future release that advertises regardless, but "
+            "claim nothing for it.") in body
+    # And the files stay an injection surface by a different route, which
+    # is why remediation deletes them rather than trusting the reviewer:
+    # in the measured round the reviewer READ both canaries and declined
+    # on judgment. Prompt text is never a control.
+    assert ("Prompt text is never a control, which is why remediation "
+            "REMOVES the files rather than trusting the reviewer to "
+            "ignore them.") in body
 
 
 def test_skill_preflight_names_the_remediation():
@@ -487,28 +902,19 @@ def test_skill_preflight_names_the_remediation():
 
 
 def test_output_encoding_class_is_wired():
-    # 0.14.2, observed live 2026-07-26 (Windows, kimi-cli 1.49.0): the
-    # round completed and UnicodeEncodeError killed the WRITE. The
-    # catch-all would have spent a second real call on a retry that
-    # cannot succeed, and the honest recovery (resume the surviving
-    # session with UTF-8 forced) had no path in the rules at all.
+    # Task 4 Step 1 probed the cp1252 output hazard live, on this client
+    # rather than the old kimi-cli one: from a console forced to code page
+    # 1252, a reply containing an em-dash, an arrow and a katakana
+    # character came back intact as valid UTF-8 and the process exited 0.
+    # No hazard was observed on this client, so the Python-console guard
+    # the old lane needed (PYTHONIOENCODING/PYTHONUTF8), the class that
+    # named its failure, and the four-flags-re-pinned recovery all go with
+    # it - none of them describe this client.
     lane = _norm(BACKUP_LANE)
-    assert "`PYTHONIOENCODING=utf-8` and `PYTHONUTF8=1`" in lane
-    assert "AFTER the model has already answered" in lane
-    # the unprobed part is marked, not papered over
-    assert ("Which of the two variables is load-bearing, and whether the "
-            "same guard is needed for kimi's own session-log write, is "
-            "UNVERIFIED") in lane
+    assert "PYTHONIOENCODING" not in lane
+    assert "PYTHONUTF8" not in lane
     fb = _norm(FALLBACKS)
-    assert "class `output-encoding`" in fb
-    assert "**Skip the retry**" in fb
-    # the resume's -p carries no rebuttal in recovery, but must not be
-    # empty - say what to send (whole-branch review, Minor 2)
-    assert ("ask the session to re-emit its previous reply verbatim" in fb)
-    # the class must NOT be filed under the two evidence-tainting
-    # classes - nothing reached disk, so nothing is suspect
-    assert ("neither a route-attribution nor an integrity failure" in fb)
-    assert ("Recovery is a RESUME of the surviving session" in fb)
+    assert "output-encoding" not in fb
 
 
 def test_fallbacks_backup_wiring():
@@ -616,3 +1022,465 @@ def test_backup_literal_single_source():
                                         errors="replace"):
                 offenders.append(str(p))
     assert offenders == []
+
+
+DRIFT = REPO / "tools" / "check-drift.ps1"
+STATEMACHINE = REPO / "evals" / "tools" / "drift_statemachine_tests.ps1"
+KIMI_CODE_FLOOR = "0.31.1"
+
+
+def test_drift_probes_the_new_cli_not_the_old_one():
+    body = _read(DRIFT)
+    assert '"--agent-file", "--skills-dir", "-m", "-p", "--session"' in body
+    assert "--quiet" not in body
+    assert "--thinking" not in body
+    assert "import kimi_cli.tools.file" not in body
+
+
+def test_drift_does_not_assert_a_hidden_alias():
+    """`-r` works but is absent from --help on 0.31.1. Asserting it would
+    manufacture the exact false finding this task removes."""
+    assert '"-r"' not in _read(DRIFT)
+
+
+def test_the_version_probe_can_actually_reach_its_failure_branch():
+    """r2's floor check was unreachable: $kimiVersion was assigned only
+    inside a successful numeric regex, so TryParse could never see a
+    malformed value and the fail-closed branch was dead code. A check
+    that cannot fail is the defect this whole task is repairing."""
+    body = _read(DRIFT)
+    assert "$kimiVersion = $kimiRaw" in body
+    assert "KimiCodeFloor" in body
+    assert KIMI_CODE_FLOOR in body
+
+
+def test_the_production_lookup_accepts_a_cmd_stub():
+    """A .cmd renamed .exe does not execute on Windows, so an absolute
+    .exe-only lookup cannot be stubbed offline at all. Production
+    therefore resolves either name in that directory - which is also true
+    of real Windows CLIs - and the harness stubs the .cmd."""
+    body = _read(DRIFT)
+    assert "kimi.exe" in body
+    assert "kimi.cmd" in body
+
+
+def test_the_state_machine_stubs_moved_with_the_probe():
+    body = _read(STATEMACHINE)
+    assert "kimi_cli" not in body
+    assert "--thinking" not in body
+    # the production lookup is an absolute path under the fake profile,
+    # not a PATH entry, so the harness must place the stub there or every
+    # kimi scenario silently takes the "absent" branch and asserts nothing
+    assert ".kimi-code" in body
+    assert "--session" in body
+    assert "KIMI_STUB_MODE" in body
+
+
+def test_a_present_but_unusable_binary_is_a_finding_not_a_note():
+    """r3 fixed the regex pre-filter but left a second path open: a binary
+    that exists while --version fails or prints nothing still fell into
+    the 'absent' note. Absent is a note; present-and-broken is a finding."""
+    body = _read(DRIFT)
+    assert "$versionExit" in body
+    assert "did not report a usable version" in body
+
+
+# --- Task 1: the workflow path/host-parity checker -------------------------
+#
+# `775472c` deleted evals/multi-model-verify/test_kimi_lane_lock.py and
+# tools/kimi-lane-lock.ps1 without touching the workflow, which still named
+# the dead test path at .github/workflows/skill-evals.yml:84 and :95 - a
+# merge-blocking break `python -m pytest <dead path> -q` reproduces (exit 4,
+# "file or directory not found"). evals/tools/check_workflow_paths.py is the
+# repair: pure Python (the ubuntu job runs it, no PowerShell, no platform
+# branch) checking every referenced evals/...py token resolves to a READABLE
+# REGULAR FILE (exists()/is_file() are both insufficient - only an actual
+# open for binary reading establishes readability) and that a declared set
+# of dual-host modules is present in BOTH Windows pytest steps.
+import importlib.util as _importlib_util
+
+CHECK_WORKFLOW_PATHS = REPO / "evals" / "tools" / "check_workflow_paths.py"
+WORKFLOW = REPO / ".github" / "workflows" / "skill-evals.yml"
+
+
+def _load_check_workflow_paths():
+    spec = _importlib_util.spec_from_file_location(
+        "check_workflow_paths", CHECK_WORKFLOW_PATHS)
+    module = _importlib_util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_check_workflow_paths_flags_nonexistent_path(tmp_path):
+    cwp = _load_check_workflow_paths()
+    text = (
+        "        run: >\n"
+        "          python -m pytest\n"
+        "          evals/multi-model-verify/test_does_not_exist.py -q\n"
+    )
+    errors = cwp.check_paths_readable(
+        cwp.extract_py_tokens(text), tmp_path)
+    assert any("test_does_not_exist.py" in e for e in errors)
+
+
+def test_check_workflow_paths_flags_directory_named_like_py_file(tmp_path):
+    """A DIRECTORY whose name ends in `.py` exists happily, so a checker
+    that stopped at exists() or is_file() would pass it. Only opening it
+    for binary reading catches this."""
+    cwp = _load_check_workflow_paths()
+    (tmp_path / "evals" / "multi-model-verify").mkdir(parents=True)
+    trap = tmp_path / "evals" / "multi-model-verify" / "test_trap.py"
+    trap.mkdir()
+    assert trap.exists() and not trap.is_file()
+    errors = cwp.check_paths_readable(
+        ["evals/multi-model-verify/test_trap.py"], tmp_path)
+    assert any("test_trap.py" in e for e in errors)
+
+
+def test_check_workflow_paths_flags_unreadable_file_deterministically(
+        tmp_path, monkeypatch):
+    """Simulated, never a real Windows ACL denial - machine ACL behaviour
+    is not something a test may depend on. An is_file()-only implementation
+    that never opens anything would pass this; opening it must not."""
+    cwp = _load_check_workflow_paths()
+    (tmp_path / "evals" / "multi-model-verify").mkdir(parents=True)
+    real_file = tmp_path / "evals" / "multi-model-verify" / "test_real.py"
+    real_file.write_text("# fixture\n", encoding="utf-8")
+    assert real_file.is_file()
+
+    def _raise_open(path):
+        if Path(path).name == "test_real.py":
+            raise PermissionError(13, "simulated permission denied")
+        return open(path, "rb")
+
+    monkeypatch.setattr(cwp, "_open_binary", _raise_open)
+    errors = cwp.check_paths_readable(
+        ["evals/multi-model-verify/test_real.py"], tmp_path)
+    assert any("test_real.py" in e for e in errors)
+
+
+def test_check_workflow_paths_flags_host_parity_gap():
+    cwp = _load_check_workflow_paths()
+    complete = " ".join(cwp.REQUIRED_DUAL_HOST_MODULES)
+    text = (
+        "      - name: PowerShell-facing tests under Windows PowerShell 5.1\n"
+        "        env:\n"
+        "          PARALLAX_PS_HOST: powershell.exe\n"
+        "        run: >\n"
+        "          python -m pytest " + complete + " -q\n"
+        "\n"
+        "      - name: PowerShell-facing tests under PowerShell 7\n"
+        "        env:\n"
+        "          PARALLAX_PS_HOST: pwsh.exe\n"
+        "        run: >\n"
+        "          python -m pytest "
+        + " ".join(cwp.REQUIRED_DUAL_HOST_MODULES[1:]) + " -q\n"
+    )
+    host_steps = cwp.extract_windows_host_steps(text)
+    assert {host for host, _ in host_steps} == {"powershell.exe", "pwsh.exe"}
+    assert len(host_steps) == 2
+    errors = cwp.check_host_parity(host_steps, cwp.REQUIRED_DUAL_HOST_MODULES)
+    assert any(
+        "pwsh.exe" in e and cwp.REQUIRED_DUAL_HOST_MODULES[0] in e
+        for e in errors)
+    assert not any("powershell.exe" in e for e in errors)
+
+
+def test_check_workflow_paths_refuses_when_host_steps_are_not_found():
+    """An unmade measurement is never a clean one. Renaming
+    PARALLAX_PS_HOST (simulated here, in a synthetic copy of the workflow
+    text - not the real file) makes extract_windows_host_steps find zero
+    host steps; check_host_parity must FAIL and say so, rather than pass
+    vacuously because its loop over an empty list never ran."""
+    cwp = _load_check_workflow_paths()
+    complete = " ".join(cwp.REQUIRED_DUAL_HOST_MODULES)
+    text = (
+        "      - name: PowerShell-facing tests under Windows PowerShell 5.1\n"
+        "        env:\n"
+        "          PARALLAX_PS_HOST_RENAMED: powershell.exe\n"
+        "        run: >\n"
+        "          python -m pytest " + complete + " -q\n"
+        "\n"
+        "      - name: PowerShell-facing tests under PowerShell 7\n"
+        "        env:\n"
+        "          PARALLAX_PS_HOST_RENAMED: pwsh.exe\n"
+        "        run: >\n"
+        "          python -m pytest " + complete + " -q\n"
+    )
+    host_steps = cwp.extract_windows_host_steps(text)
+    assert host_steps == []
+    errors = cwp.check_host_parity(host_steps, cwp.REQUIRED_DUAL_HOST_MODULES)
+    assert errors
+    assert any("could not find the expected" in e for e in errors)
+
+
+def test_check_workflow_paths_refuses_a_duplicate_host_step():
+    """A dict keyed by host lets a SECOND step for the same host silently
+    OVERWRITE the first: three steps - an incomplete powershell.exe step,
+    a complete duplicate powershell.exe step, and a complete pwsh.exe step
+    - collapse under such a dict to exactly the correct-looking pair
+    {powershell.exe, pwsh.exe}, both showing the complete module set, and
+    parity reports clean about a step it never examined. The discovered
+    host MULTISET (two powershell.exe, one pwsh.exe) is not the required
+    multiset (one of each) even though the SET matches, so this must fail
+    and name the multiplicity problem."""
+    cwp = _load_check_workflow_paths()
+    complete = " ".join(cwp.REQUIRED_DUAL_HOST_MODULES)
+    incomplete = cwp.REQUIRED_DUAL_HOST_MODULES[0]
+    text = (
+        "      - name: PowerShell-facing tests under Windows PowerShell 5.1"
+        " (incomplete, first)\n"
+        "        env:\n"
+        "          PARALLAX_PS_HOST: powershell.exe\n"
+        "        run: >\n"
+        "          python -m pytest " + incomplete + " -q\n"
+        "\n"
+        "      - name: PowerShell-facing tests under Windows PowerShell 5.1"
+        " (duplicate, complete)\n"
+        "        env:\n"
+        "          PARALLAX_PS_HOST: powershell.exe\n"
+        "        run: >\n"
+        "          python -m pytest " + complete + " -q\n"
+        "\n"
+        "      - name: PowerShell-facing tests under PowerShell 7\n"
+        "        env:\n"
+        "          PARALLAX_PS_HOST: pwsh.exe\n"
+        "        run: >\n"
+        "          python -m pytest " + complete + " -q\n"
+    )
+    host_steps = cwp.extract_windows_host_steps(text)
+    # every step is preserved - nothing collapsed
+    assert len(host_steps) == 3
+    assert {host for host, _ in host_steps} == {"powershell.exe", "pwsh.exe"}
+    errors = cwp.check_host_parity(host_steps, cwp.REQUIRED_DUAL_HOST_MODULES)
+    assert errors
+    assert any("could not find the expected" in e for e in errors)
+    # the message names the multiplicity, not just the set
+    assert any("powershell.exe" in e and "pwsh.exe" in e for e in errors)
+
+
+def test_check_workflow_paths_real_workflow_is_clean():
+    """The checker run against the real workflow, both checks. This is the
+    TDD anchor: written before the orphaned test_kimi_lane_lock.py
+    reference was removed from skill-evals.yml, it failed - confirming the
+    checker catches the real break - and passes once the workflow is
+    fixed."""
+    cwp = _load_check_workflow_paths()
+    assert cwp.check_workflow(WORKFLOW, REPO) == []
+
+
+def test_check_workflow_paths_prints_nothing_and_exits_zero():
+    import subprocess
+    import sys
+    result = subprocess.run(
+        [sys.executable, str(CHECK_WORKFLOW_PATHS)],
+        capture_output=True, text=True, cwd=str(REPO))
+    assert result.returncode == 0
+    assert result.stdout == ""
+    assert result.stderr == ""
+
+
+# --- Task 8: the doctor stops touching credentials -------------------------
+#
+# commands/doctor.md check 8 used to build a scratch KIMI_CODE_HOME and run
+# `provider list` against it - measurement 16/17 showed that proves nothing
+# and mutates nothing, and a live round dispatch failed with
+# `auth.login_required` even while `provider list` reported a healthy oauth
+# source. The check now validates the lane credential's STRUCTURE via
+# tools/read-kimi-credential-state.ps1 and reads the lane lock's STATUS via
+# tools/kimi-lane-lock.ps1 -Status, both read-only, and aggregates every
+# substate into ONE row by the total order BROKEN > STALE > N/A > OK.
+
+DOCTOR = REPO / "commands" / "doctor.md"
+
+# The lane login recovery command, from `Fixed names and values` in the
+# frozen plan - the COMPLETE emitted form, not the wrapper's filename. Task 6's
+# builder emits and executes the identical string; the doctor only prints it.
+RECOVERY_COMMAND = '& { $ErrorActionPreference = \'Stop\'; try { $ownerLines = @(& \'tools/kimi-lane-lock.ps1\' -ResolveOwner); $ownerExit = $LASTEXITCODE; if ($ownerExit -ne 0) { throw "owner resolution failed with exit $ownerExit" }; if ($ownerLines.Count -ne 1 -or -not ($ownerLines[0] -is [string]) -or [string]::IsNullOrWhiteSpace([string]$ownerLines[0])) { throw \'owner resolution returned invalid output\' }; $owner = $ownerLines[0] | ConvertFrom-Json -ErrorAction Stop; if (-not ($owner -is [System.Management.Automation.PSCustomObject])) { throw \'owner resolution returned invalid schema\' }; $ownerFields = @($owner.PSObject.Properties.Name); if ($ownerFields.Count -ne 2 -or -not ($ownerFields -ccontains \'ownerPid\') -or -not ($ownerFields -ccontains \'ownerStartTicksUtc\') -or -not (($owner.ownerPid -is [int]) -or ($owner.ownerPid -is [long])) -or [long]$owner.ownerPid -le 0 -or -not ($owner.ownerStartTicksUtc -is [string]) -or $owner.ownerStartTicksUtc -notmatch \'\\A[0-9]+\\z\') { throw \'owner resolution returned invalid schema\' }; if ([string]::IsNullOrWhiteSpace($env:TEMP) -or -not (Test-Path -LiteralPath $env:TEMP -PathType Container -ErrorAction Stop)) { throw \'TEMP is not an existing directory\' }; $verdictOut = Join-Path -Path $env:TEMP -ChildPath \'parallax-kimi-lane-login-verdict.json\' -ErrorAction Stop; & \'tools/new-kimi-lane-login.ps1\' -LaneHome \'<lane-home>\' -OwnerPid ([string]$owner.ownerPid) -OwnerStartTicksUtc $owner.ownerStartTicksUtc -VerdictOut $verdictOut; $loginExit = $LASTEXITCODE; if ($loginExit -ne 0) { throw "lane login failed with exit $loginExit" } } catch { throw } }'
+
+TOTAL_ORDER_RULE = 'row is the WORST substate observed, by `BROKEN > STALE > N/A > OK`, and every substate observed is still named in the detail text. N/A is IN that order'
+BINARY_ABSENT = 'is N/A, short-circuit, "backup lane unavailable, primary unaffected"'
+BINARY_OK_CLEAN = 'reports a usable version AT OR ABOVE the floor `0.31.1` is OK, with the reported version and the floor comparison both named in the detail — the CLEAN row this check used to omit.'
+BINARY_BROKEN = 'A present binary that does not report a usable version, or reports below the floor, is BROKEN.'
+FOUR_PART_RULE = "accept the measurement ONLY under the FOUR-PART ACCEPTANCE RULE: the process launched, it exited 0, stderr was EMPTY, and stdout was exactly one parseable line whose status/detail pairing is one of Task 2's table."
+VALIDATOR_FAILS = 'pairing outside that table is "the validator itself fails to run": BROKEN, and NO credential recovery command is fabricated, because no credential state was measured.'
+CRED_OK = '`ok` is OK — "lane credential structurally present".'
+CRED_ABSENT = '`absent` is N/A, and no hash is taken at all.'
+CRED_UNREADABLE_MALFORMED = '`unreadable` or `malformed` is BROKEN.'
+RECOVERY_PRINT_STATEMENT = 'All three credential-failure rows above — `absent`, `unreadable` and `malformed` — print THE LANE LOGIN RECOVERY COMMAND from `Fixed names and values`, complete and executable, against the configured lane home:'
+HASH_STEP1 = '1. Test existence of the credential file.'
+HASH_STEP2 = '2. If ABSENT: run the validator, require `absent`, take NO hash.'
+HASH_STEP3 = "3. If PRESENT: attempt hash 1 (SHA-256 of the file's bytes) and record success or failure."
+HASH_STEP4 = "4. Run the validator REGARDLESS of hash 1's outcome."
+HASH_STEP5 = '5. If the file is still present, attempt hash 2. Disappearance between the two hashes is BROKEN.'
+HASH_STEP6 = '6. Compare ONLY if both hashes exist. Never compare a missing value to anything.'
+HASH_STEP7 = '7. Any hash failure is BROKEN, and it does NOT suppress the validator detail.'
+HASH_CANNOT_TAKE = 'A hash that cannot be taken on a PRESENT credential is BROKEN.'
+HASH_NARROWED = 'differing hashes are BROKEN, "credential bytes changed during the check; actor not established"; equal hashes are reported as "no net byte change observed", never as proof nothing wrote the file.'
+AUTH_PROBE_LITERAL = "An AUTHENTICATED probe is a SEPARATE operation and is never part of check 8. It acquires the lane lock, it MAY REFRESH the dedicated lane credential, and it never touches the user's ordinary credential. Check 8 reports STRUCTURE only, so a structurally present credential is not a working one."
+LOCK_STATUS_CANNOT_MEASURE = 'status invocation that fails that rule is "lock status cannot be measured": BROKEN, and no recovery command is fabricated from evidence the check does not have.'
+LOCK_FREE = '`free` is OK.'
+LOCK_LIVE = "`held` and LIVE is OK, reported as held with the holder — LIVE means the holder's process is running, and never that a debate was abandoned."
+LOCK_DEAD = '`held` and DEAD is STALE, reclaimable at the next acquire.'
+LOCK_UNKNOWN_SAME_HOST = "`held`, SAME-HOST — the record's `host` equals `$env:COMPUTERNAME`, compared case-insensitively — and UNKNOWN is N/A: liveness could NOT be determined, and every mutating mode therefore treats the holder as alive and will not reclaim it. Same-host is what selects this row, because a foreign-host record also reports UNKNOWN liveness."
+LOCK_FOREIGN_HOST = "foreign-host — the record's `host` differs from `$env:COMPUTERNAME`, compared case-INSENSITIVELY, which is the comparison the doctor makes since `-Status` reports the field — is STALE, with:"
+FORCE_RELEASE_CMD = '`tools/kimi-lane-lock.ps1 -ForceRelease -LaneHome <lane-home> -ConfirmHost <host> -ConfirmOwnerPid <pid> -ConfirmOwnerStartTicksUtc <ticks> -ConfirmDebateId <id> -ConfirmNonce <nonce>`'
+LOCK_MALFORMED = 'MALFORMED is STALE, with:'
+MALFORMED_OVERRIDE_CMD = '`tools/kimi-lane-lock.ps1 -MalformedOverride -LaneHome <lane-home> -ConfirmSha256 <sha256>`'
+CONTAINMENT_UNCHANGED = '**Containment artifact.** Verify the committed `skills/multi-model-verify/references/kimi-reviewer-agent.md` exists in the installed copy and its `tools:` allowlist is present (do not re-derive the list here; report presence/absence only). Missing file or allowlist is BROKEN.'
+
+
+def test_doctor_check8_stops_touching_credentials():
+    """The old check built a scratch home and ran `provider list`; measurement
+    16/17 showed that proves nothing and mutates nothing, and the doctor now
+    never dispatches to the credential at all."""
+    body = _read(DOCTOR)
+    assert "provider list" not in body
+    assert "new-kimi-lane-home.ps1" not in body
+    assert "credential present and OAuth-sourced" not in body
+
+
+def test_doctor_check8_total_order_precedence():
+    assert TOTAL_ORDER_RULE in _norm(DOCTOR)
+
+
+def test_doctor_check8_binary_rows_including_the_clean_ok_row():
+    """r25 (plan history): the substate table called itself total while having
+    no row for the CLEAN binary, so every fixture in this task used to be a
+    failure fixture and an implementation that never emitted OK would have
+    passed all of them. This pin is the CLEAN row the table used to omit."""
+    body = _norm(DOCTOR)
+    assert BINARY_ABSENT in body
+    assert BINARY_OK_CLEAN in body
+    assert BINARY_BROKEN in body
+
+
+def test_doctor_check8_four_part_rule_and_validator_failure_row():
+    body = _norm(DOCTOR)
+    assert FOUR_PART_RULE in body
+    assert VALIDATOR_FAILS in body
+
+
+def test_doctor_check8_a_nonzero_exit_with_a_valid_absent_report_stays_broken():
+    """The plan's first boundary fixture. WHICH ROW FIRES is decided by the
+    four-part acceptance rule, not by the report's contents: a nonzero exit
+    carrying a perfectly valid-looking `absent` report is still "the
+    validator itself fails to run", because nothing was measured. Two
+    mutations, one per half of that claim."""
+    body = _norm(DOCTOR)
+    assert FOUR_PART_RULE in body
+    assert VALIDATOR_FAILS in body
+    # If exit 0 stopped being required, a nonzero exit could reach the
+    # credential table and be read as a measured `absent`.
+    without_exit_zero = body.replace("it exited 0, stderr was EMPTY",
+                                      "stderr was EMPTY")
+    assert FOUR_PART_RULE not in without_exit_zero
+    # If the unmeasured case stopped being BROKEN, an unmade measurement
+    # would read as a clean one.
+    softened = body.replace('fails to run": BROKEN', 'fails to run": N/A')
+    assert VALIDATOR_FAILS not in softened
+
+
+def test_doctor_check8_an_exit_zero_valid_absent_report_is_na_and_takes_no_hash():
+    """The plan's second boundary fixture, the other direction: a report
+    that WAS accepted and says `absent` is an ordinary actionable reading,
+    N/A rather than BROKEN, and it takes no hash at all."""
+    body = _norm(DOCTOR)
+    assert CRED_ABSENT in body
+    assert RECOVERY_PRINT_STATEMENT in body
+    wrong_verdict = body.replace("`absent` is N/A", "`absent` is BROKEN")
+    assert CRED_ABSENT not in wrong_verdict
+    hashing_anyway = body.replace("and no hash is taken at all",
+                                   "and a hash is taken")
+    assert CRED_ABSENT not in hashing_anyway
+
+
+def test_doctor_check8_credential_status_mapping():
+    body = _norm(DOCTOR)
+    assert CRED_OK in body
+    assert CRED_ABSENT in body
+    assert CRED_UNREADABLE_MALFORMED in body
+
+
+def test_doctor_check8_recovery_command_is_the_complete_emitted_form():
+    """The pin covers the COMPLETE command, not the wrapper's filename - a
+    message naming only tools/new-kimi-lane-login.ps1 must fail this pin."""
+    body = _norm(DOCTOR)
+    assert RECOVERY_PRINT_STATEMENT in body
+    # RECOVERY_COMMAND is already single-line, so it needs no normalizing
+    # of its own - normalizing a plain string (not a Path) would break _norm.
+    assert RECOVERY_COMMAND in body
+    # a message naming only the wrapper filename is not the complete command
+    filename_only = body.replace(RECOVERY_COMMAND,
+                                  "tools/new-kimi-lane-login.ps1")
+    assert RECOVERY_COMMAND not in filename_only
+    assert "tools/new-kimi-lane-login.ps1" in filename_only
+
+
+def test_doctor_check8_hash_algorithm_seven_steps():
+    body = _norm(DOCTOR)
+    for step in (HASH_STEP1, HASH_STEP2, HASH_STEP3, HASH_STEP4, HASH_STEP5,
+                 HASH_STEP6, HASH_STEP7):
+        assert step in body
+    # ordering: the seven steps appear in numeric order, not merely present
+    positions = [body.index(step) for step in
+                 (HASH_STEP1, HASH_STEP2, HASH_STEP3, HASH_STEP4, HASH_STEP5,
+                  HASH_STEP6, HASH_STEP7)]
+    assert positions == sorted(positions)
+
+
+def test_doctor_check8_hash_wording_is_narrowed():
+    body = _norm(DOCTOR)
+    assert HASH_CANNOT_TAKE in body
+    assert HASH_NARROWED in body
+
+
+def test_doctor_check8_authenticated_probe_literal_exact():
+    assert AUTH_PROBE_LITERAL in _norm(DOCTOR)
+
+
+def test_doctor_check8_lock_status_measurement_failure_row():
+    assert LOCK_STATUS_CANNOT_MEASURE in _norm(DOCTOR)
+
+
+def test_doctor_check8_lock_free_live_dead_rows():
+    body = _norm(DOCTOR)
+    assert LOCK_FREE in body
+    assert LOCK_LIVE in body
+    assert LOCK_DEAD in body
+
+
+def test_doctor_check8_unknown_same_host_pin_excludes_wrong_mappings():
+    """Explicit pin, per the plan: the UNKNOWN row's N/A verdict TOGETHER WITH
+    its required detail, so an implementation mapping UNKNOWN to OK or STALE
+    fails - a generic "lock-status reporting" pin would not catch that."""
+    body = _norm(DOCTOR)
+    assert LOCK_UNKNOWN_SAME_HOST in body
+    wrong_ok = body.replace("UNKNOWN is N/A:", "UNKNOWN is OK:")
+    assert LOCK_UNKNOWN_SAME_HOST not in wrong_ok
+    wrong_stale = body.replace("UNKNOWN is N/A:", "UNKNOWN is STALE:")
+    assert LOCK_UNKNOWN_SAME_HOST not in wrong_stale
+
+
+def test_doctor_check8_foreign_host_case_insensitive_pin_excludes_case_sensitive_wording():
+    """Explicit pin, per the plan: the foreign-host branch's CASE-INSENSITIVE
+    comparison of the record's host against $env:COMPUTERNAME, together with
+    its complete -ForceRelease recovery command, so a case-sensitive
+    comparison fails."""
+    body = _norm(DOCTOR)
+    assert LOCK_FOREIGN_HOST in body
+    assert FORCE_RELEASE_CMD in body
+    wrong = body.replace("case-INSENSITIVELY", "case-sensitively")
+    assert LOCK_FOREIGN_HOST not in wrong
+
+
+def test_doctor_check8_malformed_lock_row():
+    body = _norm(DOCTOR)
+    assert LOCK_MALFORMED in body
+    assert MALFORMED_OVERRIDE_CMD in body
+
+
+def test_doctor_check8_containment_artifact_is_unchanged():
+    """This bullet is untouched by Task 8 - same text as before the rewrite,
+    pinned in its own right per the plan's explicit instruction."""
+    assert CONTAINMENT_UNCHANGED in _norm(DOCTOR)

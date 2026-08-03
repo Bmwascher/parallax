@@ -132,8 +132,25 @@ if (Test-Path $agyExe) {
 
 $kimiVersion = ""
 $kimiRaw = ""
-try { $kimiRaw = (& kimi --version 2>&1 | Out-String).Trim() } catch {}
-if ($kimiRaw -match '(\d+\.\d+\.\d+)') { $kimiVersion = $Matches[1] }
+$versionExit = $null
+$kimiExe = ""
+$kimiBin = Join-Path $env:USERPROFILE ".kimi-code\bin"
+# Either name: a real Windows CLI may ship as .exe or as a .cmd shim, and
+# an .exe-only lookup is also impossible to stub offline, which is what
+# left every state-machine kimi scenario asserting nothing.
+foreach ($n in @("kimi.exe", "kimi.cmd")) {
+    $candidate = Join-Path $kimiBin $n
+    if (Test-Path $candidate) { $kimiExe = $candidate; break }
+}
+if ($kimiExe) {
+    try {
+        $kimiRaw = (& $kimiExe --version 2>&1 | Out-String).Trim()
+        $versionExit = $LASTEXITCODE
+    } catch { $versionExit = -1 }
+    # Assign the RAW value. r2 filtered through a numeric regex first, so a
+    # malformed version could never reach the floor check.
+    $kimiVersion = $kimiRaw
+}
 
 $registryFile = Join-Path $env:USERPROFILE ".claude\plugins\installed_plugins.json"
 $spVersion = ""
@@ -194,25 +211,50 @@ if ($codexVersion) {
     }
 }
 
-# --- check 2b (every run): kimi backup transport surface -----------------------
-# Short flags (-m/-w/-p/-r) substring-match trivially inside long-flag
-# help text; the long flags carry the real detection. All seven are
-# probed for spec conformance - a miss on any is a loud contract break.
+# --- check 2b (every run): kimi-code backup transport surface ------------------
+# Short flags (-m/-p) substring-match inside long-flag help text; the long
+# flags carry the real detection. `-r` is deliberately absent: it works but
+# is a HIDDEN alias that never appears in --help, so asserting it would
+# report a break that is not one. `kimi upgrade` self-updates, so the floor
+# is checked as well as the version recorded.
 
-if ($kimiVersion) {
-    $kimiHelp = (& kimi --help 2>&1 | Out-String)
-    foreach ($flag in @("--quiet", "--thinking", "-m", "--agent-file", "-w", "-p", "-r")) {
-        $flagPattern = '(^|[\s,\[])' + [regex]::Escape($flag) + '($|[\s,\]=])'
-        if (-not [regex]::IsMatch($kimiHelp, $flagPattern)) {
-            $findings += "[CRITICAL] kimi --help ($kimiVersion) no longer lists $flag - the backup lane's transport commands are broken; update references/backup-lane.md"
+$KimiCodeFloor = "0.31.1"
+
+if (-not $kimiExe) {
+    $notes += "kimi-code absent - backup-lane probes skipped (lane optional; primary unaffected)"
+} elseif ($versionExit -ne 0 -or -not $kimiVersion) {
+    $findings += "[CRITICAL] kimi-code is installed at $kimiExe but did not report a usable version (exit $versionExit) - an unmade version check is never a passing one; the backup lane is UNAVAILABLE"
+} else {
+    $kimiHelp = ""
+    $helpExit = -1
+    try {
+        $kimiHelp = (& $kimiExe --help 2>&1 | Out-String)
+        $helpExit = $LASTEXITCODE
+    } catch { $helpExit = -1 }
+    if ($helpExit -ne 0 -or -not $kimiHelp.Trim()) {
+        # STOP here. Running the flag loop against missing or error output
+        # emits five more findings that describe nothing - the same
+        # false-finding class this task exists to remove.
+        $findings += "[CRITICAL] kimi-code --help exited $helpExit or printed nothing - the transport surface could not be measured, so no flag conclusion is available"
+    } else {
+        foreach ($flag in @("--agent-file", "--skills-dir", "-m", "-p", "--session")) {
+            $flagPattern = '(^|[\s,\[])' + [regex]::Escape($flag) + '($|[\s,\]=])'
+            if (-not [regex]::IsMatch($kimiHelp, $flagPattern)) {
+                $findings += "[CRITICAL] kimi-code --help ($kimiVersion) no longer lists $flag - the backup lane's transport commands are broken; update references/backup-lane.md"
+            }
         }
     }
-    & python -c "import kimi_cli.tools.file, kimi_cli.tools.todo" 2>$null
-    if ($LASTEXITCODE -ne 0) {
-        $findings += "[CRITICAL] kimi_cli tool modules no longer import - the containment agent-file's tool allowlist may be stale; re-probe references/kimi-reviewer-agent.yaml against the installed kimi-cli"
+    $parsedFloor = $null
+    $parsedSeen = $null
+    $okFloor = [version]::TryParse($KimiCodeFloor, [ref]$parsedFloor)
+    $okSeen  = [version]::TryParse(($kimiVersion -replace '^\D*', ''), [ref]$parsedSeen)
+    if ($okFloor -and $okSeen) {
+        if ($parsedSeen -lt $parsedFloor) {
+            $findings += "[CRITICAL] kimi-code $kimiVersion is below the lane floor $KimiCodeFloor - the backup lane is UNAVAILABLE, not degraded; see references/backup-lane.md"
+        }
+    } else {
+        $findings += "[CRITICAL] kimi-code version '$kimiVersion' is unparseable against floor $KimiCodeFloor - an unmade floor check is never a passing one"
     }
-} else {
-    $notes += "kimi absent or version unparseable - backup-lane probes skipped (lane optional; primary unaffected)"
 }
 
 # --- check 3 (on change): Claude Code changelog slice --------------------------
@@ -340,7 +382,7 @@ if (Test-Path $PendingFile) {
     $kept = @()
     foreach ($entry in $pendingList) {
         if ($entry.status -eq "fix-branch-open") {
-            git -C $RepoRoot rev-parse --verify --quiet $entry.branch > $null 2>&1
+            git -C $RepoRoot rev-parse --verify -q $entry.branch > $null 2>&1
             if ($LASTEXITCODE -ne 0) {
                 Add-Content -Path $ReportFile -Value "`r`nPrior fix branch $($entry.branch) is gone (merged or discarded) - pending entry cleared."
                 continue

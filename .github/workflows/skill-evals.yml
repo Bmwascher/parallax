@@ -35,6 +35,9 @@ jobs:
       - name: Tier 1b - security scan
         run: python evals/tools/skill_scanner.py skills
 
+      - name: Tier 1c - exact-line oracle gate
+        run: python evals/tools/check_exact_line_oracles.py
+
       - name: Tier 2 - trigger and routing evals
         run: python evals/tools/run_trigger_evals.py
 
@@ -81,17 +84,29 @@ jobs:
           PARALLAX_PS_HOST: powershell.exe
         run: >
           python -m pytest
-          evals/multi-model-verify/test_kimi_lane_lock.py
           evals/multi-model-verify/test_attestation.py
           evals/multi-model-verify/test_codex_context_probe.py
-          evals/multi-model-verify/test_review_mirror.py -q
+          evals/multi-model-verify/test_review_mirror.py
+          evals/multi-model-verify/test_kimi_round_evidence.py
+          evals/multi-model-verify/test_kimi_lane_lock.py
+          evals/multi-model-verify/test_lock_protocol_live.py
+          evals/multi-model-verify/test_kimi_credential_state.py
+          evals/multi-model-verify/test_kimi_lane_login.py
+          evals/multi-model-verify/test_kimi_lane_home.py
+          evals/multi-model-verify/test_lane_credential_live_support.py -q
 
       - name: PowerShell-facing tests under PowerShell 7
         env:
           PARALLAX_PS_HOST: pwsh.exe
         run: >
           python -m pytest
-          evals/multi-model-verify/test_kimi_lane_lock.py
           evals/multi-model-verify/test_attestation.py
           evals/multi-model-verify/test_codex_context_probe.py
-          evals/multi-model-verify/test_review_mirror.py -q
+          evals/multi-model-verify/test_review_mirror.py
+          evals/multi-model-verify/test_kimi_round_evidence.py
+          evals/multi-model-verify/test_kimi_lane_lock.py
+          evals/multi-model-verify/test_lock_protocol_live.py
+          evals/multi-model-verify/test_kimi_credential_state.py
+          evals/multi-model-verify/test_kimi_lane_login.py
+          evals/multi-model-verify/test_kimi_lane_home.py
+          evals/multi-model-verify/test_lane_credential_live_support.py -q

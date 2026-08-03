@@ -1,515 +1,982 @@
-"""Tests for tools/kimi-lane-lock.ps1.
+"""Contract pins for the kimi-code lane lock (Task 3, 2026-08-01
+lane-credential-and-lock plan).
 
-The backup lane reads its route-attribution evidence out of one
-user-global log, so two parallax debates dispatching at once interleave
-their startup lines. That cost two of six dispatched rounds on
-2026-07-27 (backlog item 6). Ordering-based attribution in
-references/backup-lane.md handles FOREIGN kimi sessions; this lock is what
-stops parallax colliding with itself.
-
-The lock is advisory and age-bounded by design. It records no process
-handle, because the holder is a driver agent whose shell invocations are
-each short-lived - a recorded PID would be dead before the next caller
-looked, so every lock would read as stale immediately. Staleness is
-therefore decided by age alone, and these tests pin that contract
-including its limits.
-
-Runs wherever a PowerShell host exists: Windows powershell.exe or pwsh
-(GitHub ubuntu runners ship pwsh); skipped otherwise.
+WINDOWS ONLY, whole module: the lock manipulates real Windows exclusive
+file handles and real process liveness (Get-Process, Win32_Process).
+PARALLAX_PS_HOST selects which host runs these tests, same pattern as
+test_codex_context_probe.py:35-67 - a selector that merely finds A host
+would happily collect them on Ubuntu CI too, where pwsh is on PATH but
+the exclusive-handle and liveness semantics under test do not exist
+there the same way. A green suite on one Windows host proves ONE
+interpreter - 0.16.1 shipped a lock that did not lock on pwsh because
+every local run used powershell.exe only.
 """
-
+import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
-from datetime import datetime, timedelta, timezone
+import time
+import uuid
 from pathlib import Path
 
 import pytest
 
-HERE = Path(__file__).resolve().parent
-PLUGIN_ROOT = HERE.parent.parent
-LOCK = PLUGIN_ROOT / "tools" / "kimi-lane-lock.ps1"
+REPO = Path(__file__).resolve().parents[2]
+SCRIPT = REPO / "tools" / "kimi-lane-lock.ps1"
 
-# Windows PowerShell 5.1 and PowerShell 7 do NOT agree about this script's
-# input: `ConvertFrom-Json` returns an ISO-8601 stamp as a String on 5.1 and
-# auto-converts it to a DateTime on 7. A lock bug that only appears on one
-# host is therefore possible, and one shipped in 0.16.0 - every lock read as
-# unusable on pwsh while this suite stayed green locally, because it picks
-# powershell.exe when both are installed. PARALLAX_PS_HOST forces the other
-# one so both can be run before pushing, and the workflow's windows-latest
-# job runs this module under each interpreter so neither host can regress
-# unseen. `test_attestation.py` honours the same variable; the hook tests in
-# `test_multi_model_verify.py` deliberately do not, because hooks.json
-# invokes the hook as `pwsh` and testing another host would not match how it
-# runs.
 POWERSHELL = (os.environ.get("PARALLAX_PS_HOST")
               or shutil.which("powershell") or shutil.which("pwsh"))
 
 pytestmark = pytest.mark.skipif(
-    POWERSHELL is None, reason="no PowerShell host on PATH")
+    os.name != "nt" or POWERSHELL is None,
+    reason="the lock is a Windows tool: it needs a PowerShell host and "
+           "the exclusive-handle / process-liveness platform it targets")
+
+COMPUTERNAME = os.environ.get("COMPUTERNAME", "")
+
+TOKEN_RE = re.compile(r"\A[0-9a-f]{32}\Z")
+DIGITS_RE = re.compile(r"\A[0-9]+\Z")
 
 
-def run_lock(lock_path, *args, extra_env=None):
-    """Drive the script with the lock redirected into a tmp path.
-
-    PARALLAX_KIMI_LOCK is the script's documented test seam, so the real
-    per-user lock is never touched by the suite.
-
-    There is deliberately NO way for a caller to shorten the staleness
-    threshold. Two earlier shapes were both lock-stealing: a
-    `-MaxAgeMinutes` parameter (`-Acquire -MaxAgeMinutes 0` broke a fresh
-    lock with no `-Force`), and an env override honoured whenever the lock
-    path was redirected - which gated on the redirect being present rather
-    than on it differing from the default, so pointing it at the default
-    path stole the real per-user lane. The cross-vendor lane found each of
-    them, the second inside the fix for the first. Tests that need a stale
-    lock write one with a backdated stamp instead; see `write_lock`.
-    """
-    env = {**dict(__import__("os").environ), "PARALLAX_KIMI_LOCK": str(lock_path)}
-    if extra_env:
-        env.update(extra_env)
-    return subprocess.run(
-        [POWERSHELL, "-NoProfile", "-ExecutionPolicy", "Bypass",
-         "-File", str(LOCK), *args],
-        capture_output=True, text=True, timeout=120, env=env)
+# ---------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------
+def new_token():
+    return uuid.uuid4().hex
 
 
-def write_lock(path, label="debate-A", age_minutes=0.0):
-    """Place a lock owned by `label` and stamped `age_minutes` in the past.
-
-    This is how the suite reaches the stale branch: it backdates its own
-    temporary lock rather than asking the script to lower its guard.
-    """
-    stamp = datetime.now(timezone.utc) - timedelta(minutes=age_minutes)
-    payload = {"stamp": stamp.isoformat()}
-    if label is not None:
-        payload["label"] = label
-    path.write_text(json.dumps(payload), encoding="ascii")
-    return path
+def run_lock(args, env=None, timeout=20):
+    full_env = dict(os.environ)
+    if env:
+        full_env.update(env)
+    cmd = [POWERSHELL, "-NoProfile", "-NonInteractive", "-File", str(SCRIPT)] + list(args)
+    return subprocess.run(cmd, capture_output=True, text=True, env=full_env, timeout=timeout)
 
 
+def start_lock_bg(args, env=None):
+    full_env = dict(os.environ)
+    if env:
+        full_env.update(env)
+    cmd = [POWERSHELL, "-NoProfile", "-NonInteractive", "-File", str(SCRIPT)] + list(args)
+    return subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                             text=True, env=full_env)
+
+
+def lock_path(home):
+    return home / "lane.lock"
+
+
+def write_raw(home, content_bytes):
+    lock_path(home).write_bytes(content_bytes)
+
+
+def read_raw(home):
+    p = lock_path(home)
+    if not p.exists():
+        return None
+    return p.read_bytes()
+
+
+def write_held(home, **overrides):
+    rec = {
+        "version": 1,
+        "state": "held",
+        "host": COMPUTERNAME,
+        "ownerPid": 999999,
+        "ownerStartTicksUtc": "111111111",
+        "debateId": new_token(),
+        "nonce": new_token(),
+        "debateHome": str(home / "debate-home"),
+        "acquiredTicksUtc": "111111111",
+    }
+    rec.update(overrides)
+    write_raw(home, json.dumps(rec).encode("utf-8"))
+    return rec
+
+
+def sha256_hex(data: bytes):
+    return hashlib.sha256(data).hexdigest()
+
+
+def wait_for_signal(path: Path, timeout=10.0):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if path.exists():
+            try:
+                content = path.read_text(encoding="ascii").strip()
+                if content:
+                    return content
+            except OSError:
+                pass
+        time.sleep(0.05)
+    return None
+
+
+def _ticks_for_pid(pid):
+    proc = subprocess.run(
+        [POWERSHELL, "-NoProfile", "-NonInteractive", "-Command",
+         f"(Get-Process -Id {pid}).StartTime.ToUniversalTime().Ticks"],
+        capture_output=True, text=True)
+    return proc.stdout.strip()
+
+
+@pytest.fixture(scope="module")
+def self_identity():
+    """A LIVE (pid, ticks) pair that stays alive for the whole module -
+    this pytest process itself."""
+    pid = os.getpid()
+    ticks = _ticks_for_pid(pid)
+    assert DIGITS_RE.match(ticks), f"could not resolve self ticks: {ticks!r}"
+    return str(pid), ticks
+
+
+@pytest.fixture
+def lane_home(tmp_path):
+    p = tmp_path / "lane"
+    p.mkdir()
+    return p
+
+
+@pytest.fixture
+def debate_home(tmp_path):
+    p = tmp_path / "debate-home"
+    p.mkdir()
+    return p
+
+
+def start_sleeper(seconds=40):
+    """A genuinely separate LIVE process, for holder-contention fixtures
+    that must name a pid this tool did not itself spawn as the lock
+    holder's identity."""
+    return subprocess.Popen(
+        [POWERSHELL, "-NoProfile", "-NonInteractive", "-Command", f"Start-Sleep -Seconds {seconds}"],
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+
+
+# ---------------------------------------------------------------------
+# Basic shape
+# ---------------------------------------------------------------------
 def test_script_exists():
-    assert LOCK.is_file(), "the lane lock the contract names must exist"
+    assert SCRIPT.is_file()
 
 
-def test_status_reports_free_when_absent(tmp_path):
-    r = run_lock(tmp_path / "k.lock")
-    assert r.returncode == 0
-    assert "free" in r.stdout
+def test_resolve_owner_prints_pid_and_digit_ticks():
+    result = run_lock(["-ResolveOwner"])
+    assert result.returncode == 0
+    obj = json.loads(result.stdout.strip())
+    assert set(obj.keys()) == {"ownerPid", "ownerStartTicksUtc"}
+    assert isinstance(obj["ownerPid"], int) and obj["ownerPid"] > 0
+    assert DIGITS_RE.match(obj["ownerStartTicksUtc"])
 
 
-def test_acquire_then_status_reports_held(tmp_path):
-    p = tmp_path / "k.lock"
-    a = run_lock(p, "-Acquire", "-Label", "debate-A")
-    assert a.returncode == 0 and "acquired" in a.stdout
-    s = run_lock(p)
-    assert s.returncode == 0
-    assert "held" in s.stdout and "debate-A" in s.stdout
+# ---------------------------------------------------------------------
+# MALFORMED classification and the per-state property rule
+# ---------------------------------------------------------------------
+def test_free_record_with_extra_known_property_is_malformed(lane_home):
+    write_raw(lane_home, b'{"version":1,"state":"free","host":"X"}')
+    result = run_lock(["-Status", "-LaneHome", str(lane_home)])
+    assert result.returncode == 0
+    assert json.loads(result.stdout)["state"] == "MALFORMED"
 
 
-def test_acquire_creates_the_parent_directory(tmp_path):
-    # The default location is under LOCALAPPDATA and will not exist on a
-    # fresh machine; a first acquire must not fail on that.
-    p = tmp_path / "nested" / "deeper" / "k.lock"
-    r = run_lock(p, "-Acquire", "-Label", "debate-A")
-    assert r.returncode == 0
-    assert p.is_file()
+def test_free_record_with_wholly_unknown_property_is_malformed(lane_home):
+    write_raw(lane_home, b'{"version":1,"state":"free","bogus":"X"}')
+    result = run_lock(["-Status", "-LaneHome", str(lane_home)])
+    assert result.returncode == 0
+    assert json.loads(result.stdout)["state"] == "MALFORMED"
 
 
-def test_second_acquire_is_busy_and_says_not_to_dispatch(tmp_path):
-    p = tmp_path / "k.lock"
-    assert run_lock(p, "-Acquire", "-Label", "debate-A").returncode == 0
-    r = run_lock(p, "-Acquire", "-Label", "debate-B", "-WaitSeconds", "0")
-    assert r.returncode == 1, "a busy lane must not read as acquired"
-    assert "BUSY" in r.stdout
-    assert "debate-A" in r.stdout, "a waiting caller needs to know who holds it"
-    assert "Do not dispatch" in r.stdout
-
-
-def test_release_by_a_different_label_is_refused(tmp_path):
-    # One debate must not free another's lane by accident.
-    p = tmp_path / "k.lock"
-    assert run_lock(p, "-Acquire", "-Label", "debate-A").returncode == 0
-    r = run_lock(p, "-Release", "-Label", "debate-B")
-    assert r.returncode == 1
-    assert "different caller" in r.stdout
-    assert p.is_file(), "a refused release must leave the lock in place"
-
-
-def test_a_label_less_release_cannot_free_a_labelled_lock(tmp_path):
-    # A bare -Release used to skip the ownership check entirely, making it an
-    # undeclared -Force: it silently freed a lane another debate held, and
-    # two rounds could then dispatch at once. That is the exact case the lock
-    # exists to prevent, so it must be refused.
-    p = tmp_path / "k.lock"
-    assert run_lock(p, "-Acquire", "-Label", "debate-A").returncode == 0
-    r = run_lock(p, "-Release")
-    assert r.returncode == 1, "a bare release must not silently force"
-    assert "this release names no label" in r.stdout
-    assert p.is_file(), "the holder's lane must survive a bare release"
-
-
-def test_acquire_requires_a_label(tmp_path):
-    # The label is the ownership credential. An UNLABELLED lock has no holder
-    # to protect, so any bare release frees it - which the cross-vendor lane
-    # named as a hole in the ownership claim. Requiring the label on acquire
-    # means an unlabelled lock cannot exist to be exploited.
-    p = tmp_path / "k.lock"
-    r = run_lock(p, "-Acquire")
-    assert r.returncode == 2
-    assert "required on acquire" in r.stdout
-    assert not p.is_file(), "a refused acquire must not leave a lock behind"
-
-
-def test_acquire_refuses_a_whitespace_label(tmp_path):
-    # `-Label ""` was already refused, but whitespace was accepted as an
-    # owner. A blank credential is not one a later release can be checked
-    # against, so it must be refused the same way.
-    p = tmp_path / "k.lock"
-    r = run_lock(p, "-Acquire", "-Label", "   ")
-    assert r.returncode == 2
-    assert "nonblank" in r.stdout
-    assert not p.is_file()
-
-
-@pytest.mark.parametrize("label", ["debate-é", "debate-中", "deb—ate"])
-def test_acquire_refuses_a_label_it_cannot_store_faithfully(tmp_path, label):
-    # The lock is written as ASCII, so any other character became `?`. Doing
-    # that to the ownership credential meant the holder's own release no
-    # longer matched its own label and the lane sat stranded until it went
-    # stale. The backup reviewer lane found this.
-    p = tmp_path / "k.lock"
-    r = run_lock(p, "-Acquire", "-Label", label)
-    assert r.returncode == 2
-    assert "printable ASCII" in r.stdout
-    assert not p.is_file(), "a refused acquire must not leave a lock behind"
-
-
-@pytest.mark.parametrize("payload", [
-    {"label": 0},
-    {"label": None},
-    {"label": ""},
-    {"label": "   "},
-    {},
+@pytest.mark.parametrize("raw,what", [
+    (b'{"version":1,"state":"Free"}', "a capitalized state literal"),
+    (b'{"version":1,"state":"FREE"}', "an upper-case state literal"),
+    (b'{"Version":1,"state":"free"}', "a capitalized version field name"),
+    (b'{"version":1,"State":"free"}', "a capitalized state field name"),
 ])
-def test_a_bare_release_cannot_free_a_lock_with_no_usable_owner(tmp_path, payload):
-    # The first ownership fix tested the parsed field for TRUTHINESS, so a
-    # lock carrying `label: 0`, `label: null`, a blank label, or no label at
-    # all skipped the guard and was removed by a bare release. This script
-    # never writes such a lock, but it can read one - a legacy file, or one
-    # written by hand. No credential exists to present, so only -Force clears
-    # it.
-    p = tmp_path / "k.lock"
-    payload["stamp"] = datetime.now(timezone.utc).isoformat()
-    p.write_text(json.dumps(payload), encoding="ascii")
-    r = run_lock(p, "-Release")
-    assert r.returncode == 1, "an unusable owner must not mean unowned"
-    assert "no usable owner" in r.stdout
-    assert p.is_file()
-    assert run_lock(p, "-Release", "-Force").returncode == 0
-    assert not p.is_file(), "-Force must still be able to clear it"
+def test_case_variant_schema_is_malformed_not_free(lane_home, raw, what):
+    """The shipped contract says a record that does not EXACTLY satisfy the
+    schema is held and reported, never reclaimed. PowerShell's -eq, -ne and
+    -contains are case-INSENSITIVE, so each of these classified as a
+    well-formed FREE record and an acquire overwrote a record this tool had
+    not actually recognized. Every literal comparison in Get-Classification
+    is case-exact for that reason."""
+    write_raw(lane_home, raw)
+    result = run_lock(["-Status", "-LaneHome", str(lane_home)])
+    assert result.returncode == 0
+    assert json.loads(result.stdout)["state"] == "MALFORMED", what
 
 
-def test_release_ownership_is_case_sensitive(tmp_path):
-    # Ownership is a string match and nothing more, so it is exactly that:
-    # two labels differing only in case are two different callers.
-    p = tmp_path / "k.lock"
-    assert run_lock(p, "-Acquire", "-Label", "debate-A").returncode == 0
-    r = run_lock(p, "-Release", "-Label", "DEBATE-A")
-    assert r.returncode == 1
-    assert p.is_file()
+def test_the_lower_case_record_those_variants_came_from_is_free(lane_home):
+    """The positive control: the same record spelled exactly is FREE, so the
+    test above measures case and not some unrelated rejection."""
+    write_raw(lane_home, b'{"version":1,"state":"free"}')
+    result = run_lock(["-Status", "-LaneHome", str(lane_home)])
+    assert result.returncode == 0
+    assert json.loads(result.stdout)["state"] == "free"
 
 
-def test_surrounding_whitespace_does_not_break_ownership(tmp_path):
-    # Acquire stores the trimmed label, so release must trim too, or a
-    # trailing space in a driver's command would strand the lane.
-    p = tmp_path / "k.lock"
-    assert run_lock(p, "-Acquire", "-Label", " debate-A ").returncode == 0
-    assert json.loads(p.read_text(encoding="ascii"))["label"] == "debate-A"
-    assert run_lock(p, "-Release", "-Label", "debate-A ").returncode == 0
-    assert not p.is_file()
+@pytest.mark.parametrize("variant", ["OwnerPid", "ownerpid", "OWNERPID"])
+def test_case_variant_required_field_in_a_held_record_is_malformed(lane_home, debate_home,
+                                                                    variant):
+    """The FREE variants above cannot fail if only the HELD-side field
+    comparisons regress, because they never reach them. A held record whose
+    required key is spelled differently is not the frozen schema, so it is
+    MALFORMED - and an acquire against a malformed record must leave its
+    bytes untouched rather than reclaim it."""
+    rec = write_held(lane_home)
+    rec[variant] = rec.pop("ownerPid")
+    raw = json.dumps(rec).encode("utf-8")
+    write_raw(lane_home, raw)
+
+    status = run_lock(["-Status", "-LaneHome", str(lane_home)])
+    assert status.returncode == 0
+    assert json.loads(status.stdout)["state"] == "MALFORMED"
+
+    acquire = run_lock(["-Acquire", "-LaneHome", str(lane_home), "-DebateId", new_token(),
+                        "-OwnerPid", "1", "-OwnerStartTicksUtc", "1",
+                        "-DebateHome", str(debate_home)])
+    assert acquire.returncode != 0, acquire.stdout + acquire.stderr
+    assert read_raw(lane_home) == raw, "an unrecognized record must not be overwritten"
 
 
-def test_a_forced_label_less_release_frees_a_labelled_lock(tmp_path):
-    p = tmp_path / "k.lock"
-    assert run_lock(p, "-Acquire", "-Label", "debate-A").returncode == 0
-    r = run_lock(p, "-Release", "-Force")
-    assert r.returncode == 0
-    assert not p.is_file()
+def test_held_record_with_unknown_property_is_malformed(lane_home):
+    rec = write_held(lane_home)
+    rec["extra"] = "nope"
+    write_raw(lane_home, json.dumps(rec).encode("utf-8"))
+    result = run_lock(["-Status", "-LaneHome", str(lane_home)])
+    assert result.returncode == 0
+    assert json.loads(result.stdout)["state"] == "MALFORMED"
 
 
-def test_breaking_a_malformed_lock_is_announced(tmp_path):
-    # Breaking a stale lock says so; breaking an unreadable one used to be
-    # silent. Same act, so it gets the same visibility.
-    p = tmp_path / "k.lock"
-    p.write_text("{not json", encoding="ascii")
-    r = run_lock(p, "-Acquire", "-Label", "debate-A", "-WaitSeconds", "0")
-    assert r.returncode == 0
-    assert "unreadable" in r.stdout
+def test_held_record_missing_a_required_field_is_malformed(lane_home):
+    rec = write_held(lane_home)
+    del rec["nonce"]
+    write_raw(lane_home, json.dumps(rec).encode("utf-8"))
+    result = run_lock(["-Status", "-LaneHome", str(lane_home)])
+    assert result.returncode == 0
+    assert json.loads(result.stdout)["state"] == "MALFORMED"
 
 
-def test_force_releases_another_callers_lock(tmp_path):
-    p = tmp_path / "k.lock"
-    assert run_lock(p, "-Acquire", "-Label", "debate-A").returncode == 0
-    r = run_lock(p, "-Release", "-Label", "debate-B", "-Force")
-    assert r.returncode == 0
-    assert not p.is_file()
+def test_date_shaped_time_field_is_malformed(lane_home):
+    write_held(lane_home, ownerStartTicksUtc="2026-08-01T00:00:00Z")
+    result = run_lock(["-Status", "-LaneHome", str(lane_home)])
+    assert result.returncode == 0
+    assert json.loads(result.stdout)["state"] == "MALFORMED"
 
 
-def test_release_by_the_owner_frees_the_lane(tmp_path):
-    p = tmp_path / "k.lock"
-    assert run_lock(p, "-Acquire", "-Label", "debate-A").returncode == 0
-    assert run_lock(p, "-Release", "-Label", "debate-A").returncode == 0
-    assert not p.is_file()
-    assert "free" in run_lock(p).stdout
+def test_zero_length_file_is_malformed_not_free(lane_home):
+    write_raw(lane_home, b"")
+    result = run_lock(["-Status", "-LaneHome", str(lane_home)])
+    assert result.returncode == 0
+    obj = json.loads(result.stdout)
+    assert obj["state"] == "MALFORMED"
+    assert obj["bytes"] == 0
+    assert obj["sha256"] == sha256_hex(b"")
 
 
-def test_releasing_a_free_lane_is_not_an_error(tmp_path):
-    # Release runs in a driver's cleanup path, which must be idempotent.
-    r = run_lock(tmp_path / "k.lock", "-Release")
-    assert r.returncode == 0
-    assert "already free" in r.stdout
+MALFORMED_FIXTURES = {
+    "not-json": b"not json at all",
+    "not-object": b"[1,2,3]",
+    "single-byte": b"x",
+    "wrong-version": b'{"version":2,"state":"free"}',
+    "bad-state-literal": b'{"version":1,"state":"pending"}',
+    "held-missing-field": json.dumps({
+        "version": 1, "state": "held", "host": COMPUTERNAME, "ownerPid": 1,
+        "ownerStartTicksUtc": "1", "debateId": "a" * 32, "nonce": "b" * 32,
+        "debateHome": "C:/x",
+        # acquiredTicksUtc omitted
+    }).encode("utf-8"),
+    "held-wrong-type-pid": json.dumps({
+        "version": 1, "state": "held", "host": COMPUTERNAME, "ownerPid": "1",
+        "ownerStartTicksUtc": "1", "debateId": "a" * 32, "nonce": "b" * 32,
+        "debateHome": "C:/x", "acquiredTicksUtc": "1",
+    }).encode("utf-8"),
+    "free-forbidden-property": b'{"version":1,"state":"free","host":"X"}',
+}
 
 
-def test_a_stale_lock_is_broken_and_says_so(tmp_path):
-    # 46 minutes past the fixed 45-minute threshold, written by the test.
-    # This used to shorten the threshold instead, which was the very seam the
-    # cross-vendor lane then aimed at the real lane.
-    p = write_lock(tmp_path / "k.lock", "debate-A", age_minutes=46)
-    r = run_lock(p, "-Acquire", "-Label", "debate-B", "-WaitSeconds", "0")
-    assert r.returncode == 0
-    assert "stale" in r.stdout, "breaking a lock must never be silent"
+@pytest.mark.parametrize("name", sorted(MALFORMED_FIXTURES))
+def test_each_malformed_class_recoverable_by_matching_hash(lane_home, name):
+    data = MALFORMED_FIXTURES[name]
+    write_raw(lane_home, data)
+    good_hash = sha256_hex(data)
+    result = run_lock(["-MalformedOverride", "-LaneHome", str(lane_home),
+                        "-ConfirmSha256", good_hash])
+    assert result.returncode == 0, (name, result.stdout, result.stderr)
+    assert "overrode malformed lock:" in result.stderr
+    assert read_raw(lane_home) == b'{"version":1,"state":"free"}'
 
 
-def test_a_fresh_lock_is_not_stale_at_the_threshold_margin(tmp_path):
-    # The other side of the same boundary: 44 minutes still holds the lane.
-    # Without this, a threshold accidentally set to zero would pass every
-    # stale test above and break every real lock.
-    p = write_lock(tmp_path / "k.lock", "debate-A", age_minutes=44)
-    r = run_lock(p, "-Acquire", "-Label", "debate-B", "-WaitSeconds", "0")
-    assert r.returncode == 1, "a lock inside the threshold must still hold"
-    assert "BUSY" in r.stdout
+@pytest.mark.parametrize("name", sorted(MALFORMED_FIXTURES))
+def test_each_malformed_class_refused_by_mismatching_hash(lane_home, name):
+    data = MALFORMED_FIXTURES[name]
+    write_raw(lane_home, data)
+    result = run_lock(["-MalformedOverride", "-LaneHome", str(lane_home),
+                        "-ConfirmSha256", "0" * 64])
+    assert result.returncode == 5, (name, result.stdout, result.stderr)
+    assert read_raw(lane_home) == data
 
 
-def test_the_staleness_threshold_is_not_caller_controlled(tmp_path):
-    # It was a -MaxAgeMinutes parameter, which meant `-Acquire
-    # -MaxAgeMinutes 0` stole a fresh lock without -Force: the ownership
-    # guard bypassed by the flag next to it. Passing it must now fail rather
-    # than quietly work.
-    p = tmp_path / "k.lock"
-    assert run_lock(p, "-Acquire", "-Label", "debate-A").returncode == 0
-    r = run_lock(p, "-Acquire", "-Label", "debate-B", "-MaxAgeMinutes", "0")
-    assert r.returncode != 0, "the threshold must not be settable by a flag"
-    assert p.is_file()
-    holder = json.loads(p.read_text(encoding="ascii"))
-    assert holder["label"] == "debate-A", "the fresh lock must survive"
+# ---------------------------------------------------------------------
+# Unreadable -> exit 6
+# ---------------------------------------------------------------------
+def test_unreadable_path_exits_6(lane_home):
+    # A directory sitting at the lock path cannot be opened as a file -
+    # this is the "unreadable" case every mode maps to exit 6.
+    lock_path(lane_home).mkdir()
+    result = run_lock(["-Status", "-LaneHome", str(lane_home)])
+    assert result.returncode == 6
+    assert result.stdout == ""
 
 
-def test_no_environment_variable_can_shorten_the_threshold(tmp_path):
-    # The override used to be honoured whenever the lock path was redirected.
-    # That gated on the redirect being PRESENT, not on it differing from the
-    # default - so redirecting to the default path stole the real per-user
-    # lane with no -Force. The seam is gone, and setting it must now do
-    # nothing at all.
-    p = tmp_path / "k.lock"
-    assert run_lock(p, "-Acquire", "-Label", "debate-A").returncode == 0
-    r = run_lock(p, "-Acquire", "-Label", "debate-B", "-WaitSeconds", "0",
-                 extra_env={"PARALLAX_KIMI_LOCK_MAX_AGE_MINUTES": "0"})
-    assert r.returncode == 1, "no env var may lower the staleness guard"
-    assert "BUSY" in r.stdout
-    holder = json.loads(p.read_text(encoding="ascii"))
-    assert holder["label"] == "debate-A", "the fresh lock must survive"
+# ---------------------------------------------------------------------
+# Missing-file behaviour, frozen per mode
+# ---------------------------------------------------------------------
+def test_status_on_missing_reports_free_and_creates_nothing(lane_home):
+    result = run_lock(["-Status", "-LaneHome", str(lane_home)])
+    assert result.returncode == 0
+    assert json.loads(result.stdout) == {"state": "free"}
+    assert not lock_path(lane_home).exists()
 
 
-def test_the_default_path_is_derived_from_localappdata(tmp_path):
-    # Replaces a test that read the REAL per-user lane: it passed for the
-    # wrong reason when that lane was free, and failed when it was
-    # legitimately stale. Pointing LOCALAPPDATA at a tmp directory exercises
-    # the default-path branch hermetically, so the suite never touches the
-    # lane a live debate may be holding.
-    env = {**dict(__import__("os").environ), "LOCALAPPDATA": str(tmp_path)}
-    env.pop("PARALLAX_KIMI_LOCK", None)
-
-    def default_path_run(*args):
-        return subprocess.run(
-            [POWERSHELL, "-NoProfile", "-ExecutionPolicy", "Bypass",
-             "-File", str(LOCK), *args],
-            capture_output=True, text=True, timeout=120, env=env)
-
-    assert default_path_run("-Acquire", "-Label", "debate-A").returncode == 0
-    s = default_path_run("-Status")
-    assert s.returncode == 0
-    assert "debate-A" in s.stdout
-    assert str(tmp_path) in s.stdout, (
-        "the default lock must sit under LOCALAPPDATA, and this run must not "
-        "have touched the real lane")
+@pytest.mark.parametrize("args", [
+    ["-Release", "-DebateId", None, "-OwnerPid", "1", "-OwnerStartTicksUtc", "1", "-Nonce", None],
+    ["-ForceRelease", "-ConfirmHost", COMPUTERNAME, "-ConfirmOwnerPid", "1",
+     "-ConfirmOwnerStartTicksUtc", "1", "-ConfirmDebateId", None, "-ConfirmNonce", None],
+    ["-MalformedOverride", "-ConfirmSha256", "a" * 64],
+])
+def test_release_and_overrides_on_missing_exit_5_and_create_nothing(lane_home, args):
+    filled = [new_token() if a is None else a for a in args]
+    result = run_lock(filled + ["-LaneHome", str(lane_home)])
+    assert result.returncode == 5, (result.stdout, result.stderr)
+    assert not lock_path(lane_home).exists()
 
 
-def test_a_future_stamp_cannot_wedge_the_lane(tmp_path):
-    # A stamp in the future produced a NEGATIVE age, which never reached the
-    # stale branch: the lane stayed BUSY until the clock caught up, and status
-    # printed "held -360 min" to a human. Clock skew or tampering, either way
-    # not a lock to respect.
-    p = tmp_path / "k.lock"
-    future = (datetime.now(timezone.utc) + timedelta(hours=6)).isoformat()
-    p.write_text(json.dumps({"label": "ghost", "stamp": future}),
-                 encoding="ascii")
-    r = run_lock(p, "-Acquire", "-Label", "debate-A", "-WaitSeconds", "0")
-    assert r.returncode == 0, "a future-stamped lock must not hold the lane"
-    holder = json.loads(p.read_text(encoding="ascii"))
-    assert holder["label"] == "debate-A"
+def test_acquire_on_missing_creates_and_succeeds(lane_home, debate_home):
+    result = run_lock(["-Acquire", "-LaneHome", str(lane_home), "-DebateId", new_token(),
+                        "-OwnerPid", "1", "-OwnerStartTicksUtc", "1",
+                        "-DebateHome", str(debate_home)])
+    assert result.returncode == 0
+    assert TOKEN_RE.match(result.stdout.strip())
+    assert lock_path(lane_home).exists()
 
 
-def test_status_never_reports_an_impossible_age(tmp_path):
-    # A future stamp printed "held -360 min"; an unusable one printed
-    # "held 1.79769313486232E+308 min". Both are numbers that cannot be true,
-    # presented to a human as measurements.
-    p = tmp_path / "k.lock"
-    future = (datetime.now(timezone.utc) + timedelta(hours=6)).isoformat()
-    p.write_text(json.dumps({"label": "ghost", "stamp": future}),
-                 encoding="ascii")
-    r = run_lock(p)
-    assert r.returncode == 0
-    assert "age unusable" in r.stdout
-    assert "-360" not in r.stdout
-    assert "E+308" not in r.stdout
+def test_file_exists_after_every_successful_mutating_mode(lane_home, debate_home):
+    debate_id = new_token()
+    nonce = run_lock(["-Acquire", "-LaneHome", str(lane_home), "-DebateId", debate_id,
+                       "-OwnerPid", "1", "-OwnerStartTicksUtc", "1",
+                       "-DebateHome", str(debate_home)]).stdout.strip()
+    assert lock_path(lane_home).exists()
+    result = run_lock(["-Release", "-LaneHome", str(lane_home), "-DebateId", debate_id,
+                        "-OwnerPid", "1", "-OwnerStartTicksUtc", "1", "-Nonce", nonce])
+    assert result.returncode == 0
+    assert lock_path(lane_home).exists()  # release writes free in place, never deletes
 
 
-@pytest.mark.parametrize("stamp", [0, 1753689600, {"a": 1}, [1, 2], True, None])
-def test_a_stamp_that_is_not_a_string_is_breakable(tmp_path, stamp):
-    # These reached `[datetime]::TryParse` with no matching overload and
-    # THREW, which killed the age routine before it could return the infinite
-    # age it was written to return. The caller then compared nothing against
-    # the threshold, the lock read as "held 0 min", and it never aged - so
-    # the routine that exists to stop a malformed lock wedging the lane was
-    # itself the wedge. Only -Force could clear it.
-    p = tmp_path / "k.lock"
-    p.write_text(json.dumps({"label": "ghost", "stamp": stamp}),
-                 encoding="ascii")
-    r = run_lock(p, "-Acquire", "-Label", "debate-A", "-WaitSeconds", "0")
-    assert r.returncode == 0, "an unusable stamp must not hold the lane"
-    assert r.stderr == "", "and it must not throw on the way"
-    assert "E+308" not in r.stdout, (
-        "the break notice must describe an unusable age, not print it")
-    holder = json.loads(p.read_text(encoding="ascii"))
-    assert holder["label"] == "debate-A"
+# ---------------------------------------------------------------------
+# Acquire table
+# ---------------------------------------------------------------------
+def test_fresh_acquire_over_free_emits_new_nonce_and_no_stderr(lane_home, debate_home):
+    result = run_lock(["-Acquire", "-LaneHome", str(lane_home), "-DebateId", new_token(),
+                        "-OwnerPid", "1", "-OwnerStartTicksUtc", "1",
+                        "-DebateHome", str(debate_home)])
+    assert result.returncode == 0
+    assert TOKEN_RE.match(result.stdout.strip())
+    assert result.stderr == ""
 
 
-def test_a_well_formed_lock_never_reads_as_unusable(tmp_path):
-    # The direct statement of what broke on PowerShell 7: the script's OWN
-    # stamp came back from ConvertFrom-Json as a DateTime rather than a
-    # String, the string-or-unusable check rejected it, and every lock the
-    # script had just written read as infinitely old - so the lane held
-    # nothing. Whichever host runs this, a lock written a moment ago must
-    # report an age.
-    p = tmp_path / "k.lock"
-    assert run_lock(p, "-Acquire", "-Label", "debate-A").returncode == 0
-    s = run_lock(p)
-    assert "age unusable" not in s.stdout, (
-        "the script must be able to read a stamp it wrote itself"
+def test_nonce_supplied_against_free_record_exits_2_and_leaves_free(lane_home, debate_home):
+    result = run_lock(["-Acquire", "-LaneHome", str(lane_home), "-DebateId", new_token(),
+                        "-OwnerPid", "1", "-OwnerStartTicksUtc", "1",
+                        "-DebateHome", str(debate_home), "-Nonce", new_token()])
+    assert result.returncode == 2
+    # Only-ACQUIRE-creates: this call's own CreateNew produced the file,
+    # which must not be left as a malformed zero-length artifact.
+    assert read_raw(lane_home) == b'{"version":1,"state":"free"}'
+
+
+def test_dead_holder_reclaimed_and_reported(lane_home, debate_home):
+    dead_rec = write_held(lane_home, ownerPid=999999, ownerStartTicksUtc="111111111")
+    new_debate = new_token()
+    result = run_lock(["-Acquire", "-LaneHome", str(lane_home), "-DebateId", new_debate,
+                        "-OwnerPid", "1", "-OwnerStartTicksUtc", "1",
+                        "-DebateHome", str(debate_home)])
+    assert result.returncode == 0
+    assert TOKEN_RE.match(result.stdout.strip())
+    assert (f"reclaimed a dead holder: pid {dead_rec['ownerPid']} "
+            f"ticks {dead_rec['ownerStartTicksUtc']} debate {dead_rec['debateId']}"
+            f" home {dead_rec['debateHome']}") in result.stderr
+
+
+def test_nonce_supplied_against_dead_holder_exits_2_no_reclaim(lane_home, debate_home):
+    dead_rec = write_held(lane_home)
+    before = read_raw(lane_home)
+    result = run_lock(["-Acquire", "-LaneHome", str(lane_home), "-DebateId", new_token(),
+                        "-OwnerPid", "1", "-OwnerStartTicksUtc", "1",
+                        "-DebateHome", str(debate_home), "-Nonce", new_token()])
+    assert result.returncode == 2
+    assert read_raw(lane_home) == before
+
+
+def test_old_nonce_fails_after_reclaim(lane_home, debate_home):
+    dead_rec = write_held(lane_home, ownerPid=999999, ownerStartTicksUtc="111111111")
+    run_lock(["-Acquire", "-LaneHome", str(lane_home), "-DebateId", new_token(),
+              "-OwnerPid", "1", "-OwnerStartTicksUtc", "1", "-DebateHome", str(debate_home)])
+    result = run_lock(["-Release", "-LaneHome", str(lane_home), "-DebateId", dead_rec["debateId"],
+                        "-OwnerPid", str(dead_rec["ownerPid"]),
+                        "-OwnerStartTicksUtc", dead_rec["ownerStartTicksUtc"],
+                        "-Nonce", dead_rec["nonce"]])
+    assert result.returncode == 5
+
+
+def test_idempotent_reacquire_writes_nothing(lane_home, debate_home, self_identity):
+    pid, ticks = self_identity
+    debate_id = new_token()
+    r1 = run_lock(["-Acquire", "-LaneHome", str(lane_home), "-DebateId", debate_id,
+                   "-OwnerPid", pid, "-OwnerStartTicksUtc", ticks,
+                   "-DebateHome", str(debate_home)])
+    nonce = r1.stdout.strip()
+    before = read_raw(lane_home)
+    r2 = run_lock(["-Acquire", "-LaneHome", str(lane_home), "-DebateId", debate_id,
+                   "-OwnerPid", pid, "-OwnerStartTicksUtc", ticks,
+                   "-DebateHome", str(debate_home), "-Nonce", nonce])
+    assert r2.returncode == 0
+    assert r2.stdout.strip() == nonce
+    assert r2.stderr == ""
+    assert read_raw(lane_home) == before  # acquiredTicksUtc included, byte-identical
+
+
+def test_live_holder_debate_home_differs_exits_2(lane_home, debate_home, self_identity, tmp_path):
+    pid, ticks = self_identity
+    debate_id = new_token()
+    r1 = run_lock(["-Acquire", "-LaneHome", str(lane_home), "-DebateId", debate_id,
+                   "-OwnerPid", pid, "-OwnerStartTicksUtc", ticks,
+                   "-DebateHome", str(debate_home)])
+    nonce = r1.stdout.strip()
+    other_home = tmp_path / "other-debate-home"
+    other_home.mkdir()
+    result = run_lock(["-Acquire", "-LaneHome", str(lane_home), "-DebateId", debate_id,
+                        "-OwnerPid", pid, "-OwnerStartTicksUtc", ticks,
+                        "-DebateHome", str(other_home), "-Nonce", nonce])
+    assert result.returncode == 2
+
+
+def test_four_second_wait_against_live_holder_exits_3_no_reclaim(lane_home, debate_home, self_identity):
+    pid, ticks = self_identity
+    held = write_held(lane_home, host=COMPUTERNAME, ownerPid=int(pid), ownerStartTicksUtc=ticks)
+    before = read_raw(lane_home)
+    start = time.monotonic()
+    result = run_lock(["-Acquire", "-LaneHome", str(lane_home), "-DebateId", new_token(),
+                        "-OwnerPid", pid, "-OwnerStartTicksUtc", ticks,
+                        "-DebateHome", str(debate_home), "-WaitSeconds", "4", "-PollSeconds", "1"],
+                       timeout=15)
+    elapsed = time.monotonic() - start
+    assert result.returncode == 3
+    assert elapsed >= 3.5
+    assert f"liveness LIVE" in result.stderr
+    assert read_raw(lane_home) == before
+
+
+# ---------------------------------------------------------------------
+# DebateHome normalization
+# ---------------------------------------------------------------------
+def test_debate_home_relative_and_trailing_separator_forms_are_equal(lane_home, tmp_path, self_identity):
+    pid, ticks = self_identity
+    real = tmp_path / "dh"
+    real.mkdir()
+    debate_id = new_token()
+    r1 = run_lock(["-Acquire", "-LaneHome", str(lane_home), "-DebateId", debate_id,
+                   "-OwnerPid", pid, "-OwnerStartTicksUtc", ticks,
+                   "-DebateHome", str(real) + "\\"])
+    nonce = r1.stdout.strip()
+    assert r1.returncode == 0
+    cwd_relative = os.path.relpath(str(real), str(tmp_path))
+    r2 = subprocess.run(
+        [POWERSHELL, "-NoProfile", "-NonInteractive", "-File", str(SCRIPT),
+         "-Acquire", "-LaneHome", str(lane_home), "-DebateId", debate_id,
+         "-OwnerPid", pid, "-OwnerStartTicksUtc", ticks,
+         "-DebateHome", cwd_relative, "-Nonce", nonce],
+        capture_output=True, text=True, cwd=str(tmp_path))
+    assert r2.returncode == 0, (r2.stdout, r2.stderr)
+    assert r2.stdout.strip() == nonce
+
+
+def test_debate_home_drive_root_spellings_are_equal_and_normalize_to_root(lane_home, self_identity):
+    pid, ticks = self_identity
+    drive_root = os.environ.get("SystemDrive", "C:") + "\\"
+    debate_id = new_token()
+    r1 = run_lock(["-Acquire", "-LaneHome", str(lane_home), "-DebateId", debate_id,
+                   "-OwnerPid", pid, "-OwnerStartTicksUtc", ticks,
+                   "-DebateHome", drive_root])
+    nonce = r1.stdout.strip()
+    assert r1.returncode == 0
+    rec = json.loads(lock_path(lane_home).read_text(encoding="utf-8"))
+    assert rec["debateHome"].rstrip("\\/") + "\\" == drive_root or rec["debateHome"] == drive_root
+    # A second equivalent spelling of the SAME root (doubled separator)
+    # must still compare equal under normalization - never trimmed to a
+    # drive-relative "C:" form.
+    other_spelling = os.environ.get("SystemDrive", "C:") + "\\\\"
+    r2 = run_lock(["-Acquire", "-LaneHome", str(lane_home), "-DebateId", debate_id,
+                   "-OwnerPid", pid, "-OwnerStartTicksUtc", ticks,
+                   "-DebateHome", other_spelling, "-Nonce", nonce])
+    assert r2.returncode == 0, (r2.stdout, r2.stderr)
+    assert r2.stdout.strip() == nonce
+
+
+def test_debate_home_genuinely_different_path_is_not_equal(lane_home, tmp_path, self_identity):
+    pid, ticks = self_identity
+    home_a = tmp_path / "a"
+    home_b = tmp_path / "b"
+    home_a.mkdir()
+    home_b.mkdir()
+    debate_id = new_token()
+    r1 = run_lock(["-Acquire", "-LaneHome", str(lane_home), "-DebateId", debate_id,
+                   "-OwnerPid", pid, "-OwnerStartTicksUtc", ticks, "-DebateHome", str(home_a)])
+    nonce = r1.stdout.strip()
+    r2 = run_lock(["-Acquire", "-LaneHome", str(lane_home), "-DebateId", debate_id,
+                   "-OwnerPid", pid, "-OwnerStartTicksUtc", ticks,
+                   "-DebateHome", str(home_b), "-Nonce", nonce])
+    assert r2.returncode == 2
+
+
+# ---------------------------------------------------------------------
+# UNMEASURABLE liveness fault seam
+# ---------------------------------------------------------------------
+def test_unmeasurable_status_reports_unknown_never_live(lane_home, self_identity):
+    pid, ticks = self_identity
+    write_held(lane_home, host=COMPUTERNAME, ownerPid=int(pid), ownerStartTicksUtc=ticks)
+    result = run_lock(["-Status", "-LaneHome", str(lane_home)],
+                       env={"PARALLAX_LANE_LOCK_STARTTIME_FAULT": "1"})
+    assert result.returncode == 0
+    obj = json.loads(result.stdout)
+    assert obj["liveness"] == "UNKNOWN"
+
+
+def test_unmeasurable_exact_identity_reacquires_idempotently(lane_home, debate_home, self_identity):
+    pid, ticks = self_identity
+    debate_id = new_token()
+    r1 = run_lock(["-Acquire", "-LaneHome", str(lane_home), "-DebateId", debate_id,
+                   "-OwnerPid", pid, "-OwnerStartTicksUtc", ticks,
+                   "-DebateHome", str(debate_home)])
+    nonce = r1.stdout.strip()
+    r2 = run_lock(["-Acquire", "-LaneHome", str(lane_home), "-DebateId", debate_id,
+                   "-OwnerPid", pid, "-OwnerStartTicksUtc", ticks,
+                   "-DebateHome", str(debate_home), "-Nonce", nonce],
+                  env={"PARALLAX_LANE_LOCK_STARTTIME_FAULT": "1"})
+    assert r2.returncode == 0
+    assert r2.stdout.strip() == nonce
+
+
+def test_unmeasurable_competing_identity_contends_not_reclaims(lane_home, debate_home, self_identity):
+    pid, ticks = self_identity
+    debate_id = new_token()
+    run_lock(["-Acquire", "-LaneHome", str(lane_home), "-DebateId", debate_id,
+              "-OwnerPid", pid, "-OwnerStartTicksUtc", ticks, "-DebateHome", str(debate_home)])
+    result = run_lock(["-Acquire", "-LaneHome", str(lane_home), "-DebateId", new_token(),
+                        "-OwnerPid", pid, "-OwnerStartTicksUtc", ticks,
+                        "-DebateHome", str(debate_home)],
+                       env={"PARALLAX_LANE_LOCK_STARTTIME_FAULT": "1"})
+    assert result.returncode == 3
+    assert "liveness UNMEASURABLE" in result.stderr
+
+
+# ---------------------------------------------------------------------
+# Foreign-host x mode matrix
+# ---------------------------------------------------------------------
+def test_foreign_host_acquire_exits_4(lane_home, debate_home):
+    write_held(lane_home, host="SOME-OTHER-HOST")
+    result = run_lock(["-Acquire", "-LaneHome", str(lane_home), "-DebateId", new_token(),
+                        "-OwnerPid", "1", "-OwnerStartTicksUtc", "1",
+                        "-DebateHome", str(debate_home)])
+    assert result.returncode == 4
+
+
+def test_foreign_host_release_exits_4(lane_home):
+    rec = write_held(lane_home, host="SOME-OTHER-HOST")
+    result = run_lock(["-Release", "-LaneHome", str(lane_home), "-DebateId", rec["debateId"],
+                        "-OwnerPid", str(rec["ownerPid"]), "-OwnerStartTicksUtc", rec["ownerStartTicksUtc"],
+                        "-Nonce", rec["nonce"]])
+    assert result.returncode == 4
+
+
+def test_foreign_host_malformed_override_on_wellformed_exits_4(lane_home):
+    write_held(lane_home, host="SOME-OTHER-HOST")
+    result = run_lock(["-MalformedOverride", "-LaneHome", str(lane_home),
+                        "-ConfirmSha256", "a" * 64])
+    assert result.returncode == 4
+
+
+def test_foreign_host_force_release_succeeds_with_confirmed_identity(lane_home):
+    rec = write_held(lane_home, host="SOME-OTHER-HOST")
+    result = run_lock(["-ForceRelease", "-LaneHome", str(lane_home),
+                        "-ConfirmHost", rec["host"], "-ConfirmOwnerPid", str(rec["ownerPid"]),
+                        "-ConfirmOwnerStartTicksUtc", rec["ownerStartTicksUtc"],
+                        "-ConfirmDebateId", rec["debateId"], "-ConfirmNonce", rec["nonce"]])
+    assert result.returncode == 0
+    assert (f"force-released holder: host {rec['host']} pid {rec['ownerPid']} "
+            f"ticks {rec['ownerStartTicksUtc']} debate {rec['debateId']} "
+            f"home {rec['debateHome']}") in result.stderr
+    assert read_raw(lane_home) == b'{"version":1,"state":"free"}'
+
+
+def test_force_release_identity_mismatch_exits_5_untouched(lane_home):
+    rec = write_held(lane_home)
+    before = read_raw(lane_home)
+    result = run_lock(["-ForceRelease", "-LaneHome", str(lane_home),
+                        "-ConfirmHost", rec["host"], "-ConfirmOwnerPid", str(rec["ownerPid"]),
+                        "-ConfirmOwnerStartTicksUtc", rec["ownerStartTicksUtc"],
+                        "-ConfirmDebateId", new_token(), "-ConfirmNonce", rec["nonce"]])
+    assert result.returncode == 5
+    assert read_raw(lane_home) == before
+
+
+def test_release_identity_mismatch_exits_5_untouched(lane_home):
+    rec = write_held(lane_home)
+    before = read_raw(lane_home)
+    result = run_lock(["-Release", "-LaneHome", str(lane_home), "-DebateId", rec["debateId"],
+                        "-OwnerPid", str(rec["ownerPid"]), "-OwnerStartTicksUtc", rec["ownerStartTicksUtc"],
+                        "-Nonce", new_token()])
+    assert result.returncode == 5
+    assert read_raw(lane_home) == before
+
+
+def test_release_against_free_record_exits_5(lane_home):
+    write_raw(lane_home, b'{"version":1,"state":"free"}')
+    result = run_lock(["-Release", "-LaneHome", str(lane_home), "-DebateId", new_token(),
+                        "-OwnerPid", "1", "-OwnerStartTicksUtc", "1", "-Nonce", new_token()])
+    assert result.returncode == 5
+
+
+def test_malformed_override_on_wellformed_same_host_held_exits_5(lane_home):
+    write_held(lane_home)
+    result = run_lock(["-MalformedOverride", "-LaneHome", str(lane_home),
+                        "-ConfirmSha256", "a" * 64])
+    assert result.returncode == 5
+
+
+def test_malformed_exits_4_for_release_and_force_release(lane_home):
+    write_raw(lane_home, b"not json")
+    r1 = run_lock(["-Release", "-LaneHome", str(lane_home), "-DebateId", new_token(),
+                   "-OwnerPid", "1", "-OwnerStartTicksUtc", "1", "-Nonce", new_token()])
+    assert r1.returncode == 4
+    r2 = run_lock(["-ForceRelease", "-LaneHome", str(lane_home), "-ConfirmHost", COMPUTERNAME,
+                   "-ConfirmOwnerPid", "1", "-ConfirmOwnerStartTicksUtc", "1",
+                   "-ConfirmDebateId", new_token(), "-ConfirmNonce", new_token()])
+    assert r2.returncode == 4
+
+
+# ---------------------------------------------------------------------
+# -Status: byte-identical, never exit 4
+# ---------------------------------------------------------------------
+def test_status_leaves_held_file_byte_identical(lane_home):
+    write_held(lane_home)
+    before = read_raw(lane_home)
+    result = run_lock(["-Status", "-LaneHome", str(lane_home)])
+    assert result.returncode == 0
+    assert read_raw(lane_home) == before
+
+
+def test_status_on_malformed_exits_0_never_4(lane_home):
+    write_raw(lane_home, b"not json")
+    result = run_lock(["-Status", "-LaneHome", str(lane_home)])
+    assert result.returncode == 0
+    assert json.loads(result.stdout)["state"] == "MALFORMED"
+
+
+def test_status_on_foreign_host_reports_unknown_liveness(lane_home):
+    write_held(lane_home, host="SOME-OTHER-HOST", ownerPid=os.getpid())
+    result = run_lock(["-Status", "-LaneHome", str(lane_home)])
+    assert result.returncode == 0
+    obj = json.loads(result.stdout)
+    assert obj["liveness"] == "UNKNOWN"
+
+
+# ---------------------------------------------------------------------
+# Parameter-value validation (exit 2, no mutation, pre-handle)
+# ---------------------------------------------------------------------
+@pytest.mark.parametrize("wait,poll", [("-1", "2"), ("abc", "2"), ("1.5", "2"),
+                                        ("1", "0"), ("1", "-1"), ("1", "abc")])
+def test_bad_wait_or_poll_values_exit_2_no_mutation(lane_home, debate_home, wait, poll):
+    result = run_lock(["-Acquire", "-LaneHome", str(lane_home), "-DebateId", new_token(),
+                        "-OwnerPid", "1", "-OwnerStartTicksUtc", "1",
+                        "-DebateHome", str(debate_home), "-WaitSeconds", wait, "-PollSeconds", poll])
+    assert result.returncode == 2
+    assert not lock_path(lane_home).exists()
+
+
+@pytest.mark.parametrize("bad_token", ["not-hex", "a" * 31, "A" * 32, "g" * 32])
+def test_bad_debate_id_token_exits_2_no_mutation(lane_home, debate_home, bad_token):
+    result = run_lock(["-Acquire", "-LaneHome", str(lane_home), "-DebateId", bad_token,
+                        "-OwnerPid", "1", "-OwnerStartTicksUtc", "1", "-DebateHome", str(debate_home)])
+    assert result.returncode == 2
+    assert not lock_path(lane_home).exists()
+
+
+def test_empty_debate_id_is_refused_nonzero_no_mutation(lane_home, debate_home):
+    # An empty string for a mandatory [string] parameter is PowerShell's
+    # OWN binder refusal (ParameterArgumentValidationErrorEmptyStringNotAllowed),
+    # not this script's -DebateId value check - still exit-code-table row
+    # 1 territory (never emitted by script code), so only "nonzero, no
+    # mutation" is asserted here, not the specific script-level exit 2.
+    result = run_lock(["-Acquire", "-LaneHome", str(lane_home), "-DebateId", "",
+                        "-OwnerPid", "1", "-OwnerStartTicksUtc", "1", "-DebateHome", str(debate_home)])
+    assert result.returncode != 0
+    assert not lock_path(lane_home).exists()
+
+
+def test_owner_pid_zero_exits_2(lane_home, debate_home):
+    result = run_lock(["-Acquire", "-LaneHome", str(lane_home), "-DebateId", new_token(),
+                        "-OwnerPid", "0", "-OwnerStartTicksUtc", "1", "-DebateHome", str(debate_home)])
+    assert result.returncode == 2
+
+
+def test_hostname_comparison_is_case_insensitive(lane_home, debate_home, self_identity):
+    pid, ticks = self_identity
+    write_held(lane_home, host=COMPUTERNAME.lower() if COMPUTERNAME else COMPUTERNAME,
+               ownerPid=int(pid), ownerStartTicksUtc=ticks)
+    result = run_lock(["-Status", "-LaneHome", str(lane_home)])
+    assert result.returncode == 0
+    obj = json.loads(result.stdout)
+    assert obj["liveness"] == "LIVE"  # same-host recognized despite case difference
+
+
+# ---------------------------------------------------------------------
+# Binding refusal: nonzero exit, no mutation
+# ---------------------------------------------------------------------
+def test_binding_refusal_exits_nonzero_and_creates_nothing(lane_home):
+    result = run_lock(["-Acquire", "-LaneHome", str(lane_home), "-NotARealParameter", "x"])
+    assert result.returncode != 0
+    assert not lock_path(lane_home).exists()
+
+
+def test_binding_refusal_leaves_existing_lock_byte_identical(lane_home):
+    write_held(lane_home)
+    before = read_raw(lane_home)
+    result = run_lock(["-Acquire", "-LaneHome", str(lane_home), "-NotARealParameter", "x"])
+    assert result.returncode != 0
+    assert read_raw(lane_home) == before
+
+
+def test_ambiguous_parameter_set_exits_nonzero(lane_home, debate_home):
+    result = run_lock(["-Acquire", "-Release", "-LaneHome", str(lane_home),
+                        "-DebateId", new_token(), "-OwnerPid", "1",
+                        "-OwnerStartTicksUtc", "1", "-DebateHome", str(debate_home),
+                        "-Nonce", new_token()])
+    assert result.returncode != 0
+
+
+# ---------------------------------------------------------------------
+# Exit-code exhaustiveness
+# ---------------------------------------------------------------------
+def test_exit_code_exhaustiveness_across_the_bound_invocation_matrix(lane_home, debate_home, self_identity):
+    pid, ticks = self_identity
+    observed = set()
+
+    # 0: successful acquire
+    r = run_lock(["-Acquire", "-LaneHome", str(lane_home), "-DebateId", new_token(),
+                  "-OwnerPid", "1", "-OwnerStartTicksUtc", "1", "-DebateHome", str(debate_home)])
+    observed.add(r.returncode)
+
+    # 2: bad parameter value
+    r = run_lock(["-Acquire", "-LaneHome", str(lane_home), "-DebateId", "bad",
+                  "-OwnerPid", "1", "-OwnerStartTicksUtc", "1", "-DebateHome", str(debate_home)])
+    observed.add(r.returncode)
+
+    # 3: contention against a LIVE holder, zero wait budget
+    write_held(lane_home, host=COMPUTERNAME, ownerPid=int(pid), ownerStartTicksUtc=ticks)
+    r = run_lock(["-Acquire", "-LaneHome", str(lane_home), "-DebateId", new_token(),
+                  "-OwnerPid", pid, "-OwnerStartTicksUtc", ticks, "-DebateHome", str(debate_home)])
+    observed.add(r.returncode)
+
+    # 4: malformed record
+    write_raw(lane_home, b"not json")
+    r = run_lock(["-Acquire", "-LaneHome", str(lane_home), "-DebateId", new_token(),
+                  "-OwnerPid", "1", "-OwnerStartTicksUtc", "1", "-DebateHome", str(debate_home)])
+    observed.add(r.returncode)
+
+    # 5: release with nothing applicable
+    write_raw(lane_home, b'{"version":1,"state":"free"}')
+    r = run_lock(["-Release", "-LaneHome", str(lane_home), "-DebateId", new_token(),
+                  "-OwnerPid", "1", "-OwnerStartTicksUtc", "1", "-Nonce", new_token()])
+    observed.add(r.returncode)
+
+    # 6: unreadable (directory at the lock path)
+    other_home = lane_home.parent / "lane6"
+    other_home.mkdir()
+    lock_path(other_home).mkdir()
+    r = run_lock(["-Status", "-LaneHome", str(other_home)])
+    observed.add(r.returncode)
+
+    assert observed <= {0, 2, 3, 4, 5, 6}, observed
+    # every one of the six lock-code branches must be reachable, or this
+    # assertion is passing by having verified nothing.
+    assert observed == {0, 2, 3, 4, 5, 6}, observed
+
+
+# ---------------------------------------------------------------------
+# Live contention oracles, synchronized on PARALLAX_LANE_LOCK_CONTENTION_SIGNAL.
+# Each covers BOTH branches: the exclusive HANDLE, and a readable LIVE
+# HOLDER. Wall time never gates the assertions - only the signal does.
+# ---------------------------------------------------------------------
+def _run_clamp_case(lane_home, debate_home, sig_path, extra_setup_returncode_check=None, **acquire_kwargs):
+    args = ["-Acquire", "-LaneHome", str(lane_home), "-DebateId", new_token(),
+            "-OwnerPid", "1", "-OwnerStartTicksUtc", "1", "-DebateHome", str(debate_home),
+            "-WaitSeconds", "1", "-PollSeconds", "10"]
+    proc = start_lock_bg(args, env={"PARALLAX_LANE_LOCK_CONTENTION_SIGNAL": str(sig_path)})
+    branch = wait_for_signal(sig_path, timeout=10)
+    if branch is None:
+        proc.terminate()
+        pytest.fail("contention signal never arrived within 10s")
+    t_signal = time.monotonic()
+    # still alive at least 0.5s after the signal
+    time.sleep(0.5)
+    still_alive = proc.poll() is None
+    stdout, stderr = proc.communicate(timeout=10)
+    elapsed_from_signal = time.monotonic() - t_signal
+    if not still_alive:
+        pytest.fail("contender exited before 0.5s from the contention signal - "
+                     "the wait budget was not honoured")
+    assert elapsed_from_signal <= 5.0, elapsed_from_signal
+    assert proc.returncode == 3, (stdout, stderr)
+    return branch, stdout, stderr
+
+
+def test_clamp_handle_branch(lane_home, debate_home, tmp_path):
+    # Pre-write a valid free record, then hold the exclusive handle on it
+    # from a separate process so the contender can never even open it.
+    write_raw(lane_home, b'{"version":1,"state":"free"}')
+    before = read_raw(lane_home)
+    sig_path = tmp_path / "sig-clamp-handle.txt"
+    holder_script = (
+        f"$fs = [System.IO.File]::Open('{lock_path(lane_home)}', "
+        "[System.IO.FileMode]::Open, [System.IO.FileAccess]::ReadWrite, "
+        "[System.IO.FileShare]::None); Start-Sleep -Seconds 3; $fs.Close()"
     )
-    assert "held" in s.stdout and "min" in s.stdout
+    holder = subprocess.Popen([POWERSHELL, "-NoProfile", "-NonInteractive", "-Command", holder_script],
+                               stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    try:
+        time.sleep(0.3)  # let the holder actually acquire the handle first
+        branch, _, stderr = _run_clamp_case(lane_home, debate_home, sig_path)
+        assert branch == "handle"
+        assert "contended: the lock file is held by another writer, wait budget 1s expired" in stderr
+        # The holder still owns the exclusive OS handle at this point (its
+        # own 3s sleep has not elapsed yet) - wait for it to release before
+        # reading, or Python's own open() collides with the same
+        # FileShare.None handle this test is using to prove contention.
+        holder.wait(timeout=10)
+        assert read_raw(lane_home) == before
+    finally:
+        holder.terminate()
+        try:
+            holder.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            holder.kill()
 
 
-@pytest.mark.parametrize("stamp", [
-    "9999-12-31T23:59:59.9999999",
-    "0001-01-01T00:00:00",
-    "9999-12-31T23:59:59.9999999Z",
-])
-def test_a_stamp_at_the_type_extremes_is_breakable(tmp_path, stamp):
-    # PowerShell 7 hands these back as DateTime, and converting
-    # `DateTime.MaxValue` with Kind Local or Unspecified pushes the UTC
-    # equivalent out of range in any zone west of UTC - MinValue does the
-    # same east of it. An uncaught throw there is round 3's defect exactly:
-    # the age routine dies, the caller compares nothing against the
-    # threshold, and the lock reads "held 0 min" forever. Reproduced on both
-    # hosts before the guard.
-    p = tmp_path / "k.lock"
-    p.write_text(json.dumps({"label": "ghost", "stamp": stamp}),
-                 encoding="ascii")
-    r = run_lock(p, "-Acquire", "-Label", "debate-A", "-WaitSeconds", "0")
-    assert r.returncode == 0, "an out-of-range stamp must not hold the lane"
-    assert r.stderr == "", "and must not throw on the way"
-    holder = json.loads(p.read_text(encoding="ascii"))
-    assert holder["label"] == "debate-A"
+def test_clamp_holder_branch(lane_home, debate_home, tmp_path):
+    sleeper = start_sleeper(40)
+    try:
+        ticks = _ticks_for_pid(sleeper.pid)
+        assert DIGITS_RE.match(ticks), ticks
+        debate_id = new_token()
+        r0 = run_lock(["-Acquire", "-LaneHome", str(lane_home), "-DebateId", debate_id,
+                        "-OwnerPid", str(sleeper.pid), "-OwnerStartTicksUtc", ticks,
+                        "-DebateHome", str(debate_home)])
+        assert r0.returncode == 0
+        before = read_raw(lane_home)
+        sig_path = tmp_path / "sig-clamp-holder.txt"
+        branch, _, stderr = _run_clamp_case(lane_home, debate_home, sig_path)
+        assert branch == "holder"
+        assert f"contended: holder pid {sleeper.pid} ticks {ticks} debate {debate_id}, liveness LIVE, wait budget 1s expired" in stderr
+        assert read_raw(lane_home) == before
+    finally:
+        sleeper.terminate()
+        try:
+            sleeper.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            sleeper.kill()
 
 
-def test_a_current_utc_stamp_still_holds_the_lane(tmp_path):
-    # `[datetime]::TryParse` with RoundtripKind converts an offset-bearing
-    # stamp to local time but leaves a terminal `Z` as Kind=Utc, and
-    # subtracting two DateTime values ignores Kind. On a UTC-05:00 machine a
-    # CURRENT `Z` stamp therefore read as 300 minutes in the FUTURE, became
-    # infinitely old, and was broken on sight - a fresh lock stolen with no
-    # -Force. Reproduced by running it before the fix.
-    p = tmp_path / "k.lock"
-    now_z = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
-    p.write_text(json.dumps({"label": "debate-A", "stamp": now_z}),
-                 encoding="ascii")
-    r = run_lock(p, "-Acquire", "-Label", "debate-B", "-WaitSeconds", "0")
-    assert r.returncode == 1, "a current lock must hold, however it is stamped"
-    holder = json.loads(p.read_text(encoding="ascii"))
-    assert holder["label"] == "debate-A"
+def test_retry_success_handle_branch(lane_home, debate_home, tmp_path):
+    write_raw(lane_home, b'{"version":1,"state":"free"}')
+    sig_path = tmp_path / "sig-retry-handle.txt"
+    release_path = tmp_path / "release-handle.txt"
+    holder_script = (
+        f"$fs = [System.IO.File]::Open('{lock_path(lane_home)}', "
+        "[System.IO.FileMode]::Open, [System.IO.FileAccess]::ReadWrite, "
+        "[System.IO.FileShare]::None); "
+        f"while (-not (Test-Path '{release_path}')) {{ Start-Sleep -Milliseconds 100 }}; $fs.Close()"
+    )
+    holder = subprocess.Popen([POWERSHELL, "-NoProfile", "-NonInteractive", "-Command", holder_script],
+                               stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    try:
+        time.sleep(0.3)
+        args = ["-Acquire", "-LaneHome", str(lane_home), "-DebateId", new_token(),
+                "-OwnerPid", "1", "-OwnerStartTicksUtc", "1", "-DebateHome", str(debate_home),
+                "-WaitSeconds", "30", "-PollSeconds", "1"]
+        contender = start_lock_bg(args, env={"PARALLAX_LANE_LOCK_CONTENTION_SIGNAL": str(sig_path)})
+        branch = wait_for_signal(sig_path, timeout=10)
+        if branch is None:
+            contender.terminate()
+            pytest.fail("contention signal never arrived within 10s")
+        assert branch == "handle"
+        assert contender.poll() is None, "contender should still be waiting"
+        release_path.write_text("go", encoding="ascii")
+        stdout, stderr = contender.communicate(timeout=10)
+        assert contender.returncode == 0, (stdout, stderr)
+        assert TOKEN_RE.match(stdout.strip())
+    finally:
+        release_path.write_text("go", encoding="ascii")
+        holder.terminate()
+        try:
+            holder.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            holder.kill()
 
 
-def test_an_old_utc_stamp_is_still_stale(tmp_path):
-    # The other half of the same defect: a genuinely five-hour-old `Z` stamp
-    # read as brand new on this machine and held the lane past any threshold.
-    p = tmp_path / "k.lock"
-    old_z = (datetime.now(timezone.utc) - timedelta(minutes=300)).strftime(
-        "%Y-%m-%dT%H:%M:%S.%fZ")
-    p.write_text(json.dumps({"label": "debate-A", "stamp": old_z}),
-                 encoding="ascii")
-    r = run_lock(p, "-Acquire", "-Label", "debate-B", "-WaitSeconds", "0")
-    assert r.returncode == 0, "an old lock must be stale, however it is stamped"
-    assert "stale" in r.stdout
+def test_retry_success_holder_branch(lane_home, debate_home, tmp_path):
+    sleeper = start_sleeper(40)
+    try:
+        ticks = _ticks_for_pid(sleeper.pid)
+        assert DIGITS_RE.match(ticks), ticks
+        debate_id = new_token()
+        r0 = run_lock(["-Acquire", "-LaneHome", str(lane_home), "-DebateId", debate_id,
+                        "-OwnerPid", str(sleeper.pid), "-OwnerStartTicksUtc", ticks,
+                        "-DebateHome", str(debate_home)])
+        assert r0.returncode == 0
+        held_nonce = r0.stdout.strip()
 
+        sig_path = tmp_path / "sig-retry-holder.txt"
+        args = ["-Acquire", "-LaneHome", str(lane_home), "-DebateId", new_token(),
+                "-OwnerPid", "1", "-OwnerStartTicksUtc", "1", "-DebateHome", str(debate_home),
+                "-WaitSeconds", "30", "-PollSeconds", "1"]
+        contender = start_lock_bg(args, env={"PARALLAX_LANE_LOCK_CONTENTION_SIGNAL": str(sig_path)})
+        branch = wait_for_signal(sig_path, timeout=10)
+        if branch is None:
+            contender.terminate()
+            pytest.fail("contention signal never arrived within 10s")
+        assert branch == "holder"
+        assert contender.poll() is None, "contender should still be retrying"
 
-def test_the_same_instant_reads_the_same_in_every_representation(tmp_path):
-    # The real requirement behind both tests above: age must depend on the
-    # INSTANT, not on how the instant was written down.
-    then = datetime.now(timezone.utc) - timedelta(minutes=50)
-    shapes = [
-        then.strftime("%Y-%m-%dT%H:%M:%S.%fZ"),          # terminal Z
-        then.isoformat(),                                 # +00:00
-        then.astimezone().isoformat(),                    # local offset
-    ]
-    for i, stamp in enumerate(shapes):
-        p = tmp_path / f"k{i}.lock"
-        p.write_text(json.dumps({"label": "debate-A", "stamp": stamp}),
-                     encoding="ascii")
-        r = run_lock(p, "-Acquire", "-Label", "debate-B", "-WaitSeconds", "0")
-        assert r.returncode == 0, f"50 minutes must read stale for {stamp}"
-        assert "stale" in r.stdout
+        release = run_lock(["-Release", "-LaneHome", str(lane_home), "-DebateId", debate_id,
+                             "-OwnerPid", str(sleeper.pid), "-OwnerStartTicksUtc", ticks,
+                             "-Nonce", held_nonce])
+        assert release.returncode == 0
 
+        stdout, stderr = contender.communicate(timeout=10)
+        assert contender.returncode == 0, (stdout, stderr)
+        new_nonce = stdout.strip()
+        assert TOKEN_RE.match(new_nonce)
+        assert new_nonce != held_nonce
 
-def test_a_malformed_lock_is_breakable(tmp_path):
-    # A half-written lock must not wedge the lane permanently.
-    p = tmp_path / "k.lock"
-    p.write_text("{not json", encoding="ascii")
-    r = run_lock(p, "-Acquire", "-Label", "debate-A", "-WaitSeconds", "0")
-    assert r.returncode == 0
-
-
-def test_a_lock_with_no_stamp_is_breakable(tmp_path):
-    # Age decides staleness, so a missing stamp must read as infinitely old
-    # rather than as a lock that can never expire.
-    p = tmp_path / "k.lock"
-    p.write_text(json.dumps({"label": "debate-A"}), encoding="ascii")
-    r = run_lock(p, "-Acquire", "-Label", "debate-B", "-WaitSeconds", "0")
-    assert r.returncode == 0
-
-
-def test_status_marks_an_expired_lock_stale(tmp_path):
-    p = write_lock(tmp_path / "k.lock", "debate-A", age_minutes=60)
-    r = run_lock(p)
-    assert r.returncode == 0
-    assert "STALE" in r.stdout
-
-
-def test_lock_records_a_parseable_stamp_and_label(tmp_path):
-    p = tmp_path / "k.lock"
-    assert run_lock(p, "-Acquire", "-Label", "debate-A").returncode == 0
-    data = json.loads(p.read_text(encoding="ascii"))
-    assert data["label"] == "debate-A"
-    assert data["stamp"], "age-based staleness needs a stamp to read"
+        status = run_lock(["-Status", "-LaneHome", str(lane_home)])
+        obj = json.loads(status.stdout)
+        assert obj["nonce"] == new_nonce
+        assert obj["ownerPid"] == 1
+    finally:
+        sleeper.terminate()
+        try:
+            sleeper.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            sleeper.kill()

@@ -6,7 +6,7 @@ verify and refute each other's claims with file:line evidence *before*
 a cheaper implementer touches code, and again *before* the result
 merges. Neither vendor grades its own homework: when the primary
 reviewer transport is down, a consent-gated backup reviewer (Kimi K3
-via kimi-cli) substitutes a second cross-vendor seat rather than
+via kimi-code) substitutes a second cross-vendor seat rather than
 degrading to single-vendor review, and the user can convene
 multi-reviewer panels for work worth more than one set of eyes.
 
@@ -25,7 +25,7 @@ the agent files:
 |---|---|---|
 | Session driver — debates, adjudicates, merges | Any Claude model (rules attach to the seat) | Claude Code |
 | Cross-vendor reviewer (primary) | GPT-5.6 Sol | OpenAI codex CLI, `exec` read-only |
-| Cross-vendor reviewer (backup, consent-gated) | Kimi K3 | kimi-cli, contained agent-file, read-only |
+| Cross-vendor reviewer (backup, consent-gated) | Kimi K3 | kimi-code, contained agent-file, read-only |
 | Panel reviewer (Claude lane, panels only) | Fable | `agents/fable-panel-reviewer.md`, read-only subagent |
 | Whole-branch reviewer (required before mode diff) | Fable | `agents/fable-reviewer.md`, read-only subagent |
 | Implementer (mechanical) | Gemini 3.6 Flash | Antigravity CLI (`agy`) via haiku wrapper, `agents/flash-implementer.md` |
@@ -90,7 +90,7 @@ The debate rules that keep this honest
 | Piece | What it does |
 |---|---|
 | `skills/multi-model-verify/` | The debate skill: both modes, debate protocol, frozen-plan format, model prompting notes, fallbacks/consent gate |
-| `skills/multi-model-verify/references/backup-lane.md` | The cross-vendor backup reviewer lane — currently Kimi K3 via kimi-cli: consent-gated substitution when codex is down — the gate's "run backup lane" option (backup model id pinned in model-prompting-notes.md) |
+| `skills/multi-model-verify/references/backup-lane.md` | The cross-vendor backup reviewer lane — currently Kimi K3 via kimi-code: consent-gated substitution when codex is down — the gate's "run backup lane" option (backup model id pinned in model-prompting-notes.md) |
 | `skills/multi-model-verify/references/panels.md` | Multi-reviewer panels: any lane combination with at least one cross-vendor seat; hub-and-spoke blind relay; subject-revision binding |
 | `hooks/` | PostToolUse + PostToolUseFailure hook (matcher `Task\|Agent`): fingerprints the superpowers code-reviewer dispatch, injects the mode-`diff` reminder with matching SHAs; inert everywhere else |
 | `agents/implementer.md` | Zero-judgment direct-typing executor for frozen-plan tasks (model pinned in the file's frontmatter) |
@@ -105,7 +105,6 @@ The debate rules that keep this honest
 | `evals/multi-model-verify/contract_coverage.py` | Contract coverage: every marked document region must sit whole inside some test pin. Closes the pin-integrity class that produced twelve instances across three cycles |
 | `tools/check-drift.ps1` | Weekly drift watch over the upstreams the contract depends on — see [Drift protection](#drift-protection) |
 | `tools/write-attestation.ps1` · `tools/verify-attestation.ps1` | SHA-bound review attestations — see [Attestation lane](#attestation-lane) |
-| `tools/kimi-lane-lock.ps1` | Serializes the backup lane's dispatches: its route evidence comes from one user-global log, so two concurrent debates interleave and neither can be attributed. Advisory, age-bounded, breaks after 45 min |
 | `.githooks/pre-push` | Non-blocking attestation check on `main` pushes (`git config core.hooksPath .githooks` to enable) |
 
 ## Fails loud, never silent
@@ -222,7 +221,7 @@ lineup is one configuration:
   runtime (failing loud if they vanish), and every instruction surface
   (SKILL.md transport commands, doctor, drift-triage) reads them from
   there; a consistency test forbids a hardcoded `-m` literal anywhere
-  else. The backup reviewer (Kimi K3 via kimi-cli, consent-gated per
+  else. The backup reviewer (Kimi K3 via kimi-code, consent-gated per
   fallbacks.md) swaps the same way — its declarations live in the same
   file (after the primary's, as the parsers require), under the same
   single-source test.
@@ -239,8 +238,8 @@ lineup is one configuration:
   `skills/multi-model-verify/references/model-prompting-notes.md`)
 - `pwsh` (PowerShell 7) for the hook; Windows PowerShell 5.1 for the drift
   watch scheduled task; Python 3.10+ for the evals
-- Optional — backup reviewer lane: kimi-cli 1.49+ authenticated (Kimi K3;
-  backup model id and thinking flag declared in
+- Optional — backup reviewer lane: kimi-code 0.31.1+ authenticated (Kimi
+  K3; backup model id declared in
   `skills/multi-model-verify/references/model-prompting-notes.md`)
 - Optional — Flash implementer lane: the Antigravity CLI (`agy`)
   authenticated (Gemini 3.6 Flash; model literal pinned in
@@ -319,7 +318,7 @@ machine-local).
 | superpowers | Template rewrite rots the hook fingerprint (`Senior Code Reviewer` / `Git Range to Review`) or the `Base:`/`Head:` extraction | Every run: hash the installed template against the pinned fixture; CRITICAL if the fingerprints are gone |
 | Claude Code | Surface changes — the Task→Agent tool rename (v2.1.63) silently killed the hook matcher once already | On version change: fetch the changelog slice between versions and grep for hook/plugin/matcher/skill/tool-rename keywords |
 | codex CLI | `exec` transport flags the skill's commands depend on | Every run: probe `--sandbox`, `--output-last-message`, model/config flags, and the `exec resume` subcommand |
-| kimi-cli | Backup-lane flags (`--agent-file`, `-m`, `--thinking`, `-w`, `-r`) and the kimi_cli tool-module vocabulary the containment allowlist names | Every run when kimi is present: token-boundary flag probe + python import probe; version carry-forward when absent |
+| kimi-code | Backup-lane flags (`--agent-file`, `--skills-dir`, `-m`, `-p`, `--session`) and the client's version floor (`0.31.1`) | Every run when kimi-code is present: token-boundary flag probe against `--help` + floor comparison; version carry-forward when absent |
 
 ```
 powershell tools/check-drift.ps1            # one-shot

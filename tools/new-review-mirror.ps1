@@ -25,6 +25,16 @@ param(
     [string]$CodexCommand = "codex"
 )
 
+# This script decodes git's pathnames as STRICT UTF-8 and refuses to guess
+# on a bad byte, then prints them. Without this line the print undoes that
+# care: [Console]::OutputEncoding defaults to the OEM code page - measured
+# IBM437 on both hosts here - so an accented pathname leaves as one 0x82
+# byte and a UTF-8 reader sees U+FFFD. The baseline and the manifest are
+# EVIDENCE, and evidence that renames a file is worse than no evidence.
+# The ambient encoding also varies by console, which is why this surfaced
+# as an order-dependent test rather than a constant one.
+[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
+
 function Invoke-GitProcess($repo, $gitArgs) {
     # Run git and hand back its stdout as RAW BYTES.
     #
@@ -323,7 +333,7 @@ function Get-BackChannelEntry($repo) {
     # variable becomes $null and a CLEAN repo reads exactly like a FAILED
     # enumeration.
     $r = Invoke-GitFields $repo @("ls-files", "--cached", "--others", "-z",
-                                  "*AGENTS.md", ".agents/*")
+                                  "*AGENTS.md", ".agents/*", '.kimi-code/*')
     if (-not $r.Ok) {
         return @{ Ok = $false; Entries = @(); Reason = $r.Reason }
     }

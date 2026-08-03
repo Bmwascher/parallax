@@ -226,6 +226,19 @@ def test_a_nested_dot_agents_is_a_recorded_gap_not_a_silent_one(tmp_path):
     )
 
 
+def test_enumeration_sweeps_the_kimi_code_back_channel():
+    """The reviewed tree's .kimi-code/ and .agents/ entries are removed
+    because they are READABLE, not because discovery was observed.
+    Measured: nothing was loaded from either root, and the reviewer read a
+    planted SKILL.md as ordinary file content and declined on its own
+    judgment. Judgment is not a control; removal is. Whether this client
+    would ever DISCOVER those roots is unverified, and the sweep does not
+    depend on it."""
+    body = (REPO_ROOT / "tools" / "new-review-mirror.ps1").read_text(
+        encoding="utf-8")
+    assert "'.kimi-code/*'" in body
+
+
 def test_a_clean_repo_is_not_read_as_a_failed_enumeration(tmp_path):
     # PowerShell unrolls an empty array returned from a function, so the
     # caller's variable becomes $null and a clean repo looks exactly like a

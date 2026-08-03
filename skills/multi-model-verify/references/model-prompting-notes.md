@@ -202,10 +202,9 @@ Canonical reasoning effort: `high`
   calling process's OWN startup header plus its OWN
   `--output-last-message` file, so NO SHARED GLOBAL OUTPUT LOG is parsed
   for route attribution — the structural difference from the backup lane,
-  whose evidence comes out of one user-global log and therefore needs
-  `tools/kimi-lane-lock.ps1`. No such lock is needed here once the files
-  below are isolated. codex does still share auth, config, session storage
-  and quota — and two of those ARE consulted, so "not evidence" would be
+  whose evidence comes out of one user-global log. codex does still share
+  auth, config, session storage and quota — and two of those ARE
+  consulted, so "not evidence" would be
   wrong: `codex login status` is the auth preflight, and config resolution
   is what the header reports. The precise claim is narrower: none of those
   stores is a shared global output log, and none is parsed to attribute one
@@ -295,7 +294,7 @@ framing, no chain-of-thought micromanagement) still applies to Sol, but
 verify any model-specific flag or behavior claim against current OpenAI docs
 before relying on it.
 
-## The backup reviewer lane (currently Kimi K3 via kimi-cli)
+## The backup reviewer lane (currently Kimi K3 via kimi-code)
 
 THE single source for the BACKUP reviewer's identity — the same
 swap-by-one-edit rule as the primary declarations above, and the same
@@ -307,7 +306,18 @@ the drift script's PowerShell match is case-insensitive.
 
 Canonical backup reviewer model id: `kimi-code/k3-256k`
 
-Canonical backup thinking flag: `--thinking`
+Canonical backup provider: `kimi`
+
+Canonical backup reasoning effort: `high`
+
+Canonical backup thinking declaration: `[thinking] enabled = true`
+
+This client has no thinking or effort flag. Both are written into the
+debate home by tools/new-kimi-lane-home.ps1. Effort is confirmed per call
+from the session log's `thinkingEffort` field; thinking-enabled is NOT
+confirmable — measured 2026-07-31, `enabled = false` produced output
+identical to `enabled = true` in both the log and the wire transcript, so
+it is config-asserted only and the debate record says so.
 
 Everything else about the lane — transport, containment, per-round
 evidence, client config surface, mirror isolation, failure routing —

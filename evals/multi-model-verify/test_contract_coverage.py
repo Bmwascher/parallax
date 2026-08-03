@@ -622,16 +622,40 @@ PIN_PATHS = [p for p in sorted((REPO / "evals" / "multi-model-verify")
              if p.name != Path(__file__).name]
 
 DECLARED_REGIONS = {
-    "rotation-guard-detection",
-    "rotation-guard-disposition",
-    # 0.16.0: was "rotation-guard-residual-gap". Rotation started
-    # succeeding, so the gap's own contingency became the rule.
-    "rotation-guard-identity",
-    # 0.16.0 backlog item 6: session-block attribution and the lane lock.
-    "session-block-attribution",
-    "session-block-kind",
-    "session-block-residual",
+    # kimi-code swap (backlog item 13). The seven regions that used to sit
+    # here - rotation-guard-detection, rotation-guard-disposition,
+    # rotation-guard-identity, session-block-attribution,
+    # session-block-kind, session-block-residual and lane-lock - all
+    # existed to attribute a round inside ONE user-global append log.
+    #
+    # `lane-lock` below is a REUSED NAME, not a restored region. The
+    # deleted one attributed a round inside that append log. The new one
+    # is an unrelated rule about the PERSISTENT LANE LOCK FILE beside the
+    # credential - liveness-anchored staleness, in-place state
+    # transitions, and the two guarded human overrides. Nothing about the
+    # deleted rule came back.
+    # kimi-code writes a per-session wire transcript and a per-session
+    # log, so there is nothing left to attribute and every one of those
+    # rules lost its subject. The six below replace them.
+    #
+    # round-freshness-boundary is the SURVIVING HALF of the deleted
+    # offset rule: the files are still cumulative, so a slice still needs
+    # a boundary - it is now bounded by a byte offset plus a prefix hash
+    # over each file, rather than by position in a shared stream.
+    #
+    # The session-KIND check survives too, inside
+    # per-round-session-evidence: a resume that silently started a new
+    # session now shows up as session-scoped records appearing in a slice
+    # that must not carry them, instead of as a `Created new session:`
+    # line.
+    "lane-home-isolation",
     "lane-lock",
+    "lane-lock-call-lifecycle",
+    "round-freshness-boundary",
+    "per-round-session-evidence",
+    "evidence-hash-continuity",
+    "brief-hash-binding",
+    "resume-inheritance",
     "panel-floor-reference",
     "panel-floor-agent",
     "panel-lane-loss-disposition",

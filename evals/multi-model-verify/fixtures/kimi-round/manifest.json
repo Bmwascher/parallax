@@ -1,0 +1,12 @@
+{
+  "wireOffsetAfterRound1": 23624,
+  "logOffsetAfterRound1": 643,
+  "wirePrefixSha256AfterRound1": "c10c8f0eceedc8f3507b1c7ebb3692078d5698d5360e5901d835e024ad0952b7",
+  "logPrefixSha256AfterRound1": "2469d0bd42b9570096ff3d4c398dfebd7bfc583aa00a742bcbffd1f057bcdd8b",
+  "toolsHashRound1": "3174a328b87a197903a223344c2acc973389f87147e3529a7185dc8d99678777",
+  "systemPromptHashRound1": "f4410bdc723b724082088ba5b82ea44a108e6d84953b38d0288537334f2a048d",
+  "round1BriefSha256": "4a76a759d052b98c5ca834cefb54d1831e2587dfd0fe05ab255e3fa4f0b0f3a7",
+  "round2BriefSha256": "76e4d5a306d2344f7c034b13d863084f3da8535316020c27ca16ee08b202a5ee",
+  "fixtureSessionId": "session_00000000-0000-4000-8000-000000000001",
+  "fixtureModelAlias": "fixture-model/x"
+}
