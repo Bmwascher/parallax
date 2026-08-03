@@ -1693,3 +1693,60 @@ def test_a_case_variant_required_key_in_each_shape_branch_is_malformed(
     proc = run_fresh(root, FIXTURE_SESSION_ID, state_path)
     p = parsed(proc)
     assert p["status"] == "failed", p
+
+
+def test_a_case_variant_prior_session_id_is_a_mismatch_on_resume(tmp_path):
+    """The RESUME side of the same binding. Only the fresh branch had a
+    case oracle, so reverting the resume comparison alone left the suite
+    green while a case-variant prior identity was accepted."""
+    sess_dir = build_resume_layout(tmp_path, resume_wire(), resume_log())
+    state_path = tmp_path / "state.json"
+    state = resume_prior_state(sess_dir)
+    state["sessionId"] = state["sessionId"].upper()
+    write_json(state_path, state)
+    assert_failed(run_resume(sess_dir, state_path), "state-session-mismatch")
+
+
+def test_the_exact_prior_session_id_is_clean_on_resume(tmp_path):
+    """The control for the case above, same fixture, exact spelling."""
+    sess_dir = build_resume_layout(tmp_path, resume_wire(), resume_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, resume_prior_state(sess_dir))
+    assert_clean(run_resume(sess_dir, state_path))
+
+
+def test_the_exact_prior_state_fixture_without_its_invalid_byte_is_clean(tmp_path):
+    """The matching control for the prior-state decode case: the SAME
+    known-session entry, absent only the invalid byte. Without it that
+    case can still reduce to "the mutation changes which failure wins",
+    because the shared clean control carries an EMPTY knownSessionDirs."""
+    root, sess_dir = build_fresh_layout(tmp_path, fresh_wire(), fresh_log())
+    state_path = tmp_path / "state.json"
+    known = str(tmp_path / "sessions" / "wd_other" / "session_previously_known")
+    write_json(state_path, fresh_prior_state(known_session_dirs=[known]))
+    assert_clean(run_fresh(root, FIXTURE_SESSION_ID, state_path))
+
+
+# --- BOM: this change now owns the behaviour Get-Content used to give ---
+
+
+def test_a_bom_prefixed_prior_state_is_clean(tmp_path):
+    """`Get-Content -Encoding UTF8` stripped a leading BOM, so replacing it
+    means this code owns that behaviour. Without -StripBom the BOM
+    character reaches ConvertFrom-Json and the parse fails, so this is a
+    distinguishing control, not a cosmetic one."""
+    root, sess_dir = build_fresh_layout(tmp_path, fresh_wire(), fresh_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+    state_path.write_bytes(b"\xef\xbb\xbf" + state_path.read_bytes())
+    assert_clean(run_fresh(root, FIXTURE_SESSION_ID, state_path))
+
+
+def test_a_bom_prefixed_agent_file_is_clean(tmp_path):
+    """The same ownership question for the other whole-file reader."""
+    bom_agent = tmp_path / "agent-with-bom.md"
+    bom_agent.write_bytes(b"\xef\xbb\xbf" + AGENT_FILE.read_bytes())
+    root, sess_dir = build_fresh_layout(tmp_path, fresh_wire(), fresh_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+    assert_clean(run_fresh(root, FIXTURE_SESSION_ID, state_path, agent_file=bom_agent))

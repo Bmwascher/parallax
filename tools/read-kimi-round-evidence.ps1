@@ -331,11 +331,16 @@ function Get-AgentFileInfo($path) {
         Fail "agent-file-unusable: -AgentFile is not valid UTF-8"
     }
     $norm = ConvertTo-NormalizedLF $raw
-    if (-not $norm.StartsWith("---`n")) {
+    # ORDINAL. .NET's default String.StartsWith is CULTURE-SENSITIVE and
+    # silently ignores zero-width characters, so a BOM-prefixed agent file
+    # satisfied this marker check even when the BOM was still in the
+    # string - measured. A structural marker check must compare bytes as
+    # written, not as a collator sees them.
+    if (-not $norm.StartsWith("---`n", [System.StringComparison]::Ordinal)) {
         Fail "agent-file-unusable: -AgentFile does not open with a --- frontmatter marker"
     }
     $rest = $norm.Substring(4)
-    $closeIdx = $rest.IndexOf("`n---`n")
+    $closeIdx = $rest.IndexOf("`n---`n", [System.StringComparison]::Ordinal)
     if ($closeIdx -lt 0) {
         Fail "agent-file-unusable: -AgentFile frontmatter never closes with ---"
     }
@@ -393,7 +398,7 @@ function Get-SessionLeaves($root) {
     # never a clean one, so a failure here is a Fail, not a shorter list.
     try {
         Get-ChildItem -LiteralPath $root -Recurse -Directory -ErrorAction Stop |
-            Where-Object { $_.Name.StartsWith("session_") } |
+            Where-Object { $_.Name.StartsWith("session_", [System.StringComparison]::Ordinal) } |
             ForEach-Object { [void]$leaves.Add($_.FullName) }
     } catch {
         Fail ("session-inventory-unreadable: enumerating -SessionsRoot failed: " +
