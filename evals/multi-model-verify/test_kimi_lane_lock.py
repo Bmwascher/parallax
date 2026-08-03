@@ -188,6 +188,34 @@ def test_free_record_with_wholly_unknown_property_is_malformed(lane_home):
     assert json.loads(result.stdout)["state"] == "MALFORMED"
 
 
+@pytest.mark.parametrize("raw,what", [
+    (b'{"version":1,"state":"Free"}', "a capitalized state literal"),
+    (b'{"version":1,"state":"FREE"}', "an upper-case state literal"),
+    (b'{"Version":1,"state":"free"}', "a capitalized version field name"),
+    (b'{"version":1,"State":"free"}', "a capitalized state field name"),
+])
+def test_case_variant_schema_is_malformed_not_free(lane_home, raw, what):
+    """The shipped contract says a record that does not EXACTLY satisfy the
+    schema is held and reported, never reclaimed. PowerShell's -eq, -ne and
+    -contains are case-INSENSITIVE, so each of these classified as a
+    well-formed FREE record and an acquire overwrote a record this tool had
+    not actually recognized. Every literal comparison in Get-Classification
+    is case-exact for that reason."""
+    write_raw(lane_home, raw)
+    result = run_lock(["-Status", "-LaneHome", str(lane_home)])
+    assert result.returncode == 0
+    assert json.loads(result.stdout)["state"] == "MALFORMED", what
+
+
+def test_the_lower_case_record_those_variants_came_from_is_free(lane_home):
+    """The positive control: the same record spelled exactly is FREE, so the
+    test above measures case and not some unrelated rejection."""
+    write_raw(lane_home, b'{"version":1,"state":"free"}')
+    result = run_lock(["-Status", "-LaneHome", str(lane_home)])
+    assert result.returncode == 0
+    assert json.loads(result.stdout)["state"] == "free"
+
+
 def test_held_record_with_unknown_property_is_malformed(lane_home):
     rec = write_held(lane_home)
     rec["extra"] = "nope"

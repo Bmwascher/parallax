@@ -118,8 +118,9 @@ def test_check_repository_walks_a_directory_tree(tmp_path):
         "    assert len(lines) == 1\n",
         encoding="utf-8",
     )
-    findings = checker.check_repository(tmp_path)
+    findings, unmeasured = checker.check_repository(tmp_path)
     assert findings == [(bad_file, 2, "lines")], findings
+    assert unmeasured == [], unmeasured
 
 
 def test_check_repository_clean_tree_reports_nothing(tmp_path):
@@ -129,8 +130,22 @@ def test_check_repository_clean_tree_reports_nothing(tmp_path):
         "    return [l for l in text.splitlines() if l.strip()]\n",
         encoding="utf-8",
     )
-    findings = checker.check_repository(tmp_path)
+    findings, unmeasured = checker.check_repository(tmp_path)
     assert findings == [], findings
+    assert unmeasured == [], unmeasured
+
+
+def test_a_file_the_checker_cannot_parse_is_not_reported_as_clean(tmp_path):
+    """An unmeasurable file is not a clean file. All three failures used to
+    `continue`, so a file this gate could not read or parse was silently
+    indistinguishable from one that passed."""
+    broken = tmp_path / "broken.py"
+    broken.write_text("def f(:\n    pass\n", encoding="utf-8")
+    findings, unmeasured = checker.check_repository(tmp_path)
+    assert findings == [], findings
+    assert len(unmeasured) == 1, unmeasured
+    assert unmeasured[0][0] == broken
+    assert "SyntaxError" in unmeasured[0][1]
 
 
 def test_module_docstring_states_the_syntactic_limit():

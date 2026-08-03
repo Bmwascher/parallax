@@ -759,6 +759,16 @@ RECOVERY_COMMAND_TEMPLATE = (
 )
 
 
+# The needle the ABSENCE checks below use, taken from the template above
+# rather than typed from memory. Four sites used to assert
+# `"$ownerJson" not in stderr`, which the r29 rewrite had replaced with
+# $ownerLines, so those asserts could not fail whatever the builder
+# printed. `test_the_recovery_command_absence_needle_discriminates` holds
+# both directions of this needle, so a future template change breaks a
+# test instead of silently emptying four others.
+RECOVERY_COMMAND_NEEDLE = "$ownerLines = @(& 'tools/kimi-lane-lock.ps1' -ResolveOwner)"
+
+
 def _expected_recovery_command(resolved_lane_home):
     escaped = resolved_lane_home.replace("'", "''")
     return RECOVERY_COMMAND_TEMPLATE.replace("<lane-home>", escaped)
@@ -927,6 +937,32 @@ def test_the_credential_source_is_the_lane_home_not_the_user_profile(tmp_path):
 # --- FIRST USE: the four-row directory probe of the lane home. ---
 
 
+def test_the_recovery_command_absence_needle_discriminates(tmp_path):
+    """BOTH DIRECTIONS of the needle the absence checks rest on. It must be
+    present in the shipped template AND in a real emission of the command,
+    and absent from a refusal that emits no command. A needle satisfying
+    only the absent direction is what four of those checks had: they
+    pinned `$ownerJson`, which r29 replaced, so they held whatever the
+    builder printed."""
+    assert RECOVERY_COMMAND_NEEDLE in RECOVERY_COMMAND_TEMPLATE
+
+    target = tmp_path / "debate-home"
+    profile = _fake_profile(tmp_path, FAKE_REAL_CONFIG)
+
+    emitting = tmp_path / "never-created-lane-home"
+    proc, *_ = _build2(target, profile, emitting)
+    assert proc.returncode != 0, proc.stdout + proc.stderr
+    assert RECOVERY_COMMAND_NEEDLE in proc.stderr, (
+        "the needle must appear when the command IS emitted, or every "
+        "absence check using it is vacuous")
+
+    silent = tmp_path / "lane-home-is-a-file"
+    silent.write_text("not a directory", encoding="ascii")
+    proc2, *_ = _build2(tmp_path / "debate-home-2", profile, silent)
+    assert proc2.returncode != 0, proc2.stdout + proc2.stderr
+    assert RECOVERY_COMMAND_NEEDLE not in proc2.stderr
+
+
 def test_a_nonexistent_lane_home_refuses_with_the_recovery_command(tmp_path):
     target = tmp_path / "debate-home"
     profile = _fake_profile(tmp_path, FAKE_REAL_CONFIG)
@@ -960,7 +996,7 @@ def test_a_regular_file_at_the_lane_home_path_refuses_with_no_recovery_command(t
     proc, *_ = _build2(target, profile, lane_home)
     assert proc.returncode != 0, proc.stdout + proc.stderr
     assert proc.stdout == ""
-    assert "$ownerJson" not in proc.stderr
+    assert RECOVERY_COMMAND_NEEDLE not in proc.stderr
     assert not target.exists()
     # No lock invocation: no lane.lock can appear beside a file, and the
     # file itself is untouched.
@@ -978,7 +1014,7 @@ def test_the_directory_probe_fault_seam_produces_the_unmeasurable_row(tmp_path):
     assert proc.stdout == ""
     assert ("PARALLAX_LANE_HOME_DIRECTORY_PROBE_FAULT injected: simulated "
             "lane-home directory probe failure") in proc.stderr
-    assert "$ownerJson" not in proc.stderr
+    assert RECOVERY_COMMAND_NEEDLE not in proc.stderr
     assert not target.exists()
     # No mutation of the (real, existing) lane home's own lock.
     assert _lock_status(lane_home)["state"] == "free"
@@ -1053,7 +1089,7 @@ def test_validator_failure_is_not_an_actionable_state(tmp_path):
                         extra_env={"PARALLAX_KIMI_CREDENTIAL_STATE_FAULT": "1"})
     assert proc.returncode != 0, proc.stdout + proc.stderr
     assert proc.stdout == ""
-    assert "$ownerJson" not in proc.stderr
+    assert RECOVERY_COMMAND_NEEDLE not in proc.stderr
     assert not target.exists()
     assert _lock_status(lane_home)["state"] == "free"
 
@@ -1138,7 +1174,7 @@ def test_an_acquire_failure_does_not_attempt_a_release_and_precedes_validation(t
         proc, *_ = _build2(target, profile, lane_home)
         assert proc.returncode == 3, proc.stdout + proc.stderr  # lock contention
         assert proc.stdout == ""
-        assert "$ownerJson" not in proc.stderr, (
+        assert RECOVERY_COMMAND_NEEDLE not in proc.stderr, (
             "an absent-credential refusal would have printed the recovery "
             "command; contention must win, proving acquire precedes "
             "validation")

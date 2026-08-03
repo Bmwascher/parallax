@@ -286,29 +286,37 @@ function Get-Classification([byte[]]$Bytes) {
     }
     $props = @($obj.PSObject.Properties.Name)
 
-    if ($props -notcontains "version") { return @{ Malformed = $true } }
+    # Every literal comparison in this function is CASE-EXACT, because the
+    # shipped contract says a record that does not exactly satisfy the
+    # schema is held and reported rather than reclaimed. PowerShell's
+    # -eq, -ne and -contains are case-INSENSITIVE, so `"state":"Free"` and
+    # a field spelled `Owner` both used to classify as a well-formed free
+    # record, and an acquire would then overwrite a record this tool never
+    # actually recognized. That is the same defect the hex tokens already
+    # carry -cmatch for.
+    if ($props -cnotcontains "version") { return @{ Malformed = $true } }
     if (-not (Test-IntField $obj.version) -or ([int64]$obj.version) -ne 1) {
         return @{ Malformed = $true }
     }
-    if ($props -notcontains "state") { return @{ Malformed = $true } }
+    if ($props -cnotcontains "state") { return @{ Malformed = $true } }
     if (-not ($obj.state -is [string]) -or
-        ($obj.state -ne "free" -and $obj.state -ne "held")) {
+        ($obj.state -cne "free" -and $obj.state -cne "held")) {
         return @{ Malformed = $true }
     }
 
-    if ($obj.state -eq "free") {
+    if ($obj.state -ceq "free") {
         foreach ($p in $props) {
-            if ($FreeFields -notcontains $p) { return @{ Malformed = $true } }
+            if ($FreeFields -cnotcontains $p) { return @{ Malformed = $true } }
         }
         return @{ Malformed = $false; State = "free" }
     }
 
     # state -eq "held"
     foreach ($p in $props) {
-        if ($HeldFields -notcontains $p) { return @{ Malformed = $true } }
+        if ($HeldFields -cnotcontains $p) { return @{ Malformed = $true } }
     }
     foreach ($req in $HeldRequired) {
-        if ($props -notcontains $req) { return @{ Malformed = $true } }
+        if ($props -cnotcontains $req) { return @{ Malformed = $true } }
     }
     if (-not ($obj.host -is [string]) -or $obj.host.Trim().Length -eq 0) {
         return @{ Malformed = $true }

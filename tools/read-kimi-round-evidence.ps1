@@ -337,9 +337,21 @@ function Get-SessionLeaves($root) {
     # depth under -SessionsRoot (the measured topology nests leaves one
     # level under a "wd_<workspace>" container, which is itself never a
     # member).
-    Get-ChildItem -LiteralPath $root -Recurse -Directory -ErrorAction SilentlyContinue |
-        Where-Object { $_.Name.StartsWith("session_") } |
-        ForEach-Object { [void]$leaves.Add($_.FullName) }
+    #
+    # The enumeration is TERMINATING. It was -ErrorAction SilentlyContinue,
+    # which made a partly failed walk indistinguishable from a complete one:
+    # rule 3 requires EXACTLY ONE new leaf, so an unreadable subtree holding
+    # a second, concurrent session simply went uncounted and the round
+    # passed on an inventory that was never taken. An unmade measurement is
+    # never a clean one, so a failure here is a Fail, not a shorter list.
+    try {
+        Get-ChildItem -LiteralPath $root -Recurse -Directory -ErrorAction Stop |
+            Where-Object { $_.Name.StartsWith("session_") } |
+            ForEach-Object { [void]$leaves.Add($_.FullName) }
+    } catch {
+        Fail ("session-inventory-unreadable: enumerating -SessionsRoot failed: " +
+              $_.Exception.Message)
+    }
     return @($leaves)
 }
 

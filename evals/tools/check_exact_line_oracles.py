@@ -164,22 +164,28 @@ def check_repository(root):
     """Return a list of (path, lineno, name) violations across every
     tracked-looking .py file under `root`."""
     findings = []
+    unmeasured = []
     for path in _iter_python_files(root):
+        # A file this gate cannot read or parse is NOT a clean file. It used
+        # to `continue` on all three failures, so an unmeasurable file was
+        # silently indistinguishable from one that passed, inside a gate
+        # built because three human sweeps each missed an instance.
         try:
             source = path.read_text(encoding="utf-8")
-        except (UnicodeDecodeError, OSError):
+        except (UnicodeDecodeError, OSError) as exc:
+            unmeasured.append((path, type(exc).__name__))
             continue
         try:
             for lineno, name in find_violations(source, filename=str(path)):
                 findings.append((path, lineno, name))
-        except SyntaxError:
-            continue
-    return findings
+        except SyntaxError as exc:
+            unmeasured.append((path, "SyntaxError: %s" % exc.msg))
+    return findings, unmeasured
 
 
 def main():
-    findings = check_repository(REPO_ROOT)
-    if not findings:
+    findings, unmeasured = check_repository(REPO_ROOT)
+    if not findings and not unmeasured:
         return 0
     for path, lineno, name in findings:
         rel = path.relative_to(REPO_ROOT)
@@ -187,6 +193,10 @@ def main():
               f"lines from splitlines() and then tested for length one - "
               f"use accept_exactly_one_nonempty_line() instead "
               f"(evals/tools/exact_line.py)")
+    for path, why in unmeasured:
+        rel = path.relative_to(REPO_ROOT)
+        print(f"{rel}: NOT MEASURED ({why}) - this gate refuses rather than "
+              f"reporting a file it could not read or parse as clean")
     return 1
 
 

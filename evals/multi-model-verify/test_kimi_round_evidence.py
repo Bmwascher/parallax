@@ -1326,3 +1326,59 @@ def test_turn_prompt_text_not_hashing_to_expected_brief_fails(tmp_path):
     state_path = tmp_path / "state.json"
     write_json(state_path, fresh_prior_state())
     assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path), "brief-hash")
+
+
+def _deny_listing(path):
+    """Deny THIS user read-data on `path`, so a recursive walk over its
+    parent raises instead of silently returning fewer entries. Returns the
+    principal, for the caller's cleanup."""
+    principal = "%s\\%s" % (os.environ["USERDOMAIN"], os.environ["USERNAME"])
+    proc = subprocess.run(["icacls", str(path), "/deny", "%s:(RD)" % principal],
+                          capture_output=True, text=True, timeout=60)
+    if proc.returncode != 0:
+        pytest.fail("could not deny listing on %s: %s" % (path, proc.stdout + proc.stderr))
+    return principal
+
+
+def _undeny_listing(path, principal):
+    subprocess.run(["icacls", str(path), "/remove:d", principal],
+                   capture_output=True, text=True, timeout=60)
+
+
+def test_an_unreadable_sessions_subtree_fails_rather_than_shortening_the_inventory(tmp_path):
+    """Rule 3 requires EXACTLY ONE new session leaf, so an enumeration that
+    silently drops entries can satisfy it on an inventory that was never
+    taken. The walk used -ErrorAction SilentlyContinue, so this exact
+    layout - the expected leaf visible, a SECOND concurrent leaf inside a
+    subtree this user cannot list - passed as a clean fresh round. It must
+    refuse: an unmade measurement is never a clean one."""
+    root, sess_dir = build_fresh_layout(tmp_path, fresh_wire(), fresh_log())
+    hidden = root / "wd_other"
+    (hidden / "session_a_concurrent_debate").mkdir(parents=True)
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+
+    principal = _deny_listing(hidden)
+    try:
+        proc = run_fresh(root, FIXTURE_SESSION_ID, state_path)
+    finally:
+        _undeny_listing(hidden, principal)
+
+    assert_failed(proc, "session-inventory-unreadable")
+
+
+def test_the_denied_subtree_is_what_makes_that_case_fail(tmp_path):
+    """The positive control for the test above. Without the deny, the same
+    layout resolves the session and the round is clean - so that test is
+    measuring the unreadable subtree and not some unrelated defect in the
+    two-workspace layout."""
+    root, sess_dir = build_fresh_layout(tmp_path, fresh_wire(), fresh_log())
+    (root / "wd_other" / "session_a_concurrent_debate").mkdir(parents=True)
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+
+    proc = run_fresh(root, FIXTURE_SESSION_ID, state_path)
+    p = parsed(proc)
+    assert p["status"] == "failed", proc.stdout + proc.stderr
+    assert "session-not-resolvable" in p["reason"], p["reason"]
+    assert "2 new session" in p["reason"], p["reason"]

@@ -52,10 +52,12 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "skill-evals.yml"
 
-# The initial required set is exactly these four - the modules that survive
-# in the workflow once the orphaned test_kimi_lane_lock.py reference is
-# removed. Not the implementer's to choose or extend here; a later task
-# adds its own named modules to this set.
+# The required set is ENUMERATED, never counted. It began as the modules
+# that survive in the workflow once the orphaned test_kimi_lane_lock.py
+# reference is removed, and later tasks added their own named modules. A
+# sentence here once said "exactly these four" and stayed while the list
+# grew to ten, which is the same stale-count class this plan hit three
+# rounds running elsewhere: the list below is the statement.
 REQUIRED_DUAL_HOST_MODULES = [
     "evals/multi-model-verify/test_attestation.py",
     "evals/multi-model-verify/test_codex_context_probe.py",
