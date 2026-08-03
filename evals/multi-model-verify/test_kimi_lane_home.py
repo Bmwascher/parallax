@@ -1901,9 +1901,11 @@ def test_the_recovery_command_row9_full_success_with_apostrophe_and_space(tmp_pa
 # ---------------------------------------------------------------------
 # 0.20.0: the builder's skills-directory POSTCONDITION.
 #
-# The reopened debate established that the builder's own New-Item is the
-# ONLY site in this repository that writes to <debate-home>/skills, so
-# there is no shipped writer and no per-round check is warranted. These
+# The reopened debate established that no SHIPPED writer targets
+# <debate-home>/skills: the builder's own New-Item creates it, and the only
+# other writers are the two env-gated seams beside it, which no shipped
+# caller enables and which can only make a build FAIL. So there is no
+# shipped writer and no per-round check is warranted. These
 # cases therefore prove the DETECTOR fires for the reason it claims -
 # never that the shipped lane can reach the state it detects. Presenting
 # them as threat evidence would be a claim wider than its evidence, and

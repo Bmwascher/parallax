@@ -894,8 +894,10 @@ custody-order case asserts `proc.stdout == ""` instead of the frozen substring
 absence, two cases gained `not target.exists()` and lock-state assertions, and
 the positive control gained an emptiness check plus a second removal helper.
 
-Every one of those departures makes the case STRICTER, which is why none of
-them was noticed. That is exactly the reason to record it. D5 and D6 on this
+None of those departures weakens coverage, and the added assertions are
+strictly stronger; the rename and the second removal helper change no
+assertion at all. That is why none of them was noticed, and exactly the reason
+to record it. D5 and D6 on this
 same branch established that verbatim admits no silent departures, and a
 departure that happens to strengthen is still a judgment call the implementer
 was not authorized to make alone. The departures stand; the silence does not.
@@ -961,13 +963,34 @@ found four more, and two of them were in my own repairs for the first two.
    as the frozen procedure requires, so the flag was the intended differing
    variable and not the only difference.
 
-4. Three copies of one sentence claimed the builder's `New-Item` is the only site
+4. FOUR copies of one sentence claimed the builder's `New-Item` is the only site
    in the repository that writes into the lane's `skills/` directory:
-   `CLAUDE.md`, the builder's own comment, and the backlog close-out. The same
-   change that shipped the sentence added two `Set-Content` seam writers fifteen
-   lines below it. The review cited two sites; grepping the branch found the
-   third, which is recorded as amendment 1 on this cycle's application
-   checkpoint.
+   `CLAUDE.md`, the builder's own comment, the backlog close-out, and a section
+   comment in `test_kimi_lane_home.py`. The same change that shipped the
+   sentence added two `Set-Content` seam writers fifteen lines below it.
+
+   **This count was wrong the first time it was written here, and the way it was
+   wrong is the finding.** The review cited two sites. Grepping the branch for
+   the quoted phrasing found a third, and this entry then said "three copies"
+   and marked itself FIXED. The fourth is worded differently, sits in a test
+   module, and did not match that grep. It was found by the reviewer lane at
+   round 2, after the round-2 brief had asserted "All three are now consistent" -
+   a claim wider than its evidence, inside the repair for claims wider than their
+   evidence, in the same paragraph that names the pattern. Enumerate a duplicated
+   claim's copies by MEANING, not by matching the string a reviewer quoted.
+
+   **A meaning-level sweep afterwards found three MORE occurrences, and all
+   three correctly stay.** They are at `2026-08-03-home-skills-root-probe.md`,
+   in `kimi-reopen-r1-reply.md` and `sol-reopen-r2-brief.md`, and in
+   `reopened-debate-record.md`. Every one of them was TRUE when written: the
+   debate ran and the plan froze before Task 5 added the two seams, so at that
+   moment `New-Item` really was the only writer. The plan is frozen and this
+   ledger is its correction channel; the reviewer replies and the debate record
+   are evidence, and rewriting evidence to match a later state is worse than
+   carrying a correction. What made the other four defects was that they shipped
+   as CURRENT statements in the same change that falsified them. The line to
+   hold is between a dated record of a past measurement and a present-tense
+   claim about the code as it ships.
 
 **The lesson, and it is the same one the 0.19.0 cycle recorded at rounds 41-47.**
 Once the feature is sound, the remaining defects are claims wider than their
