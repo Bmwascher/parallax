@@ -46,7 +46,16 @@ failure into this finding.
 
 **The deviation.** A local helper was added inside the test, stripping Python
 comment markers before normalizing, and the two staleness assertions were
-repointed at it. `_norm` is unchanged and no other pin is affected.
+repointed at it. `_norm` itself is unchanged and no other pin is affected.
+
+**AMENDED after the Fable review.** The sentence above originally read "`_norm`
+is unchanged and no other pin is affected", which the reviewer correctly read
+as a claim that nothing ELSE in this task departed from the frozen text. That
+was false: three further departures went unrecorded, and they are now D4, D5
+and D6 below. The claim is narrowed to what it can support — the shared `_norm`
+helper is untouched and no OTHER test's pin changed — and the completeness
+claim is withdrawn. A ledger the diff debate adjudicates from cannot carry a
+false statement of its own completeness.
 
 ```python
 def uncommented(path):
@@ -111,10 +120,125 @@ it, which is worth having on the record as a control that actually fired.
 
 ---
 
+## D4 — Task 1 Step 1: the frozen test read the workflow through `_norm`, which cannot work
+
+**Task:** 1. **Step:** 1. **Class:** plan defect, repaired silently by the
+session and recorded only after the Fable review named it. **Found by:**
+`agents/fable-reviewer.md`, range `e94c0b5..fbefa66`.
+
+**What the plan froze** (plan line 173):
+
+```python
+workflow = _norm(REPO / ".github" / "workflows" / "skill-evals.yml")
+```
+
+**Why it cannot work.** `_norm` is `" ".join(text.split())`, which destroys
+every newline. The step slicing immediately below it splits on
+`"\n      - name:"`. Measured directly against the real workflow: under `_norm`,
+`"\n" in workflow` is `False` and `"\n      - name:" in workflow` is `False`.
+Both host slices would therefore run to end of file, the `powershell.exe` slice
+would contain BOTH steps, and `step.count(rel) == 1` would fail against the
+CORRECT workflow.
+
+**What shipped:** `_read`, the raw reader, at `test_backup_lane.py:1520`.
+
+**Why this is the serious one.** Plan Step 2 names this exact branch as a STOP:
+"If it fails on the per-step slicing instead, STOP: the workflow is not what
+this plan measured." Under the frozen form the first run would have taken that
+branch. The session substituted `_read` while writing the test, so the STOP
+was never reached and the substitution was never recorded — a zero-judgment
+implementer made a judgment call, and the ledger the diff debate adjudicates
+from did not carry it.
+
+**Disposition.** The substitution is correct on the merits and rides. The defect
+recorded here is the SILENCE, not the code.
+
+---
+
+## D5 — Task 1 Step 4: the mirror header was not replaced verbatim
+
+**Task:** 1. **Step:** 4. **Class:** unrecorded departure from frozen text.
+**Found by:** the Fable review.
+
+Step 4 directs that `test_review_mirror.py:31-34` — the "Guarding only on a
+PowerShell host being present..." paragraph — be REPLACED with a `COVERAGE`
+block whose text includes "See the probe suite's header for the full sequence."
+
+What shipped instead: the "Guarding only..." paragraph was RETAINED, its closing
+clause reworded to end at "sequence.", and the `COVERAGE` block was added below
+it WITHOUT the "See the probe suite's header" sentence. Every fact the frozen
+text carries is present, and the reviewer confirmed the resulting header claims
+exactly what is true. It is nonetheless not the frozen text.
+
+**Disposition.** Rides. Recorded so the diff debate adjudicates a departure it
+can see rather than discovering one it cannot.
+
+---
+
+## D6 — Task 1 Step 5: the backlog carries a fourth paragraph
+
+**Task:** 1. **Step:** 5. **Class:** unrecorded addition to frozen text.
+**Found by:** the Fable review.
+
+Step 5 freezes a three-paragraph insert under item 10's new heading. A fourth
+paragraph was added, "One thing that oracle taught, worth keeping," recording
+D1's vacuous-assertion defect in the backlog itself.
+
+**Disposition.** Rides. The addition is accurate and the reviewer verified it
+does not trip the new oracle, which scans only the two module bodies. Recorded
+because "verbatim" admits no additions either.
+
+---
+
+## D7 — Task 1 Step 7: the job-name clause was unwatched, and is now watched
+
+**Task:** 1. **Step:** 7. **Class:** plan scope gap, closed. **Found by:** the
+Fable review.
+
+The plan's three mutations cover the staleness clauses and the per-step parity
+clause. They do not touch `assert "powershell-hosts" in body`
+(`test_backup_lane.py:1533-1534`), and the initial failing run stopped at an
+earlier assert, so that clause had never been watched to fail. By this plan's
+own Global Constraint an unwatched assertion is not yet evidence.
+
+**Closed.** Two further mutations were run, one per covered module, each
+replacing the job name in that module's header:
+
+- `M4a probe header` — fails with `evals/multi-model-verify/test_codex_context_probe.py must name the CI job that covers it`
+- `M4b mirror header` — fails with `evals/multi-model-verify/test_review_mirror.py must name the CI job that covers it`
+
+Both reverted; the post-revert run is clean. **D3's lesson was applied here:**
+this harness reads and writes BYTES rather than text, so the revert cannot
+rewrite line endings. The working tree was verified clean afterwards, where the
+Step 7 harness had left a whole-file line-ending change.
+
+---
+
+## Commit-trailer check, closing the reviewer's named gap
+
+The Fable review could not verify commit bodies from the diff package and named
+that as a gap rather than assuming. Closed by the session:
+`git log e94c0b5..fbefa66 --format=%B` searched for `Claude-Session` returns 0
+across all three full commit bodies. The authorized-debt decision permits
+exactly three such trailers in this repo's history; a fourth would be a defect,
+and this range adds none.
+
+---
+
 ## Verification state at this point
 
 - `test_backup_lane.py`: 59 passed under `powershell.exe` AND under `pwsh.exe`.
 - Full suite: 934 passed, 13 skipped (the 13 are the opt-in live lane gate).
   The baseline before Task 1 was 933; the new oracle is the one added case.
-- Three mutations run, each watched to fail naming its own clause, each reverted,
-  and the post-revert run clean.
+- **FIVE mutations run**, each watched to fail naming its own clause, each
+  reverted, and each post-revert run clean: the three the plan specifies, plus
+  the two D7 adds. Every load-bearing assertion in the new oracle has now been
+  watched to fail for the reason it claims.
+- Whole-branch review by `agents/fable-reviewer.md` over `e94c0b5..fbefa66`,
+  retained at `fable-review-e94c0b5-fbefa66.md`. Verdict at the time of issue:
+  **Ready to merge: With fixes** — no Critical, one Important (this ledger being
+  narrower than the diff), two Minor. Every finding was verified against the
+  repo and accepted; D4, D5, D6 and D7 and the trailer check are those fixes.
+- **What this review is NOT.** It is one Claude-family seat reviewing one task
+  of six. It does not replace the cross-vendor gate, and no mode-diff debate has
+  run on this range.
