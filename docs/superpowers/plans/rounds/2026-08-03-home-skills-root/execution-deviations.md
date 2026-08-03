@@ -896,10 +896,8 @@ the positive control gained an emptiness check plus a second removal helper.
 
 None of those departures weakens coverage, and the added assertions are
 strictly stronger; the rename and the second removal helper change no
-assertion at all. Those departures therefore did not make the suite fail; the
-whole-branch review found them. That is exactly the reason to record them: a
-green suite is not what noticed this, and nothing in the pipeline before the
-review would have. D5 and D6 on this
+assertion at all. The recorded suite passed; the whole-branch review found the
+departures. That is exactly why they are recorded. D5 and D6 on this
 same branch established that verbatim admits no silent departures, and a
 departure that happens to strengthen is still a judgment call the implementer
 was not authorized to make alone. The departures stand; the silence does not.
