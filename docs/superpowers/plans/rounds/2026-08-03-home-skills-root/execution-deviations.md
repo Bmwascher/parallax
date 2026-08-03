@@ -306,6 +306,132 @@ it is wider than the code. Recorded rather than silently kept, per D4's lesson.
 
 ---
 
+## D9 — Task 2: the state-file parser was a tier-1c instance that evaded tier 1c
+
+**Task:** 2. **Class:** defect in the session's own new oracle. **Found by:**
+`agents/fable-reviewer.md`, range `e94c0b5..d0e116a`. **FIXED.**
+
+`read_state` built `[ln for ln in raw.split("\n") if ln.strip()]` and asserted
+exactly one survivor. That is the "discard blank lines, then count survivors"
+idiom CLAUDE.md names, which accepts `\n\n{json}\n\n` where the frozen interface
+says the state file is ONE line of ASCII JSON.
+
+**And it was spelled so the gate could not see it.**
+`evals/tools/check_exact_line_oracles.py:89-91` matches on
+`gen.iter.func.attr == "splitlines"`. This instance used `.split("\n")`, so
+tier 1c stayed green on the exact idiom it exists to remove. CLAUDE.md records
+that three hand sweeps each missed an instance of this class; this is a fourth
+spelling, written by the session that knew the rule.
+
+Now routed through `accept_exactly_one_nonempty_line()` in
+`evals/tools/exact_line.py`. Watched: mutation N1 makes the tool append a
+trailing blank line and `test_plant_state_file_shape` fails.
+
+---
+
+## D10 — the tier-1c sweep does not see `.split("\n")`, and this is NOT fixed
+
+**Class:** gap in an existing CI gate, demonstrated by D9. **Status: OPEN,
+awaiting the user's authorization**, because it is a change outside the frozen
+plan's six tasks.
+
+Widening `check_exact_line_oracles.py` from
+`gen.iter.func.attr == "splitlines"` to
+`gen.iter.func.attr in ("splitlines", "split")` was written and run against the
+whole repo: it flags NOTHING beyond D9's instance, which is already fixed. So
+the change is free and closes a demonstrated hole in a gate this project relies
+on.
+
+It is not taken here. The plan is frozen, this repo's convention is that
+off-plan changes carry explicit user authorization (precedent: `51b4554`,
+recorded as user-authorized and outside its cycle's eleven tasks), and the last
+review's Important finding was precisely about unrecorded departures from frozen
+text. Recorded for decision rather than done quietly.
+
+---
+
+## D11 — Task 2: the fault seam could not prove what the plan froze it to prove
+
+**Task:** 2. **Class:** plan defect. **Found by:** the Fable review. **FIXED.**
+
+The plan froze the seam as the rollback's positive control: "assert the
+directory existed mid-call, via a fault seam that fires after creation and
+before the state write, or the test passes equally against an implementation
+that never created anything."
+
+The seam alone cannot establish that. A tool checking
+`PARALLAX_CANARY_STATE_FAULT` BEFORE `New-Item` emits the same message, the same
+exit code and the same unchanged root, and passes every case in the file. The
+docstring claimed an observation no test made.
+
+Replaced with a real observation. An INHERIT-ONLY deny of Delete on the root
+lets creation succeed and blocks the rollback's delete, so the tool's
+rollback-failure message names the surviving canary — reachable only if the
+directory existed when the seam fired. Watched: mutation N5 relocates the seam
+before `New-Item` and the test fails.
+
+**Two platform facts this needed**, both measured 2026-08-03: denying
+delete-child on the PARENT is not enough, because deleting a child also succeeds
+via DELETE on the child itself; and in `icacls` the `(D)` right blocks it while
+`(DE)` does not. The working spec is `(OI)(CI)(IO)(D)`.
+
+---
+
+## D12 — Task 2: two `-Force` claims carried no evidence
+
+**Task:** 2. **Class:** unwatched assertion. **Found by:** the Fable review.
+**FIXED.**
+
+`Get-OrdinalNames` documents `-Force` as what makes a hidden intruder visible,
+and the canary contents check relies on it too. No case planted anything hidden,
+so dropping `-Force` from either site passed all 26 tests. Two cases added, one
+per site; watched by mutations N3 and N4.
+
+---
+
+## D13 — Task 2: the blank-root guard was removable with no test failing
+
+**Task:** 2. **Class:** unwatched assertion. **Found by:** the Fable review.
+**FIXED.**
+
+Both blank-root cases asserted only exit 1, and `Resolve-Path` on a blank path
+falls into the root-does-not-exist refusal with the same exit code — so deleting
+the guard changed nothing observable. The cases now assert the message. Watched
+by mutation N2.
+
+---
+
+## D14 — Task 2: Plant overwrites an existing `-StateOut` without refusing
+
+**Task:** 2. **Class:** accepted limit, no change. **Found by:** the Fable
+review.
+
+`Set-Content -LiteralPath $StateOut` clobbers whatever is at that path. It is
+the one unguarded write the tool performs outside the canary directory. It is
+non-recursive, driver-supplied, and Task 4 gives it a fresh scratch path per
+run. Recorded as a known limit rather than guarded, because a refusal here would
+add a failure mode to the probe driver for no measured risk.
+
+---
+
+## REFUTED — the empty-root Compare-Object claim
+
+The Fable review stated that with an empty root, `Compare-Object
+-ReferenceObject @()` "throws a binding error on both hosts", so the tool would
+exit nonzero with a raw error AFTER a successful delete, misattributing success
+as failure.
+
+**Measured 2026-08-03 and refuted on both hosts.** `Compare-Object
+-ReferenceObject @() -DifferenceObject @() -CaseSensitive` returns count 0
+without throwing under `powershell.exe` AND `pwsh.exe`, and an end-to-end plant
+then remove against an empty root exits 0 with the canary correctly gone under
+both. No change made.
+
+Recorded because a reviewer's claim is an input to adjudication, never its
+verdict, and this one was wider than the behaviour.
+
+---
+
 ## Verification state at this point
 
 - `test_backup_lane.py`: 59 passed under `powershell.exe` AND under `pwsh.exe`.
@@ -348,3 +474,36 @@ it is wider than the code. Recorded rather than silently kept, per D4's lesson.
   its 27 directories, untouched throughout.
 - The Task 2 mutation harness reads and writes BYTES, per D3. The working tree
   after all six carried only the two intended new files.
+
+**Task 2 Step 5 requires each observed failure message to be recorded. They are:**
+
+| mutation | test | observed |
+|---|---|---|
+| M1 drop `-CaseSensitive` | `test_remove_comparison_is_case_sensitive` | 1 failed |
+| M2 overwrite a leftover silently | `test_plant_refuses_a_leftover_canary` | 1 failed |
+| M3 remove the profile-root refusal | `test_plant_refuses_the_profile_root` | 1 failed, canary really created in `%USERPROFILE%` and removed |
+| M4 remove the reparse scan | `test_remove_refuses_a_reparse_point_inside_the_canary` | 1 failed |
+| M5 exact path to prefix test | `test_remove_requires_the_exact_canary_path` | 1 failed |
+| M6 skip contents+hash | `test_remove_refuses_an_extra_entry_in_the_canary` AND `test_remove_refuses_a_changed_skill_file` | 1 failed each |
+
+### Task 2, after the whole-branch review
+
+- Suite is now 29 cases: 29 passed under `powershell.exe` AND under `pwsh.exe`.
+- Tier 1c (`check_exact_line_oracles.py`) exits 0.
+- **Five further mutations**, one per guard the review's findings added, each
+  failing its named test, each reverted, post-revert module clean at 29:
+
+| mutation | test | observed |
+|---|---|---|
+| N1 state file gains a trailing blank line | `test_plant_state_file_shape` | 1 failed |
+| N2 delete the blank-root guard | `test_plant_refuses_a_blank_root` | 2 failed |
+| N3 drop `-Force` from the root enumeration | `test_the_before_list_sees_hidden_entries` | 1 failed |
+| N4 drop `-Force` from the contents check | `test_remove_sees_a_hidden_entry_inside_the_canary` | 1 failed |
+| N5 seam fires BEFORE creation | `test_the_fault_seam_really_fires_after_creation` | 1 failed |
+
+- Whole-branch review retained at `fable-review-e94c0b5-d0e116a.md`. Verdict at
+  issue: **Ready to merge: With fixes** — no Critical, one Important, five
+  Minor, one named gap. Every finding adjudicated: seven accepted and applied,
+  one REFUTED with measurement on both hosts, one (D10) held open for the user.
+- Commit-trailer check extended to `e94c0b5..d0e116a`: zero `Claude-Session`
+  trailers.

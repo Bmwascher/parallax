@@ -35,6 +35,7 @@ merely finds a host would happily collect these tests there too, same
 lesson as test_codex_context_probe.py.
 """
 import hashlib
+import importlib.util
 import json
 import os
 import shutil
@@ -45,6 +46,17 @@ import pytest
 
 REPO = Path(__file__).resolve().parents[2]
 TOOL = REPO / "tools" / "plant-home-skill-canary.ps1"
+
+
+def _load_exact_line_module():
+    path = REPO / "evals" / "tools" / "exact_line.py"
+    spec = importlib.util.spec_from_file_location("exact_line", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+accept_exactly_one_nonempty_line = _load_exact_line_module().accept_exactly_one_nonempty_line
 
 POWERSHELL = (os.environ.get("PARALLAX_PS_HOST")
               or shutil.which("powershell") or shutil.which("pwsh"))
@@ -117,10 +129,25 @@ def remove(root, state):
 
 
 def read_state(path):
+    """The frozen interface says the state file is ONE line of ASCII JSON.
+
+    This goes through the shared helper rather than the "discard blank
+    lines, then require one survivor" idiom, which is a WEAKER check that
+    accepts `\\n\\n{json}\\n\\n` - a shape the contract must reject. That
+    idiom is the defect class CLAUDE.md names, that three hand sweeps each
+    missed an instance of, and that CI tier 1c exists to remove.
+
+    The first draft here carried it, spelled with `.split("\\n")` rather
+    than `.splitlines()`, and so evaded the tier-1c sweep as well
+    (check_exact_line_oracles.py keys on `splitlines`). Caught by the
+    whole-branch review, not by the gate.
+    """
     raw = Path(path).read_bytes().decode("ascii")
-    lines = [ln for ln in raw.split("\n") if ln.strip()]
-    assert len(lines) == 1, "state file must be exactly one nonempty line"
-    return json.loads(lines[0])
+    line = accept_exactly_one_nonempty_line(raw)
+    assert line is not None, (
+        "state file must be exactly one nonempty line, optionally followed "
+        "by exactly one terminator")
+    return json.loads(line)
 
 
 # --------------------------------------------------------------------------
@@ -176,8 +203,16 @@ def test_plant_refuses_a_leftover_canary(tmp_path):
 
 @pytest.mark.parametrize("bad_root", ["", "   "])
 def test_plant_refuses_a_blank_root(tmp_path, bad_root):
+    """Assert the blank-root MESSAGE, not merely the exit code.
+
+    Resolve-Path on a blank path fails into the root-does-not-exist
+    refusal with the same exit code, so an exit-code-only assertion passes
+    identically with the blank guard deleted - the guard would carry no
+    evidence at all. Naming the message is what makes it watched.
+    """
     proc = plant(bad_root, tmp_path / "state.json")
     assert proc.returncode == 1
+    assert proc.stderr.strip() == "root is blank"
 
 
 @pytest.mark.parametrize("bad_nonce", [
@@ -366,6 +401,85 @@ def test_remove_refuses_a_missing_skill_file(tmp_path):
     proc = remove(root, state_out)
     assert proc.returncode == 1
     assert (root / CANARY_NAME).exists()
+
+
+def _hide(path):
+    subprocess.run(["attrib", "+h", str(path)], check=True,
+                   capture_output=True, shell=True)
+
+
+def test_the_before_list_sees_hidden_entries(tmp_path):
+    """`Get-ChildItem -Force` is what makes a hidden intruder visible.
+
+    Without this case, dropping -Force from the enumeration passes every
+    other test in the file: none of them plants anything hidden, so the
+    before/after lists agree either way and the comment claiming -Force is
+    load-bearing carries no evidence.
+    """
+    root = make_root(tmp_path)
+    hidden = root / "hidden-thing"
+    hidden.mkdir()
+    _hide(hidden)
+
+    state_out = tmp_path / "state.json"
+    assert plant(root, state_out).returncode == 0
+    assert "hidden-thing" in read_state(state_out)["before"]
+
+
+def test_remove_sees_a_hidden_entry_inside_the_canary(tmp_path):
+    """The same -Force claim on the canary contents check. A hidden extra
+    file is still an extra file, and a directory that no longer matches
+    what was planted must not be deleted on the strength of its name."""
+    root = make_root(tmp_path)
+    state_out = tmp_path / "state.json"
+    assert plant(root, state_out).returncode == 0
+    extra = root / CANARY_NAME / "hidden-extra.txt"
+    extra.write_text("x", encoding="ascii")
+    _hide(extra)
+
+    proc = remove(root, state_out)
+    assert proc.returncode == 1
+    assert (root / CANARY_NAME).exists()
+
+
+def test_the_fault_seam_really_fires_after_creation(tmp_path):
+    """The rollback's positive control, upgraded to an OBSERVATION.
+
+    The plan froze the seam itself as the proof that creation happened
+    first. It is not: a tool that checked the seam BEFORE New-Item would
+    emit the same message, the same exit code and the same unchanged root,
+    and would pass every other case in this file.
+
+    So observe the directory instead. Put an INHERIT-ONLY deny of Delete on
+    the root, so anything created beneath it inherits the deny while the
+    root itself stays deletable. Creation still succeeds; the rollback's
+    delete does not. The tool's rollback-failure message then names the
+    canary path and says it is still present - reachable only if the
+    directory existed when the seam fired.
+
+    The spec is `(OI)(CI)(IO)(D)` and the D matters: measured 2026-08-03,
+    `(DE)` did NOT block the delete and the rollback succeeded, while `(D)`
+    did. Denying delete-child on the PARENT alone is also not enough,
+    because deleting a child succeeds via DELETE on the child itself.
+    """
+    root = make_root(tmp_path)
+    user = os.environ["USERNAME"]
+    subprocess.run(["icacls", str(root), "/deny", user + ":(OI)(CI)(IO)(D)"],
+                   check=True, capture_output=True, shell=True)
+    try:
+        proc = plant(root, tmp_path / "state.json",
+                     env_overrides={FAULT_VAR: "1"})
+        assert proc.returncode == 1
+        assert "the rollback failed" in proc.stderr
+        assert CANARY_NAME in proc.stderr, (
+            "the message must name the directory that survived, which is "
+            "the observation that it was created before the seam fired")
+        assert (root / CANARY_NAME).is_dir(), (
+            "and it must really still be there")
+    finally:
+        subprocess.run(["icacls", str(root), "/remove:d", user],
+                       check=False, capture_output=True, shell=True)
+        shutil.rmtree(root / CANARY_NAME, ignore_errors=True)
 
 
 def test_remove_is_not_silently_idempotent(tmp_path):
