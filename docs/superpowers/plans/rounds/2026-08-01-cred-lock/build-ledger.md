@@ -153,12 +153,56 @@ with the user's own, and the user's real credential is untouched: still
 first direct evidence that this branch's fix works. Under the copy-based
 approach a lane login could retire the real refresh token.
 
+## The whole-branch review HAS RUN, and it found three things
+
+Range `6201e30..098e3e1`, retained verbatim in
+`fable-review-production.md` and `fable-review-tests.md`.
+
+**The diff is 1.9 MB and does not fit one context.** It was split into a
+production slice and a test slice, reviewed concurrently, each reviewer
+holding the whole-branch commit list and stat so each could see what it
+was not given. **Recorded as a deviation: no single reviewer saw the
+whole diff at once.**
+
+Both slices returned "ready to merge: with fixes", and between them named
+three Important findings. All three are fixed at `3a7a133`, and each
+carries an oracle that FAILS without the fix:
+
+1. **The evidence validator enumerated the sessions root with
+   `-ErrorAction SilentlyContinue`.** Rule 3 requires exactly one new
+   session leaf, so an unreadable subtree holding a second concurrent
+   session simply went uncounted. Measured by reverting the fix: on that
+   layout the old code reported the round **clean**. The enumeration is
+   now terminating and maps to `session-inventory-unreadable`.
+2. **The lock classified records with case-insensitive comparisons.**
+   `{"version":1,"state":"Free"}` and a field spelled `Version` both read
+   as a well-formed FREE record, and an acquire then overwrote a record
+   the tool had never recognized, against a shipped contract that says a
+   record not exactly satisfying the schema is held and reported. All
+   four case variants fail without the fix; the lower-case record is the
+   positive control.
+3. **Four asserts pinned `$ownerJson`**, which r29 replaced with
+   `$ownerLines`, so they held whatever the builder printed — including a
+   headline claim that validator failure fabricates no recovery command.
+   The needle now comes from the shipped template, and a new test holds
+   BOTH directions of it. Mutating the needle back to `$ownerJson` fails
+   that test.
+
+Two Minors are also fixed: the exact-line gate skipped files it could not
+read or parse, and the workflow checker's comment said "exactly these
+four" above a ten-entry list. The remaining Minors ride, with reasons in
+the two artifacts.
+
+**Re-verified after the fixes:** full suite 877 passed / 13 skipped; the
+live gate 70 per host on BOTH hosts with zero skipped; and the user's own
+credential still reads `ok`/`valid`, its file unwritten since before the
+lane logins.
+
 ## What is NOT done
 
 All eleven tasks are built. What remains is not build work:
 
-- The whole-branch fable review, then the mode-diff debate and the
-  attestation.
+- The mode-diff debate and the attestation.
 - Remote CI. It has never run on this branch and is unverified until the
   pushed workflow completes.
 
