@@ -767,3 +767,60 @@ test:**
 **M1 is the case the reopened debate turned on.** It leaves every pinned literal
 byte-identical and would pass an ordinary pin. It fails the region check. That is
 the argument the primary lane won, executed rather than asserted.
+
+---
+
+## D20 - Task 6: a behavioural gate failure I could NOT attribute, and did not pretend to
+
+**Task:** 6. **Class:** unresolved, escalated to the user. **Found by:** the
+opt-in behavioural evals. **OPEN.**
+
+`python evals/tools/run_behavioral_evals.py --changed --head` returned **1
+failure of 7 cases**: `plan-mode-debate-runs`, on expectation 4, the finish line
+naming both participating models.
+
+**Nothing I changed touches that text.** Verified, not assumed: `git diff main
+HEAD -- skills/multi-model-verify/SKILL.md` shows FIVE changed lines, all inside
+the preflight-3 paragraph, and the finish-line instruction at `SKILL.md:330` is
+untouched across the whole branch.
+
+**So I measured instead of arguing.** Nine live runs:
+
+| tree | runs | passes | expectations that failed |
+|---|---|---|---|
+| pre-change worktree at `74baa71` | 2 | **2** | none |
+| HEAD, before the pointer fix | 4 | **0** | #4 x3, #3 x2 |
+| HEAD, after the pointer fix | 3 | **1** | #1 x2, #3 x2 |
+
+**What I concluded, and what I refused to conclude.** Zero of four looked like a
+regression, and I acted on it: the edit had replaced a stated fact with `See
+references/backup-lane.md for the measured discovery controls and their limits`,
+an IMPERATIVE pointer inside preflight 3, which every mode-plan round performs -
+including primary-lane rounds that need nothing from that 35 KB file. Sending
+every run on that detour is a real mechanism, so the text became self-contained
+again and cites the reference instead.
+
+**That fix is NOT demonstrated to work.** One pass in three is not better than
+zero in four in any way I can defend. It is kept because it is better on its own
+terms, and it is recorded here as an unproven change rather than a repair.
+
+**And the attribution does not hold up either.** The failures scatter across
+THREE different expectations rather than repeating on one, which is not what a
+broken instruction looks like. Two of the last three failures are expectation 1
+reporting that the TRANSCRIPT WAS TRUNCATED before the grader could see the
+codex invocation - a limit of the harness's own rendering, not of the plugin.
+And two control runs is not a baseline; my clean control may simply have been
+luck.
+
+**The missing measurement is more CONTROL runs**, not more HEAD runs. Without
+them, flaky-case and regression are indistinguishable, and this repo's own
+invariant says an unmade measurement is never a clean one - which cuts against
+me here as readily as for me. Escalated to the user with three options rather
+than resolved by the session, because the next step costs real money and the
+merge decision is theirs.
+
+**Recorded against the plan's own claim:** Task 5 Step 4 says the `SKILL.md`
+correction is a SHORTENING. After this second revision it is 5126 tokens against
+the 5120 baseline - six tokens LONGER. The claim was true of the first version
+and is false of the shipped one. Behaviour was the priority over the byte count,
+and the plan's sentence is now inaccurate.

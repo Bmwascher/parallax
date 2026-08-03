@@ -210,10 +210,23 @@ class TestTransportContract:
         assert "That 2026-07-31 comparison was CONFOUNDED:" in text
         assert ("`Skill` was denied, so it measured the deny list, not "
                 "the flag.") in text
-        assert ("See references/backup-lane.md for the measured discovery "
-                "controls and their limits.") in text
+        assert ("Re-probed 2026-08-03, the flag DOES suppress the home "
+                "root while its target stays empty "
+                "(references/backup-lane.md).") in text
         assert "suppresses nothing observable" not in text, (
             "the falsified 2026-07-31 claim is back in SKILL.md")
+        # The correction must be SELF-CONTAINED here, citing the reference
+        # rather than sending the reader to it. Measured 2026-08-03: the
+        # first version said "See references/backup-lane.md for the
+        # measured discovery controls and their limits", and the
+        # plan-mode behavioral case went 0 for 4 against 2 for 2 on the
+        # unchanged tree, failing on citation anchoring and on the finish
+        # line. Preflight 3 runs on EVERY mode-plan round, including
+        # primary-lane rounds that need nothing from that 35 KB file, so
+        # an imperative pointer there buys a detour on every run.
+        assert "See references/backup-lane.md" not in text, (
+            "preflight 3 must CITE the reference, not instruct a detour "
+            "into it: this cost the plan-mode behavioral case 4 runs")
 
     def test_resume_flags_before_subcommand(self):
         text = read(SKILL_MD)
