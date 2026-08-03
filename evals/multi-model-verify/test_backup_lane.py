@@ -1484,3 +1484,54 @@ def test_doctor_check8_containment_artifact_is_unchanged():
     """This bullet is untouched by Task 8 - same text as before the rewrite,
     pinned in its own right per the plan's explicit instruction."""
     assert CONTAINMENT_UNCHANGED in _norm(DOCTOR)
+
+
+def test_no_module_claims_ci_skips_the_windows_suites():
+    """The powershell-hosts job has covered the probe and the mirror since
+    6a462f9. A comment saying otherwise is a false record of coverage,
+    which is the same defect class as a false claim of a clean
+    measurement: it tells a reader a gate is absent when it is present.
+
+    A COUNT is not an oracle here. Two textual occurrences could both sit
+    in one host step, or in a comment, while the count stays at 2 and the
+    second interpreter runs nothing. Slice the file into the two host
+    steps and require one occurrence in EACH, keyed on the
+    PARALLAX_PS_HOST value that names the interpreter.
+    """
+    def uncommented(path):
+        """Whitespace-normalized, with Python comment markers stripped.
+
+        _norm alone is WRONG for a pin over a wrapped comment: it joins the
+        lines but leaves each continuation line's `#` inside the sentence,
+        so the live text reads "CI does # not exercise these 155 cases".
+        A staleness assertion written against _norm is therefore vacuously
+        true and can never fail - which is what the first run of this test
+        demonstrated, and exactly the defect class this suite exists to
+        remove.
+        """
+        lines = [re.sub(r"^\s*#\s?", "", ln)
+                 for ln in path.read_text(encoding="utf-8").splitlines()]
+        return " ".join(" ".join(lines).split())
+
+    covered = (
+        "evals/multi-model-verify/test_codex_context_probe.py",
+        "evals/multi-model-verify/test_review_mirror.py",
+    )
+    workflow = _read(REPO / ".github" / "workflows" / "skill-evals.yml")
+    assert "powershell-hosts:" in workflow
+    steps = {}
+    for host in ("powershell.exe", "pwsh.exe"):
+        marker = "PARALLAX_PS_HOST: " + host
+        assert marker in workflow, "no step sets " + marker
+        tail = workflow.split(marker, 1)[1]
+        # The step ends at the next step's `- name:` at list indentation.
+        steps[host] = tail.split("\n      - name:", 1)[0]
+    for rel in covered:
+        body = uncommented(REPO / rel)
+        assert "CI does not exercise these 155 cases at all" not in body
+        assert "Backlog item 10 carries the fix" not in body
+        assert "powershell-hosts" in body, (
+            rel + " must name the CI job that covers it")
+        for host, step in steps.items():
+            assert step.count(rel) == 1, (
+                rel + " must appear exactly once in the " + host + " step")
