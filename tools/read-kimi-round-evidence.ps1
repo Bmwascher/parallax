@@ -626,10 +626,19 @@ $logLines = Read-LogSlice $logGlob $logOffset
 
 # Rule 12: session-scoped checks, fresh only.
 if ($Fresh) {
-    $configUpdates = @($records | Where-Object { $_.type -eq "config.update" })
-    $activeTools = @($records | Where-Object { $_.type -eq "tools.set_active_tools" })
-    $snapshots = @($records | Where-Object { $_.type -eq "llm.tools_snapshot" })
-    $permModes = @($records | Where-Object { $_.type -eq "permission.set_mode" })
+    # Every comparison against FOREIGN DATA below is case-exact: record
+    # types, the permission mode, the model, provider and effort, and the
+    # tool names (Compare-Object is case-INSENSITIVE without
+    # -CaseSensitive, measured). PowerShell's -eq and -ne are
+    # case-insensitive, so a round that declared `AUTO`, or a tool named
+    # `read` where the allowlist says `Read`, used to be attributed to a
+    # configuration it never actually ran under. The HOSTNAME comparison
+    # and the confirmation hashes stay case-insensitive on purpose; they
+    # are not this class.
+    $configUpdates = @($records | Where-Object { $_.type -ceq "config.update" })
+    $activeTools = @($records | Where-Object { $_.type -ceq "tools.set_active_tools" })
+    $snapshots = @($records | Where-Object { $_.type -ceq "llm.tools_snapshot" })
+    $permModes = @($records | Where-Object { $_.type -ceq "permission.set_mode" })
 
     if ($configUpdates.Count -ne 2) {
         Fail ("session-scoped-count: expected exactly 2 config.update records, found " + $configUpdates.Count)
@@ -669,20 +678,20 @@ if ($Fresh) {
     if ($recordedPrompt -ne $agentBody) {
         Fail "session-scoped-content: config.update systemPrompt does not match -AgentFile's body"
     }
-    if ($second.modelAlias -ne $Model) {
+    if ($second.modelAlias -cne $Model) {
         Fail "session-scoped-content: the second config.update's modelAlias does not match -Model"
     }
-    if ($second.thinkingEffort -ne $Effort) {
+    if ($second.thinkingEffort -cne $Effort) {
         Fail "session-scoped-content: the second config.update's thinkingEffort does not match -Effort"
     }
 
     $active = $activeTools[0]
     $activeNames = @($active.names)
     $activeDisallowed = @($active.disallowedNames)
-    if (@(Compare-Object $activeNames $agentInfo.Tools).Count -ne 0) {
+    if (@(Compare-Object $activeNames $agentInfo.Tools -CaseSensitive).Count -ne 0) {
         Fail "session-scoped-content: tools.set_active_tools.names does not match -AgentFile's tools list"
     }
-    if (@(Compare-Object $activeDisallowed $agentInfo.DisallowedTools).Count -ne 0) {
+    if (@(Compare-Object $activeDisallowed $agentInfo.DisallowedTools -CaseSensitive).Count -ne 0) {
         Fail "session-scoped-content: tools.set_active_tools.disallowedNames does not match -AgentFile's disallowedTools list"
     }
 
@@ -699,17 +708,17 @@ if ($Fresh) {
     # emits (the snapshot orders its tools differently from
     # tools.set_active_tools.names).
     $snapshotToolNames = @($snapshot.tools | ForEach-Object { $_.name })
-    if (@(Compare-Object $snapshotToolNames $activeNames).Count -ne 0) {
+    if (@(Compare-Object $snapshotToolNames $activeNames -CaseSensitive).Count -ne 0) {
         Fail "session-scoped-content: llm.tools_snapshot tool names do not equal the active tool allowlist"
     }
 
     $permMode = $permModes[0]
-    if ($permMode.mode -ne "auto") {
+    if ($permMode.mode -cne "auto") {
         Fail "session-scoped-content: permission.set_mode.mode is not 'auto'"
     }
 } else {
     foreach ($t in @("config.update", "tools.set_active_tools", "llm.tools_snapshot", "permission.set_mode")) {
-        $present = @($records | Where-Object { $_.type -eq $t })
+        $present = @($records | Where-Object { $_.type -ceq $t })
         if ($present.Count -gt 0) {
             Fail ("session-scoped-on-resume: a " + $t + " record is present in a resume slice")
         }
@@ -717,13 +726,13 @@ if ($Fresh) {
 }
 
 # Rule 13: per-call checks, both kinds.
-$turnPrompts = @($records | Where-Object { $_.type -eq "turn.prompt" })
+$turnPrompts = @($records | Where-Object { $_.type -ceq "turn.prompt" })
 if ($turnPrompts.Count -ne 1) {
     Fail ("turn-prompt-count: expected exactly 1 turn.prompt record, found " + $turnPrompts.Count)
 }
 $turnPrompt = $turnPrompts[0]
 
-$llmRequests = @($records | Where-Object { $_.type -eq "llm.request" })
+$llmRequests = @($records | Where-Object { $_.type -ceq "llm.request" })
 if ($llmRequests.Count -lt 1) {
     Fail "llm-request-count: expected at least 1 llm.request record, found 0"
 }
@@ -731,13 +740,13 @@ if ($llmRequests.Count -lt 1) {
 $toolsHashes = New-Object System.Collections.Generic.HashSet[string]
 $promptHashes = New-Object System.Collections.Generic.HashSet[string]
 foreach ($r in $llmRequests) {
-    if ($r.provider -ne $Provider) {
+    if ($r.provider -cne $Provider) {
         Fail "llm-request-field: an llm.request's provider does not match -Provider"
     }
-    if ($r.modelAlias -ne $Model) {
+    if ($r.modelAlias -cne $Model) {
         Fail "llm-request-field: an llm.request's modelAlias does not match -Model"
     }
-    if ($r.thinkingEffort -ne $Effort) {
+    if ($r.thinkingEffort -cne $Effort) {
         Fail "llm-request-field: an llm.request's thinkingEffort does not match -Effort"
     }
     if ([string]::IsNullOrEmpty($r.toolsHash)) {
@@ -759,7 +768,7 @@ $sliceToolsHash = @($toolsHashes)[0]
 $sliceSystemPromptHash = @($promptHashes)[0]
 
 if ($Fresh) {
-    $snapshot = @($records | Where-Object { $_.type -eq "llm.tools_snapshot" })[0]
+    $snapshot = @($records | Where-Object { $_.type -ceq "llm.tools_snapshot" })[0]
     # Task 4 Step 1b measured llm.request.toolsHash EQUAL to
     # llm.tools_snapshot.hash on this client - so this branch is taken,
     # not the presence-and-nonempty fallback (see the header comment).
@@ -768,7 +777,7 @@ if ($Fresh) {
     }
 }
 
-$logConfigLines = @($logLines | Where-Object { $_ -match "llm config" })
+$logConfigLines = @($logLines | Where-Object { $_ -cmatch "llm config" })
 if ($logConfigLines.Count -ne 1) {
     Fail ("log-config-count: expected exactly 1 new llm config line, found " + $logConfigLines.Count)
 }
@@ -776,13 +785,13 @@ $parsedLog = Parse-LlmConfigLine $logConfigLines[0]
 if ($null -eq $parsedLog) {
     Fail "log-config-malformed: the llm config line does not match the expected shape"
 }
-if ($parsedLog.Provider -ne $Provider) {
+if ($parsedLog.Provider -cne $Provider) {
     Fail "log-config-field: the llm config line's provider does not match -Provider"
 }
-if ($parsedLog.ModelAlias -ne $Model) {
+if ($parsedLog.ModelAlias -cne $Model) {
     Fail "log-config-field: the llm config line's modelAlias does not match -Model"
 }
-if ($parsedLog.ThinkingEffort -ne $Effort) {
+if ($parsedLog.ThinkingEffort -cne $Effort) {
     Fail "log-config-field: the llm config line's thinkingEffort does not match -Effort"
 }
 if ($parsedLog.ToolCount -ne $agentInfo.Tools.Count) {

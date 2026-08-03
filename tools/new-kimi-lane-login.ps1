@@ -227,9 +227,13 @@ $ValidVerdictPairs = @(
     @("malformed", "wrong-type"),
     @("malformed", "blank-token")
 )
+# The pair match is CASE-EXACT. -eq is case-insensitive on this platform,
+# so a validator emitting "OK"/"Valid" was accepted as the frozen
+# "ok"/"valid" pair, and this caller then routed on a status the frozen
+# table does not contain.
 function Test-ValidVerdictPair([string]$Status, [string]$Detail) {
     foreach ($pair in $ValidVerdictPairs) {
-        if ($pair[0] -eq $Status -and $pair[1] -eq $Detail) { return $true }
+        if ($pair[0] -ceq $Status -and $pair[1] -ceq $Detail) { return $true }
     }
     return $false
 }
@@ -322,7 +326,7 @@ function Invoke-CredentialValidator([string]$CredPath) {
         }
         $propNames = @($parsed.PSObject.Properties.Name | Sort-Object)
         $expectedNames = @("detail", "fields", "status")
-        if (($propNames -join ",") -ne ($expectedNames -join ",")) { return @{ Ok = $false } }
+        if (($propNames -join ",") -cne ($expectedNames -join ",")) { return @{ Ok = $false } }
         if (-not ($parsed.status -is [string])) { return @{ Ok = $false } }
         if (-not ($parsed.detail -is [string])) { return @{ Ok = $false } }
         # @(...) wraps a bare SCALAR into a one-element array, so a bare
@@ -415,7 +419,7 @@ function Invoke-LoginBody {
         return
     }
 
-    if (-not ($pre.Status -eq "ok" -and -not $ForceLogin)) {
+    if (-not ($pre.Status -ceq "ok" -and -not $ForceLogin)) {
         # Redirect the client at the LANE home for the duration of this
         # one call only, so its login writes
         # <lane-home>\credentials\kimi-code.json rather than falling back
@@ -456,7 +460,7 @@ function Invoke-LoginBody {
 
     # Success requires structural validity. The post-run verdict decides
     # the exit code, never the client's own exit code.
-    if ($post.Status -eq "ok") { $script:MainCode = 0 } else { $script:MainCode = 6 }
+    if ($post.Status -ceq "ok") { $script:MainCode = 0 } else { $script:MainCode = 6 }
 }
 
 # =======================================================================

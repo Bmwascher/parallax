@@ -111,10 +111,21 @@ try {
         Write-Result "unreadable" "read-failed" @()
     }
 
-    $text = [System.Text.Encoding]::UTF8.GetString($bytes)
-
-    # -- not-json: the bytes do not parse as JSON ------------------------
+    # -- not-json: the bytes are not valid UTF-8, or do not parse as JSON -
+    # The decode is STRICT. `[System.Text.Encoding]::UTF8` substitutes
+    # U+FFFD for every invalid byte, so a credential file with a corrupt
+    # byte inside a token decoded to a replacement character, parsed as
+    # JSON, and was accepted as `ok/valid` - bytes that are not a
+    # credential, read as a good one. Invalid encoding is a structural
+    # failure and lands on the SAME frozen pair as unparseable text,
+    # because no new status/detail vocabulary may be invented here.
+    $text = $null
     $parsed = $null
+    try {
+        $text = (New-Object System.Text.UTF8Encoding($false, $true)).GetString($bytes)
+    } catch {
+        Write-Result "malformed" "not-json" @()
+    }
     try {
         $parsed = $text | ConvertFrom-Json -ErrorAction Stop
     } catch {
@@ -132,7 +143,7 @@ try {
 
     # -- missing-field: a required field is absent ------------------------
     foreach ($required in $RequiredFields) {
-        if ($presentNames -notcontains $required) {
+        if ($presentNames -cnotcontains $required) {
             Write-Result "malformed" "missing-field" $fieldNames
         }
     }

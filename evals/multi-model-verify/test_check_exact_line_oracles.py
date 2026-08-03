@@ -155,3 +155,53 @@ def test_module_docstring_states_the_syntactic_limit():
     doc = checker.__doc__ or ""
     assert "SYNTACTIC" in doc
     assert "semantically equivalent" in doc
+
+
+def test_main_refuses_a_file_it_cannot_decode(tmp_path, monkeypatch, capsys):
+    """END TO END, through main(), because the executable gate is what CI
+    runs. A test that calls check_repository() directly proves the list is
+    built and nothing about the exit code the gate actually returns."""
+    bad = tmp_path / "invalid_utf8.py"
+    bad.write_bytes(b"x = '\xff\xfe not utf-8'\n")
+    monkeypatch.setattr(checker, "REPO_ROOT", tmp_path)
+
+    rc = checker.main()
+    out = capsys.readouterr().out
+
+    assert rc == 1, out
+    assert "NOT MEASURED" in out, out
+    assert "invalid_utf8.py" in out, out
+    assert "UnicodeDecodeError" in out, out
+
+
+def test_main_refuses_a_file_it_cannot_open(tmp_path, monkeypatch, capsys):
+    """The other read branch. An OSError is not reproducible from file
+    content alone, so it is injected at the one call that raises it."""
+    (tmp_path / "ordinary.py").write_text("x = 1\n", encoding="utf-8")
+    monkeypatch.setattr(checker, "REPO_ROOT", tmp_path)
+
+    def _raise(self, *args, **kwargs):
+        raise OSError(13, "injected")
+
+    monkeypatch.setattr(checker.Path, "read_text", _raise)
+
+    rc = checker.main()
+    out = capsys.readouterr().out
+
+    assert rc == 1, out
+    assert "NOT MEASURED" in out, out
+    # `OSError(13, ...)` IS a PermissionError, and the gate names the
+    # concrete type it caught rather than the base class it caught it by.
+    assert "PermissionError" in out, out
+    assert "ordinary.py" in out, out
+
+
+def test_main_returns_zero_on_a_clean_tree(tmp_path, monkeypatch, capsys):
+    """The positive control for both: without an unmeasurable file the same
+    driver returns 0 and prints nothing."""
+    (tmp_path / "ordinary.py").write_text("x = 1\n", encoding="utf-8")
+    monkeypatch.setattr(checker, "REPO_ROOT", tmp_path)
+
+    rc = checker.main()
+    assert rc == 0
+    assert capsys.readouterr().out == ""

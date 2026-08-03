@@ -669,6 +669,12 @@ STUB_VALIDATOR_SCALAR_FIELDS = (
     "Write-Output '{\"status\":\"ok\",\"detail\":\"valid\",\"fields\":\"access_token\"}'\n"
     "exit 0\n"
 )
+STUB_VALIDATOR_CASE_VARIANT_PAIR = (
+    "param([string]$Path)\n"
+    "Write-Output '{\"status\":\"OK\",\"detail\":\"Valid\","
+    "\"fields\":[\"access_token\"]}'\n"
+    "exit 0\n"
+)
 STUB_VALIDATOR_BLANK_LINE_PADDED = (
     "param([string]$Path)\n"
     '[Console]::Out.Write("`n`n{`"status`":`"ok`",`"detail`":`"valid`",'
@@ -716,6 +722,23 @@ def test_builder_rejects_blank_line_padded_validator_stdout(tmp_path):
     lane_home = _fake_lane_home(tmp_path)
     proc, debate_id, owner_pid, owner_ticks = _build_with_stub_validator(
         target, profile, lane_home, STUB_VALIDATOR_BLANK_LINE_PADDED, tmp_path)
+    assert proc.returncode != 0, proc.stdout + proc.stderr
+    assert proc.stdout == ""
+    assert not target.exists()
+    assert _lock_status(lane_home)["state"] == "free"
+
+
+def test_builder_rejects_a_case_variant_verdict_pair(tmp_path):
+    """A pairing outside the frozen table is VALIDATOR FAILURE, never a
+    credential state. -eq is case-insensitive on this platform, so
+    "OK"/"Valid" satisfied the table and the builder then routed on a
+    status the table does not contain - and `Status -ne "ok"` accepted it
+    as a usable credential."""
+    target = tmp_path / "case-variant-home"
+    profile = _fake_profile(tmp_path, FAKE_REAL_CONFIG)
+    lane_home = _fake_lane_home(tmp_path)
+    proc, debate_id, owner_pid, owner_ticks = _build_with_stub_validator(
+        target, profile, lane_home, STUB_VALIDATOR_CASE_VARIANT_PAIR, tmp_path)
     assert proc.returncode != 0, proc.stdout + proc.stderr
     assert proc.stdout == ""
     assert not target.exists()
@@ -1162,8 +1185,12 @@ def test_an_acquire_failure_does_not_attempt_a_release_and_precedes_validation(t
     target = tmp_path / "contended-home"
 
     holder_proc, holder_pid, holder_ticks = _spawn_live_holder()
+    # Bound BEFORE the try, so a failed acquire does not make the finally
+    # raise NameError and bury the real failure. The release is attempted
+    # only if the acquire actually produced custody.
+    holder_debate_id = _new_hex32()
+    holder_nonce = None
     try:
-        holder_debate_id = _new_hex32()
         acquire = _lock_acquire_direct(lane_home, holder_debate_id, holder_pid,
                                         holder_ticks, str(tmp_path / "holder-debate-home"))
         assert acquire.returncode == 0, acquire.stdout + acquire.stderr
@@ -1184,8 +1211,12 @@ def test_an_acquire_failure_does_not_attempt_a_release_and_precedes_validation(t
         after = _lock_status(lane_home)
         assert after == before, "an acquire failure must never mutate the record"
     finally:
-        _lock_release_direct(lane_home, holder_debate_id, holder_pid, holder_ticks, holder_nonce)
-        _kill_holder(holder_proc)
+        try:
+            if holder_nonce is not None:
+                _lock_release_direct(lane_home, holder_debate_id, holder_pid,
+                                     holder_ticks, holder_nonce)
+        finally:
+            _kill_holder(holder_proc)
 
 
 # --- The reclaim/contention integration oracles for the lock boundary. ---
@@ -1218,8 +1249,12 @@ def test_a_build_contending_with_a_live_holder_fails(tmp_path):
     lane_home = _fake_lane_home(tmp_path)
 
     holder_proc, holder_pid, holder_ticks = _spawn_live_holder()
+    # Bound BEFORE the try, so a failed acquire does not make the finally
+    # raise NameError and bury the real failure. The release is attempted
+    # only if the acquire actually produced custody.
+    holder_debate_id = _new_hex32()
+    holder_nonce = None
     try:
-        holder_debate_id = _new_hex32()
         acquire = _lock_acquire_direct(lane_home, holder_debate_id, holder_pid,
                                         holder_ticks, str(tmp_path / "holder-debate-home"))
         assert acquire.returncode == 0, acquire.stdout + acquire.stderr
@@ -1231,8 +1266,12 @@ def test_a_build_contending_with_a_live_holder_fails(tmp_path):
         assert "contended: holder pid %s" % holder_pid in proc.stderr
         assert not target.exists()
     finally:
-        _lock_release_direct(lane_home, holder_debate_id, holder_pid, holder_ticks, holder_nonce)
-        _kill_holder(holder_proc)
+        try:
+            if holder_nonce is not None:
+                _lock_release_direct(lane_home, holder_debate_id, holder_pid,
+                                     holder_ticks, holder_nonce)
+        finally:
+            _kill_holder(holder_proc)
 
 
 # --- Cleanup fault seams: delete and release, independently. ---

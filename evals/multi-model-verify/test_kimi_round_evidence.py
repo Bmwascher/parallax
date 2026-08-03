@@ -1382,3 +1382,68 @@ def test_the_denied_subtree_is_what_makes_that_case_fail(tmp_path):
     assert p["status"] == "failed", proc.stdout + proc.stderr
     assert "session-not-resolvable" in p["reason"], p["reason"]
     assert "2 new session" in p["reason"], p["reason"]
+
+
+# --- case-only differences, one per comparison class --------------------
+#
+# PowerShell's -eq/-ne and Compare-Object are case-INSENSITIVE (measured),
+# so before these were made case-exact a round could declare `AUTO`, carry
+# a tool named `read` where the allowlist says `Read`, or name a
+# case-variant provider, and still be attributed to the declared
+# configuration. Each case below targets a DIFFERENT comparison, so
+# neutering one cannot be masked by another catching the mutation.
+
+
+def test_permission_mode_differing_only_in_case_fails(tmp_path):
+    wire = fresh_wire()
+    idx = find_index(wire, "permission.set_mode", 1)
+    wire = mutate(wire, idx, lambda o: o.__setitem__("mode", "AUTO"))
+    root, sess_dir = build_fresh_layout(tmp_path, wire, fresh_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+    assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path),
+                  "permission.set_mode.mode is not 'auto'")
+
+
+def test_a_record_type_differing_only_in_case_is_not_that_record(tmp_path):
+    """A record type is matched, not parsed, so a case variant must not
+    satisfy the type. Renaming the only permission.set_mode record leaves
+    ZERO of them, which is what the count check must see."""
+    wire = fresh_wire()
+    idx = find_index(wire, "permission.set_mode", 1)
+    wire = mutate(wire, idx, lambda o: o.__setitem__("type", "Permission.Set_Mode"))
+    root, sess_dir = build_fresh_layout(tmp_path, wire, fresh_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+    assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path), "session-scoped")
+
+
+def test_an_active_tool_name_differing_only_in_case_fails(tmp_path):
+    """Compare-Object without -CaseSensitive treats `read` and `Read` as
+    equal, so the allowlist comparison used to pass on a tool the agent
+    file never authorized under that spelling."""
+    wire = fresh_wire()
+    idx = find_index(wire, "tools.set_active_tools", 1)
+
+    def _lower_first(o):
+        o["names"][0] = o["names"][0].lower()
+
+    original = json.loads(wire[idx])["names"][0]
+    assert original != original.lower(), (
+        "this fixture's first tool name must have an upper-case letter for "
+        "the mutation to be a case-only change")
+    wire = mutate(wire, idx, _lower_first)
+    root, sess_dir = build_fresh_layout(tmp_path, wire, fresh_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+    assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path), "session-scoped-content")
+
+
+def test_an_llm_request_provider_differing_only_in_case_fails(tmp_path):
+    wire = fresh_wire()
+    idx = find_index(wire, "llm.request", 1)
+    wire = mutate(wire, idx, lambda o: o.__setitem__("provider", FIXTURE_PROVIDER.upper()))
+    root, sess_dir = build_fresh_layout(tmp_path, wire, fresh_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+    assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path), "llm-request-field")

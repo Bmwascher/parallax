@@ -216,6 +216,30 @@ def test_the_lower_case_record_those_variants_came_from_is_free(lane_home):
     assert json.loads(result.stdout)["state"] == "free"
 
 
+@pytest.mark.parametrize("variant", ["OwnerPid", "ownerpid", "OWNERPID"])
+def test_case_variant_required_field_in_a_held_record_is_malformed(lane_home, debate_home,
+                                                                    variant):
+    """The FREE variants above cannot fail if only the HELD-side field
+    comparisons regress, because they never reach them. A held record whose
+    required key is spelled differently is not the frozen schema, so it is
+    MALFORMED - and an acquire against a malformed record must leave its
+    bytes untouched rather than reclaim it."""
+    rec = write_held(lane_home)
+    rec[variant] = rec.pop("ownerPid")
+    raw = json.dumps(rec).encode("utf-8")
+    write_raw(lane_home, raw)
+
+    status = run_lock(["-Status", "-LaneHome", str(lane_home)])
+    assert status.returncode == 0
+    assert json.loads(status.stdout)["state"] == "MALFORMED"
+
+    acquire = run_lock(["-Acquire", "-LaneHome", str(lane_home), "-DebateId", new_token(),
+                        "-OwnerPid", "1", "-OwnerStartTicksUtc", "1",
+                        "-DebateHome", str(debate_home)])
+    assert acquire.returncode != 0, acquire.stdout + acquire.stderr
+    assert read_raw(lane_home) == raw, "an unrecognized record must not be overwritten"
+
+
 def test_held_record_with_unknown_property_is_malformed(lane_home):
     rec = write_held(lane_home)
     rec["extra"] = "nope"

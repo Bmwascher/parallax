@@ -499,3 +499,56 @@ def test_a_binding_refusal_produces_no_classification(tmp_path):
     line on stdout."""
     proc = run_validator(path=None)
     assert_validator_failure(proc)
+
+
+# --- structural encoding, and case-exact field names --------------------
+
+
+def test_invalid_utf8_inside_a_required_string_is_malformed(tmp_path):
+    """`[System.Text.Encoding]::UTF8` substitutes U+FFFD for every invalid
+    byte, so a credential holding a corrupt byte inside a token used to
+    decode to a replacement character, parse as JSON, and be accepted as
+    ok/valid: bytes that are not a credential, read as a good one. Invalid
+    encoding is a structural failure and lands on the frozen
+    malformed/not-json pair, because no new vocabulary may be invented
+    here."""
+    doc = json.dumps(valid_fields()).encode("utf-8")
+    marker = FAKE_ACCESS.encode("ascii")
+    assert marker in doc
+    # 0x80 is a continuation byte with no lead byte: invalid UTF-8 by
+    # itself, and placed INSIDE a required string rather than in the
+    # structural JSON, so a decoder that substitutes still parses.
+    corrupt = doc.replace(marker, marker[:5] + b"\x80" + marker[5:], 1)
+    path = tmp_path / "corrupt.json"
+    path.write_bytes(corrupt)
+
+    proc = run_validator(path)
+    report = assert_classification(proc)
+    assert report["status"] == "malformed", report
+    assert report["detail"] == "not-json", report
+
+
+def test_the_same_bytes_without_the_invalid_one_are_ok(tmp_path):
+    """The positive control for the case above: identical content, valid
+    encoding, classified ok. So that test measures the invalid byte and
+    not some other property of the fixture."""
+    path = write_doc(tmp_path, "clean.json", **valid_fields())
+    report = assert_classification(run_validator(path))
+    assert report["status"] == "ok" and report["detail"] == "valid"
+
+
+@pytest.mark.parametrize("variant", [
+    "Access_Token", "ACCESS_TOKEN", "access_Token",
+])
+def test_a_case_variant_required_field_name_is_missing_field(tmp_path, variant):
+    """PowerShell's -contains is case-insensitive AND its property access
+    is case-insensitive, so a document whose key is `Access_Token`
+    satisfied the required `access_token` twice over and was accepted as
+    ok. The measured schema names exact keys."""
+    doc = valid_fields()
+    doc[variant] = doc.pop("access_token")
+    path = write_doc(tmp_path, "case.json", **doc)
+
+    report = assert_classification(run_validator(path))
+    assert report["status"] == "malformed", report
+    assert report["detail"] == "missing-field", report

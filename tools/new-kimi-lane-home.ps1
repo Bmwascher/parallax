@@ -196,9 +196,13 @@ $ValidVerdictPairs = @(
     @("malformed", "wrong-type"),
     @("malformed", "blank-token")
 )
+# The pair match is CASE-EXACT. -eq is case-insensitive on this platform,
+# so a validator emitting "OK"/"Valid" was accepted as the frozen
+# "ok"/"valid" pair, and this caller then routed on a status the frozen
+# table does not contain.
 function Test-ValidVerdictPair([string]$Status, [string]$Detail) {
     foreach ($pair in $ValidVerdictPairs) {
-        if ($pair[0] -eq $Status -and $pair[1] -eq $Detail) { return $true }
+        if ($pair[0] -ceq $Status -and $pair[1] -ceq $Detail) { return $true }
     }
     return $false
 }
@@ -294,7 +298,7 @@ function Invoke-CredentialValidator([string]$CredPath) {
         }
         $propNames = @($parsed.PSObject.Properties.Name | Sort-Object)
         $expectedNames = @("detail", "fields", "status")
-        if (($propNames -join ",") -ne ($expectedNames -join ",")) { return @{ Ok = $false } }
+        if (($propNames -join ",") -cne ($expectedNames -join ",")) { return @{ Ok = $false } }
         if (-not ($parsed.status -is [string])) { return @{ Ok = $false } }
         if (-not ($parsed.detail -is [string])) { return @{ Ok = $false } }
         # @(...) wraps a bare SCALAR into a one-element array, so a bare
@@ -588,7 +592,7 @@ try {
         Write-Stderr "credential validator failed"
         exit 6
     }
-    if ($credentialVerdict.Status -ne "ok") {
+    if ($credentialVerdict.Status -cne "ok") {
         $recoveryCommand = Get-LaneLoginRecoveryCommand $resolvedLaneHome
         Write-Stderr "the lane credential is unusable (status: $($credentialVerdict.Status)); run this to fix it:"
         Write-Stderr $recoveryCommand
