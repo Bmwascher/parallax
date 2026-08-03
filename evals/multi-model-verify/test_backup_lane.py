@@ -890,13 +890,26 @@ def test_backup_lane_client_config_sweep():
     # lane closed as it ships, and the standing instruction to keep
     # passing the flag. Both lanes agreed this prose must not sit inside
     # region 2, because a region has to fit one pin.
+    # CORRECTED after the per-task review. The first version of this pin
+    # said the deny list was "measured in cells A and B". It was not: both
+    # cells ALSO passed the flag at an empty target, so discovery was
+    # already suppressed and no discovered skill was ever presented for
+    # the deny list to block. What A and B do measure is the TOOL SURFACE
+    # - five tools, `Skill` absent - which is a different claim. This is
+    # the fourth instance on this branch of a claim wider than its
+    # evidence, and the third about these same two cells.
     assert ("The load-bearing control as the lane ships is the `Skill` "
-            "deny list - a discovered skill cannot be invoked, measured "
-            "in cells A and B of the same record.") in body
+            "deny list, and what is MEASURED of it is the TOOL SURFACE: "
+            "cells A and B advertised five tools with `Skill` absent, and "
+            "the round validator compares that snapshot against the agent "
+            "file by exact list equality on every session-creating call. "
+            "Those cells passed the flag as well, so they measure the "
+            "COMPOSITION and cannot attribute their null result to either "
+            "layer alone.") in body
     assert ("Keep passing `--skills-dir` on every call, fresh and "
             "resumed, as a measured second layer, and claim for it "
-            "exactly what was measured: replacement, conditional on an "
-            "empty target, on 0.31.1.") in body
+            "exactly what was measured: suppression of the home root, "
+            "conditional on an empty target, on 0.31.1.") in body
     # And the files stay an injection surface by a different route, which
     # is why remediation deletes them rather than trusting the reviewer:
     # in the measured round the reviewer READ both canaries and declined

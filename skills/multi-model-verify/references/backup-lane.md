@@ -371,11 +371,15 @@ exactly like the primary lane's `~/.codex/AGENTS.md` — never a finding.
   path. A client whose skill delivery changes shape retires this
   measurement rather than inheriting it.
   <!-- contract:end -->
-  The load-bearing control as the lane ships is the `Skill` deny list - a
-  discovered skill cannot be invoked, measured in cells A and B of the
-  same record. Keep passing `--skills-dir` on every call, fresh and
-  resumed, as a measured second layer, and claim for it exactly what was
-  measured: replacement, conditional on an empty target, on 0.31.1.
+  The load-bearing control as the lane ships is the `Skill` deny list, and
+  what is MEASURED of it is the TOOL SURFACE: cells A and B advertised five
+  tools with `Skill` absent, and the round validator compares that snapshot
+  against the agent file by exact list equality on every session-creating
+  call. Those cells passed the flag as well, so they measure the
+  COMPOSITION and cannot attribute their null result to either layer alone.
+  Keep passing `--skills-dir` on every call, fresh and resumed, as a
+  measured second layer, and claim for it exactly what was measured:
+  suppression of the home root, conditional on an empty target, on 0.31.1.
 - A planted `SKILL.md` remains READABLE as ordinary workspace content
   whatever the discovery configuration does. In the measured round the
   reviewer read both canaries with `Read`, recognized them as injection

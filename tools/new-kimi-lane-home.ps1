@@ -52,11 +52,13 @@
 #
 # Exit codes:
 #   0  built (custody JSON on stdout) / removed ("removed <path>" on stdout)
-#   1  reserved: an EXISTING, UNCHANGED gate refusal (destination reused,
-#      unsafe -Model/-Effort, git-work-tree check, model-table carrying,
-#      or a Remove-mode sentinel/dangerous-root/profile/.git refusal)
-#      propagates as an ordinary uncaught PowerShell error, same as before
-#      this task
+#   1  a gate refusal that propagates as an ordinary UNCAUGHT PowerShell
+#      error: destination reused, unsafe -Model/-Effort, git-work-tree
+#      check, model-table carrying, a Remove-mode sentinel/dangerous-root/
+#      profile/.git refusal, or - added 0.20.0 - the skills-directory
+#      POSTCONDITION and its two test seams. Measured: an uncaught throw
+#      exits 1, which is why the postcondition is listed here and not
+#      under 2 with the parameter refusals
 #   2  a -LaneHome/-DebateId/-OwnerPid/-OwnerStartTicksUtc/-Nonce value was
 #      refused by this script or by the lock tool (parameter refusal, or
 #      an identity/-Path mismatch at the lock)

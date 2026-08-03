@@ -636,3 +636,134 @@ one file, it was FALSE for it. The docstring now states both measurements, notes
 that git's eol normalization can flip either on a fresh checkout, and names
 `read_text`'s universal-newline folding as the thing that actually makes the pins
 match.
+
+---
+
+## D16 - Task 5: the frozen plan's builder snippet calls a function that does not exist
+
+**Task:** 5. **Class:** plan defect. **Found by:** the session, while writing the
+step; independently confirmed by the Fable review. **FIXED.**
+
+Revision 7's Task 5 Step 5 writes `Fail (...)` for both refusal paths.
+`tools/new-kimi-lane-home.ps1` has NO `Fail` function - the only match in the
+whole file is the phrase "Fail closed" inside a comment. Followed verbatim the
+build would have refused with a "term not recognized" error carrying the wrong
+message, and the tests, which assert the message text, would have failed for a
+reason unrelated to what they check.
+
+Substituted `throw`, which is what that section of the script already uses and
+is also the only correct choice: the postcondition sits inside the guarded
+`try`, so throwing is what runs the catch that deletes the home and the finally
+that releases the lock. A bare stderr write and exit would have left an
+unreleasable lane. The reasoning is written into the code rather than left here.
+
+---
+
+## D17 - Task 5: the deny-list sentence cited cells that cannot carry it
+
+**Task:** 5. **Class:** claim wider than its evidence. **Found by:** the Fable
+review. **FIXED.**
+
+The prose shipped as "the load-bearing control as the lane ships is the `Skill`
+deny list - a discovered skill cannot be invoked, measured in cells A and B of
+the same record."
+
+Cells A and B BOTH passed `--skills-dir` at an empty target, so discovery was
+already suppressed and no discovered skill was ever presented for the deny list
+to block. Their null result is fully explained by the flag alone. Verified from
+the cell results rather than argued: both record `skillsDirPassed: true`.
+
+What A and B DO measure about the deny list is the TOOL SURFACE - `toolCount` 5
+with `Skill` absent from the advertised snapshot, compared against the agent file
+by exact list equality on every session-creating call. The text now says that,
+and says plainly that the cells measure the composition.
+
+**This is the FOURTH instance on this branch of a claim wider than its evidence,
+and the THIRD about these same two cells.** The first two were caught by the
+reopened debate and are already retracted in the probe record. That a fourth
+survived into shipped contract text, one commit after the correction that named
+the fault, is the finding worth carrying forward.
+
+**Watched to fail:** reverting the prose to the overreaching wording fails
+`test_backup_lane_client_config_sweep`; restored byte-identical.
+
+---
+
+## D18 - Task 5: the plan promised a pin its own step did not contain
+
+**Task:** 5. **Class:** plan defect. **Found by:** the Fable review. **FIXED.**
+
+Step 4's rationale states that the corrected `SKILL.md` sentence "gets one direct
+pin added in Step 1". Step 1's code block contains no such pin, and the
+implementer following the plan's literal code added none. The corrected sentence
+therefore shipped unpinned, in a file whose PREVIOUS version of that sentence was
+also unpinned - which is exactly how a falsified measurement stayed in a shipped
+skill until a probe contradicted it.
+
+Fixed with `test_the_confounded_flag_claim_stays_corrected` in
+`test_multi_model_verify.py`. It pins the corrected sentence AND asserts the
+falsified phrase is absent, so a restoration fails rather than merely not
+matching.
+
+**The pin normalizes whitespace, and that is the OPPOSITE reasoning to D4 and
+D15.** Those two were defects because a newline-anchored needle was matched
+against whitespace-collapsed text. This needle spans a line wrap and anchors on
+no newline, so collapsing is what makes it match. The docstring says so, because
+the two cases look identical from a distance.
+
+**Watched to fail:** restoring `suppresses nothing observable` to `SKILL.md`
+fails the new case; restored byte-identical.
+
+---
+
+## D19 - Task 5: three smaller departures, recorded rather than silent
+
+**Task:** 5. **Class:** recorded deviation. **Found by:** the Fable review
+(Minors 1 to 3).
+
+- **The trailing prose said "measured: replacement".** The probe measured
+  suppression of ONE root under one condition; "replacement" is the client's help
+  text, which the probe record explicitly refuses to launder into a measurement.
+  Changed to "suppression of the home root".
+- **`SKILL.md`'s replacement is shorter than the frozen Step 4 block.** Same
+  meaning, fewer words, for the lint budget the step itself cites. The plan
+  claimed a SHORTENING and the first attempt was 21 characters LONGER, which is
+  what prompted the tightening; measured after: 5120 tokens to 5117.
+- **The builder's exit-code taxonomy did not list the new refusal.** Added - and
+  the first attempt filed it under exit 2 with the parameter refusals, which is
+  WRONG. Measured live: an uncaught `throw` in this script exits 1. Corrected,
+  and the measurement is written into the header so the next reader does not have
+  to repeat it.
+
+---
+
+## Task 5 evidence
+
+- Every new assertion watched to FAIL before its implementation existed, and for
+  the reason it claims: the four text pins failed on absent text (first failing
+  assert named at `test_backup_lane.py:855`); `test_declared_regions_match_the_
+  documents` failed with `declared region(s) not found in any document:
+  ['home-skill-root-disposition', 'home-skill-root-disposition-limit']`; the
+  three postcondition cases failed because the seam and check did not exist.
+  `test_a_clean_build_still_succeeds_with_an_empty_skills_dir` PASSED at that
+  point, which is correct - it is the positive control, not evidence.
+- **Both hosts.** `test_kimi_lane_home.py` is 88 passed under `powershell.exe`
+  and 88 passed under `pwsh.exe`.
+- Full modules after the fixes: 331 passed, 1 skipped.
+- Both contract regions confirmed COLLECTED and covered, by calling
+  `contract_coverage.collect_regions` directly rather than inferring it from a
+  green suite.
+
+**Step 7's four coverage mutations, each reverted, each caught by the right
+test:**
+
+| mutation | caught by |
+|---|---|
+| M1 weakening sentence appended INSIDE region 2 | `test_every_marked_region_is_locked_by_a_pin` |
+| M2 region 2's `contract:end` deleted | `test_declared_regions_match_the_documents` AND the pin test |
+| M3 a sentence deleted from inside region 1 | the pin test AND `test_backup_lane_client_config_sweep` |
+| M4 the limit id renamed in the DOCUMENT only | `test_declared_regions_match_the_documents` |
+
+**M1 is the case the reopened debate turned on.** It leaves every pinned literal
+byte-identical and would pass an ordinary pin. It fails the region check. That is
+the argument the primary lane won, executed rather than asserted.

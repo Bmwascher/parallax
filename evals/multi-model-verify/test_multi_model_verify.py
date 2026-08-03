@@ -191,6 +191,30 @@ class TestTransportContract:
         assert "codex-context-probe.ps1" in text
         assert "new-review-mirror.ps1" in text
 
+    def test_the_confounded_flag_claim_stays_corrected(self):
+        """SKILL.md carried a MEASUREMENT that a later probe falsified: it
+        said a run with `--skills-dir` and a run without were
+        indistinguishable, so the flag "suppresses nothing observable".
+        The 2026-08-03 probe measured the opposite. Nothing pinned that
+        sentence, so restoring it would have kept the suite green - a
+        false record of a measurement, which is the defect class this
+        cycle exists to remove.
+
+        NORMALIZED on purpose, and the reasoning is the opposite of D4's.
+        This needle spans a line wrap and anchors on NO newline, so
+        collapsing whitespace is what makes it match rather than what
+        destroys it. A pin whose needle contains a newline must never be
+        written this way.
+        """
+        text = " ".join(read(SKILL_MD).split())
+        assert "That 2026-07-31 comparison was CONFOUNDED:" in text
+        assert ("`Skill` was denied, so it measured the deny list, not "
+                "the flag.") in text
+        assert ("See references/backup-lane.md for the measured discovery "
+                "controls and their limits.") in text
+        assert "suppresses nothing observable" not in text, (
+            "the falsified 2026-07-31 claim is back in SKILL.md")
+
     def test_resume_flags_before_subcommand(self):
         text = read(SKILL_MD)
         # Model and effort must be re-pinned on EVERY call including resume -
