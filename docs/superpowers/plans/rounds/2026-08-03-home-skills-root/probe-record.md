@@ -165,14 +165,29 @@ confirmation string; the body arrives as a separate `context.append_message`
 with `origin.kind: skill_activation`. Measured in D, in E, and by the negative
 shape in C and E2.
 
-The plan took that clause from the committed fixture
-`evals/multi-model-verify/fixtures/kimi-round/fresh-wire.jsonl:13-18`, where
-`tool.call` and `tool.result` are TOP-LEVEL record types. On the live client
-they are nested inside `context.append_loop_event`, and the record types
-present are `metadata`, `config.update`, `tools.set_active_tools`,
-`permission.set_mode`, `turn.prompt`, `context.append_message`,
-`context.append_loop_event`, `llm.tools_snapshot`, `llm.request` and
-`usage.record`. The fixture does not describe this client's layout.
+**The cause is NOT a stale fixture, and an earlier version of this record said
+it was. That was false and is corrected here**, because a debate that
+adjudicates from it would be adjudicating from a fiction. The committed fixture
+`evals/multi-model-verify/fixtures/kimi-round/fresh-wire.jsonl` matches the live
+client exactly, record type for record type, and the `tool.call` and
+`tool.result` the plan cites at lines 13-14 are nested inside
+`context.append_loop_event` precisely as they are live. Re-measured 2026-08-03
+against all five cells.
+
+The real defect is a generalization ACROSS TOOLS. The fixture's `tool.result` is
+a **Grep** result, and a Grep result's raw `output` genuinely IS the answer
+(`notes.txt:2:widget count: 42`). The plan's measured fact 6b states that
+"`tool.result` records carry the tool's raw `output` into the wire transcript",
+which is true, and the gate then assumed a **Skill** result's raw output would
+likewise be the skill body. It is not. Measured in D and in E, `Skill`'s result
+is a fixed confirmation string, `Skill "<name>" loaded inline. Follow its
+instructions.`, and the body is delivered separately as a
+`context.append_message` whose `origin.kind` is `skill_activation`. One tool's
+result shape was read as every tool's.
+
+That distinction is what makes this worth the debate's time: the same
+generalization would silently weaken any future oracle written to read a tool's
+effect out of its own result record.
 
 Read literally, every positive branch fails its own clause and the run is VOID.
 Read against the clause's stated purpose, the run is decisive. **The two
