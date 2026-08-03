@@ -241,12 +241,11 @@ the user's own credential still reads `ok`/`valid`.
 
 ## Mutation audit, SESSION-MEASURED
 
-Every fix in rounds 41 through 45 was checked by REVERTING it and running
-the oracle that claims to cover it. This table is review evidence, not a
-product oracle: the committed tests carry the distinguishing fixtures,
-and these results are session-measured rather than independently
-reproducible. Each row is one source replacement in the named file, run
-against the commit in the last column.
+Selected review mutations from rounds 41 through 46 are summarized below.
+This is session-measured context, not a complete or independently
+reproducible audit. Rows may group related replacements; Command entries
+are selectors or per-case labels rather than copy-paste invocations;
+Result entries identify a commit only where one is written.
 
 | Reverted | Command | Result |
 |---|---|---|
@@ -261,9 +260,9 @@ against the commit in the last column.
 | each ordinal comparison, one at a time | per-case | 1 failed each, this round |
 | `switch -CaseSensitive` | `-k first_record_type` | **0 failed** — recorded as defensive, not claimed |
 
-The last row is the point of keeping this table: one change of the ten
-could not be shown to matter, and it is written down as such rather than
-listed with the rest.
+The last row is the point of keeping this table: the final listed
+mutation could not be shown to matter, and it is written down as such
+rather than listed with the rest.
 
 ## What is NOT done
 
