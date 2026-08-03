@@ -47,10 +47,13 @@ BODY_END = "$toplevel ="
 # proves the platform it ran on, which is the 0.16.1 lesson - a lock that
 # passed on Windows PowerShell and did not lock on pwsh - one step out.
 #
-# COVERAGE COST, recorded rather than left quiet: CI is Linux, so CI does
-# not exercise these 155 cases at all. A green CI badge on this repo says
-# nothing about the probe or the mirror. Backlog item 10 carries the fix,
-# which is a Windows job, not a looser test.
+# COVERAGE, recorded rather than assumed: these cases are Windows-only, so
+# the ubuntu job skips them. The `powershell-hosts` job on windows-latest
+# runs this module under BOTH powershell.exe and pwsh.exe, which is what
+# makes the ubuntu skip a division of labour rather than a coverage hole.
+# A green badge on this repo therefore does say something about the probe.
+# If this module ever leaves both Windows pytest steps, the claim above is
+# false and test_backup_lane.py asserts it back.
 POWERSHELL = (os.environ.get("PARALLAX_PS_HOST")
               or shutil.which("powershell") or shutil.which("pwsh"))
 

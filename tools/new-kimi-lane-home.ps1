@@ -52,11 +52,13 @@
 #
 # Exit codes:
 #   0  built (custody JSON on stdout) / removed ("removed <path>" on stdout)
-#   1  reserved: an EXISTING, UNCHANGED gate refusal (destination reused,
-#      unsafe -Model/-Effort, git-work-tree check, model-table carrying,
-#      or a Remove-mode sentinel/dangerous-root/profile/.git refusal)
-#      propagates as an ordinary uncaught PowerShell error, same as before
-#      this task
+#   1  a gate refusal that propagates as an ordinary UNCAUGHT PowerShell
+#      error: destination reused, unsafe -Model/-Effort, git-work-tree
+#      check, model-table carrying, a Remove-mode sentinel/dangerous-root/
+#      profile/.git refusal, or - added 0.20.0 - the skills-directory
+#      POSTCONDITION and its two test seams. Measured: an uncaught throw
+#      exits 1, which is why the postcondition is listed here and not
+#      under 2 with the parameter refusals
 #   2  a -LaneHome/-DebateId/-OwnerPid/-OwnerStartTicksUtc/-Nonce value was
 #      refused by this script or by the lock tool (parameter refusal, or
 #      an identity/-Path mismatch at the lock)
@@ -900,6 +902,49 @@ enabled = true
     Set-Content -LiteralPath (Join-Path $resolved "config.toml") -Value $configToml -Encoding ascii
 
     New-Item -ItemType Directory -Path (Join-Path $resolved "skills") | Out-Null
+
+    # POSTCONDITION on the builder's OWN act. NOT a control against unknown
+    # writers, and the lane contract says exactly that.
+    #
+    # The reopened home-skills-root debate (2026-08-03) established that the
+    # New-Item above is the ONLY site in this repository that writes here, so
+    # there is no shipped writer to defend against and no per-round check is
+    # warranted - a check nothing can fail is indistinguishable from a broken
+    # one on every run forever. What this DOES catch is a future edit to THIS
+    # script that seeds content, a copy that starts following a junction, or a
+    # refactor that reorders creation: the one moment content can legitimately
+    # enter.
+    #
+    # -Force, because a hidden intruder is still an intruder and a check blind
+    # to it passes the obvious case and fails the real one. TERMINATING,
+    # because an enumeration that failed is not an empty directory - an unmade
+    # measurement is never a clean one. Both are watched by their own tests.
+    $skillsDir = Join-Path $resolved "skills"
+    if ($env:PARALLAX_SKILLS_SEED_FILE) {
+        Set-Content -LiteralPath (Join-Path $skillsDir "seeded.txt") `
+            -Value "PARALLAX_SKILLS_SEED_FILE injected" -Encoding ascii
+    }
+    if ($env:PARALLAX_SKILLS_SEED_HIDDEN) {
+        $hidden = Join-Path $skillsDir "hidden.txt"
+        Set-Content -LiteralPath $hidden -Value "hidden" -Encoding ascii
+        (Get-Item -LiteralPath $hidden -Force).Attributes = `
+            [System.IO.FileAttributes]::Hidden
+    }
+    # THROW, not a bare stderr write and exit. This sits inside the guarded
+    # try above, so throwing is what runs the cleanup that deletes the home
+    # and the finally that releases the lock. A refusal that left either
+    # behind would hand the caller an unreleasable lane.
+    $seeded = @()
+    try {
+        $seeded = @(Get-ChildItem -LiteralPath $skillsDir -Force -ErrorAction Stop)
+    } catch {
+        throw ("skills directory could not be enumerated after creation: " +
+               $_.Exception.Message)
+    }
+    if ($seeded.Count -ne 0) {
+        throw ("skills directory is not empty after creation: " +
+               $seeded.Count + " entry(ies)")
+    }
 
     # -------------------------------------------------------------------
     # 6. Construct AND EMIT the custody JSON line. JSON construction and

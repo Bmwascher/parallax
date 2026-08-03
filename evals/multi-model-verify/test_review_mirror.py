@@ -31,7 +31,13 @@ STUB = Path(__file__).parent / "fixtures" / "stub-codex" / "stub-codex.ps1"
 # Guarding only on a PowerShell host being present was not enough: the CI
 # runner ships `pwsh`, so these cases ran on Linux and failed there for a
 # second, different reason. See the probe suite's header for the full
-# sequence and for the coverage cost this skip accepts.
+# sequence.
+#
+# COVERAGE, recorded rather than assumed: these cases are Windows-only, so
+# the ubuntu job skips them. The `powershell-hosts` job on windows-latest
+# runs this module under BOTH powershell.exe and pwsh.exe. If this module
+# ever leaves both Windows pytest steps, that claim is false and
+# test_backup_lane.py asserts it back.
 POWERSHELL = (os.environ.get("PARALLAX_PS_HOST")
               or shutil.which("powershell") or shutil.which("pwsh"))
 

@@ -40,6 +40,57 @@ def test_bad_filter_then_count_idiom_is_flagged():
     assert violations == [(2, "lines")], violations
 
 
+def test_the_split_newline_spelling_is_flagged():
+    """The same defect written with `.split("\\n")` instead of
+    `.splitlines()`.
+
+    This spelling shipped into evals/multi-model-verify/test_home_skill_
+    canary.py on 2026-08-03 and passed this gate untouched, because the
+    matcher keyed on the attribute name `splitlines` alone. It was caught
+    by a whole-branch review, not by CI. The class does not care which
+    call produced the list; it cares that blanks were discarded before
+    the survivors were counted.
+    """
+    source = (
+        "def read_state(raw):\n"
+        "    lines = [ln for ln in raw.split('\\n') if ln.strip()]\n"
+        "    assert len(lines) == 1\n"
+        "    return lines[0]\n"
+    )
+    violations = checker.find_violations(source, filename="bad.py")
+    assert violations == [(2, "lines")], violations
+
+
+def test_the_split_crlf_spelling_is_flagged():
+    """A separator does not have to be a bare LF to be a line separator."""
+    source = (
+        "def read_state(raw):\n"
+        "    lines = [ln for ln in raw.split('\\r\\n') if ln.strip()]\n"
+        "    assert len(lines) == 1\n"
+        "    return lines[0]\n"
+    )
+    violations = checker.find_violations(source, filename="bad.py")
+    assert violations == [(2, "lines")], violations
+
+
+def test_splitting_on_a_non_newline_separator_is_not_flagged():
+    """Direction 2 for the widened matcher, and the reason it is widened
+    on the SEPARATOR rather than on `.split` generally.
+
+    Splitting a comma-separated field list and requiring one survivor is
+    not this defect class: nothing there is a line, and no contract
+    promises one. Flagging it would make the gate cry wolf on correct
+    code, and a gate that cries wolf gets suppressed.
+    """
+    source = (
+        "def one_field(raw):\n"
+        "    parts = [p for p in raw.split(',') if p.strip()]\n"
+        "    assert len(parts) == 1\n"
+        "    return parts[0]\n"
+    )
+    assert checker.find_violations(source, filename="ok.py") == []
+
+
 def test_bad_filter_then_count_idiom_with_not_equal_test_is_flagged():
     """The same defect written as `if len(lines) != 1: raise ...` (the
     shape actually used at evals/multi-model-verify/test_lock_protocol_

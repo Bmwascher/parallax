@@ -81,6 +81,13 @@ through a directory JUNCTION and must never hold a COPY: the access token
 lives 900 seconds and a refresh rotates BOTH tokens, so a copy that
 refreshes retires the original. Change the tests first.
 
+The same builder asserts, as a POSTCONDITION on its own act, that the
+`skills/` directory it just created is empty. That is NOT a per-round
+control and must not be described as one: nothing re-checks it at
+dispatch, because the builder's own `New-Item` is the only site in this
+repo that writes there. Its cases are in `test_kimi_lane_home.py`, and
+its two seams are builder contract rather than test scaffolding.
+
 Contract text inside `contract:start` / `contract:end` HTML comment
 markers must sit WHOLE inside a single pin in `evals/multi-model-verify/`.
 The checker scans all Markdown under `skills/`, plus `agents/*.md` and

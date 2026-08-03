@@ -67,11 +67,12 @@ toggled on, its stop-time review overlaps mode `diff` — expected, not a bug.
    the auditor that break independence. kimi-code, the backup lane's
    client, documents `.kimi-code/skills/` as a project-level discovery
    root too (references/backup-lane.md), so the sweep covers it
-   identically. Probed 2026-07-31 with canaries planted at both roots: a
-   run with `--skills-dir` and a run without it were indistinguishable,
-   and neither loaded either canary, so that flag suppresses nothing
-   observable — this enumeration is the PRIMARY control for the reviewed
-   tree's skills and agents, not defence in depth. Enumerate the whole
+   identically. That 2026-07-31 comparison was CONFOUNDED:
+   `Skill` was denied, so it measured the deny list, not the flag.
+   Re-probed 2026-08-03, the flag DOES suppress the home root while its
+   target stays empty (references/backup-lane.md). This enumeration is
+   the PRIMARY control for the reviewed tree's skills and agents, not
+   defence in depth. Enumerate the whole
    tree in one listing — `git ls-files --cached --others '*AGENTS.md'
    '.agents/*' '.kimi-code/*'` — which covers tracked, untracked, AND
    ignored files: `--others` without `--exclude-standard` lists ignored

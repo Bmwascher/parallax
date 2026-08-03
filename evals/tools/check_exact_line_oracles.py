@@ -15,21 +15,35 @@ independent sweeps for that idiom each missed at least one instance
 before it was swept mechanically; this script is that mechanical sweep,
 run in the eval gate so a tenth instance cannot be reintroduced silently.
 
-It flags an assignment `name = [x for x in EXPR.splitlines() if COND]`
-where COND filters on truthiness (any non-comparison test, e.g.
-`x.strip()`) or on inequality with the empty string (`x != ""` /
-`x.strip() != ""`) ONLY WHEN `name` is later compared to `len(name) == 1`
-or `len(name) != 1` in the same lexical scope. Both halves are required:
-a comprehension that filters blank lines for a legitimate multi-record
-result (never tested for length one) is NOT flagged.
+It flags an assignment `name = [x for x in <line split> if COND]` where
+COND filters on truthiness (any non-comparison test, e.g. `x.strip()`) or
+on inequality with the empty string (`x != ""` / `x.strip() != ""`) ONLY
+WHEN `name` is later compared to `len(name) == 1` or `len(name) != 1` in
+the same lexical scope. Both halves are required: a comprehension that
+filters blank lines for a legitimate multi-record result (never tested
+for length one) is NOT flagged.
+
+A <line split> is `.splitlines()` OR `.split(<sep>)` where <sep> is a
+string literal containing a newline. The SEPARATOR is what makes it a
+line split, not the method name - `.split(",")` is a field parse and is
+deliberately not matched.
+
+WIDENED 2026-08-03, and the reason is this gate's own miss. Until then it
+keyed on the attribute name `splitlines` alone, and a fresh instance of
+the defect class written `raw.split("\\n")` shipped straight past it into
+evals/multi-model-verify/test_home_skill_canary.py. A whole-branch review
+caught it; CI did not. That makes four spellings of this class that a
+sweep has missed, counting the three hand sweeps recorded above.
 
 LIMIT, stated once here and nowhere overstated: this checker recognizes
-one SYNTACTIC shape - a list comprehension over `.splitlines()` with a
+one SYNTACTIC shape - a list comprehension over a line split with a
 truthiness/"!= \"\"" filter, whose target is later measured for length
 one. It cannot prove that an arbitrarily-written parser is semantically equivalent
 to `accept_exactly_one_nonempty_line()`, and a clean run of this script
 must never be described as proving the defect class is gone - only that
-this one syntactic idiom was not found.
+this one syntactic idiom was not found. A `for` loop that appends, a
+`filter()` call, a regex split, or a separator built at runtime are all
+still invisible to it.
 """
 import ast
 import sys
@@ -78,16 +92,45 @@ def _is_risky_filter(expr):
     return True
 
 
+_NEWLINE_SEPARATORS = ("\n", "\r\n", "\r")
+
+
+def _is_line_split(call):
+    """True if `call` splits text into LINES: `.splitlines()`, or
+    `.split(<sep>)` where <sep> is a string literal containing a newline.
+
+    THE SEPARATOR IS WHAT MATTERS, NOT THE METHOD NAME. Keying on
+    `splitlines` alone is how this gate stayed green over a fresh instance
+    of its own defect class on 2026-08-03: the same discard-then-count
+    idiom written `raw.split("\\n")` was invisible to it, and a review
+    caught what CI could not.
+
+    `.split(",")` is deliberately NOT matched. That is a field parse, no
+    contract there promises one LINE, and a gate that fired on it would
+    cry wolf on correct code - and a gate that cries wolf gets suppressed.
+    """
+    if not (isinstance(call, ast.Call) and isinstance(call.func, ast.Attribute)):
+        return False
+    if call.func.attr == "splitlines":
+        return True
+    if call.func.attr != "split":
+        return False
+    if len(call.args) != 1 or call.keywords:
+        return False
+    arg = call.args[0]
+    return (isinstance(arg, ast.Constant) and isinstance(arg.value, str)
+            and arg.value in _NEWLINE_SEPARATORS)
+
+
 def _is_risky_listcomp(value):
-    """True if `value` is `[... for x in EXPR.splitlines() if COND]` with
-    COND matching `_is_risky_filter` (a truthiness or "!= \"\"" filter)."""
+    """True if `value` is `[... for x in <line split> if COND]` with COND
+    matching `_is_risky_filter` (a truthiness or "!= \"\"" filter)."""
     if not isinstance(value, ast.ListComp) or len(value.generators) != 1:
         return False
     gen = value.generators[0]
     if getattr(gen, "is_async", 0):
         return False
-    if not (isinstance(gen.iter, ast.Call) and isinstance(gen.iter.func, ast.Attribute)
-            and gen.iter.func.attr == "splitlines"):
+    if not _is_line_split(gen.iter):
         return False
     return any(_is_risky_filter(f) for f in gen.ifs)
 

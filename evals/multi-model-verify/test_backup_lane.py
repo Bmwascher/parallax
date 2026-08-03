@@ -839,32 +839,77 @@ def test_backup_lane_client_config_sweep():
             "value in a debate's home was written by something other "
             "than the builder and is a finding about the home, not a "
             "note.") in body
-    # The retired "unprobed territory" pin carried a DISPOSITION for the
-    # source this lane cannot clear. Its successor names which roots are
-    # covered by what, and that `~/.agents/skills/` is covered by
-    # nothing: preflight-3 operates on the MIRROR and KIMI_CODE_HOME does
-    # not relocate the user's home, so an uneven coverage claim here
-    # would be the same overclaim in a new place.
+    # 0.20.0: two retired pins are replaced here. The first instructed
+    # every round to record an unknown, and the probe resolved it. The
+    # second called `--skills-dir` unmeasurable, which was true only of
+    # the CONFOUNDED configuration it was measured in, where `Skill` was
+    # denied so nothing could load either way.
+    #
+    # The disposition and the limit that binds it are SEPARATE regions
+    # because one pin must lock a whole region, and each is long enough
+    # alone. The prose after them is deliberately OUTSIDE both regions,
+    # so the regions stay pinnable.
     assert ("`~/.agents/skills/` lives in the user's own home, is not "
             "relocated by `KIMI_CODE_HOME`, and NOTHING this lane runs "
-            "removes it. Enumerate that root before round 1 and record "
-            "what it holds; a non-empty one is unprobed territory, "
-            "recorded as such rather than assumed absorbed by the tool "
-            "allowlist.") in body
-    # The old "LATENT surface" pin recorded that a back-channel key's
-    # presence says nothing about whether anything is actually being
-    # merged. Its successor is stronger and states the same restraint:
-    # `--skills-dir` is a MITIGATION whose effect is UNMEASURABLE here,
-    # not a control - measured, runs with and without it were
-    # indistinguishable because nothing loaded either way. Claiming it as
-    # a control is the overclaim this pin exists to block.
-    assert ("`--skills-dir` is a MITIGATION whose effect is UNMEASURABLE "
-            "in this configuration, not a control") in body
-    assert ("The load-bearing controls are that allowlist and preflight-3 "
-            "remediation.") in body
-    assert ("Keep passing `--skills-dir`, because it costs nothing and "
-            "covers a future release that advertises regardless, but "
-            "claim nothing for it.") in body
+            "removes it.") in body
+    assert ("Enumerate that root before round 1 and record its COUNT, "
+            "never its contents - the repo is public. MEASURED "
+            "2026-08-03 on kimi-code 0.31.1, and no longer unprobed: a "
+            "canary skill planted in that root was REACHABLE when "
+            "`--skills-dir` was omitted - the wire carried the "
+            "invocation and a `skill_activation` message delivering the "
+            "body - and was NOT found when the flag was passed, the "
+            "lookup returning the calibrated not-found result exactly. "
+            "Treat the enumeration as an environment record of reachable "
+            "external instruction inventory, not as a control and not as "
+            "evidence that any real skill was invoked. Record: "
+            "docs/superpowers/plans/rounds/2026-08-03-home-skills-root/"
+            "probe-record.md") in body
+    assert ("The disposition is bound to what the probe reached: one "
+            "skill, named exactly, at the home root, on kimi-code "
+            "0.31.1. Suppression was measured for that root ALONE; the "
+            "two project roots were never canaried, and their exclusion "
+            "rests on the flag's measured replacement semantics and the "
+            "client's own help text, with preflight-3 remediation "
+            "clearing them in the mirror regardless. The flag REPLACES "
+            "discovery with its target rather than adding to it, so it "
+            "does not suppress its own target - it selects it - and its "
+            "suppression of the other roots holds only while "
+            "`<debate-home>/skills/` is EMPTY: the builder creates it "
+            "empty and asserts that as its own postcondition, and no "
+            "per-round check re-verifies it at dispatch. On that client "
+            "`systemPromptChars` equalled the LF-normalized agent body "
+            "in every cell, including both loaded-canary cells, so the "
+            "measured delivery path was `skill_activation` and not "
+            "system-prompt injection: the deny list controls that "
+            "measured path, and the lane's system-prompt equality "
+            "checks, not the deny list, would have to reject any future "
+            "injection path. A client whose skill delivery changes shape "
+            "retires this measurement rather than inheriting it.") in body
+    # OUTSIDE the regions, and pinned separately: what actually holds the
+    # lane closed as it ships, and the standing instruction to keep
+    # passing the flag. Both lanes agreed this prose must not sit inside
+    # region 2, because a region has to fit one pin.
+    # CORRECTED after the per-task review. The first version of this pin
+    # said the deny list was "measured in cells A and B". It was not: both
+    # cells ALSO passed the flag at an empty target, so discovery was
+    # already suppressed and no discovered skill was ever presented for
+    # the deny list to block. What A and B do measure is the TOOL SURFACE
+    # - five tools, `Skill` absent - which is a different claim. This is
+    # the fourth instance on this branch of a claim wider than its
+    # evidence, and the third about these same two cells.
+    assert ("The load-bearing control as the lane ships is the `Skill` "
+            "deny list, and what is MEASURED of it is the TOOL SURFACE: "
+            "cells A and B advertised five tools with `Skill` absent, and "
+            "the round validator compares that snapshot against the agent "
+            "file by exact list equality on every session-creating call. "
+            "Those cells passed the flag as well, so they measure the "
+            "COMPOSITION and cannot attribute their null result to either "
+            "layer alone.") in body
+    assert ("Keep passing `--skills-dir` on every call, fresh and "
+            "resumed, as a measured second layer, and claim for it "
+            "exactly what was measured: suppression of the home root, "
+            "conditional on an empty target, on 0.31.1.") in body
     # And the files stay an injection surface by a different route, which
     # is why remediation deletes them rather than trusting the reviewer:
     # in the measured round the reviewer READ both canaries and declined
@@ -1484,3 +1529,156 @@ def test_doctor_check8_containment_artifact_is_unchanged():
     """This bullet is untouched by Task 8 - same text as before the rewrite,
     pinned in its own right per the plan's explicit instruction."""
     assert CONTAINMENT_UNCHANGED in _norm(DOCTOR)
+
+
+def test_no_module_claims_ci_skips_the_windows_suites():
+    """The powershell-hosts job has covered the probe and the mirror since
+    6a462f9. A comment saying otherwise is a false record of coverage,
+    which is the same defect class as a false claim of a clean
+    measurement: it tells a reader a gate is absent when it is present.
+
+    A COUNT is not an oracle here. Two textual occurrences could both sit
+    in one host step, or in a comment, while the count stays at 2 and the
+    second interpreter runs nothing. Slice the file into the two host
+    steps and require one occurrence in EACH, keyed on the
+    PARALLAX_PS_HOST value that names the interpreter.
+    """
+    def uncommented(path):
+        """Whitespace-normalized, with Python comment markers stripped.
+
+        _norm alone is WRONG for a pin over a wrapped comment: it joins the
+        lines but leaves each continuation line's `#` inside the sentence,
+        so the live text reads "CI does # not exercise these 155 cases".
+        A staleness assertion written against _norm is therefore vacuously
+        true and can never fail - which is what the first run of this test
+        demonstrated, and exactly the defect class this suite exists to
+        remove.
+        """
+        lines = [re.sub(r"^\s*#\s?", "", ln)
+                 for ln in path.read_text(encoding="utf-8").splitlines()]
+        return " ".join(" ".join(lines).split())
+
+    covered = (
+        "evals/multi-model-verify/test_codex_context_probe.py",
+        "evals/multi-model-verify/test_review_mirror.py",
+    )
+    workflow = _read(REPO / ".github" / "workflows" / "skill-evals.yml")
+    assert "powershell-hosts:" in workflow
+    steps = {}
+    for host in ("powershell.exe", "pwsh.exe"):
+        marker = "PARALLAX_PS_HOST: " + host
+        assert marker in workflow, "no step sets " + marker
+        tail = workflow.split(marker, 1)[1]
+        # The step ends at the next step's `- name:` at list indentation.
+        steps[host] = tail.split("\n      - name:", 1)[0]
+    for rel in covered:
+        body = uncommented(REPO / rel)
+        assert "CI does not exercise these 155 cases at all" not in body
+        assert "Backlog item 10 carries the fix" not in body
+        assert "powershell-hosts" in body, (
+            rel + " must name the CI job that covers it")
+        for host, step in steps.items():
+            assert step.count(rel) == 1, (
+                rel + " must appear exactly once in the " + host + " step")
+
+
+def _lines(path):
+    r"""Raw read with CRLF folded to LF, for pins that are NEWLINE-ANCHORED.
+
+    _norm is wrong for every assertion below and the frozen plan used it
+    anyway. _norm is `" ".join(text.split())`, so `"\n  - Skill\n"` can
+    never occur in its output: the "must not offer" assertion would be
+    vacuously TRUE and the "must deny" assertion vacuously FALSE, and
+    `re.findall(r"^  - (\w+)$", ..., re.M)` would return [] and make every
+    frontmatter-delta comparison compare two empty sets. Measured
+    2026-08-03. Same class as D4 in the execution-deviation ledger, third
+    instance in this plan.
+
+    On line endings, stated at its true reach and no wider. The two files
+    this reads do NOT agree, measured 2026-08-03: the reviewer agent is 39
+    CRLF and 0 bare LF, the probe agent is 0 CRLF and 53 bare LF, and git's
+    own eol normalization means either can flip on a fresh checkout. An
+    earlier version of this docstring said "the agent files ARE CRLF",
+    which was a measurement of ONE file stated over two - the exact
+    claim-wider-than-its-evidence fault the rest of this docstring is
+    about. What actually makes the `\n` pins match, for both files and
+    under either ending, is `read_text`'s universal-newline folding. The
+    explicit fold below is belt-and-braces for a caller that ever switches
+    to `newline=""`; it is NOT load-bearing today.
+    """
+    return path.read_text(encoding="utf-8").replace("\r\n", "\n")
+
+
+def test_the_review_agent_still_denies_skill():
+    """The probe agent exists to offer `Skill` for a MEASUREMENT. The one
+    way that becomes a defect instead of a measurement is if the loosened
+    file, or the loosening, reaches a review round. Two separate things
+    must hold, so they are two separate assertions."""
+    review = _lines(REPO / "skills" / "multi-model-verify" / "references"
+                    / "kimi-reviewer-agent.md")
+    tools_block = review.split("disallowedTools:")[0]
+    denied_block = review.split("disallowedTools:")[1].split("subagents:")[0]
+    assert "\n  - Skill\n" not in tools_block, (
+        "the review lane's agent must never offer Skill")
+    assert "\n  - Skill\n" in denied_block, (
+        "the review lane's agent must explicitly deny Skill")
+    assert "\n  - Bash\n" in denied_block
+    assert "\n  - Write\n" in denied_block
+    assert "\n  - Edit\n" in denied_block
+    assert "subagents: []" in review
+
+
+def test_the_probe_agent_is_never_named_by_the_lane_contract():
+    """A probe-only agent file that a dispatch command can reach is not
+    probe-only. The lane contract, the skill and the commands must never
+    name it; only this plan's probe record and the probe's own tests do."""
+    probe_rel = "tools/kimi-probe-agent.md"
+    probe = _lines(REPO / "tools" / "kimi-probe-agent.md")
+    tools_block = probe.split("disallowedTools:")[0]
+    denied_block = probe.split("disallowedTools:")[1].split("subagents:")[0]
+    # The loosening is exactly one tool, and only that one.
+    assert "\n  - Skill\n" in tools_block
+    assert "\n  - Skill\n" not in denied_block
+    # Every containment control the review agent has, this file keeps.
+    for denied in ("Bash", "Write", "Edit", "WebSearch", "FetchURL",
+                   "Agent", "AgentSwarm"):
+        assert "\n  - " + denied + "\n" in denied_block, denied
+    assert "subagents: []" in probe
+    assert "PROBE ONLY" in probe
+    # The ONLY permitted frontmatter delta against the review agent is the
+    # Skill move. A named-document list would have been the defect this
+    # guard exists to catch, in the guard itself: the lane contract is a
+    # whole directory plus the agent and command surfaces, and a list goes
+    # stale the moment a file is added. Sweep, do not enumerate.
+    review = _lines(REPO / "skills" / "multi-model-verify" / "references"
+                    / "kimi-reviewer-agent.md")
+    r_tools = set(re.findall(r"^  - (\w+)$", review.split("disallowedTools:")[0], re.M))
+    p_tools = set(re.findall(r"^  - (\w+)$", probe.split("disallowedTools:")[0], re.M))
+    r_denied = set(re.findall(r"^  - (\w+)$",
+                              review.split("disallowedTools:")[1].split("subagents:")[0], re.M))
+    p_denied = set(re.findall(r"^  - (\w+)$",
+                              probe.split("disallowedTools:")[1].split("subagents:")[0], re.M))
+    # Non-emptiness first: every set difference below is satisfied by two
+    # empty sets, so without this the whole comparison is vacuous - which
+    # is precisely how the frozen version of this test read.
+    assert len(r_tools) == 5, r_tools
+    assert len(p_tools) == 6, p_tools
+    assert r_denied, r_denied
+    assert p_tools - r_tools == {"Skill"}, p_tools - r_tools
+    assert r_tools - p_tools == set()
+    assert r_denied - p_denied == {"Skill"}, r_denied - p_denied
+    assert p_denied - r_denied == set()
+    # And nothing on any dispatch surface may name the probe file.
+    # PER ROOT, not a total. `Path.rglob` on a directory that does not
+    # exist yields nothing and raises nothing, so a renamed root drops out
+    # of the sweep in silence. A single total floor cannot see that: the
+    # three roots hold 9 + 5 + 3 files, so losing `agents` leaves 12 and
+    # losing `commands` leaves 14, both clearing any floor low enough to
+    # survive ordinary churn. An unswept root is not a clean root.
+    for root, floor in (("skills", 5), ("agents", 3), ("commands", 2)):
+        paths = sorted((REPO / root).rglob("*.md"))
+        assert len(paths) >= floor, (
+            root + " swept only " + str(len(paths)) + " files; the root moved")
+        for path in paths:
+            assert probe_rel not in _lines(path), (
+                str(path.relative_to(REPO)) + " must not name the probe agent file")
