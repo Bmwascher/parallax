@@ -1549,12 +1549,17 @@ def _lines(path):
     2026-08-03. Same class as D4 in the execution-deviation ledger, third
     instance in this plan.
 
-    On line endings, stated at its true reach: the agent files ARE CRLF on
-    disk here (39 CRLF, 0 bare LF, measured 2026-08-03), and `read_text`
-    already folds them through universal newlines, so the `\n` pins match
-    without help. The explicit fold below is belt-and-braces for a caller
-    that ever switches to `newline=""`; it is NOT what makes the pins work
-    today, and claiming otherwise would be a claim wider than its evidence.
+    On line endings, stated at its true reach and no wider. The two files
+    this reads do NOT agree, measured 2026-08-03: the reviewer agent is 39
+    CRLF and 0 bare LF, the probe agent is 0 CRLF and 53 bare LF, and git's
+    own eol normalization means either can flip on a fresh checkout. An
+    earlier version of this docstring said "the agent files ARE CRLF",
+    which was a measurement of ONE file stated over two - the exact
+    claim-wider-than-its-evidence fault the rest of this docstring is
+    about. What actually makes the `\n` pins match, for both files and
+    under either ending, is `read_text`'s universal-newline folding. The
+    explicit fold below is belt-and-braces for a caller that ever switches
+    to `newline=""`; it is NOT load-bearing today.
     """
     return path.read_text(encoding="utf-8").replace("\r\n", "\n")
 
@@ -1619,10 +1624,16 @@ def test_the_probe_agent_is_never_named_by_the_lane_contract():
     assert r_denied - p_denied == {"Skill"}, r_denied - p_denied
     assert p_denied - r_denied == set()
     # And nothing on any dispatch surface may name the probe file.
-    swept = 0
-    for root in ("skills", "agents", "commands"):
-        for path in sorted((REPO / root).rglob("*.md")):
-            swept += 1
+    # PER ROOT, not a total. `Path.rglob` on a directory that does not
+    # exist yields nothing and raises nothing, so a renamed root drops out
+    # of the sweep in silence. A single total floor cannot see that: the
+    # three roots hold 9 + 5 + 3 files, so losing `agents` leaves 12 and
+    # losing `commands` leaves 14, both clearing any floor low enough to
+    # survive ordinary churn. An unswept root is not a clean root.
+    for root, floor in (("skills", 5), ("agents", 3), ("commands", 2)):
+        paths = sorted((REPO / root).rglob("*.md"))
+        assert len(paths) >= floor, (
+            root + " swept only " + str(len(paths)) + " files; the root moved")
+        for path in paths:
             assert probe_rel not in _lines(path), (
                 str(path.relative_to(REPO)) + " must not name the probe agent file")
-    assert swept > 10, "the sweep found almost nothing; the roots are wrong"

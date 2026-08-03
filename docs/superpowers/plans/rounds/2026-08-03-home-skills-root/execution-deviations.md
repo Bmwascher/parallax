@@ -592,3 +592,47 @@ byte-identical file:
 
 Post-revert module clean at 61, working tree carrying only this cycle's own
 three paths.
+
+### Task 3, after the per-task Fable review
+
+Raw reply retained at `fable-review-d11be0c-c7a9c50.md`. **Ready to merge: Yes**
+- no Critical, no Important, three Minors. Every finding adjudicated below, and
+the reviewer's own backstop claim was re-verified by the session rather than
+taken on trust.
+
+**The backstop claim: VERIFIED, after one false negative of my own.** My first
+check reported the "ONLY agent configuration" sentence ABSENT, because I searched
+for it with a space where `backup-lane.md` wraps it across a line. It is present,
+and `references/kimi-reviewer-agent.md` is named inside a contract pin. The
+reviewer is right that the pinned dispatch template, not the new sweep, is the
+containment gate.
+
+**Minor 1 - sweep evasion surface. ACCEPTED AS A RECORDED LIMIT, no change.**
+The sweep is a NAMING guard over `*.md` in three roots, and it is stated as such
+rather than widened. Widening it to every spelling of a path is a losing race,
+and the real gate is the pinned template. Carried into the diff debate as the
+reviewer asked, so the record says which control does the work.
+
+**Minor 2 - the total floor cannot see a vanished root. ACCEPTED AND FIXED.**
+Confirmed by measurement: `rglob("*.md")` on a directory that does not exist
+returns an empty list and raises nothing, and the roots hold 9 + 5 + 3, so losing
+`agents` leaves 12 and losing `commands` leaves 14 - both over the old floor of
+10. This is the check-that-cannot-fail class. Replaced with a per-root floor.
+**Watched to fail, by really removing the root, not by faking a count:**
+
+| mutation | observed |
+|---|---|
+| `commands/` renamed away | exit 1, `commands swept only 0 files; the root moved` |
+| `agents/` renamed away | exit 1, `agents swept only 0 files; the root moved` |
+
+Both restored; post-revert the case passes and the tree carries only the test
+file's own edit.
+
+**Minor 3 - the docstring's plural. ACCEPTED AND FIXED, and it was worse than
+reported.** The reviewer said the probe file's endings were unrecorded.
+Measured: the reviewer agent is **39 CRLF, 0 bare LF**; the probe agent is **0
+CRLF, 53 bare LF**. So "the agent files ARE CRLF" was not merely unevidenced for
+one file, it was FALSE for it. The docstring now states both measurements, notes
+that git's eol normalization can flip either on a fresh checkout, and names
+`read_text`'s universal-newline folding as the thing that actually makes the pins
+match.
