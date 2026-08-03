@@ -59,6 +59,16 @@ and restart the session when hooks/ or skills/ changed. A restart alone
 only reloads the cached version. GitHub remote (Bmwascher/parallax,
 public) serves stable installs on other machines.
 
+BUMP THE VERSION LAST, not when the branch's first task touches it.
+`plugin update` keys ONLY on the version string: once a version has been
+cached, the same number reports "already at the latest version" and
+copies NOTHING, however much the checkout changed afterwards. Measured
+2026-08-03: 0.20.0 was bumped mid-branch, cached at 14:13, and then five
+diff-debate rounds rewrote `skills/`. The update refused, and the cache
+kept skill text the review had already retracted. A mid-branch bump is
+therefore a bump that gets consumed before the branch is finished, and
+the recovery is another bump.
+
 ## Skill editing rules
 The multi-model-verify skill's transport commands (codex exec flags, resume
 syntax) are LIVE-VERIFIED contracts locked by evals/multi-model-verify/
