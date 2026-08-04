@@ -424,3 +424,63 @@ pinned by an oracle watched to fail first:
    the code, not on a watched failure.
 4. **Non-object JSON lines.** `null`, a bare scalar and an array all
    parse and were silently ignored. Now refused.
+
+### Amendment 5 (2026-08-04, Task 3) - three deviations the Fable review found unrecorded
+
+None changes behaviour; all three are text or file-list drift that the
+plan calls frozen, and a frozen plan that quietly changes is not frozen.
+
+1. **The limit sentence's lead-in.** The plan freezes "The tool enforces
+   260 characters as a conservative policy across both supported
+   PowerShell hosts" as verbatim text. The shipped region reads "The
+   LIMIT is 260 characters as a conservative policy across both
+   supported PowerShell hosts". Everything after the lead-in is
+   verbatim and the meaning is unchanged; the region needed a
+   sentence-initial label because it runs inline with the universe and
+   the arithmetic rather than standing alone.
+2. **Files outside Task 3's list.** The task named three files. Four
+   more changed: `test_backup_lane.py` holds the region's pin,
+   `test_contract_coverage.py` declares the region, the backlog carries
+   item 26, and `SKILL.md` was already listed. The first two follow
+   mechanically from putting a contract region in `backup-lane.md`,
+   which the task itself directs; the backlog edit is deliberately
+   outside this plan and is recorded as its own item.
+3. **The token delta had no durable record.** Measured and reported at
+   the time but written nowhere in the repo. Now in "Token deltas
+   measured" below.
+
+### Amendment 6 (2026-08-04, Task 3) - two permissive-direction fixes from the Fable review
+
+1. **The repo ROOT was never attribute-checked.** Only entries beneath
+   it were, so a repo root that is itself a junction was measured and
+   copied straight through while the contract says a source reparse
+   point is refused before measuring. This machine really does use
+   junctions for lane homes. Fixed, and pinned by
+   `test_a_repo_root_that_is_itself_a_reparse_point_is_refused`, watched
+   to fail first: the old tool BUILT the mirror.
+2. **`budget_error()` in the tests matched the wrong refusal.** It
+   scanned for "path budget", and the unenumerable-path message says
+   "the path budget was never measured", so three refusal cases would
+   have accepted an enumeration block as a budget refusal. Now matches
+   "path budget exceeded".
+
+Also taken, from the review's minor 6: the relative path is now cut with
+a rebuilt prefix rather than `root.Length + 1`. A drive root trims to
+`C:`, where that arithmetic under-measures every relative path, which is
+the permissive direction. Not covered by a test - a drive-root repo
+mirrored to another drive is not a shape worth building a fixture for.
+
+## Token deltas measured
+
+`SKILL.md` body, by the strict lint's own estimator, against a ~5000
+budget:
+
+| point | tokens | delta |
+|---|---|---|
+| branch base `50575a3` | 5129 | - |
+| after Task 1 | 5133 | +4 |
+| after Task 2 (incl. review fixes) | 5273 | +140 |
+| after Task 3 | 5334 | +61 |
+
+Running total +205. Item 19 is scheduled for 0.23.0 and this release
+makes it worse, as this plan predicted it would.

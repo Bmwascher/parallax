@@ -561,6 +561,30 @@ if ($budgetRootLen -ge $PathBudget) {
 }
 
 $srcRoot = $RepoRoot.TrimEnd("\", "/")
+# The prefix stripped to form a relative path, rebuilt rather than
+# derived from a length. A drive root trims to "C:", and "C:".Length + 1
+# is 3 only by coincidence of that one case; on any root ending in a
+# colon the arithmetic silently under-measures every relative path,
+# which is the permissive direction.
+$srcPrefix = $srcRoot
+if (-not $srcPrefix.EndsWith("\")) { $srcPrefix = $srcPrefix + "\" }
+
+# The ROOT is a source path too. Checking only entries below it leaves
+# the one reparse point most likely to exist unmeasured, and the
+# contract clause says "a source reparse point" with no exemption.
+try {
+    $rootAttr = [int][System.IO.File]::GetAttributes($srcRoot)
+} catch {
+    Write-Output ("ERROR: $srcRoot could not be enumerated, so the path " +
+        "budget was never measured: " + $_.Exception.Message)
+    exit 2
+}
+if (($rootAttr -band [int][System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+    Write-Output ("ERROR: $srcRoot is a reparse point - the mirror refuses " +
+        "to measure or copy across one")
+    exit 2
+}
+
 $deepestLen = -1
 $deepestRel = ""
 $dirAttr = [int][System.IO.FileAttributes]::Directory
@@ -600,7 +624,7 @@ while ($pending.Count -gt 0) {
                 "refuses to measure or copy across one")
             exit 2
         }
-        $rel = $entry.Substring($srcRoot.Length + 1)
+        $rel = $entry.Substring($srcPrefix.Length)
         if ($rel.Length -gt $deepestLen) {
             $deepestLen = $rel.Length
             $deepestRel = $rel

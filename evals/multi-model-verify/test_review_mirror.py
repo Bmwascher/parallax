@@ -1101,11 +1101,15 @@ def deep_child(root, total_len, tail="f.txt"):
 
 
 def budget_error(proc):
-    """The refusal line, or None. Asserted on rather than a bare exit
-    code: several conditions exit 2, and a test that could not tell them
-    apart would pass against the wrong refusal."""
+    """The BUDGET refusal line, or None.
+
+    Matches the full phrase, not the words "path budget": the
+    unenumerable-path refusal says "the path budget was never measured",
+    so a looser match let three cases below accept an enumeration block
+    as a budget refusal. Found by the Fable review of this task.
+    """
     for line in proc.stdout.splitlines():
-        if "path budget" in line.lower():
+        if "path budget exceeded" in line.lower():
             return line
     return None
 
@@ -1271,3 +1275,24 @@ def test_an_unreadable_source_path_blocks_rather_than_skips(tmp_path):
         # how the first version of this case leaked.
         assert undo.returncode == 0, undo.stdout + undo.stderr
         assert (locked / "inner.txt").exists(), "the deny ACE is still in force"
+
+
+def test_a_repo_root_that_is_itself_a_reparse_point_is_refused(tmp_path):
+    """The root is a source path too.
+
+    Checking only entries BELOW it leaves the one reparse point most
+    likely to exist unmeasured, and this machine really does use
+    junctions for lane homes. The contract clause says "a source reparse
+    point", with no exemption for the root.
+    """
+    real = make_repo(tmp_path)
+    link = tmp_path / "viarepo"
+    rc = subprocess.run(["cmd", "/c", "mklink", "/J", str(link), str(real)],
+                        capture_output=True, text=True)
+    if rc.returncode != 0:
+        pytest.skip("junction creation unavailable: " + rc.stderr)
+    mirror = long_mirror(tmp_path)
+    proc = run_mirror(link, mirror)
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "reparse" in proc.stdout.lower(), proc.stdout
+    assert not mirror.exists()
