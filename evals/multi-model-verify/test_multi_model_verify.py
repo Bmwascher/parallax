@@ -313,8 +313,9 @@ class TestTransportContract:
         assert ("A record is a binding CANDIDATE only if it carries at"
                 " least one `payload.content[]` element and EVERY"
                 " element's `type` is `input_text`") in notes
-        assert ("A RESUMED slice must carry exactly one user record in"
-                " addition") in notes
+        assert ("a FRESH slice must carry exactly two, the client's"
+                " instructions preamble and the brief, and a RESUMED"
+                " slice exactly one") in notes
         assert ("a slice that does not decode as strict UTF-8, a line"
                 " that is not a JSON object") in notes
         # The claim's ceiling. This must never read as server attestation.
@@ -375,9 +376,14 @@ class TestTransportContract:
         "canonicalized - UTF-8, CRLF normalized to LF, leading and "
         "trailing whitespace stripped. Require exactly one candidate "
         "to equal the brief's SHA-256, and require it to be the LAST "
-        "user record in the slice. A RESUMED slice must carry exactly "
-        "one user record in addition: it has no instructions preamble "
-        "to make room for, so a second one is unexplained. Taking the "
+        "user record in the slice. Bound the slice's user-record "
+        "COUNT as well: a FRESH slice must carry exactly two, the "
+        "client's instructions preamble and the brief, and a RESUMED "
+        "slice exactly one, because it has no preamble to make room "
+        "for. Both counts are what was measured, and anything looser "
+        "is unearned width: an unexplained user record before the "
+        "brief is unattributed text in front of the reviewer, which "
+        "is the class this binding exists to refuse. Taking the "
         "slice's sole user record instead is wrong on every fresh "
         "call: the client's own instructions preamble is also `role` "
         "`user`, so a fresh slice carries two. Nor may the record be "

@@ -110,6 +110,14 @@ One resume failure is deterministic and skips the retry: output matching
 The rollout is gone; skip the retry and go straight to this
 class's consent gate with the same fresh-per-round option.
 
+The round-1 `-PriorState` file is written by the driver before the
+first dispatch, not by any tool: a JSON object with `kind` set to `fresh`
+and `knownRollouts` listing every `rollout-*.jsonl` under the effective
+Codex session root at that moment. An empty list is legitimate and an
+ABSENT field is refused, because an inventory nobody made must not read
+as an inventory that found nothing. Every later round passes the previous
+verdict's `nextState` verbatim.
+
 ### Brief attribution failure — class `brief-attribution`
 
 The primary lane binds the brief it sent to the prompt its client

@@ -402,9 +402,13 @@ also carried something else. Concatenate the candidate's `text` fields in
 order and canonicalize exactly as the pre-dispatch brief was canonicalized -
 UTF-8, CRLF normalized to LF, leading and trailing whitespace stripped.
 Require exactly one candidate to equal the brief's SHA-256, and require it to
-be the LAST user record in the slice. A RESUMED slice must carry exactly one
-user record in addition: it has no instructions preamble to make room for, so
-a second one is unexplained. Taking the slice's sole user record instead is
+be the LAST user record in the slice. Bound the slice's user-record COUNT as
+well: a FRESH slice must carry exactly two, the client's instructions preamble
+and the brief, and a RESUMED slice exactly one, because it has no preamble to
+make room for. Both counts are what was measured, and anything looser is
+unearned width: an unexplained user record before the brief is unattributed
+text in front of the reviewer, which is the class this binding exists to
+refuse. Taking the slice's sole user record instead is
 wrong on every fresh call: the client's own instructions preamble is also
 `role` `user`, so a fresh slice carries two. Nor may the record be identified
 by content-element count - the preamble carried 2 elements and briefs carried

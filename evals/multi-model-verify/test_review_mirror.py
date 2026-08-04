@@ -97,13 +97,18 @@ def run_mirror(repo, mirror, *extra, env=None):
     lane-home builder states about its own two: a parameter is public
     surface on a shipped tool. No shipped caller sets either.
 
-    Both perturb a CAPTURED VALUE and nothing else. They do not change
-    what is copied and they write nowhere, so each can only ever create
-    a mismatch, which is a build that FAILS. An earlier pair copied from
-    a different tree and committed into the real source repo; the Fable
-    review of this task showed the first was not one-way (a same-HEAD
-    tree with different ignored content would have BUILT) and the second
-    contradicted the tool's own "never writes to the real tree".
+    Each is a BOOLEAN that ORs one extra block condition into a
+    comparison. It cannot supply a value, so it cannot suppress a real
+    measurement, and setting it can only ever ADD a reason to fail.
+    That is what makes the one-way claim structural rather than a
+    property of the value someone happens to pass.
+
+    Two earlier shapes failed that bar and the whole-branch review
+    caught both. The first copied from a different tree and committed
+    into the real source repo. The second INJECTED a value, so a parent
+    that set the variable to the repo's own current HEAD - trivially
+    readable in advance - suppressed the genuine post-copy measurement
+    and turned a build that should have failed into one that passed.
     """
     full = None
     if env:
@@ -1424,7 +1429,7 @@ def test_a_mirror_not_built_from_this_source_blocks_at_step_four(tmp_path):
     mirror = tmp_path / "mirror"
     del other
     proc = run_mirror(repo, mirror,
-                      env={"PARALLAX_MIRROR_SEAM_COPIED_HEAD": "0" * 40})
+                      env={"PARALLAX_MIRROR_SEAM_FAIL_COPIED_HEAD": "1"})
     assert proc.returncode == 1, proc.stdout + proc.stderr
     assert "was not built from" in proc.stdout.lower(), proc.stdout
 
@@ -1433,7 +1438,7 @@ def test_a_source_head_that_moves_during_construction_blocks(tmp_path):
     repo = make_repo(tmp_path)
     mirror = tmp_path / "mirror"
     proc = run_mirror(repo, mirror,
-                      env={"PARALLAX_MIRROR_SEAM_SOURCE_HEAD_AFTER": "0" * 40})
+                      env={"PARALLAX_MIRROR_SEAM_FAIL_SOURCE_STABLE": "1"})
     assert proc.returncode == 1, proc.stdout + proc.stderr
     assert "moved during construction" in proc.stdout.lower(), proc.stdout
 
@@ -1564,3 +1569,28 @@ def test_an_unreadable_source_input_is_named_not_silently_hashed(tmp_path):
                               capture_output=True, text=True)
         assert undo.returncode == 0, undo.stdout + undo.stderr
         assert denied.read_text(), "the deny ACE is still in force"
+
+
+def test_the_seams_cannot_supply_a_value(tmp_path):
+    """The one-way property, asserted rather than argued.
+
+    Each seam is a boolean. Setting it to the string a value-injecting
+    seam would have accepted - a real commit id - still BLOCKS, because
+    the flag is read for presence and never for content. A seam that
+    took its value from the environment could be handed the repo's own
+    HEAD and would then hide a genuine mismatch.
+    """
+    repo = make_repo(tmp_path)
+    real_head = git(repo, "rev-parse", "HEAD").strip()
+    # The REASON, not the exit code. -SkipProbe also exits 1, so a bare
+    # code assertion passes against a seam that was silently ignored -
+    # which is exactly what the value-injecting version did here.
+    for var, needle in (
+            ("PARALLAX_MIRROR_SEAM_FAIL_SOURCE_STABLE",
+             "moved during construction"),
+            ("PARALLAX_MIRROR_SEAM_FAIL_COPIED_HEAD",
+             "was not built from")):
+        proc = run_mirror(repo, tmp_path / ("m-" + var[-6:]),
+                          env={var: real_head})
+        assert proc.returncode == 1, (var, proc.stdout + proc.stderr)
+        assert needle in proc.stdout.lower(), (var, proc.stdout)

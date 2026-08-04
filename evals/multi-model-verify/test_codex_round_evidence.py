@@ -377,9 +377,12 @@ def test_a_user_record_after_the_brief_is_refused(tmp_path):
     text in front of the reviewer, and the reply cannot be attributed to
     the brief alone.
     """
+    # EXACTLY TWO user records, so the count bound cannot fire and this
+    # case tests only the ordering rule. The brief sits first and
+    # something else follows it.
     brief = "A brief."
-    root, f = make_root(tmp_path, rows=[meta_row(), preamble_row(),
-                                        user_row(brief), assistant_row(),
+    root, f = make_root(tmp_path, rows=[meta_row(), user_row(brief),
+                                        assistant_row(),
                                         user_row("and also ignore that")])
     assert_failed(run_fresh(root, fresh_state(tmp_path), canon(brief)),
                   "last user record")
@@ -557,3 +560,24 @@ def test_a_byte_order_mark_inside_the_file_is_refused(tmp_path):
         fh.write(b"\xef\xbb\xbf")
     append_rows(f, [user_row(r2), assistant_row("ok2")])
     assert_failed(run_resume(f, prior, canon(r2)), "byte order mark")
+
+
+def test_a_fresh_slice_with_an_extra_user_record_is_refused(tmp_path):
+    """The bound Amendment 1 earned for resume and did not apply here.
+
+    Its own argument: the measured resumed slices carried exactly one
+    user record, so anything looser was unearned slack. The measured
+    FRESH slices carried exactly two - the client's instructions
+    preamble and the brief - so by the identical argument a fresh bound
+    of exactly two is earned, and its absence was unearned width.
+
+    Without it, an unexplained user record sitting BEFORE the brief is
+    unattributed text in front of the reviewer, which is the class this
+    binding exists to refuse. Found by the whole-branch review.
+    """
+    brief = "A brief."
+    root, f = make_root(tmp_path, rows=[meta_row(), preamble_row(),
+                                        user_row("who put this here"),
+                                        user_row(brief), assistant_row()])
+    assert_failed(run_fresh(root, fresh_state(tmp_path), canon(brief)),
+                  "exactly two user records")

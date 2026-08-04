@@ -405,6 +405,15 @@ if ($Resume -and $userRecords.Count -ne 1) {
     Fail ("a resumed slice must carry exactly one user record, found " +
           $userRecords.Count)
 }
+# A FRESH slice carried exactly TWO on every measured round: the client's
+# instructions preamble and the brief. The same argument that earned the
+# resume bound earns this one, and leaving it out was unearned width - an
+# unexplained user record before the brief is unattributed text in front
+# of the reviewer, which is the class this binding exists to refuse.
+if ($Fresh -and $userRecords.Count -ne 2) {
+    Fail ("a fresh slice must carry exactly two user records, the client's" +
+          " instructions preamble and the brief, found " + $userRecords.Count)
+}
 
 $matchIndexes = @()
 for ($i = 0; $i -lt $userRecords.Count; $i++) {

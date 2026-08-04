@@ -648,3 +648,62 @@ against a case that fails two runs in three. The argument here is that
 the failing expectations are the ones item 18 already attributes to the
 harness and to the case itself, not that a single green run would have
 proved anything.
+
+
+### Amendment 11 (2026-08-04, whole-branch review) - the seams still were not one-way
+
+**The claim the branch made three times** - in the tool comment, in the
+test docstring, and in Amendment 10 item 2 - was that each seam perturbs
+a captured value and can therefore only ever create a mismatch.
+
+**That was false as implemented, and the whole-branch review caught it.**
+Both seams REPLACED a measured value with the environment variable's
+value. A parent that set `PARALLAX_MIRROR_SEAM_SOURCE_HEAD_AFTER` to the
+repo's own current HEAD - trivially readable in advance - suppressed the
+genuine post-copy measurement, so a source that really moved mid-copy
+passed bridge step 3. The same substitution on the other seam neutralized
+step 4. That turns a failing build into a passing one, which is the exact
+inverse of the claim.
+
+**Adopted:** both seams are now BOOLEANS that OR one extra block
+condition into their comparison. `PARALLAX_MIRROR_SEAM_FAIL_SOURCE_STABLE`
+and `PARALLAX_MIRROR_SEAM_FAIL_COPIED_HEAD`. Neither can supply a value,
+so neither can suppress a measurement, and setting either can only ADD a
+reason to fail. The property is now STRUCTURAL rather than a property of
+the value someone passes, and it is asserted by
+`test_the_seams_cannot_supply_a_value` rather than argued in a comment:
+the case sets each flag to a real commit id and requires the build to
+block anyway, with the specific reason checked because `-SkipProbe` also
+exits 1.
+
+**Correction to Amendment 8**, which named `PARALLAX_MIRROR_COPY_SOURCE_OVERRIDE`
+and `PARALLAX_MIRROR_MOVE_SOURCE_HEAD`. Those were the FIRST pair and no
+longer exist. The names above are the shipped ones.
+
+**This is the third shape these seams have taken, and the third was found
+by review rather than by reasoning.** Recorded that way on purpose: the
+lesson is that a one-way claim about a test seam needs a test, not a
+careful comment.
+
+### Amendment 12 (2026-08-04, whole-branch review) - the fresh slice keeps its earned bound
+
+Amendment 1 tightened the RESUMED slice to exactly one user record, on
+the argument that the measured slices carried exactly one so anything
+looser was unearned slack. The measured FRESH slices carried exactly two,
+the instructions preamble and the brief, and the identical argument was
+not applied to them. It is now: a fresh slice must carry exactly two.
+
+**Direction:** strictly stricter. What it closes is a fresh slice
+carrying preamble, an unexplained user record, and the brief last, which
+bound clean because only the LAST record's position was checked.
+Unattributed text in front of the reviewer is precisely the class this
+binding exists to refuse.
+
+**Also taken from the same review:** the verify mode resolved
+`-MirrorPath` before this fix through the provider only in build mode,
+so verify compared a relative path resolved against a different
+location - the same provider-versus-process divergence this tool's own
+history block calls an ordinary PowerShell condition. And the round-1
+`-PriorState` schema existed only inside the tool's comment header, so
+an operator reading `SKILL.md` and the references end to end could run
+everything in this release except author that one file. Both fixed.

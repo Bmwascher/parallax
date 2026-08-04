@@ -570,6 +570,15 @@ $RepoRoot = (Resolve-Path $RepoRoot).Path
 # HEADs would be blind in the middle of the feature.
 # ---------------------------------------------------------------------
 if ($VerifyIdentity) {
+    # Resolve THROUGH THE PROVIDER here too. Build does this below and
+    # verify did not, so a relative -MirrorPath resolved against the
+    # process location for Test-Path and against the provider location
+    # for git - the same divergence this file's own history block calls
+    # an ordinary PowerShell condition. Verify only reads, so the
+    # realistic failure was a spurious block rather than a wrong pass,
+    # but a tool should not teach one lesson in one mode and forget it
+    # in the other.
+    $MirrorPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($MirrorPath)
     $shaRx = '^[0-9a-f]{40}$'
     if ($SourceHead -cnotmatch $shaRx) {
         Write-Output ("BLOCKED: the recorded source head is missing or not a" +
@@ -868,26 +877,35 @@ if ($LASTEXITCODE -ge 8) {
     exit 2
 }
 
-# THE TWO TEST SEAMS, and the rule they must satisfy literally.
+# THE TWO TEST SEAMS, and the rule they must satisfy LITERALLY.
 #
-# Each perturbs ONE CAPTURED VALUE and nothing else. Neither changes what
-# is copied and neither writes anywhere, so each can only ever create a
-# MISMATCH, which is a build that fails. That is what makes the one-way
-# claim true rather than merely likely.
+# Each is a BOOLEAN that ORs one extra block condition into a comparison
+# below. Neither can supply a value, so neither can suppress a real
+# measurement, and setting either can only ever ADD a reason to fail.
+# That makes the one-way property structural rather than a property of
+# whatever value someone happens to pass.
 #
-# The first pair did not satisfy it, and the Fable review of this task
-# was right on both counts: a copy-source override aimed at a same-HEAD
-# tree with different ignored content would have BUILT, carrying the
-# wrong non-HEAD content under a record attesting the real source; and a
-# seam that committed into $RepoRoot contradicted this tool's own
-# promise, three lines from the top, that it never writes to the real
-# tree. Any parent process can set these variables, so a seam that
-# mutates user state is a hazard whatever its gating.
+# TWO earlier shapes failed that bar, and both were caught by review
+# rather than by reasoning, which is why the property is now asserted by
+# a test instead of argued in a comment:
+#
+#   1. A copy-source override aimed at a same-HEAD tree with different
+#      ignored content would have BUILT, carrying the wrong non-HEAD
+#      content under a record attesting the real source. Its partner
+#      committed into $RepoRoot, contradicting this tool's promise three
+#      lines from the top that it never writes to the real tree.
+#   2. The replacement INJECTED a value. A parent that set it to the
+#      repo's own current HEAD - trivially readable in advance -
+#      suppressed the genuine post-copy measurement and turned a build
+#      that should have failed into one that passed. That is the exact
+#      inverse of the claim the comment was making.
+#
+# Any parent process can set these variables, so the shape has to be
+# safe on its own, not safe because no shipped caller sets it.
+$seamFailSourceStable = [bool]$env:PARALLAX_MIRROR_SEAM_FAIL_SOURCE_STABLE
+$seamFailCopiedHead = [bool]$env:PARALLAX_MIRROR_SEAM_FAIL_COPIED_HEAD
+
 $sourceAfter = Get-HeadSha $RepoRoot
-if ($env:PARALLAX_MIRROR_SEAM_SOURCE_HEAD_AFTER) {
-    $sourceAfter = @{ Ok = $true
-                      Sha = $env:PARALLAX_MIRROR_SEAM_SOURCE_HEAD_AFTER }
-}
 
 # BRIDGE STEP 3: the source must not have moved while we copied it. A
 # source that moved mid-copy produces a tree that matches no commit.
@@ -895,7 +913,7 @@ if (-not $sourceAfter.Ok) {
     Write-Output ("BLOCKED: " + $sourceAfter.Reason + " after the copy")
     exit 1
 }
-if ($sourceAfter.Sha -ne $sourceBefore.Sha) {
+if ($seamFailSourceStable -or ($sourceAfter.Sha -ne $sourceBefore.Sha)) {
     Write-Output ("BLOCKED: the source head moved during construction (" +
         $sourceBefore.Sha + " to " + $sourceAfter.Sha + ") - the copied tree" +
         " matches neither commit")
@@ -907,15 +925,12 @@ if ($sourceAfter.Sha -ne $sourceBefore.Sha) {
 # proves the mirror was built from the recorded source commit - two true
 # facts arranged to look like one.
 $copiedHead = Get-HeadSha $MirrorPath
-if ($env:PARALLAX_MIRROR_SEAM_COPIED_HEAD) {
-    $copiedHead = @{ Ok = $true; Sha = $env:PARALLAX_MIRROR_SEAM_COPIED_HEAD }
-}
 if (-not $copiedHead.Ok) {
     Write-Output ("BLOCKED: " + $copiedHead.Reason + " - the copied tree's" +
         " identity could not be measured")
     exit 1
 }
-if ($copiedHead.Sha -ne $sourceBefore.Sha) {
+if ($seamFailCopiedHead -or ($copiedHead.Sha -ne $sourceBefore.Sha)) {
     Write-Output ("BLOCKED: the mirror was not built from this source (source" +
         " head " + $sourceBefore.Sha + ", copied head " + $copiedHead.Sha + ")")
     exit 1
