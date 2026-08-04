@@ -408,8 +408,11 @@ proceed; do not infer either key's value.
   starts. This sentence used to say "in the session scratchpad" and
   SKILL.md said the opposite, a contradiction 0.21.0 introduced and the
   mode-diff debate caught: an operator reading both could comply with
-  neither. The location rule is stated HERE and referenced from
-  SKILL.md, so there is one place to change it.
+  neither. The rule is stated in BOTH files and must be changed in both:
+  SKILL.md carries it inline because that is where preflight 3 acts, and
+  a reader who never opens this file still has to know it. Saying it
+  lives in one place would be the same false claim in the other
+  direction, which round 2 of the same debate caught.
 - The mirror is a FILE COPY of the working tree that PRESERVES `.git`, not
   a `git clone`. This is not a preference: a clone carries TRACKED FILES ONLY,
   and the review inputs are routinely gitignored — a project's frozen
@@ -452,7 +455,14 @@ proceed; do not infer either key's value.
   gate proves committed-HEAD freshness. Non-HEAD inputs are bound in the
   constructed mirror's manifest AT CONSTRUCTION TIME, and source-side
   changes after construction are detected by the source-status
-  comparison below. That comparison is a fingerprint over the status
+  comparison below WHEN THEY ARE VISIBLE TO IT: that is, changes that
+  move the status listing, or that alter the content of a path the
+  listing names. A tracked file git reports CLEAN is in neither, so a
+  raw-byte change that survives the clean filter unchanged - the
+  autocrlf case measured below is the mild one, a content-stripping
+  filter the severe one - moves neither HEAD nor this fingerprint and is
+  NOT covered. Round 2 of the mode-diff debate found the unqualified
+  claim. That comparison is a fingerprint over the status
   capture AND the content of every path status names, not the status
   listing alone: measured 2026-08-04, editing an already-ignored file
   leaves the listing byte-identical, so a listing-only fingerprint

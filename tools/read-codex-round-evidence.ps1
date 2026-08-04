@@ -188,11 +188,67 @@ if ($Fresh) {
     Assert-PriorField "sessionId"
     Assert-PriorField "bytes"
     Assert-PriorField "prefixSha256"
+    # THE RESUME HALF CARRIED THE SAME DEFECT F1 CLOSED ON THE FRESH
+    # HALF. Found by the mode-diff debate round 2, and measured here
+    # before it was accepted: `rolloutFile` null or empty is PRESENT, so
+    # the assertion above passed, and the comparison against the
+    # caller's -RolloutFile is gated on truthiness further down and was
+    # therefore skipped. The state's own record of which file it
+    # measured constrained nothing.
+    #
+    # The other three were NOT permissive: a bad `bytes` failed its
+    # coercion, a bad `prefixSha256` failed its comparison, and a blank
+    # `sessionId` disagreed with the filename. All three were refused
+    # already. What they got wrong was the REASON - a schema fault was
+    # reported as a changed rollout or a disagreement across sources,
+    # which sends the operator to re-measure an artifact that is fine.
+    # Validating the shape here makes the refusal name the field.
+    foreach ($f in @("rolloutFile", "sessionId")) {
+        $v = $prior.$f
+        if (-not ($v -is [string]) -or [string]::IsNullOrWhiteSpace($v)) {
+            Fail ("prior state " + $f + " must be a non-empty string; a " +
+                  "blank or non-string value records no measurement")
+        }
+    }
+    $rawBytes = $prior.bytes
+    if (-not (($rawBytes -is [int]) -or ($rawBytes -is [long])) -or
+        [long]$rawBytes -lt 0) {
+        Fail ("prior state bytes must be a non-negative whole number of " +
+              "bytes; anything else is not a byte offset anyone measured")
+    }
+    if (-not ($prior.prefixSha256 -is [string]) -or
+        ([string]$prior.prefixSha256) -notmatch '^[0-9a-f]{64}$') {
+        Fail ("prior state prefixSha256 must be a lowercase 64-character " +
+              "hex digest; a value that cannot be one was never a hash of " +
+              "anything")
+    }
 }
 
 # --------------------------------------------------------------------
 # Locate the rollout and establish the byte range THIS call appended.
 # --------------------------------------------------------------------
+
+function Test-JsonObjectLine([string]$raw, $parsed) {
+    # A JSONL RECORD IS AN OBJECT, AND `-is [PSCustomObject]` DOES NOT
+    # ESTABLISH THAT ON EVERY HOST. Measured 2026-08-04 on
+    # `'[{"type":"session_meta",...}]' | ConvertFrom-Json`:
+    #   Windows PowerShell 5.1 returns System.Object[] - the type test
+    #     catches it.
+    #   PowerShell 7.6.3 UNROLLS the single-element array and returns the
+    #     PSCustomObject inside it - the type test cannot see it, and the
+    #     line's properties then read straight through.
+    # So the shipped slice parser's object check, and the resume
+    # first-line check added hours earlier, both passed a JSON ARRAY on
+    # PowerShell 7 while refusing it on 5.1. That is the 0.16.0 lane-lock
+    # class this repo runs two host jobs for: a green suite on one
+    # interpreter proves one interpreter.
+    # The RAW TEXT decides instead. A JSON object begins with `{`, on
+    # every host, and combined with a successful parse that is the whole
+    # rule.
+    if ($null -eq $raw) { return $false }
+    if (-not $raw.TrimStart().StartsWith("{")) { return $false }
+    return ($parsed -is [System.Management.Automation.PSCustomObject])
+}
 
 function Get-RolloutSessionId([string]$name) {
     # rollout-<timestamp>-<session-id>.jsonl. The id is the tail because a
@@ -249,13 +305,17 @@ if ($Fresh) {
     $targetFile = (Resolve-Path -LiteralPath $RolloutFile).ProviderPath
     $expectSessionId = [string]$prior.sessionId
 
-    if ($prior.rolloutFile) {
-        $statedFile = $null
-        try { $statedFile = [System.IO.Path]::GetFullPath([string]$prior.rolloutFile) }
-        catch { $statedFile = [string]$prior.rolloutFile }
-        if (-not ($statedFile -ieq [System.IO.Path]::GetFullPath($targetFile))) {
-            Fail ("prior state names a different rollout file: " + $statedFile)
-        }
+    # UNCONDITIONAL. This used to be gated on `if ($prior.rolloutFile)`,
+    # so the falsy forms skipped the one check that ties the caller's
+    # -RolloutFile to the file the prior state actually measured. The
+    # schema check above now guarantees a non-empty string, and the
+    # comparison runs for every resume rather than for the ones whose
+    # state happened to be well-formed.
+    $statedFile = $null
+    try { $statedFile = [System.IO.Path]::GetFullPath([string]$prior.rolloutFile) }
+    catch { $statedFile = [string]$prior.rolloutFile }
+    if (-not ($statedFile -ieq [System.IO.Path]::GetFullPath($targetFile))) {
+        Fail ("prior state names a different rollout file: " + $statedFile)
     }
 }
 
@@ -343,7 +403,7 @@ for ($i = 0; $i -lt $lines.Count; $i++) {
     }
     # `null`, a bare scalar and an array are all valid JSON and none is a
     # record. Ignoring them silently is lenience under a strict-parse claim.
-    if (-not ($rec -is [System.Management.Automation.PSCustomObject])) {
+    if (-not (Test-JsonObjectLine $lines[$i] $rec)) {
         Fail ("rollout line " + ($i + 1) + " of this call's slice is not a " +
               "JSON object")
     }
@@ -400,6 +460,16 @@ if ($Fresh) {
     } catch {
         Fail ("the resumed rollout's first record is not parseable JSON, so " +
               "its session identity was never measured")
+    }
+    # PROVE IT IS AN OBJECT BEFORE READING PROPERTIES. A first line that
+    # is a JSON ARRAY satisfied a check written to prove the line is a
+    # session_meta record, because its properties read straight through.
+    # See Test-JsonObjectLine for the host divergence that makes the
+    # obvious type test the wrong instrument.
+    if (-not (Test-JsonObjectLine $firstLine $firstRec)) {
+        Fail ("the resumed rollout's first line is valid JSON but not an " +
+              "object, so it is not a session_meta record whatever its " +
+              "properties read as")
     }
     if ($firstRec.type -ne "session_meta") {
         Fail ("the resumed rollout's first record is not a session_meta " +

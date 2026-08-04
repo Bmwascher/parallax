@@ -775,3 +775,58 @@ operator reads. Both now name the LANE rather than the model. Worth
 recording because the literal arrived while writing prose about
 correctness, which is exactly when the sweep stops being on anyone's
 mind.
+
+### Amendment 14 (2026-08-04, mode-diff debate round 2) - the fixes had defects, and one was older than the branch
+
+Same reviewer session resumed against the applied diff. Claim 6, scope,
+PASS. Claims 1 to 5 carried defects. Two of the reviewer's sub-claims did
+NOT survive checking and were narrowed rather than accepted.
+
+**Two reachable holes in the round-1 fixes.** The resume half still
+validated field PRESENCE only, exactly the defect F1 closed on the fresh
+half: a `rolloutFile` that was null or empty is present, and the
+comparison tying the caller's file to the one the state measured was
+gated on truthiness, so it was skipped. It runs unconditionally now, over
+a validated schema. Separately, the F2 first-line check read `.type` and
+`.payload.id` without proving it had an object.
+
+**Two sub-claims narrowed.** The reviewer also said `bytes`,
+`prefixSha256` and `sessionId` were permissive. They were not: each was
+already refused downstream, by a failed coercion, a failed comparison and
+a filename disagreement respectively. What was actually wrong is the
+REASON each printed - a schema fault reported as a changed rollout sends
+the operator to re-measure a file that is fine. The shape checks landed
+anyway, on that narrower ground, and the closure says so.
+
+**G9, which the reviewer did not find and its finding uncovered.** The
+obvious instrument for the object check is `-is [PSCustomObject]`, and it
+does not work. Measured on
+`'[{"type":"session_meta",...}]' | ConvertFrom-Json`: Windows PowerShell
+5.1 returns `System.Object[]`; PowerShell 7.6.3 UNROLLS the single
+element and returns the object inside it. The SHIPPED slice parser used
+that test, so its contract-stated rule that a non-object line blocks the
+round was true on 5.1 and false on 7 - and older than this branch. Both
+call sites now decide on the RAW TEXT beginning with `{` plus a
+successful parse.
+
+This is the 0.16.0 lane-lock class, second occurrence: a green suite on
+one interpreter proves one interpreter. Both oracles were watched to
+fail on PowerShell 7 by mutating the raw-text check out, and both PASSED
+on 5.1 before the fix. That asymmetry is the evidence, and no single-host
+run could have produced it.
+
+**Four over-wide statements corrected.** The mirror-location text claimed
+a single source while `SKILL.md` restates the rule in full; it now says
+the rule lives in both files and must be changed in both. The identity
+region claimed post-construction source changes are detected, when the
+fingerprint only sees what `git status` sees - a raw-byte change
+surviving the clean filter moves neither HEAD nor fingerprint, and the
+autocrlf case this repo already measured is the mild version of it. Item
+20's oracle-count sentence read as one-of-36 rather than one-of-six-new.
+The test module dated every refusal to "before the validator exists",
+which is stale for oracles a later review added.
+
+**What round 2 says about round 1.** Every defect it found was in text
+round 1 produced. Two rounds, two rounds' worth of fixes carrying their
+own defects. The fix-gets-no-discount rule is not a slogan here; it is
+the measured behaviour of this branch.

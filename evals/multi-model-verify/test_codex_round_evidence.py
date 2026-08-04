@@ -21,7 +21,10 @@ THE FAILURE DIRECTION IS THE POINT. Every case below that ends `failed`
 asserts that an unmade, altered or unattributable measurement cannot be
 read as a clean one. A negative case that passed by accident would be
 worse than an absent one, so each is watched to fail for its own reason
-before the validator exists.
+before ITS TARGET CHECK exists. That boundary, not "before the validator
+exists": most of these predate the validator, but the ones a later review
+added were written against a validator that already ran, and the honest
+claim is the one that holds for both.
 
 Each test asserts on `status`, on the process EXIT CODE, and on a
 distinguishing substring of `reason`, never on an exact message string.
@@ -633,10 +636,16 @@ def test_an_inventory_holding_a_non_string_is_refused(tmp_path):
 def test_an_empty_inventory_is_still_accepted(tmp_path):
     """The positive control that keeps the fix from becoming a refusal
     of the ordinary case. An empty list is a MADE measurement that found
-    nothing, and it must stay distinguishable from an absent one."""
+    nothing, and it must stay distinguishable from an absent one.
+
+    The inventory is authored BEFORE the rollout exists, which is the
+    order a real round runs in. The tool compares no timestamps, so the
+    order changes no verdict; a control that stages the wrong story
+    still reads as evidence for a claim it never tested.
+    """
     brief = "A brief."
-    root, f = make_root(tmp_path, brief=brief)
     prior = state_file(tmp_path, {"kind": "fresh", "knownRollouts": []})
+    root, f = make_root(tmp_path, brief=brief)
     assert_clean(run_fresh(root, prior, canon(brief)))
 
 
@@ -658,3 +667,157 @@ def test_a_resumed_prefix_with_a_foreign_session_meta_is_refused(tmp_path):
     prior = resume_state(tmp_path, f)
     append_rows(f, [user_row(r2), assistant_row("ok2")])
     assert_failed(run_resume(f, prior, canon(r2)), "session id")
+
+
+# =====================================================================
+# Mode-diff debate round 2, same reviewer session. Three defects IN the
+# round-1 fixes, all verified here before acceptance.
+# =====================================================================
+
+def test_a_null_rollout_file_in_the_resume_state_is_refused(tmp_path):
+    """G1. The resume half carried the exact defect F1 closed on the
+    fresh half.
+
+    `rolloutFile: null` is PRESENT, so the presence assertion passed, and
+    the comparison against the caller's `-RolloutFile` was gated on
+    truthiness and therefore skipped entirely. The state's own record of
+    which file it measured then constrained nothing, which is a
+    provenance nobody checked reading as one that matched.
+    """
+    r1, r2 = "Round one brief.", "Round two brief."
+    root, f = make_root(tmp_path, rows=[meta_row(), preamble_row(),
+                                        user_row(r1), assistant_row()])
+    b = f.read_bytes()
+    prior = state_file(tmp_path, {
+        "kind": "resume", "rolloutFile": None, "sessionId": SESSION,
+        "bytes": len(b), "prefixSha256": hashlib.sha256(b).hexdigest()})
+    append_rows(f, [user_row(r2), assistant_row("ok2")])
+    assert_failed(run_resume(f, prior, canon(r2)), "rolloutFile")
+
+
+def test_a_blank_rollout_file_in_the_resume_state_is_refused(tmp_path):
+    """G1. Empty string is the other FALSY form of the same hole.
+
+    A whitespace-only string is not: PowerShell calls it truthy, the
+    comparison runs, and it already failed. Only the falsy forms - null
+    and empty - skipped the check, and this pins the second one.
+    """
+    r1, r2 = "Round one brief.", "Round two brief."
+    root, f = make_root(tmp_path, rows=[meta_row(), preamble_row(),
+                                        user_row(r1), assistant_row()])
+    b = f.read_bytes()
+    prior = state_file(tmp_path, {
+        "kind": "resume", "rolloutFile": "", "sessionId": SESSION,
+        "bytes": len(b), "prefixSha256": hashlib.sha256(b).hexdigest()})
+    append_rows(f, [user_row(r2), assistant_row("ok2")])
+    assert_failed(run_resume(f, prior, canon(r2)), "rolloutFile")
+
+
+def test_a_non_integer_byte_offset_is_refused(tmp_path):
+    """G1. `bytes` reached an `[int]` coercion with no type check.
+
+    THIS WAS NOT A PERMISSIVE HOLE and the round-2 finding was wider
+    than its evidence there: the coercion failed and the call was
+    already refused. What was wrong is what it SAID - "does not carry a
+    usable byte offset" describes a coercion, not a schema, and an
+    operator reading it cannot tell a corrupt state file from a stale
+    one. The refusal now names the field.
+    """
+    r1, r2 = "Round one brief.", "Round two brief."
+    root, f = make_root(tmp_path, rows=[meta_row(), preamble_row(),
+                                        user_row(r1), assistant_row()])
+    b = f.read_bytes()
+    prior = state_file(tmp_path, {
+        "kind": "resume", "rolloutFile": str(f), "sessionId": SESSION,
+        "bytes": "many", "prefixSha256": hashlib.sha256(b).hexdigest()})
+    append_rows(f, [user_row(r2), assistant_row("ok2")])
+    assert_failed(run_resume(f, prior, canon(r2)), "bytes")
+
+
+def test_a_malformed_prefix_hash_is_refused(tmp_path):
+    """G1. `prefixSha256` was compared as a string with no shape check.
+
+    ALSO NOT A PERMISSIVE HOLE: the comparison ran and failed. It
+    reported "the rollout prefix changed since the prior state was
+    captured", which is a claim about the ROLLOUT and the state file was
+    the thing at fault. A refusal that blames the wrong artifact sends
+    the operator to re-measure a file that is fine.
+    """
+    r1, r2 = "Round one brief.", "Round two brief."
+    root, f = make_root(tmp_path, rows=[meta_row(), preamble_row(),
+                                        user_row(r1), assistant_row()])
+    b = f.read_bytes()
+    prior = state_file(tmp_path, {
+        "kind": "resume", "rolloutFile": str(f), "sessionId": SESSION,
+        "bytes": len(b), "prefixSha256": "not-a-digest"})
+    append_rows(f, [user_row(r2), assistant_row("ok2")])
+    assert_failed(run_resume(f, prior, canon(r2)), "prefixSha256")
+
+
+def test_a_blank_session_id_in_the_resume_state_is_refused(tmp_path):
+    """G1. An empty `sessionId` is present, so the presence check passed.
+
+    ALSO NOT A PERMISSIVE HOLE: it then disagreed with the filename and
+    was refused. The reported reason blamed a disagreement ACROSS
+    SOURCES, when one of the two sources was simply blank. Same class as
+    the two above: right verdict, wrong story.
+    """
+    r1, r2 = "Round one brief.", "Round two brief."
+    root, f = make_root(tmp_path, rows=[meta_row(), preamble_row(),
+                                        user_row(r1), assistant_row()])
+    b = f.read_bytes()
+    prior = state_file(tmp_path, {
+        "kind": "resume", "rolloutFile": str(f), "sessionId": "",
+        "bytes": len(b), "prefixSha256": hashlib.sha256(b).hexdigest()})
+    append_rows(f, [user_row(r2), assistant_row("ok2")])
+    assert_failed(run_resume(f, prior, canon(r2)), "sessionId")
+
+
+def test_a_first_line_that_is_an_array_is_refused(tmp_path):
+    """G2. The F2 fix checked properties without proving it had an
+    object.
+
+    Measured 2026-08-04 on both hosts:
+    `'[{"type":"session_meta",...}]' | ConvertFrom-Json` UNROLLS to its
+    single element, so `.type` and `.payload.id` both read through and a
+    first line that is a JSON ARRAY satisfied a check written to prove
+    the line is a session_meta record. The slice parser already refuses
+    valid non-object JSON; the fix omitted the same guard.
+    """
+    r1, r2 = "Round one brief.", "Round two brief."
+    day = tmp_path / "sessions" / "2026" / "08" / "04"
+    day.mkdir(parents=True, exist_ok=True)
+    f = day / rollout_name()
+    with open(f, "w", encoding="utf-8", newline="\n") as fh:
+        fh.write(json.dumps([meta_row()]) + "\n")
+        for r in [preamble_row(), user_row(r1), assistant_row()]:
+            fh.write(json.dumps(r) + "\n")
+    prior = resume_state(tmp_path, f)
+    append_rows(f, [user_row(r2), assistant_row("ok2")])
+    assert_failed(run_resume(f, prior, canon(r2)), "object")
+
+
+def test_a_slice_line_that_is_a_single_element_array_is_refused(tmp_path):
+    """G9. The SHIPPED slice parser carried the same hole, on one host
+    only, and the round-2 finding exposed more than it claimed.
+
+    Measured 2026-08-04 on
+    `'[{"type":"session_meta",...}]' | ConvertFrom-Json`: Windows
+    PowerShell 5.1 returns `System.Object[]`, which the object test
+    catches; PowerShell 7.6.3 UNROLLS the single-element array and hands
+    back the object inside it, which the object test cannot see. So a
+    rollout line that is an ARRAY passed the contract's "a line that is
+    not a JSON object blocks the round" on 7 and failed it on 5.1.
+
+    This is the 0.16.0 lane-lock class: a green suite on one interpreter
+    proves one interpreter. The raw text now decides, and a JSON object
+    starts with `{` on every host.
+    """
+    r1, r2 = "Round one brief.", "Round two brief."
+    root, f = make_root(tmp_path, rows=[meta_row(), preamble_row(),
+                                        user_row(r1), assistant_row()])
+    prior = resume_state(tmp_path, f)
+    with open(f, "a", encoding="utf-8", newline="\n") as fh:
+        fh.write(json.dumps([user_row(r2)]) + "\n")
+        fh.write(json.dumps(assistant_row("ok2")) + "\n")
+    assert_failed(run_resume(f, prior, canon(r2)), "JSON object")
