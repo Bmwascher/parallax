@@ -596,3 +596,83 @@ pass `-OwnerName <name>` to both the build and the login, and states
 that it is optional everywhere and never part of the identity a release
 must match. Until this edit the field was available but nothing on the
 shipped path passed one.
+
+---
+
+# Build record - tasks 6, 7 and 8 (2026-08-04)
+
+Both rules land in `references/debate-protocol.md`, which SKILL.md names
+as REQUIRED READING before the first round and routes iteration through.
+Nothing was added to SKILL.md, which is already over its token budget
+(5404 against ~5000) as backlog item 19 records.
+
+## Task 6: the cap counts the thing it was named for
+
+The old cap counted EXCHANGES. That fits a contested debate and not a
+fix-verify loop, where every round finds something new, the session
+verifies and accepts it, and nothing is argued.
+
+- The cap is now **4 CONSECUTIVE CONTESTED exchanges**. A contested
+  round increments it; a round whose findings are all accepted RESETS it
+  to zero.
+- A **total fix-verify budget**, caller-set and declared before round 1,
+  bounds the other regime. Exhausting it PAUSES for the user's
+  authorization. It never certifies and never converts into a verdict,
+  because the session both adjudicates acceptance and decides when to
+  stop - one actor holding both roles - and a budget the USER controls
+  is the bound a session cannot grant itself.
+- Termination requires an **adjudicated dry round**: no new substantive
+  finding AND no outstanding contested point. The plan's own predicate
+  ("ends when a round produces no new accepted finding") was logically
+  wrong: it also ends a round whose only new finding is CONTESTED, which
+  is the exact case the cap exists to escalate. The text says why, so
+  the shorter version cannot return as a simplification.
+
+Both overrun runs are named in the shipped text - the field report's 8
+rounds and this repo's own 0.21.1 seven - so the rule cannot be rewritten
+without confronting the measurements that produced it.
+
+## Task 7: the scope rule, with definitions that decide cases
+
+The improvised rule worked and was two judgement calls. Two reviewers
+who define them differently produce two different attestations, and an
+attestation that means something different run to run means nothing.
+
+- **SAME CLASS** is a violation of the same NAMED invariant, contract
+  clause or frozen postcondition, cited by name. Not similar symptoms,
+  not the same file, not the same subsystem.
+- **VERIFICATION SURFACE** is the exact files, symbols, runtime paths
+  and gates enumerated BEFORE the finding is raised. Enumerated after,
+  it is a surface drawn around the answer someone already wanted.
+- **The certification unit** is named before the debate ends rather than
+  inferred from what was touched.
+- **An exercised surface with an outstanding follow-up cannot be
+  attested**: FIX, ESCALATE, or an explicitly narrowed claim naming what
+  is excluded.
+
+## The pins are mutation-tested, all five
+
+Prose pins are easy to write and easy to write uselessly, so each was
+checked by CHANGING the text rather than deleting it. Every mutation
+failed its own pin and nothing else:
+
+| Mutation | Pin that failed |
+| --- | --- |
+| `RESETS it to zero` -> `keeps it as it was` | contested-round counter |
+| `Exhausting it PAUSES` -> `Exhausting it ENDS` | fix-verify budget |
+| `ENUMERATED BEFORE` -> `enumerated when` | verification surface |
+| `finding AND left no` -> `finding OR left no` | adjudicated dry round |
+| `cannot be attested` -> `should not be attested` | outstanding follow-up |
+
+## Task 8: the evidence is primary now
+
+`docs/superpowers/plans/rounds/2026-08-04-transport-and-mirror/` holds
+all seven plan-debate replies with their briefs and all five diff-debate
+replies, verbatim, with a README indexing each round by the verdict line
+the reply itself carries.
+
+The README also states what they do NOT establish. No round record
+carries a contested-point count, so "seven rounds, zero contested" is
+still a reconstruction rather than a reading, and the 0.20.0 `6,5,2,1,0`
+sequence is not retained anywhere and stays an assertion. The reviewer
+raised both as a gap; only one of them is closed.

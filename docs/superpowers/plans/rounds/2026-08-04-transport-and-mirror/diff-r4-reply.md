@@ -1,0 +1,9 @@
+1. R3-1 / D21. The original causal attribution is gone, but its replacement adds another claim wider than the evidence: “nothing in the pipeline before the review would have” noticed it. The record establishes only that the executed suites passed and the review found the drift; it does not establish the counterfactual capability of every pipeline component. Replace the tail with: “The recorded suite passed; the whole-branch review found the departures. That is exactly why they are recorded.” `docs/superpowers/plans/rounds/2026-08-03-home-skills-root/execution-deviations.md:887-905`; `docs/superpowers/plans/rounds/2026-08-03-home-skills-root/execution-deviations.md:752-767`. **FIX**
+
+2. R3-2 / D24. This closes the finding. It claims neither a count nor completeness, correctly retracts the false Sol round-2 citation, identifies the three omissions from round 3, and labels the remaining paths as examples only. The unlisted Sol round-4 reply therefore creates no contradiction. `docs/superpowers/plans/rounds/2026-08-03-home-skills-root/execution-deviations.md:984-1008`; `docs/superpowers/plans/rounds/2026-08-03-home-skills-root/sol-reopen-r2-brief.md:5-8`; `docs/superpowers/plans/rounds/2026-08-03-home-skills-root/sol-reopen-r4-reply.md:18-22`. **PASS**
+
+3. Regression check. No executable regression is present; the remaining defect is confined to D21’s newly added modal claim. D24 does not regress the corrected historical boundary. `docs/superpowers/plans/rounds/2026-08-03-home-skills-root/execution-deviations.md:897-905`; `docs/superpowers/plans/rounds/2026-08-03-home-skills-root/execution-deviations.md:984-1008`. **FIX**
+
+UNVERIFIED: the reported dual-host gate executions and 973-passed/13-skipped counts were not independently rerun because this environment has no Python command. They are not used in the verdict. Required gates: `CLAUDE.md:11-18`.
+
+**Terminal verdict for `e94c0b5..9e7bd21`: FIX.**

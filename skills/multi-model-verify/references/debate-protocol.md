@@ -50,15 +50,69 @@ Each exchange (one session position or rebuttal + one reviewer reply) is a round
   accepted fix in the debate record and treat the plan as converged — an
   accepted FIX is agreement, not a dispute for the user to settle. (This
   matters whenever a FIX lands in the last round before the cap.)
-- Round cap: **4 exchanges** by default (caller may raise or lower it).
+- Round cap: **4 CONSECUTIVE CONTESTED exchanges** by default (caller may
+  raise or lower it). A round carrying a CONTESTED point increments the
+  counter; a round whose findings are all accepted RESETS it to zero.
   Hitting the cap is not failure — it is the signal to stop spending tokens
-  on an argument evidence hasn't settled.
-- At the cap or on ESCALATE, for points that remain genuinely contested:
-  stop, present BOTH positions to the user with their evidence, and let the
-  user decide. Never silently pick a side.
+  on an argument evidence hasn't settled, and that argument is the only
+  thing this counter measures.
+- **A fix-verify loop is not an argument, and the cap above does not bound
+  it.** A round that finds something new, has it verified, accepts it and
+  moves on is progress. Two measured runs overran a flat cap of 4: a field
+  report ran 8 rounds with zero refutations, zero escalations and zero
+  repeat findings, where stopping at 4 would have shipped its defects 5 and
+  6; and this repo's own 0.21.1 debate ran 7 rounds with zero contested
+  points, where rounds 5 and 6 each returned ESCALATE on real defects.
+- **A separate TOTAL FIX-VERIFY BUDGET bounds that loop**, caller-set and
+  declared before round 1. Exhausting it PAUSES the debate for the user's
+  authorization to continue — it NEVER certifies and never converts into a
+  verdict. The session both adjudicates whether a finding is accepted AND
+  decides when to stop, which is one actor holding both roles; a budget the
+  USER controls is the bound a session cannot grant itself.
+- Termination: the debate ends only on an **adjudicated dry round** — one
+  that produced no new substantive finding AND left no outstanding
+  contested point. "Ends when a round produces no new accepted finding" is
+  NOT the rule: that also ends a round whose only new finding is CONTESTED,
+  which is the exact case the cap exists to escalate.
+- At the cap, at budget exhaustion, or on ESCALATE, for points that remain
+  genuinely contested: stop, present BOTH positions to the user with their
+  evidence, and let the user decide. Never silently pick a side.
 - Questions only runtime testing can answer always escalate — neither model
   can run the live application (in WoW projects, /reload + BugSack is always
   the user's step).
+
+## Scope: pre-existing defects a review walks past
+
+A diff review reads adjacent code and finds defects that PREDATE the range.
+Both answers are defensible — surgical-changes discipline says leave them,
+and certifying a module you know is broken says fix them — so the rule is
+written down here rather than improvised per debate, because an attestation
+that means something different run to run means nothing.
+
+**The rule.** FIX a pre-existing defect when it is of the SAME CLASS as
+what the branch already fixes AND it lives on the verification surface this
+debate will exercise. RECORD anything else as a named follow-up. Do NOT
+certify a module whose follow-up has not landed.
+
+Both halves are judgement calls unless they are defined, and two reviewers
+who define them differently produce two different attestations. So:
+
+- **SAME CLASS** means a violation of the SAME NAMED invariant, contract
+  clause, or frozen postcondition — cited by name. It does not mean similar
+  symptoms, the same file, or the same subsystem. "Both are null-handling
+  bugs" is not a class; "both violate the postcondition that an unmade
+  measurement never reads as a clean one" is.
+- **VERIFICATION SURFACE** means the exact files, symbols, runtime paths
+  and gates ENUMERATED BEFORE the finding is raised. Enumerated after, it
+  is a surface drawn around the answer someone already wanted.
+- **The certification unit** is the module or contract region the
+  attestation names, and it is named before the debate ends, not inferred
+  from what was touched.
+
+**An exercised surface with an outstanding follow-up cannot be attested.**
+The debate ends FIX or ESCALATE, or it attests an EXPLICITLY NARROWED claim
+that names what is excluded. Silence about a known defect inside a
+certified unit is the one outcome this rule exists to prevent.
 
 ## Final adjudication (the session's last step)
 

@@ -750,6 +750,91 @@ class TestDebateProtocol:
         text = read(REFERENCES / "debate-protocol.md")
         assert re.search(r"converged with amendments", text, re.IGNORECASE)
 
+    def test_round_cap_counts_only_contested_rounds(self):
+        """Backlog item 24. The old cap counted EXCHANGES, which fits a
+        contested debate and not a fix-verify loop, where every round
+        finds something new, the session verifies and accepts it, and
+        nothing is argued.
+
+        Two measured runs overran a flat 4: a field report ran 8 rounds
+        with zero refutations, where stopping at 4 would have shipped
+        its defects 5 and 6, and this repo's own 0.21.1 debate ran 7
+        rounds with rounds 5 and 6 each returning ESCALATE on real
+        defects. Both are named in the text so the rule cannot be
+        rewritten without confronting the runs that produced it."""
+        text = " ".join(read(REFERENCES / "debate-protocol.md").split())
+        assert (
+            "Round cap: **4 CONSECUTIVE CONTESTED exchanges** by default "
+            "(caller may raise or lower it). A round carrying a CONTESTED "
+            "point increments the counter; a round whose findings are all "
+            "accepted RESETS it to zero.") in text
+        assert (
+            "**A fix-verify loop is not an argument, and the cap above "
+            "does not bound it.**") in text
+
+    def test_fix_verify_budget_pauses_rather_than_certifying(self):
+        """The bound a session cannot grant itself.
+
+        Nothing stopped a fix-verify loop running unbounded, because the
+        session both adjudicates whether a finding is accepted and
+        decides when to stop - one actor holding both roles. The budget
+        is the user's, and exhausting it PAUSES; a budget that converted
+        into a verdict would be the same actor again."""
+        text = " ".join(read(REFERENCES / "debate-protocol.md").split())
+        assert (
+            "**A separate TOTAL FIX-VERIFY BUDGET bounds that loop**, "
+            "caller-set and declared before round 1. Exhausting it PAUSES "
+            "the debate for the user's authorization to continue \u2014 it "
+            "NEVER certifies and never converts into a verdict.".replace(
+                "\u2014", "—")) in text
+
+    def test_termination_requires_an_adjudicated_dry_round(self):
+        """The predicate the plan proposed was logically wrong.
+
+        "Ends when a round produces no new accepted finding" also ends a
+        round whose only new finding is CONTESTED - the exact case the
+        cap exists to escalate. The replacement requires BOTH halves,
+        and the text says why, so the shorter version cannot come back
+        as a simplification."""
+        text = " ".join(read(REFERENCES / "debate-protocol.md").split())
+        assert (
+            "the debate ends only on an **adjudicated dry round** \u2014 one "
+            "that produced no new substantive finding AND left no "
+            "outstanding contested point.".replace("\u2014", "—")) in text
+        assert (
+            "that also ends a round whose only new finding is CONTESTED") in text
+
+    def test_scope_rule_defines_same_class_and_verification_surface(self):
+        """Backlog item 25. Mode diff said nothing about SCOPE, so each
+        session improvised and the attestation record meant something
+        slightly different run to run.
+
+        Both halves of the improvised rule are judgement calls unless
+        they are defined, so both are defined operationally: same class
+        is a NAMED invariant rather than a similar symptom, and the
+        verification surface is enumerated BEFORE the finding, because a
+        surface drawn afterwards is drawn around the wanted answer."""
+        text = " ".join(read(REFERENCES / "debate-protocol.md").split())
+        assert "## Scope: pre-existing defects a review walks past" in text
+        assert (
+            "**SAME CLASS** means a violation of the SAME NAMED invariant, "
+            "contract clause, or frozen postcondition \u2014 cited by name. "
+            "It does not mean similar symptoms, the same file, or the same "
+            "subsystem.".replace("\u2014", "—")) in text
+        assert (
+            "**VERIFICATION SURFACE** means the exact files, symbols, "
+            "runtime paths and gates ENUMERATED BEFORE the finding is "
+            "raised.") in text
+
+    def test_scope_rule_blocks_attestation_over_an_outstanding_followup(self):
+        """The half that has teeth. Recording a follow-up is easy; the
+        rule only means anything if the follow-up blocks the claim."""
+        text = " ".join(read(REFERENCES / "debate-protocol.md").split())
+        assert (
+            "**An exercised surface with an outstanding follow-up cannot "
+            "be attested.** The debate ends FIX or ESCALATE, or it attests "
+            "an EXPLICITLY NARROWED claim that names what is excluded.") in text
+
     def test_session_final_adjudication(self):
         # The chain never terminates on the external reviewer's verdict:
         # the session verifies the final round and emits the terminal
