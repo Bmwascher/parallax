@@ -481,9 +481,19 @@ budget:
 | after Task 1 | 5133 | +4 |
 | after Task 2 (incl. review fixes) | 5273 | +140 |
 | after Task 3 | 5334 | +61 |
+| after Task 4 | 5334 | 0 |
+| after Task 5 | 5404 | +70 |
 
-Running total +205. Item 19 is scheduled for 0.23.0 and this release
-makes it worse, as this plan predicted it would.
+**Release total: 5129 to 5404, +275, or 5.4 percent.** That is 404
+tokens over the ~5000 budget, about 8 percent over. Task 4 cost nothing
+here because the identity gate is documented entirely in
+`references/backup-lane.md`; the three tasks that did cost tokens each
+added a point-of-use rule an operator has to see before dispatching.
+
+Item 19 is scheduled for 0.23.0 and this release makes it worse, as this
+plan predicted it would. Item 27, filed by the Task 5 review, belongs
+with it: both rewrite the same file and item 19 will be re-reading every
+paragraph anyway.
 
 ### Amendment 7 (2026-08-04, Task 4) - the chosen drift disposition did not catch its own case
 
@@ -601,3 +611,40 @@ Verify exits 1 on every identity block and 2 when the source root does
 not exist, through the pre-existing path shared with build. Both are
 refusals and neither can read as clean, but the earlier wording was
 imprecise.
+
+
+## Behavioural evals, measured 2026-08-04
+
+`python evals/tools/run_behavioral_evals.py --changed --head`, nine cases
+selected, all against `skills/multi-model-verify/SKILL.md`.
+
+PASS: `diff-mode-spec-fidelity` 4/4, `degraded-consent-gate` 4/4,
+`missing-reference-refusal` 3/3, `fix-application-checkpoint` 4/4,
+`fix-checkpoint-attended-stop` 3/3, `no-manufactured-objections` 3/3.
+
+SKIPPED(manual), both named as the plan's step required, both needing
+state the harness cannot build: `backup-lane-consented-substitution`,
+`panel-blind-relay`.
+
+FAIL: `plan-mode-debate-runs` 2/4. This is backlog item 18's case and
+its two misses are item 18's two documented causes, not a regression
+from this branch:
+
+- MISS 1 is the KNOWN, non-flaky cause item 18 names: the harness's
+  transcript rendering truncates the PowerShell tool call before
+  `codex exec` appears, so the grader cannot see the invocation it is
+  asked to judge, however correctly the run behaved. An expectation the
+  grader cannot observe is an unmade measurement wearing a verdict.
+- MISS 3 is the residual flakiness: the plan made reference-specific
+  claims without citing the reference file.
+
+Item 18 measured this case at 2 of 6 passes on an UNCHANGED tree and 1
+of 7 on the 0.20.0 branch, same expectations failing in both arms. Two
+runs of it tonight disagreed with each other, 2 failures then 1, which
+is the same flakiness observed again rather than new information.
+
+**What this does NOT establish.** One run cannot exonerate a branch
+against a case that fails two runs in three. The argument here is that
+the failing expectations are the ones item 18 already attributes to the
+harness and to the case itself, not that a single green run would have
+proved anything.
