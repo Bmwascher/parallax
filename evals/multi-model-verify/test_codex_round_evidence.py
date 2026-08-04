@@ -527,17 +527,58 @@ def test_a_record_carrying_a_non_text_element_does_not_bind(tmp_path):
                   "does not match")
 
 
-def test_a_resume_slice_with_two_user_records_is_refused(tmp_path):
-    """A resumed slice carried exactly ONE user record on every measured
-    round: the resume payload. There is no preamble to make room for, so
-    a second one is unexplained and the round is not attributable.
+def test_a_resume_slice_with_an_unexplained_extra_record_is_refused(tmp_path):
+    """An extra user record before the brief is unattributed text in
+    front of the reviewer, which is the class this binding refuses.
+
+    This used to be a COUNT rule - a resumed slice must carry exactly
+    one. That bound was falsified in the field (see the preamble case
+    below), so the rule is now about IDENTITY rather than arithmetic:
+    the only record allowed in front of the brief is one the client
+    already emitted in this session.
     """
     r2 = "Round two brief."
     root, f = make_root(tmp_path, brief="Round one brief.")
     prior = resume_state(tmp_path, f)
     append_rows(f, [user_row("something else entirely"), user_row(r2),
                     assistant_row("ok2")])
-    assert_failed(run_resume(f, prior, canon(r2)), "exactly one user record")
+    assert_failed(run_resume(f, prior, canon(r2)), "preamble")
+
+
+def test_a_resume_slice_repeating_the_clients_preamble_is_accepted(tmp_path):
+    """MEASURED IN THE FIELD 2026-08-04, and it falsified the contract.
+
+    Session `019fcb9a`, three resumes of one session: the first carried
+    exactly one user record, and the third carried the client's
+    instructions preamble AND the brief - byte-identical preamble, 1532
+    characters, to the one at the session's own start. The "a resumed
+    slice carries exactly one" bound came from three measured rounds and
+    round four broke it, so it was a claim wider than its evidence
+    living inside the tool that exists to refuse those.
+
+    It BLOCKED a legitimate round. That is the safe direction and it is
+    still a defect: a gate that fires on a clean run teaches its reader
+    to route around it.
+    """
+    r1, r2 = "Round one brief.", "Round two brief."
+    root, f = make_root(tmp_path, rows=[meta_row(), preamble_row(),
+                                        user_row(r1), assistant_row()])
+    prior = resume_state(tmp_path, f)
+    append_rows(f, [preamble_row(), user_row(r2), assistant_row("ok2")])
+    assert_clean(run_resume(f, prior, canon(r2)))
+
+
+def test_a_resume_slice_with_three_user_records_is_refused(tmp_path):
+    """Two is the measured ceiling. A third is unexplained however it
+    reads, and the preamble exemption is for ONE repeat, not a licence
+    to stack records in front of the brief."""
+    r1, r2 = "Round one brief.", "Round two brief."
+    root, f = make_root(tmp_path, rows=[meta_row(), preamble_row(),
+                                        user_row(r1), assistant_row()])
+    prior = resume_state(tmp_path, f)
+    append_rows(f, [preamble_row(), preamble_row(), user_row(r2),
+                    assistant_row("ok2")])
+    assert_failed(run_resume(f, prior, canon(r2)), "user record")
 
 
 def test_a_non_object_json_line_is_refused(tmp_path):

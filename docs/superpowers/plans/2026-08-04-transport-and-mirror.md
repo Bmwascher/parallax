@@ -830,3 +830,64 @@ which is stale for oracles a later review added.
 round 1 produced. Two rounds, two rounds' worth of fixes carrying their
 own defects. The fix-gets-no-discount rule is not a slogan here; it is
 the measured behaviour of this branch.
+
+### Amendment 15 (2026-08-04, round 3 dispatch) - the binding refused a legitimate round, and it was right to
+
+Round 3's brief binding returned `failed`: "a resumed slice must carry
+exactly one user record, found 2". The reply was DISCARDED UNREAD, which
+is what the contract says to do, and only then was the cause
+investigated.
+
+**What the client did.** Session `019fcb9a`, mapped end to end:
+
+| round | mode | user records in slice |
+|---|---|---|
+| 1 | fresh | preamble + brief |
+| 2 | resume | brief |
+| 3 | resume | preamble + brief |
+
+The round-3 preamble was byte-identical to the session's own opening
+preamble, 1532 characters, carrying the AGENTS.md instruction block and
+the environment context. Same client, same session, resumed twice, and
+it emitted the preamble once and not the other time. No trigger was
+established and none is claimed.
+
+**What the contract said.** Amendment 1 tightened the resumed slice to
+exactly one user record because "the measured slices carried exactly
+one" - three rounds of one session. Amendment 12 applied the identical
+argument to fresh slices. The fourth round falsified the resumed half.
+That is a claim wider than its evidence, living inside the tool built to
+refuse claims wider than their evidence.
+
+**What replaced it.** IDENTITY, not arithmetic. A resumed slice may
+carry at most two user records; the brief must be LAST; and a record in
+front of the brief must canonically equal the FIRST user record in this
+session's own prefix. Novel text still cannot get in front of the
+reviewer, which is the entire point, and a re-emitted preamble is no
+longer read as an attack. The prefix is read only as far as its first
+user record, so the bounded-read argument F2 rests on still holds.
+
+**The re-bind, and why it is not moving the goalposts.** After the fix,
+the SAME unchanged append-only bytes bound `clean` and the reply was
+read. The guard against gate-tuning is that the corrected rule still
+refuses the original attack - an oracle pins novel text in front of the
+brief - and accepts only a byte-identical repeat of the client's own
+preamble, which the tool verifies rather than assumes. Both the refusal
+and the correction are recorded here rather than the correction alone.
+
+**The lesson is about sample size, not about codex.** Three rounds of one
+session is not a client's behaviour. Every "on every measured round"
+sentence in this branch rests on the same kind of sample.
+
+### Folded in: another session's mirror change
+
+`41ab307`, authored in a separate session on top of `aae5be8`: source
+directory reparse points are now FOLLOWED by the budget walk rather than
+refused, because `robocopy /E` without `/XJ` or `/SL` follows them, so
+refusing to measure across one described a SMALLER universe than the copy
+produces. Cycles and repeated link targets are still refused, and a repo
+root that is itself a reparse point stays refused.
+
+It lands inside this release rather than getting its own cycle: it edits
+the same contract region F4 narrowed, in a file this debate's reviewer has
+already read three times. The round-4 brief carries it as its own claim.

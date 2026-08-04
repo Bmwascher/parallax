@@ -520,13 +520,64 @@ if ($userRecords.Count -lt 1) {
           "prompt to bind the brief to")
 }
 
-# A RESUMED slice carried exactly one user record on every measured round:
-# the resume payload. There is no instructions preamble to make room for,
-# so a second one is unexplained and the round is not attributable. A FRESH
-# slice always carries at least two, which is why this bound is resume-only.
-if ($Resume -and $userRecords.Count -ne 1) {
-    Fail ("a resumed slice must carry exactly one user record, found " +
-          $userRecords.Count)
+# THIS BOUND USED TO BE ARITHMETIC AND THE FIELD FALSIFIED IT.
+# "A resumed slice carries exactly one user record" was earned from three
+# measured rounds. Round four of session 019fcb9a, 2026-08-04, carried the
+# client's instructions preamble AND the brief - a preamble byte-identical
+# to the one at the session's own start - and the rule BLOCKED a
+# legitimate round. A claim wider than its evidence, inside the tool built
+# to refuse those.
+#
+# The replacement is about IDENTITY, not arithmetic: at most two user
+# records, and a record in front of the brief must be one THIS CLIENT
+# ALREADY EMITTED in this session. Novel text still cannot get in front of
+# the reviewer, which is the whole point, and a re-emitted preamble no
+# longer reads as an attack. Comparing against the session's first user
+# record needs the PREFIX, so the prefix is read only as far as that
+# record - a bounded read near the top of the file, not the cumulative
+# whole.
+if ($Resume) {
+    if ($userRecords.Count -gt 2) {
+        Fail ("a resumed slice may carry at most two user records, the " +
+              "client's instructions preamble and the brief, found " +
+              $userRecords.Count)
+    }
+    if ($userRecords.Count -eq 2) {
+        $prefixPreamble = $null
+        try {
+            $reader = New-Object System.IO.StreamReader(
+                $targetFile, (New-Object System.Text.UTF8Encoding($false, $true)))
+            try {
+                $consumed = 0
+                while ($null -ne ($ln = $reader.ReadLine())) {
+                    # Never read past this call's own slice: the record we
+                    # are looking for is the client's, from before it.
+                    $consumed += [System.Text.Encoding]::UTF8.GetByteCount($ln) + 1
+                    if ($consumed -gt $sliceOffset) { break }
+                    if ($ln.TrimStart().StartsWith("{")) {
+                        $cand = $null
+                        try { $cand = $ln | ConvertFrom-Json } catch { $cand = $null }
+                        if ($cand -and $cand.type -eq "response_item" -and
+                            $cand.payload -and $cand.payload.type -eq "message" -and
+                            $cand.payload.role -eq "user") {
+                            $prefixPreamble = Get-UserText $cand
+                            break
+                        }
+                    }
+                }
+            } finally { $reader.Dispose() }
+        } catch {
+            Fail ("the resumed rollout's prefix could not be read to find the " +
+                  "client's own preamble: " + $_.Exception.Message)
+        }
+        $extra = Get-UserText $userRecords[0]
+        if ($null -eq $prefixPreamble -or $null -eq $extra -or
+            (Get-CanonicalSha256 $extra) -ne (Get-CanonicalSha256 $prefixPreamble)) {
+            Fail ("a resumed slice carries a user record in front of the brief " +
+                  "that does not repeat the client's own preamble from this " +
+                  "session, so it is unattributed text in front of the reviewer")
+        }
+    }
 }
 # A FRESH slice carried exactly TWO on every measured round: the client's
 # instructions preamble and the brief. The same argument that earned the
