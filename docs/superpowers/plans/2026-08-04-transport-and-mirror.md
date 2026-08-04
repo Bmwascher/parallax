@@ -326,10 +326,31 @@ the LAST user record in the slice. The trailing-record requirement is the
 part that still refuses an injected extra prompt, which is what "exactly
 one" was reaching for.
 
-**Direction of the change:** no case that previously failed now passes.
-A slice with a second matching record still fails (ambiguous), and a
-slice with any user record after the match still fails. What changed is
-that a clean fresh round can now pass at all.
+**Direction of the change:** exactly one case that previously failed now
+passes, and it is the one the rule was breaking - a clean fresh round.
+No case the rule exists to CATCH was loosened: a slice with a second
+matching record still fails as ambiguous, and a slice with any user
+record after the match still fails.
+
+**Corrected 2026-08-04 after the Fable whole-branch review**, which
+found this paragraph originally claimed "no case that previously failed
+now passes" two sentences before naming one. It also found two real
+widenings this amendment had not recorded. Both are now CLOSED in the
+code rather than merely recorded, so the shipped rule is no wider than
+the frozen one on either point:
+
+- The frozen shape required EVERY `content[]` element to be
+  `input_text`. The first implementation hashed only the `input_text`
+  elements, so a record carrying the brief text plus something else
+  bound clean. A record is now a binding candidate only if every
+  element is `input_text`. Pinned by
+  `test_a_record_carrying_a_non_text_element_does_not_bind`.
+- The last-user-record rule refused a prompt injected AFTER the brief
+  but accepted any number of non-matching user records before it. On a
+  fresh call that is required, because the preamble is one. On a
+  RESUMED call the measured slices carried exactly one user record, so
+  the slack was unearned: a resumed slice must now carry exactly one.
+  Pinned by `test_a_resume_slice_with_two_user_records_is_refused`.
 
 **Locked by:** `test_a_user_record_after_the_brief_is_refused` and
 `test_a_hash_mismatch_is_refused` in
@@ -359,3 +380,47 @@ that hands it forward, so no caller can invent it.
 
 **Direction of the change:** exit codes are unchanged (0 clean, 1
 failed). Nothing that fails under the frozen shape passes under this one.
+
+### Amendment 3 (2026-08-04, Task 2) - canonicalization is two-sided
+
+**Frozen text:** "UTF-8, CRLF normalized to LF, trailing whitespace
+stripped."
+
+**Adopted instead:** LEADING and trailing whitespace stripped.
+
+**Why:** the tool and every caller must apply the identical rule or the
+hash never matches, and a one-sided strip leaves the leading case for a
+driver to guess. Recorded rather than silently taken, because the
+reviewer was right that it had drifted without an entry.
+
+**Direction of the change:** neutral for delivery integrity - stripping
+is applied to BOTH the sent brief and the recorded prompt, so a
+transport that alters leading whitespace and nothing else is no longer
+caught. That is accepted: the failure this binding exists to catch
+(measured 5.1 quote stripping) alters the body, not the margins, and a
+rule that fires on incidental margin differences would be retried into
+irrelevance.
+
+### Amendment 4 (2026-08-04, Task 2) - four permissive-direction fixes from the Fable review
+
+The whole-branch review found four gaps between "no unmade or unreadable
+measurement reads clean" and what the tool did. All four are closed, each
+pinned by an oracle watched to fail first:
+
+1. **Lenient decode.** `[Encoding]::UTF8.GetString` substitutes U+FFFD
+   for invalid bytes and never throws (measured 2026-08-04), so a slice
+   the contract called undecodable read clean. Now
+   `UTF8Encoding($false, $true)`, which throws.
+2. **Absent prior-state fields read as made measurements.** An absent
+   `knownRollouts` and a legitimately empty one are both falsy, so the
+   newly-created check was skipped exactly when nobody had built the
+   inventory; an absent `bytes` casts to 0, which reads as "measure from
+   the start of the file". Every field is now checked by NAME.
+3. **Swallowed enumeration errors.** `Get-ChildItem -ErrorAction
+   SilentlyContinue` turned "two rollouts, one unreadable" into "exactly
+   one". Now `-ErrorAction Stop` inside a catch that fails the round.
+   NOT covered by an oracle: no portable way was found to force an
+   enumeration error in a temp directory, so this one rests on reading
+   the code, not on a watched failure.
+4. **Non-object JSON lines.** `null`, a bare scalar and an array all
+   parse and were silently ignored. Now refused.

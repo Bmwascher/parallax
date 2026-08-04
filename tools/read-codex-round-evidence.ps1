@@ -146,6 +146,30 @@ if ($prior.kind -ne $wantKind) {
           $wantKind + "'")
 }
 
+# EVERY field this script compares against must be PRESENT, checked by
+# name rather than by truthiness. An absent `knownRollouts` and a
+# legitimately empty one are both falsy, so a truthiness test skipped the
+# newly-created check exactly when nobody had made the inventory; an
+# absent `bytes` casts to 0, which reads as "measure from the start of the
+# file". Both are the permissive direction, and an unmade measurement is
+# never a clean one.
+function Assert-PriorField($name) {
+    $present = @($prior.PSObject.Properties.Name) -contains $name
+    if (-not $present) {
+        Fail ("prior state is missing the required field '" + $name +
+              "': the measurement it records was never made")
+    }
+}
+
+if ($Fresh) {
+    Assert-PriorField "knownRollouts"
+} else {
+    Assert-PriorField "rolloutFile"
+    Assert-PriorField "sessionId"
+    Assert-PriorField "bytes"
+    Assert-PriorField "prefixSha256"
+}
+
 # --------------------------------------------------------------------
 # Locate the rollout and establish the byte range THIS call appended.
 # --------------------------------------------------------------------
@@ -166,8 +190,16 @@ if ($Fresh) {
     }
     $expectSessionId = $SessionIdFromStdout
 
-    $all = @(Get-ChildItem -LiteralPath $SessionsRoot -Recurse -File -Filter "rollout-*.jsonl" `
-                -ErrorAction SilentlyContinue)
+    # -Stop, never -SilentlyContinue: a swallowed enumeration error turns
+    # "two rollouts, one unreadable" into "exactly one", which is the
+    # ambiguity refusal reading as a clean binding.
+    $all = @()
+    try {
+        $all = @(Get-ChildItem -LiteralPath $SessionsRoot -Recurse -File `
+                    -Filter "rollout-*.jsonl" -ErrorAction Stop)
+    } catch {
+        Fail ("the sessions root could not be enumerated: " + $_.Exception.Message)
+    }
     $matching = @($all | Where-Object {
         (Get-RolloutSessionId $_.Name) -eq $expectSessionId
     })
@@ -179,12 +211,9 @@ if ($Fresh) {
 
     # A pre-existing file bearing the right session id is not evidence that
     # THIS call produced it.
-    $known = @()
-    if ($prior.knownRollouts) {
-        $known = @($prior.knownRollouts | ForEach-Object {
-            try { [System.IO.Path]::GetFullPath([string]$_) } catch { [string]$_ }
-        })
-    }
+    $known = @($prior.knownRollouts | ForEach-Object {
+        try { [System.IO.Path]::GetFullPath([string]$_) } catch { [string]$_ }
+    })
     $normTarget = [System.IO.Path]::GetFullPath($targetFile)
     foreach ($k in $known) {
         if ($k -and ($k -ieq $normTarget)) {
@@ -246,10 +275,29 @@ if ($bytes.Length -eq 0 -or $bytes[$bytes.Length - 1] -ne 0x0A) {
           "terminating newline")
 }
 
-$sliceText = [System.Text.Encoding]::UTF8.GetString(
-    $bytes, $sliceOffset, ($bytes.Length - $sliceOffset))
+# STRICT decode. [Encoding]::UTF8 substitutes U+FFFD for invalid bytes and
+# never throws (measured 2026-08-04), so a corrupted slice whose damage sat
+# outside the brief record reached a clean verdict while the contract said
+# "strict UTF-8 JSONL". UTF8Encoding($false, $true) throws instead.
+$sliceText = $null
+try {
+    $strict = New-Object System.Text.UTF8Encoding($false, $true)
+    $sliceText = $strict.GetString(
+        $bytes, $sliceOffset, ($bytes.Length - $sliceOffset))
+} catch {
+    Fail ("this call's slice does not decode as strict UTF-8: " +
+          $_.Exception.Message)
+}
+
 if ($sliceText.Length -gt 0 -and [int][char]$sliceText[0] -eq 0xFEFF) {
-    $sliceText = $sliceText.Substring(1)
+    if ($sliceOffset -eq 0) {
+        # A byte order mark at the start of the file is a file-level
+        # artifact and not part of any record.
+        $sliceText = $sliceText.Substring(1)
+    } else {
+        Fail ("this call's slice begins with a byte order mark: the bytes " +
+              "appended do not start where the prior state recorded")
+    }
 }
 
 $parts = $sliceText.Split("`n")
@@ -266,12 +314,20 @@ for ($i = 0; $i -lt $lines.Count; $i++) {
         Fail ("rollout line " + ($i + 1) + " of this call's slice is blank; " +
               "the record stream is not intact")
     }
+    $rec = $null
     try {
-        $records += ,($lines[$i] | ConvertFrom-Json)
+        $rec = $lines[$i] | ConvertFrom-Json
     } catch {
         Fail ("rollout line " + ($i + 1) + " of this call's slice could not be " +
               "parsed as JSON: " + $_.Exception.Message)
     }
+    # `null`, a bare scalar and an array are all valid JSON and none is a
+    # record. Ignoring them silently is lenience under a strict-parse claim.
+    if (-not ($rec -is [System.Management.Automation.PSCustomObject])) {
+        Fail ("rollout line " + ($i + 1) + " of this call's slice is not a " +
+              "JSON object")
+    }
+    $records += ,$rec
 }
 
 # --------------------------------------------------------------------
@@ -315,11 +371,18 @@ function Get-UserText($record) {
     # one-element briefs, so a reader taking content[0] would pass every
     # observed round and silently drop the tail of any brief the client
     # chose to split.
+    #
+    # EVERY element must be `input_text` for the record to be a binding
+    # candidate. Hashing only the text elements would bind a record that
+    # also carried something else - wider than the frozen rule, and wider
+    # than anything measured. A non-candidate returns $null and can never
+    # match.
+    $elements = @($record.payload.content)
+    if ($elements.Count -lt 1) { return $null }
     $sb = New-Object System.Text.StringBuilder
-    foreach ($el in @($record.payload.content)) {
-        if ($el -and $el.type -eq "input_text") {
-            [void]$sb.Append([string]$el.text)
-        }
+    foreach ($el in $elements) {
+        if (-not $el -or $el.type -ne "input_text") { return $null }
+        [void]$sb.Append([string]$el.text)
     }
     $sb.ToString()
 }
@@ -334,9 +397,19 @@ if ($userRecords.Count -lt 1) {
           "prompt to bind the brief to")
 }
 
+# A RESUMED slice carried exactly one user record on every measured round:
+# the resume payload. There is no instructions preamble to make room for,
+# so a second one is unexplained and the round is not attributable. A FRESH
+# slice always carries at least two, which is why this bound is resume-only.
+if ($Resume -and $userRecords.Count -ne 1) {
+    Fail ("a resumed slice must carry exactly one user record, found " +
+          $userRecords.Count)
+}
+
 $matchIndexes = @()
 for ($i = 0; $i -lt $userRecords.Count; $i++) {
-    if ((Get-CanonicalSha256 (Get-UserText $userRecords[$i])) -eq $ExpectedBriefSha256) {
+    $text = Get-UserText $userRecords[$i]
+    if ($null -ne $text -and (Get-CanonicalSha256 $text) -eq $ExpectedBriefSha256) {
         $matchIndexes += ,$i
     }
 }

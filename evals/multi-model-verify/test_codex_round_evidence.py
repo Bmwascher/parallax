@@ -443,3 +443,117 @@ def test_a_rollout_outside_the_sessions_root_is_refused(tmp_path):
     f.unlink()
     assert_failed(run_fresh(root, fresh_state(tmp_path), canon(brief)),
                   "exactly one")
+
+
+# =====================================================================
+# Fable whole-branch review, 2026-08-04. Four permissive-direction holes
+# in a tool whose entire contract is that no unmade or unreadable
+# measurement reads clean. Each is pinned before it is closed.
+# =====================================================================
+
+def test_undecodable_bytes_in_the_slice_are_refused(tmp_path):
+    """The contract says STRICT UTF-8. The first implementation used
+    `[Encoding]::UTF8.GetString`, which substitutes U+FFFD for invalid
+    bytes and never throws (measured 2026-08-04), so a corrupted slice
+    whose damage sat outside the brief record reached a clean verdict.
+    """
+    brief = "A brief."
+    root, f = make_root(tmp_path, brief=brief)
+    with open(f, "ab") as fh:
+        fh.write(b'{"type":"note","payload":"\xff\xfe"}\n')
+    assert_failed(run_fresh(root, fresh_state(tmp_path), canon(brief)),
+                  "decode")
+
+
+def test_a_prior_state_missing_its_inventory_is_refused(tmp_path):
+    """An UNMADE inventory must not read as an empty one.
+
+    `if ($prior.knownRollouts)` is false for BOTH the absent field and a
+    legitimately empty list, so the newly-created check was skipped
+    exactly when nobody had made it.
+    """
+    brief = "A brief."
+    root, f = make_root(tmp_path, brief=brief)
+    prior = state_file(tmp_path, {"kind": "fresh"})
+    assert_failed(run_fresh(root, prior, canon(brief)), "knownRollouts")
+
+
+def test_a_prior_state_missing_its_byte_offset_is_refused(tmp_path):
+    """`[int]` of an absent property is 0, not an error, so an absent
+    offset silently became "measure from the start of the file"."""
+    root, f = make_root(tmp_path, brief="Round one.")
+    prior = state_file(tmp_path, {"kind": "resume", "rolloutFile": str(f),
+                                  "sessionId": SESSION,
+                                  "prefixSha256": "0" * 64})
+    assert_failed(run_resume(f, prior, canon("Round one.")), "bytes")
+
+
+def test_a_prior_state_missing_its_prefix_hash_is_refused(tmp_path):
+    root, f = make_root(tmp_path, brief="Round one.")
+    b = f.read_bytes()
+    prior = state_file(tmp_path, {"kind": "resume", "rolloutFile": str(f),
+                                  "sessionId": SESSION, "bytes": len(b)})
+    assert_failed(run_resume(f, prior, canon("Round one.")), "prefixSha256")
+
+
+def test_a_prior_state_missing_its_rollout_path_is_refused(tmp_path):
+    root, f = make_root(tmp_path, brief="Round one.")
+    b = f.read_bytes()
+    prior = state_file(tmp_path, {
+        "kind": "resume", "sessionId": SESSION, "bytes": len(b),
+        "prefixSha256": hashlib.sha256(b).hexdigest()})
+    assert_failed(run_resume(f, prior, canon("Round one.")), "rolloutFile")
+
+
+def test_a_record_carrying_a_non_text_element_does_not_bind(tmp_path):
+    """The frozen shape required EVERY `content[]` element to be
+    `input_text`. Hashing only the text elements binds a record that also
+    carried something else, which is wider than the frozen rule and
+    wider than anything measured.
+    """
+    brief = "A brief."
+    row = user_row(brief)
+    row["payload"]["content"].append({"type": "input_image",
+                                      "image_url": "data:,x"})
+    root, f = make_root(tmp_path, rows=[meta_row(), preamble_row(), row,
+                                        assistant_row()])
+    assert_failed(run_fresh(root, fresh_state(tmp_path), canon(brief)),
+                  "does not match")
+
+
+def test_a_resume_slice_with_two_user_records_is_refused(tmp_path):
+    """A resumed slice carried exactly ONE user record on every measured
+    round: the resume payload. There is no preamble to make room for, so
+    a second one is unexplained and the round is not attributable.
+    """
+    r2 = "Round two brief."
+    root, f = make_root(tmp_path, brief="Round one brief.")
+    prior = resume_state(tmp_path, f)
+    append_rows(f, [user_row("something else entirely"), user_row(r2),
+                    assistant_row("ok2")])
+    assert_failed(run_resume(f, prior, canon(r2)), "exactly one user record")
+
+
+def test_a_non_object_json_line_is_refused(tmp_path):
+    """`null`, a bare scalar and an array all parse as valid JSON. A
+    record stream carrying one is not the shape the contract describes,
+    and silently ignoring it is lenience under a strict-parse claim."""
+    brief = "A brief."
+    root, f = make_root(tmp_path, brief=brief)
+    with open(f, "a", encoding="utf-8", newline="\n") as fh:
+        fh.write("null\n")
+    assert_failed(run_fresh(root, fresh_state(tmp_path), canon(brief)),
+                  "JSON object")
+
+
+def test_a_byte_order_mark_inside_the_file_is_refused(tmp_path):
+    """A BOM at offset 0 is a file-level artifact. A BOM at a RESUME
+    boundary is not: it means the bytes this call appended do not start
+    where the prior state said they did."""
+    r2 = "Round two brief."
+    root, f = make_root(tmp_path, brief="Round one brief.")
+    prior = resume_state(tmp_path, f)
+    with open(f, "ab") as fh:
+        fh.write(b"\xef\xbb\xbf")
+    append_rows(f, [user_row(r2), assistant_row("ok2")])
+    assert_failed(run_resume(f, prior, canon(r2)), "byte order mark")

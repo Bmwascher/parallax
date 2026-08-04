@@ -302,11 +302,21 @@ class TestTransportContract:
         # Amendment 1, 2026-08-04. The discriminator is the brief HASH
         # plus position, and the reason is written into the contract so
         # the next reader cannot re-derive the same wrong rule.
-        assert ("Require exactly one of those records to equal the"
-                " brief's SHA-256, and require it to be the LAST user"
-                " record in the slice.") in notes
+        assert ("Require exactly one candidate to equal the brief's"
+                " SHA-256, and require it to be the LAST user record in"
+                " the slice.") in notes
         assert ("the client's own instructions preamble is also `role`"
                 " `user`, so a fresh slice carries two") in notes
+        # The Fable whole-branch review, 2026-08-04, found three
+        # permissive-direction gaps between this text and the tool. The
+        # text now states the stricter rule the tool enforces.
+        assert ("A record is a binding CANDIDATE only if it carries at"
+                " least one `payload.content[]` element and EVERY"
+                " element's `type` is `input_text`") in notes
+        assert ("A RESUMED slice must carry exactly one user record in"
+                " addition") in notes
+        assert ("a slice that does not decode as strict UTF-8, a line"
+                " that is not a JSON object") in notes
         # The claim's ceiling. This must never read as server attestation.
         assert ("This is a client-echo binding: it proves what the"
                 " measured Codex client recorded for this call, never"
@@ -355,22 +365,28 @@ class TestTransportContract:
         assert (
         "**Prompt record.** In the current-call slice, consider every "
         "record where `type` is `response_item`, `payload.type` is "
-        "`message` and `payload.role` is `user`. For each, "
-        "concatenate in order the `text` fields of its "
-        "`payload.content[]` elements whose `type` is `input_text`, "
-        "and canonicalize exactly as the pre-dispatch brief was "
+        "`message` and `payload.role` is `user`. A record is a "
+        "binding CANDIDATE only if it carries at least one "
+        "`payload.content[]` element and EVERY element's `type` is "
+        "`input_text`; hashing only the text elements of a mixed "
+        "record would bind a record that also carried something else. "
+        "Concatenate the candidate's `text` fields in order and "
+        "canonicalize exactly as the pre-dispatch brief was "
         "canonicalized - UTF-8, CRLF normalized to LF, leading and "
-        "trailing whitespace stripped. Require exactly one of those "
-        "records to equal the brief's SHA-256, and require it to be "
-        "the LAST user record in the slice. Taking the slice's sole "
-        "user record instead is wrong on every fresh call: the "
-        "client's own instructions preamble is also `role` `user`, so "
-        "a fresh slice carries two. Nor may the record be identified "
-        "by content-element count - the preamble carried 2 elements "
-        "and briefs carried 1 on the measured sample, and nothing "
-        "prevents a client splitting a long prompt. No matching "
-        "record, several matching records, a further user record "
-        "after the match, a malformed or undecodable slice, or an "
+        "trailing whitespace stripped. Require exactly one candidate "
+        "to equal the brief's SHA-256, and require it to be the LAST "
+        "user record in the slice. A RESUMED slice must carry exactly "
+        "one user record in addition: it has no instructions preamble "
+        "to make room for, so a second one is unexplained. Taking the "
+        "slice's sole user record instead is wrong on every fresh "
+        "call: the client's own instructions preamble is also `role` "
+        "`user`, so a fresh slice carries two. Nor may the record be "
+        "identified by content-element count - the preamble carried 2 "
+        "elements and briefs carried 1 on the measured sample, and "
+        "nothing prevents a client splitting a long prompt. No "
+        "matching candidate, several matching candidates, a further "
+        "user record after the match, a slice that does not decode as "
+        "strict UTF-8, a line that is not a JSON object, or an "
         "unequal hash blocks the round; discard the reply unread. "
         "**Evidence limit.** This is a client-echo binding: it proves "
         "what the measured Codex client recorded for this call, never "
