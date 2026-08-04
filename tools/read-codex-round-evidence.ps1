@@ -111,6 +111,10 @@ function Get-CanonicalSha256([string]$text) {
     Get-Sha256Hex $bytes 0 $bytes.Length
 }
 
+# The four characters JSON calls whitespace. Everything else that
+# .NET considers whitespace is content as far as this parser goes.
+$script:JsonWs = [char[]]@(' ', "`t", "`r", "`n")
+
 function Get-JsonObjectLineFault([string]$raw, $parsed) {
     # Returns $null when the line is a lone JSON object, else a phrase
     # naming the fault. Two faults, and an operator has to be able to
@@ -141,7 +145,11 @@ function Get-JsonObjectLineFault([string]$raw, $parsed) {
     # Delegating strictness to the parser is what went wrong; the scan
     # below decides here, the same way for every host.
     if ($null -eq $raw) { return "is not a JSON object" }
-    $t = $raw.Trim()
+    # JSON WHITESPACE ONLY. `.Trim()` strips Unicode whitespace, and both
+    # hosts accept a trailing U+00A0 after the value (measured
+    # 2026-08-04), so the tail check erased exactly the character it was
+    # supposed to catch. JSON defines whitespace as these four.
+    $t = $raw.Trim($script:JsonWs)
     if (-not $t.StartsWith("{")) { return "is not a JSON object" }
     if (-not ($parsed -is [System.Management.Automation.PSCustomObject])) {
         return "is not a JSON object"
@@ -160,6 +168,14 @@ function Get-JsonObjectLineFault([string]$raw, $parsed) {
             continue
         }
         if ($c -eq '"') { $inStr = $true; continue }
+        # NO `/` IS LEGAL OUTSIDE A JSON STRING, so one can only begin a
+        # comment. PowerShell 7.6.3 accepts comments INSIDE an object as
+        # well as after it (measured 2026-08-04; 5.1 refuses both), and a
+        # brace-depth scan with no comment state cannot see them - worse,
+        # a `}` or `"` inside a comment misleads the scan itself. Refusing
+        # the character is exact, host-independent, and cheaper than
+        # tracking comment state.
+        if ($c -eq '/') { return "carries a comment, which strict JSON has no room for" }
         if ($c -eq '{') { $depth++; continue }
         if ($c -eq '}') {
             $depth--
@@ -167,7 +183,7 @@ function Get-JsonObjectLineFault([string]$raw, $parsed) {
         }
     }
     if ($end -lt 0) { return "is not a JSON object" }
-    if ($t.Substring($end + 1).Trim() -ne "") {
+    if ($t.Substring($end + 1).Trim($script:JsonWs) -ne "") {
         return "carries trailing content after its JSON value"
     }
     return $null
@@ -272,13 +288,17 @@ if ($Fresh) {
     # therefore skipped. The state's own record of which file it
     # measured constrained nothing.
     #
-    # The other three were NOT permissive: a bad `bytes` failed its
-    # coercion, a bad `prefixSha256` failed its comparison, and a blank
-    # `sessionId` disagreed with the filename. All three were refused
-    # already. What they got wrong was the REASON - a schema fault was
-    # reported as a changed rollout or a disagreement across sources,
-    # which sends the operator to re-measure an artifact that is fine.
-    # Validating the shape here makes the refusal name the field.
+    # Of the other three, TWO were diagnostic and one was a hole, and
+    # this comment said all three were diagnostic until round 4 read it
+    # against the record. A bad `prefixSha256` failed its comparison and
+    # a blank `sessionId` disagreed with the filename, so both were
+    # already refused and only the REASON was wrong - a schema fault
+    # reported as a changed rollout sends the operator to re-measure an
+    # artifact that is fine. `bytes` was different: a FRACTIONAL count
+    # truncates through `[int]` on both hosts, so paired with a prefix
+    # hash taken through the truncated offset it reached the ordinary
+    # slice checks. Validating the shape here closes that and makes the
+    # other two name their field.
     foreach ($f in @("rolloutFile", "sessionId")) {
         $v = $prior.$f
         if (-not ($v -is [string]) -or [string]::IsNullOrWhiteSpace($v)) {
@@ -303,6 +323,19 @@ if ($Fresh) {
 # --------------------------------------------------------------------
 # Locate the rollout and establish the byte range THIS call appended.
 # --------------------------------------------------------------------
+
+function Test-RecordIsUserMessage($rec) {
+    # NESTED SHAPES NEED ESTABLISHING TOO, and the root guard does not
+    # reach them. `payload` given as a JSON ARRAY enumerates its members
+    # on BOTH hosts, so `payload.type` and `payload.role` read straight
+    # through a value that is not an object at all - the same defect as
+    # the root one, one level down, and found by round 4 of the debate.
+    if (-not ($rec -is [System.Management.Automation.PSCustomObject])) { return $false }
+    if ($rec.type -ne "response_item") { return $false }
+    if (-not ($rec.payload -is [System.Management.Automation.PSCustomObject])) { return $false }
+    if ($rec.payload.type -ne "message") { return $false }
+    return ($rec.payload.role -eq "user")
+}
 
 function Get-RolloutSessionId([string]$name) {
     # rollout-<timestamp>-<session-id>.jsonl. The id is the tail because a
@@ -478,7 +511,13 @@ if (-not $nameId) {
 }
 
 if ($Fresh) {
-    $metaRecords = @($records | Where-Object { $_.type -eq "session_meta" })
+    # `payload` must be an OBJECT before its id is read: an array payload
+    # enumerates `.id` through on both hosts, so a session identity could
+    # be taken from a value that is not a record's payload at all.
+    $metaRecords = @($records | Where-Object {
+        $_.type -eq "session_meta" -and
+        ($_.payload -is [System.Management.Automation.PSCustomObject])
+    })
     if ($metaRecords.Count -lt 1) {
         Fail "the fresh rollout carries no session_meta record"
     }
@@ -530,6 +569,10 @@ if ($Fresh) {
         Fail ("the resumed rollout's first record is not a session_meta " +
               "record, so its session identity was never measured")
     }
+    if (-not ($firstRec.payload -is [System.Management.Automation.PSCustomObject])) {
+        Fail ("the resumed rollout's first record has no object payload, so " +
+              "the session identity read from it is not one it declares")
+    }
     $prefixId = [string]$firstRec.payload.id
     if ($prefixId -ne $expectSessionId) {
         Fail ("the session id disagrees across sources: session_meta '" +
@@ -559,16 +602,17 @@ function Get-UserText($record) {
     if ($elements.Count -lt 1) { return $null }
     $sb = New-Object System.Text.StringBuilder
     foreach ($el in $elements) {
-        if (-not $el -or $el.type -ne "input_text") { return $null }
+        # An element that is not an OBJECT reads its `type` through member
+        # enumeration on both hosts, so `-not $el` never saw it. Same
+        # nested-shape class as the payload guard above.
+        if (-not ($el -is [System.Management.Automation.PSCustomObject])) { return $null }
+        if ($el.type -ne "input_text") { return $null }
         [void]$sb.Append([string]$el.text)
     }
     $sb.ToString()
 }
 
-$userRecords = @($records | Where-Object {
-    $_.type -eq "response_item" -and $_.payload -and
-    $_.payload.type -eq "message" -and $_.payload.role -eq "user"
-})
+$userRecords = @($records | Where-Object { Test-RecordIsUserMessage $_ })
 
 if ($userRecords.Count -lt 1) {
     Fail ("this call's slice carries no user record, so there is no recorded " +
@@ -609,12 +653,18 @@ if ($Resume) {
                     # are looking for is the client's, from before it.
                     $consumed += [System.Text.Encoding]::UTF8.GetByteCount($ln) + 1
                     if ($consumed -gt $sliceOffset) { break }
-                    if ($ln.TrimStart().StartsWith("{")) {
+                    if ($ln.TrimStart($script:JsonWs).StartsWith("{")) {
                         $cand = $null
                         try { $cand = $ln | ConvertFrom-Json } catch { $cand = $null }
-                        if ($cand -and $cand.type -eq "response_item" -and
-                            $cand.payload -and $cand.payload.type -eq "message" -and
-                            $cand.payload.role -eq "user") {
+                        # THE SAME GATE AS EVERY OTHER LINE. This scan
+                        # parsed and read properties directly, so the
+                        # strictness the rest of the tool had just gained
+                        # stopped at its edge - and this is the record the
+                        # preamble exemption is measured against, which
+                        # makes it the last place to take a line on trust.
+                        if ($null -ne $cand -and
+                            $null -eq (Get-JsonObjectLineFault $ln $cand) -and
+                            (Test-RecordIsUserMessage $cand)) {
                             $prefixPreamble = Get-UserText $cand
                             break
                         }

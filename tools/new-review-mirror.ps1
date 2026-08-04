@@ -862,7 +862,24 @@ while ($pending.Count -gt 0) {
             $targetFull = ""
             try {
                 $entryFull = [System.IO.Path]::GetFullPath($entry)
-                $targetFull = [System.IO.Path]::GetFullPath($target)
+                # A RELATIVE TARGET IS RELATIVE TO THE LINK, NOT TO US.
+                # `GetFullPath` with one argument resolves against the
+                # PROCESS working directory, so a relative symbolic link
+                # target resolved to wherever this script happened to be
+                # invoked from: two distinct targets could compare equal
+                # and read as a repeat, and a genuine self-cycle could
+                # compare against the wrong absolute path and be missed.
+                # Junctions always store an absolute target, which is why
+                # the junction tests did not show it; symbolic links do
+                # not. Combine-then-normalize rather than the two-argument
+                # overload, which .NET Framework 4.8 does not carry.
+                if ([System.IO.Path]::IsPathRooted($target)) {
+                    $targetFull = [System.IO.Path]::GetFullPath($target)
+                } else {
+                    $linkParent = [System.IO.Path]::GetDirectoryName($entryFull)
+                    $targetFull = [System.IO.Path]::GetFullPath(
+                        [System.IO.Path]::Combine($linkParent, $target))
+                }
             } catch {
                 Write-Output ("ERROR: $entry is a directory reparse point " +
                     "whose target " + $target + " is not a usable path, so " +

@@ -1642,3 +1642,36 @@ def test_the_seams_cannot_supply_a_value(tmp_path):
                           env={var: real_head})
         assert proc.returncode == 1, (var, proc.stdout + proc.stderr)
         assert needle in proc.stdout.lower(), (var, proc.stdout)
+
+
+def test_a_relative_symlink_cycle_is_refused(tmp_path):
+    """Round 4 of the mode-diff debate, and it is the folded-in commit's
+    own defect rather than this branch's.
+
+    The reparse walk resolved a link target with one-argument
+    `GetFullPath`, which normalizes against the PROCESS working
+    directory. A JUNCTION always stores an absolute target, so every
+    test written for this feature passed; a SYMBOLIC LINK may store a
+    relative one, and that resolved to wherever the script happened to be
+    invoked from. Two distinct relative targets could then compare equal
+    and read as a repeat, and a genuine self-cycle could compare against
+    the wrong absolute path and be missed entirely.
+
+    NOT WATCHED TO FAIL LOCALLY, and the record says so rather than
+    implying otherwise: this machine refuses symbolic-link creation
+    without elevation, so this case first executes on the Windows CI
+    runners. The FIX rests on the measurement in
+    `new-review-mirror.ps1`'s comment and on reading the resolution, not
+    on a local red-to-green.
+    """
+    repo = make_repo(tmp_path)
+    link = repo / "selflink"
+    rc = subprocess.run(
+        ["cmd", "/c", "mklink", "/D", str(link), "."],
+        capture_output=True, text=True)
+    if rc.returncode != 0:
+        pytest.skip("symbolic-link creation unavailable: " + rc.stderr)
+    mirror = long_mirror(tmp_path)
+    proc = run_mirror(repo, mirror)
+    assert proc.returncode == 2, (proc.returncode, proc.stdout, proc.stderr)
+    assert "cycle" in proc.stdout.lower(), proc.stdout

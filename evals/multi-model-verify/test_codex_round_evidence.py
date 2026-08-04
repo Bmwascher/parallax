@@ -563,13 +563,14 @@ def test_a_resume_slice_with_an_unexplained_extra_record_is_refused(tmp_path):
 def test_a_resume_slice_repeating_the_clients_preamble_is_accepted(tmp_path):
     """MEASURED IN THE FIELD 2026-08-04, and it falsified the contract.
 
-    Session `019fcb9a`, three resumes of one session: the first carried
-    exactly one user record, and the third carried the client's
-    instructions preamble AND the brief - byte-identical preamble, 1532
-    characters, to the one at the session's own start. The "a resumed
-    slice carries exactly one" bound came from three measured rounds and
-    round four broke it, so it was a claim wider than its evidence
-    living inside the tool that exists to refuse those.
+    Session `019fcb9a`, THREE CALLS: one fresh, then two resumes. The
+    fresh call carried preamble and brief; the first resume carried the
+    brief alone; the SECOND resume carried the client's instructions
+    preamble AND the brief - a preamble identical, 1532 characters, to
+    the one at the session's own start. The "a resumed slice carries
+    exactly one" bound came from three measured rounds and the fourth
+    broke it, so it was a claim wider than its evidence living inside
+    the tool that exists to refuse those.
 
     It BLOCKED a legitimate round. That is the safe direction and it is
     still a defect: a gate that fires on a clean run teaches its reader
@@ -982,3 +983,99 @@ def test_a_prior_state_naming_another_valid_rollout_is_refused(tmp_path):
     append_rows(target, [user_row(r2), assistant_row("ok2")])
     assert_failed(run_resume(target, prior, canon(r2)),
                   "different rollout file")
+
+
+# =====================================================================
+# Mode-diff debate round 4. The guards written in round 3 stopped at
+# their own edges, in four places.
+# =====================================================================
+
+NBSP = "\u00a0"
+
+
+def test_a_trailing_nbsp_is_refused(tmp_path):
+    """K1. The trailing-content scan trimmed with .NET's idea of
+    whitespace, not JSON's.
+
+    Measured 2026-08-04: BOTH hosts accept `{"a":1}` followed by U+00A0,
+    and `String.Trim()` strips U+00A0, so the tail check erased exactly
+    the character it existed to catch. This one is not a host split; it
+    was wrong everywhere.
+    """
+    r1, r2 = "Round one brief.", "Round two brief."
+    root, f = make_root(tmp_path, rows=[meta_row(), preamble_row(),
+                                        user_row(r1), assistant_row()])
+    prior = resume_state(tmp_path, f)
+    with open(f, "a", encoding="utf-8", newline="\n") as fh:
+        fh.write(json.dumps(assistant_row("note")) + NBSP + "\n")
+        fh.write(json.dumps(user_row(r2)) + "\n")
+        fh.write(json.dumps(assistant_row("ok2")) + "\n")
+    assert_failed_any(run_resume(f, prior, canon(r2)),
+                      ["trailing content", "could not be parsed as JSON"])
+
+
+def test_a_comment_inside_the_object_is_refused(tmp_path):
+    """K2. Round 3's scan caught comments AFTER the value and not inside
+    it.
+
+    Measured 2026-08-04: PowerShell 7.6.3 accepts `{"a":1, /* x */
+    "b":2}` and 5.1 refuses it. A brace-depth scan with no comment state
+    cannot see one, and worse, a `}` or `"` inside a comment misleads
+    the scan itself. No `/` is legal outside a JSON string, so refusing
+    the character is exact and needs no comment state at all.
+    """
+    r1, r2 = "Round one brief.", "Round two brief."
+    root, f = make_root(tmp_path, rows=[meta_row(), preamble_row(),
+                                        user_row(r1), assistant_row()])
+    prior = resume_state(tmp_path, f)
+    row = json.dumps(assistant_row("note"))
+    with open(f, "a", encoding="utf-8", newline="\n") as fh:
+        fh.write(row[:-1] + ', "x":1 /* } */ }' + "\n")
+        fh.write(json.dumps(user_row(r2)) + "\n")
+        fh.write(json.dumps(assistant_row("ok2")) + "\n")
+    assert_failed_any(run_resume(f, prior, canon(r2)),
+                      ["comment", "could not be parsed as JSON"])
+
+
+def test_a_record_whose_payload_is_an_array_is_refused(tmp_path):
+    """K3. The root guard did not reach nested shapes.
+
+    A `payload` given as a JSON ARRAY enumerates its members on BOTH
+    hosts, so `payload.type` and `payload.role` read straight through a
+    value that is not an object. Same defect as the root one, one level
+    down, and the brief that carries it would then be hashed out of a
+    record whose shape nobody established.
+    """
+    r1, r2 = "Round one brief.", "Round two brief."
+    root, f = make_root(tmp_path, rows=[meta_row(), preamble_row(),
+                                        user_row(r1), assistant_row()])
+    prior = resume_state(tmp_path, f)
+    row = user_row(r2)
+    row["payload"] = [row["payload"]]
+    append_rows(f, [row, assistant_row("ok2")])
+    assert_failed_any(run_resume(f, prior, canon(r2)),
+                      ["no user record", "does not match"])
+
+
+def test_a_prefix_preamble_line_with_trailing_content_is_refused(tmp_path):
+    """K4. The preamble-identity scan took its line on trust.
+
+    It parsed and read properties directly instead of going through the
+    same gate as every other line, so the strictness the tool had just
+    gained stopped at the edge of the one scan whose record decides
+    whether an extra user record is allowed in front of the brief. The
+    last place to trust a line is the one the exemption is measured
+    against.
+    """
+    r1, r2 = "Round one brief.", "Round two brief."
+    day = tmp_path / "sessions" / "2026" / "08" / "04"
+    day.mkdir(parents=True, exist_ok=True)
+    f = day / rollout_name()
+    with open(f, "w", encoding="utf-8", newline="\n") as fh:
+        fh.write(json.dumps(meta_row()) + "\n")
+        fh.write(json.dumps(preamble_row()) + NBSP + "\n")
+        fh.write(json.dumps(user_row(r1)) + "\n")
+        fh.write(json.dumps(assistant_row()) + "\n")
+    prior = resume_state(tmp_path, f)
+    append_rows(f, [preamble_row(), user_row(r2), assistant_row("ok2")])
+    assert_failed(run_resume(f, prior, canon(r2)), "preamble")

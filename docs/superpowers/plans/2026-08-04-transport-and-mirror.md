@@ -798,10 +798,10 @@ and Double on 7, `[int]` truncates both to 1108257, and paired with a
 prefix hash through that offset the state reached the ordinary slice
 checks. I had tested one input, `"many"`, watched it fail its coercion,
 and generalized from it. `prefixSha256` and `sessionId` were diagnostic
-as recorded; `bytes` was a hole. What was actually wrong is the
-REASON each printed - a schema fault reported as a changed rollout sends
-the operator to re-measure a file that is fine. The shape checks landed
-anyway, on that narrower ground, and the closure says so.
+as recorded; `bytes` was a hole. For those two the REASON was
+the fault - a schema error reported as a changed rollout sends the
+operator to re-measure a file that is fine - and for `bytes` the hole was
+real. The shape checks cover all three; the record now separates them.
 
 **G9, which the reviewer did not find and its finding uncovered.** The
 obvious instrument for the object check is `-is [PSCustomObject]`, and it
@@ -876,8 +876,11 @@ user record, so the bounded-read argument F2 rests on still holds.
 the SAME unchanged append-only bytes bound `clean` and the reply was
 read. The guard against gate-tuning is that the corrected rule still
 refuses the original attack - an oracle pins novel text in front of the
-brief - and accepts only a byte-identical repeat of the client's own
-preamble, which the tool verifies rather than assumes. Both the refusal
+brief - and accepts only a CANONICALLY equal repeat of the client's own
+preamble, which the tool verifies rather than assumes. Canonical, not
+byte-identical: the comparison folds CRLF to LF and strips surrounding
+whitespace, exactly as every other hash in this tool does, and the
+earlier wording here claimed a stricter test than the code performs. Both the refusal
 and the correction are recorded here rather than the correction alone.
 
 **The lesson is about sample size, not about codex.** Three rounds of one
