@@ -1738,9 +1738,14 @@ OWNER_STUB_BLANK_NAME = (
     "Write-Output '{\"ownerPid\": 4321, \"ownerStartTicksUtc\": \"123456789\", \"ownerName\": \"   \"}'\n"
     "exit 0\n"
 )
+# -OwnerName is declared even though these stubs ignore it. The recovery
+# command now always passes it, and a SIMPLE script would have absorbed
+# the unknown argument into $args silently - so a later [CmdletBinding()]
+# would flip the invoked rows to "binding refused" for a reason nobody
+# would look for. Declaring it makes the tolerance deliberate.
 LOGIN_STUB_MARK_AND_FAIL = (
     "param([string]$LaneHome, [string]$OwnerPid, [string]$OwnerStartTicksUtc, "
-    "[string]$VerdictOut, [switch]$Force)\n"
+    "[string]$OwnerName, [string]$VerdictOut, [switch]$Force)\n"
     'Set-Content -LiteralPath (Join-Path $PSScriptRoot "login-invoked.marker") '
     '-Value "invoked" -Encoding ascii\n'
     "exit 6\n"

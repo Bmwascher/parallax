@@ -219,8 +219,14 @@ def run_lock_through_an_extra_shell(args, timeout=40):
     The inner host is the same executable, so the ONLY difference
     between this and run_lock is an added transparent shell frame.
     """
-    inner = (POWERSHELL + " -NoProfile -NonInteractive -File "
-             + str(SCRIPT) + " " + " ".join(args))
+    # Both paths are QUOTED. This passes today only because
+    # PARALLAX_PS_HOST is normally a bare name and the powershell fallback
+    # resolves under System32 with no spaces; the shutil.which("pwsh")
+    # fallback is under Program Files, and an unquoted splice there fails
+    # the inner parse - which would fail this oracle for a TRANSPORT
+    # reason while looking like the resolution defect it exists to catch.
+    inner = ('"' + POWERSHELL + '" -NoProfile -NonInteractive -File "'
+             + str(SCRIPT) + '" ' + " ".join(args))
     cmd = [POWERSHELL, "-NoProfile", "-NonInteractive", "-Command",
            "& " + inner]
     return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)

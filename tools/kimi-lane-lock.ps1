@@ -860,6 +860,16 @@ function Invoke-ResolveOwnerMode {
                 Write-Stderr "owner resolution reached the top of the process tree with no non-transport ancestor"
                 exit 2
             }
+            # NAMED RESIDUAL: this follows ParentProcessId with no
+            # creation-time ordering guard, so an ancestor pid that exited
+            # and was REUSED inside the walk's own window resolves a wrong
+            # live owner. A merely dead ancestor fails closed (null here,
+            # or Get-Process throwing below), so only reuse during the walk
+            # slips through, and it lands on the stuck-lane direction this
+            # whole function already trades toward. The standard guard - a
+            # parent whose start time is not LATER than its child's - would
+            # close it, and is not added here because no test in this repo
+            # can watch it fail for the reason it claims. Backlog item 29.
             $parentWmi = Get-CimInstance -ClassName Win32_Process -Filter "ProcessId=$parentPid" -ErrorAction Stop
             if ($null -eq $parentWmi) { throw "ancestor $parentPid disappeared during the ancestry walk" }
             $parentName = [string]$parentWmi.Name

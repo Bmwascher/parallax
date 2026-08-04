@@ -795,9 +795,13 @@ class TestDebateProtocol:
         text = " ".join(read(REFERENCES / "debate-protocol.md").split())
         assert (
             "Round cap: **4 CONSECUTIVE CONTESTED exchanges** by default "
-            "(caller may raise or lower it). A round carrying a CONTESTED "
-            "point increments the counter; a round whose findings are all "
-            "accepted RESETS it to zero.") in text
+            "(caller may raise or lower it). A round is CONTESTED while any "
+            "contested point is OUTSTANDING, whether it was raised in that "
+            "round or an earlier one — an argument evidence has not "
+            "settled is still the argument this counter exists to count, "
+            "and a round that merely accepts other findings does not settle "
+            "it. A contested round increments the counter; a round that "
+            "leaves NO contested point outstanding RESETS it to zero.") in text
         assert (
             "**A fix-verify loop is not an argument, and the cap above "
             "does not bound it.**") in text

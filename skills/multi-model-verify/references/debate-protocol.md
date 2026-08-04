@@ -51,8 +51,12 @@ Each exchange (one session position or rebuttal + one reviewer reply) is a round
   accepted FIX is agreement, not a dispute for the user to settle. (This
   matters whenever a FIX lands in the last round before the cap.)
 - Round cap: **4 CONSECUTIVE CONTESTED exchanges** by default (caller may
-  raise or lower it). A round carrying a CONTESTED point increments the
-  counter; a round whose findings are all accepted RESETS it to zero.
+  raise or lower it). A round is CONTESTED while any contested point is
+  OUTSTANDING, whether it was raised in that round or an earlier one — an
+  argument evidence has not settled is still the argument this counter
+  exists to count, and a round that merely accepts other findings does not
+  settle it. A contested round increments the counter; a round that leaves
+  NO contested point outstanding RESETS it to zero.
   Hitting the cap is not failure — it is the signal to stop spending tokens
   on an argument evidence hasn't settled, and that argument is the only
   thing this counter measures.
@@ -61,8 +65,13 @@ Each exchange (one session position or rebuttal + one reviewer reply) is a round
   moves on is progress. Two measured runs overran a flat cap of 4: a field
   report ran 8 rounds with zero refutations, zero escalations and zero
   repeat findings, where stopping at 4 would have shipped its defects 5 and
-  6; and this repo's own 0.21.1 debate ran 7 rounds with zero contested
-  points, where rounds 5 and 6 each returned ESCALATE on real defects.
+  6; and this repo's own 0.21.1 debate ran 7 rounds in which rounds 5 and 6
+  each returned ESCALATE on real defects and only round 7 was terminal. Its
+  twelve round records are retained under
+  `docs/superpowers/plans/rounds/2026-08-04-transport-and-mirror/`; they
+  record verdicts PER CLAIM rather than a contested-point tally, so "no
+  contested point" there is a reconstruction from the claims and not a
+  reading off the records.
 - **A separate TOTAL FIX-VERIFY BUDGET bounds that loop**, caller-set and
   declared before round 1. Exhausting it PAUSES the debate for the user's
   authorization to continue — it NEVER certifies and never converts into a

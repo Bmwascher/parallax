@@ -676,3 +676,89 @@ carries a contested-point count, so "seven rounds, zero contested" is
 still a reconstruction rather than a reading, and the 0.20.0 `6,5,2,1,0`
 sequence is not retained anywhere and stays an assertion. The reviewer
 raised both as a gap; only one of them is closed.
+
+---
+
+# Fable whole-branch review, `02adc87..HEAD` (2026-08-04)
+
+Verdict: **ready to merge WITH FIXES**. No Critical. No Important. Five
+Minor. Every finding was reproduced here against the source before it
+was accepted; none was taken on the reviewer's authority.
+
+## Two were fixed because of WHERE they sit
+
+Both land in the exact policy text this branch exists to make
+unambiguous, which is the one place an ambiguity cannot ride.
+
+**F1 - "carrying" was undefined.** `debate-protocol.md:54` said a round
+"carrying a CONTESTED point increments the counter". A point contested
+in round N and still outstanding while round N+1's new findings are all
+accepted read BOTH ways. Under the not-carrying reading the counter
+RESETS while the outstanding point still blocks termination, so neither
+the cap nor the dry-round rule could end the debate and only the
+fix-verify budget - built for the other regime entirely - would bound
+it. Settled explicitly: a round is CONTESTED while any contested point
+is OUTSTANDING, raised that round or earlier, and a round that merely
+accepts other findings does not settle it.
+
+**F2 - a claim one word wider than this branch's own evidence.** The
+shipped text said the 0.21.1 debate ran "with zero contested points",
+while the rounds README this same branch wrote says no round record
+carries a contested-point count. The text now says what the records
+support: rounds 5 and 6 each returned ESCALATE, only round 7 was
+terminal, and the absence of contested points is a reconstruction from
+the claims rather than a reading off the records.
+
+The corrected pin was re-mutation-tested: `whether it was raised` ->
+`when it was raised` fails it.
+
+## One was NAMED rather than fixed, on purpose
+
+**F3 - no creation-time ordering guard in the ancestry walk.** Real. A
+pid that exits and is REUSED inside the walk's own window resolves a
+wrong live owner. A merely dead ancestor already fails closed, so only
+reuse during the walk slips through, and it lands on the stuck-lane
+direction this function already trades toward.
+
+The standard guard is one comparison. It was NOT added, because no test
+in this repo can watch it fail for the reason it claims - reproducing
+pid reuse inside a specific microsecond window is not something a suite
+can arrange - and adding unverified code to the one function this branch
+exists to make trustworthy is the wrong trade. The residual is named in
+the code and filed as backlog item 29, which is exactly what task 7's
+own scope rule prescribes for a defect the verification surface cannot
+reach.
+
+## Two were fixture fragility, both fixed
+
+**F4** - `run_lock_through_an_extra_shell` spliced the host path
+unquoted. It passes today only because `PARALLAX_PS_HOST` is normally a
+bare name and the powershell fallback lives under System32 with no
+spaces; the `shutil.which("pwsh")` fallback is under Program Files, and
+an unquoted splice there fails the INNER parse - which would fail this
+oracle for a transport reason while looking exactly like the resolution
+defect it exists to catch.
+
+**F5** - the login stub absorbed the new `-OwnerName` argument into
+`$args` because it is a simple script. Functioning, invisible, and one
+added `[CmdletBinding()]` would have flipped the invoked rows to
+"binding refused" for a reason nobody would look for. The parameter is
+now declared.
+
+## What the review CONFIRMED, and it was asked to attack these
+
+- The proposed-owner liveness check running BEFORE the lock file is read
+  is correct: it is parameter validation, matching every other exit-2
+  path in the tool, nothing mutates either way, and `-Status` remains
+  the malformed-diagnosis surface. The masking is diagnostic ordering,
+  not a lost measurement.
+- The task 2 trade is defensible as shipped, the transport list names
+  transports rather than approved owners, and 16 levels against a
+  measured depth of 6 is generous with a fail-closed overflow.
+- The synthetic-identity migration did not weaken any oracle. The lock
+  module's `write_held` plantings stay valid because a record whose
+  owner died after acquire is a reachable state; the home module's
+  reclaim fixture correctly moved to spawn-and-kill because it drives
+  the real acquire path the tool now guards.
+- The mutation tests picked load-bearing words rather than convenient
+  ones.
