@@ -257,6 +257,40 @@ class TestTransportContract:
             " model-prompting-notes.md)"
         )
 
+    def test_resume_pipes_the_brief_on_stdin(self):
+        """The brief must never be a POSITIONAL argument on resume.
+
+        Measured 2026-08-03 on codex-cli 0.144.1, recorded at
+        docs/superpowers/plans/rounds/2026-08-04-transport-and-mirror/
+        resume-transport-probe.md. The npm wrapper splats $args to node.
+        On Windows PowerShell 5.1 a quoted span splits the argument and
+        strips the quotes: the documented positional form exited 2 with
+        `unexpected argument 'Gems` and wrote no reply file, while the
+        stdin form on the same host and the same session exited 0 with
+        the quotes delivered.
+
+        The SERIOUS half is quieter. When the quoted span contains no
+        space the argument COUNT does not change, so nothing fails, the
+        route header verifies, and the reviewer reads a brief this side
+        never wrote. Round 1 was always immune because it pipes; this
+        makes resume identical to it.
+        """
+        text = read(SKILL_MD)
+        assert re.search(
+            r"Get-Content -Raw <brief-file> \| codex exec"
+            r" --sandbox read-only --disable plugins --disable apps"
+            r" -c \$override -m <canonical-model-id>"
+            r" -c model_reasoning_effort=<canonical-effort>"
+            r" [^\n]*resume <SESSION_ID> -", text
+        ), (
+            "the resume dispatch must pipe the brief on stdin and end"
+            " `resume <SESSION_ID> -`, matching round 1"
+        )
+        assert 'resume <SESSION_ID> "<rebuttal-brief>"' not in text, (
+            "the positional brief form is live-proven defective on"
+            " PowerShell 5.1 and must not return"
+        )
+
     def test_sandbox_verified_in_route_check(self):
         # Sandbox mode has NO continuity across resumes: probed 2026-07-24
         # (v0.144.1) - a resume WITHOUT --sandbox resolved to the config
