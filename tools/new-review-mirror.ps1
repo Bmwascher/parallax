@@ -562,7 +562,15 @@ $RepoRoot = (Resolve-Path $RepoRoot).Path
 # WHAT IT PROVES, narrowly: the two-HEAD gate proves committed-HEAD
 # freshness. Non-HEAD inputs are bound in the constructed mirror's
 # manifest AT CONSTRUCTION TIME, and source-side changes after
-# construction are detected by the source-status comparison here.
+# construction are detected by the source-status comparison here WHEN
+# THEY ARE VISIBLE TO IT: changes that move the status listing, or that
+# alter the content of a path the listing names. A tracked file git
+# reports CLEAN is in neither, so a raw-byte change surviving the clean
+# filter unchanged moves neither HEAD nor this fingerprint and is NOT
+# covered. The contract region carries the same qualification; this
+# comment said "are detected" flat until round 3 of the mode-diff debate
+# pointed out that the code and the contract had drifted apart again,
+# in the direction of the code claiming more.
 #
 # The status comparison is not decoration. An edit to an untracked or
 # ignored review input moves NEITHER head, and that content class is

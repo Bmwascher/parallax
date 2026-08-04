@@ -198,6 +198,21 @@ def assert_clean(proc):
     return p
 
 
+def assert_failed_any(proc, needles):
+    """Refused, with the reason matching ONE of several named paths.
+
+    For a case where the two hosts legitimately refuse at different
+    checks. Still asserts the reason, so it is not the weaker
+    "refused somehow": every acceptable path is named up front.
+    """
+    p = parsed(proc)
+    assert p.get("status") == "failed", (p, proc.stderr)
+    assert proc.returncode == 1, (proc.returncode, p, proc.stderr)
+    reason = p.get("reason", "")
+    assert any(n in reason for n in needles), (needles, p)
+    return p
+
+
 def assert_failed(proc, needle):
     p = parsed(proc)
     assert p.get("status") == "failed", (p, proc.stderr)
@@ -818,12 +833,16 @@ def test_a_first_line_that_is_an_array_is_refused(tmp_path):
     """G2. The F2 fix checked properties without proving it had an
     object.
 
-    Measured 2026-08-04 on both hosts:
-    `'[{"type":"session_meta",...}]' | ConvertFrom-Json` UNROLLS to its
-    single element, so `.type` and `.payload.id` both read through and a
-    first line that is a JSON ARRAY satisfied a check written to prove
-    the line is a session_meta record. The slice parser already refuses
-    valid non-object JSON; the fix omitted the same guard.
+    Measured 2026-08-04, and the two hosts differ - this docstring said
+    they behaved alike until round 3 read it against the branch's own
+    recorded measurement. `'[{"type":"session_meta",...}]' |
+    ConvertFrom-Json` UNROLLS to its single element on PowerShell 7.6.3,
+    where the object test cannot see the array at all. Windows
+    PowerShell 5.1 keeps `System.Object[]`, and the property reads still
+    succeeded there through member-access enumeration. Different
+    mechanisms, same outcome: a first line that is a JSON ARRAY
+    satisfied a check written to prove the line is a session_meta
+    record.
     """
     r1, r2 = "Round one brief.", "Round two brief."
     day = tmp_path / "sessions" / "2026" / "08" / "04"
@@ -862,3 +881,104 @@ def test_a_slice_line_that_is_a_single_element_array_is_refused(tmp_path):
         fh.write(json.dumps([user_row(r2)]) + "\n")
         fh.write(json.dumps(assistant_row("ok2")) + "\n")
     assert_failed(run_resume(f, prior, canon(r2)), "JSON object")
+
+
+# =====================================================================
+# Mode-diff debate round 3. Four claims stood; these close them.
+# =====================================================================
+
+def test_a_prior_state_that_is_an_array_is_refused(tmp_path):
+    """H1. G9's fix guarded the ROLLOUT's lines and not the STATE FILE.
+
+    Measured on both hosts: a prior state written as `[{...}]` unrolls
+    on PowerShell 7.6.3, so `.kind` and every field read straight
+    through and the document behaves as the object it is not. On 5.1 it
+    stays `System.Object[]` and the presence check happens to fail. Same
+    host-divergent class, one file over.
+    """
+    brief = "A brief."
+    root, f = make_root(tmp_path, brief=brief)
+    p = tmp_path / "prior.json"
+    p.write_text(json.dumps([{"kind": "fresh", "knownRollouts": []}]),
+                 encoding="utf-8")
+    assert_failed(run_fresh(root, p, canon(brief)), "object")
+
+
+def test_a_record_line_with_a_trailing_comment_is_refused(tmp_path):
+    """H2. `ConvertFrom-Json` is not a strict-JSON gate on every host.
+
+    Measured 2026-08-04: `{"type":"note"} // tail` is ACCEPTED by
+    PowerShell 7.6.3 and refused by 5.1. Arbitrary trailing text and a
+    second object are refused by both, so the divergence is specifically
+    JSON COMMENTS - narrower than "trailing content", and enough to make
+    the contract's strict-JSONL claim false on one interpreter.
+
+    BOTH HOSTS NOW REFUSE IT, AT DIFFERENT CHECKS, and the oracle names
+    both rather than pretending one. 5.1 never parses the line at all;
+    7 parses it and the trailing-content scan catches what the parser
+    let through. A single expected reason here would be a claim about
+    one interpreter wearing the shape of a claim about the tool.
+    """
+    r1, r2 = "Round one brief.", "Round two brief."
+    root, f = make_root(tmp_path, rows=[meta_row(), preamble_row(),
+                                        user_row(r1), assistant_row()])
+    prior = resume_state(tmp_path, f)
+    with open(f, "a", encoding="utf-8", newline="\n") as fh:
+        fh.write(json.dumps(assistant_row("note")) + " // tail\n")
+        fh.write(json.dumps(user_row(r2)) + "\n")
+        fh.write(json.dumps(assistant_row("ok2")) + "\n")
+    assert_failed_any(run_resume(f, prior, canon(r2)),
+                      ["trailing content", "could not be parsed as JSON"])
+
+
+def test_a_fractional_byte_offset_is_refused(tmp_path):
+    """H5. THE ROUND-2 NARROWING WAS WRONG AND THIS PINS THE CORRECTION.
+
+    I recorded `bytes` as never permissive, on the evidence of one input
+    (`"many"`) that fails its coercion. Measured 2026-08-04: JSON
+    `1108257.4` parses to Decimal on 5.1 and Double on 7, and `[int]`
+    yields 1108257 on both. Paired with a prefix hash taken THROUGH that
+    truncated offset, a fractional count reached the ordinary slice
+    checks, so the field was permissive by a shape I had not tested.
+
+    The schema check closes it. The correction being pinned here is to
+    the RECORD, which called this diagnostic when it was a hole.
+    """
+    r1, r2 = "Round one brief.", "Round two brief."
+    root, f = make_root(tmp_path, rows=[meta_row(), preamble_row(),
+                                        user_row(r1), assistant_row()])
+    b = f.read_bytes()
+    prior = state_file(tmp_path, {
+        "kind": "resume", "rolloutFile": str(f), "sessionId": SESSION,
+        "bytes": len(b) + 0.4,
+        "prefixSha256": hashlib.sha256(b).hexdigest()})
+    append_rows(f, [user_row(r2), assistant_row("ok2")])
+    assert_failed(run_resume(f, prior, canon(r2)), "bytes")
+
+
+def test_a_prior_state_naming_another_valid_rollout_is_refused(tmp_path):
+    """H7. The unconditional path comparison needs its own oracle.
+
+    The null and blank `rolloutFile` cases stop at the SCHEMA guard, so
+    deleting the comparison leaves both green while their narratives
+    describe the comparison as the defect. Here BOTH paths are real
+    rollouts and the state's own byte offset and prefix hash describe
+    the file actually passed, so nothing downstream can refuse it: only
+    the comparison can, and removing it makes this case bind clean.
+    """
+    r1, r2 = "Round one brief.", "Round two brief."
+    day = tmp_path / "sessions" / "2026" / "08" / "04"
+    day.mkdir(parents=True, exist_ok=True)
+    other = day / rollout_name(stamp="2026-08-04T00-00-00")
+    write_rows(other, [meta_row(), preamble_row(), user_row("elsewhere"),
+                       assistant_row()])
+    target = day / rollout_name()
+    write_rows(target, [meta_row(), preamble_row(), user_row(r1),
+                        assistant_row()])
+    b = target.read_bytes()
+    prior = state_file(tmp_path, {
+        "kind": "resume", "rolloutFile": str(other), "sessionId": SESSION,
+        "bytes": len(b), "prefixSha256": hashlib.sha256(b).hexdigest()})
+    append_rows(target, [user_row(r2), assistant_row("ok2")])
+    assert_failed(run_resume(target, prior, canon(r2)),
+                  "different rollout file")

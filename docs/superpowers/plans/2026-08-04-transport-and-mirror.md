@@ -790,10 +790,15 @@ gated on truthiness, so it was skipped. It runs unconditionally now, over
 a validated schema. Separately, the F2 first-line check read `.type` and
 `.payload.id` without proving it had an object.
 
-**Two sub-claims narrowed.** The reviewer also said `bytes`,
-`prefixSha256` and `sessionId` were permissive. They were not: each was
-already refused downstream, by a failed coercion, a failed comparison and
-a filename disagreement respectively. What was actually wrong is the
+**Two sub-claims narrowed, AND ONE OF THE NARROWINGS WAS WRONG.** The
+reviewer also said `bytes`, `prefixSha256` and `sessionId` were
+permissive. I recorded all three as already-refused-downstream. Round 3
+checked that and `bytes` was not: JSON `1108257.4` becomes Decimal on 5.1
+and Double on 7, `[int]` truncates both to 1108257, and paired with a
+prefix hash through that offset the state reached the ordinary slice
+checks. I had tested one input, `"many"`, watched it fail its coercion,
+and generalized from it. `prefixSha256` and `sessionId` were diagnostic
+as recorded; `bytes` was a hole. What was actually wrong is the
 REASON each printed - a schema fault reported as a changed rollout sends
 the operator to re-measure a file that is fine. The shape checks landed
 anyway, on that narrower ground, and the closure says so.

@@ -111,6 +111,68 @@ function Get-CanonicalSha256([string]$text) {
     Get-Sha256Hex $bytes 0 $bytes.Length
 }
 
+function Get-JsonObjectLineFault([string]$raw, $parsed) {
+    # Returns $null when the line is a lone JSON object, else a phrase
+    # naming the fault. Two faults, and an operator has to be able to
+    # tell them apart: one says the value is the wrong kind, the other
+    # says something rode in behind a value of the right kind.
+    # A JSONL RECORD IS AN OBJECT, AND `-is [PSCustomObject]` DOES NOT
+    # ESTABLISH THAT ON EVERY HOST. Measured 2026-08-04 on
+    # `'[{"type":"session_meta",...}]' | ConvertFrom-Json`:
+    #   Windows PowerShell 5.1 returns System.Object[] - the type test
+    #     catches it.
+    #   PowerShell 7.6.3 UNROLLS the single-element array and returns the
+    #     PSCustomObject inside it - the type test cannot see it, and the
+    #     line's properties then read straight through.
+    # So the shipped slice parser's object check, and the resume
+    # first-line check added hours earlier, both passed a JSON ARRAY on
+    # PowerShell 7 while refusing it on 5.1. That is the 0.16.0 lane-lock
+    # class this repo runs two host jobs for: a green suite on one
+    # interpreter proves one interpreter.
+    # The RAW TEXT decides instead. A JSON object begins with `{`, on
+    # every host, and combined with a successful parse that is the whole
+    # rule.
+    # AND `ConvertFrom-Json` IS NOT A STRICT-JSON GATE EITHER. Measured
+    # 2026-08-04: `{"type":"note"} // tail` is ACCEPTED on PowerShell
+    # 7.6.3 and refused on 5.1, because 7's parser allows JSON comments.
+    # Arbitrary trailing text and a second object are refused on both, so
+    # the divergence is comments specifically - narrow, and still enough
+    # to make the contract's strict-JSONL claim false on one interpreter.
+    # Delegating strictness to the parser is what went wrong; the scan
+    # below decides here, the same way for every host.
+    if ($null -eq $raw) { return "is not a JSON object" }
+    $t = $raw.Trim()
+    if (-not $t.StartsWith("{")) { return "is not a JSON object" }
+    if (-not ($parsed -is [System.Management.Automation.PSCustomObject])) {
+        return "is not a JSON object"
+    }
+    # Nothing but whitespace may follow the object's own closing brace.
+    # The parse already established well-formed JSON, so this only has to
+    # find where the value ends: track string literals so a brace inside
+    # one is not counted, and escapes so a quote inside one is not.
+    $depth = 0; $inStr = $false; $esc = $false; $end = -1
+    for ($i = 0; $i -lt $t.Length; $i++) {
+        $c = $t[$i]
+        if ($inStr) {
+            if ($esc) { $esc = $false }
+            elseif ($c -eq '\') { $esc = $true }
+            elseif ($c -eq '"') { $inStr = $false }
+            continue
+        }
+        if ($c -eq '"') { $inStr = $true; continue }
+        if ($c -eq '{') { $depth++; continue }
+        if ($c -eq '}') {
+            $depth--
+            if ($depth -eq 0) { $end = $i; break }
+        }
+    }
+    if ($end -lt 0) { return "is not a JSON object" }
+    if ($t.Substring($end + 1).Trim() -ne "") {
+        return "carries trailing content after its JSON value"
+    }
+    return $null
+}
+
 # --------------------------------------------------------------------
 # Argument shape. A caller that passes an unusable expected hash must be
 # refused here: telling it the round is clean because nothing could be
@@ -138,6 +200,20 @@ try {
     $prior = $priorText | ConvertFrom-Json
 } catch {
     Fail ("prior state file could not be parsed as JSON: " + $_.Exception.Message)
+}
+
+# THE STATE FILE NEEDS THE SAME ROOT GUARD AS A ROLLOUT LINE, and the
+# first version of that guard only covered the rollout. Measured on both
+# hosts 2026-08-04: a prior state written `[{...}]` UNROLLS on PowerShell
+# 7.6.3, so `.kind` and every field below read straight through and the
+# document behaves as the object it is not; on 5.1 it stays
+# `System.Object[]` and the presence checks happen to fail. One file over
+# from where the same defect was just closed, which is the argument for
+# putting the rule in a function rather than at a call site.
+$priorFault = Get-JsonObjectLineFault $priorText $prior
+if ($priorFault) {
+    Fail ("prior state " + $priorFault + " at its root, so the fields " +
+          "read from it are not the fields it declares")
 }
 
 $wantKind = if ($Fresh) { "fresh" } else { "resume" }
@@ -227,28 +303,6 @@ if ($Fresh) {
 # --------------------------------------------------------------------
 # Locate the rollout and establish the byte range THIS call appended.
 # --------------------------------------------------------------------
-
-function Test-JsonObjectLine([string]$raw, $parsed) {
-    # A JSONL RECORD IS AN OBJECT, AND `-is [PSCustomObject]` DOES NOT
-    # ESTABLISH THAT ON EVERY HOST. Measured 2026-08-04 on
-    # `'[{"type":"session_meta",...}]' | ConvertFrom-Json`:
-    #   Windows PowerShell 5.1 returns System.Object[] - the type test
-    #     catches it.
-    #   PowerShell 7.6.3 UNROLLS the single-element array and returns the
-    #     PSCustomObject inside it - the type test cannot see it, and the
-    #     line's properties then read straight through.
-    # So the shipped slice parser's object check, and the resume
-    # first-line check added hours earlier, both passed a JSON ARRAY on
-    # PowerShell 7 while refusing it on 5.1. That is the 0.16.0 lane-lock
-    # class this repo runs two host jobs for: a green suite on one
-    # interpreter proves one interpreter.
-    # The RAW TEXT decides instead. A JSON object begins with `{`, on
-    # every host, and combined with a successful parse that is the whole
-    # rule.
-    if ($null -eq $raw) { return $false }
-    if (-not $raw.TrimStart().StartsWith("{")) { return $false }
-    return ($parsed -is [System.Management.Automation.PSCustomObject])
-}
 
 function Get-RolloutSessionId([string]$name) {
     # rollout-<timestamp>-<session-id>.jsonl. The id is the tail because a
@@ -403,9 +457,10 @@ for ($i = 0; $i -lt $lines.Count; $i++) {
     }
     # `null`, a bare scalar and an array are all valid JSON and none is a
     # record. Ignoring them silently is lenience under a strict-parse claim.
-    if (-not (Test-JsonObjectLine $lines[$i] $rec)) {
-        Fail ("rollout line " + ($i + 1) + " of this call's slice is not a " +
-              "JSON object")
+    $lineFault = Get-JsonObjectLineFault $lines[$i] $rec
+    if ($lineFault) {
+        Fail ("rollout line " + ($i + 1) + " of this call's slice " +
+              $lineFault)
     }
     $records += ,$rec
 }
@@ -464,12 +519,12 @@ if ($Fresh) {
     # PROVE IT IS AN OBJECT BEFORE READING PROPERTIES. A first line that
     # is a JSON ARRAY satisfied a check written to prove the line is a
     # session_meta record, because its properties read straight through.
-    # See Test-JsonObjectLine for the host divergence that makes the
+    # See Get-JsonObjectLineFault for the host divergence that makes the
     # obvious type test the wrong instrument.
-    if (-not (Test-JsonObjectLine $firstLine $firstRec)) {
-        Fail ("the resumed rollout's first line is valid JSON but not an " +
-              "object, so it is not a session_meta record whatever its " +
-              "properties read as")
+    $firstFault = Get-JsonObjectLineFault $firstLine $firstRec
+    if ($firstFault) {
+        Fail ("the resumed rollout's first line " + $firstFault + ", so it " +
+              "is not a session_meta record whatever its properties read as")
     }
     if ($firstRec.type -ne "session_meta") {
         Fail ("the resumed rollout's first record is not a session_meta " +
