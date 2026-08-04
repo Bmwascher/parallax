@@ -50,6 +50,28 @@ what they cover:
   setup failure FAILS the gate instead of skipping it, because a skipped
   credential measurement is not a clean one.
 
+## Long-running commands
+
+DISPATCH DEBATE ROUNDS AND FULL GATES DETACHED, from the FIRST attempt.
+The foreground tool ceiling is 600 seconds and `run_in_background` has
+none. A codex round that crosses the ceiling is killed by the caller, not
+by the client: no `--output-last-message` file is written, so it is a
+transport failure rather than a review result, and the quota is spent for
+nothing. Measured repeatedly through 0.21.x.
+
+Two traps in the dispatch scripts themselves, both measured 2026-08-04:
+
+- Do NOT run the native `codex` call under
+  `$ErrorActionPreference = 'Stop'`. codex prints a benign models-cache
+  warning to stderr at startup, and Stop promotes ANY native stderr line
+  to a terminating `NativeCommandError`, killing the dispatch before the
+  reviewer does any work. Drop to `Continue` around the native call and
+  check `$LASTEXITCODE` yourself; nothing is being ignored, only the
+  stderr channel is stopped from masquerading as a failure.
+- Do NOT pipe an expensive run's output through `tail`, `head` or
+  `Select-Object -Last`. The failure NAMES are what a second run needs,
+  and truncating them costs the whole run again.
+
 ## Dev loop
 The plugin is installed user-scope from a LOCAL marketplace pointing at
 this working copy, but installs are VERSIONED CACHE COPIES — checkout
