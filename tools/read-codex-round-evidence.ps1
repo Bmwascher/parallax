@@ -621,11 +621,12 @@ if ($userRecords.Count -lt 1) {
 
 # THIS BOUND USED TO BE ARITHMETIC AND THE FIELD FALSIFIED IT.
 # "A resumed slice carries exactly one user record" was earned from three
-# measured rounds. Round four of session 019fcb9a, 2026-08-04, carried the
-# client's instructions preamble AND the brief - a preamble byte-identical
-# to the one at the session's own start - and the rule BLOCKED a
-# legitimate round. A claim wider than its evidence, inside the tool built
-# to refuse those.
+# measured rounds of an earlier session. Session 019fcb9a then ran THREE
+# CALLS on 2026-08-04 - one fresh, then two resumes - and its SECOND
+# RESUME carried the client's instructions preamble AND the brief, a
+# preamble identical to the one at that session's own start. The rule
+# BLOCKED a legitimate round. A claim wider than its evidence, inside the
+# tool built to refuse those.
 #
 # The replacement is about IDENTITY, not arithmetic: at most two user
 # records, and a record in front of the brief must be one THIS CLIENT

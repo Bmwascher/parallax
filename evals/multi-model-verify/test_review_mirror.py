@@ -1674,4 +1674,10 @@ def test_a_relative_symlink_cycle_is_refused(tmp_path):
     mirror = long_mirror(tmp_path)
     proc = run_mirror(repo, mirror)
     assert proc.returncode == 2, (proc.returncode, proc.stdout, proc.stderr)
-    assert "cycle" in proc.stdout.lower(), proc.stdout
+    # The refusal's own words. This asserted "cycle" until the confirming
+    # round read it against the message, which says "would never
+    # terminate" and never uses that word - so the oracle would have
+    # failed the first time a runner permitted symbolic links, and the
+    # local skip was hiding it. A test that cannot run is exactly the
+    # test whose assertion nobody has checked.
+    assert "would never terminate" in proc.stdout, proc.stdout

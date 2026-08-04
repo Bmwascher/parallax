@@ -423,7 +423,17 @@ by content-element count - the preamble carried 2 elements and briefs carried
 prompt. No matching candidate, several matching candidates, a further user
 record after the match, a slice that does not decode as strict UTF-8, a line
 that is not a JSON object, or an unequal hash blocks the round; discard the
-reply unread.
+reply unread. WHAT "A JSON OBJECT" MEANS HERE IS NARROWER THAN RFC-STRICT
+JSON, and saying otherwise was a claim wider than its evidence. Measured
+2026-08-04 on both hosts, `ConvertFrom-Json` accepts single-quoted strings,
+unquoted keys, `NaN`, leading-zero numbers and literal control characters
+inside strings; PowerShell 7 also accepts comments and a trailing comma, and
+5.1 accepts a leading `+` in an exponent. The line check therefore
+establishes THREE things and not more: the value is an object, no comment
+appears outside a string, and nothing follows the value but JSON whitespace.
+Those are the properties that keep unattributed text out of the record
+stream. Full lexical validation is open backlog work, not a property this
+check has.
 
 **Evidence limit.** This is a client-echo binding: it proves what the
 measured Codex client recorded for this call, never what the server or model
