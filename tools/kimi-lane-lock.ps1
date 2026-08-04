@@ -540,10 +540,13 @@ if ($Mode -eq "MalformedOverride") {
 # RESIDUAL, and it is unavoidable here: this establishes LIVE BEFORE the
 # write, not AT it. Nonce generation, record construction and
 # serialization run in between, so an owner that dies inside that window
-# is still written. The window is microseconds against the seconds-long
-# one the pre-loop-only check left open, and closing it entirely would
-# need an atomicity this tool cannot have - the process being measured
-# is not the process writing.
+# is still written. It is a far NARROWER window than the pre-loop-only
+# check left open - that one spanned the whole wait budget, this one
+# spans a few statements - but its wall-clock duration is NOT measured
+# and is not bounded by that statement count, because the scheduler can
+# pause this process anywhere inside it. Closing it entirely would need
+# an atomicity this tool cannot have: the process being measured is not
+# the process writing.
 #
 # UNMEASURABLE refuses HERE and is accepted at the gate above, and the
 # asymmetry is the whole design: the pid lookup succeeded, so the
@@ -594,7 +597,8 @@ function Invoke-AcquireMode {
     # releases. The cross-vendor round found exactly that window.
     #
     # The guarantee is at the WRITE SITES: `Assert-OwnerLiveForWrite` is
-    # called immediately before every record write and requires LIVE.
+    # called before every HELD-OWNER write and establishes LIVE there.
+    # Not "every record write": the free-record writes carry no owner.
     # UNMEASURABLE survives only where NOTHING is written - the
     # idempotent re-entry path, where a matching nonce and a matching
     # retained identity already establish ownership without a

@@ -115,8 +115,8 @@ Panel participation: a user-invoked panel per references/panels.md is a second s
   exits when its command does. What is measured is stability across an
   added SHELL frame, not under any wrapper; backlog item 26 is open on
   exactly the remaining class. A caller that KNOWS its own session
-  process should pass that identity instead of resolving one. So run
-  `tools/kimi-lane-lock.ps1
+  process should pass that identity instead of resolving one.
+  OTHERWISE, run `tools/kimi-lane-lock.ps1
   -ResolveOwner` once at the start of the debate, keep its `ownerPid`,
   `ownerStartTicksUtc` and `ownerName`, generate one 32-character
   lowercase hexadecimal debate id, and hand the pid, the ticks and the

@@ -782,7 +782,9 @@ record claimed it was closed.
 
 Fixed as the reviewer proposed and better than the plan asked: the gate
 stays a fast DEAD-only refusal, and `Assert-OwnerLiveForWrite` runs
-IMMEDIATELY BEFORE EVERY RECORD WRITE requiring LIVE. UNMEASURABLE now
+IMMEDIATELY BEFORE EVERY RECORD WRITE requiring LIVE. (Round 3: "every
+record write" is too wide and is corrected to every HELD-OWNER write
+throughout - the free-record writes carry no owner. See Amendment 4.) UNMEASURABLE now
 survives only where NOTHING is written - the idempotent re-entry path,
 where a matching nonce and a matching retained identity already
 establish ownership without a measurement. The case the DEAD-only rule
@@ -957,3 +959,66 @@ not exist.
 Every one of those is a claim wider than its evidence, written by me,
 surviving my own gates. Three of the last three releases have had a
 confirming round block the merge.
+
+---
+
+# Amendment 4 (2026-08-04, diff debate round 3) - three surviving surfaces
+
+Session `019fce61` resumed, brief binding CLEAN, head judged
+`6565ca0d2cbcd81cc982eb9c6b51b221980ac662`. Claims 3, 4, 5, 6 and 7
+PASS; claims 1, 2 and 8 FIX. Third consecutive round to find something
+real; none of it contested.
+
+## A narrowed claim that was narrowed in only one of three places
+
+Amendment 3 said the guarantee "is now" stated as every HELD-OWNER
+write. It was, at the helper's own definition - and the GATE comment
+twelve lines away still said "before every record write and requires
+LIVE", and Amendment 2 still said "IMMEDIATELY BEFORE EVERY RECORD
+WRITE". So the operative source contradicted itself, and a narrowing
+that lands on one surface out of three is not a narrowing.
+
+All three now agree. Amendment 2's sentence is corrected in place with a
+pointer here, not rewritten.
+
+## "Microseconds" was a number I did not measure
+
+The check-to-write residual was described as "microseconds against the
+seconds-long window the pre-loop-only check left open". The comparison
+is sound; the magnitude is not a measurement. The scheduler can pause
+the process anywhere between the check and the write, so wall-clock
+duration is not bounded by the number of intervening statements.
+
+Now stated as what is actually known: a far narrower window - the old
+one spanned the whole wait budget, this one spans a few statements - and
+its duration is explicitly NOT measured. This is the same defect class
+as the two the confirming rounds already found: a claim wider than its
+evidence, in the sentence that exists to state a limit.
+
+## A failing oracle could leak a two-minute process
+
+`test_an_owner_that_dies_during_contention_is_never_written` kills the
+victim only on the success path. If the contention signal timed out or
+the branch assertion failed, execution never reached the kill, and the
+`finally` terminated only the waiter - so a 120-second sleeper outlived
+the failing oracle. The victim is now reaped in `finally` too.
+
+Worth noting where this came from: the fixture was rewritten in round 2
+to fix a synchronization defect, and the rewrite introduced this one.
+Sixth instance in this repo of a fix carrying its own defect.
+
+## The exception the next sentence took back
+
+The lifecycle contract gained "a caller that KNOWS its own session
+process should pass that identity instead of resolving one" and then
+continued "So run `-ResolveOwner` once at the start of the debate" -
+an unconditional instruction immediately after the exception to it. Now
+"OTHERWISE, run". The whole-region pin moved with it.
+
+## What passed
+
+Claims 3, 4, 5, 6 and 7 all PASS, including the convergence pin that did
+not exist a round ago and the reason-sensitive schema fixtures. The
+reviewer also settled a question I had left open: the phrase-only
+convergence test may stay, because it no longer bears the semantic
+burden and Amendment 3 names its limitation.

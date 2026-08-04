@@ -1315,6 +1315,12 @@ def test_an_owner_that_dies_during_contention_is_never_written(
         assert rel.returncode == 0, (rel.stdout, rel.stderr)
         stdout, stderr = waiter.communicate(timeout=60)
     finally:
+        # The victim is reaped HERE too. If the signal times out or the
+        # branch assertion fails, execution never reaches the kill above
+        # and a 120-second sleeper outlives the failing oracle.
+        if victim.poll() is None:
+            victim.kill()
+            victim.wait(timeout=30)
         if waiter.poll() is None:
             waiter.kill()
 
