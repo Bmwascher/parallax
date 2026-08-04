@@ -163,6 +163,26 @@ function Assert-PriorField($name) {
 
 if ($Fresh) {
     Assert-PriorField "knownRollouts"
+    # PRESENCE IS NOT A MEASUREMENT. Found by the mode-diff debate,
+    # cross-vendor reviewer lane, round 1, and measured here first:
+    # `knownRollouts: null` satisfies a presence test, and
+    # `@($null | ForEach-Object {...})` then yields a ONE-element array,
+    # so the inventory became a single entry matching no path, the
+    # not-new comparison never fired, and a PRE-EXISTING rollout bound
+    # as though this call had created it. An empty ARRAY is still
+    # accepted: that is a measurement that found nothing, which is a
+    # different thing from one nobody made.
+    $inv = $prior.knownRollouts
+    if ($null -eq $inv -or -not ($inv -is [System.Array])) {
+        Fail ("prior state knownRollouts must be an array; a missing or " +
+              "non-array inventory is one nobody made")
+    }
+    foreach ($item in $inv) {
+        if (-not ($item -is [string]) -or [string]::IsNullOrWhiteSpace($item)) {
+            Fail ("prior state knownRollouts must hold only non-empty path " +
+                  "strings; an entry that is not one cannot be compared")
+        }
+    }
 } else {
     Assert-PriorField "rolloutFile"
     Assert-PriorField "sessionId"
@@ -356,6 +376,39 @@ if ($Fresh) {
     if ($nameId -ne $expectSessionId) {
         Fail ("the session id disagrees across sources: filename '" + $nameId +
               "', prior state '" + $expectSessionId + "'")
+    }
+    # THE PREFIX'S OWN session_meta, re-measured rather than trusted.
+    # The contract says a resumed rollout is resolved by its first
+    # `session_meta` record AND its filename; resume checked the
+    # filename and the prior state and parsed only the appended slice,
+    # so the recorded provenance was taken on faith. Found by the
+    # mode-diff debate, cross-vendor lane, round 1. Only the FIRST line
+    # is read: the prefix hash already pins the rest, and re-parsing a
+    # whole cumulative rollout every round would grow without bound.
+    $firstLine = $null
+    try {
+        $reader = New-Object System.IO.StreamReader(
+            $targetFile, (New-Object System.Text.UTF8Encoding($false, $true)))
+        try { $firstLine = $reader.ReadLine() } finally { $reader.Dispose() }
+    } catch {
+        Fail ("the resumed rollout's first record could not be read: " +
+              $_.Exception.Message)
+    }
+    $firstRec = $null
+    try {
+        $firstRec = $firstLine | ConvertFrom-Json
+    } catch {
+        Fail ("the resumed rollout's first record is not parseable JSON, so " +
+              "its session identity was never measured")
+    }
+    if ($firstRec.type -ne "session_meta") {
+        Fail ("the resumed rollout's first record is not a session_meta " +
+              "record, so its session identity was never measured")
+    }
+    $prefixId = [string]$firstRec.payload.id
+    if ($prefixId -ne $expectSessionId) {
+        Fail ("the session id disagrees across sources: session_meta '" +
+              $prefixId + "', prior state '" + $expectSessionId + "'")
     }
 }
 

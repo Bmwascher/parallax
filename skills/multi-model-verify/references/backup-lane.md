@@ -401,8 +401,15 @@ proceed; do not infer either key's value.
 
 ## Workspace isolation and the brief
 
-- Reviews run in a THROWAWAY REVIEW MIRROR in the session scratchpad —
-  never the real tree.
+- Reviews run in a THROWAWAY REVIEW MIRROR — never the real tree. Build
+  it at a SHORT path directly under the temp directory, such as a
+  `kerev<n>` folder, and never inside the session scratchpad, whose own
+  path is long enough to consume most of the budget before the copy
+  starts. This sentence used to say "in the session scratchpad" and
+  SKILL.md said the opposite, a contradiction 0.21.0 introduced and the
+  mode-diff debate caught: an operator reading both could comply with
+  neither. The location rule is stated HERE and referenced from
+  SKILL.md, so there is one place to change it.
 - The mirror is a FILE COPY of the working tree that PRESERVES `.git`, not
   a `git clone`. This is not a preference: a clone carries TRACKED FILES ONLY,
   and the review inputs are routinely gitignored — a project's frozen
@@ -430,7 +437,14 @@ proceed; do not infer either key's value.
   `mirror_head`. Steps three and four are the bridge itself: without
   them the record can hold two individually valid commit ids while
   nothing proves the mirror was built FROM the recorded source commit,
-  which is two true facts arranged to look like one. Before every fresh
+  which is two true facts arranged to look like one. What the bridge
+  proves is matching OBSERVED ENDPOINTS, and that is weaker than an
+  uninterrupted construction: a source that moves away and back during
+  the copy satisfies both the before-and-after head equality and the
+  before-and-after fingerprint, while the copied worktree can still hold
+  intermediate bytes. The debate named that gap and it is real; the only
+  thing that would close it is building from an immutable snapshot,
+  which this release does not do. Before every fresh
   and resumed dispatch, re-run the tool with `-VerifyIdentity` and the
   three recorded values. Missing, unreadable or unequal BLOCKS the
   round, and a value that was never recorded is never a value that
@@ -454,11 +468,18 @@ proceed; do not infer either key's value.
   MID-COPY and leaves a partially populated tree that reads exactly like
   a complete one, which is why the check runs before the root is
   created rather than after the copy reports a count. The UNIVERSE it
-  measures is every file and directory destination that the exact
-  `robocopy /E` operation may create beneath the resolved mirror root,
-  including tracked, untracked, ignored, and all `.git` content: a
-  directory holding no files is still a destination, and `.git` is
-  copied so `.git` counts. The ARITHMETIC is the resolved mirror-root
+  measures is every file and directory destination implied by the source
+  AS ENUMERATED at pre-flight time, including tracked, untracked,
+  ignored, and all `.git` content: a directory holding no files is still
+  a destination, and `.git` is copied so `.git` counts. It is NOT a
+  guarantee that this universe equals the one `robocopy /E` later walks.
+  The enumeration finishes before the mirror root exists and the copy
+  runs after it, so a path created in that window is in robocopy's
+  universe and not in the measured one. The contract said "the exact
+  `robocopy /E` operation" and that read as a guarantee; the mode-diff
+  debate was right that it is not one. Closing the window needs
+  construction from an immutable snapshot, which this release does not
+  do. The ARITHMETIC is the resolved mirror-root
   length, plus a separator, plus the relative destination path length.
   The LIMIT is 260 characters as a conservative policy across both
   supported PowerShell hosts. It is a deterministic refusal threshold,

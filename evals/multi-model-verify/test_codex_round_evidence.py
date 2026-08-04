@@ -581,3 +581,80 @@ def test_a_fresh_slice_with_an_extra_user_record_is_refused(tmp_path):
                                         user_row(brief), assistant_row()])
     assert_failed(run_fresh(root, fresh_state(tmp_path), canon(brief)),
                   "exactly two user records")
+
+
+# =====================================================================
+# Mode-diff debate round 1, cross-vendor reviewer lane. Two findings,
+# both verified here before they were accepted.
+# =====================================================================
+
+def test_a_null_inventory_is_refused(tmp_path):
+    """F1. Property PRESENCE is not the same as a made measurement.
+
+    `Assert-PriorField` tested only that the key exists, so
+    `{"kind":"fresh","knownRollouts":null}` passed it. Measured
+    2026-08-04: `@($null | ForEach-Object {...})` yields a ONE-element
+    array, so the inventory became a single garbage entry that matches
+    no path, the not-new comparison never fired, and a PRE-EXISTING
+    rollout bound as though this call had created it. That is the exact
+    permissive direction the region claims to forbid.
+    """
+    brief = "A brief."
+    root, f = make_root(tmp_path, brief=brief)
+    prior = state_file(tmp_path, {"kind": "fresh", "knownRollouts": None})
+    assert_failed(run_fresh(root, prior, canon(brief)), "knownRollouts")
+
+
+def test_a_scalar_inventory_is_refused(tmp_path):
+    brief = "A brief."
+    root, f = make_root(tmp_path, brief=brief)
+    prior = state_file(tmp_path, {"kind": "fresh", "knownRollouts": "nope"})
+    assert_failed(run_fresh(root, prior, canon(brief)), "knownRollouts")
+
+
+def test_an_object_inventory_is_refused(tmp_path):
+    brief = "A brief."
+    root, f = make_root(tmp_path, brief=brief)
+    prior = state_file(tmp_path, {"kind": "fresh",
+                                  "knownRollouts": {"a": 1}})
+    assert_failed(run_fresh(root, prior, canon(brief)), "knownRollouts")
+
+
+def test_an_inventory_holding_a_non_string_is_refused(tmp_path):
+    """A list of the right SHAPE holding the wrong TYPE is still an
+    inventory nobody can compare against."""
+    brief = "A brief."
+    root, f = make_root(tmp_path, brief=brief)
+    prior = state_file(tmp_path, {"kind": "fresh",
+                                  "knownRollouts": [str(f), 7]})
+    assert_failed(run_fresh(root, prior, canon(brief)), "knownRollouts")
+
+
+def test_an_empty_inventory_is_still_accepted(tmp_path):
+    """The positive control that keeps the fix from becoming a refusal
+    of the ordinary case. An empty list is a MADE measurement that found
+    nothing, and it must stay distinguishable from an absent one."""
+    brief = "A brief."
+    root, f = make_root(tmp_path, brief=brief)
+    prior = state_file(tmp_path, {"kind": "fresh", "knownRollouts": []})
+    assert_clean(run_fresh(root, prior, canon(brief)))
+
+
+def test_a_resumed_prefix_with_a_foreign_session_meta_is_refused(tmp_path):
+    """F2. The contract said this check happened; the code did not do it.
+
+    `codex-brief-binding-calls` states a resumed rollout is resolved by
+    its first `session_meta` record AND its filename. Resume checked the
+    filename and the prior state's session id and parsed only the
+    APPENDED slice, so the recorded provenance was trusted rather than
+    re-measured. A file whose name says one session and whose first
+    record says another is exactly what the filename check exists to
+    catch, and on resume nothing caught it.
+    """
+    r1 = "Round one brief."
+    r2 = "Round two brief."
+    root, f = make_root(tmp_path, rows=[meta_row(OTHER), preamble_row(),
+                                        user_row(r1), assistant_row()])
+    prior = resume_state(tmp_path, f)
+    append_rows(f, [user_row(r2), assistant_row("ok2")])
+    assert_failed(run_resume(f, prior, canon(r2)), "session id")

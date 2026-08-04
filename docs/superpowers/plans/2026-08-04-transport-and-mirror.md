@@ -707,3 +707,71 @@ history block calls an ordinary PowerShell condition. And the round-1
 `-PriorState` schema existed only inside the tool's comment header, so
 an operator reading `SKILL.md` and the references end to end could run
 everything in this release except author that one file. Both fixed.
+
+### Amendment 13 (2026-08-04, mode-diff debate round 1) - six findings from the cross-vendor lane
+
+`gpt-5.6-sol`, effort high, sandbox read-only, session
+`019fcb9a-e5a2-7ff3-be29-c38f0977b9ac`, brief binding `clean`. Eight
+claims: 2 and 5 PASS, the rest FIX. Every finding was reproduced in this
+session before it was accepted; none was rejected, and the application
+checkpoint carries the dispositions.
+
+**Two code defects, both permissive-direction, both closed.**
+
+`knownRollouts` present but NULL passed the presence check that Amendment
+12's sibling fix had just created. `@($null | ForEach-Object {...})`
+yields a one-element array, so the inventory became a single garbage
+entry, the "this rollout is new" comparison never fired, and a
+PRE-EXISTING rollout could bind as if this call had created it. The
+region's own fail-closed claim was therefore false. The prior state's
+`knownRollouts` is now required to be a non-null array of non-empty
+strings.
+
+Resume never read the prefix's own `session_meta`. The contract said a
+resumed rollout is resolved by that record AND its filename; the code
+checked the filename and the prior state's recorded id, so the
+provenance was trusted rather than re-measured. Resume now parses the
+prefix's FIRST line under strict UTF-8 and requires its `payload.id` to
+equal the resumed session id. Only the first line: the prefix hash
+already pins the rest.
+
+**Three claims were wider than their evidence, and were narrowed rather
+than engineered away.** Sol's alternative in each case was construction
+from an immutable filesystem snapshot. That is a real design and it is
+not in this release's scope, so the honest move is the smaller claim.
+
+- The path budget is measured before the mirror root exists and robocopy
+  runs after it. "The exact `robocopy /E` operation" read as a guarantee
+  of identical universes; the region now says the source AS ENUMERATED
+  and names the window.
+- The identity bridge compares ENDPOINTS. A source that moves away and
+  back during the copy satisfies both the head equality and the
+  fingerprint while the copied worktree holds intermediate bytes. The
+  region now says observed endpoints and names the gap.
+- Two backlog closures omitted limits the code plainly has. Item 20's
+  closure now records the residue that survives the two code fixes: the
+  tool validates the prior state's SHAPE, not its truthfulness, so an
+  inventory taken at the wrong moment still binds clean. Item 22's
+  records ABA and the path-universe mutation window.
+
+**One shipped-guidance contradiction.** `SKILL.md` said never build the
+mirror inside the session scratchpad; `references/backup-lane.md` said
+reviews run in a mirror in the session scratchpad. I introduced the
+`SKILL.md` half in Task 3 without reading the reference. One rule now,
+stated in the reference and matching `SKILL.md`.
+
+**What the round says about the release.** The two code defects were both
+in text this branch ADDED, and one of them was inside a fix applied hours
+earlier by the previous review. A fix is new code and gets no discount.
+
+**The application itself failed the gate once, and the gate was right.**
+The comments written to explain F1 and F2 named the reviewer model
+literally, in `tools/read-codex-round-evidence.ps1` and
+`evals/multi-model-verify/test_codex_round_evidence.py`. The
+single-source sweep in `test_multi_model_verify.py` exists precisely so
+that a reviewer swap changes ONE file, and it does not care that the
+literal sat in a comment: a stale id in a comment is a stale id an
+operator reads. Both now name the LANE rather than the model. Worth
+recording because the literal arrived while writing prose about
+correctness, which is exactly when the sweep stops being on anyone's
+mind.
