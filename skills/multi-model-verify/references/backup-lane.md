@@ -497,11 +497,15 @@ proceed; do not infer either key's value.
   downstream client could support. Three requirements sit OUTSIDE that
   universe and bind equally. The `-OverrideOut` path is written beside
   the mirror by the tool rather than by robocopy, so the copy universe
-  never covers it and it carries its own check. A source reparse point
-  is REFUSED before measuring rather than measured through, because
-  nothing has established that this enumerator and robocopy traverse an
-  identical universe across one, and a budget computed over a universe
-  the copy does not share is not a measurement of the copy. A source
+  never covers it and it carries its own check. A source directory
+  reparse point is FOLLOWED, because the copy follows it: `robocopy /E`
+  with neither /XJ nor /SL writes the target's contents as an ordinary
+  directory at the link's relative path, so refusing to measure across
+  one described a SMALLER universe than the copy produces. What the copy
+  cannot survive is a cycle, so a link onto one of its own ancestors is
+  refused, and so is a tree whose links reach one target twice, which is
+  indistinguishable from a cycle without walking the whole graph. A
+  repo root that is itself a reparse point stays refused. A source
   path that cannot be enumerated BLOCKS the build and is never skipped,
   the same hole semantics the manifest builder states: a path that
   cannot be measured is not a path known to fit. The refusal names the

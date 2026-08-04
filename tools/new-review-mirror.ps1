@@ -781,6 +781,11 @@ $deepestRel = ""
 $dirAttr = [int][System.IO.FileAttributes]::Directory
 $reparseAttr = [int][System.IO.FileAttributes]::ReparsePoint
 
+# Every directory link target this walk has already followed. Case
+# insensitive because the filesystem is.
+$followedTargets = New-Object "System.Collections.Generic.HashSet[string]" (
+    [System.StringComparer]::OrdinalIgnoreCase)
+
 $pending = New-Object System.Collections.Stack
 $pending.Push($srcRoot)
 while ($pending.Count -gt 0) {
@@ -805,15 +810,75 @@ while ($pending.Count -gt 0) {
                 "path budget was never measured: " + $_.Exception.Message)
             exit 2
         }
-        # Source reparse points are REFUSED before measuring, not
-        # measured through. Nothing here establishes that this
-        # enumerator and robocopy traverse an identical universe across
-        # one, and a budget computed over a universe the copy does not
-        # share is not a measurement of the copy.
-        if (($attr -band $reparseAttr) -ne 0) {
-            Write-Output ("ERROR: $entry is a reparse point - the mirror " +
-                "refuses to measure or copy across one")
-            exit 2
+        # Source reparse points are FOLLOWED, because the copy follows
+        # them. `robocopy /E` with neither /XJ nor /SL walks into a
+        # directory junction and into a directory symbolic link and writes
+        # the TARGET'S CONTENTS as an ordinary directory at the same
+        # relative path - measured on a junction nested inside the source
+        # tree and on a directory symbolic link, both on this host, the
+        # destination carrying no reparse attribute in either case.
+        # Refusing here therefore measured a SMALLER universe than the copy
+        # produces, and blocked every repo that links a reference clone or
+        # a shared skills directory into its tree.
+        #
+        # What the copy genuinely cannot survive is a cycle: robocopy has no
+        # cycle detection, so a link pointing at one of its own ancestors
+        # makes both this walk and the copy unbounded. That is the case
+        # guarded below, and it still refuses.
+        if (($attr -band $reparseAttr) -ne 0 -and ($attr -band $dirAttr) -ne 0) {
+            $target = $null
+            try {
+                $item = Get-Item -LiteralPath $entry -Force -ErrorAction Stop
+                $target = $item.Target
+                # Windows PowerShell 5.1 hands back a string COLLECTION here
+                # and PowerShell 7 hands back a plain string, so take the
+                # first element of anything that is not already a string
+                # rather than testing for one collection type.
+                if ($null -ne $target -and $target -isnot [string]) {
+                    foreach ($candidate in $target) { $target = $candidate; break }
+                }
+            } catch {
+                $target = $null
+            }
+            if ([string]::IsNullOrEmpty($target)) {
+                # An unresolvable link is the same class as an unreadable
+                # directory: a path that cannot be measured is not a path
+                # known to fit.
+                Write-Output ("ERROR: $entry is a directory reparse point " +
+                    "whose target could not be read, so the path budget was " +
+                    "never measured")
+                exit 2
+            }
+
+            $entryFull = ""
+            $targetFull = ""
+            try {
+                $entryFull = [System.IO.Path]::GetFullPath($entry)
+                $targetFull = [System.IO.Path]::GetFullPath($target)
+            } catch {
+                Write-Output ("ERROR: $entry is a directory reparse point " +
+                    "whose target " + $target + " is not a usable path, so " +
+                    "the path budget was never measured")
+                exit 2
+            }
+            $targetPrefix = $targetFull.TrimEnd("\") + "\"
+            if ($entryFull.Equals($targetFull, "OrdinalIgnoreCase") -or
+                $entryFull.StartsWith($targetPrefix, "OrdinalIgnoreCase")) {
+                Write-Output ("ERROR: $entry points at $targetFull, which " +
+                    "contains it - following that link would never " +
+                    "terminate, so the mirror refuses it")
+                exit 2
+            }
+            if (-not $followedTargets.Add($targetFull)) {
+                # Two links onto one target is not itself a cycle, but it is
+                # indistinguishable from one here without walking the whole
+                # graph, and refusing is the direction that cannot
+                # mismeasure.
+                Write-Output ("ERROR: $entry points at $targetFull, which " +
+                    "another link in this tree already reaches - the mirror " +
+                    "refuses a tree whose links overlap")
+                exit 2
+            }
         }
         $rel = $entry.Substring($srcPrefix.Length)
         if ($rel.Length -gt $deepestLen) {

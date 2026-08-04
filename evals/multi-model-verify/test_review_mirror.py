@@ -1238,13 +1238,14 @@ def test_an_over_budget_override_path_is_refused(tmp_path):
     assert not mirror.exists()
 
 
-def test_a_source_reparse_point_is_refused(tmp_path):
-    """Refused BEFORE measuring, not measured through.
+def test_a_source_directory_link_is_followed_not_refused(tmp_path):
+    """The enumerator matches the copy, which follows the link.
 
-    Nothing here has established that the enumerator and robocopy
-    traverse an identical universe across a reparse point, and a budget
-    computed over a universe the copy does not share is not a
-    measurement of the copy.
+    `robocopy /E` with neither /XJ nor /SL writes the TARGET'S CONTENTS as
+    an ordinary directory at the link's relative path. Refusing to measure
+    across one described a smaller universe than the copy produces, and
+    blocked every repo that links a reference clone or a shared skills
+    directory into its tree.
     """
     repo = make_repo(tmp_path)
     outside = tmp_path / "outside"
@@ -1257,8 +1258,55 @@ def test_a_source_reparse_point_is_refused(tmp_path):
         pytest.skip("junction creation unavailable: " + rc.stderr)
     mirror = long_mirror(tmp_path)
     proc = run_mirror(repo, mirror)
+    # -SkipProbe builds the mirror and then verifies nothing, so exit 1
+    # with the skip block IS the successful-build outcome here.
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert SKIP_BLOCK in proc.stdout, proc.stdout
+    copied = mirror / "linked" / "x.txt"
+    assert copied.exists(), proc.stdout
+    assert copied.read_text() == "linked\n"
+    # The copy flattens the link. Asserting this is what proves the walk
+    # and the copy share one universe rather than two that happen to agree
+    # on a file count.
+    assert not (mirror / "linked").is_symlink()
+
+
+def test_a_link_pointing_at_its_own_ancestor_is_refused(tmp_path):
+    """The one case the copy cannot survive.
+
+    robocopy has no cycle detection, so a link onto one of its own
+    ancestors makes both the walk and the copy unbounded.
+    """
+    repo = make_repo(tmp_path)
+    link = repo / "self"
+    rc = subprocess.run(["cmd", "/c", "mklink", "/J", str(link), str(repo)],
+                        capture_output=True, text=True)
+    if rc.returncode != 0:
+        pytest.skip("junction creation unavailable: " + rc.stderr)
+    mirror = long_mirror(tmp_path)
+    proc = run_mirror(repo, mirror)
     assert proc.returncode == 2, proc.stdout + proc.stderr
-    assert "reparse" in proc.stdout.lower(), proc.stdout
+    assert "never terminate" in proc.stdout.lower(), proc.stdout
+    assert not mirror.exists()
+
+
+def test_two_links_onto_one_target_are_refused(tmp_path):
+    """Not a cycle, but indistinguishable from one without walking the
+    whole graph. Refusing is the direction that cannot mismeasure."""
+    repo = make_repo(tmp_path)
+    outside = tmp_path / "shared"
+    outside.mkdir()
+    (outside / "x.txt").write_text("shared\n")
+    for name in ("one", "two"):
+        rc = subprocess.run(
+            ["cmd", "/c", "mklink", "/J", str(repo / name), str(outside)],
+            capture_output=True, text=True)
+        if rc.returncode != 0:
+            pytest.skip("junction creation unavailable: " + rc.stderr)
+    mirror = long_mirror(tmp_path)
+    proc = run_mirror(repo, mirror)
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "links overlap" in proc.stdout.lower(), proc.stdout
     assert not mirror.exists()
 
 
