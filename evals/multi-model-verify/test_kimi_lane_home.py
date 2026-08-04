@@ -1681,7 +1681,7 @@ OWNER_STUB_NOT_OBJECT = (
 )
 OWNER_STUB_MISSING_FIELD = (
     "param([switch]$ResolveOwner)\n"
-    "Write-Output '{\"ownerPid\": 4321}'\n"
+    "Write-Output '{\"ownerPid\": 4321, \"ownerName\": \"claude.exe\"}'\n"
     "exit 0\n"
 )
 OWNER_STUB_EXTRA_FIELD = (
@@ -1691,27 +1691,27 @@ OWNER_STUB_EXTRA_FIELD = (
 )
 OWNER_STUB_WRONG_PID_TYPE = (
     "param([switch]$ResolveOwner)\n"
-    "Write-Output '{\"ownerPid\": \"4321\", \"ownerStartTicksUtc\": \"123456789\"}'\n"
+    "Write-Output '{\"ownerPid\": \"4321\", \"ownerStartTicksUtc\": \"123456789\", \"ownerName\": \"claude.exe\"}'\n"
     "exit 0\n"
 )
 OWNER_STUB_PID_ZERO = (
     "param([switch]$ResolveOwner)\n"
-    "Write-Output '{\"ownerPid\": 0, \"ownerStartTicksUtc\": \"123456789\"}'\n"
+    "Write-Output '{\"ownerPid\": 0, \"ownerStartTicksUtc\": \"123456789\", \"ownerName\": \"claude.exe\"}'\n"
     "exit 0\n"
 )
 OWNER_STUB_PID_NEGATIVE = (
     "param([switch]$ResolveOwner)\n"
-    "Write-Output '{\"ownerPid\": -5, \"ownerStartTicksUtc\": \"123456789\"}'\n"
+    "Write-Output '{\"ownerPid\": -5, \"ownerStartTicksUtc\": \"123456789\", \"ownerName\": \"claude.exe\"}'\n"
     "exit 0\n"
 )
 OWNER_STUB_WRONG_TICKS_TYPE = (
     "param([switch]$ResolveOwner)\n"
-    "Write-Output '{\"ownerPid\": 4321, \"ownerStartTicksUtc\": 123456789}'\n"
+    "Write-Output '{\"ownerPid\": 4321, \"ownerStartTicksUtc\": 123456789, \"ownerName\": \"claude.exe\"}'\n"
     "exit 0\n"
 )
 OWNER_STUB_TICKS_NON_DIGIT = (
     "param([switch]$ResolveOwner)\n"
-    "Write-Output '{\"ownerPid\": 4321, \"ownerStartTicksUtc\": \"12a456789\"}'\n"
+    "Write-Output '{\"ownerPid\": 4321, \"ownerStartTicksUtc\": \"12a456789\", \"ownerName\": \"claude.exe\"}'\n"
     "exit 0\n"
 )
 OWNER_STUB_VALID_JSON = (

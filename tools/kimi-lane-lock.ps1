@@ -531,6 +531,38 @@ if ($Mode -eq "MalformedOverride") {
 # ---------------------------------------------------------------------
 # Mode implementations.
 # ---------------------------------------------------------------------
+# ---------------------------------------------------------------------
+# A RECORD IS A CLAIM that this owner holds the lane, so writing one
+# requires LIVE - not merely "not known to be dead". Called immediately
+# before every record write, never on a path that writes nothing.
+#
+# UNMEASURABLE refuses HERE and is accepted at the gate above, and the
+# asymmetry is the whole design: the pid lookup succeeded, so the
+# process exists, but the pid-REUSE guard did not run, and an identity
+# whose reuse guard never ran is not one to write down as an owner. Where
+# nothing is written there is nothing to be wrong about, which is why the
+# idempotent re-entry path never calls this.
+# ---------------------------------------------------------------------
+function Assert-OwnerLiveForWrite($OpenInfo) {
+    $atWrite = Get-Liveness -OwnerPidValue $OwnerPidInt -TicksValue $OwnerStartTicksUtc
+    if ($atWrite -ne "LIVE") {
+        # A file THIS CALL created must not be left at zero length: a
+        # zero-length file is MALFORMED by rule, so a refusal would turn
+        # a free lane into one needing the guarded override. Same
+        # obligation, and the same remedy, as the nonce-against-free
+        # refusal below. Caught by this fix's own oracle, which is what
+        # "a fix is new code and gets no discount" looks like in
+        # practice.
+        if ($null -ne $OpenInfo -and -not $OpenInfo.Existed) {
+            Write-RecordJson $OpenInfo.Stream '{"version":1,"state":"free"}'
+        }
+        Close-CurrentStream
+        Write-Stderr ("refusing to record an owner that is not live (" + $atWrite +
+                      "): pid " + $OwnerPidInt + ", ticks " + $OwnerStartTicksUtc)
+        exit 2
+    }
+}
+
 function Invoke-AcquireMode {
     # THE PROPOSED OWNER MUST NOT BE DEAD, AND NOTHING CHECKED IT.
     # `Get-Liveness` has been in this file the whole time and acquire
@@ -545,19 +577,21 @@ function Invoke-AcquireMode {
     # The item said this needed a wrapping harness to reproduce. It did
     # not: a pid that has exited reaches it directly.
     #
-    # DEAD ONLY, AND THE NARROWING IS THE POINT. UNMEASURABLE means the
-    # pid lookup SUCCEEDED and only the start-time read failed, so the
-    # process exists and what went unmeasured is the pid-REUSE guard,
-    # not existence. This file already has one meaning for that state -
-    # every mutating mode treats it as ALIVE and refuses to reclaim -
-    # and refusing here would contradict it in the worst direction:
-    # the TRUE owner could not re-enter its own lock whenever the start
-    # time was unreadable. Refusing DEAD is therefore the whole claim,
-    # and it is not "the recorded owner is live".
+    # THIS GATE IS A FAST REFUSAL, NOT THE GUARANTEE. It refuses DEAD
+    # only, and it runs ONCE, before the acquisition loop below - so on
+    # its own it cannot be the thing that keeps a dead identity out of
+    # the record. A caller that WAITS behind a holder is measured here,
+    # waits, may DIE, and would then be written the moment the holder
+    # releases. The cross-vendor round found exactly that window.
     #
-    # Residual, stated rather than hidden: a running pid carrying the
-    # wrong ticks still records if the start-time read fails, because
-    # that is the one measurement that would have caught it.
+    # The guarantee is at the WRITE SITES: `Assert-OwnerLiveForWrite` is
+    # called immediately before every record write and requires LIVE.
+    # UNMEASURABLE survives only where NOTHING is written - the
+    # idempotent re-entry path, where a matching nonce and a matching
+    # retained identity already establish ownership without a
+    # measurement. That is the case the DEAD-only rule was protecting,
+    # and it is protected without letting an unmeasured owner be
+    # recorded.
     $proposed = Get-Liveness -OwnerPidValue $OwnerPidInt -TicksValue $OwnerStartTicksUtc
     if ($proposed -eq "DEAD") {
         Write-Stderr ("the proposed owner is not live (measured DEAD): pid " +
@@ -601,6 +635,7 @@ function Invoke-AcquireMode {
                 Close-CurrentStream
                 exit 2
             }
+            Assert-OwnerLiveForWrite $open
             $newNonce = New-Nonce
             $nowTicks = [string]([System.DateTime]::UtcNow.Ticks)
             $rec = [ordered]@{
@@ -625,6 +660,7 @@ function Invoke-AcquireMode {
 
         if ($liveness -eq "DEAD") {
             if ($NonceProvided) { Close-CurrentStream; exit 2 }
+            Assert-OwnerLiveForWrite $open
             $newNonce = New-Nonce
             $nowTicks = [string]([System.DateTime]::UtcNow.Ticks)
             $newRec = [ordered]@{

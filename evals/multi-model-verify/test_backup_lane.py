@@ -1611,7 +1611,14 @@ def test_doctor_quiet_row_never_becomes_an_expiry():
             "or if ANY part of the walk fails to read, say NOTHING about "
             "quietness at all, neither quiet nor active. An unmeasurable "
             "idle time is not an idle debate, and a partial walk measures "
-            "the files it could open rather than the debate.") in body
+            "the files it could open rather than the debate. REPARSE "
+            "POINTS ARE NEVER FOLLOWED — not directory junctions, not "
+            "symbolic links, not file links — because following one "
+            "measures a directory that is not the debate home and can "
+            "leave the home entirely. A reparse point encountered "
+            "anywhere under the home is not skipped either: it makes the "
+            "in-home measurement INCOMPLETE, and an incomplete "
+            "measurement takes the silence rule above.") in body
 
 
 def test_doctor_check8_lock_free_live_dead_rows():

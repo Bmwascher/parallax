@@ -12,7 +12,7 @@ Two debates ran over this branch. Both are here.
 
 | Round | File | Verdict as the reply states it |
 | --- | --- | --- |
-| 1 | `plan-reply-r1b.md` | FIX, eight findings |
+| 1 | `plan-reply-r1b.md` | FIX; claims 1, 3, 4, 6, 7 and 8 require changes |
 | 2 | `plan-reply-r2.md` | PASS on the scope claim; no terminal line |
 | 3 | `plan-reply-r3.md` | FIX on the unconditional rollout comparison |
 | 4 | `plan-reply-r4.md` | FIX on chronology, canonical identity, checkpoint |

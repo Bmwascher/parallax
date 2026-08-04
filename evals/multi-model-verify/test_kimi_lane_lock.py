@@ -40,7 +40,8 @@ COMPUTERNAME = os.environ.get("COMPUTERNAME", "")
 def _live_owner():
     """A genuinely LIVE owner identity: this pytest process.
 
-    Acquire refuses an owner that does not measure LIVE, so a fixture
+    Acquire refuses an owner measured DEAD at the gate, and requires
+    LIVE again immediately before each record write, so a fixture
     identity of pid 1 / ticks 1 is no longer usable. The pytest process
     is alive for the whole run by construction, and its start ticks are
     read the same way the tool reads them, so the pair the tests pass is
@@ -1234,29 +1235,79 @@ def test_reclaiming_a_dead_holder_carries_the_new_owner_name(lane_home, debate_h
     assert rec["ownerName"] == "claude.exe", rec
 
 
-def test_acquire_accepts_an_unmeasurable_proposed_owner(lane_home, debate_home):
-    """The refusal is DEAD-only, and this is the boundary it may not cross.
+def test_acquire_refuses_to_write_a_record_for_an_unmeasurable_owner(
+        lane_home, debate_home):
+    """A record is a CLAIM that this owner holds the lane, so writing one
+    requires LIVE and not merely "not known to be dead".
 
-    UNMEASURABLE means the pid lookup SUCCEEDED and only the start-time
-    read failed: the process exists, and what went unmeasured is the
-    pid-reuse guard. This file already has one meaning for that state -
-    every mutating mode treats it as ALIVE and refuses to reclaim - so a
-    proposed-owner check that refused it would contradict the tool in
-    the worst direction, locking the TRUE owner out of its own lock
-    whenever the start time was unreadable.
+    The first shipped cut refused only DEAD, and that left a residual:
+    an owner whose start time could not be read was written down without
+    the pid-reuse guard ever running. The cross-vendor round pointed out
+    that the residual is removable without cost, because the case the
+    DEAD-only rule was protecting is the NON-WRITING idempotent re-entry
+    - matching nonce, matching identity - which is pinned separately by
+    test_unmeasurable_exact_identity_reacquires_idempotently and is
+    untouched by this rule.
 
-    Watched failing: the first cut of this check refused anything that
-    did not measure LIVE, and the two holder-side fault-seam oracles
-    (idempotent re-acquire, competing identity contends) both went red
-    for exactly this reason before the rule was narrowed.
+    So: LIVE to WRITE, and UNMEASURABLE only where nothing is written.
     """
     rc = run_lock(["-Acquire", "-LaneHome", str(lane_home),
                    "-DebateId", "d" * 32,
                    "-OwnerPid", LIVE_PID, "-OwnerStartTicksUtc", LIVE_TICKS,
                    "-DebateHome", str(debate_home), "-WaitSeconds", "0"],
                   env={"PARALLAX_LANE_LOCK_STARTTIME_FAULT": "1"})
-    assert rc.returncode == 0, (rc.returncode, rc.stdout, rc.stderr)
-    assert TOKEN_RE.match(rc.stdout.strip()), rc.stdout
+    assert rc.returncode == 2, (rc.returncode, rc.stdout, rc.stderr)
+    assert read_raw(lane_home) in (None, b'{"version":1,"state":"free"}'), read_raw(lane_home)
+
+
+def test_an_owner_that_dies_during_contention_is_never_written(
+        lane_home, debate_home, self_identity):
+    """The window the single pre-loop check could not see.
+
+    Liveness was measured ONCE, before the acquisition loop. A caller
+    that waits behind a holder can therefore be measured LIVE, wait,
+    DIE, and still have its identity written the moment the holder
+    releases - which is exactly the already-dead record item 26 calls
+    the silent half, arrived at by a different road.
+
+    The fixture is synchronized rather than timed: the holder is only
+    released AFTER the proposed owner has been killed and reaped, so the
+    write attempt provably happens after the death.
+    """
+    pid, ticks = self_identity
+    holder_debate = new_token()
+    r1 = run_lock(["-Acquire", "-LaneHome", str(lane_home),
+                   "-DebateId", holder_debate,
+                   "-OwnerPid", pid, "-OwnerStartTicksUtc", ticks,
+                   "-DebateHome", str(debate_home)])
+    assert r1.returncode == 0, (r1.stdout, r1.stderr)
+    holder_nonce = r1.stdout.strip()
+
+    victim = start_sleeper(seconds=120)
+    victim_ticks = _ticks_for_pid(victim.pid)
+    assert DIGITS_RE.match(victim_ticks), victim_ticks
+
+    waiter = start_lock_bg(["-Acquire", "-LaneHome", str(lane_home),
+                            "-DebateId", new_token(),
+                            "-OwnerPid", str(victim.pid),
+                            "-OwnerStartTicksUtc", victim_ticks,
+                            "-DebateHome", str(debate_home),
+                            "-WaitSeconds", "30", "-PollSeconds", "1"])
+    try:
+        time.sleep(2.0)
+        victim.kill()
+        victim.wait(timeout=30)
+        rel = run_lock(["-Release", "-LaneHome", str(lane_home),
+                        "-DebateId", holder_debate, "-OwnerPid", pid,
+                        "-OwnerStartTicksUtc", ticks, "-Nonce", holder_nonce])
+        assert rel.returncode == 0, (rel.stdout, rel.stderr)
+        stdout, stderr = waiter.communicate(timeout=60)
+    finally:
+        if waiter.poll() is None:
+            waiter.kill()
+
+    assert waiter.returncode == 2, (waiter.returncode, stdout, stderr)
+    assert read_raw(lane_home) == b'{"version":1,"state":"free"}', read_raw(lane_home)
 
 
 def test_acquire_still_accepts_a_live_owner(lane_home, debate_home):

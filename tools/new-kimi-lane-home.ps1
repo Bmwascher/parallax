@@ -172,9 +172,12 @@ function Invoke-LockCall([hashtable]$LockArgs) {
 # structurally unreachable after any failure and the preference never
 # leaks into the user's own shell. It also validates what it received
 # rather than only that the call succeeded: exactly one nonblank stdout
-# line, a PSCustomObject carrying exactly ownerPid and
-# ownerStartTicksUtc, an integral pid above zero, ticks matching
-# \A[0-9]+\z, and a TEMP that exists and is a directory.
+# line, a PSCustomObject carrying exactly ownerPid, ownerStartTicksUtc
+# and ownerName, an integral pid above zero, ticks matching \A[0-9]+\z,
+# a non-blank string name, and a TEMP that exists and is a directory.
+# The field set is EXACT in both directions, which is why adding
+# ownerName had to move this template, the doctor's duplicate and both
+# frozen test literals in one commit.
 # ---------------------------------------------------------------------
 $RecoveryCommandTemplate = '& { $ErrorActionPreference = ''Stop''; try { $ownerLines = @(& ''tools/kimi-lane-lock.ps1'' -ResolveOwner); $ownerExit = $LASTEXITCODE; if ($ownerExit -ne 0) { throw "owner resolution failed with exit $ownerExit" }; if ($ownerLines.Count -ne 1 -or -not ($ownerLines[0] -is [string]) -or [string]::IsNullOrWhiteSpace([string]$ownerLines[0])) { throw ''owner resolution returned invalid output'' }; $owner = $ownerLines[0] | ConvertFrom-Json -ErrorAction Stop; if (-not ($owner -is [System.Management.Automation.PSCustomObject])) { throw ''owner resolution returned invalid schema'' }; $ownerFields = @($owner.PSObject.Properties.Name); if ($ownerFields.Count -ne 3 -or -not ($ownerFields -ccontains ''ownerPid'') -or -not ($ownerFields -ccontains ''ownerStartTicksUtc'') -or -not ($ownerFields -ccontains ''ownerName'') -or -not (($owner.ownerPid -is [int]) -or ($owner.ownerPid -is [long])) -or [long]$owner.ownerPid -le 0 -or -not ($owner.ownerStartTicksUtc -is [string]) -or $owner.ownerStartTicksUtc -notmatch ''\A[0-9]+\z'' -or -not ($owner.ownerName -is [string]) -or [string]::IsNullOrWhiteSpace($owner.ownerName)) { throw ''owner resolution returned invalid schema'' }; if ([string]::IsNullOrWhiteSpace($env:TEMP) -or -not (Test-Path -LiteralPath $env:TEMP -PathType Container -ErrorAction Stop)) { throw ''TEMP is not an existing directory'' }; $verdictOut = Join-Path -Path $env:TEMP -ChildPath ''parallax-kimi-lane-login-verdict.json'' -ErrorAction Stop; & ''tools/new-kimi-lane-login.ps1'' -LaneHome ''<lane-home>'' -OwnerPid ([string]$owner.ownerPid) -OwnerStartTicksUtc $owner.ownerStartTicksUtc -OwnerName $owner.ownerName -VerdictOut $verdictOut; $loginExit = $LASTEXITCODE; if ($loginExit -ne 0) { throw "lane login failed with exit $loginExit" } } catch { throw } }'
 

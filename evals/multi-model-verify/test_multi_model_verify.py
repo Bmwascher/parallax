@@ -817,10 +817,14 @@ class TestDebateProtocol:
         text = " ".join(read(REFERENCES / "debate-protocol.md").split())
         assert (
             "**A separate TOTAL FIX-VERIFY BUDGET bounds that loop**, "
-            "caller-set and declared before round 1. Exhausting it PAUSES "
-            "the debate for the user's authorization to continue \u2014 it "
-            "NEVER certifies and never converts into a verdict.".replace(
-                "\u2014", "—")) in text
+            "caller-set and declared before round 1. ONE UNIT IS ONE "
+            "DISPATCHED EXCHANGE — every round sent to a reviewer, "
+            "whatever it returns, including a round that returns "
+            "nothing usable. Counting only productive rounds would let "
+            "the unproductive ones run free, which is the shape being "
+            "bounded. Exhausting it PAUSES the debate for the user's "
+            "authorization to continue — it NEVER certifies and "
+            "never converts into a verdict.") in text
 
     def test_termination_requires_an_adjudicated_dry_round(self):
         """The predicate the plan proposed was logically wrong.

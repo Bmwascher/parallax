@@ -762,3 +762,106 @@ now declared.
   the real acquire path the tool now guards.
 - The mutation tests picked load-bearing words rather than convenient
   ones.
+
+---
+
+# Amendment 2 (2026-08-04, diff debate round 1) - a deviation I did not record, and a window I did not see
+
+Cross-vendor diff debate, session `019fce61`, brief binding CLEAN. Claim
+7 PASS; claims 1, 2, 3, 4, 5, 6 and 8 FIX. Every finding was reproduced
+here before acceptance.
+
+## The severe one: liveness was measured once, and the write happens later
+
+Task 3 shipped a check at the TOP of `Invoke-AcquireMode`, before the
+acquisition loop. A caller that WAITS behind a holder is therefore
+measured LIVE, waits, may DIE, and is still written the moment the
+holder releases. That is the already-dead record item 26 calls the
+silent half, reached by a different road, and the branch's own build
+record claimed it was closed.
+
+Fixed as the reviewer proposed and better than the plan asked: the gate
+stays a fast DEAD-only refusal, and `Assert-OwnerLiveForWrite` runs
+IMMEDIATELY BEFORE EVERY RECORD WRITE requiring LIVE. UNMEASURABLE now
+survives only where NOTHING is written - the idempotent re-entry path,
+where a matching nonce and a matching retained identity already
+establish ownership without a measurement. The case the DEAD-only rule
+was protecting is protected, and the residual it carried is GONE rather
+than restated.
+
+`test_an_owner_that_dies_during_contention_is_never_written` reproduces
+the window synchronously: the holder is released only AFTER the proposed
+owner is killed and reaped, so the write attempt provably follows the
+death. Watched failing before the fix.
+
+**The fix carried its own defect, and this branch's own new oracle
+caught it.** Refusing at the fresh-acquire write site left a ZERO-LENGTH
+lock file when that call had just created it - and a zero-length file is
+MALFORMED by rule, so a refusal would have turned a free lane into one
+needing the guarded override. The same obligation the nonce-against-free
+refusal already carries. Fifth instance in this repo's history of a fix
+carrying its own defect.
+
+## The deviation: task 2 is not the shape Amendment 1 froze
+
+Amendment 1 said `-ResolveOwner` should "walk to a recognized long-lived
+ancestor and REFUSE when none is found". What shipped is the opposite
+shape: a DENY-list of four transports, accepting whatever sits above
+them. I made that choice deliberately during the build, for reasons that
+are still good - an allow-list of session-host names cannot be validated
+against install shapes nobody here has seen, and it would refuse this
+repo's own harness, which runs under `python.exe` - but I did not record
+it as a deviation, and an unrecorded deviation from a frozen plan is
+drift whatever its merit.
+
+The consequence is real and was overclaimed. An EPHEMERAL wrapper named
+`node.exe`, `python.exe` or anything outside the four transport names is
+still accepted as the owner. The stability oracle inserts another copy
+of the SAME PowerShell host, so what it establishes is stability across
+an added SHELL FRAME, not "under any wrapper".
+
+**Disposition, decided by the user 2026-08-04:** amend the task, narrow
+every claim to what the oracle establishes, and keep item 26 PARTIALLY
+CLOSED with the remaining wrapper class named at its own heading. The
+alternative - build the allow-list now - closes the item fully and buys
+a refusal path nobody here can validate.
+
+## The rest
+
+- **Claim 3.** The six non-name schema stubs omitted `ownerName`, so
+  every one of them could pass through the missing-name rejection even
+  with its intended validation deleted. Each now carries a valid name
+  and exactly one defect. Measured rather than asserted: removing the
+  `-le 0` clause fails EXACTLY `pid_zero` and `pid_negative`; removing
+  the digits clause fails EXACTLY `ticks_non_digit`. The template's own
+  comment still described a two-field record and now describes three.
+- **Claim 4.** The quiet-holder walk did not say what to do with reparse
+  points, so two implementations could measure different file universes
+  while both following the rule. They are now NEVER followed, and one
+  encountered under the home makes the measurement INCOMPLETE, which
+  takes the silence rule.
+- **Claim 5.** "Converged with amendments" and the new termination rule
+  contradicted each other, and the suite pinned BOTH, so green tests
+  preserved the contradiction instead of detecting it. Convergence is
+  now explicitly AGREEMENT, not termination: the amendments are applied
+  and the debate still ends on an adjudicated dry round. The budget's
+  unit was undefined; one unit is now one DISPATCHED EXCHANGE, whatever
+  it returns, because counting only productive rounds lets the
+  unproductive ones run free.
+- **Claim 6.** The rounds README said round 1 was "FIX, eight findings".
+  The reply's own first line says "claims 2 and 5 pass; claims 1, 3, 4,
+  6, 7, and 8 need fixes" - eight CLAIMS, six fixes. Corrected. A
+  retained record's index misreading the record is the one error that
+  makes retention worthless.
+- **Claim 8.** The backlog's top-level status summary still called 24,
+  25 and 26 open and omitted 28 and 29 while their own headings said
+  otherwise.
+
+## What the reviewer got right that no earlier pass did
+
+Fable reviewed this same branch and returned no Critical and no
+Important. The contention window in claim 1 is a genuine
+mutual-exclusion defect in the task built to close mutual-exclusion
+defects, and it survived my build, my own gates and a whole-branch
+review before a second vendor read it. That is the case for the
+cross-vendor gate, made again.

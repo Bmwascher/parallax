@@ -47,9 +47,13 @@ Each exchange (one session position or rebuttal + one reviewer reply) is a round
 - Converged: both sides verdict PASS in the same round.
 - **Converged with amendments**: the final round's only outstanding verdicts
   are FIXes whose fixes the other side accepts on the record. Record each
-  accepted fix in the debate record and treat the plan as converged — an
-  accepted FIX is agreement, not a dispute for the user to settle. (This
-  matters whenever a FIX lands in the last round before the cap.)
+  accepted fix in the debate record — an accepted FIX is agreement, not a
+  dispute for the user to settle. (This matters whenever a FIX lands in the
+  last round before the cap.) THIS IS AGREEMENT, NOT TERMINATION. The
+  amendments still have to be APPLIED, and the debate still ends the way
+  the termination rule below says it ends: on an adjudicated dry round. A
+  round that produces accepted fixes is a round that produced new
+  substantive findings, so it is not that round.
 - Round cap: **4 CONSECUTIVE CONTESTED exchanges** by default (caller may
   raise or lower it). A round is CONTESTED while any contested point is
   OUTSTANDING, whether it was raised in that round or an earlier one — an
@@ -73,9 +77,12 @@ Each exchange (one session position or rebuttal + one reviewer reply) is a round
   contested point" there is a reconstruction from the claims and not a
   reading off the records.
 - **A separate TOTAL FIX-VERIFY BUDGET bounds that loop**, caller-set and
-  declared before round 1. Exhausting it PAUSES the debate for the user's
-  authorization to continue — it NEVER certifies and never converts into a
-  verdict. The session both adjudicates whether a finding is accepted AND
+  declared before round 1. ONE UNIT IS ONE DISPATCHED EXCHANGE — every
+  round sent to a reviewer, whatever it returns, including a round that
+  returns nothing usable. Counting only productive rounds would let the
+  unproductive ones run free, which is the shape being bounded. Exhausting
+  it PAUSES the debate for the user's authorization to continue — it NEVER
+  certifies and never converts into a verdict. The session both adjudicates whether a finding is accepted AND
   decides when to stop, which is one actor holding both roles; a budget the
   USER controls is the bound a session cannot grant itself.
 - Termination: the debate ends only on an **adjudicated dry round** — one
