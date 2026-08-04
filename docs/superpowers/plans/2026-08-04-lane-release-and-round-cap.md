@@ -942,6 +942,11 @@ session process should pass that identity instead of resolving one.
   the seconds-long window the pre-loop-only check left open, and closing
   it entirely would need an atomicity this tool cannot have, since the
   process being measured is not the process writing. Named in the code.
+  **CORRECTED BY ROUNDS 3 AND 5:** "microseconds against the
+  seconds-long window" is an unmeasured comparison and is RETRACTED. The
+  claim is control-flow placement only; see Amendment 4. The sentence
+  stays standing with this pointer because a retracted claim that
+  disappears cannot be checked against what replaced it.
 - **Seven, not six.** The non-name schema fixtures number seven; the
   extra-field stub is the seventh and was rebuilt earlier in the branch.
 - **"Measures a directory" was false for the file-link case.** Following
@@ -984,8 +989,12 @@ pointer here, not rewritten.
 ## "Microseconds" was a number I did not measure
 
 The check-to-write residual was described as "microseconds against the
-seconds-long window the pre-loop-only check left open". The comparison
-is sound; the magnitude is not a measurement. The scheduler can pause
+seconds-long window the pre-loop-only check left open". The
+CONTROL-FLOW DISTINCTION is sound; neither the duration nor any
+comparative magnitude is measured. (This read "the comparison is sound"
+until round 5 struck it: the comparison it referred to WAS the
+microseconds-versus-seconds one, so the correction contradicted
+itself.) The scheduler can pause
 the process anywhere between the check and the write, so wall-clock
 duration is not bounded by the number of intervening statements.
 
