@@ -428,7 +428,7 @@ JSON, and saying otherwise was a claim wider than its evidence. Measured
 2026-08-04 on both hosts, `ConvertFrom-Json` accepts single-quoted strings,
 unquoted keys, `NaN`, leading-zero numbers and literal control characters
 inside strings; PowerShell 7 also accepts comments and a trailing comma, and
-5.1 accepts a leading `+` in an exponent. The line check therefore
+5.1 accepts a leading `+` on the whole number, such as `+1` or `+1e2`. The line check therefore
 establishes THREE things and not more: the value is an object, no comment
 appears outside a string, and nothing follows the value but JSON whitespace.
 Those are the properties that keep unattributed text out of the record
