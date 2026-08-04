@@ -451,7 +451,17 @@ function Get-ContentManifest($repo, $paths) {
     foreach ($p in $paths) {
         $full = Join-Path $repo $p
         if (Test-Path $full -PathType Container) {
-            $found = Get-ChildItem -LiteralPath $full -Recurse -File -Force
+            # -Stop, never the default: a swallowed enumeration error
+            # omits every file under an unreadable subdirectory and the
+            # manifest then reads as coverage of a tree it never saw.
+            $found = $null
+            try {
+                $found = Get-ChildItem -LiteralPath $full -Recurse -File `
+                    -Force -ErrorAction Stop
+            } catch {
+                return @{ Error = ("'" + $p + "' could not be enumerated: " +
+                                   $_.Exception.Message) }
+            }
             foreach ($f in $found) {
                 $rel = $f.FullName.Substring($repo.Length + 1)
                 [void]$files.Add($rel.Replace("\", "/"))
@@ -469,7 +479,20 @@ function Get-ContentManifest($repo, $paths) {
     $sha = [System.Security.Cryptography.SHA256]::Create()
     $out = New-Object System.Collections.ArrayList
     foreach ($rel in $unique) {
-        $bytes = [System.IO.File]::ReadAllBytes((Join-Path $repo $rel))
+        # A failed ReadAllBytes is NON-TERMINATING on both hosts
+        # (measured 2026-08-04), so without this catch $bytes keeps the
+        # PREVIOUS file's contents and this line records that hash for
+        # the file it could not read - deterministically, so the wrong
+        # value reproduces on every later run. Evidence that quietly
+        # names the wrong bytes is worse than no evidence.
+        $bytes = $null
+        try {
+            $bytes = [System.IO.File]::ReadAllBytes((Join-Path $repo $rel))
+        } catch {
+            $sha.Dispose()
+            return @{ Error = ("'" + $rel + "' could not be read: " +
+                               $_.Exception.Message) }
+        }
         $hex = ([System.BitConverter]::ToString($sha.ComputeHash($bytes)) -replace '-', '').ToLower()
         [void]$out.Add($rel + " " + $hex)
     }
@@ -548,17 +571,17 @@ $RepoRoot = (Resolve-Path $RepoRoot).Path
 # ---------------------------------------------------------------------
 if ($VerifyIdentity) {
     $shaRx = '^[0-9a-f]{40}$'
-    if ($SourceHead -notmatch $shaRx) {
+    if ($SourceHead -cnotmatch $shaRx) {
         Write-Output ("BLOCKED: the recorded source head is missing or not a" +
             " commit id, so nothing was compared")
         exit 1
     }
-    if ($MirrorHead -notmatch $shaRx) {
+    if ($MirrorHead -cnotmatch $shaRx) {
         Write-Output ("BLOCKED: the recorded mirror head is missing or not a" +
             " commit id, so nothing was compared")
         exit 1
     }
-    if ($SourceStatusSha256 -notmatch '^[0-9a-f]{64}$') {
+    if ($SourceStatusSha256 -cnotmatch '^[0-9a-f]{64}$') {
         Write-Output ("BLOCKED: the recorded source status hash is missing or" +
             " malformed, so nothing was compared")
         exit 1
@@ -826,36 +849,48 @@ if (-not $sourceBefore.Ok) {
     exit 1
 }
 
-# TEST SEAM. Copies from somewhere else so the bridge has something to
-# catch. Gated on an environment variable, set by no shipped caller, and
-# it can only make the build FAIL: with the bridge in place the copied
-# head cannot match, and without the bridge this seam is what proves the
-# gap. Same shape and same rule as the lane-home builder's two seams.
-$copyFrom = $RepoRoot
-if ($env:PARALLAX_MIRROR_COPY_SOURCE_OVERRIDE) {
-    $copyFrom = $env:PARALLAX_MIRROR_COPY_SOURCE_OVERRIDE
+# The source status, captured BEFORE the copy. Taken here and again
+# after, and required equal, for the same reason as the head: a
+# fingerprint taken only afterwards bakes in any edit that landed during
+# the copy, and every later verify then passes over a mirror carrying
+# older bytes. That direction is fail-OPEN, which this gate may not be.
+$statusBefore = Get-StatusSha256 $RepoRoot
+if (-not $statusBefore.Ok) {
+    Write-Output ("BLOCKED: the source status capture failed (" +
+        $statusBefore.Reason + "), so post-construction drift in an" +
+        " untracked or ignored review input would be undetectable")
+    exit 1
 }
 
-& robocopy $copyFrom $MirrorPath /E /COPY:DAT /R:1 /W:1 /NFL /NDL /NJH /NJS /NP | Out-Null
+& robocopy $RepoRoot $MirrorPath /E /COPY:DAT /R:1 /W:1 /NFL /NDL /NJH /NJS /NP | Out-Null
 if ($LASTEXITCODE -ge 8) {
     Write-Output "ERROR: robocopy failed with $LASTEXITCODE"
     exit 2
 }
 
-# TEST SEAM. Moves the source head after the copy so step 3 has something
-# to catch. Same gating and the same one-way rule: it can only fail a
-# build.
-if ($env:PARALLAX_MIRROR_MOVE_SOURCE_HEAD) {
-    Set-Content -LiteralPath (Join-Path $RepoRoot "seam-moved.txt") `
-        -Value "moved during construction"
-    & git -C $RepoRoot add -- "seam-moved.txt" 2>&1 | Out-Null
-    & git -C $RepoRoot -c user.email=parallax@local -c user.name=parallax `
-        commit -q -m "seam: move the source head" 2>&1 | Out-Null
+# THE TWO TEST SEAMS, and the rule they must satisfy literally.
+#
+# Each perturbs ONE CAPTURED VALUE and nothing else. Neither changes what
+# is copied and neither writes anywhere, so each can only ever create a
+# MISMATCH, which is a build that fails. That is what makes the one-way
+# claim true rather than merely likely.
+#
+# The first pair did not satisfy it, and the Fable review of this task
+# was right on both counts: a copy-source override aimed at a same-HEAD
+# tree with different ignored content would have BUILT, carrying the
+# wrong non-HEAD content under a record attesting the real source; and a
+# seam that committed into $RepoRoot contradicted this tool's own
+# promise, three lines from the top, that it never writes to the real
+# tree. Any parent process can set these variables, so a seam that
+# mutates user state is a hazard whatever its gating.
+$sourceAfter = Get-HeadSha $RepoRoot
+if ($env:PARALLAX_MIRROR_SEAM_SOURCE_HEAD_AFTER) {
+    $sourceAfter = @{ Ok = $true
+                      Sha = $env:PARALLAX_MIRROR_SEAM_SOURCE_HEAD_AFTER }
 }
 
 # BRIDGE STEP 3: the source must not have moved while we copied it. A
 # source that moved mid-copy produces a tree that matches no commit.
-$sourceAfter = Get-HeadSha $RepoRoot
 if (-not $sourceAfter.Ok) {
     Write-Output ("BLOCKED: " + $sourceAfter.Reason + " after the copy")
     exit 1
@@ -872,6 +907,9 @@ if ($sourceAfter.Sha -ne $sourceBefore.Sha) {
 # proves the mirror was built from the recorded source commit - two true
 # facts arranged to look like one.
 $copiedHead = Get-HeadSha $MirrorPath
+if ($env:PARALLAX_MIRROR_SEAM_COPIED_HEAD) {
+    $copiedHead = @{ Ok = $true; Sha = $env:PARALLAX_MIRROR_SEAM_COPIED_HEAD }
+}
 if (-not $copiedHead.Ok) {
     Write-Output ("BLOCKED: " + $copiedHead.Reason + " - the copied tree's" +
         " identity could not be measured")
@@ -883,15 +921,21 @@ if ($copiedHead.Sha -ne $sourceBefore.Sha) {
     exit 1
 }
 
-# The source status, captured at construction, is what makes drift in a
-# non-HEAD review input detectable later. Taken here, from the source as
-# copied, and never re-derived from the mirror: the mirror is about to be
-# remediated and would then disagree by design.
+# The second half of the status bridge: re-capture and require equal, so
+# an edit that landed during the copy fails the build instead of being
+# baked into the record. Never re-derived from the mirror, which is about
+# to be remediated and would then disagree by design.
 $sourceStatus = Get-StatusSha256 $RepoRoot
 if (-not $sourceStatus.Ok) {
     Write-Output ("BLOCKED: the source status capture failed (" +
         $sourceStatus.Reason + "), so post-construction drift in an" +
         " untracked or ignored review input would be undetectable")
+    exit 1
+}
+if ($sourceStatus.Sha -ne $statusBefore.Sha) {
+    Write-Output ("BLOCKED: a source review input changed during" +
+        " construction, so the mirror carries neither the before nor the" +
+        " after state of the tree")
     exit 1
 }
 

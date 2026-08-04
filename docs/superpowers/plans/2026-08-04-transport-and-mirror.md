@@ -530,3 +530,74 @@ value it is supposed to pin.
 than parameters, following the lane-home builder's convention and its
 rule: no shipped caller sets either, and each can only make a build
 FAIL, never turn a failing build into a successful one.
+
+### Amendment 9 (2026-08-04, Task 4) - the Fable review's CRITICAL finding did not reproduce
+
+**The claim:** the two parameter sets have no
+`[CmdletBinding(DefaultParameterSetName)]`, so the shipped build call
+`-RepoRoot <repo> -MirrorPath <scratch>` is ambiguous and dies with
+"Parameter set cannot be resolved" before any code runs; the suite
+cannot see it because every build test adds the Build-only `-SkipProbe`.
+
+**Measured, both hosts, the exact shipped invocation with no
+`-SkipProbe`:** it resolves to Build and exits 0 after a real probe. The
+Verify set declares four mandatory parameters that were not supplied, so
+PowerShell has one satisfiable candidate and picks it. No default set is
+needed.
+
+**Recorded rather than dropped** because the reasoning was sound and the
+conclusion was not, and the next reader deserves the measurement rather
+than a silent absence. Nothing changed in the code for this finding.
+
+### Amendment 10 (2026-08-04, Task 4) - three fixes from the Fable review, and one claim narrowed
+
+1. **A failed read was silently given the previous file's hash.**
+   Measured on both hosts: `[IO.File]::ReadAllBytes` failing is
+   NON-terminating, so `$bytes` kept the prior iteration's contents and
+   `Get-ContentManifest` recorded that hash for the file it could not
+   read - deterministically, so the wrong value reproduces forever. Now
+   caught and returned as an error. `Get-ChildItem -Recurse` gained
+   `-ErrorAction Stop` for the same reason: a swallowed enumeration
+   error omits everything under an unreadable subdirectory and the
+   manifest then reads as coverage of a tree it never saw. Pinned by
+   `test_an_unreadable_source_input_is_named_not_silently_hashed`,
+   watched to fail under mutation.
+
+   **The review's version of this finding was wider than what is
+   reachable, and the narrower claim is the true one.** It said an
+   unreadable file present at construction would produce a clean build
+   whose wrong values reproduce at verify time and compare EQUAL. They
+   cannot: robocopy fails with exit 9 on an unreadable source file and
+   the build stops first. No false-clean identity was reachable. What
+   was reachable, and is now fixed, is a verify-time read failure being
+   reported as ordinary DRIFT rather than as a measurement that could
+   not be made.
+
+2. **Both test seams are rewritten, and the one-way claim now holds
+   literally.** The review was right twice. A copy-source override aimed
+   at a same-HEAD tree with different ignored content would have BUILT,
+   carrying the wrong non-HEAD content under a record attesting the real
+   source - so that seam was not one-way, by Amendment 7's own reasoning
+   about what the mirror is for. And the head-moving seam committed into
+   `$RepoRoot`, contradicting this tool's promise three lines from its
+   top that it never writes to the real tree; any parent process can set
+   these variables, so a seam that mutates user state is a hazard
+   whatever its gating. Both now perturb ONE CAPTURED VALUE and nothing
+   else. Neither changes what is copied, neither writes anywhere, and
+   each can therefore only create a mismatch, which is a build that
+   fails.
+
+3. **The status fingerprint is now taken before AND after the copy, and
+   required equal.** Taken only afterwards, an edit landing during the
+   copy was baked into the record while the mirror carried older bytes,
+   and every later verify passed. That direction is fail-open, which
+   this gate may not be.
+
+Also taken: the hex guards use `-cnotmatch`, so the lowercase-only
+regexes mean what they say.
+
+**Correction to Amendment 8.** It said verify exits "1 on any block".
+Verify exits 1 on every identity block and 2 when the source root does
+not exist, through the pre-existing path shared with build. Both are
+refusals and neither can read as clean, but the earlier wording was
+imprecise.

@@ -95,9 +95,15 @@ def run_mirror(repo, mirror, *extra, env=None):
 
     They are environment variables, not parameters, for the reason the
     lane-home builder states about its own two: a parameter is public
-    surface on a shipped tool. Both can only force a build to FAIL, never
-    turn a failing build into a successful one, and no shipped caller
-    sets either.
+    surface on a shipped tool. No shipped caller sets either.
+
+    Both perturb a CAPTURED VALUE and nothing else. They do not change
+    what is copied and they write nowhere, so each can only ever create
+    a mismatch, which is a build that FAILS. An earlier pair copied from
+    a different tree and committed into the real source repo; the Fable
+    review of this task showed the first was not one-way (a same-HEAD
+    tree with different ignored content would have BUILT) and the second
+    contradicted the tool's own "never writes to the real tree".
     """
     full = None
     if env:
@@ -1416,8 +1422,9 @@ def test_a_mirror_not_built_from_this_source_blocks_at_step_four(tmp_path):
     repo = make_repo(tmp_path)
     other = make_clean_repo(tmp_path)
     mirror = tmp_path / "mirror"
+    del other
     proc = run_mirror(repo, mirror,
-                      env={"PARALLAX_MIRROR_COPY_SOURCE_OVERRIDE": str(other)})
+                      env={"PARALLAX_MIRROR_SEAM_COPIED_HEAD": "0" * 40})
     assert proc.returncode == 1, proc.stdout + proc.stderr
     assert "was not built from" in proc.stdout.lower(), proc.stdout
 
@@ -1426,7 +1433,7 @@ def test_a_source_head_that_moves_during_construction_blocks(tmp_path):
     repo = make_repo(tmp_path)
     mirror = tmp_path / "mirror"
     proc = run_mirror(repo, mirror,
-                      env={"PARALLAX_MIRROR_MOVE_SOURCE_HEAD": "1"})
+                      env={"PARALLAX_MIRROR_SEAM_SOURCE_HEAD_AFTER": "0" * 40})
     assert proc.returncode == 1, proc.stdout + proc.stderr
     assert "moved during construction" in proc.stdout.lower(), proc.stdout
 
@@ -1512,3 +1519,48 @@ def test_an_unreadable_mirror_blocks_the_dispatch(tmp_path):
     shutil.rmtree(mirror, onerror=_force_remove)
     proc = run_verify(repo, mirror, ident)
     assert proc.returncode == 1, proc.stdout + proc.stderr
+
+
+
+def test_an_unreadable_source_input_is_named_not_silently_hashed(tmp_path):
+    """An unmeasured file must be REPORTED, never given another file's
+    hash.
+
+    Measured on both hosts 2026-08-04: a failed
+    `[IO.File]::ReadAllBytes` is NON-terminating, so the loop variable
+    keeps the PREVIOUS file's bytes and the manifest records that hash
+    for the file it could not read. Deterministic, so the wrong value
+    reproduces on every later run.
+
+    SCOPE, stated narrowly because the Fable review's version of this
+    finding was wider than what is reachable: an unreadable file present
+    at CONSTRUCTION cannot produce a clean build, because robocopy fails
+    with exit 9 and the build stops before any of this. So no false-clean
+    identity was reachable. What was reachable, and is what this case
+    pins, is a verify-time read failure being reported as ordinary DRIFT
+    rather than as a measurement that could not be made.
+    """
+    repo = make_repo(tmp_path)
+    (repo / "aaa.txt").write_text("readable, sorts first\n")
+    denied = repo / "bbb.txt"
+    denied.write_text("this one will not be readable\n")
+    mirror = tmp_path / "mirror"
+    _, ident = build_and_read(repo, mirror)
+    user = os.environ.get("USERNAME") or ""
+    if not user:
+        pytest.skip("USERNAME not set; cannot build a deny ACE")
+    deny = subprocess.run(["icacls", str(denied), "/deny", user + ":(RD)"],
+                          capture_output=True, text=True)
+    if deny.returncode != 0:
+        pytest.skip("icacls deny unavailable: " + deny.stdout + deny.stderr)
+    try:
+        proc = run_verify(repo, mirror, ident)
+        assert proc.returncode == 1, proc.stdout + proc.stderr
+        assert "could not be read" in proc.stdout.lower(), (
+            "an unreadable input must be named as unreadable, not "
+            "reported as drift: " + proc.stdout)
+    finally:
+        undo = subprocess.run(["icacls", str(denied), "/remove:d", user],
+                              capture_output=True, text=True)
+        assert undo.returncode == 0, undo.stdout + undo.stderr
+        assert denied.read_text(), "the deny ACE is still in force"
