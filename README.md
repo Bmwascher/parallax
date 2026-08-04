@@ -169,6 +169,19 @@ flowchart TD
   your ordinary kimi-code login — see
   [Lane credential ownership](#lane-credential-ownership) for why
   borrowing it could log you out.
+- **Home skill root, measured (0.20.0)**: the backup lane's client has
+  four skill-discovery roots, and one of them is your own
+  `~/.agents/skills/`, which no environment variable relocates and
+  nothing the lane runs removes. It was carried as unprobed territory for
+  two cycles because the only earlier attempt could not tell "root not
+  read" from "tool not offered". A live six-cell probe answered it: the
+  root IS reachable with `--skills-dir` omitted, and the flag DOES
+  suppress it while the directory it names stays empty. The lane was not
+  open in the measured configuration, on kimi-code 0.31.1, because the
+  reviewer agent denies the `Skill` tool. What is NOT measured is stated
+  next to it: no cell passed the flag against a populated target, the two
+  project roots were never canaried, and a client whose skill delivery
+  changes shape retires the measurement rather than inheriting it.
 - **Reviewer context isolation (0.17.0)**: the gate measures the
   cross-vendor reviewer's PROMPT.
   `tools/codex-context-probe.ps1` renders the model-visible prompt with
