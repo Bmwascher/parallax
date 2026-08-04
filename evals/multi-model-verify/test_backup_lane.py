@@ -467,7 +467,13 @@ def test_brief_hash_binding_region():
     "hash to the same value" leaves a driver to invent the step that
     makes it true. The concatenation over every `input[]` element is
     pinned for the same reason: hashing only the first element is the
-    obvious wrong reading."""
+    obvious wrong reading.
+
+    0.21.0 extends the region to name the RESUME payload. The rule said
+    "the brief", the resumed payload is a rebuttal, and the coverage was
+    an inference: read narrowly, every round after the first had its
+    delivery unchecked, which is the exact gap the rule exists to close.
+    """
     assert (
             "Hash the brief BEFORE dispatch and require the recorded prompt "
             "to match: SHA-256 over the brief canonicalized as UTF-8 with "
@@ -477,7 +483,13 @@ def test_brief_hash_binding_region():
             "than an implementation detail: the measured evidence matched "
             "only after newline normalization, so a rule saying merely that "
             "the two hash to the same value leaves a driver to invent that "
-            "step.") in _norm(BACKUP_LANE)
+            "step. \"The brief\" here means the payload of EVERY call in the "
+            "debate, fresh and resumed alike: a resumed round's payload is a "
+            "rebuttal rather than the opening brief, and it is bound by this "
+            "same rule. Stating it removes an inference - a rule that named "
+            "only round 1 would leave every later round's delivery "
+            "unchecked, which is the gap this rule exists to close."
+            ) in _norm(BACKUP_LANE)
 
 
 def test_backup_lane_containment_and_probe_pins():
@@ -1685,3 +1697,134 @@ def test_the_probe_agent_is_never_named_by_the_lane_contract():
         for path in paths:
             assert probe_rel not in _lines(path), (
                 str(path.relative_to(REPO)) + " must not name the probe agent file")
+
+
+def test_mirror_path_budget_region():
+    """The pre-flight's contract, locked whole (0.21.0, backlog item 21).
+
+    Three clauses here are the ones a later reader is most likely to
+    trim, and each has a measured reason to stay. The UNIVERSE names
+    directories and `.git` explicitly, because a files-only reading
+    passes this repo and then fails mid-copy. A directory link is
+    FOLLOWED rather than refused, because robocopy follows it and a
+    refusal measured a smaller universe than the copy produces - the
+    refusal that survives is the cycle case, which is the one the copy
+    cannot complete. The unenumerable-path rule BLOCKS, because the
+    manifest builder's hole semantics apply here too: a path that cannot
+    be measured is not a path known to fit.
+    """
+    assert (
+            "The mirror is a copy into a NEW root, so a destination "
+            "that was legal in the source can be illegal in the mirror. "
+            "That failure lands MID-COPY and leaves a partially "
+            "populated tree that reads exactly like a complete one, "
+            "which is why the check runs before the root is created "
+            "rather than after the copy reports a count. The UNIVERSE "
+            "it measures is every file and directory destination "
+            "implied by the source AS ENUMERATED at pre-flight time, "
+            "including tracked, untracked, ignored, and all `.git` "
+            "content: a directory holding no files is still a "
+            "destination, and `.git` is copied so `.git` counts. It is "
+            "NOT a guarantee that this universe equals the one "
+            "`robocopy /E` later walks. The enumeration finishes before "
+            "the mirror root exists and the copy runs after it, so a "
+            "path created in that window is in robocopy's universe and "
+            "not in the measured one. The contract said \"the exact "
+            "`robocopy /E` operation\" and that read as a guarantee; the "
+            "mode-diff debate was right that it is not one. Closing the "
+            "window needs construction from an immutable snapshot, "
+            "which this release does not do. The ARITHMETIC is the "
+            "resolved mirror-root length, plus a separator, plus the "
+            "relative destination path length. The LIMIT is 260 "
+            "characters as a conservative policy across both supported "
+            "PowerShell hosts. It is a deterministic refusal threshold, "
+            "not a claim about the maximum any host, API, OS "
+            "configuration, or downstream client could support. Three "
+            "requirements sit OUTSIDE that universe and bind equally. "
+            "The `-OverrideOut` path is written beside the mirror by "
+            "the tool rather than by robocopy, so the copy universe "
+            "never covers it and it carries its own check. A source "
+            "directory reparse point is FOLLOWED, because the copy "
+            "follows it: `robocopy /E` with neither /XJ nor /SL writes "
+            "the target's contents as an ordinary directory at the "
+            "link's relative path, so refusing to measure across one "
+            "described a SMALLER universe than the copy produces. What "
+            "the copy cannot survive is a cycle, so a link onto one of "
+            "its own ancestors is refused, and so is a tree whose links "
+            "reach one target twice, which is indistinguishable from a "
+            "cycle without walking the whole graph. A repo root that is "
+            "itself a reparse point stays refused. "
+            "A source path that cannot be enumerated BLOCKS the build "
+            "and is never skipped, the same hole semantics the manifest "
+            "builder states: a path that cannot be measured is not a "
+            "path known to fit. The refusal names the root length, the "
+            "deepest relative destination length, their sum and the "
+            "limit, because a refusal an operator cannot act on is a "
+            "refusal they will work around."
+            ) in _norm(BACKUP_LANE)
+
+
+def test_mirror_identity_gate_region():
+    """The identity gate's contract, locked whole (0.21.0, item 22).
+
+    Three clauses carry the weight. TWO identities, because they differ
+    whenever remediation committed and a record printing one twice would
+    be wrong in the common case. The BRIDGE at steps three and four,
+    because without it two individually valid commit ids prove nothing
+    about whether one tree came from the other. And the fingerprint
+    covering CONTENT rather than the status listing alone, which is
+    measured: editing an already-ignored file leaves the listing
+    byte-identical, so the listing-only version verified clean across
+    exactly the drift the check exists to catch.
+    """
+    assert (
+            "The record carries TWO identities and one fingerprint: "
+            "`source_head`, `mirror_head` and `source_status_sha256`. "
+            "The two heads differ whenever remediation committed, which "
+            "is the ordinary case for a repo carrying a tracked "
+            "back-channel, so a record printing one of them twice is "
+            "wrong in the common case rather than the rare one. "
+            "Construction is a six-step bridge. Capture the source head "
+            "BEFORE the copy; copy; require the live source head still "
+            "equals it; before remediation, require the COPIED tree's "
+            "head equals it; remediate, then record `mirror_head`. "
+            "Steps three and four are the bridge itself: without them "
+            "the record can hold two individually valid commit ids "
+            "while nothing proves the mirror was built FROM the "
+            "recorded source commit, which is two true facts arranged "
+            "to look like one. What the bridge proves is matching "
+            "OBSERVED ENDPOINTS, and that is weaker than an "
+            "uninterrupted construction: a source that moves away and "
+            "back during the copy satisfies both the before-and-after "
+            "head equality and the before-and-after fingerprint, while "
+            "the copied worktree can still hold intermediate bytes. The "
+            "debate named that gap and it is real; the only thing that "
+            "would close it is building from an immutable snapshot, "
+            "which this release does not do. Before every fresh and "
+            "resumed dispatch, re-run the tool with `-VerifyIdentity` "
+            "and the three recorded values. Missing, unreadable or "
+            "unequal BLOCKS the round, and a value that was never "
+            "recorded is never a value that matched. What the gate "
+            "proves is narrow and stated so: the two-HEAD gate proves "
+            "committed-HEAD freshness. Non-HEAD inputs are bound in the "
+            "constructed mirror's manifest AT CONSTRUCTION TIME, and "
+            "source-side changes after construction are detected by the "
+            "source-status comparison below WHEN THEY ARE VISIBLE TO "
+            "IT: that is, changes that move the status listing, or that "
+            "alter the content of a path the listing names. A tracked "
+            "file git reports CLEAN is in neither, so a raw-byte change "
+            "that survives the clean filter unchanged - the autocrlf "
+            "case measured below is the mild one, a content-stripping "
+            "filter the severe one - moves neither HEAD nor this "
+            "fingerprint and is NOT covered. Round 2 of the mode-diff "
+            "debate found the unqualified claim. That comparison is a "
+            "fingerprint over the status capture AND the content of "
+            "every path status names, not the status listing alone: "
+            "measured 2026-08-04, editing an already-ignored file "
+            "leaves the listing byte-identical, so a listing-only "
+            "fingerprint verified clean across exactly the drift this "
+            "check exists to catch. Ignored and untracked content is "
+            "the entire reason this workspace is a mirror, so a gate "
+            "blind to its bytes would be blind in the middle of the "
+            "feature."
+            ) in _norm(BACKUP_LANE)

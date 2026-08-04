@@ -257,6 +257,236 @@ class TestTransportContract:
             " model-prompting-notes.md)"
         )
 
+    def test_the_codex_brief_binding_contract_is_stated(self):
+        """The codex lane must bind the brief it sent to the prompt the
+        client recorded, the way the backup lane already does.
+
+        Item 20's filed defect was the argument shape. The GAP the plan
+        debate surfaced is wider: the backup lane fails the round when
+        the recorded prompt does not match the brief
+        (backup-lane.md, region brief-hash-binding), and the codex lane
+        had no equivalent, which is exactly why corruption there could be
+        silent while corruption on the backup lane could not.
+
+        Every clause below is measured, not assumed. The record shape is
+        probe part 5: three rounds of one session, exactly one matching
+        record each, no cross-matches. The byte-boundary design rests on
+        the rollout being cumulative and append-only, also part 5.
+        """
+        # NORMALIZED on purpose. Every needle below spans a line wrap in
+        # the reference and anchors on NO newline, so collapsing
+        # whitespace is what makes it match rather than what destroys it.
+        # A needle containing a newline must never be written this way -
+        # that is D4's rule, and this is its other side.
+        notes = " ".join(read(REFERENCES / "model-prompting-notes.md").split())
+        # Fresh calls: the rollout must be NEW and unambiguous.
+        assert "Codex brief binding — fresh calls" in notes
+        assert ("Require exactly one newly created rollout whose filename"
+                " and first `session_meta` record both carry that session"
+                " ID.") in notes
+        # Resumed calls: the boundary that proves THIS call appended.
+        assert "Codex brief binding — resumed calls" in notes
+        assert ("capture its byte length and SHA-256 over exactly those"
+                " bytes") in notes
+        assert ("Parse only complete JSONL records after that byte"
+                " boundary.") in notes
+        # The record shape, stated rather than gestured at. The primary
+        # lane refused the freeze while this read "identified by
+        # structure" - a placeholder standing where a contract belongs.
+        assert ("consider every record where `type` is `response_item`,"
+                " `payload.type` is `message` and `payload.role` is"
+                " `user`") in notes
+        # The frozen text said "exactly one" USER record. Implementation
+        # measured that unsatisfiable: a fresh slice always carries two,
+        # because the client's instructions preamble is role `user` too.
+        # Amendment 1, 2026-08-04. The discriminator is the brief HASH
+        # plus position, and the reason is written into the contract so
+        # the next reader cannot re-derive the same wrong rule.
+        assert ("Require exactly one candidate to equal the brief's"
+                " SHA-256, and require it to be the LAST user record in"
+                " the slice.") in notes
+        assert ("the client's own instructions preamble is also `role`"
+                " `user`, so a fresh slice carries two") in notes
+        # The Fable whole-branch review, 2026-08-04, found three
+        # permissive-direction gaps between this text and the tool. The
+        # text now states the stricter rule the tool enforces.
+        assert ("A record is a binding CANDIDATE only if it carries at"
+                " least one `payload.content[]` element and EVERY"
+                " element's `type` is `input_text`") in notes
+        # The resumed half was a COUNT until 2026-08-04, when the client
+        # re-emitted its preamble on a resume and the rule blocked a
+        # legitimate round. It is an IDENTITY rule now, and the contract
+        # has to say the same thing the tool does.
+        assert ("a FRESH slice carries exactly two user records, the"
+                " client's instructions preamble and the brief") in notes
+        assert ("A RESUMED slice carries at most two, and a record"
+                " ahead of the brief must CANONICALLY EQUAL the first"
+                " user record in that session's own prefix") in notes
+        assert ("a slice that does not decode as strict UTF-8, a line"
+                " that is not a JSON object") in notes
+        # The claim's ceiling. This must never read as server attestation.
+        assert ("This is a client-echo binding: it proves what the"
+                " measured Codex client recorded for this call, never"
+                " what the server or model received.") in notes
+
+
+    def test_the_codex_binding_regions_are_locked_whole(self):
+        """Each marked region sits WHOLE inside ONE pin.
+
+        CLAUDE.md's rule, and the reason for it: a fragment pin stays
+        green while the operative half of the region it claims to lock
+        is deleted. Twelve instances of that defect are on this repo's
+        record. Normalized because the regions wrap across lines and no
+        needle here contains a newline.
+        """
+        notes = " ".join(read(REFERENCES / "model-prompting-notes.md").split())
+        assert (
+        "The backup lane fails a round when the prompt its client "
+        "recorded does not match the brief that was sent "
+        "(backup-lane.md, region `brief-hash-binding`). This lane "
+        "had no equivalent, which is why corruption here could be "
+        "silent while corruption there could not. It has one now, "
+        "and it reads the PER-SESSION ROLLOUT rather than scraping "
+        "the transcript. **Codex brief binding — fresh calls.** "
+        "Before dispatch, hash the brief under the declared "
+        "canonicalization and inventory the rollout files under the "
+        "effective Codex session root. After the call, read the "
+        "session ID only from the verified startup-header block. "
+        "Require exactly one newly created rollout whose filename "
+        "and first `session_meta` record both carry that session "
+        "ID. Parse the file as strict UTF-8 JSONL. Malformed JSON, "
+        "a missing terminal record boundary, no matching rollout, "
+        "or multiple matching rollouts is a brief-attribution "
+        "failure. **Codex brief binding — resumed calls.** Before "
+        "dispatch, resolve exactly one rollout whose first "
+        "`session_meta` record and filename match the resumed "
+        "session ID; capture its byte length and SHA-256 over "
+        "exactly those bytes. After the call, require the file "
+        "still exists, is not shorter, and has the identical prefix "
+        "hash. Parse only complete JSONL records after that byte "
+        "boundary. A missing, replaced, truncated, or "
+        "prefix-modified rollout is a brief-attribution failure."
+        ) in notes, (
+        "region codex-brief-binding-calls must sit WHOLE in one pin")
+
+        assert (
+        "**Prompt record.** In the current-call slice, consider "
+        "every record where `type` is `response_item`, "
+        "`payload.type` is `message` and `payload.role` is `user`. "
+        "A record is a binding CANDIDATE only if it carries at "
+        "least one `payload.content[]` element and EVERY element's "
+        "`type` is `input_text`; hashing only the text elements of "
+        "a mixed record would bind a record that also carried "
+        "something else. Concatenate the candidate's `text` fields "
+        "in order and canonicalize exactly as the pre-dispatch "
+        "brief was canonicalized - UTF-8, CRLF normalized to LF, "
+        "leading and trailing whitespace stripped. Require exactly "
+        "one candidate to equal the brief's SHA-256, and require it "
+        "to be the LAST user record in the slice. Bound what may "
+        "sit IN FRONT of it: a FRESH slice carries exactly two user "
+        "records, the client's instructions preamble and the brief. "
+        "A RESUMED slice carries at most two, and a record ahead of "
+        "the brief must CANONICALLY EQUAL the first user record in "
+        "that session's own prefix - the client repeating its own "
+        "preamble, and nothing else. The resumed rule was a COUNT "
+        "of exactly one until 2026-08-04, earned from three "
+        "measured rounds and falsified by the fourth, which carried "
+        "a re-emitted preamble and blocked a legitimate round; the "
+        "identity rule is what the measurement supports. Equality "
+        "is CANONICAL, not byte-for-byte: the same UTF-8, "
+        "CRLF-to-LF, ends-stripped rule used everywhere else here, "
+        "so it tolerates line-ending and surrounding-whitespace "
+        "differences and nothing more. Anything looser than this is "
+        "unearned width: an unexplained user record before the "
+        "brief is unattributed text in front of the reviewer, which "
+        "is the class this binding exists to refuse. Taking the "
+        "slice's sole user record instead is wrong on every fresh "
+        "call: the client's own instructions preamble is also "
+        "`role` `user`, so a fresh slice carries two. Nor may the "
+        "record be identified by content-element count - the "
+        "preamble carried 2 elements and briefs carried 1 on the "
+        "measured sample, and nothing prevents a client splitting a "
+        "long prompt. No matching candidate, several matching "
+        "candidates, a further user record after the match, a slice "
+        "that does not decode as strict UTF-8, a line that is not a "
+        "JSON object, or an unequal hash blocks the round; discard "
+        "the reply unread. WHAT \"A JSON OBJECT\" MEANS HERE IS "
+        "NARROWER THAN RFC-STRICT JSON, and saying otherwise was a "
+        "claim wider than its evidence. Measured 2026-08-04 on both "
+        "hosts, `ConvertFrom-Json` accepts single-quoted strings, "
+        "unquoted keys, `NaN`, leading-zero numbers and literal "
+        "control characters inside strings; PowerShell 7 also "
+        "accepts comments and a trailing comma, and 5.1 accepts a "
+        "leading `+` on the whole number, such as `+1` or `+1e2`. "
+        "The line check therefore establishes THREE things and not "
+        "more: the value is an object, no comment appears outside a "
+        "string, and nothing follows the value but JSON whitespace. "
+        "Those are the properties that keep unattributed text out "
+        "of the record stream. Full lexical validation is open "
+        "backlog work, not a property this check has. **Evidence "
+        "limit.** This is a client-echo binding: it proves what the "
+        "measured Codex client recorded for this call, never what "
+        "the server or model received."
+        ) in notes, (
+        "region codex-brief-binding-record must sit WHOLE in one pin")
+
+    def test_the_brief_attribution_failure_class_exists(self):
+        """A binding with no failure class is a check with no consequence."""
+        fb = read(REFERENCES / "fallbacks.md")
+        assert "brief-attribution" in fb
+        assert "reply DISCARDED unread" in fb
+
+    def test_the_concurrency_claim_admits_the_rollout_is_parsed(self):
+        """This release falsifies a sentence already in the file.
+
+        The concurrency paragraph said none of codex's shared stores is
+        parsed to attribute an invocation. The binding parses session
+        storage, so that became false the moment it shipped - the same
+        shape as the write-site sentence 0.20.0 falsified in its own
+        commit. What SURVIVES is the structural difference from the
+        backup lane: the rollout is per-session, named by session id,
+        not one shared global log.
+        """
+        notes = read(REFERENCES / "model-prompting-notes.md")
+        assert ("none is parsed to attribute one invocation's transcript"
+                " or reply to another") not in notes, (
+            "the binding parses session storage; this sentence is false")
+        assert "per-session rollout" in notes
+
+    def test_resume_pipes_the_brief_on_stdin(self):
+        """The brief must never be a POSITIONAL argument on resume.
+
+        Measured 2026-08-03 on codex-cli 0.144.1, recorded at
+        docs/superpowers/plans/rounds/2026-08-04-transport-and-mirror/
+        resume-transport-probe.md. The npm wrapper splats $args to node.
+        On Windows PowerShell 5.1 a quoted span splits the argument and
+        strips the quotes: the documented positional form exited 2 with
+        `unexpected argument 'Gems` and wrote no reply file, while the
+        stdin form on the same host and the same session exited 0 with
+        the quotes delivered.
+
+        The SERIOUS half is quieter. When the quoted span contains no
+        space the argument COUNT does not change, so nothing fails, the
+        route header verifies, and the reviewer reads a brief this side
+        never wrote. Round 1 was always immune because it pipes; this
+        makes resume identical to it.
+        """
+        text = read(SKILL_MD)
+        assert re.search(
+            r"Get-Content -Raw <brief-file> \| codex exec"
+            r" --sandbox read-only --disable plugins --disable apps"
+            r" -c \$override -m <canonical-model-id>"
+            r" -c model_reasoning_effort=<canonical-effort>"
+            r" [^\n]*resume <SESSION_ID> -", text
+        ), (
+            "the resume dispatch must pipe the brief on stdin and end"
+            " `resume <SESSION_ID> -`, matching round 1"
+        )
+        assert 'resume <SESSION_ID> "<rebuttal-brief>"' not in text, (
+            "the positional brief form is live-proven defective on"
+            " PowerShell 5.1 and must not return"
+        )
+
     def test_sandbox_verified_in_route_check(self):
         # Sandbox mode has NO continuity across resumes: probed 2026-07-24
         # (v0.144.1) - a resume WITHOUT --sandbox resolved to the config
@@ -1293,6 +1523,39 @@ class TestApplicationCheckpoint:
             "the finish line must attest the post-fix, re-reviewed range"
         )
         assert re.search(r"fixes are still unapplied", skill)
+
+    def test_a_pass_is_terminal_only_for_its_own_head(self):
+        """Item 23. A PASS covers the head it was issued on, and no other.
+
+        The failure this closes is quiet and easy: the reviewer raises
+        something it explicitly labels non-blocking, the session agrees,
+        applies it, and merges under the PASS. The head moved. The
+        verdict describes a range nobody reviewed, and the attestation
+        binds it anyway because the emitter is given whatever head it is
+        handed.
+
+        Not the same rule as the checkpoint's. That governs fixes for a
+        FIX verdict. This one governs edits made AFTER a PASS, where
+        nothing else in the flow is watching.
+        """
+        skill = read(SKILL_MD)
+        assert ("A PASS is terminal only for the exact head it was issued"
+                " on.") in skill
+        # NORMALIZED, because both needles below span a line wrap in the
+        # skill and anchor on no newline. D4's rule and its other side: a
+        # needle that contains a newline must never be written raw, and
+        # one that spans a wrap must be matched against collapsed
+        # whitespace or it silently never matches.
+        flat = " ".join(skill.split())
+        assert ("including observations it labelled non-blocking") in flat, (
+            "the non-blocking case is the one that gets applied without"
+            " thinking, so it must be named rather than implied")
+        # The remedy is TWO options and it is mandatory, not advice. A
+        # bare "run one confirming round" pin would stay green while the
+        # sentence became "you may run one confirming round" - the same
+        # words with the rule taken out.
+        assert ("Either leave them for a follow-up branch, or run one"
+                " confirming round.") in flat
 
     def test_reverified_is_contractual(self):
         # Sol diff review round 1, F2: the state machine's last transition

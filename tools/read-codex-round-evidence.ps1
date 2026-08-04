@@ -1,0 +1,733 @@
+# read-codex-round-evidence.ps1 - bind ONE codex debate round's reply to
+# the brief this side actually sent, by reading the client's OWN append-only
+# session rollout.
+#
+# WHY THIS EXISTS. The backup lane has always failed a round whose recorded
+# prompt differs from the brief that was sent. The codex lane had no such
+# check, and that asymmetry is the whole defect: measured 2026-08-03,
+# Windows PowerShell 5.1 native argument splatting STRIPS a double-quoted
+# span that contains no space, and it does so without changing the argument
+# COUNT. Nothing errors. The reviewer answers a brief this side never wrote,
+# and the driver reads the answer as a clean round.
+#
+# WHAT IT READS, AND WHY THAT FILE. The human-readable transcript is
+# PROMPT-STEERABLE: measured the same day, a brief carrying delimiter-shaped
+# payload put a second `session id:` line into the transcript, so a parser
+# taking the last match reads the value the BRIEF chose. The JSONL rollout
+# under <CODEX_HOME>/sessions/<yyyy>/<mm>/<dd>/ is immune by construction -
+# delimiter-shaped text inside a JSON string cannot create a record boundary
+# - so it, and never the transcript, is the data source.
+#
+# WHAT A CLEAN VERDICT DOES AND DOES NOT CLAIM. It claims the client
+# RECORDED, in the byte range this call appended, exactly one user prompt
+# equal to the declared brief. That is CLIENT-ECHO evidence. It is not
+# evidence about what any server received, and it never becomes that.
+#
+# TWO PARAMETER SETS, because a fresh call must DISCOVER its rollout (the
+# file does not exist before the client creates it) and a resume must be
+# TOLD which file to measure. Passing a fresh-only argument to the resume
+# set, or the reverse, is PowerShell's own parameter-set resolution error,
+# never a runtime check.
+#
+#   Fresh:  -Fresh -SessionsRoot <dir> -SessionIdFromStdout <id>
+#           -PriorState <json-file> -ExpectedBriefSha256 <hex> [-Json]
+#   Resume: -Resume -RolloutFile <path>
+#           -PriorState <json-file> -ExpectedBriefSha256 <hex> [-Json]
+#
+# -PriorState is a JSON FILE written before this call:
+#   fresh state:  kind="fresh", knownRollouts (every rollout-*.jsonl under
+#                 -SessionsRoot immediately BEFORE dispatch)
+#   resume state: kind="resume", rolloutFile, sessionId, bytes,
+#                 prefixSha256 (the previous invocation's nextState)
+#
+# THE BYTE BOUNDARY IS THE CONTINUITY CHECK. Without it a STALE rollout -
+# one this call never appended to - reads exactly like a fresh one, because
+# the previous round's prompt is still in the file and still matches its own
+# hash. Offsets are BYTE counts, not line counts: a prefix hash through a
+# byte offset has one unambiguous definition.
+#
+# -ExpectedBriefSha256 is a HASH, not a brief file, because a file re-read
+# after the call is mutable and would silently redefine the expected value.
+# Its canonicalization is DECLARED, not incidental: UTF-8 bytes of the text
+# with CRLF folded to LF and leading and trailing whitespace removed.
+#
+# Exit codes: 0 clean, 1 failed (reason on stdout, see -Json).
+param(
+    [Parameter(ParameterSetName = "Fresh", Mandatory = $true)]
+    [switch]$Fresh,
+    [Parameter(ParameterSetName = "Fresh", Mandatory = $true)]
+    [string]$SessionsRoot,
+    [Parameter(ParameterSetName = "Fresh", Mandatory = $true)]
+    [string]$SessionIdFromStdout,
+
+    [Parameter(ParameterSetName = "Resume", Mandatory = $true)]
+    [switch]$Resume,
+    [Parameter(ParameterSetName = "Resume", Mandatory = $true)]
+    [string]$RolloutFile,
+
+    [Parameter(Mandatory = $true)][string]$PriorState,
+    [Parameter(Mandatory = $true)][string]$ExpectedBriefSha256,
+    [switch]$Json
+)
+
+$ErrorActionPreference = "Stop"
+
+function Write-Result($status, $reason, $nextState, $asJson) {
+    if ($asJson) {
+        $obj = [ordered]@{ status = $status }
+        if ($reason) { $obj.reason = $reason }
+        if ($nextState) { $obj.nextState = $nextState }
+        Write-Output (ConvertTo-Json $obj -Compress -Depth 6)
+    } else {
+        if ($status -eq "clean") {
+            Write-Output "clean"
+        } else {
+            Write-Output ("failed: " + $reason)
+        }
+    }
+    if ($status -eq "clean") { exit 0 } else { exit 1 }
+}
+
+function Fail($reason) {
+    Write-Result "failed" $reason $null $Json
+}
+
+function Get-Sha256Hex([byte[]]$bytes, [int]$offset, [int]$count) {
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $h = $sha.ComputeHash($bytes, $offset, $count)
+    } finally {
+        $sha.Dispose()
+    }
+    ($h | ForEach-Object { $_.ToString("x2") }) -join ""
+}
+
+function Get-CanonicalSha256([string]$text) {
+    # The declared canonicalization, in one place. Both this script and the
+    # caller that computes -ExpectedBriefSha256 must apply the same rule, so
+    # it is stated rather than left to whichever side reads the bytes first.
+    $t = $text.Replace("`r`n", "`n").Trim()
+    $bytes = [System.Text.Encoding]::UTF8.GetBytes($t)
+    Get-Sha256Hex $bytes 0 $bytes.Length
+}
+
+# The four characters JSON calls whitespace. Everything else that
+# .NET considers whitespace is content as far as this parser goes.
+$script:JsonWs = [char[]]@(' ', "`t", "`r", "`n")
+
+function Get-JsonObjectLineFault([string]$raw, $parsed) {
+    # Returns $null when the line is a lone JSON object, else a phrase
+    # naming the fault. Two faults, and an operator has to be able to
+    # tell them apart: one says the value is the wrong kind, the other
+    # says something rode in behind a value of the right kind.
+    # A JSONL RECORD IS AN OBJECT, AND `-is [PSCustomObject]` DOES NOT
+    # ESTABLISH THAT ON EVERY HOST. Measured 2026-08-04 on
+    # `'[{"type":"session_meta",...}]' | ConvertFrom-Json`:
+    #   Windows PowerShell 5.1 returns System.Object[] - the type test
+    #     catches it.
+    #   PowerShell 7.6.3 UNROLLS the single-element array and returns the
+    #     PSCustomObject inside it - the type test cannot see it, and the
+    #     line's properties then read straight through.
+    # So the shipped slice parser's object check, and the resume
+    # first-line check added hours earlier, both passed a JSON ARRAY on
+    # PowerShell 7 while refusing it on 5.1. That is the 0.16.0 lane-lock
+    # class this repo runs two host jobs for: a green suite on one
+    # interpreter proves one interpreter.
+    # The RAW TEXT decides instead. A JSON object begins with `{`, on
+    # every host, and combined with a successful parse that is the whole
+    # rule.
+    # AND `ConvertFrom-Json` IS NOT A STRICT-JSON GATE EITHER. Measured
+    # 2026-08-04: `{"type":"note"} // tail` is ACCEPTED on PowerShell
+    # 7.6.3 and refused on 5.1, because 7's parser allows JSON comments.
+    # Arbitrary trailing text and a second object are refused on both, so
+    # the divergence is comments specifically - narrow, and still enough
+    # to make the contract's strict-JSONL claim false on one interpreter.
+    # Delegating strictness to the parser is what went wrong; the scan
+    # below decides here, the same way for every host.
+    if ($null -eq $raw) { return "is not a JSON object" }
+    # JSON WHITESPACE ONLY. `.Trim()` strips Unicode whitespace, and both
+    # hosts accept a trailing U+00A0 after the value (measured
+    # 2026-08-04), so the tail check erased exactly the character it was
+    # supposed to catch. JSON defines whitespace as these four.
+    $t = $raw.Trim($script:JsonWs)
+    if (-not $t.StartsWith("{")) { return "is not a JSON object" }
+    if (-not ($parsed -is [System.Management.Automation.PSCustomObject])) {
+        return "is not a JSON object"
+    }
+    # Nothing but whitespace may follow the object's own closing brace.
+    # The parse already established well-formed JSON, so this only has to
+    # find where the value ends: track string literals so a brace inside
+    # one is not counted, and escapes so a quote inside one is not.
+    $depth = 0; $inStr = $false; $esc = $false; $end = -1
+    for ($i = 0; $i -lt $t.Length; $i++) {
+        $c = $t[$i]
+        if ($inStr) {
+            if ($esc) { $esc = $false }
+            elseif ($c -eq '\') { $esc = $true }
+            elseif ($c -eq '"') { $inStr = $false }
+            continue
+        }
+        if ($c -eq '"') { $inStr = $true; continue }
+        # NO `/` IS LEGAL OUTSIDE A JSON STRING, so one can only begin a
+        # comment. PowerShell 7.6.3 accepts comments INSIDE an object as
+        # well as after it (measured 2026-08-04; 5.1 refuses both), and a
+        # brace-depth scan with no comment state cannot see them - worse,
+        # a `}` or `"` inside a comment misleads the scan itself. Refusing
+        # the character is exact, host-independent, and cheaper than
+        # tracking comment state.
+        if ($c -eq '/') { return "carries a comment, which strict JSON has no room for" }
+        if ($c -eq '{') { $depth++; continue }
+        if ($c -eq '}') {
+            $depth--
+            if ($depth -eq 0) { $end = $i; break }
+        }
+    }
+    if ($end -lt 0) { return "is not a JSON object" }
+    if ($t.Substring($end + 1).Trim($script:JsonWs) -ne "") {
+        return "carries trailing content after its JSON value"
+    }
+    return $null
+}
+
+# --------------------------------------------------------------------
+# Argument shape. A caller that passes an unusable expected hash must be
+# refused here: telling it the round is clean because nothing could be
+# compared is precisely the permissive direction this script forbids.
+# --------------------------------------------------------------------
+
+if ($ExpectedBriefSha256 -notmatch '^[0-9a-f]{64}$') {
+    Fail ("-ExpectedBriefSha256 is not a lowercase 64-character hex digest: '" +
+          $ExpectedBriefSha256 + "'")
+}
+
+if (-not (Test-Path -LiteralPath $PriorState -PathType Leaf)) {
+    Fail ("prior state file not found: " + $PriorState)
+}
+
+$priorText = $null
+try {
+    $priorText = [System.IO.File]::ReadAllText($PriorState)
+} catch {
+    Fail ("prior state file could not be read: " + $_.Exception.Message)
+}
+
+$prior = $null
+try {
+    $prior = $priorText | ConvertFrom-Json
+} catch {
+    Fail ("prior state file could not be parsed as JSON: " + $_.Exception.Message)
+}
+
+# THE STATE FILE NEEDS THE SAME ROOT GUARD AS A ROLLOUT LINE, and the
+# first version of that guard only covered the rollout. Measured on both
+# hosts 2026-08-04: a prior state written `[{...}]` UNROLLS on PowerShell
+# 7.6.3, so `.kind` and every field below read straight through and the
+# document behaves as the object it is not; on 5.1 it stays
+# `System.Object[]` and the presence checks happen to fail. One file over
+# from where the same defect was just closed, which is the argument for
+# putting the rule in a function rather than at a call site.
+$priorFault = Get-JsonObjectLineFault $priorText $prior
+if ($priorFault) {
+    Fail ("prior state " + $priorFault + " at its root, so the fields " +
+          "read from it are not the fields it declares")
+}
+
+$wantKind = if ($Fresh) { "fresh" } else { "resume" }
+if ($prior.kind -ne $wantKind) {
+    Fail ("prior state kind is '" + [string]$prior.kind + "' but this call needs kind '" +
+          $wantKind + "'")
+}
+
+# EVERY field this script compares against must be PRESENT, checked by
+# name rather than by truthiness. An absent `knownRollouts` and a
+# legitimately empty one are both falsy, so a truthiness test skipped the
+# newly-created check exactly when nobody had made the inventory; an
+# absent `bytes` casts to 0, which reads as "measure from the start of the
+# file". Both are the permissive direction, and an unmade measurement is
+# never a clean one.
+function Assert-PriorField($name) {
+    $present = @($prior.PSObject.Properties.Name) -contains $name
+    if (-not $present) {
+        Fail ("prior state is missing the required field '" + $name +
+              "': the measurement it records was never made")
+    }
+}
+
+if ($Fresh) {
+    Assert-PriorField "knownRollouts"
+    # PRESENCE IS NOT A MEASUREMENT. Found by the mode-diff debate,
+    # cross-vendor reviewer lane, round 1, and measured here first:
+    # `knownRollouts: null` satisfies a presence test, and
+    # `@($null | ForEach-Object {...})` then yields a ONE-element array,
+    # so the inventory became a single entry matching no path, the
+    # not-new comparison never fired, and a PRE-EXISTING rollout bound
+    # as though this call had created it. An empty ARRAY is still
+    # accepted: that is a measurement that found nothing, which is a
+    # different thing from one nobody made.
+    $inv = $prior.knownRollouts
+    if ($null -eq $inv -or -not ($inv -is [System.Array])) {
+        Fail ("prior state knownRollouts must be an array; a missing or " +
+              "non-array inventory is one nobody made")
+    }
+    foreach ($item in $inv) {
+        if (-not ($item -is [string]) -or [string]::IsNullOrWhiteSpace($item)) {
+            Fail ("prior state knownRollouts must hold only non-empty path " +
+                  "strings; an entry that is not one cannot be compared")
+        }
+    }
+} else {
+    Assert-PriorField "rolloutFile"
+    Assert-PriorField "sessionId"
+    Assert-PriorField "bytes"
+    Assert-PriorField "prefixSha256"
+    # THE RESUME HALF CARRIED THE SAME DEFECT F1 CLOSED ON THE FRESH
+    # HALF. Found by the mode-diff debate round 2, and measured here
+    # before it was accepted: `rolloutFile` null or empty is PRESENT, so
+    # the assertion above passed, and the comparison against the
+    # caller's -RolloutFile is gated on truthiness further down and was
+    # therefore skipped. The state's own record of which file it
+    # measured constrained nothing.
+    #
+    # Of the other three, TWO were diagnostic and one was a hole, and
+    # this comment said all three were diagnostic until round 4 read it
+    # against the record. A bad `prefixSha256` failed its comparison and
+    # a blank `sessionId` disagreed with the filename, so both were
+    # already refused and only the REASON was wrong - a schema fault
+    # reported as a changed rollout sends the operator to re-measure an
+    # artifact that is fine. `bytes` was different: a FRACTIONAL count
+    # truncates through `[int]` on both hosts, so paired with a prefix
+    # hash taken through the truncated offset it reached the ordinary
+    # slice checks. Validating the shape here closes that and makes the
+    # other two name their field.
+    foreach ($f in @("rolloutFile", "sessionId")) {
+        $v = $prior.$f
+        if (-not ($v -is [string]) -or [string]::IsNullOrWhiteSpace($v)) {
+            Fail ("prior state " + $f + " must be a non-empty string; a " +
+                  "blank or non-string value records no measurement")
+        }
+    }
+    $rawBytes = $prior.bytes
+    if (-not (($rawBytes -is [int]) -or ($rawBytes -is [long])) -or
+        [long]$rawBytes -lt 0) {
+        Fail ("prior state bytes must be a non-negative whole number of " +
+              "bytes; anything else is not a byte offset anyone measured")
+    }
+    if (-not ($prior.prefixSha256 -is [string]) -or
+        ([string]$prior.prefixSha256) -notmatch '^[0-9a-f]{64}$') {
+        Fail ("prior state prefixSha256 must be a lowercase 64-character " +
+              "hex digest; a value that cannot be one was never a hash of " +
+              "anything")
+    }
+}
+
+# --------------------------------------------------------------------
+# Locate the rollout and establish the byte range THIS call appended.
+# --------------------------------------------------------------------
+
+function Test-RecordIsUserMessage($rec) {
+    # NESTED SHAPES NEED ESTABLISHING TOO, and the root guard does not
+    # reach them. `payload` given as a JSON ARRAY enumerates its members
+    # on BOTH hosts, so `payload.type` and `payload.role` read straight
+    # through a value that is not an object at all - the same defect as
+    # the root one, one level down, and found by round 4 of the debate.
+    if (-not ($rec -is [System.Management.Automation.PSCustomObject])) { return $false }
+    if ($rec.type -ne "response_item") { return $false }
+    if (-not ($rec.payload -is [System.Management.Automation.PSCustomObject])) { return $false }
+    if ($rec.payload.type -ne "message") { return $false }
+    return ($rec.payload.role -eq "user")
+}
+
+function Get-RolloutSessionId([string]$name) {
+    # rollout-<timestamp>-<session-id>.jsonl. The id is the tail because a
+    # timestamp carries its own hyphens.
+    if ($name -match '^rollout-.*-([0-9a-fA-F-]{36})\.jsonl$') { $Matches[1] } else { $null }
+}
+
+$targetFile = $null
+$expectSessionId = $null
+$sliceOffset = 0
+
+if ($Fresh) {
+    if (-not (Test-Path -LiteralPath $SessionsRoot -PathType Container)) {
+        Fail ("sessions root not found: " + $SessionsRoot)
+    }
+    $expectSessionId = $SessionIdFromStdout
+
+    # -Stop, never -SilentlyContinue: a swallowed enumeration error turns
+    # "two rollouts, one unreadable" into "exactly one", which is the
+    # ambiguity refusal reading as a clean binding.
+    $all = @()
+    try {
+        $all = @(Get-ChildItem -LiteralPath $SessionsRoot -Recurse -File `
+                    -Filter "rollout-*.jsonl" -ErrorAction Stop)
+    } catch {
+        Fail ("the sessions root could not be enumerated: " + $_.Exception.Message)
+    }
+    $matching = @($all | Where-Object {
+        (Get-RolloutSessionId $_.Name) -eq $expectSessionId
+    })
+    if ($matching.Count -ne 1) {
+        Fail ("expected exactly one rollout under the sessions root for session id " +
+              $expectSessionId + ", found " + $matching.Count)
+    }
+    $targetFile = $matching[0].FullName
+
+    # A pre-existing file bearing the right session id is not evidence that
+    # THIS call produced it.
+    $known = @($prior.knownRollouts | ForEach-Object {
+        try { [System.IO.Path]::GetFullPath([string]$_) } catch { [string]$_ }
+    })
+    $normTarget = [System.IO.Path]::GetFullPath($targetFile)
+    foreach ($k in $known) {
+        if ($k -and ($k -ieq $normTarget)) {
+            Fail ("the rollout for session id " + $expectSessionId +
+                  " is not new: it was already present before this call")
+        }
+    }
+    $sliceOffset = 0
+} else {
+    if (-not (Test-Path -LiteralPath $RolloutFile -PathType Leaf)) {
+        Fail ("rollout file not found: " + $RolloutFile)
+    }
+    $targetFile = (Resolve-Path -LiteralPath $RolloutFile).ProviderPath
+    $expectSessionId = [string]$prior.sessionId
+
+    # UNCONDITIONAL. This used to be gated on `if ($prior.rolloutFile)`,
+    # so the falsy forms skipped the one check that ties the caller's
+    # -RolloutFile to the file the prior state actually measured. The
+    # schema check above now guarantees a non-empty string, and the
+    # comparison runs for every resume rather than for the ones whose
+    # state happened to be well-formed.
+    $statedFile = $null
+    try { $statedFile = [System.IO.Path]::GetFullPath([string]$prior.rolloutFile) }
+    catch { $statedFile = [string]$prior.rolloutFile }
+    if (-not ($statedFile -ieq [System.IO.Path]::GetFullPath($targetFile))) {
+        Fail ("prior state names a different rollout file: " + $statedFile)
+    }
+}
+
+$bytes = $null
+try {
+    $bytes = [System.IO.File]::ReadAllBytes($targetFile)
+} catch {
+    Fail ("rollout file could not be read: " + $_.Exception.Message)
+}
+
+if ($Resume) {
+    $priorBytes = -1
+    try { $priorBytes = [int]$prior.bytes } catch { $priorBytes = -1 }
+    if ($priorBytes -lt 0) {
+        Fail "prior state does not carry a usable byte offset"
+    }
+    if ($bytes.Length -lt $priorBytes) {
+        Fail ("the rollout is shorter than the prior state records (" +
+              $bytes.Length + " bytes now, " + $priorBytes + " before)")
+    }
+    $observedPrefix = Get-Sha256Hex $bytes 0 $priorBytes
+    if ($observedPrefix -ne [string]$prior.prefixSha256) {
+        Fail ("the rollout prefix changed since the prior state was captured; " +
+              "the record this call appended to is not the one it measured")
+    }
+    if ($bytes.Length -eq $priorBytes) {
+        Fail ("the rollout has no new bytes: this call appended nothing, so " +
+              "there is no round to bind")
+    }
+    $sliceOffset = $priorBytes
+}
+
+# A final line with no terminating newline is a file still being written.
+# Binding against it means reading a measurement that is not finished.
+if ($bytes.Length -eq 0 -or $bytes[$bytes.Length - 1] -ne 0x0A) {
+    Fail ("the rollout ends with an incomplete record: the last line has no " +
+          "terminating newline")
+}
+
+# STRICT decode. [Encoding]::UTF8 substitutes U+FFFD for invalid bytes and
+# never throws (measured 2026-08-04), so a corrupted slice whose damage sat
+# outside the brief record reached a clean verdict while the contract said
+# "strict UTF-8 JSONL". UTF8Encoding($false, $true) throws instead.
+$sliceText = $null
+try {
+    $strict = New-Object System.Text.UTF8Encoding($false, $true)
+    $sliceText = $strict.GetString(
+        $bytes, $sliceOffset, ($bytes.Length - $sliceOffset))
+} catch {
+    Fail ("this call's slice does not decode as strict UTF-8: " +
+          $_.Exception.Message)
+}
+
+if ($sliceText.Length -gt 0 -and [int][char]$sliceText[0] -eq 0xFEFF) {
+    if ($sliceOffset -eq 0) {
+        # A byte order mark at the start of the file is a file-level
+        # artifact and not part of any record.
+        $sliceText = $sliceText.Substring(1)
+    } else {
+        Fail ("this call's slice begins with a byte order mark: the bytes " +
+              "appended do not start where the prior state recorded")
+    }
+}
+
+$parts = $sliceText.Split("`n")
+# The split's final element is the empty tail after the terminating newline
+# checked above, never a record.
+$lines = @()
+for ($i = 0; $i -lt $parts.Length - 1; $i++) {
+    $lines += ,($parts[$i].TrimEnd("`r"))
+}
+
+$records = @()
+for ($i = 0; $i -lt $lines.Count; $i++) {
+    if ($lines[$i].Trim() -eq "") {
+        Fail ("rollout line " + ($i + 1) + " of this call's slice is blank; " +
+              "the record stream is not intact")
+    }
+    $rec = $null
+    try {
+        $rec = $lines[$i] | ConvertFrom-Json
+    } catch {
+        Fail ("rollout line " + ($i + 1) + " of this call's slice could not be " +
+              "parsed as JSON: " + $_.Exception.Message)
+    }
+    # `null`, a bare scalar and an array are all valid JSON and none is a
+    # record. Ignoring them silently is lenience under a strict-parse claim.
+    $lineFault = Get-JsonObjectLineFault $lines[$i] $rec
+    if ($lineFault) {
+        Fail ("rollout line " + ($i + 1) + " of this call's slice " +
+              $lineFault)
+    }
+    $records += ,$rec
+}
+
+# --------------------------------------------------------------------
+# Session identity. The filename and the session_meta record must AGREE.
+# Checking only the name would let a renamed or swapped file pass on its
+# label, which is not evidence about what the client wrote.
+# --------------------------------------------------------------------
+
+$nameId = Get-RolloutSessionId ([System.IO.Path]::GetFileName($targetFile))
+if (-not $nameId) {
+    Fail ("the rollout filename does not carry a session id: " +
+          [System.IO.Path]::GetFileName($targetFile))
+}
+
+if ($Fresh) {
+    # `payload` must be an OBJECT before its id is read: an array payload
+    # enumerates `.id` through on both hosts, so a session identity could
+    # be taken from a value that is not a record's payload at all.
+    $metaRecords = @($records | Where-Object {
+        $_.type -eq "session_meta" -and
+        ($_.payload -is [System.Management.Automation.PSCustomObject])
+    })
+    if ($metaRecords.Count -lt 1) {
+        Fail "the fresh rollout carries no session_meta record"
+    }
+    $metaId = [string]$metaRecords[0].payload.id
+    if ($metaId -ne $nameId -or $metaId -ne $expectSessionId) {
+        Fail ("the session id disagrees across sources: filename '" + $nameId +
+              "', session_meta '" + $metaId + "', dispatch '" + $expectSessionId + "'")
+    }
+} else {
+    if ($nameId -ne $expectSessionId) {
+        Fail ("the session id disagrees across sources: filename '" + $nameId +
+              "', prior state '" + $expectSessionId + "'")
+    }
+    # THE PREFIX'S OWN session_meta, re-measured rather than trusted.
+    # The contract says a resumed rollout is resolved by its first
+    # `session_meta` record AND its filename; resume checked the
+    # filename and the prior state and parsed only the appended slice,
+    # so the recorded provenance was taken on faith. Found by the
+    # mode-diff debate, cross-vendor lane, round 1. Only the FIRST line
+    # is read: the prefix hash already pins the rest, and re-parsing a
+    # whole cumulative rollout every round would grow without bound.
+    $firstLine = $null
+    try {
+        $reader = New-Object System.IO.StreamReader(
+            $targetFile, (New-Object System.Text.UTF8Encoding($false, $true)))
+        try { $firstLine = $reader.ReadLine() } finally { $reader.Dispose() }
+    } catch {
+        Fail ("the resumed rollout's first record could not be read: " +
+              $_.Exception.Message)
+    }
+    $firstRec = $null
+    try {
+        $firstRec = $firstLine | ConvertFrom-Json
+    } catch {
+        Fail ("the resumed rollout's first record is not parseable JSON, so " +
+              "its session identity was never measured")
+    }
+    # PROVE IT IS AN OBJECT BEFORE READING PROPERTIES. A first line that
+    # is a JSON ARRAY satisfied a check written to prove the line is a
+    # session_meta record, because its properties read straight through.
+    # See Get-JsonObjectLineFault for the host divergence that makes the
+    # obvious type test the wrong instrument.
+    $firstFault = Get-JsonObjectLineFault $firstLine $firstRec
+    if ($firstFault) {
+        Fail ("the resumed rollout's first line " + $firstFault + ", so it " +
+              "is not a session_meta record whatever its properties read as")
+    }
+    if ($firstRec.type -ne "session_meta") {
+        Fail ("the resumed rollout's first record is not a session_meta " +
+              "record, so its session identity was never measured")
+    }
+    if (-not ($firstRec.payload -is [System.Management.Automation.PSCustomObject])) {
+        Fail ("the resumed rollout's first record has no object payload, so " +
+              "the session identity read from it is not one it declares")
+    }
+    $prefixId = [string]$firstRec.payload.id
+    if ($prefixId -ne $expectSessionId) {
+        Fail ("the session id disagrees across sources: session_meta '" +
+              $prefixId + "', prior state '" + $expectSessionId + "'")
+    }
+}
+
+# --------------------------------------------------------------------
+# The brief. Exactly one user record in THIS call's slice must equal the
+# declared brief, and it must be the LAST one: an extra prompt after it
+# means something other than this driver put text in front of the
+# reviewer, and the reply cannot be attributed to the brief alone.
+# --------------------------------------------------------------------
+
+function Get-UserText($record) {
+    # Content elements are joined IN ORDER. The measured sample carried
+    # one-element briefs, so a reader taking content[0] would pass every
+    # observed round and silently drop the tail of any brief the client
+    # chose to split.
+    #
+    # EVERY element must be `input_text` for the record to be a binding
+    # candidate. Hashing only the text elements would bind a record that
+    # also carried something else - wider than the frozen rule, and wider
+    # than anything measured. A non-candidate returns $null and can never
+    # match.
+    $elements = @($record.payload.content)
+    if ($elements.Count -lt 1) { return $null }
+    $sb = New-Object System.Text.StringBuilder
+    foreach ($el in $elements) {
+        # An element that is not an OBJECT reads its `type` through member
+        # enumeration on both hosts, so `-not $el` never saw it. Same
+        # nested-shape class as the payload guard above.
+        if (-not ($el -is [System.Management.Automation.PSCustomObject])) { return $null }
+        if ($el.type -ne "input_text") { return $null }
+        [void]$sb.Append([string]$el.text)
+    }
+    $sb.ToString()
+}
+
+$userRecords = @($records | Where-Object { Test-RecordIsUserMessage $_ })
+
+if ($userRecords.Count -lt 1) {
+    Fail ("this call's slice carries no user record, so there is no recorded " +
+          "prompt to bind the brief to")
+}
+
+# THIS BOUND USED TO BE ARITHMETIC AND THE FIELD FALSIFIED IT.
+# "A resumed slice carries exactly one user record" was earned from three
+# measured rounds of an earlier session. Session 019fcb9a then ran THREE
+# CALLS on 2026-08-04 - one fresh, then two resumes - and its SECOND
+# RESUME carried the client's instructions preamble AND the brief, a
+# preamble identical to the one at that session's own start. The rule
+# BLOCKED a legitimate round. A claim wider than its evidence, inside the
+# tool built to refuse those.
+#
+# The replacement is about IDENTITY, not arithmetic: at most two user
+# records, and a record in front of the brief must be one THIS CLIENT
+# ALREADY EMITTED in this session. Novel text still cannot get in front of
+# the reviewer, which is the whole point, and a re-emitted preamble no
+# longer reads as an attack. Comparing against the session's first user
+# record needs the PREFIX, so the prefix is read only as far as that
+# record - a bounded read near the top of the file, not the cumulative
+# whole.
+if ($Resume) {
+    if ($userRecords.Count -gt 2) {
+        Fail ("a resumed slice may carry at most two user records, the " +
+              "client's instructions preamble and the brief, found " +
+              $userRecords.Count)
+    }
+    if ($userRecords.Count -eq 2) {
+        $prefixPreamble = $null
+        try {
+            $reader = New-Object System.IO.StreamReader(
+                $targetFile, (New-Object System.Text.UTF8Encoding($false, $true)))
+            try {
+                $consumed = 0
+                while ($null -ne ($ln = $reader.ReadLine())) {
+                    # Never read past this call's own slice: the record we
+                    # are looking for is the client's, from before it.
+                    $consumed += [System.Text.Encoding]::UTF8.GetByteCount($ln) + 1
+                    if ($consumed -gt $sliceOffset) { break }
+                    if ($ln.TrimStart($script:JsonWs).StartsWith("{")) {
+                        $cand = $null
+                        try { $cand = $ln | ConvertFrom-Json } catch { $cand = $null }
+                        # THE SAME GATE AS EVERY OTHER LINE. This scan
+                        # parsed and read properties directly, so the
+                        # strictness the rest of the tool had just gained
+                        # stopped at its edge - and this is the record the
+                        # preamble exemption is measured against, which
+                        # makes it the last place to take a line on trust.
+                        if ($null -ne $cand -and
+                            $null -eq (Get-JsonObjectLineFault $ln $cand) -and
+                            (Test-RecordIsUserMessage $cand)) {
+                            $prefixPreamble = Get-UserText $cand
+                            break
+                        }
+                    }
+                }
+            } finally { $reader.Dispose() }
+        } catch {
+            Fail ("the resumed rollout's prefix could not be read to find the " +
+                  "client's own preamble: " + $_.Exception.Message)
+        }
+        $extra = Get-UserText $userRecords[0]
+        if ($null -eq $prefixPreamble -or $null -eq $extra -or
+            (Get-CanonicalSha256 $extra) -ne (Get-CanonicalSha256 $prefixPreamble)) {
+            Fail ("a resumed slice carries a user record in front of the brief " +
+                  "that does not repeat the client's own preamble from this " +
+                  "session, so it is unattributed text in front of the reviewer")
+        }
+    }
+}
+# A FRESH slice carried exactly TWO on every measured round: the client's
+# instructions preamble and the brief. The same argument that earned the
+# resume bound earns this one, and leaving it out was unearned width - an
+# unexplained user record before the brief is unattributed text in front
+# of the reviewer, which is the class this binding exists to refuse.
+if ($Fresh -and $userRecords.Count -ne 2) {
+    Fail ("a fresh slice must carry exactly two user records, the client's" +
+          " instructions preamble and the brief, found " + $userRecords.Count)
+}
+
+$matchIndexes = @()
+for ($i = 0; $i -lt $userRecords.Count; $i++) {
+    $text = Get-UserText $userRecords[$i]
+    if ($null -ne $text -and (Get-CanonicalSha256 $text) -eq $ExpectedBriefSha256) {
+        $matchIndexes += ,$i
+    }
+}
+
+if ($matchIndexes.Count -eq 0) {
+    Fail ("the recorded prompt does not match the declared brief: no user " +
+          "record in this call's slice hashes to " + $ExpectedBriefSha256)
+}
+if ($matchIndexes.Count -gt 1) {
+    Fail ("the brief is ambiguous: " + $matchIndexes.Count + " user records in " +
+          "this call's slice hash to the declared brief")
+}
+if ($matchIndexes[0] -ne ($userRecords.Count - 1)) {
+    Fail ("the brief is not the last user record in this call's slice: " +
+          ($userRecords.Count - 1 - $matchIndexes[0]) +
+          " further user record(s) follow it")
+}
+
+# --------------------------------------------------------------------
+# Clean. nextState is what the NEXT round resumes from, so the boundary
+# is carried forward by the same script that established it.
+# --------------------------------------------------------------------
+
+$next = [ordered]@{
+    kind         = "resume"
+    rolloutFile  = $targetFile
+    sessionId    = $expectSessionId
+    bytes        = $bytes.Length
+    prefixSha256 = (Get-Sha256Hex $bytes 0 $bytes.Length)
+}
+
+Write-Result "clean" $null $next $Json

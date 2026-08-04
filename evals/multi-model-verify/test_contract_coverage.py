@@ -677,6 +677,29 @@ DECLARED_REGIONS = {
     # considers the home trusted" underneath a still-passing pin.
     "home-skill-root-disposition",
     "home-skill-root-disposition-limit",
+    # 0.21.0, backlog item 20. The codex lane never verified that the
+    # brief it sent is the prompt the client recorded, while the backup
+    # lane always did - which is exactly why corruption on this lane
+    # could be silent and corruption on that one could not. Two regions
+    # rather than one because a region must fit a single pin: the CALLS
+    # region holds the fresh and resumed boundaries, the RECORD region
+    # holds the prompt shape and the claim's ceiling.
+    "codex-brief-binding-calls",
+    "codex-brief-binding-record",
+    # 0.21.0, backlog item 21. The mirror copies into a NEW root, so a
+    # destination legal in the source can be illegal in the mirror, and
+    # that failure lands mid-copy leaving a partial tree that reads like
+    # a complete one. One region rather than two: the universe, the
+    # arithmetic, the limit and the three out-of-universe requirements
+    # are one rule, and splitting them is how a reader ends up
+    # measuring files but not directories.
+    "mirror-path-budget",
+    # 0.21.0, backlog item 22. The mirror's two identities, the
+    # construction bridge that ties them together, and the dispatch-time
+    # gate. One region because the bridge is only meaningful beside the
+    # fields it bridges, and the narrowed claim is only honest beside
+    # the fingerprint that backs it.
+    "mirror-identity-gate",
 }
 
 

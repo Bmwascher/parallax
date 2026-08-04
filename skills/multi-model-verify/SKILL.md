@@ -92,6 +92,10 @@ toggled on, its stop-time review overlaps mode `diff` — expected, not a bug.
 
    Clearing it — only on the user's choice, never automatically: run
    `tools/new-review-mirror.ps1 -RepoRoot <repo> -MirrorPath <scratch>`.
+   Build at a SHORT `<scratch>` directly under the temp directory, such
+   as a `kerev<n>` folder, never inside the session scratchpad: the
+   mirror re-roots every path, and the tool refuses before creating
+   anything when the budget is blown.
    It builds the **review mirror** (references/backup-lane.md owns its
    construction, its baseline, and its identity fields — a file copy
    preserving `.git`, NOT a clone), deletes the offending entries THERE,
@@ -226,6 +230,15 @@ toggled on, its stop-time review overlaps mode `diff` — expected, not a bug.
    path serves the previous round's reply and reads exactly like success —
    a reply not freshly written by this round's call is a stale reply, a
    transport failure (fallbacks.md), never a review result.
+   Per-round evidence: bind the reply to the brief THIS side sent with
+   `tools/read-codex-round-evidence.ps1` — `-Fresh` at round 1, `-Resume`
+   after. `-PriorState` is an inventory of the session root captured
+   BEFORE round 1 dispatches, then each later round's `nextState`; a state
+   with a missing field is refused, never assumed empty. A verdict other
+   than clean is class `brief-attribution` (fallbacks.md): the reply is
+   discarded unread. A clean verdict is client-echo evidence — what the
+   client recorded, never what any server received.
+
 3. Later rounds keep the reviewer's state by resuming that session — flags MUST
    precede the resume subcommand (flags after it are a usage error):
 
@@ -234,7 +247,7 @@ toggled on, its stop-time review overlaps mode `diff` — expected, not a bug.
    $seen = ([System.BitConverter]::ToString(([System.Security.Cryptography.SHA256]::Create()).ComputeHash($bytes)) -replace '-', '').ToLower()
    if ($seen -cne "<override-sha256>") { throw "the override file changed after the probe verified it" }
    $override = (New-Object System.Text.UTF8Encoding($false, $true)).GetString($bytes)
-   codex exec --sandbox read-only --disable plugins --disable apps -c $override -m <canonical-model-id> -c model_reasoning_effort=<canonical-effort> --output-last-message <reply-file> resume <SESSION_ID> "<rebuttal-brief>" > <transcript-file> 2>&1
+   Get-Content -Raw <brief-file> | codex exec --sandbox read-only --disable plugins --disable apps -c $override -m <canonical-model-id> -c model_reasoning_effort=<canonical-effort> --output-last-message <reply-file> resume <SESSION_ID> - > <transcript-file> 2>&1
    ```
 
    The preamble repeats in full every round. Rounds are separate shell
@@ -305,6 +318,11 @@ then requires the user's explicitly recorded risk acceptance, never a PASS.
 Before it: the session's final-adjudication step (debate-protocol.md) —
 verify the last round's findings against the repo and issue the terminal
 verdict; a reviewer's PASS/FIX is never terminal by itself.
+
+A PASS is terminal only for the exact head it was issued on. If you apply
+anything the reviewer raised — including observations it labelled
+non-blocking — the head moves and the verdict no longer covers it. Either
+leave them for a follow-up branch, or run one confirming round.
 
 **Mode diff only — record the verdict mechanically.** After the terminal
 verdict, run the attestation emitter from this plugin's checkout:

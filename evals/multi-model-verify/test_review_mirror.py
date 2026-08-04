@@ -90,12 +90,35 @@ def make_clean_repo(tmp_path):
     return repo
 
 
-def run_mirror(repo, mirror, *extra):
+def run_mirror(repo, mirror, *extra, env=None):
+    """`env` carries the build's two TEST SEAMS.
+
+    They are environment variables, not parameters, for the reason the
+    lane-home builder states about its own two: a parameter is public
+    surface on a shipped tool. No shipped caller sets either.
+
+    Each is a BOOLEAN that ORs one extra block condition into a
+    comparison. It cannot supply a value, so it cannot suppress a real
+    measurement, and setting it can only ever ADD a reason to fail.
+    That is what makes the one-way claim structural rather than a
+    property of the value someone happens to pass.
+
+    Two earlier shapes failed that bar and the whole-branch review
+    caught both. The first copied from a different tree and committed
+    into the real source repo. The second INJECTED a value, so a parent
+    that set the variable to the repo's own current HEAD - trivially
+    readable in advance - suppressed the genuine post-copy measurement
+    and turned a build that should have failed into one that passed.
+    """
+    full = None
+    if env:
+        full = dict(os.environ)
+        full.update(env)
     return subprocess.run(
         [ps_host(), "-NoProfile", "-NonInteractive", "-File", str(MIRROR),
          "-RepoRoot", str(repo), "-MirrorPath", str(mirror),
          "-SkipProbe", *extra],
-        capture_output=True, text=True)
+        capture_output=True, text=True, env=full)
 
 
 SKIP_BLOCK = "BLOCKED: no client measurement was made (-SkipProbe)"
@@ -1052,3 +1075,609 @@ def test_a_backslash_bearing_index_entry_stops_the_enumeration():
     out = run_functions(
         '$r = ConvertTo-StatusRecord @("?? caf\\303\\251.txt"); $r.Error')
     assert "cannot handle" in out, out
+
+
+# =====================================================================
+# The path-budget pre-flight (0.21.0, backlog item 21).
+#
+# The mirror is a robocopy of the whole repo into a NEW root. If that
+# root is deep, destinations that were fine in the source exceed what the
+# tool will build, and the failure lands MID-COPY: a partially populated
+# mirror that reads like a real one. The pre-flight moves that refusal to
+# before anything is created.
+#
+# THE UNIVERSE IS FROZEN TEXT, converged by both reviewer lanes: every
+# file and directory destination that the exact robocopy /E operation may
+# create beneath the resolved mirror root, including tracked, untracked,
+# ignored, and all .git content. Two cases below exist because narrower
+# readings are tempting and wrong - a directory with no files in it is
+# still a destination, and .git content is not excluded.
+# =====================================================================
+
+BUDGET = 260
+
+
+def long_mirror(tmp_path):
+    """A mirror root deliberately much LONGER than the source repo root.
+
+    The source has to be creatable or the fixture measures Python's
+    limits instead of the tool's: a destination at 280 characters built
+    from a source root the same length needs a 280-character source,
+    which `mkdir` refuses before the tool ever runs. `make_repo` uses
+    `src`, so this name buys 37 characters of headroom.
+    """
+    return tmp_path / ("mirrorroot" * 4)
+
+
+def deep_child(root, total_len, tail="f.txt"):
+    """A path under `root` whose FULL length is exactly `total_len`,
+    built from nested directories so no single component is
+    unreasonable."""
+    room = total_len - len(str(root)) - 1 - len(tail)
+    assert room >= 2, "root already too long for this case"
+    parts = []
+    while room > 31:
+        parts.append("d" * 29)
+        room -= 30
+    parts.append("d" * (room - 1))
+    return root.joinpath(*parts) / tail
+
+
+def budget_error(proc):
+    """The BUDGET refusal line, or None.
+
+    Matches the full phrase, not the words "path budget": the
+    unenumerable-path refusal says "the path budget was never measured",
+    so a looser match let three cases below accept an enumeration block
+    as a budget refusal. Found by the Fable review of this task.
+    """
+    for line in proc.stdout.splitlines():
+        if "path budget exceeded" in line.lower():
+            return line
+    return None
+
+
+def test_a_mirror_just_under_the_budget_builds(tmp_path):
+    """The positive control. Without it every refusal below is satisfied
+    by a tool that refuses everything."""
+    repo = make_repo(tmp_path)
+    mirror = long_mirror(tmp_path)
+    target = deep_child(mirror, BUDGET - 1)
+    src = repo / target.relative_to(mirror)
+    src.parent.mkdir(parents=True)
+    src.write_text("deep but legal\n")
+    proc = run_mirror(repo, mirror)
+    assert_built(proc)
+    assert target.exists(), "a path one under the budget must be copied"
+
+
+def test_a_mirror_at_the_budget_is_refused(tmp_path):
+    repo = make_repo(tmp_path)
+    mirror = long_mirror(tmp_path)
+    src = repo / deep_child(mirror, BUDGET).relative_to(mirror)
+    src.parent.mkdir(parents=True)
+    src.write_text("exactly at the limit\n")
+    proc = run_mirror(repo, mirror)
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert budget_error(proc), proc.stdout
+
+
+def test_the_refusal_names_every_number_it_used(tmp_path):
+    """A refusal an operator cannot act on is a refusal they will
+    override. It must show the root length, the deepest relative path
+    length, their sum, and the limit."""
+    repo = make_repo(tmp_path)
+    mirror = long_mirror(tmp_path)
+    deepest = deep_child(mirror, BUDGET + 20)
+    src = repo / deepest.relative_to(mirror)
+    src.parent.mkdir(parents=True)
+    src.write_text("over\n")
+    proc = run_mirror(repo, mirror)
+    line = budget_error(proc)
+    assert line, proc.stdout
+    assert str(len(str(mirror))) in line, ("mirror-root length missing", line)
+    assert str(len(str(deepest.relative_to(mirror)))) in line, (
+        "deepest relative path length missing", line)
+    assert str(BUDGET + 20) in line, ("the sum missing", line)
+    assert str(BUDGET) in line, ("the limit missing", line)
+
+
+def test_the_mirror_does_not_exist_after_a_refusal(tmp_path):
+    """The whole point of a PRE-flight. A refusal that leaves a directory
+    behind has already done part of the thing it refused to do."""
+    repo = make_repo(tmp_path)
+    mirror = long_mirror(tmp_path)
+    src = repo / deep_child(mirror, BUDGET + 5).relative_to(mirror)
+    src.parent.mkdir(parents=True)
+    src.write_text("over\n")
+    proc = run_mirror(repo, mirror)
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert not mirror.exists(), "the pre-flight ran after creating the root"
+
+
+def test_an_over_budget_directory_with_no_files_is_refused(tmp_path):
+    """A DIRECTORY is a destination robocopy /E creates. Measuring only
+    files reads this repo as fine and then fails mid-copy."""
+    repo = make_repo(tmp_path)
+    mirror = long_mirror(tmp_path)
+    d = repo / deep_child(mirror, BUDGET + 8, tail="leafdir").relative_to(mirror)
+    d.mkdir(parents=True)
+    proc = run_mirror(repo, mirror)
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert budget_error(proc), proc.stdout
+
+
+def test_an_over_budget_path_under_dot_git_is_refused(tmp_path):
+    """.git is copied, so .git counts. Skipping it is the narrower
+    universe the frozen sentence rules out."""
+    repo = make_repo(tmp_path)
+    mirror = long_mirror(tmp_path)
+    rel = deep_child(mirror / ".git", BUDGET + 8).relative_to(mirror / ".git")
+    src = repo / ".git" / rel
+    src.parent.mkdir(parents=True)
+    src.write_text("git internals are destinations too\n")
+    proc = run_mirror(repo, mirror)
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert budget_error(proc), proc.stdout
+
+
+def test_an_over_budget_override_path_is_refused(tmp_path):
+    """-OverrideOut is written BESIDE the mirror by this tool, not by
+    robocopy, so the copy universe never covers it. It gets its own
+    check or it gets none."""
+    repo = make_repo(tmp_path)
+    mirror = long_mirror(tmp_path)
+    override = deep_child(tmp_path, BUDGET + 4, tail="o.txt")
+    # Deliberately NOT created. Windows caps directory creation at 248
+    # characters, so a fixture that built this parent would measure
+    # `mkdir`'s limit instead of the tool's, and the check under test
+    # runs on the resolved string before anything touches disk.
+    proc = run_mirror(repo, mirror, "-OverrideOut", str(override))
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert budget_error(proc), proc.stdout
+    assert not mirror.exists()
+
+
+def test_a_source_directory_link_is_followed_not_refused(tmp_path):
+    """The enumerator matches the copy, which follows the link.
+
+    `robocopy /E` with neither /XJ nor /SL writes the TARGET'S CONTENTS as
+    an ordinary directory at the link's relative path. Refusing to measure
+    across one described a smaller universe than the copy produces, and
+    blocked every repo that links a reference clone or a shared skills
+    directory into its tree.
+    """
+    repo = make_repo(tmp_path)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "x.txt").write_text("linked\n")
+    link = repo / "linked"
+    rc = subprocess.run(["cmd", "/c", "mklink", "/J", str(link), str(outside)],
+                        capture_output=True, text=True)
+    if rc.returncode != 0:
+        pytest.skip("junction creation unavailable: " + rc.stderr)
+    mirror = long_mirror(tmp_path)
+    proc = run_mirror(repo, mirror)
+    # -SkipProbe builds the mirror and then verifies nothing, so exit 1
+    # with the skip block IS the successful-build outcome here.
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert SKIP_BLOCK in proc.stdout, proc.stdout
+    copied = mirror / "linked" / "x.txt"
+    assert copied.exists(), proc.stdout
+    assert copied.read_text() == "linked\n"
+    # The copy flattens the link. Asserting this is what proves the walk
+    # and the copy share one universe rather than two that happen to agree
+    # on a file count.
+    assert not (mirror / "linked").is_symlink()
+
+
+def test_a_link_pointing_at_its_own_ancestor_is_refused(tmp_path):
+    """The one case the copy cannot survive.
+
+    robocopy has no cycle detection, so a link onto one of its own
+    ancestors makes both the walk and the copy unbounded.
+    """
+    repo = make_repo(tmp_path)
+    link = repo / "self"
+    rc = subprocess.run(["cmd", "/c", "mklink", "/J", str(link), str(repo)],
+                        capture_output=True, text=True)
+    if rc.returncode != 0:
+        pytest.skip("junction creation unavailable: " + rc.stderr)
+    mirror = long_mirror(tmp_path)
+    proc = run_mirror(repo, mirror)
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "never terminate" in proc.stdout.lower(), proc.stdout
+    assert not mirror.exists()
+
+
+def test_two_links_onto_one_target_are_refused(tmp_path):
+    """Not a cycle, but indistinguishable from one without walking the
+    whole graph. Refusing is the direction that cannot mismeasure."""
+    repo = make_repo(tmp_path)
+    outside = tmp_path / "shared"
+    outside.mkdir()
+    (outside / "x.txt").write_text("shared\n")
+    for name in ("one", "two"):
+        rc = subprocess.run(
+            ["cmd", "/c", "mklink", "/J", str(repo / name), str(outside)],
+            capture_output=True, text=True)
+        if rc.returncode != 0:
+            pytest.skip("junction creation unavailable: " + rc.stderr)
+    mirror = long_mirror(tmp_path)
+    proc = run_mirror(repo, mirror)
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "links overlap" in proc.stdout.lower(), proc.stdout
+    assert not mirror.exists()
+
+
+def test_an_unreadable_source_path_blocks_rather_than_skips(tmp_path):
+    """Hole semantics, the rule the manifest builder already states: a
+    path that cannot be measured is not a path known to fit."""
+    repo = make_repo(tmp_path)
+    locked = repo / "locked"
+    locked.mkdir()
+    (locked / "inner.txt").write_text("x\n")
+    user = os.environ.get("USERNAME") or ""
+    if not user:
+        pytest.skip("USERNAME not set; cannot build a deny ACE")
+    # DENY LIST-DIRECTORY ONLY, never (RX).
+    #
+    # (RX) also denies ReadPermissions, and an explicit deny is evaluated
+    # before the owner's implicit READ_CONTROL/WRITE_DAC. Measured
+    # 2026-08-03: the ACE then cannot be read or removed, the directory
+    # cannot be deleted, and the fixture leaks a permanently
+    # undeletable tree into the temp directory on every run. (RD) blocks
+    # the enumeration this case needs and leaves the ACE removable.
+    deny = subprocess.run(
+        ["icacls", str(locked), "/deny", user + ":(OI)(CI)(RD)"],
+        capture_output=True, text=True)
+    if deny.returncode != 0:
+        pytest.skip("icacls deny unavailable: " + deny.stdout + deny.stderr)
+    try:
+        mirror = long_mirror(tmp_path)
+        proc = run_mirror(repo, mirror)
+        assert proc.returncode == 2, proc.stdout + proc.stderr
+        assert "could not be enumerated" in proc.stdout.lower(), proc.stdout
+        assert not mirror.exists()
+    finally:
+        undo = subprocess.run(["icacls", str(locked), "/remove:d", user],
+                              capture_output=True, text=True)
+        # Asserted, not fire-and-forget. A cleanup that silently failed is
+        # how the first version of this case leaked.
+        assert undo.returncode == 0, undo.stdout + undo.stderr
+        assert (locked / "inner.txt").exists(), "the deny ACE is still in force"
+
+
+def test_a_repo_root_that_is_itself_a_reparse_point_is_refused(tmp_path):
+    """The root is a source path too.
+
+    Checking only entries BELOW it leaves the one reparse point most
+    likely to exist unmeasured, and this machine really does use
+    junctions for lane homes. The contract clause says "a source reparse
+    point", with no exemption for the root.
+    """
+    real = make_repo(tmp_path)
+    link = tmp_path / "viarepo"
+    rc = subprocess.run(["cmd", "/c", "mklink", "/J", str(link), str(real)],
+                        capture_output=True, text=True)
+    if rc.returncode != 0:
+        pytest.skip("junction creation unavailable: " + rc.stderr)
+    mirror = long_mirror(tmp_path)
+    proc = run_mirror(link, mirror)
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "reparse" in proc.stdout.lower(), proc.stdout
+    assert not mirror.exists()
+
+
+# =====================================================================
+# Mirror identity and the staleness gate (0.21.0, backlog item 22).
+#
+# THE SIX-STEP CONSTRUCTION BRIDGE, frozen by both reviewer lanes:
+#   1. capture source_head_before
+#   2. copy the tree
+#   3. require the live source HEAD still equals source_head_before
+#   4. before remediation, require the copied mirror HEAD equals it
+#   5. remediate, then record mirror_head
+#   6. before every dispatch, compare live source HEAD to source_head and
+#      live mirror HEAD to mirror_head
+#
+# STEPS 3 AND 4 ARE THE BRIDGE, and they are the whole point. Without
+# them the record can hold two individually valid SHAs while nothing
+# proves the mirror was built FROM the recorded source commit - two true
+# facts arranged to look like one.
+#
+# THE CLAIM IS NARROW, deliberately: the two-HEAD gate proves
+# committed-HEAD freshness. Non-HEAD inputs are bound in the manifest at
+# CONSTRUCTION TIME, and source-side changes after construction are
+# caught by the source-status comparison, not by the HEADs. An edit to an
+# ignored review input moves neither HEAD, and ignored inputs are exactly
+# the content class the mirror exists to carry.
+# =====================================================================
+
+
+def _force_remove(func, path, _exc):
+    """git marks its object files read-only, so a plain rmtree of a
+    mirror raises PermissionError on Windows before it reaches the
+    condition under test."""
+    os.chmod(path, 0o700)
+    func(path)
+
+
+def record_field(stdout, name):
+    """One scalar field of the construction record, or None."""
+    for line in stdout.splitlines():
+        if line.startswith(name + ": "):
+            return line[len(name) + 2:].strip()
+    return None
+
+
+def build_and_read(repo, mirror):
+    proc = run_mirror(repo, mirror)
+    assert_built(proc)
+    return proc, {
+        "source_head": record_field(proc.stdout, "source_head"),
+        "mirror_head": record_field(proc.stdout, "mirror_head"),
+        "source_status_sha256": record_field(proc.stdout,
+                                             "source_status_sha256"),
+    }
+
+
+def run_verify(repo, mirror, ident, **override):
+    fields = dict(ident)
+    fields.update(override)
+    return subprocess.run(
+        [ps_host(), "-NoProfile", "-NonInteractive", "-File", str(MIRROR),
+         "-VerifyIdentity", "-RepoRoot", str(repo), "-MirrorPath", str(mirror),
+         "-SourceHead", str(fields["source_head"]),
+         "-MirrorHead", str(fields["mirror_head"]),
+         "-SourceStatusSha256", str(fields["source_status_sha256"])],
+        capture_output=True, text=True)
+
+
+# --- construction: the record carries both identities ----------------
+
+def test_the_record_carries_both_heads_and_the_source_status_hash(tmp_path):
+    """The positive control for construction.
+
+    `mirror_head` differs from `source_head` whenever remediation
+    committed, which is the ordinary case for a repo carrying a tracked
+    back-channel - so the two fields are not interchangeable and a
+    record printing one twice would be wrong in the common case.
+    """
+    repo = make_repo(tmp_path)
+    proc, ident = build_and_read(repo, tmp_path / "mirror")
+    assert ident["source_head"], proc.stdout
+    assert ident["mirror_head"], proc.stdout
+    assert len(ident["source_status_sha256"]) == 64, proc.stdout
+    assert ident["source_head"] == git(repo, "rev-parse", "HEAD").strip()
+
+
+def test_remediation_moves_mirror_head_away_from_source_head(tmp_path):
+    repo = make_repo(tmp_path)
+    (repo / "AGENTS.md").write_text("# planted\n")
+    git(repo, "add", "AGENTS.md")
+    commit(repo, "plant")
+    proc, ident = build_and_read(repo, tmp_path / "mirror")
+    assert ident["source_head"] != ident["mirror_head"], (
+        "remediation committed, so the two identities must differ; a "
+        "record that reported one for both would hide the commit")
+
+
+def test_a_mirror_not_built_from_this_source_blocks_at_step_four(tmp_path):
+    """The bridge itself.
+
+    A pre-existing directory at the mirror path holding a DIFFERENT
+    repository is replaced by -Force, so this case plants the foreign
+    repo and passes -Force: what it checks is that step 4 compares the
+    COPIED tree's HEAD against the captured source HEAD rather than
+    trusting that the copy happened.
+    """
+    repo = make_repo(tmp_path)
+    other = make_clean_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    del other
+    proc = run_mirror(repo, mirror,
+                      env={"PARALLAX_MIRROR_SEAM_FAIL_COPIED_HEAD": "1"})
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "was not built from" in proc.stdout.lower(), proc.stdout
+
+
+def test_a_source_head_that_moves_during_construction_blocks(tmp_path):
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    proc = run_mirror(repo, mirror,
+                      env={"PARALLAX_MIRROR_SEAM_FAIL_SOURCE_STABLE": "1"})
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "moved during construction" in proc.stdout.lower(), proc.stdout
+
+
+# --- dispatch: the staleness gate ------------------------------------
+
+def test_a_clean_dispatch_passes(tmp_path):
+    """The other positive control. Without it every block below is
+    satisfied by a gate that blocks everything."""
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    _, ident = build_and_read(repo, mirror)
+    proc = run_verify(repo, mirror, ident)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+
+
+def test_a_source_head_that_moved_blocks_the_dispatch(tmp_path):
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    _, ident = build_and_read(repo, mirror)
+    (repo / "new.txt").write_text("later work\n")
+    git(repo, "add", "new.txt")
+    commit(repo, "source moved on")
+    proc = run_verify(repo, mirror, ident)
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "source head" in proc.stdout.lower(), proc.stdout
+
+
+def test_a_tampered_mirror_head_blocks_the_dispatch(tmp_path):
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    _, ident = build_and_read(repo, mirror)
+    (mirror / "sneak.txt").write_text("added inside the mirror\n")
+    git(mirror, "add", "sneak.txt")
+    commit(mirror, "tamper")
+    proc = run_verify(repo, mirror, ident)
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "mirror head" in proc.stdout.lower(), proc.stdout
+
+
+def test_source_drift_in_an_ignored_file_blocks_the_dispatch(tmp_path):
+    """The case the two-HEAD gate CANNOT see, and the reason the source
+    status is captured at all.
+
+    An edit to an ignored review input moves neither HEAD. Ignored
+    content is precisely what the mirror exists to carry, so leaving
+    this undetected would be a hole in the middle of the feature.
+    """
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    _, ident = build_and_read(repo, mirror)
+    (repo / "ignored" / "secret.txt").write_text("edited after the copy\n")
+    proc = run_verify(repo, mirror, ident)
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "source status" in proc.stdout.lower(), proc.stdout
+
+
+def test_source_drift_in_an_untracked_file_blocks_the_dispatch(tmp_path):
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    _, ident = build_and_read(repo, mirror)
+    (repo / "brand-new-input.txt").write_text("appeared after the copy\n")
+    proc = run_verify(repo, mirror, ident)
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "source status" in proc.stdout.lower(), proc.stdout
+
+
+def test_a_missing_identity_field_blocks_the_dispatch(tmp_path):
+    """An identity that was never recorded is not an identity that
+    matched. Empty must never read as agreement."""
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    _, ident = build_and_read(repo, mirror)
+    for field in ("source_head", "mirror_head", "source_status_sha256"):
+        proc = run_verify(repo, mirror, ident, **{field: ""})
+        assert proc.returncode == 1, (field, proc.stdout + proc.stderr)
+
+
+def test_an_unreadable_mirror_blocks_the_dispatch(tmp_path):
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    _, ident = build_and_read(repo, mirror)
+    shutil.rmtree(mirror, onerror=_force_remove)
+    proc = run_verify(repo, mirror, ident)
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+
+
+
+def test_an_unreadable_source_input_is_named_not_silently_hashed(tmp_path):
+    """An unmeasured file must be REPORTED, never given another file's
+    hash.
+
+    Measured on both hosts 2026-08-04: a failed
+    `[IO.File]::ReadAllBytes` is NON-terminating, so the loop variable
+    keeps the PREVIOUS file's bytes and the manifest records that hash
+    for the file it could not read. Deterministic, so the wrong value
+    reproduces on every later run.
+
+    SCOPE, stated narrowly because the Fable review's version of this
+    finding was wider than what is reachable: an unreadable file present
+    at CONSTRUCTION cannot produce a clean build, because robocopy fails
+    with exit 9 and the build stops before any of this. So no false-clean
+    identity was reachable. What was reachable, and is what this case
+    pins, is a verify-time read failure being reported as ordinary DRIFT
+    rather than as a measurement that could not be made.
+    """
+    repo = make_repo(tmp_path)
+    (repo / "aaa.txt").write_text("readable, sorts first\n")
+    denied = repo / "bbb.txt"
+    denied.write_text("this one will not be readable\n")
+    mirror = tmp_path / "mirror"
+    _, ident = build_and_read(repo, mirror)
+    user = os.environ.get("USERNAME") or ""
+    if not user:
+        pytest.skip("USERNAME not set; cannot build a deny ACE")
+    deny = subprocess.run(["icacls", str(denied), "/deny", user + ":(RD)"],
+                          capture_output=True, text=True)
+    if deny.returncode != 0:
+        pytest.skip("icacls deny unavailable: " + deny.stdout + deny.stderr)
+    try:
+        proc = run_verify(repo, mirror, ident)
+        assert proc.returncode == 1, proc.stdout + proc.stderr
+        assert "could not be read" in proc.stdout.lower(), (
+            "an unreadable input must be named as unreadable, not "
+            "reported as drift: " + proc.stdout)
+    finally:
+        undo = subprocess.run(["icacls", str(denied), "/remove:d", user],
+                              capture_output=True, text=True)
+        assert undo.returncode == 0, undo.stdout + undo.stderr
+        assert denied.read_text(), "the deny ACE is still in force"
+
+
+def test_the_seams_cannot_supply_a_value(tmp_path):
+    """The one-way property, asserted rather than argued.
+
+    Each seam is a boolean. Setting it to the string a value-injecting
+    seam would have accepted - a real commit id - still BLOCKS, because
+    the flag is read for presence and never for content. A seam that
+    took its value from the environment could be handed the repo's own
+    HEAD and would then hide a genuine mismatch.
+    """
+    repo = make_repo(tmp_path)
+    real_head = git(repo, "rev-parse", "HEAD").strip()
+    # The REASON, not the exit code. -SkipProbe also exits 1, so a bare
+    # code assertion passes against a seam that was silently ignored -
+    # which is exactly what the value-injecting version did here.
+    for var, needle in (
+            ("PARALLAX_MIRROR_SEAM_FAIL_SOURCE_STABLE",
+             "moved during construction"),
+            ("PARALLAX_MIRROR_SEAM_FAIL_COPIED_HEAD",
+             "was not built from")):
+        proc = run_mirror(repo, tmp_path / ("m-" + var[-6:]),
+                          env={var: real_head})
+        assert proc.returncode == 1, (var, proc.stdout + proc.stderr)
+        assert needle in proc.stdout.lower(), (var, proc.stdout)
+
+
+def test_a_relative_symlink_cycle_is_refused(tmp_path):
+    """Round 4 of the mode-diff debate, and it is the folded-in commit's
+    own defect rather than this branch's.
+
+    The reparse walk resolved a link target with one-argument
+    `GetFullPath`, which normalizes against the PROCESS working
+    directory. A JUNCTION always stores an absolute target, so every
+    test written for this feature passed; a SYMBOLIC LINK may store a
+    relative one, and that resolved to wherever the script happened to be
+    invoked from. Two distinct relative targets could then compare equal
+    and read as a repeat, and a genuine self-cycle could compare against
+    the wrong absolute path and be missed entirely.
+
+    NOT WATCHED TO FAIL LOCALLY, and the record says so rather than
+    implying otherwise: this machine refuses symbolic-link creation
+    without elevation, so this case first executes on the Windows CI
+    runners. The FIX rests on the measurement in
+    `new-review-mirror.ps1`'s comment and on reading the resolution, not
+    on a local red-to-green.
+    """
+    repo = make_repo(tmp_path)
+    link = repo / "selflink"
+    rc = subprocess.run(
+        ["cmd", "/c", "mklink", "/D", str(link), "."],
+        capture_output=True, text=True)
+    if rc.returncode != 0:
+        pytest.skip("symbolic-link creation unavailable: " + rc.stderr)
+    mirror = long_mirror(tmp_path)
+    proc = run_mirror(repo, mirror)
+    assert proc.returncode == 2, (proc.returncode, proc.stdout, proc.stderr)
+    # The refusal's own words. This asserted "cycle" until the confirming
+    # round read it against the message, which says "would never
+    # terminate" and never uses that word - so the oracle would have
+    # failed the first time a runner permitted symbolic links, and the
+    # local skip was hiding it. A test that cannot run is exactly the
+    # test whose assertion nobody has checked.
+    assert "would never terminate" in proc.stdout, proc.stdout

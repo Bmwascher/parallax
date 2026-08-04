@@ -16,13 +16,42 @@
 #
 # Exit codes: 0 built and clean, 1 blocked (reason on stdout), 2 script or
 # environment error.
+# TWO MODES. Build constructs the mirror and prints the record. Verify
+# re-checks that record against the live source and the live mirror
+# immediately before a dispatch, which is step 6 of the construction
+# bridge: the two-HEAD gate is worthless if it is only ever evaluated at
+# the moment the mirror is made.
+#
+#   Build:  -RepoRoot <src> -MirrorPath <dst> [-OverrideOut <p>] [-Force]
+#           [-SkipProbe] [-CodexCommand <exe>]
+#   Verify: -VerifyIdentity -RepoRoot <src> -MirrorPath <dst>
+#           -SourceHead <sha> -MirrorHead <sha> -SourceStatusSha256 <hex>
+#
+# The identity values are passed as ARGUMENTS rather than re-read from a
+# file the build wrote, for the reason the codex brief binding states
+# about its own expected hash: a file re-read later is mutable and would
+# silently redefine the value it is supposed to pin.
 param(
-    [Parameter(Mandatory = $true)][string]$RepoRoot,
-    [Parameter(Mandatory = $true)][string]$MirrorPath,
-    [string]$OverrideOut,
-    [switch]$Force,
-    [switch]$SkipProbe,
-    [string]$CodexCommand = "codex"
+    [Parameter(ParameterSetName = "Verify", Mandatory = $true)]
+    [switch]$VerifyIdentity,
+    [Parameter(ParameterSetName = "Verify", Mandatory = $true)]
+    [AllowEmptyString()][string]$SourceHead,
+    [Parameter(ParameterSetName = "Verify", Mandatory = $true)]
+    [AllowEmptyString()][string]$MirrorHead,
+    [Parameter(ParameterSetName = "Verify", Mandatory = $true)]
+    [AllowEmptyString()][string]$SourceStatusSha256,
+
+    [Parameter(ParameterSetName = "Build", Mandatory = $true)]
+    [Parameter(ParameterSetName = "Verify", Mandatory = $true)]
+    [string]$RepoRoot,
+    [Parameter(ParameterSetName = "Build", Mandatory = $true)]
+    [Parameter(ParameterSetName = "Verify", Mandatory = $true)]
+    [string]$MirrorPath,
+
+    [Parameter(ParameterSetName = "Build")][string]$OverrideOut,
+    [Parameter(ParameterSetName = "Build")][switch]$Force,
+    [Parameter(ParameterSetName = "Build")][switch]$SkipProbe,
+    [Parameter(ParameterSetName = "Build")][string]$CodexCommand = "codex"
 )
 
 # This script decodes git's pathnames as STRICT UTF-8 and refuses to guess
@@ -422,7 +451,17 @@ function Get-ContentManifest($repo, $paths) {
     foreach ($p in $paths) {
         $full = Join-Path $repo $p
         if (Test-Path $full -PathType Container) {
-            $found = Get-ChildItem -LiteralPath $full -Recurse -File -Force
+            # -Stop, never the default: a swallowed enumeration error
+            # omits every file under an unreadable subdirectory and the
+            # manifest then reads as coverage of a tree it never saw.
+            $found = $null
+            try {
+                $found = Get-ChildItem -LiteralPath $full -Recurse -File `
+                    -Force -ErrorAction Stop
+            } catch {
+                return @{ Error = ("'" + $p + "' could not be enumerated: " +
+                                   $_.Exception.Message) }
+            }
             foreach ($f in $found) {
                 $rel = $f.FullName.Substring($repo.Length + 1)
                 [void]$files.Add($rel.Replace("\", "/"))
@@ -440,11 +479,72 @@ function Get-ContentManifest($repo, $paths) {
     $sha = [System.Security.Cryptography.SHA256]::Create()
     $out = New-Object System.Collections.ArrayList
     foreach ($rel in $unique) {
-        $bytes = [System.IO.File]::ReadAllBytes((Join-Path $repo $rel))
+        # A failed ReadAllBytes is NON-TERMINATING on both hosts
+        # (measured 2026-08-04), so without this catch $bytes keeps the
+        # PREVIOUS file's contents and this line records that hash for
+        # the file it could not read - deterministically, so the wrong
+        # value reproduces on every later run. Evidence that quietly
+        # names the wrong bytes is worse than no evidence.
+        $bytes = $null
+        try {
+            $bytes = [System.IO.File]::ReadAllBytes((Join-Path $repo $rel))
+        } catch {
+            $sha.Dispose()
+            return @{ Error = ("'" + $rel + "' could not be read: " +
+                               $_.Exception.Message) }
+        }
         $hex = ([System.BitConverter]::ToString($sha.ComputeHash($bytes)) -replace '-', '').ToLower()
         [void]$out.Add($rel + " " + $hex)
     }
     return @{ Paths = @($out) }
+}
+
+function Get-HeadSha($repo) {
+    # @{Ok=$true; Sha=..} or @{Ok=$false; Reason=..}. Structured for the
+    # same reason every other capture here is: a bare empty string cannot
+    # be told apart from a failed read, and an unread HEAD must never
+    # compare equal to anything.
+    $out = (& git -C $repo rev-parse HEAD 2>$null | Out-String).Trim()
+    if (($LASTEXITCODE -ne 0) -or -not $out) {
+        return @{ Ok = $false; Reason = "could not resolve HEAD in $repo" }
+    }
+    return @{ Ok = $true; Sha = $out }
+}
+
+function Get-StatusSha256($repo) {
+    # The source's non-HEAD fingerprint: the SAME status capture the
+    # mirror already uses, PLUS the content manifest of the paths that
+    # status names. Fields are joined on NUL, the separator git already
+    # emitted them with, so no field value can forge a boundary.
+    #
+    # THE CONTENT HALF IS NOT OPTIONAL, and measured 2026-08-04 rather
+    # than assumed: editing an already-ignored file leaves the status
+    # listing byte-identical, so a status-only fingerprint verified clean
+    # across exactly the drift this check exists to catch. Status alone
+    # sees a path APPEAR or DISAPPEAR or change code; it does not see the
+    # bytes behind it change, and the bytes are the review input.
+    $captured = Get-BaselineRaw $repo
+    if (-not $captured.Ok) {
+        return @{ Ok = $false; Reason = $captured.Reason }
+    }
+    $parsedStatus = ConvertTo-StatusRecord $captured.Fields
+    if ($parsedStatus.ContainsKey("Error")) {
+        return @{ Ok = $false; Reason = $parsedStatus.Error }
+    }
+    $subj = Get-ManifestSubject $parsedStatus.Records
+    if ($subj.ContainsKey("Error")) {
+        return @{ Ok = $false; Reason = $subj.Error }
+    }
+    $content = Get-ContentManifest $repo $subj.Paths
+    if ($content.ContainsKey("Error")) {
+        return @{ Ok = $false; Reason = $content.Error }
+    }
+    $joined = ((@($captured.Fields) + @($content.Paths)) -join "`0")
+    $bytes = [System.Text.Encoding]::UTF8.GetBytes($joined)
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try { $digest = $sha.ComputeHash($bytes) } finally { $sha.Dispose() }
+    return @{ Ok = $true
+              Sha = (($digest | ForEach-Object { $_.ToString("x2") }) -join "") }
 }
 
 $toplevel = $true
@@ -454,6 +554,105 @@ if (-not (Test-Path $RepoRoot)) {
     exit 2
 }
 $RepoRoot = (Resolve-Path $RepoRoot).Path
+
+# ---------------------------------------------------------------------
+# VERIFY MODE - step 6 of the construction bridge, run immediately before
+# every fresh and resumed dispatch.
+#
+# WHAT IT PROVES, narrowly: the two-HEAD gate proves committed-HEAD
+# freshness. Non-HEAD inputs are bound in the constructed mirror's
+# manifest AT CONSTRUCTION TIME, and source-side changes after
+# construction are detected by the source-status comparison here WHEN
+# THEY ARE VISIBLE TO IT: changes that move the status listing, or that
+# alter the content of a path the listing names. A tracked file git
+# reports CLEAN is in neither, so a raw-byte change surviving the clean
+# filter unchanged moves neither HEAD nor this fingerprint and is NOT
+# covered. The contract region carries the same qualification; this
+# comment said "are detected" flat until round 3 of the mode-diff debate
+# pointed out that the code and the contract had drifted apart again,
+# in the direction of the code claiming more.
+#
+# The status comparison is not decoration. An edit to an untracked or
+# ignored review input moves NEITHER head, and that content class is
+# precisely what the mirror exists to carry, so a gate built only on
+# HEADs would be blind in the middle of the feature.
+# ---------------------------------------------------------------------
+if ($VerifyIdentity) {
+    # Resolve THROUGH THE PROVIDER here too. Build does this below and
+    # verify did not, so a relative -MirrorPath resolved against the
+    # process location for Test-Path and against the provider location
+    # for git - the same divergence this file's own history block calls
+    # an ordinary PowerShell condition. Verify only reads, so the
+    # realistic failure was a spurious block rather than a wrong pass,
+    # but a tool should not teach one lesson in one mode and forget it
+    # in the other.
+    $MirrorPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($MirrorPath)
+    $shaRx = '^[0-9a-f]{40}$'
+    if ($SourceHead -cnotmatch $shaRx) {
+        Write-Output ("BLOCKED: the recorded source head is missing or not a" +
+            " commit id, so nothing was compared")
+        exit 1
+    }
+    if ($MirrorHead -cnotmatch $shaRx) {
+        Write-Output ("BLOCKED: the recorded mirror head is missing or not a" +
+            " commit id, so nothing was compared")
+        exit 1
+    }
+    if ($SourceStatusSha256 -cnotmatch '^[0-9a-f]{64}$') {
+        Write-Output ("BLOCKED: the recorded source status hash is missing or" +
+            " malformed, so nothing was compared")
+        exit 1
+    }
+    if (-not (Test-Path -LiteralPath $MirrorPath -PathType Container)) {
+        Write-Output ("BLOCKED: the mirror at $MirrorPath is gone, so its" +
+            " identity could not be measured")
+        exit 1
+    }
+
+    $liveSource = Get-HeadSha $RepoRoot
+    if (-not $liveSource.Ok) {
+        Write-Output ("BLOCKED: " + $liveSource.Reason + " - an unread source" +
+            " head is never a matching one")
+        exit 1
+    }
+    if ($liveSource.Sha -ne $SourceHead) {
+        Write-Output ("BLOCKED: the source head moved since construction" +
+            " (recorded " + $SourceHead + ", live " + $liveSource.Sha +
+            ") - rebuild the mirror")
+        exit 1
+    }
+
+    $liveMirror = Get-HeadSha $MirrorPath
+    if (-not $liveMirror.Ok) {
+        Write-Output ("BLOCKED: " + $liveMirror.Reason + " - an unread mirror" +
+            " head is never a matching one")
+        exit 1
+    }
+    if ($liveMirror.Sha -ne $MirrorHead) {
+        Write-Output ("BLOCKED: the mirror head changed since construction" +
+            " (recorded " + $MirrorHead + ", live " + $liveMirror.Sha +
+            ") - something wrote into the mirror")
+        exit 1
+    }
+
+    $liveStatus = Get-StatusSha256 $RepoRoot
+    if (-not $liveStatus.Ok) {
+        Write-Output ("BLOCKED: the source status could not be captured (" +
+            $liveStatus.Reason + ") - an unmade measurement is never a clean" +
+            " one")
+        exit 1
+    }
+    if ($liveStatus.Sha -ne $SourceStatusSha256) {
+        Write-Output ("BLOCKED: the source status changed since construction" +
+            " - a tracked, untracked or ignored review input moved without" +
+            " moving either head, so the mirror no longer carries what the" +
+            " source holds. Rebuild the mirror.")
+        exit 1
+    }
+
+    Write-Output "identity: verified"
+    exit 0
+}
 
 # RESOLVE ONCE, THROUGH THE PROVIDER, BEFORE ANY GUARD. An earlier
 # revision guarded `[IO.Path]::GetFullPath($MirrorPath)`, which resolves a
@@ -520,6 +719,213 @@ if (Test-Path $OverrideOut) {
     exit 2
 }
 
+# ---------------------------------------------------------------------
+# PATH BUDGET PRE-FLIGHT. Runs here, after the overlap and override
+# guards and BEFORE anything is created or deleted, because the failure
+# it prevents is a MID-COPY one: robocopy stops at the first destination
+# it cannot create, leaving a partially populated mirror that reads
+# exactly like a complete one.
+#
+# THE UNIVERSE, frozen text: every file and directory destination that
+# the exact `robocopy /E` operation may create beneath the resolved
+# mirror root, including tracked, untracked, ignored, and all `.git`
+# content. Two consequences that narrower readings get wrong - a
+# directory with no files in it is still a destination, and `.git` is
+# copied so `.git` counts.
+#
+# THE LIMIT is 260 characters as a conservative policy across both
+# supported PowerShell hosts. It is a deterministic refusal threshold,
+# not a claim about the maximum any host, API, OS configuration, or
+# downstream client could support.
+#
+# THE ARITHMETIC is resolved mirror-root length, plus separator, plus
+# the relative destination path length.
+$PathBudget = 260
+$budgetRoot = $MirrorPath.TrimEnd("\", "/")
+$budgetRootLen = $budgetRoot.Length
+
+# -OverrideOut is written BESIDE the mirror by this script, not by
+# robocopy, so the copy universe never covers it. Its own check or none.
+if ($OverrideOut.Length -ge $PathBudget) {
+    Write-Output ("ERROR: path budget exceeded by the override file - " +
+        "$OverrideOut is $($OverrideOut.Length) characters and the limit " +
+        "is $PathBudget")
+    exit 2
+}
+
+if ($budgetRootLen -ge $PathBudget) {
+    Write-Output ("ERROR: path budget exceeded by the mirror root alone - " +
+        "root is $budgetRootLen characters and the limit is $PathBudget")
+    exit 2
+}
+
+$srcRoot = $RepoRoot.TrimEnd("\", "/")
+# The prefix stripped to form a relative path, rebuilt rather than
+# derived from a length. A drive root trims to "C:", and "C:".Length + 1
+# is 3 only by coincidence of that one case; on any root ending in a
+# colon the arithmetic silently under-measures every relative path,
+# which is the permissive direction.
+$srcPrefix = $srcRoot
+if (-not $srcPrefix.EndsWith("\")) { $srcPrefix = $srcPrefix + "\" }
+
+# The ROOT is a source path too. Checking only entries below it leaves
+# the one reparse point most likely to exist unmeasured, and the
+# contract clause says "a source reparse point" with no exemption.
+try {
+    $rootAttr = [int][System.IO.File]::GetAttributes($srcRoot)
+} catch {
+    Write-Output ("ERROR: $srcRoot could not be enumerated, so the path " +
+        "budget was never measured: " + $_.Exception.Message)
+    exit 2
+}
+if (($rootAttr -band [int][System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+    Write-Output ("ERROR: $srcRoot is a reparse point - the mirror refuses " +
+        "to measure or copy across one")
+    exit 2
+}
+
+$deepestLen = -1
+$deepestRel = ""
+$dirAttr = [int][System.IO.FileAttributes]::Directory
+$reparseAttr = [int][System.IO.FileAttributes]::ReparsePoint
+
+# Every directory link target this walk has already followed. Case
+# insensitive because the filesystem is.
+$followedTargets = New-Object "System.Collections.Generic.HashSet[string]" (
+    [System.StringComparer]::OrdinalIgnoreCase)
+
+$pending = New-Object System.Collections.Stack
+$pending.Push($srcRoot)
+while ($pending.Count -gt 0) {
+    $dir = $pending.Pop()
+    $entries = $null
+    try {
+        $entries = @([System.IO.Directory]::GetFileSystemEntries($dir))
+    } catch {
+        # An unreadable path BLOCKS. It is never skipped: a path that
+        # cannot be measured is not a path known to fit, and the same
+        # hole semantics the manifest builder states apply here.
+        Write-Output ("ERROR: $dir could not be enumerated, so the path " +
+            "budget was never measured: " + $_.Exception.Message)
+        exit 2
+    }
+    foreach ($entry in $entries) {
+        $attr = 0
+        try {
+            $attr = [int][System.IO.File]::GetAttributes($entry)
+        } catch {
+            Write-Output ("ERROR: $entry could not be enumerated, so the " +
+                "path budget was never measured: " + $_.Exception.Message)
+            exit 2
+        }
+        # Source reparse points are FOLLOWED, because the copy follows
+        # them. `robocopy /E` with neither /XJ nor /SL walks into a
+        # directory junction and into a directory symbolic link and writes
+        # the TARGET'S CONTENTS as an ordinary directory at the same
+        # relative path - measured on a junction nested inside the source
+        # tree and on a directory symbolic link, both on this host, the
+        # destination carrying no reparse attribute in either case.
+        # Refusing here therefore measured a SMALLER universe than the copy
+        # produces, and blocked every repo that links a reference clone or
+        # a shared skills directory into its tree.
+        #
+        # What the copy genuinely cannot survive is a cycle: robocopy has no
+        # cycle detection, so a link pointing at one of its own ancestors
+        # makes both this walk and the copy unbounded. That is the case
+        # guarded below, and it still refuses.
+        if (($attr -band $reparseAttr) -ne 0 -and ($attr -band $dirAttr) -ne 0) {
+            $target = $null
+            try {
+                $item = Get-Item -LiteralPath $entry -Force -ErrorAction Stop
+                $target = $item.Target
+                # Windows PowerShell 5.1 hands back a string COLLECTION here
+                # and PowerShell 7 hands back a plain string, so take the
+                # first element of anything that is not already a string
+                # rather than testing for one collection type.
+                if ($null -ne $target -and $target -isnot [string]) {
+                    foreach ($candidate in $target) { $target = $candidate; break }
+                }
+            } catch {
+                $target = $null
+            }
+            if ([string]::IsNullOrEmpty($target)) {
+                # An unresolvable link is the same class as an unreadable
+                # directory: a path that cannot be measured is not a path
+                # known to fit.
+                Write-Output ("ERROR: $entry is a directory reparse point " +
+                    "whose target could not be read, so the path budget was " +
+                    "never measured")
+                exit 2
+            }
+
+            $entryFull = ""
+            $targetFull = ""
+            try {
+                $entryFull = [System.IO.Path]::GetFullPath($entry)
+                # A RELATIVE TARGET IS RELATIVE TO THE LINK, NOT TO US.
+                # `GetFullPath` with one argument resolves against the
+                # PROCESS working directory, so a relative symbolic link
+                # target resolved to wherever this script happened to be
+                # invoked from: two distinct targets could compare equal
+                # and read as a repeat, and a genuine self-cycle could
+                # compare against the wrong absolute path and be missed.
+                # Junctions always store an absolute target, which is why
+                # the junction tests did not show it; symbolic links do
+                # not. Combine-then-normalize rather than the two-argument
+                # overload, which .NET Framework 4.8 does not carry.
+                if ([System.IO.Path]::IsPathRooted($target)) {
+                    $targetFull = [System.IO.Path]::GetFullPath($target)
+                } else {
+                    $linkParent = [System.IO.Path]::GetDirectoryName($entryFull)
+                    $targetFull = [System.IO.Path]::GetFullPath(
+                        [System.IO.Path]::Combine($linkParent, $target))
+                }
+            } catch {
+                Write-Output ("ERROR: $entry is a directory reparse point " +
+                    "whose target " + $target + " is not a usable path, so " +
+                    "the path budget was never measured")
+                exit 2
+            }
+            $targetPrefix = $targetFull.TrimEnd("\") + "\"
+            if ($entryFull.Equals($targetFull, "OrdinalIgnoreCase") -or
+                $entryFull.StartsWith($targetPrefix, "OrdinalIgnoreCase")) {
+                Write-Output ("ERROR: $entry points at $targetFull, which " +
+                    "contains it - following that link would never " +
+                    "terminate, so the mirror refuses it")
+                exit 2
+            }
+            if (-not $followedTargets.Add($targetFull)) {
+                # Two links onto one target is not itself a cycle, but it is
+                # indistinguishable from one here without walking the whole
+                # graph, and refusing is the direction that cannot
+                # mismeasure.
+                Write-Output ("ERROR: $entry points at $targetFull, which " +
+                    "another link in this tree already reaches - the mirror " +
+                    "refuses a tree whose links overlap")
+                exit 2
+            }
+        }
+        $rel = $entry.Substring($srcPrefix.Length)
+        if ($rel.Length -gt $deepestLen) {
+            $deepestLen = $rel.Length
+            $deepestRel = $rel
+        }
+        if (($attr -band $dirAttr) -ne 0) { $pending.Push($entry) }
+    }
+}
+
+if ($deepestLen -ge 0) {
+    $deepestSum = $budgetRootLen + 1 + $deepestLen
+    if ($deepestSum -ge $PathBudget) {
+        Write-Output ("ERROR: path budget exceeded - mirror root is " +
+            "$budgetRootLen characters, the deepest relative destination " +
+            "is $deepestLen characters, their sum is $deepestSum, and the " +
+            "limit is $PathBudget. Build the mirror at a shorter path. " +
+            "Deepest: $deepestRel")
+        exit 2
+    }
+}
+
 if (Test-Path $MirrorPath) {
     if (-not $Force) {
         Write-Output ("ERROR: $MirrorPath already exists - a stale mirror" +
@@ -531,10 +937,111 @@ if (Test-Path $MirrorPath) {
 New-Item -ItemType Directory -Force -Path $MirrorPath | Out-Null
 $MirrorPath = (Resolve-Path $MirrorPath).Path
 
+# CONSTRUCTION BRIDGE, step 1: capture the source identity BEFORE the
+# copy. Everything after this compares against this value, not against a
+# fresh read, because a fresh read cannot tell a stable source from one
+# that moved and moved back.
+$sourceBefore = Get-HeadSha $RepoRoot
+if (-not $sourceBefore.Ok) {
+    Write-Output ("BLOCKED: " + $sourceBefore.Reason + " - the mirror's" +
+        " identity in the debate record would be blank on the source side")
+    exit 1
+}
+
+# The source status, captured BEFORE the copy. Taken here and again
+# after, and required equal, for the same reason as the head: a
+# fingerprint taken only afterwards bakes in any edit that landed during
+# the copy, and every later verify then passes over a mirror carrying
+# older bytes. That direction is fail-OPEN, which this gate may not be.
+$statusBefore = Get-StatusSha256 $RepoRoot
+if (-not $statusBefore.Ok) {
+    Write-Output ("BLOCKED: the source status capture failed (" +
+        $statusBefore.Reason + "), so post-construction drift in an" +
+        " untracked or ignored review input would be undetectable")
+    exit 1
+}
+
 & robocopy $RepoRoot $MirrorPath /E /COPY:DAT /R:1 /W:1 /NFL /NDL /NJH /NJS /NP | Out-Null
 if ($LASTEXITCODE -ge 8) {
     Write-Output "ERROR: robocopy failed with $LASTEXITCODE"
     exit 2
+}
+
+# THE TWO TEST SEAMS, and the rule they must satisfy LITERALLY.
+#
+# Each is a BOOLEAN that ORs one extra block condition into a comparison
+# below. Neither can supply a value, so neither can suppress a real
+# measurement, and setting either can only ever ADD a reason to fail.
+# That makes the one-way property structural rather than a property of
+# whatever value someone happens to pass.
+#
+# TWO earlier shapes failed that bar, and both were caught by review
+# rather than by reasoning, which is why the property is now asserted by
+# a test instead of argued in a comment:
+#
+#   1. A copy-source override aimed at a same-HEAD tree with different
+#      ignored content would have BUILT, carrying the wrong non-HEAD
+#      content under a record attesting the real source. Its partner
+#      committed into $RepoRoot, contradicting this tool's promise three
+#      lines from the top that it never writes to the real tree.
+#   2. The replacement INJECTED a value. A parent that set it to the
+#      repo's own current HEAD - trivially readable in advance -
+#      suppressed the genuine post-copy measurement and turned a build
+#      that should have failed into one that passed. That is the exact
+#      inverse of the claim the comment was making.
+#
+# Any parent process can set these variables, so the shape has to be
+# safe on its own, not safe because no shipped caller sets it.
+$seamFailSourceStable = [bool]$env:PARALLAX_MIRROR_SEAM_FAIL_SOURCE_STABLE
+$seamFailCopiedHead = [bool]$env:PARALLAX_MIRROR_SEAM_FAIL_COPIED_HEAD
+
+$sourceAfter = Get-HeadSha $RepoRoot
+
+# BRIDGE STEP 3: the source must not have moved while we copied it. A
+# source that moved mid-copy produces a tree that matches no commit.
+if (-not $sourceAfter.Ok) {
+    Write-Output ("BLOCKED: " + $sourceAfter.Reason + " after the copy")
+    exit 1
+}
+if ($seamFailSourceStable -or ($sourceAfter.Sha -ne $sourceBefore.Sha)) {
+    Write-Output ("BLOCKED: the source head moved during construction (" +
+        $sourceBefore.Sha + " to " + $sourceAfter.Sha + ") - the copied tree" +
+        " matches neither commit")
+    exit 1
+}
+
+# BRIDGE STEP 4: the COPIED tree must carry the source's head. Without
+# this the record can hold two individually valid SHAs while nothing
+# proves the mirror was built from the recorded source commit - two true
+# facts arranged to look like one.
+$copiedHead = Get-HeadSha $MirrorPath
+if (-not $copiedHead.Ok) {
+    Write-Output ("BLOCKED: " + $copiedHead.Reason + " - the copied tree's" +
+        " identity could not be measured")
+    exit 1
+}
+if ($seamFailCopiedHead -or ($copiedHead.Sha -ne $sourceBefore.Sha)) {
+    Write-Output ("BLOCKED: the mirror was not built from this source (source" +
+        " head " + $sourceBefore.Sha + ", copied head " + $copiedHead.Sha + ")")
+    exit 1
+}
+
+# The second half of the status bridge: re-capture and require equal, so
+# an edit that landed during the copy fails the build instead of being
+# baked into the record. Never re-derived from the mirror, which is about
+# to be remediated and would then disagree by design.
+$sourceStatus = Get-StatusSha256 $RepoRoot
+if (-not $sourceStatus.Ok) {
+    Write-Output ("BLOCKED: the source status capture failed (" +
+        $sourceStatus.Reason + "), so post-construction drift in an" +
+        " untracked or ignored review input would be undetectable")
+    exit 1
+}
+if ($sourceStatus.Sha -ne $statusBefore.Sha) {
+    Write-Output ("BLOCKED: a source review input changed during" +
+        " construction, so the mirror carries neither the before nor the" +
+        " after state of the tree")
+    exit 1
 }
 
 $found = Get-BackChannelEntry $MirrorPath
@@ -650,7 +1157,13 @@ if (-not $SkipProbe) {
 }
 
 Write-Output ("mirror: " + $MirrorPath)
-Write-Output ("head: " + $head)
+# TWO identities, not one. They differ whenever remediation committed,
+# which is the ordinary case for a repo carrying a tracked back-channel,
+# so a record printing one of them twice would be wrong in the common
+# case rather than the rare one.
+Write-Output ("source_head: " + $sourceBefore.Sha)
+Write-Output ("mirror_head: " + $head)
+Write-Output ("source_status_sha256: " + $sourceStatus.Sha)
 Write-Output "baseline:"
 foreach ($b in $baseline) { Write-Output ("  " + $b) }
 Write-Output "manifest:"

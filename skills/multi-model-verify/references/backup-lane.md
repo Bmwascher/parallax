@@ -258,7 +258,12 @@ log). There is no shared stream and nothing to attribute by position.
   canonicalization is part of the rule rather than an implementation
   detail: the measured evidence matched only after newline
   normalization, so a rule saying merely that the two hash to the same
-  value leaves a driver to invent that step.
+  value leaves a driver to invent that step. "The brief" here means the
+  payload of EVERY call in the debate, fresh and resumed alike: a
+  resumed round's payload is a rebuttal rather than the opening brief,
+  and it is bound by this same rule. Stating it removes an inference -
+  a rule that named only round 1 would leave every later round's
+  delivery unchecked, which is the gap this rule exists to close.
   <!-- contract:end -->
 - What these checks do and do NOT guarantee, stated narrowly. A failed
   allowlist does not necessarily change the EFFECTIVE tool set, because
@@ -396,8 +401,18 @@ proceed; do not infer either key's value.
 
 ## Workspace isolation and the brief
 
-- Reviews run in a THROWAWAY REVIEW MIRROR in the session scratchpad —
-  never the real tree.
+- Reviews run in a THROWAWAY REVIEW MIRROR — never the real tree. Build
+  it at a SHORT path directly under the temp directory, such as a
+  `kerev<n>` folder, and never inside the session scratchpad, whose own
+  path is long enough to consume most of the budget before the copy
+  starts. This sentence used to say "in the session scratchpad" and
+  SKILL.md said the opposite, a contradiction 0.21.0 introduced and the
+  mode-diff debate caught: an operator reading both could comply with
+  neither. The rule is stated in BOTH files and must be changed in both:
+  SKILL.md carries it inline because that is where preflight 3 acts, and
+  a reader who never opens this file still has to know it. Saying it
+  lives in one place would be the same false claim in the other
+  direction, which round 2 of the same debate caught.
 - The mirror is a FILE COPY of the working tree that PRESERVES `.git`, not
   a `git clone`. This is not a preference: a clone carries TRACKED FILES ONLY,
   and the review inputs are routinely gitignored — a project's frozen
@@ -412,6 +427,92 @@ proceed; do not infer either key's value.
   remediation, the re-enumeration, the baseline, the manifest and the
   client probe as one step; the rules below remain its specification, and
   a driver building a mirror by hand still follows them.
+- **Mirror identity, and the gate that keeps it fresh.**
+  <!-- contract:start id=mirror-identity-gate -->
+  The record carries TWO identities and one fingerprint: `source_head`,
+  `mirror_head` and `source_status_sha256`. The two heads differ whenever
+  remediation committed, which is the ordinary case for a repo carrying a
+  tracked back-channel, so a record printing one of them twice is wrong
+  in the common case rather than the rare one. Construction is a
+  six-step bridge. Capture the source head BEFORE the copy; copy;
+  require the live source head still equals it; before remediation,
+  require the COPIED tree's head equals it; remediate, then record
+  `mirror_head`. Steps three and four are the bridge itself: without
+  them the record can hold two individually valid commit ids while
+  nothing proves the mirror was built FROM the recorded source commit,
+  which is two true facts arranged to look like one. What the bridge
+  proves is matching OBSERVED ENDPOINTS, and that is weaker than an
+  uninterrupted construction: a source that moves away and back during
+  the copy satisfies both the before-and-after head equality and the
+  before-and-after fingerprint, while the copied worktree can still hold
+  intermediate bytes. The debate named that gap and it is real; the only
+  thing that would close it is building from an immutable snapshot,
+  which this release does not do. Before every fresh
+  and resumed dispatch, re-run the tool with `-VerifyIdentity` and the
+  three recorded values. Missing, unreadable or unequal BLOCKS the
+  round, and a value that was never recorded is never a value that
+  matched. What the gate proves is narrow and stated so: the two-HEAD
+  gate proves committed-HEAD freshness. Non-HEAD inputs are bound in the
+  constructed mirror's manifest AT CONSTRUCTION TIME, and source-side
+  changes after construction are detected by the source-status
+  comparison below WHEN THEY ARE VISIBLE TO IT: that is, changes that
+  move the status listing, or that alter the content of a path the
+  listing names. A tracked file git reports CLEAN is in neither, so a
+  raw-byte change that survives the clean filter unchanged - the
+  autocrlf case measured below is the mild one, a content-stripping
+  filter the severe one - moves neither HEAD nor this fingerprint and is
+  NOT covered. Round 2 of the mode-diff debate found the unqualified
+  claim. That comparison is a fingerprint over the status
+  capture AND the content of every path status names, not the status
+  listing alone: measured 2026-08-04, editing an already-ignored file
+  leaves the listing byte-identical, so a listing-only fingerprint
+  verified clean across exactly the drift this check exists to catch.
+  Ignored and untracked content is the entire reason this workspace is a
+  mirror, so a gate blind to its bytes would be blind in the middle of
+  the feature.
+  <!-- contract:end -->
+- **The path budget, checked BEFORE anything is created.**
+  <!-- contract:start id=mirror-path-budget -->
+  The mirror is a copy into a NEW root, so a destination that was legal
+  in the source can be illegal in the mirror. That failure lands
+  MID-COPY and leaves a partially populated tree that reads exactly like
+  a complete one, which is why the check runs before the root is
+  created rather than after the copy reports a count. The UNIVERSE it
+  measures is every file and directory destination implied by the source
+  AS ENUMERATED at pre-flight time, including tracked, untracked,
+  ignored, and all `.git` content: a directory holding no files is still
+  a destination, and `.git` is copied so `.git` counts. It is NOT a
+  guarantee that this universe equals the one `robocopy /E` later walks.
+  The enumeration finishes before the mirror root exists and the copy
+  runs after it, so a path created in that window is in robocopy's
+  universe and not in the measured one. The contract said "the exact
+  `robocopy /E` operation" and that read as a guarantee; the mode-diff
+  debate was right that it is not one. Closing the window needs
+  construction from an immutable snapshot, which this release does not
+  do. The ARITHMETIC is the resolved mirror-root
+  length, plus a separator, plus the relative destination path length.
+  The LIMIT is 260 characters as a conservative policy across both
+  supported PowerShell hosts. It is a deterministic refusal threshold,
+  not a claim about the maximum any host, API, OS configuration, or
+  downstream client could support. Three requirements sit OUTSIDE that
+  universe and bind equally. The `-OverrideOut` path is written beside
+  the mirror by the tool rather than by robocopy, so the copy universe
+  never covers it and it carries its own check. A source directory
+  reparse point is FOLLOWED, because the copy follows it: `robocopy /E`
+  with neither /XJ nor /SL writes the target's contents as an ordinary
+  directory at the link's relative path, so refusing to measure across
+  one described a SMALLER universe than the copy produces. What the copy
+  cannot survive is a cycle, so a link onto one of its own ancestors is
+  refused, and so is a tree whose links reach one target twice, which is
+  indistinguishable from a cycle without walking the whole graph. A
+  repo root that is itself a reparse point stays refused. A source
+  path that cannot be enumerated BLOCKS the build and is never skipped,
+  the same hole semantics the manifest builder states: a path that
+  cannot be measured is not a path known to fit. The refusal names the
+  root length, the deepest relative destination length, their sum and
+  the limit, because a refusal an operator cannot act on is a refusal
+  they will work around.
+  <!-- contract:end -->
 - The mirror is the dispatch's WORKING DIRECTORY, and the brief is
   passed INLINE in the `-p` payload — it is never written into the
   mirror as a file with a pointer to it. The reason is the hash rule,
