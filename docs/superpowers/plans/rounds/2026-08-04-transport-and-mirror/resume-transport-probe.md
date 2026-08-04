@@ -139,6 +139,52 @@ are text inside a JSON string; they cannot create a record boundary.
 **Conclusion for the binding's design.** Read the rollout, do not scrape the
 transcript. The immunity is structural, not a parser that got the escaping right.
 
+## Part 5 — the exact rollout record shape
+
+Added after plan round 3. The primary lane refused the freeze because parts 3
+and 4 said the round's prompt must be "identified by structure" without naming
+the structure, which is a placeholder standing where a runtime contract belongs.
+Measured on `codex-cli 0.144.1`, session `019fca2e`, after three rounds.
+
+**The rollout is CUMULATIVE and append-only across resumes.** The same file held
+272 rows after round 1 and 325 after round 3, at 1,139,681 bytes. Each resumed
+call appends; nothing rewrites. This is what makes a byte-offset boundary sound.
+
+**The identifying structure**, stated as the four conditions that hold together:
+
+```
+row.type            == "response_item"
+row.payload.type    == "message"
+row.payload.role    == "user"
+every row.payload.content[] element has type == "input_text"
+```
+
+The prompt text is the in-order concatenation of those elements' `text` fields.
+
+**Verified across all three rounds of one session:**
+
+| round | brief chars | rollout row | match |
+|---|---|---|---|
+| 1 | 7338 | 8 | yes |
+| 2 | 6066 | 171 | yes |
+| 3 | 5641 | 279 | yes |
+
+Exactly one matching row per round, and no round's brief matched any other
+round's row.
+
+**Do NOT identify the record by content-element count.** The instructions
+preamble at row 5 carries 2 `input_text` elements and each brief carried 1,
+which makes element count LOOK like a discriminator on this sample. It is not
+one: nothing observed here prevents a client from splitting a long prompt across
+elements. The sound discriminator is the one the primary lane specified —
+exactly one such record WITHIN THE CURRENT-CALL BYTE SLICE — and the cumulative
+append-only behaviour above is what makes that slice definable.
+
+**Still unmeasured, and it belongs to the drift watch:** whether the rollout
+path, the four-condition shape, or the append-only behaviour is stable across
+codex versions. The binding fails closed on anything it cannot identify, so a
+schema change degrades to a loud failure rather than a silent pass.
+
 ## What is still NOT measured
 
 - **The backup lane's runtime behaviour.** Both kimi forms pass the payload as
