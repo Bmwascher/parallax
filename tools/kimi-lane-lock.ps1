@@ -505,6 +505,38 @@ if ($Mode -eq "MalformedOverride") {
 # Mode implementations.
 # ---------------------------------------------------------------------
 function Invoke-AcquireMode {
+    # THE PROPOSED OWNER MUST NOT BE DEAD, AND NOTHING CHECKED IT.
+    # `Get-Liveness` has been in this file the whole time and acquire
+    # called it on ONE thing: the EXISTING holder's record, to decide
+    # reclaim rights. The owner being WRITTEN DOWN was validated for
+    # syntax only. So a caller could record an already-dead identity,
+    # the next acquire would read that record as DEAD and reclaim it,
+    # and the mutual exclusion this lock exists to provide was gone
+    # while every status read looked ordinary.
+    #
+    # Found by the 0.22.0 plan debate, backlog item 26's silent half.
+    # The item said this needed a wrapping harness to reproduce. It did
+    # not: a pid that has exited reaches it directly.
+    #
+    # DEAD ONLY, AND THE NARROWING IS THE POINT. UNMEASURABLE means the
+    # pid lookup SUCCEEDED and only the start-time read failed, so the
+    # process exists and what went unmeasured is the pid-REUSE guard,
+    # not existence. This file already has one meaning for that state -
+    # every mutating mode treats it as ALIVE and refuses to reclaim -
+    # and refusing here would contradict it in the worst direction:
+    # the TRUE owner could not re-enter its own lock whenever the start
+    # time was unreadable. Refusing DEAD is therefore the whole claim,
+    # and it is not "the recorded owner is live".
+    #
+    # Residual, stated rather than hidden: a running pid carrying the
+    # wrong ticks still records if the start-time read fails, because
+    # that is the one measurement that would have caught it.
+    $proposed = Get-Liveness -OwnerPidValue $OwnerPidInt -TicksValue $OwnerStartTicksUtc
+    if ($proposed -eq "DEAD") {
+        Write-Stderr ("the proposed owner is not live (measured DEAD): pid " +
+                      $OwnerPidInt + ", ticks " + $OwnerStartTicksUtc)
+        exit 2
+    }
     $sw = [System.Diagnostics.Stopwatch]::StartNew()
     while ($true) {
         $open = Open-ForAcquire -Path $LockPath -Stopwatch $sw -WaitBudget $WaitSecondsInt -PollBudget $PollSecondsInt
