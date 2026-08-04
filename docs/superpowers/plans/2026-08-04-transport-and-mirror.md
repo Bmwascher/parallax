@@ -299,3 +299,63 @@ leave them for a follow-up branch, or run one confirming round.
 **Type consistency.** `read-codex-round-evidence.ps1`'s interface is declared once in Task 2 and referenced nowhere else. The mirror identity field names `source_head` and `mirror_head` are used identically in Task 4's steps and its contract text.
 
 **Known gap, stated rather than hidden.** This release makes `SKILL.md` longer, worsening item 19. Tasks 1, 2, 3 and 5 each record their delta and Task 6 totals it. Item 19 is scheduled for 0.23.0.
+
+---
+
+## Amendments
+
+Deviations from the frozen text, recorded at the moment they were taken.
+A frozen plan that quietly changes under the implementer is not frozen.
+
+### Amendment 1 (2026-08-04, Task 2) - the prompt-record rule was unsatisfiable
+
+**Frozen text:** "In the current-call slice, require exactly one record
+where `type` is `response_item`, `payload.type` is `message`,
+`payload.role` is `user` ..."
+
+**What implementation measured:** on a FRESH call the slice is the whole
+file, and it always carries TWO such records - codex prepends its own
+instructions preamble, which is also `role` `user`. The frozen rule
+therefore fails every clean fresh round. The plan's own Step 3 note
+already said the preamble is a second user record; the contract sentence
+above it did not follow.
+
+**Adopted instead:** consider every user record in the slice; require
+exactly one of them to hash to the declared brief, and require it to be
+the LAST user record in the slice. The trailing-record requirement is the
+part that still refuses an injected extra prompt, which is what "exactly
+one" was reaching for.
+
+**Direction of the change:** no case that previously failed now passes.
+A slice with a second matching record still fails (ambiguous), and a
+slice with any user record after the match still fails. What changed is
+that a clean fresh round can now pass at all.
+
+**Locked by:** `test_a_user_record_after_the_brief_is_refused` and
+`test_a_hash_mismatch_is_refused` in
+`evals/multi-model-verify/test_codex_round_evidence.py`, both watched to
+flip under mutation of the rule they claim to cover.
+
+### Amendment 2 (2026-08-04, Task 2) - the validator's interface
+
+**Frozen text:** "`read-codex-round-evidence.ps1 -SessionId <id>
+-ExpectedBriefSha256 <hex> -PriorState <path> [-StateOut <path>]`,
+exiting 0 with one JSON line on stdout when the binding holds, and
+non-zero with the failure class on stderr otherwise."
+
+**Adopted instead:** the shape its sibling `read-kimi-round-evidence.ps1`
+already uses - two parameter sets (`-Fresh -SessionsRoot
+-SessionIdFromStdout` / `-Resume -RolloutFile`), a `-Json` switch, and
+ONE JSON line on stdout in both directions carrying `status`, `reason`
+and, when clean, `nextState`.
+
+**Why:** a fresh call cannot be handed the rollout it exists to discover,
+so one `-SessionId` signature asks the fresh branch for its own answer.
+Putting the reason on stdout rather than stderr is what lets the oracles
+read it through `accept_exactly_one_nonempty_line()`, which CLAUDE.md
+requires of every new single-line parser. `nextState` replaces
+`-StateOut`: the script that establishes the byte boundary is the one
+that hands it forward, so no caller can invent it.
+
+**Direction of the change:** exit codes are unchanged (0 clean, 1
+failed). Nothing that fails under the frozen shape passes under this one.

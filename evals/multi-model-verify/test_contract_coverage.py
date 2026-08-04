@@ -677,6 +677,15 @@ DECLARED_REGIONS = {
     # considers the home trusted" underneath a still-passing pin.
     "home-skill-root-disposition",
     "home-skill-root-disposition-limit",
+    # 0.21.0, backlog item 20. The codex lane never verified that the
+    # brief it sent is the prompt the client recorded, while the backup
+    # lane always did - which is exactly why corruption on this lane
+    # could be silent and corruption on that one could not. Two regions
+    # rather than one because a region must fit a single pin: the CALLS
+    # region holds the fresh and resumed boundaries, the RECORD region
+    # holds the prompt shape and the claim's ceiling.
+    "codex-brief-binding-calls",
+    "codex-brief-binding-record",
 }
 
 

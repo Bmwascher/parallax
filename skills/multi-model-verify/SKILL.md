@@ -226,6 +226,13 @@ toggled on, its stop-time review overlaps mode `diff` — expected, not a bug.
    path serves the previous round's reply and reads exactly like success —
    a reply not freshly written by this round's call is a stale reply, a
    transport failure (fallbacks.md), never a review result.
+   Per-round evidence: bind the reply to the brief THIS side sent with
+   `tools/read-codex-round-evidence.ps1` — `-Fresh` at round 1, `-Resume`
+   after, each call carrying the previous verdict's `nextState`. A verdict
+   other than clean is class `brief-attribution` (fallbacks.md): the reply
+   is discarded unread. A clean verdict is client-echo evidence — what the
+   client recorded, never what any server received.
+
 3. Later rounds keep the reviewer's state by resuming that session — flags MUST
    precede the resume subcommand (flags after it are a usage error):
 

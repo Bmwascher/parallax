@@ -467,7 +467,13 @@ def test_brief_hash_binding_region():
     "hash to the same value" leaves a driver to invent the step that
     makes it true. The concatenation over every `input[]` element is
     pinned for the same reason: hashing only the first element is the
-    obvious wrong reading."""
+    obvious wrong reading.
+
+    0.21.0 extends the region to name the RESUME payload. The rule said
+    "the brief", the resumed payload is a rebuttal, and the coverage was
+    an inference: read narrowly, every round after the first had its
+    delivery unchecked, which is the exact gap the rule exists to close.
+    """
     assert (
             "Hash the brief BEFORE dispatch and require the recorded prompt "
             "to match: SHA-256 over the brief canonicalized as UTF-8 with "
@@ -477,7 +483,13 @@ def test_brief_hash_binding_region():
             "than an implementation detail: the measured evidence matched "
             "only after newline normalization, so a rule saying merely that "
             "the two hash to the same value leaves a driver to invent that "
-            "step.") in _norm(BACKUP_LANE)
+            "step. \"The brief\" here means the payload of EVERY call in the "
+            "debate, fresh and resumed alike: a resumed round's payload is a "
+            "rebuttal rather than the opening brief, and it is bound by this "
+            "same rule. Stating it removes an inference - a rule that named "
+            "only round 1 would leave every later round's delivery "
+            "unchecked, which is the gap this rule exists to close."
+            ) in _norm(BACKUP_LANE)
 
 
 def test_backup_lane_containment_and_probe_pins():

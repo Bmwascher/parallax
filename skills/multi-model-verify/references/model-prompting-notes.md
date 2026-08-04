@@ -206,9 +206,17 @@ Canonical reasoning effort: `high`
   auth, config, session storage and quota — and two of those ARE
   consulted, so "not evidence" would be
   wrong: `codex login status` is the auth preflight, and config resolution
-  is what the header reports. The precise claim is narrower: none of those
-  stores is a shared global output log, and none is parsed to attribute one
-  invocation's transcript or reply to another.
+  is what the header reports. **Session storage is now consulted too**, by
+  the brief binding below, which parses this call's per-session rollout.
+  The precise claim is narrower than it once was and still holds where it
+  matters: none of those stores is a shared global output log. The
+  per-session rollout is named by session id in its filename AND in its
+  first `session_meta` record, so two concurrent debates read two
+  different files; that is the structural difference from the backup
+  lane, whose evidence comes out of one user-global log, and it survives
+  the binding. An earlier version of this paragraph said none of the
+  stores is parsed to attribute an invocation. The binding falsified that
+  sentence, so it is gone rather than quietly left standing.
   Distinct session ids are necessary and NOT sufficient. Each concurrent
   debate needs its own scratch DIRECTORY, or its own `<brief-file>`,
   `<reply-file>` and `<transcript-file>` paths — all three, because the
@@ -356,3 +364,76 @@ In the primary lane's tag grammar it is one more line inside
 convention. It never substitutes for the three controls above, and a
 round that skipped the probe does not become clean because the brief
 said the right words.
+
+## The codex brief binding
+
+<!-- contract:start id=codex-brief-binding-calls -->
+The backup lane fails a round when the prompt its client recorded does not
+match the brief that was sent (backup-lane.md, region `brief-hash-binding`).
+This lane had no equivalent, which is why corruption here could be silent
+while corruption there could not. It has one now, and it reads the
+PER-SESSION ROLLOUT rather than scraping the transcript.
+
+**Codex brief binding — fresh calls.** Before dispatch, hash the brief under
+the declared canonicalization and inventory the rollout files under the
+effective Codex session root. After the call, read the session ID only from
+the verified startup-header block. Require exactly one newly created rollout
+whose filename and first `session_meta` record both carry that session ID.
+Parse the file as strict UTF-8 JSONL. Malformed JSON, a missing terminal
+record boundary, no matching rollout, or multiple matching rollouts is a
+brief-attribution failure.
+
+**Codex brief binding — resumed calls.** Before dispatch, resolve exactly one
+rollout whose first `session_meta` record and filename match the resumed
+session ID; capture its byte length and SHA-256 over exactly those bytes.
+After the call, require the file still exists, is not shorter, and has the
+identical prefix hash. Parse only complete JSONL records after that byte
+boundary. A missing, replaced, truncated, or prefix-modified rollout is a
+brief-attribution failure.
+<!-- contract:end -->
+
+<!-- contract:start id=codex-brief-binding-record -->
+**Prompt record.** In the current-call slice, consider every record where
+`type` is `response_item`, `payload.type` is `message` and `payload.role` is
+`user`. For each, concatenate in order the `text` fields of its
+`payload.content[]` elements whose `type` is `input_text`, and canonicalize
+exactly as the pre-dispatch brief was canonicalized - UTF-8, CRLF normalized
+to LF, leading and trailing whitespace stripped. Require exactly one of those
+records to equal the brief's SHA-256, and require it to be the LAST user
+record in the slice. Taking the slice's sole user record instead is wrong on
+every fresh call: the client's own instructions preamble is also `role`
+`user`, so a fresh slice carries two. Nor may the record be identified by
+content-element count - the preamble carried 2 elements and briefs carried 1
+on the measured sample, and nothing prevents a client splitting a long
+prompt. No matching record, several matching records, a further user record
+after the match, a malformed or undecodable slice, or an unequal hash blocks
+the round; discard the reply unread.
+
+**Evidence limit.** This is a client-echo binding: it proves what the
+measured Codex client recorded for this call, never what the server or model
+received.
+<!-- contract:end -->
+
+**Why the rollout and not the transcript.** Measured 2026-08-03, probe part
+4: a brief whose body carries delimiter-shaped payload lines put a SECOND
+`session id:` into the transcript, all zeroes, and a parser taking the last
+match reads the value the brief chose. That is also why the route check reads
+the FIRST `model:`, `provider:` and `reasoning effort:` lines rather than any
+match - a discipline this measurement showed to be load-bearing. The rollout
+is immune by construction: delimiter-shaped lines inside a JSON string cannot
+create a record boundary.
+
+**Why the record shape is stated and not gestured at.** Probe part 5 measured
+it across three rounds of one session: exactly one matching record per round,
+no cross-matches. Do NOT identify the record by content-element count - the
+instructions preamble carried two elements and every brief carried one on
+that sample, which makes count LOOK like a discriminator, and nothing
+observed prevents a client splitting a long prompt. The sound discriminator
+is exactly-one-record within the current-call byte slice, which the rollout's
+cumulative append-only behaviour is what makes definable.
+
+**Version coupling.** The rollout path, the four-condition shape, and the
+append-only behaviour are properties of the measured client and are not
+guaranteed across releases. The binding fails closed on anything it cannot
+identify, so a schema change surfaces as a loud brief-attribution failure
+rather than a silent pass. Drift watch owns the re-probe.

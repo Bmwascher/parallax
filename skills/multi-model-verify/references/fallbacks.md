@@ -110,6 +110,33 @@ One resume failure is deterministic and skips the retry: output matching
 The rollout is gone; skip the retry and go straight to this
 class's consent gate with the same fresh-per-round option.
 
+### Brief attribution failure — class `brief-attribution`
+
+The primary lane binds the brief it sent to the prompt its client
+recorded (model-prompting-notes.md, the codex brief binding). This class
+fires when that binding cannot be satisfied: no matching rollout, several
+matching rollouts, a rollout that was replaced, truncated or
+prefix-modified under the call, malformed JSONL, a current-call slice
+holding zero or several prompt records, or a hash mismatch between the
+brief and the recorded prompt.
+
+**Disposition, matching the backup lane's route-attribution class:
+nothing here is transient → NO retry, reply DISCARDED UNREAD, consent
+gate.** The reply is discarded rather than read-then-judged because a
+round whose brief cannot be attributed is unattributable no matter what
+the reply says, and reading it first is how an unattributable round
+acquires the appearance of a review.
+
+One member deserves its rationale stated separately, the way the backup
+lane states the rotation case. A HASH MISMATCH is not merely
+unattributable — it is positive evidence that what the reviewer read is
+not what this side wrote. It takes the same disposition, and it is the
+member that justifies discarding rather than quarantining.
+
+An unreadable rollout is never a clean binding. The whole point is that
+an altered brief must not look like an intact one, and neither may an
+unmade measurement.
+
 ### Stale API evidence
 If the project's API-reference drift check reports the build changed under
 a claim, that claim is **struck until re-verified** — the strike rule does

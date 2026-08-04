@@ -258,7 +258,12 @@ log). There is no shared stream and nothing to attribute by position.
   canonicalization is part of the rule rather than an implementation
   detail: the measured evidence matched only after newline
   normalization, so a rule saying merely that the two hash to the same
-  value leaves a driver to invent that step.
+  value leaves a driver to invent that step. "The brief" here means the
+  payload of EVERY call in the debate, fresh and resumed alike: a
+  resumed round's payload is a rebuttal rather than the opening brief,
+  and it is bound by this same rule. Stating it removes an inference -
+  a rule that named only round 1 would leave every later round's
+  delivery unchecked, which is the gap this rule exists to close.
   <!-- contract:end -->
 - What these checks do and do NOT guarantee, stated narrowly. A failed
   allowlist does not necessarily change the EFFECTIVE tool set, because
