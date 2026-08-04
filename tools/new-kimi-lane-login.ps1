@@ -84,6 +84,12 @@ param(
 
     [Parameter(Mandatory = $true)]
     [string]$OwnerStartTicksUtc,
+    # OPTIONAL passthrough. The lock records the owner's process NAME so
+    # a stuck lane says WHAT holds it, not only which pid. Optional here
+    # for the same reason it is optional in the record: a caller that
+    # supplies none is not in error, and this wrapper must not become the
+    # thing that requires one.
+    [Parameter(Mandatory = $false)][string]$OwnerName,
 
     [Parameter(Mandatory = $false)]
     [string]$KimiBinary = (Join-Path $env:USERPROFILE ".kimi-code\bin\kimi.exe"),
@@ -528,11 +534,17 @@ try {
     # lane-home path itself (this login owns no separate debate home).
     # No lock is held yet on failure, so a direct exit here is safe.
     # ===================================================================
-    $acquireResult = Invoke-LockCall -LockArgs @{
+    $acquireArgs = @{
         Acquire = $true; LaneHome = $resolvedLaneHome; DebateId = $LoginDebateId
         OwnerPid = $OwnerPid; OwnerStartTicksUtc = $OwnerStartTicksUtc
         DebateHome = $resolvedLaneHome
     }
+    # Forwarded only when the caller supplied it. Adding the key with an
+    # empty value would turn "no name" into a REFUSED acquire (the lock
+    # rejects a supplied-but-blank name), which is a wrapper deciding to
+    # fail a call the caller made correctly.
+    if ($PSBoundParameters.ContainsKey("OwnerName")) { $acquireArgs.OwnerName = $OwnerName }
+    $acquireResult = Invoke-LockCall -LockArgs $acquireArgs
     if ($acquireResult.ExitCode -ne 0) {
         exit $acquireResult.ExitCode
     }

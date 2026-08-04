@@ -305,7 +305,7 @@ def _owner_ticks_for_pid(pid):
 
 def _build2(target, profile, lane_home, model=PLACEHOLDER_MODEL, effort="high",
             debate_id=None, owner_pid=None, owner_ticks=None, extra_env=None,
-            timeout=120):
+            timeout=120, owner_name=None):
     if debate_id is None:
         debate_id = _new_hex32()
     if owner_pid is None or owner_ticks is None:
@@ -320,7 +320,8 @@ def _build2(target, profile, lane_home, model=PLACEHOLDER_MODEL, effort="high",
          "-File", str(BUILDER), "-Path", str(target),
          "-Model", model, "-Effort", effort,
          "-LaneHome", str(lane_home), "-DebateId", debate_id,
-         "-OwnerPid", str(owner_pid), "-OwnerStartTicksUtc", str(owner_ticks)],
+         "-OwnerPid", str(owner_pid), "-OwnerStartTicksUtc", str(owner_ticks)]
+        + ([] if owner_name is None else ["-OwnerName", owner_name]),
         capture_output=True, text=True, timeout=timeout, env=env)
     return proc, debate_id, str(owner_pid), str(owner_ticks)
 
@@ -805,7 +806,7 @@ def test_builder_capture_read_fault_is_validator_failure(tmp_path):
 # $RecoveryCommandTemplate (with its PowerShell '' escaping undone) so
 # this pin cannot silently drift from the emitting production string.
 RECOVERY_COMMAND_TEMPLATE = (
-    '& { $ErrorActionPreference = \'Stop\'; try { $ownerLines = @(& \'tools/kimi-lane-lock.ps1\' -ResolveOwner); $ownerExit = $LASTEXITCODE; if ($ownerExit -ne 0) { throw "owner resolution failed with exit $ownerExit" }; if ($ownerLines.Count -ne 1 -or -not ($ownerLines[0] -is [string]) -or [string]::IsNullOrWhiteSpace([string]$ownerLines[0])) { throw \'owner resolution returned invalid output\' }; $owner = $ownerLines[0] | ConvertFrom-Json -ErrorAction Stop; if (-not ($owner -is [System.Management.Automation.PSCustomObject])) { throw \'owner resolution returned invalid schema\' }; $ownerFields = @($owner.PSObject.Properties.Name); if ($ownerFields.Count -ne 3 -or -not ($ownerFields -ccontains \'ownerPid\') -or -not ($ownerFields -ccontains \'ownerStartTicksUtc\') -or -not ($ownerFields -ccontains \'ownerName\') -or -not (($owner.ownerPid -is [int]) -or ($owner.ownerPid -is [long])) -or [long]$owner.ownerPid -le 0 -or -not ($owner.ownerStartTicksUtc -is [string]) -or $owner.ownerStartTicksUtc -notmatch \'\\A[0-9]+\\z\' -or -not ($owner.ownerName -is [string]) -or [string]::IsNullOrWhiteSpace($owner.ownerName)) { throw \'owner resolution returned invalid schema\' }; if ([string]::IsNullOrWhiteSpace($env:TEMP) -or -not (Test-Path -LiteralPath $env:TEMP -PathType Container -ErrorAction Stop)) { throw \'TEMP is not an existing directory\' }; $verdictOut = Join-Path -Path $env:TEMP -ChildPath \'parallax-kimi-lane-login-verdict.json\' -ErrorAction Stop; & \'tools/new-kimi-lane-login.ps1\' -LaneHome \'<lane-home>\' -OwnerPid ([string]$owner.ownerPid) -OwnerStartTicksUtc $owner.ownerStartTicksUtc -VerdictOut $verdictOut; $loginExit = $LASTEXITCODE; if ($loginExit -ne 0) { throw "lane login failed with exit $loginExit" } } catch { throw } }'
+    '& { $ErrorActionPreference = \'Stop\'; try { $ownerLines = @(& \'tools/kimi-lane-lock.ps1\' -ResolveOwner); $ownerExit = $LASTEXITCODE; if ($ownerExit -ne 0) { throw "owner resolution failed with exit $ownerExit" }; if ($ownerLines.Count -ne 1 -or -not ($ownerLines[0] -is [string]) -or [string]::IsNullOrWhiteSpace([string]$ownerLines[0])) { throw \'owner resolution returned invalid output\' }; $owner = $ownerLines[0] | ConvertFrom-Json -ErrorAction Stop; if (-not ($owner -is [System.Management.Automation.PSCustomObject])) { throw \'owner resolution returned invalid schema\' }; $ownerFields = @($owner.PSObject.Properties.Name); if ($ownerFields.Count -ne 3 -or -not ($ownerFields -ccontains \'ownerPid\') -or -not ($ownerFields -ccontains \'ownerStartTicksUtc\') -or -not ($ownerFields -ccontains \'ownerName\') -or -not (($owner.ownerPid -is [int]) -or ($owner.ownerPid -is [long])) -or [long]$owner.ownerPid -le 0 -or -not ($owner.ownerStartTicksUtc -is [string]) -or $owner.ownerStartTicksUtc -notmatch \'\\A[0-9]+\\z\' -or -not ($owner.ownerName -is [string]) -or [string]::IsNullOrWhiteSpace($owner.ownerName)) { throw \'owner resolution returned invalid schema\' }; if ([string]::IsNullOrWhiteSpace($env:TEMP) -or -not (Test-Path -LiteralPath $env:TEMP -PathType Container -ErrorAction Stop)) { throw \'TEMP is not an existing directory\' }; $verdictOut = Join-Path -Path $env:TEMP -ChildPath \'parallax-kimi-lane-login-verdict.json\' -ErrorAction Stop; & \'tools/new-kimi-lane-login.ps1\' -LaneHome \'<lane-home>\' -OwnerPid ([string]$owner.ownerPid) -OwnerStartTicksUtc $owner.ownerStartTicksUtc -OwnerName $owner.ownerName -VerdictOut $verdictOut; $loginExit = $LASTEXITCODE; if ($loginExit -ne 0) { throw "lane login failed with exit $loginExit" } } catch { throw } }'
 )
 
 
@@ -1247,6 +1248,47 @@ def test_an_acquire_failure_does_not_attempt_a_release_and_precedes_validation(t
 
 
 # --- The reclaim/contention integration oracles for the lock boundary. ---
+
+
+def test_a_build_forwards_the_owner_name_into_the_record(tmp_path):
+    """The builder is the FIRST of two call chains into acquire, and a
+    passthrough added to one and not the other is a name that appears or
+    vanishes depending on which command took the lane.
+
+    Read from the RECORD rather than from the builder's own output: the
+    record is what a blocked second session and the doctor both read.
+    """
+    target = tmp_path / "named-home"
+    profile = _fake_profile(tmp_path, FAKE_REAL_CONFIG)
+    lane_home = _fake_lane_home(tmp_path)
+
+    proc, debate_id, owner_pid, owner_ticks = _build2(
+        target, profile, lane_home, owner_name="claude.exe")
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    custody = _parse_custody(proc.stdout)
+    status = _lock_status(lane_home)
+    assert status["state"] == "held", status
+    assert status["ownerName"] == "claude.exe", status
+
+    _remove2(target, lane_home, debate_id, owner_pid, owner_ticks, custody["nonce"])
+
+
+def test_a_build_without_an_owner_name_records_none(tmp_path):
+    """A wrapper that supplied an empty name would turn every nameless
+    build into a REFUSED acquire, because the lock rejects a
+    supplied-but-blank name. Absent has to stay absent."""
+    target = tmp_path / "unnamed-home"
+    profile = _fake_profile(tmp_path, FAKE_REAL_CONFIG)
+    lane_home = _fake_lane_home(tmp_path)
+
+    proc, debate_id, owner_pid, owner_ticks = _build2(target, profile, lane_home)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    custody = _parse_custody(proc.stdout)
+    status = _lock_status(lane_home)
+    assert status["state"] == "held", status
+    assert "ownerName" not in status, status
+
+    _remove2(target, lane_home, debate_id, owner_pid, owner_ticks, custody["nonce"])
 
 
 def test_a_build_reclaiming_a_dead_holder_succeeds(tmp_path):

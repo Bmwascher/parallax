@@ -1137,6 +1137,97 @@ def test_acquire_refuses_an_owner_whose_ticks_do_not_match(lane_home, debate_hom
     assert "live" in (rc.stdout + rc.stderr).lower(), (rc.stdout, rc.stderr)
 
 
+# ---------------------------------------------------------------------
+# ownerName as an OPTIONAL held-v1 field
+# ---------------------------------------------------------------------
+def test_acquire_records_an_optional_owner_name(lane_home, debate_home):
+    """The name resolution now reports has to reach the RECORD, or the
+    only place a wrong owner is legible is the moment it is resolved -
+    which is the one moment nobody is looking."""
+    rc = run_lock(["-Acquire", "-LaneHome", str(lane_home),
+                   "-DebateId", "e" * 32,
+                   "-OwnerPid", LIVE_PID, "-OwnerStartTicksUtc", LIVE_TICKS,
+                   "-OwnerName", "claude.exe",
+                   "-DebateHome", str(debate_home), "-WaitSeconds", "0"])
+    assert rc.returncode == 0, (rc.returncode, rc.stdout, rc.stderr)
+    rec = json.loads(read_raw(lane_home).decode("utf-8"))
+    assert rec["ownerName"] == "claude.exe", rec
+
+
+def test_acquire_without_owner_name_writes_no_such_field(lane_home, debate_home):
+    """OPTIONAL means absent, not empty.
+
+    A record written with an empty ownerName would be a record claiming
+    to carry a name, and every reader would have to decide what an empty
+    one means. Absent has one meaning already.
+    """
+    rc = run_lock(["-Acquire", "-LaneHome", str(lane_home),
+                   "-DebateId", "f" * 32,
+                   "-OwnerPid", LIVE_PID, "-OwnerStartTicksUtc", LIVE_TICKS,
+                   "-DebateHome", str(debate_home), "-WaitSeconds", "0"])
+    assert rc.returncode == 0, (rc.returncode, rc.stdout, rc.stderr)
+    rec = json.loads(read_raw(lane_home).decode("utf-8"))
+    assert "ownerName" not in rec, rec
+
+
+def test_a_held_record_carrying_owner_name_is_well_formed(lane_home):
+    """The migration direction that matters on the way IN.
+
+    The held schema is an EXACT field set, so before this change a
+    record carrying ownerName classified MALFORMED - which is exit 4 and
+    a lane nobody can take without the guarded override.
+    """
+    write_held(lane_home, host=COMPUTERNAME, ownerName="claude.exe")
+    result = run_lock(["-Status", "-LaneHome", str(lane_home)])
+    assert result.returncode == 0
+    obj = json.loads(result.stdout)
+    assert obj["state"] == "held", obj
+    assert obj["ownerName"] == "claude.exe", obj
+
+
+def test_a_held_record_without_owner_name_is_still_well_formed(lane_home):
+    """The migration direction that matters on the way OUT, and the
+    reason the field is optional rather than required.
+
+    Every record written before this change lacks it. A required field
+    would have turned all of them MALFORMED the moment the plugin cache
+    updated - a lane locked by an upgrade, not by a debate.
+    """
+    write_held(lane_home, host=COMPUTERNAME)
+    result = run_lock(["-Status", "-LaneHome", str(lane_home)])
+    assert result.returncode == 0
+    obj = json.loads(result.stdout)
+    assert obj["state"] == "held", obj
+    assert "ownerName" not in obj, obj
+
+
+def test_acquire_refuses_a_blank_owner_name(lane_home, debate_home):
+    """A supplied name that says nothing is a caller error, not a record
+    to write. Refusing keeps "present" and "informative" the same thing.
+    """
+    rc = run_lock(["-Acquire", "-LaneHome", str(lane_home),
+                   "-DebateId", "0" * 32,
+                   "-OwnerPid", LIVE_PID, "-OwnerStartTicksUtc", LIVE_TICKS,
+                   "-OwnerName", "   ",
+                   "-DebateHome", str(debate_home), "-WaitSeconds", "0"])
+    assert rc.returncode == 2, (rc.returncode, rc.stdout, rc.stderr)
+    assert read_raw(lane_home) in (None, b'{"version":1,"state":"free"}'), read_raw(lane_home)
+
+
+def test_reclaiming_a_dead_holder_carries_the_new_owner_name(lane_home, debate_home):
+    """The reclaim writer is a SECOND record writer, and a field added to
+    one writer and not the other is a field that vanishes on reclaim."""
+    write_held(lane_home, host=COMPUTERNAME, ownerName="stale.exe")
+    rc = run_lock(["-Acquire", "-LaneHome", str(lane_home),
+                   "-DebateId", "1" * 32,
+                   "-OwnerPid", LIVE_PID, "-OwnerStartTicksUtc", LIVE_TICKS,
+                   "-OwnerName", "claude.exe",
+                   "-DebateHome", str(debate_home), "-WaitSeconds", "0"])
+    assert rc.returncode == 0, (rc.returncode, rc.stdout, rc.stderr)
+    rec = json.loads(read_raw(lane_home).decode("utf-8"))
+    assert rec["ownerName"] == "claude.exe", rec
+
+
 def test_acquire_accepts_an_unmeasurable_proposed_owner(lane_home, debate_home):
     """The refusal is DEAD-only, and this is the boundary it may not cross.
 

@@ -449,3 +449,72 @@ synthetic owner identities. The verification surface for a change to a
 shared tool is every module that drives that tool, not the one module
 named after it - which is the operational definition task 7 is being
 asked to write, failed in the same branch that writes it.
+
+---
+
+# Build record - task 4, ownerName as an optional held-v1 field (2026-08-04)
+
+Built. `ownerName` reaches the persistent record, both wrapper call
+chains forward it, and status reports it when it is there. Ten new
+oracles across three modules.
+
+## Why OPTIONAL, and why that is the whole design
+
+The held record is an EXACT field set: a property the schema does not
+name makes the record MALFORMED, which is exit 4 and a lane nobody can
+take without the guarded override.
+
+The lock already carried two lists, `$HeldFields` (admitted) and
+`$HeldRequired` (demanded). Adding `ownerName` to the first and not the
+second IS the migration. A required field would have turned every record
+written before this change MALFORMED the moment the plugin cache
+updated - a lane locked by an upgrade rather than by a debate.
+
+Both directions are pinned, because only pinning one of them would let
+the other rot:
+
+- `test_a_held_record_carrying_owner_name_is_well_formed`
+- `test_a_held_record_without_owner_name_is_still_well_formed`
+
+Optional in PRESENCE is not optional in SHAPE. A record that carries the
+field at all must carry something a reader can act on, so a blank or
+non-string name is MALFORMED, and a supplied-but-blank `-OwnerName` is a
+REFUSED acquire rather than a silent absence. That is the rule `-Nonce`
+already follows in the same file.
+
+## Two writers, two chains, and both were live traps
+
+The lock has TWO record writers - the fresh acquire and the RECLAIM of a
+dead holder - and a field added to one is a field that vanishes the
+first time a lane is reclaimed. Pinned by
+`test_reclaiming_a_dead_holder_carries_the_new_owner_name`.
+
+The tools have TWO call chains into acquire - the builder and the login
+wrapper - and the login one is what the doctor's own recovery command
+drives, so it is the chain most likely to be holding a lane an operator
+is trying to understand. Each is pinned from the RECORD rather than from
+the wrapper's own output, and each was watched failing with its
+forwarding line removed.
+
+Neither wrapper forwards an empty name. Adding the key with an empty
+value would turn a nameless call into a REFUSED acquire, which is a
+wrapper failing a call the caller made correctly.
+
+## The consumers, enumerated
+
+- `tools/kimi-lane-lock.ps1` - parameter, schema, validation, both
+  writers, status output.
+- `tools/new-kimi-lane-home.ps1` - parameter and both acquire sites.
+- `tools/new-kimi-lane-login.ps1` - parameter and its acquire site.
+- The recovery command in all four copies, which now forwards
+  `-OwnerName $owner.ownerName` to the login wrapper.
+- `test_kimi_lane_lock.py`, `test_kimi_lane_home.py`,
+  `test_kimi_lane_login.py`.
+
+## What this does NOT do
+
+Nothing yet passes a name on the shipped debate path: the skill's
+lifecycle region still says to keep `ownerPid` and `ownerStartTicksUtc`
+and hand those to every later call. That sentence moves with task 1's
+edit to the same file, and until it does, the field is available rather
+than used.

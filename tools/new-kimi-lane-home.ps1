@@ -79,6 +79,12 @@ param(
     [Parameter(Mandatory = $true)][string]$DebateId,
     [Parameter(Mandatory = $true)][string]$OwnerPid,
     [Parameter(Mandatory = $true)][string]$OwnerStartTicksUtc,
+    # OPTIONAL passthrough. The lock records the owner's process NAME so
+    # a stuck lane says WHAT holds it, not only which pid. Optional here
+    # for the same reason it is optional in the record: a caller that
+    # supplies none is not in error, and this wrapper must not become the
+    # thing that requires one.
+    [Parameter(Mandatory = $false)][string]$OwnerName,
     [Parameter(ParameterSetName = "Remove", Mandatory = $true)][string]$Nonce
 )
 
@@ -170,7 +176,7 @@ function Invoke-LockCall([hashtable]$LockArgs) {
 # ownerStartTicksUtc, an integral pid above zero, ticks matching
 # \A[0-9]+\z, and a TEMP that exists and is a directory.
 # ---------------------------------------------------------------------
-$RecoveryCommandTemplate = '& { $ErrorActionPreference = ''Stop''; try { $ownerLines = @(& ''tools/kimi-lane-lock.ps1'' -ResolveOwner); $ownerExit = $LASTEXITCODE; if ($ownerExit -ne 0) { throw "owner resolution failed with exit $ownerExit" }; if ($ownerLines.Count -ne 1 -or -not ($ownerLines[0] -is [string]) -or [string]::IsNullOrWhiteSpace([string]$ownerLines[0])) { throw ''owner resolution returned invalid output'' }; $owner = $ownerLines[0] | ConvertFrom-Json -ErrorAction Stop; if (-not ($owner -is [System.Management.Automation.PSCustomObject])) { throw ''owner resolution returned invalid schema'' }; $ownerFields = @($owner.PSObject.Properties.Name); if ($ownerFields.Count -ne 3 -or -not ($ownerFields -ccontains ''ownerPid'') -or -not ($ownerFields -ccontains ''ownerStartTicksUtc'') -or -not ($ownerFields -ccontains ''ownerName'') -or -not (($owner.ownerPid -is [int]) -or ($owner.ownerPid -is [long])) -or [long]$owner.ownerPid -le 0 -or -not ($owner.ownerStartTicksUtc -is [string]) -or $owner.ownerStartTicksUtc -notmatch ''\A[0-9]+\z'' -or -not ($owner.ownerName -is [string]) -or [string]::IsNullOrWhiteSpace($owner.ownerName)) { throw ''owner resolution returned invalid schema'' }; if ([string]::IsNullOrWhiteSpace($env:TEMP) -or -not (Test-Path -LiteralPath $env:TEMP -PathType Container -ErrorAction Stop)) { throw ''TEMP is not an existing directory'' }; $verdictOut = Join-Path -Path $env:TEMP -ChildPath ''parallax-kimi-lane-login-verdict.json'' -ErrorAction Stop; & ''tools/new-kimi-lane-login.ps1'' -LaneHome ''<lane-home>'' -OwnerPid ([string]$owner.ownerPid) -OwnerStartTicksUtc $owner.ownerStartTicksUtc -VerdictOut $verdictOut; $loginExit = $LASTEXITCODE; if ($loginExit -ne 0) { throw "lane login failed with exit $loginExit" } } catch { throw } }'
+$RecoveryCommandTemplate = '& { $ErrorActionPreference = ''Stop''; try { $ownerLines = @(& ''tools/kimi-lane-lock.ps1'' -ResolveOwner); $ownerExit = $LASTEXITCODE; if ($ownerExit -ne 0) { throw "owner resolution failed with exit $ownerExit" }; if ($ownerLines.Count -ne 1 -or -not ($ownerLines[0] -is [string]) -or [string]::IsNullOrWhiteSpace([string]$ownerLines[0])) { throw ''owner resolution returned invalid output'' }; $owner = $ownerLines[0] | ConvertFrom-Json -ErrorAction Stop; if (-not ($owner -is [System.Management.Automation.PSCustomObject])) { throw ''owner resolution returned invalid schema'' }; $ownerFields = @($owner.PSObject.Properties.Name); if ($ownerFields.Count -ne 3 -or -not ($ownerFields -ccontains ''ownerPid'') -or -not ($ownerFields -ccontains ''ownerStartTicksUtc'') -or -not ($ownerFields -ccontains ''ownerName'') -or -not (($owner.ownerPid -is [int]) -or ($owner.ownerPid -is [long])) -or [long]$owner.ownerPid -le 0 -or -not ($owner.ownerStartTicksUtc -is [string]) -or $owner.ownerStartTicksUtc -notmatch ''\A[0-9]+\z'' -or -not ($owner.ownerName -is [string]) -or [string]::IsNullOrWhiteSpace($owner.ownerName)) { throw ''owner resolution returned invalid schema'' }; if ([string]::IsNullOrWhiteSpace($env:TEMP) -or -not (Test-Path -LiteralPath $env:TEMP -PathType Container -ErrorAction Stop)) { throw ''TEMP is not an existing directory'' }; $verdictOut = Join-Path -Path $env:TEMP -ChildPath ''parallax-kimi-lane-login-verdict.json'' -ErrorAction Stop; & ''tools/new-kimi-lane-login.ps1'' -LaneHome ''<lane-home>'' -OwnerPid ([string]$owner.ownerPid) -OwnerStartTicksUtc $owner.ownerStartTicksUtc -OwnerName $owner.ownerName -VerdictOut $verdictOut; $loginExit = $LASTEXITCODE; if ($loginExit -ne 0) { throw "lane login failed with exit $loginExit" } } catch { throw } }'
 
 function Get-LaneLoginRecoveryCommand([string]$ResolvedLaneHome) {
     # "<lane-home>" substitution, a literal algorithm: replace every ' in
@@ -366,11 +372,17 @@ if ($Remove) {
     #    this call is read-only when the identity already matches the
     #    held record (no Write-RecordJson on that path in the lock).
     # -----------------------------------------------------------------
-    $identityCheck = Invoke-LockCall -LockArgs @{
+    $identityArgs = @{
         Acquire = $true; LaneHome = $LaneHome; DebateId = $DebateId
         OwnerPid = $OwnerPid; OwnerStartTicksUtc = $OwnerStartTicksUtc
         DebateHome = $fullPath; Nonce = $Nonce
     }
+    # Forwarded only when the caller supplied it. Adding the key with an
+    # empty value would turn "no name" into a REFUSED acquire (the lock
+    # rejects a supplied-but-blank name), which is a wrapper deciding to
+    # fail a call the caller made correctly.
+    if ($PSBoundParameters.ContainsKey("OwnerName")) { $identityArgs.OwnerName = $OwnerName }
+    $identityCheck = Invoke-LockCall -LockArgs $identityArgs
     if ($identityCheck.ExitCode -ne 0) {
         exit $identityCheck.ExitCode
     }
@@ -564,11 +576,13 @@ try {
     # because a login can otherwise mutate the shared credential between
     # validation and acquisition.
     # -------------------------------------------------------------------
-    $acquireResult = Invoke-LockCall -LockArgs @{
+    $acquireArgs = @{
         Acquire = $true; LaneHome = $resolvedLaneHome; DebateId = $DebateId
         OwnerPid = $OwnerPid; OwnerStartTicksUtc = $OwnerStartTicksUtc
         DebateHome = $fullPath
     }
+    if ($PSBoundParameters.ContainsKey("OwnerName")) { $acquireArgs.OwnerName = $OwnerName }
+    $acquireResult = Invoke-LockCall -LockArgs $acquireArgs
     if ($acquireResult.ExitCode -ne 0) {
         # $lockAcquired stays false: an acquire failure never attempts a
         # release. The finally below still runs (exit does not bypass

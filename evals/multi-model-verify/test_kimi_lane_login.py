@@ -1071,6 +1071,77 @@ def _displace_lock_externally(lane_home, timeout=10):
     return False
 
 
+def _held_record_while_blocked(lane_home, timeout=10):
+    """The held record as it stands WHILE the wrapper holds it.
+
+    The login wrapper releases on the way out, so the only moment its
+    record exists is while the run is blocked. Reading it afterwards
+    would measure nothing.
+    """
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        status = run_lock(["-Status", "-LaneHome", str(lane_home)])
+        if status.returncode == 0:
+            obj = json.loads(status.stdout)
+            if obj.get("state") == "held":
+                return obj
+        time.sleep(0.1)
+    return None
+
+
+def test_the_login_lock_carries_the_owner_name_it_was_given(
+        lane_home, kimi_stub, tmp_path):
+    """The login wrapper is the SECOND call chain into acquire, and a
+    passthrough added to one chain and not the other is a name that
+    appears or vanishes depending on which command took the lane.
+
+    This is also the chain the doctor's own recovery command drives, so
+    it is the one most likely to be holding a lane an operator is trying
+    to understand.
+    """
+    lane_home.mkdir()
+    verdict_out = tmp_path / "verdict.json"
+    release_signal = tmp_path / "release.txt"
+    proc = start_wrapper_bg(
+        ["-LaneHome", str(lane_home), "-OwnerPid", LIVE_PID,
+         "-OwnerStartTicksUtc", LIVE_TICKS, "-OwnerName", "claude.exe",
+         "-KimiBinary", str(kimi_stub), "-VerdictOut", str(verdict_out)],
+        env={"PARALLAX_TEST_STUB_BLOCK_UNTIL": str(release_signal),
+             "PARALLAX_TEST_STUB_WRITE_CREDENTIAL": "ok"})
+    try:
+        held = _held_record_while_blocked(lane_home)
+    finally:
+        release_signal.write_text("go", encoding="ascii")
+    stdout, stderr = proc.communicate(timeout=15)
+    assert held is not None, (stdout, stderr)
+    assert held.get("ownerName") == "claude.exe", held
+    assert proc.returncode == 0, (stdout, stderr)
+
+
+def test_the_login_lock_omits_the_owner_name_when_none_was_given(
+        lane_home, kimi_stub, tmp_path):
+    """The passthrough must not invent one. A wrapper that supplied an
+    empty name would turn every nameless call into a REFUSED acquire,
+    because the lock rejects a supplied-but-blank name."""
+    lane_home.mkdir()
+    verdict_out = tmp_path / "verdict.json"
+    release_signal = tmp_path / "release.txt"
+    proc = start_wrapper_bg(
+        ["-LaneHome", str(lane_home), "-OwnerPid", LIVE_PID,
+         "-OwnerStartTicksUtc", LIVE_TICKS,
+         "-KimiBinary", str(kimi_stub), "-VerdictOut", str(verdict_out)],
+        env={"PARALLAX_TEST_STUB_BLOCK_UNTIL": str(release_signal),
+             "PARALLAX_TEST_STUB_WRITE_CREDENTIAL": "ok"})
+    try:
+        held = _held_record_while_blocked(lane_home)
+    finally:
+        release_signal.write_text("go", encoding="ascii")
+    stdout, stderr = proc.communicate(timeout=15)
+    assert held is not None, (stdout, stderr)
+    assert "ownerName" not in held, held
+    assert proc.returncode == 0, (stdout, stderr)
+
+
 def test_release_refusal_propagates_when_main_operation_succeeded(
         lane_home, kimi_stub, tmp_path):
     lane_home.mkdir()

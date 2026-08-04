@@ -90,6 +90,13 @@ param(
     [Parameter(ParameterSetName = "Acquire", Mandatory = $true)]
     [string]$DebateHome,
 
+    # OPTIONAL, and on -Acquire only. Release and ForceRelease match on
+    # the identity they were GIVEN; a display name is not part of that
+    # identity and must never become something a caller has to reproduce
+    # in order to let go of its own lock.
+    [Parameter(ParameterSetName = "Acquire", Mandatory = $false)]
+    [string]$OwnerName,
+
     # Mandatory on -Release (present the nonce this session was given),
     # optional on -Acquire (absent on a fresh acquisition, supplied only
     # to prove an idempotent re-acquire of one's own held lock).
@@ -126,8 +133,15 @@ $ErrorActionPreference = "Stop"
 # Record schema constants.
 # ---------------------------------------------------------------------
 $FreeFields = @("version", "state")
+# ownerName is in $HeldFields and NOT in $HeldRequired, and that gap is
+# the migration. The held schema is an EXACT field set, so a REQUIRED
+# ownerName would have turned every record written before this change
+# MALFORMED the moment the plugin cache updated - a lane locked by an
+# upgrade rather than by a debate, freeable only through the guarded
+# override. Optional means both shapes stay well formed.
 $HeldFields = @("version", "state", "host", "ownerPid", "ownerStartTicksUtc",
-                "debateId", "nonce", "debateHome", "acquiredTicksUtc")
+                "debateId", "nonce", "debateHome", "acquiredTicksUtc",
+                "ownerName")
 $HeldRequired = @("host", "ownerPid", "ownerStartTicksUtc", "debateId",
                   "nonce", "debateHome", "acquiredTicksUtc")
 # -DebateId/-Nonce/-ConfirmDebateId/-ConfirmNonce/debateId/nonce: exactly
@@ -343,6 +357,13 @@ function Get-Classification([byte[]]$Bytes) {
         -not ($obj.acquiredTicksUtc -match $DigitsPattern)) {
         return @{ Malformed = $true }
     }
+    # Optional in PRESENCE, not in shape: a record that carries the field
+    # at all must carry something a reader can act on.
+    if ($props -ccontains "ownerName") {
+        if (-not ($obj.ownerName -is [string]) -or $obj.ownerName.Trim().Length -eq 0) {
+            return @{ Malformed = $true }
+        }
+    }
     return @{ Malformed = $false; State = "held"; Record = $obj }
 }
 
@@ -479,6 +500,12 @@ if ($Mode -eq "Acquire" -or $Mode -eq "Release") {
 if ($Mode -eq "Acquire") {
     if ([string]::IsNullOrWhiteSpace($DebateHome)) { exit 2 }
 }
+# "Provided" means the caller supplied the parameter at all. An empty or
+# whitespace value is a REFUSED value, never silently treated as absent,
+# because a record claiming to carry a name and carrying nothing forces
+# every reader to invent a meaning for it. Same rule as -Nonce.
+$OwnerNameProvided = $PSBoundParameters.ContainsKey("OwnerName")
+if ($OwnerNameProvided -and [string]::IsNullOrWhiteSpace($OwnerName)) { exit 2 }
 # -Nonce: mandatory on -Release (the binder guarantees it is bound, but
 # an explicit -Nonce "" still binds successfully, so the pattern is
 # checked regardless of emptiness), optional on -Acquire. "Provided"
@@ -582,6 +609,7 @@ function Invoke-AcquireMode {
                 debateId = $DebateId; nonce = $newNonce; debateHome = $DebateHome
                 acquiredTicksUtc = $nowTicks
             }
+            if ($OwnerNameProvided) { $rec["ownerName"] = $OwnerName }
             Write-RecordJson $open.Stream (ConvertTo-Json $rec -Compress)
             Close-CurrentStream
             Write-Output $newNonce
@@ -605,6 +633,9 @@ function Invoke-AcquireMode {
                 debateId = $DebateId; nonce = $newNonce; debateHome = $DebateHome
                 acquiredTicksUtc = $nowTicks
             }
+            # The RECLAIM writer, and it is a SECOND one. The name here
+            # is the new owner's; the dead holder's goes with its record.
+            if ($OwnerNameProvided) { $newRec["ownerName"] = $OwnerName }
             Write-RecordJson $open.Stream (ConvertTo-Json $newRec -Compress)
             Close-CurrentStream
             Write-Stderr "reclaimed a dead holder: pid $($rec.ownerPid) ticks $($rec.ownerStartTicksUtc) debate $($rec.debateId) home $($rec.debateHome)"
@@ -765,6 +796,9 @@ function Invoke-StatusMode {
         state = "held"; host = $rec.host; ownerPid = [int64]$rec.ownerPid
         ownerStartTicksUtc = $rec.ownerStartTicksUtc; debateId = $rec.debateId
         nonce = $rec.nonce; debateHome = $rec.debateHome; liveness = $livenessOut
+    }
+    if (@($rec.PSObject.Properties.Name) -ccontains "ownerName") {
+        $obj["ownerName"] = $rec.ownerName
     }
     Write-Output (ConvertTo-Json $obj -Compress)
     exit 0
