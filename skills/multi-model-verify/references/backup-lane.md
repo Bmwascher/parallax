@@ -110,13 +110,18 @@ Panel participation: a user-invoked panel per references/panels.md is a second s
   deriving it from the invoking shell's parent is correct only for a
   DIRECT invocation, and under any wrapper it names an intermediate
   process that also exits. So run `tools/kimi-lane-lock.ps1
-  -ResolveOwner` once at the start of the debate, keep its `ownerPid`
-  and `ownerStartTicksUtc`, generate one 32-character lowercase
-  hexadecimal debate id, and hand all three to every later call. Build
-  with `tools/new-kimi-lane-home.ps1 -Path <debate-home> -Model
-  <canonical-backup-model-id> -Effort <canonical-backup-effort>
-  -LaneHome <lane-home> -DebateId <id> -OwnerPid <pid>
-  -OwnerStartTicksUtc <ticks>`; it acquires the lock before it validates
+  -ResolveOwner` once at the start of the debate, keep its `ownerPid`,
+  `ownerStartTicksUtc` and `ownerName`, generate one 32-character
+  lowercase hexadecimal debate id, and hand the pid, the ticks and the
+  debate id to every later call. Pass `-OwnerName <name>` to the BUILD
+  and to the LOGIN too: the lock records it, so a blocked session and
+  the doctor can see WHAT holds the lane rather than only which pid. It
+  is OPTIONAL everywhere and is never part of the identity a release
+  must match, because a caller must not need a display name in order to
+  let go of its own lock. Build with `tools/new-kimi-lane-home.ps1 -Path
+  <debate-home> -Model <canonical-backup-model-id> -Effort
+  <canonical-backup-effort> -LaneHome <lane-home> -DebateId <id>
+  -OwnerPid <pid> -OwnerStartTicksUtc <ticks> -OwnerName <name>`; it acquires the lock before it validates
   the credential, because a login could otherwise write that credential
   in between, and it releases only when the build itself failed. Build
   prints one JSON line carrying `debateHome` and `nonce`: keep that
@@ -128,7 +133,8 @@ Panel participation: a user-invoked panel per references/panels.md is a second s
   who cannot release also cannot destroy, and it releases only after the
   home is gone. Log the lane in with `tools/new-kimi-lane-login.ps1
   -LaneHome <lane-home> -OwnerPid <pid> -OwnerStartTicksUtc <ticks>
-  -VerdictOut <path>`, passing the SAME lane home the build was given,
+  -OwnerName <name> -VerdictOut <path>`, passing the SAME lane home the
+  build was given,
   because omitting it authenticates the default home while the debate
   dispatches from another; the wrapper generates its own debate id,
   takes the same lock with the lane home as its debate home, and
@@ -152,6 +158,29 @@ Panel participation: a user-invoked panel per references/panels.md is a second s
   -LaneHome <lane-home>`, which reports the holder and its liveness and
   reports LIVE to mean the process is running, never to mean the debate
   is still going.
+  <!-- contract:end -->
+- **Closing the debate: release the lane.**
+  <!-- contract:start id=lane-debate-close -->
+  A backup-lane debate is not over when the last round returns. It is
+  over when the LANE IS RELEASED, and that is a NAMED STEP of the
+  debate's close rather than a clause of the call protocol above. Run
+  `tools/new-kimi-lane-home.ps1 -Path <debate-home> -Remove -LaneHome
+  <lane-home> -DebateId <id> -OwnerPid <pid> -OwnerStartTicksUtc <ticks>
+  -Nonce <nonce>` as the LAST act of every backup-lane debate, including
+  one that ended in ESCALATE, one the user abandoned mid-round, and one
+  whose rounds failed on transport, because the lock is held identically
+  in all three and none of them is a reason to keep it. THIS RULE IS
+  ADVISORY AND CANNOT BE ANYTHING ELSE. Pinned prose does not execute a
+  teardown and nothing detects a debate that finished without one: the
+  record stays HELD until its owner process dies, at which point it
+  becomes DEAD by liveness and is reclaimable at some later acquire, so
+  a forgotten release blocks the lane for the life of the session
+  process. That is not hypothetical - on 2026-08-03 two sessions blocked
+  for over three hours with the lock behaving exactly as designed. The
+  doctor reports a QUIET live holder as INFORMATION so the omission is
+  at least visible; visibility is not detection, it changes nothing
+  about who may reclaim, and it is not a second chance to skip this
+  step.
   <!-- contract:end -->
 - **What a resume inherits, and what it cannot.**
   <!-- contract:start id=resume-inheritance -->

@@ -518,3 +518,81 @@ lifecycle region still says to keep `ownerPid` and `ownerStartTicksUtc`
 and hand those to every later call. That sentence moves with task 1's
 edit to the same file, and until it does, the field is available rather
 than used.
+
+---
+
+# Build record - tasks 1 and 5, the release step and the quiet-holder row (2026-08-04)
+
+Built together because task 1's text cites task 5's row, and a rule that
+cites something not yet built is a claim wider than its evidence.
+
+## Task 1: the baseline really was stale, and the correction is narrower
+
+The plan's premise - that release exists only as an internal lifecycle
+side effect - was FALSE. `lane-home-isolation` already says "Remove the
+home with `-Remove` when the debate ends".
+
+What is TRUE is narrower, and it is what the new region fixes: the
+instruction was a CLAUSE INSIDE a contract region about building the
+home, not a STEP a driver reads at the debate's close. New region
+`lane-debate-close` in `backup-lane.md`, declared in `DECLARED_REGIONS`
+and pinned by `test_lane_debate_close_region`.
+
+It names the three cases most likely to skip it - a debate that ended in
+ESCALATE, one the user abandoned mid-round, one whose rounds failed on
+transport - because the lock is held identically in all three and none
+of them is a reason to keep it.
+
+**The admission is pinned WITH the rule, deliberately.** Pinned prose
+does not execute a teardown and nothing detects a debate that finished
+without one. A region stating the step without stating its own limit
+would be exactly the defect this repo's first invariant names. So the
+region says so, in the region, where it cannot be separated from the
+instruction it qualifies.
+
+## Task 5: four rules the backlog said had to be decided, decided
+
+The item required a rule for what "quiet" reads from and said it must
+degrade to silence. The plan did not supply one. All four are now in
+`commands/doctor.md` and pinned:
+
+- **INTERVAL: 30 minutes.** A single review round can legitimately run
+  past the ten-minute dispatch ceiling and a debate can sit between
+  rounds. A shorter interval reports an ACTIVE debate as quiet, which is
+  the failure that makes an operator distrust the row and then ignore
+  it.
+- **UNIVERSE: files under the recorded `debateHome`, recursive,
+  directories excluded.** Directory timestamps move for reasons that are
+  not debate activity, and the per-round session evidence this lane
+  writes is files.
+- **TIMESTAMP: the NEWEST `LastWriteTimeUtc`.** One number, compared
+  against now.
+- **PARTIAL UNREADABILITY: say nothing at all.** Missing home, not a
+  directory, no files, or ANY read failure anywhere in the walk, and the
+  doctor reports neither quiet nor active. A partial walk measures the
+  files it could open, not the debate.
+
+**The constraint that keeps it information.** The row stays OK, no
+reclaim rule moves, and nothing in the lock tool reads it. A predecessor
+expired holders by AGE and that let anyone break a live round; an idle
+reading that moved a verdict would be that expiry under another name.
+`test_doctor_quiet_row_never_becomes_an_expiry` pins that sentence.
+
+## The pins were mutation-tested, not merely written
+
+Prose pins are easy to write and easy to write uselessly. Both were
+checked by MUTATING the doctor text rather than deleting it:
+
+- `more than 30 MINUTES` -> `more than 10 MINUTES`: the interval pin
+  failed. The number is pinned, not the paragraph.
+- `if ANY part of the walk fails to read` -> `if the walk fails to
+  read`: the silence pin failed. The word that makes a partial failure
+  count is pinned, which is the whole rule.
+
+## Task 4's loose end, closed here
+
+The lifecycle region now says to keep `ownerName` from resolution and
+pass `-OwnerName <name>` to both the build and the login, and states
+that it is optional everywhere and never part of the identity a release
+must match. Until this edit the field was available but nothing on the
+shipped path passed one.

@@ -651,6 +651,7 @@ DECLARED_REGIONS = {
     "lane-home-isolation",
     "lane-lock",
     "lane-lock-call-lifecycle",
+    "lane-debate-close",
     "round-freshness-boundary",
     "per-round-session-evidence",
     "evidence-hash-continuity",

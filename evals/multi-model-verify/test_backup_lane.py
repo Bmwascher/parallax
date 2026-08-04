@@ -262,59 +262,113 @@ def test_lane_lock_call_lifecycle_region():
     directory. The nonce half is pinned with them - a hold nobody can
     release is a lane nobody else can use."""
     assert (
-            "Ownership is RESOLVED ONCE per debate and PASSED EXPLICITLY "
-            "thereafter. The owner is the harness session process, not the "
-            "shell, which exits between calls and would make every lock "
-            "instantly stale; deriving it from the invoking shell's parent "
-            "is correct only for a DIRECT invocation, and under any wrapper "
-            "it names an intermediate process that also exits. So run "
-            "`tools/kimi-lane-lock.ps1 -ResolveOwner` once at the start of "
-            "the debate, keep its `ownerPid` and `ownerStartTicksUtc`, "
-            "generate one 32-character lowercase hexadecimal debate id, and "
-            "hand all three to every later call. Build with "
-            "`tools/new-kimi-lane-home.ps1 -Path <debate-home> -Model "
-            "<canonical-backup-model-id> -Effort <canonical-backup-effort> "
-            "-LaneHome <lane-home> -DebateId <id> -OwnerPid <pid> "
-            "-OwnerStartTicksUtc <ticks>`; it acquires the lock before it "
+            "Ownership is RESOLVED ONCE per debate and PASSED "
+            "EXPLICITLY thereafter. The owner is the harness session "
+            "process, not the shell, which exits between calls and "
+            "would make every lock instantly stale; deriving it from "
+            "the invoking shell's parent is correct only for a DIRECT "
+            "invocation, and under any wrapper it names an intermediate "
+            "process that also exits. So run `tools/kimi-lane-lock.ps1 "
+            "-ResolveOwner` once at the start of the debate, keep its "
+            "`ownerPid`, `ownerStartTicksUtc` and `ownerName`, generate "
+            "one 32-character lowercase hexadecimal debate id, and hand "
+            "the pid, the ticks and the debate id to every later call. "
+            "Pass `-OwnerName <name>` to the BUILD and to the LOGIN "
+            "too: the lock records it, so a blocked session and the "
+            "doctor can see WHAT holds the lane rather than only which "
+            "pid. It is OPTIONAL everywhere and is never part of the "
+            "identity a release must match, because a caller must not "
+            "need a display name in order to let go of its own lock. "
+            "Build with `tools/new-kimi-lane-home.ps1 -Path "
+            "<debate-home> -Model <canonical-backup-model-id> -Effort "
+            "<canonical-backup-effort> -LaneHome <lane-home> -DebateId "
+            "<id> -OwnerPid <pid> -OwnerStartTicksUtc <ticks> "
+            "-OwnerName <name>`; it acquires the lock before it "
             "validates the credential, because a login could otherwise "
-            "write that credential in between, and it releases only when "
-            "the build itself failed. Build prints one JSON line carrying "
-            "`debateHome` and `nonce`: keep that nonce, because removal "
-            "requires it and a hold nobody can release is a lane nobody "
-            "else can use. Remove with `tools/new-kimi-lane-home.ps1 -Path "
-            "<debate-home> -Remove -LaneHome <lane-home> -DebateId <id> "
-            "-OwnerPid <pid> -OwnerStartTicksUtc <ticks> -Nonce <nonce>`; "
-            "it confirms the complete identity BEFORE it deletes anything, "
-            "so a caller who cannot release also cannot destroy, and it "
+            "write that credential in between, and it releases only "
+            "when the build itself failed. Build prints one JSON line "
+            "carrying `debateHome` and `nonce`: keep that nonce, "
+            "because removal requires it and a hold nobody can release "
+            "is a lane nobody else can use. Remove with "
+            "`tools/new-kimi-lane-home.ps1 -Path <debate-home> -Remove "
+            "-LaneHome <lane-home> -DebateId <id> -OwnerPid <pid> "
+            "-OwnerStartTicksUtc <ticks> -Nonce <nonce>`; it confirms "
+            "the complete identity BEFORE it deletes anything, so a "
+            "caller who cannot release also cannot destroy, and it "
             "releases only after the home is gone. Log the lane in with "
-            "`tools/new-kimi-lane-login.ps1 -LaneHome <lane-home> -OwnerPid "
-            "<pid> -OwnerStartTicksUtc <ticks> -VerdictOut <path>`, passing "
-            "the SAME lane home the build was given, because omitting it "
-            "authenticates the default home while the debate dispatches "
-            "from another; the wrapper generates its own debate id, takes "
-            "the same lock with the lane home as its debate home, and "
-            "releases it on the way out. A login outside that lock would be "
-            "the one writer this protocol never sees. Only these filesystem "
-            "interactions occur before lock acquisition, because the lock "
-            "lives inside the lane directory: the login wrapper's "
+            "`tools/new-kimi-lane-login.ps1 -LaneHome <lane-home> "
+            "-OwnerPid <pid> -OwnerStartTicksUtc <ticks> -OwnerName "
+            "<name> -VerdictOut <path>`, passing the SAME lane home the "
+            "build was given, because omitting it authenticates the "
+            "default home while the debate dispatches from another; the "
+            "wrapper generates its own debate id, takes the same lock "
+            "with the lane home as its debate home, and releases it on "
+            "the way out. A login outside that lock would be the one "
+            "writer this protocol never sees. Only these filesystem "
+            "interactions occur before lock acquisition, because the "
+            "lock lives inside the lane directory: the login wrapper's "
             "fail-closed probe of the lane directory, the login wrapper "
-            "creating that directory when the probe measured it missing, "
-            "the login wrapper applying its access rules, and the builder's "
-            "own read-only fail-closed probe of whether that directory is "
-            "there. All four interactions are safe to repeat: both probes "
-            "only read, and directory creation and ACL application are "
-            "idempotent. The builder NEVER creates the directory: if it is "
-            "missing the builder prints the login command and stops without "
-            "taking the lock, and once the directory is confirmed the "
-            "credentials directory and the credential file are both "
-            "measured UNDER the lock. A debate that ends without removal "
-            "leaves its home on disk and its record still HELD; that record "
-            "is not freed by the session exiting, it merely becomes DEAD by "
-            "liveness and is reclaimable at some later acquire. Read the "
-            "state at any time with `tools/kimi-lane-lock.ps1 -Status "
-            "-LaneHome <lane-home>`, which reports the holder and its "
-            "liveness and reports LIVE to mean the process is running, "
-            "never to mean the debate is still going.") in _norm(BACKUP_LANE)
+            "creating that directory when the probe measured it "
+            "missing, the login wrapper applying its access rules, and "
+            "the builder's own read-only fail-closed probe of whether "
+            "that directory is there. All four interactions are safe to "
+            "repeat: both probes only read, and directory creation and "
+            "ACL application are idempotent. The builder NEVER creates "
+            "the directory: if it is missing the builder prints the "
+            "login command and stops without taking the lock, and once "
+            "the directory is confirmed the credentials directory and "
+            "the credential file are both measured UNDER the lock. A "
+            "debate that ends without removal leaves its home on disk "
+            "and its record still HELD; that record is not freed by the "
+            "session exiting, it merely becomes DEAD by liveness and is "
+            "reclaimable at some later acquire. Read the state at any "
+            "time with `tools/kimi-lane-lock.ps1 -Status -LaneHome "
+            "<lane-home>`, which reports the holder and its liveness "
+            "and reports LIVE to mean the process is running, never to "
+            "mean the debate is still going."
+    ) in _norm(BACKUP_LANE)
+def test_lane_debate_close_region():
+    """The release step, named at the debate's CLOSE rather than
+    buried in the call protocol - and honest that it is advisory.
+
+    The baseline this replaces was stale: `lane-home-isolation`
+    already said to remove the home when the debate ends. What was
+    missing is that the instruction was a clause inside a contract
+    region rather than a step a driver reads at the close, and that
+    nothing detects a debate which finished without one.
+
+    The admission is pinned WITH the rule on purpose. Pinned prose
+    does not execute a teardown, so a region that stated the step
+    without stating its own limit would be a claim wider than what
+    this branch built."""
+    assert (
+            "A backup-lane debate is not over when the last round "
+            "returns. It is over when the LANE IS RELEASED, and that is "
+            "a NAMED STEP of the debate's close rather than a clause of "
+            "the call protocol above. Run `tools/new-kimi-lane-home.ps1 "
+            "-Path <debate-home> -Remove -LaneHome <lane-home> "
+            "-DebateId <id> -OwnerPid <pid> -OwnerStartTicksUtc <ticks> "
+            "-Nonce <nonce>` as the LAST act of every backup-lane "
+            "debate, including one that ended in ESCALATE, one the user "
+            "abandoned mid-round, and one whose rounds failed on "
+            "transport, because the lock is held identically in all "
+            "three and none of them is a reason to keep it. THIS RULE "
+            "IS ADVISORY AND CANNOT BE ANYTHING ELSE. Pinned prose does "
+            "not execute a teardown and nothing detects a debate that "
+            "finished without one: the record stays HELD until its "
+            "owner process dies, at which point it becomes DEAD by "
+            "liveness and is reclaimable at some later acquire, so a "
+            "forgotten release blocks the lane for the life of the "
+            "session process. That is not hypothetical - on 2026-08-03 "
+            "two sessions blocked for over three hours with the lock "
+            "behaving exactly as designed. The doctor reports a QUIET "
+            "live holder as INFORMATION so the omission is at least "
+            "visible; visibility is not detection, it changes nothing "
+            "about who may reclaim, and it is not a second chance to "
+            "skip this step."
+    ) in _norm(BACKUP_LANE)
+
+
 def test_resume_inheritance_region():
     """The measured inheritance surface, stated at exactly its width.
 
@@ -1501,6 +1555,63 @@ def test_doctor_check8_authenticated_probe_literal_exact():
 
 def test_doctor_check8_lock_status_measurement_failure_row():
     assert LOCK_STATUS_CANNOT_MEASURE in _norm(DOCTOR)
+
+
+def test_doctor_reports_the_holder_name_and_a_quiet_debate_home():
+    """Item 26's visibility half, and every rule it needs decided.
+
+    The incident that opened the item was a lane blocked for hours with
+    the lock behaving correctly at every step: check 8 maps held + LIVE
+    to OK and says LIVE never means abandoned, which is the right rule
+    for reclaim rights and leaves a forgotten teardown indistinguishable
+    from an active review.
+
+    Four things had to be decided rather than described, and each is
+    pinned here: the INTERVAL (30 minutes), the UNIVERSE (files under
+    the recorded debateHome, recursive, directories excluded), the
+    TIMESTAMP rule (newest LastWriteTimeUtc), and what a PARTIAL read
+    does (say nothing at all).
+    """
+    body = _norm(DOCTOR)
+    assert (
+            "Report the holder's `ownerName` when the record carries "
+            "one; a record written before that field existed carries "
+            "none, and absence is reported as absence rather than "
+            "guessed at.") in body
+    assert (
+            "QUIET-HOLDER INFORMATION, and it is INFORMATION ONLY. "
+            "Measure the recorded `debateHome`: walk it RECURSIVELY and "
+            "take the NEWEST `LastWriteTimeUtc` over FILES ONLY, "
+            "directories excluded. If that newest write is more than 30 "
+            "MINUTES before now, add to the detail text that the debate "
+            "home has been quiet for that long. The interval is 30 "
+            "minutes because a single review round can legitimately run "
+            "past the ten-minute dispatch ceiling and a debate can sit "
+            "between rounds, so a shorter one would report an active "
+            "debate as quiet.") in body
+
+
+def test_doctor_quiet_row_never_becomes_an_expiry():
+    """The constraint that keeps this INFORMATION.
+
+    A predecessor expired holders by AGE and that let anyone break a
+    live round, which is why the lock's staleness rule is liveness and
+    never a clock. An idle-time reading that moved the verdict, or that
+    any reclaim path consulted, would be that expiry wearing a different
+    name - so the row's own text says it changes nothing, and the
+    unreadable case degrades to SILENCE rather than to a guess."""
+    body = _norm(DOCTOR)
+    assert (
+            "This row STAYS OK and no reclaim rule moves: quiet is not "
+            "abandoned, it is never grounds to break a live lock, and "
+            "nothing in the lock tool reads it. It exists so a forgotten "
+            "teardown is VISIBLE, which is not the same as detected. The "
+            "measurement DEGRADES TO SILENCE — if the recorded "
+            "`debateHome` is missing, is not a directory, holds no files, "
+            "or if ANY part of the walk fails to read, say NOTHING about "
+            "quietness at all, neither quiet nor active. An unmeasurable "
+            "idle time is not an idle debate, and a partial walk measures "
+            "the files it could open rather than the debate.") in body
 
 
 def test_doctor_check8_lock_free_live_dead_rows():

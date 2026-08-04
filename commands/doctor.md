@@ -228,7 +228,27 @@ an absent credential plus a free lock would have no defined row.
   - `free` is OK.
   - `held` and LIVE is OK, reported as held with the holder — LIVE means
     the holder's process is running, and never that a debate was
-    abandoned.
+    abandoned. Report the holder's `ownerName` when the record carries
+    one; a record written before that field existed carries none, and
+    absence is reported as absence rather than guessed at.
+
+    QUIET-HOLDER INFORMATION, and it is INFORMATION ONLY. Measure the
+    recorded `debateHome`: walk it RECURSIVELY and take the NEWEST
+    `LastWriteTimeUtc` over FILES ONLY, directories excluded. If that
+    newest write is more than 30 MINUTES before now, add to the detail
+    text that the debate home has been quiet for that long. The interval
+    is 30 minutes because a single review round can legitimately run
+    past the ten-minute dispatch ceiling and a debate can sit between
+    rounds, so a shorter one would report an active debate as quiet.
+    This row STAYS OK and no reclaim rule moves: quiet is not abandoned,
+    it is never grounds to break a live lock, and nothing in the lock
+    tool reads it. It exists so a forgotten teardown is VISIBLE, which
+    is not the same as detected. The measurement DEGRADES TO SILENCE —
+    if the recorded `debateHome` is missing, is not a directory, holds
+    no files, or if ANY part of the walk fails to read, say NOTHING
+    about quietness at all, neither quiet nor active. An unmeasurable
+    idle time is not an idle debate, and a partial walk measures the
+    files it could open rather than the debate.
   - `held` and DEAD is STALE, reclaimable at the next acquire.
   - `held`, SAME-HOST — the record's `host` equals `$env:COMPUTERNAME`,
     compared case-insensitively — and UNKNOWN is N/A: liveness could NOT
