@@ -235,6 +235,23 @@ Canonical reasoning effort: `high`
   one conversation, one rollout, two writers — so run parallel rounds as
   separate debates, never as two turns of one. Quota is shared, which makes
   parallel rounds faster and not cheaper.
+- **Dispatch the round DETACHED, and do not let the shell kill it.** A
+  round that crosses the caller's foreground timeout is killed by the
+  CALLER, not by the client: no `--output-last-message` file is written,
+  so it is a transport failure rather than a review result and the quota
+  is spent for nothing. Measured repeatedly through 0.21.x. Two traps
+  live in the dispatch script itself, both measured 2026-08-04:
+  - Do NOT run the native `codex` call under
+    `$ErrorActionPreference = 'Stop'`. codex prints a benign models-cache
+    warning to STDERR at startup, and `Stop` promotes ANY native stderr
+    line to a terminating `NativeCommandError`, killing the dispatch
+    before the reviewer does any work. Drop to `Continue` around the
+    native call and check `$LASTEXITCODE` yourself: nothing is being
+    ignored, only the stderr channel is stopped from masquerading as a
+    failure.
+  - Do NOT pipe an expensive run's output through `tail`, `head` or
+    `Select-Object -Last`. The failure NAMES are what a second run needs,
+    and truncating them costs the whole run again.
 - **Lost-rollout resume failure is deterministic with a stable
   signature**: probed 2026-07-24 (codex-cli 0.144.1): `codex exec
   --sandbox read-only -m gpt-5.6-sol -c model_reasoning_effort=low

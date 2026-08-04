@@ -719,6 +719,36 @@ class TestTransportContract:
         ) in notes
 
 
+def test_dispatch_traps_are_documented_in_the_notes():
+    """Two measured ways to kill a round before the reviewer works.
+
+    Both cost real quota before they were written down. The stderr one
+    is the nastier: codex prints a benign models-cache warning at
+    startup, and $ErrorActionPreference = 'Stop' promotes ANY native
+    stderr line to a terminating NativeCommandError, so the dispatch
+    dies looking like a codex failure when codex never ran.
+
+    The truncation one is cheaper to describe and just as expensive: the
+    failure NAMES are what a second run needs, so piping an expensive
+    run through tail or head costs the whole run again."""
+    notes = " ".join(read(REFERENCES / "model-prompting-notes.md").split())
+    assert (
+        "A round that crosses the caller's foreground timeout is killed "
+        "by the CALLER, not by the client: no `--output-last-message` "
+        "file is written, so it is a transport failure rather than a "
+        "review result and the quota is spent for nothing.") in notes
+    assert (
+        "Do NOT run the native `codex` call under `$ErrorActionPreference "
+        "= 'Stop'`. codex prints a benign models-cache warning to STDERR "
+        "at startup, and `Stop` promotes ANY native stderr line to a "
+        "terminating `NativeCommandError`, killing the dispatch before "
+        "the reviewer does any work.") in notes
+    assert (
+        "Do NOT pipe an expensive run's output through `tail`, `head` or "
+        "`Select-Object -Last`. The failure NAMES are what a second run "
+        "needs, and truncating them costs the whole run again.") in notes
+
+
 class TestDebateProtocol:
     def test_round_cap_default(self):
         text = read(REFERENCES / "debate-protocol.md")
