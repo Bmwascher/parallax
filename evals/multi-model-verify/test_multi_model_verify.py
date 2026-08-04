@@ -1505,9 +1505,8 @@ class TestApplicationCheckpoint:
         skill = read(SKILL_MD)
         assert ("A PASS is terminal only for the exact head it was issued"
                 " on.") in skill
-        assert ("run one confirming round") in skill
-        # NORMALIZED, because this needle spans a line wrap in the skill
-        # and anchors on no newline. D4's rule and its other side: a
+        # NORMALIZED, because both needles below span a line wrap in the
+        # skill and anchor on no newline. D4's rule and its other side: a
         # needle that contains a newline must never be written raw, and
         # one that spans a wrap must be matched against collapsed
         # whitespace or it silently never matches.
@@ -1515,7 +1514,12 @@ class TestApplicationCheckpoint:
         assert ("including observations it labelled non-blocking") in flat, (
             "the non-blocking case is the one that gets applied without"
             " thinking, so it must be named rather than implied")
-
+        # The remedy is TWO options and it is mandatory, not advice. A
+        # bare "run one confirming round" pin would stay green while the
+        # sentence became "you may run one confirming round" - the same
+        # words with the rule taken out.
+        assert ("Either leave them for a follow-up branch, or run one"
+                " confirming round.") in flat
 
     def test_reverified_is_contractual(self):
         # Sol diff review round 1, F2: the state machine's last transition
