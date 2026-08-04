@@ -532,9 +532,18 @@ if ($Mode -eq "MalformedOverride") {
 # Mode implementations.
 # ---------------------------------------------------------------------
 # ---------------------------------------------------------------------
-# A RECORD IS A CLAIM that this owner holds the lane, so writing one
-# requires LIVE - not merely "not known to be dead". Called immediately
-# before every record write, never on a path that writes nothing.
+# A HELD-OWNER RECORD IS A CLAIM that this owner holds the lane, so
+# writing one requires a LIVE measurement - not merely "not known to be
+# dead". Called before every HELD-OWNER write and on no other path: the
+# free-record writes carry no owner and have nothing to be wrong about.
+#
+# RESIDUAL, and it is unavoidable here: this establishes LIVE BEFORE the
+# write, not AT it. Nonce generation, record construction and
+# serialization run in between, so an owner that dies inside that window
+# is still written. The window is microseconds against the seconds-long
+# one the pre-loop-only check left open, and closing it entirely would
+# need an atomicity this tool cannot have - the process being measured
+# is not the process writing.
 #
 # UNMEASURABLE refuses HERE and is accepted at the gate above, and the
 # asymmetry is the whole design: the pid lookup succeeded, so the

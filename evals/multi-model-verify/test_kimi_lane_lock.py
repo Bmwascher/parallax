@@ -1261,7 +1261,7 @@ def test_acquire_refuses_to_write_a_record_for_an_unmeasurable_owner(
 
 
 def test_an_owner_that_dies_during_contention_is_never_written(
-        lane_home, debate_home, self_identity):
+        lane_home, debate_home, self_identity, tmp_path):
     """The window the single pre-loop check could not see.
 
     Liveness was measured ONCE, before the acquisition loop. A caller
@@ -1270,9 +1270,15 @@ def test_an_owner_that_dies_during_contention_is_never_written(
     releases - which is exactly the already-dead record item 26 calls
     the silent half, arrived at by a different road.
 
-    The fixture is synchronized rather than timed: the holder is only
-    released AFTER the proposed owner has been killed and reaped, so the
-    write attempt provably happens after the death.
+    The fixture is synchronized on the CONTENTION SIGNAL, not on a
+    clock. An earlier cut slept two seconds before killing the victim,
+    and the cross-vendor round showed that this proves nothing: if the
+    victim dies before the waiter reaches its PRE-LOOP measurement, the
+    DEAD gate refuses and every assertion still passes - the test goes
+    green for the gate it is not testing. Waiting for the "holder"
+    signal establishes that the waiter is already PAST that gate and
+    inside the acquisition loop before the victim dies, which is the
+    only ordering that exercises the write-site rule.
     """
     pid, ticks = self_identity
     holder_debate = new_token()
@@ -1287,14 +1293,20 @@ def test_an_owner_that_dies_during_contention_is_never_written(
     victim_ticks = _ticks_for_pid(victim.pid)
     assert DIGITS_RE.match(victim_ticks), victim_ticks
 
+    sig_path = tmp_path / "contention.txt"
     waiter = start_lock_bg(["-Acquire", "-LaneHome", str(lane_home),
                             "-DebateId", new_token(),
                             "-OwnerPid", str(victim.pid),
                             "-OwnerStartTicksUtc", victim_ticks,
                             "-DebateHome", str(debate_home),
-                            "-WaitSeconds", "30", "-PollSeconds", "1"])
+                            "-WaitSeconds", "30", "-PollSeconds", "1"],
+                           env={"PARALLAX_LANE_LOCK_CONTENTION_SIGNAL": str(sig_path)})
     try:
-        time.sleep(2.0)
+        branch = wait_for_signal(sig_path, timeout=20)
+        assert branch == "holder", (
+            "the waiter must be PAST the pre-loop DEAD gate and inside the "
+            "acquisition loop before the victim dies, or this measures the "
+            "gate instead of the write-site rule; signal was %r" % (branch,))
         victim.kill()
         victim.wait(timeout=30)
         rel = run_lock(["-Release", "-LaneHome", str(lane_home),

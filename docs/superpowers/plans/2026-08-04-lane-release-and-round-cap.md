@@ -790,9 +790,9 @@ was protecting is protected, and the residual it carried is GONE rather
 than restated.
 
 `test_an_owner_that_dies_during_contention_is_never_written` reproduces
-the window synchronously: the holder is released only AFTER the proposed
-owner is killed and reaped, so the write attempt provably follows the
-death. Watched failing before the fix.
+the window. Watched failing before the fix. NOTE, added by round 2: this
+paragraph originally called the fixture synchronized and said the write
+"provably" follows the death. It slept two seconds. See Amendment 3.
 
 **The fix carried its own defect, and this branch's own new oracle
 caught it.** Refusing at the fresh-acquire write site left a ZERO-LENGTH
@@ -828,10 +828,12 @@ a refusal path nobody here can validate.
 
 ## The rest
 
-- **Claim 3.** The six non-name schema stubs omitted `ownerName`, so
-  every one of them could pass through the missing-name rejection even
-  with its intended validation deleted. Each now carries a valid name
-  and exactly one defect. Measured rather than asserted: removing the
+- **Claim 3.** The non-name schema stubs omitted `ownerName`, so every
+  one of them could pass through the missing-name rejection even with
+  its intended validation deleted. All SEVEN now carry a valid name and
+  exactly one defect. (Round 2 corrected this count from six: the
+  extra-field stub is a seventh non-name fixture and was rebuilt
+  earlier in the branch.) Measured rather than asserted: removing the
   `-le 0` clause fails EXACTLY `pid_zero` and `pid_negative`; removing
   the digits clause fails EXACTLY `ticks_non_digit`. The template's own
   comment still described a two-field record and now describes three.
@@ -842,7 +844,11 @@ a refusal path nobody here can validate.
   takes the silence rule.
 - **Claim 5.** "Converged with amendments" and the new termination rule
   contradicted each other, and the suite pinned BOTH, so green tests
-  preserved the contradiction instead of detecting it. Convergence is
+  preserved the contradiction instead of detecting it. This entry
+  originally claimed a new pin covered the clarification. IT DID NOT:
+  the script that would have added it exited on an earlier failure
+  before writing, and only the budget pin was rewritten. Round 2 caught
+  the false claim; the pin exists now. Convergence is
   now explicitly AGREEMENT, not termination: the amendments are applied
   and the debate still ends on an adjudicated dry round. The budget's
   unit was undefined; one unit is now one DISPATCHED EXCHANGE, whatever
@@ -865,3 +871,89 @@ mutual-exclusion defect in the task built to close mutual-exclusion
 defects, and it survived my build, my own gates and a whole-branch
 review before a second vendor read it. That is the case for the
 cross-vendor gate, made again.
+
+---
+
+# Amendment 3 (2026-08-04, diff debate round 2) - the confirming round found six more
+
+Session `019fce61` resumed, brief binding CLEAN, head judged
+`ad61503e5814819f4616e2f26ed9b1b72f787606`. Claims 6 and 7 PASS; claims
+1, 2, 3, 4, 5 and 8 FIX. Every finding reproduced here before
+acceptance. A confirming round again blocked the merge, for the third
+consecutive release.
+
+## The one that matters most: my new oracle was not synchronized
+
+Amendment 2 called
+`test_an_owner_that_dies_during_contention_is_never_written`
+"synchronized rather than timed" and said the write attempt "provably"
+follows the death. BOTH WERE FALSE. The fixture slept two seconds and
+then killed the victim.
+
+The consequence is exactly the failure this repo's third invariant
+exists to prevent. If the victim died before the waiter reached its
+PRE-LOOP measurement, the DEAD gate refused, and every assertion still
+passed - the test went green for a gate it was not testing, while
+appearing to prove the write-site rule.
+
+It now waits for the tool's own `"holder"` contention signal, which
+establishes that the waiter is PAST the gate and inside the acquisition
+loop before the victim dies. Re-verified by discrimination: removing the
+fresh-acquire write-site guard fails it.
+
+I wrote "synchronized" in a record about a test that slept. The reviewer
+read the test.
+
+## A pin I claimed existed and did not
+
+Amendment 2 said a new pin covered the convergence clarification. It did
+not. The script that would have added it exited on an earlier failure
+BEFORE writing, and only the budget pin was rewritten. The pre-existing
+neighbour checks that the phrase "converged with amendments" appears,
+which stays green with the entire clarification deleted.
+
+The reviewer found it by reading the assertion rather than the record.
+The pin exists now and was mutation-tested.
+
+## The contract still claimed more than the tool does
+
+`lane-lock-call-lifecycle` still said "the owner IS the harness session
+process" and then sent callers to `-ResolveOwner`. After Amendment 2
+narrowed everything else, this was the last surface asserting what the
+implementation had just been admitted not to do - and the stale sentence
+was PINNED, so the suite was holding it in place.
+
+Rewritten: the owner SHOULD be the session process, `-ResolveOwner`
+APPROXIMATES that and does not guarantee it, it returns the first
+ancestor outside four named transports, and under a wrapper named
+anything else it returns THAT WRAPPER. A caller that knows its own
+session process should pass that identity instead of resolving one.
+
+## Three smaller corrections
+
+- **"Every record write" overclaimed.** Free-record writes carry no
+  owner and legitimately do not call the helper. The guarantee is now
+  stated as every HELD-OWNER write.
+- **The check-to-write race is now admitted.** The helper establishes
+  LIVE BEFORE the write, not AT it: nonce generation, record
+  construction and serialization run in between. Microseconds against
+  the seconds-long window the pre-loop-only check left open, and closing
+  it entirely would need an atomicity this tool cannot have, since the
+  process being measured is not the process writing. Named in the code.
+- **Seven, not six.** The non-name schema fixtures number seven; the
+  extra-field stub is the seventh and was rebuilt earlier in the branch.
+- **"Measures a directory" was false for the file-link case.** Following
+  a file link measures a filesystem object outside the debate home, not
+  a directory. The prose and its pin both carried the false statement.
+
+## What this round says about the process
+
+Fable returned no Critical and no Important on this branch. Round 1 then
+found a mutual-exclusion defect in the task built to close
+mutual-exclusion defects. Round 2 found that the oracle written to prove
+round 1's fix did not prove it, and that a record claimed a pin that did
+not exist.
+
+Every one of those is a claim wider than its evidence, written by me,
+surviving my own gates. Three of the last three releases have had a
+confirming round block the merge.

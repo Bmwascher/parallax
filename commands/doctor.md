@@ -250,8 +250,8 @@ an absent credential plus a free lock would have no defined row.
     idle time is not an idle debate, and a partial walk measures the
     files it could open rather than the debate. REPARSE POINTS ARE NEVER
     FOLLOWED — not directory junctions, not symbolic links, not file
-    links — because following one measures a directory that is not the
-    debate home and can leave the home entirely. A reparse point
+    links — because following one measures a filesystem object outside
+    the debate home and can leave the home entirely. A reparse point
     encountered anywhere under the home is not skipped either: it makes
     the in-home measurement INCOMPLETE, and an incomplete measurement
     takes the silence rule above.

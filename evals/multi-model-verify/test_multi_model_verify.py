@@ -826,6 +826,29 @@ class TestDebateProtocol:
             "authorization to continue — it NEVER certifies and "
             "never converts into a verdict.") in text
 
+    def test_converged_with_amendments_is_agreement_not_termination(self):
+        """The two clauses contradicted each other and the suite pinned
+        BOTH, so green tests PRESERVED the contradiction rather than
+        detecting it - which is what pins do when nothing checks them
+        against each other.
+
+        THIS PIN WAS CLAIMED TO EXIST BEFORE IT DID. Amendment 2 said a
+        new pin covered the clarification; the script that would have
+        added it exited on an earlier failure before writing, and only
+        the budget pin was rewritten. The confirming round found the
+        false claim by reading the assertion rather than the record. The
+        pre-existing test nearby checks only that the PHRASE "converged
+        with amendments" appears, which stays green with the whole
+        clarification deleted."""
+        text = " ".join(read(REFERENCES / "debate-protocol.md").split())
+        assert (
+            "THIS IS AGREEMENT, NOT TERMINATION. The amendments still have "
+            "to be APPLIED, and the debate still ends the way the "
+            "termination rule below says it ends: on an adjudicated dry "
+            "round. A round that produces accepted fixes is a round that "
+            "produced new substantive findings, so it is not that "
+            "round.") in text
+
     def test_termination_requires_an_adjudicated_dry_round(self):
         """The predicate the plan proposed was logically wrong.
 

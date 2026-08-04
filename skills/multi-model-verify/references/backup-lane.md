@@ -105,11 +105,18 @@ Panel participation: a user-invoked panel per references/panels.md is a second s
 - **The lock's call lifecycle.**
   <!-- contract:start id=lane-lock-call-lifecycle -->
   Ownership is RESOLVED ONCE per debate and PASSED EXPLICITLY
-  thereafter. The owner is the harness session process, not the shell,
-  which exits between calls and would make every lock instantly stale;
-  deriving it from the invoking shell's parent is correct only for a
-  DIRECT invocation, and under any wrapper it names an intermediate
-  process that also exits. So run `tools/kimi-lane-lock.ps1
+  thereafter. The owner SHOULD be the harness session process, not the
+  shell, which exits between calls and would make every lock instantly
+  stale. `-ResolveOwner` APPROXIMATES that and does not guarantee it: it
+  walks past four named TRANSPORTS — `pwsh.exe`, `powershell.exe`,
+  `cmd.exe`, `conhost.exe` — and returns the FIRST ancestor outside that
+  set, so under a wrapper whose executable is named anything else,
+  `node.exe` and `python.exe` among them, it returns THAT WRAPPER, which
+  exits when its command does. What is measured is stability across an
+  added SHELL frame, not under any wrapper; backlog item 26 is open on
+  exactly the remaining class. A caller that KNOWS its own session
+  process should pass that identity instead of resolving one. So run
+  `tools/kimi-lane-lock.ps1
   -ResolveOwner` once at the start of the debate, keep its `ownerPid`,
   `ownerStartTicksUtc` and `ownerName`, generate one 32-character
   lowercase hexadecimal debate id, and hand the pid, the ticks and the
