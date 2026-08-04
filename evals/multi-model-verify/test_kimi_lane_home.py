@@ -305,7 +305,7 @@ def _owner_ticks_for_pid(pid):
 
 def _build2(target, profile, lane_home, model=PLACEHOLDER_MODEL, effort="high",
             debate_id=None, owner_pid=None, owner_ticks=None, extra_env=None,
-            timeout=120):
+            timeout=120, owner_name=None):
     if debate_id is None:
         debate_id = _new_hex32()
     if owner_pid is None or owner_ticks is None:
@@ -320,7 +320,8 @@ def _build2(target, profile, lane_home, model=PLACEHOLDER_MODEL, effort="high",
          "-File", str(BUILDER), "-Path", str(target),
          "-Model", model, "-Effort", effort,
          "-LaneHome", str(lane_home), "-DebateId", debate_id,
-         "-OwnerPid", str(owner_pid), "-OwnerStartTicksUtc", str(owner_ticks)],
+         "-OwnerPid", str(owner_pid), "-OwnerStartTicksUtc", str(owner_ticks)]
+        + ([] if owner_name is None else ["-OwnerName", owner_name]),
         capture_output=True, text=True, timeout=timeout, env=env)
     return proc, debate_id, str(owner_pid), str(owner_ticks)
 
@@ -805,7 +806,7 @@ def test_builder_capture_read_fault_is_validator_failure(tmp_path):
 # $RecoveryCommandTemplate (with its PowerShell '' escaping undone) so
 # this pin cannot silently drift from the emitting production string.
 RECOVERY_COMMAND_TEMPLATE = (
-    '& { $ErrorActionPreference = \'Stop\'; try { $ownerLines = @(& \'tools/kimi-lane-lock.ps1\' -ResolveOwner); $ownerExit = $LASTEXITCODE; if ($ownerExit -ne 0) { throw "owner resolution failed with exit $ownerExit" }; if ($ownerLines.Count -ne 1 -or -not ($ownerLines[0] -is [string]) -or [string]::IsNullOrWhiteSpace([string]$ownerLines[0])) { throw \'owner resolution returned invalid output\' }; $owner = $ownerLines[0] | ConvertFrom-Json -ErrorAction Stop; if (-not ($owner -is [System.Management.Automation.PSCustomObject])) { throw \'owner resolution returned invalid schema\' }; $ownerFields = @($owner.PSObject.Properties.Name); if ($ownerFields.Count -ne 2 -or -not ($ownerFields -ccontains \'ownerPid\') -or -not ($ownerFields -ccontains \'ownerStartTicksUtc\') -or -not (($owner.ownerPid -is [int]) -or ($owner.ownerPid -is [long])) -or [long]$owner.ownerPid -le 0 -or -not ($owner.ownerStartTicksUtc -is [string]) -or $owner.ownerStartTicksUtc -notmatch \'\\A[0-9]+\\z\') { throw \'owner resolution returned invalid schema\' }; if ([string]::IsNullOrWhiteSpace($env:TEMP) -or -not (Test-Path -LiteralPath $env:TEMP -PathType Container -ErrorAction Stop)) { throw \'TEMP is not an existing directory\' }; $verdictOut = Join-Path -Path $env:TEMP -ChildPath \'parallax-kimi-lane-login-verdict.json\' -ErrorAction Stop; & \'tools/new-kimi-lane-login.ps1\' -LaneHome \'<lane-home>\' -OwnerPid ([string]$owner.ownerPid) -OwnerStartTicksUtc $owner.ownerStartTicksUtc -VerdictOut $verdictOut; $loginExit = $LASTEXITCODE; if ($loginExit -ne 0) { throw "lane login failed with exit $loginExit" } } catch { throw } }'
+    '& { $ErrorActionPreference = \'Stop\'; try { $ownerLines = @(& \'tools/kimi-lane-lock.ps1\' -ResolveOwner); $ownerExit = $LASTEXITCODE; if ($ownerExit -ne 0) { throw "owner resolution failed with exit $ownerExit" }; if ($ownerLines.Count -ne 1 -or -not ($ownerLines[0] -is [string]) -or [string]::IsNullOrWhiteSpace([string]$ownerLines[0])) { throw \'owner resolution returned invalid output\' }; $owner = $ownerLines[0] | ConvertFrom-Json -ErrorAction Stop; if (-not ($owner -is [System.Management.Automation.PSCustomObject])) { throw \'owner resolution returned invalid schema\' }; $ownerFields = @($owner.PSObject.Properties.Name); if ($ownerFields.Count -ne 3 -or -not ($ownerFields -ccontains \'ownerPid\') -or -not ($ownerFields -ccontains \'ownerStartTicksUtc\') -or -not ($ownerFields -ccontains \'ownerName\') -or -not (($owner.ownerPid -is [int]) -or ($owner.ownerPid -is [long])) -or [long]$owner.ownerPid -le 0 -or -not ($owner.ownerStartTicksUtc -is [string]) -or $owner.ownerStartTicksUtc -notmatch \'\\A[0-9]+\\z\' -or -not ($owner.ownerName -is [string]) -or [string]::IsNullOrWhiteSpace($owner.ownerName)) { throw \'owner resolution returned invalid schema\' }; if ([string]::IsNullOrWhiteSpace($env:TEMP) -or -not (Test-Path -LiteralPath $env:TEMP -PathType Container -ErrorAction Stop)) { throw \'TEMP is not an existing directory\' }; $verdictOut = Join-Path -Path $env:TEMP -ChildPath \'parallax-kimi-lane-login-verdict.json\' -ErrorAction Stop; & \'tools/new-kimi-lane-login.ps1\' -LaneHome \'<lane-home>\' -OwnerPid ([string]$owner.ownerPid) -OwnerStartTicksUtc $owner.ownerStartTicksUtc -OwnerName $owner.ownerName -VerdictOut $verdictOut; $loginExit = $LASTEXITCODE; if ($loginExit -ne 0) { throw "lane login failed with exit $loginExit" } } catch { throw } }'
 )
 
 
@@ -1249,17 +1250,67 @@ def test_an_acquire_failure_does_not_attempt_a_release_and_precedes_validation(t
 # --- The reclaim/contention integration oracles for the lock boundary. ---
 
 
+def test_a_build_forwards_the_owner_name_into_the_record(tmp_path):
+    """The builder is the FIRST of two call chains into acquire, and a
+    passthrough added to one and not the other is a name that appears or
+    vanishes depending on which command took the lane.
+
+    Read from the RECORD rather than from the builder's own output: the
+    record is what a blocked second session and the doctor both read.
+    """
+    target = tmp_path / "named-home"
+    profile = _fake_profile(tmp_path, FAKE_REAL_CONFIG)
+    lane_home = _fake_lane_home(tmp_path)
+
+    proc, debate_id, owner_pid, owner_ticks = _build2(
+        target, profile, lane_home, owner_name="claude.exe")
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    custody = _parse_custody(proc.stdout)
+    status = _lock_status(lane_home)
+    assert status["state"] == "held", status
+    assert status["ownerName"] == "claude.exe", status
+
+    _remove2(target, lane_home, debate_id, owner_pid, owner_ticks, custody["nonce"])
+
+
+def test_a_build_without_an_owner_name_records_none(tmp_path):
+    """A wrapper that supplied an empty name would turn every nameless
+    build into a REFUSED acquire, because the lock rejects a
+    supplied-but-blank name. Absent has to stay absent."""
+    target = tmp_path / "unnamed-home"
+    profile = _fake_profile(tmp_path, FAKE_REAL_CONFIG)
+    lane_home = _fake_lane_home(tmp_path)
+
+    proc, debate_id, owner_pid, owner_ticks = _build2(target, profile, lane_home)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    custody = _parse_custody(proc.stdout)
+    status = _lock_status(lane_home)
+    assert status["state"] == "held", status
+    assert "ownerName" not in status, status
+
+    _remove2(target, lane_home, debate_id, owner_pid, owner_ticks, custody["nonce"])
+
+
 def test_a_build_reclaiming_a_dead_holder_succeeds(tmp_path):
     target = tmp_path / "reclaim-home"
     profile = _fake_profile(tmp_path, FAKE_REAL_CONFIG)
     lane_home = _fake_lane_home(tmp_path)
 
-    dead_pid = "999999"
-    dead_ticks = "638000000000000000"
+    # The dead holder is now made by KILLING a real one. Acquire refuses
+    # to record an owner that already measures DEAD, so the old fixture -
+    # acquire with pid 999999 - can no longer reach this state, and a
+    # state the tool refuses to create is not one to plant by hand. This
+    # is also the truer fixture: the record is written by the shipped
+    # acquire path while the owner is genuinely alive, and it becomes
+    # dead the way a real one does.
+    holder_proc, dead_pid, dead_ticks = _spawn_live_holder()
     dead_debate_id = _new_hex32()
-    acquire = _lock_acquire_direct(lane_home, dead_debate_id, dead_pid, dead_ticks,
-                                    str(tmp_path / "dead-debate-home"))
-    assert acquire.returncode == 0, acquire.stdout + acquire.stderr
+    try:
+        acquire = _lock_acquire_direct(lane_home, dead_debate_id, dead_pid, dead_ticks,
+                                        str(tmp_path / "dead-debate-home"))
+        assert acquire.returncode == 0, acquire.stdout + acquire.stderr
+    finally:
+        _kill_holder(holder_proc)
 
     proc, debate_id, owner_pid, owner_ticks = _build2(target, profile, lane_home)
     assert proc.returncode == 0, proc.stdout + proc.stderr
@@ -1630,47 +1681,71 @@ OWNER_STUB_NOT_OBJECT = (
 )
 OWNER_STUB_MISSING_FIELD = (
     "param([switch]$ResolveOwner)\n"
-    "Write-Output '{\"ownerPid\": 4321}'\n"
+    "Write-Output '{\"ownerPid\": 4321, \"ownerName\": \"claude.exe\"}'\n"
     "exit 0\n"
 )
 OWNER_STUB_EXTRA_FIELD = (
     "param([switch]$ResolveOwner)\n"
-    "Write-Output '{\"ownerPid\": 4321, \"ownerStartTicksUtc\": \"123456789\", \"extra\": \"x\"}'\n"
+    "Write-Output '{\"ownerPid\": 4321, \"ownerStartTicksUtc\": \"123456789\", \"ownerName\": \"claude.exe\", \"extra\": \"x\"}'\n"
     "exit 0\n"
 )
 OWNER_STUB_WRONG_PID_TYPE = (
     "param([switch]$ResolveOwner)\n"
-    "Write-Output '{\"ownerPid\": \"4321\", \"ownerStartTicksUtc\": \"123456789\"}'\n"
+    "Write-Output '{\"ownerPid\": \"4321\", \"ownerStartTicksUtc\": \"123456789\", \"ownerName\": \"claude.exe\"}'\n"
     "exit 0\n"
 )
 OWNER_STUB_PID_ZERO = (
     "param([switch]$ResolveOwner)\n"
-    "Write-Output '{\"ownerPid\": 0, \"ownerStartTicksUtc\": \"123456789\"}'\n"
+    "Write-Output '{\"ownerPid\": 0, \"ownerStartTicksUtc\": \"123456789\", \"ownerName\": \"claude.exe\"}'\n"
     "exit 0\n"
 )
 OWNER_STUB_PID_NEGATIVE = (
     "param([switch]$ResolveOwner)\n"
-    "Write-Output '{\"ownerPid\": -5, \"ownerStartTicksUtc\": \"123456789\"}'\n"
+    "Write-Output '{\"ownerPid\": -5, \"ownerStartTicksUtc\": \"123456789\", \"ownerName\": \"claude.exe\"}'\n"
     "exit 0\n"
 )
 OWNER_STUB_WRONG_TICKS_TYPE = (
     "param([switch]$ResolveOwner)\n"
-    "Write-Output '{\"ownerPid\": 4321, \"ownerStartTicksUtc\": 123456789}'\n"
+    "Write-Output '{\"ownerPid\": 4321, \"ownerStartTicksUtc\": 123456789, \"ownerName\": \"claude.exe\"}'\n"
     "exit 0\n"
 )
 OWNER_STUB_TICKS_NON_DIGIT = (
     "param([switch]$ResolveOwner)\n"
-    "Write-Output '{\"ownerPid\": 4321, \"ownerStartTicksUtc\": \"12a456789\"}'\n"
+    "Write-Output '{\"ownerPid\": 4321, \"ownerStartTicksUtc\": \"12a456789\", \"ownerName\": \"claude.exe\"}'\n"
     "exit 0\n"
 )
 OWNER_STUB_VALID_JSON = (
     "param([switch]$ResolveOwner)\n"
+    "Write-Output '{\"ownerPid\": 4321, \"ownerStartTicksUtc\": \"123456789\", \"ownerName\": \"claude.exe\"}'\n"
+    "exit 0\n"
+)
+# ownerName is REQUIRED, not merely tolerated. Without these three the
+# field-count check alone would pass a record carrying any third key,
+# and the name exists so a wrong owner is legible on sight - a blank
+# or numeric one reads as legible while carrying nothing.
+OWNER_STUB_MISSING_NAME = (
+    "param([switch]$ResolveOwner)\n"
     "Write-Output '{\"ownerPid\": 4321, \"ownerStartTicksUtc\": \"123456789\"}'\n"
     "exit 0\n"
 )
+OWNER_STUB_WRONG_NAME_TYPE = (
+    "param([switch]$ResolveOwner)\n"
+    "Write-Output '{\"ownerPid\": 4321, \"ownerStartTicksUtc\": \"123456789\", \"ownerName\": 7}'\n"
+    "exit 0\n"
+)
+OWNER_STUB_BLANK_NAME = (
+    "param([switch]$ResolveOwner)\n"
+    "Write-Output '{\"ownerPid\": 4321, \"ownerStartTicksUtc\": \"123456789\", \"ownerName\": \"   \"}'\n"
+    "exit 0\n"
+)
+# -OwnerName is declared even though these stubs ignore it. The recovery
+# command now always passes it, and a SIMPLE script would have absorbed
+# the unknown argument into $args silently - so a later [CmdletBinding()]
+# would flip the invoked rows to "binding refused" for a reason nobody
+# would look for. Declaring it makes the tolerance deliberate.
 LOGIN_STUB_MARK_AND_FAIL = (
     "param([string]$LaneHome, [string]$OwnerPid, [string]$OwnerStartTicksUtc, "
-    "[string]$VerdictOut, [switch]$Force)\n"
+    "[string]$OwnerName, [string]$VerdictOut, [switch]$Force)\n"
     'Set-Content -LiteralPath (Join-Path $PSScriptRoot "login-invoked.marker") '
     '-Value "invoked" -Encoding ascii\n'
     "exit 6\n"
@@ -1795,12 +1870,20 @@ def test_the_recovery_command_row4_owner_json_malformed(tmp_path):
     ("pid_negative", OWNER_STUB_PID_NEGATIVE),
     ("wrong_ticks_type", OWNER_STUB_WRONG_TICKS_TYPE),
     ("ticks_non_digit", OWNER_STUB_TICKS_NON_DIGIT),
+    ("missing_name", OWNER_STUB_MISSING_NAME),
+    ("wrong_name_type", OWNER_STUB_WRONG_NAME_TYPE),
+    ("blank_name", OWNER_STUB_BLANK_NAME),
 ])
 def test_the_recovery_command_row5_owner_schema(tmp_path, label, stub):
     """Row 5: owner JSON is valid but the wrong shape - not an object,
     wrong property set (missing or extra), wrong pid type, a pid <= 0,
     wrong ticks type, or ticks failing \\A[0-9]+\\z. Every sub-case must
-    independently fail closed: nonzero, login never invoked."""
+    independently fail closed: nonzero, login never invoked.
+
+    ownerName is REQUIRED rather than tolerated. The field-count
+    check alone would admit a record carrying any third key, and the
+    name exists so a wrong owner is legible on sight - a blank or
+    numeric one reads as legible while carrying nothing."""
     run, marker = _run_recovery_row(tmp_path, "owner_schema_" + label, stub)
     assert run.returncode != 0, run.stdout + run.stderr
     assert not marker.exists()

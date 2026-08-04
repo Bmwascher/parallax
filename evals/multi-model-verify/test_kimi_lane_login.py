@@ -189,6 +189,35 @@ $obj = [ordered]@{
 ConvertTo-Json -InputObject $obj -Compress -Depth 5
 """
 
+def _live_owner():
+    """A genuinely LIVE owner identity: this pytest process.
+
+    Acquire refuses to record an owner that already measures DEAD (the
+    fix for backlog item 26's silent half), so the fixture identity of
+    pid 1 / ticks 1 that this module used throughout is no longer an
+    identity any acquire can accept. The pytest process is alive for the
+    whole run by construction, and its start ticks are read the way the
+    tool reads them.
+    """
+    pid = os.getpid()
+    proc = subprocess.run(
+        [POWERSHELL, "-NoProfile", "-Command",
+         "$p = Get-Process -Id " + str(pid) +
+         "; [string]$p.StartTime.ToUniversalTime().Ticks"],
+        capture_output=True, text=True, timeout=60)
+    ticks = proc.stdout.strip()
+    if not ticks.isdigit():
+        raise RuntimeError("could not read this process's start ticks: "
+                           + repr(proc.stdout) + proc.stderr)
+    return str(pid), ticks
+
+
+if os.name == "nt" and POWERSHELL is not None:
+    LIVE_PID, LIVE_TICKS = _live_owner()
+else:
+    LIVE_PID, LIVE_TICKS = "1", "1"
+
+
 
 # ---------------------------------------------------------------------
 # Helpers
@@ -401,7 +430,7 @@ def test_fresh_build_creates_home_acquires_logs_in_and_succeeds(
     verdict_out = tmp_path / "verdict.json"
     marker = tmp_path / "marker.txt"
     result = run_wrapper(
-        ["-LaneHome", str(lane_home), "-OwnerPid", "1", "-OwnerStartTicksUtc", "1",
+        ["-LaneHome", str(lane_home), "-OwnerPid", LIVE_PID, "-OwnerStartTicksUtc", LIVE_TICKS,
          "-KimiBinary", str(kimi_stub), "-VerdictOut", str(verdict_out)],
         env={"PARALLAX_TEST_STUB_MARKER_FILE": str(marker),
              "PARALLAX_TEST_STUB_WRITE_CREDENTIAL": "ok"})
@@ -451,7 +480,7 @@ def test_second_run_is_idempotent_and_skips_the_client(
     marker = tmp_path / "marker.txt"
     common_env = {"PARALLAX_TEST_STUB_MARKER_FILE": str(marker),
                   "PARALLAX_TEST_STUB_WRITE_CREDENTIAL": "ok"}
-    r1 = run_wrapper(["-LaneHome", str(lane_home), "-OwnerPid", "1", "-OwnerStartTicksUtc", "1",
+    r1 = run_wrapper(["-LaneHome", str(lane_home), "-OwnerPid", LIVE_PID, "-OwnerStartTicksUtc", LIVE_TICKS,
                        "-KimiBinary", str(kimi_stub), "-VerdictOut", str(verdict_out)],
                       env=common_env)
     assert r1.returncode == 0, (r1.stdout, r1.stderr)
@@ -460,7 +489,7 @@ def test_second_run_is_idempotent_and_skips_the_client(
     home_acl_before = acl_dump(lane_home, acl_dump_script)
     cred_acl_before = acl_dump(lane_home / "credentials", acl_dump_script)
 
-    r2 = run_wrapper(["-LaneHome", str(lane_home), "-OwnerPid", "1", "-OwnerStartTicksUtc", "1",
+    r2 = run_wrapper(["-LaneHome", str(lane_home), "-OwnerPid", LIVE_PID, "-OwnerStartTicksUtc", LIVE_TICKS,
                        "-KimiBinary", str(kimi_stub), "-VerdictOut", str(verdict_out)],
                       env=common_env)
     assert r2.returncode == 0, (r2.stdout, r2.stderr)
@@ -481,7 +510,7 @@ def test_home_probe_fault_seam_exits_6_no_mutation(lane_home, kimi_stub, tmp_pat
     verdict_out = tmp_path / "verdict.json"
     marker = tmp_path / "marker.txt"
     result = run_wrapper(
-        ["-LaneHome", str(lane_home), "-OwnerPid", "1", "-OwnerStartTicksUtc", "1",
+        ["-LaneHome", str(lane_home), "-OwnerPid", LIVE_PID, "-OwnerStartTicksUtc", LIVE_TICKS,
          "-KimiBinary", str(kimi_stub), "-VerdictOut", str(verdict_out)],
         env={"PARALLAX_KIMI_LANE_LOGIN_HOME_PROBE_FAULT": "1",
              "PARALLAX_TEST_STUB_MARKER_FILE": str(marker)})
@@ -517,7 +546,7 @@ def test_credentials_probe_fault_seam_exits_6_releases_lock(lane_home, kimi_stub
     verdict_out = tmp_path / "verdict.json"
     marker = tmp_path / "marker.txt"
     result = run_wrapper(
-        ["-LaneHome", str(lane_home), "-OwnerPid", "1", "-OwnerStartTicksUtc", "1",
+        ["-LaneHome", str(lane_home), "-OwnerPid", LIVE_PID, "-OwnerStartTicksUtc", LIVE_TICKS,
          "-KimiBinary", str(kimi_stub), "-VerdictOut", str(verdict_out)],
         env={"PARALLAX_KIMI_LANE_LOGIN_CREDENTIALS_PROBE_FAULT": "1",
              "PARALLAX_TEST_STUB_MARKER_FILE": str(marker)})
@@ -542,7 +571,7 @@ def test_credentials_probe_non_directory_collision_exits_6_preserved_and_release
     verdict_out = tmp_path / "verdict.json"
     marker = tmp_path / "marker.txt"
     r1 = run_wrapper(
-        ["-LaneHome", str(lane_home), "-OwnerPid", "1", "-OwnerStartTicksUtc", "1",
+        ["-LaneHome", str(lane_home), "-OwnerPid", LIVE_PID, "-OwnerStartTicksUtc", LIVE_TICKS,
          "-KimiBinary", str(kimi_stub), "-VerdictOut", str(verdict_out)],
         env={"PARALLAX_TEST_STUB_MARKER_FILE": str(marker),
              "PARALLAX_TEST_STUB_WRITE_CREDENTIAL": "ok"})
@@ -556,7 +585,7 @@ def test_credentials_probe_non_directory_collision_exits_6_preserved_and_release
 
     verdict_out2 = tmp_path / "verdict2.json"
     r2 = run_wrapper(
-        ["-LaneHome", str(lane_home), "-OwnerPid", "1", "-OwnerStartTicksUtc", "1",
+        ["-LaneHome", str(lane_home), "-OwnerPid", LIVE_PID, "-OwnerStartTicksUtc", LIVE_TICKS,
          "-KimiBinary", str(kimi_stub), "-VerdictOut", str(verdict_out2)],
         env={"PARALLAX_TEST_STUB_MARKER_FILE": str(marker)})
     assert r2.returncode == 6
@@ -581,7 +610,7 @@ def test_pre_client_validator_failure_nonzero_valid_line_exits_6_no_client(
     counter = tmp_path / "counter.txt"
     result = run_stub_wrapper(
         stub_tools_dir,
-        ["-LaneHome", str(lane_home), "-OwnerPid", "1", "-OwnerStartTicksUtc", "1",
+        ["-LaneHome", str(lane_home), "-OwnerPid", LIVE_PID, "-OwnerStartTicksUtc", LIVE_TICKS,
          "-KimiBinary", str(kimi_stub), "-VerdictOut", str(verdict_out), "-Force"],
         env={"PARALLAX_TEST_VALIDATOR_COUNTER_FILE": str(counter),
              "PARALLAX_TEST_VALIDATOR_FAIL_ON_CALL": "1",
@@ -603,7 +632,7 @@ def test_pre_client_validator_failure_exit0_malformed_exits_6_no_client(
     counter = tmp_path / "counter.txt"
     result = run_stub_wrapper(
         stub_tools_dir,
-        ["-LaneHome", str(lane_home), "-OwnerPid", "1", "-OwnerStartTicksUtc", "1",
+        ["-LaneHome", str(lane_home), "-OwnerPid", LIVE_PID, "-OwnerStartTicksUtc", LIVE_TICKS,
          "-KimiBinary", str(kimi_stub), "-VerdictOut", str(verdict_out), "-Force"],
         env={"PARALLAX_TEST_VALIDATOR_COUNTER_FILE": str(counter),
              "PARALLAX_TEST_VALIDATOR_FAIL_ON_CALL": "1",
@@ -621,7 +650,7 @@ def test_post_client_validator_failure_nonzero_valid_line_exits_6_client_ran(
     counter = tmp_path / "counter.txt"
     result = run_stub_wrapper(
         stub_tools_dir,
-        ["-LaneHome", str(lane_home), "-OwnerPid", "1", "-OwnerStartTicksUtc", "1",
+        ["-LaneHome", str(lane_home), "-OwnerPid", LIVE_PID, "-OwnerStartTicksUtc", LIVE_TICKS,
          "-KimiBinary", str(kimi_stub), "-VerdictOut", str(verdict_out), "-Force"],
         env={"PARALLAX_TEST_VALIDATOR_COUNTER_FILE": str(counter),
              "PARALLAX_TEST_VALIDATOR_FAIL_ON_CALL": "2",
@@ -644,7 +673,7 @@ def test_post_client_validator_failure_exit0_malformed_exits_6_client_ran(
     counter = tmp_path / "counter.txt"
     result = run_stub_wrapper(
         stub_tools_dir,
-        ["-LaneHome", str(lane_home), "-OwnerPid", "1", "-OwnerStartTicksUtc", "1",
+        ["-LaneHome", str(lane_home), "-OwnerPid", LIVE_PID, "-OwnerStartTicksUtc", LIVE_TICKS,
          "-KimiBinary", str(kimi_stub), "-VerdictOut", str(verdict_out), "-Force"],
         env={"PARALLAX_TEST_VALIDATOR_COUNTER_FILE": str(counter),
              "PARALLAX_TEST_VALIDATOR_FAIL_ON_CALL": "2",
@@ -668,7 +697,7 @@ def test_validator_scalar_fields_rejected_at_both_call_positions(
     counter = tmp_path / "counter.txt"
     result = run_stub_wrapper(
         stub_tools_dir,
-        ["-LaneHome", str(lane_home), "-OwnerPid", "1", "-OwnerStartTicksUtc", "1",
+        ["-LaneHome", str(lane_home), "-OwnerPid", LIVE_PID, "-OwnerStartTicksUtc", LIVE_TICKS,
          "-KimiBinary", str(kimi_stub), "-VerdictOut", str(verdict_out), "-Force"],
         env={"PARALLAX_TEST_VALIDATOR_COUNTER_FILE": str(counter),
              "PARALLAX_TEST_VALIDATOR_FAIL_ON_CALL": str(fail_on_call),
@@ -687,7 +716,7 @@ def test_validator_blank_line_padded_stdout_rejected_at_both_call_positions(
     counter = tmp_path / "counter.txt"
     result = run_stub_wrapper(
         stub_tools_dir,
-        ["-LaneHome", str(lane_home), "-OwnerPid", "1", "-OwnerStartTicksUtc", "1",
+        ["-LaneHome", str(lane_home), "-OwnerPid", LIVE_PID, "-OwnerStartTicksUtc", LIVE_TICKS,
          "-KimiBinary", str(kimi_stub), "-VerdictOut", str(verdict_out), "-Force"],
         env={"PARALLAX_TEST_VALIDATOR_COUNTER_FILE": str(counter),
              "PARALLAX_TEST_VALIDATOR_FAIL_ON_CALL": str(fail_on_call),
@@ -713,7 +742,7 @@ def test_validator_case_variant_result_keys_rejected_at_both_call_positions(
     counter = tmp_path / "counter.txt"
     result = run_stub_wrapper(
         stub_tools_dir,
-        ["-LaneHome", str(lane_home), "-OwnerPid", "1", "-OwnerStartTicksUtc", "1",
+        ["-LaneHome", str(lane_home), "-OwnerPid", LIVE_PID, "-OwnerStartTicksUtc", LIVE_TICKS,
          "-KimiBinary", str(kimi_stub), "-VerdictOut", str(verdict_out), "-Force"],
         env={"PARALLAX_TEST_VALIDATOR_COUNTER_FILE": str(counter),
              "PARALLAX_TEST_VALIDATOR_FAIL_ON_CALL": str(fail_on_call),
@@ -737,7 +766,7 @@ def test_validator_case_variant_pair_rejected_at_both_call_positions(
     counter = tmp_path / "counter.txt"
     result = run_stub_wrapper(
         stub_tools_dir,
-        ["-LaneHome", str(lane_home), "-OwnerPid", "1", "-OwnerStartTicksUtc", "1",
+        ["-LaneHome", str(lane_home), "-OwnerPid", LIVE_PID, "-OwnerStartTicksUtc", LIVE_TICKS,
          "-KimiBinary", str(kimi_stub), "-VerdictOut", str(verdict_out), "-Force"],
         env={"PARALLAX_TEST_VALIDATOR_COUNTER_FILE": str(counter),
              "PARALLAX_TEST_VALIDATOR_FAIL_ON_CALL": str(fail_on_call),
@@ -762,7 +791,7 @@ def test_capture_read_fault_seam_is_validator_failure(lane_home, kimi_stub, tmp_
     verdict_out = tmp_path / "verdict.json"
     marker = tmp_path / "marker.txt"
     result = run_wrapper(
-        ["-LaneHome", str(lane_home), "-OwnerPid", "1", "-OwnerStartTicksUtc", "1",
+        ["-LaneHome", str(lane_home), "-OwnerPid", LIVE_PID, "-OwnerStartTicksUtc", LIVE_TICKS,
          "-KimiBinary", str(kimi_stub), "-VerdictOut", str(verdict_out)],
         env={"PARALLAX_KIMI_CREDENTIAL_VALIDATOR_CAPTURE_READ_FAULT": "1",
              "PARALLAX_TEST_STUB_MARKER_FILE": str(marker)})
@@ -781,7 +810,7 @@ def test_client_exit_0_leaving_bad_credential_fails_with_6(lane_home, kimi_stub,
     expected_status = {"none": "absent", "malformed": "malformed", "unreadable": "unreadable"}[mode]
     verdict_out = tmp_path / "verdict.json"
     result = run_wrapper(
-        ["-LaneHome", str(lane_home), "-OwnerPid", "1", "-OwnerStartTicksUtc", "1",
+        ["-LaneHome", str(lane_home), "-OwnerPid", LIVE_PID, "-OwnerStartTicksUtc", LIVE_TICKS,
          "-KimiBinary", str(kimi_stub), "-VerdictOut", str(verdict_out)],
         env={"PARALLAX_TEST_STUB_WRITE_CREDENTIAL": mode,
              "PARALLAX_TEST_STUB_EXIT_CODE": "0"})
@@ -799,7 +828,7 @@ def test_client_exit_nonzero_with_ok_credential_succeeds_with_0(lane_home, kimi_
     client's own exit code would pass every other listed case."""
     verdict_out = tmp_path / "verdict.json"
     result = run_wrapper(
-        ["-LaneHome", str(lane_home), "-OwnerPid", "1", "-OwnerStartTicksUtc", "1",
+        ["-LaneHome", str(lane_home), "-OwnerPid", LIVE_PID, "-OwnerStartTicksUtc", LIVE_TICKS,
          "-KimiBinary", str(kimi_stub), "-VerdictOut", str(verdict_out)],
         env={"PARALLAX_TEST_STUB_WRITE_CREDENTIAL": "ok",
              "PARALLAX_TEST_STUB_EXIT_CODE": "5"})
@@ -817,7 +846,7 @@ def test_kimi_code_home_restored_previously_unset(lane_home, kimi_stub, tmp_path
     driver = tmp_path / "driver.ps1"
     driver.write_text(
         f'Remove-Item Env:KIMI_CODE_HOME -ErrorAction SilentlyContinue\n'
-        f'& "{SCRIPT}" -LaneHome "{lane_home}" -OwnerPid 1 -OwnerStartTicksUtc 1 '
+        f'& "{SCRIPT}" -LaneHome "{lane_home}" -OwnerPid {LIVE_PID} -OwnerStartTicksUtc {LIVE_TICKS} '
         f'-KimiBinary "{kimi_stub}" -VerdictOut "{verdict_out}"\n'
         f'Write-Output "WASSET=[$(Test-Path Env:KIMI_CODE_HOME)]"\n'
         f'Write-Output "VALUE=[$env:KIMI_CODE_HOME]"\n',
@@ -838,7 +867,7 @@ def test_kimi_code_home_restored_previously_set(lane_home, kimi_stub, tmp_path):
     driver = tmp_path / "driver.ps1"
     driver.write_text(
         f'$env:KIMI_CODE_HOME = "{sentinel}"\n'
-        f'& "{SCRIPT}" -LaneHome "{lane_home}" -OwnerPid 1 -OwnerStartTicksUtc 1 '
+        f'& "{SCRIPT}" -LaneHome "{lane_home}" -OwnerPid {LIVE_PID} -OwnerStartTicksUtc {LIVE_TICKS} '
         f'-KimiBinary "{kimi_stub}" -VerdictOut "{verdict_out}"\n'
         f'Write-Output "VALUE=[$env:KIMI_CODE_HOME]"\n',
         encoding="ascii")
@@ -875,7 +904,7 @@ def test_wrapper_never_touches_real_userprofile_credential(tmp_path, kimi_stub):
     full_env = clean_env({"USERPROFILE": str(fake_profile),
                            "PARALLAX_TEST_STUB_WRITE_CREDENTIAL": "ok"})
     cmd = [POWERSHELL, "-NoProfile", "-NonInteractive", "-File", str(SCRIPT),
-           "-OwnerPid", "1", "-OwnerStartTicksUtc", "1",
+           "-OwnerPid", LIVE_PID, "-OwnerStartTicksUtc", LIVE_TICKS,
            "-KimiBinary", str(stub_as_exe), "-VerdictOut", str(verdict_out)]
     result = subprocess.run(cmd, capture_output=True, text=True, env=full_env, timeout=30)
     assert result.returncode == 0, (result.stdout, result.stderr)
@@ -918,7 +947,7 @@ def test_live_holder_contention_exits_3_no_client_no_release(
     verdict_out = tmp_path / "verdict.json"
     marker = tmp_path / "marker.txt"
     result = run_wrapper(
-        ["-LaneHome", str(lane_home), "-OwnerPid", "1", "-OwnerStartTicksUtc", "1",
+        ["-LaneHome", str(lane_home), "-OwnerPid", LIVE_PID, "-OwnerStartTicksUtc", LIVE_TICKS,
          "-KimiBinary", str(kimi_stub), "-VerdictOut", str(verdict_out)],
         env={"PARALLAX_TEST_STUB_MARKER_FILE": str(marker)})
     assert result.returncode == 3, (result.stdout, result.stderr)
@@ -944,7 +973,7 @@ def test_dead_holder_reclaimed_reports_lock_diagnostic_and_wrapper_succeeds(
 
     verdict_out = tmp_path / "verdict.json"
     result = run_wrapper(
-        ["-LaneHome", str(lane_home), "-OwnerPid", "1", "-OwnerStartTicksUtc", "1",
+        ["-LaneHome", str(lane_home), "-OwnerPid", LIVE_PID, "-OwnerStartTicksUtc", LIVE_TICKS,
          "-KimiBinary", str(kimi_stub), "-VerdictOut", str(verdict_out)],
         env={"PARALLAX_TEST_STUB_WRITE_CREDENTIAL": "ok"})
     assert result.returncode == 0, (result.stdout, result.stderr)
@@ -957,8 +986,8 @@ def test_malformed_lock_record_exits_4(lane_home, kimi_stub, tmp_path):
     lane_home.mkdir()
     write_raw_lock(lane_home, b"not json at all")
     verdict_out = tmp_path / "verdict.json"
-    result = run_wrapper(["-LaneHome", str(lane_home), "-OwnerPid", "1",
-                           "-OwnerStartTicksUtc", "1", "-KimiBinary", str(kimi_stub),
+    result = run_wrapper(["-LaneHome", str(lane_home), "-OwnerPid", LIVE_PID,
+                           "-OwnerStartTicksUtc", LIVE_TICKS, "-KimiBinary", str(kimi_stub),
                            "-VerdictOut", str(verdict_out)])
     assert result.returncode == 4
     assert not verdict_out.exists()
@@ -975,7 +1004,7 @@ def test_client_streams_are_temporally_inherited_and_absent_from_verdict(
     verdict_out = tmp_path / "verdict.json"
     release_signal = tmp_path / "release.txt"
     proc = start_wrapper_bg(
-        ["-LaneHome", str(lane_home), "-OwnerPid", "1", "-OwnerStartTicksUtc", "1",
+        ["-LaneHome", str(lane_home), "-OwnerPid", LIVE_PID, "-OwnerStartTicksUtc", LIVE_TICKS,
          "-KimiBinary", str(kimi_stub), "-VerdictOut", str(verdict_out)],
         env={"PARALLAX_TEST_STUB_BLOCK_UNTIL": str(release_signal),
              "PARALLAX_TEST_STUB_WRITE_CREDENTIAL": "ok"})
@@ -1042,13 +1071,84 @@ def _displace_lock_externally(lane_home, timeout=10):
     return False
 
 
+def _held_record_while_blocked(lane_home, timeout=10):
+    """The held record as it stands WHILE the wrapper holds it.
+
+    The login wrapper releases on the way out, so the only moment its
+    record exists is while the run is blocked. Reading it afterwards
+    would measure nothing.
+    """
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        status = run_lock(["-Status", "-LaneHome", str(lane_home)])
+        if status.returncode == 0:
+            obj = json.loads(status.stdout)
+            if obj.get("state") == "held":
+                return obj
+        time.sleep(0.1)
+    return None
+
+
+def test_the_login_lock_carries_the_owner_name_it_was_given(
+        lane_home, kimi_stub, tmp_path):
+    """The login wrapper is the SECOND call chain into acquire, and a
+    passthrough added to one chain and not the other is a name that
+    appears or vanishes depending on which command took the lane.
+
+    This is also the chain the doctor's own recovery command drives, so
+    it is the one most likely to be holding a lane an operator is trying
+    to understand.
+    """
+    lane_home.mkdir()
+    verdict_out = tmp_path / "verdict.json"
+    release_signal = tmp_path / "release.txt"
+    proc = start_wrapper_bg(
+        ["-LaneHome", str(lane_home), "-OwnerPid", LIVE_PID,
+         "-OwnerStartTicksUtc", LIVE_TICKS, "-OwnerName", "claude.exe",
+         "-KimiBinary", str(kimi_stub), "-VerdictOut", str(verdict_out)],
+        env={"PARALLAX_TEST_STUB_BLOCK_UNTIL": str(release_signal),
+             "PARALLAX_TEST_STUB_WRITE_CREDENTIAL": "ok"})
+    try:
+        held = _held_record_while_blocked(lane_home)
+    finally:
+        release_signal.write_text("go", encoding="ascii")
+    stdout, stderr = proc.communicate(timeout=15)
+    assert held is not None, (stdout, stderr)
+    assert held.get("ownerName") == "claude.exe", held
+    assert proc.returncode == 0, (stdout, stderr)
+
+
+def test_the_login_lock_omits_the_owner_name_when_none_was_given(
+        lane_home, kimi_stub, tmp_path):
+    """The passthrough must not invent one. A wrapper that supplied an
+    empty name would turn every nameless call into a REFUSED acquire,
+    because the lock rejects a supplied-but-blank name."""
+    lane_home.mkdir()
+    verdict_out = tmp_path / "verdict.json"
+    release_signal = tmp_path / "release.txt"
+    proc = start_wrapper_bg(
+        ["-LaneHome", str(lane_home), "-OwnerPid", LIVE_PID,
+         "-OwnerStartTicksUtc", LIVE_TICKS,
+         "-KimiBinary", str(kimi_stub), "-VerdictOut", str(verdict_out)],
+        env={"PARALLAX_TEST_STUB_BLOCK_UNTIL": str(release_signal),
+             "PARALLAX_TEST_STUB_WRITE_CREDENTIAL": "ok"})
+    try:
+        held = _held_record_while_blocked(lane_home)
+    finally:
+        release_signal.write_text("go", encoding="ascii")
+    stdout, stderr = proc.communicate(timeout=15)
+    assert held is not None, (stdout, stderr)
+    assert "ownerName" not in held, held
+    assert proc.returncode == 0, (stdout, stderr)
+
+
 def test_release_refusal_propagates_when_main_operation_succeeded(
         lane_home, kimi_stub, tmp_path):
     lane_home.mkdir()
     verdict_out = tmp_path / "verdict.json"
     release_signal = tmp_path / "release.txt"
     proc = start_wrapper_bg(
-        ["-LaneHome", str(lane_home), "-OwnerPid", "1", "-OwnerStartTicksUtc", "1",
+        ["-LaneHome", str(lane_home), "-OwnerPid", LIVE_PID, "-OwnerStartTicksUtc", LIVE_TICKS,
          "-KimiBinary", str(kimi_stub), "-VerdictOut", str(verdict_out)],
         env={"PARALLAX_TEST_STUB_BLOCK_UNTIL": str(release_signal),
              "PARALLAX_TEST_STUB_WRITE_CREDENTIAL": "ok"})
@@ -1074,7 +1174,7 @@ def test_release_refusal_does_not_override_a_preceding_failure(
     verdict_out = tmp_path / "verdict.json"
     release_signal = tmp_path / "release.txt"
     proc = start_wrapper_bg(
-        ["-LaneHome", str(lane_home), "-OwnerPid", "1", "-OwnerStartTicksUtc", "1",
+        ["-LaneHome", str(lane_home), "-OwnerPid", LIVE_PID, "-OwnerStartTicksUtc", LIVE_TICKS,
          "-KimiBinary", str(kimi_stub), "-VerdictOut", str(verdict_out)],
         env={"PARALLAX_TEST_STUB_BLOCK_UNTIL": str(release_signal),
              "PARALLAX_TEST_STUB_WRITE_CREDENTIAL": "none"})
@@ -1108,7 +1208,7 @@ def test_exit_code_exhaustiveness(tmp_path, kimi_stub, self_identity):
 
     # 0
     home0 = tmp_path / "h0"
-    r = run_wrapper(["-LaneHome", str(home0), "-OwnerPid", "1", "-OwnerStartTicksUtc", "1",
+    r = run_wrapper(["-LaneHome", str(home0), "-OwnerPid", LIVE_PID, "-OwnerStartTicksUtc", LIVE_TICKS,
                       "-KimiBinary", str(kimi_stub), "-VerdictOut", str(tmp_path / "v0.json")],
                      env={"PARALLAX_TEST_STUB_WRITE_CREDENTIAL": "ok"})
     observed.add(r.returncode)
@@ -1123,7 +1223,7 @@ def test_exit_code_exhaustiveness(tmp_path, kimi_stub, self_identity):
     home3 = tmp_path / "h3"
     home3.mkdir()
     write_held_lock(home3, new_token(), pid, ticks, new_token())
-    r = run_wrapper(["-LaneHome", str(home3), "-OwnerPid", "1", "-OwnerStartTicksUtc", "1",
+    r = run_wrapper(["-LaneHome", str(home3), "-OwnerPid", LIVE_PID, "-OwnerStartTicksUtc", LIVE_TICKS,
                       "-KimiBinary", str(kimi_stub), "-VerdictOut", str(tmp_path / "v3.json")])
     observed.add(r.returncode)
 
@@ -1131,7 +1231,7 @@ def test_exit_code_exhaustiveness(tmp_path, kimi_stub, self_identity):
     home4 = tmp_path / "h4"
     home4.mkdir()
     write_raw_lock(home4, b"not json")
-    r = run_wrapper(["-LaneHome", str(home4), "-OwnerPid", "1", "-OwnerStartTicksUtc", "1",
+    r = run_wrapper(["-LaneHome", str(home4), "-OwnerPid", LIVE_PID, "-OwnerStartTicksUtc", LIVE_TICKS,
                       "-KimiBinary", str(kimi_stub), "-VerdictOut", str(tmp_path / "v4.json")])
     observed.add(r.returncode)
 
@@ -1141,7 +1241,7 @@ def test_exit_code_exhaustiveness(tmp_path, kimi_stub, self_identity):
     verdict5 = tmp_path / "v5.json"
     release5 = tmp_path / "release5.txt"
     proc = start_wrapper_bg(
-        ["-LaneHome", str(home5), "-OwnerPid", "1", "-OwnerStartTicksUtc", "1",
+        ["-LaneHome", str(home5), "-OwnerPid", LIVE_PID, "-OwnerStartTicksUtc", LIVE_TICKS,
          "-KimiBinary", str(kimi_stub), "-VerdictOut", str(verdict5)],
         env={"PARALLAX_TEST_STUB_BLOCK_UNTIL": str(release5),
              "PARALLAX_TEST_STUB_WRITE_CREDENTIAL": "ok"})
@@ -1157,7 +1257,7 @@ def test_exit_code_exhaustiveness(tmp_path, kimi_stub, self_identity):
     home6.mkdir()
     home6_lane = home6 / "lane"
     home6_lane.write_bytes(b"not a directory")
-    r = run_wrapper(["-LaneHome", str(home6_lane), "-OwnerPid", "1", "-OwnerStartTicksUtc", "1",
+    r = run_wrapper(["-LaneHome", str(home6_lane), "-OwnerPid", LIVE_PID, "-OwnerStartTicksUtc", LIVE_TICKS,
                       "-KimiBinary", str(kimi_stub), "-VerdictOut", str(tmp_path / "v6.json")])
     observed.add(r.returncode)
 

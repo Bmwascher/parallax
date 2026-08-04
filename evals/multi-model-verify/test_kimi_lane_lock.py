@@ -36,6 +36,35 @@ pytestmark = pytest.mark.skipif(
 
 COMPUTERNAME = os.environ.get("COMPUTERNAME", "")
 
+
+def _live_owner():
+    """A genuinely LIVE owner identity: this pytest process.
+
+    Acquire refuses an owner measured DEAD at the gate, and requires
+    LIVE again immediately before each record write, so a fixture
+    identity of pid 1 / ticks 1 is no longer usable. The pytest process
+    is alive for the whole run by construction, and its start ticks are
+    read the same way the tool reads them, so the pair the tests pass is
+    the pair the tool measures.
+    """
+    pid = os.getpid()
+    proc = subprocess.run(
+        [POWERSHELL, "-NoProfile", "-Command",
+         "$p = Get-Process -Id " + str(pid) +
+         "; [string]$p.StartTime.ToUniversalTime().Ticks"],
+        capture_output=True, text=True, timeout=60)
+    ticks = proc.stdout.strip()
+    if not ticks.isdigit():
+        raise RuntimeError("could not read this process's start ticks: "
+                           + repr(proc.stdout) + proc.stderr)
+    return str(pid), ticks
+
+
+if os.name == "nt" and POWERSHELL is not None:
+    LIVE_PID, LIVE_TICKS = _live_owner()
+else:
+    LIVE_PID, LIVE_TICKS = "1", "1"
+
 TOKEN_RE = re.compile(r"\A[0-9a-f]{32}\Z")
 DIGITS_RE = re.compile(r"\A[0-9]+\Z")
 
@@ -166,9 +195,83 @@ def test_resolve_owner_prints_pid_and_digit_ticks():
     result = run_lock(["-ResolveOwner"])
     assert result.returncode == 0
     obj = json.loads(result.stdout.strip())
-    assert set(obj.keys()) == {"ownerPid", "ownerStartTicksUtc"}
+    assert set(obj.keys()) == {"ownerPid", "ownerStartTicksUtc", "ownerName"}
     assert isinstance(obj["ownerPid"], int) and obj["ownerPid"] > 0
     assert DIGITS_RE.match(obj["ownerStartTicksUtc"])
+
+
+def test_resolve_owner_reports_the_resolved_process_name():
+    """The owner was recorded as a bare number, so a wrong owner and a
+    right one looked identical in every record and every status read.
+
+    Backlog item 26 opened with a lane blocked for hours and no way to
+    tell from the artifacts WHAT held it. The name does not fix the
+    resolution; it makes a wrong resolution legible on sight.
+    """
+    result = run_lock(["-ResolveOwner"])
+    assert result.returncode == 0
+    obj = json.loads(result.stdout.strip())
+    assert isinstance(obj["ownerName"], str) and obj["ownerName"].strip()
+
+
+def run_lock_through_an_extra_shell(args, timeout=40):
+    """Invoke the tool one shell level deeper than run_lock does.
+
+    The inner host is the same executable, so the ONLY difference
+    between this and run_lock is an added transparent shell frame.
+    """
+    # Both paths are QUOTED. This passes today only because
+    # PARALLAX_PS_HOST is normally a bare name and the powershell fallback
+    # resolves under System32 with no spaces; the shutil.which("pwsh")
+    # fallback is under Program Files, and an unquoted splice there fails
+    # the inner parse - which would fail this oracle for a TRANSPORT
+    # reason while looking like the resolution defect it exists to catch.
+    inner = ('"' + POWERSHELL + '" -NoProfile -NonInteractive -File "'
+             + str(SCRIPT) + '" ' + " ".join(args))
+    cmd = [POWERSHELL, "-NoProfile", "-NonInteractive", "-Command",
+           "& " + inner]
+    return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+
+
+def test_resolve_owner_is_stable_across_an_added_shell_frame():
+    """Item 26's instability, reproduced HERE without the other
+    session's wrapping harness.
+
+    The report was that `-ResolveOwner` returns a DIFFERENT pid per call
+    under a wrapper, so the recorded owner reads DEAD almost at once.
+    The mechanism is that resolution took the DIRECT parent, and under a
+    wrapper the direct parent is the ephemeral shell the wrapper just
+    spawned - a new pid every call, dead by the next status read.
+
+    Adding one shell frame reproduces it exactly. Resolution must walk
+    PAST the hosts this tool is invoked through and land on the same
+    process either way, or the recorded owner is an artifact of how deep
+    the caller happened to nest its shells.
+    """
+    direct = run_lock(["-ResolveOwner"])
+    wrapped = run_lock_through_an_extra_shell(["-ResolveOwner"])
+    assert direct.returncode == 0, (direct.stdout, direct.stderr)
+    assert wrapped.returncode == 0, (wrapped.stdout, wrapped.stderr)
+    a = json.loads(direct.stdout.strip())
+    b = json.loads(wrapped.stdout.strip())
+    assert a["ownerPid"] == b["ownerPid"], (a, b)
+    assert a["ownerStartTicksUtc"] == b["ownerStartTicksUtc"], (a, b)
+    assert a["ownerName"] == b["ownerName"], (a, b)
+
+
+def test_resolve_owner_refuses_when_the_ancestry_cannot_be_read():
+    """An unmade measurement is never a clean one.
+
+    The fault seam forces the ancestry walk to throw. It is safe by
+    construction: its only reachable effect is to REFUSE, and there is
+    no path by which it produces an owner record. Same shape as
+    PARALLAX_LANE_LOCK_STARTTIME_FAULT, which can only classify a holder
+    alive and refuse a takeover.
+    """
+    result = run_lock(["-ResolveOwner"],
+                      env={"PARALLAX_LANE_LOCK_ANCESTRY_FAULT": "1"})
+    assert result.returncode == 2, (result.returncode, result.stdout, result.stderr)
+    assert result.stdout.strip() == "", result.stdout
 
 
 # ---------------------------------------------------------------------
@@ -234,7 +337,7 @@ def test_case_variant_required_field_in_a_held_record_is_malformed(lane_home, de
     assert json.loads(status.stdout)["state"] == "MALFORMED"
 
     acquire = run_lock(["-Acquire", "-LaneHome", str(lane_home), "-DebateId", new_token(),
-                        "-OwnerPid", "1", "-OwnerStartTicksUtc", "1",
+                        "-OwnerPid", LIVE_PID, "-OwnerStartTicksUtc", LIVE_TICKS,
                         "-DebateHome", str(debate_home)])
     assert acquire.returncode != 0, acquire.stdout + acquire.stderr
     assert read_raw(lane_home) == raw, "an unrecognized record must not be overwritten"
@@ -341,7 +444,7 @@ def test_status_on_missing_reports_free_and_creates_nothing(lane_home):
 
 
 @pytest.mark.parametrize("args", [
-    ["-Release", "-DebateId", None, "-OwnerPid", "1", "-OwnerStartTicksUtc", "1", "-Nonce", None],
+    ["-Release", "-DebateId", None, "-OwnerPid", LIVE_PID, "-OwnerStartTicksUtc", LIVE_TICKS, "-Nonce", None],
     ["-ForceRelease", "-ConfirmHost", COMPUTERNAME, "-ConfirmOwnerPid", "1",
      "-ConfirmOwnerStartTicksUtc", "1", "-ConfirmDebateId", None, "-ConfirmNonce", None],
     ["-MalformedOverride", "-ConfirmSha256", "a" * 64],
@@ -355,7 +458,7 @@ def test_release_and_overrides_on_missing_exit_5_and_create_nothing(lane_home, a
 
 def test_acquire_on_missing_creates_and_succeeds(lane_home, debate_home):
     result = run_lock(["-Acquire", "-LaneHome", str(lane_home), "-DebateId", new_token(),
-                        "-OwnerPid", "1", "-OwnerStartTicksUtc", "1",
+                        "-OwnerPid", LIVE_PID, "-OwnerStartTicksUtc", LIVE_TICKS,
                         "-DebateHome", str(debate_home)])
     assert result.returncode == 0
     assert TOKEN_RE.match(result.stdout.strip())
@@ -365,11 +468,11 @@ def test_acquire_on_missing_creates_and_succeeds(lane_home, debate_home):
 def test_file_exists_after_every_successful_mutating_mode(lane_home, debate_home):
     debate_id = new_token()
     nonce = run_lock(["-Acquire", "-LaneHome", str(lane_home), "-DebateId", debate_id,
-                       "-OwnerPid", "1", "-OwnerStartTicksUtc", "1",
+                       "-OwnerPid", LIVE_PID, "-OwnerStartTicksUtc", LIVE_TICKS,
                        "-DebateHome", str(debate_home)]).stdout.strip()
     assert lock_path(lane_home).exists()
     result = run_lock(["-Release", "-LaneHome", str(lane_home), "-DebateId", debate_id,
-                        "-OwnerPid", "1", "-OwnerStartTicksUtc", "1", "-Nonce", nonce])
+                        "-OwnerPid", LIVE_PID, "-OwnerStartTicksUtc", LIVE_TICKS, "-Nonce", nonce])
     assert result.returncode == 0
     assert lock_path(lane_home).exists()  # release writes free in place, never deletes
 
@@ -379,7 +482,7 @@ def test_file_exists_after_every_successful_mutating_mode(lane_home, debate_home
 # ---------------------------------------------------------------------
 def test_fresh_acquire_over_free_emits_new_nonce_and_no_stderr(lane_home, debate_home):
     result = run_lock(["-Acquire", "-LaneHome", str(lane_home), "-DebateId", new_token(),
-                        "-OwnerPid", "1", "-OwnerStartTicksUtc", "1",
+                        "-OwnerPid", LIVE_PID, "-OwnerStartTicksUtc", LIVE_TICKS,
                         "-DebateHome", str(debate_home)])
     assert result.returncode == 0
     assert TOKEN_RE.match(result.stdout.strip())
@@ -388,7 +491,7 @@ def test_fresh_acquire_over_free_emits_new_nonce_and_no_stderr(lane_home, debate
 
 def test_nonce_supplied_against_free_record_exits_2_and_leaves_free(lane_home, debate_home):
     result = run_lock(["-Acquire", "-LaneHome", str(lane_home), "-DebateId", new_token(),
-                        "-OwnerPid", "1", "-OwnerStartTicksUtc", "1",
+                        "-OwnerPid", LIVE_PID, "-OwnerStartTicksUtc", LIVE_TICKS,
                         "-DebateHome", str(debate_home), "-Nonce", new_token()])
     assert result.returncode == 2
     # Only-ACQUIRE-creates: this call's own CreateNew produced the file,
@@ -400,7 +503,7 @@ def test_dead_holder_reclaimed_and_reported(lane_home, debate_home):
     dead_rec = write_held(lane_home, ownerPid=999999, ownerStartTicksUtc="111111111")
     new_debate = new_token()
     result = run_lock(["-Acquire", "-LaneHome", str(lane_home), "-DebateId", new_debate,
-                        "-OwnerPid", "1", "-OwnerStartTicksUtc", "1",
+                        "-OwnerPid", LIVE_PID, "-OwnerStartTicksUtc", LIVE_TICKS,
                         "-DebateHome", str(debate_home)])
     assert result.returncode == 0
     assert TOKEN_RE.match(result.stdout.strip())
@@ -413,7 +516,7 @@ def test_nonce_supplied_against_dead_holder_exits_2_no_reclaim(lane_home, debate
     dead_rec = write_held(lane_home)
     before = read_raw(lane_home)
     result = run_lock(["-Acquire", "-LaneHome", str(lane_home), "-DebateId", new_token(),
-                        "-OwnerPid", "1", "-OwnerStartTicksUtc", "1",
+                        "-OwnerPid", LIVE_PID, "-OwnerStartTicksUtc", LIVE_TICKS,
                         "-DebateHome", str(debate_home), "-Nonce", new_token()])
     assert result.returncode == 2
     assert read_raw(lane_home) == before
@@ -422,7 +525,7 @@ def test_nonce_supplied_against_dead_holder_exits_2_no_reclaim(lane_home, debate
 def test_old_nonce_fails_after_reclaim(lane_home, debate_home):
     dead_rec = write_held(lane_home, ownerPid=999999, ownerStartTicksUtc="111111111")
     run_lock(["-Acquire", "-LaneHome", str(lane_home), "-DebateId", new_token(),
-              "-OwnerPid", "1", "-OwnerStartTicksUtc", "1", "-DebateHome", str(debate_home)])
+              "-OwnerPid", LIVE_PID, "-OwnerStartTicksUtc", LIVE_TICKS, "-DebateHome", str(debate_home)])
     result = run_lock(["-Release", "-LaneHome", str(lane_home), "-DebateId", dead_rec["debateId"],
                         "-OwnerPid", str(dead_rec["ownerPid"]),
                         "-OwnerStartTicksUtc", dead_rec["ownerStartTicksUtc"],
@@ -587,7 +690,7 @@ def test_unmeasurable_competing_identity_contends_not_reclaims(lane_home, debate
 def test_foreign_host_acquire_exits_4(lane_home, debate_home):
     write_held(lane_home, host="SOME-OTHER-HOST")
     result = run_lock(["-Acquire", "-LaneHome", str(lane_home), "-DebateId", new_token(),
-                        "-OwnerPid", "1", "-OwnerStartTicksUtc", "1",
+                        "-OwnerPid", LIVE_PID, "-OwnerStartTicksUtc", LIVE_TICKS,
                         "-DebateHome", str(debate_home)])
     assert result.returncode == 4
 
@@ -644,7 +747,7 @@ def test_release_identity_mismatch_exits_5_untouched(lane_home):
 def test_release_against_free_record_exits_5(lane_home):
     write_raw(lane_home, b'{"version":1,"state":"free"}')
     result = run_lock(["-Release", "-LaneHome", str(lane_home), "-DebateId", new_token(),
-                        "-OwnerPid", "1", "-OwnerStartTicksUtc", "1", "-Nonce", new_token()])
+                        "-OwnerPid", LIVE_PID, "-OwnerStartTicksUtc", LIVE_TICKS, "-Nonce", new_token()])
     assert result.returncode == 5
 
 
@@ -658,7 +761,7 @@ def test_malformed_override_on_wellformed_same_host_held_exits_5(lane_home):
 def test_malformed_exits_4_for_release_and_force_release(lane_home):
     write_raw(lane_home, b"not json")
     r1 = run_lock(["-Release", "-LaneHome", str(lane_home), "-DebateId", new_token(),
-                   "-OwnerPid", "1", "-OwnerStartTicksUtc", "1", "-Nonce", new_token()])
+                   "-OwnerPid", LIVE_PID, "-OwnerStartTicksUtc", LIVE_TICKS, "-Nonce", new_token()])
     assert r1.returncode == 4
     r2 = run_lock(["-ForceRelease", "-LaneHome", str(lane_home), "-ConfirmHost", COMPUTERNAME,
                    "-ConfirmOwnerPid", "1", "-ConfirmOwnerStartTicksUtc", "1",
@@ -699,7 +802,7 @@ def test_status_on_foreign_host_reports_unknown_liveness(lane_home):
                                         ("1", "0"), ("1", "-1"), ("1", "abc")])
 def test_bad_wait_or_poll_values_exit_2_no_mutation(lane_home, debate_home, wait, poll):
     result = run_lock(["-Acquire", "-LaneHome", str(lane_home), "-DebateId", new_token(),
-                        "-OwnerPid", "1", "-OwnerStartTicksUtc", "1",
+                        "-OwnerPid", LIVE_PID, "-OwnerStartTicksUtc", LIVE_TICKS,
                         "-DebateHome", str(debate_home), "-WaitSeconds", wait, "-PollSeconds", poll])
     assert result.returncode == 2
     assert not lock_path(lane_home).exists()
@@ -708,7 +811,7 @@ def test_bad_wait_or_poll_values_exit_2_no_mutation(lane_home, debate_home, wait
 @pytest.mark.parametrize("bad_token", ["not-hex", "a" * 31, "A" * 32, "g" * 32])
 def test_bad_debate_id_token_exits_2_no_mutation(lane_home, debate_home, bad_token):
     result = run_lock(["-Acquire", "-LaneHome", str(lane_home), "-DebateId", bad_token,
-                        "-OwnerPid", "1", "-OwnerStartTicksUtc", "1", "-DebateHome", str(debate_home)])
+                        "-OwnerPid", LIVE_PID, "-OwnerStartTicksUtc", LIVE_TICKS, "-DebateHome", str(debate_home)])
     assert result.returncode == 2
     assert not lock_path(lane_home).exists()
 
@@ -720,7 +823,7 @@ def test_empty_debate_id_is_refused_nonzero_no_mutation(lane_home, debate_home):
     # 1 territory (never emitted by script code), so only "nonzero, no
     # mutation" is asserted here, not the specific script-level exit 2.
     result = run_lock(["-Acquire", "-LaneHome", str(lane_home), "-DebateId", "",
-                        "-OwnerPid", "1", "-OwnerStartTicksUtc", "1", "-DebateHome", str(debate_home)])
+                        "-OwnerPid", LIVE_PID, "-OwnerStartTicksUtc", LIVE_TICKS, "-DebateHome", str(debate_home)])
     assert result.returncode != 0
     assert not lock_path(lane_home).exists()
 
@@ -775,12 +878,12 @@ def test_exit_code_exhaustiveness_across_the_bound_invocation_matrix(lane_home, 
 
     # 0: successful acquire
     r = run_lock(["-Acquire", "-LaneHome", str(lane_home), "-DebateId", new_token(),
-                  "-OwnerPid", "1", "-OwnerStartTicksUtc", "1", "-DebateHome", str(debate_home)])
+                  "-OwnerPid", LIVE_PID, "-OwnerStartTicksUtc", LIVE_TICKS, "-DebateHome", str(debate_home)])
     observed.add(r.returncode)
 
     # 2: bad parameter value
     r = run_lock(["-Acquire", "-LaneHome", str(lane_home), "-DebateId", "bad",
-                  "-OwnerPid", "1", "-OwnerStartTicksUtc", "1", "-DebateHome", str(debate_home)])
+                  "-OwnerPid", LIVE_PID, "-OwnerStartTicksUtc", LIVE_TICKS, "-DebateHome", str(debate_home)])
     observed.add(r.returncode)
 
     # 3: contention against a LIVE holder, zero wait budget
@@ -792,13 +895,13 @@ def test_exit_code_exhaustiveness_across_the_bound_invocation_matrix(lane_home, 
     # 4: malformed record
     write_raw(lane_home, b"not json")
     r = run_lock(["-Acquire", "-LaneHome", str(lane_home), "-DebateId", new_token(),
-                  "-OwnerPid", "1", "-OwnerStartTicksUtc", "1", "-DebateHome", str(debate_home)])
+                  "-OwnerPid", LIVE_PID, "-OwnerStartTicksUtc", LIVE_TICKS, "-DebateHome", str(debate_home)])
     observed.add(r.returncode)
 
     # 5: release with nothing applicable
     write_raw(lane_home, b'{"version":1,"state":"free"}')
     r = run_lock(["-Release", "-LaneHome", str(lane_home), "-DebateId", new_token(),
-                  "-OwnerPid", "1", "-OwnerStartTicksUtc", "1", "-Nonce", new_token()])
+                  "-OwnerPid", LIVE_PID, "-OwnerStartTicksUtc", LIVE_TICKS, "-Nonce", new_token()])
     observed.add(r.returncode)
 
     # 6: unreadable (directory at the lock path)
@@ -821,7 +924,7 @@ def test_exit_code_exhaustiveness_across_the_bound_invocation_matrix(lane_home, 
 # ---------------------------------------------------------------------
 def _run_clamp_case(lane_home, debate_home, sig_path, extra_setup_returncode_check=None, **acquire_kwargs):
     args = ["-Acquire", "-LaneHome", str(lane_home), "-DebateId", new_token(),
-            "-OwnerPid", "1", "-OwnerStartTicksUtc", "1", "-DebateHome", str(debate_home),
+            "-OwnerPid", LIVE_PID, "-OwnerStartTicksUtc", LIVE_TICKS, "-DebateHome", str(debate_home),
             "-WaitSeconds", "1", "-PollSeconds", "10"]
     proc = start_lock_bg(args, env={"PARALLAX_LANE_LOCK_CONTENTION_SIGNAL": str(sig_path)})
     branch = wait_for_signal(sig_path, timeout=10)
@@ -913,7 +1016,7 @@ def test_retry_success_handle_branch(lane_home, debate_home, tmp_path):
     try:
         time.sleep(0.3)
         args = ["-Acquire", "-LaneHome", str(lane_home), "-DebateId", new_token(),
-                "-OwnerPid", "1", "-OwnerStartTicksUtc", "1", "-DebateHome", str(debate_home),
+                "-OwnerPid", LIVE_PID, "-OwnerStartTicksUtc", LIVE_TICKS, "-DebateHome", str(debate_home),
                 "-WaitSeconds", "30", "-PollSeconds", "1"]
         contender = start_lock_bg(args, env={"PARALLAX_LANE_LOCK_CONTENTION_SIGNAL": str(sig_path)})
         branch = wait_for_signal(sig_path, timeout=10)
@@ -949,7 +1052,7 @@ def test_retry_success_holder_branch(lane_home, debate_home, tmp_path):
 
         sig_path = tmp_path / "sig-retry-holder.txt"
         args = ["-Acquire", "-LaneHome", str(lane_home), "-DebateId", new_token(),
-                "-OwnerPid", "1", "-OwnerStartTicksUtc", "1", "-DebateHome", str(debate_home),
+                "-OwnerPid", LIVE_PID, "-OwnerStartTicksUtc", LIVE_TICKS, "-DebateHome", str(debate_home),
                 "-WaitSeconds", "30", "-PollSeconds", "1"]
         contender = start_lock_bg(args, env={"PARALLAX_LANE_LOCK_CONTENTION_SIGNAL": str(sig_path)})
         branch = wait_for_signal(sig_path, timeout=10)
@@ -973,10 +1076,264 @@ def test_retry_success_holder_branch(lane_home, debate_home, tmp_path):
         status = run_lock(["-Status", "-LaneHome", str(lane_home)])
         obj = json.loads(status.stdout)
         assert obj["nonce"] == new_nonce
-        assert obj["ownerPid"] == 1
+        assert obj["ownerPid"] == int(LIVE_PID)
     finally:
         sleeper.terminate()
         try:
             sleeper.wait(timeout=10)
         except subprocess.TimeoutExpired:
             sleeper.kill()
+
+
+# =====================================================================
+# 0.22.0, plan debate round 1. Acquire recorded a proposed owner without
+# ever checking it was alive.
+# =====================================================================
+
+def _dead_pid():
+    """A pid that is not running.
+
+    Started and reaped, so the identity is well formed and the process
+    is gone - which is exactly the shape a wrapper-resolved owner has by
+    the time a debate reaches its teardown.
+    """
+    proc = subprocess.Popen(
+        [POWERSHELL, "-NoProfile", "-NonInteractive", "-Command", "exit 0"],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    proc.wait(timeout=30)
+    return str(proc.pid)
+
+
+def test_acquire_refuses_an_owner_that_is_not_live(lane_home, debate_home):
+    """The severe half of backlog item 26, and it needed no wrapping
+    harness to reach.
+
+    `Get-Liveness` has been in this tool the whole time. Acquire called
+    it on ONE thing: the EXISTING holder's record, to decide reclaim
+    rights. It never called it on the PROPOSED owner - that path checked
+    only that the pid and ticks were syntactically well formed and then
+    wrote them down.
+
+    So a caller could record an owner that was already DEAD. The next
+    acquire reads that record as DEAD, reclaims it, and the mutual
+    exclusion this lock exists to provide is gone while every status
+    read looks completely ordinary. The stuck-lock symptom was the
+    visible half of item 26; this is the silent half.
+    """
+    rc = run_lock(["-Acquire", "-LaneHome", str(lane_home),
+                   "-DebateId", "a" * 32,
+                   "-OwnerPid", _dead_pid(), "-OwnerStartTicksUtc", LIVE_TICKS,
+                   "-DebateHome", str(debate_home), "-WaitSeconds", "0"])
+    assert rc.returncode != 0, (rc.returncode, rc.stdout, rc.stderr)
+    assert "live" in (rc.stdout + rc.stderr).lower(), (rc.stdout, rc.stderr)
+
+
+def test_acquire_refuses_an_owner_whose_ticks_do_not_match(lane_home, debate_home):
+    """A live pid with the WRONG start ticks is the identity-reuse case.
+
+    `Get-Liveness` already classifies it DEAD, because a pid can be
+    reused by a different process. Acquire must refuse it for the same
+    reason it refuses a vanished one: the identity names something that
+    is not the process the caller thinks it is.
+    """
+    rc = run_lock(["-Acquire", "-LaneHome", str(lane_home),
+                   "-DebateId", "b" * 32,
+                   "-OwnerPid", LIVE_PID, "-OwnerStartTicksUtc", "1",
+                   "-DebateHome", str(debate_home), "-WaitSeconds", "0"])
+    assert rc.returncode != 0, (rc.returncode, rc.stdout, rc.stderr)
+    assert "live" in (rc.stdout + rc.stderr).lower(), (rc.stdout, rc.stderr)
+
+
+# ---------------------------------------------------------------------
+# ownerName as an OPTIONAL held-v1 field
+# ---------------------------------------------------------------------
+def test_acquire_records_an_optional_owner_name(lane_home, debate_home):
+    """The name resolution now reports has to reach the RECORD, or the
+    only place a wrong owner is legible is the moment it is resolved -
+    which is the one moment nobody is looking."""
+    rc = run_lock(["-Acquire", "-LaneHome", str(lane_home),
+                   "-DebateId", "e" * 32,
+                   "-OwnerPid", LIVE_PID, "-OwnerStartTicksUtc", LIVE_TICKS,
+                   "-OwnerName", "claude.exe",
+                   "-DebateHome", str(debate_home), "-WaitSeconds", "0"])
+    assert rc.returncode == 0, (rc.returncode, rc.stdout, rc.stderr)
+    rec = json.loads(read_raw(lane_home).decode("utf-8"))
+    assert rec["ownerName"] == "claude.exe", rec
+
+
+def test_acquire_without_owner_name_writes_no_such_field(lane_home, debate_home):
+    """OPTIONAL means absent, not empty.
+
+    A record written with an empty ownerName would be a record claiming
+    to carry a name, and every reader would have to decide what an empty
+    one means. Absent has one meaning already.
+    """
+    rc = run_lock(["-Acquire", "-LaneHome", str(lane_home),
+                   "-DebateId", "f" * 32,
+                   "-OwnerPid", LIVE_PID, "-OwnerStartTicksUtc", LIVE_TICKS,
+                   "-DebateHome", str(debate_home), "-WaitSeconds", "0"])
+    assert rc.returncode == 0, (rc.returncode, rc.stdout, rc.stderr)
+    rec = json.loads(read_raw(lane_home).decode("utf-8"))
+    assert "ownerName" not in rec, rec
+
+
+def test_a_held_record_carrying_owner_name_is_well_formed(lane_home):
+    """The migration direction that matters on the way IN.
+
+    The held schema is an EXACT field set, so before this change a
+    record carrying ownerName classified MALFORMED - which is exit 4 and
+    a lane nobody can take without the guarded override.
+    """
+    write_held(lane_home, host=COMPUTERNAME, ownerName="claude.exe")
+    result = run_lock(["-Status", "-LaneHome", str(lane_home)])
+    assert result.returncode == 0
+    obj = json.loads(result.stdout)
+    assert obj["state"] == "held", obj
+    assert obj["ownerName"] == "claude.exe", obj
+
+
+def test_a_held_record_without_owner_name_is_still_well_formed(lane_home):
+    """The migration direction that matters on the way OUT, and the
+    reason the field is optional rather than required.
+
+    Every record written before this change lacks it. A required field
+    would have turned all of them MALFORMED the moment the plugin cache
+    updated - a lane locked by an upgrade, not by a debate.
+    """
+    write_held(lane_home, host=COMPUTERNAME)
+    result = run_lock(["-Status", "-LaneHome", str(lane_home)])
+    assert result.returncode == 0
+    obj = json.loads(result.stdout)
+    assert obj["state"] == "held", obj
+    assert "ownerName" not in obj, obj
+
+
+def test_acquire_refuses_a_blank_owner_name(lane_home, debate_home):
+    """A supplied name that says nothing is a caller error, not a record
+    to write. Refusing keeps "present" and "informative" the same thing.
+    """
+    rc = run_lock(["-Acquire", "-LaneHome", str(lane_home),
+                   "-DebateId", "0" * 32,
+                   "-OwnerPid", LIVE_PID, "-OwnerStartTicksUtc", LIVE_TICKS,
+                   "-OwnerName", "   ",
+                   "-DebateHome", str(debate_home), "-WaitSeconds", "0"])
+    assert rc.returncode == 2, (rc.returncode, rc.stdout, rc.stderr)
+    assert read_raw(lane_home) in (None, b'{"version":1,"state":"free"}'), read_raw(lane_home)
+
+
+def test_reclaiming_a_dead_holder_carries_the_new_owner_name(lane_home, debate_home):
+    """The reclaim writer is a SECOND record writer, and a field added to
+    one writer and not the other is a field that vanishes on reclaim."""
+    write_held(lane_home, host=COMPUTERNAME, ownerName="stale.exe")
+    rc = run_lock(["-Acquire", "-LaneHome", str(lane_home),
+                   "-DebateId", "1" * 32,
+                   "-OwnerPid", LIVE_PID, "-OwnerStartTicksUtc", LIVE_TICKS,
+                   "-OwnerName", "claude.exe",
+                   "-DebateHome", str(debate_home), "-WaitSeconds", "0"])
+    assert rc.returncode == 0, (rc.returncode, rc.stdout, rc.stderr)
+    rec = json.loads(read_raw(lane_home).decode("utf-8"))
+    assert rec["ownerName"] == "claude.exe", rec
+
+
+def test_acquire_refuses_to_write_a_record_for_an_unmeasurable_owner(
+        lane_home, debate_home):
+    """A record is a CLAIM that this owner holds the lane, so writing one
+    requires LIVE and not merely "not known to be dead".
+
+    The first shipped cut refused only DEAD, and that left a residual:
+    an owner whose start time could not be read was written down without
+    the pid-reuse guard ever running. The cross-vendor round pointed out
+    that the residual is removable without cost, because the case the
+    DEAD-only rule was protecting is the NON-WRITING idempotent re-entry
+    - matching nonce, matching identity - which is pinned separately by
+    test_unmeasurable_exact_identity_reacquires_idempotently and is
+    untouched by this rule.
+
+    So: LIVE to WRITE, and UNMEASURABLE only where nothing is written.
+    """
+    rc = run_lock(["-Acquire", "-LaneHome", str(lane_home),
+                   "-DebateId", "d" * 32,
+                   "-OwnerPid", LIVE_PID, "-OwnerStartTicksUtc", LIVE_TICKS,
+                   "-DebateHome", str(debate_home), "-WaitSeconds", "0"],
+                  env={"PARALLAX_LANE_LOCK_STARTTIME_FAULT": "1"})
+    assert rc.returncode == 2, (rc.returncode, rc.stdout, rc.stderr)
+    assert read_raw(lane_home) in (None, b'{"version":1,"state":"free"}'), read_raw(lane_home)
+
+
+def test_an_owner_that_dies_during_contention_is_never_written(
+        lane_home, debate_home, self_identity, tmp_path):
+    """The window the single pre-loop check could not see.
+
+    Liveness was measured ONCE, before the acquisition loop. A caller
+    that waits behind a holder can therefore be measured LIVE, wait,
+    DIE, and still have its identity written the moment the holder
+    releases - which is exactly the already-dead record item 26 calls
+    the silent half, arrived at by a different road.
+
+    The fixture is synchronized on the CONTENTION SIGNAL, not on a
+    clock. An earlier cut slept two seconds before killing the victim,
+    and the cross-vendor round showed that this proves nothing: if the
+    victim dies before the waiter reaches its PRE-LOOP measurement, the
+    DEAD gate refuses and every assertion still passes - the test goes
+    green for the gate it is not testing. Waiting for the "holder"
+    signal establishes that the waiter is already PAST that gate and
+    inside the acquisition loop before the victim dies, which is the
+    only ordering that exercises the write-site rule.
+    """
+    pid, ticks = self_identity
+    holder_debate = new_token()
+    r1 = run_lock(["-Acquire", "-LaneHome", str(lane_home),
+                   "-DebateId", holder_debate,
+                   "-OwnerPid", pid, "-OwnerStartTicksUtc", ticks,
+                   "-DebateHome", str(debate_home)])
+    assert r1.returncode == 0, (r1.stdout, r1.stderr)
+    holder_nonce = r1.stdout.strip()
+
+    victim = start_sleeper(seconds=120)
+    victim_ticks = _ticks_for_pid(victim.pid)
+    assert DIGITS_RE.match(victim_ticks), victim_ticks
+
+    sig_path = tmp_path / "contention.txt"
+    waiter = start_lock_bg(["-Acquire", "-LaneHome", str(lane_home),
+                            "-DebateId", new_token(),
+                            "-OwnerPid", str(victim.pid),
+                            "-OwnerStartTicksUtc", victim_ticks,
+                            "-DebateHome", str(debate_home),
+                            "-WaitSeconds", "30", "-PollSeconds", "1"],
+                           env={"PARALLAX_LANE_LOCK_CONTENTION_SIGNAL": str(sig_path)})
+    try:
+        branch = wait_for_signal(sig_path, timeout=20)
+        assert branch == "holder", (
+            "the waiter must be PAST the pre-loop DEAD gate and inside the "
+            "acquisition loop before the victim dies, or this measures the "
+            "gate instead of the write-site rule; signal was %r" % (branch,))
+        victim.kill()
+        victim.wait(timeout=30)
+        rel = run_lock(["-Release", "-LaneHome", str(lane_home),
+                        "-DebateId", holder_debate, "-OwnerPid", pid,
+                        "-OwnerStartTicksUtc", ticks, "-Nonce", holder_nonce])
+        assert rel.returncode == 0, (rel.stdout, rel.stderr)
+        stdout, stderr = waiter.communicate(timeout=60)
+    finally:
+        # The victim is reaped HERE too. If the signal times out or the
+        # branch assertion fails, execution never reaches the kill above
+        # and a 120-second sleeper outlives the failing oracle.
+        if victim.poll() is None:
+            victim.kill()
+            victim.wait(timeout=30)
+        if waiter.poll() is None:
+            waiter.kill()
+
+    assert waiter.returncode == 2, (waiter.returncode, stdout, stderr)
+    assert read_raw(lane_home) == b'{"version":1,"state":"free"}', read_raw(lane_home)
+
+
+def test_acquire_still_accepts_a_live_owner(lane_home, debate_home):
+    """The positive control. The refusal must not close the ordinary
+    case, which is the whole reason the lane exists."""
+    rc = run_lock(["-Acquire", "-LaneHome", str(lane_home),
+                   "-DebateId", "c" * 32,
+                   "-OwnerPid", LIVE_PID, "-OwnerStartTicksUtc", LIVE_TICKS,
+                   "-DebateHome", str(debate_home), "-WaitSeconds", "0"])
+    assert rc.returncode == 0, (rc.returncode, rc.stdout, rc.stderr)
+    assert TOKEN_RE.match(rc.stdout.strip()), rc.stdout

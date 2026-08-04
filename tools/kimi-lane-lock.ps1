@@ -90,6 +90,13 @@ param(
     [Parameter(ParameterSetName = "Acquire", Mandatory = $true)]
     [string]$DebateHome,
 
+    # OPTIONAL, and on -Acquire only. Release and ForceRelease match on
+    # the identity they were GIVEN; a display name is not part of that
+    # identity and must never become something a caller has to reproduce
+    # in order to let go of its own lock.
+    [Parameter(ParameterSetName = "Acquire", Mandatory = $false)]
+    [string]$OwnerName,
+
     # Mandatory on -Release (present the nonce this session was given),
     # optional on -Acquire (absent on a fresh acquisition, supplied only
     # to prove an idempotent re-acquire of one's own held lock).
@@ -126,8 +133,15 @@ $ErrorActionPreference = "Stop"
 # Record schema constants.
 # ---------------------------------------------------------------------
 $FreeFields = @("version", "state")
+# ownerName is in $HeldFields and NOT in $HeldRequired, and that gap is
+# the migration. The held schema is an EXACT field set, so a REQUIRED
+# ownerName would have turned every record written before this change
+# MALFORMED the moment the plugin cache updated - a lane locked by an
+# upgrade rather than by a debate, freeable only through the guarded
+# override. Optional means both shapes stay well formed.
 $HeldFields = @("version", "state", "host", "ownerPid", "ownerStartTicksUtc",
-                "debateId", "nonce", "debateHome", "acquiredTicksUtc")
+                "debateId", "nonce", "debateHome", "acquiredTicksUtc",
+                "ownerName")
 $HeldRequired = @("host", "ownerPid", "ownerStartTicksUtc", "debateId",
                   "nonce", "debateHome", "acquiredTicksUtc")
 # -DebateId/-Nonce/-ConfirmDebateId/-ConfirmNonce/debateId/nonce: exactly
@@ -343,6 +357,13 @@ function Get-Classification([byte[]]$Bytes) {
         -not ($obj.acquiredTicksUtc -match $DigitsPattern)) {
         return @{ Malformed = $true }
     }
+    # Optional in PRESENCE, not in shape: a record that carries the field
+    # at all must carry something a reader can act on.
+    if ($props -ccontains "ownerName") {
+        if (-not ($obj.ownerName -is [string]) -or $obj.ownerName.Trim().Length -eq 0) {
+            return @{ Malformed = $true }
+        }
+    }
     return @{ Malformed = $false; State = "held"; Record = $obj }
 }
 
@@ -479,6 +500,12 @@ if ($Mode -eq "Acquire" -or $Mode -eq "Release") {
 if ($Mode -eq "Acquire") {
     if ([string]::IsNullOrWhiteSpace($DebateHome)) { exit 2 }
 }
+# "Provided" means the caller supplied the parameter at all. An empty or
+# whitespace value is a REFUSED value, never silently treated as absent,
+# because a record claiming to carry a name and carrying nothing forces
+# every reader to invent a meaning for it. Same rule as -Nonce.
+$OwnerNameProvided = $PSBoundParameters.ContainsKey("OwnerName")
+if ($OwnerNameProvided -and [string]::IsNullOrWhiteSpace($OwnerName)) { exit 2 }
 # -Nonce: mandatory on -Release (the binder guarantees it is bound, but
 # an explicit -Nonce "" still binds successfully, so the pattern is
 # checked regardless of emptiness), optional on -Acquire. "Provided"
@@ -504,7 +531,89 @@ if ($Mode -eq "MalformedOverride") {
 # ---------------------------------------------------------------------
 # Mode implementations.
 # ---------------------------------------------------------------------
+# ---------------------------------------------------------------------
+# A HELD-OWNER RECORD IS A CLAIM that this owner holds the lane, so
+# writing one requires a LIVE measurement - not merely "not known to be
+# dead". Called before every HELD-OWNER write and on no other path: the
+# free-record writes carry no owner and have nothing to be wrong about.
+#
+# RESIDUAL, and it is unavoidable here: this establishes LIVE BEFORE the
+# write, not AT it. Nonce generation, record construction and
+# serialization run in between, so an owner that dies inside that window
+# is still written. WHAT CHANGED IS CONTROL-FLOW PLACEMENT, and that is
+# the whole claim. The old interval began BEFORE the acquisition loop,
+# so it could include contention waiting up to the entire wait budget;
+# this one begins after the loop has committed to a write and contains
+# only nonce generation, record construction and serialization. NEITHER
+# interval's wall-clock duration is measured and NO comparative
+# magnitude is claimed - the scheduler can pause this process anywhere
+# inside either one. Closing the remaining interval entirely would need
+# an atomicity this tool cannot have: the process being measured is not
+# the process writing.
+#
+# UNMEASURABLE refuses HERE and is accepted at the gate above, and the
+# asymmetry is the whole design: the pid lookup succeeded, so the
+# process exists, but the pid-REUSE guard did not run, and an identity
+# whose reuse guard never ran is not one to write down as an owner. Where
+# nothing is written there is nothing to be wrong about, which is why the
+# idempotent re-entry path never calls this.
+# ---------------------------------------------------------------------
+function Assert-OwnerLiveForWrite($OpenInfo) {
+    $atWrite = Get-Liveness -OwnerPidValue $OwnerPidInt -TicksValue $OwnerStartTicksUtc
+    if ($atWrite -ne "LIVE") {
+        # A file THIS CALL created must not be left at zero length: a
+        # zero-length file is MALFORMED by rule, so a refusal would turn
+        # a free lane into one needing the guarded override. Same
+        # obligation, and the same remedy, as the nonce-against-free
+        # refusal below. Caught by this fix's own oracle, which is what
+        # "a fix is new code and gets no discount" looks like in
+        # practice.
+        if ($null -ne $OpenInfo -and -not $OpenInfo.Existed) {
+            Write-RecordJson $OpenInfo.Stream '{"version":1,"state":"free"}'
+        }
+        Close-CurrentStream
+        Write-Stderr ("refusing to record an owner that is not live (" + $atWrite +
+                      "): pid " + $OwnerPidInt + ", ticks " + $OwnerStartTicksUtc)
+        exit 2
+    }
+}
+
 function Invoke-AcquireMode {
+    # THE PROPOSED OWNER MUST NOT BE DEAD, AND NOTHING CHECKED IT.
+    # `Get-Liveness` has been in this file the whole time and acquire
+    # called it on ONE thing: the EXISTING holder's record, to decide
+    # reclaim rights. The owner being WRITTEN DOWN was validated for
+    # syntax only. So a caller could record an already-dead identity,
+    # the next acquire would read that record as DEAD and reclaim it,
+    # and the mutual exclusion this lock exists to provide was gone
+    # while every status read looked ordinary.
+    #
+    # Found by the 0.22.0 plan debate, backlog item 26's silent half.
+    # The item said this needed a wrapping harness to reproduce. It did
+    # not: a pid that has exited reaches it directly.
+    #
+    # THIS GATE IS A FAST REFUSAL, NOT THE GUARANTEE. It refuses DEAD
+    # only, and it runs ONCE, before the acquisition loop below - so on
+    # its own it cannot be the thing that keeps a dead identity out of
+    # the record. A caller that WAITS behind a holder is measured here,
+    # waits, may DIE, and would then be written the moment the holder
+    # releases. The cross-vendor round found exactly that window.
+    #
+    # The guarantee is at the WRITE SITES: `Assert-OwnerLiveForWrite` is
+    # called before every HELD-OWNER write and establishes LIVE there.
+    # Not "every record write": the free-record writes carry no owner.
+    # UNMEASURABLE survives only where NOTHING is written - the
+    # idempotent re-entry path, where a matching nonce and a matching
+    # retained identity already establish ownership without a
+    # measurement. That is the case the DEAD-only rule was protecting,
+    # and it is protected without letting an unmeasured owner be
+    # recorded.
+    $proposed = Get-Liveness -OwnerPidValue $OwnerPidInt -TicksValue $OwnerStartTicksUtc
+    if ($proposed -eq "DEAD") {
+        Write-Stderr ("the proposed owner is not live (measured DEAD): pid " +
+                      $OwnerPidInt + ", ticks " + $OwnerStartTicksUtc)
+        exit 2
+    }
     $sw = [System.Diagnostics.Stopwatch]::StartNew()
     while ($true) {
         $open = Open-ForAcquire -Path $LockPath -Stopwatch $sw -WaitBudget $WaitSecondsInt -PollBudget $PollSecondsInt
@@ -542,6 +651,7 @@ function Invoke-AcquireMode {
                 Close-CurrentStream
                 exit 2
             }
+            Assert-OwnerLiveForWrite $open
             $newNonce = New-Nonce
             $nowTicks = [string]([System.DateTime]::UtcNow.Ticks)
             $rec = [ordered]@{
@@ -550,6 +660,7 @@ function Invoke-AcquireMode {
                 debateId = $DebateId; nonce = $newNonce; debateHome = $DebateHome
                 acquiredTicksUtc = $nowTicks
             }
+            if ($OwnerNameProvided) { $rec["ownerName"] = $OwnerName }
             Write-RecordJson $open.Stream (ConvertTo-Json $rec -Compress)
             Close-CurrentStream
             Write-Output $newNonce
@@ -565,6 +676,7 @@ function Invoke-AcquireMode {
 
         if ($liveness -eq "DEAD") {
             if ($NonceProvided) { Close-CurrentStream; exit 2 }
+            Assert-OwnerLiveForWrite $open
             $newNonce = New-Nonce
             $nowTicks = [string]([System.DateTime]::UtcNow.Ticks)
             $newRec = [ordered]@{
@@ -573,6 +685,9 @@ function Invoke-AcquireMode {
                 debateId = $DebateId; nonce = $newNonce; debateHome = $DebateHome
                 acquiredTicksUtc = $nowTicks
             }
+            # The RECLAIM writer, and it is a SECOND one. The name here
+            # is the new owner's; the dead holder's goes with its record.
+            if ($OwnerNameProvided) { $newRec["ownerName"] = $OwnerName }
             Write-RecordJson $open.Stream (ConvertTo-Json $newRec -Compress)
             Close-CurrentStream
             Write-Stderr "reclaimed a dead holder: pid $($rec.ownerPid) ticks $($rec.ownerStartTicksUtc) debate $($rec.debateId) home $($rec.debateHome)"
@@ -734,20 +849,108 @@ function Invoke-StatusMode {
         ownerStartTicksUtc = $rec.ownerStartTicksUtc; debateId = $rec.debateId
         nonce = $rec.nonce; debateHome = $rec.debateHome; liveness = $livenessOut
     }
+    if (@($rec.PSObject.Properties.Name) -ccontains "ownerName") {
+        $obj["ownerName"] = $rec.ownerName
+    }
     Write-Output (ConvertTo-Json $obj -Compress)
     exit 0
 }
 
+# ---------------------------------------------------------------------
+# Owner resolution walks PAST its own transports.
+#
+# It used to return the DIRECT parent, which is only the right answer
+# when the caller happens to invoke the tool from the process that owns
+# the debate. Under a wrapper that spawns a fresh shell per call, the
+# direct parent is that shell: a NEW pid every call, already exited by
+# the next status read. Backlog item 26 reported exactly that, and
+# test_resolve_owner_is_stable_across_an_added_shell_frame reproduces it
+# with one added shell frame - no wrapping harness required.
+#
+# So the walk SKIPS the hosts this tool is invoked through and stops at
+# the first ancestor that is not one. Measured chain on the shipped
+# path, 2026-08-04: pwsh -> claude -> pwsh -> Code -> Code -> explorer.
+# The direct parent is already non-transparent there, so the resolved
+# owner is UNCHANGED for the ordinary caller; only nested invocations
+# move, and they move onto the stable answer.
+#
+# THE COST, STATED. A genuinely long-lived orchestration script running
+# in one of these hosts is skipped, and the owner resolves to ITS
+# parent - a lock that can outlive the debate rather than one that dies
+# inside it. That is item 26's visible half traded against its silent
+# half, and it is the direction that fails toward a stuck lane rather
+# than toward two debates on one credential.
+#
+# The list names transports, not "approved owners". Adding a name here
+# says "this tool is invoked THROUGH that", nothing else.
+# ---------------------------------------------------------------------
+$script:TransparentHosts = @("pwsh.exe", "powershell.exe", "cmd.exe", "conhost.exe")
+$script:AncestryWalkLimit = 16
+
 function Invoke-ResolveOwnerMode {
     try {
-        $selfPid = $PID
-        $selfProc = Get-CimInstance -ClassName Win32_Process -Filter "ProcessId=$selfPid" -ErrorAction Stop
-        $parentPid = [int]$selfProc.ParentProcessId
-        $parentProc = Get-Process -Id $parentPid -ErrorAction Stop
-        $ticks = [string]$parentProc.StartTime.ToUniversalTime().Ticks
-        $obj = [ordered]@{ ownerPid = $parentPid; ownerStartTicksUtc = $ticks }
-        Write-Output (ConvertTo-Json $obj -Compress)
-        exit 0
+        # The seam forces the ancestry read to throw. Safe by
+        # construction: its only reachable effect is the refusal below,
+        # and no path through it emits an owner record. Same shape as
+        # PARALLAX_LANE_LOCK_STARTTIME_FAULT.
+        if ($env:PARALLAX_LANE_LOCK_ANCESTRY_FAULT) {
+            throw "PARALLAX_LANE_LOCK_ANCESTRY_FAULT injected: simulated ancestry read failure"
+        }
+        $cursor = $PID
+        $steps = 0
+        while ($true) {
+            $steps++
+            if ($steps -gt $script:AncestryWalkLimit) {
+                Write-Stderr ("owner resolution found no non-transport ancestor within " +
+                              $script:AncestryWalkLimit + " levels")
+                exit 2
+            }
+            $wmi = Get-CimInstance -ClassName Win32_Process -Filter "ProcessId=$cursor" -ErrorAction Stop
+            if ($null -eq $wmi) { throw "process $cursor disappeared during the ancestry walk" }
+            $parentPid = [int]$wmi.ParentProcessId
+            if ($parentPid -le 0) {
+                Write-Stderr "owner resolution reached the top of the process tree with no non-transport ancestor"
+                exit 2
+            }
+            # NAMED RESIDUAL: this follows ParentProcessId with no
+            # creation-time ordering guard, so an ancestor pid that exited
+            # and was REUSED inside the walk's own window resolves a wrong
+            # live owner. A merely dead ancestor fails closed (null here,
+            # or Get-Process throwing below), so only reuse during the walk
+            # slips through, and it lands on the stuck-lane direction this
+            # whole function already trades toward. The standard guard - a
+            # parent whose start time is not LATER than its child's - would
+            # close it, and is not added here because no test in this repo
+            # can watch it fail for the reason it claims. Backlog item 29.
+            $parentWmi = Get-CimInstance -ClassName Win32_Process -Filter "ProcessId=$parentPid" -ErrorAction Stop
+            if ($null -eq $parentWmi) { throw "ancestor $parentPid disappeared during the ancestry walk" }
+            $parentName = [string]$parentWmi.Name
+            if ([string]::IsNullOrWhiteSpace($parentName)) {
+                throw "ancestor $parentPid has no readable process name"
+            }
+            $isTransparent = $false
+            foreach ($h in $script:TransparentHosts) {
+                if ([System.String]::Equals($parentName, $h, [System.StringComparison]::OrdinalIgnoreCase)) {
+                    $isTransparent = $true
+                    break
+                }
+            }
+            if (-not $isTransparent) {
+                $parentProc = Get-Process -Id $parentPid -ErrorAction Stop
+                $ticks = [string]$parentProc.StartTime.ToUniversalTime().Ticks
+                if ([string]::IsNullOrWhiteSpace($ticks)) {
+                    throw "ancestor $parentPid has no readable start time"
+                }
+                $obj = [ordered]@{
+                    ownerPid = $parentPid
+                    ownerStartTicksUtc = $ticks
+                    ownerName = $parentName
+                }
+                Write-Output (ConvertTo-Json $obj -Compress)
+                exit 0
+            }
+            $cursor = $parentPid
+        }
     } catch {
         Write-Stderr "owner resolution failed"
         exit 2

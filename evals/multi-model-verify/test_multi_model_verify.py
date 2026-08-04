@@ -719,6 +719,36 @@ class TestTransportContract:
         ) in notes
 
 
+def test_dispatch_traps_are_documented_in_the_notes():
+    """Two measured ways to kill a round before the reviewer works.
+
+    Both cost real quota before they were written down. The stderr one
+    is the nastier: codex prints a benign models-cache warning at
+    startup, and $ErrorActionPreference = 'Stop' promotes ANY native
+    stderr line to a terminating NativeCommandError, so the dispatch
+    dies looking like a codex failure when codex never ran.
+
+    The truncation one is cheaper to describe and just as expensive: the
+    failure NAMES are what a second run needs, so piping an expensive
+    run through tail or head costs the whole run again."""
+    notes = " ".join(read(REFERENCES / "model-prompting-notes.md").split())
+    assert (
+        "A round that crosses the caller's foreground timeout is killed "
+        "by the CALLER, not by the client: no `--output-last-message` "
+        "file is written, so it is a transport failure rather than a "
+        "review result and the quota is spent for nothing.") in notes
+    assert (
+        "Do NOT run the native `codex` call under `$ErrorActionPreference "
+        "= 'Stop'`. codex prints a benign models-cache warning to STDERR "
+        "at startup, and `Stop` promotes ANY native stderr line to a "
+        "terminating `NativeCommandError`, killing the dispatch before "
+        "the reviewer does any work.") in notes
+    assert (
+        "Do NOT pipe an expensive run's output through `tail`, `head` or "
+        "`Select-Object -Last`. The failure NAMES are what a second run "
+        "needs, and truncating them costs the whole run again.") in notes
+
+
 class TestDebateProtocol:
     def test_round_cap_default(self):
         text = read(REFERENCES / "debate-protocol.md")
@@ -749,6 +779,122 @@ class TestDebateProtocol:
         # overstates conflict when the cap lands on an accepted FIX).
         text = read(REFERENCES / "debate-protocol.md")
         assert re.search(r"converged with amendments", text, re.IGNORECASE)
+
+    def test_round_cap_counts_only_contested_rounds(self):
+        """Backlog item 24. The old cap counted EXCHANGES, which fits a
+        contested debate and not a fix-verify loop, where every round
+        finds something new, the session verifies and accepts it, and
+        nothing is argued.
+
+        Two measured runs overran a flat 4: a field report ran 8 rounds
+        with zero refutations, where stopping at 4 would have shipped
+        its defects 5 and 6, and this repo's own 0.21.1 debate ran 7
+        rounds with rounds 5 and 6 each returning ESCALATE on real
+        defects. Both are named in the text so the rule cannot be
+        rewritten without confronting the runs that produced it."""
+        text = " ".join(read(REFERENCES / "debate-protocol.md").split())
+        assert (
+            "Round cap: **4 CONSECUTIVE CONTESTED exchanges** by default "
+            "(caller may raise or lower it). A round is CONTESTED while any "
+            "contested point is OUTSTANDING, whether it was raised in that "
+            "round or an earlier one — an argument evidence has not "
+            "settled is still the argument this counter exists to count, "
+            "and a round that merely accepts other findings does not settle "
+            "it. A contested round increments the counter; a round that "
+            "leaves NO contested point outstanding RESETS it to zero.") in text
+        assert (
+            "**A fix-verify loop is not an argument, and the cap above "
+            "does not bound it.**") in text
+
+    def test_fix_verify_budget_pauses_rather_than_certifying(self):
+        """The bound a session cannot grant itself.
+
+        Nothing stopped a fix-verify loop running unbounded, because the
+        session both adjudicates whether a finding is accepted and
+        decides when to stop - one actor holding both roles. The budget
+        is the user's, and exhausting it PAUSES; a budget that converted
+        into a verdict would be the same actor again."""
+        text = " ".join(read(REFERENCES / "debate-protocol.md").split())
+        assert (
+            "**A separate TOTAL FIX-VERIFY BUDGET bounds that loop**, "
+            "caller-set and declared before round 1. ONE UNIT IS ONE "
+            "DISPATCHED EXCHANGE — every round sent to a reviewer, "
+            "whatever it returns, including a round that returns "
+            "nothing usable. Counting only productive rounds would let "
+            "the unproductive ones run free, which is the shape being "
+            "bounded. Exhausting it PAUSES the debate for the user's "
+            "authorization to continue — it NEVER certifies and "
+            "never converts into a verdict.") in text
+
+    def test_converged_with_amendments_is_agreement_not_termination(self):
+        """The two clauses contradicted each other and the suite pinned
+        BOTH, so green tests PRESERVED the contradiction rather than
+        detecting it - which is what pins do when nothing checks them
+        against each other.
+
+        THIS PIN WAS CLAIMED TO EXIST BEFORE IT DID. Amendment 2 said a
+        new pin covered the clarification; the script that would have
+        added it exited on an earlier failure before writing, and only
+        the budget pin was rewritten. The confirming round found the
+        false claim by reading the assertion rather than the record. The
+        pre-existing test nearby checks only that the PHRASE "converged
+        with amendments" appears, which stays green with the whole
+        clarification deleted."""
+        text = " ".join(read(REFERENCES / "debate-protocol.md").split())
+        assert (
+            "THIS IS AGREEMENT, NOT TERMINATION. The amendments still have "
+            "to be APPLIED, and the debate still ends the way the "
+            "termination rule below says it ends: on an adjudicated dry "
+            "round. A round that produces accepted fixes is a round that "
+            "produced new substantive findings, so it is not that "
+            "round.") in text
+
+    def test_termination_requires_an_adjudicated_dry_round(self):
+        """The predicate the plan proposed was logically wrong.
+
+        "Ends when a round produces no new accepted finding" also ends a
+        round whose only new finding is CONTESTED - the exact case the
+        cap exists to escalate. The replacement requires BOTH halves,
+        and the text says why, so the shorter version cannot come back
+        as a simplification."""
+        text = " ".join(read(REFERENCES / "debate-protocol.md").split())
+        assert (
+            "the debate ends only on an **adjudicated dry round** \u2014 one "
+            "that produced no new substantive finding AND left no "
+            "outstanding contested point.".replace("\u2014", "—")) in text
+        assert (
+            "that also ends a round whose only new finding is CONTESTED") in text
+
+    def test_scope_rule_defines_same_class_and_verification_surface(self):
+        """Backlog item 25. Mode diff said nothing about SCOPE, so each
+        session improvised and the attestation record meant something
+        slightly different run to run.
+
+        Both halves of the improvised rule are judgement calls unless
+        they are defined, so both are defined operationally: same class
+        is a NAMED invariant rather than a similar symptom, and the
+        verification surface is enumerated BEFORE the finding, because a
+        surface drawn afterwards is drawn around the wanted answer."""
+        text = " ".join(read(REFERENCES / "debate-protocol.md").split())
+        assert "## Scope: pre-existing defects a review walks past" in text
+        assert (
+            "**SAME CLASS** means a violation of the SAME NAMED invariant, "
+            "contract clause, or frozen postcondition \u2014 cited by name. "
+            "It does not mean similar symptoms, the same file, or the same "
+            "subsystem.".replace("\u2014", "—")) in text
+        assert (
+            "**VERIFICATION SURFACE** means the exact files, symbols, "
+            "runtime paths and gates ENUMERATED BEFORE the finding is "
+            "raised.") in text
+
+    def test_scope_rule_blocks_attestation_over_an_outstanding_followup(self):
+        """The half that has teeth. Recording a follow-up is easy; the
+        rule only means anything if the follow-up blocks the claim."""
+        text = " ".join(read(REFERENCES / "debate-protocol.md").split())
+        assert (
+            "**An exercised surface with an outstanding follow-up cannot "
+            "be attested.** The debate ends FIX or ESCALATE, or it attests "
+            "an EXPLICITLY NARROWED claim that names what is excluded.") in text
 
     def test_session_final_adjudication(self):
         # The chain never terminates on the external reviewer's verdict:

@@ -1,0 +1,4 @@
+1. The contract now correctly identifies the lenient forms as a leading `+` on the whole number—`+1` or `+1e2` ([model-prompting-notes.md:426](/C:/Users/Brandon/Documents/parallax/skills/multi-model-verify/references/model-prompting-notes.md:426)). Item 28 records the same forms and correctly distinguishes valid `1e+2`, accepted by both hosts ([2026-07-27-0150-backlog.md:1675](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-07-27-0150-backlog.md:1675), [2026-07-27-0150-backlog.md:1679](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-07-27-0150-backlog.md:1679)). The regenerated whole-region pin matches the contract ([test_multi_model_verify.py:412](/C:/Users/Brandon/Documents/parallax/evals/multi-model-verify/test_multi_model_verify.py:412)). No unrelated change exists in the range. **PASS**
+
+**TERMINAL VERDICT for `9048d2f42d52`: PASS. This verdict is terminal for this head, and the merge is unblocked.**
+

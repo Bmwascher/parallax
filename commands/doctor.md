@@ -189,7 +189,7 @@ an absent credential plus a free lock would have no defined row.
   home:
 
   ```powershell
-  & { $ErrorActionPreference = 'Stop'; try { $ownerLines = @(& 'tools/kimi-lane-lock.ps1' -ResolveOwner); $ownerExit = $LASTEXITCODE; if ($ownerExit -ne 0) { throw "owner resolution failed with exit $ownerExit" }; if ($ownerLines.Count -ne 1 -or -not ($ownerLines[0] -is [string]) -or [string]::IsNullOrWhiteSpace([string]$ownerLines[0])) { throw 'owner resolution returned invalid output' }; $owner = $ownerLines[0] | ConvertFrom-Json -ErrorAction Stop; if (-not ($owner -is [System.Management.Automation.PSCustomObject])) { throw 'owner resolution returned invalid schema' }; $ownerFields = @($owner.PSObject.Properties.Name); if ($ownerFields.Count -ne 2 -or -not ($ownerFields -ccontains 'ownerPid') -or -not ($ownerFields -ccontains 'ownerStartTicksUtc') -or -not (($owner.ownerPid -is [int]) -or ($owner.ownerPid -is [long])) -or [long]$owner.ownerPid -le 0 -or -not ($owner.ownerStartTicksUtc -is [string]) -or $owner.ownerStartTicksUtc -notmatch '\A[0-9]+\z') { throw 'owner resolution returned invalid schema' }; if ([string]::IsNullOrWhiteSpace($env:TEMP) -or -not (Test-Path -LiteralPath $env:TEMP -PathType Container -ErrorAction Stop)) { throw 'TEMP is not an existing directory' }; $verdictOut = Join-Path -Path $env:TEMP -ChildPath 'parallax-kimi-lane-login-verdict.json' -ErrorAction Stop; & 'tools/new-kimi-lane-login.ps1' -LaneHome '<lane-home>' -OwnerPid ([string]$owner.ownerPid) -OwnerStartTicksUtc $owner.ownerStartTicksUtc -VerdictOut $verdictOut; $loginExit = $LASTEXITCODE; if ($loginExit -ne 0) { throw "lane login failed with exit $loginExit" } } catch { throw } }
+  & { $ErrorActionPreference = 'Stop'; try { $ownerLines = @(& 'tools/kimi-lane-lock.ps1' -ResolveOwner); $ownerExit = $LASTEXITCODE; if ($ownerExit -ne 0) { throw "owner resolution failed with exit $ownerExit" }; if ($ownerLines.Count -ne 1 -or -not ($ownerLines[0] -is [string]) -or [string]::IsNullOrWhiteSpace([string]$ownerLines[0])) { throw 'owner resolution returned invalid output' }; $owner = $ownerLines[0] | ConvertFrom-Json -ErrorAction Stop; if (-not ($owner -is [System.Management.Automation.PSCustomObject])) { throw 'owner resolution returned invalid schema' }; $ownerFields = @($owner.PSObject.Properties.Name); if ($ownerFields.Count -ne 3 -or -not ($ownerFields -ccontains 'ownerPid') -or -not ($ownerFields -ccontains 'ownerStartTicksUtc') -or -not ($ownerFields -ccontains 'ownerName') -or -not (($owner.ownerPid -is [int]) -or ($owner.ownerPid -is [long])) -or [long]$owner.ownerPid -le 0 -or -not ($owner.ownerStartTicksUtc -is [string]) -or $owner.ownerStartTicksUtc -notmatch '\A[0-9]+\z' -or -not ($owner.ownerName -is [string]) -or [string]::IsNullOrWhiteSpace($owner.ownerName)) { throw 'owner resolution returned invalid schema' }; if ([string]::IsNullOrWhiteSpace($env:TEMP) -or -not (Test-Path -LiteralPath $env:TEMP -PathType Container -ErrorAction Stop)) { throw 'TEMP is not an existing directory' }; $verdictOut = Join-Path -Path $env:TEMP -ChildPath 'parallax-kimi-lane-login-verdict.json' -ErrorAction Stop; & 'tools/new-kimi-lane-login.ps1' -LaneHome '<lane-home>' -OwnerPid ([string]$owner.ownerPid) -OwnerStartTicksUtc $owner.ownerStartTicksUtc -OwnerName $owner.ownerName -VerdictOut $verdictOut; $loginExit = $LASTEXITCODE; if ($loginExit -ne 0) { throw "lane login failed with exit $loginExit" } } catch { throw } }
   ```
 
   **Hash procedure, a seven-step algorithm run around the validator call
@@ -228,7 +228,33 @@ an absent credential plus a free lock would have no defined row.
   - `free` is OK.
   - `held` and LIVE is OK, reported as held with the holder — LIVE means
     the holder's process is running, and never that a debate was
-    abandoned.
+    abandoned. Report the holder's `ownerName` when the record carries
+    one; a record written before that field existed carries none, and
+    absence is reported as absence rather than guessed at.
+
+    QUIET-HOLDER INFORMATION, and it is INFORMATION ONLY. Measure the
+    recorded `debateHome`: walk it RECURSIVELY and take the NEWEST
+    `LastWriteTimeUtc` over FILES ONLY, directories excluded. If that
+    newest write is more than 30 MINUTES before now, add to the detail
+    text that the debate home has been quiet for that long. The interval
+    is 30 minutes because a single review round can legitimately run
+    past the ten-minute dispatch ceiling and a debate can sit between
+    rounds, so a shorter one would report an active debate as quiet.
+    This row STAYS OK and no reclaim rule moves: quiet is not abandoned,
+    it is never grounds to break a live lock, and nothing in the lock
+    tool reads it. It exists so a forgotten teardown is VISIBLE, which
+    is not the same as detected. The measurement DEGRADES TO SILENCE —
+    if the recorded `debateHome` is missing, is not a directory, holds
+    no files, or if ANY part of the walk fails to read, say NOTHING
+    about quietness at all, neither quiet nor active. An unmeasurable
+    idle time is not an idle debate, and a partial walk measures the
+    files it could open rather than the debate. REPARSE POINTS ARE NEVER
+    FOLLOWED — not directory junctions, not symbolic links, not file
+    links — because following one measures a filesystem object outside
+    the debate home and can leave the home entirely. A reparse point
+    encountered anywhere under the home is not skipped either: it makes
+    the in-home measurement INCOMPLETE, and an incomplete measurement
+    takes the silence rule above.
   - `held` and DEAD is STALE, reclaimable at the next acquire.
   - `held`, SAME-HOST — the record's `host` equals `$env:COMPUTERNAME`,
     compared case-insensitively — and UNKNOWN is N/A: liveness could NOT
