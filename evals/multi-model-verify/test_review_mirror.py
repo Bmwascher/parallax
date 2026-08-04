@@ -90,12 +90,24 @@ def make_clean_repo(tmp_path):
     return repo
 
 
-def run_mirror(repo, mirror, *extra):
+def run_mirror(repo, mirror, *extra, env=None):
+    """`env` carries the build's two TEST SEAMS.
+
+    They are environment variables, not parameters, for the reason the
+    lane-home builder states about its own two: a parameter is public
+    surface on a shipped tool. Both can only force a build to FAIL, never
+    turn a failing build into a successful one, and no shipped caller
+    sets either.
+    """
+    full = None
+    if env:
+        full = dict(os.environ)
+        full.update(env)
     return subprocess.run(
         [ps_host(), "-NoProfile", "-NonInteractive", "-File", str(MIRROR),
          "-RepoRoot", str(repo), "-MirrorPath", str(mirror),
          "-SkipProbe", *extra],
-        capture_output=True, text=True)
+        capture_output=True, text=True, env=full)
 
 
 SKIP_BLOCK = "BLOCKED: no client measurement was made (-SkipProbe)"
@@ -1296,3 +1308,207 @@ def test_a_repo_root_that_is_itself_a_reparse_point_is_refused(tmp_path):
     assert proc.returncode == 2, proc.stdout + proc.stderr
     assert "reparse" in proc.stdout.lower(), proc.stdout
     assert not mirror.exists()
+
+
+# =====================================================================
+# Mirror identity and the staleness gate (0.21.0, backlog item 22).
+#
+# THE SIX-STEP CONSTRUCTION BRIDGE, frozen by both reviewer lanes:
+#   1. capture source_head_before
+#   2. copy the tree
+#   3. require the live source HEAD still equals source_head_before
+#   4. before remediation, require the copied mirror HEAD equals it
+#   5. remediate, then record mirror_head
+#   6. before every dispatch, compare live source HEAD to source_head and
+#      live mirror HEAD to mirror_head
+#
+# STEPS 3 AND 4 ARE THE BRIDGE, and they are the whole point. Without
+# them the record can hold two individually valid SHAs while nothing
+# proves the mirror was built FROM the recorded source commit - two true
+# facts arranged to look like one.
+#
+# THE CLAIM IS NARROW, deliberately: the two-HEAD gate proves
+# committed-HEAD freshness. Non-HEAD inputs are bound in the manifest at
+# CONSTRUCTION TIME, and source-side changes after construction are
+# caught by the source-status comparison, not by the HEADs. An edit to an
+# ignored review input moves neither HEAD, and ignored inputs are exactly
+# the content class the mirror exists to carry.
+# =====================================================================
+
+
+def _force_remove(func, path, _exc):
+    """git marks its object files read-only, so a plain rmtree of a
+    mirror raises PermissionError on Windows before it reaches the
+    condition under test."""
+    os.chmod(path, 0o700)
+    func(path)
+
+
+def record_field(stdout, name):
+    """One scalar field of the construction record, or None."""
+    for line in stdout.splitlines():
+        if line.startswith(name + ": "):
+            return line[len(name) + 2:].strip()
+    return None
+
+
+def build_and_read(repo, mirror):
+    proc = run_mirror(repo, mirror)
+    assert_built(proc)
+    return proc, {
+        "source_head": record_field(proc.stdout, "source_head"),
+        "mirror_head": record_field(proc.stdout, "mirror_head"),
+        "source_status_sha256": record_field(proc.stdout,
+                                             "source_status_sha256"),
+    }
+
+
+def run_verify(repo, mirror, ident, **override):
+    fields = dict(ident)
+    fields.update(override)
+    return subprocess.run(
+        [ps_host(), "-NoProfile", "-NonInteractive", "-File", str(MIRROR),
+         "-VerifyIdentity", "-RepoRoot", str(repo), "-MirrorPath", str(mirror),
+         "-SourceHead", str(fields["source_head"]),
+         "-MirrorHead", str(fields["mirror_head"]),
+         "-SourceStatusSha256", str(fields["source_status_sha256"])],
+        capture_output=True, text=True)
+
+
+# --- construction: the record carries both identities ----------------
+
+def test_the_record_carries_both_heads_and_the_source_status_hash(tmp_path):
+    """The positive control for construction.
+
+    `mirror_head` differs from `source_head` whenever remediation
+    committed, which is the ordinary case for a repo carrying a tracked
+    back-channel - so the two fields are not interchangeable and a
+    record printing one twice would be wrong in the common case.
+    """
+    repo = make_repo(tmp_path)
+    proc, ident = build_and_read(repo, tmp_path / "mirror")
+    assert ident["source_head"], proc.stdout
+    assert ident["mirror_head"], proc.stdout
+    assert len(ident["source_status_sha256"]) == 64, proc.stdout
+    assert ident["source_head"] == git(repo, "rev-parse", "HEAD").strip()
+
+
+def test_remediation_moves_mirror_head_away_from_source_head(tmp_path):
+    repo = make_repo(tmp_path)
+    (repo / "AGENTS.md").write_text("# planted\n")
+    git(repo, "add", "AGENTS.md")
+    commit(repo, "plant")
+    proc, ident = build_and_read(repo, tmp_path / "mirror")
+    assert ident["source_head"] != ident["mirror_head"], (
+        "remediation committed, so the two identities must differ; a "
+        "record that reported one for both would hide the commit")
+
+
+def test_a_mirror_not_built_from_this_source_blocks_at_step_four(tmp_path):
+    """The bridge itself.
+
+    A pre-existing directory at the mirror path holding a DIFFERENT
+    repository is replaced by -Force, so this case plants the foreign
+    repo and passes -Force: what it checks is that step 4 compares the
+    COPIED tree's HEAD against the captured source HEAD rather than
+    trusting that the copy happened.
+    """
+    repo = make_repo(tmp_path)
+    other = make_clean_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    proc = run_mirror(repo, mirror,
+                      env={"PARALLAX_MIRROR_COPY_SOURCE_OVERRIDE": str(other)})
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "was not built from" in proc.stdout.lower(), proc.stdout
+
+
+def test_a_source_head_that_moves_during_construction_blocks(tmp_path):
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    proc = run_mirror(repo, mirror,
+                      env={"PARALLAX_MIRROR_MOVE_SOURCE_HEAD": "1"})
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "moved during construction" in proc.stdout.lower(), proc.stdout
+
+
+# --- dispatch: the staleness gate ------------------------------------
+
+def test_a_clean_dispatch_passes(tmp_path):
+    """The other positive control. Without it every block below is
+    satisfied by a gate that blocks everything."""
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    _, ident = build_and_read(repo, mirror)
+    proc = run_verify(repo, mirror, ident)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+
+
+def test_a_source_head_that_moved_blocks_the_dispatch(tmp_path):
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    _, ident = build_and_read(repo, mirror)
+    (repo / "new.txt").write_text("later work\n")
+    git(repo, "add", "new.txt")
+    commit(repo, "source moved on")
+    proc = run_verify(repo, mirror, ident)
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "source head" in proc.stdout.lower(), proc.stdout
+
+
+def test_a_tampered_mirror_head_blocks_the_dispatch(tmp_path):
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    _, ident = build_and_read(repo, mirror)
+    (mirror / "sneak.txt").write_text("added inside the mirror\n")
+    git(mirror, "add", "sneak.txt")
+    commit(mirror, "tamper")
+    proc = run_verify(repo, mirror, ident)
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "mirror head" in proc.stdout.lower(), proc.stdout
+
+
+def test_source_drift_in_an_ignored_file_blocks_the_dispatch(tmp_path):
+    """The case the two-HEAD gate CANNOT see, and the reason the source
+    status is captured at all.
+
+    An edit to an ignored review input moves neither HEAD. Ignored
+    content is precisely what the mirror exists to carry, so leaving
+    this undetected would be a hole in the middle of the feature.
+    """
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    _, ident = build_and_read(repo, mirror)
+    (repo / "ignored" / "secret.txt").write_text("edited after the copy\n")
+    proc = run_verify(repo, mirror, ident)
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "source status" in proc.stdout.lower(), proc.stdout
+
+
+def test_source_drift_in_an_untracked_file_blocks_the_dispatch(tmp_path):
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    _, ident = build_and_read(repo, mirror)
+    (repo / "brand-new-input.txt").write_text("appeared after the copy\n")
+    proc = run_verify(repo, mirror, ident)
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "source status" in proc.stdout.lower(), proc.stdout
+
+
+def test_a_missing_identity_field_blocks_the_dispatch(tmp_path):
+    """An identity that was never recorded is not an identity that
+    matched. Empty must never read as agreement."""
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    _, ident = build_and_read(repo, mirror)
+    for field in ("source_head", "mirror_head", "source_status_sha256"):
+        proc = run_verify(repo, mirror, ident, **{field: ""})
+        assert proc.returncode == 1, (field, proc.stdout + proc.stderr)
+
+
+def test_an_unreadable_mirror_blocks_the_dispatch(tmp_path):
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    _, ident = build_and_read(repo, mirror)
+    shutil.rmtree(mirror, onerror=_force_remove)
+    proc = run_verify(repo, mirror, ident)
+    assert proc.returncode == 1, proc.stdout + proc.stderr

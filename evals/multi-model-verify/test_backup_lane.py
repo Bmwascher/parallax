@@ -1747,3 +1747,53 @@ def test_mirror_path_budget_region():
             "length, their sum and the limit, because a refusal an "
             "operator cannot act on is a refusal they will work around."
             ) in _norm(BACKUP_LANE)
+
+
+def test_mirror_identity_gate_region():
+    """The identity gate's contract, locked whole (0.21.0, item 22).
+
+    Three clauses carry the weight. TWO identities, because they differ
+    whenever remediation committed and a record printing one twice would
+    be wrong in the common case. The BRIDGE at steps three and four,
+    because without it two individually valid commit ids prove nothing
+    about whether one tree came from the other. And the fingerprint
+    covering CONTENT rather than the status listing alone, which is
+    measured: editing an already-ignored file leaves the listing
+    byte-identical, so the listing-only version verified clean across
+    exactly the drift the check exists to catch.
+    """
+    assert (
+            "The record carries TWO identities and one fingerprint: "
+            "`source_head`, `mirror_head` and `source_status_sha256`. "
+            "The two heads differ whenever remediation committed, which "
+            "is the ordinary case for a repo carrying a tracked "
+            "back-channel, so a record printing one of them twice is "
+            "wrong in the common case rather than the rare one. "
+            "Construction is a six-step bridge. Capture the source head "
+            "BEFORE the copy; copy; require the live source head still "
+            "equals it; before remediation, require the COPIED tree's "
+            "head equals it; remediate, then record `mirror_head`. "
+            "Steps three and four are the bridge itself: without them "
+            "the record can hold two individually valid commit ids "
+            "while nothing proves the mirror was built FROM the "
+            "recorded source commit, which is two true facts arranged "
+            "to look like one. Before every fresh and resumed dispatch, "
+            "re-run the tool with `-VerifyIdentity` and the three "
+            "recorded values. Missing, unreadable or unequal BLOCKS the "
+            "round, and a value that was never recorded is never a "
+            "value that matched. What the gate proves is narrow and "
+            "stated so: the two-HEAD gate proves committed-HEAD "
+            "freshness. Non-HEAD inputs are bound in the constructed "
+            "mirror's manifest AT CONSTRUCTION TIME, and source-side "
+            "changes after construction are detected by the "
+            "source-status comparison below. That comparison is a "
+            "fingerprint over the status capture AND the content of "
+            "every path status names, not the status listing alone: "
+            "measured 2026-08-04, editing an already-ignored file "
+            "leaves the listing byte-identical, so a listing-only "
+            "fingerprint verified clean across exactly the drift this "
+            "check exists to catch. Ignored and untracked content is "
+            "the entire reason this workspace is a mirror, so a gate "
+            "blind to its bytes would be blind in the middle of the "
+            "feature."
+            ) in _norm(BACKUP_LANE)

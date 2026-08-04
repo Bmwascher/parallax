@@ -694,6 +694,12 @@ DECLARED_REGIONS = {
     # are one rule, and splitting them is how a reader ends up
     # measuring files but not directories.
     "mirror-path-budget",
+    # 0.21.0, backlog item 22. The mirror's two identities, the
+    # construction bridge that ties them together, and the dispatch-time
+    # gate. One region because the bridge is only meaningful beside the
+    # fields it bridges, and the narrowed claim is only honest beside
+    # the fingerprint that backs it.
+    "mirror-identity-gate",
 }
 
 

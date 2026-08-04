@@ -417,6 +417,36 @@ proceed; do not infer either key's value.
   remediation, the re-enumeration, the baseline, the manifest and the
   client probe as one step; the rules below remain its specification, and
   a driver building a mirror by hand still follows them.
+- **Mirror identity, and the gate that keeps it fresh.**
+  <!-- contract:start id=mirror-identity-gate -->
+  The record carries TWO identities and one fingerprint: `source_head`,
+  `mirror_head` and `source_status_sha256`. The two heads differ whenever
+  remediation committed, which is the ordinary case for a repo carrying a
+  tracked back-channel, so a record printing one of them twice is wrong
+  in the common case rather than the rare one. Construction is a
+  six-step bridge. Capture the source head BEFORE the copy; copy;
+  require the live source head still equals it; before remediation,
+  require the COPIED tree's head equals it; remediate, then record
+  `mirror_head`. Steps three and four are the bridge itself: without
+  them the record can hold two individually valid commit ids while
+  nothing proves the mirror was built FROM the recorded source commit,
+  which is two true facts arranged to look like one. Before every fresh
+  and resumed dispatch, re-run the tool with `-VerifyIdentity` and the
+  three recorded values. Missing, unreadable or unequal BLOCKS the
+  round, and a value that was never recorded is never a value that
+  matched. What the gate proves is narrow and stated so: the two-HEAD
+  gate proves committed-HEAD freshness. Non-HEAD inputs are bound in the
+  constructed mirror's manifest AT CONSTRUCTION TIME, and source-side
+  changes after construction are detected by the source-status
+  comparison below. That comparison is a fingerprint over the status
+  capture AND the content of every path status names, not the status
+  listing alone: measured 2026-08-04, editing an already-ignored file
+  leaves the listing byte-identical, so a listing-only fingerprint
+  verified clean across exactly the drift this check exists to catch.
+  Ignored and untracked content is the entire reason this workspace is a
+  mirror, so a gate blind to its bytes would be blind in the middle of
+  the feature.
+  <!-- contract:end -->
 - **The path budget, checked BEFORE anything is created.**
   <!-- contract:start id=mirror-path-budget -->
   The mirror is a copy into a NEW root, so a destination that was legal

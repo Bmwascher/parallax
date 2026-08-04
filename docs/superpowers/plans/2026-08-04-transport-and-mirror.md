@@ -484,3 +484,49 @@ budget:
 
 Running total +205. Item 19 is scheduled for 0.23.0 and this release
 makes it worse, as this plan predicted it would.
+
+### Amendment 7 (2026-08-04, Task 4) - the chosen drift disposition did not catch its own case
+
+**Frozen text:** "capture the source's status output at construction using
+the same status command the mirror already uses, and compare it at
+dispatch." Its stated rationale: "an edit to an untracked or ignored
+review input after construction moves nothing the gate compares, and
+that is precisely the content class the mirror exists to carry."
+
+**What implementation measured 2026-08-04:** the disposition as literally
+written does NOT catch that case. `git status --porcelain --ignored
+-uall -z` reports the PATH, not its bytes. Editing an already-ignored
+file leaves the capture byte-identical, and the status-only fingerprint
+verified CLEAN across exactly the drift the check exists to catch. The
+oracle `test_source_drift_in_an_ignored_file_blocks_the_dispatch` was
+watched to pass wrongly before the fix, which is how this surfaced.
+
+**Adopted instead:** the fingerprint covers the status capture AND the
+content manifest of every path status names, reusing the two functions
+the mirror already has. Appearance and disappearance are still caught by
+the status half; content edits are caught by the content half.
+
+**Direction of the change:** strictly stricter. Nothing that blocked
+before passes now. The cost is hashing the source's untracked and
+ignored files at construction and again at each dispatch, which is work
+the mirror already does once for its own manifest.
+
+### Amendment 8 (2026-08-04, Task 4) - the dispatch gate needed an executable mode
+
+**Not in the frozen text.** Bridge step 6 is written as a rule for the
+driver, but Task 4's own Step 1 requires a case where "a clean dispatch"
+passes, and a rule with nothing to run cannot have a passing case.
+
+**Adopted:** a second parameter set on the same tool, `-VerifyIdentity
+-RepoRoot -MirrorPath -SourceHead -MirrorHead -SourceStatusSha256`,
+exiting 0 on a verified identity and 1 on any block. The three values
+are passed as ARGUMENTS rather than re-read from a file the build wrote,
+for the reason the codex brief binding states about its own expected
+hash: a file re-read later is mutable and would silently redefine the
+value it is supposed to pin.
+
+**Two test seams**, `PARALLAX_MIRROR_COPY_SOURCE_OVERRIDE` and
+`PARALLAX_MIRROR_MOVE_SOURCE_HEAD`, both environment variables rather
+than parameters, following the lane-home builder's convention and its
+rule: no shipped caller sets either, and each can only make a build
+FAIL, never turn a failing build into a successful one.

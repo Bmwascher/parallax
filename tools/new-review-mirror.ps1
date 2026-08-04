@@ -16,13 +16,42 @@
 #
 # Exit codes: 0 built and clean, 1 blocked (reason on stdout), 2 script or
 # environment error.
+# TWO MODES. Build constructs the mirror and prints the record. Verify
+# re-checks that record against the live source and the live mirror
+# immediately before a dispatch, which is step 6 of the construction
+# bridge: the two-HEAD gate is worthless if it is only ever evaluated at
+# the moment the mirror is made.
+#
+#   Build:  -RepoRoot <src> -MirrorPath <dst> [-OverrideOut <p>] [-Force]
+#           [-SkipProbe] [-CodexCommand <exe>]
+#   Verify: -VerifyIdentity -RepoRoot <src> -MirrorPath <dst>
+#           -SourceHead <sha> -MirrorHead <sha> -SourceStatusSha256 <hex>
+#
+# The identity values are passed as ARGUMENTS rather than re-read from a
+# file the build wrote, for the reason the codex brief binding states
+# about its own expected hash: a file re-read later is mutable and would
+# silently redefine the value it is supposed to pin.
 param(
-    [Parameter(Mandatory = $true)][string]$RepoRoot,
-    [Parameter(Mandatory = $true)][string]$MirrorPath,
-    [string]$OverrideOut,
-    [switch]$Force,
-    [switch]$SkipProbe,
-    [string]$CodexCommand = "codex"
+    [Parameter(ParameterSetName = "Verify", Mandatory = $true)]
+    [switch]$VerifyIdentity,
+    [Parameter(ParameterSetName = "Verify", Mandatory = $true)]
+    [AllowEmptyString()][string]$SourceHead,
+    [Parameter(ParameterSetName = "Verify", Mandatory = $true)]
+    [AllowEmptyString()][string]$MirrorHead,
+    [Parameter(ParameterSetName = "Verify", Mandatory = $true)]
+    [AllowEmptyString()][string]$SourceStatusSha256,
+
+    [Parameter(ParameterSetName = "Build", Mandatory = $true)]
+    [Parameter(ParameterSetName = "Verify", Mandatory = $true)]
+    [string]$RepoRoot,
+    [Parameter(ParameterSetName = "Build", Mandatory = $true)]
+    [Parameter(ParameterSetName = "Verify", Mandatory = $true)]
+    [string]$MirrorPath,
+
+    [Parameter(ParameterSetName = "Build")][string]$OverrideOut,
+    [Parameter(ParameterSetName = "Build")][switch]$Force,
+    [Parameter(ParameterSetName = "Build")][switch]$SkipProbe,
+    [Parameter(ParameterSetName = "Build")][string]$CodexCommand = "codex"
 )
 
 # This script decodes git's pathnames as STRICT UTF-8 and refuses to guess
@@ -447,6 +476,54 @@ function Get-ContentManifest($repo, $paths) {
     return @{ Paths = @($out) }
 }
 
+function Get-HeadSha($repo) {
+    # @{Ok=$true; Sha=..} or @{Ok=$false; Reason=..}. Structured for the
+    # same reason every other capture here is: a bare empty string cannot
+    # be told apart from a failed read, and an unread HEAD must never
+    # compare equal to anything.
+    $out = (& git -C $repo rev-parse HEAD 2>$null | Out-String).Trim()
+    if (($LASTEXITCODE -ne 0) -or -not $out) {
+        return @{ Ok = $false; Reason = "could not resolve HEAD in $repo" }
+    }
+    return @{ Ok = $true; Sha = $out }
+}
+
+function Get-StatusSha256($repo) {
+    # The source's non-HEAD fingerprint: the SAME status capture the
+    # mirror already uses, PLUS the content manifest of the paths that
+    # status names. Fields are joined on NUL, the separator git already
+    # emitted them with, so no field value can forge a boundary.
+    #
+    # THE CONTENT HALF IS NOT OPTIONAL, and measured 2026-08-04 rather
+    # than assumed: editing an already-ignored file leaves the status
+    # listing byte-identical, so a status-only fingerprint verified clean
+    # across exactly the drift this check exists to catch. Status alone
+    # sees a path APPEAR or DISAPPEAR or change code; it does not see the
+    # bytes behind it change, and the bytes are the review input.
+    $captured = Get-BaselineRaw $repo
+    if (-not $captured.Ok) {
+        return @{ Ok = $false; Reason = $captured.Reason }
+    }
+    $parsedStatus = ConvertTo-StatusRecord $captured.Fields
+    if ($parsedStatus.ContainsKey("Error")) {
+        return @{ Ok = $false; Reason = $parsedStatus.Error }
+    }
+    $subj = Get-ManifestSubject $parsedStatus.Records
+    if ($subj.ContainsKey("Error")) {
+        return @{ Ok = $false; Reason = $subj.Error }
+    }
+    $content = Get-ContentManifest $repo $subj.Paths
+    if ($content.ContainsKey("Error")) {
+        return @{ Ok = $false; Reason = $content.Error }
+    }
+    $joined = ((@($captured.Fields) + @($content.Paths)) -join "`0")
+    $bytes = [System.Text.Encoding]::UTF8.GetBytes($joined)
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try { $digest = $sha.ComputeHash($bytes) } finally { $sha.Dispose() }
+    return @{ Ok = $true
+              Sha = (($digest | ForEach-Object { $_.ToString("x2") }) -join "") }
+}
+
 $toplevel = $true
 
 if (-not (Test-Path $RepoRoot)) {
@@ -454,6 +531,88 @@ if (-not (Test-Path $RepoRoot)) {
     exit 2
 }
 $RepoRoot = (Resolve-Path $RepoRoot).Path
+
+# ---------------------------------------------------------------------
+# VERIFY MODE - step 6 of the construction bridge, run immediately before
+# every fresh and resumed dispatch.
+#
+# WHAT IT PROVES, narrowly: the two-HEAD gate proves committed-HEAD
+# freshness. Non-HEAD inputs are bound in the constructed mirror's
+# manifest AT CONSTRUCTION TIME, and source-side changes after
+# construction are detected by the source-status comparison here.
+#
+# The status comparison is not decoration. An edit to an untracked or
+# ignored review input moves NEITHER head, and that content class is
+# precisely what the mirror exists to carry, so a gate built only on
+# HEADs would be blind in the middle of the feature.
+# ---------------------------------------------------------------------
+if ($VerifyIdentity) {
+    $shaRx = '^[0-9a-f]{40}$'
+    if ($SourceHead -notmatch $shaRx) {
+        Write-Output ("BLOCKED: the recorded source head is missing or not a" +
+            " commit id, so nothing was compared")
+        exit 1
+    }
+    if ($MirrorHead -notmatch $shaRx) {
+        Write-Output ("BLOCKED: the recorded mirror head is missing or not a" +
+            " commit id, so nothing was compared")
+        exit 1
+    }
+    if ($SourceStatusSha256 -notmatch '^[0-9a-f]{64}$') {
+        Write-Output ("BLOCKED: the recorded source status hash is missing or" +
+            " malformed, so nothing was compared")
+        exit 1
+    }
+    if (-not (Test-Path -LiteralPath $MirrorPath -PathType Container)) {
+        Write-Output ("BLOCKED: the mirror at $MirrorPath is gone, so its" +
+            " identity could not be measured")
+        exit 1
+    }
+
+    $liveSource = Get-HeadSha $RepoRoot
+    if (-not $liveSource.Ok) {
+        Write-Output ("BLOCKED: " + $liveSource.Reason + " - an unread source" +
+            " head is never a matching one")
+        exit 1
+    }
+    if ($liveSource.Sha -ne $SourceHead) {
+        Write-Output ("BLOCKED: the source head moved since construction" +
+            " (recorded " + $SourceHead + ", live " + $liveSource.Sha +
+            ") - rebuild the mirror")
+        exit 1
+    }
+
+    $liveMirror = Get-HeadSha $MirrorPath
+    if (-not $liveMirror.Ok) {
+        Write-Output ("BLOCKED: " + $liveMirror.Reason + " - an unread mirror" +
+            " head is never a matching one")
+        exit 1
+    }
+    if ($liveMirror.Sha -ne $MirrorHead) {
+        Write-Output ("BLOCKED: the mirror head changed since construction" +
+            " (recorded " + $MirrorHead + ", live " + $liveMirror.Sha +
+            ") - something wrote into the mirror")
+        exit 1
+    }
+
+    $liveStatus = Get-StatusSha256 $RepoRoot
+    if (-not $liveStatus.Ok) {
+        Write-Output ("BLOCKED: the source status could not be captured (" +
+            $liveStatus.Reason + ") - an unmade measurement is never a clean" +
+            " one")
+        exit 1
+    }
+    if ($liveStatus.Sha -ne $SourceStatusSha256) {
+        Write-Output ("BLOCKED: the source status changed since construction" +
+            " - a tracked, untracked or ignored review input moved without" +
+            " moving either head, so the mirror no longer carries what the" +
+            " source holds. Rebuild the mirror.")
+        exit 1
+    }
+
+    Write-Output "identity: verified"
+    exit 0
+}
 
 # RESOLVE ONCE, THROUGH THE PROVIDER, BEFORE ANY GUARD. An earlier
 # revision guarded `[IO.Path]::GetFullPath($MirrorPath)`, which resolves a
@@ -656,10 +815,84 @@ if (Test-Path $MirrorPath) {
 New-Item -ItemType Directory -Force -Path $MirrorPath | Out-Null
 $MirrorPath = (Resolve-Path $MirrorPath).Path
 
-& robocopy $RepoRoot $MirrorPath /E /COPY:DAT /R:1 /W:1 /NFL /NDL /NJH /NJS /NP | Out-Null
+# CONSTRUCTION BRIDGE, step 1: capture the source identity BEFORE the
+# copy. Everything after this compares against this value, not against a
+# fresh read, because a fresh read cannot tell a stable source from one
+# that moved and moved back.
+$sourceBefore = Get-HeadSha $RepoRoot
+if (-not $sourceBefore.Ok) {
+    Write-Output ("BLOCKED: " + $sourceBefore.Reason + " - the mirror's" +
+        " identity in the debate record would be blank on the source side")
+    exit 1
+}
+
+# TEST SEAM. Copies from somewhere else so the bridge has something to
+# catch. Gated on an environment variable, set by no shipped caller, and
+# it can only make the build FAIL: with the bridge in place the copied
+# head cannot match, and without the bridge this seam is what proves the
+# gap. Same shape and same rule as the lane-home builder's two seams.
+$copyFrom = $RepoRoot
+if ($env:PARALLAX_MIRROR_COPY_SOURCE_OVERRIDE) {
+    $copyFrom = $env:PARALLAX_MIRROR_COPY_SOURCE_OVERRIDE
+}
+
+& robocopy $copyFrom $MirrorPath /E /COPY:DAT /R:1 /W:1 /NFL /NDL /NJH /NJS /NP | Out-Null
 if ($LASTEXITCODE -ge 8) {
     Write-Output "ERROR: robocopy failed with $LASTEXITCODE"
     exit 2
+}
+
+# TEST SEAM. Moves the source head after the copy so step 3 has something
+# to catch. Same gating and the same one-way rule: it can only fail a
+# build.
+if ($env:PARALLAX_MIRROR_MOVE_SOURCE_HEAD) {
+    Set-Content -LiteralPath (Join-Path $RepoRoot "seam-moved.txt") `
+        -Value "moved during construction"
+    & git -C $RepoRoot add -- "seam-moved.txt" 2>&1 | Out-Null
+    & git -C $RepoRoot -c user.email=parallax@local -c user.name=parallax `
+        commit -q -m "seam: move the source head" 2>&1 | Out-Null
+}
+
+# BRIDGE STEP 3: the source must not have moved while we copied it. A
+# source that moved mid-copy produces a tree that matches no commit.
+$sourceAfter = Get-HeadSha $RepoRoot
+if (-not $sourceAfter.Ok) {
+    Write-Output ("BLOCKED: " + $sourceAfter.Reason + " after the copy")
+    exit 1
+}
+if ($sourceAfter.Sha -ne $sourceBefore.Sha) {
+    Write-Output ("BLOCKED: the source head moved during construction (" +
+        $sourceBefore.Sha + " to " + $sourceAfter.Sha + ") - the copied tree" +
+        " matches neither commit")
+    exit 1
+}
+
+# BRIDGE STEP 4: the COPIED tree must carry the source's head. Without
+# this the record can hold two individually valid SHAs while nothing
+# proves the mirror was built from the recorded source commit - two true
+# facts arranged to look like one.
+$copiedHead = Get-HeadSha $MirrorPath
+if (-not $copiedHead.Ok) {
+    Write-Output ("BLOCKED: " + $copiedHead.Reason + " - the copied tree's" +
+        " identity could not be measured")
+    exit 1
+}
+if ($copiedHead.Sha -ne $sourceBefore.Sha) {
+    Write-Output ("BLOCKED: the mirror was not built from this source (source" +
+        " head " + $sourceBefore.Sha + ", copied head " + $copiedHead.Sha + ")")
+    exit 1
+}
+
+# The source status, captured at construction, is what makes drift in a
+# non-HEAD review input detectable later. Taken here, from the source as
+# copied, and never re-derived from the mirror: the mirror is about to be
+# remediated and would then disagree by design.
+$sourceStatus = Get-StatusSha256 $RepoRoot
+if (-not $sourceStatus.Ok) {
+    Write-Output ("BLOCKED: the source status capture failed (" +
+        $sourceStatus.Reason + "), so post-construction drift in an" +
+        " untracked or ignored review input would be undetectable")
+    exit 1
 }
 
 $found = Get-BackChannelEntry $MirrorPath
@@ -775,7 +1008,13 @@ if (-not $SkipProbe) {
 }
 
 Write-Output ("mirror: " + $MirrorPath)
-Write-Output ("head: " + $head)
+# TWO identities, not one. They differ whenever remediation committed,
+# which is the ordinary case for a repo carrying a tracked back-channel,
+# so a record printing one of them twice would be wrong in the common
+# case rather than the rare one.
+Write-Output ("source_head: " + $sourceBefore.Sha)
+Write-Output ("mirror_head: " + $head)
+Write-Output ("source_status_sha256: " + $sourceStatus.Sha)
 Write-Output "baseline:"
 foreach ($b in $baseline) { Write-Output ("  " + $b) }
 Write-Output "manifest:"
