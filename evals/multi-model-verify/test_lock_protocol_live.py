@@ -300,9 +300,22 @@ def _run_crash_oracle(tmp_path, host, partial_prefix):
 
     debate_home = tmp_path / "debate-home"
     debate_home.mkdir()
+    # The owner is THIS process, not a synthetic pid. Acquire refuses to
+    # record an owner that measures DEAD, and that refusal is parameter
+    # validation: it runs before the lock file is read. A synthetic owner
+    # would therefore exit 2 and this oracle would stop measuring what it
+    # claims to - that a MALFORMED record exits 4 rather than being
+    # reclaimed.
+    ticks = subprocess.run(
+        [host, "-NoProfile", "-Command",
+         "$p = Get-Process -Id " + str(os.getpid()) +
+         "; [string]$p.StartTime.ToUniversalTime().Ticks"],
+        capture_output=True, text=True, timeout=60).stdout.strip()
+    assert ticks.isdigit(), ticks
     acquire = run_lock_tool(host, [
         "-Acquire", "-LaneHome", str(lane_home), "-DebateId", uuid.uuid4().hex,
-        "-OwnerPid", "1", "-OwnerStartTicksUtc", "1", "-DebateHome", str(debate_home),
+        "-OwnerPid", str(os.getpid()), "-OwnerStartTicksUtc", ticks,
+        "-DebateHome", str(debate_home),
     ])
     assert acquire.returncode == 4, (acquire.stdout, acquire.stderr)
 

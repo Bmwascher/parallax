@@ -770,16 +770,91 @@ function Invoke-StatusMode {
     exit 0
 }
 
+# ---------------------------------------------------------------------
+# Owner resolution walks PAST its own transports.
+#
+# It used to return the DIRECT parent, which is only the right answer
+# when the caller happens to invoke the tool from the process that owns
+# the debate. Under a wrapper that spawns a fresh shell per call, the
+# direct parent is that shell: a NEW pid every call, already exited by
+# the next status read. Backlog item 26 reported exactly that, and
+# test_resolve_owner_is_stable_across_an_added_shell_frame reproduces it
+# with one added shell frame - no wrapping harness required.
+#
+# So the walk SKIPS the hosts this tool is invoked through and stops at
+# the first ancestor that is not one. Measured chain on the shipped
+# path, 2026-08-04: pwsh -> claude -> pwsh -> Code -> Code -> explorer.
+# The direct parent is already non-transparent there, so the resolved
+# owner is UNCHANGED for the ordinary caller; only nested invocations
+# move, and they move onto the stable answer.
+#
+# THE COST, STATED. A genuinely long-lived orchestration script running
+# in one of these hosts is skipped, and the owner resolves to ITS
+# parent - a lock that can outlive the debate rather than one that dies
+# inside it. That is item 26's visible half traded against its silent
+# half, and it is the direction that fails toward a stuck lane rather
+# than toward two debates on one credential.
+#
+# The list names transports, not "approved owners". Adding a name here
+# says "this tool is invoked THROUGH that", nothing else.
+# ---------------------------------------------------------------------
+$script:TransparentHosts = @("pwsh.exe", "powershell.exe", "cmd.exe", "conhost.exe")
+$script:AncestryWalkLimit = 16
+
 function Invoke-ResolveOwnerMode {
     try {
-        $selfPid = $PID
-        $selfProc = Get-CimInstance -ClassName Win32_Process -Filter "ProcessId=$selfPid" -ErrorAction Stop
-        $parentPid = [int]$selfProc.ParentProcessId
-        $parentProc = Get-Process -Id $parentPid -ErrorAction Stop
-        $ticks = [string]$parentProc.StartTime.ToUniversalTime().Ticks
-        $obj = [ordered]@{ ownerPid = $parentPid; ownerStartTicksUtc = $ticks }
-        Write-Output (ConvertTo-Json $obj -Compress)
-        exit 0
+        # The seam forces the ancestry read to throw. Safe by
+        # construction: its only reachable effect is the refusal below,
+        # and no path through it emits an owner record. Same shape as
+        # PARALLAX_LANE_LOCK_STARTTIME_FAULT.
+        if ($env:PARALLAX_LANE_LOCK_ANCESTRY_FAULT) {
+            throw "PARALLAX_LANE_LOCK_ANCESTRY_FAULT injected: simulated ancestry read failure"
+        }
+        $cursor = $PID
+        $steps = 0
+        while ($true) {
+            $steps++
+            if ($steps -gt $script:AncestryWalkLimit) {
+                Write-Stderr ("owner resolution found no non-transport ancestor within " +
+                              $script:AncestryWalkLimit + " levels")
+                exit 2
+            }
+            $wmi = Get-CimInstance -ClassName Win32_Process -Filter "ProcessId=$cursor" -ErrorAction Stop
+            if ($null -eq $wmi) { throw "process $cursor disappeared during the ancestry walk" }
+            $parentPid = [int]$wmi.ParentProcessId
+            if ($parentPid -le 0) {
+                Write-Stderr "owner resolution reached the top of the process tree with no non-transport ancestor"
+                exit 2
+            }
+            $parentWmi = Get-CimInstance -ClassName Win32_Process -Filter "ProcessId=$parentPid" -ErrorAction Stop
+            if ($null -eq $parentWmi) { throw "ancestor $parentPid disappeared during the ancestry walk" }
+            $parentName = [string]$parentWmi.Name
+            if ([string]::IsNullOrWhiteSpace($parentName)) {
+                throw "ancestor $parentPid has no readable process name"
+            }
+            $isTransparent = $false
+            foreach ($h in $script:TransparentHosts) {
+                if ([System.String]::Equals($parentName, $h, [System.StringComparison]::OrdinalIgnoreCase)) {
+                    $isTransparent = $true
+                    break
+                }
+            }
+            if (-not $isTransparent) {
+                $parentProc = Get-Process -Id $parentPid -ErrorAction Stop
+                $ticks = [string]$parentProc.StartTime.ToUniversalTime().Ticks
+                if ([string]::IsNullOrWhiteSpace($ticks)) {
+                    throw "ancestor $parentPid has no readable start time"
+                }
+                $obj = [ordered]@{
+                    ownerPid = $parentPid
+                    ownerStartTicksUtc = $ticks
+                    ownerName = $parentName
+                }
+                Write-Output (ConvertTo-Json $obj -Compress)
+                exit 0
+            }
+            $cursor = $parentPid
+        }
     } catch {
         Write-Stderr "owner resolution failed"
         exit 2

@@ -805,7 +805,7 @@ def test_builder_capture_read_fault_is_validator_failure(tmp_path):
 # $RecoveryCommandTemplate (with its PowerShell '' escaping undone) so
 # this pin cannot silently drift from the emitting production string.
 RECOVERY_COMMAND_TEMPLATE = (
-    '& { $ErrorActionPreference = \'Stop\'; try { $ownerLines = @(& \'tools/kimi-lane-lock.ps1\' -ResolveOwner); $ownerExit = $LASTEXITCODE; if ($ownerExit -ne 0) { throw "owner resolution failed with exit $ownerExit" }; if ($ownerLines.Count -ne 1 -or -not ($ownerLines[0] -is [string]) -or [string]::IsNullOrWhiteSpace([string]$ownerLines[0])) { throw \'owner resolution returned invalid output\' }; $owner = $ownerLines[0] | ConvertFrom-Json -ErrorAction Stop; if (-not ($owner -is [System.Management.Automation.PSCustomObject])) { throw \'owner resolution returned invalid schema\' }; $ownerFields = @($owner.PSObject.Properties.Name); if ($ownerFields.Count -ne 2 -or -not ($ownerFields -ccontains \'ownerPid\') -or -not ($ownerFields -ccontains \'ownerStartTicksUtc\') -or -not (($owner.ownerPid -is [int]) -or ($owner.ownerPid -is [long])) -or [long]$owner.ownerPid -le 0 -or -not ($owner.ownerStartTicksUtc -is [string]) -or $owner.ownerStartTicksUtc -notmatch \'\\A[0-9]+\\z\') { throw \'owner resolution returned invalid schema\' }; if ([string]::IsNullOrWhiteSpace($env:TEMP) -or -not (Test-Path -LiteralPath $env:TEMP -PathType Container -ErrorAction Stop)) { throw \'TEMP is not an existing directory\' }; $verdictOut = Join-Path -Path $env:TEMP -ChildPath \'parallax-kimi-lane-login-verdict.json\' -ErrorAction Stop; & \'tools/new-kimi-lane-login.ps1\' -LaneHome \'<lane-home>\' -OwnerPid ([string]$owner.ownerPid) -OwnerStartTicksUtc $owner.ownerStartTicksUtc -VerdictOut $verdictOut; $loginExit = $LASTEXITCODE; if ($loginExit -ne 0) { throw "lane login failed with exit $loginExit" } } catch { throw } }'
+    '& { $ErrorActionPreference = \'Stop\'; try { $ownerLines = @(& \'tools/kimi-lane-lock.ps1\' -ResolveOwner); $ownerExit = $LASTEXITCODE; if ($ownerExit -ne 0) { throw "owner resolution failed with exit $ownerExit" }; if ($ownerLines.Count -ne 1 -or -not ($ownerLines[0] -is [string]) -or [string]::IsNullOrWhiteSpace([string]$ownerLines[0])) { throw \'owner resolution returned invalid output\' }; $owner = $ownerLines[0] | ConvertFrom-Json -ErrorAction Stop; if (-not ($owner -is [System.Management.Automation.PSCustomObject])) { throw \'owner resolution returned invalid schema\' }; $ownerFields = @($owner.PSObject.Properties.Name); if ($ownerFields.Count -ne 3 -or -not ($ownerFields -ccontains \'ownerPid\') -or -not ($ownerFields -ccontains \'ownerStartTicksUtc\') -or -not ($ownerFields -ccontains \'ownerName\') -or -not (($owner.ownerPid -is [int]) -or ($owner.ownerPid -is [long])) -or [long]$owner.ownerPid -le 0 -or -not ($owner.ownerStartTicksUtc -is [string]) -or $owner.ownerStartTicksUtc -notmatch \'\\A[0-9]+\\z\' -or -not ($owner.ownerName -is [string]) -or [string]::IsNullOrWhiteSpace($owner.ownerName)) { throw \'owner resolution returned invalid schema\' }; if ([string]::IsNullOrWhiteSpace($env:TEMP) -or -not (Test-Path -LiteralPath $env:TEMP -PathType Container -ErrorAction Stop)) { throw \'TEMP is not an existing directory\' }; $verdictOut = Join-Path -Path $env:TEMP -ChildPath \'parallax-kimi-lane-login-verdict.json\' -ErrorAction Stop; & \'tools/new-kimi-lane-login.ps1\' -LaneHome \'<lane-home>\' -OwnerPid ([string]$owner.ownerPid) -OwnerStartTicksUtc $owner.ownerStartTicksUtc -VerdictOut $verdictOut; $loginExit = $LASTEXITCODE; if ($loginExit -ne 0) { throw "lane login failed with exit $loginExit" } } catch { throw } }'
 )
 
 
@@ -1254,12 +1254,21 @@ def test_a_build_reclaiming_a_dead_holder_succeeds(tmp_path):
     profile = _fake_profile(tmp_path, FAKE_REAL_CONFIG)
     lane_home = _fake_lane_home(tmp_path)
 
-    dead_pid = "999999"
-    dead_ticks = "638000000000000000"
+    # The dead holder is now made by KILLING a real one. Acquire refuses
+    # to record an owner that already measures DEAD, so the old fixture -
+    # acquire with pid 999999 - can no longer reach this state, and a
+    # state the tool refuses to create is not one to plant by hand. This
+    # is also the truer fixture: the record is written by the shipped
+    # acquire path while the owner is genuinely alive, and it becomes
+    # dead the way a real one does.
+    holder_proc, dead_pid, dead_ticks = _spawn_live_holder()
     dead_debate_id = _new_hex32()
-    acquire = _lock_acquire_direct(lane_home, dead_debate_id, dead_pid, dead_ticks,
-                                    str(tmp_path / "dead-debate-home"))
-    assert acquire.returncode == 0, acquire.stdout + acquire.stderr
+    try:
+        acquire = _lock_acquire_direct(lane_home, dead_debate_id, dead_pid, dead_ticks,
+                                        str(tmp_path / "dead-debate-home"))
+        assert acquire.returncode == 0, acquire.stdout + acquire.stderr
+    finally:
+        _kill_holder(holder_proc)
 
     proc, debate_id, owner_pid, owner_ticks = _build2(target, profile, lane_home)
     assert proc.returncode == 0, proc.stdout + proc.stderr
@@ -1635,7 +1644,7 @@ OWNER_STUB_MISSING_FIELD = (
 )
 OWNER_STUB_EXTRA_FIELD = (
     "param([switch]$ResolveOwner)\n"
-    "Write-Output '{\"ownerPid\": 4321, \"ownerStartTicksUtc\": \"123456789\", \"extra\": \"x\"}'\n"
+    "Write-Output '{\"ownerPid\": 4321, \"ownerStartTicksUtc\": \"123456789\", \"ownerName\": \"claude.exe\", \"extra\": \"x\"}'\n"
     "exit 0\n"
 )
 OWNER_STUB_WRONG_PID_TYPE = (
@@ -1665,7 +1674,26 @@ OWNER_STUB_TICKS_NON_DIGIT = (
 )
 OWNER_STUB_VALID_JSON = (
     "param([switch]$ResolveOwner)\n"
+    "Write-Output '{\"ownerPid\": 4321, \"ownerStartTicksUtc\": \"123456789\", \"ownerName\": \"claude.exe\"}'\n"
+    "exit 0\n"
+)
+# ownerName is REQUIRED, not merely tolerated. Without these three the
+# field-count check alone would pass a record carrying any third key,
+# and the name exists so a wrong owner is legible on sight - a blank
+# or numeric one reads as legible while carrying nothing.
+OWNER_STUB_MISSING_NAME = (
+    "param([switch]$ResolveOwner)\n"
     "Write-Output '{\"ownerPid\": 4321, \"ownerStartTicksUtc\": \"123456789\"}'\n"
+    "exit 0\n"
+)
+OWNER_STUB_WRONG_NAME_TYPE = (
+    "param([switch]$ResolveOwner)\n"
+    "Write-Output '{\"ownerPid\": 4321, \"ownerStartTicksUtc\": \"123456789\", \"ownerName\": 7}'\n"
+    "exit 0\n"
+)
+OWNER_STUB_BLANK_NAME = (
+    "param([switch]$ResolveOwner)\n"
+    "Write-Output '{\"ownerPid\": 4321, \"ownerStartTicksUtc\": \"123456789\", \"ownerName\": \"   \"}'\n"
     "exit 0\n"
 )
 LOGIN_STUB_MARK_AND_FAIL = (
@@ -1795,12 +1823,20 @@ def test_the_recovery_command_row4_owner_json_malformed(tmp_path):
     ("pid_negative", OWNER_STUB_PID_NEGATIVE),
     ("wrong_ticks_type", OWNER_STUB_WRONG_TICKS_TYPE),
     ("ticks_non_digit", OWNER_STUB_TICKS_NON_DIGIT),
+    ("missing_name", OWNER_STUB_MISSING_NAME),
+    ("wrong_name_type", OWNER_STUB_WRONG_NAME_TYPE),
+    ("blank_name", OWNER_STUB_BLANK_NAME),
 ])
 def test_the_recovery_command_row5_owner_schema(tmp_path, label, stub):
     """Row 5: owner JSON is valid but the wrong shape - not an object,
     wrong property set (missing or extra), wrong pid type, a pid <= 0,
     wrong ticks type, or ticks failing \\A[0-9]+\\z. Every sub-case must
-    independently fail closed: nonzero, login never invoked."""
+    independently fail closed: nonzero, login never invoked.
+
+    ownerName is REQUIRED rather than tolerated. The field-count
+    check alone would admit a record carrying any third key, and the
+    name exists so a wrong owner is legible on sight - a blank or
+    numeric one reads as legible while carrying nothing."""
     run, marker = _run_recovery_row(tmp_path, "owner_schema_" + label, stub)
     assert run.returncode != 0, run.stdout + run.stderr
     assert not marker.exists()

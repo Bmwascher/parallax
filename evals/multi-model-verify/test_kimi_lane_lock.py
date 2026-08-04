@@ -194,9 +194,77 @@ def test_resolve_owner_prints_pid_and_digit_ticks():
     result = run_lock(["-ResolveOwner"])
     assert result.returncode == 0
     obj = json.loads(result.stdout.strip())
-    assert set(obj.keys()) == {"ownerPid", "ownerStartTicksUtc"}
+    assert set(obj.keys()) == {"ownerPid", "ownerStartTicksUtc", "ownerName"}
     assert isinstance(obj["ownerPid"], int) and obj["ownerPid"] > 0
     assert DIGITS_RE.match(obj["ownerStartTicksUtc"])
+
+
+def test_resolve_owner_reports_the_resolved_process_name():
+    """The owner was recorded as a bare number, so a wrong owner and a
+    right one looked identical in every record and every status read.
+
+    Backlog item 26 opened with a lane blocked for hours and no way to
+    tell from the artifacts WHAT held it. The name does not fix the
+    resolution; it makes a wrong resolution legible on sight.
+    """
+    result = run_lock(["-ResolveOwner"])
+    assert result.returncode == 0
+    obj = json.loads(result.stdout.strip())
+    assert isinstance(obj["ownerName"], str) and obj["ownerName"].strip()
+
+
+def run_lock_through_an_extra_shell(args, timeout=40):
+    """Invoke the tool one shell level deeper than run_lock does.
+
+    The inner host is the same executable, so the ONLY difference
+    between this and run_lock is an added transparent shell frame.
+    """
+    inner = (POWERSHELL + " -NoProfile -NonInteractive -File "
+             + str(SCRIPT) + " " + " ".join(args))
+    cmd = [POWERSHELL, "-NoProfile", "-NonInteractive", "-Command",
+           "& " + inner]
+    return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+
+
+def test_resolve_owner_is_stable_across_an_added_shell_frame():
+    """Item 26's instability, reproduced HERE without the other
+    session's wrapping harness.
+
+    The report was that `-ResolveOwner` returns a DIFFERENT pid per call
+    under a wrapper, so the recorded owner reads DEAD almost at once.
+    The mechanism is that resolution took the DIRECT parent, and under a
+    wrapper the direct parent is the ephemeral shell the wrapper just
+    spawned - a new pid every call, dead by the next status read.
+
+    Adding one shell frame reproduces it exactly. Resolution must walk
+    PAST the hosts this tool is invoked through and land on the same
+    process either way, or the recorded owner is an artifact of how deep
+    the caller happened to nest its shells.
+    """
+    direct = run_lock(["-ResolveOwner"])
+    wrapped = run_lock_through_an_extra_shell(["-ResolveOwner"])
+    assert direct.returncode == 0, (direct.stdout, direct.stderr)
+    assert wrapped.returncode == 0, (wrapped.stdout, wrapped.stderr)
+    a = json.loads(direct.stdout.strip())
+    b = json.loads(wrapped.stdout.strip())
+    assert a["ownerPid"] == b["ownerPid"], (a, b)
+    assert a["ownerStartTicksUtc"] == b["ownerStartTicksUtc"], (a, b)
+    assert a["ownerName"] == b["ownerName"], (a, b)
+
+
+def test_resolve_owner_refuses_when_the_ancestry_cannot_be_read():
+    """An unmade measurement is never a clean one.
+
+    The fault seam forces the ancestry walk to throw. It is safe by
+    construction: its only reachable effect is to REFUSE, and there is
+    no path by which it produces an owner record. Same shape as
+    PARALLAX_LANE_LOCK_STARTTIME_FAULT, which can only classify a holder
+    alive and refuse a takeover.
+    """
+    result = run_lock(["-ResolveOwner"],
+                      env={"PARALLAX_LANE_LOCK_ANCESTRY_FAULT": "1"})
+    assert result.returncode == 2, (result.returncode, result.stdout, result.stderr)
+    assert result.stdout.strip() == "", result.stdout
 
 
 # ---------------------------------------------------------------------

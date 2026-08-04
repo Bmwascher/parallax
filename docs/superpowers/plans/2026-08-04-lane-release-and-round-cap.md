@@ -362,3 +362,90 @@ the four new results are not confounded with it.
 Item 26's `-ResolveOwner` instability is untouched here; that is task 2.
 This closes the silent half only: a dead identity can no longer be
 written into the record in the first place.
+
+---
+
+# Build record - task 2, owner resolution walks past its own transports (2026-08-04)
+
+Built. `tools/kimi-lane-lock.ps1` `Invoke-ResolveOwnerMode`, plus every
+consumer of the resolved record. Four new oracles in
+`test_kimi_lane_lock.py`.
+
+## Item 26's instability is reproducible HERE, and the item said it was not
+
+The item's evidence status reads: "Reproducing the instability needs a
+harness that wraps, and finding one is the first step of this item."
+That is wrong, and the correction goes into the item when it closes.
+
+One added shell frame reproduces it exactly.
+`test_resolve_owner_is_stable_across_an_added_shell_frame` calls
+`-ResolveOwner` twice - once as the suite always has, once through one
+extra PowerShell host - and against the shipped tool the two calls
+returned pid 30944 and pid 4872. Different owner, same machine, same
+second. That IS the reported defect: the direct parent under a wrapper
+is the shell the wrapper just spawned, a new pid every call, dead by the
+next status read.
+
+No wrapping harness was needed. A shell was.
+
+## What changed
+
+Resolution now walks up from `$PID`, SKIPS the hosts this tool is
+invoked through (`pwsh.exe`, `powershell.exe`, `cmd.exe`,
+`conhost.exe`), and stops at the first ancestor that is not one. It
+reports that ancestor's NAME alongside its pid and start ticks.
+
+Measured chain on the shipped path, 2026-08-04:
+`pwsh -> claude -> pwsh -> Code -> Code -> explorer`. The direct parent
+is already non-transparent there, so the ordinary caller's resolved
+owner is UNCHANGED. Only nested invocations move, and they move onto the
+answer the un-nested call already gave.
+
+Refusals, all exit 2 with nothing on stdout: the walk reaching the top
+of the process tree, exceeding 16 levels, an unreadable process name, an
+unreadable start time, or the ancestry read throwing.
+
+## The cost, stated rather than buried
+
+A genuinely long-lived orchestration script running inside one of those
+four hosts is skipped, and the owner resolves to ITS parent - a lock
+that can outlive the debate instead of one that dies inside it.
+
+That is item 26's VISIBLE half traded against its SILENT half. It is the
+direction that fails toward a stuck lane rather than toward two debates
+against one credential, which is the trade this repo's lock design
+already makes everywhere else. It is also the weakest point in this
+task and the reviewer should be pointed straight at it.
+
+The list names TRANSPORTS, not approved owners. Adding a name to it says
+"this tool is invoked through that" and nothing more, which is why it
+needs no allow-list of session hosts that would rot with every new
+install shape.
+
+## The coupling, enumerated and closed
+
+`ownerName` is a THIRD field in a record validated by an EXACT field-set
+check, so every copy of that check moved in the same commit or the
+recovery path would have thrown `owner resolution returned invalid
+schema` on its next real use:
+
+- `tools/new-kimi-lane-home.ps1` - the recovery-command template, where
+  the check originates.
+- `commands/doctor.md` - the duplicate the doctor prints.
+- `evals/multi-model-verify/test_backup_lane.py` - the frozen literal.
+- `evals/multi-model-verify/test_kimi_lane_home.py` - the frozen literal
+  and the owner-stub set.
+
+The stub set gained three rejection reasons (missing name, non-string
+name, blank name) and its EXTRA-field stub was rebuilt on the full
+three-field record, because left at two fields it would have quietly
+become a second copy of the missing-name case.
+
+## A scoping error of my own, recorded
+
+Task 3 was committed after running `test_kimi_lane_lock.py` only. The
+full suite then failed in modules that drive the same tool with
+synthetic owner identities. The verification surface for a change to a
+shared tool is every module that drives that tool, not the one module
+named after it - which is the operational definition task 7 is being
+asked to write, failed in the same branch that writes it.
