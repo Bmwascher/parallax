@@ -1052,3 +1052,222 @@ def test_a_backslash_bearing_index_entry_stops_the_enumeration():
     out = run_functions(
         '$r = ConvertTo-StatusRecord @("?? caf\\303\\251.txt"); $r.Error')
     assert "cannot handle" in out, out
+
+
+# =====================================================================
+# The path-budget pre-flight (0.21.0, backlog item 21).
+#
+# The mirror is a robocopy of the whole repo into a NEW root. If that
+# root is deep, destinations that were fine in the source exceed what the
+# tool will build, and the failure lands MID-COPY: a partially populated
+# mirror that reads like a real one. The pre-flight moves that refusal to
+# before anything is created.
+#
+# THE UNIVERSE IS FROZEN TEXT, converged by both reviewer lanes: every
+# file and directory destination that the exact robocopy /E operation may
+# create beneath the resolved mirror root, including tracked, untracked,
+# ignored, and all .git content. Two cases below exist because narrower
+# readings are tempting and wrong - a directory with no files in it is
+# still a destination, and .git content is not excluded.
+# =====================================================================
+
+BUDGET = 260
+
+
+def long_mirror(tmp_path):
+    """A mirror root deliberately much LONGER than the source repo root.
+
+    The source has to be creatable or the fixture measures Python's
+    limits instead of the tool's: a destination at 280 characters built
+    from a source root the same length needs a 280-character source,
+    which `mkdir` refuses before the tool ever runs. `make_repo` uses
+    `src`, so this name buys 37 characters of headroom.
+    """
+    return tmp_path / ("mirrorroot" * 4)
+
+
+def deep_child(root, total_len, tail="f.txt"):
+    """A path under `root` whose FULL length is exactly `total_len`,
+    built from nested directories so no single component is
+    unreasonable."""
+    room = total_len - len(str(root)) - 1 - len(tail)
+    assert room >= 2, "root already too long for this case"
+    parts = []
+    while room > 31:
+        parts.append("d" * 29)
+        room -= 30
+    parts.append("d" * (room - 1))
+    return root.joinpath(*parts) / tail
+
+
+def budget_error(proc):
+    """The refusal line, or None. Asserted on rather than a bare exit
+    code: several conditions exit 2, and a test that could not tell them
+    apart would pass against the wrong refusal."""
+    for line in proc.stdout.splitlines():
+        if "path budget" in line.lower():
+            return line
+    return None
+
+
+def test_a_mirror_just_under_the_budget_builds(tmp_path):
+    """The positive control. Without it every refusal below is satisfied
+    by a tool that refuses everything."""
+    repo = make_repo(tmp_path)
+    mirror = long_mirror(tmp_path)
+    target = deep_child(mirror, BUDGET - 1)
+    src = repo / target.relative_to(mirror)
+    src.parent.mkdir(parents=True)
+    src.write_text("deep but legal\n")
+    proc = run_mirror(repo, mirror)
+    assert_built(proc)
+    assert target.exists(), "a path one under the budget must be copied"
+
+
+def test_a_mirror_at_the_budget_is_refused(tmp_path):
+    repo = make_repo(tmp_path)
+    mirror = long_mirror(tmp_path)
+    src = repo / deep_child(mirror, BUDGET).relative_to(mirror)
+    src.parent.mkdir(parents=True)
+    src.write_text("exactly at the limit\n")
+    proc = run_mirror(repo, mirror)
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert budget_error(proc), proc.stdout
+
+
+def test_the_refusal_names_every_number_it_used(tmp_path):
+    """A refusal an operator cannot act on is a refusal they will
+    override. It must show the root length, the deepest relative path
+    length, their sum, and the limit."""
+    repo = make_repo(tmp_path)
+    mirror = long_mirror(tmp_path)
+    deepest = deep_child(mirror, BUDGET + 20)
+    src = repo / deepest.relative_to(mirror)
+    src.parent.mkdir(parents=True)
+    src.write_text("over\n")
+    proc = run_mirror(repo, mirror)
+    line = budget_error(proc)
+    assert line, proc.stdout
+    assert str(len(str(mirror))) in line, ("mirror-root length missing", line)
+    assert str(len(str(deepest.relative_to(mirror)))) in line, (
+        "deepest relative path length missing", line)
+    assert str(BUDGET + 20) in line, ("the sum missing", line)
+    assert str(BUDGET) in line, ("the limit missing", line)
+
+
+def test_the_mirror_does_not_exist_after_a_refusal(tmp_path):
+    """The whole point of a PRE-flight. A refusal that leaves a directory
+    behind has already done part of the thing it refused to do."""
+    repo = make_repo(tmp_path)
+    mirror = long_mirror(tmp_path)
+    src = repo / deep_child(mirror, BUDGET + 5).relative_to(mirror)
+    src.parent.mkdir(parents=True)
+    src.write_text("over\n")
+    proc = run_mirror(repo, mirror)
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert not mirror.exists(), "the pre-flight ran after creating the root"
+
+
+def test_an_over_budget_directory_with_no_files_is_refused(tmp_path):
+    """A DIRECTORY is a destination robocopy /E creates. Measuring only
+    files reads this repo as fine and then fails mid-copy."""
+    repo = make_repo(tmp_path)
+    mirror = long_mirror(tmp_path)
+    d = repo / deep_child(mirror, BUDGET + 8, tail="leafdir").relative_to(mirror)
+    d.mkdir(parents=True)
+    proc = run_mirror(repo, mirror)
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert budget_error(proc), proc.stdout
+
+
+def test_an_over_budget_path_under_dot_git_is_refused(tmp_path):
+    """.git is copied, so .git counts. Skipping it is the narrower
+    universe the frozen sentence rules out."""
+    repo = make_repo(tmp_path)
+    mirror = long_mirror(tmp_path)
+    rel = deep_child(mirror / ".git", BUDGET + 8).relative_to(mirror / ".git")
+    src = repo / ".git" / rel
+    src.parent.mkdir(parents=True)
+    src.write_text("git internals are destinations too\n")
+    proc = run_mirror(repo, mirror)
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert budget_error(proc), proc.stdout
+
+
+def test_an_over_budget_override_path_is_refused(tmp_path):
+    """-OverrideOut is written BESIDE the mirror by this tool, not by
+    robocopy, so the copy universe never covers it. It gets its own
+    check or it gets none."""
+    repo = make_repo(tmp_path)
+    mirror = long_mirror(tmp_path)
+    override = deep_child(tmp_path, BUDGET + 4, tail="o.txt")
+    # Deliberately NOT created. Windows caps directory creation at 248
+    # characters, so a fixture that built this parent would measure
+    # `mkdir`'s limit instead of the tool's, and the check under test
+    # runs on the resolved string before anything touches disk.
+    proc = run_mirror(repo, mirror, "-OverrideOut", str(override))
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert budget_error(proc), proc.stdout
+    assert not mirror.exists()
+
+
+def test_a_source_reparse_point_is_refused(tmp_path):
+    """Refused BEFORE measuring, not measured through.
+
+    Nothing here has established that the enumerator and robocopy
+    traverse an identical universe across a reparse point, and a budget
+    computed over a universe the copy does not share is not a
+    measurement of the copy.
+    """
+    repo = make_repo(tmp_path)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "x.txt").write_text("linked\n")
+    link = repo / "linked"
+    rc = subprocess.run(["cmd", "/c", "mklink", "/J", str(link), str(outside)],
+                        capture_output=True, text=True)
+    if rc.returncode != 0:
+        pytest.skip("junction creation unavailable: " + rc.stderr)
+    mirror = long_mirror(tmp_path)
+    proc = run_mirror(repo, mirror)
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "reparse" in proc.stdout.lower(), proc.stdout
+    assert not mirror.exists()
+
+
+def test_an_unreadable_source_path_blocks_rather_than_skips(tmp_path):
+    """Hole semantics, the rule the manifest builder already states: a
+    path that cannot be measured is not a path known to fit."""
+    repo = make_repo(tmp_path)
+    locked = repo / "locked"
+    locked.mkdir()
+    (locked / "inner.txt").write_text("x\n")
+    user = os.environ.get("USERNAME") or ""
+    if not user:
+        pytest.skip("USERNAME not set; cannot build a deny ACE")
+    # DENY LIST-DIRECTORY ONLY, never (RX).
+    #
+    # (RX) also denies ReadPermissions, and an explicit deny is evaluated
+    # before the owner's implicit READ_CONTROL/WRITE_DAC. Measured
+    # 2026-08-03: the ACE then cannot be read or removed, the directory
+    # cannot be deleted, and the fixture leaks a permanently
+    # undeletable tree into the temp directory on every run. (RD) blocks
+    # the enumeration this case needs and leaves the ACE removable.
+    deny = subprocess.run(
+        ["icacls", str(locked), "/deny", user + ":(OI)(CI)(RD)"],
+        capture_output=True, text=True)
+    if deny.returncode != 0:
+        pytest.skip("icacls deny unavailable: " + deny.stdout + deny.stderr)
+    try:
+        mirror = long_mirror(tmp_path)
+        proc = run_mirror(repo, mirror)
+        assert proc.returncode == 2, proc.stdout + proc.stderr
+        assert "could not be enumerated" in proc.stdout.lower(), proc.stdout
+        assert not mirror.exists()
+    finally:
+        undo = subprocess.run(["icacls", str(locked), "/remove:d", user],
+                              capture_output=True, text=True)
+        # Asserted, not fire-and-forget. A cleanup that silently failed is
+        # how the first version of this case leaked.
+        assert undo.returncode == 0, undo.stdout + undo.stderr
+        assert (locked / "inner.txt").exists(), "the deny ACE is still in force"

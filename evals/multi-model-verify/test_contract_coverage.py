@@ -686,6 +686,14 @@ DECLARED_REGIONS = {
     # holds the prompt shape and the claim's ceiling.
     "codex-brief-binding-calls",
     "codex-brief-binding-record",
+    # 0.21.0, backlog item 21. The mirror copies into a NEW root, so a
+    # destination legal in the source can be illegal in the mirror, and
+    # that failure lands mid-copy leaving a partial tree that reads like
+    # a complete one. One region rather than two: the universe, the
+    # arithmetic, the limit and the three out-of-universe requirements
+    # are one rule, and splitting them is how a reader ends up
+    # measuring files but not directories.
+    "mirror-path-budget",
 }
 
 

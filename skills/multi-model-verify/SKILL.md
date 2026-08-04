@@ -92,6 +92,10 @@ toggled on, its stop-time review overlaps mode `diff` — expected, not a bug.
 
    Clearing it — only on the user's choice, never automatically: run
    `tools/new-review-mirror.ps1 -RepoRoot <repo> -MirrorPath <scratch>`.
+   Build at a SHORT `<scratch>` directly under the temp directory, such
+   as a `kerev<n>` folder, never inside the session scratchpad: the
+   mirror re-roots every path, and the tool refuses before creating
+   anything when the budget is blown.
    It builds the **review mirror** (references/backup-lane.md owns its
    construction, its baseline, and its identity fields — a file copy
    preserving `.git`, NOT a clone), deletes the offending entries THERE,

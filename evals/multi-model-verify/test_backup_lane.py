@@ -1697,3 +1697,53 @@ def test_the_probe_agent_is_never_named_by_the_lane_contract():
         for path in paths:
             assert probe_rel not in _lines(path), (
                 str(path.relative_to(REPO)) + " must not name the probe agent file")
+
+
+def test_mirror_path_budget_region():
+    """The pre-flight's contract, locked whole (0.21.0, backlog item 21).
+
+    Three clauses here are the ones a later reader is most likely to
+    trim, and each has a measured reason to stay. The UNIVERSE names
+    directories and `.git` explicitly, because a files-only reading
+    passes this repo and then fails mid-copy. The reparse-point refusal
+    is a refusal rather than a measurement, because nothing has
+    established that the enumerator and robocopy traverse the same
+    universe across one. The unenumerable-path rule BLOCKS, because the
+    manifest builder's hole semantics apply here too: a path that cannot
+    be measured is not a path known to fit.
+    """
+    assert (
+            "The mirror is a copy into a NEW root, so a destination "
+            "that was legal in the source can be illegal in the mirror. "
+            "That failure lands MID-COPY and leaves a partially "
+            "populated tree that reads exactly like a complete one, "
+            "which is why the check runs before the root is created "
+            "rather than after the copy reports a count. The UNIVERSE "
+            "it measures is every file and directory destination that "
+            "the exact `robocopy /E` operation may create beneath the "
+            "resolved mirror root, including tracked, untracked, "
+            "ignored, and all `.git` content: a directory holding no "
+            "files is still a destination, and `.git` is copied so "
+            "`.git` counts. The ARITHMETIC is the resolved mirror-root "
+            "length, plus a separator, plus the relative destination "
+            "path length. The LIMIT is 260 characters as a conservative "
+            "policy across both supported PowerShell hosts. It is a "
+            "deterministic refusal threshold, not a claim about the "
+            "maximum any host, API, OS configuration, or downstream "
+            "client could support. Three requirements sit OUTSIDE that "
+            "universe and bind equally. The `-OverrideOut` path is "
+            "written beside the mirror by the tool rather than by "
+            "robocopy, so the copy universe never covers it and it "
+            "carries its own check. A source reparse point is REFUSED "
+            "before measuring rather than measured through, because "
+            "nothing has established that this enumerator and robocopy "
+            "traverse an identical universe across one, and a budget "
+            "computed over a universe the copy does not share is not a "
+            "measurement of the copy. A source path that cannot be "
+            "enumerated BLOCKS the build and is never skipped, the same "
+            "hole semantics the manifest builder states: a path that "
+            "cannot be measured is not a path known to fit. The refusal "
+            "names the root length, the deepest relative destination "
+            "length, their sum and the limit, because a refusal an "
+            "operator cannot act on is a refusal they will work around."
+            ) in _norm(BACKUP_LANE)

@@ -520,6 +520,107 @@ if (Test-Path $OverrideOut) {
     exit 2
 }
 
+# ---------------------------------------------------------------------
+# PATH BUDGET PRE-FLIGHT. Runs here, after the overlap and override
+# guards and BEFORE anything is created or deleted, because the failure
+# it prevents is a MID-COPY one: robocopy stops at the first destination
+# it cannot create, leaving a partially populated mirror that reads
+# exactly like a complete one.
+#
+# THE UNIVERSE, frozen text: every file and directory destination that
+# the exact `robocopy /E` operation may create beneath the resolved
+# mirror root, including tracked, untracked, ignored, and all `.git`
+# content. Two consequences that narrower readings get wrong - a
+# directory with no files in it is still a destination, and `.git` is
+# copied so `.git` counts.
+#
+# THE LIMIT is 260 characters as a conservative policy across both
+# supported PowerShell hosts. It is a deterministic refusal threshold,
+# not a claim about the maximum any host, API, OS configuration, or
+# downstream client could support.
+#
+# THE ARITHMETIC is resolved mirror-root length, plus separator, plus
+# the relative destination path length.
+$PathBudget = 260
+$budgetRoot = $MirrorPath.TrimEnd("\", "/")
+$budgetRootLen = $budgetRoot.Length
+
+# -OverrideOut is written BESIDE the mirror by this script, not by
+# robocopy, so the copy universe never covers it. Its own check or none.
+if ($OverrideOut.Length -ge $PathBudget) {
+    Write-Output ("ERROR: path budget exceeded by the override file - " +
+        "$OverrideOut is $($OverrideOut.Length) characters and the limit " +
+        "is $PathBudget")
+    exit 2
+}
+
+if ($budgetRootLen -ge $PathBudget) {
+    Write-Output ("ERROR: path budget exceeded by the mirror root alone - " +
+        "root is $budgetRootLen characters and the limit is $PathBudget")
+    exit 2
+}
+
+$srcRoot = $RepoRoot.TrimEnd("\", "/")
+$deepestLen = -1
+$deepestRel = ""
+$dirAttr = [int][System.IO.FileAttributes]::Directory
+$reparseAttr = [int][System.IO.FileAttributes]::ReparsePoint
+
+$pending = New-Object System.Collections.Stack
+$pending.Push($srcRoot)
+while ($pending.Count -gt 0) {
+    $dir = $pending.Pop()
+    $entries = $null
+    try {
+        $entries = @([System.IO.Directory]::GetFileSystemEntries($dir))
+    } catch {
+        # An unreadable path BLOCKS. It is never skipped: a path that
+        # cannot be measured is not a path known to fit, and the same
+        # hole semantics the manifest builder states apply here.
+        Write-Output ("ERROR: $dir could not be enumerated, so the path " +
+            "budget was never measured: " + $_.Exception.Message)
+        exit 2
+    }
+    foreach ($entry in $entries) {
+        $attr = 0
+        try {
+            $attr = [int][System.IO.File]::GetAttributes($entry)
+        } catch {
+            Write-Output ("ERROR: $entry could not be enumerated, so the " +
+                "path budget was never measured: " + $_.Exception.Message)
+            exit 2
+        }
+        # Source reparse points are REFUSED before measuring, not
+        # measured through. Nothing here establishes that this
+        # enumerator and robocopy traverse an identical universe across
+        # one, and a budget computed over a universe the copy does not
+        # share is not a measurement of the copy.
+        if (($attr -band $reparseAttr) -ne 0) {
+            Write-Output ("ERROR: $entry is a reparse point - the mirror " +
+                "refuses to measure or copy across one")
+            exit 2
+        }
+        $rel = $entry.Substring($srcRoot.Length + 1)
+        if ($rel.Length -gt $deepestLen) {
+            $deepestLen = $rel.Length
+            $deepestRel = $rel
+        }
+        if (($attr -band $dirAttr) -ne 0) { $pending.Push($entry) }
+    }
+}
+
+if ($deepestLen -ge 0) {
+    $deepestSum = $budgetRootLen + 1 + $deepestLen
+    if ($deepestSum -ge $PathBudget) {
+        Write-Output ("ERROR: path budget exceeded - mirror root is " +
+            "$budgetRootLen characters, the deepest relative destination " +
+            "is $deepestLen characters, their sum is $deepestSum, and the " +
+            "limit is $PathBudget. Build the mirror at a shorter path. " +
+            "Deepest: $deepestRel")
+        exit 2
+    }
+}
+
 if (Test-Path $MirrorPath) {
     if (-not $Force) {
         Write-Output ("ERROR: $MirrorPath already exists - a stale mirror" +
