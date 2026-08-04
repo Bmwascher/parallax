@@ -1488,6 +1488,35 @@ class TestApplicationCheckpoint:
         )
         assert re.search(r"fixes are still unapplied", skill)
 
+    def test_a_pass_is_terminal_only_for_its_own_head(self):
+        """Item 23. A PASS covers the head it was issued on, and no other.
+
+        The failure this closes is quiet and easy: the reviewer raises
+        something it explicitly labels non-blocking, the session agrees,
+        applies it, and merges under the PASS. The head moved. The
+        verdict describes a range nobody reviewed, and the attestation
+        binds it anyway because the emitter is given whatever head it is
+        handed.
+
+        Not the same rule as the checkpoint's. That governs fixes for a
+        FIX verdict. This one governs edits made AFTER a PASS, where
+        nothing else in the flow is watching.
+        """
+        skill = read(SKILL_MD)
+        assert ("A PASS is terminal only for the exact head it was issued"
+                " on.") in skill
+        assert ("run one confirming round") in skill
+        # NORMALIZED, because this needle spans a line wrap in the skill
+        # and anchors on no newline. D4's rule and its other side: a
+        # needle that contains a newline must never be written raw, and
+        # one that spans a wrap must be matched against collapsed
+        # whitespace or it silently never matches.
+        flat = " ".join(skill.split())
+        assert ("including observations it labelled non-blocking") in flat, (
+            "the non-blocking case is the one that gets applied without"
+            " thinking, so it must be named rather than implied")
+
+
     def test_reverified_is_contractual(self):
         # Sol diff review round 1, F2: the state machine's last transition
         # must be executable, not declarative - the verification plan is

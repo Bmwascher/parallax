@@ -319,6 +319,11 @@ Before it: the session's final-adjudication step (debate-protocol.md) —
 verify the last round's findings against the repo and issue the terminal
 verdict; a reviewer's PASS/FIX is never terminal by itself.
 
+A PASS is terminal only for the exact head it was issued on. If you apply
+anything the reviewer raised — including observations it labelled
+non-blocking — the head moves and the verdict no longer covers it. Either
+leave them for a follow-up branch, or run one confirming round.
+
 **Mode diff only — record the verdict mechanically.** After the terminal
 verdict, run the attestation emitter from this plugin's checkout:
 
