@@ -540,11 +540,14 @@ if ($Mode -eq "MalformedOverride") {
 # RESIDUAL, and it is unavoidable here: this establishes LIVE BEFORE the
 # write, not AT it. Nonce generation, record construction and
 # serialization run in between, so an owner that dies inside that window
-# is still written. It is a far NARROWER window than the pre-loop-only
-# check left open - that one spanned the whole wait budget, this one
-# spans a few statements - but its wall-clock duration is NOT measured
-# and is not bounded by that statement count, because the scheduler can
-# pause this process anywhere inside it. Closing it entirely would need
+# is still written. WHAT CHANGED IS CONTROL-FLOW PLACEMENT, and that is
+# the whole claim. The old interval began BEFORE the acquisition loop,
+# so it could include contention waiting up to the entire wait budget;
+# this one begins after the loop has committed to a write and contains
+# only nonce generation, record construction and serialization. NEITHER
+# interval's wall-clock duration is measured and NO comparative
+# magnitude is claimed - the scheduler can pause this process anywhere
+# inside either one. Closing the remaining interval entirely would need
 # an atomicity this tool cannot have: the process being measured is not
 # the process writing.
 #

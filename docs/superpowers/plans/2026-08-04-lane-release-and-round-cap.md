@@ -989,11 +989,20 @@ is sound; the magnitude is not a measurement. The scheduler can pause
 the process anywhere between the check and the write, so wall-clock
 duration is not bounded by the number of intervening statements.
 
-Now stated as what is actually known: a far narrower window - the old
-one spanned the whole wait budget, this one spans a few statements - and
-its duration is explicitly NOT measured. This is the same defect class
-as the two the confirming rounds already found: a claim wider than its
-evidence, in the sentence that exists to state a limit.
+Now stated as what is actually known, and ROUND 4 had to narrow it a
+second time. "A far narrower window" is itself a comparative magnitude,
+and it is not supported: a successful acquisition need not wait the
+whole budget, and the scheduler pause the same sentence admits means the
+new interval is not PROVEN shorter in wall clock. What is established is
+CONTROL-FLOW PLACEMENT - the old interval began before the acquisition
+loop and could include contention waiting up to the entire budget; this
+one begins after the loop commits to a write and contains only nonce
+generation, record construction and serialization. Neither duration is
+measured and no comparison is claimed.
+
+Same defect class as the two the confirming rounds already found, twice
+in the same sentence: a claim wider than its evidence, in the sentence
+that exists to state a limit.
 
 ## A failing oracle could leak a two-minute process
 
