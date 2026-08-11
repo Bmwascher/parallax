@@ -121,6 +121,7 @@ action, one ESCALATED into the debate.
 |---|---|---|---|
 | 1 | `diff-brief-r1.md` | `diff-reply-r1.txt` | FIX. Ruled the escalation, then found four spec drifts the whole-branch review missed |
 | 2 | `diff-brief-r2.md` | `diff-reply-r2.txt` | FIX. The fix re-review was not dry: one blocking spec miss and four record defects |
+| 3 | `diff-brief-r3.md` | `diff-reply-r3.txt` | FIX. The fail-first repair accepted; a licence obligation and two record residues found |
 
 ## What round 1 found, and why it matters more than the count
 
@@ -139,7 +140,14 @@ all four had survived a whole-branch review that read the same diff:
    of a matrix nobody had specified — the same defect round 9 of the plan
    debate found in the PowerShell module, repeated in the module written
    after it. The rebuild changed which cases do the killing: three mutants
-   now die on cells the first build could not generate.
+   now die on `presence=twice` and `presence=absent` cells INSIDE the
+   specified product. It did not create those shapes — the 88-case build
+   carried equivalent hand-added cases outside any enumeration, and the
+   whole-branch review names old `B[sandbox,absent]` as mutant 9's killer.
+   (This sentence first claimed the cells could not have been generated
+   before. Corrected at diff round 3, in place rather than below, because
+   a synopsis is not a verbatim record and a reader who stops here would
+   otherwise carry the refuted claim away.)
 2. **The required upstream re-diff was never performed.** The header
    disclosed that honestly, and the reviewer ruled that disclosing a
    skipped step does not discharge a frozen task. Correct: the question
@@ -206,3 +214,40 @@ Note that `diff-brief-r2.md` is retained VERBATIM and therefore still
 contains two of those overstatements. That is what a retained record is
 for: the corrections live in the code and the backlog, not in a rewritten
 brief.
+
+## Round 3, and the obligation nobody was reading
+
+The blocking finding was `evals/tools/LICENSE-THIRD-PARTY.md`. It still
+said `skill_lint.py` was "unmodified except the provenance header" while
+the file's own header, four lines of code away, recorded a substantive
+delta. Two promises to two different readers, and only one was kept. It is
+also the Apache-2.0 section 4(b) statement of changes, which the notice's
+own last paragraph cites, so it is a licence obligation rather than a
+courtesy.
+
+NOTHING IN THE SUITE READ THAT FILE. That is the whole mechanism: the file
+header was pinned, so it stayed true; the notice was not, so it went false
+and stayed false for the length of a branch. It is now pinned by two
+tests, which is more than the reviewer asked for and is the part that
+stops the next recurrence.
+
+Two record residues alongside it, both the same shape as each other: a
+correction applied where I was looking and not where else the same
+sentence lived. One stale "round 13 of the diff debate" in a docstring
+after the module's invariant block and the plan were both fixed; and the
+README's own synopsis still carrying "cells the first build could not
+generate" sixty lines above the paragraph refuting it.
+
+## The through-line of this diff debate
+
+Three rounds, eleven findings, and almost none of them about code
+behaviour. The code was right nearly every time. What kept being wrong was
+the RECORD: a plan surface that did not match the tree, a licence notice
+nobody pinned, a synopsis contradicting its own corrections, and twice, an
+accurate description of a missing measurement standing in for the
+measurement.
+
+A missing test fails a gate. A missing or stale RECORD fails nothing, so
+the only thing that catches it is a reader comparing the frozen plan to
+the tree line by line. That is what mode diff is, and it is why the
+whole-branch review is an input to it rather than a replacement for it.

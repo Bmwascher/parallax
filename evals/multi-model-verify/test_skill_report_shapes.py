@@ -583,8 +583,9 @@ def test_every_oracle_field_has_a_declared_rule():
 
     The generator computes four fields per case. Each needs a rule
     written above, or its expected value is a description of what the
-    parser does. Three of the four were undeclared until round 13 of the
-    diff debate, which is why this test exists rather than a comment.
+    parser does. Three of the four were undeclared until cycle exchange
+    13, which is diff round 1, which is why this test exists rather than
+    a comment.
     """
     text = Path(__file__).read_text(encoding="utf-8")
     assert "BlockPresent is TRUE iff at least one OPENER survives" in text, (

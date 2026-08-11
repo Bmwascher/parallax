@@ -278,7 +278,16 @@ about the OLD form and must keep passing; it documents the defect.
 Runs AFTER Tasks 1 and 2, because both change the body size.
 
 **Files:** `evals/tools/skill_lint.py`, `evals/tools/LICENSE-THIRD-PARTY.md`,
-`evals/multi-model-verify/test_multi_model_verify.py`
+`evals/multi-model-verify/test_skill_lint_budget.py`,
+`evals/multi-model-verify/fixtures/skill_lint_pre_change.py`
+
+**CORRECTED at diff round 3.** The freeze named
+`test_multi_model_verify.py` as this task's test surface. The budget proof
+was written in its own module instead, which is the better home and was
+never adjudicated as a change; the fixture is the frozen pre-change linter
+added at diff round 2. Both are recorded here rather than left as a
+surface that does not match the tree, because the surface is what a later
+debate adjudicates drift against.
 
 ### Step 1 — Measure
 

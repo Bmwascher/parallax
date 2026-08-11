@@ -251,6 +251,48 @@ class TestVendoringObligations:
         )
         assert "A body over BODY_TOKEN_CEILING is an ERROR, so it exits 1" in text
 
+    def test_the_third_party_notice_describes_the_delta(self):
+        """The notice is the Apache-2.0 section 4(b) statement of changes.
+
+        Nothing pinned it before, which is how it stayed on "unmodified
+        except the provenance header" for a whole release after the delta
+        landed. The file header and this notice are two separate promises
+        to two separate readers, and only one of them was being kept.
+        """
+        notice = (REPO_ROOT / "evals" / "tools"
+                  / "LICENSE-THIRD-PARTY.md").read_text(encoding="utf-8")
+        assert "BODY TOKEN BUDGET ENFORCEMENT" in notice, (
+            "the notice does not state the change it is required to state")
+        assert "ca8e5b3c56e51e336449a99d79b42b45ea690b86" in notice, (
+            "the notice does not name the upstream commit it was compared"
+            " against")
+        # The phrase appears exactly TWICE and both are correct: once as a
+        # live claim about skill_scanner.py, which really is unmodified,
+        # and once quoted inside skill_lint.py's own retraction of it. A
+        # plain `not in` would fail on the retraction that fixes the
+        # defect, which is a test that punishes the correction it asked
+        # for; the header pin above has the same shape for the same
+        # reason.
+        assert notice.count("unmodified except the provenance header") == 2, (
+            "one live use for skill_scanner and one inside skill_lint's"
+            " retraction; any other count means a tool's status changed"
+            " without this notice being updated"
+        )
+        assert "skill_scanner.py` — unmodified" in notice
+        assert "was false from then until this correction" in notice, (
+            "the retraction has to say when the old claim stopped being"
+            " true, not merely stop making it"
+        )
+
+    def test_the_frozen_fixture_is_covered_by_the_notice(self):
+        """It is Apache-2.0 code sitting outside the directory the notice
+        scopes itself to, so it has to be named or it is uncovered."""
+        notice = (REPO_ROOT / "evals" / "tools"
+                  / "LICENSE-THIRD-PARTY.md").read_text(encoding="utf-8")
+        rel = "evals/multi-model-verify/fixtures/skill_lint_pre_change.py"
+        assert rel in notice, "the frozen fixture is not named in the notice"
+        assert "It must never be updated" in notice
+
     def test_the_policy_is_declared_global_and_non_rebasing(self):
         text = LINT_PATH.read_text(encoding="utf-8")
         assert "GLOBAL LINTER POLICY, not a per-skill setting" in text
