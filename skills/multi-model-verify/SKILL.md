@@ -107,22 +107,9 @@ toggled on, its stop-time review overlaps mode `diff` — expected, not a bug.
    record. The mirror is then the reviewed tree for every lane in that
    debate — dispatch codex with the mirror as cwd, and keep citations
    resolvable in the real repo. Whether the removal needs a commit
-   branches on tracked-ness, and the difference misreads as a failure:
-   a TRACKED entry's deletion shows as ` D` in `git status --porcelain`
-   — a tracked MODIFICATION, which the post-remediation baseline would
-   absorb, so the per-round check is not what forces the issue: an
-   uncommitted ` D` leaves a tracked modification sitting in the
-   baseline, which bars mode diff and breaks HEAD-identifies-content
-   (references/backup-lane.md) — so commit the removal
-   inside the mirror; an IGNORED or untracked entry's deletion shows
-   nothing, no commit is possible, and HEAD legitimately stays where it
-   was — `nothing to commit` alongside an unchanged HEAD is the CORRECT
-   observation there, not an inconsistency to chase (both observed
-   2026-07-26). The mirror carries the real repo's `.git`, hooks
-   included, so a commit inside it runs that project's pre-commit hooks
-   against the scratchpad copy: expect them to fire, and treat a hook
-   failure as a mirror-construction problem, never as a finding about
-   the reviewed work.
+   branches on tracked-ness, and the difference misreads as a failure;
+   references/backup-lane.md states that branch and the hook behaviour
+   that comes with it.
 
    Files above the repo's git root are NOT ingested (same probe), and
    `~/.codex/AGENTS.md` is the user's own
@@ -189,12 +176,20 @@ toggled on, its stop-time review overlaps mode `diff` — expected, not a bug.
    it to a scratchpad file, then run round 1:
 
    ```powershell
+   $priorOutputEncoding = $OutputEncoding
+   try {
+   $OutputEncoding = New-Object System.Text.UTF8Encoding($false)
+   $brief = [System.IO.File]::ReadAllText("<brief-file>", (New-Object System.Text.UTF8Encoding($false, $true)))
    $bytes = [System.IO.File]::ReadAllBytes("<verified-override-file>")
    $seen = ([System.BitConverter]::ToString(([System.Security.Cryptography.SHA256]::Create()).ComputeHash($bytes)) -replace '-', '').ToLower()
    if ($seen -cne "<override-sha256>") { throw "the override file changed after the probe verified it" }
    $override = (New-Object System.Text.UTF8Encoding($false, $true)).GetString($bytes)
-   Get-Content -Raw <brief-file> | codex exec --sandbox read-only --disable plugins --disable apps -c $override -m <canonical-model-id> -c model_reasoning_effort=<canonical-effort> --output-last-message <reply-file> - > <transcript-file> 2>&1
+   $brief | codex exec --sandbox read-only --disable plugins --disable apps -c $override -m <canonical-model-id> -c model_reasoning_effort=<canonical-effort> --output-last-message <reply-file> - > <transcript-file> 2>&1
+   } finally { $OutputEncoding = $priorOutputEncoding }
    ```
+
+   Both encoding lines are load-bearing on Windows PowerShell 5.1
+   (references/model-prompting-notes.md).
 
    <!-- contract:start id=verified-override-dispatch -->
    The `-c` value MUST be the file the probe wrote with `-OverrideOut`, on
@@ -243,11 +238,16 @@ toggled on, its stop-time review overlaps mode `diff` — expected, not a bug.
    precede the resume subcommand (flags after it are a usage error):
 
    ```powershell
+   $priorOutputEncoding = $OutputEncoding
+   try {
+   $OutputEncoding = New-Object System.Text.UTF8Encoding($false)
+   $brief = [System.IO.File]::ReadAllText("<brief-file>", (New-Object System.Text.UTF8Encoding($false, $true)))
    $bytes = [System.IO.File]::ReadAllBytes("<verified-override-file>")
    $seen = ([System.BitConverter]::ToString(([System.Security.Cryptography.SHA256]::Create()).ComputeHash($bytes)) -replace '-', '').ToLower()
    if ($seen -cne "<override-sha256>") { throw "the override file changed after the probe verified it" }
    $override = (New-Object System.Text.UTF8Encoding($false, $true)).GetString($bytes)
-   Get-Content -Raw <brief-file> | codex exec --sandbox read-only --disable plugins --disable apps -c $override -m <canonical-model-id> -c model_reasoning_effort=<canonical-effort> --output-last-message <reply-file> resume <SESSION_ID> - > <transcript-file> 2>&1
+   $brief | codex exec --sandbox read-only --disable plugins --disable apps -c $override -m <canonical-model-id> -c model_reasoning_effort=<canonical-effort> --output-last-message <reply-file> resume <SESSION_ID> - > <transcript-file> 2>&1
+   } finally { $OutputEncoding = $priorOutputEncoding }
    ```
 
    The preamble repeats in full every round. Rounds are separate shell
@@ -256,14 +256,10 @@ toggled on, its stop-time review overlaps mode `diff` — expected, not a bug.
    rounds.
 
    Each resume's header must echo the resumed `session id:` and the same
-   effective route — the round-1 check repeated, `sandbox:` included (a
-   resume that silently started a fresh session has dropped the reviewer's
-   debate state). Sandbox mode has NO continuity across resumes: a resume
-   missing `--sandbox read-only` resolves to the config default — on a
-   `workspace-write` default the read-only auditor becomes a writing agent
-   mid-review (probed 2026-07-24, the write landed; see
-   model-prompting-notes.md). The header's `sandbox:` line is where that
-   surfaces.
+   effective route — the round-1 check repeated, `sandbox:` included.
+   Sandbox mode has NO continuity across resumes, so the flag is re-pinned
+   on every one; references/model-prompting-notes.md carries the probe that
+   measured it and what a dropped flag does.
 
 4. Iterate per debate-protocol.md until convergence or the round cap, then
    escalate any unresolved points to the user with both positions stated.
@@ -332,11 +328,8 @@ powershell -NoProfile -File <plugin-root>/tools/write-attestation.ps1 -RepoRoot 
 ```
 
 When an application checkpoint governed fix application, pass it via
-`-CheckpointFile`: the record then also binds the checkpoint's hash and
-the emitter-computed changed-path set, `<head>` is the POST-fix,
-re-reviewed head — never the head the FIX verdict was issued on — and
-the artifact must already carry its appended verification results (the
-recorded hash covers the final artifact).
+`-CheckpointFile`; references/application-checkpoint.md states what that
+binds and which head it is bound to.
 
 It writes `.git/parallax/attestations/<head-sha>.json` inside the reviewed
 repo — untracked by design, so recording the verdict cannot move HEAD out

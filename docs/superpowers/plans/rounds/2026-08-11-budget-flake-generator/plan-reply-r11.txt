@@ -1,0 +1,14 @@
+1. The backlog records are correctly scoped: item 9 says two parsers only and names uncovered parsers (`docs/superpowers/plans/2026-07-27-0150-backlog.md:603-650`); item 18 remains pending until Task 8 (`:1129-1185`); item 19 records the corrected history and 5250/5500 policy (`:1187-1227`). **PASS**
+
+2. New records defect: the frozen plan still carries the superseded threshold policy:
+
+- warning only through 5250 and error above 5250 (`docs/superpowers/plans/2026-08-11-budget-flake-generator.md:294-304`);
+- boundary pins at 5250/5251 (`:310`);
+- fail-first requirement above 5250 (`:325-327`);
+- obsolete estimate that Task 2 would add about 100 tokens (`:286-288`).
+
+That contradicts the implemented 5250 soft/5500 hard thresholds and the backlog close-out. Amend Task 3 with an explicit round-7 correction: measured 5227 baseline, warning through 5500, error at 5501, pins 5250/5251/5500/5501, and the old-implementation fail-first above 5500. **FIX**
+
+This is not an adjudicated dry round. Unit 12 is spent and one authorized unit remains (`skills/multi-model-verify/references/debate-protocol.md:79-90`).
+
+UNVERIFIED: the reported runtime test and lint executions.

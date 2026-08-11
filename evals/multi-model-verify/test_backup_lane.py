@@ -1010,18 +1010,29 @@ def test_skill_preflight_names_the_remediation():
     # probe - so an unqualified "empty output" no longer says which one
     # carries the evidence.
     assert "empty enumeration output is the evidence" in skill
+    # 0.23.0: the tracked-versus-untracked branch and the hook paragraph
+    # MOVED to backup-lane.md, which already owns mirror construction, so
+    # SKILL.md stops carrying detail only read once the sweep has already
+    # found something. The four literals below are pinned against their
+    # new home rather than deleted: each one encodes a review finding and
+    # dropping any of them would recreate the 0.14.2 inadequacy noted
+    # below. SKILL.md keeps the STOP, the user's choice, the short-path
+    # rule, the tool imperative and the reviewed-tree consequence.
+    assert "references/backup-lane.md states that branch and the" in skill
+    body = _norm(REPO / "skills" / "multi-model-verify" / "references"
+                 / "backup-lane.md")
     assert ("a TRACKED entry's deletion shows as ` D` in "
-            "`git status --porcelain`") in skill
+            "`git status --porcelain`") in body
     assert ("`nothing to commit` alongside an unchanged HEAD is the "
             "CORRECT observation there, not an inconsistency to chase"
-            ) in skill
+            ) in body
     # 0.14.2 Sol round 1, F10b: the assertions above pin the OBSERVATIONS
     # but never the imperative, so deleting "commit the removal inside
     # the mirror" left the pin green - and that commit is the whole
     # point of the tracked branch. Pin the imperative and the
     # consequence that justifies it.
-    assert "so commit the removal inside the mirror" in skill
-    assert ("bars mode diff and breaks HEAD-identifies-content" in skill)
+    assert "so commit the removal inside the mirror" in body
+    assert ("bars mode diff and breaks HEAD-identifies-content" in body)
 
 
 def test_output_encoding_class_is_wired():

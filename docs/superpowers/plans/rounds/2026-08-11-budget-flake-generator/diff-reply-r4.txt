@@ -1,0 +1,20 @@
+This is not a dry round. The requested repairs landed, but two new record claims are wider than their evidence.
+
+1. The notice overstates what is hash-pinned.
+
+It says the fixture’s “content is hash-pinned” ([LICENSE-THIRD-PARTY.md:26](C:/Users/Brandon/Documents/parallax/evals/tools/LICENSE-THIRD-PARTY.md:26)). The hash test explicitly excludes the banner and hashes only the copied text below it ([test_skill_lint_budget.py:134](C:/Users/Brandon/Documents/parallax/evals/multi-model-verify/test_skill_lint_budget.py:134)). The notice-specific test merely requires the path and never-update sentence ([test_skill_lint_budget.py:287](C:/Users/Brandon/Documents/parallax/evals/multi-model-verify/test_skill_lint_budget.py:287)), so the banner can change while every pin remains green.
+
+Narrow the notice to “the copied text below the banner is hash-pinned; the banner is prose and excluded,” matching the actual test.
+
+2. The new debate total is arithmetically false.
+
+The README’s own ledger records four Round-1 findings, five Round-2 findings, and three Round-3 findings ([README:118](C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/rounds/2026-08-11-budget-flake-generator/README.md:118)). That totals twelve, but the new through-line says “Three rounds, eleven findings” ([README:241](C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/rounds/2026-08-11-budget-flake-generator/README.md:241)).
+
+I do not reopen the underlying fixes: the notice now describes the live delta and fixture ([LICENSE-THIRD-PARTY.md:9](C:/Users/Brandon/Documents/parallax/evals/tools/LICENSE-THIRD-PARTY.md:9), [LICENSE-THIRD-PARTY.md:24](C:/Users/Brandon/Documents/parallax/evals/tools/LICENSE-THIRD-PARTY.md:24)); the Task 3 surface is reconciled ([plan:276](C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-08-11-budget-flake-generator.md:276)); and the README synopsis is corrected inline ([README:137](C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/rounds/2026-08-11-budget-flake-generator/README.md:137)).
+
+Both are record-only fixes, but both block an adjudicated dry round under the claim-width invariant. Item 31 remains follow-up; Task 8 remains the release measurement.
+
+This is the fourth consecutive non-dry exchange, so the independently declared round cap is now reached even though two fix-verify units remain. Further re-review requires the user to reset or extend that cap.
+
+**ESCALATE**
+

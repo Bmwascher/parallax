@@ -404,7 +404,30 @@ def compact_stream(stdout):
                 # authorization), which 600 chars truncates. These tools
                 # exist only in the mutation lane, so every other case's
                 # transcript is unchanged.
-                cap = 2400 if block.get("name") in ("Edit", "Write") else 600
+                #
+                # 0.23.0 (backlog item 18): the two SHELL tools join them,
+                # and they are the complete set the executor exposes - see
+                # AVAILABLE_TOOLS. Expectation 1 of plan-mode-debate-runs
+                # grades on `codex exec`, `--sandbox read-only` and the
+                # model flag, all of which sit behind the mandated
+                # override-verification preamble. Measured on a realistic
+                # dispatch with absolute scratchpad paths: 790, 801 and 867
+                # of a 1327-character JSON input, so 600 cut all three and
+                # the expectation failed for a reason that is not about the
+                # plugin. It failed INTERMITTENTLY because how far in they
+                # land depends on how long that run's paths are; with
+                # SKILL.md's short placeholders the same dispatch is 657
+                # characters and passes. 1327 is ONE measured dispatch, not
+                # an established maximum.
+                #
+                # Rejected: rendering bounded windows around those three
+                # tokens. It would let the harness decide in advance which
+                # part of an input deserves to be visible, which is a thumb
+                # on the scale even when the source event is genuine.
+                cap = (2400
+                       if block.get("name") in ("Edit", "Write",
+                                                "Bash", "PowerShell")
+                       else 600)
                 lines.append(
                     f"[tool_use {block.get('id')}] {block.get('name')} {args[:cap]}")
             elif block.get("type") == "tool_result":
@@ -517,9 +540,16 @@ def elide_transcript(transcript, limit=40000, head_budget=15000,
     at the boundaries, and re-slicing the retained evidence could bisect a
     record or silently drop a later required pair (Sol review 2026-07-16).
     compact_stream keeps each tool record on one physical line, so keeping
-    lines whole keeps records (and therefore call/result pairs) whole; if
-    the evidence budget runs out, an explicit marker says evidence was
-    dropped rather than letting absence read as 'never happened'.
+    lines whole keeps INDIVIDUAL RECORDS whole; if the evidence budget runs
+    out, an explicit marker says evidence was dropped rather than letting
+    absence read as 'never happened'.
+
+    That is deliberately narrower than what this said until 0.23.0, which
+    claimed whole lines keep call/result PAIRS whole. They do not: this
+    loop can exhaust its budget having retained one half of a pair. The
+    property it actually has is indivisible records plus an ANNOUNCED
+    loss, and the 2400-character shell cap makes the budget run out sooner,
+    so the difference is now reachable rather than theoretical.
     """
     if len(transcript) <= limit:
         return transcript

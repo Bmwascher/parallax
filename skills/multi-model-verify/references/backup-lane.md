@@ -463,6 +463,23 @@ proceed; do not infer either key's value.
   remediation, the re-enumeration, the baseline, the manifest and the
   client probe as one step; the rules below remain its specification, and
   a driver building a mirror by hand still follows them.
+- **Whether the removal needs a commit branches on tracked-ness, and the
+  difference misreads as a failure.**
+  a TRACKED entry's deletion shows as ` D` in `git status --porcelain`
+  — a tracked MODIFICATION, which the post-remediation baseline would
+  absorb, so the per-round check is not what forces the issue: an
+  uncommitted ` D` leaves a tracked modification sitting in the
+  baseline, which bars mode diff and breaks HEAD-identifies-content
+  — so commit the removal
+  inside the mirror; an IGNORED or untracked entry's deletion shows
+  nothing, no commit is possible, and HEAD legitimately stays where it
+  was — `nothing to commit` alongside an unchanged HEAD is the CORRECT
+  observation there, not an inconsistency to chase (both observed
+  2026-07-26). The mirror carries the real repo's `.git`, hooks
+  included, so a commit inside it runs that project's pre-commit hooks
+  against the scratchpad copy: expect them to fire, and treat a hook
+  failure as a mirror-construction problem, never as a finding about
+  the reviewed work.
 - **Mirror identity, and the gate that keeps it fresh.**
   <!-- contract:start id=mirror-identity-gate -->
   The record carries TWO identities and one fingerprint: `source_head`,

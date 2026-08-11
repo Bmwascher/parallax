@@ -1,0 +1,13 @@
+1. Task 3 now records the complete measurement correction, 5250/5500 bands, four boundaries and corrected fail-first requirement consistently (`docs/superpowers/plans/2026-08-11-budget-flake-generator.md:280-342`). **PASS**
+
+2. The records preserve the correct terminal states: item 18 remains pending until Task 8, while items 9 and 19 close at their established narrow scopes (`docs/superpowers/plans/2026-07-27-0150-backlog.md:603-650,1129-1227`). **PASS**
+
+No new substantive finding remains and no contested point is outstanding. This is the **ADJUDICATED DRY ROUND closing the reopened point and the four-item plan** under the termination rule (`skills/multi-model-verify/references/debate-protocol.md:88-92`).
+
+Task 8 remains implementation work; this verdict terminates the plan debate, not the pending live measurement.
+
+UNVERIFIED:
+
+- The reported runtime test and lint executions.
+- The transient intermediate count of 5486, whose snapshot is not retained.
+- Task 8’s outcome, correctly recorded as pending.

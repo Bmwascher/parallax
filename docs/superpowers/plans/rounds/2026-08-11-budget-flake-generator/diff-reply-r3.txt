@@ -1,0 +1,21 @@
+This is not a dry round. The executable measurement is now sound, but one blocking vendoring defect and two record residues remain.
+
+1. Blocking — the third-party notice was never updated.
+
+The frozen plan explicitly includes `evals/tools/LICENSE-THIRD-PARTY.md` in Task 3’s file surface and makes honouring the vendoring mandatory ([plan:276](C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-08-11-budget-flake-generator.md:276), [plan:331](C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-08-11-budget-flake-generator.md:331)). The live linter records a substantive budget-enforcement delta ([skill_lint.py:7](C:/Users/Brandon/Documents/parallax/evals/tools/skill_lint.py:7)), while the third-party notice still says it is “unmodified except the provenance header” ([LICENSE-THIRD-PARTY.md:9](C:/Users/Brandon/Documents/parallax/evals/tools/LICENSE-THIRD-PARTY.md:9)).
+
+The new fixture also identifies itself as copied Apache-2.0 code and points to that notice beside the live copy ([skill_lint_pre_change.py:19](C:/Users/Brandon/Documents/parallax/evals/multi-model-verify/fixtures/skill_lint_pre_change.py:19)), but the notice covers only three tools “in this directory” and assigns the rest of the repository to the project license ([LICENSE-THIRD-PARTY.md:3](C:/Users/Brandon/Documents/parallax/evals/tools/LICENSE-THIRD-PARTY.md:3), [LICENSE-THIRD-PARTY.md:16](C:/Users/Brandon/Documents/parallax/evals/tools/LICENSE-THIRD-PARTY.md:16)). Update it to describe the live delta and explicitly cover the frozen fixture.
+
+The plan’s file list should also be reconciled: it names `test_multi_model_verify.py` ([plan:280](C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-08-11-budget-flake-generator.md:280)), while the budget proof actually lives in `test_skill_lint_budget.py` and its new fixture ([test_skill_lint_budget.py:24](C:/Users/Brandon/Documents/parallax/evals/multi-model-verify/test_skill_lint_budget.py:24), [test_skill_lint_budget.py:111](C:/Users/Brandon/Documents/parallax/evals/multi-model-verify/test_skill_lint_budget.py:111)).
+
+2. Two accepted record corrections remain incomplete.
+
+- The main oracle record now correctly says “cycle exchange 13, diff round 1,” but the test’s own docstring still says the fields were undeclared until “round 13 of the diff debate” ([test_skill_report_shapes.py:581](C:/Users/Brandon/Documents/parallax/evals/multi-model-verify/test_skill_report_shapes.py:581)). That is the exact formulation round 2 rejected.
+- The non-verbatim README synopsis still states that three mutants now die on cells the first build could not generate ([README:137](C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/rounds/2026-08-11-budget-flake-generator/README.md:137)), then later says that statement was refuted because equivalent inputs already existed ([README:200](C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/rounds/2026-08-11-budget-flake-generator/README.md:200)). The verbatim-retention exception is expressly limited to `diff-brief-r2.md` ([README:205](C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/rounds/2026-08-11-budget-flake-generator/README.md:205)); the synopsis should be corrected or marked superseded inline.
+
+The central fail-first repair is accepted: the test hashes the historical body ([test_skill_lint_budget.py:134](C:/Users/Brandon/Documents/parallax/evals/multi-model-verify/test_skill_lint_budget.py:134)), runs it and requires exit 0 with observed token output ([test_skill_lint_budget.py:154](C:/Users/Brandon/Documents/parallax/evals/multi-model-verify/test_skill_lint_budget.py:154)), then requires the shipped linter to fail the same-sized body ([test_skill_lint_budget.py:172](C:/Users/Brandon/Documents/parallax/evals/multi-model-verify/test_skill_lint_budget.py:172)).
+
+Blocking: the stale third-party notice and Task 3 surface reconciliation. The two wording residues block an adjudicated dry round but not runtime behavior. Item 31 remains the named follow-up; Task 8 remains the outstanding release measurement.
+
+**FIX**
+

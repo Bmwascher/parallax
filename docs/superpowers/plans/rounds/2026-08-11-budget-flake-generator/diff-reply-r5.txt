@@ -1,0 +1,18 @@
+This is not an adjudicated dry round. Both intended corrections landed, but two claims remain too wide.
+
+1. “Banner edits do not break any pin” is false.
+
+The notice correctly says only the copied text is hashed, but then claims all banner edits break no pin ([LICENSE-THIRD-PARTY.md:34](C:/Users/Brandon/Documents/parallax/evals/tools/LICENSE-THIRD-PARTY.md:34)). The test uses both 75-dash banner separators to split the fixture and requires exactly three parts ([test_skill_lint_budget.py:141](C:/Users/Brandon/Documents/parallax/evals/multi-model-verify/test_skill_lint_budget.py:141)). Editing either separator therefore fails a structural pin, even though edits to the intervening banner prose do not affect the SHA-256 assertion.
+
+Narrow both the notice and test comment to: banner prose is excluded from the hash; separator changes still fail the structural assertion.
+
+2. The range touches five files, not three.
+
+The three corrected targets are the notice, its test, and the README. But the range also adds the retained Round-4 brief and reply—both live files ([diff-brief-r4.md:1](C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/rounds/2026-08-11-budget-flake-generator/diff-brief-r4.md:1), [diff-reply-r4.txt:1](C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/rounds/2026-08-11-budget-flake-generator/diff-reply-r4.txt:1)). The opening claim is accurate only as “three substantive fix targets, plus two retained debate artifacts.”
+
+The README enumeration itself is now coherent ([README:244](C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/rounds/2026-08-11-budget-flake-generator/README.md:244)), and the notice pin now asserts the intended hash boundary ([test_skill_lint_budget.py:287](C:/Users/Brandon/Documents/parallax/evals/multi-model-verify/test_skill_lint_budget.py:287)). These are record-only findings, not runtime defects.
+
+This was the last reset-cap round, so the review pauses for user direction rather than consuming another exchange.
+
+**ESCALATE**
+

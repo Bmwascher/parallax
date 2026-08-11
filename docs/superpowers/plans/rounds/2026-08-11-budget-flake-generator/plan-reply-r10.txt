@@ -1,0 +1,13 @@
+1. The implementation builds **768 arrangement cases**, not 780: `4 × 4 × 2 × 4 × 3 × 2` (`evals/multi-model-verify/test_skill_report_shapes.py:126-170`). Twelve separate entry cases produce **780 total generated cases** (`:174-209`). The 791-test total is consistent after adding the eleven non-case tests. Record “768 arrangement + 12 entry = 780 generated,” not “780 arrangement plus 12.” **FIX**
+
+2. The frozen ambiguity invariant contradicts itself. The plan says only one ordered pair is non-ambiguous and explicitly lists `none` as ambiguous (`docs/superpowers/plans/2026-08-11-budget-flake-generator.md:509-516`). The test repeats that claim and immediately says `none` is non-ambiguous (`evals/multi-model-verify/test_skill_report_shapes.py:57-64`).
+
+Production and the generated oracle consistently use the latter behavior: absence or one ordered pair is non-ambiguous (`tools/codex-context-probe.ps1:238-242`; `evals/multi-model-verify/test_skill_report_shapes.py:151-170`). Correct the frozen statement and test comment to:
+
+> Two shapes are non-ambiguous: no delimiters, representing an absent container, or exactly one correctly ordered pair. Every other arrangement is ambiguous.
+
+This is a specification correction, not a production-code change. **FIX**
+
+No other substantive finding emerged. This is not an adjudicated dry round. Unit 11 is spent and two authorized units remain (`skills/multi-model-verify/references/debate-protocol.md:79-90`).
+
+UNVERIFIED: the reported two-host runtime results and printed mutant kills; the committed test structure was verified statically.

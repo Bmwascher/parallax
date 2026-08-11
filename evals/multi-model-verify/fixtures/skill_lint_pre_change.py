@@ -1,34 +1,31 @@
+# ---------------------------------------------------------------------------
+# FROZEN FIXTURE. DO NOT EDIT, DO NOT UPDATE, DO NOT LINT-FIX.
+#
+# This is `evals/tools/skill_lint.py` EXACTLY as it stood at commit
+# `dd0db13`, the last commit before 0.23.0 added body token budget
+# ENFORCEMENT. It exists so the fail-first proof that item 19's frozen plan
+# requires can EXECUTE the pre-change implementation instead of restating
+# it. An earlier attempt restated the old rule inline, which cannot fail
+# for the reason it claims; the cross-vendor lane refused it twice, once
+# as a dishonest docstring and once as an unmet frozen task.
+#
+# The COPIED TEXT, everything below this banner, is 16065 bytes with
+# sha256 23172735f1fe7d5e0fbfe8ba2d44b770a3f6264d0ec81e0bb5b39d1de2954745.
+# That is what `git show dd0db13:evals/tools/skill_lint.py` produces, and
+# test_skill_lint_budget.py re-hashes the text below this banner against
+# it. Editing this file breaks that pin on purpose: a "pre-change"
+# implementation that drifts is not one.
+#
+# It is a historical snapshot of vendored Apache-2.0 code from
+# Shubhamsaboo/awesome-llm-apps; see LICENSE-THIRD-PARTY.md next to the
+# live copy.
+# ---------------------------------------------------------------------------
 #!/usr/bin/env python3
 """
 [vendored 2026-07-12] From Shubhamsaboo/awesome-llm-apps (Apache-2.0),
-agent_skills/evals/tools/skill_lint.py. See LICENSE-THIRD-PARTY.md in this
-directory. Re-diff before editing locally.
-
-LOCAL DELTA, and there is exactly one. 0.23.0 (2026-08-11) added BODY
-TOKEN BUDGET ENFORCEMENT: the vendored file warned above ~5000 tokens and
-never failed, so the number went unowned for several releases (backlog
-item 19). This copy adds BODY_TOKEN_CEILING, makes an over-ceiling body an
-ERROR, and rebases both numbers from a measured body. Everything else is
-upstream.
-
-RE-DIFF PERFORMED 2026-08-11, TWICE, AGAINST TWO DIFFERENT BASELINES.
-
-1. Against this file's imported state at `acbf045`: byte-identical from
-   import through `dd0db13`. So the claim this header used to make,
-   "unmodified except this provenance header", was true until that
-   change and is false afterwards.
-2. Against LIVE UPSTREAM, fetched the same day from
-   raw.githubusercontent.com. Upstream's newest commit touching
-   `agent_skills/evals/tools/skill_lint.py` is
-   `ca8e5b3c56e51e336449a99d79b42b45ea690b86`, dated 2026-07-09 - three
-   days BEFORE this repo imported the file. Diffing the imported copy
-   against current upstream gives exactly ONE hunk: the four-line
-   provenance header this repo substituted at import. The body is
-   byte-identical.
-
-So upstream has not moved since import, and the only local divergence is
-the budget-enforcement delta named above plus this header. Fetch again
-before the next local edit: this statement is dated, not standing.
+agent_skills/evals/tools/skill_lint.py — unmodified except this provenance
+header. See LICENSE-THIRD-PARTY.md in this directory. Re-diff against
+upstream before editing locally.
 skill_lint.py — validate an agent skill directory against the agentskills.io spec.
 
 Usage:
@@ -41,8 +38,7 @@ Checks (spec: https://agentskills.io/specification, verified July 2026):
   * description: present, 1-1024 chars, plus triggering heuristics
   * compatibility: <= 500 chars if present
   * body: warn at 400 lines, 500+ lines is a warning (error with --strict);
-    token budget - clean at or below BODY_TOKEN_BUDGET, WARNING above it,
-    ERROR above BODY_TOKEN_CEILING (local delta, see the header)
+    ~5k-token budget warning
   * relative file references in the body must exist on disk
   * forward-slash paths only (backslash paths are an error)
   * TODO/FIXME-style markers are warnings
@@ -50,9 +46,6 @@ Checks (spec: https://agentskills.io/specification, verified July 2026):
     awesome-llm-apps quality bar expects bundled tools and references
 
 Exit codes: 0 = no errors (warnings allowed), 1 = errors found, 2 = usage error.
-A body over BODY_TOKEN_CEILING is an ERROR, so it exits 1 - that is the
-point of the local delta, and it is the one way a token count can fail this
-tool rather than merely print at it.
 Python 3 stdlib only — no third-party dependencies (frontmatter parsing is
 hand-rolled for the flat fields the spec defines; pyyaml is NOT required).
 """
@@ -69,37 +62,7 @@ MAX_DESC = 1024
 MAX_COMPAT = 500
 BODY_WARN_LINES = 400
 BODY_MAX_LINES = 500
-
-# GLOBAL LINTER POLICY, not a per-skill setting. Only one tracked SKILL.md
-# exists in this repo today, but this file is a generic tool and these two
-# numbers apply to every skill it is pointed at.
-#
-# Three MUTUALLY EXCLUSIVE outcomes: clean at or below the soft target,
-# WARNING above it up to the hard ceiling, ERROR above the ceiling. Never
-# a warning and an error for the same body.
-#
-# BOTH NUMBERS ARE IN THIS TOOL'S OWN ESTIMATE, which is len(body) // 4
-# and which the output calls "roughly". They are not tokenizer counts and
-# they never were; swapping in a real tokenizer would move every number
-# here without changing what the gate does. Read "5227" below as "5227 by
-# this estimate". The cross-vendor lane narrowed this in the 0.23.0 diff
-# debate, where it had been written as measured rather than estimated.
-#
-# 0.23.0 rebased both from a MEASURED body rather than a guessed one.
-# Upstream shipped a 5000 warning that nothing enforced; it had sat over
-# that number for several releases (backlog item 19). The relocations in
-# that release brought multi-model-verify's body to 5069, and its
-# mandatory UTF-8 brief transport - two encoding lines that CANNOT be
-# deduplicated, because separate rounds run in separate shells - put it at
-# 5227. The soft target is set from that measured baseline; the ceiling
-# preserves the 250-token warning band the debate agreed on.
-#
-# These do NOT rebase automatically. A future release that measures over
-# the ceiling must either relocate text to a reference file or change
-# these numbers deliberately, with the measurement and the reason recorded
-# here. Neither remedy is "delete a sentence a review asked for".
-BODY_TOKEN_BUDGET = 5250
-BODY_TOKEN_CEILING = 5500
+BODY_TOKEN_BUDGET = 5000
 
 KNOWN_KEYS = {"name", "description", "license", "compatibility", "metadata", "allowed-tools"}
 
@@ -306,24 +269,10 @@ def check_body(body, skill_dir, strict, errors, warnings):
             "moving reference material out now" % (n, BODY_WARN_LINES, BODY_MAX_LINES)
         )
     est_tokens = len(body) // 4
-    if est_tokens > BODY_TOKEN_CEILING:
-        # ERROR, and deliberately not also a warning: the two bands are
-        # mutually exclusive so the output says one thing. A warning that
-        # never fails is what let this number drift unowned for several
-        # releases.
-        errors.append(
-            "SKILL.md body is roughly %d tokens, over the hard ceiling of %d. "
-            "Two remedies: move text that is read only when a branch is taken "
-            "into a references/ file, or raise the ceiling deliberately in "
-            "skill_lint.py with the measurement and the reason recorded there. "
-            "Deleting text a review asked for is not one of them."
-            % (est_tokens, BODY_TOKEN_CEILING)
-        )
-    elif est_tokens > BODY_TOKEN_BUDGET:
+    if est_tokens > BODY_TOKEN_BUDGET:
         warnings.append(
-            "SKILL.md body is roughly %d tokens (budget ~%d, hard ceiling %d): "
-            "every token competes with the user's task once the skill activates"
-            % (est_tokens, BODY_TOKEN_BUDGET, BODY_TOKEN_CEILING)
+            "SKILL.md body is roughly %d tokens (budget ~%d): every token competes "
+            "with the user's task once the skill activates" % (est_tokens, BODY_TOKEN_BUDGET)
         )
 
     if BACKSLASH_PATH.search(body):

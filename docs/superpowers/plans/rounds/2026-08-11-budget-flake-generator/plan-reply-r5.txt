@@ -1,0 +1,15 @@
+One substantive finding: the budget ledger is one unit low.
+
+Five exchanges were spent before this request. Round 5 itself is another “round sent to a reviewer,” so it consumes the sixth unit immediately, regardless of its outcome. The corrected ledger is:
+
+- Total budget: 8
+- Spent: 6
+- Remaining after this dispatch: 2
+
+That follows the protocol’s definition of one unit per dispatched exchange, including unusable exchanges—not per completed response (`skills/multi-model-verify/references/debate-protocol.md:79-87`). **FIX — record 6 spent and 2 remaining.**
+
+I found no additional substantive defect or outstanding contested point in the four-item plan as amended. However, this budget correction is a new substantive finding, so the protocol forbids calling this the adjudicated dry round (`skills/multi-model-verify/references/debate-protocol.md:88-95`).
+
+**Final status: NOT AN ADJUDICATED DRY ROUND.** With the ledger corrected, a subsequent finding-free round can terminate the plan.
+
+UNVERIFIED: none.

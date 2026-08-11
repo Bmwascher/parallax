@@ -1,0 +1,10 @@
+The re-review is not dry. Two substantive record defects remain:
+
+1. `render_field` still reverses rule 1. The module says ANSI placement cannot affect the verdict because escapes are removed first ([test_route_parser_shapes.py](/C:/Users/Brandon/Documents/parallax/evals/multi-model-verify/test_route_parser_shapes.py:134)), but its docstring says the placements are distinguishable **after** stripping ([test_route_parser_shapes.py](/C:/Users/Brandon/Documents/parallax/evals/multi-model-verify/test_route_parser_shapes.py:161)). They are distinguishable before stripping and collapse afterward.
+
+2. “There is now no total anywhere in this file” is literally contradicted five lines earlier by “the six-round enumeration is TWENTY” ([README.md](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/rounds/2026-08-11-budget-flake-generator/README.md:402), [README.md](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/rounds/2026-08-11-budget-flake-generator/README.md:407)). The defensible claim is that no authoritative aggregate total is maintained; historical and corrective totals remain.
+
+Both are record-only but blocking for dry-round attestation. With zero authorized units remaining, this pauses for the user.
+
+**FIX**
+

@@ -1,0 +1,67 @@
+Use all twelve runs on the fixed tree. A six/six split would weaken the measurement that matters: whether the resulting gate is usable now. The fail-first long-input test supplies the causal evidence for the rendering mechanism; the live sample supplies end-to-end post-fix reliability.
+
+Do not call 3/13 an unchanged-tree control. It combines 2/6 on `74baa71` with 1/7 on the 0.20.0 branch. The record says their failure modes were identical and found no meaningful difference, but they remain two historical arms. `docs/superpowers/plans/rounds/2026-08-03-home-skills-root/execution-deviations.md:840-857`.
+
+**Sample verdict: PASS — spend all twelve on the fixed tree, subject to the corrections below.**
+
+## Required sampling corrections
+
+### 1. Define “fixed tree” operationally
+
+The exact command shown loads the installed plugin, not the checkout. Before run 1:
+
+- finish the branch and version bump;
+- update the installed plugin;
+- record the branch SHA and installed plugin version;
+- use the same installation for all twelve runs.
+
+Otherwise the fixed harness could grade behavior from a stale skill. The runner explicitly warns about this boundary. `evals/tools/run_behavioral_evals.py:18-24`.
+
+Do not use `--head` for the terminal sample: its shadowing against an installed copy is itself unverified, and the runner says the pre-merge run should use the installed cache. `evals/tools/run_behavioral_evals.py:769-775`.
+
+### 2. Do not discard every executor nonzero
+
+The blanket discard rule is too broad. The runner deliberately classifies an executor nonzero as a case failure because a partial transcript from a crashed execution must not be graded into success. `evals/tools/run_behavioral_evals.py:470-486`.
+
+Use:
+
+- **Executor timeout or nonzero:** counts as a failed run.
+- **Grader authentication, grader process, or grader route failure:** unmade expectation measurement; record and replace it. Those paths return no verdicts. `evals/tools/run_behavioral_evals.py:688-696`, `evals/tools/run_behavioral_evals.py:708-736`.
+- **Malformed/missing grader verdict array:** also unmade expectation measurement; record and replace it. `evals/tools/run_behavioral_evals.py:487-504`.
+
+Cap replacement attempts in advance; after that cap, stop as blocked rather than silently spending additional live calls.
+
+### 3. Narrow what the aggregate proves
+
+Fixed-only sampling proves current post-fix performance, not that every improvement was caused by the rendering change. Rename the bands accordingly:
+
+- 10–12: the post-fix case met its repair gate.
+- 6–9: the post-fix case remains unreliable.
+- 0–5: the post-fix case failed its repair gate.
+
+At 10–12, item 18 closes only if:
+
+- expectation 1 failed zero times; and
+- every remaining failed expectation is grounded in actual agent noncompliance, not missing, truncated, elided, or unbound harness evidence.
+
+A harness-caused failure in any expectation leaves item 18 open. Otherwise two legitimate case failures can demonstrate that the case correctly rejected two noncompliant runs rather than that the case remained flaky.
+
+## Terminal verdict
+
+With those sampling amendments applied, the plan is terminal:
+
+- twelve fixed-tree runs;
+- final installed plugin pinned and recorded;
+- executor failures counted;
+- grader-side unmade measurements replaced under a predeclared cap;
+- aggregate claims limited to observed post-fix reliability;
+- any harness-caused miss keeps item 18 open.
+
+**Final verdict: PASS — TERMINAL for the four-item implementation plan with the sampling amendments above incorporated.**
+
+## UNVERIFIED
+
+- The eventual post-relocation token count and resulting soft threshold.
+- The installed-plugin identity until it is updated and recorded before run 1.
+- The twelve-run outcome.
+- Backup-lane non-ASCII argument behavior, intentionally outside scope.
