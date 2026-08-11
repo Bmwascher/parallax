@@ -1,0 +1,76 @@
+The round is not dry. Four corrections remain internally inconsistent, Task 3 still misses one standing surface, and DQ3 lacks an implementation step. FIX 9 stands.
+
+## Corrections
+
+1. **FIX 4 — calibration versus control**
+
+The new central explanation is correct: pass 1 is calibration, unexpected presence is detection, and absence is mitigation (`docs/superpowers/plans/2026-08-11-tool-surface-agy-drift.md:90-113`; `docs/superpowers/plans/rounds/2026-08-11-tool-surface-agy-drift/probe-record.md:129-144`). But the old overclaim survives in five places:
+
+- Task 1’s heading still says “two-pass with a positive control” (`plan:80`).
+- Finding 1 says app-server “IS” the evidence needed to verify removal (`probe-record.md:29-31`).
+- Finding 2 says the flags “remove 125” tools (`probe-record.md:34-57`; also `plan:28-29`).
+- Finding 3 calls pre-dispatch enumeration “a control” (`probe-record.md:63-68`).
+- Shape A remains “Measured to work,” even though only zero reported tools were measured (`plan:142-144`).
+
+Those statements contradict the measured disabled/crashed ambiguity (`probe-record.md:89-105`). The new sentence reserving “control” for the presence direction is also too broad: presence is a real detection when observed, but the record establishes no control that guarantees an available tool will be observed (`plan:103-113`).
+
+**FIX — remove “positive control” from the heading; reserve “detection,” not “control,” for observed presence; change “remove 125” to “125 fewer tools were reported”; change “IS that source” to “enumerates the observed surface”; and change Shape A to “measured to produce zero reported tools, with removal versus failure unresolved.”**
+
+2. **FIX 5 — existing agy enforcement**
+
+The new Task 5 body correctly says the wrapper already performs operational checks and that the real gap is weekly/doctor coverage (`plan:219-229`). But the exact rejected overclaim remains in the Goal: “Four of its five declared contracts have no check anywhere” (`plan:16-17`). The probe record likewise still says “no contract check ran” before later saying the contracts are enforced (`probe-record.md:180-185,232-264`).
+
+The correction then overcompensates: “the contracts ARE enforced” is wider than the evidence because item 11’s fifth contract is the absence of *any* approval-bypass or persisted allow rule (`docs/superpowers/plans/2026-07-27-0150-backlog.md:787-800`). The wrapper checks the known `write_file` rule class and forbids bypass flags in its own lane (`agents/flash-implementer.md:54-59,97-105`), while the plan itself keeps the broader security property UNMEASURED (`probe-record.md:225-230`).
+
+Finally, the doctor’s binary check is not one of item 11’s five contracts. Doctor parses the declaration and checks `agy models`, but expressly provides only client-side requested/propagated route language (`commands/doctor.md:129-144`). Calling “binary exists” and “agy models contains the literal” two mirrored contracts miscounts the contract set (`probe-record.md:254-256`).
+
+**FIX — correct the Goal and version paragraph to “no drift-side contract check”; replace “the contracts ARE enforced” with “the known operational checks are enforced, while the full security contract remains UNMEASURED”; and describe doctor as covering model declaration/reachability only, not two complete item-11 contracts.**
+
+3. **FIX 7 — `allowNonWorkspaceAccess` residual**
+
+The historical correction is accurate: `false` soft-denied a trusted-workspace write and `true` was restored on agy 1.1.7 (`docs/superpowers/plans/2026-07-25-flash-implementer.md:590-603`; `docs/superpowers/plans/rounds/2026-07-25-flash-implementer/diff-round1-header.txt:4135-4137`).
+
+The residual is nevertheless too narrow. A result measured on 1.1.7 leaves two questions open on 1.1.12:
+
+1. Does `false` still soft-deny the lane’s intended trusted-workspace writes?
+2. What does `true` permit outside the workspace?
+
+The amended text names only the second and calls `true` a current documented lane requirement (`plan:269-281,322-325`; `probe-record.md:222-230`). That turns a version-bounded measurement into a present-tense requirement.
+
+**FIX — state that `true` was required on agy 1.1.7; the follow-up must re-test both current necessity under `false` and outside-workspace reach under `true` on 1.1.12.**
+
+4. **FIX 9 — `.codex` provenance**
+
+This correction stands. Both files now distinguish the known unswept enumeration from unmeasured reachability, retract the untrusted-loading claim, retain UNPROBED status, and separate global `~/.codex/AGENTS.md` from repository-local `.codex` (`plan:283-291`; `probe-record.md:146-171`). That matches the prior standing record (`skills/multi-model-verify/references/model-prompting-notes.md:288-291`). **PASS**
+
+5. **FIX 10 — standing surfaces**
+
+Four is not complete. The standing reviewer-isolation design is a fifth surface. It still says:
+
+- the missing flag-parity surface is “the same missing surface backlog item 7 describes” (`docs/superpowers/specs/2026-07-28-reviewer-isolation-design.md:184-197`);
+- the reviewer tool surface is out of reach;
+- no free tool-list view exists;
+- removal levers are unverified;
+- the gap is item 7 (`reviewer-isolation-design.md:378-395`).
+
+The prompt flag-parity uncertainty remains real, but it is no longer the same gap as item 7. The no-tool-list premise is simply false after this measurement.
+
+The older mirror design’s statement that item 7 was outside that cycle’s scope remains historical and does not need rewriting (`docs/superpowers/specs/2026-07-29-mirror-z-capture-design.md:354-360`).
+
+**FIX — Task 3 must list five surfaces and update `docs/superpowers/specs/2026-07-28-reviewer-isolation-design.md`; preserve model/sandbox prompt parity as a separate unverified limit while retracting the no-free-tool-list and item-7 linkage.**
+
+## Additional finding
+
+6. **DQ3 is recorded but not executable**
+
+The answered design question requires agy version changes to be reported (`plan:315-320`). Task 5 only says to gather the live version and add contract probes; it never instructs the implementation to compare the previous and live agy versions or emit a report (`plan:231-254`).
+
+That is a real omission because the current watcher silently carries/saves agy (`tools/check-drift.ps1:274-280,352-360`) while explicit change reporting exists only for codex and superpowers (`tools/check-drift.ps1:321-325`).
+
+**FIX — add an explicit Task 5 step and Task 7 cases requiring an agy version change to appear in the drift report, including failed/unparseable-version behavior.**
+
+## Round status
+
+Nothing else emerged from the amended-file review and repository-wide stale-text sweep. The round is **not DRY** because the six fixes above remain.
+
+Meters: **2/4 consecutive contested exchanges; 2/6 total fix-verify units.**

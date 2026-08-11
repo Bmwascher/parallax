@@ -26,14 +26,21 @@ its resolved enablement.
 
 Neither starts a turn. Both are reads.
 
-The premise "a design that verifies a tool removal needs a new source of
-evidence" therefore stands, and this IS that source. The premise "there
-is no free tool-list view" does not stand and must be retracted when the
-item is closed.
+The premise "there is no free tool-list view" does not stand and must be
+retracted when the item is closed.
 
-### Finding 2. The shipped isolation flags remove 125 of 128 tools.
+**What this source is, stated exactly** (narrowed at round 2). It
+ENUMERATES THE OBSERVED SURFACE. An earlier draft called it the source of
+evidence a design needs to VERIFY A REMOVAL; finding 6 below shows it
+cannot do that, so the earlier wording claimed the one thing this record
+goes on to disprove.
 
-Measured twice, identical both times.
+### Finding 2. With the shipped isolation flags, 125 fewer of 128 tools
+### are REPORTED.
+
+Measured twice, identical both times. The wording was corrected at round
+2: this record measured what the client REPORTS, and finding 6 is the
+reason that is not interchangeable with what was removed.
 
 ```
 ARM A: (no flags)
@@ -51,10 +58,10 @@ MCP SERVERS: 1
 TOTAL TOOLS: 3
 ```
 
-The reviewer's shipped isolation flags are far more effective than any
-document in this repo claimed, because nothing in this repo had ever
-measured them. That is a claim-width correction in the repo's favour, and
-it is still a correction.
+The reviewer's shipped isolation flags reduce the reported surface far
+more than any document in this repo claimed, because nothing in this repo
+had ever measured them. That is a claim-width correction in the repo's
+favour, and it is still a correction.
 
 `experimentalFeature/list` corroborates the same flags from a second
 angle: under arm A the list reports `plugins: enabled=True`; under arm B
@@ -64,8 +71,12 @@ angle: under arm A the list reports `plugins: enabled=True`; under arm B
 
 Three tools survive: `js`, `js_add_node_module_dir`, `js_reset`. The
 first executes JavaScript. Item 7 inferred this from `mcp:` lines in a
-transcript AFTER spending the review call. It is now measurable BEFORE
-dispatch, which is the difference between a post-mortem and a control.
+transcript AFTER spending the review call. It is now observable BEFORE
+dispatch, which is the difference between a post-mortem and a detection.
+
+Corrected at round 2: an earlier draft called this "a control". It is not.
+It is a DETECTION of something observed. Nothing here establishes that
+every tool present would be observed.
 
 ### Finding 4. `-c mcp_servers={}` is a NO-OP.
 
@@ -181,8 +192,13 @@ watching records only a version string. Each contract was checked live.
 
 Item 11 quotes `"agy": "1.1.8"`. Live `agy --version` is **1.1.12** and
 `tools/drift-snapshot.json` already carries 1.1.12. The version string
-moved four releases and no contract check ran, which is the item's own
-thesis demonstrated rather than argued.
+moved four releases and no DRIFT-SIDE contract check ran, which is the
+item's own thesis demonstrated rather than argued.
+
+The wording matters and was corrected at round 2: the operational checks
+DID run, per dispatch, inside the Flash implementer. What never ran was
+anything on the drift side, and `check-drift` does not even emit a note
+when the agy version changes, which is why four releases passed unremarked.
 
 ### Contract-by-contract, measured
 
@@ -219,15 +235,23 @@ result. The write was soft-denied. The value was restored to `true` and
 the finding recorded as "allowNonWorkspaceAccess=true required for
 print-mode writes as of agy 1.1.7".
 
-So `true` is not an unexamined default. It is a documented requirement of
-the lane, measured once, on agy 1.1.7.
+So `true` is not an unexamined default. It was a documented requirement of
+the lane, measured once, ON AGY 1.1.7.
 
-Claim width, restated. This record establishes: the key exists; its value
-is `true`; no check reads it; and `false` broke the lane's intended writes
-on 1.1.7. It does NOT establish what `true` permits OUTSIDE the workspace,
-on 1.1.12 or on any version. That is the remaining unknown, it is
-narrower than the earlier draft implied, and it is a real one: item 11's
-security contract stays explicitly UNMEASURED rather than clean.
+Claim width, restated, and narrowed again at round 2. This record
+establishes: the key exists; its value is `true`; no check reads it; and
+`false` broke the lane's intended writes on 1.1.7.
+
+TWO things stay open on 1.1.12, and an earlier draft named only the
+second, which quietly turned a version-bounded result into a present-tense
+requirement:
+
+1. Does `false` STILL soft-deny those writes? If it no longer does, `true`
+   is no longer needed and the setting can go.
+2. What does `true` permit OUTSIDE the workspace?
+
+Item 11's security contract stays explicitly UNMEASURED rather than clean,
+and the follow-up must test both.
 
 ### What actually watches agy today
 
@@ -243,25 +267,41 @@ per-tool allow rule at all (item 3, which is item 11's fifth contract).
 `agents/flash-implementer.md:100-105` forbids any approval-bypass flag,
 and lines 81-92 block a missing transcript after the run.
 
-So the contracts ARE enforced, per dispatch and post run, at the point of
-use.
+So the KNOWN OPERATIONAL CHECKS are enforced, per dispatch and post run,
+at the point of use.
+
+**Not "the contracts ARE enforced", which round 2 caught as an
+overcorrection.** Item 11's fifth contract is the absence of ANY
+approval-bypass flag or persisted per-tool allow rule. The wrapper checks
+one known rule CLASS, `write_file(` in any spelling
+(`agents/flash-implementer.md:54-59`), and forbids bypass FLAGS within its
+own lane (`:97-105`). That is not the same as establishing the absence of
+any such mechanism, and this record's own settings finding below leaves
+the broader security property UNMEASURED. Replacing an understatement with
+an overstatement is not a correction.
 
 The real gap is narrower and still real:
 
 - `tools/check-drift.ps1:127-130` runs `agy.exe --version` and stores the
   string. That is the whole of the WEEKLY DRIFT WATCHER's agy coverage.
-  None of the contracts above is watched there.
-- `commands/doctor.md:129-141` mirrors only two of them: the binary
-  exists, and `agy models` contains the literal. It does not read the
-  settings file at all.
+  None of the contracts above is watched there, and no note is emitted
+  when the version itself changes.
+- `commands/doctor.md:129-144` covers MODEL DECLARATION AND REACHABILITY:
+  the binary exists, and `agy models` contains the declared literal, with
+  its own note that the route language it offers is client-side
+  requested/propagated only. Round 2 corrected an earlier draft that
+  called this two mirrored item-11 contracts; it is not, and counting it
+  that way inflates what exists today. It does not read the settings file
+  at all.
 - So a drift in any of these surfaces is discovered when a task is
   DISPATCHED and blocked, not before. That is safe but late: the failure
   lands mid-build, on a frozen plan, with the round's budget already
   committed.
 
-The claim this record now makes is that the contracts are not covered by
-the drift watcher and are incompletely mirrored by the doctor. It does NOT
-claim they go unchecked.
+The claim this record now makes: the known operational checks are enforced
+at dispatch, the full security contract remains UNMEASURED, nothing is
+covered by the drift watcher, and the doctor covers model declaration and
+reachability only.
 
 ---
 

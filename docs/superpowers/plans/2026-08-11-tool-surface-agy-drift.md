@@ -14,7 +14,9 @@ Close two open backlog items:
    can satisfy every rule the repo has while the auditor holds a code
    execution tool.
 2. **Backlog item 11** — the agy lane has version tracking but no drift
-   protection. Four of its five declared contracts have no check anywhere.
+   protection. Four of its five declared contracts have no DRIFT-SIDE
+   check. They are not unchecked: the Flash implementer enforces the known
+   operational ones per dispatch and after the run. See Task 5.
 
 Both items say "shape of a fix, not decided" and both forbid a design
 argued from parsing alone. The probe record was taken first for that
@@ -25,8 +27,10 @@ reason.
 - Item 7's premise "there is no free tool-list view to measure against" is
   **false**. `codex app-server --stdio` answers `mcpServerStatus/list`,
   which names every resolved server and every tool. It starts no turn.
-- The shipped isolation flags remove **125 of 128** tools. Nothing in this
-  repo had measured that.
+- With the shipped isolation flags, **125 fewer of 128** tools are
+  reported. Nothing in this repo had measured that. The wording is
+  deliberate: what was measured is what the client REPORTS, and finding 6
+  is why that is not the same as what was removed.
 - `-c mcp_servers={}`, named as a candidate lever in item 7, is a **no-op**.
 - `node_repl` and its `js` code-execution tool **survive** the shipped
   flags.
@@ -77,7 +81,7 @@ Copy into every task's context.
 
 ---
 
-## Task 1 — the tool-surface probe, two-pass with a positive control
+## Task 1 — the tool-surface probe, two-pass with an instrument calibration
 
 Build `tools/codex-tool-surface-probe.ps1`.
 
@@ -101,16 +105,21 @@ after the reviewer refuted an earlier draft that called it a positive
 control):
 
 - A tool PRESENT in pass 2 that the allowlist does not name is a real
-  detection. Detecting presence never depends on telling removal from
-  silence.
+  DETECTION. Observing something present never depends on telling removal
+  from silence.
 - A tool ABSENT from pass 2 is a MITIGATION. It is observationally
   identical to that server having failed to launch, per probe-record
   finding 6, and pass 1 says nothing about the MCP subsystem's health
   under pass-2 conditions.
 
 Neither the script, the skill, nor any report may describe this as
-verified reviewer isolation on the tool axis. The word "control" is
-reserved for the presence direction.
+verified reviewer isolation on the tool axis.
+
+**And "control" is not the right word for the presence direction either**
+(round 2). A detection is what happens when a tool IS observed. Nothing
+measured establishes that every tool actually present WILL be observed, so
+there is no guarantee running in the other direction. The word this design
+is entitled to is DETECTION, and only about what it saw.
 
 **The verdict is an allowlist comparison, never a zero-count assertion.**
 Finding 6 of the probe record is the reason: a crashed server and a
@@ -140,8 +149,9 @@ inside `contract:start`/`contract:end` markers and is pinned.
 The open question is `node_repl`. Two shapes, and the debate settles it:
 
 - **Shape A.** Add `-c mcp_servers.node_repl.enabled=false` to the review
-  dispatch. Measured to work (probe record finding 5). The allowlist is
-  then EMPTY and every tool is a block.
+  dispatch. Measured to produce ZERO REPORTED TOOLS, with removal versus
+  launch failure unresolved (probe record findings 5 and 6). The allowlist
+  is then EMPTY and every tool is a block.
 - **Shape B.** Keep the dispatch as it is and declare `js`,
   `js_add_node_module_dir` and `js_reset` as accepted residuals with a
   written rationale.
@@ -166,10 +176,14 @@ behaviour.
 
 ## Task 3 — retract the false premise everywhere it is written
 
-Four standing surfaces say the tool surface is unmeasured, and all four
-become false when this ships. An earlier draft named only two; the
-reviewer found the other two at plan round 1. Task 3 updates ALL of them,
-plus the test that pins one of them.
+FIVE standing surfaces say the tool surface is unmeasured, and all five
+become false when this ships. The first draft named two, plan round 1
+found two more, and plan round 2 found the fifth. Task 3 updates ALL of
+them, plus the test that pins one of them.
+
+The count moved twice, which is itself the reason this task exists: the
+premise was written into more places than anyone remembered, and each
+sweep found what the last one missed.
 
 1. `tools/codex-context-probe.ps1:1-23` — the header telling the reader
    the script "does not read the reviewer's tool surface at all - see
@@ -183,6 +197,25 @@ plus the test that pins one of them.
 4. Backlog item 7 itself, including its closing note that `-c
    mcp_servers={}` parses and does nothing, so no future cycle proposes
    it again.
+5. `docs/superpowers/specs/2026-07-28-reviewer-isolation-design.md:378-395`
+   — the accepted-limits section, which states that the tool surface is
+   "out of reach of this mechanism", that "there is no free tool-list view
+   to measure", and that the removal levers are unverified.
+
+**Surface 5 needs a SPLIT, not a rewrite, and this is the subtle part.**
+That same document, at lines 184-197, records a DIFFERENT and still-real
+limit: `codex debug prompt-input` rejects `--sandbox` and `-m`, so full
+flag parity with the dispatch cannot be REQUESTED, and whether model or
+sandbox selection changes rendered prompt content is UNVERIFIED. The
+document currently calls that "the same missing surface backlog item 7
+describes". After this cycle it is NOT the same surface: the tool-list
+half is measured, the prompt-parity half is not. Task 3 retracts the
+no-free-tool-list premise and the item-7 linkage, and PRESERVES the
+prompt-parity limit as its own unverified item.
+
+`docs/superpowers/specs/2026-07-29-mirror-z-capture-design.md:354-360`
+says item 7 was outside that cycle's scope. That is a historical statement
+about a past cycle, it stays true, and Task 3 does not touch it.
 
 **Surface 2 is pinned, and the pin is part of this task, not follow-up.**
 `evals/multi-model-verify/test_multi_model_verify.py:762-782`
@@ -222,11 +255,18 @@ three of item 11's contracts as a per-dispatch preflight, lines 100-105
 forbid any approval-bypass flag, and lines 81-92 block a missing
 transcript after the run. Those stay exactly as they are.
 
-The gap is that the WEEKLY DRIFT WATCHER covers none of them and the
-doctor mirrors only two, so a drift is discovered when a task is
-dispatched and blocked, mid-build, on a frozen plan, with the budget
-already committed. This task moves the discovery earlier. It does not
-replace the enforcement.
+The gap is that the WEEKLY DRIFT WATCHER covers none of them, so a drift
+is discovered when a task is dispatched and blocked, mid-build, on a
+frozen plan, with the budget already committed. This task moves the
+discovery earlier. It does not replace the enforcement.
+
+The doctor's coverage is stated precisely, because an earlier draft
+miscounted it (round 2). `commands/doctor.md:129-144` checks that the
+binary exists and that `agy models` contains the declared literal. That is
+MODEL DECLARATION AND REACHABILITY, and the doctor's own note says the
+route language it offers is client-side requested/propagated only. It is
+not two of item 11's five contracts, and calling it that inflates what
+exists today.
 
 `tools/check-drift.ps1` currently runs `agy --version` and stores the
 string (lines 127-130). Add, beside it, the contract set item 11
@@ -249,6 +289,20 @@ today, inside the Flash implementer's own evidence step, where a missing
 transcript is already blocked. The plan states this narrowing explicitly
 rather than letting a weaker check inherit the item's wording.
 
+**The agy VERSION CHANGE must be reported, and today it is not.** Round 2
+found this and it is a real omission, not a wording point. `check-drift`
+emits an explicit change note for codex (`tools/check-drift.ps1:321-323`)
+and for superpowers (`:324-326`). agy is only carried forward and saved
+(`:274`, `:280`, `:355`), so 1.1.8 becoming 1.1.12 produced no note at
+all, which is exactly how item 11's own version moved four releases
+unremarked. DQ3's answer was "report version changes"; without this step
+the plan records that answer without making it happen.
+
+Add: an agy version differing from the snapshot emits a note in the same
+form as the codex and superpowers ones. A version that cannot be read or
+parsed is its own note, not a silent carry-forward, because a carried
+value reads exactly like an unchanged one.
+
 **Every one of these lands on a drift report, never on silence.** An agy
 that is absent is a lane that is unavailable, which the drift report must
 say. An `agy models` call that fails is not a passing identity check.
@@ -264,6 +318,19 @@ so a drift is visible before a task is dispatched rather than after.
 Through the existing drift state-machine harness against stub CLIs, so no
 live agy call is needed. Every failure direction, watched to fail first.
 
+Cases must include, at minimum:
+
+- each contract failing, and the drift report naming which one;
+- the agy version CHANGING, and a note appearing in the report;
+- the agy version being UNREADABLE or unparseable, and that being its own
+  note rather than a silent carry-forward of the snapshot value;
+- agy absent entirely, reported as the lane being unavailable.
+
+The carry-forward case is the one most likely to pass by accident: the
+existing code path already carries the old value, so a test that only
+asserts "a version is present" passes whether or not anything was
+measured.
+
 ## Task 8 — record what was measured but NOT decided
 
 **`allowNonWorkspaceAccess`.** Corrected at plan round 1: it HAS been
@@ -271,14 +338,22 @@ measured once. `docs/superpowers/plans/2026-07-25-flash-implementer.md:590-603`
 records the 0.12.0 build setting it to `false`, watching a trusted-workspace
 print-mode write get soft-denied, restoring `true`, and documenting
 "allowNonWorkspaceAccess=true required for print-mode writes as of agy
-1.1.7". So `true` is a documented lane requirement, not an unexamined
-default.
+1.1.7". So `true` was a measured lane requirement ON AGY 1.1.7.
 
-The new backlog item is therefore NARROWER than an earlier draft implied:
-what does `true` permit OUTSIDE the workspace, on 1.1.12? Recording the
-value as watched drift does not answer that and must not be presented as
-closing it. Item 11's security contract is marked explicitly UNMEASURED,
-and item 11 stays partially open on that point when the rest of it closes.
+**The residual is TWO questions, not one** (round 2 corrected an earlier
+draft that named only the second and, in naming only it, quietly promoted
+a version-bounded measurement into a present-tense requirement):
+
+1. Does `false` STILL soft-deny the lane's intended trusted-workspace
+   writes on 1.1.12? The 1.1.7 result does not answer this. If it no
+   longer denies, `true` is no longer required and the setting can simply
+   go.
+2. What does `true` permit OUTSIDE the workspace, on 1.1.12?
+
+The follow-up item must re-test both. Recording the value as watched drift
+answers neither and must not be presented as closing them. Item 11's
+security contract is marked explicitly UNMEASURED, and item 11 stays
+partially open on that point when the rest of it closes.
 
 **The `<repo>/.codex` enumeration gap.** Also corrected: it was already
 known, at
@@ -320,6 +395,7 @@ checks on every drift run, block failed or unreadable checks, and retain
 1.1.12 as the OBSERVED BASELINE rather than a compatibility boundary.
 
 **DQ4 — watch `allowNonWorkspaceAccess` and open the focused measurement
-item; do not flip it this cycle.** `false` is already measured to break
-the lane's intended writes on agy 1.1.7. The unmeasured half is what
-`true` permits outside the workspace on 1.1.12. See Task 8.
+item; do not flip it this cycle.** `false` was measured to break the
+lane's intended writes on agy 1.1.7. Two things stay unmeasured on 1.1.12:
+whether `false` still denies, and what `true` permits outside the
+workspace. See Task 8.
