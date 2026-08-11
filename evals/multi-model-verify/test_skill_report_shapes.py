@@ -74,6 +74,33 @@ ENTRY = "- demo:widget: Use when demoing. (file: C:/s/demo/SKILL.md)"
 #      every offset outside it is unchanged.
 #   5. Every entry-looking line is audited. A line that fails the grammar
 #      sets Malformed rather than being dropped in silence.
+#
+# Invariants 6, 7 and 8 were added at round 13 of the diff debate. The
+# generator was already computing all three; they were simply not written
+# down, so those expected values rested on agreement with the production
+# code rather than on a decided rule. A generated suite whose oracle is
+# read off the implementation is not independent evidence, whatever it
+# scores. Nothing about the code or the expected values changed when
+# these were added - the RULES had been left implicit.
+#
+#   6. BlockPresent is TRUE iff at least one OPENER survives masking.
+#      A closer with no opener reports the container ABSENT: an opener is
+#      what claims a container exists, and a stray closer claims nothing.
+#      Presence is therefore independent of ambiguity - a three-opener
+#      arrangement is present AND ambiguous.
+#   7. Entries are read ONLY from the body of an unambiguous single
+#      ordered pair. Every ambiguous arrangement reports ZERO entries even
+#      with a heading sitting inside it, because ambiguity means there is
+#      no single body to read from. Reporting entries from a guessed body
+#      is the failure this rule forbids.
+#   8. The entry grammar, as a truth table rather than a regex:
+#      an entry is ONE line, `- <name>: <description> (file: <path>)`.
+#      The file marker is the LAST such marker on the line, so a
+#      description that itself mentions `(file: x)` still parses and a
+#      path containing parentheses stays whole. Two entries joined onto
+#      one line is MALFORMED and yields no entry. A line with no file
+#      marker is MALFORMED and yields no entry. Malformed is reported, not
+#      silently dropped, which is invariant 5 applied to this grammar.
 # ---------------------------------------------------------------------------
 
 
@@ -160,9 +187,11 @@ def build_cases():
                                                                   and closes)
                         one = opens == 1 and closes == 1 and ordered
                         ambiguous = not (none or one)
+                        # Invariant 6. An opener is what claims a
+                        # container; a closer alone claims nothing.
                         present = opens >= 1
-                        # Invariant 3: entries come from the container body
-                        # only, and only when the shape is unambiguous.
+                        # Invariants 3 and 7: the body of the ONE ordered
+                        # pair, and nothing else, supplies entries.
                         entries = (1 if (one and heading in ("inside", "both"))
                                    else 0)
                         name = (f"o{opens}c{closes}/{order}/{heading}"
@@ -177,12 +206,17 @@ def build_cases():
 
 
 def entry_grammar_cases():
-    """Invariant 5, on the one arrangement that reaches the entry loop.
+    """Invariants 5 and 8, on the one arrangement that reaches the loop.
 
     Kept as named cases rather than folded into the product: they vary the
     ENTRY LINE, which is a different axis from the delimiter arrangement,
     and crossing them would multiply the matrix without testing anything
     the product does not already cover.
+
+    Every expected value below comes from invariant 8's truth table.
+    Round 13 of the diff debate found these outcomes were being asserted
+    against a rule that existed only as production comments; the rule is
+    now written above, and each case names the clause it exercises.
     """
     cases = [
         case("entries/joined-on-one-line",
@@ -538,6 +572,29 @@ def test_the_scope_claim_is_recorded():
     text = Path(__file__).read_text(encoding="utf-8")
     assert "Item 9's evidence is entirely PowerShell" in text
     assert "THE EVIDENCE IS THE MUTATION" in text
+
+
+def test_every_oracle_field_has_a_declared_rule():
+    """No expected value may rest on agreement with production.
+
+    The generator computes four fields per case. Each needs a rule
+    written above, or its expected value is a description of what the
+    parser does. Three of the four were undeclared until round 13 of the
+    diff debate, which is why this test exists rather than a comment.
+    """
+    text = Path(__file__).read_text(encoding="utf-8")
+    assert "BlockPresent is TRUE iff at least one OPENER survives" in text, (
+        "the block-presence rule is undeclared")
+    assert "Entries are read ONLY from the body of an unambiguous single" in text, (
+        "entry suppression under ambiguity is undeclared")
+    assert "The entry grammar, as a truth table rather than a regex" in text, (
+        "the entry grammar is undeclared")
+    assert "TWO shapes are non-ambiguous" in text, (
+        "the ambiguity rule is undeclared")
+    # And the addition is dated, so a later reader can tell a rule that
+    # was decided in advance from one back-filled after the fact.
+    assert "Invariants 6, 7 and 8 were added at round 13" in text
+    assert "Nothing about the code or the expected values changed when" in text
 
 
 if __name__ == "__main__":

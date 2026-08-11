@@ -338,6 +338,14 @@ warnings-allowed. Step 2 falsifies all three statements.
 Required, and item 19 is not complete without them:
 
 - re-diff the vendored source against upstream as its own header directs;
+  **NOT DONE ON THE FIRST BUILD. Found at round 1 of the DIFF debate.**
+  The first attempt diffed only against this repo's own imported copy and
+  said so in the header. The reviewer ruled that honest disclosure of a
+  skipped step does not discharge a frozen task, which is correct: the
+  question the step answers is whether UPSTREAM moved, and a local diff
+  cannot answer it. Performed 2026-08-11 against live upstream; result
+  recorded in the file header and pinned by
+  `test_the_re_diff_is_recorded_with_its_scope`.
 - update the provenance note to identify the local budget-enforcement
   delta specifically;
 - update the documented checks list and the exit-code description;
@@ -470,6 +478,31 @@ rule in half the cases.
 well-formed: presence in {absent, once, twice} x form in {`K: v`, `K:`,
 `K: `, `K:v`, ` K: v`} x escape placement in {none, in label, in value}.
 
+**NOT IMPLEMENTED AS FROZEN ON THE FIRST BUILD. Found at round 1 of the
+DIFF debate; rebuilt.** The first implementation folded the escape
+placements into the form table, never crossed presence with form at all,
+and produced 88 cases where the product above is 4 x 3 x 5 x 3 x 2 = 360.
+"All ten mutants killed" was therefore true of a matrix nobody had
+specified — the same defect round 9 found in the PowerShell sweep, in the
+module written to avoid it.
+
+Two readings the freeze does not settle, decided at the rebuild and
+recorded here rather than left in the code:
+
+- **`twice` crossed with form and escape** means TWO occurrences of the
+  SAME form and placement. A mixed pair is a different combination that
+  the product already covers cell by cell, and it is kept as a declared
+  extra because it is the shape that separates counting labels from
+  counting field lines.
+- **`absent` crossed with form and escape** is degenerate: with the key
+  omitted there is nothing for either axis to act on, so 30 of the 360
+  cells per key render identical text. They are generated anyway. A
+  quietly pruned product is a matrix nobody specified, which is the
+  defect being corrected.
+
+Cases beyond the 360 are permitted and are counted separately, so that
+"how many cases" never has to mean "how many of them were specified".
+
 Expected results come from the seven rules, computed by the generator, not
 hand-written per case.
 
@@ -542,6 +575,32 @@ runs that module under both Windows PowerShell and pwsh.
   container's body. A heading anywhere else supplies no entries.
 - Known/quoted containers are masked before scanning; a container that
   appears only inside a masked region is not a container.
+- **ADDED at round 13 of the DIFF debate.** `BlockPresent` is TRUE iff at
+  least one OPENER survives masking. A closer with no opener reports the
+  container ABSENT: an opener is what claims a container exists, a stray
+  closer claims nothing. Presence is independent of ambiguity, so a
+  three-opener arrangement is present AND ambiguous.
+- **ADDED at round 13 of the DIFF debate.** Entries are read ONLY from the
+  body of an unambiguous single ordered pair. Every ambiguous arrangement
+  reports ZERO entries even with a heading inside it, because ambiguity
+  means there is no single body to read from. Reporting entries from a
+  guessed body is the failure this rule forbids.
+- **ADDED at round 13 of the DIFF debate.** The entry grammar, as a truth
+  table rather than a regex: an entry is ONE line,
+  `- <name>: <description> (file: <path>)`. The file marker is the LAST
+  such marker on the line, so a description that itself mentions
+  `(file: x)` still parses and a path containing parentheses stays whole.
+  Two entries joined onto one line is MALFORMED and yields no entry. A
+  line with no file marker is MALFORMED and yields no entry. Malformed is
+  reported, never silently dropped.
+
+  **Why the three above are additions and not changes.** The generator was
+  already computing all three fields, and no expected value moved when
+  they were written down. The defect was that those expected values
+  rested on agreement with the production code rather than on a decided
+  rule, which makes a generated suite something other than independent
+  evidence. The reviewer found the first instance; the cross-vendor lane
+  found the other two in the same pass.
 
 ### Enumerate
 

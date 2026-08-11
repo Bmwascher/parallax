@@ -99,3 +99,74 @@ code had already moved past. A frozen plan is what mode diff adjudicates
 drift against, so a stale record does not merely mislead a reader - it
 makes correct work read as drift, or gets taken as authority and the
 correct work reverted.
+
+---
+
+# The DIFF debate
+
+Same directory, different debate. The plan debate above froze what to
+build; this one reviews what was built, over `8ddda15..28bfd07`.
+
+## Required input: the whole-branch review
+
+`fable-whole-branch-review-8ddda15-28bfd07.md` — the `agents/fable-reviewer.md`
+seat's raw reply, retained range-bound, with this session's per-finding
+adjudication table appended. Nine findings, no critical ones, verdict
+"ready to merge with fixes". Seven accepted as fixes, one accepted with no
+action, one ESCALATED into the debate.
+
+## Rounds
+
+| round | brief | reply | outcome |
+|---|---|---|---|
+| 1 | `diff-brief-r1.md` | `diff-reply-r1.txt` | FIX. Ruled the escalation, then found four spec drifts the whole-branch review missed |
+
+## What round 1 found, and why it matters more than the count
+
+The escalated point was ruled the way the session had proposed: record
+`tools/check-drift.ps1:700`, narrow the claim, open a follow-up, do NOT
+fix it inside a range that never enumerated the file. That is
+`debate-protocol.md:108-126` applied conjunctively, and it is the first
+time this repo has drawn an explicit certification boundary rather than
+either fixing everything in sight or saying nothing.
+
+The four new findings were all SPEC DRIFT against the frozen plan, and
+all four had survived a whole-branch review that read the same diff:
+
+1. **Sweep B was 88 cases where the plan froze 360.** Presence was never
+   crossed with form or escape at all. "All ten mutants killed" was true
+   of a matrix nobody had specified — the same defect round 9 of the plan
+   debate found in the PowerShell module, repeated in the module written
+   after it. The rebuild changed which cases do the killing: three mutants
+   now die on cells the first build could not generate.
+2. **The required upstream re-diff was never performed.** The header
+   disclosed that honestly, and the reviewer ruled that disclosing a
+   skipped step does not discharge a frozen task. Correct: the question
+   the step answers is whether UPSTREAM moved, and a local diff cannot
+   answer it. Performed at the fix; upstream had not moved since import.
+3. **The required new backlog entry did not exist.**
+4. **The required retained mutation output did not exist.** The
+   whole-branch review had noticed it and filed it under "could not
+   verify"; the cross-vendor lane reclassified it as an unmet retention
+   requirement, which is what it is.
+
+Two more claims of the session's were narrowed: "5227 tokens" is a linter
+estimate of `len(body) // 4`, and "the only outstanding task" was true
+only of frozen-plan tasks.
+
+## The shape of it
+
+Three of the four drifts are the same failure: a frozen requirement that
+produces no artifact when skipped. A missing test fails a gate. A missing
+RECORD fails nothing, so nothing catches it but a reader comparing the
+plan to the tree line by line. That is what mode diff is for, and it is
+why the whole-branch review is an input to it rather than a substitute.
+
+## Other artifacts
+
+- `finding-brief-encoding.md` — the void round's transport defect, now
+  carrying its reconciled character delta and the two dispatch sites this
+  release does NOT guard.
+- `mutation-evidence.md` — the retained failing output for all eighteen
+  mutants across both generated modules, each naming the case that killed
+  it.

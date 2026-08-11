@@ -1,0 +1,75 @@
+## Scope ruling on escalated finding 1
+
+The scope rule selects **RECORD, NARROW, FOLLOW UP**, not an in-range production fix.
+
+The rule is conjunctive: a pre-existing defect is fixed only when it is both the same named class and on the verification surface enumerated beforehand. The drift dispatch is the same `brief-encoding-transport` class, but the frozen surface names `SKILL.md`, its references, `skill_lint.py`, `run_behavioral_evals.py`, and test-only coverage of `codex-context-probe.ps1`; it never enumerates `tools/check-drift.ps1` or its autofix path. [skills/multi-model-verify/references/debate-protocol.md:108-126](C:/Users/Brandon/Documents/parallax/skills/multi-model-verify/references/debate-protocol.md:108), [docs/superpowers/plans/2026-08-11-budget-flake-generator.md:23-40](C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-08-11-budget-flake-generator.md:23), [tools/check-drift.ps1:680-702](C:/Users/Brandon/Documents/parallax/tools/check-drift.ps1:680).
+
+Therefore:
+
+- Do not modify `check-drift.ps1` in this range.
+- Fix the new overbroad `CLAUDE.md` wording, which currently calls the form defective without limiting the claim to the documented skill dispatch. [CLAUDE.md:74-82](C:/Users/Brandon/Documents/parallax/CLAUDE.md:74)
+- Record `check-drift.ps1:700` as a live residual and `commands/doctor.md:70` as ASCII-safe today but latent. [commands/doctor.md:67-74](C:/Users/Brandon/Documents/parallax/commands/doctor.md:67)
+- Narrow the certification unit explicitly to the documented multi-model-verify dispatch contract, excluding those two sites. The protocol permits that; silence does not. [skills/multi-model-verify/references/debate-protocol.md:128-131](C:/Users/Brandon/Documents/parallax/skills/multi-model-verify/references/debate-protocol.md:128)
+
+The production `check-drift.ps1` guard and its state-machine suite are follow-up work. The record/narrowing changes are blocking here.
+
+## Additional blocking findings
+
+1. **Task 5 did not build the frozen Sweep B matrix.**
+
+   The freeze requires, per key, `presence {absent, once, twice} × form {5 values} × escape placement {3 values} × line ending {2}`—360 combinations. [docs/superpowers/plans/2026-08-11-budget-flake-generator.md:459-474](C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-08-11-budget-flake-generator.md:459)
+
+   The implementation instead generates 72 form cases, four mid-line cases, and twelve separately selected presence cases—88 total. Presence, form, and escape are not crossed. [evals/multi-model-verify/test_route_parser_shapes.py:189-220](C:/Users/Brandon/Documents/parallax/evals/multi-model-verify/test_route_parser_shapes.py:189)
+
+   Consequently accepted finding 2 cannot simply change “222” to “210.” Either implement the frozen product or reopen the specification; only then record the resulting count.
+
+2. **The required upstream re-diff was not performed.**
+
+   Task 3 explicitly requires re-diffing the vendored source against upstream. [docs/superpowers/plans/2026-08-11-budget-flake-generator.md:331-348](C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-08-11-budget-flake-generator.md:331)
+
+   The shipped header admits it compared only with the imported local snapshot and did not fetch current upstream. [evals/tools/skill_lint.py:14-18](C:/Users/Brandon/Documents/parallax/evals/tools/skill_lint.py:14)
+
+   Honest disclosure does not satisfy the frozen task. Perform the upstream comparison or formally reopen that requirement.
+
+3. **Task 7 omitted the required UTF-8 backlog entry.**
+
+   The plan requires a new closed backlog entry carrying the measurement and the explicit unmeasured backup-lane boundary. [docs/superpowers/plans/2026-08-11-budget-flake-generator.md:575-589](C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-08-11-budget-flake-generator.md:575)
+
+   The backlog moves directly from item 19 to the old item 20; no new UTF-8 entry exists. [docs/superpowers/plans/2026-07-27-0150-backlog.md:1187-1229](C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-07-27-0150-backlog.md:1187)
+
+4. **The plan-required retained mutation evidence is absent.**
+
+   Task 5 requires retaining failing output naming the killer for every mutant. [docs/superpowers/plans/2026-08-11-budget-flake-generator.md:495-503](C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-08-11-budget-flake-generator.md:495)
+
+   The whole-branch reviewer noticed that the retained outputs were absent, but this was placed under “could not verify” and never adjudicated. [docs/superpowers/plans/rounds/2026-08-11-budget-flake-generator/fable-whole-branch-review-8ddda15-28bfd07.md:50-53](C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/rounds/2026-08-11-budget-flake-generator/fable-whole-branch-review-8ddda15-28bfd07.md:50)
+
+   That is not merely unverifiable chronology; it is an unmet retention requirement.
+
+## Claim-width rulings
+
+1. **Encoding lines load-bearing:** supported for Windows PowerShell 5.1. The exact `a???b`, intact UTF-8, and `a?b` payloads isolate the decode and pipe stages and reject empty measurements. [evals/multi-model-verify/test_multi_model_verify.py:2813-2889](C:/Users/Brandon/Documents/parallax/evals/multi-model-verify/test_multi_model_verify.py:2813)
+
+2. **Child scope inert:** supported only as a Windows PowerShell 5.1 claim. The test is explicitly host-specific; an unqualified statement about all PowerShell hosts would exceed it. [evals/multi-model-verify/test_multi_model_verify.py:2778-2780](C:/Users/Brandon/Documents/parallax/evals/multi-model-verify/test_multi_model_verify.py:2778)
+
+3. **Route expected values derive from seven rules:** supported. I found no expected boolean requiring the production parser. The defect is the generated set’s failure to implement the frozen Cartesian enumeration, not its individual expected values. [evals/multi-model-verify/test_route_parser_shapes.py:102-169](C:/Users/Brandon/Documents/parallax/evals/multi-model-verify/test_route_parser_shapes.py:102)
+
+4. **Fail-open model prevents decorative fallback evidence:** supported for the ambiguity fallback. The unchanged fallback is tested under the declared fault before its mutants are applied. [evals/multi-model-verify/test_skill_report_shapes.py:316-425](C:/Users/Brandon/Documents/parallax/evals/multi-model-verify/test_skill_report_shapes.py:316)
+
+5. **“5227 tokens”: wider than the metric.** The linter computes `len(body) // 4` and itself calls the result “roughly” tokens. The defensible statement is “5227 linter-estimated tokens.” [evals/tools/skill_lint.py:288-306](C:/Users/Brandon/Documents/parallax/evals/tools/skill_lint.py:288) The 5250/5500 policy remains supported.
+
+6. **“The only outstanding task”: too wide at this head.** Task 8 is the only outstanding frozen-plan task, but findings 2–8 are already accepted and unapplied. [docs/superpowers/plans/rounds/2026-08-11-budget-flake-generator/fable-whole-branch-review-8ddda15-28bfd07.md:66-76](C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/rounds/2026-08-11-budget-flake-generator/fable-whole-branch-review-8ddda15-28bfd07.md:66) Item 18 itself correctly remains pending. [docs/superpowers/plans/2026-07-27-0150-backlog.md:1181-1185](C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-07-27-0150-backlog.md:1181)
+
+## Generated-oracle ruling
+
+Finding 7 is not the only PowerShell oracle field missing from the freeze.
+
+- `BlockPresent = opens >= 1` is the accepted instance. [evals/multi-model-verify/test_skill_report_shapes.py:156-175](C:/Users/Brandon/Documents/parallax/evals/multi-model-verify/test_skill_report_shapes.py:156)
+- `Entries` is forced to zero for every ambiguous arrangement, even with an inside heading, but the freeze defines heading scope—not entry suppression under ambiguity. [test_skill_report_shapes.py:164-167](C:/Users/Brandon/Documents/parallax/evals/multi-model-verify/test_skill_report_shapes.py:164), [docs/superpowers/plans/2026-08-11-budget-flake-generator.md:528-545](C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-08-11-budget-flake-generator.md:528)
+- The twelve entry-grammar cases assign exact `Entries`/`Malformed` outcomes for joined entries, missing file markers, parentheses, descriptions, and multiple entries. Those rules exist only as a test-local fifth invariant and mirror the production regex/comments; they were never frozen in Task 6. [evals/multi-model-verify/test_skill_report_shapes.py:57-76](C:/Users/Brandon/Documents/parallax/evals/multi-model-verify/test_skill_report_shapes.py:57), [test_skill_report_shapes.py:179-211](C:/Users/Brandon/Documents/parallax/evals/multi-model-verify/test_skill_report_shapes.py:179), [tools/codex-context-probe.ps1:250-299](C:/Users/Brandon/Documents/parallax/tools/codex-context-probe.ps1:250)
+
+Freeze those truth tables before treating the generated suite as independent evidence.
+
+Blocking: accepted findings 2–7; the record portion of 8; all additional findings above; and Task 8’s installed-plugin twelve-run gate. Finding 2’s final count must wait for the route-matrix decision. Follow-up: guarding `check-drift.ps1`, recording/then addressing the latent doctor site, and finding 9’s subprocess-cost observation.
+
+**FIX**
+

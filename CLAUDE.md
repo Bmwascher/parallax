@@ -80,6 +80,12 @@ Two traps in the dispatch scripts themselves, both measured 2026-08-04:
   `& { }` block does NOT work: the native pipe reads the OUTER scope, so
   a child-scope assignment is scoped and inert. Only the round-evidence
   binding catches the corruption, and it costs the whole round.
+  0.23.0 fixed the SKILL.md dispatch ONLY. `tools/check-drift.ps1:700`
+  still ships the defective form, with no brief binding to catch it, and
+  `commands/doctor.md:70` has the same shape on a pure-ASCII payload.
+  Both are named in the finding write-up under
+  `docs/superpowers/plans/rounds/2026-08-11-budget-flake-generator/`;
+  do not read the rule above as a statement that the repo is clean.
 
 ## Dev loop
 The plugin is installed user-scope from a LOCAL marketplace pointing at

@@ -120,6 +120,8 @@ QUALIFIES = {"exactly-8": True, "below-floor": False, "long": True,
              "trailing-space": True, "coloured": True,
              "dash-prefixed-text": False}
 
+# The FIVE field forms the plan froze for sweep B, and their accepted
+# verdict from rules 5 to 7. Nothing here is read off the parser.
 FIELD_FORMS = {
     # form -> (renderer, accepted?)
     "well-formed":   (lambda k, v: f"{k}: {v}", True),
@@ -127,11 +129,58 @@ FIELD_FORMS = {
     "empty-value":   (lambda k, v: f"{k}: ", False),
     "no-space":      (lambda k, v: f"{k}:{v}", False),
     "leading-space": (lambda k, v: f" {k}: {v}", False),
+}
+
+# The THREE escape placements the plan froze, as an axis of its own rather
+# than as extra entries in the form table. Rule 1 removes escapes from the
+# whole output before anything is located, so placement can never change a
+# verdict - which is exactly the claim this axis exists to test. If any
+# expected value below varied by placement, rule 1 would be false.
+ESCAPE_PLACEMENTS = ("none", "in-label", "in-value")
+
+# The THREE presence states the plan froze. "twice" is underspecified in
+# the freeze: it does not say whether the two occurrences share the form
+# and escape under test. THIS MODULE READS IT AS BOTH THE SAME, because
+# the axis is per-form and a mixed pair would be a different form
+# combination that the product already covers separately. Mixed pairs are
+# still covered, as a declared extra below.
+PRESENCE = ("absent", "once", "twice")
+
+# Beyond the frozen product. Each earns its place by killing a mutant or
+# by pinning a rule the five frozen forms cannot reach; none of them is
+# part of the 360, and the count below says so.
+EXTRA_FORMS = {
     "padded-value":  (lambda k, v: f"{k}:  {v}  ", True),   # rule 6
-    "escape-in-label": (lambda k, v: f"{k[:2]}{ESC}{k[2:]}: {v}", True),
-    "escape-in-value": (lambda k, v: f"{k}: {ESC}{v}{RESET}", True),
     "wrong-value":   (lambda k, v: f"{k}: {v}-decoy", False),
 }
+
+
+def render_field(key, value, form, escape):
+    """One field line: a frozen form with a frozen escape placement.
+
+    The escape goes INSIDE the label or INSIDE the value, never between
+    them, so the two placements are distinguishable after rule 1 strips
+    them. A form with no value slot still gets an in-value case, with the
+    escape written where the value would have been - otherwise that cell
+    of the product would be a copy of the "none" cell.
+    """
+    k, v = key, value
+    if escape == "in-label":
+        k = key[:2] + ESC + key[2:]
+    elif escape == "in-value":
+        v = ESC + value + RESET
+    if form == "well-formed":
+        return f"{k}: {v}"
+    if form == "no-space":
+        return f"{k}:{v}"
+    if form == "leading-space":
+        return f" {k}: {v}"
+    tail = (ESC + RESET) if escape == "in-value" else ""
+    if form == "bare-label":
+        return f"{k}:{tail}"
+    if form == "empty-value":
+        return f"{k}: {tail}"
+    raise AssertionError(f"unfrozen form {form!r}")
 
 
 def well_formed_fields(skip=None):
@@ -187,15 +236,44 @@ def sweep_a():
 
 
 def sweep_b():
-    """Per field: presence x form x line ending, others well-formed."""
-    for key, form, eol in itertools.product(KEYS, FIELD_FORMS,
-                                            ("\n", "\r\n")):
-        render, accepted = FIELD_FORMS[form]
-        fields = well_formed_fields(skip=key) + [render(key, KEYS[key])]
+    """The frozen product, per key: presence x form x escape x line ending.
+
+    4 keys x 3 presence x 5 forms x 3 escapes x 2 line endings = 360.
+
+    The `absent` cells repeat: with the key omitted, form and escape have
+    nothing to act on, so all 30 per key render the same text. They are
+    generated anyway, because the product is what the plan froze and a
+    quietly pruned product is a matrix nobody specified. The first build
+    of this sweep crossed nothing and produced 88 cases; the diff debate
+    caught it.
+    """
+    for key, presence, form, escape, eol in itertools.product(
+            KEYS, PRESENCE, FIELD_FORMS, ESCAPE_PLACEMENTS,
+            ("\n", "\r\n")):
+        _, accepted = FIELD_FORMS[form]
+        fields = well_formed_fields(skip=key)
+        if presence == "once":
+            fields = fields + [render_field(key, KEYS[key], form, escape)]
+        elif presence == "twice":
+            line = render_field(key, KEYS[key], form, escape)
+            fields = fields + [line, line]
         text, has_block = build("exactly-8", 2, fields, eol=eol)
-        yield (f"B[{key},{form},"
+        # From rules 5 and 7 alone. An absent key yields no label and no
+        # field line; a doubled one yields two of whichever the form
+        # produces. Either way `exactly one of each` fails, so only the
+        # `once` cells can be clean, and only in an accepted form. The
+        # escape placement is absent from this expression on purpose:
+        # rule 1 makes it presentational.
+        expected = has_block and presence == "once" and accepted
+        yield (f"B[{key},{presence},{form},esc={escape},"
                f"eol={'crlf' if eol == chr(13) + chr(10) else 'lf'}]",
-               text, has_block and accepted)
+               text, expected)
+    # --- beyond the frozen product ---
+    for key, form in itertools.product(KEYS, EXTRA_FORMS):
+        render, accepted = EXTRA_FORMS[form]
+        fields = well_formed_fields(skip=key) + [render(key, KEYS[key])]
+        text, has_block = build("exactly-8", 2, fields)
+        yield (f"X[{key},{form}]", text, has_block and accepted)
     # A key name appearing MID-LINE inside the block. Rule 5 anchors both
     # patterns at line start, so this is ordinary noise and the route stays
     # clean. Added after the first mutation run: nothing in the original
@@ -206,18 +284,17 @@ def sweep_b():
         noisy = (well_formed_fields()
                  + [f"workdir: C:\\repo (see {key}: elsewhere)"])
         text, _ = build("exactly-8", 2, noisy)
-        yield (f"B[{key},name-appears-mid-line]", text, True)
-    # Presence: absent, and duplicated (rule 5 demands exactly one).
+        yield (f"X[{key},name-appears-mid-line]", text, True)
+    # A MIXED pair: one good field line and one bare label for the same
+    # key. The product's `twice` cells hold two of the SAME form, so this
+    # shape is outside it, and it is the one that separates "count the
+    # labels" from "count the field lines" - mutants 6 and 7 die on
+    # different clauses of it.
     for key in KEYS:
         fields = well_formed_fields(skip=key)
-        text, _ = build("exactly-8", 2, fields)
-        yield (f"B[{key},absent]", text, False)
-        dup = fields + [f"{key}: {KEYS[key]}", f"{key}: {KEYS[key]}"]
-        text, _ = build("exactly-8", 2, dup)
-        yield (f"B[{key},duplicated-identical]", text, False)
         mixed = fields + [f"{key}: {KEYS[key]}", f"{key}:"]
         text, _ = build("exactly-8", 2, mixed)
-        yield (f"B[{key},valid-plus-bare-label]", text, False)
+        yield (f"X[{key},valid-plus-bare-label]", text, False)
 
 
 def all_cases():
@@ -229,6 +306,54 @@ def all_cases():
 # ---------------------------------------------------------------------------
 
 CASES = all_cases()
+
+# Loaded ONCE. The unmutated source is the same for every case, and
+# re-executing the runner module per case cost several hundred execs for
+# no evidence. The mutation test below still loads its own module per
+# mutant, because there the source genuinely differs.
+REAL = load_runner()
+
+
+def test_the_frozen_product_is_enumerated_in_full():
+    """The plan froze a Cartesian product; this is the arithmetic.
+
+    Stated as a product rather than a total, so a dropped axis names
+    itself instead of showing up as a number that is merely different.
+    """
+    assert len(KEYS) == 4
+    assert len(PRESENCE) == 3
+    assert len(FIELD_FORMS) == 5
+    assert len(ESCAPE_PLACEMENTS) == 3
+    product = len(KEYS) * len(PRESENCE) * len(FIELD_FORMS) * len(
+        ESCAPE_PLACEMENTS) * 2
+    assert product == 360
+    frozen = [c for c in CASES if c[0].startswith("B[")]
+    assert len(frozen) == 360, (
+        f"sweep B enumerated {len(frozen)} of the frozen 360")
+    # The extras are counted separately and deliberately, so that "how
+    # many cases" never has to mean "how many of them were specified".
+    extras = [c for c in CASES if c[0].startswith("X[")]
+    assert len(extras) == 16, f"{len(extras)} extras, expected 16"
+
+
+def test_the_escape_axis_never_changes_a_verdict():
+    """Rule 1, asserted over the matrix rather than trusted.
+
+    Every frozen cell has two siblings that differ ONLY in escape
+    placement. If any triple disagrees, rule 1 is false and the whole
+    oracle rests on something that is not written down.
+    """
+    by_cell = {}
+    for name, _, expected in CASES:
+        if not name.startswith("B["):
+            continue
+        stripped = re.sub(r",esc=[a-z-]+", "", name)
+        by_cell.setdefault(stripped, set()).add(expected)
+    assert by_cell, "no frozen cells found"
+    disagreeing = {k: v for k, v in by_cell.items() if len(v) != 1}
+    assert not disagreeing, (
+        f"escape placement changed the verdict for {sorted(disagreeing)[:3]}")
+    assert len(by_cell) == 120, f"{len(by_cell)} cells, expected 120"
 
 
 def test_the_matrix_is_not_trivially_one_sided():
@@ -243,8 +368,7 @@ def test_the_matrix_is_not_trivially_one_sided():
 @pytest.mark.parametrize("name,text,expected",
                          CASES, ids=[c[0] for c in CASES])
 def test_generated_shape(name, text, expected):
-    mod = load_runner()
-    assert mod.effective_route_ok(text, MODEL, EFFORT) is expected, name
+    assert REAL.effective_route_ok(text, MODEL, EFFORT) is expected, name
 
 
 # Ten mutants, one per defence the parser's own comments record. Each is a

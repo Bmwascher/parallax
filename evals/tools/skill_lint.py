@@ -11,11 +11,24 @@ item 19). This copy adds BODY_TOKEN_CEILING, makes an over-ceiling body an
 ERROR, and rebases both numbers from a measured body. Everything else is
 upstream.
 
-Re-diff performed 2026-08-11 against this file's imported state at
-`acbf045`: byte-identical from import through `dd0db13`, so the previous
-"unmodified except this provenance header" claim was true until that
-change and is false afterwards. That is a diff against the IMPORTED copy,
-not against upstream's current HEAD, which was not fetched.
+RE-DIFF PERFORMED 2026-08-11, TWICE, AGAINST TWO DIFFERENT BASELINES.
+
+1. Against this file's imported state at `acbf045`: byte-identical from
+   import through `dd0db13`. So the claim this header used to make,
+   "unmodified except this provenance header", was true until that
+   change and is false afterwards.
+2. Against LIVE UPSTREAM, fetched the same day from
+   raw.githubusercontent.com. Upstream's newest commit touching
+   `agent_skills/evals/tools/skill_lint.py` is
+   `ca8e5b3c56e51e336449a99d79b42b45ea690b86`, dated 2026-07-09 - three
+   days BEFORE this repo imported the file. Diffing the imported copy
+   against current upstream gives exactly ONE hunk: the four-line
+   provenance header this repo substituted at import. The body is
+   byte-identical.
+
+So upstream has not moved since import, and the only local divergence is
+the budget-enforcement delta named above plus this header. Fetch again
+before the next local edit: this statement is dated, not standing.
 skill_lint.py — validate an agent skill directory against the agentskills.io spec.
 
 Usage:
@@ -65,7 +78,14 @@ BODY_MAX_LINES = 500
 # WARNING above it up to the hard ceiling, ERROR above the ceiling. Never
 # a warning and an error for the same body.
 #
-# 0.23.0 rebased both from the measured body, not from an estimate.
+# BOTH NUMBERS ARE IN THIS TOOL'S OWN ESTIMATE, which is len(body) // 4
+# and which the output calls "roughly". They are not tokenizer counts and
+# they never were; swapping in a real tokenizer would move every number
+# here without changing what the gate does. Read "5227" below as "5227 by
+# this estimate". The cross-vendor lane narrowed this in the 0.23.0 diff
+# debate, where it had been written as measured rather than estimated.
+#
+# 0.23.0 rebased both from a MEASURED body rather than a guessed one.
 # Upstream shipped a 5000 warning that nothing enforced; it had sat over
 # that number for several releases (backlog item 19). The relocations in
 # that release brought multi-model-verify's body to 5069, and its

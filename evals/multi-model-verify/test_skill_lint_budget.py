@@ -103,12 +103,24 @@ class TestTheThreeBands:
 
 
 class TestTheOldImplementationCouldNotFail:
-    """The fail-first proof, run against the pre-change code itself.
+    """The fail-first proof, and an honest account of which half proves it.
 
-    Written because 'we added enforcement' is a claim about a diff. This
-    reconstructs the vendored behaviour - a warning and nothing else - and
-    shows it passing a body far over the ceiling. If this ever fails, the
-    delta being described is not the delta that exists.
+    Two halves, and they are NOT equally strong. Say so here rather than
+    let the class name imply both.
+
+    The FIRST half restates the vendored rule inline - warn above 5000,
+    never error - and shows it leaving a far-over-ceiling body unfailed.
+    It runs no vendored code. `errors` is empty by construction, so that
+    assertion CANNOT fail for the reason the sentence above suggests; it
+    is a readable statement of the old behaviour, not a measurement of
+    it. The real evidence that the old code could not fail is the
+    upstream diff pinned in TestVendoringObligations: the fetched
+    upstream file has no ceiling and no error path at all.
+
+    The SECOND half is the measurement. It runs the SHIPPED linter as a
+    subprocess against the same oversized fixture and requires exit 1.
+    That one fails if the enforcement is removed, which is the delta the
+    class exists to prove.
     """
 
     def test_a_warning_only_lint_passes_an_over_ceiling_body(self, tmp_path):
@@ -119,15 +131,18 @@ class TestTheOldImplementationCouldNotFail:
         body = re.sub(r"^---\n.*?\n---\n", "", body, flags=re.S)
         est = len(body) // 4
         assert est > mod.BODY_TOKEN_CEILING, "fixture is not over the ceiling"
-        # The vendored rule, verbatim in behaviour: warn, never error.
+        # The vendored rule restated, NOT executed. See the class
+        # docstring: this branch cannot fail, and it is here to be read.
         errors, warnings = [], []
         if est > 5000:
             warnings.append("over budget")
         assert not errors and warnings, (
-            "the vendored implementation produced no error for a body"
-            f" {est - mod.BODY_TOKEN_CEILING} tokens over today's ceiling"
+            "the vendored rule as restated here produced no error for a"
+            f" body {est - mod.BODY_TOKEN_CEILING} tokens over today's"
+            " ceiling"
         )
-        # And the shipped implementation does fail it.
+        # The measurement. The shipped implementation DOES fail it, and
+        # this half is what breaks if the enforcement is removed.
         code, out = run_lint(skill)
         assert code == 1 and "over the hard ceiling" in out, out
 
@@ -146,9 +161,9 @@ class TestVendoringObligations:
         assert text.count("unmodified except this provenance header") == 1, (
             "the phrase may appear only where it is being retracted"
         )
-        assert ('previous\n"unmodified except this provenance header" claim'
-                " was true until that\nchange and is false afterwards."
-                ) in text, (
+        assert ('the claim this header used to make,\n'
+                '   "unmodified except this provenance header", was true'
+                " until that\n   change and is false afterwards.") in text, (
             "the retraction has to say when the old claim stopped being"
             " true, not merely stop making it"
         )
@@ -157,11 +172,48 @@ class TestVendoringObligations:
 
     def test_the_re_diff_is_recorded_with_its_scope(self):
         text = LINT_PATH.read_text(encoding="utf-8")
-        assert "Re-diff performed 2026-08-11" in text
-        # The scope limit is the honest part: this was diffed against the
-        # imported copy in this repo, not against upstream's current HEAD.
-        assert ("That is a diff against the IMPORTED copy,\nnot against"
-                " upstream's current HEAD, which was not fetched.") in text
+        assert "RE-DIFF PERFORMED 2026-08-11, TWICE, AGAINST TWO DIFFERENT" in text
+        # Both baselines have to be named, because they answer different
+        # questions: the imported copy says what THIS repo changed, and
+        # live upstream says whether upstream moved underneath it. The
+        # first release of this header did only the former and said so;
+        # the diff debate ruled that honest disclosure does not discharge
+        # a frozen task, so the fetch was performed and pinned here.
+        assert "1. Against this file's imported state at `acbf045`:" in text
+        assert "Against LIVE UPSTREAM, fetched the same day from" in text
+        assert "ca8e5b3c56e51e336449a99d79b42b45ea690b86" in text, (
+            "the upstream commit the comparison was made against has to be"
+            " named, or the next maintainer cannot tell what moved since"
+        )
+        assert "gives exactly ONE hunk" in text
+        # And the claim must be dated rather than standing, because it
+        # decays the moment upstream commits again.
+        assert "this statement is dated, not standing." in text
+
+    def test_the_two_thresholds_are_pinned_to_their_literal_values(self):
+        """A silent renumber of either constant must break a test.
+
+        The header says these numbers do NOT rebase automatically, and
+        the whole point of item 19 is that an unowned number drifts. Every
+        other test in this module reads the constants through the module,
+        so all of them would follow a renumber quietly. This one does not.
+        Changing either value here is the deliberate, recorded act the
+        policy demands.
+        """
+        mod = load_lint()
+        assert mod.BODY_TOKEN_BUDGET == 5250
+        assert mod.BODY_TOKEN_CEILING == 5500
+        # The four boundaries the plan froze, stated as literals so the
+        # band edges are readable without evaluating arithmetic.
+        assert (5250, 5251, 5500, 5501) == (
+            mod.BODY_TOKEN_BUDGET,
+            mod.BODY_TOKEN_BUDGET + 1,
+            mod.BODY_TOKEN_CEILING,
+            mod.BODY_TOKEN_CEILING + 1,
+        )
+        text = LINT_PATH.read_text(encoding="utf-8")
+        assert "BODY_TOKEN_BUDGET = 5250" in text
+        assert "BODY_TOKEN_CEILING = 5500" in text
 
     def test_the_documented_checks_and_exit_codes_match_behaviour(self):
         text = LINT_PATH.read_text(encoding="utf-8")
