@@ -292,13 +292,17 @@ class TestVendoringObligations:
         rel = "evals/multi-model-verify/fixtures/skill_lint_pre_change.py"
         assert rel in notice, "the frozen fixture is not named in the notice"
         assert "It must never be updated" in notice
-        # And the notice must not claim more coverage than exists. The
-        # hash test above splits the banner off and hashes only the copied
-        # text, so a banner edit breaks nothing; saying "its content is
-        # hash-pinned" claimed the whole file.
+        # And the notice must claim NEITHER more coverage nor more
+        # freedom than exists. Two drafts got this wrong in opposite
+        # directions: "its content is hash-pinned" claimed the whole file,
+        # then "banner edits break no pin" forgot that the split asserts
+        # on the separator lines.
         assert "the COPIED TEXT BELOW THE BANNER" in notice, (
             "the notice has to say WHICH part of the fixture is pinned")
-        assert "The banner itself is\nprose and is EXCLUDED from the hash" in notice
+        assert "Banner PROSE is\nexcluded from the hash" in notice
+        assert ("requires exactly three parts, so editing either separator"
+                " fails a\nstructural assertion") in notice, (
+            "the notice has to say the separator lines are not free to edit")
 
     def test_the_policy_is_declared_global_and_non_rebasing(self):
         text = LINT_PATH.read_text(encoding="utf-8")

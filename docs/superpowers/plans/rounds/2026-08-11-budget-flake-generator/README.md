@@ -123,6 +123,7 @@ action, one ESCALATED into the debate.
 | 2 | `diff-brief-r2.md` | `diff-reply-r2.txt` | FIX. The fix re-review was not dry: one blocking spec miss and four record defects |
 | 3 | `diff-brief-r3.md` | `diff-reply-r3.txt` | FIX. The fail-first repair accepted; a licence obligation and two record residues found |
 | 4 | `diff-brief-r4.md` | `diff-reply-r4.txt` | ESCALATE. Two claims wider than their evidence, and the ROUND CAP reached |
+| 5 | `diff-brief-r5.md` | `diff-reply-r5.txt` | ESCALATE. Two more, one of them introduced BY round 4's fix; budget exhausted |
 
 ## What round 1 found, and why it matters more than the count
 
@@ -241,11 +242,11 @@ generate" sixty lines above the paragraph refuting it.
 
 ## The through-line of this diff debate
 
-Four rounds, and every one of them found something: four spec drifts and
+Five rounds, and every one of them found something: four spec drifts and
 two narrowed claims at round 1, one blocking spec miss and four record
 defects at round 2, one licence obligation and two record residues at
-round 3, two overstated claims at round 4. Almost none of them were about
-code behaviour.
+round 3, two overstated claims at round 4, two more at round 5. Almost
+none of them were about code behaviour.
 
 (An earlier draft of this paragraph said "eleven findings", which
 contradicted this file's own round table. The count is now enumerated
@@ -281,3 +282,39 @@ the separation has been exercised in a live debate.
 
 The user was asked, chose to reset the cap, and authorized ONE more
 round. That round is the confirming re-review.
+
+## Round 5, the authorized confirming round, which was not dry either
+
+Two findings, both mine, both narrower than round 4's:
+
+- The licence notice had been narrowed at round 4 to say banner prose is
+  excluded from the fixture's hash. It then went on to say banner edits
+  break no pin, which is false: the same test splits on the banner's two
+  75-dash separator lines and requires exactly three parts, so editing a
+  separator fails a STRUCTURAL assertion even though it changes no hash.
+  Two consecutive drafts of one paragraph, wrong in opposite directions —
+  first claiming more coverage than the test has, then more freedom.
+- The round-5 brief said the fix range "touches three files". It touches
+  five: three fix targets plus the two retained round-4 artifacts. The
+  brief is retained verbatim and still says three; the correction lives
+  here, which is the same treatment `diff-brief-r2.md` got.
+
+The reviewer then paused rather than spending another exchange, because
+the user's cap reset had authorized exactly one round and this was it.
+
+## The user's second intervention
+
+At round 5's pause the ledger read 6 authorized, 5 spent, 1 remaining. The
+session put four options to the user, including merging on ESCALATE with
+recorded risk acceptance and stopping outright, and said plainly that the
+findings were shrinking each round and that nothing since round 2 had been
+about code behaviour. The user chose to EXTEND BY UP TO THREE ROUNDS and
+let the debate run until it goes dry rather than stop at a number.
+
+New ledger: 8 authorized, 5 spent, 3 remaining.
+
+Worth naming why that is the harder and better call. Round 5's first
+finding was a defect INTRODUCED BY ROUND 4'S FIX: narrowing the notice's
+overclaim overshot into an underclaim. A fix is new code and gets no
+discount, and this is what that rule looks like in a record file rather
+than in a function.

@@ -32,10 +32,16 @@ from upstream: the provenance header this repo substituted at import, plus
 a banner marking it uneditable. It must never be updated.
 
 What is hash-pinned, exactly: the COPIED TEXT BELOW THE BANNER, by
-`evals/multi-model-verify/test_skill_lint_budget.py`. The banner itself is
-prose and is EXCLUDED from the hash, so banner edits do not break any
-pin. An earlier draft of this paragraph said "its content is hash-pinned",
-which claimed the whole file and was wider than the test.
+`evals/multi-model-verify/test_skill_lint_budget.py`. Banner PROSE is
+excluded from the hash and can be reworded freely. The banner's two
+75-dash SEPARATOR LINES are not prose: the same test splits on them and
+requires exactly three parts, so editing either separator fails a
+structural assertion even though it changes no hash.
+
+Two earlier drafts of this paragraph were wider than the test. The first
+said "its content is hash-pinned", which claimed the whole file. The
+second said banner edits break no pin, which claimed more freedom than
+the separators allow.
 
 It is named here because the paragraph above scopes this notice to "the
 three Python tools in this directory", which would otherwise leave a
