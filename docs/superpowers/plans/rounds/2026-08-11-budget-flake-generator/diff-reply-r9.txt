@@ -1,0 +1,12 @@
+The re-review is not dry. The rule-1 correction itself is accurate, but three record findings remain.
+
+1. **The authoritative-total correction is incomplete and still overclaims.** The Round 6 section still says there is “no total at all” ([README.md](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/rounds/2026-08-11-budget-flake-generator/README.md:365)), while the new policy correctly says corrective totals remain ([README.md](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/rounds/2026-08-11-budget-flake-generator/README.md:408)). It then says arithmetic over the list has been wrong “every single time” ([README.md](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/rounds/2026-08-11-budget-flake-generator/README.md:418)), despite correctly calculating eighteen and twenty earlier ([README.md](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/rounds/2026-08-11-budget-flake-generator/README.md:265)). Narrow this to maintained authoritative aggregates.
+
+2. **The previous-fix provenance is overstated.** Round 8 says both findings were inside the preceding fix, then says the reversed rule-1 sentence had survived seven rounds ([README.md](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/rounds/2026-08-11-budget-flake-generator/README.md:428)). The line existed before `6205a06..9bc9338`; only the neighboring valueless-form paragraph changed in that fix. Likewise, “from round 5 onward, every round” is false for round 6 ([README.md](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/rounds/2026-08-11-budget-flake-generator/README.md:463)): its recorded findings were the older generator specification gap and a claim in the round-6 brief, not defects introduced by the round-5 patch ([README.md](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/rounds/2026-08-11-budget-flake-generator/README.md:343)).
+
+3. **The closing code chronology contradicts itself.** It says both code findings occurred at round 1, then names the second at round 6 in the same sentence ([README.md](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/rounds/2026-08-11-budget-flake-generator/README.md:455)). The intended statement is “at rounds 1 and 6.”
+
+These are record-only, but blocking for dry-round attestation. This last authorized unit therefore pauses for the user.
+
+**FIX**
+

@@ -127,6 +127,7 @@ action, one ESCALATED into the debate.
 | 6 | `diff-brief-r6.md` | `diff-reply-r6.txt` | FIX. A third unfrozen reading in the generator; two implementation areas cleared |
 | 7 | `diff-brief-r7.md` | `diff-reply-r7.txt` | FIX. Two self-contradictions introduced by round 6's own fix |
 | 8 | `diff-brief-r8.md` | `diff-reply-r8.txt` | FIX. Rule 1 stated backwards, and a fourth counting defect; budget exhausted |
+| 9 | `diff-brief-r9.md` | `diff-reply-r9.txt` | FIX. Three record defects, one refuting this file's own account of itself |
 
 ## What round 1 found, and why it matters more than the count
 
@@ -250,8 +251,8 @@ two narrowed claims at round 1, one blocking spec miss and four record
 defects at round 2, one licence obligation and two record residues at
 round 3, two overstated claims at round 4, two more at round 5, one
 specification gap and one recreated total at round 6, two
-self-contradictions at round 7, two more at round 8. Almost none of them
-were about code behaviour. **No total appears here on purpose.** Round 4
+self-contradictions at round 7, two more at round 8, three record defects
+at round 9. Almost none of them were about code behaviour. **No total appears here on purpose.** Round 4
 removed one because totals go stale; a brief put one back at round 6 and
 got it wrong; the correction of that put a second wrong one in the README
 and in the round-7 brief. Three attempts, three wrong numbers, all of
@@ -367,8 +368,9 @@ said "five rounds have found seventeen things". The first five rounds
 enumerate to eighteen. (Round 7 then found that the correction of that
 correction was ALSO wrong: the six-round enumeration is twenty, and both
 the README and the round-7 brief had said eighteen across six rounds.
-This is the third wrong total in four rounds, which is why there is now
-no total at all.) Round 4 removed a total from this file
+This is the third wrong total in four rounds, which is why this file no
+longer maintains an authoritative aggregate. Corrective totals like the
+ones in this very sentence remain, as records of specific wrong claims.) Round 4 removed a total from this file
 precisely because totals go stale, and the very next brief written after
 that correction contained a new one. The brief is retained verbatim and
 still says seventeen.
@@ -415,18 +417,25 @@ file" five lines under one of those corrective totals. Round 8. Counting
 defects were found at rounds 4, 6, 7 and 8, and round 7's was itself a
 count left stale inside round 6's fix.)
 
-The arithmetic over that list has been wrong every single time it has been
-attempted, by a session that had already twice written down that totals go
-stale. That is the most useful sentence in this document.
+Every MAINTAINED aggregate this file has carried has been wrong, written
+by a session that had already twice recorded here that totals go stale.
+The corrective arithmetic done since — eighteen for the first five rounds,
+twenty for six — is right, which is the distinction round 9 drew and this
+paragraph had collapsed.
 
 A FIX is new code and gets no discount. Rounds 5, 7 and 8 each found a
 defect inside the immediately preceding round's fix, and after round 5
-that was written down as a lesson here and then repeated twice.
+that was written down as a lesson here and then repeated twice. Round 6
+did not, and round 9 caught this file generalising three rounds into a
+rule that covered four.
 
 ## Round 8, the last authorized unit
 
-Two findings, both mine, both record-only, and both again inside the
-previous round's fix.
+Two findings, both mine, both record-only. **Only ONE of them was inside
+the previous round's fix**, and round 9 refuted the claim that both were:
+the reversed rule-1 sentence below dates from the round-1 sweep-B rebuild
+at `985ff7e` and was byte-identical at `9bc9338`, so it survived eight
+rounds and a whole-branch review rather than being newly introduced.
 
 - **`render_field`'s docstring stated rule 1 backwards.** It said the
   three escape placements "are distinguishable after rule 1 strips them".
@@ -452,18 +461,73 @@ is the second time it has done that in this debate.
 What the eight rounds actually establish, stated as narrowly as the
 evidence allows:
 
-- **Code:** two findings, both at round 1, both spec drift rather than
+- **Code:** two findings, at rounds 1 and 6, both spec drift rather than
   wrong behaviour — a generated matrix that was not the frozen product,
-  and a specification gap in the same generator at round 6. Every mutation
+  and a specification gap in the same generator. (This said "both at
+  round 1" and then named the second at round 6 in the same sentence.
+  Round 9.) Every mutation
   run, every gate and both PowerShell hosts have been green since round 1,
   and the reviewer explicitly cleared the fault model and the behavioural
   cap change with line citations at round 6.
 - **Process:** two frozen tasks were not done and were disclosed rather
   than performed. Both were then performed.
 - **Records:** everything else. See the per-round list above rather than
-  a figure; from round 5 onward, every round found at least one defect
-  that the immediately preceding fix had introduced.
+  a figure. Rounds 5, 7 and 8 each found a defect the immediately
+  preceding fix had introduced; round 6 did NOT — its findings were an
+  older specification gap and a claim in the round-6 brief. Round 9
+  refuted the wider "from round 5 onward, every round" that stood here.
 
 The last figure is the one worth carrying into the next cycle. A fix is
 new code and gets no discount, and in a documentation-heavy release that
 rule bites hardest on the prose nobody runs.
+
+## Round 9, and the end of the debate
+
+Three findings, all in this file, all record-only. One of them matters
+more than its size.
+
+- **This file's account of itself was wrong.** It said round 8's two
+  findings were both inside round 7's fix, and that from round 5 onward
+  EVERY round found a defect the preceding fix had introduced. Neither
+  holds. The reversed rule-1 sentence dates from the round-1 sweep-B
+  rebuild at `985ff7e` and was byte-identical at `9bc9338`; round 6's
+  findings were an older specification gap and a claim in a brief. The
+  true statement is rounds 5, 7 and 8. Three instances had been
+  generalised into a rule covering four, and the session had been
+  reporting that rule to the user.
+- **"No total at all" and "wrong every single time"** both survived in the
+  round-6 section after the policy above them was narrowed. And the second
+  was simply false: eighteen and twenty are correct calculations. Only the
+  MAINTAINED aggregates were ever wrong.
+- **The closing summary** said both code findings were at round 1 and then
+  named the second at round 6 in the same sentence.
+
+## How it ended
+
+The budget was exhausted for the third time. The user was told the
+remaining findings were confined to this file and chose to fix and
+continue rather than authorize another round, accepting that the
+attestation would therefore record **ESCALATE with recorded risk
+acceptance** rather than a PASS. No reviewer PASS was ever issued in this
+debate.
+
+That is the honest outcome, and it is worth more than a PASS bought by
+stopping the reviewer earlier.
+
+## What nine rounds established
+
+- **Code:** two findings, at rounds 1 and 6, both spec drift rather than
+  wrong behaviour. Every gate and both PowerShell hosts green throughout.
+  The reviewer cleared the fault model and the behavioural cap change by
+  line citation at round 6.
+- **Process:** two frozen tasks were disclosed rather than performed, then
+  performed.
+- **Records:** everything else, and the record defects did not stop
+  arriving. They shrank in consequence, not in frequency.
+
+The last line is the one to carry into the next cycle. A record that no
+gate reads will drift, and a session correcting it will introduce new
+drift at a rate a reviewer can measure. The remedy is not more rounds; it
+is fewer derived claims. Almost every finding after round 4 was a number,
+a total, or a generalisation the file computed about itself instead of
+pointing at the list it already had.
