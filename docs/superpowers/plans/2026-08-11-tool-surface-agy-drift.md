@@ -1,9 +1,23 @@
 # 0.24.0 — the reviewer's tool surface, and the agy lane's contracts
 
-**Status: DRAFT.** Not frozen. This is the session position going into the
-mode-`plan` cross-vendor debate. Every number in it comes from
+**Status: FROZEN.** Debate terminal at round 6 on an ADJUDICATED DRY
+ROUND, plus one void round before round 1. Every round found something
+real; findings per round ran 5, 6, 5, 2, 1, 0. The declared round cap of 4
+consecutive contested exchanges was reached at round 4 and the user
+authorized rounds 5 and 6 separately. All 6 fix-verify units are spent.
+Changes require reopening the debate and appending a round to the record.
+
+Every number in this plan comes from
 `rounds/2026-08-11-tool-surface-agy-drift/probe-record.md`, measured
 2026-08-11.
+
+**What the debate cost, recorded because it is the most useful thing here.**
+Nineteen findings across five contested rounds, and every single one was a
+claim of the session's that was wider than its evidence. Not one was a
+disagreement about design. The recurring failure was PROPAGATION: a
+correction applied where the reviewer had cited it and nowhere else, three
+rounds running, including once inside the correction itself and once in
+this cycle's own debate record.
 
 ## Goal
 

@@ -304,3 +304,43 @@ happens next: findings per round ran 5, 6, 5, 2, 1.
 
 Applied at `e47c6d9`. Meters: 5 contested exchanges against a declared
 cap of 4, one authorized; 5/6 fix-verify units. ONE unit remains.
+
+## Round 6 — DRY. TERMINAL.
+
+Brief: `plan-brief-r6.md`. Reply: `plan-reply-r6.txt`. Binding clean
+(`-Resume`, boundary 1773747 bytes). The user authorized this exchange
+specifically to give the debate a chance to terminate cleanly.
+
+All three questions PASS. The narrowing is correct and complete, the
+class-wide claim survives only as explicitly retracted historical text,
+and the fix introduced no defect. Adjudicated DRY, which is the protocol's
+termination condition.
+
+**The debate is TERMINAL at round 6.** The plan is FROZEN.
+
+## Final tally
+
+| round | findings | note |
+|---|---|---|
+| 0 | — | VOID. Reply discarded unread; no prior-state inventory |
+| 1 | 5 FIX, 5 PASS | premise falsified, control overclaimed |
+| 2 | 6 FIX | round 1's fixes had not propagated |
+| 3 | 5 FIX | they still had not; one fix made a false-clean |
+| 4 | 2 FIX, 8 PASS | CAP REACHED, user authorized round 5 |
+| 5 | 1 FIX | third narrowing of one sentence |
+| 6 | 0 | DRY, terminal |
+
+Meters at termination: 6 contested exchanges against a declared cap of 4,
+two of them user-authorized; 6/6 fix-verify units spent.
+
+**Nineteen findings, and every one was a claim of the session's that was
+wider than its evidence.** Not one was a disagreement about design. The
+reviewer never proposed a different architecture; it repeatedly refused to
+let the session say more than it had measured.
+
+**The recurring failure was PROPAGATION.** A correction applied where the
+reviewer cited it and nowhere else, three rounds running. It appeared
+inside its own correction at round 4, and inside THIS FILE at round 3 and
+again at round 4. The general lesson is written into Task 3: a count is a
+claim and goes stale like one, and four sweeps finding something is not
+evidence that a fifth would find nothing.
