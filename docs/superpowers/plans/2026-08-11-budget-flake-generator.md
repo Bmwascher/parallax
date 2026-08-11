@@ -495,8 +495,12 @@ and produced 88 cases where the product above is 4 x 3 x 5 x 3 x 2 = 360.
 specified — the same defect round 9 found in the PowerShell sweep, in the
 module written to avoid it.
 
-Two readings the freeze does not settle, decided at the rebuild and
-recorded here rather than left in the code:
+THREE readings the freeze does not settle. All three were decided at the
+rebuild; only the first two were RECORDED then, and the third lived in
+`render_field` alone until diff round 6 found it. (This sentence said
+"two" for two rounds after the third was added to the list below it, and
+also claimed all three had been recorded here from the start. Round 7
+caught the count; the rest is corrected with it.)
 
 - **`twice` crossed with form and escape** means TWO occurrences of the
   SAME form and placement. A mixed pair is a different combination that

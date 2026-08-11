@@ -125,6 +125,7 @@ action, one ESCALATED into the debate.
 | 4 | `diff-brief-r4.md` | `diff-reply-r4.txt` | ESCALATE. Two claims wider than their evidence, and the ROUND CAP reached |
 | 5 | `diff-brief-r5.md` | `diff-reply-r5.txt` | ESCALATE. Two more, one of them introduced BY round 4's fix; budget exhausted |
 | 6 | `diff-brief-r6.md` | `diff-reply-r6.txt` | FIX. A third unfrozen reading in the generator; two implementation areas cleared |
+| 7 | `diff-brief-r7.md` | `diff-reply-r7.txt` | FIX. Two self-contradictions introduced by round 6's own fix |
 
 ## What round 1 found, and why it matters more than the count
 
@@ -243,12 +244,17 @@ generate" sixty lines above the paragraph refuting it.
 
 ## The through-line of this diff debate
 
-Six rounds, and every one of them found something: four spec drifts and
+Seven rounds, and every one of them found something: four spec drifts and
 two narrowed claims at round 1, one blocking spec miss and four record
 defects at round 2, one licence obligation and two record residues at
 round 3, two overstated claims at round 4, two more at round 5, one
-specification gap and one recreated total at round 6. Almost none of them
-were about code behaviour.
+specification gap and one recreated total at round 6, two
+self-contradictions at round 7. Almost none of them were about code
+behaviour. **No total appears here on purpose.** Round 4
+removed one because totals go stale; a brief put one back at round 6 and
+got it wrong; the correction of that put a second wrong one in the README
+and in the round-7 brief. Three attempts, three wrong numbers, all of
+them arithmetic over a list that is right there. The list is the record.
 
 **Which briefs still carry uncorrected claims.** Retained briefs and
 replies are verbatim and are never edited, so some of them still state
@@ -256,9 +262,11 @@ things later rounds refuted. `diff-brief-r2.md` says three mutants die on
 cells the first build could not generate, and that sweep B's values follow
 from rules 5 and 7 alone. `diff-brief-r5.md` says the fix range touches
 three files; it touches five. `diff-brief-r6.md` says five rounds found
-seventeen things; the enumeration above says eighteen. Every correction
-lives in the code, the plan and the backlog, which is where a reader acts
-from.
+seventeen things; the first five rounds enumerate to eighteen, and this
+sentence itself said "the enumeration above" while that enumeration had
+grown to six rounds, which round 7 caught. `diff-brief-r7.md` says
+eighteen across six rounds; it is twenty. Every correction lives in the
+code, the plan and the backlog, which is where a reader acts from.
 
 (An earlier draft of this paragraph said "eleven findings", which
 contradicted this file's own round table. The count is now enumerated
@@ -354,8 +362,12 @@ key has no line and so no value position, while a valueless form has a
 value position that is merely empty.
 
 **And a total, three rounds after totals were removed.** The round-6 brief
-said "five rounds have found seventeen things". The README's own
-enumeration comes to eighteen. Round 4 removed a total from this file
+said "five rounds have found seventeen things". The first five rounds
+enumerate to eighteen. (Round 7 then found that the correction of that
+correction was ALSO wrong: the six-round enumeration is twenty, and both
+the README and the round-7 brief had said eighteen across six rounds.
+This is the third wrong total in four rounds, which is why there is now
+no total at all.) Round 4 removed a total from this file
 precisely because totals go stale, and the very next brief written after
 that correction contained a new one. The brief is retained verbatim and
 still says seventeen.
@@ -370,3 +382,33 @@ citing the lines it checked: the fault model proves the unchanged fallback
 over the complete matrix before mutating it, and the cap change matches
 the frozen four-tool rule with visibility, exact-cap and exhaustion
 coverage.
+
+## Round 7, and the honest thing to say about it
+
+Two findings, and BOTH were introduced by round 6's own fix.
+
+- The plan paragraph recording the third degenerate crossing still opened
+  "Two readings the freeze does not settle" and then listed three. The
+  sentence that had been correct for two readings was left standing when
+  the third was added to the list below it.
+- `render_field`'s docstring called `K:` a form with "no value slot" and
+  then justified its own behaviour by saying the value position exists.
+  Two sentences, three lines apart, contradicting each other.
+- A THIRD, found by the session auditing its own round-7 fix before
+  sending it: the same plan sentence also said all three readings were
+  "recorded here rather than left in the code", which was false for the
+  one that lived in `render_field` alone. All three were DECIDED at the
+  rebuild; only two were RECORDED then.
+- And the count again: the six-round enumeration is TWENTY. Round 6's
+  brief said seventeen, the correction said eighteen, and eighteen was the
+  five-round figure carried forward without re-adding. Third wrong total
+  in four rounds.
+
+There is now no total anywhere in this file. The list is the record, and
+the arithmetic over it has been wrong every single time it has been
+attempted, by a session that had already twice written down that totals go
+stale. That is the most useful sentence in this document.
+
+A FIX is new code and gets no discount. Rounds 5 and 7 are both instances
+of the fix carrying the defect, and after round 5 that was recorded as a
+lesson and then repeated two rounds later.

@@ -1,0 +1,8 @@
+1. **The third crossing is recorded, but its explanation contradicts itself.** The plan introduces “Two readings” and then lists three ([plan](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-08-11-budget-flake-generator.md:498)). The generator docstring also calls `K:` a form with “no value slot,” then justifies its behavior by saying that value position exists ([test_route_parser_shapes.py](/C:/Users/Brandon/Documents/parallax/evals/multi-model-verify/test_route_parser_shapes.py:165)). Change these to “Three readings” and “a valueless form,” respectively.
+
+2. **The count is still misstated.** The six-round enumeration is 6 + 5 + 3 + 2 + 2 + 2 = **20**, not eighteen ([README.md](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/rounds/2026-08-11-budget-flake-generator/README.md:246)). Eighteen is the count for the first five rounds only. Consequently, “the enumeration above says eighteen” is now ambiguous/stale after adding round 6 ([README.md](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/rounds/2026-08-11-budget-flake-generator/README.md:258)), and this round’s “eighteen across six rounds” claim is false.
+
+Both are blocking for an adjudicated dry-round attestation, though neither identifies a behavioral defect. No follow-up-only finding.
+
+**FIX**
+

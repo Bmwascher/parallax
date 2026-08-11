@@ -162,8 +162,10 @@ def render_field(key, value, form, escape):
     them, so the two placements are distinguishable after rule 1 strips
     them.
 
-    A form with no value slot - `K:` and `K: ` - still gets an in-value
-    case, with the escape written where the value WOULD have been. That
+    A VALUELESS form - `K:` and `K: `, which carry a value POSITION but
+    no value in it - still gets an in-value case, with the escape written
+    where the value would have been. (This said "no value slot" and then
+    justified itself by saying the position exists. Round 7.) That
     is the THIRD degenerate crossing of the frozen product, and unlike
     the other two it lived only here until diff round 6 moved it into the
     plan. It differs from `presence=absent`, which IS left as duplicate
