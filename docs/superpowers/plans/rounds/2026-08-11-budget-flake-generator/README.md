@@ -122,6 +122,7 @@ action, one ESCALATED into the debate.
 | 1 | `diff-brief-r1.md` | `diff-reply-r1.txt` | FIX. Ruled the escalation, then found four spec drifts the whole-branch review missed |
 | 2 | `diff-brief-r2.md` | `diff-reply-r2.txt` | FIX. The fix re-review was not dry: one blocking spec miss and four record defects |
 | 3 | `diff-brief-r3.md` | `diff-reply-r3.txt` | FIX. The fail-first repair accepted; a licence obligation and two record residues found |
+| 4 | `diff-brief-r4.md` | `diff-reply-r4.txt` | ESCALATE. Two claims wider than their evidence, and the ROUND CAP reached |
 
 ## What round 1 found, and why it matters more than the count
 
@@ -240,8 +241,16 @@ generate" sixty lines above the paragraph refuting it.
 
 ## The through-line of this diff debate
 
-Three rounds, eleven findings, and almost none of them about code
-behaviour. The code was right nearly every time. What kept being wrong was
+Four rounds, and every one of them found something: four spec drifts and
+two narrowed claims at round 1, one blocking spec miss and four record
+defects at round 2, one licence obligation and two record residues at
+round 3, two overstated claims at round 4. Almost none of them were about
+code behaviour.
+
+(An earlier draft of this paragraph said "eleven findings", which
+contradicted this file's own round table. The count is now enumerated
+rather than totalled, because a total is the kind of number that goes
+stale the moment a round is added.) The code was right nearly every time. What kept being wrong was
 the RECORD: a plan surface that did not match the tree, a licence notice
 nobody pinned, a synopsis contradicting its own corrections, and twice, an
 accurate description of a missing measurement standing in for the
@@ -251,3 +260,24 @@ A missing test fails a gate. A missing or stale RECORD fails nothing, so
 the only thing that catches it is a reader comparing the frozen plan to
 the tree line by line. That is what mode diff is, and it is why the
 whole-branch review is an input to it rather than a replacement for it.
+
+## Round 4, and the cap
+
+Two findings, both mine, both record-only, and both the same species as
+everything above: the licence notice said the frozen fixture's "content
+is hash-pinned" when the test splits the banner off and hashes only the
+copied text, and the through-line paragraph above said "eleven findings"
+when this file's own round table lists twelve. Neither touched code. Both
+were claims wider than their evidence, in a file whose subject is claims
+wider than their evidence.
+
+The reviewer then did something worth recording. It counted four
+consecutive contested exchanges, observed that the round cap declared in
+the round-1 brief was reached even though two fix-verify units remained,
+and returned ESCALATE rather than absorbing the finding or quietly
+continuing. The cap and the fix-verify budget are separate meters, which
+is exactly what backlog item 24 changed in 0.22.0; this is the first time
+the separation has been exercised in a live debate.
+
+The user was asked, chose to reset the cap, and authorized ONE more
+round. That round is the confirming re-review.

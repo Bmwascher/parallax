@@ -29,8 +29,13 @@ exactly as it stood at commit `dd0db13`, immediately before the budget
 delta above, and it exists so the fail-first proof for that delta can
 EXECUTE the pre-change implementation instead of describing it. Changes
 from upstream: the provenance header this repo substituted at import, plus
-a banner marking it uneditable. It must never be updated; its content is
-hash-pinned by `evals/multi-model-verify/test_skill_lint_budget.py`.
+a banner marking it uneditable. It must never be updated.
+
+What is hash-pinned, exactly: the COPIED TEXT BELOW THE BANNER, by
+`evals/multi-model-verify/test_skill_lint_budget.py`. The banner itself is
+prose and is EXCLUDED from the hash, so banner edits do not break any
+pin. An earlier draft of this paragraph said "its content is hash-pinned",
+which claimed the whole file and was wider than the test.
 
 It is named here because the paragraph above scopes this notice to "the
 three Python tools in this directory", which would otherwise leave a
