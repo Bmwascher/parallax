@@ -382,6 +382,27 @@ convention. It never substitutes for the three controls above, and a
 round that skipped the probe does not become clean because the brief
 said the right words.
 
+## The brief across the native stdin boundary
+
+<!-- contract:start id=brief-encoding-transport -->
+The brief is read as strict UTF-8 and `$OutputEncoding` is set to UTF-8
+before the pipe. Windows PowerShell 5.1 defaults `$OutputEncoding` to
+us-ascii AND reads a no-BOM file with the ANSI code page, so two faults
+fire in series and one em dash arrives as three question marks.
+Measured 2026-08-11 on 5.1, where a 13,363-byte brief lost all 15 of
+its em dashes; PowerShell 7 defaults both to UTF-8 and is unaffected.
+The reviewer then answers a brief this side never wrote, and only the
+round-evidence binding catches it.
+The assignment is at SCRIPT scope and restored in `finally`, NOT made
+inside a `& { }` block. Measured the same day: a `$OutputEncoding` set
+in a child scope leaves the native pipe on the outer value, and the em
+dash still arrived as `?`. Scoping it and having it take effect are two
+different things, and only one of them was tested first.
+The backup lane passes its brief as an argument rather than through a
+pipe, so this mechanism does not apply there and nothing here is
+claimed about it.
+<!-- contract:end -->
+
 ## The codex brief binding
 
 <!-- contract:start id=codex-brief-binding-calls -->

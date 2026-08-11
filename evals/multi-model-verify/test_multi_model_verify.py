@@ -470,10 +470,17 @@ class TestTransportContract:
         route header verifies, and the reviewer reads a brief this side
         never wrote. Round 1 was always immune because it pipes; this
         makes resume identical to it.
+
+        0.23.0 REPLACED the `Get-Content -Raw` spelling this used to pin,
+        rather than adding beside it: that spelling is itself defective on
+        the same host (see test_the_brief_is_read_and_piped_as_utf8), so
+        leaving the old regex would have kept a broken form pinned as the
+        correct one. The property being pinned is unchanged - the brief
+        goes on STDIN and the command ends `resume <SESSION_ID> -`.
         """
         text = read(SKILL_MD)
         assert re.search(
-            r"Get-Content -Raw <brief-file> \| codex exec"
+            r"\$brief \| codex exec"
             r" --sandbox read-only --disable plugins --disable apps"
             r" -c \$override -m <canonical-model-id>"
             r" -c model_reasoning_effort=<canonical-effort>"
@@ -482,9 +489,80 @@ class TestTransportContract:
             "the resume dispatch must pipe the brief on stdin and end"
             " `resume <SESSION_ID> -`, matching round 1"
         )
+        assert "Get-Content -Raw <brief-file> | codex exec" not in text, (
+            "the Get-Content -Raw spelling reads a no-BOM UTF-8 brief with"
+            " the ANSI code page on Windows PowerShell 5.1 and must not"
+            " return"
+        )
         assert 'resume <SESSION_ID> "<rebuttal-brief>"' not in text, (
             "the positional brief form is live-proven defective on"
             " PowerShell 5.1 and must not return"
+        )
+
+    def test_the_brief_is_read_and_piped_as_utf8(self):
+        """Both dispatch forms carry the encoding guard, and the contract
+        text that says why is locked here.
+
+        Found by this repo's own round-evidence binding during the 0.23.0
+        plan debate: round 1 was dispatched, answered, and REFUSED because
+        the prompt codex recorded was not the brief that was sent.
+        """
+        text = read(SKILL_MD)
+        # Both blocks: the scope, the strict decoder, the piped variable.
+        assert text.count("$OutputEncoding = New-Object"
+                          " System.Text.UTF8Encoding($false)") >= 2, (
+            "every dispatch must set $OutputEncoding: Windows PowerShell"
+            " 5.1 defaults it to us-ascii, which flattens non-ASCII to '?'"
+            " at the native stdin boundary"
+        )
+        assert text.count(
+            '$brief = [System.IO.File]::ReadAllText("<brief-file>",'
+            ' (New-Object System.Text.UTF8Encoding($false, $true)))') >= 2, (
+            "every dispatch must decode the brief as strict UTF-8: 5.1"
+            " reads a no-BOM file with the ANSI code page"
+        )
+        assert text.count("$brief | codex exec") >= 2, (
+            "both the fresh and the resumed dispatch pipe the decoded"
+            " brief, not a re-read of the file"
+        )
+        # SCRIPT scope, restored in finally. A `& { }` block was written
+        # first, on the reasoning that a child scope cannot leak; it was
+        # then MEASURED and the native pipe stayed on the OUTER value, so
+        # the em dash was still flattened. Scoping a setting and having it
+        # take effect are two different things.
+        assert text.count("$priorOutputEncoding = $OutputEncoding") >= 2, (
+            "the previous value must be captured so finally can restore it"
+        )
+        assert text.count(
+            "} finally { $OutputEncoding = $priorOutputEncoding }") >= 2, (
+            "the setting must be restored even when the override hash"
+            " check throws"
+        )
+        assert ("   & {" + chr(10)) not in text, (
+            "a child-scope assignment does not reach the native pipe;"
+            " measured 2026-08-11 on Windows PowerShell 5.1"
+        )
+        assert "Get-Content -Raw <brief-file>" not in text, (
+            "no dispatch may re-read the brief with Get-Content -Raw"
+        )
+        notes = read(REFERENCES / "model-prompting-notes.md")
+        assert ("The brief is read as strict UTF-8 and `$OutputEncoding` is set to UTF-8\n"
+                "before the pipe. Windows PowerShell 5.1 defaults `$OutputEncoding` to\n"
+                "us-ascii AND reads a no-BOM file with the ANSI code page, so two faults\n"
+                "fire in series and one em dash arrives as three question marks.\n"
+                "Measured 2026-08-11 on 5.1, where a 13,363-byte brief lost all 15 of\n"
+                "its em dashes; PowerShell 7 defaults both to UTF-8 and is unaffected.\n"
+                "The reviewer then answers a brief this side never wrote, and only the\n"
+                "round-evidence binding catches it.\n"
+                "The assignment is at SCRIPT scope and restored in `finally`, NOT made\n"
+                "inside a `& { }` block. Measured the same day: a `$OutputEncoding` set\n"
+                "in a child scope leaves the native pipe on the outer value, and the em\n"
+                "dash still arrived as `?`. Scoping it and having it take effect are two\n"
+                "different things, and only one of them was tested first.\n"
+                "The backup lane passes its brief as an argument rather than through a\n"
+                "pipe, so this mechanism does not apply there and nothing here is\n"
+                "claimed about it.") in notes, (
+            "the brief-encoding-transport region must stay whole"
         )
 
     def test_sandbox_verified_in_route_check(self):
@@ -2575,6 +2653,125 @@ class TestDriftStateMachine:
             capture_output=True, text=True, timeout=1200)
         assert proc.returncode == 0, (
             f"state-machine failures:\n{proc.stdout}\n{proc.stderr}")
+
+
+class TestBriefEncodingOverStdin:
+    """Run the two dispatch spellings for real and read the BYTES that
+    reach the child process.
+
+    This is the measurement, not a re-reading of the skill text. The
+    defect it pins cost a full reviewer round during 0.23.0's own plan
+    debate: the brief was corrupted on the way out, the reviewer answered
+    something this side never wrote, and only the round-evidence binding
+    refused it.
+
+    Windows-only and host-specific by nature. Windows PowerShell 5.1 is
+    the affected interpreter; PowerShell 7 defaults both settings to UTF-8
+    and shows nothing, so a run on 7 alone would prove the wrong thing.
+    """
+
+    DUMPER = ("import sys\n"
+              "sys.stdout.write(sys.stdin.buffer.read().hex())\n")
+
+    def _run(self, tmp_path, snippet):
+        brief = tmp_path / "brief.md"
+        # UTF-8, NO BOM - the shape a scratchpad brief actually has.
+        brief.write_bytes("a—b".encode("utf-8"))
+        dumper = tmp_path / "dump.py"
+        dumper.write_text(self.DUMPER, encoding="utf-8")
+        script = tmp_path / "run.ps1"
+        script.write_text(
+            snippet.replace("<BRIEF>", str(brief))
+                   .replace("<PY>", sys.executable)
+                   .replace("<DUMP>", str(dumper)),
+            encoding="utf-8")
+        proc = subprocess.run(
+            ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass",
+             "-File", str(script)],
+            capture_output=True, text=True, timeout=120)
+        assert proc.returncode == 0, proc.stdout + proc.stderr
+        return proc.stdout.strip().lower()
+
+    @pytest.mark.skipif(os.name != "nt",
+                        reason="Windows PowerShell 5.1 is the subject")
+    def test_the_documented_old_form_corrupts_the_brief(self, tmp_path):
+        # Get-Content -Raw decodes the no-BOM file with the ANSI code page,
+        # splitting one 3-byte character into three; $OutputEncoding is
+        # us-ascii on 5.1, flattening each of the three to '?'. THREE
+        # question marks, not one, is what proves both faults fired.
+        out = self._run(tmp_path,
+                        "Get-Content -Raw <BRIEF> | & '<PY>' '<DUMP>'\n")
+        assert "3f3f3f" in out, (
+            "expected the em dash to arrive as three question marks;"
+            f" got {out}"
+        )
+        assert "e28094" not in out, "the em dash must not survive the old form"
+
+    @pytest.mark.skipif(os.name != "nt",
+                        reason="Windows PowerShell 5.1 is the subject")
+    def test_the_shipped_form_delivers_the_brief_intact(self, tmp_path):
+        # The exact guards SKILL.md's dispatch blocks carry: SCRIPT-scope
+        # assignment, strict decoder, restore in finally.
+        out = self._run(tmp_path, (
+            "$priorOutputEncoding = $OutputEncoding\n"
+            "try {\n"
+            "$OutputEncoding = New-Object System.Text.UTF8Encoding($false)\n"
+            "$brief = [System.IO.File]::ReadAllText('<BRIEF>',"
+            " (New-Object System.Text.UTF8Encoding($false, $true)))\n"
+            "$brief | & '<PY>' '<DUMP>'\n"
+            "} finally { $OutputEncoding = $priorOutputEncoding }\n"))
+        assert "e28094" in out, (
+            f"the em dash must survive as UTF-8 bytes e2 80 94; got {out}"
+        )
+        assert "3f3f3f" not in out, "no character may be flattened to '?'"
+
+    @pytest.mark.skipif(os.name != "nt",
+                        reason="Windows PowerShell 5.1 is the subject")
+    def test_a_child_scope_does_not_reach_the_pipe(self, tmp_path):
+        """The mistake this release made, pinned so it cannot come back.
+
+        `& { }` was chosen first because a child scope provably cannot
+        leak the setting into the caller's shell - which was measured, and
+        was true, and was the wrong question. The native pipe reads
+        `$OutputEncoding` from the outer scope, so the guard did nothing
+        and the em dash was still flattened. The strict decoder worked, so
+        the character reached the pipe whole and came out as ONE `?`
+        rather than three: a partly-applied fix looks different from no
+        fix, and neither is the fix.
+        """
+        out = self._run(tmp_path, (
+            "$brief = [System.IO.File]::ReadAllText('<BRIEF>',"
+            " (New-Object System.Text.UTF8Encoding($false, $true)))\n"
+            "& { $OutputEncoding = New-Object"
+            " System.Text.UTF8Encoding($false)\n"
+            "$brief | & '<PY>' '<DUMP>' }\n"))
+        assert "e28094" not in out, (
+            "if a child-scope assignment now reaches the pipe, the shipped"
+            " script-scope form is no longer the only working one and the"
+            f" contract text must be re-measured; got {out}"
+        )
+
+    @pytest.mark.skipif(os.name != "nt",
+                        reason="Windows PowerShell 5.1 is the subject")
+    def test_the_setting_is_restored_after_the_dispatch(self, tmp_path):
+        # A script-scope assignment DOES leak without the finally, which is
+        # the price of it working at all. The restore is what pays it.
+        out = self._run(tmp_path, (
+            "$before = $OutputEncoding.WebName\n"
+            "$priorOutputEncoding = $OutputEncoding\n"
+            "try { $OutputEncoding = New-Object"
+            " System.Text.UTF8Encoding($false); throw 'as if the hash"
+            " check failed' }\n"
+            "catch { }\n"
+            "finally { $OutputEncoding = $priorOutputEncoding }\n"
+            "$after = $OutputEncoding.WebName\n"
+            "[System.Text.Encoding]::UTF8.GetBytes(\"$before/$after\")"
+            " | ForEach-Object { '{0:x2}' -f $_ }\n"))
+        decoded = bytes.fromhex("".join(out.split())).decode("utf-8")
+        before, after = decoded.split("/")
+        assert before == after, (
+            f"$OutputEncoding was not restored: {before} -> {after}"
+        )
 
 
 if __name__ == "__main__":

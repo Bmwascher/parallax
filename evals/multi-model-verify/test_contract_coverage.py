@@ -667,6 +667,10 @@ DECLARED_REGIONS = {
     "client-context-probe",
     "plugin-cache-reclassified",
     "verified-override-dispatch",
+    # 0.23.0: the brief's encoding across the native stdin boundary. Found
+    # by the round-evidence binding refusing a round of this release's own
+    # plan debate.
+    "brief-encoding-transport",
     "enumeration-depth-asymmetry",
     "brief-scope-guard",
     "client-probe-scope-limit",

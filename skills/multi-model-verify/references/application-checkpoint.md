@@ -89,6 +89,14 @@ or whose path set no longer matches the range, is rejected. Binding
 metadata is all-or-none: stripping one field cannot evade the rest. An
 attestation minted for a different change set fails mechanically.
 
+Two things about that emitter call, moved here from SKILL.md in 0.23.0
+because they are read only when a checkpoint actually governed the fixes.
+The `<head>` passed with `-CheckpointFile` is the POST-fix, re-reviewed
+head — never the head the FIX verdict was issued on. And the artifact must
+ALREADY carry its appended verification results before the emitter runs,
+because the recorded hash covers the final artifact; hashing it first and
+appending afterwards records a file that no longer exists.
+
 ## Standalone contexts (no parallax machinery)
 
 For a distilled skill outside this plugin, keep a `COLLABORATION.md` in
