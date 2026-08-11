@@ -1,0 +1,9 @@
+DRY.
+
+1. The narrowing is correct and complete. The plan now distinguishes actual past promotion from the missing required promotion step. The retained claim concerns only the README/raw-artifact rule, which appears in the 0.17.0 record and reviewer instruction but not in the required protocol (`docs/superpowers/plans/2026-08-11-tool-surface-agy-drift.md:435-462`; `docs/superpowers/plans/rounds/2026-07-28-reviewer-isolation/README.md:10-12`; `docs/superpowers/plans/rounds/2026-07-28-reviewer-isolation/sol-diff-r1-reply.md:77-87`; `skills/multi-model-verify/SKILL.md:23-27`). **PASS**
+
+2. The class-wide “never promoted” claim survives only as explicitly retracted historical text. The only current “never promoted” statement is narrowed to this specific rule; the round README records the prior overclaim and its correction rather than restating it as current (`docs/superpowers/plans/2026-08-11-tool-surface-agy-drift.md:435-442`, `:457-462`; `docs/superpowers/plans/rounds/2026-08-11-tool-surface-agy-drift/README.md:283-300`). **PASS**
+
+3. No defect was introduced by the fix. This is an adjudicated dry round, satisfying the protocol’s termination condition (`skills/multi-model-verify/references/debate-protocol.md:88-95`). **PASS**
+
+**The round is DRY. The debate terminates with the sixth and final fix-verify unit spent.**
