@@ -75,13 +75,17 @@ ENTRY = "- demo:widget: Use when demoing. (file: C:/s/demo/SKILL.md)"
 #   5. Every entry-looking line is audited. A line that fails the grammar
 #      sets Malformed rather than being dropped in silence.
 #
-# Invariants 6, 7 and 8 were added at round 13 of the diff debate. The
-# generator was already computing all three; they were simply not written
-# down, so those expected values rested on agreement with the production
-# code rather than on a decided rule. A generated suite whose oracle is
-# read off the implementation is not independent evidence, whatever it
-# scores. Nothing about the code or the expected values changed when
-# these were added - the RULES had been left implicit.
+# Invariants 6, 7 and 8 were added at CYCLE EXCHANGE 13, which is DIFF
+# ROUND 1. Both numbers, because the cycle ran twelve plan rounds and then
+# opened a separate diff debate: "round 13" alone reads as a thirteenth
+# plan round, which is not where this was found.
+#
+# The generator was already computing all three; they were simply not
+# written down, so those expected values rested on agreement with the
+# production code rather than on a decided rule. A generated suite whose
+# oracle is read off the implementation is not independent evidence,
+# whatever it scores. Nothing about the code or the expected values
+# changed when these were added - the RULES had been left implicit.
 #
 #   6. BlockPresent is TRUE iff at least one OPENER survives masking.
 #      A closer with no opener reports the container ABSENT: an opener is
@@ -214,9 +218,9 @@ def entry_grammar_cases():
     the product does not already cover.
 
     Every expected value below comes from invariant 8's truth table.
-    Round 13 of the diff debate found these outcomes were being asserted
-    against a rule that existed only as production comments; the rule is
-    now written above, and each case names the clause it exercises.
+    Cycle exchange 13, diff round 1, found these outcomes were being
+    asserted against a rule that existed only as production comments;
+    the rule is now written above.
     """
     cases = [
         case("entries/joined-on-one-line",
@@ -593,8 +597,24 @@ def test_every_oracle_field_has_a_declared_rule():
         "the ambiguity rule is undeclared")
     # And the addition is dated, so a later reader can tell a rule that
     # was decided in advance from one back-filled after the fact.
-    assert "Invariants 6, 7 and 8 were added at round 13" in text
+    assert "Invariants 6, 7 and 8 were added at CYCLE EXCHANGE 13" in text
     assert "Nothing about the code or the expected values changed when" in text
+    # THE PLAN IS THE AUTHORITATIVE RECORD, and this module is not it.
+    # Reading only this file would let the declarations be stripped from
+    # the plan with the suite still green, which makes the claim "a test
+    # fails if any declaration is removed" wider than the test. The
+    # cross-vendor lane caught exactly that at diff round 2.
+    plan = (REPO_ROOT / "docs" / "superpowers" / "plans"
+            / "2026-08-11-budget-flake-generator.md").read_text(
+                encoding="utf-8")
+    assert "`BlockPresent` is TRUE iff at\n  least one OPENER survives masking" in plan, (
+        "the block-presence rule is undeclared in the frozen plan")
+    assert "Entries are read ONLY from the\n  body of an unambiguous single ordered pair" in plan, (
+        "entry suppression under ambiguity is undeclared in the frozen plan")
+    assert "The entry grammar, as a truth\n  table rather than a regex" in plan, (
+        "the entry grammar is undeclared in the frozen plan")
+    assert plan.count("**ADDED at CYCLE EXCHANGE 13, which is DIFF ROUND 1.**") == 3, (
+        "each of the three additions has to carry its own dated marker")
 
 
 if __name__ == "__main__":

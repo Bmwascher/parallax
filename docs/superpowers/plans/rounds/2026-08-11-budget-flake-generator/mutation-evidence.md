@@ -25,8 +25,11 @@ the tests themselves, so `-s` is required and no post-processing is.
 python -m pytest evals/multi-model-verify/test_route_parser_shapes.py::test_every_defence_is_killed -q -s
 ```
 
-Ten mutants, ten killed, 0 survivors. Run 2026-08-11 at the
-post-rebuild matrix (360 frozen cells plus 16 declared extras).
+Ten mutants, ten killed, 0 survivors. Run 2026-08-11 against the
+post-rebuild matrix: 122 sweep-A cases, 360 frozen sweep-B cells and
+16 declared extras, 498 cases in all. The 360 and the 16 are sweep B
+alone; sweep A is a separate enumeration and most of the killers below
+come from it.
 
 ```
 1-ansi-not-stripped-before-locating killed by: A[coloured,rules=2,decoy=False,eol=lf] (expected True, got False); A[coloured,rules=2,decoy=False,eol=crlf] (expected True, got False); A[coloured,rules=2,decoy=True,eol=lf] (expected True, got False)
@@ -43,9 +46,11 @@ post-rebuild matrix (360 frozen cells plus 16 declared extras).
 
 Note which cells do the work: mutants 7 and 8 are killed by
 `presence=twice` cells, and mutant 9 by a `presence=absent` cell.
-Both axes only exist because the diff debate found sweep B was not
-the frozen product. The pre-rebuild matrix killed them with
-hand-added cases outside any specified enumeration.
+The pre-rebuild matrix DID kill all three, using hand-added cases that
+sat outside any specified enumeration. So the rebuild did not create
+these shapes; it moved equivalent inputs inside the frozen product and
+gave them product case IDs. That is a smaller claim than 'the old
+matrix could not have caught this', and it is the true one.
 
 ## B. `Get-SkillReport`, `test_skill_report_shapes.py`
 

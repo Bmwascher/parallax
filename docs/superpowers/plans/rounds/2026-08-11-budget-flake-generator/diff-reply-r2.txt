@@ -1,0 +1,35 @@
+The fix re-review is not dry. I found one blocking spec miss and four narrower record defects.
+
+1. Blocking — the frozen fail-first test still does not exist.
+
+The plan requires “a fail-first test proving the PRE-CHANGE implementation does NOT fail above the ceiling” ([plan:352](C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-08-11-budget-flake-generator.md:352)). The replacement test explicitly admits that it executes no pre-change code and cannot fail ([test_skill_lint_budget.py:105](C:/Users/Brandon/Documents/parallax/evals/multi-model-verify/test_skill_lint_budget.py:105)); it constructs `errors = []` itself ([test_skill_lint_budget.py:126](C:/Users/Brandon/Documents/parallax/evals/multi-model-verify/test_skill_lint_budget.py:126)), then executes only the shipped linter ([test_skill_lint_budget.py:144](C:/Users/Brandon/Documents/parallax/evals/multi-model-verify/test_skill_lint_budget.py:144)). The upstream “pin” merely asserts prose in the current header ([test_skill_lint_budget.py:173](C:/Users/Brandon/Documents/parallax/evals/multi-model-verify/test_skill_lint_budget.py:173)).
+
+Therefore whole-branch finding 4 was explained more honestly, but not applied as frozen. Task 2 remains outstanding, so claim 6—Task 8 is the only outstanding frozen-plan task—is false at this head.
+
+2. The Sweep B values are independent, but not derived from rules 5 and 7 alone.
+
+Rule 1 is what makes every escape placement verdict-neutral ([test_route_parser_shapes.py:52](C:/Users/Brandon/Documents/parallax/evals/multi-model-verify/test_route_parser_shapes.py:52), [test_route_parser_shapes.py:134](C:/Users/Brandon/Documents/parallax/evals/multi-model-verify/test_route_parser_shapes.py:134)). The expected expression deliberately omits escape for exactly that reason, even while its preceding sentence claims rules 5 and 7 alone ([test_route_parser_shapes.py:261](C:/Users/Brandon/Documents/parallax/evals/multi-model-verify/test_route_parser_shapes.py:261)). Narrow that derivation to rules 1, 5, and 7. I found no expected value read from production.
+
+3. Invariants 6–8 are defensible amendments, not derivations from the original five-rule freeze.
+
+The module itself correctly admits they were added after the generator already computed those values ([test_skill_report_shapes.py:78](C:/Users/Brandon/Documents/parallax/evals/multi-model-verify/test_skill_report_shapes.py:78)). They align with the existing production contract: exact unambiguous span selection ([codex-context-probe.ps1:184](C:/Users/Brandon/Documents/parallax/tools/codex-context-probe.ps1:184)), body-only entry reading ([codex-context-probe.ps1:244](C:/Users/Brandon/Documents/parallax/tools/codex-context-probe.ps1:244)), and complete entry auditing ([codex-context-probe.ps1:253](C:/Users/Brandon/Documents/parallax/tools/codex-context-probe.ps1:253)). I accept them as explicit policy decisions.
+
+Two record claims still need correction:
+
+- The pin reads only its own module ([test_skill_report_shapes.py:577](C:/Users/Brandon/Documents/parallax/evals/multi-model-verify/test_skill_report_shapes.py:577)); removing the declarations from the authoritative plan would remain green. Thus the backlog’s unqualified “a test fails if any declaration is removed” is too wide ([backlog:670](C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-07-27-0150-backlog.md:670)). Pin both records or narrow the claim.
+- They were added in diff-debate round 1, not “round 13 of the DIFF debate”: the retained ledger lists only diff round 1 ([README:118](C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/rounds/2026-08-11-budget-flake-generator/README.md:118)), while both plan and module say round 13 ([plan:578](C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-08-11-budget-flake-generator.md:578), [test_skill_report_shapes.py:78](C:/Users/Brandon/Documents/parallax/evals/multi-model-verify/test_skill_report_shapes.py:78)). “Cycle exchange 13 / diff round 1” would reconcile it.
+
+4. The rebuild did not create the underlying absent and duplicate killer shapes.
+
+At `28bfd07`, the old generator already emitted absent, duplicated-identical, and mixed cases at `evals/multi-model-verify/test_route_parser_shapes.py:210-220`; the retained whole-branch review also names old `B[sandbox,absent]` as mutant 9’s killer ([whole-branch review:23](C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/rounds/2026-08-11-budget-flake-generator/fable-whole-branch-review-8ddda15-28bfd07.md:23)). The rebuild moved equivalent inputs into the specified Cartesian product and changed their case IDs. The retained mutation note already mostly says this correctly ([mutation-evidence.md:44](C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/rounds/2026-08-11-budget-flake-generator/mutation-evidence.md:44)); the backlog’s “cells the first build could not generate” needs that narrower formulation ([backlog:659](C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-07-27-0150-backlog.md:659)). Also qualify “360 frozen cells plus 16 extras” as Sweep B; the route suite additionally has Sweep A ([mutation-evidence.md:28](C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/rounds/2026-08-11-budget-flake-generator/mutation-evidence.md:28)).
+
+5. The encoding evidence count is overstated in item 30.
+
+There are three whole-payload spelling tests ([test_multi_model_verify.py:2831](C:/Users/Brandon/Documents/parallax/evals/multi-model-verify/test_multi_model_verify.py:2831), [test_multi_model_verify.py:2844](C:/Users/Brandon/Documents/parallax/evals/multi-model-verify/test_multi_model_verify.py:2844), [test_multi_model_verify.py:2862](C:/Users/Brandon/Documents/parallax/evals/multi-model-verify/test_multi_model_verify.py:2862)). The fourth test checks restoration after a throw, not another spelling or the `a—b` payload ([test_multi_model_verify.py:2895](C:/Users/Brandon/Documents/parallax/evals/multi-model-verify/test_multi_model_verify.py:2895)). Item 30 currently says all four do the payload comparison ([backlog:1979](C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-07-27-0150-backlog.md:1979)).
+
+The escalation narrowing itself is correctly applied: the certification unit expressly excludes both residual sites ([checkpoint:70](C:/Users/Brandon/Documents/parallax/.git/parallax/application-checkpoints/2026-08-11-0332-28bfd07d6d2b.md:70)), and item 31 preserves the conjunctive scope rationale ([backlog:2013](C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-07-27-0150-backlog.md:2013)).
+
+Blocking: the missing executable fail-first proof. The four record/oracle corrections also block an adjudicated dry round under this repo’s claim-width invariant, but they do not expose a new runtime defect. Follow-up remains item 31; Task 8 remains a planned release gate, not a substitute for completing Task 2.
+
+**FIX**
+

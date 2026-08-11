@@ -258,12 +258,16 @@ def sweep_b():
             line = render_field(key, KEYS[key], form, escape)
             fields = fields + [line, line]
         text, has_block = build("exactly-8", 2, fields, eol=eol)
-        # From rules 5 and 7 alone. An absent key yields no label and no
-        # field line; a doubled one yields two of whichever the form
-        # produces. Either way `exactly one of each` fails, so only the
-        # `once` cells can be clean, and only in an accepted form. The
-        # escape placement is absent from this expression on purpose:
-        # rule 1 makes it presentational.
+        # From rules 1, 5 and 7. Rules 5 and 7 give the presence and form
+        # halves: an absent key yields no label and no field line, a
+        # doubled one yields two of whichever the form produces, so either
+        # way `exactly one of each` fails and only the `once` cells can be
+        # clean, and only in an accepted form. RULE 1 is what licenses the
+        # third axis being absent from this expression - escapes are
+        # stripped before anything is located, so placement is
+        # presentational. Citing only 5 and 7 would leave the escape axis
+        # unexplained; the cross-vendor lane caught that at round 2 of the
+        # diff debate.
         expected = has_block and presence == "once" and accepted
         yield (f"B[{key},{presence},{form},esc={escape},"
                f"eol={'crlf' if eol == chr(13) + chr(10) else 'lf'}]",

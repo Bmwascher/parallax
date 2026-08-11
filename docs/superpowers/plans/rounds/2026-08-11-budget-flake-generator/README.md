@@ -120,6 +120,7 @@ action, one ESCALATED into the debate.
 | round | brief | reply | outcome |
 |---|---|---|---|
 | 1 | `diff-brief-r1.md` | `diff-reply-r1.txt` | FIX. Ruled the escalation, then found four spec drifts the whole-branch review missed |
+| 2 | `diff-brief-r2.md` | `diff-reply-r2.txt` | FIX. The fix re-review was not dry: one blocking spec miss and four record defects |
 
 ## What round 1 found, and why it matters more than the count
 
@@ -170,3 +171,38 @@ why the whole-branch review is an input to it rather than a substitute.
 - `mutation-evidence.md` — the retained failing output for all eighteen
   mutants across both generated modules, each naming the case that killed
   it.
+
+## Round 2, and the finding worth carrying forward
+
+The fix re-review found that round 1's fix to whole-branch finding 4 had
+made the docstring honest and left the measurement missing. The frozen
+plan required a test proving the PRE-CHANGE implementation does not fail
+above the ceiling; two drafts restated the old rule inline instead of
+running it, the second one openly admitting in its own docstring that it
+could not fail. AN HONEST DESCRIPTION OF A MISSING MEASUREMENT IS STILL A
+MISSING MEASUREMENT. The fix is a hash-pinned fixture holding the linter
+frozen at `dd0db13` and a proof that RUNS it.
+
+That is the same shape as round 1's finding B, where the vendored header
+disclosed a skipped upstream fetch and the disclosure was mistaken for
+discharge. Twice in one debate, this session substituted an accurate
+account of not having done something for doing it.
+
+Four narrower corrections, all of them claims of mine wider than their
+evidence:
+
+- the sweep-B derivation cited rules 5 and 7 when rule 1 is what licenses
+  dropping the escape axis;
+- "a test fails if any declaration is removed" was true only of the
+  module, not of the authoritative plan, so the test was widened;
+- "round 13 of the diff debate" conflated the cycle exchange number with
+  the diff round number;
+- "cells the first build could not generate" was refuted by the retained
+  whole-branch review, which names old `B[sandbox,absent]` as mutant 9's
+  killer. The rebuild moved equivalent inputs into the specified product;
+  it did not create the shapes.
+
+Note that `diff-brief-r2.md` is retained VERBATIM and therefore still
+contains two of those overstatements. That is what a retained record is
+for: the corrections live in the code and the backlog, not in a rewritten
+brief.

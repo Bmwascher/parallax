@@ -575,17 +575,17 @@ runs that module under both Windows PowerShell and pwsh.
   container's body. A heading anywhere else supplies no entries.
 - Known/quoted containers are masked before scanning; a container that
   appears only inside a masked region is not a container.
-- **ADDED at round 13 of the DIFF debate.** `BlockPresent` is TRUE iff at
+- **ADDED at CYCLE EXCHANGE 13, which is DIFF ROUND 1.** `BlockPresent` is TRUE iff at
   least one OPENER survives masking. A closer with no opener reports the
   container ABSENT: an opener is what claims a container exists, a stray
   closer claims nothing. Presence is independent of ambiguity, so a
   three-opener arrangement is present AND ambiguous.
-- **ADDED at round 13 of the DIFF debate.** Entries are read ONLY from the
+- **ADDED at CYCLE EXCHANGE 13, which is DIFF ROUND 1.** Entries are read ONLY from the
   body of an unambiguous single ordered pair. Every ambiguous arrangement
   reports ZERO entries even with a heading inside it, because ambiguity
   means there is no single body to read from. Reporting entries from a
   guessed body is the failure this rule forbids.
-- **ADDED at round 13 of the DIFF debate.** The entry grammar, as a truth
+- **ADDED at CYCLE EXCHANGE 13, which is DIFF ROUND 1.** The entry grammar, as a truth
   table rather than a regex: an entry is ONE line,
   `- <name>: <description> (file: <path>)`. The file marker is the LAST
   such marker on the line, so a description that itself mentions

@@ -8,6 +8,7 @@ module pins the three-band behaviour, its four boundaries, and the
 vendoring obligations that come with editing a vendored file.
 """
 
+import hashlib
 import importlib.util
 import re
 import subprocess
@@ -18,6 +19,10 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 LINT_PATH = REPO_ROOT / "evals" / "tools" / "skill_lint.py"
+# The linter as it stood BEFORE this release added enforcement, frozen so
+# the fail-first proof can execute it rather than describe it.
+PRE_CHANGE_PATH = (Path(__file__).resolve().parent / "fixtures"
+                   / "skill_lint_pre_change.py")
 
 
 def load_lint():
@@ -52,9 +57,10 @@ def make_skill(root, body_tokens):
     return d
 
 
-def run_lint(skill_dir):
+def run_lint(skill_dir, lint_path=None):
     proc = subprocess.run(
-        [sys.executable, str(LINT_PATH), str(skill_dir), "--strict"],
+        [sys.executable, str(lint_path or LINT_PATH), str(skill_dir),
+         "--strict"],
         capture_output=True, text=True, timeout=120)
     return proc.returncode, proc.stdout + proc.stderr
 
@@ -103,46 +109,69 @@ class TestTheThreeBands:
 
 
 class TestTheOldImplementationCouldNotFail:
-    """The fail-first proof, and an honest account of which half proves it.
+    """The fail-first proof, EXECUTED against the pre-change code.
 
-    Two halves, and they are NOT equally strong. Say so here rather than
-    let the class name imply both.
+    The plan requires a test proving the PRE-CHANGE implementation does
+    not fail above the ceiling. Two earlier attempts did not satisfy it.
+    The first restated the old rule inline and called itself a fail-first
+    proof; the second kept the restatement and merely admitted in its
+    docstring that it could not fail. The cross-vendor lane refused both,
+    the second time on the ground that an honest description of a missing
+    measurement is still a missing measurement.
 
-    The FIRST half restates the vendored rule inline - warn above 5000,
-    never error - and shows it leaving a far-over-ceiling body unfailed.
-    It runs no vendored code. `errors` is empty by construction, so that
-    assertion CANNOT fail for the reason the sentence above suggests; it
-    is a readable statement of the old behaviour, not a measurement of
-    it. The real evidence that the old code could not fail is the
-    upstream diff pinned in TestVendoringObligations: the fetched
-    upstream file has no ceiling and no error path at all.
+    So the pre-change file is frozen as a fixture and RUN. It is
+    `evals/tools/skill_lint.py` at `dd0db13`, the last commit before the
+    enforcement landed, and both halves below are subprocess runs against
+    the same oversized skill:
 
-    The SECOND half is the measurement. It runs the SHIPPED linter as a
-    subprocess against the same oversized fixture and requires exit 1.
-    That one fails if the enforcement is removed, which is the delta the
-    class exists to prove.
+    - the pre-change linter warns and EXITS 0;
+    - the shipped linter ERRORS and exits 1.
+
+    Either half fails if the delta this release claims is not the delta
+    that exists.
     """
 
-    def test_a_warning_only_lint_passes_an_over_ceiling_body(self, tmp_path):
+    def test_the_frozen_pre_change_linter_is_the_file_it_claims_to_be(self):
+        """A pre-change implementation that drifts is not one.
+
+        The banner is prose and the copied text is evidence, so only the
+        copied text is hashed.
+        """
+        text = PRE_CHANGE_PATH.read_text(encoding="utf-8")
+        marker = "# " + "-" * 75 + "\n"
+        parts = text.split(marker, 2)
+        assert len(parts) == 3, "the frozen fixture's banner is malformed"
+        body = parts[2].encode("utf-8")
+        assert len(body) == 16065, f"fixture body is {len(body)} bytes"
+        assert hashlib.sha256(body).hexdigest() == (
+            "23172735f1fe7d5e0fbfe8ba2d44b770a3f6264d0ec81e0bb5b39d1de2954745"
+        ), "the frozen pre-change linter has been edited"
+        # And it really is pre-change: no ceiling, and the number it did
+        # carry was the unenforced 5000.
+        assert "BODY_TOKEN_CEILING" not in parts[2]
+        assert "5000" in parts[2]
+
+    def test_the_pre_change_linter_passes_an_over_ceiling_body(self, tmp_path):
         mod = load_lint()
+        # Round-7 correction: the boundary that matters is ABOVE 5500,
+        # not above 5250.
         oversized = mod.BODY_TOKEN_CEILING + 5000
         skill = make_skill(tmp_path, oversized)
-        body = (skill / "SKILL.md").read_text(encoding="utf-8")
-        body = re.sub(r"^---\n.*?\n---\n", "", body, flags=re.S)
-        est = len(body) // 4
-        assert est > mod.BODY_TOKEN_CEILING, "fixture is not over the ceiling"
-        # The vendored rule restated, NOT executed. See the class
-        # docstring: this branch cannot fail, and it is here to be read.
-        errors, warnings = [], []
-        if est > 5000:
-            warnings.append("over budget")
-        assert not errors and warnings, (
-            "the vendored rule as restated here produced no error for a"
-            f" body {est - mod.BODY_TOKEN_CEILING} tokens over today's"
-            " ceiling"
+        code, out = run_lint(skill, lint_path=PRE_CHANGE_PATH)
+        assert code == 0, (
+            "the pre-change linter FAILED an over-ceiling body, so the"
+            f" enforcement this release claims to add already existed:\n{out}"
         )
-        # The measurement. The shipped implementation DOES fail it, and
-        # this half is what breaks if the enforcement is removed.
+        assert "ERROR" not in out, out
+        # It did notice; it just could not act. That is the defect.
+        assert "token" in out.lower(), (
+            "the pre-change linter said nothing at all about the body size,"
+            f" so this fixture is not exercising the old rule:\n{out}"
+        )
+
+    def test_the_shipped_linter_fails_the_same_body(self, tmp_path):
+        mod = load_lint()
+        skill = make_skill(tmp_path, mod.BODY_TOKEN_CEILING + 5000)
         code, out = run_lint(skill)
         assert code == 1 and "over the hard ceiling" in out, out
 
