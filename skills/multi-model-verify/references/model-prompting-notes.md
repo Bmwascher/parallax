@@ -146,6 +146,35 @@ Canonical reasoning effort: `high`
   as the baseline, then compare one level lower" — `medium` is a tuning
   candidate, but only via a full behavioral-suite pass at both levels;
   never silently downgrade the review lane.
+- **Tool surface (every debate, before round 1)**: run
+  `tools/codex-tool-surface-probe.ps1 -WorkDir <dispatch cwd> -Json`. It
+  speaks JSON-RPC to `codex app-server --stdio` and reads
+  `mcpServerStatus/list`, which names every resolved MCP server and every
+  tool it exposes. It starts no turn, so it spends no tokens. A blocked
+  result is a TRANSPORT failure (fallbacks.md), never a review result.
+  <!-- contract:start id=tool-surface-probe -->
+  The probe runs TWO passes and their directions are NOT symmetric. Pass 1
+  carries no isolation flags and is an INSTRUMENT CALIBRATION: if it
+  cannot see a running server with at least one tool, this probe is not
+  known to be able to see a tool at all, the measurement is UNMADE, and
+  the verdict is BLOCKED. Pass 2 carries the dispatch flags. A tool
+  reported there and not named by the ALLOWLIST is a DETECTION and blocks.
+  A tool ABSENT from pass 2 is a MITIGATION and never proof of removal:
+  measured 2026-08-11, a server disabled by config and a server that
+  failed to launch both report a null serverInfo with zero tools, and no
+  field separates them. Never report a clean tool-surface probe as
+  verified reviewer isolation.
+  <!-- contract:end -->
+  <!-- contract:start id=tool-surface-allowlist -->
+  The ALLOWLIST is EMPTY, and the dispatch carries
+  `-c mcp_servers.node_repl.enabled=false` on the fresh call and on every
+  resume. Measured 2026-08-11: `--disable plugins --disable apps` alone
+  leaves `node_repl` and its `js` JavaScript-execution tool resolved, so
+  the two feature flags alone are not the whole control. Widening this
+  allowlist widens what the auditor may hold and belongs in the debate
+  record with its reason. `-c mcp_servers={}` must NEVER be used in its
+  place: it parses, exits 0, and was measured to change nothing at all.
+  <!-- contract:end -->
 - **Effective route confirmation (every call, fresh or resume)**: codex
   echoes the RESOLVED config in its startup header — capture stdout and
   check the first `model: `, `provider: `, and `reasoning effort: ` lines

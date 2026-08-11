@@ -148,17 +148,16 @@ toggled on, its stop-time review overlaps mode `diff` — expected, not a bug.
    <!-- contract:start id=client-probe-scope-limit -->
    State what a clean probe means, and never more. It means exactly this:
    no skill is advertised, no plugin or apps block is present, and no
-   instruction source sits inside the reviewed tree. Two things it does
+   instruction source sits inside the reviewed tree. Three things it does
    NOT mean. The global `AGENTS.md` above survives a clean probe and is
    still instructing the reviewer; the probe records it rather than
-   removing it. And the reviewer's TOOL surface is not read at all,
-   because tools are not in the prompt: measured 2026-07-28, the rendered
-   prompt names neither a configured MCP server nor the memories feature,
-   `codex debug` offers no tool-list view to measure instead, and a round
-   dispatched with the flags and the verified override still logged
-   `mcp: node_repl/js started` three times in its own transcript. Backlog
-   item 7 holds the tool half. Do not call a passing probe full reviewer
-   isolation.
+   removing it. It says nothing about the TOOL surface, which is not in
+   the prompt and is measured separately by the tool-surface probe in
+   references/model-prompting-notes.md, where a clean result is a
+   mitigation, never proof of removal. And full flag parity with the
+   dispatch cannot be REQUESTED: `prompt-input` rejects `--sandbox` and
+   `-m`, so whether either changes rendered content is UNVERIFIED. Do not
+   call a passing probe full reviewer isolation.
    <!-- contract:end -->
 
 ## Mode plan
@@ -184,7 +183,7 @@ toggled on, its stop-time review overlaps mode `diff` — expected, not a bug.
    $seen = ([System.BitConverter]::ToString(([System.Security.Cryptography.SHA256]::Create()).ComputeHash($bytes)) -replace '-', '').ToLower()
    if ($seen -cne "<override-sha256>") { throw "the override file changed after the probe verified it" }
    $override = (New-Object System.Text.UTF8Encoding($false, $true)).GetString($bytes)
-   $brief | codex exec --sandbox read-only --disable plugins --disable apps -c $override -m <canonical-model-id> -c model_reasoning_effort=<canonical-effort> --output-last-message <reply-file> - > <transcript-file> 2>&1
+   $brief | codex exec --sandbox read-only --disable plugins --disable apps -c mcp_servers.node_repl.enabled=false -c $override -m <canonical-model-id> -c model_reasoning_effort=<canonical-effort> --output-last-message <reply-file> - > <transcript-file> 2>&1
    } finally { $OutputEncoding = $priorOutputEncoding }
    ```
 
@@ -246,7 +245,7 @@ toggled on, its stop-time review overlaps mode `diff` — expected, not a bug.
    $seen = ([System.BitConverter]::ToString(([System.Security.Cryptography.SHA256]::Create()).ComputeHash($bytes)) -replace '-', '').ToLower()
    if ($seen -cne "<override-sha256>") { throw "the override file changed after the probe verified it" }
    $override = (New-Object System.Text.UTF8Encoding($false, $true)).GetString($bytes)
-   $brief | codex exec --sandbox read-only --disable plugins --disable apps -c $override -m <canonical-model-id> -c model_reasoning_effort=<canonical-effort> --output-last-message <reply-file> resume <SESSION_ID> - > <transcript-file> 2>&1
+   $brief | codex exec --sandbox read-only --disable plugins --disable apps -c mcp_servers.node_repl.enabled=false -c $override -m <canonical-model-id> -c model_reasoning_effort=<canonical-effort> --output-last-message <reply-file> resume <SESSION_ID> - > <transcript-file> 2>&1
    } finally { $OutputEncoding = $priorOutputEncoding }
    ```
 

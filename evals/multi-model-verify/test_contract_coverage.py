@@ -674,6 +674,15 @@ DECLARED_REGIONS = {
     "enumeration-depth-asymmetry",
     "brief-scope-guard",
     "client-probe-scope-limit",
+    # 0.24.0, backlog item 7: the reviewer's TOOL surface. Two regions
+    # rather than one because a region must fit a single pin, and because
+    # they say different kinds of thing. The PROBE region holds the
+    # measurement's shape - why pass 1 is a calibration and why an absent
+    # tool is only a mitigation. The ALLOWLIST region holds a DECISION
+    # about what the auditor may hold, which is the part a later cycle
+    # would be tempted to widen quietly.
+    "tool-surface-probe",
+    "tool-surface-allowlist",
     # 0.20.0, from the reopened home-skills-root debate. These replace
     # no earlier region - the text they cover was ordinary pinned prose
     # asserting an UNKNOWN ("unprobed territory") and an unmeasurable
