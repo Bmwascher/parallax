@@ -159,8 +159,12 @@ def render_field(key, value, form, escape):
     """One field line: a frozen form with a frozen escape placement.
 
     The escape goes INSIDE the label or INSIDE the value, never between
-    them, so the two placements are distinguishable after rule 1 strips
-    them.
+    them, so the three placements produce three DIFFERENT RAW TEXTS. Rule
+    1 then strips the escapes and all three collapse to the SAME located
+    text, which is precisely why placement cannot move a verdict. (An
+    earlier version of this sentence said the placements are
+    distinguishable AFTER stripping, which is rule 1 backwards, in the
+    module whose subject is rule 1. Round 8.)
 
     A VALUELESS form - `K:` and `K: `, which carry a value POSITION but
     no value in it - still gets an in-value case, with the escape written

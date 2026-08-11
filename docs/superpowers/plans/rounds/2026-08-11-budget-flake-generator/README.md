@@ -126,6 +126,7 @@ action, one ESCALATED into the debate.
 | 5 | `diff-brief-r5.md` | `diff-reply-r5.txt` | ESCALATE. Two more, one of them introduced BY round 4's fix; budget exhausted |
 | 6 | `diff-brief-r6.md` | `diff-reply-r6.txt` | FIX. A third unfrozen reading in the generator; two implementation areas cleared |
 | 7 | `diff-brief-r7.md` | `diff-reply-r7.txt` | FIX. Two self-contradictions introduced by round 6's own fix |
+| 8 | `diff-brief-r8.md` | `diff-reply-r8.txt` | FIX. Rule 1 stated backwards, and a fourth counting defect; budget exhausted |
 
 ## What round 1 found, and why it matters more than the count
 
@@ -249,8 +250,8 @@ two narrowed claims at round 1, one blocking spec miss and four record
 defects at round 2, one licence obligation and two record residues at
 round 3, two overstated claims at round 4, two more at round 5, one
 specification gap and one recreated total at round 6, two
-self-contradictions at round 7. Almost none of them were about code
-behaviour. **No total appears here on purpose.** Round 4
+self-contradictions at round 7, two more at round 8. Almost none of them
+were about code behaviour. **No total appears here on purpose.** Round 4
 removed one because totals go stale; a brief put one back at round 6 and
 got it wrong; the correction of that put a second wrong one in the README
 and in the round-7 brief. Three attempts, three wrong numbers, all of
@@ -404,11 +405,65 @@ Two findings, and BOTH were introduced by round 6's own fix.
   five-round figure carried forward without re-adding. Third wrong total
   in four rounds.
 
-There is now no total anywhere in this file. The list is the record, and
-the arithmetic over it has been wrong every single time it has been
+No AUTHORITATIVE aggregate total is maintained in this file any more. The
+per-round list is the record. Corrective totals still appear, above and
+below, as historical statements about specific wrong claims — "the
+six-round enumeration is twenty" is one of them — and those are records of
+what was wrong, not a figure anything should be read off. (The first
+version of this paragraph said "there is now no total anywhere in this
+file" five lines under one of those corrective totals. Round 8. Counting
+defects were found at rounds 4, 6, 7 and 8, and round 7's was itself a
+count left stale inside round 6's fix.)
+
+The arithmetic over that list has been wrong every single time it has been
 attempted, by a session that had already twice written down that totals go
 stale. That is the most useful sentence in this document.
 
-A FIX is new code and gets no discount. Rounds 5 and 7 are both instances
-of the fix carrying the defect, and after round 5 that was recorded as a
-lesson and then repeated two rounds later.
+A FIX is new code and gets no discount. Rounds 5, 7 and 8 each found a
+defect inside the immediately preceding round's fix, and after round 5
+that was written down as a lesson here and then repeated twice.
+
+## Round 8, the last authorized unit
+
+Two findings, both mine, both record-only, and both again inside the
+previous round's fix.
+
+- **`render_field`'s docstring stated rule 1 backwards.** It said the
+  three escape placements "are distinguishable after rule 1 strips them".
+  They are distinguishable BEFORE stripping and collapse afterwards, which
+  is the entire reason placement cannot move a verdict. That sentence sat
+  in the module whose subject is rule 1, twenty lines under a comment
+  stating rule 1 correctly, and survived seven rounds.
+- **The fourth counting defect.** "There is now no total anywhere in this
+  file" appeared five lines under "the six-round enumeration is TWENTY".
+  The defensible claim, and the one now written, is that no AUTHORITATIVE
+  aggregate total is maintained; corrective totals remain as records of
+  specific wrong claims.
+
+Second self-contradiction inside a fix for a counting defect, in
+consecutive rounds.
+
+## The state at budget exhaustion
+
+Eight rounds. Every one found something. Zero authorized units remain, so
+the reviewer paused for the user rather than absorbing the finding, which
+is the second time it has done that in this debate.
+
+What the eight rounds actually establish, stated as narrowly as the
+evidence allows:
+
+- **Code:** two findings, both at round 1, both spec drift rather than
+  wrong behaviour — a generated matrix that was not the frozen product,
+  and a specification gap in the same generator at round 6. Every mutation
+  run, every gate and both PowerShell hosts have been green since round 1,
+  and the reviewer explicitly cleared the fault model and the behavioural
+  cap change with line citations at round 6.
+- **Process:** two frozen tasks were not done and were disclosed rather
+  than performed. Both were then performed.
+- **Records:** everything else. See the per-round list above rather than
+  a figure; from round 5 onward, every round found at least one defect
+  that the immediately preceding fix had introduced.
+
+The last figure is the one worth carrying into the next cycle. A fix is
+new code and gets no discount, and in a documentation-heavy release that
+rule bites hardest on the prose nobody runs.
