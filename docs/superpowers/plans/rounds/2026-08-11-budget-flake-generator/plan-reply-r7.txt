@@ -1,0 +1,26 @@
+1. Recommend **soft 5250, hard 5500**, but define it as preserving the already-agreed 250-token warning band—not as granting an open-ended 270-token allowance. The current 5227 count reproduces using the linter’s actual frontmatter parsing and `len(body) // 4` formula (`evals/tools/skill_lint.py:73-93,235-253`; `skills/multi-model-verify/SKILL.md:5-361`).
+
+Use:
+
+```text
+tokens <= 5250          clean
+5250 < tokens <= 5500   warning
+tokens > 5500           error
+```
+
+Pin 5250, 5251, 5500 and 5501; move the old-implementation fail-first case to 5501. Record the 5227 measured baseline and mandatory UTF-8 transport as the reason, while stating that future ceilings do not rebase automatically. This requires updating the frozen 5250 ceiling and its tests at `docs/superpowers/plans/2026-08-11-budget-flake-generator.md:290-310,319-329`.
+
+Option (b)’s failure mode is immediate shaving pressure: it provides only three clean tokens, twenty warning tokens and twenty-three total tokens before failure. The recommended shape’s failure mode is threshold ratcheting across a global linter policy (`evals/tools/skill_lint.py:37-45`; `docs/superpowers/plans/2026-08-11-budget-flake-generator.md:328-329`); the recorded baseline and non-automatic-raise rule contain that risk. **FIX — adopt 5250/5500 and amend every 5250 hard-boundary obligation accordingly.**
+
+2. The region placement is not an unauthorized fourth relocation. The operational guard remains in both `SKILL.md` dispatches, with its pointer (`skills/multi-model-verify/SKILL.md:178-192,240-250`). Only the new explanatory contract lives in the file designated as the single transport source (`skills/multi-model-verify/references/model-prompting-notes.md:79-88,385-404`), and its complete text is pinned there (`evals/multi-model-verify/test_multi_model_verify.py:548-566`). The rejected fourth relocation concerned moving pre-existing text solely to satisfy arithmetic (`docs/superpowers/plans/rounds/2026-08-11-budget-flake-generator/plan-reply-r3.txt:30-33`). **PASS**
+
+3. There is one new substantive Task 2 finding. The child-scope runtime test only asserts that `e28094` is absent; empty output therefore passes (`evals/multi-model-verify/test_multi_model_verify.py:2840-2862`). The shipped-form test requires `e28094` somewhere but forbids only `3f3f3f`, so output containing the correct dash plus a single `?` also passes its “intact” claim (`evals/multi-model-verify/test_multi_model_verify.py:2822-2836`).
+
+Require positive payload evidence: at minimum `613f62` for the child-scope case, and exact `61e2809462` payload plus the declared pipeline terminator for the shipped case. Watch those assertions fail against focused empty-output and extra-byte mutants before accepting them. **FIX — strengthen both byte oracles so missing or additional data cannot pass.**
+
+Because this dispatch consumes unit 8 and produced a substantive finding, the debate is not dry and now pauses for user authorization (`skills/multi-model-verify/references/debate-protocol.md:79-87`).
+
+UNVERIFIED:
+
+- The exact transient 5486 count; the committed endpoints reproduce, but that intermediate tree is not retained. Reconstructing from the current contract text gives 5484, consistent with “about 420” but not the exact snapshot.
+- The reported two-host runtime outputs and fail/pass history; no runnable Python executable was available in this review environment.

@@ -1,7 +1,10 @@
 # 0.23.0 — the budget, the flaky gate, the generators, and a UTF-8 brief
 
-**Status: FROZEN.** Debate terminal at round 6 (adjudicated dry round).
-Changes require reopening the debate and appending a round to the record.
+**Status: FROZEN.** Debate terminal at round 6, then REOPENED during the
+build when a measurement falsified a number the freeze rested on, and
+terminal again at round 12 (adjudicated dry round). Twelve rounds plus one
+void one; every round found something real and none was contested. Changes
+require reopening the debate and appending a round to the record.
 
 ## Goal
 
@@ -283,31 +286,47 @@ Runs AFTER Tasks 1 and 2, because both change the body size.
 python evals/tools/skill_lint.py skills/multi-model-verify --strict
 ```
 
-Record the exact token number. Arithmetic going in: 5404, minus about 275
-for Task 1a, minus whatever 1b and 1c yield, plus about 100 for Task 2's
-guard.
+Record the exact token number.
+
+**Arithmetic as frozen, and it was wrong:** 5404, minus about 275 for Task
+1a, minus whatever 1b and 1c yield, plus **about 100** for Task 2's guard.
+
+**CORRECTED AT ROUND 7 BY MEASUREMENT.** Task 2's guard cost about **420**,
+not 100: it is three lines, and `test_multi_model_verify.py:150-175` forbids
+collapsing the two dispatch blocks, so it lands twice — plus its contract
+region. Measured: 5404 → 5069 after the three relocations → 5486 with the
+guard and its region → 5200 after the region moved to
+`model-prompting-notes.md`, which the file itself calls the single source
+for the reviewer transport → **5227** with a one-line pointer back.
 
 ### Step 2 — Set the thresholds
 
-Three MUTUALLY EXCLUSIVE outcomes, exactly as the debate specified:
+**CORRECTED AT ROUND 7.** The frozen shape below assumed the body would
+land near 5000, so it put the hard ceiling at 5250. At the measured 5227
+that leaves 23 tokens of headroom and no honest place for a soft target,
+which is the shaving pressure this item exists to prevent. The user was
+given the choice and reopened the debate rather than let the session pick.
+
+Three MUTUALLY EXCLUSIVE outcomes:
 
 ```
-tokens <= soft            clean
-soft < tokens <= 5250     warning
-tokens > 5250             error   (error, never warning-and-error)
+tokens <= 5250            clean
+5250 < tokens <= 5500     warning
+tokens > 5500             error   (error, never warning-and-error)
 ```
 
-`soft` is 5000 if the measured body clears it. If it does not, `soft` is
-**the smallest declared value that clears the measured body**, 5250 stays
-the hard ceiling, and the constant carries a comment recording the encoding
-guard as the reason the baseline moved and the measured body as the number
-it was set from. This is a baseline reset with a stated cause, not drift.
+The soft target is **5250**, rebased from the measured 5227 baseline; the
+ceiling is **5500**, preserving the 250-token warning band the debate
+agreed on. The constant records the measurement, the encoding guard as the
+reason the baseline moved, and an explicit statement that these do NOT
+rebase automatically — a future release over the ceiling must relocate
+text or change the numbers deliberately.
 
 The hard-error message must name the two legitimate remedies — relocate
 text to a reference, or change the ceiling deliberately — and must not
 invite deleting load-bearing text.
 
-**Boundary pins, four of them:** `soft`, `soft + 1`, `5250`, `5251`.
+**Boundary pins, four of them:** `5250`, `5251`, `5500`, `5501`.
 
 ### Step 3 — Honour the vendoring
 
@@ -323,7 +342,7 @@ Required, and item 19 is not complete without them:
   delta specifically;
 - update the documented checks list and the exit-code description;
 - a fail-first test proving the PRE-CHANGE implementation does NOT fail
-  above 5250;
+  above the ceiling (round-7 correction: **above 5500**, not 5250);
 - the four boundary tests from Step 2;
 - keep explicit that `BODY_TOKEN_BUDGET` is a GLOBAL linter policy, not a
   per-skill setting, even though only one tracked `SKILL.md` exists today.
@@ -511,9 +530,14 @@ runs that module under both Windows PowerShell and pwsh.
 - `BlockPresent` and `Entries` are reported SEPARATELY: an absent container
   and a present-but-unparseable container are different facts and must not
   collapse.
-- Exactly one opener and one closer, closer after opener, is the only
-  non-ambiguous shape. Every other arrangement — none, opener-only,
-  closer-only, two of either, closer before opener — is AMBIGUOUS.
+- **CORRECTED at round 10.** TWO shapes are non-ambiguous: NO delimiters at
+  all, representing an absent container, or EXACTLY ONE correctly ordered
+  pair. Every other arrangement — opener-only, closer-only, two or more of
+  either, closer before opener — is AMBIGUOUS. The frozen wording said the
+  ordered pair was the ONLY non-ambiguous shape and then listed "none" as
+  ambiguous, which contradicted itself; production and the generated
+  oracle always behaved as stated here, so this is a specification
+  correction and not a code change.
 - The `### Available skills` heading is honoured only INSIDE the
   container's body. A heading anywhere else supplies no entries.
 - Known/quoted containers are masked before scanning; a container that
@@ -633,9 +657,10 @@ anything more is needed.
 
 **Participants:** Claude Opus 5 (session) / gpt-5.6-sol (codex exec,
 session `019fef3e-9b6a-7a21-a49f-686e0d96ac53`)
-**Rounds used:** 6 of 8 (total fix-verify budget; 7 units consumed
-including the void round, 1 remaining)
-**Outcome:** converged, terminal on an adjudicated dry round
+**Rounds used:** 12, plus one VOID round; 13 units consumed of 13
+authorized (8 declared late at round 5, +2 by the user after round 7,
++3 after round 9)
+**Outcome:** converged, terminal on an ADJUDICATED DRY ROUND at round 12
 **Verification status:** FULL
 **Degradation:** none
 **Authorized by:** user at round 4 (twelve live behavioural runs)
@@ -666,6 +691,30 @@ including the void round, 1 remaining)
 | 19 | "Worst realistic dispatch is 1327 characters" | session | NARROWED | one measured dispatch; no corpus establishes a maximum |
 | 20 | Fix-verify ledger of 5 spent | session | REFUTED | a round consumes its unit on dispatch; 6 spent |
 | 21 | The UTF-8 brief transport defect | session | accepted as work item 4 | reproduced independently by the reviewer |
+
+### Rounds 7 to 12 — the plan was REOPENED after the build began
+
+Round 6 was terminal. Building then produced a measurement that falsified a
+number the freeze rested on, and the user chose to reopen rather than let
+the session decide. Every one of the six further rounds found something
+real, and none was contested.
+
+| # | Finding | Raised by | Outcome |
+|---|---|---|---|
+| 22 | Task 2's guard cost ~420 tokens, not the ~100 I estimated; at 5227 a 5250 ceiling leaves 23 tokens | session | reopened the plan; user chose to reopen rather than accept a shave |
+| 23 | Threshold shape: warn at 5250, error above 5500, four boundary pins | reviewer | adopted; Task 3 rewritten |
+| 24 | Two new byte oracles could pass on EMPTY output | reviewer | accepted; both now compare the whole payload, both mutants killed |
+| 25 | Asserting that three mutants survive locks in today's topology and proves nothing | reviewer | accepted; replaced with a declared fail-open FAULT MODEL, all three now die |
+| 26 | Task 6 hand-picked 19 arrangements where the plan froze a Cartesian product | reviewer | accepted; 768 arrangement cases built, reaching kills the hand-picked set could not |
+| 27 | Case count wrong in two places (768+12=780 generated, 791 tests) | reviewer | corrected in the plan and the backlog |
+| 28 | The frozen ambiguity invariant contradicted itself about "none" | reviewer | corrected in both places; production and the oracle were always right, the SENTENCE was wrong |
+| 29 | The frozen plan still carried the superseded 5250 ceiling after the code and backlog were amended | reviewer | corrected in place with round-7 markers |
+
+**The class worth carrying forward.** Findings 27, 28 and 29 are all the
+same shape: the CODE was right and the RECORD was wrong. A frozen plan is
+what mode diff adjudicates drift against, so a stale plan does not merely
+mislead a reader — it makes correct work read as drift, or gets taken as
+authority and the correct work reverted.
 
 ### Escalated points (user-decided)
 

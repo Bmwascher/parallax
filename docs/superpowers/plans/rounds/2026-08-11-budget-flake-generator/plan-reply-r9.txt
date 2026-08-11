@@ -1,0 +1,22 @@
+1. The round-8 fault-injection fix is structurally correct. The unchanged fallback is tested first (`evals/multi-model-verify/test_skill_report_shapes.py:318-339`), mutants are applied on top of the declared fault (`:342-389`), and the primary guard is measured separately (`:392-425`). **PASS**
+
+2. New substantive finding: Task 6 did not implement its frozen case matrix. The plan requires the Cartesian product of opener count, closer count, ordering, heading placement, quoted-container placement and line ending (`docs/superpowers/plans/2026-08-11-budget-flake-generator.md:522-526`).
+
+The implementation instead appends:
+
+- eight selected delimiter arrangements (`evals/multi-model-verify/test_skill_report_shapes.py:98-116`);
+- three independent heading cases (`:118-130`);
+- two masking cases (`:132-141`);
+- six entry cases (`:143-170`);
+- then duplicates those 19 cases for CRLF (`:172-175`).
+
+It contains no three-opener or three-closer arrangement and does not cross delimiter, heading and quoted-container axes. Therefore 38 cases and killed mutants do not satisfy the frozen enumeration, and item 9 cannot yet close.
+
+Implement the declared Cartesian matrix, run the unchanged fallback and all mutants over it on both hosts, and extend the direct `Hide-KnownContainer` probe beyond its current three-case subset (`:419-426`) to cover every canonical delimiter arrangement. **FIX**
+
+This is not an adjudicated dry round. Unit 10 is exhausted, so the debate pauses for further user authorization (`skills/multi-model-verify/references/debate-protocol.md:79-90`).
+
+UNVERIFIED:
+
+- The reported 49-test two-host runs and exact mutation output.
+- The reported live lint output.

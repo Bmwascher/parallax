@@ -1,6 +1,6 @@
 # 0.23.0 plan-debate round records
 
-Retained verbatim. Six rounds plus one VOID round, primary lane
+Retained verbatim. TWELVE rounds plus one VOID round, primary lane
 (gpt-5.6-sol via codex exec), session `019fef3e-9b6a-7a21-a49f-686e0d96ac53`.
 
 | round | brief | reply | outcome |
@@ -11,7 +11,23 @@ Retained verbatim. Six rounds plus one VOID round, primary lane
 | 3 | `plan-brief-r3.md` | `plan-reply-r3.txt` | 3 FIX, 1 PASS, NOT TERMINAL |
 | 4 | `plan-brief-r4.md` | `plan-reply-r4.txt` | PASS, conditional terminal, 3 sampling amendments |
 | 5 | `plan-brief-r5.md` | `plan-reply-r5.txt` | FIX (budget ledger), NOT the dry round |
-| 6 | `plan-brief-r6.md` | `plan-reply-r6.txt` | PASS, ADJUDICATED DRY ROUND, terminal |
+| 6 | `plan-brief-r6.md` | `plan-reply-r6.txt` | PASS, adjudicated dry round, terminal |
+| 7 | `plan-brief-r7.md` | `plan-reply-r7.txt` | REOPENED mid-build; FIX on the ceiling and on two byte oracles |
+| 8 | `plan-brief-r8.md` | `plan-reply-r8.txt` | FIX: test the fallback under a fault, not by asserting its shadow |
+| 9 | `plan-brief-r9.md` | `plan-reply-r9.txt` | FIX: the PowerShell matrix was hand-picked, not the frozen product |
+| 10 | `plan-brief-r10.md` | `plan-reply-r10.txt` | FIX: case count wrong; the frozen invariant contradicted itself |
+| 11 | `plan-brief-r11.md` | `plan-reply-r11.txt` | FIX: the frozen plan still carried the superseded ceiling |
+| 12 | `plan-brief-r12.md` | `plan-reply-r12.txt` | PASS, ADJUDICATED DRY ROUND, terminal |
+
+## The reopening
+
+Round 6 ended the debate. The BUILD then produced a measurement that
+falsified a number the freeze rested on: I had estimated the UTF-8 guard at
+about 100 tokens and it cost about 420, which left 23 tokens under a
+ceiling the debate had set expecting room. The user chose to reopen rather
+than let the session pick a number.
+
+Six further rounds, every one finding something real, none contested.
 
 ## The void round
 
@@ -59,3 +75,27 @@ found it. I had not opened the header at all.
 `debate-protocol.md` requires the total fix-verify budget to be declared
 BEFORE round 1. I declared it at round 5, and the reviewer then corrected
 the arithmetic. Both are recorded rather than tidied away.
+
+
+## The second half's findings, and what they have in common
+
+Rounds 7 to 12 found eight things. Three were defects in code or tests:
+
+- two new byte oracles could pass on EMPTY output - written by me into the
+  module whose entire subject is that an unmade measurement must never read
+  as a clean one;
+- asserting that three mutants survive locked in today's topology while
+  proving nothing about whether the fallback works, and was replaced by a
+  declared fail-open fault model that kills all three;
+- the PowerShell matrix was 19 hand-picked arrangements where the plan had
+  frozen a Cartesian product, so "all mutants killed" was true of a matrix
+  nobody had specified.
+
+Three more were the same shape as each other, and it is the shape worth
+carrying forward: THE CODE WAS RIGHT AND THE RECORD WAS WRONG. A case count
+stated two different wrong ways; a frozen invariant that contradicted
+itself in consecutive sentences; a frozen plan still carrying a ceiling the
+code had already moved past. A frozen plan is what mode diff adjudicates
+drift against, so a stale record does not merely mislead a reader - it
+makes correct work read as drift, or gets taken as authority and the
+correct work reverted.

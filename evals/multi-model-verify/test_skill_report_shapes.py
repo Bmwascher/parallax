@@ -58,10 +58,15 @@ ENTRY = "- demo:widget: Use when demoing. (file: C:/s/demo/SKILL.md)"
 #
 #   1. BlockPresent and Entries are reported SEPARATELY. An absent
 #      container and a present-but-unparseable one are different facts.
-#   2. Exactly one opener and one closer, closer after opener, is the ONLY
-#      unambiguous shape. Every other arrangement - none, opener-only,
-#      closer-only, two of either, closer before opener - is AMBIGUOUS.
-#      "None" is the one non-ambiguous zero case.
+#   2. TWO shapes are non-ambiguous: NO delimiters at all, representing an
+#      absent container, or EXACTLY ONE correctly ordered pair. Every other
+#      arrangement - opener-only, closer-only, two or more of either,
+#      closer before opener - is AMBIGUOUS.
+#      (This wording replaces a self-contradictory one that called the
+#      ordered pair the ONLY non-ambiguous shape and then exempted "none"
+#      in the next sentence. The generated oracle and production always
+#      behaved as stated here; the SENTENCE was wrong, not the code.
+#      Found by the cross-vendor lane at round 10.)
 #   3. The heading is honoured only INSIDE the container body. A heading
 #      anywhere else supplies no entries.
 #   4. Known containers are MASKED before the scan, so a delimiter quoted
