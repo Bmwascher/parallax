@@ -67,6 +67,32 @@ favour, and it is still a correction.
 angle: under arm A the list reports `plugins: enabled=True`; under arm B
 `plugins` is absent from the enabled set. The two views agree.
 
+### The 128 above is a TIMESTAMP, not a constant. Measured the same day.
+
+Re-measured at about 17:00 on 2026-08-11, roughly two and a half hours
+after the arms above, by two independent instruments - the throwaway
+Python probe and the shipped `tools/codex-tool-surface-probe.ps1`. Both
+report **133**: `codex_apps` 130, `node_repl` 3.
+
+So `codex_apps` gained five tools in an afternoon. No codex version
+changed; nothing on this machine was reinstalled. The app surface is
+simply not static.
+
+Two consequences, and the second is the useful one.
+
+- Every count in this record is bound to the hour it was taken. "125 of
+  128" describes 14:30 on 2026-08-11 and nothing else. Any later reader
+  who quotes it as the current surface is doing what this whole cycle
+  spent six rounds learning not to do.
+- **This is the argument for measuring per dispatch rather than recording
+  a number.** A pinned expected count would have gone stale the same
+  afternoon it was written, and a check comparing against it would have
+  started failing for a reason that has nothing to do with reviewer
+  isolation. The probe enumerates and compares against a declared
+  ALLOWLIST for exactly this reason: the allowlist says what the reviewer
+  may hold, which is a decision, while the count says what happened to be
+  installed, which is weather.
+
 ### Finding 3. `node_repl` SURVIVES the isolation flags.
 
 Three tools survive: `js`, `js_add_node_module_dir`, `js_reset`. The
