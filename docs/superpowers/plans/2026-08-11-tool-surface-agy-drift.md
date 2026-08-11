@@ -33,9 +33,10 @@ reason.
 - A disabled server and a crashed server are **indistinguishable** in the
   record. That, not the tool list, is what constrains the design.
 - Item 11's own version string moved from 1.1.8 to **1.1.12** with no
-  contract check in between.
-- `settings.json` carries `allowNonWorkspaceAccess: true` and nothing in
-  this repo reads it.
+  drift-side contract check in between.
+- `settings.json` carries `allowNonWorkspaceAccess: true`. No CHECK reads
+  it, though the 0.12.0 build did MEASURE it once: `false` soft-denied the
+  lane's own writes on agy 1.1.7, which is why `true` is there.
 
 ## Architecture
 
@@ -86,13 +87,30 @@ It starts `codex app-server --stdio`, sends `initialize` with
 
 **It runs TWO passes and the pair is the evidence.**
 
-- **Pass 1, BASELINE, no isolation flags.** The instrument must be shown to
-  work. It must observe at least one MCP server with a non-null
-  `serverInfo` and at least one named tool. If pass 1 sees nothing, the
-  probe is not known to be able to see anything, the measurement is UNMADE,
-  and the verdict is BLOCKED. A clean pass 2 alone is never reported.
+- **Pass 1, BASELINE, no isolation flags. This is an INSTRUMENT
+  CALIBRATION, not a control.** The probe must be shown able to see
+  anything at all: at least one MCP server with a non-null `serverInfo`
+  and at least one named tool. If pass 1 sees nothing, the probe is not
+  known to be able to see anything, the measurement is UNMADE, and the
+  verdict is BLOCKED. A clean pass 2 alone is never reported.
 - **Pass 2, DISPATCH, with the exact flags the review dispatch uses.** The
   surviving tools are ENUMERATED, not counted.
+
+**What the pair does and does not establish** (settled at plan round 1,
+after the reviewer refuted an earlier draft that called it a positive
+control):
+
+- A tool PRESENT in pass 2 that the allowlist does not name is a real
+  detection. Detecting presence never depends on telling removal from
+  silence.
+- A tool ABSENT from pass 2 is a MITIGATION. It is observationally
+  identical to that server having failed to launch, per probe-record
+  finding 6, and pass 1 says nothing about the MCP subsystem's health
+  under pass-2 conditions.
+
+Neither the script, the skill, nor any report may describe this as
+verified reviewer isolation on the tool axis. The word "control" is
+reserved for the presence direction.
 
 **The verdict is an allowlist comparison, never a zero-count assertion.**
 Finding 6 of the probe record is the reason: a crashed server and a
@@ -103,8 +121,12 @@ the unexpected does not depend on being able to tell removal from silence.
 
 **The residual is named, not hidden.** Pass 2 losing a tool is consistent
 with two causes: the flag removed it, or it failed to launch. This design
-does not resolve that ambiguity, and it does not need to for the
-allowlist direction. Where it DOES matter is design question 1 below.
+does not resolve that ambiguity. It does not need to for the presence
+direction, and it cannot for the absence direction. Design question 1
+asked whether a survivor control could close it; the round-1 answer was
+that none exists in the measured configuration, because after the shipped
+flags `node_repl` is the ONLY remaining server, so shape A removes the
+only candidate survivor.
 
 Exit codes match the existing probe: 0 clean, 1 blocked with the reason on
 stdout, 2 script error. `-Json` emits the same shape as
@@ -124,22 +146,57 @@ The open question is `node_repl`. Two shapes, and the debate settles it:
   `js_add_node_module_dir` and `js_reset` as accepted residuals with a
   written rationale.
 
-Session position: **Shape A**, with the residual from finding 6 named in
-the contract text rather than argued away. Shape B requires asserting that
-a code-execution tool in a read-only reviewer is acceptable, and this repo
-has no measurement of what `node_repl` can reach. That assertion would be
-wider than its evidence.
+**Settled at plan round 1: Shape A**, with three conditions the reviewer
+attached and this plan adopts.
 
-## Task 3 — retract the false premise in item 7 and in the probe header
+- It applies to BOTH the fresh dispatch and the resume dispatch, which
+  today carry identical isolation flags (`SKILL.md:175-188` and
+  `SKILL.md:237-250`). A resume that drops the flag would silently restore
+  the tool for every round after the first.
+- It ships as RISK REDUCTION with an empty allowlist, never described as
+  verified isolation.
+- The residual from probe-record finding 6 is written into the contract
+  text rather than argued away.
 
-`tools/codex-context-probe.ps1:1-23` tells the reader the script "does not
-read the reviewer's tool surface at all - see backlog item 7". Item 7 in
-turn says no free tool-list view exists. Both statements outlive this
-change and both would be false. Update each to point at the new probe and
-to state what was measured.
+Shape B was rejected because it requires asserting that a code-execution
+tool in a read-only reviewer is acceptable, and this repo has no
+measurement of what `node_repl` can reach. That assertion would be wider
+than its evidence. Nothing measured suggests disabling it changes review
+behaviour.
 
-Also record, in the item's closing note, that `-c mcp_servers={}` parses
-and does nothing, so no future cycle proposes it again.
+## Task 3 — retract the false premise everywhere it is written
+
+Four standing surfaces say the tool surface is unmeasured, and all four
+become false when this ships. An earlier draft named only two; the
+reviewer found the other two at plan round 1. Task 3 updates ALL of them,
+plus the test that pins one of them.
+
+1. `tools/codex-context-probe.ps1:1-23` — the header telling the reader
+   the script "does not read the reviewer's tool surface at all - see
+   backlog item 7". Point it at the new probe.
+2. `skills/multi-model-verify/SKILL.md`, contract region
+   `client-probe-scope-limit` — "`codex debug` offers no tool-list view to
+   measure instead" and "Backlog item 7 holds the tool half".
+3. `README.md:186-200` — states independently that the reviewer's tool
+   surface "is not in the prompt and is not measured ... Tracked as
+   backlog item 7". Nothing in an earlier draft touched this.
+4. Backlog item 7 itself, including its closing note that `-c
+   mcp_servers={}` parses and does nothing, so no future cycle proposes
+   it again.
+
+**Surface 2 is pinned, and the pin is part of this task, not follow-up.**
+`evals/multi-model-verify/test_multi_model_verify.py:762-782`
+(`test_the_probe_does_not_claim_the_tool_surface`) asserts that region
+VERBATIM as one multi-line literal. Editing the region without editing the
+pin turns a documentation fix into a red suite. Per `CLAUDE.md`, change
+the test first. `DECLARED_REGIONS` in
+`evals/multi-model-verify/test_contract_coverage.py:666-676` keeps the
+region declared; if the edit splits or renames it, that file changes too.
+
+**What the replacement text must NOT say.** The region exists to stop a
+clean probe reading as full reviewer isolation. The new text must keep
+that stop. The tool axis moves from "unmeasured" to "measured, with the
+absence direction a mitigation" — which is still not full isolation.
 
 ## Task 4 — tests for the tool-surface probe
 
@@ -158,6 +215,18 @@ way the existing probe tests drive theirs. Cases must include, at minimum:
 Each must be watched to FAIL first, and the failure text recorded.
 
 ## Task 5 — extend agy drift watching from a version to its contracts
+
+**What this task is NOT, corrected at plan round 1.** It is not adding
+checks that do not exist. `agents/flash-implementer.md:45-59` already runs
+three of item 11's contracts as a per-dispatch preflight, lines 100-105
+forbid any approval-bypass flag, and lines 81-92 block a missing
+transcript after the run. Those stay exactly as they are.
+
+The gap is that the WEEKLY DRIFT WATCHER covers none of them and the
+doctor mirrors only two, so a drift is discovered when a task is
+dispatched and blocked, mid-build, on a frozen plan, with the budget
+already committed. This task moves the discovery earlier. It does not
+replace the enforcement.
 
 `tools/check-drift.ps1` currently runs `agy --version` and stores the
 string (lines 127-130). Add, beside it, the contract set item 11
@@ -197,15 +266,29 @@ live agy call is needed. Every failure direction, watched to fail first.
 
 ## Task 8 — record what was measured but NOT decided
 
-`allowNonWorkspaceAccess: true` is on, and this cycle establishes only
-that it exists, that its value is `true`, and that nothing reads it. It
-does not establish what agy does with it or whether the plugin set it.
-Open a new backlog item for that measurement rather than acting on a guess.
+**`allowNonWorkspaceAccess`.** Corrected at plan round 1: it HAS been
+measured once. `docs/superpowers/plans/2026-07-25-flash-implementer.md:590-603`
+records the 0.12.0 build setting it to `false`, watching a trusted-workspace
+print-mode write get soft-denied, restoring `true`, and documenting
+"allowNonWorkspaceAccess=true required for print-mode writes as of agy
+1.1.7". So `true` is a documented lane requirement, not an unexamined
+default.
 
-Same for the `<repo>/.codex` enumeration gap in the probe record: the
-preflight sweep does not cover it, codex loads project-local skills from
-it, and this repo's copy is empty. A gap in the enumeration, not a live
-exposure, and a separate item.
+The new backlog item is therefore NARROWER than an earlier draft implied:
+what does `true` permit OUTSIDE the workspace, on 1.1.12? Recording the
+value as watched drift does not answer that and must not be presented as
+closing it. Item 11's security contract is marked explicitly UNMEASURED,
+and item 11 stays partially open on that point when the rest of it closes.
+
+**The `<repo>/.codex` enumeration gap.** Also corrected: it was already
+known, at
+`skills/multi-model-verify/references/model-prompting-notes.md:288-291`
+("'.codex/' stays unswept — unprobed; probe before adding"). This cycle
+reconfirms it and retracts the unsupported half of the earlier draft: that
+codex loads project-local skills from there even when the project is
+untrusted was the client's description, never a measurement, and no canary
+artifact exists. The reachability stays UNPROBED. The follow-up item is to
+probe it, not to widen the sweep on an unmeasured premise.
 
 ## Task 9 — the version bump, last
 
@@ -215,27 +298,28 @@ the version number.
 
 ---
 
-## Design questions for the debate
+## Design questions — ANSWERED at plan round 1
 
-**DQ1 — the survivor control.** Under shape A, pass 2 shows `node_repl`
-gone. That is consistent with the flag working AND with a launch failure,
-and finding 6 says the record cannot separate them. Is there a sound
-survivor control — some server or signal that must REMAIN visible in pass 2
-— that would distinguish "the environment is healthy and the flag worked"
-from "the MCP subsystem died"? Or is the honest answer that this direction
-of the check is a mitigation rather than a control, and must be labelled
-that way in the contract text?
+**DQ1 — the survivor control. No sound survivor exists in the measured
+configuration.** After the shipped flags, `node_repl` is the only
+remaining MCP server, so shape A removes the only candidate survivor, and
+`experimentalFeature/list` answering proves only that the app-server is
+alive. The absence direction is labelled a MITIGATION. A real control
+would need a newly measured MCP failure diagnostic, a resolved-config
+echo, or a harmless pass-2 survivor; none is measured, so none is claimed.
 
-**DQ2 — shape A or shape B for `node_repl`.** Session position is A. What
-breaks it?
+**DQ2 — Shape A**, applied to the fresh AND resume dispatches, shipped as
+risk reduction with an empty allowlist, never called verified isolation.
+See Task 2.
 
-**DQ3 — a version floor for agy.** Item 11 offers a floor, the way the
-Fable panel lane has Claude Code 2.1.216. This plan declines it: the only
-agy version anything has been measured on is 1.1.12, and a floor asserted
-at the version that happens to be installed is a claim with no measurement
-under it. Is declining right, or does a floor at the measured version carry
-real protection the contract checks do not?
+**DQ3 — no version floor for agy.** A floor means "below this the lane is
+unavailable", as `tools/check-drift.ps1:250-257` does for the Kimi lane.
+No agy breakage boundary has been measured; 1.1.12 is simply today's
+version. Instead: report version changes, run the behavioural contract
+checks on every drift run, block failed or unreadable checks, and retain
+1.1.12 as the OBSERVED BASELINE rather than a compatibility boundary.
 
-**DQ4 — `allowNonWorkspaceAccess: true`.** Watch it and open an item
-(session position), or treat it as a defect this cycle fixes? The plugin
-has no measurement of what it permits.
+**DQ4 — watch `allowNonWorkspaceAccess` and open the focused measurement
+item; do not flip it this cycle.** `false` is already measured to break
+the lane's intended writes on agy 1.1.7. The unmeasured half is what
+`true` permits outside the workspace on 1.1.12. See Task 8.

@@ -120,20 +120,55 @@ cannot exist, and no design should rest on it.
 ### What findings 6 and 7 together imply for the fix
 
 A one-pass "the tool is absent" assertion cannot be sound. The measurement
-needs a POSITIVE CONTROL, the same two-pass shape the 0.17.0 skills probe
-already uses: first demonstrate the probe CAN see the thing, then
-demonstrate the flag removes it. If pass one does not see it, the
-instrument is not known to work, the measurement is UNMADE, and the
-correct outcome is BLOCKED — never clean.
+needs a two-pass shape, the same one the 0.17.0 skills probe already uses:
+first demonstrate the probe CAN see the thing, then run the dispatch
+configuration. If pass one does not see it, the instrument is not known to
+work, the measurement is UNMADE, and the correct outcome is BLOCKED —
+never clean.
 
-### Unrecorded gap found alongside
+**Corrected at plan round 1, and the correction matters.** An earlier
+draft of this section called that pair a POSITIVE CONTROL for removal. It
+is not one, and the reviewer refuted it from this record's own finding 6.
+Pass 1 calibrates the INSTRUMENT under baseline conditions. It says
+nothing about the MCP subsystem's health under pass-2 conditions, and an
+empty pass 2 stays observationally identical to the deliberate crash in
+arm F. So:
+
+- pass 1 is an INSTRUMENT CALIBRATION;
+- an unexpected tool SURVIVING pass 2 is a real detection, because
+  detecting something present never depends on telling removal from
+  silence;
+- a tool ABSENT from pass 2 is a MITIGATION, not proof of removal.
+
+The pair must never be described as a positive removal control unless
+some pass-2 survivor or MCP failure diagnostic is first measured.
+
+### Enumeration gap, RECONFIRMED rather than found
 
 The preflight enumeration sweeps `*AGENTS.md`, `.agents/*` and
-`.kimi-code/*`. It does NOT sweep `<repo>/.codex/*`, and codex loads
-project-local skills from `<repo>/.codex` even when the project is
-untrusted. This repo's `.codex` directory exists and is EMPTY, so nothing
-is reachable through it today. That makes it a gap in the enumeration,
-not a live exposure.
+`.kimi-code/*`. It does NOT sweep `<repo>/.codex/*`. This repo's `.codex`
+directory exists and is EMPTY, so nothing is reachable through it today.
+That makes it a gap in the enumeration, not a live exposure.
+
+**Two corrections at plan round 1.**
+
+It was not newly found. `skills/multi-model-verify/references/model-prompting-notes.md:288-291`
+already records it, in those words: "'.codex/' stays unswept — unprobed;
+probe before adding." This record reconfirms standing text.
+
+And an earlier draft asserted that "codex loads project-local skills from
+`<repo>/.codex` even when the project is untrusted". That is RETRACTED. It
+came from the client's own description, not from a measurement, and this
+record retains no `.codex` canary artifact comparable to its tool-surface
+reproductions. The reachability stays UNPROBED, exactly as the standing
+text says. Anything else would be this record doing the thing it exists to
+prevent.
+
+Note the neighbouring distinction, since the two are easy to merge: the
+round-1 preflight probe reported `global_agents_md_path` as
+`C:\Users\Brandon\.codex\AGENTS.md`. That is the codex HOME, which the
+probe DOES see and record. The repo-local `.codex` is a different
+directory and is not evidence about it.
 
 ---
 
@@ -171,28 +206,62 @@ them.
 ```
 
 `trustedWorkspaces` is the key the lane depends on and it is correct.
-`allowNonWorkspaceAccess` is set to **true**, and nothing in this repo
-reads it. The lane's fifth declared dependency is "the absence of any
-approval-bypass flag or persisted per-tool allow rule". A setting that
-permits access OUTSIDE the workspace is at minimum adjacent to that
-dependency, it is currently ON, and no check in the plugin has ever
-looked at it.
+`allowNonWorkspaceAccess` is set to **true**, and no CHECK in this repo
+reads it.
 
-Claim width: this record establishes that the key exists, that its value
-is `true`, and that nothing checks it. It does NOT establish what agy
-does with it, whether the plugin set it, or whether it changes what the
-Flash implementer can reach. Those are open questions for the debate, not
-findings.
+**Corrected at plan round 1: it HAS been measured once, and this record
+missed it.** An earlier draft said the repo has no measurement of what agy
+does with this key. False.
+`docs/superpowers/plans/2026-07-25-flash-implementer.md:590-603` records a
+deliberate bounded probe during the 0.12.0 build: set the key to `false`,
+run a print-mode write against a still-trusted directory, observe the
+result. The write was soft-denied. The value was restored to `true` and
+the finding recorded as "allowNonWorkspaceAccess=true required for
+print-mode writes as of agy 1.1.7".
+
+So `true` is not an unexamined default. It is a documented requirement of
+the lane, measured once, on agy 1.1.7.
+
+Claim width, restated. This record establishes: the key exists; its value
+is `true`; no check reads it; and `false` broke the lane's intended writes
+on 1.1.7. It does NOT establish what `true` permits OUTSIDE the workspace,
+on 1.1.12 or on any version. That is the remaining unknown, it is
+narrower than the earlier draft implied, and it is a real one: item 11's
+security contract stays explicitly UNMEASURED rather than clean.
 
 ### What actually watches agy today
 
-`tools/check-drift.ps1:127-130` runs `agy.exe --version` and stores the
-string. That is the whole of it. `commands/doctor.md:129-141` checks the
-binary exists and that `agy models` contains the literal. Neither reads
-the settings file, the transcript path, or `allowNonWorkspaceAccess`.
+**Corrected at plan round 1.** An earlier draft said "three of the five
+declared contracts have no check anywhere". That is FALSE and the reviewer
+refuted it with citations this record should have carried.
 
-So three of the five declared contracts have no check anywhere, and the
-fourth is checked only in the doctor, which a dispatch does not run.
+`agents/flash-implementer.md:45-59` runs a five-item preflight before
+EVERY dispatch, and three of item 11's contracts are in it: `agy models`
+must contain the model literal (item 1), `trustedWorkspaces` must contain
+the workspace (item 2), and the settings file must carry NO file-writing
+per-tool allow rule at all (item 3, which is item 11's fifth contract).
+`agents/flash-implementer.md:100-105` forbids any approval-bypass flag,
+and lines 81-92 block a missing transcript after the run.
+
+So the contracts ARE enforced, per dispatch and post run, at the point of
+use.
+
+The real gap is narrower and still real:
+
+- `tools/check-drift.ps1:127-130` runs `agy.exe --version` and stores the
+  string. That is the whole of the WEEKLY DRIFT WATCHER's agy coverage.
+  None of the contracts above is watched there.
+- `commands/doctor.md:129-141` mirrors only two of them: the binary
+  exists, and `agy models` contains the literal. It does not read the
+  settings file at all.
+- So a drift in any of these surfaces is discovered when a task is
+  DISPATCHED and blocked, not before. That is safe but late: the failure
+  lands mid-build, on a frozen plan, with the round's budget already
+  committed.
+
+The claim this record now makes is that the contracts are not covered by
+the drift watcher and are incompletely mirrored by the doctor. It does NOT
+claim they go unchecked.
 
 ---
 
