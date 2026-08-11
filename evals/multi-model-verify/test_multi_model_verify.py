@@ -1438,6 +1438,114 @@ class TestEvalFixtures:
         )
         assert "[tool_result for=toolu_B ERROR] permission denied" in out
 
+    # The realistic dispatch this suite grades on. Absolute scratchpad
+    # paths and a 64-hex override digest, exactly as a live run builds
+    # them - the placeholder form in SKILL.md is ~670 characters shorter
+    # and lands INSIDE the old 600 cap, which is why the case passed
+    # sometimes. ONE measured dispatch, not an established maximum.
+    _DISPATCH_OVERRIDE = (
+        r"C:\Users\Brandon\AppData\Local\Temp\claude"
+        r"\C--Users-Brandon-Documents-parallax"
+        r"\a29d60ea-aa36-4cc1-806e-3a7a85997dab\scratchpad\debate23"
+        r"\override-verified.txt")
+    _DISPATCH_BRIEF = (
+        r"C:\Users\Brandon\AppData\Local\Temp\claude"
+        r"\C--Users-Brandon-Documents-parallax"
+        r"\a29d60ea-aa36-4cc1-806e-3a7a85997dab\scratchpad\debate23"
+        r"\plan-brief-r1.md")
+
+    def _realistic_dispatch(self, model):
+        sha = "180f09f5" * 8
+        return "\n".join([
+            "$priorOutputEncoding = $OutputEncoding",
+            "try {",
+            "$OutputEncoding = New-Object System.Text.UTF8Encoding($false)",
+            f'$brief = [System.IO.File]::ReadAllText("{self._DISPATCH_BRIEF}",'
+            " (New-Object System.Text.UTF8Encoding($false, $true)))",
+            f'$bytes = [System.IO.File]::ReadAllBytes("'
+            f'{self._DISPATCH_OVERRIDE}")',
+            "$seen = ([System.BitConverter]::ToString((["
+            "System.Security.Cryptography.SHA256]::Create())"
+            ".ComputeHash($bytes)) -replace '-', '').ToLower()",
+            f'if ($seen -cne "{sha}") {{ throw "the override file changed'
+            ' after the probe verified it" }',
+            "$override = (New-Object System.Text.UTF8Encoding($false,"
+            " $true)).GetString($bytes)",
+            "$brief | codex exec --sandbox read-only --disable plugins"
+            f" --disable apps -c $override -m {model}"
+            " -c model_reasoning_effort=high --output-last-message"
+            " reply-r1.txt - > transcript-r1.txt 2>&1",
+            "} finally { $OutputEncoding = $priorOutputEncoding }",
+        ])
+
+    @pytest.mark.parametrize("tool", ["Bash", "PowerShell"])
+    def test_a_realistic_dispatch_stays_visible_to_the_grader(self, tool):
+        """Backlog item 18's mechanism, as a test.
+
+        Expectation 1 of `plan-mode-debate-runs` asks the grader to observe
+        `codex exec`, `--sandbox read-only` and the model flag. All three
+        live inside the shell tool's `command` input, BEHIND the mandated
+        override-verification preamble. Rendered at the old 600-character
+        cap they were cut off, so the expectation failed for a reason that
+        has nothing to do with the plugin - and it failed intermittently,
+        because how far in they land depends on how long the run's paths
+        happen to be.
+        """
+        mod = self._load_runner()
+        notes = read(REFERENCES / "model-prompting-notes.md")
+        model = re.search(r"Canonical model id: `([^`\n]+)`", notes).group(1)
+        events = json.dumps({"type": "assistant", "message": {"content": [
+            {"type": "tool_use", "id": "toolu_D", "name": tool,
+             "input": {"command": self._realistic_dispatch(model),
+                       "description": "Dispatch plan debate round 1"}}]}})
+        out = mod.compact_stream(events)
+        for needle in ("codex exec", "--sandbox read-only", f"-m {model}"):
+            assert needle in out, (
+                f"expectation 1 grades on {needle!r} and the rendering cut"
+                f" it: the {tool} record is only {len(out)} characters"
+            )
+        assert len(out.splitlines()) == 1, (
+            "the record must stay on ONE physical line - elision is"
+            " line-aligned"
+        )
+
+    def test_an_over_cap_shell_input_truncates_at_the_declared_cap(self):
+        # The cap is a bound, not a suggestion. A pathological input must
+        # still be cut, and cut where the code says.
+        mod = self._load_runner()
+        huge = "y" * 9000
+        events = json.dumps({"type": "assistant", "message": {"content": [
+            {"type": "tool_use", "id": "toolu_H", "name": "Bash",
+             "input": {"command": huge}}]}})
+        out = mod.compact_stream(events)
+        prefix = "[tool_use toolu_H] Bash "
+        assert out.startswith(prefix)
+        assert len(out) - len(prefix) == 2400, (
+            f"expected exactly the declared cap; got {len(out) - len(prefix)}"
+        )
+
+    def test_wide_shell_records_exhaust_the_budget_explicitly(self):
+        # Wider records make the middle-evidence budget run out sooner.
+        # The property that must survive is NOT that everything fits: it is
+        # that a loss is ANNOUNCED and that no record is bisected. The old
+        # comment claimed whole lines keep call/result PAIRS whole; they do
+        # not - the loop can stop having kept one half.
+        mod = self._load_runner()
+        head = ["h" * 200] * 80
+        tail = ["t" * 200] * 140
+        middle = []
+        for i in range(40):
+            middle.append(f'[tool_use toolu_W{i}] Bash ' + "z" * 2400)
+            middle.append(f"[tool_result for=toolu_W{i} ok] " + "r" * 200)
+        transcript = "\n".join(head + middle + tail)
+        out = mod.elide_transcript(transcript)
+        assert "retained-evidence budget exhausted" in out, (
+            "a dropped record must be announced, never silently absent"
+        )
+        for ln in out.splitlines():
+            if ln.startswith("[tool_use toolu_W"):
+                assert ln.endswith("z"), "a record was bisected"
+
     def test_agent_text_cannot_spoof_tool_evidence(self):
         # Only genuine structured events may occupy the evidence namespace:
         # an executor that PRINTS a marker-shaped line as prose must not be
@@ -1928,7 +2036,9 @@ class TestApplicationCheckpoint:
         )
         runner = read(REPO_ROOT / "evals" / "tools"
                       / "run_behavioral_evals.py")
-        assert 'in ("Edit", "Write")' in runner and "2400" in runner, (
+        # 0.23.0 widened that tuple to the two shell tools as well, so the
+        # pin names the two this case needs rather than the whole literal.
+        assert '("Edit", "Write",' in runner and "2400" in runner, (
             "the checkpoint Write's CONTENT is graded evidence - the"
             " default 600-char args cap truncates it"
         )
@@ -2692,6 +2802,30 @@ class TestBriefEncodingOverStdin:
         assert proc.returncode == 0, proc.stdout + proc.stderr
         return proc.stdout.strip().lower()
 
+    # The pipe writes a UTF-8 preamble and a line terminator around the
+    # payload on Windows PowerShell 5.1. Both are the transport's, not the
+    # brief's, so they are declared here and stripped ONCE - never treated
+    # as "anything may surround the payload", which is how an oracle stops
+    # being able to fail.
+    BOM = "efbbbf"
+    EOL = "0d0a"
+
+    def _payload(self, out):
+        """The bytes the brief itself contributed, or an explicit failure.
+
+        Every oracle below compares the WHOLE payload, because a
+        containment check cannot distinguish 'the character arrived' from
+        'the character arrived and something else did too', and an empty
+        capture satisfies every `not in` assertion ever written. Sol found
+        both holes in this module at round 7.
+        """
+        assert out, "the child produced NO output: nothing was measured"
+        body = out[len(self.BOM):] if out.startswith(self.BOM) else out
+        assert body.endswith(self.EOL), (
+            f"expected the pipeline terminator {self.EOL}; got {out!r}"
+        )
+        return body[:-len(self.EOL)]
+
     @pytest.mark.skipif(os.name != "nt",
                         reason="Windows PowerShell 5.1 is the subject")
     def test_the_documented_old_form_corrupts_the_brief(self, tmp_path):
@@ -2701,11 +2835,9 @@ class TestBriefEncodingOverStdin:
         # question marks, not one, is what proves both faults fired.
         out = self._run(tmp_path,
                         "Get-Content -Raw <BRIEF> | & '<PY>' '<DUMP>'\n")
-        assert "3f3f3f" in out, (
-            "expected the em dash to arrive as three question marks;"
-            f" got {out}"
+        assert self._payload(out) == "613f3f3f62", (
+            f"expected exactly a—b flattened to a???b; got {out!r}"
         )
-        assert "e28094" not in out, "the em dash must not survive the old form"
 
     @pytest.mark.skipif(os.name != "nt",
                         reason="Windows PowerShell 5.1 is the subject")
@@ -2720,10 +2852,10 @@ class TestBriefEncodingOverStdin:
             " (New-Object System.Text.UTF8Encoding($false, $true)))\n"
             "$brief | & '<PY>' '<DUMP>'\n"
             "} finally { $OutputEncoding = $priorOutputEncoding }\n"))
-        assert "e28094" in out, (
-            f"the em dash must survive as UTF-8 bytes e2 80 94; got {out}"
+        assert self._payload(out) == "61e2809462", (
+            "the brief must arrive byte-for-byte as a—b in UTF-8;"
+            f" got {out!r}"
         )
-        assert "3f3f3f" not in out, "no character may be flattened to '?'"
 
     @pytest.mark.skipif(os.name != "nt",
                         reason="Windows PowerShell 5.1 is the subject")
@@ -2738,6 +2870,11 @@ class TestBriefEncodingOverStdin:
         the character reached the pipe whole and came out as ONE `?`
         rather than three: a partly-applied fix looks different from no
         fix, and neither is the fix.
+
+        The assertion is POSITIVE and exact. Written first as
+        `"e28094" not in out`, it would have passed on empty output -
+        a test that proves the guard is unnecessary by measuring nothing.
+        Sol found that at round 7.
         """
         out = self._run(tmp_path, (
             "$brief = [System.IO.File]::ReadAllText('<BRIEF>',"
@@ -2745,10 +2882,12 @@ class TestBriefEncodingOverStdin:
             "& { $OutputEncoding = New-Object"
             " System.Text.UTF8Encoding($false)\n"
             "$brief | & '<PY>' '<DUMP>' }\n"))
-        assert "e28094" not in out, (
-            "if a child-scope assignment now reaches the pipe, the shipped"
-            " script-scope form is no longer the only working one and the"
-            f" contract text must be re-measured; got {out}"
+        assert self._payload(out) == "613f62", (
+            "a child-scope assignment must leave the pipe on the outer"
+            " encoding, flattening the whole em dash to ONE '?'. If this"
+            " now differs, the shipped script-scope form is no longer the"
+            f" only working one and the contract must be re-measured;"
+            f" got {out!r}"
         )
 
     @pytest.mark.skipif(os.name != "nt",
