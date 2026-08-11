@@ -252,10 +252,16 @@ rewritten; the corrections live here"
 (`rounds/2026-07-28-reviewer-isolation/README.md:10-12`). That cycle's own
 reviewer stated it as an instruction: "label superseded claims in the
 rounds README without rewriting raw artifacts"
-(`rounds/2026-07-28-reviewer-isolation/sol-diff-r1-reply.md:87`). This
+(`rounds/2026-07-28-reviewer-isolation/sol-diff-r1-reply.md:77-87`). This
 cycle re-derived the identical rule at round 3, at the cost of a contested
-exchange, because the rule lives inside one cycle's record where no later
-cycle reads it. Recorded as a follow-up in Task 8.
+exchange, because the rule stayed inside one cycle's record and was never
+promoted anywhere a later cycle reads. Recorded as a follow-up in Task 8.
+
+**Surface 6 has a SECOND stale claim, created by this very task.** Round 4
+caught it: the debate README states the surface count as SIX, which
+Finding A made false within the same cycle that wrote it. The builder must
+treat the count itself as a claim that goes stale, not just the
+conclusions around it.
 
 **Not a shipped surface, but do not lose it:** `.claude/state/handoff.md`
 carries "Item 7 ... is partly answered by the 22-name inventory but is not
@@ -426,17 +432,24 @@ answers neither and must not be presented as closing them. Item 11's
 security contract is marked explicitly UNMEASURED, and item 11 stays
 partially open on that point when the rest of it closes.
 
-**Adjudication rules die inside the cycle that derived them.** Found after
-round 3. The rule for editing a rounds README while leaving raw artifacts
-alone was derived in 0.17.0, written at
-`rounds/2026-07-28-reviewer-isolation/README.md:10-12`, and stated as an
-instruction by that cycle's reviewer at `sol-diff-r1-reply.md:87`. This
-cycle re-derived it at round 3 and paid a contested exchange for it. The
-follow-up item is not "write the rule down" - it was written down. It is
-that a rule recorded only in one cycle's round record is invisible to
-every later cycle, and the repo has no place where such rules accumulate.
-Whether that place should be `debate-protocol.md` is for the item to
-settle, not this plan.
+**Adjudication rules are never PROMOTED out of the cycle that derived
+them.** Found after round 3, and narrowed by round 4. The rule for editing
+a rounds README while leaving raw artifacts alone was derived in 0.17.0,
+written at `rounds/2026-07-28-reviewer-isolation/README.md:10-12`, and
+stated as an instruction by that cycle's reviewer at
+`sol-diff-r1-reply.md:77-87`. This cycle re-derived it at round 3 and paid
+a contested exchange for it.
+
+The follow-up is not "write the rule down"; it was written down. Nor is it
+that the repo lacks somewhere for such rules to live: an earlier draft
+said that and round 4 refuted it. `references/debate-protocol.md` IS that
+place, it carries the debate's standing rules, and `SKILL.md:27` makes it
+REQUIRED READING before the first round.
+
+The gap is the PROMOTION STEP. Nothing in the flow ever moves a rule a
+debate settled out of that debate's record and into `debate-protocol.md`,
+so a rule earned at the cost of a round stays where only that cycle can
+see it. That is what the item is about.
 
 **The `<repo>/.codex` enumeration gap.** Also corrected: it was already
 known, at

@@ -154,6 +154,12 @@ without the pin turns a documentation fix into a red suite.
 > `docs/superpowers/specs/2026-07-28-reviewer-isolation-design.md:378-395`
 > as surface 5. Round 3 added THIS FILE as surface 6. The operative count
 > is six.
+>
+> **SUPERSEDED AGAIN, after round 3.** Seven. The session's own sweep
+> found `rounds/2026-07-28-reviewer-isolation/README.md:14-21` as surface
+> 7. Round 4 caught that this very line had gone stale inside the cycle
+> that wrote it, which is the propagation defect appearing INSIDE its own
+> correction. The count is a claim like any other and goes stale like one.
 
 **Design questions, answered.** No sound survivor control exists in the
 measured configuration, because after the flags `node_repl` is the only
@@ -207,7 +213,8 @@ Round 3 was asked to sweep for propagation specifically, because round 2's
 finding predicted its own recurrence. It recurred. **This file was the
 surface**: written between rounds 1 and 2, stating round-1 conclusions in
 its own words, never revisited when rounds 2 and 3 corrected them. Hence
-the SUPERSEDED blocks above, and hence Task 3's count moving to six.
+the SUPERSEDED blocks above, and hence Task 3's count moving to six, and
+then to seven when the session swept for itself.
 
 The distinction that makes editing it correct: `plan-brief-r*.md` and
 `plan-reply-r*.txt` are VERBATIM HISTORICAL ARTIFACTS and are never
@@ -232,3 +239,43 @@ The other four:
   assert the exit code rather than the report text.
 
 Applied at `6f1a93e`.
+
+## Round 4 — eight PASSes, two FIXes, CAP REACHED
+
+Brief: `plan-brief-r4.md`. Reply: `plan-reply-r4.txt`. Binding clean
+(`-Resume`, boundary 1618355 bytes).
+
+This round carried the session's OWN findings rather than only answering
+the reviewer's. Six of the seven previously contested points were
+confirmed closed, and both new session findings were adjudicated.
+
+- **Finding A confirmed.** Surface 7 is the 0.17.0 debate record, and the
+  split it needs is exactly the one proposed: the tools-are-not-in-the-
+  prompt half stays true, the not-measured half does not.
+- **Finding C confirmed.** Excluding gitignored local state from the
+  shipped-surface count is right.
+- **Seven is the count.** No eighth. Three other tracked matches were
+  checked and are historical statements that stay true: two plans
+  recording item 7 as out of THEIR cycle's scope, and the mirror design
+  doing the same.
+- **Finding B was half right and then overclaimed, and the correction is
+  sharper than the finding.** Saying the repo has "no place" for
+  adjudication rules to accumulate is FALSE:
+  `references/debate-protocol.md` is that place and `SKILL.md:27` makes it
+  required reading before round 1. The real gap is the absence of a
+  PROMOTION STEP out of a cycle's record into it.
+- **The debate record went stale again, inside the cycle that corrected
+  it.** It said the count was six while the plan said seven. The
+  propagation defect, appearing inside its own fix, one round after being
+  named. The count is a claim and goes stale like one.
+
+**THE ROUND CAP IS REACHED.** Four consecutive contested exchanges. Both
+remaining fixes are applied, and both were accepted without contest, but
+the protocol's termination condition is an adjudicated DRY round and this
+round was not dry. The debate is PAUSED for user authorization rather than
+continued.
+
+Meters at the pause: 4/4 consecutive contested exchanges, 4/6 total
+fix-verify units. Two units remain unspent.
+
+Applied at `<pending>`.
