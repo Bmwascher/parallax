@@ -180,14 +180,16 @@ behaviour.
 
 ## Task 3 — retract the false premise everywhere it is written
 
-SIX standing surfaces carry claims this cycle falsifies. The first draft
-named two, round 1 found two more, round 2 found the fifth, and round 3
-found the sixth. Task 3 updates ALL of them, plus the test that pins one
-of them.
+SEVEN standing surfaces carry claims this cycle falsifies. The first draft
+named two, round 1 found two more, round 2 found the fifth, round 3 found
+the sixth, and the session's own sweep after round 3 found the seventh.
+Task 3 updates ALL of them, plus the test that pins one of them.
 
-The count moved three times, which is itself the reason this task exists:
+The count moved four times, which is itself the reason this task exists:
 the premise was written into more places than anyone remembered, and every
-sweep found what the last one missed.
+sweep found what the last one missed. Four sweeps is not evidence that the
+fifth would find nothing. The builder runs the sweep again before closing
+the task, and records what it searched for.
 
 1. `tools/codex-context-probe.ps1:1-23` — the header telling the reader
    the script "does not read the reviewer's tool surface at all - see
@@ -228,15 +230,38 @@ about a past cycle, it stays true, and Task 3 does not touch it.
    rounds 2 and 3 corrected them. It repeats the control/removal language
    and the "doctor mirrors two" miscount.
 
-**The rule for surface 6, because it is not like the other five.** The
-retained `plan-brief-r*.md` and `plan-reply-r*.txt` files are VERBATIM
-HISTORICAL ARTIFACTS and must never be rewritten; a brief that was sent
-and a reply that was received are what they were. The README is a
-SYNTHESIZED STANDING RECORD, which is a different kind of document: it is
-read as current. So it keeps its round-1 history, and the superseded
-conclusions are marked superseded in place with the adjudication that
-replaced them appended. Editing it is not falsifying the record; leaving
-it is.
+7. `docs/superpowers/plans/rounds/2026-07-28-reviewer-isolation/README.md:14-21`
+   — the 0.17.0 debate record. Found by the session's own sweep after
+   round 3, not by a reviewer. It says the tool surface "is not in the
+   prompt and is not measured". The FIRST half stays true and must
+   survive; the second half is what this cycle falsifies.
+
+**The rule for surfaces 6 and 7, because they are not like the other
+five.** The retained `plan-brief-r*.md` and `plan-reply-r*.txt` files are
+VERBATIM HISTORICAL ARTIFACTS and must never be rewritten; a brief that
+was sent and a reply that was received are what they were. A rounds README
+is a SYNTHESIZED STANDING RECORD, which is a different kind of document:
+it is read as current. So it keeps its history, and superseded conclusions
+are marked superseded in place with the adjudication that replaced them
+appended. Editing it is not falsifying the record; leaving it is.
+
+**That rule is not new, and that is the uncomfortable part.** The 0.17.0
+cycle derived it and wrote it into the head of that same file: "Every file
+here is a RAW RECORD of what was said at the time... The artifacts are not
+rewritten; the corrections live here"
+(`rounds/2026-07-28-reviewer-isolation/README.md:10-12`). That cycle's own
+reviewer stated it as an instruction: "label superseded claims in the
+rounds README without rewriting raw artifacts"
+(`rounds/2026-07-28-reviewer-isolation/sol-diff-r1-reply.md:87`). This
+cycle re-derived the identical rule at round 3, at the cost of a contested
+exchange, because the rule lives inside one cycle's record where no later
+cycle reads it. Recorded as a follow-up in Task 8.
+
+**Not a shipped surface, but do not lose it:** `.claude/state/handoff.md`
+carries "Item 7 ... is partly answered by the 22-name inventory but is not
+closed". That file is gitignored (`.gitignore:3`), so it is local session
+state rather than something this task ships. It still needs updating when
+the item closes, and naming it here is what stops it being forgotten.
 
 **Surface 2 is pinned, and the pin is part of this task, not follow-up.**
 `evals/multi-model-verify/test_multi_model_verify.py:762-782`
@@ -400,6 +425,18 @@ The follow-up item must re-test both. Recording the value as watched drift
 answers neither and must not be presented as closing them. Item 11's
 security contract is marked explicitly UNMEASURED, and item 11 stays
 partially open on that point when the rest of it closes.
+
+**Adjudication rules die inside the cycle that derived them.** Found after
+round 3. The rule for editing a rounds README while leaving raw artifacts
+alone was derived in 0.17.0, written at
+`rounds/2026-07-28-reviewer-isolation/README.md:10-12`, and stated as an
+instruction by that cycle's reviewer at `sol-diff-r1-reply.md:87`. This
+cycle re-derived it at round 3 and paid a contested exchange for it. The
+follow-up item is not "write the rule down" - it was written down. It is
+that a rule recorded only in one cycle's round record is invisible to
+every later cycle, and the repo has no place where such rules accumulate.
+Whether that place should be `debate-protocol.md` is for the item to
+settle, not this plan.
 
 **The `<repo>/.codex` enumeration gap.** Also corrected: it was already
 known, at

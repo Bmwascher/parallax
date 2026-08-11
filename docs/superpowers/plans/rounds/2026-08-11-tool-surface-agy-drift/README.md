@@ -231,4 +231,4 @@ The other four:
   rounds in. It is now a FINDING with a non-clean exit, and Task 7 must
   assert the exit code rather than the report text.
 
-Applied at `<pending>`.
+Applied at `6f1a93e`.
