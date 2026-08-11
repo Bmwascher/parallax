@@ -90,7 +90,11 @@ This is the exact false-clean the 0.17.0 probe exists to forbid: a flag
 that looks like a control, is accepted by the parser, and does nothing.
 It must never ship as a control.
 
-### Finding 5. Two levers DO work.
+### Finding 5. Two levers CHANGE THEIR REPORTED SURFACES.
+
+Retitled at round 3. "Work" asserts an effect; what was measured is a
+change in what the client reports, and for the second lever finding 6
+shows those are not the same thing.
 
 - `--disable memories` flips `memories` to `enabled=False` in
   `experimentalFeature/list`.

@@ -14,9 +14,13 @@ Close two open backlog items:
    can satisfy every rule the repo has while the auditor holds a code
    execution tool.
 2. **Backlog item 11** — the agy lane has version tracking but no drift
-   protection. Four of its five declared contracts have no DRIFT-SIDE
-   check. They are not unchecked: the Flash implementer enforces the known
-   operational ones per dispatch and after the run. See Task 5.
+   protection. NONE of its five declared contracts has a DRIFT-SIDE check.
+   (Corrected at round 3: an earlier draft said four of five, which
+   silently counted the stored version string as the fifth contract. It is
+   not one of them; `backlog:787-800` lists the five and the version
+   string is not among them.) They are not unchecked: the Flash
+   implementer enforces the known operational ones per dispatch and after
+   the run. See Task 5.
 
 Both items say "shape of a fix, not decided" and both forbid a design
 argued from parsing alone. The probe record was taken first for that
@@ -134,8 +138,8 @@ does not resolve that ambiguity. It does not need to for the presence
 direction, and it cannot for the absence direction. Design question 1
 asked whether a survivor control could close it; the round-1 answer was
 that none exists in the measured configuration, because after the shipped
-flags `node_repl` is the ONLY remaining server, so shape A removes the
-only candidate survivor.
+flags `node_repl` is the ONLY remaining server, so shape A makes the only
+candidate survivor unreported too.
 
 Exit codes match the existing probe: 0 clean, 1 blocked with the reason on
 stdout, 2 script error. `-Json` emits the same shape as
@@ -176,13 +180,13 @@ behaviour.
 
 ## Task 3 — retract the false premise everywhere it is written
 
-FIVE standing surfaces say the tool surface is unmeasured, and all five
-become false when this ships. The first draft named two, plan round 1
-found two more, and plan round 2 found the fifth. Task 3 updates ALL of
-them, plus the test that pins one of them.
+SIX standing surfaces carry claims this cycle falsifies. The first draft
+named two, round 1 found two more, round 2 found the fifth, and round 3
+found the sixth. Task 3 updates ALL of them, plus the test that pins one
+of them.
 
-The count moved twice, which is itself the reason this task exists: the
-premise was written into more places than anyone remembered, and each
+The count moved three times, which is itself the reason this task exists:
+the premise was written into more places than anyone remembered, and every
 sweep found what the last one missed.
 
 1. `tools/codex-context-probe.ps1:1-23` — the header telling the reader
@@ -216,6 +220,23 @@ prompt-parity limit as its own unverified item.
 `docs/superpowers/specs/2026-07-29-mirror-z-capture-design.md:354-360`
 says item 7 was outside that cycle's scope. That is a historical statement
 about a past cycle, it stays true, and Task 3 does not touch it.
+
+6. `docs/superpowers/plans/rounds/2026-08-11-tool-surface-agy-drift/README.md`
+   — THIS CYCLE'S OWN DEBATE RECORD. Found at round 3, and the most
+   embarrassing of the six: it was written between rounds 1 and 2, states
+   the round-1 conclusions in its own words, and was never revisited when
+   rounds 2 and 3 corrected them. It repeats the control/removal language
+   and the "doctor mirrors two" miscount.
+
+**The rule for surface 6, because it is not like the other five.** The
+retained `plan-brief-r*.md` and `plan-reply-r*.txt` files are VERBATIM
+HISTORICAL ARTIFACTS and must never be rewritten; a brief that was sent
+and a reply that was received are what they were. The README is a
+SYNTHESIZED STANDING RECORD, which is a different kind of document: it is
+read as current. So it keeps its round-1 history, and the superseded
+conclusions are marked superseded in place with the adjudication that
+replaced them appended. Editing it is not falsifying the record; leaving
+it is.
 
 **Surface 2 is pinned, and the pin is part of this task, not follow-up.**
 `evals/multi-model-verify/test_multi_model_verify.py:762-782`
@@ -298,10 +319,29 @@ all, which is exactly how item 11's own version moved four releases
 unremarked. DQ3's answer was "report version changes"; without this step
 the plan records that answer without making it happen.
 
-Add: an agy version differing from the snapshot emits a note in the same
-form as the codex and superpowers ones. A version that cannot be read or
-parsed is its own note, not a silent carry-forward, because a carried
-value reads exactly like an unchanged one.
+Add: an agy version differing from the snapshot emits a NOTE in the same
+form as the codex and superpowers ones.
+
+**And an unreadable version must be a FINDING, not a note. Round 3 caught
+this as a false-clean introduced by the round-2 fix itself.** In this
+script the two are not interchangeable. Notes are printed under a "Notes:"
+heading (`tools/check-drift.ps1:345-348`) and sit happily beside "No
+findings." (`:341`), and the exit is decided by findings alone:
+`if ($findings.Count -eq 0) { exit 0 }` (`:411`). So specifying an
+unreadable agy version as a note would make an unmade measurement exit
+CLEAN, which is the exact invariant this plan opens by declaring.
+
+The rule, stated so the builder cannot get it wrong:
+
+- version READ and CHANGED -> a note, exit unaffected.
+- version READ and unchanged -> nothing.
+- version ABSENT, UNREADABLE, or UNPARSEABLE -> a FINDING, non-clean exit,
+  and the prior snapshot value is PRESERVED rather than overwritten with
+  an empty one.
+
+The carry-forward at `:274` and `:280` stays, because losing the last
+known good value would destroy the comparison the next run needs. What
+must not survive is the carry-forward happening SILENTLY.
 
 **Every one of these lands on a drift report, never on silence.** An agy
 that is absent is a lane that is unavailable, which the drift report must
@@ -322,14 +362,20 @@ Cases must include, at minimum:
 
 - each contract failing, and the drift report naming which one;
 - the agy version CHANGING, and a note appearing in the report;
-- the agy version being UNREADABLE or unparseable, and that being its own
-  note rather than a silent carry-forward of the snapshot value;
+- the agy version being ABSENT, UNREADABLE or UNPARSEABLE, asserting BOTH
+  the finding text AND a non-clean exit code, and asserting the prior
+  snapshot value survives;
 - agy absent entirely, reported as the lane being unavailable.
 
-The carry-forward case is the one most likely to pass by accident: the
-existing code path already carries the old value, so a test that only
-asserts "a version is present" passes whether or not anything was
-measured.
+**Assert the exit code, not only the text.** The unreadable case is the
+one most likely to pass while proving nothing: notes and findings both
+appear in the report, so a test that greps the report for a phrase passes
+identically whether the run exited 0 or non-zero. The exit code is the
+part that carries the invariant.
+
+The carry-forward is the second trap: the existing code path already
+carries the old value forward, so a test that only asserts "a version is
+present" passes whether or not anything was measured this run.
 
 ## Task 8 — record what was measured but NOT decided
 
@@ -377,7 +423,8 @@ the version number.
 
 **DQ1 — the survivor control. No sound survivor exists in the measured
 configuration.** After the shipped flags, `node_repl` is the only
-remaining MCP server, so shape A removes the only candidate survivor, and
+remaining MCP server, so shape A makes the only candidate survivor
+unreported too, with disable versus launch failure unresolved, and
 `experimentalFeature/list` answering proves only that the app-server is
 alive. The absence direction is labelled a MITIGATION. A real control
 would need a newly measured MCP failure diagnostic, a resolved-config

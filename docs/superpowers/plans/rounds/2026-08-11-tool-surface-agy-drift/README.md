@@ -29,6 +29,13 @@ The global `AGENTS.md` survives a clean probe by design and is recorded
 here rather than removed. Per `client-probe-scope-limit`, a clean probe is
 not full reviewer isolation, and item 7 is the reason.
 
+> **SUPERSEDED at round 3, in part.** A clean probe is still not full
+> reviewer isolation, and that stop must survive this cycle. But "item 7
+> is the reason" stops being the whole reason once item 7 closes: the
+> tool-list half becomes measured, while the prompt flag-parity limit at
+> `docs/superpowers/specs/2026-07-28-reviewer-isolation-design.md:184-197`
+> stays unverified and becomes the reason on its own. Task 3 splits them.
+
 ## Round 0 — VOID, and the cost was real
 
 Round 1 was dispatched once before this record existed, answered, exit 0,
@@ -92,6 +99,12 @@ pass 2 stays observationally identical to the deliberate-crash arm. So the
 presence direction is a control and the absence direction is a mitigation.
 The pair is not a positive removal control and may not be called one.
 
+> **SUPERSEDED at round 2.** "The presence direction is a control" is
+> still too strong. Observing a tool is a DETECTION. Nothing measured
+> establishes that every tool actually present would be observed, so there
+> is no guarantee running in that direction either. The word this design
+> is entitled to is detection, and only about what it saw.
+
 **FIX 5.** `agents/flash-implementer.md:45-59` already runs three of item
 11's contracts as a per-dispatch preflight, `:100-105` bans any
 approval-bypass flag, and `:81-92` blocks a missing transcript after the
@@ -99,12 +112,29 @@ run. The gap is that the weekly drift watcher covers none of them and the
 doctor mirrors two, so a drift lands mid-build on a frozen plan rather
 than before it. Safe, but late.
 
+> **SUPERSEDED at rounds 2 and 3, twice.** "The doctor mirrors two" is a
+> miscount: `commands/doctor.md:129-144` covers MODEL DECLARATION AND
+> REACHABILITY, with its own caveat that the route language is client-side
+> requested/propagated only. That is not two of item 11's five contracts.
+> And the round-2 replacement, "the contracts ARE enforced", overshot in
+> the other direction: item 11's fifth contract is the absence of ANY
+> bypass mechanism, while the wrapper checks one known rule class. The
+> settled wording is that the KNOWN OPERATIONAL CHECKS are enforced at
+> dispatch and the full security contract remains UNMEASURED.
+
 **FIX 7.** `docs/superpowers/plans/2026-07-25-flash-implementer.md:590-603`
 records the 0.12.0 build setting the key to `false`, watching a
 trusted-workspace print-mode write get soft-denied, restoring `true`, and
 documenting it as required on agy 1.1.7. `true` is a measured lane
 requirement. The residual is only what it permits OUTSIDE the workspace on
 1.1.12, and item 11's security contract stays explicitly UNMEASURED.
+
+> **SUPERSEDED at round 2.** "`true` is a measured lane requirement",
+> present tense, promotes a version-bounded result into a standing one. It
+> was required ON AGY 1.1.7. TWO questions are open on 1.1.12, not one:
+> whether `false` still soft-denies the lane's intended writes, and what
+> `true` permits outside the workspace. If `false` no longer denies, the
+> setting can simply go.
 
 **FIX 9.** `references/model-prompting-notes.md:288-291` already says
 "'.codex/' stays unswept — unprobed; probe before adding". Reconfirmed,
@@ -119,6 +149,12 @@ states it independently, and
 SKILL region VERBATIM as one multi-line literal, so editing the region
 without the pin turns a documentation fix into a red suite.
 
+> **SUPERSEDED at rounds 2 and 3.** Four was not the count, and neither
+> was five. Round 2 added
+> `docs/superpowers/specs/2026-07-28-reviewer-isolation-design.md:378-395`
+> as surface 5. Round 3 added THIS FILE as surface 6. The operative count
+> is six.
+
 **Design questions, answered.** No sound survivor control exists in the
 measured configuration, because after the flags `node_repl` is the only
 server left and shape A removes the only candidate. Shape A ships anyway,
@@ -126,10 +162,73 @@ on both the fresh AND resume dispatches, as risk reduction with an empty
 allowlist. No agy version floor; 1.1.12 is an observed baseline, not a
 compatibility boundary. Watch `allowNonWorkspaceAccess`, do not flip it.
 
+> **SUPERSEDED at round 3.** "Shape A removes the only candidate" asserts
+> an effect the record cannot establish. Shape A makes `node_repl`
+> UNREPORTED, with disable versus launch failure unresolved.
+
 Applied at `4be7eee`.
 
-## Round 2 — confirming
+## Round 2 — six findings, not dry
 
-Brief: `plan-brief-r2.md`. Asks whether any correction reintroduced the
-defect it was written to remove, whether Task 3's second sweep is
-exhaustive where the first was not, and whether the round is DRY.
+Brief: `plan-brief-r2.md`. Reply: `plan-reply-r2.txt`. Binding clean
+(`-Resume`, boundary 876878 bytes).
+
+The central finding was a PROPAGATION failure. Round 1's corrections were
+right and were applied to the sections the reviewer had cited, and to
+nothing else. The retracted overclaim survived in five further places: a
+task heading, two findings, a summary bullet, and the sentence justifying
+shape A.
+
+Three more, and one of them corrected a correction:
+
+- "the contracts ARE enforced" overshot. Replacing an understatement with
+  an overstatement is not a correction.
+- the `allowNonWorkspaceAccess` residual was too narrow, and in naming
+  only one of two questions it promoted a version-bounded measurement into
+  a present-tense requirement.
+- a FIFTH standing surface, the 0.17.0 reviewer-isolation design, which
+  needs a SPLIT rather than a rewrite: its tool-list premise is now false,
+  its prompt flag-parity limit beside it is still real, and the document
+  currently calls them the same gap.
+
+Round 2's own new finding: DQ3's answer was "report agy version changes"
+and Task 5 never said to do it. `check-drift` emits change notes for codex
+(`:321-323`) and superpowers (`:324-326`) only, which is exactly how agy
+moved four releases unremarked.
+
+Applied at `5737d4d`.
+
+## Round 3 — five findings, not dry, and the propagation repeated
+
+Brief: `plan-brief-r3.md`. Reply: `plan-reply-r3.txt`. Binding clean
+(`-Resume`, boundary 1084313 bytes).
+
+Round 3 was asked to sweep for propagation specifically, because round 2's
+finding predicted its own recurrence. It recurred. **This file was the
+surface**: written between rounds 1 and 2, stating round-1 conclusions in
+its own words, never revisited when rounds 2 and 3 corrected them. Hence
+the SUPERSEDED blocks above, and hence Task 3's count moving to six.
+
+The distinction that makes editing it correct: `plan-brief-r*.md` and
+`plan-reply-r*.txt` are VERBATIM HISTORICAL ARTIFACTS and are never
+rewritten. This README is a SYNTHESIZED STANDING RECORD and is read as
+current, so leaving a superseded conclusion in it is the falsification,
+not marking it.
+
+The other four:
+
+- three remnants of removal language survived round 2's sweep, including
+  finding 5's title.
+- the Goal said "four of five contracts lack drift-side checks" while Task
+  5 said the watcher covers none. The version string is not one of item
+  11's five contracts (`backlog:787-800`), so the count was wrong: it is
+  none of five.
+- **A FALSE-CLEAN INTRODUCED BY THE ROUND-2 FIX.** That fix specified an
+  unreadable agy version as a NOTE. In this script notes print beside "No
+  findings." (`tools/check-drift.ps1:341,345-348`) and the exit is decided
+  by findings alone (`:411`), so an unmade measurement would have exited
+  CLEAN. The plan's own opening invariant, defeated by its own fix, three
+  rounds in. It is now a FINDING with a non-clean exit, and Task 7 must
+  assert the exit code rather than the report text.
+
+Applied at `<pending>`.
