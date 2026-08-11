@@ -1,0 +1,86 @@
+The artifact chain is verified, with one correction: 15 em dashes were corrupted, not 14.
+
+## Artifact verification
+
+The brief is 13,363 UTF-8 bytes, 13,333 characters, with 45 non-ASCII bytes representing exactly 15 em dashes. The corrupted rollout’s second user record is 13,365 characters and contains 15 `???` spans. After canonical line-ending/whitespace handling, replacing those 15 spans with em dashes reproduces the brief exactly.
+
+The clean rollout’s second user record canonicalizes to the brief byte-for-byte and has the same SHA-256:
+
+```text
+0d3697ac7056968f5d25cadfe2cb367d4f6264bd4f6111e9d6167ef77dd7e8dd
+```
+
+Evidence: the corrupted user record is `C:\Users\Brandon\.codex\sessions\2026\08\11\rollout-2026-08-11T00-02-58-019fef33-d341-7881-8d6e-4f7437783b86.jsonl:9`; the clean re-dispatch is `C:\Users\Brandon\.codex\sessions\2026\08\11\rollout-2026-08-11T00-14-45-019fef3e-9b6a-7a21-a49f-686e0d96ac53.jsonl:9`.
+
+The raw-length difference is 32 characters because the 15 substitutions add 30 characters and the native pipeline adds two more line-ending characters. Canonicalized, the difference is exactly 30.
+
+**Verdict: FIX — change “14 spans” to “15 spans.” Everything else about the corrupted and clean artifacts is confirmed.**
+
+## Remaining threshold choice
+
+### (a) Ship a permanent warning with a dated exception
+
+Failure mode: this resolves ownership but not signal quality. Every clean run still emits a warning that requires no action, so readers continue learning to skip it. That is the precise failure item 19 identifies. `docs/superpowers/plans/2026-07-27-0150-backlog.md:1158-1161`.
+
+The hard 5250 stop would prevent unlimited growth, but the 5000 warning would cease to mean “something newly crossed the soft target.”
+
+**Verdict: FIX — a dated exception documents the contradiction; it does not remove it. Do not choose (a).**
+
+### (b) Find another relocation
+
+Failure mode: scope becomes budget-driven rather than contract-driven. The three accepted relocations have independent ownership reasons; a fourth chosen solely to make arithmetic green recreates the pressure to remove or obscure load-bearing instructions. The backlog expressly rules that out. `docs/superpowers/plans/2026-07-27-0150-backlog.md:1169-1172`.
+
+**Verdict: FIX — do not authorize an unspecified fourth relocation.**
+
+### (c) Deliberately rebase the soft threshold
+
+Failure mode: threshold ratcheting. A future cycle could cite any mandatory addition as precedent for moving the target again, and because `BODY_TOKEN_BUDGET` is global, the raise changes the lint policy rather than only documenting this skill. `evals/tools/skill_lint.py:37-45`.
+
+It is nevertheless the least self-defeating choice. Measure after the three approved relocations and encoding guard, then set the soft threshold to the smallest declared value that clears that measured body. Keep 5250 as the hard ceiling. Record the encoding correction and final body measurement beside the soft constant so the raise is an explicit baseline reset, not unexplained drift.
+
+Use mutually exclusive outcomes:
+
+```text
+tokens <= soft          clean
+soft < tokens <= 5250   warning
+tokens > 5250           error, not warning+error
+```
+
+Pin the exact boundary behavior: soft, soft+1, 5250, and 5251.
+
+**Verdict: PASS — choose (c) if the honest final body remains above 5000.**
+
+## New required plan amendment: vendored provenance
+
+`skill_lint.py` currently claims it is “unmodified except this provenance header” and directs maintainers to re-diff upstream before local editing. Adding soft/hard thresholds makes that claim false. Its check summary also currently promises only a token-budget warning, and its exit-code description says warnings permit exit zero. `evals/tools/skill_lint.py:3-6`, `evals/tools/skill_lint.py:12-26`.
+
+Before calling item 19 complete, the plan must require:
+
+- re-diffing the vendored source as its header directs;
+- updating the provenance note to identify the local budget-enforcement delta;
+- updating the documented checks and exit behavior;
+- fail-first tests proving the old implementation does not fail above 5250;
+- boundary tests for soft, soft+1, 5250, and 5251;
+- the hard-error message naming relocation or a deliberate ceiling change as the remedies.
+
+Only one tracked `SKILL.md` currently exists, but the linter remains a generic tool; the global-policy nature of the threshold should remain explicit.
+
+**Verdict: FIX — this provenance/documentation/test obligation is missing from the plan.**
+
+## Terminal verdict
+
+The implementation plan is not terminal yet. It needs three amendments:
+
+1. Correct the transport record from 14 to 15 corrupted em dashes.
+2. Predeclare option (c) as the response if the final honest measurement exceeds 5000.
+3. Add the vendored-linter provenance, documentation, re-diff, and boundary-test work above.
+
+After those textual amendments, I have no remaining substantive objection to the four-item plan.
+
+**Final verdict: FIX — NOT TERMINAL until those three amendments are incorporated.**
+
+## UNVERIFIED
+
+- The exact final soft threshold and post-relocation body size; they cannot be known before the approved text changes land.
+- The exact predeclared decision rule for the 12 behavioral runs. Authorization and run count are stated here, but the actual result-to-decision mapping was not supplied in this round.
+- The backup lane’s non-ASCII argument behavior remains unmeasured, as intentionally scoped.

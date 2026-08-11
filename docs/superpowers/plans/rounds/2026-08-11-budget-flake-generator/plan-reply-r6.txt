@@ -1,0 +1,7 @@
+1. The ledger is correct: Round 6 consumes unit 7 when dispatched, leaving one unused unit (`skills/multi-model-verify/references/debate-protocol.md:79-87`). **PASS**
+
+2. This round produced no new substantive finding and leaves no contested point outstanding, satisfying the termination rule (`skills/multi-model-verify/references/debate-protocol.md:88-92`). **PASS**
+
+**This is the ADJUDICATED DRY ROUND for the four-item plan as amended. The plan debate is terminal.**
+
+UNVERIFIED: none.

@@ -1,0 +1,134 @@
+The offsets are now fully reproducible. The encoding mechanism is also independently reproduced on Windows PowerShell 5.1. I accept the fourth work item, but as a separate transport fix—not folded conceptually into item 18.
+
+## Reproductions
+
+Using the supplied paths, SHA, model, description field, and the five lines at `skills/multi-model-verify/SKILL.md:192-196`, encoded as `run_behavioral_evals.py` does at `evals/tools/run_behavioral_evals.py:397`, I get exactly:
+
+```text
+json len                 1327
+codex exec               790
+--sandbox read-only      801
+-m gpt-5.6-sol           867
+```
+
+**Verdict: PASS — claim 3’s offsets are verified.**
+
+The pin correction also stands. `test_skill_preflight_names_the_remediation` has six relevant assertions: mirror, enumeration evidence, tracked deletion, ignored/untracked observation, commit imperative, and HEAD consequence. `evals/multi-model-verify/test_backup_lane.py:1000-1024`.
+
+Relocation must move the corresponding operational facts into `backup-lane.md` and retarget those assertions; simply deleting them from the skill would recreate the exact test inadequacy recorded at lines 1018-1024.
+
+**Verdict: PASS — the ordinary-pin correction is verified.**
+
+## Fourth item: UTF-8 brief transport
+
+I independently reproduced both serial faults using the repository’s UTF-8-no-BOM `SKILL.md` as input under Windows PowerShell 5.1:
+
+1. `Get-Content -Raw` decoded an em dash as the three characters `â`, `€`, `”`.
+2. With `$OutputEncoding` equal to `us-ascii`, piping that string into a native process emitted bytes `3F-3F-3F`.
+3. Reading through strict UTF-8 and setting `$OutputEncoding` to UTF-8 emitted the original `E2-80-94`.
+
+The affected shipped commands use `Get-Content -Raw` for both fresh and resumed dispatches. `skills/multi-model-verify/SKILL.md:191-197`, `skills/multi-model-verify/SKILL.md:245-251`. The repository already treats native-process encoding as an evidence boundary elsewhere. `tools/new-review-mirror.ps1:57-65`.
+
+The present evidence reader correctly refuses this corruption rather than blessing it: it compares the client-recorded prompt hash with the declared brief and fails when no user record matches. `tools/read-codex-round-evidence.ps1:21-24`, `tools/read-codex-round-evidence.ps1:698-708`. Therefore the current consequence is a void, costly round—not a false clean result.
+
+Add this as a distinct fourth item with these acceptance criteria:
+
+- strict UTF-8-no-BOM decoding for both fresh and resume brief files;
+- explicit UTF-8 `$OutputEncoding` at the native stdin boundary;
+- the setting scoped or restored rather than leaking unexpectedly into the caller’s shell;
+- both documented dispatch forms pinned;
+- a Windows PowerShell 5.1 test watched to produce `???` before the fix and exact UTF-8 afterward;
+- no claim about the backup lane’s argument transport.
+
+The existing resume test currently pins the defective `Get-Content -Raw` form and must be replaced, not merely supplemented. `evals/multi-model-verify/test_multi_model_verify.py:460-487`.
+
+**Verdict: PASS — add the fourth work item.**
+
+## Q4 — What may move?
+
+### (a) Deduplicate the override preamble
+
+Not as proposed in this cycle. The duplication is deliberate: the test explicitly requires two complete preambles because rounds execute in separate shells and a prior `$override` cannot survive into a later round. `evals/multi-model-verify/test_multi_model_verify.py:150-175`.
+
+A single common block could theoretically preserve that rule, but it would require a new structural oracle proving neither fresh nor resume is presented as a standalone copyable command without the preamble. Saving approximately 101 tokens is not enough reason to reopen that boundary while the transport form is already changing.
+
+**Verdict: FIX — leave both complete per-dispatch preambles for now.**
+
+### (b) Move the checkpoint-binding explanation
+
+Accept. `application-checkpoint.md` already owns the full hash, changed-path, relocation, and rejection contract. `skills/multi-model-verify/references/application-checkpoint.md:73-90`.
+
+Keep one imperative in `SKILL.md`: when a checkpoint governed application, pass it through `-CheckpointFile`. Move the explanatory duplication at `SKILL.md:334-339` to the reference. Existing wiring tests require the parameter’s discoverability, not that all binding detail remain inline. `evals/multi-model-verify/test_multi_model_verify.py:1652-1671`.
+
+**Verdict: PASS.**
+
+### (c) Condense the resume rationale
+
+Accept a partial move. `model-prompting-notes.md` already owns the measured no-continuity result, same-session check, effective-route requirements, and flags-before-resume rule. `skills/multi-model-verify/references/model-prompting-notes.md:149-168`, `skills/multi-model-verify/references/model-prompting-notes.md:192-199`.
+
+Keep inline:
+
+- repeat the complete verification preamble every round;
+- re-pin flags before `resume`;
+- require the resumed session id and effective route to match.
+
+Move the historical rationale and detailed probe result from `SKILL.md:253-266`.
+
+**Verdict: PASS with that retained imperative.**
+
+These two honest moves, plus lines 109-125, may clear 5000 even after adding the encoding guard, but that cannot be known until the exact text lands. Do not make “below 5000” an invitation to alter candidate (a) or shave another contract. Measure after the three justified relocations. If still above 5000, put the soft threshold to the user; the hard 5250 ceiling remains the actual stop.
+
+## Q5 — 2400 for shell tools or bounded windows?
+
+Prefer the simpler name-based 2400 cap for `Bash` and `PowerShell`.
+
+Those are exactly the shell tools the behavioral executor exposes. `evals/tools/run_behavioral_evals.py:75-103`. Extending the existing `Edit`/`Write` branch at lines 402-409:
+
+- retains the complete measured 1327-character dispatch;
+- introduces no content-sensitive selection;
+- keeps the record bounded and on one physical line;
+- reuses an established cap rather than adding another evidence representation.
+
+The risk is real but bounded: each shell record can grow by 1800 characters, and middle evidence has only 16000 characters before explicit exhaustion. `evals/tools/run_behavioral_evals.py:510-550`. Add tests for:
+
+- the supplied 1327-character event retaining all three needles;
+- inputs over 2400 truncating exactly at the declared cap;
+- one-line preservation;
+- spoofed prose remaining neutralized;
+- several 2400-character shell records exhausting the evidence budget explicitly without bisecting a record.
+
+What would change my mind:
+
+- a required, realistic shell invocation exceeding 2400;
+- recorded behavioral transcripts showing the larger records routinely exhaust 16000 and discard later required evidence;
+- a fail-first stress fixture where the 2400 policy hides another expectation’s evidence.
+
+If one occurs, use generic head-and-tail rendering—not semantic windows around selected command tokens. Your objection is right: choosing token-specific windows would make the harness decide in advance what deserves to be visible.
+
+**Recommendation: use the 2400 name-based shell cap.**
+
+## Q6 — Can the PowerShell half move to 0.24.0?
+
+Only if item 9 remains open or is explicitly split.
+
+A frozen grammar and case matrix are useful design artifacts, but they are not evidence that the PowerShell generator works. Item 9’s problem is the repeated PowerShell fault chain, while the proposed Python target already has focused handwritten tests. `docs/superpowers/plans/2026-07-27-0150-backlog.md:603-628`, `evals/multi-model-verify/test_multi_model_verify.py:1216-1325`.
+
+The PowerShell execution cost is already minimized: `run_functions` extracts the production functions and can execute a whole generated matrix in one host process. `evals/multi-model-verify/test_codex_context_probe.py:73-96`. CI already runs that module under both supported Windows hosts. `evals/multi-model-verify/test_codex_context_probe.py:35-63`.
+
+Therefore:
+
+- If 0.23.0 claims to close item 9, execute both generators now.
+- If scope must shrink, close only a newly named Python subitem—“The behavioural grader’s effective-route parser lacks generated shape coverage”—and leave item 9 open for 0.24.0.
+- Do not mark item 9 closed on an unexecuted PowerShell matrix.
+
+A half-landed matrix is not worse than nothing as design documentation, but it is worse than nothing if presented as closure because it creates evidence the release did not actually obtain.
+
+**Recommendation: execute both now; otherwise split the item honestly and leave the PowerShell backlog open.**
+
+## UNVERIFIED
+
+- The specific 13,363-byte round-1 artifact, its 14 corrupted spans, and the claimed clean re-dispatch: no rollout or brief artifact path was supplied. The two-stage `???` mechanism itself was independently reproduced.
+- “Worst realistic dispatch” as an upper-bound claim. The supplied 1327-character dispatch is verified, but no corpus establishes that it is the maximum.
+- Any non-ASCII behavior of the backup lane’s `-p` argument path; as stated, it remains unmeasured.
+
+No files were changed.

@@ -1,0 +1,175 @@
+The plan’s direction is mostly sound, but all six claims need narrowing or additional acceptance criteria. The largest corrections are the non-monotonic budget history, the already-existing route-parser tests, and the absence of a fail-first test for the proposed rendering fix.
+
+## Claim 1
+
+The enforcement mechanism is confirmed: `BODY_TOKEN_BUDGET` is 5000; the estimate is `len(body) // 4`; exceeding it appends only to `warnings`; and warnings do not affect the exit code. `--strict` promotes only the 500-line limit, not the token budget. `evals/tools/skill_lint.py:18-26`, `evals/tools/skill_lint.py:41-43`, `evals/tools/skill_lint.py:235-254`, `evals/tools/skill_lint.py:357-383`.
+
+The current arithmetic also stands: the normalized body is 21,616 characters, hence 5,404 estimated tokens. “Bytes” is technically wrong—the lint counts Python characters, not UTF-8 bytes. The section proportions are otherwise substantially reproducible, and preflight is about 38% of the body. `skills/multi-model-verify/SKILL.md:5-368`, `evals/tools/skill_lint.py:249-253`.
+
+The historical conclusion does not stand. Recomputing release snapshots with the same formula gives:
+
+- 0.18.0: 5120
+- 0.19.0: 5120
+- initial 0.20.0: 5117
+- corrected 0.20.1: 5129
+- 0.21.0: 5404
+- 0.22.0/current: 5404
+
+Thus it neither grew every cycle nor “never shrunk.” The repository’s own record only claims growth across the three measurements surrounding the 0.20.0 correction, not six monotonic cycles. `91278a1:skills/multi-model-verify/SKILL.md:5-349`, `ee40db5:skills/multi-model-verify/SKILL.md:5-349`, `2e39414:skills/multi-model-verify/SKILL.md:5-349`, `d2ed202:skills/multi-model-verify/SKILL.md:5-350`, `83fe146:skills/multi-model-verify/SKILL.md:5-368`, `skills/multi-model-verify/SKILL.md:5-368`, `docs/superpowers/plans/2026-07-27-0150-backlog.md:1158-1167`.
+
+**Verdict: FIX — say that the budget has remained unenforced and has risen materially since 0.18.0, but remove “six cycles,” “every cycle,” and “never shrunk.”**
+
+## Claim 2
+
+The branch-only relocation is justified. The STOP occurs before the remediation detail, and the detail begins only under “If present.” None of the five contract regions intersects lines 93-125. `skills/multi-model-verify/SKILL.md:80-93`, `skills/multi-model-verify/SKILL.md:144-175`, `skills/multi-model-verify/SKILL.md:199-209`.
+
+The backup reference already specifies mirror construction, remediation, identity, baseline, and tracked/untracked behavior. `skills/multi-model-verify/references/backup-lane.md:438-465`, `skills/multi-model-verify/references/backup-lane.md:466-509`, `skills/multi-model-verify/references/backup-lane.md:561-599`.
+
+Two corrections are required:
+
+1. Lines 93-125 are about 2,191 normalized characters, approximately 547 lint-estimated tokens—not 1,780/445. `skills/multi-model-verify/SKILL.md:93-125`, `evals/tools/skill_lint.py:249`.
+
+2. The short-path rule cannot disappear into the reference. The reference explicitly says that rule must remain in both files because a primary-lane reader may never otherwise open `backup-lane.md`. `skills/multi-model-verify/references/backup-lane.md:440-451`.
+
+Keep in `SKILL.md`: STOP, user choice, short-path requirement, the mirror-tool imperative, and that the mirror becomes the reviewed tree. Move the tracked-versus-untracked explanation, hook behavior, and detailed construction contract.
+
+For enforcement, I do not recommend simply turning the existing 5000 warning into an error; see Q1. The backlog supports a hard stop but leaves its exact shape undecided. `docs/superpowers/plans/2026-07-27-0150-backlog.md:1169-1184`.
+
+**Verdict: FIX — retain the named load-bearing imperatives, correct the savings estimate, and use separate soft and hard thresholds rather than converting 5000 directly into a cliff.**
+
+## Claim 3
+
+The mechanism is confirmed. Every non-Edit/Write `tool_use` input is JSON-encoded and cut at 600 characters. `evals/tools/run_behavioral_evals.py:391-409`.
+
+I reproduced the placeholder case exactly:
+
+- JSON length: 657
+- `codex exec`: offset 448
+- `--sandbox read-only`: offset 459
+- model flag: offset 525
+
+That follows directly from the mandated preamble and dispatch at `SKILL.md:191-197` and the encoder at `run_behavioral_evals.py:397`.
+
+I could not reproduce 1327/790/801/867 because the exact real path strings used in that calculation were not supplied or retained in the named artifacts. Those offsets are therefore UNVERIFIED.
+
+The broader truncation mechanism is nevertheless independently supported by the recorded failures, which explicitly attribute expectation 1 to the renderer cutting the transcript before the invocation. `docs/superpowers/plans/rounds/2026-08-03-home-skills-root/execution-deviations.md:819-825`, `docs/superpowers/plans/rounds/2026-08-03-home-skills-root/execution-deviations.md:840-857`.
+
+“Cannot pass in a realistic run” is too wide: the recorded controls include complete case passes. The supported statement is that expectation 1 can fail independently of product behavior and is path-length-sensitive under the current rendering. `docs/superpowers/plans/rounds/2026-08-03-home-skills-root/execution-deviations.md:848-857`.
+
+**Verdict: FIX — replace “cannot pass” with “can become unobservable and fail independently of behavior”; retain the path-sensitive truncation diagnosis, but do not publish the unreproduced offsets as confirmed.**
+
+## Claim 4
+
+The sequencing is correct: repair observability, then re-measure, then decide whether any expectation needs changing. The backlog explicitly requires separating expectation 1 before measuring an unchanged tree and prohibits tuning against one branch. `docs/superpowers/plans/2026-07-27-0150-backlog.md:1129-1142`.
+
+The one-line constraint stands. `json.dumps` keeps newlines escaped inside a `tool_use` input, while `elide_transcript` operates on whole physical lines. `evals/tools/run_behavioral_evals.py:397-409`, `evals/tools/run_behavioral_evals.py:510-550`.
+
+The spoofing boundary also stands: ordinary text, malformed stream text, final-result text, and stderr pass through `_neutralize`; genuine structured `tool_use` events alone receive the tool prefix. `evals/tools/run_behavioral_evals.py:359-367`, `evals/tools/run_behavioral_evals.py:381-410`, `evals/tools/run_behavioral_evals.py:472-477`.
+
+One wording correction: whole lines preserve individual records, not necessarily complete call/result pairs. The middle-evidence loop can exhaust its budget after retaining one half of a pair; its safety property is that the loss becomes explicit. `evals/tools/run_behavioral_evals.py:535-550`. The existing test proves selected pairs survive under its fixture budget, while a separate test only requires an exhaustion marker once the budget is exceeded. `evals/multi-model-verify/test_multi_model_verify.py:1388-1422`.
+
+The plan is also missing the mandatory fail-first regression. Existing compact-stream tests cover binding, one-line results, and prose spoofing, but not a long PowerShell tool input whose dispatch falls beyond character 600. `evals/multi-model-verify/test_multi_model_verify.py:1336-1386`.
+
+Expectation 3 should remain unchanged: it directly grades the full-path-first instruction actually present in the skill, and the historical record identifies it as the other failure mode. `skills/multi-model-verify/SKILL.md:179-185`, `evals/multi-model-verify/evals.json:13-16`, `docs/superpowers/plans/rounds/2026-08-03-home-skills-root/execution-deviations.md:842-846`.
+
+**Verdict: FIX — add a realistic long-input test, watch it fail under head-only rendering, and narrow the pair-preservation claim to indivisible records plus explicit loss. The implementation order itself passes.**
+
+## Claim 5
+
+The four historical defenses and their comments are real. `header_block` binds to the first two delimiter rules; ANSI is removed before rule location; material after the closing rule is excluded; and labels are counted separately from parseable values. `evals/tools/run_behavioral_evals.py:594-617`, `evals/tools/run_behavioral_evals.py:620-667`.
+
+But “currently untested” is false. Focused tests already cover:
+
+- coloured headers and wrong routes;
+- a missing field supplied by payload text;
+- escape-stripping that manufactures payload text;
+- duplicate valid fields;
+- missing header blocks;
+- bare, empty, and no-space duplicate labels.
+
+`evals/multi-model-verify/test_multi_model_verify.py:1216-1246`, `evals/multi-model-verify/test_multi_model_verify.py:1248-1301`, `evals/multi-model-verify/test_multi_model_verify.py:1303-1325`.
+
+What is absent is generated combinatorial coverage; only the malformed duplicate has a small parameterized matrix. `evals/multi-model-verify/test_multi_model_verify.py:1303-1325`.
+
+“Highest-value” and “denser” are not established by the cited evidence. The PowerShell parser remains the documented hotspot: `Get-SkillReport`’s comments identify raw-versus-masked text, wrong-span selection, wrong list coverage, and quoted-container failures—the exact class item 9 describes. `tools/codex-context-probe.ps1:135-205`, `tools/codex-context-probe.ps1:221-305`.
+
+**Verdict: FIX — call the Python route parser the cheapest first generator target, not an untested or proven highest-value target, and do not use it alone to close the PowerShell-motivated backlog item.**
+
+## Claim 6
+
+The narrow scope statement and mutation-evidence principle are correct. A generated suite covering one function must claim one function, and killing the recorded defensive mutations is materially stronger evidence than a green production run. Item 9 itself asks for generated shapes and invariant-based assertions. `docs/superpowers/plans/2026-07-27-0150-backlog.md:624-635`.
+
+The oracle is not yet precise enough:
+
+- Three or more delimiter rules are not automatically invalid; the parser intentionally uses the first two and discards later payload text. `evals/tools/run_behavioral_evals.py:594-617`.
+- ANSI inside a real header label is not assigned an expected result. Current code strips it before field parsing, whereas the existing manufactured-label test places the escape after the closing rule and therefore tests a different boundary. `evals/tools/run_behavioral_evals.py:608-617`, `evals/multi-model-verify/test_multi_model_verify.py:1273-1284`.
+- Current value parsing accepts surrounding value whitespace because the captured value is stripped. The generator must decide whether this is valid normalization or malformed input. `evals/tools/run_behavioral_evals.py:657-663`.
+
+Define the oracle explicitly as:
+
+1. locate the startup block using the first two normalized delimiter rules;
+2. ignore all later text;
+3. state exactly which ANSI placements are presentation-only and which make a label malformed;
+4. state the accepted whitespace grammar;
+5. require exactly one accepted line for each field in that block.
+
+Then kill one source-level mutant per defense and retain the failing output showing which generated case killed it.
+
+**Verdict: FIX — keep the narrow scope and mutation criterion, but freeze the route grammar before generating cases; the present “well-formed” invariant leaves several enumerated shapes undecided.**
+
+## Design questions
+
+### Q1 — Budget thresholds
+
+| Shape | Benefit | Failure mode |
+|---|---|---|
+| (i) Hard fail at 5000 | Simple and immediately enforceable | After the proposed move, likely leaves little margin and creates direct pressure to shave a load-bearing sentence instead of making a deliberate budget decision. |
+| (ii) Warn at 5000, hard fail higher | Separates early signal from a true runaway stop | The warning can become permanent background noise again, and the file may consume the entire gap before anyone acts. |
+| (iii) Hard fail at the exact landed size | Creates a strict ratchet | Every legitimate correction immediately requires either deletion or a ceiling edit; “stated reason” can decay into boilerplate. |
+
+I recommend **(ii): retain 5000 as the soft signal and hard-fail at 5250**. The present 5404 body must still shrink, while a successfully moved body should clear the warning and retain roughly 250 tokens before the hard stop. The hard-error message should name relocation or a deliberate, reasoned ceiling raise as the two remedies. `evals/tools/skill_lint.py:249-254`, `docs/superpowers/plans/2026-07-27-0150-backlog.md:1169-1184`.
+
+The plan should require this release to finish below 5000, so the warning is not shipped already normalized. The known residual risk is that a future branch ignores the warning until 5250; that is preferable to a 5000 cliff incentivizing deletion of correctness text.
+
+### Q2 — Harness rendering versus different evidence
+
+Keep expectation 1. A genuine structured `tool_use` is the correct artifact for proving that the executor dispatched the command; the defect is that the harness destroys part of that artifact before grading it. The grader is explicitly forbidden to assume unstated work, while `compact_stream` says tool inputs are the evidence of actual calls. `evals/tools/run_behavioral_evals.py:115-129`, `evals/tools/run_behavioral_evals.py:370-375`.
+
+Widening does not weaken the narration boundary if:
+
+- only genuine structured `tool_use` blocks can produce the record;
+- agent text continues through `_neutralize`;
+- the record retains its tool-use id and tool name;
+- JSON newlines remain escaped;
+- the elision marker states the original length and omitted count;
+- a prose event containing identical command text is tested and cannot enter the namespace.
+
+`evals/tools/run_behavioral_evals.py:359-367`, `evals/tools/run_behavioral_evals.py:391-410`, `evals/multi-model-verify/test_multi_model_verify.py:1363-1386`.
+
+I would use a bounded head-and-tail representation only with a fail-first maximum-path fixture proving all three dispatch tokens remain observable. If that cannot be guaranteed, render bounded windows around `codex exec`, `--sandbox read-only`, and the model flag directly from the original structured event, with the tool-use id and full-input hash. That remains tool evidence, not narration.
+
+For residual measurement, **12 unchanged-tree runs** is defensible if authorized: at the recorded one-third pass rate, the probability of observing zero passes in 12 runs is under 1%. Predeclare the rule before running; do not reinterpret the sample afterward. The historical 2-of-6 control and 1-of-7 branch tally is at `execution-deviations.md:848-857`. No live behavioral runs were spent in this review.
+
+### Q3 — Is one Python parser sufficient?
+
+No. It is sufficient for a narrower subitem, whose heading should be:
+
+> **The behavioural grader’s effective-route parser lacks generated shape coverage**
+
+It is not sufficient to close item 9 as written because item 9’s problem, evidence, and repeated defect chain concern the PowerShell probe. `docs/superpowers/plans/2026-07-27-0150-backlog.md:603-628`.
+
+The minimum second target is **`Get-SkillReport`, including its `Hide-KnownContainer` dependency**. That seam contains the exact raw-versus-masked source choice, span selection, container arrangement, quoted-marker, and entry-loop faults that consumed the original rounds. `tools/codex-context-probe.ps1:122-205`, `tools/codex-context-probe.ps1:221-305`, `tools/codex-context-probe.ps1:404-478`.
+
+The cost is bounded: generate the cases in Python, send the complete matrix through one `run_functions` PowerShell invocation per configured host, and assert only report invariants. The existing helper already extracts and runs the functions, and CI already executes the module under both Windows PowerShell and pwsh. `evals/multi-model-verify/test_codex_context_probe.py:28-63`, `evals/multi-model-verify/test_codex_context_probe.py:73-96`.
+
+That adds no model tokens or live CLI work. It is the minimum evidence connecting item 9’s remedy to item 9’s actual failure site.
+
+## UNVERIFIED
+
+- The exact real-path measurement `json len = 1327` and offsets `790/801/867`; the exact substituted path strings were unavailable. The placeholder offset 448 was reproduced.
+- The literal current `skill_lint.py` process output. No Python interpreter was available in this sandbox; the 5404 arithmetic, warning classification, formatting code, and resulting pass semantics were verified statically.
+- “The overwhelming majority of activations” have an empty preflight sweep. The present tree’s matching-path sweep was empty, but no activation-frequency record exists.
+- The comparative empirical assertion that the Python route parser is “denser” or “highest-value”; no generated run or cost comparison exists.
+
+No files were changed.
+
