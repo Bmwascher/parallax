@@ -277,26 +277,69 @@ MUTANTS = {
         "foreach ($name in $script:KnownContainers) { }"),
 }
 
-# SHADOWED DEFENCES, and this is a finding rather than a coverage hole.
+# DEFENCE IN DEPTH, tested under the fault it defends against.
 #
-# `Get-SkillReport` re-derives the ambiguity of the skills container from
-# its own marker counts at lines 222-241. Those lines cannot be reached
-# with a bad arrangement, because `skills_instructions` is itself a KNOWN
-# CONTAINER: the masking loop above runs `Hide-KnownContainer` over it
-# first, and that function REFUSES every arrangement other than exactly
-# one open and one close with the close after the open, by throwing. The
-# caller catches the throw and sets Ambiguous with the cause.
+# `Get-SkillReport` re-derives the skills container's ambiguity from its
+# own marker counts at lines 222-241. No generated INPUT reaches those
+# lines with a bad arrangement, because `skills_instructions` is itself a
+# known container: the masking loop runs `Hide-KnownContainer` over it
+# first, and that function throws on every arrangement other than exactly
+# one correctly ordered pair. So the first matrix run reported all three
+# arithmetic mutants as SURVIVING.
 #
-# So mutating the later arithmetic changes nothing observable. The first
-# matrix run reported all three as SURVIVING, and the honest reading is
-# not "add more shapes" - no shape exists - but "this arithmetic is
-# unreachable defence in depth for the shapes this function is given".
+# My first treatment was to assert the shadow and measure what casts it.
+# Sol refused it at round 8, and was right: that locks today's topology in
+# place while proving nothing about whether the fallback WORKS. The
+# arithmetic's own comment says it exists precisely so that a failure the
+# earlier rule misses is still caught, so the way to test it is to inject
+# the fault it defends against.
 #
-# They stay here, asserted to survive AND paired with a direct measurement
-# that the earlier layer is what refuses. If a future change stops the
-# masking layer refusing, these flip to killable and this module says so
-# rather than quietly passing.
-SHADOWED_MUTANTS = {
+# THE FAULT MODEL, declared: the primary guard FAILS OPEN for
+# `skills_instructions` only. Everything else is untouched, and this is
+# test-only - the production script is not changed by this module.
+FAIL_OPEN = (
+    "foreach ($name in $script:KnownContainers) {\n"
+    "            $scan = Hide-KnownContainer $scan $name\n"
+    "        }",
+    "foreach ($name in $script:KnownContainers) {\n"
+    "            if ($name -ne 'skills_instructions') {\n"
+    "                $scan = Hide-KnownContainer $scan $name\n"
+    "            }\n"
+    "        }")
+
+
+def fail_open_source():
+    source = PROBE.read_text(encoding="utf-8")
+    old, new = FAIL_OPEN
+    assert old in source, "the masking loop anchor moved"
+    return source.replace(old, new, 1)
+
+
+def test_the_fallback_classifies_correctly_when_the_guard_fails_open():
+    """Step one of the fault model: with the primary guard bypassed, the
+    UNCHANGED arithmetic must reach the same verdict on every shape.
+
+    If this failed, the fallback would be decoration and the three mutants
+    below would be untestable for a different and worse reason."""
+    got, err = run_matrix(fail_open_source())
+    assert got is not None, err
+    wrong = []
+    for expected in CASES:
+        r = got.get(expected["name"])
+        if r is None:
+            wrong.append(f"{expected['name']} (no result)")
+            continue
+        for field in ("present", "ambiguous", "entries", "malformed"):
+            if r[field] != expected[field]:
+                wrong.append(f"{expected['name']}.{field}"
+                             f" (expected {expected[field]}, got {r[field]})")
+    assert not wrong, (
+        "with Hide-KnownContainer bypassed for skills_instructions the"
+        f" downstream arithmetic misclassified: {wrong[:5]}"
+    )
+
+
+FALLBACK_MUTANTS = {
     "2-close-before-open-accepted": (
         "$one = (($opens -eq 1) -and ($closes -eq 1) -and\n"
         "            ($closeAt -ge ($openAt + $open.Length)))",
@@ -310,30 +353,48 @@ SHADOWED_MUTANTS = {
 }
 
 
-@pytest.mark.parametrize("mutant", sorted(SHADOWED_MUTANTS))
-def test_a_shadowed_defence_is_shadowed_by_the_layer_named(mutant):
-    """Assert the shadow, and assert WHAT casts it.
+@pytest.mark.parametrize("mutant", sorted(FALLBACK_MUTANTS))
+def test_every_fallback_defence_is_killed_under_the_fault(mutant):
+    """Step two: each arithmetic mutant, applied ON TOP of the fault.
 
-    Asserting only that the mutant survives would be a test that passes
-    because nothing happened, which is the shape this whole module exists
-    to reject. So the second half measures the masking layer directly and
-    requires it to be the thing that refuses.
+    Both edits together represent one real scenario - the primary guard
+    fails open AND the fallback is missing this clause - which is the pair
+    of failures the fallback exists to survive.
     """
-    old, new = SHADOWED_MUTANTS[mutant]
-    source = PROBE.read_text(encoding="utf-8")
+    old, new = FALLBACK_MUTANTS[mutant]
+    source = fail_open_source()
     assert old in source, f"{mutant}: anchor no longer present in the source"
     got, err = run_matrix(source.replace(old, new, 1))
-    assert got is not None, err
-    differing = [c["name"] for c in CASES
-                 if any(got[c["name"]][f] != c[f]
-                        for f in ("present", "ambiguous", "entries",
-                                  "malformed"))]
-    assert not differing, (
-        f"{mutant} is NO LONGER SHADOWED: {differing[:3]}. The masking"
-        " layer has stopped refusing these arrangements, so this"
-        " arithmetic is now load-bearing and belongs in MUTANTS."
+    if got is None:
+        print(f"{mutant} killed by: the mutated script failed to run"
+              f" ({err.strip()[:120]})")
+        return
+    killers = []
+    for expected in CASES:
+        r = got.get(expected["name"])
+        if r is None:
+            killers.append(f"{expected['name']} (no result)")
+            continue
+        for field in ("present", "ambiguous", "entries", "malformed"):
+            if r[field] != expected[field]:
+                killers.append(f"{expected['name']}.{field}"
+                               f" (expected {expected[field]}, got {r[field]})")
+                break
+        if len(killers) >= 3:
+            break
+    assert killers, (
+        f"MUTANT SURVIVED under the fail-open fault: {mutant}. The"
+        " fallback arithmetic is not doing the job its comment claims."
     )
-    # The shadow's source, measured rather than assumed.
+    print(f"{mutant} killed by: {'; '.join(killers)}")
+
+
+def test_the_primary_guard_still_refuses_directly():
+    """The fault model is only meaningful if the guard normally holds.
+
+    Measured, not assumed: Hide-KnownContainer refuses the bad
+    arrangements and accepts the good one.
+    """
     probe = run_masking_directly()
     assert probe["closer-before-opener"] == "threw", probe
     assert probe["two-openers"] == "threw", probe
