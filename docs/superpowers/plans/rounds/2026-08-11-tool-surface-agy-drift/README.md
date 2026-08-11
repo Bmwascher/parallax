@@ -278,4 +278,4 @@ continued.
 Meters at the pause: 4/4 consecutive contested exchanges, 4/6 total
 fix-verify units. Two units remain unspent.
 
-Applied at `<pending>`.
+Applied at `e876ca8`.
