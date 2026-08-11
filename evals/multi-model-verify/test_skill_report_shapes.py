@@ -92,90 +92,121 @@ def block(entries=1, heading=True):
     return "\n".join(lines)
 
 
+# The QUOTED-CONTAINER axis. <INSTRUCTIONS> carries the global and project
+# AGENTS.md bodies verbatim, so a user's own file may legitimately contain
+# a skills delimiter as prose. Masking blanks it before the scan, which is
+# why a quoted delimiter must never move the counts.
+QUOTED = {
+    "none": "",
+    "one-opener": ("<INSTRUCTIONS>\nNever emit " + OPEN + " yourself.\n"
+                   "</INSTRUCTIONS>\n"),
+    "opener-and-closer": ("<INSTRUCTIONS>\nBad: " + OPEN + " ... " + CLOSE
+                          + "\n</INSTRUCTIONS>\n"),
+}
+HEADINGS = ("inside", "outside", "both", "absent")
+
+
+def arrangement(opens, closes, order, inner, outside):
+    """Render one delimiter arrangement.
+
+    `order` is "opener-first" or "closer-first"; with no opener or no
+    closer the two render identically, and that duplication is kept rather
+    than special-cased so the matrix is the declared product.
+    """
+    parts = []
+    if outside:
+        parts.append(outside)
+    if order == "closer-first" and opens and closes:
+        parts += [CLOSE] * closes + [inner] + [OPEN] * opens
+    else:
+        parts += [OPEN] * opens + [inner] + [CLOSE] * closes
+    return "\n".join(p for p in parts if p)
+
+
 def build_cases():
+    """The frozen Cartesian product.
+
+    opener count x closer count x ordering x heading placement x quoted
+    container x line ending = 4 * 4 * 2 * 4 * 3 * 2 = 768 cases.
+
+    Written after round 9, which found that the first implementation
+    hand-picked 19 arrangements and duplicated them for CRLF instead of
+    enumerating the product the plan froze. It had no three-opener or
+    three-closer case and never crossed the delimiter, heading and
+    quoted-container axes. Killed mutants over a matrix that is not the
+    declared one do not satisfy the declared enumeration.
+    """
     cases = []
-
-    # Invariant 2: the opener/closer arrangement matrix.
-    arrangements = {
-        "none": ("plain prompt text", False, False),
-        "one-pair": (container(block()), True, False),
-        "opener-only": (OPEN + "\n" + block(), True, True),
-        "closer-only": (block() + "\n" + CLOSE, False, True),
-        "two-openers": (OPEN + "\n" + OPEN + "\n" + block() + "\n" + CLOSE,
-                        True, True),
-        "two-closers": (OPEN + "\n" + block() + "\n" + CLOSE + "\n" + CLOSE,
-                        True, True),
-        "closer-before-opener": (CLOSE + "\n" + block() + "\n" + OPEN,
-                                 True, True),
-        "two-pairs": (container(block()) + "\n" + container(block()),
-                      True, True),
-    }
-    for name, (text, present, ambiguous) in arrangements.items():
-        entries = 1 if (present and not ambiguous) else 0
-        cases.append(case(f"arrangement/{name}", text, present=present,
-                          ambiguous=ambiguous, entries=entries))
-
-    # Invariant 3: heading placement.
-    cases.append(case(
-        "heading/outside-only",
-        HEADING + "\n" + ENTRY + "\n" + container("no heading here"),
-        present=True, ambiguous=False, entries=0))
-    cases.append(case(
-        "heading/both",
-        HEADING + "\n" + ENTRY + "\n" + container(block()),
-        present=True, ambiguous=False, entries=1))
-    cases.append(case(
-        "heading/absent",
-        container(ENTRY),
-        present=True, ambiguous=False, entries=0))
-
-    # Invariant 4: a delimiter QUOTED inside a known container is masked
-    # and is not a delimiter. <INSTRUCTIONS> carries AGENTS.md verbatim.
-    quoted = ("<INSTRUCTIONS>\nNever emit " + OPEN + " yourself.\n"
-              "</INSTRUCTIONS>\n" + container(block()))
-    cases.append(case("masking/quoted-opener-in-instructions", quoted,
-                      present=True, ambiguous=False, entries=1))
-    quoted_pair = ("<INSTRUCTIONS>\nBad: " + OPEN + " ... " + CLOSE + "\n"
-                   "</INSTRUCTIONS>\n" + container(block()))
-    cases.append(case("masking/quoted-pair-in-instructions", quoted_pair,
-                      present=True, ambiguous=False, entries=1))
-
-    # Invariant 5: every entry-looking line is audited.
-    cases.append(case(
-        "entries/joined-on-one-line",
-        container(HEADING + "\n" + ENTRY + " " + ENTRY),
-        present=True, ambiguous=False, entries=0, malformed=True))
-    cases.append(case(
-        "entries/no-file-marker",
-        container(HEADING + "\n- demo:widget: Use when demoing."),
-        present=True, ambiguous=False, entries=0, malformed=True))
-    cases.append(case(
-        "entries/path-with-parentheses",
-        container(HEADING + "\n- demo:widget: Use when demoing."
-                  " (file: C:/Program Files (x86)/s/SKILL.md)"),
-        present=True, ambiguous=False, entries=1))
-    cases.append(case(
-        "entries/description-mentions-file-marker",
-        container(HEADING + "\n- demo:widget: Use when (file: x) is shown."
-                  " (file: C:/s/demo/SKILL.md)"),
-        present=True, ambiguous=False, entries=1))
-    cases.append(case(
-        "entries/description-with-parens-and-dash",
-        container(HEADING + "\n- demo:widget: Use when output is (done)"
-                  " - next: retry. (file: C:/s/demo/SKILL.md)"),
-        present=True, ambiguous=False, entries=1))
-    cases.append(case(
-        "entries/three-well-formed",
-        container(block(entries=3)),
-        present=True, ambiguous=False, entries=3))
-
-    # Line endings, applied across the whole set.
-    crlf = [dict(c, name=c["name"] + "/crlf",
-                 text=c["text"].replace("\n", "\r\n")) for c in cases]
-    return cases + crlf
+    for opens in range(4):
+        for closes in range(4):
+            for order in ("opener-first", "closer-first"):
+                for heading in HEADINGS:
+                    for qname, quoted in QUOTED.items():
+                        inner = (block() if heading in ("inside", "both")
+                                 else "no heading here")
+                        outside = ((HEADING + "\n" + ENTRY)
+                                   if heading in ("outside", "both") else "")
+                        text = quoted + arrangement(opens, closes, order,
+                                                    inner, outside)
+                        # Invariant 2, from the construction. A quoted
+                        # delimiter is masked, so it never counts.
+                        none = opens == 0 and closes == 0
+                        ordered = order == "opener-first" or not (opens
+                                                                  and closes)
+                        one = opens == 1 and closes == 1 and ordered
+                        ambiguous = not (none or one)
+                        present = opens >= 1
+                        # Invariant 3: entries come from the container body
+                        # only, and only when the shape is unambiguous.
+                        entries = (1 if (one and heading in ("inside", "both"))
+                                   else 0)
+                        name = (f"o{opens}c{closes}/{order}/{heading}"
+                                f"/quoted-{qname}")
+                        for eol, suffix in (("\n", "lf"), ("\r\n", "crlf")):
+                            cases.append(case(
+                                f"{name}/{suffix}",
+                                text.replace("\n", eol),
+                                present=present, ambiguous=ambiguous,
+                                entries=entries))
+    return cases
 
 
-CASES = build_cases()
+def entry_grammar_cases():
+    """Invariant 5, on the one arrangement that reaches the entry loop.
+
+    Kept as named cases rather than folded into the product: they vary the
+    ENTRY LINE, which is a different axis from the delimiter arrangement,
+    and crossing them would multiply the matrix without testing anything
+    the product does not already cover.
+    """
+    cases = [
+        case("entries/joined-on-one-line",
+             container(HEADING + "\n" + ENTRY + " " + ENTRY),
+             present=True, ambiguous=False, entries=0, malformed=True),
+        case("entries/no-file-marker",
+             container(HEADING + "\n- demo:widget: Use when demoing."),
+             present=True, ambiguous=False, entries=0, malformed=True),
+        case("entries/path-with-parentheses",
+             container(HEADING + "\n- demo:widget: Use when demoing."
+                       " (file: C:/Program Files (x86)/s/SKILL.md)"),
+             present=True, ambiguous=False, entries=1),
+        case("entries/description-mentions-file-marker",
+             container(HEADING + "\n- demo:widget: Use when (file: x) is"
+                       " shown. (file: C:/s/demo/SKILL.md)"),
+             present=True, ambiguous=False, entries=1),
+        case("entries/description-with-parens-and-dash",
+             container(HEADING + "\n- demo:widget: Use when output is (done)"
+                       " - next: retry. (file: C:/s/demo/SKILL.md)"),
+             present=True, ambiguous=False, entries=1),
+        case("entries/three-well-formed", container(block(entries=3)),
+             present=True, ambiguous=False, entries=3),
+    ]
+    return cases + [dict(c, name=c["name"] + "/crlf",
+                         text=c["text"].replace("\n", "\r\n"))
+                    for c in cases]
+
+
+CASES = build_cases() + entry_grammar_cases()
 
 RUNNER_SNIPPET = r"""
 $cases = Get-Content -Raw -LiteralPath '<CASES>' |
@@ -392,13 +423,18 @@ def test_every_fallback_defence_is_killed_under_the_fault(mutant):
 def test_the_primary_guard_still_refuses_directly():
     """The fault model is only meaningful if the guard normally holds.
 
-    Measured, not assumed: Hide-KnownContainer refuses the bad
-    arrangements and accepts the good one.
+    Measured over EVERY canonical arrangement, not a subset: the guard
+    must accept exactly the shapes the fallback accepts and refuse
+    exactly the ones it refuses, or the two layers disagree about what is
+    ambiguous and the fault model tests the wrong thing.
     """
     probe = run_masking_directly()
-    assert probe["closer-before-opener"] == "threw", probe
-    assert probe["two-openers"] == "threw", probe
-    assert probe["one-pair"] == "ok", probe
+    wrong = [c["name"] for c in MASKING_CASES
+             if probe.get(c["name"]) != c["expected"]]
+    assert not wrong, (
+        f"the primary guard disagrees with the declared invariant on:"
+        f" {wrong}"
+    )
 
 
 MASKING_SNIPPET = r"""
@@ -416,14 +452,34 @@ $out | ConvertTo-Json -Depth 3 -Compress
 """
 
 
+def masking_cases():
+    """Every canonical delimiter arrangement, for the direct probe.
+
+    Round 9 found the earlier probe used a three-case subset, which cannot
+    show that the primary guard refuses everything the fallback also
+    refuses - only that it refuses three things.
+    """
+    out = []
+    for opens in range(4):
+        for closes in range(4):
+            for order in ("opener-first", "closer-first"):
+                text = arrangement(opens, closes, order, block(), "")
+                ordered = order == "opener-first" or not (opens and closes)
+                accepted = (opens == 0 and closes == 0) or (
+                    opens == 1 and closes == 1 and ordered)
+                out.append({"name": f"o{opens}c{closes}/{order}",
+                            "text": text,
+                            "expected": "ok" if accepted else "threw"})
+    return out
+
+
+MASKING_CASES = masking_cases()
+
+
 def run_masking_directly():
     text = PROBE.read_text(encoding="utf-8")
     body = text[text.index(BODY_START):text.index(BODY_END)]
-    subset = [c for c in CASES
-              if c["name"] in ("arrangement/closer-before-opener",
-                               "arrangement/two-openers",
-                               "arrangement/one-pair")]
-    subset = [dict(c, name=c["name"].split("/", 1)[1]) for c in subset]
+    subset = [{"name": c["name"], "text": c["text"]} for c in MASKING_CASES]
     tmp = Path(tempfile.mkdtemp(prefix="parallax-mask-"))
     try:
         cases_file = tmp / "cases.json"
