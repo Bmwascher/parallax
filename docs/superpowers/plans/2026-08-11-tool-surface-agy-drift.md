@@ -432,8 +432,16 @@ answers neither and must not be presented as closing them. Item 11's
 security contract is marked explicitly UNMEASURED, and item 11 stays
 partially open on that point when the rest of it closes.
 
-**Adjudication rules are never PROMOTED out of the cycle that derived
-them.** Found after round 3, and narrowed by round 4. The rule for editing
+**The documented flow has no REQUIRED promotion step for adjudication
+rules.** Found after round 3, narrowed by round 4, and narrowed again by
+round 5. "Never promoted" was wider than the evidence: promotion HAS
+happened. `references/debate-protocol.md:67-95` carries the round-cap rule
+promoted out of the measured 0.21.1 cycle, and `:100-106` carries the
+pre-existing-defect scope rule with its reason stated - "the rule is
+written down here rather than improvised per debate". What is missing is
+not the act; it is any step that REQUIRES it.
+
+The rule for editing
 a rounds README while leaving raw artifacts alone was derived in 0.17.0,
 written at `rounds/2026-07-28-reviewer-isolation/README.md:10-12`, and
 stated as an instruction by that cycle's reviewer at
@@ -446,10 +454,12 @@ said that and round 4 refuted it. `references/debate-protocol.md` IS that
 place, it carries the debate's standing rules, and `SKILL.md:27` makes it
 REQUIRED READING before the first round.
 
-The gap is the PROMOTION STEP. Nothing in the flow ever moves a rule a
-debate settled out of that debate's record and into `debate-protocol.md`,
-so a rule earned at the cost of a round stays where only that cycle can
-see it. That is what the item is about.
+The gap is that NO DOCUMENTED STEP REQUIRES PROMOTION. It happens when
+somebody thinks of it, which is why two rules made it into
+`debate-protocol.md` and this one did not, and a rule earned at the cost
+of a round then stays where only that cycle can see it. The narrower claim
+about THIS rule stands on its own evidence: it was written in 0.17.0, it
+was never promoted, and 0.24.0 paid for it again.
 
 **The `<repo>/.codex` enumeration gap.** Also corrected: it was already
 known, at

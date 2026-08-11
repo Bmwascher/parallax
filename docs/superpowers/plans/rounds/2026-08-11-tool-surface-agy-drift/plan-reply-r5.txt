@@ -1,0 +1,9 @@
+NOT DRY. The surface-count fix passes; the promotion fix introduced one new overclaim.
+
+1. The surface-count correction is complete. The old six-count is explicitly superseded by seven, the round-3 narrative records both transitions, and Task 3 warns that the count itself is a stale-able claim (`docs/superpowers/plans/rounds/2026-08-11-tool-surface-agy-drift/README.md:152-162`, `:212-217`; `docs/superpowers/plans/2026-08-11-tool-surface-agy-drift.md:260-264`). **PASS**
+
+2. The promotion correction removes the false “no place” claim and correctly identifies `debate-protocol.md` as required reading (`docs/superpowers/plans/2026-08-11-tool-surface-agy-drift.md:443-452`; `skills/multi-model-verify/SKILL.md:23-27`). But its new heading says adjudication rules are “never PROMOTED,” which is wider than the evidence. The protocol itself contains rules justified by prior measured cycles, demonstrating that promotion has occurred even though no required promotion step exists (`skills/multi-model-verify/references/debate-protocol.md:67-95`, `:100-106`). **FIX — change `docs/superpowers/plans/2026-08-11-tool-surface-agy-drift.md:435-452` to “The documented flow has no REQUIRED promotion step” and “No documented step requires promotion”; retain the narrower claim that this particular rule was never promoted.**
+
+3. No other live remnant remains. The remaining six-count text is marked superseded or describes the historical transition, and the current README states the narrower missing-step conclusion (`docs/superpowers/plans/rounds/2026-08-11-tool-surface-agy-drift/README.md:152-162`, `:212-217`, `:261-266`). **PASS**
+
+Overall verdict: **FIX**. This authorized exchange is consumed and the debate returns to the user; it cannot terminate as DRY.

@@ -279,3 +279,28 @@ Meters at the pause: 4/4 consecutive contested exchanges, 4/6 total
 fix-verify units. Two units remain unspent.
 
 Applied at `e876ca8`.
+
+## Round 5 — one FIX, authorized past the cap, still not dry
+
+Brief: `plan-brief-r5.md`. Reply: `plan-reply-r5.txt`. Binding clean
+(`-Resume`, boundary 1690165 bytes). The user authorized exactly one
+exchange past the cap.
+
+The surface-count fix passed. The promotion fix did not: its new heading
+said adjudication rules are "never PROMOTED", which is wider than the
+evidence. Promotion HAS happened — `debate-protocol.md:67-95` carries the
+round-cap rule promoted out of the measured 0.21.1 cycle, and `:100-106`
+carries the pre-existing-defect scope rule, which states its own reason:
+"the rule is written down here rather than improvised per debate". What is
+missing is not the act but any step that REQUIRES it. Narrowed to "no
+documented step requires promotion", with the claim about THIS rule kept,
+because that one stands on its own evidence.
+
+**A correction to a correction to a correction, and the third one was
+still too wide.** Rounds 3, 4 and 5 each narrowed the same sentence.
+
+The convergence is nonetheless real, and it is the argument for what
+happens next: findings per round ran 5, 6, 5, 2, 1.
+
+Applied at `<pending>`. Meters: 5 contested exchanges against a declared
+cap of 4, one authorized; 5/6 fix-verify units. ONE unit remains.
