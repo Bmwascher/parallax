@@ -302,5 +302,5 @@ still too wide.** Rounds 3, 4 and 5 each narrowed the same sentence.
 The convergence is nonetheless real, and it is the argument for what
 happens next: findings per round ran 5, 6, 5, 2, 1.
 
-Applied at `<pending>`. Meters: 5 contested exchanges against a declared
+Applied at `e47c6d9`. Meters: 5 contested exchanges against a declared
 cap of 4, one authorized; 5/6 fix-verify units. ONE unit remains.
