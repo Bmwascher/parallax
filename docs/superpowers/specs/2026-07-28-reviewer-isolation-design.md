@@ -192,9 +192,15 @@ prompt-input` rejects `--sandbox` and `-m` outright with `unexpected
 argument`. What that measurement establishes is only that parity cannot
 be REQUESTED. Whether model or sandbox selection could change rendered
 prompt content is UNVERIFIED — there is no way to render the prompt under
-those flags and compare, which is the same missing surface backlog item 7
-describes. Treat the two as an unmeasured difference, not a proven
-irrelevance.
+those flags and compare. Treat the two as an unmeasured difference, not a
+proven irrelevance.
+
+**0.24.0: this is NO LONGER the same surface as backlog item 7, and the
+sentence saying so has been removed.** Item 7 was the TOOL surface, and
+it is now measured and closed. This is the PROMPT surface under
+unrequestable flags, it is still unverified, and it now stands on its own
+rather than borrowing a closed item's tracking. Nothing about it was
+measured this cycle.
 
 - **Repo-scoped** — any path inside the reviewed tree. STOP and remediate
   in the mirror. This is preflight 3's existing rule, unchanged.
@@ -397,6 +403,23 @@ unchanged.
   from inside the reviewed tree. It does NOT mean the reviewer received
   no instructions at all — the global `AGENTS.md` in the limit below
   survives it — and it says nothing about what the reviewer can DO.
+
+  **SUPERSEDED IN PART, 0.24.0.** The half of this limit saying the tool
+  surface is "out of reach of this mechanism" stands: it is out of reach
+  of THIS mechanism, which renders a prompt. The half saying "there is no
+  free tool-list view to measure" does not. Measured 2026-08-11, `codex
+  app-server --stdio` answers `mcpServerStatus/list`, which names every
+  resolved MCP server and every tool, starts no turn, and costs nothing.
+  `tools/codex-tool-surface-probe.ps1` reads it, and backlog item 7 is
+  CLOSED.
+
+  Two things this cycle did NOT settle, and they are why the limit is
+  narrowed rather than deleted. `-c mcp_servers={}`, named above as an
+  unverified lever, was measured to be INERT — it parses, exits 0 and
+  changes nothing — so the warning against shipping it on the strength of
+  parsing was correct. And a server disabled by config is
+  indistinguishable from one that failed to launch, so the new probe's
+  ABSENCE direction is a mitigation, not a control.
 - **THE BLUNT RULE. A known family name occurring at all, in any form,
   anywhere in the render, stops the run.** The four families are
   `skills_instructions`, `plugins_instructions`, `recommended_plugins`

@@ -20,6 +20,19 @@ passed every check the probe makes. The shipped wording is the
 `client-probe-scope-limit` region in SKILL.md, and the gap is backlog
 item 7.
 
+> **SUPERSEDED IN PART at 0.24.0.** "Not in the prompt" is still true and
+> is why a separate instrument was needed. "Is not measured" is no longer
+> true: `tools/codex-tool-surface-probe.ps1` reads
+> `mcpServerStatus/list` from `codex app-server --stdio`, free and local,
+> and backlog item 7 is CLOSED. The 0.24.0 cycle found this file by its
+> own sweep, as the seventh standing surface carrying the retracted
+> premise. Its record is at
+> `docs/superpowers/plans/rounds/2026-08-11-tool-surface-agy-drift/`.
+>
+> Note what did NOT change: a clean prompt probe is still not full
+> reviewer isolation, and the new probe's ABSENCE direction is a
+> mitigation rather than proof of removal.
+
 **Note on `skills-override-used.txt`: it is a HISTORICAL RECORD, not the
 format.** It uses DOUBLE-quoted TOML paths, which is what the debate ran
 with before the format defect was found. The shipped generator
