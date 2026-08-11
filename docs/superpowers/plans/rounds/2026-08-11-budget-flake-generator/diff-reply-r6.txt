@@ -1,0 +1,20 @@
+The Round-5 repairs are accepted, but this is not dry. I found one generated-matrix specification gap and one repeated count error.
+
+1. Sweep B has a third unfrozen interpretation.
+
+The frozen product crosses five forms with `escape placement ∈ {none, in label, in value}` ([plan:486](C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-08-11-budget-flake-generator.md:486)). The plan says exactly two readings were unsettled—`twice` and `absent`—and records decisions for them ([plan:498](C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-08-11-budget-flake-generator.md:498)).
+
+But `K:` and `K: ` have no value, so “escape in value” is also undefined. `render_field` resolves that after the freeze by inserting `ESC + RESET` where a value would have been, specifically to avoid duplicating the `none` cell ([test_route_parser_shapes.py:158](C:/Users/Brandon/Documents/parallax/evals/multi-model-verify/test_route_parser_shapes.py:158), [test_route_parser_shapes.py:178](C:/Users/Brandon/Documents/parallax/evals/multi-model-verify/test_route_parser_shapes.py:178)). That is a defensible construction choice, but it is not in the authoritative plan—unlike `absent`, where duplicate cells are deliberately retained ([test_route_parser_shapes.py:243](C:/Users/Brandon/Documents/parallax/evals/multi-model-verify/test_route_parser_shapes.py:243)).
+
+No expected verdict is read from production: rule 1 makes either rendering verdict-neutral, and the expected expression remains independently derived ([test_route_parser_shapes.py:261](C:/Users/Brandon/Documents/parallax/evals/multi-model-verify/test_route_parser_shapes.py:261)). The fix is to record this third degenerate crossing in the plan, or choose the duplicate-cell interpretation consistently.
+
+2. “Five rounds have found seventeen things” is false against the new enumeration.
+
+The README now enumerates six Round-1 items, five Round-2 items, three Round-3 items, two Round-4 items, and two Round-5 items ([README:245](C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/rounds/2026-08-11-budget-flake-generator/README.md:245)). That is eighteen, not seventeen. This recreates the total the README intentionally removed because totals go stale ([README:251](C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/rounds/2026-08-11-budget-flake-generator/README.md:251)).
+
+I found no substantive defect in the other two implementation-sensitive areas. The fail-open model first proves the unchanged fallback over the complete generated matrix, then mutates it under the declared fault ([test_skill_report_shapes.py:371](C:/Users/Brandon/Documents/parallax/evals/multi-model-verify/test_skill_report_shapes.py:371), [test_skill_report_shapes.py:392](C:/Users/Brandon/Documents/parallax/evals/multi-model-verify/test_skill_report_shapes.py:392), [test_skill_report_shapes.py:430](C:/Users/Brandon/Documents/parallax/evals/multi-model-verify/test_skill_report_shapes.py:430)). The shell cap matches the frozen four-tool rule exactly ([plan:392](C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-08-11-budget-flake-generator.md:392), [run_behavioral_evals.py:427](C:/Users/Brandon/Documents/parallax/evals/tools/run_behavioral_evals.py:427)) and has direct visibility, exact-cap, and exhaustion coverage ([test_multi_model_verify.py:1481](C:/Users/Brandon/Documents/parallax/evals/multi-model-verify/test_multi_model_verify.py:1481), [test_multi_model_verify.py:1512](C:/Users/Brandon/Documents/parallax/evals/multi-model-verify/test_multi_model_verify.py:1512), [test_multi_model_verify.py:1527](C:/Users/Brandon/Documents/parallax/evals/multi-model-verify/test_multi_model_verify.py:1527)).
+
+Both findings block an adjudicated dry round; neither exposes a production runtime defect.
+
+**FIX**
+

@@ -124,6 +124,7 @@ action, one ESCALATED into the debate.
 | 3 | `diff-brief-r3.md` | `diff-reply-r3.txt` | FIX. The fail-first repair accepted; a licence obligation and two record residues found |
 | 4 | `diff-brief-r4.md` | `diff-reply-r4.txt` | ESCALATE. Two claims wider than their evidence, and the ROUND CAP reached |
 | 5 | `diff-brief-r5.md` | `diff-reply-r5.txt` | ESCALATE. Two more, one of them introduced BY round 4's fix; budget exhausted |
+| 6 | `diff-brief-r6.md` | `diff-reply-r6.txt` | FIX. A third unfrozen reading in the generator; two implementation areas cleared |
 
 ## What round 1 found, and why it matters more than the count
 
@@ -242,11 +243,22 @@ generate" sixty lines above the paragraph refuting it.
 
 ## The through-line of this diff debate
 
-Five rounds, and every one of them found something: four spec drifts and
+Six rounds, and every one of them found something: four spec drifts and
 two narrowed claims at round 1, one blocking spec miss and four record
 defects at round 2, one licence obligation and two record residues at
-round 3, two overstated claims at round 4, two more at round 5. Almost
-none of them were about code behaviour.
+round 3, two overstated claims at round 4, two more at round 5, one
+specification gap and one recreated total at round 6. Almost none of them
+were about code behaviour.
+
+**Which briefs still carry uncorrected claims.** Retained briefs and
+replies are verbatim and are never edited, so some of them still state
+things later rounds refuted. `diff-brief-r2.md` says three mutants die on
+cells the first build could not generate, and that sweep B's values follow
+from rules 5 and 7 alone. `diff-brief-r5.md` says the fix range touches
+three files; it touches five. `diff-brief-r6.md` says five rounds found
+seventeen things; the enumeration above says eighteen. Every correction
+lives in the code, the plan and the backlog, which is where a reader acts
+from.
 
 (An earlier draft of this paragraph said "eleven findings", which
 contradicted this file's own round table. The count is now enumerated
@@ -318,3 +330,43 @@ finding was a defect INTRODUCED BY ROUND 4'S FIX: narrowing the notice's
 overclaim overshot into an underclaim. A fix is new code and gets no
 discount, and this is what that rule looks like in a record file rather
 than in a function.
+
+## Round 6
+
+Two findings, and one of them is not a record defect.
+
+**The generated matrix had a THIRD unfrozen interpretation.** The plan
+recorded two readings the freeze had not settled — how `twice` crosses
+with form and escape, and what `absent` does with axes that have nothing
+to act on. It did not record a third: `K:` and `K: ` have no value, so
+"escape in value" is undefined for them too. `render_field` resolved it
+after the freeze, by writing the escape where the value would have been,
+and specifically to AVOID the duplicate cells that `absent` deliberately
+keeps. Two of the three readings were in the authoritative record and the
+third was only in the code, and the two that were recorded went opposite
+ways from the one that was not.
+
+The reviewer was explicit that no expected verdict is read from
+production — rule 1 makes either rendering verdict-neutral — so this is a
+specification gap, not a wrong answer. It is now in the plan, with the
+reason the two degenerate crossings are treated differently: an absent
+key has no line and so no value position, while a valueless form has a
+value position that is merely empty.
+
+**And a total, three rounds after totals were removed.** The round-6 brief
+said "five rounds have found seventeen things". The README's own
+enumeration comes to eighteen. Round 4 removed a total from this file
+precisely because totals go stale, and the very next brief written after
+that correction contained a new one. The brief is retained verbatim and
+still says seventeen.
+
+**What round 6 did NOT find, which is worth as much.** The brief asked the
+reviewer to spend the round on the three places the session built and
+cannot audit neutrally, rather than on the record surface: the rebuilt
+`sweep_b`/`render_field`, the FAIL_OPEN fault model, and the behavioural
+cap change that no generated suite covers. It found the specification gap
+above in the first, and reported no substantive defect in the other two,
+citing the lines it checked: the fault model proves the unchanged fallback
+over the complete matrix before mutating it, and the cap change matches
+the frozen four-tool rule with visibility, exact-cap and exhaustion
+coverage.

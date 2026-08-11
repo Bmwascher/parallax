@@ -508,6 +508,23 @@ recorded here rather than left in the code:
   cells per key render identical text. They are generated anyway. A
   quietly pruned product is a matrix nobody specified, which is the
   defect being corrected.
+- **`escape in value` crossed with the two valueless forms** — `K:` and
+  `K: ` — is the THIRD degenerate crossing. **ADDED at diff round 6**,
+  which found it recorded in the code and not here, next to two readings
+  that were. The escape is written WHERE THE VALUE WOULD HAVE BEEN, so
+  `K:` renders as `K:` + ESC + RESET and `K: ` as `K: ` + ESC + RESET.
+  After rule 1 strips the escapes both are byte-identical to their `none`
+  siblings, so no expected verdict moves.
+
+  **Why this one is not pruned to duplicates while `absent` is.** The two
+  cases are different in kind, not in taste. With the key ABSENT there is
+  no line at all, so there is no position an escape could occupy and no
+  rendering to vary; the duplication is forced. With a valueless FORM the
+  line exists and the value position exists, it is merely empty, so an
+  escape can genuinely be placed there. Rendering it is the reading that
+  keeps the axis meaning the same thing in every cell it appears in.
+  Either reading is defensible; what was not defensible was deciding one
+  of them in `render_field` and the other two here.
 
 Cases beyond the 360 are permitted and are counted separately, so that
 "how many cases" never has to mean "how many of them were specified".

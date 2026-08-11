@@ -160,9 +160,17 @@ def render_field(key, value, form, escape):
 
     The escape goes INSIDE the label or INSIDE the value, never between
     them, so the two placements are distinguishable after rule 1 strips
-    them. A form with no value slot still gets an in-value case, with the
-    escape written where the value would have been - otherwise that cell
-    of the product would be a copy of the "none" cell.
+    them.
+
+    A form with no value slot - `K:` and `K: ` - still gets an in-value
+    case, with the escape written where the value WOULD have been. That
+    is the THIRD degenerate crossing of the frozen product, and unlike
+    the other two it lived only here until diff round 6 moved it into the
+    plan. It differs from `presence=absent`, which IS left as duplicate
+    cells, because an absent key has no line and therefore no value
+    position to occupy, while a valueless form has a value position that
+    is merely empty. See the plan for the full reasoning; do not change
+    one of the three readings without changing the record.
     """
     k, v = key, value
     if escape == "in-label":
