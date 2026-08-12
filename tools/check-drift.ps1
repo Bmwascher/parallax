@@ -139,6 +139,11 @@ if (-not $codexVersion) {
 # do not replace the enforcement.
 $agyVersion = ""
 $agyExe = ""
+$agyAllowNonWorkspace = ""
+# Whether settings.json was READ AND PARSED this run. Distinguishing that
+# from "no value" is what separates a key that was REMOVED from a key that
+# was never measured, and the two must not share a carry-forward.
+$agySettingsParsed = $false
 $agyBin = Join-Path $env:LOCALAPPDATA "agy\bin"
 # Either name, for the same reason the kimi lookup below takes either: an
 # .exe-only lookup cannot be stubbed offline, and that is what left every
@@ -157,12 +162,23 @@ if (-not $agyExe) {
         $agyVersionExit = $LASTEXITCODE
     } catch { $agyRaw = $_.Exception.Message; $agyVersionExit = -1 }
     if ($agyRaw -match '(\d+\.\d+\.\d+)') { $agyVersion = $Matches[1] }
-    if (-not $agyVersion) {
-        # A FINDING, never a note. Notes print beside "No findings." and
-        # the exit code is decided by findings alone, so recording an
-        # unreadable version as a note would let an unmade measurement
-        # exit CLEAN. Caught in the 0.24.0 plan debate at round 3, in the
-        # fix written at round 2.
+    # Both of these are FINDINGS, never notes. Notes print beside "No
+    # findings." and the exit code is decided by findings alone, so
+    # recording an unreadable version as a note would let an unmade
+    # measurement exit CLEAN. Caught in the 0.24.0 plan debate at round 3,
+    # in the fix written at round 2.
+    if ($agyVersionExit -ne 0) {
+        # A FAILED CALL IS NOT A MEASUREMENT, whatever it printed. This
+        # block fired only when the regex missed, so a client that printed
+        # a version AND exited non-zero was recorded as measured and the
+        # run stayed clean - while `commands/doctor.md` called the same
+        # machine BROKEN, and while the kimi block below had required exit
+        # 0 all along. Found by the 0.24.0 whole-branch review. The parsed
+        # value is DISCARDED so the snapshot carries the last good one
+        # forward instead of promoting an unmeasured version.
+        $agyVersion = ""
+        $findings += "[CRITICAL] agy is installed at $agyExe but 'agy --version' exited $agyVersionExit`: $agyRaw - a failed call is not a version measurement, whatever it printed, and the previous value is kept rather than overwritten"
+    } elseif (-not $agyVersion) {
         $findings += "[CRITICAL] agy is installed at $agyExe but did not report a usable version (exit $agyVersionExit): $agyRaw - an unmade version check is never a passing one, and the previous value is kept rather than overwritten"
     }
 
@@ -217,6 +233,7 @@ if (-not $agyExe) {
             $findings += "[CRITICAL] agy settings.json did not parse as JSON: $($_.Exception.Message) - an unreadable settings file is not an empty one"
         }
         if ($agyCfg) {
+            $agySettingsParsed = $true
             $tw = $null
             if ($agyCfg.PSObject.Properties.Name -contains "trustedWorkspaces") {
                 $tw = $agyCfg.trustedWorkspaces
@@ -453,6 +470,17 @@ if ($agyAllowNonWorkspace -and $snapshot -and
     ([string]$snapshot.agyAllowNonWorkspaceAccess -ne $agyAllowNonWorkspace)) {
     $notes += "agy allowNonWorkspaceAccess $($snapshot.agyAllowNonWorkspaceAccess) -> $agyAllowNonWorkspace (what this permits outside the workspace is UNMEASURED - backlog item 36)"
 }
+# REMOVAL IS A CHANGE. The carry-forward below restored last week's value
+# whenever this run's read was empty, which silently included the key
+# VANISHING from a settings file that parsed - so the snapshot went on
+# asserting a value the file no longer carried and no note fired. "A change
+# to it is watched" was true of a changed value and false of a removed one.
+# Found by the 0.24.0 whole-branch review. Guarded on PARSED, because a
+# settings file that could not be read has measured nothing either way.
+if ($agySettingsParsed -and -not $agyAllowNonWorkspace -and $snapshot -and
+    ($snapshot.PSObject.Properties.Name -contains "agyAllowNonWorkspaceAccess")) {
+    $notes += "agy allowNonWorkspaceAccess $($snapshot.agyAllowNonWorkspaceAccess) -> absent (the key was REMOVED from settings.json; what that changes for the lane is UNMEASURED - backlog item 36)"
+}
 
 # --- report, toast, snapshot ---------------------------------------------------
 
@@ -487,12 +515,18 @@ $newSnapshot = @{
     updated     = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss")
 }
 # The relaxation is stored so a change to it is a drift next week. It is
-# carried forward when unreadable, exactly like the versions: losing the
+# carried forward when UNMEASURED, exactly like the versions: losing the
 # last known good value would destroy the comparison the next run needs.
 # What must never happen silently is the carry-forward, and the finding
 # above is what makes it audible.
+#
+# `-not $agySettingsParsed` is the whole correction. The carry-forward used
+# to fire on an empty value, which also covered a key REMOVED from a file
+# that parsed perfectly - so a deletion was restored from last week and the
+# snapshot went on asserting it. A parsed file with no key is a
+# MEASUREMENT of absence, and absence is what gets saved.
 $agyAllowToSave = $agyAllowNonWorkspace
-if (-not $agyAllowToSave -and $snapshot -and
+if (-not $agyAllowToSave -and -not $agySettingsParsed -and $snapshot -and
     ($snapshot.PSObject.Properties.Name -contains "agyAllowNonWorkspaceAccess")) {
     $agyAllowToSave = [string]$snapshot.agyAllowNonWorkspaceAccess
 }

@@ -152,6 +152,13 @@ Canonical reasoning effort: `high`
   `mcpServerStatus/list`, which names every resolved MCP server and every
   tool it exposes. It starts no turn, so it spends no tokens. A blocked
   result is a TRANSPORT failure (fallbacks.md), never a review result.
+  **It reads a DIFFERENT SUBCOMMAND from the one the reviewer runs.** The
+  probe reads `codex app-server`; the review dispatches `codex exec`, and
+  for everything measured so far the two resolve their MCP servers
+  independently. `codex exec` was measured only to ACCEPT the same flags,
+  never probed for its own tool surface. So a clean pass 2 is a PROXY for
+  the reviewer's surface, not a direct reading of it. Probing the exec
+  surface is backlog item 39.
   <!-- contract:start id=tool-surface-probe -->
   The probe runs TWO passes and their directions are NOT symmetric. Pass 1
   carries no isolation flags and is an INSTRUMENT CALIBRATION: if it

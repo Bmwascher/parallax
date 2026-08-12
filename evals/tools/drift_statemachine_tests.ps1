@@ -394,6 +394,10 @@ exit /b 0
 
 :version
 if "%AGY_STUB_MODE%"=="version-fail" exit /b 1
+if "%AGY_STUB_MODE%"=="version-fail-loud" (
+echo 1.1.12
+exit /b 1
+)
 if "%AGY_STUB_MODE%"=="unparseable" (
 echo agy version devbuild
 exit /b 0
@@ -497,6 +501,12 @@ function Reset-State {
 
 function Set-SnapshotWithAgy($claude, $codex, $sp, $agy) {
     $snap = @{ claude = $claude; codex = $codex; superpowers = $sp; agy = $agy; updated = "2026-01-01T00:00:00" }
+    ConvertTo-Json -InputObject $snap | Set-Content -Path $SnapshotFile
+}
+
+function Set-SnapshotWithAgyAllow($claude, $codex, $sp, $agy, $allow) {
+    $snap = @{ claude = $claude; codex = $codex; superpowers = $sp; agy = $agy
+               agyAllowNonWorkspaceAccess = $allow; updated = "2026-01-01T00:00:00" }
     ConvertTo-Json -InputObject $snap | Set-Content -Path $SnapshotFile
 }
 
@@ -958,6 +968,43 @@ $env:AGY_STUB_MODE = "version-fail"
 Invoke-Drift "agy-version-fail" "noaction" "" 60000
 Assert-True ($script:LastReport -match '\[CRITICAL\] agy is installed at') "a failed agy --version is a finding"
 Assert-True ($script:LastExit -ne 0) "a failed agy --version makes the run non-clean"
+Complete-Scenario $b
+
+# --- scenario: agy-version-fail-loud ----------------------------------------
+# The divergent state the whole-branch review named: a client that exits
+# NON-ZERO while printing something a version regex matches. The doctor
+# calls that BROKEN. This block took stdout from a failed call as a
+# measurement, recorded it, and stayed clean - so the two instruments the
+# branch says were aligned disagreed about one fact. The kimi block one
+# screen below has required exit 0 all along, so it was also a
+# disagreement inside a single file.
+
+$b = $script:failCount
+Reset-State
+Set-SnapshotWithAgy "1.2.3" "7.7.7" "6.2.0" "1.1.8"
+$env:AGY_STUB_MODE = "version-fail-loud"
+Invoke-Drift "agy-version-fail-loud" "noaction" "" 60000
+Assert-True ($script:LastReport -match "'agy --version' exited 1") "a non-zero exit is a finding even when the output parses as a version"
+Assert-True ($script:LastExit -ne 0) "a failed version call makes the run non-clean"
+$snapAfter = Get-SavedSnapshot
+Assert-True ($snapAfter.agy -eq "1.1.8") "the version printed by a FAILED call is discarded, not saved as measured"
+Complete-Scenario $b
+
+# --- scenario: agy-allow-removed --------------------------------------------
+# Removal is a change. The carry-forward restored last week's value
+# whenever this run's read was empty, including when the key had VANISHED
+# from a settings file that parsed - so the snapshot asserted a value the
+# file no longer carried and no note fired. "A change to it is watched"
+# was true of a changed value and false of a removed one.
+
+$b = $script:failCount
+Reset-State
+Set-SnapshotWithAgyAllow "1.2.3" "7.7.7" "6.2.0" "1.1.12" "True"
+Set-AgySettings '{"trustedWorkspaces": ["C:\\fake\\repo"]}'
+Invoke-Drift "agy-allow-removed" "noaction" "" 60000
+Assert-True ($script:LastReport -match 'allowNonWorkspaceAccess.*absent') "a REMOVED key is reported, not absorbed by the carry-forward"
+$snapAfter = Get-SavedSnapshot
+Assert-True (-not ($snapAfter.PSObject.Properties.Name -contains "agyAllowNonWorkspaceAccess")) "the removed key does not survive in the snapshot as a measured value"
 Complete-Scenario $b
 
 # --- scenario: agy-version-changed ------------------------------------------

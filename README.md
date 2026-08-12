@@ -206,7 +206,12 @@ flowchart TD
   **A tool ABSENT from the second pass is a MITIGATION, not proof of
   removal** — measured 2026-08-11, a server disabled by config and a
   server that failed to launch report the same thing, and no field
-  separates them. This closed backlog item 7, which had said no free
+  separates them. It also reads a DIFFERENT SUBCOMMAND from the one the
+  review runs: the probe reads `codex app-server`, the review dispatches
+  `codex exec`, and the two resolve their MCP servers independently for
+  everything measured so far. `codex exec` was measured only to ACCEPT the
+  same flags, so a clean second pass is a proxy for the reviewer's surface
+  rather than a direct reading of it. This closed backlog item 7, which had said no free
   tool-list view existed; that was true of `codex debug` and false of
   codex.
 

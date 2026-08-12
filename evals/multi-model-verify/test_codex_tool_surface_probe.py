@@ -155,6 +155,33 @@ class TestTheInstrumentMustBeShownToWork:
         assert v["status"] == "blocked"
         assert proc.returncode == 1
 
+    def test_calibration_needs_one_server_that_is_running_AND_has_a_tool(self):
+        # Fable whole-branch review, minor 4. Counting running servers and
+        # tools as two INDEPENDENT facts lets a tool-less running server
+        # plus a silent server that reports tools satisfy the calibration
+        # between them - two half-measurements reported as one. No measured
+        # record has this shape, which is exactly why the code must not
+        # depend on that staying true.
+        split = json.dumps([
+            {
+                "name": "codex_apps",
+                "serverInfo": {"name": "codex_apps", "version": "1.0.0"},
+                "authStatus": "unsupported",
+                "tools": {},
+            },
+            {
+                "name": "node_repl",
+                "serverInfo": None,
+                "authStatus": "unsupported",
+                "tools": {"js": {}},
+            },
+        ])
+        proc = run_probe(pass1=split, pass2=EMPTY)
+        v = verdict(proc)
+        assert v["status"] == "blocked", v
+        assert proc.returncode == 1
+        assert "calibrat" in v["reason"].lower()
+
     def test_a_calibrated_pass_1_with_an_empty_pass_2_is_clean(self):
         proc = run_probe(pass1=HEALTHY, pass2=EMPTY)
         v = verdict(proc)
@@ -198,6 +225,28 @@ class TestTheAbsenceDirectionIsReportedAsAMitigation:
         text = json.dumps(v).lower()
         assert "mitigation" in text
         assert "isolation" not in text.replace("tool_surface_isolation", "")
+
+    def test_the_reported_dispatch_tool_count_is_measured_not_assumed(self):
+        # Fable whole-branch review, minor 5. `dispatch_tools` was the
+        # constant 0, which is exact under the shipped EMPTY allowlist and
+        # false the day a caller widens it: the reviewer would hold the
+        # allowed tools while the record a debate quotes said zero.
+        # ONE allowed tool, deliberately. Measured while writing this case:
+        # under `powershell -File`, `-AllowTool a,b,c` arrives as a SINGLE
+        # string element rather than three, so a multi-value allowlist
+        # passed that way matches nothing and every tool blocks. That
+        # direction fails SAFE - it over-blocks, it never over-permits - so
+        # it is recorded here rather than worked around.
+        one_tool = json.dumps([{
+            "name": "node_repl",
+            "serverInfo": {"name": "node_repl", "version": "1.0.0"},
+            "authStatus": "unsupported",
+            "tools": {"js": {}},
+        }])
+        proc = run_probe(pass1=HEALTHY, pass2=one_tool, extra=["-AllowTool", "js"])
+        v = verdict(proc)
+        assert v["status"] == "clean", v
+        assert v["dispatch_tools"] == 1, v
 
     def test_a_clean_report_distinguishes_silent_from_absent(self):
         # pass 2 reporting the AMBIGUOUS record, rather than no server at

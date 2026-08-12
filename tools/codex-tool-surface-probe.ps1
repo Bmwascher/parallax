@@ -31,6 +31,14 @@
 # Do NOT describe a clean result as verified reviewer isolation on the
 # tool axis. It is not one, and the report says so in its own words.
 #
+# AND IT READS A DIFFERENT SUBCOMMAND FROM THE ONE THE REVIEWER RUNS. This
+# script reads `codex app-server`; the review dispatches `codex exec`, and
+# for everything measured so far the two resolve their MCP servers
+# independently. `codex exec` was measured only to ACCEPT the same flags,
+# never probed for its own tool surface. A clean pass 2 is therefore a
+# PROXY for the reviewer's surface, not a direct reading of it. Probing the
+# exec surface is backlog item 39.
+#
 # Both passes poll on the SAME schedule, which is what makes them
 # comparable: a pass-2 surface read earlier than pass 1's would be a
 # shorter measurement wearing the same name.
@@ -236,8 +244,23 @@ function Invoke-AppServer($codex, $extraArgs, $workDir, $timeoutSeconds,
     # host may refuse to set, and a corrupt first frame is unobservable from
     # this side once sent - the server simply reports nothing. So the pipe is
     # inspected instead of trusted, and a preamble is a BLOCK.
-    $preamble = @()
-    try { $preamble = $proc.StandardInput.Encoding.GetPreamble() } catch { }
+    $preamble = $null
+    $preambleRead = $false
+    try {
+        $preamble = $proc.StandardInput.Encoding.GetPreamble()
+        $preambleRead = $true
+    } catch { }
+    if (-not $preambleRead) {
+        # The check itself could not be made. Swallowing that left the
+        # probe proceeding as though the pipe were verified, which is this
+        # script's own forbidden shape wearing the clothes of a guard.
+        # Fable whole-branch review, minor 3.
+        try { $proc.Kill() } catch { }
+        return @{ Started = $false
+                  Reason = ("the stdin encoding could not be read, so it is" +
+                            " not known whether the first JSON-RPC frame" +
+                            " would reach the app server intact") }
+    }
     if ($preamble -and $preamble.Length -gt 0) {
         try { $proc.Kill() } catch { }
         return @{ Started = $false
@@ -434,9 +457,15 @@ $pass1 = Invoke-AppServer $CodexCommand @() $WorkDir $TimeoutSeconds `
                           $PollIntervalMs $PollCount
 $surface1 = Test-Transport $pass1 "pass 1 (baseline)" $Json
 
-$running1 = @($surface1 | Where-Object { $_.HasInfo })
+# ONE server that is BOTH running and carrying a tool, as one fact about
+# one server. Counting running servers and tools separately let a
+# tool-less running server and a silent server that reported tools
+# calibrate the instrument between them: two half-measurements reported as
+# one whole one. No measured record has that shape, which is exactly why
+# the code must not depend on that staying true. Fable review, minor 4.
+$calibrated = @($surface1 | Where-Object { $_.HasInfo -and $_.Tools.Count -gt 0 })
 $tools1 = @($surface1 | ForEach-Object { $_.Tools } | Where-Object { $_ })
-if ($running1.Count -eq 0 -or $tools1.Count -eq 0) {
+if ($calibrated.Count -eq 0) {
     Write-Blocked ("pass 1 (baseline) saw no running MCP server with any" +
         " tool, so the instrument is not calibrated: this probe is not" +
         " known to be able to see a tool at all, and a clean pass 2 from" +
@@ -485,7 +514,13 @@ if ($silent.Count -gt 0) {
 Write-Result "clean" $null ([ordered]@{
     baseline_servers = @($surface1 | ForEach-Object { $_.Name })
     baseline_tools   = $tools1.Count
-    dispatch_tools   = 0
+    # MEASURED, not assumed. This was the constant 0, which is exact only
+    # while the allowlist is empty: a caller who widens it gets a reviewer
+    # holding the allowed tools and a record saying zero. Every tool
+    # counted here is one the allowlist named, since anything else blocked
+    # above. Fable review, minor 5.
+    dispatch_tools   = @($surface2 | ForEach-Object { $_.Tools } |
+                         Where-Object { $_ }).Count
     silent_servers   = $silent
     allowlist        = $AllowTool
     note             = $note
