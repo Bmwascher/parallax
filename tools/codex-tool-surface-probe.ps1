@@ -98,33 +98,72 @@ function Invoke-AppServer($codex, $extraArgs, $workDir, $timeoutSeconds,
     #>
     $argList = New-Object System.Collections.Generic.List[string]
 
-    # RESOLVE THE COMMAND FIRST. Process.Start with UseShellExecute=false
-    # does no PATH or PATHEXT lookup, so a bare name that runs fine at a
-    # prompt fails here with "cannot find the file specified". Measured
-    # 2026-08-11 on this machine: `codex` resolves to
-    # `...\npm-global\codex.ps1`, an npm shim - so the .ps1 branch below
-    # is the PRODUCTION path here, not test scaffolding.
-    if (-not (Test-Path -LiteralPath $codex)) {
-        $resolved = $null
+    # RESOLVE THE COMMAND, AND CHOOSE A FORM Process.Start CAN ACTUALLY
+    # RUN. This is more work than it looks and the first version got it
+    # wrong.
+    #
+    # Process.Start with UseShellExecute=false does no PATH or PATHEXT
+    # lookup, so a bare name that runs fine at a prompt fails with "cannot
+    # find the file specified". Resolving through Get-Command fixes that
+    # much. It is NOT enough. Measured 2026-08-11, `codex` on this machine
+    # resolves to THREE things:
+    #
+    #   codex.ps1  ExternalScript  an npm shim
+    #   codex.cmd  Application     an npm shim
+    #   codex      Application     extensionless, a shell script
+    #
+    # and there is no codex.exe at all. `Get-Command | Select -First 1`
+    # returns whichever the host happens to rank first, which differs
+    # between Windows PowerShell and pwsh. Process.Start can execute NONE
+    # of those three directly: a .cmd is not an executable image, and
+    # neither is an extensionless shell script.
+    #
+    # The first version of this function took the first candidate and
+    # special-cased only .ps1. It worked here by luck. Another session
+    # running this probe on the same machine hit the .cmd and the probe
+    # failed three times before the cause was found.
+    #
+    # So: enumerate ALL candidates, and pick by what can be launched -
+    # .exe directly, .cmd/.bat through cmd.exe, .ps1 through the current
+    # PowerShell host. Prefer .exe because it needs no interpreter at all.
+    $candidates = @()
+    if (Test-Path -LiteralPath $codex) {
+        $candidates = @($codex)
+    } else {
         try {
-            $resolved = (Get-Command $codex -ErrorAction Stop |
-                         Select-Object -First 1).Source
+            $candidates = @(Get-Command $codex -All -ErrorAction Stop |
+                            ForEach-Object { $_.Source } |
+                            Where-Object { $_ })
         } catch { }
-        if ($resolved) { $codex = $resolved }
+        if ($candidates.Count -eq 0) { $candidates = @($codex) }
     }
 
-    $file = $codex
-    # A PowerShell-implemented client is launched through the current
-    # host: Process.Start cannot execute a .ps1 itself. The arguments
-    # here are bare tokens with no embedded quotes, so command-line
-    # parsing has nothing to strip.
-    if ($codex -match '\.ps1$') {
-        $file = (Get-Process -Id $PID).Path
-        $argList.Add("-NoProfile")
-        $argList.Add("-NonInteractive")
-        $argList.Add("-File")
-        $argList.Add($codex)
+    $file = $null
+    $prefix = @()
+    foreach ($ext in @('\.exe$', '\.(cmd|bat)$', '\.ps1$')) {
+        $hit = @($candidates | Where-Object { $_ -match $ext }) | Select-Object -First 1
+        if (-not $hit) { continue }
+        if ($ext -eq '\.exe$') {
+            $file = $hit
+        } elseif ($ext -eq '\.(cmd|bat)$') {
+            # /c, then the batch path. cmd.exe is the only thing that can
+            # run a batch file, and Process.Start will not do it for us.
+            $file = "$env:SystemRoot\System32\cmd.exe"
+            $prefix = @("/c", $hit)
+        } else {
+            $file = (Get-Process -Id $PID).Path
+            $prefix = @("-NoProfile", "-NonInteractive", "-File", $hit)
+        }
+        break
     }
+    if (-not $file) {
+        # Nothing launchable. BLOCKED, not a guess: an instrument that
+        # cannot start has measured nothing.
+        return @{ Started = $false
+                  Reason = ("no launchable form of '" + $codex + "' was found" +
+                            " (candidates: " + (($candidates -join ", ")) + ")") }
+    }
+    foreach ($p in $prefix) { $argList.Add($p) }
     $argList.Add("app-server")
     $argList.Add("--stdio")
     foreach ($a in $extraArgs) { $argList.Add($a) }
@@ -147,11 +186,65 @@ function Invoke-AppServer($codex, $extraArgs, $workDir, $timeoutSeconds,
     $psi.StandardErrorEncoding = New-Object System.Text.UTF8Encoding($false)
     if ($workDir) { $psi.WorkingDirectory = $workDir }
 
+    # THE STDIN ENCODING MUST BE FIXED BEFORE Start, AND NOWHERE ELSE.
+    #
+    # Measured 2026-08-11. This defect made the probe fail BY CONSTRUCTION
+    # on one of the two hosts this repo supports, and twenty green cases
+    # said otherwise:
+    #
+    #   Windows PowerShell 5.1   EF BB BF 7B 22 69 64 ...
+    #   pwsh 7                            7B 22 69 64 ...
+    #
+    # .NET Framework builds Process.StandardInput from Console.InputEncoding.
+    # This machine's console is UTF-8, whose encoder carries a THREE-BYTE
+    # PREAMBLE, so the `initialize` frame reached the app server with a
+    # byte-order mark glued to its opening brace and was not JSON. .NET Core
+    # wraps the same encoding to report an EMPTY preamble, which is the whole
+    # of why pwsh 7 passed.
+    #
+    # Two repairs were tried and MEASURED before this one:
+    #
+    #  - `ProcessStartInfo.StandardInputEncoding` does not exist on 5.1.
+    #  - Wrapping `StandardInput.BaseStream` in a preamble-free StreamWriter
+    #    does not work either, and the reason is the point: Process.Start
+    #    sets AutoFlush on its OWN writer, and setting AutoFlush FLUSHES, so
+    #    the three bytes are in the pipe before this function gets the object
+    #    back. There is no way to unsend them.
+    #
+    # So the encoding is changed before Start and restored immediately after.
+    $prevInputEncoding = $null
+    try {
+        $prevInputEncoding = [Console]::InputEncoding
+        [Console]::InputEncoding = New-Object System.Text.UTF8Encoding($false)
+    } catch {
+        # Left to the preamble check below, which BLOCKS. It is never
+        # silently accepted.
+    }
+
     $proc = $null
     try {
         $proc = [System.Diagnostics.Process]::Start($psi)
     } catch {
         return @{ Started = $false; Reason = $_.Exception.Message }
+    } finally {
+        if ($null -ne $prevInputEncoding) {
+            try { [Console]::InputEncoding = $prevInputEncoding } catch { }
+        }
+    }
+
+    # The self-check. The repair above depends on a console property that a
+    # host may refuse to set, and a corrupt first frame is unobservable from
+    # this side once sent - the server simply reports nothing. So the pipe is
+    # inspected instead of trusted, and a preamble is a BLOCK.
+    $preamble = @()
+    try { $preamble = $proc.StandardInput.Encoding.GetPreamble() } catch { }
+    if ($preamble -and $preamble.Length -gt 0) {
+        try { $proc.Kill() } catch { }
+        return @{ Started = $false
+                  Reason = ("the stdin encoding carries a " + $preamble.Length +
+                            "-byte preamble, so the first JSON-RPC frame would" +
+                            " reach the app server corrupt and no surface could" +
+                            " be read") }
     }
 
     $outTask = $proc.StandardOutput.ReadToEndAsync()

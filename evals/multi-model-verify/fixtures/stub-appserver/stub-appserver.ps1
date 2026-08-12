@@ -28,10 +28,40 @@ if ($env:PARALLAX_STUB_AS_EXIT) { exit [int]$env:PARALLAX_STUB_AS_EXIT }
 $mode = $env:PARALLAX_STUB_AS_MODE
 if (-not $mode) { $mode = "normal" }
 
+# STDIN IS READ AS RAW BYTES, NOT THROUGH [Console]::In.
+#
+# This is the fixture's fidelity to the thing it stands in for, and it was
+# NOT here first. A StreamReader built on a UTF-8 encoding silently strips
+# a matching preamble before any caller sees it, so this stub could not
+# observe a byte-order mark at all - it read a clean `{"id":1,...}` from a
+# stream that carried `EF BB BF {"id":1,...}` on the wire. The real app
+# server parses BYTES and rejects that frame. Measured 2026-08-11: with
+# the defect deliberately restored, a strict first-frame check written on
+# top of [Console]::In PASSED, which is a guard proving the opposite of
+# what it looks like.
+$rawIn = [Console]::OpenStandardInput()
+
+function Read-RawLine($stream) {
+    # One line as BYTES. $null at end of stream; an empty array for a blank
+    # line, which is a different thing and the caller must not confuse them.
+    $bytes = New-Object System.Collections.Generic.List[byte]
+    while ($true) {
+        $b = $stream.ReadByte()
+        if ($b -lt 0) {
+            if ($bytes.Count -eq 0) { return $null }
+            break
+        }
+        if ($b -eq 10) { break }
+        if ($b -eq 13) { continue }
+        $bytes.Add([byte]$b)
+    }
+    return ,$bytes.ToArray()
+}
+
 if ($mode -eq "noframes") {
     # Consume stdin and say nothing at all. A probe that reads this as an
     # empty tool surface would be reporting an unmade measurement.
-    while ($null -ne [Console]::In.ReadLine()) { }
+    while ($null -ne (Read-RawLine $rawIn)) { }
     exit 0
 }
 
@@ -51,9 +81,37 @@ if (-not $payload) { $payload = "[]" }
 
 [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
 
+# THE FIRST FRAME IS CHECKED STRICTLY, and this is a regression guard
+# rather than tidiness. The probe's first version wrote stdin through
+# Process.StandardInput, which on Windows PowerShell 5.1 prefixes a
+# three-byte UTF-8 preamble to the first write; the real app server saw
+# `<BOM>{"id":1,...}`, which is not JSON, and the probe failed by
+# construction on that host. Every case in the suite stayed GREEN, because
+# the `catch { continue }` below simply skipped the corrupt frame and this
+# stub answered the later polls anyway. A lenient stub certified a broken
+# instrument.
+#
+# So a first frame whose FIRST BYTE is not `{` is now a hard stub failure,
+# and the probe blocks on the non-zero exit.
+$first = $true
+
 while ($true) {
-    $line = [Console]::In.ReadLine()
-    if ($null -eq $line) { break }
+    $raw = Read-RawLine $rawIn
+    if ($null -eq $raw) { break }
+    if ($first) {
+        $first = $false
+        if ($raw.Count -eq 0 -or $raw[0] -ne 0x7B) {
+            $lead = (@($raw | Select-Object -First 8) |
+                     ForEach-Object { $_.ToString("X2") }) -join " "
+            [Console]::Error.WriteLine(
+                "STUB: the first frame's first byte is not '{' (0x7B). Leading" +
+                " bytes: " + $lead)
+            exit 9
+        }
+    }
+    # UTF8.GetString does NOT strip a preamble, which is the point: what the
+    # check above saw is what the parser below sees.
+    $line = [System.Text.Encoding]::UTF8.GetString($raw)
     if (-not $line.Trim()) { continue }
 
     $req = $null

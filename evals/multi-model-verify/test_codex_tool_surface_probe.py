@@ -253,6 +253,93 @@ class TestEveryTransportFailureDirectionBlocks:
         assert "timeout" in v["reason"].lower() or "timed out" in v["reason"].lower()
 
 
+class TestTheLauncherResolution:
+    """Process.Start cannot execute what a shell can.
+
+    Measured 2026-08-11: `codex` on this machine resolves to codex.ps1,
+    codex.cmd AND an extensionless codex, with NO codex.exe. Process.Start
+    with UseShellExecute=false launches none of them directly, and
+    `Get-Command | Select -First 1` returns whichever the host ranks
+    first, which differs between Windows PowerShell and pwsh.
+
+    The probe's first version special-cased only .ps1 and passed here by
+    luck. Another session on the SAME MACHINE hit the .cmd and the probe
+    failed three times before the cause was found - a defect that shipped
+    green because every test drove the one form that happened to work.
+    """
+
+    def test_a_cmd_launcher_starts(self):
+        cmd_stub = STUB.with_suffix(".cmd")
+        assert cmd_stub.exists(), "the .cmd stub is the point of this case"
+        env = dict(os.environ)
+        env["PARALLAX_STUB_AS_PASS1"] = HEALTHY
+        env["PARALLAX_STUB_AS_PASS2"] = EMPTY
+        proc = subprocess.run(
+            [POWERSHELL, "-NoProfile", "-NonInteractive", "-File", str(PROBE),
+             "-CodexCommand", str(cmd_stub), "-Json"],
+            capture_output=True, text=True, env=env, timeout=180)
+        v = verdict(proc)
+        assert v["status"] == "clean", v
+        assert proc.returncode == 0
+
+    def test_an_unlaunchable_command_blocks_rather_than_reporting_nothing(self):
+        # The failure direction. A probe that cannot start has measured
+        # nothing, and "no tools" from a process that never ran is exactly
+        # the false-clean this script exists to refuse.
+        env = dict(os.environ)
+        env["PARALLAX_STUB_AS_PASS1"] = HEALTHY
+        env["PARALLAX_STUB_AS_PASS2"] = EMPTY
+        proc = subprocess.run(
+            [POWERSHELL, "-NoProfile", "-NonInteractive", "-File", str(PROBE),
+             "-CodexCommand", "parallax-no-such-client", "-Json"],
+            capture_output=True, text=True, env=env, timeout=180)
+        v = verdict(proc)
+        assert v["status"] == "blocked"
+        assert proc.returncode == 1
+
+
+class TestTheFramesGoOutIntactOnBothHosts:
+    """The probe failed BY CONSTRUCTION on one of the two supported hosts,
+    and twenty green cases said otherwise.
+
+    Measured 2026-08-11. .NET Framework builds Process.StandardInput from
+    Console.InputEncoding; this machine's console is UTF-8, whose encoder
+    carries a three-byte preamble, and StreamWriter emits it before the
+    first write:
+
+        Windows PowerShell 5.1   EF BB BF 7B 22 69 64 ...
+        pwsh 7                            7B 22 69 64 ...
+
+    So under 5.1 the real app server received `<BOM>{"id":1,...}`, which is
+    not JSON. The suite stayed green because the stub caught the parse
+    error and answered the later polls anyway - a lenient stub certifying a
+    broken instrument. The stub now exits 9 on a first frame that does not
+    begin with `{`, which is what makes every other case in this module a
+    guard as well.
+
+    This case is the one that does not depend on which host the suite
+    happened to pick: it drives EVERY host present. `CLAUDE.md` states the
+    rule it enforces - a green suite on one host proves one interpreter.
+    """
+
+    def test_the_first_frame_reaches_the_server_with_no_byte_order_mark(self):
+        hosts = [h for h in (shutil.which("powershell"), shutil.which("pwsh"))
+                 if h]
+        assert hosts, "no PowerShell host at all"
+        env = dict(os.environ)
+        env["PARALLAX_STUB_AS_PASS1"] = HEALTHY
+        env["PARALLAX_STUB_AS_PASS2"] = EMPTY
+        for host in hosts:
+            proc = subprocess.run(
+                [host, "-NoProfile", "-NonInteractive", "-File", str(PROBE),
+                 "-CodexCommand", str(STUB), "-Json"],
+                capture_output=True, text=True, env=env, timeout=180)
+            v = verdict(proc)
+            assert v["status"] == "clean", (
+                host + " did not get a clean run: " + json.dumps(v) +
+                " / stderr: " + proc.stderr)
+
+
 class TestTheInvocationContract:
     """Pass 2 must carry the flags the real dispatch carries. A probe that
     measured a configuration the reviewer never receives is measuring
