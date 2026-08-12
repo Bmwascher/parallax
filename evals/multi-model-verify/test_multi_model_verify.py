@@ -2645,6 +2645,36 @@ class TestDoctorCommand:
         assert "app-server" in body and "account/rateLimits/read" in body
         assert "experimental" in body.lower()
 
+    def test_the_agy_row_asserts_the_same_contracts_the_drift_run_does(self):
+        # 0.24.0, backlog item 11. `tools/check-drift.ps1` asserts FOUR
+        # things about the Flash implementer lane every week; the doctor
+        # asserted one of them, the version. Two instruments that disagree
+        # about the same fact are worse than one instrument, because the
+        # quieter one reads as a second opinion.
+        body = read(self.DOCTOR)
+        for anchor in (
+            "agy.cmd",                    # both installed client forms
+            "& <agy> models",             # the resolved path, not bare PATH
+            "trustedWorkspaces",          # the workspace-trust contract
+            "allowNonWorkspaceAccess",    # recorded, and never a verdict
+            "antigravity-cli",            # where both of those live
+            "brain",                      # the authorship-evidence root
+            "backlog item 36",            # what the recorded value does NOT say
+        ):
+            assert anchor in body, "agy contract anchor missing: " + anchor
+
+    def test_an_absent_agy_client_is_not_a_broken_row(self):
+        # The Flash lane is OPTIONAL and the drift run records its absence
+        # as a NOTE, not a finding. A doctor that calls the same machine
+        # BROKEN teaches the user to ignore BROKEN - the identical argument
+        # check 9 already makes for repo-scoped hits.
+        body = read(self.DOCTOR)
+        assert "Flash implementer lane unavailable" in body
+        assert re.search(
+            r"[Nn]either present is N/A[^.]{0,120}short-circuit", body), (
+            "an absent agy client must short-circuit the row to N/A"
+        )
+
 
 class TestIntakeCommand:
     """commands/intake.md codifies the external-reference intake
