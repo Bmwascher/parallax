@@ -124,10 +124,124 @@ if (-not $codexVersion) {
     $findings += "[CRITICAL] codex --version failed or unparseable: $codexRaw"
 }
 
+# --- agy: the Flash implementer lane's CONTRACTS, not just its version ---
+#
+# 0.24.0, backlog item 11. Until now this block ran `agy --version` and
+# stored the string, and nothing compared it to the snapshot. That is how
+# the item's own quoted version, 1.1.8, became 1.1.12 across four releases
+# without a word in any report.
+#
+# The lane's contracts ARE enforced - `agents/flash-implementer.md:45-59`
+# runs three of them as a per-dispatch preflight and blocks a missing
+# transcript after the run. What was missing is any check EARLIER than
+# dispatch, so a drift surfaced mid-build on a frozen plan with the round's
+# budget already committed. These checks move the discovery earlier. They
+# do not replace the enforcement.
 $agyVersion = ""
-$agyExe = Join-Path $env:LOCALAPPDATA "agy\bin\agy.exe"
-if (Test-Path $agyExe) {
-    $agyVersion = (& $agyExe --version 2>$null | Select-Object -First 1)
+$agyExe = ""
+$agyBin = Join-Path $env:LOCALAPPDATA "agy\bin"
+# Either name, for the same reason the kimi lookup below takes either: an
+# .exe-only lookup cannot be stubbed offline, and that is what left every
+# state-machine scenario for that lane asserting nothing.
+foreach ($n in @("agy.exe", "agy.cmd")) {
+    $candidate = Join-Path $agyBin $n
+    if (Test-Path $candidate) { $agyExe = $candidate; break }
+}
+if (-not $agyExe) {
+    $notes += "agy absent - the Flash implementer lane is UNAVAILABLE (lane optional; reviewer lanes unaffected)"
+} else {
+    $agyRaw = ""
+    $agyVersionExit = $null
+    try {
+        $agyRaw = (& $agyExe --version 2>&1 | Out-String).Trim()
+        $agyVersionExit = $LASTEXITCODE
+    } catch { $agyRaw = $_.Exception.Message; $agyVersionExit = -1 }
+    if ($agyRaw -match '(\d+\.\d+\.\d+)') { $agyVersion = $Matches[1] }
+    if (-not $agyVersion) {
+        # A FINDING, never a note. Notes print beside "No findings." and
+        # the exit code is decided by findings alone, so recording an
+        # unreadable version as a note would let an unmade measurement
+        # exit CLEAN. Caught in the 0.24.0 plan debate at round 3, in the
+        # fix written at round 2.
+        $findings += "[CRITICAL] agy is installed at $agyExe but did not report a usable version (exit $agyVersionExit): $agyRaw - an unmade version check is never a passing one, and the previous value is kept rather than overwritten"
+    }
+
+    # Contract 1: the model literal resolves. The literal lives in ONE
+    # place, the agent file's Lane note; reading it from there is what
+    # stops this check drifting from the lane it claims to watch.
+    $flashAgent = Join-Path $PSScriptRoot "..\agents\flash-implementer.md"
+    $agyModelLiteral = ""
+    if (Test-Path $flashAgent) {
+        $agentText = Get-Content -Raw -LiteralPath $flashAgent
+        if ($agentText -match 'Canonical model literal:\s*`?\s*[\r\n]*\s*`([^`]+)`') {
+            $agyModelLiteral = $Matches[1].Trim()
+        }
+    }
+    if (-not $agyModelLiteral) {
+        $findings += "[CRITICAL] could not parse the canonical model literal from agents/flash-implementer.md - the Flash lane's identity check has nothing to compare against, which is an unmade check, not a passing one"
+    } else {
+        $agyModelsOut = ""
+        $agyModelsExit = $null
+        try {
+            $agyModelsOut = (& $agyExe models 2>&1 | Out-String)
+            $agyModelsExit = $LASTEXITCODE
+        } catch {
+            # -1, deliberately, so a client that could not be LAUNCHED lands
+            # on the "could not be made" finding below rather than falling
+            # through to the rename finding. An exception message does not
+            # contain the model literal, so the fall-through would have
+            # reported a launch failure as a renamed model: a true finding
+            # with a false cause.
+            $agyModelsOut = $_.Exception.Message
+            $agyModelsExit = -1
+        }
+        if ($agyModelsExit -ne 0 -and $null -ne $agyModelsExit) {
+            $findings += "[CRITICAL] 'agy models' exited $agyModelsExit - the Flash lane's only reachability and identity check could not be made"
+        } elseif ($agyModelsOut -notmatch [regex]::Escape($agyModelLiteral)) {
+            $findings += "[CRITICAL] 'agy models' no longer lists '$agyModelLiteral' - the Flash lane's model was renamed or the account cannot see it; update agents/flash-implementer.md's Lane note"
+        }
+    }
+
+    # Contract 2: the settings file, its shape, and the relaxation nobody
+    # was watching. `allowNonWorkspaceAccess` is RECORDED so a change to it
+    # is a drift. Recording is not measuring: what `true` permits outside
+    # the workspace is UNMEASURED on this version (backlog item 36).
+    $agySettings = Join-Path $env:USERPROFILE ".gemini\antigravity-cli\settings.json"
+    if (-not (Test-Path $agySettings)) {
+        $findings += "[CRITICAL] agy settings.json is missing at $agySettings - trustedWorkspaces cannot be checked, and the Flash lane blocks on it at dispatch"
+    } else {
+        $agyCfg = $null
+        try {
+            $agyCfg = (Get-Content -Raw -LiteralPath $agySettings) | ConvertFrom-Json
+        } catch {
+            $findings += "[CRITICAL] agy settings.json did not parse as JSON: $($_.Exception.Message) - an unreadable settings file is not an empty one"
+        }
+        if ($agyCfg) {
+            $tw = $null
+            if ($agyCfg.PSObject.Properties.Name -contains "trustedWorkspaces") {
+                $tw = $agyCfg.trustedWorkspaces
+            }
+            if ($null -eq $tw) {
+                $findings += "[CRITICAL] agy settings.json has no trustedWorkspaces key - the Flash lane cannot write in any workspace"
+            } elseif (-not ($tw -is [System.Array])) {
+                $findings += "[CRITICAL] agy settings.json trustedWorkspaces is not an array (got $($tw.GetType().Name)) - the file's shape changed and the lane's preflight reads it positionally"
+            }
+            if ($agyCfg.PSObject.Properties.Name -contains "allowNonWorkspaceAccess") {
+                $agyAllowNonWorkspace = [string]$agyCfg.allowNonWorkspaceAccess
+            }
+        }
+    }
+
+    # Contract 3: the brain root. NARROWER than backlog item 11 asks for,
+    # deliberately. Item 11 lists the transcript path itself, but a
+    # transcript only exists AFTER a run, so a pre-dispatch check cannot
+    # assert it without asserting something it has not measured. The
+    # transcript stays enforced where it already blocks, in the Flash
+    # implementer's own evidence step.
+    $agyBrain = Join-Path $env:USERPROFILE ".gemini\antigravity-cli\brain"
+    if (-not (Test-Path $agyBrain)) {
+        $findings += "[CRITICAL] agy brain root is missing at $agyBrain - this is where the lane's authorship evidence is read from, and a lane whose evidence cannot be located must stop rather than proceed unverified"
+    }
 }
 
 $kimiVersion = ""
@@ -324,6 +438,21 @@ if ($snapshot -and $codexVersion -and $snapshot.codex -and ($snapshot.codex -ne 
 if ($snapshot -and $spVersion -and $snapshot.superpowers -and ($snapshot.superpowers -ne $spVersion)) {
     $notes += "superpowers $($snapshot.superpowers) -> $spVersion (template canary re-hashed above)"
 }
+# 0.24.0, backlog item 11. Until this line existed, agy was the only
+# tracked component whose version could move without the report saying so:
+# codex and superpowers had change notes, agy was carried forward and
+# saved in silence. That is exactly how 1.1.8 became 1.1.12 unremarked.
+if ($snapshot -and $agyVersion -and $snapshot.agy -and ($snapshot.agy -ne $agyVersion)) {
+    $notes += "agy $($snapshot.agy) -> $agyVersion (lane contracts re-probed above)"
+}
+# The relaxation, recorded so a CHANGE to it is visible. Recording is not
+# measuring, and the note says so: what `true` permits outside the
+# workspace is UNMEASURED on the installed version.
+if ($agyAllowNonWorkspace -and $snapshot -and
+    ($snapshot.PSObject.Properties.Name -contains "agyAllowNonWorkspaceAccess") -and
+    ([string]$snapshot.agyAllowNonWorkspaceAccess -ne $agyAllowNonWorkspace)) {
+    $notes += "agy allowNonWorkspaceAccess $($snapshot.agyAllowNonWorkspaceAccess) -> $agyAllowNonWorkspace (what this permits outside the workspace is UNMEASURED - backlog item 36)"
+}
 
 # --- report, toast, snapshot ---------------------------------------------------
 
@@ -357,6 +486,17 @@ $newSnapshot = @{
     superpowers = $spVersionToSave
     updated     = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss")
 }
+# The relaxation is stored so a change to it is a drift next week. It is
+# carried forward when unreadable, exactly like the versions: losing the
+# last known good value would destroy the comparison the next run needs.
+# What must never happen silently is the carry-forward, and the finding
+# above is what makes it audible.
+$agyAllowToSave = $agyAllowNonWorkspace
+if (-not $agyAllowToSave -and $snapshot -and
+    ($snapshot.PSObject.Properties.Name -contains "agyAllowNonWorkspaceAccess")) {
+    $agyAllowToSave = [string]$snapshot.agyAllowNonWorkspaceAccess
+}
+if ($agyAllowToSave) { $newSnapshot.agyAllowNonWorkspaceAccess = $agyAllowToSave }
 $newSnapshot | ConvertTo-Json | Set-Content -Path $SnapshotFile
 
 # --- unresolved prior run (pending disposition) --------------------------------
