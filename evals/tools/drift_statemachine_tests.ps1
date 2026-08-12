@@ -988,6 +988,12 @@ Assert-True ($script:LastReport -match "'agy --version' exited 1") "a non-zero e
 Assert-True ($script:LastExit -ne 0) "a failed version call makes the run non-clean"
 $snapAfter = Get-SavedSnapshot
 Assert-True ($snapAfter.agy -eq "1.1.8") "the version printed by a FAILED call is discarded, not saved as measured"
+# The assertion above is ALSO satisfied by a watcher that died before it
+# rewrote the snapshot at all, which would leave the seeded file intact.
+# It discriminated the defect it was written for - pre-fix, 1.1.12 was
+# saved - but this closes the residual reading. Whole-branch review, second
+# pass, minor 3.
+Assert-True ($snapAfter.updated -ne "2026-01-01T00:00:00") "the snapshot was actually rewritten, so the carried version is a decision and not a leftover"
 Complete-Scenario $b
 
 # --- scenario: agy-allow-removed --------------------------------------------
@@ -1064,6 +1070,21 @@ Set-AgySettings '{"trustedWorkspaces": ['
 Invoke-Drift "agy-settings-malformed" "noaction" "" 60000
 Assert-True ($script:LastReport -match 'did not parse as JSON') "an unparseable settings file is a finding, not an empty config"
 Assert-True ($script:LastExit -ne 0) "an unparseable settings file makes the run non-clean"
+Complete-Scenario $b
+
+# --- scenario: agy-settings-null --------------------------------------------
+# A settings file that PARSES and yields nothing. Measured 2026-08-12:
+# `null`, `false` and `[]` all parse without throwing and are all falsy in
+# PowerShell, so the object guard skipped every contract below it in
+# silence and the run exited CLEAN. An unmade measurement must never look
+# like a passing one. Whole-branch review, second pass, minor 2.
+
+$b = $script:failCount
+Reset-State
+Set-AgySettings 'null'
+Invoke-Drift "agy-settings-null" "noaction" "" 60000
+Assert-True ($script:LastReport -match 'parsed but yielded no object') "a settings file that parses to nothing is a finding, not a skipped check"
+Assert-True ($script:LastExit -ne 0) "a settings file that measures no contract makes the run non-clean"
 Complete-Scenario $b
 
 # --- scenario: agy-trustedworkspaces-shape ----------------------------------

@@ -227,10 +227,24 @@ if (-not $agyExe) {
         $findings += "[CRITICAL] agy settings.json is missing at $agySettings - trustedWorkspaces cannot be checked, and the Flash lane blocks on it at dispatch"
     } else {
         $agyCfg = $null
+        $agyParseThrew = $false
         try {
             $agyCfg = (Get-Content -Raw -LiteralPath $agySettings) | ConvertFrom-Json
         } catch {
+            $agyParseThrew = $true
             $findings += "[CRITICAL] agy settings.json did not parse as JSON: $($_.Exception.Message) - an unreadable settings file is not an empty one"
+        }
+        if (-not $agyParseThrew -and -not $agyCfg) {
+            # A SUCCESSFUL PARSE THAT YIELDS NO OBJECT. Measured 2026-08-12:
+            # `null`, `false` AND `[]` all parse without throwing and are all
+            # falsy in PowerShell, so the guard below skipped every contract
+            # in SILENCE - no trustedWorkspaces finding, no shape finding, no
+            # recorded relaxation, and a clean exit. That is an unmade
+            # measurement wearing the face of a passing one, which is the one
+            # outcome this script may never produce. Found by the 0.24.0
+            # whole-branch review, second pass, which named two of the three
+            # shapes; the third turned up while measuring it.
+            $findings += "[CRITICAL] agy settings.json parsed but yielded no object (a bare null, false or empty array): every trustedWorkspaces and shape check below would be SKIPPED IN SILENCE, and a file that measures no contract is not a passing one"
         }
         if ($agyCfg) {
             $agySettingsParsed = $true
