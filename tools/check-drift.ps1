@@ -142,7 +142,29 @@ if (-not $codexVersion) {
 # cover what was never measured.
 $agyVersion = ""
 $agyExe = ""
-$agyAllowNonWorkspace = ""
+# The VALUE, kept with its JSON TYPE. `[string]` was applied here and at
+# every comparison, which collapsed `null` and `""` to the same saved text:
+# a settings file changing `null` to `""` was a real relaxation of a
+# recorded contract that produced no note at all. Recording a value so a
+# CHANGE to it is visible only works if the recording can tell the values
+# apart. Found by the diff debate at round 2. $null is the unmeasured
+# state; $agyAllowPresent, not this, says whether the key was there.
+$agyAllowNonWorkspace = $null
+
+function Get-ValueToken($v) {
+    <#
+      A type-preserving token for one settings value, used for BOTH the
+      comparison and the note text.
+
+      JSON is the token because it separates every case this contract can
+      hold - `null`, `""`, `false`, `true`, `"true"` - which plain string
+      rendering does not: `[string]$null` and `[string]""` are both the
+      empty string, and `[string]$true` and `[string]"True"` are both
+      "True". It is also what a reader sees in settings.json.
+    #>
+    if ($null -eq $v) { return "null" }
+    return (ConvertTo-Json $v -Compress)
+}
 # PRESENCE, tracked separately from the VALUE. Reading presence off the
 # value's truthiness made `"allowNonWorkspaceAccess": null` and `""` - both
 # legal, both PRESENT - read as a removed key: the run then wrote a
@@ -269,7 +291,7 @@ if (-not $agyExe) {
             }
             if ($agyCfg.PSObject.Properties.Name -contains "allowNonWorkspaceAccess") {
                 $agyAllowPresent = $true
-                $agyAllowNonWorkspace = [string]$agyCfg.allowNonWorkspaceAccess
+                $agyAllowNonWorkspace = $agyCfg.allowNonWorkspaceAccess
             }
         }
     }
@@ -490,10 +512,17 @@ if ($snapshot -and $agyVersion -and $snapshot.agy -and ($snapshot.agy -ne $agyVe
 # The relaxation, recorded so a CHANGE to it is visible. Recording is not
 # measuring, and the note says so: what `true` permits outside the
 # workspace is UNMEASURED on the installed version.
+# Compared and REPORTED as type-preserving tokens, so `null -> ""` is a
+# visible change rather than two renderings of the same empty string. One
+# consequence is stated rather than discovered later: the first run after
+# this change compares a token against a snapshot written by the old
+# `[string]` form, so an existing recorded value can emit ONE cosmetic note
+# such as `"True" -> true`. It is a note, so the run stays clean, and the
+# next run has a token on both sides.
 if ($agyAllowPresent -and $snapshot -and
     ($snapshot.PSObject.Properties.Name -contains "agyAllowNonWorkspaceAccess") -and
-    ([string]$snapshot.agyAllowNonWorkspaceAccess -ne $agyAllowNonWorkspace)) {
-    $notes += "agy allowNonWorkspaceAccess $($snapshot.agyAllowNonWorkspaceAccess) -> $agyAllowNonWorkspace (what this permits outside the workspace is UNMEASURED - backlog item 36)"
+    ((Get-ValueToken $snapshot.agyAllowNonWorkspaceAccess) -ne (Get-ValueToken $agyAllowNonWorkspace))) {
+    $notes += "agy allowNonWorkspaceAccess $(Get-ValueToken $snapshot.agyAllowNonWorkspaceAccess) -> $(Get-ValueToken $agyAllowNonWorkspace) (what this permits outside the workspace is UNMEASURED - backlog item 36)"
 }
 # REMOVAL IS A CHANGE. The carry-forward below restored last week's value
 # whenever this run's read was empty, which silently included the key
@@ -504,7 +533,7 @@ if ($agyAllowPresent -and $snapshot -and
 # settings file that could not be read has measured nothing either way.
 if ($agySettingsParsed -and -not $agyAllowPresent -and $snapshot -and
     ($snapshot.PSObject.Properties.Name -contains "agyAllowNonWorkspaceAccess")) {
-    $notes += "agy allowNonWorkspaceAccess $($snapshot.agyAllowNonWorkspaceAccess) -> absent (the key was REMOVED from settings.json; what that changes for the lane is UNMEASURED - backlog item 36)"
+    $notes += "agy allowNonWorkspaceAccess $(Get-ValueToken $snapshot.agyAllowNonWorkspaceAccess) -> absent (the key was REMOVED from settings.json; what that changes for the lane is UNMEASURED - backlog item 36)"
 }
 
 # --- report, toast, snapshot ---------------------------------------------------
@@ -557,7 +586,10 @@ if ($agyAllowPresent) {
     $newSnapshot.agyAllowNonWorkspaceAccess = $agyAllowNonWorkspace
 } elseif (-not $agySettingsParsed -and $snapshot -and
           ($snapshot.PSObject.Properties.Name -contains "agyAllowNonWorkspaceAccess")) {
-    $newSnapshot.agyAllowNonWorkspaceAccess = [string]$snapshot.agyAllowNonWorkspaceAccess
+    # Carried forward with its TYPE. The `[string]` here turned a carried
+    # `null` into `""` on every unreadable-settings run, so a value nobody
+    # measured this week came back as a different value next week.
+    $newSnapshot.agyAllowNonWorkspaceAccess = $snapshot.agyAllowNonWorkspaceAccess
 }
 $newSnapshot | ConvertTo-Json | Set-Content -Path $SnapshotFile
 

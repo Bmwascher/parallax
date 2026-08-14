@@ -87,6 +87,19 @@ TWO_SERVERS = json.dumps([
 # shipped probe never asked for this surface at all.
 FEATURES = json.dumps([
     {"name": "memories", "enabled": True},
+    {"name": "plugins", "enabled": True},
+    {"name": "apps", "enabled": True},
+    {"name": "some_other_feature", "enabled": False},
+])
+
+# The same surface as the dispatch pass resolves it: every feature the
+# dispatch disables comes back reported and FALSE. This is what the live
+# 2026-08-14 reading showed on both hosts, and it is the only shape that
+# may reach a clean verdict now that those features are policed.
+DISABLED_FEATURES = json.dumps([
+    {"name": "memories", "enabled": False},
+    {"name": "plugins", "enabled": False},
+    {"name": "apps", "enabled": False},
     {"name": "some_other_feature", "enabled": False},
 ])
 
@@ -412,6 +425,39 @@ class TestTheLauncherResolution:
                 "a path with a cmd metacharacter did not start: "
                 + json.dumps(v) + " / stderr: " + proc.stderr)
 
+    def test_a_cmd_launcher_in_a_path_with_a_percent_sign_blocks(self):
+        # Diff debate round 2. The metacharacter regex above covers
+        # `&|<>^()` and NOT `%`, and percent is the one cmd.exe expands
+        # while parsing - inside double quotes as well, so the quoting that
+        # fixed `a & b (x)` cannot touch it, and `%%` only escapes inside a
+        # batch FILE. A directory named with a `%NAME%` sequence would
+        # therefore launch a DIFFERENT path from the one resolved, and
+        # whatever that produced would be reported as a measurement of the
+        # real client.
+        #
+        # So the direction here is BLOCKED, not clean. That is the whole
+        # point: an instrument that cannot be aimed has measured nothing,
+        # and this is the one case in this class that must not start.
+        stub_dir = STUB.parent
+        with tempfile.TemporaryDirectory() as td:
+            odd = Path(td) / "pct %PATH% dir"
+            odd.mkdir()
+            for name in ("stub-appserver.ps1", "stub-appserver.cmd"):
+                shutil.copy(stub_dir / name, odd / name)
+            env = dict(os.environ)
+            env["PARALLAX_STUB_AS_PASS1"] = HEALTHY
+            env["PARALLAX_STUB_AS_PASS2"] = EMPTY
+            proc = subprocess.run(
+                [POWERSHELL, "-NoProfile", "-NonInteractive", "-File", str(PROBE),
+                 "-CodexCommand", str(odd / "stub-appserver.cmd"), "-Json"],
+                capture_output=True, text=True, env=env, timeout=180)
+            v = verdict(proc)
+            assert v["status"] == "blocked", (
+                "a path carrying a percent sign must not be launched: "
+                + json.dumps(v) + " / stderr: " + proc.stderr)
+            assert proc.returncode == 1
+            assert "percent" in v["reason"], v
+
     def test_an_unlaunchable_command_blocks_rather_than_reporting_nothing(self):
         # The failure direction. A probe that cannot start has measured
         # nothing, and "no tools" from a process that never ran is exactly
@@ -482,22 +528,188 @@ class TestTheFeatureSurfaceIsReadAtAll:
     """
 
     def test_the_feature_surface_is_requested_and_reported(self):
+        # The baseline may hold memories enabled - that is the state the
+        # 2026-08-12 live reading found and the reason the flag exists. What
+        # the dispatch may hold is a different question, below.
         proc = run_probe(pass1=HEALTHY, pass2=EMPTY,
-                         features1=FEATURES, features2=FEATURES)
+                         features1=FEATURES, features2=DISABLED_FEATURES)
         v = verdict(proc)
         assert v["status"] == "clean", v
         assert "memories=True" in v["baseline_features"], v
-        assert "memories=True" in v["dispatch_features"], v
+        assert "memories=False" in v["dispatch_features"], v
 
-    def test_the_feature_report_states_that_it_judges_nothing(self):
-        # There is no declared allowlist of acceptable features, so nothing
-        # here may read as acceptance. A record that lists an enabled
-        # feature without saying it was not judged is exactly the kind of
-        # quiet promotion this repo keeps finding in its own text.
+    def test_the_feature_report_states_what_it_did_and_did_not_judge(self):
+        # No allowlist of acceptable features exists, so nothing beyond the
+        # disabled ones may read as acceptance. A record that lists an
+        # enabled feature without saying it was not judged is exactly the
+        # kind of quiet promotion this repo keeps finding in its own text.
         proc = run_probe(pass1=HEALTHY, pass2=EMPTY,
-                         features1=FEATURES, features2=FEATURES)
+                         features1=FEATURES, features2=DISABLED_FEATURES)
         v = verdict(proc)
         assert "seen rather than accepted" in v["feature_note"], v
+        # ...and it must NOT claim the probe judged nothing, because it now
+        # judges exactly the disabled ones.
+        assert "memories" in v["feature_note"], v
+
+
+class TestTheDisabledFeaturesArePoliced:
+    """Round 1 accepted a fix asking for an enabled-feature policy and a
+    fail-first case for an unexpectedly enabled feature. Only the reading
+    half was built, and the fixture then fed `memories=True` into pass 2 and
+    asserted a CLEAN verdict - a test certifying the exact state that should
+    stop a round. Found by the diff debate at round 2.
+
+    This direction is sound where absence is not. A feature reported ENABLED
+    after the dispatch disabled it is present and observed, so it needs no
+    ability to tell a disabled server from a crashed one. It says the flag
+    did not take effect.
+    """
+
+    def test_a_disabled_feature_reported_enabled_blocks(self):
+        # ONLY memories is left enabled, so the case names the feature it
+        # actually tests. Feeding an all-enabled surface here trips
+        # `plugins` first and the assertion would pass or fail on which
+        # name the loop reaches first rather than on the behaviour.
+        memories_on = json.dumps([
+            {"name": "plugins", "enabled": False},
+            {"name": "apps", "enabled": False},
+            {"name": "memories", "enabled": True},
+        ])
+        proc = run_probe(pass1=HEALTHY, pass2=EMPTY,
+                         features1=FEATURES, features2=memories_on)
+        v = verdict(proc)
+        assert v["status"] == "blocked", v
+        assert proc.returncode == 1
+        assert "memories=True" in v["reason"], v
+        assert "did NOT take effect" in v["reason"], v
+
+    def test_a_disabled_feature_the_surface_never_reports_blocks(self):
+        # Silence is not a disabled feature. Whether the flag took effect is
+        # simply unmeasured, and an unmade measurement is never a clean one.
+        no_memories = json.dumps([
+            {"name": "plugins", "enabled": False},
+            {"name": "apps", "enabled": False},
+        ])
+        proc = run_probe(pass1=HEALTHY, pass2=EMPTY,
+                         features1=FEATURES, features2=no_memories)
+        v = verdict(proc)
+        assert v["status"] == "blocked", v
+        assert proc.returncode == 1
+        assert "memories" in v["reason"], v
+        assert "UNMEASURED" in v["reason"], v
+
+    def test_a_disabled_feature_with_a_non_boolean_value_blocks(self):
+        # `"false"` is a STRING and is truthy in PowerShell. Read as a
+        # value it would pass for disabled while meaning nothing of the
+        # kind, so the type is checked rather than the truthiness.
+        stringly = json.dumps([
+            {"name": "plugins", "enabled": False},
+            {"name": "apps", "enabled": False},
+            {"name": "memories", "enabled": "false"},
+        ])
+        proc = run_probe(pass1=HEALTHY, pass2=EMPTY,
+                         features1=FEATURES, features2=stringly)
+        v = verdict(proc)
+        assert v["status"] == "blocked", v
+        assert proc.returncode == 1
+        assert "non-boolean" in v["reason"], v
+
+    def test_a_disabled_feature_carrying_no_enablement_member_blocks(self):
+        nameless = json.dumps([
+            {"name": "plugins", "enabled": False},
+            {"name": "apps", "enabled": False},
+            {"name": "memories"},
+        ])
+        proc = run_probe(pass1=HEALTHY, pass2=EMPTY,
+                         features1=FEATURES, features2=nameless)
+        v = verdict(proc)
+        assert v["status"] == "blocked", v
+        assert "no enabled/isEnabled/value member" in v["reason"], v
+
+    def test_a_disabled_feature_reported_twice_blocks(self):
+        # Two records for one name: which one describes the reviewer cannot
+        # be read, so neither is taken.
+        doubled = json.dumps([
+            {"name": "plugins", "enabled": False},
+            {"name": "apps", "enabled": False},
+            {"name": "memories", "enabled": False},
+            {"name": "memories", "enabled": True},
+        ])
+        proc = run_probe(pass1=HEALTHY, pass2=EMPTY,
+                         features1=FEATURES, features2=doubled)
+        v = verdict(proc)
+        assert v["status"] == "blocked", v
+        assert "memories" in v["reason"], v
+
+    def test_the_policed_list_is_derived_from_the_flags_actually_sent(self):
+        # plugins and apps are disabled by the same dispatch, so they are
+        # policed on the same terms as memories. If this ever stops being
+        # true, the policy has been narrowed to one hardcoded name.
+        plugins_on = json.dumps([
+            {"name": "plugins", "enabled": True},
+            {"name": "apps", "enabled": False},
+            {"name": "memories", "enabled": False},
+        ])
+        proc = run_probe(pass1=HEALTHY, pass2=EMPTY,
+                         features1=FEATURES, features2=plugins_on)
+        v = verdict(proc)
+        assert v["status"] == "blocked", v
+        assert "plugins=True" in v["reason"], v
+
+
+class TestANullSurfaceIsNotAnEmptyOne:
+    """`{"result":{"data":null}}` is the third reading of this rule and the
+    first two were both false-cleans. Member presence alone let it through,
+    and the reducers then walked `@($null)` - a ONE-ELEMENT array holding
+    $null, the same PowerShell trap this fixture already documents for
+    `tools: {}` - skipped the single element, and reported an empty surface
+    as a clean one. Found by the diff debate at round 2.
+
+    Distinct from the `nodata` case: this shape PASSES the check that stops
+    that one, which is why it needs its own fixture and its own case.
+    """
+
+    def test_a_status_result_whose_data_is_null_blocks(self):
+        proc = run_probe(pass1=HEALTHY, pass2=EMPTY, mode="datanull")
+        v = verdict(proc)
+        assert v["status"] == "blocked", v
+        assert proc.returncode == 1
+        assert "no data member" in v["reason"], v
+
+    def test_a_feature_result_whose_data_is_null_blocks(self):
+        # The feature surface has no calibration pass behind it, so a null
+        # here would have reached the clean report on its own.
+        proc = run_probe(pass1=HEALTHY, pass2=EMPTY, mode="features-datanull")
+        v = verdict(proc)
+        assert v["status"] == "blocked", v
+        assert proc.returncode == 1
+        assert "experimentalFeature/list" in v["reason"], v
+
+
+class TestTheTwoIdRangesCannotCollide:
+    """Status ids were 100+n and feature ids 200+n, read back as the fixed
+    windows 100-199 and 200-299, while -PollCount accepted any integer. At
+    101 polls the 101st status id is 201 - inside the FEATURE window - so a
+    status answer would be read as the feature surface. Found by the diff
+    debate at round 2.
+
+    The bases are now derived from the poll count and handed to the reader,
+    so the windows cannot drift out of step with the ids at any value.
+    """
+
+    def test_a_poll_count_past_the_old_window_still_reads_both_surfaces(self):
+        # 101 is the first count that collided. The interval is dropped to
+        # 1ms so the case measures the id arithmetic and not the clock.
+        proc = run_probe(pass1=HEALTHY, pass2=EMPTY,
+                         features1=FEATURES, features2=DISABLED_FEATURES,
+                         extra=["-PollCount", "101", "-PollIntervalMs", "1"])
+        v = verdict(proc)
+        assert v["status"] == "clean", v
+        # The feature surface must still be the FEATURE surface: a status
+        # answer read through the feature window would carry no feature
+        # names at all.
+        assert "memories=False" in v["dispatch_features"], v
+        assert v["baseline_tools"] > 0, v
 
 
 class TestTheInvocationContract:

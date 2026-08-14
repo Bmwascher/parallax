@@ -67,3 +67,88 @@ PROXY for the reviewer's own surface. Item 39 carries the measurement.
 ## Rounds
 
 (appended as they land, with the round-evidence binding verdict for each)
+
+### Round 1 — 2026-08-12, binding CLEAN
+
+Fresh dispatch, session `019ff4eb-346e-7be2-9af3-520ebc876707`. Brief
+`diff-brief-r1.md`, reply retained verbatim at `diff-reply-r1.txt`.
+
+**Six FIX, one PASS, one ESCALATE.** Every finding was verified against the
+code before anything changed, and every one was ACCEPTED. Two were faults
+in this branch's own earlier fixes. Adjudications: build checkpoint
+amendment 9. Fixes committed at `ac7dc43`.
+
+Meters after round 1: **1 contested exchange of 4; 1 fix-verify unit of 4.**
+
+### Round 2 — 2026-08-14, binding FAILED, reply DISCARDED UNREAD
+
+Resume of the same session. Brief `diff-brief-r2.md`, canonical sha256
+`a04f122d145ce793...`. The client exited 0 and wrote a 9233-byte reply.
+The round-evidence binding then FAILED:
+
+    a resumed slice carries a user record in front of the brief that does
+    not repeat the client's own preamble from this session, so it is
+    unattributed text in front of the reviewer
+
+Under the contract a non-clean binding means the reply is DISCARDED
+UNREAD, and it was. **No content from that reply has been read, quoted, or
+acted on, and none appears anywhere in this branch.** The round's quota is
+spent for nothing.
+
+**Cause, measured rather than reasoned.** Round 1 ran on 2026-08-12 and
+round 2 on 2026-08-14. The session's first user record is 1532 characters
+- the AGENTS.md instructions block plus `<environment_context>` dated
+2026-08-12. The record the resumed slice placed in front of the brief is
+390 characters: `<environment_context>` ALONE, dated 2026-08-14, with no
+instructions block. Shorter AND differently dated, so the identity test
+cannot match them.
+
+**The guard was right and is not being relaxed to get past it.** Its rule
+is that anything in front of the brief must be text this client already
+emitted in this session, so novel text cannot reach the reviewer ahead of
+the brief. A refreshed environment context has never been emitted in that
+session. This is the rule working, on a case it was never measured
+against: the bound was earned from rounds that all ran inside one day.
+Filed as backlog item 42, priority HIGH, because it blocks the repo's own
+review process on any debate that spans midnight.
+
+**Meters are UNCHANGED at 1 of 4 and 1 of 4.** A transport failure is not
+an exchange. Nothing was adjudicated, contested, or conceded, because
+nothing was read.
+
+### Round 2, RETRY — 2026-08-14, same session and same day, binding CLEAN
+
+Dispatched again on the user's decision, after the options and their costs
+were put to them. Brief `diff-brief-r2.md` with one paragraph added
+telling the reviewer its earlier answer was never read and must not be
+referred back to. Canonical sha256 `629f3a81a89e5787...`. Reply retained
+verbatim at `diff-reply-r2.txt`.
+
+**This retry also MEASURED what item 42 records as unknown.** With the
+environment context already refreshed inside the session, the same-day
+resume carried the brief ALONE - one user record, no preamble - and bound
+clean. Item 42 stands unchanged: that is a workaround available only while
+a debate stays inside one day, not a fix.
+
+**Five FIX, four PASS.** Every finding was verified against the code
+before anything changed. Two were faults in fixes made at round 1, and one
+was a false sentence the session wrote itself. Adjudications: build
+checkpoint amendment 11.
+
+| # | Finding | Disposition |
+|---|---|---|
+| 1a | status and feature id windows collide past 100 polls | FIXED, bases derived from the poll count |
+| 1b | `{"result":{"data":null}}` reduces to an empty surface | FIXED, blocks |
+| 2 | the disabled-feature policy was read but never enforced, and a test certified `memories=True` as clean | FIXED, blocks; policed list derived from the flags sent |
+| 3 | `%` absent from the cmd metacharacter set | FIXED, such a path is refused rather than launched |
+| 4 | `[string]` flattened `null` and `""` in the watcher | FIXED, values keep their JSON type |
+| 5 | the workflow comment "as soon as it existed" was false | FIXED at the source |
+| - | round-1 parser repairs, proxy propagation, the verification record, item 40's disposition | PASS |
+
+Eleven new probe cases and two new drift assertions were watched RED
+against the pre-fix code, with 31 existing probe cases green in the same
+run and exactly two drift assertions failing.
+
+Meters after this round: **2 contested exchanges of 4; 2 fix-verify units
+of 4.** Not terminal: termination needs an adjudicated DRY round, and this
+one found five things.

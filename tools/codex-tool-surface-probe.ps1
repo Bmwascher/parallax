@@ -195,16 +195,37 @@ function Invoke-AppServer($codex, $extraArgs, $workDir, $timeoutSeconds,
     $psi = New-Object System.Diagnostics.ProcessStartInfo
     $psi.FileName = $file
     if ($batchPath) {
+        # PERCENT IS NOT QUOTABLE, so a line carrying one is REFUSED rather
+        # than launched. cmd expands `%NAME%` while parsing, and it does so
+        # INSIDE double quotes as well, so the quoting below cannot make it
+        # literal and neither `/s` nor `^` reliably suppresses it on a
+        # command line - `%%` only escapes inside a batch FILE. A legal
+        # Windows path may contain `%`. Launching it anyway would run a
+        # DIFFERENT path from the one resolved, and the probe would report
+        # whatever that produced as a measurement of the real client.
+        # Blocking is the only honest direction: an instrument that cannot
+        # be aimed has measured nothing. Found by the diff debate at round
+        # 2, which also found the claim below overstated.
+        $cmdLine = (& $quote $batchPath) + ' ' + $tail
+        if ($cmdLine.Contains('%')) {
+            return @{ Started = $false
+                      Reason = ("the batch launcher's command line contains a" +
+                                " percent sign, which cmd.exe expands even" +
+                                " inside quotes, so the line cannot be passed" +
+                                " through literally: " + $cmdLine) }
+        }
         # `/s /c "<whole command line>"`, and the shape is the fix rather
         # than decoration. Under a bare `/c`, cmd applies a rule that
         # depends on how many quotes the line has and what sits between
         # them, so `cmd /c "C:\a & b\x.cmd" app-server --stdio` gets taken
         # apart and the `&` runs as a command separator. With `/s`, cmd
-        # strips exactly the first and last quote of the remainder and
-        # executes what is left verbatim, which is the one predictable
-        # form. Found by the diff debate at round 1; quoting the path alone
-        # was measured and was NOT enough.
-        $psi.Arguments = '/s /c "' + (& $quote $batchPath) + ' ' + $tail + '"'
+        # strips exactly the first and last quote of the remainder and runs
+        # what is left without re-applying that rule, which is the one
+        # predictable form. It is NOT verbatim - percent expansion still
+        # happens, which is why the refusal above sits in front of it.
+        # Found by the diff debate at round 1; quoting the path alone was
+        # measured and was NOT enough.
+        $psi.Arguments = '/s /c "' + $cmdLine + '"'
     } else {
         $psi.Arguments = $tail
     }
@@ -302,11 +323,20 @@ function Invoke-AppServer($codex, $extraArgs, $workDir, $timeoutSeconds,
                 '"capabilities":{"experimentalApi":true}}}'
         $proc.StandardInput.WriteLine($init)
         $proc.StandardInput.Flush()
+        # TWO id ranges, DERIVED from $pollCount so they cannot collide at
+        # any value of it. The first version hardcoded 100+n and 200+n and
+        # read them back as the fixed windows 100-199 and 200-299, while
+        # -PollCount took any integer: at 101 polls the 101st status id is
+        # 201, which lands inside the FEATURE window, and a status answer
+        # would be read as the feature surface. Nothing capped it. Found by
+        # the diff debate at round 2. A cap would have worked; deriving the
+        # bases needs no cap and cannot drift out of step with the reader,
+        # because the reader is handed these same numbers below.
+        $statusBase  = 100
+        $featureBase = $statusBase + $pollCount + 1
         for ($n = 1; $n -le $pollCount; $n++) {
             if ($proc.HasExited) { break }
             Start-Sleep -Milliseconds $pollIntervalMs
-            # TWO methods per poll, on two id ranges: 100+ for the server and
-            # tool surface, 200+ for the resolved FEATURE surface.
             #
             # `experimentalFeature/list` was in the frozen plan's task 1 from
             # the start and the first shipped probe simply never sent it -
@@ -316,9 +346,9 @@ function Invoke-AppServer($codex, $extraArgs, $workDir, $timeoutSeconds,
             # probe that reads only tools closes half an item and reports the
             # other half as nothing at all.
             $proc.StandardInput.WriteLine(
-                '{"id":' + (100 + $n) + ',"method":"mcpServerStatus/list","params":{}}')
+                '{"id":' + ($statusBase + $n) + ',"method":"mcpServerStatus/list","params":{}}')
             $proc.StandardInput.WriteLine(
-                '{"id":' + (200 + $n) + ',"method":"experimentalFeature/list","params":{}}')
+                '{"id":' + ($featureBase + $n) + ',"method":"experimentalFeature/list","params":{}}')
             $proc.StandardInput.Flush()
         }
         if (-not $proc.HasExited) { $proc.StandardInput.Close() }
@@ -344,6 +374,12 @@ function Invoke-AppServer($codex, $extraArgs, $workDir, $timeoutSeconds,
         Error    = $err
         ExitCode = $(if ($timedOut) { -1 } else { $proc.ExitCode })
         TimedOut = $timedOut
+        # The reader is TOLD the windows this call actually used, rather
+        # than repeating the constants and hoping the two stay in step.
+        StatusMin  = ($statusBase + 1)
+        StatusMax  = ($statusBase + $pollCount)
+        FeatureMin = ($featureBase + 1)
+        FeatureMax = ($featureBase + $pollCount)
     }
 }
 
@@ -404,7 +440,16 @@ function Get-LastResponse($text, $minId, $maxId) {
         }
         if ($obj.PSObject.Properties.Name -contains "result") {
             if ($null -eq $obj.result -or
-                -not ($obj.result.PSObject.Properties.Name -contains "data")) {
+                -not ($obj.result.PSObject.Properties.Name -contains "data") -or
+                $null -eq $obj.result.data) {
+                # `data: null` is the THIRD reading of this rule, and the
+                # first two were both false-cleans. Member PRESENCE alone
+                # let `{"data":null}` through, and the reducers then walked
+                # `@($null)` - a ONE-ELEMENT array holding $null, the same
+                # PowerShell trap this file already documents for `tools:
+                # {}` - whose single element they skip, producing an empty
+                # surface and a clean report. A null surface is not a
+                # surface of nothing. Found by the diff debate at round 2.
                 $sawResultWithoutData = $true
                 continue
             }
@@ -476,8 +521,10 @@ function Test-Transport($pass, $label, $asJson) {
     # asked for it and because backlog item 7 names the memories feature
     # beside the MCP tools; a probe that reads only tools answers half of
     # that item and says nothing about the other half.
-    $status = Read-Surface $pass $label "mcpServerStatus/list" 100 199 $asJson
-    $features = Read-Surface $pass $label "experimentalFeature/list" 200 299 $asJson
+    $status = Read-Surface $pass $label "mcpServerStatus/list" `
+                  $pass.StatusMin $pass.StatusMax $asJson
+    $features = Read-Surface $pass $label "experimentalFeature/list" `
+                  $pass.FeatureMin $pass.FeatureMax $asJson
     return @{
         Servers  = (Get-Surface $status)
         Features = (Get-Features $features)
@@ -526,12 +573,18 @@ function Get-Features($result) {
     <#
       Reduce the feature response to NAME plus resolved enablement.
 
-      This is VISIBILITY, not a control. The frozen plan's DQ1 settled that
-      this list answering proves only that the app server is alive, and it
-      defines no allowlist of acceptable features, so nothing here decides a
-      verdict. What it does is put the reviewer's resolved features - the
-      memories feature among them - into a record that a debate can read,
-      which is the half of backlog item 7 the tool list cannot answer.
+      Mostly VISIBILITY, with one exception that the caller applies. The
+      frozen plan's DQ1 settled that this list ANSWERING proves only that
+      the app server is alive - that is about the list as a SURVIVOR
+      control, and it is still true. It does not settle what a feature the
+      dispatch claims to have DISABLED may report: one that comes back
+      enabled says the flag did not take effect, which is a present,
+      observed fact rather than an inference from absence. The caller
+      blocks on exactly those, and on nothing else.
+
+      An earlier version of this comment cited DQ1 for the wider claim that
+      nothing here decides a verdict. That was the comment doing the work
+      the plan had not done. Diff debate, round 2.
     #>
     $features = @()
     foreach ($f in @($result.data)) {
@@ -600,6 +653,59 @@ $pass2 = Invoke-AppServer $CodexCommand $dispatchArgs $WorkDir $TimeoutSeconds `
 $read2 = Test-Transport $pass2 "pass 2 (dispatch)" $Json
 $surface2 = $read2.Servers
 
+# THE DISPATCH FEATURE POLICY. Every feature this pass explicitly DISABLED
+# must come back reported and false, or the probe blocks.
+#
+# Round 1 of the diff debate accepted a fix that asked for an
+# enabled-feature policy and a fail-first case for an unexpectedly enabled
+# feature. Only the reading half was built, and a comment justified the
+# omission by pointing at plan DQ1 - which settles that this list is no
+# SURVIVOR control, and settles nothing about a feature the dispatch
+# claims to have turned off. Worse, the module's own fixture fed
+# `memories=True` into pass 2 and asserted a CLEAN verdict, so a test
+# certified the exact state that should stop a round. Found by the diff
+# debate at round 2.
+#
+# This direction is sound where absence is not: `memories=True` here is
+# something PRESENT and observed, so it needs no ability to tell a disabled
+# server from a crashed one. It says the flag did not take effect, and a
+# reviewer holding a cross-session store is the thing item 7 exists to
+# stop.
+#
+# The list is DERIVED from the flags above rather than typed out again, so
+# a `--disable` added later is policed without anyone remembering to.
+$requiredFalse = @()
+for ($i = 0; $i -lt $dispatchArgs.Count - 1; $i++) {
+    if ($dispatchArgs[$i] -eq "--disable") { $requiredFalse += $dispatchArgs[$i + 1] }
+}
+foreach ($name in $requiredFalse) {
+    $hits = @($read2.Features | Where-Object { $_.Name -eq $name })
+    if ($hits.Count -eq 0) {
+        Write-Blocked ("pass 2 (dispatch) disabled '" + $name + "' but the" +
+            " feature surface never reported it, so whether the flag took" +
+            " effect is UNMEASURED") $Json
+    }
+    if ($hits.Count -gt 1) {
+        Write-Blocked ("pass 2 (dispatch) reported the feature '" + $name +
+            "' " + $hits.Count + " times, so which one describes the" +
+            " reviewer cannot be read") $Json
+    }
+    $value = $hits[0].Enabled
+    if ($value -isnot [bool]) {
+        Write-Blocked ("pass 2 (dispatch) reported feature '" + $name +
+            "' with a non-boolean enablement (" +
+            $(if ($null -eq $value) { "no enabled/isEnabled/value member" }
+              else { $value.GetType().Name + " '" + [string]$value + "'" }) +
+            "), and an unreadable value is not a disabled one") $Json
+    }
+    if ($value) {
+        Write-Blocked ("pass 2 (dispatch) passed '--disable " + $name +
+            "' and the feature surface still reports " + $name +
+            "=True, so the flag did NOT take effect and the reviewer would" +
+            " hold it") $Json
+    }
+}
+
 $unexpected = @()
 foreach ($s in $surface2) {
     foreach ($t in $s.Tools) {
@@ -624,16 +730,22 @@ if ($silent.Count -gt 0) {
     $note += " Server(s) present but SILENT (no serverInfo, no tools): " +
              ($silent -join ", ") + "."
 }
-# The FEATURE half of the record, and it decides nothing. There is no
-# declared allowlist of acceptable features, so no feature here can block;
-# what this does is make the reviewer's resolved features readable, which
-# is the half of backlog item 7 the tool list cannot answer. A feature
-# enabled in pass 2 that a debate cares about is a decision for a person,
-# and the note says so rather than implying the probe made it.
-$featureNote = "feature enablement is REPORTED, never judged: this probe" +
-               " carries no allowlist of acceptable features, so nothing" +
-               " here blocks and a feature reported enabled in the dispatch" +
-               " configuration has been seen rather than accepted."
+# The FEATURE half of the record. It decides EXACTLY ONE thing, and the
+# note has to be precise about which, because a debate record quotes it.
+#
+# Policed: every feature the dispatch explicitly disabled, checked above -
+# reaching this line means each came back reported and false. Not policed:
+# everything else, because no allowlist of acceptable features exists and
+# inventing one here would be a judgment nothing measured supports. A
+# feature enabled in pass 2 that this probe did not disable has been SEEN,
+# not accepted, and what to do about it is a decision for a person.
+$featureNote = "feature enablement is REPORTED. The only features this" +
+               " probe judges are the ones the dispatch explicitly" +
+               " disabled (" + ($requiredFalse -join ", ") + "), each of" +
+               " which was reported and false or this run would have" +
+               " blocked. Every OTHER feature listed here is seen rather" +
+               " than accepted: no allowlist of acceptable features exists," +
+               " so nothing else here blocks."
 Write-Result "clean" $null ([ordered]@{
     baseline_servers  = @($surface1 | ForEach-Object { $_.Name })
     baseline_tools    = $tools1.Count

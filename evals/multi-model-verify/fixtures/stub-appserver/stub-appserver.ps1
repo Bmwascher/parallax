@@ -17,8 +17,9 @@
 # PARALLAX_STUB_AS_EXIT      - exit with this code instead of 0
 # PARALLAX_STUB_AS_MODE      - normal (default), malformed, noframes,
 #                              rpcerror, hang, dieafterinit, garbage,
-#                              nodata, features-silent, features-rpcerror,
-#                              features-nodata
+#                              nodata, datanull, features-silent,
+#                              features-rpcerror, features-nodata,
+#                              features-datanull
 # PARALLAX_STUB_AS_HANGSECS  - how long `hang` sleeps, default 60
 #
 # Windows PowerShell 5.1 compatible, ASCII ONLY.
@@ -85,8 +86,27 @@ if (-not $payload) { $payload = "[]" }
 
 # The FEATURE payload, same shape rule: raw JSON so a test controls exactly
 # what the parser sees.
+#
+# THE DEFAULT IS NOT EMPTY, and that is deliberate. It was `[]`, which
+# modelled a server that reports no features at all - a server the real one
+# is not. Once the probe began POLICING the features the dispatch disables,
+# an empty default made every ordinary case block on "the feature surface
+# never reported it", which would have been the fixture failing, not the
+# code. A stub that is unlike the real thing in the direction the contract
+# reads is a stub that measures the stub.
+#
+# The default below is copied in SHAPE from the live 2026-08-14 reading on
+# both hosts, never a raw recording: plugins, apps and memories all True in
+# the baseline and all False under the dispatch flags. Any test that needs
+# another shape passes it explicitly.
 $featurePayload = if ($isPass2) { $env:PARALLAX_STUB_AS_FEATURES2 } else { $env:PARALLAX_STUB_AS_FEATURES1 }
-if (-not $featurePayload) { $featurePayload = "[]" }
+if (-not $featurePayload) {
+    $featureDefault = if ($isPass2) { "false" } else { "true" }
+    $featurePayload = '[{"name":"plugins","enabled":' + $featureDefault +
+                      '},{"name":"apps","enabled":' + $featureDefault +
+                      '},{"name":"memories","enabled":' + $featureDefault +
+                      '},{"name":"sqlite","enabled":true}]'
+}
 
 $script:GarbageSent = $false
 
@@ -168,6 +188,16 @@ while ($true) {
             [Console]::Out.WriteLine('{"id":' + $id + ',"result":{}}')
             continue
         }
+        # A DATA MEMBER THAT IS PRESENT AND NULL. The member-presence check
+        # that closed `nodata` accepted this one, and the reducer then
+        # walked `@($null)` - a one-element array holding $null - skipped
+        # its only element, and produced an empty surface and a clean
+        # report. Distinct from `nodata`: this shape passes the check that
+        # stops that one.
+        if ($mode -eq "datanull") {
+            [Console]::Out.WriteLine('{"id":' + $id + ',"result":{"data":null}}')
+            continue
+        }
         # The payload is emitted as raw JSON, not re-serialized, so a test
         # controls the EXACT shape the parser sees - including a null
         # serverInfo, which is the field the whole design turns on.
@@ -189,6 +219,10 @@ while ($true) {
         }
         if ($mode -eq "features-nodata") {
             [Console]::Out.WriteLine('{"id":' + $id + ',"result":{}}')
+            continue
+        }
+        if ($mode -eq "features-datanull") {
+            [Console]::Out.WriteLine('{"id":' + $id + ',"result":{"data":null}}')
             continue
         }
         [Console]::Out.WriteLine('{"id":' + $id + ',"result":{"data":' + $featurePayload + '}}')

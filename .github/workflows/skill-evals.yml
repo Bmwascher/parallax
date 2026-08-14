@@ -80,9 +80,10 @@ jobs:
       # hooks.json invokes the hook as `pwsh`, so another host would not
       # match how it runs.
       #
-      # The 0.24.0 tool-surface probe was added to BOTH lists as soon as it
-      # existed, because leaving it out repeated the 0.16.0 shape exactly.
-      # Its module skips wherever no host is found, so the ubuntu job runs
+      # The 0.24.0 tool-surface probe was NOT added when it was written. It
+      # was in neither list until the final gate run for that same release
+      # went looking, which is the whole reason this comment names it.
+      # Its module skips wherever no host is found, so the ubuntu job ran
       # it under the pwsh that runner ships and windows-latest ran it under
       # nothing at all. That left Windows PowerShell 5.1 uncovered - and
       # 5.1 is the host the probe was BROKEN ON: 5.1 built the process's

@@ -1087,6 +1087,27 @@ Invoke-Drift "agy-allow-null" "noaction" "" 60000
 Assert-True (-not ($script:LastReport -match 'allowNonWorkspaceAccess.*absent')) "a key holding null is PRESENT, and is never reported as removed"
 $snapAfter = Get-SavedSnapshot
 Assert-True ($snapAfter.PSObject.Properties.Name -contains "agyAllowNonWorkspaceAccess") "a present key with a null value still survives in the snapshot"
+# SURVIVING IS NOT THE SAME AS SURVIVING AS ITSELF. Both assertions above
+# are satisfied by a run that saves the WRONG value, and one did: the
+# watcher cast every value through `[string]`, so `null` was recorded as
+# the empty string. Diff debate round 2 named it, and these two close it.
+Assert-True ($null -eq $snapAfter.agyAllowNonWorkspaceAccess) "a null value is saved as NULL, not flattened to an empty string"
+Complete-Scenario $b
+
+# --- scenario: agy-allow-null-to-empty --------------------------------------
+# The change that the `[string]` cast made INVISIBLE. `null` and `""` are
+# different settings values, and the whole point of recording this key is
+# that a change to it is drift - but both rendered as the empty string, so
+# the comparison found them equal and no note was written. Diff debate
+# round 2.
+
+$b = $script:failCount
+Reset-State
+Set-SnapshotWithAgyAllow "1.2.3" "7.7.7" "6.2.0" "1.1.12" $null
+Set-AgySettings '{"allowNonWorkspaceAccess": "", "trustedWorkspaces": ["C:\\fake\\repo"]}'
+Invoke-Drift "agy-allow-null-to-empty" "noaction" "" 60000
+Assert-True ($script:LastReport -match 'allowNonWorkspaceAccess null -> ""') "a null to empty-string change is REPORTED, not absorbed as equal"
+Assert-True ($script:LastExit -eq 0) "a recorded value changing is a note, so the run stays clean"
 Complete-Scenario $b
 
 # --- scenario: agy-settings-null --------------------------------------------
