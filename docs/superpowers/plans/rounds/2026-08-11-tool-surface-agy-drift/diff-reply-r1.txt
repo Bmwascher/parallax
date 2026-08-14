@@ -1,0 +1,83 @@
+Overall: the range is not ready to merge. Claims 1, 2, 3, 4, 7, and 8 fail; claim 5 stands; claim 6 lacks the required fail-first record. Separately, Task 9 is unapplied—the manifest remains `0.23.0`—and the checkpoint’s required verification-results section is empty (`.claude-plugin/plugin.json:3`; `docs/superpowers/plans/2026-08-11-tool-surface-agy-drift.md:488-492`; `.git/parallax/application-checkpoints/2026-08-11-1630-7945ac1-0240-build.md:413-415`).
+
+1. `Test-Transport` still has two false-clean inputs.
+
+   - `Get-LastStatusResponse` silently ignores every nonblank stdout line that does not begin with `{`. Therefore `garbage` followed by a valid status response is clean: `SawAny` and `Unreadable` are never set for the garbage, while the later result is accepted (`tools/codex-tool-surface-probe.ps1:333-363`, `tools/codex-tool-surface-probe.ps1:417-442`). With garbage alone, it blocks but incorrectly says the server “wrote no frames at all,” despite receiving nonblank protocol output (`tools/codex-tool-surface-probe.ps1:429-435`).
+   - A valid JSON response such as `{"id":101,"result":{}}` also passes transport. `Get-Surface` silently converts a missing `data` member into an empty surface, after which pass 2 reaches the clean report (`tools/codex-tool-surface-probe.ps1:375-400`, `tools/codex-tool-surface-probe.ps1:486-527`).
+   - The malformed fixture covers only a truncated line beginning with `{`; neither missing `data` nor garbage-plus-valid is tested (`evals/multi-model-verify/fixtures/stub-appserver/stub-appserver.ps1:122-124`, `evals/multi-model-verify/test_codex_tool_surface_probe.py:278-282`).
+
+   Fix: treat every nonblank stdout line as a JSON-RPC frame or protocol failure; validate that the selected result contains a readable `data` surface; add fail-first cases for garbage-plus-valid and missing-`data` pass 2.
+
+   **FIX**
+
+2. The five newly cited surfaces contain the proxy caveat, but propagation is incomplete. The correct qualification appears in the probe, README, prompting notes, backlog item 7, and item 39 (`tools/codex-tool-surface-probe.ps1:34-40`; `README.md:206-214`; `skills/multi-model-verify/references/model-prompting-notes.md:155-161`; `docs/superpowers/plans/2026-07-27-0150-backlog.md:593-600`; `docs/superpowers/plans/2026-07-27-0150-backlog.md:2567-2588`).
+
+   Operative surfaces still state only that the tool surface “is measured”:
+
+   - `tools/codex-context-probe.ps1:8-15`
+   - `docs/superpowers/plans/rounds/2026-07-28-reviewer-isolation/README.md:23-34`
+   - `docs/superpowers/specs/2026-07-28-reviewer-isolation-design.md:198-203`
+   - `docs/superpowers/specs/2026-07-28-reviewer-isolation-design.md:407-422`
+   - `docs/superpowers/plans/rounds/2026-08-11-tool-surface-agy-drift/README.md:32-37`
+   - the frozen plan itself says the axis moves to “measured” without the later proxy amendment (`docs/superpowers/plans/2026-08-11-tool-surface-agy-drift.md:295-298`).
+
+   Fix: propagate the `app-server`/`exec` proxy qualification to every synthesized standing surface; preserve the frozen body by appending a superseding amendment rather than silently rewriting it.
+
+   **FIX**
+
+3. The two recorded repairs are correctly placed. Launcher resolution selects launchable `.exe`, batch, or PowerShell forms before `Process.Start`, and the stdin encoding is changed before start; the self-check blocks both an unreadable encoding and a surviving preamble (`tools/codex-tool-surface-probe.ps1:134-173`, `tools/codex-tool-surface-probe.ps1:222-270`; `.git/parallax/application-checkpoints/2026-08-11-1630-7945ac1-0240-build.md:209-290`).
+
+   A third host assumption remains: the batch branch uses `cmd.exe /c`, but argument construction quotes tokens only when they contain whitespace. A legal batch path containing a command metacharacter such as `&` but no whitespace is therefore handed to `cmd.exe` unquoted (`tools/codex-tool-surface-probe.ps1:151-160`, `tools/codex-tool-surface-probe.ps1:179-188`). The `.cmd` test exercises only the repository fixture’s ordinary path (`evals/multi-model-verify/test_codex_tool_surface_probe.py:320-329`).
+
+   Fix: use cmd-safe quoting/escaping for the batch path and add a launcher test from a directory containing both whitespace and `&`.
+
+   **FIX**
+
+4. The common normal/failure verdicts align, and filing review 2 Minor 1 as item 40 was a correct scope disposition: the verification surface explicitly named only the agy section, while the standing rule records same-class defects outside the predeclared surface (`.git/parallax/application-checkpoints/2026-08-11-1630-7945ac1-0240-build.md:46-59`; `skills/multi-model-verify/references/debate-protocol.md:108-131`; `docs/superpowers/plans/2026-07-27-0150-backlog.md:2593-2600`).
+
+   There is nevertheless a twelfth disagreement: a parseable settings object containing `"allowNonWorkspaceAccess": null` or `""`. Doctor says a present key is reported as a present informational value (`commands/doctor.md:172-175`). Drift detects presence, casts the value to an empty string, and later interprets that emptiness as key removal, writes an “absent” note, and drops the property from the snapshot (`tools/check-drift.ps1:249-262`, `tools/check-drift.ps1:487-497`, `tools/check-drift.ps1:542-547`).
+
+   Fix: track property presence independently from its value and compare/save the value—including null or empty—without converting presence into truthiness. Add a fail-first `agy-allow-null` scenario.
+
+   **FIX**
+
+5. The narrowing stands. Item 11 expressly says there is no floor because no breakage boundary was measured, and 1.1.12 is only an observed baseline (`docs/superpowers/plans/2026-07-27-0150-backlog.md:957-963`). It limits the pre-dispatch assertion to the brain root because the transcript exists only after a run (`docs/superpowers/plans/2026-07-27-0150-backlog.md:964-966`), while the implementer blocks a missing per-run transcript at the point where one should exist (`agents/flash-implementer.md:81-95`). It also explicitly leaves the broader security property and current `allowNonWorkspaceAccess` semantics open (`docs/superpowers/plans/2026-07-27-0150-backlog.md:968-973`).
+
+   This is contract-drift protection, not a compatibility-floor claim, and the partial-closure label says exactly that.
+
+   **PASS**
+
+6. The current harness contains fifteen agy scenarios, including a positive control that requires both a newly written agy version and the recorded setting value (`evals/tools/drift_statemachine_tests.ps1:926-938`, `evals/tools/drift_statemachine_tests.ps1:940-1140`). The `LOCALAPPDATA` isolation and CRLF writer are load-bearing in the present harness (`evals/tools/drift_statemachine_tests.ps1:127-148`, `evals/tools/drift_statemachine_tests.ps1:352-366`, `evals/tools/drift_statemachine_tests.ps1:430-450`).
+
+   I cannot confirm the historical red-green claim under the project’s evidence rule. The checkpoint requires recorded failure text, but its verification-results section is still empty; it records a fail-first result only for later individual repairs, not the original scenario set or these two fixture changes (`.git/parallax/application-checkpoints/2026-08-11-1630-7945ac1-0240-build.md:77-80`, `.git/parallax/application-checkpoints/2026-08-11-1630-7945ac1-0240-build.md:263-274`, `.git/parallax/application-checkpoints/2026-08-11-1630-7945ac1-0240-build.md:394-415`).
+
+   **ESCALATE**
+
+7. Items 36–39 are narrowly written: item 36 preserves both version-bounded questions, item 37 names only the missing required promotion step, item 38 explicitly retracts the unmeasured `.codex` reachability claim, and item 39 confines itself to the `exec` proxy gap (`docs/superpowers/plans/2026-07-27-0150-backlog.md:2473-2498`; `docs/superpowers/plans/2026-07-27-0150-backlog.md:2509-2531`; `docs/superpowers/plans/2026-07-27-0150-backlog.md:2541-2557`; `docs/superpowers/plans/2026-07-27-0150-backlog.md:2567-2588`).
+
+   Three width failures remain:
+
+   - Item 7 says disabling `node_repl` “removes the only candidate,” even though the same record establishes only that it becomes unreported and cannot distinguish disablement from launch failure (`docs/superpowers/plans/2026-07-27-0150-backlog.md:562-583`; `docs/superpowers/plans/rounds/2026-08-11-tool-surface-agy-drift/README.md:171-173`).
+   - `check-drift.ps1` restates the explicitly retracted “contracts ARE enforced” claim; the probe record says only known operational checks are enforced and the full security property remains unmeasured (`tools/check-drift.ps1:127-139`; `docs/superpowers/plans/rounds/2026-08-11-tool-surface-agy-drift/probe-record.md:300-311`).
+   - Item 40 says the defect “cannot make the watcher miss a real drift,” immediately after demonstrating that a failed version call can be accepted and the run can remain clean (`docs/superpowers/plans/2026-07-27-0150-backlog.md:2602-2617`, `docs/superpowers/plans/2026-07-27-0150-backlog.md:2625-2627`).
+
+   Fix those sentences respectively to “makes unreported,” “known operational checks,” and “may preserve the parsed version string but misses the failed measurement itself.” Filing item 40 rather than fixing it remains the correct disposition.
+
+   **FIX**
+
+8. A material limit is neither implemented nor admitted: item 7 includes the reviewer’s memories feature, and the frozen plan requires both `mcpServerStatus/list` and `experimentalFeature/list` (`docs/superpowers/plans/2026-07-27-0150-backlog.md:484-490`; `docs/superpowers/plans/2026-08-11-tool-surface-agy-drift.md:102-108`). The shipped probe sends `initialize` and repeated `mcpServerStatus/list` calls, then closes stdin; it never sends `experimentalFeature/list` (`tools/codex-tool-surface-probe.ps1:276-301`). The fixture’s feature-list handler is consequently dormant, and the invocation tests require only `app-server --stdio`, not the JSON-RPC methods (`evals/multi-model-verify/fixtures/stub-appserver/stub-appserver.ps1:151-153`; `evals/multi-model-verify/test_codex_tool_surface_probe.py:423-431`).
+
+   The dispatch also does not carry the measured `--disable memories` lever; its fresh and resume commands disable only plugins, apps, and `node_repl` (`skills/multi-model-verify/SKILL.md:175-188`, `skills/multi-model-verify/SKILL.md:237-250`). Thus item 7 is marked DONE while the cross-session memory half of its own problem is neither measured per dispatch nor controlled.
+
+   Fix: reopen item 7/the frozen design; query and validate `experimentalFeature/list`, define an enabled-feature allowlist, decide and apply `--disable memories` on fresh and resume dispatches, and add fail-first tests for missing, malformed, RPC-error, and unexpectedly enabled feature responses. The parser/schema omissions from claim 1 must also be documented or fixed.
+
+   **FIX**
+
+UNVERIFIED:
+
+- Claim 6’s original fail-first history and both fixture-repair reproductions: the current files narrate them, but the required recorded failure outputs are absent.
+- The full pytest suite on the final range: review 2 says it was still running, and the checkpoint never received results (`docs/superpowers/plans/rounds/2026-08-11-tool-surface-agy-drift/fable-review-2-ef428c3-710d74f.md:56-58`; `.git/parallax/application-checkpoints/2026-08-11-1630-7945ac1-0240-build.md:413-415`).
+- The preamble encoding-getter failure remains verified by reading only, exactly as amendment 8 records (`.git/parallax/application-checkpoints/2026-08-11-1630-7945ac1-0240-build.md:408-411`).
+
+Static checks only: `git diff --check ef428c3..835226b` passed, and PowerShell parsing passed for the probe, drift watcher, and state-machine harness. No runtime suite was executed.
+

@@ -148,16 +148,19 @@ function Invoke-AppServer($codex, $extraArgs, $workDir, $timeoutSeconds,
 
     $file = $null
     $prefix = @()
+    $batchPath = $null
     foreach ($ext in @('\.exe$', '\.(cmd|bat)$', '\.ps1$')) {
         $hit = @($candidates | Where-Object { $_ -match $ext }) | Select-Object -First 1
         if (-not $hit) { continue }
         if ($ext -eq '\.exe$') {
             $file = $hit
         } elseif ($ext -eq '\.(cmd|bat)$') {
-            # /c, then the batch path. cmd.exe is the only thing that can
-            # run a batch file, and Process.Start will not do it for us.
+            # cmd.exe is the only thing that can run a batch file, and
+            # Process.Start will not do it for us. The command line is built
+            # separately below, because cmd's own quoting rules are not the
+            # ones every other program uses.
             $file = "$env:SystemRoot\System32\cmd.exe"
-            $prefix = @("/c", $hit)
+            $batchPath = $hit
         } else {
             $file = (Get-Process -Id $PID).Path
             $prefix = @("-NoProfile", "-NonInteractive", "-File", $hit)
@@ -176,16 +179,35 @@ function Invoke-AppServer($codex, $extraArgs, $workDir, $timeoutSeconds,
     $argList.Add("--stdio")
     foreach ($a in $extraArgs) { $argList.Add($a) }
 
+    # The argument STRING, not ArgumentList: Windows PowerShell 5.1's
+    # ProcessStartInfo has no ArgumentList property at all, and reaching for
+    # it there throws on a null.
+    #
+    # Quoting is on whitespace OR any cmd.exe metacharacter, because the
+    # batch branch below hands its line to a shell that RE-PARSES it. A
+    # Windows path cannot contain a double quote, so quoting is always safe.
+    $quote = {
+        param($tok)
+        if ($tok -match '[\s&|<>^()]') { '"' + $tok + '"' } else { $tok }
+    }
+    $tail = ($argList | ForEach-Object { & $quote $_ }) -join " "
+
     $psi = New-Object System.Diagnostics.ProcessStartInfo
     $psi.FileName = $file
-    # The argument STRING, not ArgumentList: Windows PowerShell 5.1's
-    # ProcessStartInfo has no ArgumentList property at all, and reaching
-    # for it there throws on a null. Quoting is applied only to tokens
-    # that contain whitespace; every token this script passes is a bare
-    # flag or a `key=value` with none.
-    $psi.Arguments = ($argList | ForEach-Object {
-        if ($_ -match '\s') { '"' + $_ + '"' } else { $_ }
-    }) -join " "
+    if ($batchPath) {
+        # `/s /c "<whole command line>"`, and the shape is the fix rather
+        # than decoration. Under a bare `/c`, cmd applies a rule that
+        # depends on how many quotes the line has and what sits between
+        # them, so `cmd /c "C:\a & b\x.cmd" app-server --stdio` gets taken
+        # apart and the `&` runs as a command separator. With `/s`, cmd
+        # strips exactly the first and last quote of the remainder and
+        # executes what is left verbatim, which is the one predictable
+        # form. Found by the diff debate at round 1; quoting the path alone
+        # was measured and was NOT enough.
+        $psi.Arguments = '/s /c "' + (& $quote $batchPath) + ' ' + $tail + '"'
+    } else {
+        $psi.Arguments = $tail
+    }
     $psi.UseShellExecute = $false
     $psi.RedirectStandardInput = $true
     $psi.RedirectStandardOutput = $true
@@ -283,9 +305,20 @@ function Invoke-AppServer($codex, $extraArgs, $workDir, $timeoutSeconds,
         for ($n = 1; $n -le $pollCount; $n++) {
             if ($proc.HasExited) { break }
             Start-Sleep -Milliseconds $pollIntervalMs
-            $id = 100 + $n
+            # TWO methods per poll, on two id ranges: 100+ for the server and
+            # tool surface, 200+ for the resolved FEATURE surface.
+            #
+            # `experimentalFeature/list` was in the frozen plan's task 1 from
+            # the start and the first shipped probe simply never sent it -
+            # spec drift, found by the diff debate at round 1, not by any
+            # test here. It matters beyond fidelity: backlog item 7's problem
+            # statement names the memories feature alongside MCP tools, so a
+            # probe that reads only tools closes half an item and reports the
+            # other half as nothing at all.
             $proc.StandardInput.WriteLine(
-                '{"id":' + $id + ',"method":"mcpServerStatus/list","params":{}}')
+                '{"id":' + (100 + $n) + ',"method":"mcpServerStatus/list","params":{}}')
+            $proc.StandardInput.WriteLine(
+                '{"id":' + (200 + $n) + ',"method":"experimentalFeature/list","params":{}}')
             $proc.StandardInput.Flush()
         }
         if (-not $proc.HasExited) { $proc.StandardInput.Close() }
@@ -316,50 +349,74 @@ function Invoke-AppServer($codex, $extraArgs, $workDir, $timeoutSeconds,
 
 # --- parsing -----------------------------------------------------------
 
-function Get-LastStatusResponse($text) {
+function Get-LastResponse($text, $minId, $maxId) {
     <#
-      Return the LAST mcpServerStatus/list response in the stream, or a
-      fault describing why there is none.
+      Return the LAST response in the stream whose id falls in [minId,
+      maxId], or a fault describing why there is none.
 
       The last one is the latest poll, so it is the most-connected view
       the server offered. Taking the first would systematically read the
       surface while servers were still connecting - the very shape that
       makes an unmade measurement look like a clean one.
+
+      TWO RULES HERE WERE WRONG IN THE FIRST VERSION and both were
+      false-cleans found by the diff debate at round 1:
+
+      1. A non-blank line that is not a JSON object used to be SKIPPED.
+         So `garbage` followed by a valid response read as clean, and
+         garbage alone blocked with the untrue reason "wrote no frames at
+         all". Every non-blank line on this stream is supposed to be a
+         JSON-RPC frame; one that is not is a protocol failure, and
+         skipping it is how a parser reports a partial stream as a whole
+         one.
+      2. A result with NO `data` member used to be accepted, and
+         `Get-Surface` then turned it into an empty surface, so
+         `{"id":101,"result":{}}` reached the clean report. A response
+         that carries no surface is not a surface of nothing.
     #>
     $found = $null
     $sawError = $null
     $sawUnreadable = $false
-    $sawAny = $false
+    $sawAnyOutput = $false
+    $sawResultWithoutData = $false
     foreach ($line in ($text -split "`n")) {
         $t = $line.Trim()
         if (-not $t) { continue }
-        if (-not $t.StartsWith("{")) { continue }
-        $sawAny = $true
+        $sawAnyOutput = $true
+        if (-not $t.StartsWith("{")) {
+            $sawUnreadable = $true
+            continue
+        }
         $obj = $null
         try {
             $obj = $t | ConvertFrom-Json
         } catch {
-            # A truncated or malformed frame is not a frame we may skip:
-            # skipping it silently is how a parser reports a partial
-            # stream as a whole one.
             $sawUnreadable = $true
             continue
         }
         if ($null -eq $obj.id) { continue }
-        if ([int]$obj.id -lt 100) { continue }
+        $id = 0
+        try { $id = [int]$obj.id } catch { $sawUnreadable = $true; continue }
+        if ($id -lt $minId -or $id -gt $maxId) { continue }
         if ($obj.PSObject.Properties.Name -contains "error" -and $obj.error) {
             $sawError = $obj.error
             continue
         }
         if ($obj.PSObject.Properties.Name -contains "result") {
+            if ($null -eq $obj.result -or
+                -not ($obj.result.PSObject.Properties.Name -contains "data")) {
+                $sawResultWithoutData = $true
+                continue
+            }
             $found = $obj.result
         }
     }
     return @{
-        Result     = $found
-        RpcError   = $sawError
-        Unreadable = $sawUnreadable
-        SawAny     = $sawAny
+        Result       = $found
+        RpcError     = $sawError
+        Unreadable   = $sawUnreadable
+        SawAnyOutput = $sawAnyOutput
+        ResultNoData = $sawResultWithoutData
     }
 }
 
@@ -414,32 +471,78 @@ function Test-Transport($pass, $label, $asJson) {
             " - the probe could not be taken, so nothing is known about the" +
             " tool surface") $asJson
     }
-    $parsed = Get-LastStatusResponse $pass.Output
+    # Both surfaces are read, and each one's failure directions block on
+    # their own terms. The FEATURE surface is read because the frozen plan
+    # asked for it and because backlog item 7 names the memories feature
+    # beside the MCP tools; a probe that reads only tools answers half of
+    # that item and says nothing about the other half.
+    $status = Read-Surface $pass $label "mcpServerStatus/list" 100 199 $asJson
+    $features = Read-Surface $pass $label "experimentalFeature/list" 200 299 $asJson
+    return @{
+        Servers  = (Get-Surface $status)
+        Features = (Get-Features $features)
+    }
+}
+
+function Read-Surface($pass, $label, $method, $minId, $maxId, $asJson) {
+    $parsed = Get-LastResponse $pass.Output $minId $maxId
     if ($parsed.RpcError) {
-        Write-Blocked ($label + ": the app server answered" +
-            " mcpServerStatus/list with an RPC error (" +
-            [string]$parsed.RpcError.message + "), so no surface was reported") $asJson
+        Write-Blocked ($label + ": the app server answered " + $method +
+            " with an RPC error (" + [string]$parsed.RpcError.message +
+            "), so no surface was reported") $asJson
     }
     if ($null -eq $parsed.Result) {
+        if ($parsed.ResultNoData) {
+            Write-Blocked ($label + ": the app server answered " + $method +
+                " with a result carrying no data member, and a response that" +
+                " carries no surface is not a surface of nothing") $asJson
+        }
         if ($parsed.Unreadable) {
-            Write-Blocked ($label + ": the app server's output could not be" +
-                " read as JSON, and an unreadable stream is not an empty" +
-                " tool surface") $asJson
+            Write-Blocked ($label + ": the app server wrote output that is not" +
+                " a readable JSON-RPC frame, and an unreadable stream is not" +
+                " an empty surface") $asJson
         }
-        if (-not $parsed.SawAny) {
-            Write-Blocked ($label + ": the app server wrote no frames at" +
-                " all, which is an unmade measurement, not an empty tool" +
-                " surface") $asJson
+        if (-not $parsed.SawAnyOutput) {
+            Write-Blocked ($label + ": the app server wrote nothing at all," +
+                " which is an unmade measurement, not an empty surface") $asJson
         }
-        Write-Blocked ($label + ": the app server never answered" +
-            " mcpServerStatus/list, so the surface was never reported") $asJson
+        Write-Blocked ($label + ": the app server never answered " + $method +
+            ", so that surface was never reported") $asJson
     }
     if ($parsed.Unreadable) {
-        Write-Blocked ($label + ": part of the app server's output could not" +
-            " be read as JSON, so the surface read from the rest is a" +
+        Write-Blocked ($label + ": part of the app server's output is not a" +
+            " readable JSON-RPC frame, so the surface read from the rest is a" +
             " partial stream reported as a whole one") $asJson
     }
-    return Get-Surface $parsed.Result
+    if ($parsed.ResultNoData) {
+        Write-Blocked ($label + ": one " + $method + " result carried no data" +
+            " member, so part of what was reported cannot be read as a" +
+            " surface") $asJson
+    }
+    return $parsed.Result
+}
+
+function Get-Features($result) {
+    <#
+      Reduce the feature response to NAME plus resolved enablement.
+
+      This is VISIBILITY, not a control. The frozen plan's DQ1 settled that
+      this list answering proves only that the app server is alive, and it
+      defines no allowlist of acceptable features, so nothing here decides a
+      verdict. What it does is put the reviewer's resolved features - the
+      memories feature among them - into a record that a debate can read,
+      which is the half of backlog item 7 the tool list cannot answer.
+    #>
+    $features = @()
+    foreach ($f in @($result.data)) {
+        if ($null -eq $f) { continue }
+        $enabled = $null
+        foreach ($k in @("enabled", "isEnabled", "value")) {
+            if ($f.PSObject.Properties.Name -contains $k) { $enabled = $f.$k; break }
+        }
+        $features += ,@{ Name = [string]$f.name; Enabled = $enabled }
+    }
+    return $features
 }
 
 # --- main --------------------------------------------------------------
@@ -455,7 +558,8 @@ if ($WorkDir) {
 # Pass 1: BASELINE. No isolation flags. This is the calibration.
 $pass1 = Invoke-AppServer $CodexCommand @() $WorkDir $TimeoutSeconds `
                           $PollIntervalMs $PollCount
-$surface1 = Test-Transport $pass1 "pass 1 (baseline)" $Json
+$read1 = Test-Transport $pass1 "pass 1 (baseline)" $Json
+$surface1 = $read1.Servers
 
 # ONE server that is BOTH running and carrying a tool, as one fact about
 # one server. Counting running servers and tools separately let a
@@ -478,14 +582,23 @@ if ($calibrated.Count -eq 0) {
 # 0.24.0 plan debate. `-c mcp_servers={}` was MEASURED to be inert - it
 # parses, exits 0 and changes nothing - and must never appear here in its
 # place.
+# `--disable memories` is here because the review dispatch carries it, and
+# this pass is worth nothing if it models a configuration the reviewer
+# never receives. Measured 2026-08-12 on the live client, BEFORE the flag
+# was added: the review configuration reported `memories=True`, so the
+# auditor held a cross-session store while plugins and apps were correctly
+# off. Continuity within a review comes from resuming the same session,
+# which the debate protocol already does for every round after the first.
 $dispatchArgs = @(
     "--disable", "plugins",
     "--disable", "apps",
+    "--disable", "memories",
     "-c", "mcp_servers.node_repl.enabled=false"
 )
 $pass2 = Invoke-AppServer $CodexCommand $dispatchArgs $WorkDir $TimeoutSeconds `
                           $PollIntervalMs $PollCount
-$surface2 = Test-Transport $pass2 "pass 2 (dispatch)" $Json
+$read2 = Test-Transport $pass2 "pass 2 (dispatch)" $Json
+$surface2 = $read2.Servers
 
 $unexpected = @()
 foreach ($s in $surface2) {
@@ -511,9 +624,24 @@ if ($silent.Count -gt 0) {
     $note += " Server(s) present but SILENT (no serverInfo, no tools): " +
              ($silent -join ", ") + "."
 }
+# The FEATURE half of the record, and it decides nothing. There is no
+# declared allowlist of acceptable features, so no feature here can block;
+# what this does is make the reviewer's resolved features readable, which
+# is the half of backlog item 7 the tool list cannot answer. A feature
+# enabled in pass 2 that a debate cares about is a decision for a person,
+# and the note says so rather than implying the probe made it.
+$featureNote = "feature enablement is REPORTED, never judged: this probe" +
+               " carries no allowlist of acceptable features, so nothing" +
+               " here blocks and a feature reported enabled in the dispatch" +
+               " configuration has been seen rather than accepted."
 Write-Result "clean" $null ([ordered]@{
-    baseline_servers = @($surface1 | ForEach-Object { $_.Name })
-    baseline_tools   = $tools1.Count
+    baseline_servers  = @($surface1 | ForEach-Object { $_.Name })
+    baseline_tools    = $tools1.Count
+    baseline_features = @($read1.Features | ForEach-Object {
+                            $_.Name + "=" + [string]$_.Enabled })
+    dispatch_features = @($read2.Features | ForEach-Object {
+                            $_.Name + "=" + [string]$_.Enabled })
+    feature_note      = $featureNote
     # MEASURED, not assumed. This was the constant 0, which is exact only
     # while the allowlist is empty: a caller who widens it gets a reviewer
     # holding the allowed tools and a record saying zero. Every tool

@@ -183,7 +183,7 @@ toggled on, its stop-time review overlaps mode `diff` — expected, not a bug.
    $seen = ([System.BitConverter]::ToString(([System.Security.Cryptography.SHA256]::Create()).ComputeHash($bytes)) -replace '-', '').ToLower()
    if ($seen -cne "<override-sha256>") { throw "the override file changed after the probe verified it" }
    $override = (New-Object System.Text.UTF8Encoding($false, $true)).GetString($bytes)
-   $brief | codex exec --sandbox read-only --disable plugins --disable apps -c mcp_servers.node_repl.enabled=false -c $override -m <canonical-model-id> -c model_reasoning_effort=<canonical-effort> --output-last-message <reply-file> - > <transcript-file> 2>&1
+   $brief | codex exec --sandbox read-only --disable plugins --disable apps --disable memories -c mcp_servers.node_repl.enabled=false -c $override -m <canonical-model-id> -c model_reasoning_effort=<canonical-effort> --output-last-message <reply-file> - > <transcript-file> 2>&1
    } finally { $OutputEncoding = $priorOutputEncoding }
    ```
 
@@ -245,7 +245,7 @@ toggled on, its stop-time review overlaps mode `diff` — expected, not a bug.
    $seen = ([System.BitConverter]::ToString(([System.Security.Cryptography.SHA256]::Create()).ComputeHash($bytes)) -replace '-', '').ToLower()
    if ($seen -cne "<override-sha256>") { throw "the override file changed after the probe verified it" }
    $override = (New-Object System.Text.UTF8Encoding($false, $true)).GetString($bytes)
-   $brief | codex exec --sandbox read-only --disable plugins --disable apps -c mcp_servers.node_repl.enabled=false -c $override -m <canonical-model-id> -c model_reasoning_effort=<canonical-effort> --output-last-message <reply-file> resume <SESSION_ID> - > <transcript-file> 2>&1
+   $brief | codex exec --sandbox read-only --disable plugins --disable apps --disable memories -c mcp_servers.node_repl.enabled=false -c $override -m <canonical-model-id> -c model_reasoning_effort=<canonical-effort> --output-last-message <reply-file> resume <SESSION_ID> - > <transcript-file> 2>&1
    } finally { $OutputEncoding = $priorOutputEncoding }
    ```
 

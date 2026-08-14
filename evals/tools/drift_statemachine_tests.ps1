@@ -1072,6 +1072,23 @@ Assert-True ($script:LastReport -match 'did not parse as JSON') "an unparseable 
 Assert-True ($script:LastExit -ne 0) "an unparseable settings file makes the run non-clean"
 Complete-Scenario $b
 
+# --- scenario: agy-allow-null -----------------------------------------------
+# PRESENCE is not the same question as VALUE. A key holding `null` is
+# PRESENT, and reading presence off the value's truthiness made this run
+# report the key as REMOVED, write a note saying so, and drop it from the
+# snapshot - all about a key that is still sitting in the file. Diff debate
+# round 1, claim 4, inside the fix written for the review's minor 6.
+
+$b = $script:failCount
+Reset-State
+Set-SnapshotWithAgyAllow "1.2.3" "7.7.7" "6.2.0" "1.1.12" "True"
+Set-AgySettings '{"allowNonWorkspaceAccess": null, "trustedWorkspaces": ["C:\\fake\\repo"]}'
+Invoke-Drift "agy-allow-null" "noaction" "" 60000
+Assert-True (-not ($script:LastReport -match 'allowNonWorkspaceAccess.*absent')) "a key holding null is PRESENT, and is never reported as removed"
+$snapAfter = Get-SavedSnapshot
+Assert-True ($snapAfter.PSObject.Properties.Name -contains "agyAllowNonWorkspaceAccess") "a present key with a null value still survives in the snapshot"
+Complete-Scenario $b
+
 # --- scenario: agy-settings-null --------------------------------------------
 # A settings file that PARSES and yields nothing. Measured 2026-08-12:
 # `null`, `false` and `[]` all parse without throwing and are all falsy in

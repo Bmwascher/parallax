@@ -32,6 +32,14 @@ item 7.
 > Note what did NOT change: a clean prompt probe is still not full
 > reviewer isolation, and the new probe's ABSENCE direction is a
 > mitigation rather than proof of removal.
+>
+> **NARROWED AGAIN at the 0.24.0 diff debate, round 1.** "Is measured" is
+> itself wider than the evidence. The probe reads `codex app-server`; the
+> review dispatches `codex exec`, and the two resolve their MCP servers
+> independently for everything measured so far. `codex exec` was measured
+> only to ACCEPT the same flags, never probed for its own tool surface. So
+> the tool surface is measured BY PROXY, and backlog item 39 carries the
+> direct measurement.
 
 **Note on `skills-override-used.txt`: it is a HISTORICAL RECORD, not the
 format.** It uses DOUBLE-quoted TOML paths, which is what the debate ran

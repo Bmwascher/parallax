@@ -181,6 +181,12 @@ Canonical reasoning effort: `high`
   allowlist widens what the auditor may hold and belongs in the debate
   record with its reason. `-c mcp_servers={}` must NEVER be used in its
   place: it parses, exits 0, and was measured to change nothing at all.
+  The dispatch also carries `--disable memories` on the fresh call and on
+  every resume. Measured 2026-08-12: without it the review configuration
+  reports `memories=True`, so the auditor holds a CROSS-SESSION store no
+  other control touches; with it the same probe reports `memories=False`.
+  Continuity within one review comes from resuming that review's own
+  session, never from the store.
   <!-- contract:end -->
 - **Effective route confirmation (every call, fresh or resume)**: codex
   echoes the RESOLVED config in its startup header — capture stdout and

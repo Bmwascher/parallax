@@ -1,0 +1,492 @@
+  ok   stub is CRLF: claude.cmd - cmd.exe cannot find a batch label in an LF-only file
+  ok   stub is CRLF: kimi.cmd - cmd.exe cannot find a batch label in an LF-only file
+  ok   stub is CRLF: agy.cmd - cmd.exe cannot find a batch label in an LF-only file
+
+SCENARIO carry-forward
+  ok   exit code 1 on findings
+  ok   claude probe failure is CRITICAL
+  ok   failed probe carries last known claude version forward
+  ok   pending: manual-triage-needed
+  ok   manual CRITICAL toast fired
+
+SCENARIO blocked-verdict
+  ok   BLOCKED falls to the manual path
+  ok   unresolved prior run re-toasted
+  ok   old pending entry kept, new one appended
+  ok   BLOCKED gets its own toast
+  ok   BLOCKED is never reported as a runner failure
+  ok   BLOCKED records no runner failure on the pending entry
+
+SCENARIO no-verdict
+  ok   verdict-less run is not trusted
+  ok   pending: manual-triage-needed
+  ok   a verdict-less run records a generic runner failure
+
+SCENARIO blocked-crash
+  ok   a crashed run carrying a BLOCKED line is not trusted
+  ok   nonzero-exit BLOCKED reports as a runner failure
+  ok   a crashed run is never reported as a deliberate handoff
+  ok   the crash is recorded as the failure reason
+
+SCENARIO credits-death
+  ok   out-of-credits run is not trusted
+  ok   runner stderr reaches the report
+  ok   the stderr TEXT reaches the report
+  ok   toast names the automation, not just the findings
+  ok   toast names the recurring cause
+  ok   pending: manual-triage-needed
+  ok   pending entry carries the failure reason
+
+SCENARIO failure-resurfaces
+  ok   prior runner failure re-surfaces in the report
+  ok   prior runner failure re-surfaces in the toast
+
+SCENARIO critical-dismissal
+  ok   trusted NO-ACTION recorded
+  ok   CRITICAL dismissal demands verification
+  ok   manual toast suppressed on trusted dismissal
+  ok   pending: critical-dismissal-needs-verification
+
+SCENARIO warn-only-silence
+  ok   template hash drift is a WARN
+  ok   no CRITICAL finding in this run
+  ok   trusted NO-ACTION recorded
+  ok   WARN-only dismissal is SILENT - no toast at all
+  ok   WARN-only dismissal leaves no pending entry
+
+SCENARIO pending-auto-clear
+  ok   vanished fix branch clears its pending entry
+  ok   no unresolved re-toast after the auto-clear
+  ok   only this run's new entry remains
+
+SCENARIO fixes-applied
+  ok   fix committed on a drift branch
+  ok   script-side cross-review verdict recorded
+  ok   fix-ready toast fired
+  ok   pending: fix-branch-open
+  ok   fix branch exists with the verified commit
+
+SCENARIO gate-failure
+  ok   a fix that breaks the suite is rejected by the script's own gate
+  ok   no commit claim on a failed gate
+  ok   no success toast on a failed gate
+  ok   manual toast on a failed gate
+  ok   no drift branch survives a failed gate
+  ok   pending: manual-triage-needed
+
+SCENARIO malformed-review
+  ok   the verified fix still commits
+  ok   off-grammar review reads as UNAVAILABLE
+  ok   an off-grammar answer is never reported as a reviewer verdict
+  ok   the toast carries the UNAVAILABLE state, not silence
+
+SCENARIO commit-failure
+  ok   failed commit is reported and discarded
+  ok   manual toast on commit failure
+  ok   pending: manual-triage-needed
+  ok   no orphan drift branch survives a failed commit
+
+SCENARIO route-mismatch
+  ok   the verified fix still commits
+  ok   header/canonical disagreement is reported as a route mismatch
+  ok   route mismatch reads as UNAVAILABLE
+  ok   a mismatched route is never reported as a reviewer verdict
+
+SCENARIO auth-preflight-fail
+  ok   the verified fix still commits
+  ok   failed preflight records the auth reason
+  ok   no reviewer verdict without a passed preflight
+
+SCENARIO kimi-flag-drift
+  ok   flag drop raises the agent-file drift finding
+  ok   the floor check stays quiet on a flag-only drop
+
+SCENARIO kimi-short-flag-drift
+  ok   a dropped short flag is caught even with the other four intact
+
+SCENARIO kimi-below-floor
+  ok   a below-floor version raises the floor finding
+
+SCENARIO kimi-unparseable-version
+  ok   an unparseable version raises its own finding rather than passing the floor check
+
+SCENARIO kimi-version-carry
+  ok   failed kimi probe carries the last known-good version forward
+  ok   a present-but-broken binary is reported as a finding, not silently skipped
+
+SCENARIO agy-contracts-clean
+  ok   a healthy agy lane produces no agy finding and no agy note
+  ok   a clean run exits 0
+  FAIL the probed agy version is written to the snapshot
+  FAIL allowNonWorkspaceAccess is RECORDED so a change to it is visible next week
+  --- report ---
+parallax drift watch - 2026-08-14_130106
+claude: 1.2.3 | codex: 7.7.7 | superpowers: 6.2.0
+
+No findings.
+
+Notes:
+  superpowers template matches pinned fixture (sha256 7677bb7ab7b2...)
+
+  --- toasts ---
+
+  --- script output (exit 0) ---
+parallax drift watch - 2026-08-14_130106
+claude: 1.2.3 | codex: 7.7.7 | superpowers: 6.2.0
+
+No findings.
+
+Notes:
+  superpowers template matches pinned fixture (sha256 7677bb7ab7b2...)
+
+
+SCENARIO agy-version-unreadable
+  FAIL an unreadable agy version is a FINDING, not a note
+  FAIL an unreadable agy version makes the run NON-CLEAN - a note would have exited 0
+  ok   the prior snapshot value is PRESERVED, not overwritten with an empty one
+  --- report ---
+parallax drift watch - 2026-08-14_130106
+claude: 1.2.3 | codex: 7.7.7 | superpowers: 6.2.0
+
+No findings.
+
+Notes:
+  superpowers template matches pinned fixture (sha256 7677bb7ab7b2...)
+
+  --- toasts ---
+
+  --- script output (exit 0) ---
+parallax drift watch - 2026-08-14_130106
+claude: 1.2.3 | codex: 7.7.7 | superpowers: 6.2.0
+
+No findings.
+
+Notes:
+  superpowers template matches pinned fixture (sha256 7677bb7ab7b2...)
+
+
+SCENARIO agy-version-fail
+  FAIL a failed agy --version is a finding
+  FAIL a failed agy --version makes the run non-clean
+  --- report ---
+parallax drift watch - 2026-08-14_130107
+claude: 1.2.3 | codex: 7.7.7 | superpowers: 6.2.0
+
+No findings.
+
+Notes:
+  superpowers template matches pinned fixture (sha256 7677bb7ab7b2...)
+
+  --- toasts ---
+
+  --- script output (exit 0) ---
+parallax drift watch - 2026-08-14_130107
+claude: 1.2.3 | codex: 7.7.7 | superpowers: 6.2.0
+
+No findings.
+
+Notes:
+  superpowers template matches pinned fixture (sha256 7677bb7ab7b2...)
+
+
+SCENARIO agy-version-fail-loud
+  FAIL a non-zero exit is a finding even when the output parses as a version
+  FAIL a failed version call makes the run non-clean
+  ok   the version printed by a FAILED call is discarded, not saved as measured
+  ok   the snapshot was actually rewritten, so the carried version is a decision and not a leftover
+  --- report ---
+parallax drift watch - 2026-08-14_130107
+claude: 1.2.3 | codex: 7.7.7 | superpowers: 6.2.0
+
+No findings.
+
+Notes:
+  superpowers template matches pinned fixture (sha256 7677bb7ab7b2...)
+
+  --- toasts ---
+
+  --- script output (exit 0) ---
+parallax drift watch - 2026-08-14_130107
+claude: 1.2.3 | codex: 7.7.7 | superpowers: 6.2.0
+
+No findings.
+
+Notes:
+  superpowers template matches pinned fixture (sha256 7677bb7ab7b2...)
+
+
+SCENARIO agy-allow-removed
+  FAIL a REMOVED key is reported, not absorbed by the carry-forward
+  FAIL the removed key does not survive in the snapshot as a measured value
+  --- report ---
+parallax drift watch - 2026-08-14_130107
+claude: 1.2.3 | codex: 7.7.7 | superpowers: 6.2.0
+
+No findings.
+
+Notes:
+  superpowers template matches pinned fixture (sha256 7677bb7ab7b2...)
+
+  --- toasts ---
+
+  --- script output (exit 0) ---
+parallax drift watch - 2026-08-14_130107
+claude: 1.2.3 | codex: 7.7.7 | superpowers: 6.2.0
+
+No findings.
+
+Notes:
+  superpowers template matches pinned fixture (sha256 7677bb7ab7b2...)
+
+
+SCENARIO agy-version-changed
+  FAIL an agy version change is REPORTED, not carried silently
+  ok   a readable version change is a note, so the run stays clean
+  --- report ---
+parallax drift watch - 2026-08-14_130108
+claude: 1.2.3 | codex: 7.7.7 | superpowers: 6.2.0
+
+No findings.
+
+Notes:
+  superpowers template matches pinned fixture (sha256 7677bb7ab7b2...)
+
+  --- toasts ---
+
+  --- script output (exit 0) ---
+parallax drift watch - 2026-08-14_130108
+claude: 1.2.3 | codex: 7.7.7 | superpowers: 6.2.0
+
+No findings.
+
+Notes:
+  superpowers template matches pinned fixture (sha256 7677bb7ab7b2...)
+
+
+SCENARIO agy-model-renamed
+  FAIL a renamed model is a finding naming the literal it looked for
+  FAIL a renamed model makes the run non-clean
+  --- report ---
+parallax drift watch - 2026-08-14_130108
+claude: 1.2.3 | codex: 7.7.7 | superpowers: 6.2.0
+
+No findings.
+
+Notes:
+  superpowers template matches pinned fixture (sha256 7677bb7ab7b2...)
+
+  --- toasts ---
+
+  --- script output (exit 0) ---
+parallax drift watch - 2026-08-14_130108
+claude: 1.2.3 | codex: 7.7.7 | superpowers: 6.2.0
+
+No findings.
+
+Notes:
+  superpowers template matches pinned fixture (sha256 7677bb7ab7b2...)
+
+
+SCENARIO agy-models-fail
+  FAIL a failed models call is a finding carrying the exit code
+  FAIL a failed models call makes the run non-clean
+  --- report ---
+parallax drift watch - 2026-08-14_130108
+claude: 1.2.3 | codex: 7.7.7 | superpowers: 6.2.0
+
+No findings.
+
+Notes:
+  superpowers template matches pinned fixture (sha256 7677bb7ab7b2...)
+
+  --- toasts ---
+
+  --- script output (exit 0) ---
+parallax drift watch - 2026-08-14_130108
+claude: 1.2.3 | codex: 7.7.7 | superpowers: 6.2.0
+
+No findings.
+
+Notes:
+  superpowers template matches pinned fixture (sha256 7677bb7ab7b2...)
+
+
+SCENARIO agy-settings-missing
+  FAIL a missing settings file is a finding
+  FAIL a missing settings file makes the run non-clean
+  --- report ---
+parallax drift watch - 2026-08-14_130109
+claude: 1.2.3 | codex: 7.7.7 | superpowers: 6.2.0
+
+No findings.
+
+Notes:
+  superpowers template matches pinned fixture (sha256 7677bb7ab7b2...)
+
+  --- toasts ---
+
+  --- script output (exit 0) ---
+parallax drift watch - 2026-08-14_130109
+claude: 1.2.3 | codex: 7.7.7 | superpowers: 6.2.0
+
+No findings.
+
+Notes:
+  superpowers template matches pinned fixture (sha256 7677bb7ab7b2...)
+
+
+SCENARIO agy-settings-malformed
+  FAIL an unparseable settings file is a finding, not an empty config
+  FAIL an unparseable settings file makes the run non-clean
+  --- report ---
+parallax drift watch - 2026-08-14_130109
+claude: 1.2.3 | codex: 7.7.7 | superpowers: 6.2.0
+
+No findings.
+
+Notes:
+  superpowers template matches pinned fixture (sha256 7677bb7ab7b2...)
+
+  --- toasts ---
+
+  --- script output (exit 0) ---
+parallax drift watch - 2026-08-14_130109
+claude: 1.2.3 | codex: 7.7.7 | superpowers: 6.2.0
+
+No findings.
+
+Notes:
+  superpowers template matches pinned fixture (sha256 7677bb7ab7b2...)
+
+
+SCENARIO agy-allow-null
+  ok   a key holding null is PRESENT, and is never reported as removed
+  ok   a present key with a null value still survives in the snapshot
+
+SCENARIO agy-settings-null
+  FAIL a settings file that parses to nothing is a finding, not a skipped check
+  FAIL a settings file that measures no contract makes the run non-clean
+  --- report ---
+parallax drift watch - 2026-08-14_130110
+claude: 1.2.3 | codex: 7.7.7 | superpowers: 6.2.0
+
+No findings.
+
+Notes:
+  superpowers template matches pinned fixture (sha256 7677bb7ab7b2...)
+
+  --- toasts ---
+
+  --- script output (exit 0) ---
+parallax drift watch - 2026-08-14_130110
+claude: 1.2.3 | codex: 7.7.7 | superpowers: 6.2.0
+
+No findings.
+
+Notes:
+  superpowers template matches pinned fixture (sha256 7677bb7ab7b2...)
+
+
+SCENARIO agy-trustedworkspaces-shape
+  FAIL a changed settings shape is a finding
+  FAIL a changed settings shape makes the run non-clean
+  --- report ---
+parallax drift watch - 2026-08-14_130110
+claude: 1.2.3 | codex: 7.7.7 | superpowers: 6.2.0
+
+No findings.
+
+Notes:
+  superpowers template matches pinned fixture (sha256 7677bb7ab7b2...)
+
+  --- toasts ---
+
+  --- script output (exit 0) ---
+parallax drift watch - 2026-08-14_130110
+claude: 1.2.3 | codex: 7.7.7 | superpowers: 6.2.0
+
+No findings.
+
+Notes:
+  superpowers template matches pinned fixture (sha256 7677bb7ab7b2...)
+
+
+SCENARIO agy-trustedworkspaces-absent
+  FAIL a missing trustedWorkspaces key is a finding
+  FAIL a missing trustedWorkspaces key makes the run non-clean
+  --- report ---
+parallax drift watch - 2026-08-14_130110
+claude: 1.2.3 | codex: 7.7.7 | superpowers: 6.2.0
+
+No findings.
+
+Notes:
+  superpowers template matches pinned fixture (sha256 7677bb7ab7b2...)
+
+  --- toasts ---
+
+  --- script output (exit 0) ---
+parallax drift watch - 2026-08-14_130110
+claude: 1.2.3 | codex: 7.7.7 | superpowers: 6.2.0
+
+No findings.
+
+Notes:
+  superpowers template matches pinned fixture (sha256 7677bb7ab7b2...)
+
+
+SCENARIO agy-brain-missing
+  FAIL a missing brain root is a finding: the lane's authorship evidence lives there
+  FAIL a missing brain root makes the run non-clean
+  --- report ---
+parallax drift watch - 2026-08-14_130111
+claude: 1.2.3 | codex: 7.7.7 | superpowers: 6.2.0
+
+No findings.
+
+Notes:
+  superpowers template matches pinned fixture (sha256 7677bb7ab7b2...)
+
+  --- toasts ---
+
+  --- script output (exit 0) ---
+parallax drift watch - 2026-08-14_130111
+claude: 1.2.3 | codex: 7.7.7 | superpowers: 6.2.0
+
+No findings.
+
+Notes:
+  superpowers template matches pinned fixture (sha256 7677bb7ab7b2...)
+
+
+SCENARIO agy-absent
+  FAIL an absent agy is reported as an unavailable lane
+  ok   an absent lane raises no CRITICAL - the contracts do not fire against a lane that is not installed
+  ok   an absent optional lane does not fail the run
+  --- report ---
+parallax drift watch - 2026-08-14_130111
+claude: 1.2.3 | codex: 7.7.7 | superpowers: 6.2.0
+
+No findings.
+
+Notes:
+  superpowers template matches pinned fixture (sha256 7677bb7ab7b2...)
+
+  --- toasts ---
+
+  --- script output (exit 0) ---
+parallax drift watch - 2026-08-14_130111
+claude: 1.2.3 | codex: 7.7.7 | superpowers: 6.2.0
+
+No findings.
+
+Notes:
+  superpowers template matches pinned fixture (sha256 7677bb7ab7b2...)
+
+
+SCENARIO triage-timeout
+  ok   hung agent killed at the cap
+  ok   manual toast after the timeout
+  ok   pending: manual-triage-needed
+
+28 ASSERTION(S) FAILED

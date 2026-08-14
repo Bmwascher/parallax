@@ -12,7 +12,9 @@
 # `codex debug`; false of codex. The app server answers
 # `mcpServerStatus/list`, free and local. Read that script's own header
 # before trusting either probe: a clean tool-surface result is a
-# MITIGATION, not proof of removal.
+# MITIGATION, not proof of removal, and it reads `codex app-server` while
+# the review dispatches `codex exec`, so it is a PROXY for the reviewer's
+# own surface rather than a reading of it (backlog item 39).
 #
 # Preflight 3 has only ever enumerated the REVIEWED TREE. Every source that
 # hijacked a review on 2026-07-28 - the user's codex plugin cache, the

@@ -35,6 +35,14 @@ not full reviewer isolation, and item 7 is the reason.
 > tool-list half becomes measured, while the prompt flag-parity limit at
 > `docs/superpowers/specs/2026-07-28-reviewer-isolation-design.md:184-197`
 > stays unverified and becomes the reason on its own. Task 3 splits them.
+>
+> **NARROWED at the diff debate, round 1.** "The tool-list half becomes
+> measured" is wider than the evidence: the probe reads `codex app-server`
+> and the review dispatches `codex exec`, so it is measured BY PROXY and
+> item 39 carries the direct measurement. The same round found that the
+> probe never sent `experimentalFeature/list` at all, which the frozen
+> plan's Task 1 required; that is fixed, and the memories feature it
+> exposes is now both measured and disabled on every dispatch.
 
 ## Round 0 — VOID, and the cost was real
 

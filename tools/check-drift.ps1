@@ -131,15 +131,25 @@ if (-not $codexVersion) {
 # the item's own quoted version, 1.1.8, became 1.1.12 across four releases
 # without a word in any report.
 #
-# The lane's contracts ARE enforced - `agents/flash-implementer.md:45-59`
-# runs three of them as a per-dispatch preflight and blocks a missing
-# transcript after the run. What was missing is any check EARLIER than
-# dispatch, so a drift surfaced mid-build on a frozen plan with the round's
-# budget already committed. These checks move the discovery earlier. They
-# do not replace the enforcement.
+# The lane's KNOWN OPERATIONAL CHECKS are enforced -
+# `agents/flash-implementer.md:45-59` runs three of them as a per-dispatch
+# preflight and blocks a missing transcript after the run. That is not the
+# same as the lane's contracts being enforced: the security property in
+# backlog item 11 is UNMEASURED and stays open. What was missing is any
+# check EARLIER than dispatch, so a drift surfaced mid-build on a frozen
+# plan with the round's budget already committed. These checks move the
+# discovery earlier. They do not replace the enforcement, and they do not
+# cover what was never measured.
 $agyVersion = ""
 $agyExe = ""
 $agyAllowNonWorkspace = ""
+# PRESENCE, tracked separately from the VALUE. Reading presence off the
+# value's truthiness made `"allowNonWorkspaceAccess": null` and `""` - both
+# legal, both PRESENT - read as a removed key: the run then wrote a
+# "removed" note about a key that is still there and dropped it from the
+# snapshot. Found by the diff debate at round 1, in the fix written for the
+# review's minor 6.
+$agyAllowPresent = $false
 # Whether settings.json was READ AND PARSED this run. Distinguishing that
 # from "no value" is what separates a key that was REMOVED from a key that
 # was never measured, and the two must not share a carry-forward.
@@ -258,6 +268,7 @@ if (-not $agyExe) {
                 $findings += "[CRITICAL] agy settings.json trustedWorkspaces is not an array (got $($tw.GetType().Name)) - the file's shape changed and the lane's preflight reads it positionally"
             }
             if ($agyCfg.PSObject.Properties.Name -contains "allowNonWorkspaceAccess") {
+                $agyAllowPresent = $true
                 $agyAllowNonWorkspace = [string]$agyCfg.allowNonWorkspaceAccess
             }
         }
@@ -479,7 +490,7 @@ if ($snapshot -and $agyVersion -and $snapshot.agy -and ($snapshot.agy -ne $agyVe
 # The relaxation, recorded so a CHANGE to it is visible. Recording is not
 # measuring, and the note says so: what `true` permits outside the
 # workspace is UNMEASURED on the installed version.
-if ($agyAllowNonWorkspace -and $snapshot -and
+if ($agyAllowPresent -and $snapshot -and
     ($snapshot.PSObject.Properties.Name -contains "agyAllowNonWorkspaceAccess") -and
     ([string]$snapshot.agyAllowNonWorkspaceAccess -ne $agyAllowNonWorkspace)) {
     $notes += "agy allowNonWorkspaceAccess $($snapshot.agyAllowNonWorkspaceAccess) -> $agyAllowNonWorkspace (what this permits outside the workspace is UNMEASURED - backlog item 36)"
@@ -491,7 +502,7 @@ if ($agyAllowNonWorkspace -and $snapshot -and
 # to it is watched" was true of a changed value and false of a removed one.
 # Found by the 0.24.0 whole-branch review. Guarded on PARSED, because a
 # settings file that could not be read has measured nothing either way.
-if ($agySettingsParsed -and -not $agyAllowNonWorkspace -and $snapshot -and
+if ($agySettingsParsed -and -not $agyAllowPresent -and $snapshot -and
     ($snapshot.PSObject.Properties.Name -contains "agyAllowNonWorkspaceAccess")) {
     $notes += "agy allowNonWorkspaceAccess $($snapshot.agyAllowNonWorkspaceAccess) -> absent (the key was REMOVED from settings.json; what that changes for the lane is UNMEASURED - backlog item 36)"
 }
@@ -539,12 +550,15 @@ $newSnapshot = @{
 # that parsed perfectly - so a deletion was restored from last week and the
 # snapshot went on asserting it. A parsed file with no key is a
 # MEASUREMENT of absence, and absence is what gets saved.
-$agyAllowToSave = $agyAllowNonWorkspace
-if (-not $agyAllowToSave -and -not $agySettingsParsed -and $snapshot -and
-    ($snapshot.PSObject.Properties.Name -contains "agyAllowNonWorkspaceAccess")) {
-    $agyAllowToSave = [string]$snapshot.agyAllowNonWorkspaceAccess
+# Saved on PRESENCE, never on truthiness. A key that is present and holds
+# `null` or `""` is a measured value and must be stored as one; storing on
+# truthiness dropped it and then reported it removed next week.
+if ($agyAllowPresent) {
+    $newSnapshot.agyAllowNonWorkspaceAccess = $agyAllowNonWorkspace
+} elseif (-not $agySettingsParsed -and $snapshot -and
+          ($snapshot.PSObject.Properties.Name -contains "agyAllowNonWorkspaceAccess")) {
+    $newSnapshot.agyAllowNonWorkspaceAccess = [string]$snapshot.agyAllowNonWorkspaceAccess
 }
-if ($agyAllowToSave) { $newSnapshot.agyAllowNonWorkspaceAccess = $agyAllowToSave }
 $newSnapshot | ConvertTo-Json | Set-Content -Path $SnapshotFile
 
 # --- unresolved prior run (pending disposition) --------------------------------

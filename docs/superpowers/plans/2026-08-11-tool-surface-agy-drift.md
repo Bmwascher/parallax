@@ -520,3 +520,54 @@ item; do not flip it this cycle.** `false` was measured to break the
 lane's intended writes on agy 1.1.7. Two things stay unmeasured on 1.1.12:
 whether `false` still denies, and what `true` permits outside the
 workspace. See Task 8.
+
+---
+
+## Amendment 1 — appended after the diff debate, round 1 (2026-08-12)
+
+The body above is FROZEN and is not rewritten. This amendment supersedes
+the two places it is wider than what was measured, and records one build
+deviation the debate found.
+
+**A. "Measured" is measured BY PROXY.** Task 3's instruction at lines
+295-298 moves the tool axis from "unmeasured" to "measured, with the
+absence direction a mitigation". A third qualification belongs there: the
+probe reads `codex app-server`, while the review dispatches `codex exec`.
+For everything measured so far the two resolve their MCP servers
+independently, and `codex exec` was measured only to ACCEPT the same flags
+(build checkpoint amendment 4), never probed for its own tool surface. So
+a clean result is a proxy for the reviewer's surface, not a reading of it.
+Backlog item 39 carries the direct measurement.
+
+**B. Task 1 was BUILT INCOMPLETE, and no deviation was recorded.** Task 1
+at lines 106-108 requires the probe to send `mcpServerStatus/list` AND
+`experimentalFeature/list`. The first shipped probe sent only the first.
+That is spec drift, and the implementer makes no judgment calls, so it is
+a finding rather than a choice; it was found by the diff debate at round
+1, not by any test in this build.
+
+It matters beyond fidelity. Backlog item 7's own problem statement names
+the memories feature beside the MCP tools, so a probe that reads only
+tools closes half an item and says nothing at all about the other half.
+
+Fixed: the probe now sends both methods on every poll, on separate id
+ranges, and every failure direction of the feature surface blocks exactly
+as the status surface's does.
+
+**C. What that missing half then measured, on the live client,
+2026-08-12.** The review configuration reported `memories=True` while
+`plugins` and `apps` were correctly false. The reviewer held a
+cross-session store that no control in this repo touched.
+
+The user's decision, recorded verbatim: "Memory should be off by default,
+I think. And then we use the same session when needed to retain memory for
+the specific review job." That is what shipped. `--disable memories` now
+rides the fresh dispatch and every resume, and continuity within one
+review comes from resuming that review's own session, which the debate
+protocol already does for every round after the first.
+
+Measured after the change: `memories=False` in the dispatch configuration,
+`memories=True` in the baseline, from the same probe in the same run.
+`codex exec` was separately measured to ACCEPT the flag - exit 0, clean
+route - because the last time a flag was verified only against
+`app-server` it nearly shipped unverified on the subcommand that matters.

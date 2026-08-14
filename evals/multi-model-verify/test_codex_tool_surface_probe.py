@@ -81,8 +81,19 @@ TWO_SERVERS = json.dumps([
 ])
 
 
+# A feature record in the shape the app server reports one. Copied in SHAPE
+# only. `memories` is here because backlog item 7 names it beside the MCP
+# tools: the tool list cannot answer that half of the item, and the first
+# shipped probe never asked for this surface at all.
+FEATURES = json.dumps([
+    {"name": "memories", "enabled": True},
+    {"name": "some_other_feature", "enabled": False},
+])
+
+
 def run_probe(pass1=HEALTHY, pass2=EMPTY, mode=None, exit_code=None,
-              hang_secs=None, extra=(), log=None, timeout=90):
+              hang_secs=None, extra=(), log=None, timeout=90,
+              features1=None, features2=None):
     """Drive the probe against the stub app server.
 
     The stub is a .ps1 and is invoked IN-PROCESS through -CodexCommand, the
@@ -94,6 +105,10 @@ def run_probe(pass1=HEALTHY, pass2=EMPTY, mode=None, exit_code=None,
     env = dict(os.environ)
     env["PARALLAX_STUB_AS_PASS1"] = pass1
     env["PARALLAX_STUB_AS_PASS2"] = pass2
+    if features1 is not None:
+        env["PARALLAX_STUB_AS_FEATURES1"] = features1
+    if features2 is not None:
+        env["PARALLAX_STUB_AS_FEATURES2"] = features2
     if mode:
         env["PARALLAX_STUB_AS_MODE"] = mode
     if exit_code is not None:
@@ -293,6 +308,47 @@ class TestEveryTransportFailureDirectionBlocks:
         assert v["status"] == "blocked"
         assert proc.returncode == 1
 
+    def test_garbage_before_a_valid_frame_blocks(self):
+        # Diff debate round 1, claim 1. A non-blank line that is not a
+        # JSON-RPC frame used to be SKIPPED, so garbage followed by a
+        # perfectly valid response read as CLEAN, and garbage alone blocked
+        # with the untrue reason "wrote no frames at all". Every non-blank
+        # line on this stream is meant to be a frame.
+        proc = run_probe(mode="garbage")
+        v = verdict(proc)
+        assert v["status"] == "blocked", v
+        assert proc.returncode == 1
+        assert "readable JSON-RPC frame" in v["reason"], v["reason"]
+
+    def test_a_result_with_no_data_member_blocks(self):
+        # Diff debate round 1, claim 1. `{"id":101,"result":{}}` is
+        # well-formed JSON with the right id and NO surface in it. It used
+        # to become an empty surface and reach the clean report: a response
+        # that carries no surface is not a surface of nothing.
+        proc = run_probe(mode="nodata")
+        v = verdict(proc)
+        assert v["status"] == "blocked", v
+        assert proc.returncode == 1
+        assert "no data member" in v["reason"], v["reason"]
+
+    def test_a_silent_feature_surface_blocks(self):
+        proc = run_probe(mode="features-silent")
+        v = verdict(proc)
+        assert v["status"] == "blocked", v
+        assert "experimentalFeature/list" in v["reason"], v["reason"]
+
+    def test_a_feature_rpc_error_blocks(self):
+        proc = run_probe(mode="features-rpcerror")
+        v = verdict(proc)
+        assert v["status"] == "blocked", v
+        assert "experimentalFeature/list" in v["reason"], v["reason"]
+
+    def test_a_feature_result_with_no_data_blocks(self):
+        proc = run_probe(mode="features-nodata")
+        v = verdict(proc)
+        assert v["status"] == "blocked", v
+        assert "no data member" in v["reason"], v["reason"]
+
     def test_a_hanging_server_blocks_on_the_timeout(self):
         proc = run_probe(mode="hang", hang_secs=45,
                          extra=["-TimeoutSeconds", "5"], timeout=120)
@@ -330,6 +386,31 @@ class TestTheLauncherResolution:
         v = verdict(proc)
         assert v["status"] == "clean", v
         assert proc.returncode == 0
+
+    def test_a_cmd_launcher_in_a_path_with_a_metacharacter_starts(self):
+        # Diff debate round 1, claim 3. The batch branch hands the path to
+        # `cmd.exe /c`, which RE-PARSES it, and the argument builder quoted
+        # only on whitespace. A legal directory called `a & b` with an
+        # ampersand in it therefore arrived as a command separator. The .cmd
+        # case above uses the fixture's ordinary path and could never catch
+        # it.
+        stub_dir = STUB.parent
+        with tempfile.TemporaryDirectory() as td:
+            odd = Path(td) / "a & b (x)"
+            odd.mkdir()
+            for name in ("stub-appserver.ps1", "stub-appserver.cmd"):
+                shutil.copy(stub_dir / name, odd / name)
+            env = dict(os.environ)
+            env["PARALLAX_STUB_AS_PASS1"] = HEALTHY
+            env["PARALLAX_STUB_AS_PASS2"] = EMPTY
+            proc = subprocess.run(
+                [POWERSHELL, "-NoProfile", "-NonInteractive", "-File", str(PROBE),
+                 "-CodexCommand", str(odd / "stub-appserver.cmd"), "-Json"],
+                capture_output=True, text=True, env=env, timeout=180)
+            v = verdict(proc)
+            assert v["status"] == "clean", (
+                "a path with a cmd metacharacter did not start: "
+                + json.dumps(v) + " / stderr: " + proc.stderr)
 
     def test_an_unlaunchable_command_blocks_rather_than_reporting_nothing(self):
         # The failure direction. A probe that cannot start has measured
@@ -389,6 +470,36 @@ class TestTheFramesGoOutIntactOnBothHosts:
                 " / stderr: " + proc.stderr)
 
 
+class TestTheFeatureSurfaceIsReadAtAll:
+    """The frozen plan's task 1 named TWO JSON-RPC methods and the first
+    shipped probe sent one.
+
+    That is spec drift, and it was found by the diff debate rather than by
+    any test here. It is not a formality: backlog item 7's problem
+    statement names the memories feature beside the MCP tools, so a probe
+    that reads only tools answers half the item and reports nothing at all
+    about the other half.
+    """
+
+    def test_the_feature_surface_is_requested_and_reported(self):
+        proc = run_probe(pass1=HEALTHY, pass2=EMPTY,
+                         features1=FEATURES, features2=FEATURES)
+        v = verdict(proc)
+        assert v["status"] == "clean", v
+        assert "memories=True" in v["baseline_features"], v
+        assert "memories=True" in v["dispatch_features"], v
+
+    def test_the_feature_report_states_that_it_judges_nothing(self):
+        # There is no declared allowlist of acceptable features, so nothing
+        # here may read as acceptance. A record that lists an enabled
+        # feature without saying it was not judged is exactly the kind of
+        # quiet promotion this repo keeps finding in its own text.
+        proc = run_probe(pass1=HEALTHY, pass2=EMPTY,
+                         features1=FEATURES, features2=FEATURES)
+        v = verdict(proc)
+        assert "seen rather than accepted" in v["feature_note"], v
+
+
 class TestTheInvocationContract:
     """Pass 2 must carry the flags the real dispatch carries. A probe that
     measured a configuration the reviewer never receives is measuring
@@ -419,6 +530,20 @@ class TestTheInvocationContract:
         assert "mcp_servers.node_repl.enabled=false" in second, second
         assert "mcp_servers={}" not in second, (
             "the inert lever must never ship as a control: " + second)
+
+    def test_pass_2_disables_the_reviewers_cross_session_memory(self):
+        # The probe is worth nothing if pass 2 models a configuration the
+        # reviewer never receives. The review dispatch carries
+        # `--disable memories`, so this pass must too.
+        with tempfile.TemporaryDirectory() as td:
+            log = Path(td) / "calls.jsonl"
+            run_probe(pass1=HEALTHY, pass2=EMPTY, log=log)
+            calls = [json.loads(ln) for ln in
+                     log.read_text(encoding="utf-8").splitlines() if ln.strip()]
+        first, second = " ".join(calls[0]), " ".join(calls[1])
+        assert "memories" in second, second
+        assert "memories" not in first, (
+            "pass 1 is the BASELINE and must carry no isolation flag: " + first)
 
     def test_both_passes_run_app_server_over_stdio(self):
         with tempfile.TemporaryDirectory() as td:

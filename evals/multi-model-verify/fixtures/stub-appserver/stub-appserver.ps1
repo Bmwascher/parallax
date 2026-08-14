@@ -12,9 +12,13 @@
 # PARALLAX_STUB_AS_LOG       - file to append one JSON array per call to
 # PARALLAX_STUB_AS_PASS1     - JSON for pass 1's mcpServerStatus/list data
 # PARALLAX_STUB_AS_PASS2     - JSON for pass 2's data
+# PARALLAX_STUB_AS_FEATURES1 - JSON for pass 1's experimentalFeature/list
+# PARALLAX_STUB_AS_FEATURES2 - JSON for pass 2's
 # PARALLAX_STUB_AS_EXIT      - exit with this code instead of 0
 # PARALLAX_STUB_AS_MODE      - normal (default), malformed, noframes,
-#                              rpcerror, hang, dieafterinit
+#                              rpcerror, hang, dieafterinit, garbage,
+#                              nodata, features-silent, features-rpcerror,
+#                              features-nodata
 # PARALLAX_STUB_AS_HANGSECS  - how long `hang` sleeps, default 60
 #
 # Windows PowerShell 5.1 compatible, ASCII ONLY.
@@ -79,6 +83,13 @@ $isPass2 = ($args -contains "--disable") -and ($args -contains "plugins")
 $payload = if ($isPass2) { $env:PARALLAX_STUB_AS_PASS2 } else { $env:PARALLAX_STUB_AS_PASS1 }
 if (-not $payload) { $payload = "[]" }
 
+# The FEATURE payload, same shape rule: raw JSON so a test controls exactly
+# what the parser sees.
+$featurePayload = if ($isPass2) { $env:PARALLAX_STUB_AS_FEATURES2 } else { $env:PARALLAX_STUB_AS_FEATURES1 }
+if (-not $featurePayload) { $featurePayload = "[]" }
+
+$script:GarbageSent = $false
+
 [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
 
 # THE FIRST FRAME IS CHECKED STRICTLY, and this is a regression guard
@@ -124,6 +135,15 @@ while ($true) {
         continue
     }
 
+    # GARBAGE-THEN-VALID. A non-blank line that is not a JSON-RPC frame at
+    # all, emitted BEFORE the real answer, so the rest of the exchange is
+    # perfectly well formed. The probe used to skip such a line and report
+    # the valid answer as a whole stream.
+    if ($mode -eq "garbage" -and -not $script:GarbageSent) {
+        $script:GarbageSent = $true
+        [Console]::Out.WriteLine('this line is not a json-rpc frame')
+    }
+
     if ($method -eq "initialize") {
         [Console]::Out.WriteLine((ConvertTo-Json -Compress -Depth 6 @{
             id = $id
@@ -141,6 +161,13 @@ while ($true) {
             }))
             continue
         }
+        # A RESULT WITH NO DATA MEMBER. Well-formed JSON, correct id, and no
+        # surface in it at all. The probe used to turn this into an empty
+        # surface and report clean.
+        if ($mode -eq "nodata") {
+            [Console]::Out.WriteLine('{"id":' + $id + ',"result":{}}')
+            continue
+        }
         # The payload is emitted as raw JSON, not re-serialized, so a test
         # controls the EXACT shape the parser sees - including a null
         # serverInfo, which is the field the whole design turns on.
@@ -149,7 +176,22 @@ while ($true) {
     }
 
     if ($method -eq "experimentalFeature/list") {
-        [Console]::Out.WriteLine('{"id":' + $id + ',"result":{"data":[]}}')
+        # The feature surface the frozen plan asked for and the first
+        # shipped probe never requested. Its failure directions are the same
+        # as the status surface's, so they are stubbable the same way.
+        if ($mode -eq "features-silent") { continue }
+        if ($mode -eq "features-rpcerror") {
+            [Console]::Out.WriteLine((ConvertTo-Json -Compress -Depth 6 @{
+                id = $id
+                error = @{ code = -32601; message = "method not found" }
+            }))
+            continue
+        }
+        if ($mode -eq "features-nodata") {
+            [Console]::Out.WriteLine('{"id":' + $id + ',"result":{}}')
+            continue
+        }
+        [Console]::Out.WriteLine('{"id":' + $id + ',"result":{"data":' + $featurePayload + '}}')
         continue
     }
 }

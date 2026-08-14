@@ -196,11 +196,13 @@ those flags and compare. Treat the two as an unmeasured difference, not a
 proven irrelevance.
 
 **0.24.0: this is NO LONGER the same surface as backlog item 7, and the
-sentence saying so has been removed.** Item 7 was the TOOL surface, and
-it is now measured and closed. This is the PROMPT surface under
-unrequestable flags, it is still unverified, and it now stands on its own
-rather than borrowing a closed item's tracking. Nothing about it was
-measured this cycle.
+sentence saying so has been removed.** Item 7 was the TOOL surface, and it
+is now measured BY PROXY and closed on that basis: the probe reads
+`codex app-server` while the review dispatches `codex exec`, which was
+measured only to ACCEPT the same flags (backlog item 39 carries the direct
+measurement). This is the PROMPT surface under unrequestable flags, it is
+still unverified, and it now stands on its own rather than borrowing a
+closed item's tracking. Nothing about it was measured this cycle.
 
 - **Repo-scoped** — any path inside the reviewed tree. STOP and remediate
   in the mirror. This is preflight 3's existing rule, unchanged.
@@ -412,6 +414,13 @@ unchanged.
   resolved MCP server and every tool, starts no turn, and costs nothing.
   `tools/codex-tool-surface-probe.ps1` reads it, and backlog item 7 is
   CLOSED.
+
+  **Narrowed again at the 0.24.0 diff debate, round 1:** what that probe
+  reads is `codex app-server`'s surface, while the review dispatches
+  `codex exec`. The two resolve their MCP servers independently for
+  everything measured so far, and `exec` was measured only to ACCEPT the
+  same flags. The reading is therefore a PROXY, and backlog item 39 carries
+  the direct measurement.
 
   Two things this cycle did NOT settle, and they are why the limit is
   narrowed rather than deleted. `-c mcp_servers={}`, named above as an

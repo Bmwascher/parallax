@@ -141,10 +141,27 @@ class TestTransportContract:
         # --disable plugins removes all 31 and the recommended-plugins
         # block; --disable apps removes the apps block.
         text = read(SKILL_MD)
-        assert text.count("--disable plugins --disable apps") >= 2, (
+        assert text.count("--disable plugins --disable apps --disable memories") >= 2, (
             "the isolation flags must ride BOTH the dispatch and the resume"
             " - nothing carries across a resume by itself, which is the"
             " same trap --sandbox read-only already documents"
+        )
+
+    def test_the_reviewers_cross_session_memory_is_disabled(self):
+        # 0.24.0, diff debate round 1. Measured on the live client that day:
+        # the review configuration reported `memories=True`, so the auditor
+        # carried a cross-session store while `plugins` and `apps` were
+        # correctly false. Backlog item 7 names that store in its own
+        # problem statement, beside the MCP tools.
+        #
+        # Continuity WITHIN a review is not lost by this: the debate already
+        # resumes the same session for every round after the first, which is
+        # where a review's memory is supposed to live.
+        text = read(SKILL_MD)
+        assert text.count("--disable memories") >= 2, (
+            "the memories flag must ride BOTH the fresh dispatch and the"
+            " resume: a flag on the fresh call alone leaves every later"
+            " round of the same debate holding the store"
         )
 
     def test_the_verified_override_is_what_gets_dispatched(self):
@@ -244,7 +261,8 @@ class TestTransportContract:
         # debate's model (cross-review finding, 2026-07-12).
         assert re.search(
             r"codex exec --sandbox read-only --disable plugins"
-            r" --disable apps -c mcp_servers\.node_repl\.enabled=false"
+            r" --disable apps --disable memories"
+            r" -c mcp_servers\.node_repl\.enabled=false"
             r" -c \$override -m <canonical-model-id>"
             r" -c model_reasoning_effort=<canonical-effort>"
             r" [^\n]*resume <SESSION_ID>", text
@@ -483,6 +501,7 @@ class TestTransportContract:
         assert re.search(
             r"\$brief \| codex exec"
             r" --sandbox read-only --disable plugins --disable apps"
+            r" --disable memories"
             r" -c mcp_servers\.node_repl\.enabled=false"
             r" -c \$override -m <canonical-model-id>"
             r" -c model_reasoning_effort=<canonical-effort>"
@@ -829,7 +848,13 @@ class TestTransportContract:
             "  the two feature flags alone are not the whole control. Widening this\n"
             "  allowlist widens what the auditor may hold and belongs in the debate\n"
             "  record with its reason. `-c mcp_servers={}` must NEVER be used in its\n"
-            "  place: it parses, exits 0, and was measured to change nothing at all."
+            "  place: it parses, exits 0, and was measured to change nothing at all.\n"
+            "  The dispatch also carries `--disable memories` on the fresh call and on\n"
+            "  every resume. Measured 2026-08-12: without it the review configuration\n"
+            "  reports `memories=True`, so the auditor holds a CROSS-SESSION store no\n"
+            "  other control touches; with it the same probe reports `memories=False`.\n"
+            "  Continuity within one review comes from resuming that review's own\n"
+            "  session, never from the store."
         ) in text
 
     def test_both_dispatches_disable_the_surviving_mcp_server(self):
