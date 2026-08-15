@@ -1,0 +1,48 @@
+The functional fixes stand, but the range is not dry because the new PowerShell 7 scenario can still be skipped while the enclosing gate exits successfully. The final verification record is also stale.
+
+1. The rebuilt bare-object case now discriminates correctly. The malformed object is supplied only to baseline while pass 2 receives the complete valid disabled set (`evals/multi-model-verify/test_codex_tool_surface_probe.py:750-774`). Pre-fix, baseline feature data was coerced and no baseline feature policy rejected it; only pass 2’s features are policed, so the run reached CLEAN (`tools/codex-tool-surface-probe.ps1:698-717`; `tools/codex-tool-surface-probe.ps1:743-802`).
+
+   The two reason assertions are specific: `"not a list"` originates from the collection guard, while the pass label is supplied by the baseline caller (`tools/codex-tool-surface-probe.ps1:616-620`; `tools/codex-tool-surface-probe.ps1:698-702`). I found no unrelated blocked path containing both.
+
+   **PASS**
+
+2. The depth threshold and both test shapes are correct. The metric counts the scalar leaf, and the guard now permits depth 101 but blocks greater values (`tools/check-drift.ps1:208-234`; `tools/check-drift.ps1:373-410`). I reproduced the boundaries:
+
+   - On 5.1, the 99-loop value measures 101, serializes intact, and does not fire; the next level fails parsing.
+   - On PowerShell 7, values measuring 102 and 152 truncate at `-Depth 100` and satisfy the guard.
+
+   The boundary case requires both absence of the depth finding and exit 0 (`evals/tools/drift_statemachine_tests.ps1:1226-1245`). The over-boundary case requires the precise depth finding, the “NOT recorded” consequence, and nonzero exit (`evals/tools/drift_statemachine_tests.ps1:1247-1279`). One scenario explicitly naming PowerShell 7 does not misrepresent the others: the invocation defaults to 5.1 and only that call supplies `pwsh.exe` (`evals/tools/drift_statemachine_tests.ps1:533-550`; `evals/tools/drift_statemachine_tests.ps1:1271-1279`).
+
+   Two defects remain:
+
+   - When `pwsh.exe` is absent, the harness increments only `skipCount`; its final exit remains `$script:failCount`, so it exits 0 (`evals/tools/drift_statemachine_tests.ps1:1261-1269`; `evals/tools/drift_statemachine_tests.ps1:1363-1375`; `evals/tools/drift_statemachine_tests.ps1:1405`). The pytest caller checks only that exit code and never reads the qualified summary (`evals/multi-model-verify/test_multi_model_verify.py:2866-2879`). Thus an unmade required measurement still passes the actual gate.
+   - The scenario comment says “CI runs both hosts,” but the live state machine is slow and opt-in, while the workflow’s dual-host steps do not include its module (`evals/tools/drift_statemachine_tests.ps1:1261-1265`; `README.md:381-394`; `.github/workflows/skill-evals.yml:93-125`).
+
+   A smaller width error also remains: the local guard comment still universally says `ConvertTo-Json` does not warn, contradicting the preceding host-specific correction that PowerShell 7 does warn (`tools/check-drift.ps1:185-201`; `tools/check-drift.ps1:366-372`).
+
+   **FIX — make any skipped required scenario produce a nonzero harness result, correct the CI statement, and narrow the stale warning comment to Windows PowerShell 5.1.**
+
+3. The nested-array change case uses the measured collapsing shape, seeds a distinct old value, and requires both the deep leaf name and new value in the report (`evals/tools/drift_statemachine_tests.ps1:1206-1224`). Those assertions cannot be satisfied by an arbitrary finding: neither `leaf` nor `TWO` appears elsewhere in the scenario’s report inputs. Values within the admitted depth are serialized exactly; deeper values now become findings, so I found no remaining silently equal array shape (`tools/check-drift.ps1:204-205`; `tools/check-drift.ps1:406-410`).
+
+   **PASS**
+
+4. The item title now includes both necessary qualifications—refreshed and non-identical—and matches the body’s measured condition (`docs/superpowers/plans/2026-07-27-0150-backlog.md:2705`; `docs/superpowers/plans/2026-07-27-0150-backlog.md:2740-2747`).
+
+   **PASS**
+
+5. Preserving the dispatched brief verbatim is the correct disposition. The record declares briefs and replies immutable artifacts while identifying itself as the synthesized standing record (`docs/superpowers/plans/rounds/2026-08-11-tool-surface-agy-drift/diff-debate-record.md:3-7`). Its correction names the exact false wording, supplies the narrower replacement, and explains why the original remains unchanged (`docs/superpowers/plans/rounds/2026-08-11-tool-surface-agy-drift/diff-debate-record.md:275-282`). A future reader can distinguish historical input from current conclusion without losing either.
+
+   **PASS**
+
+6. The five-instance half-fix count is supported by the checkpoint’s enumerated class, and the index incident is recorded with the observed `MM`, staged diff, cleanup, and subsequent hash verification (`.git/parallax/application-checkpoints/2026-08-11-1630-7945ac1-0240-build.md:806-850`). The current index is empty.
+
+   The checkpoint’s final-gates section was not refreshed after these fixes. It still records 125 assertions across 41 scenarios and identifies `agy-allow-nested-array` as the only added scenario (`.git/parallax/application-checkpoints/2026-08-11-1630-7945ac1-0240-build.md:1112-1130`). The current harness additionally contains array-change, 5.1-boundary, and PowerShell-7-over-boundary scenarios with seven new assertions (`evals/tools/drift_statemachine_tests.ps1:1206-1279`). Consequently, the checkpoint does not retain a final green run for the tree at `99d1961`.
+
+   **FIX — rerun the final state machine after fixing skip handling and append its actual scenario/assertion/skip counts; preserve the existing 125/41 result explicitly as the pre-round-6 run.**
+
+UNVERIFIED:
+
+- The exact historical “2 red, 48 green” probe run and seven-red array fail-watch. The checkpoint records their totals but retains no raw output for those two runs (`.git/parallax/application-checkpoints/2026-08-11-1630-7945ac1-0240-build.md:793-804`). Their current shapes and pre-fix discrimination were independently verified; only the historical execution totals remain unverified.
+- The claimed full final gates on `99d1961`. The checkpoint’s retained final section still describes the earlier 125/41 tree (`.git/parallax/application-checkpoints/2026-08-11-1630-7945ac1-0240-build.md:1112-1130`).
+
+**Is this range DRY? No.** One moderate evidence false-clean remains: absence of PowerShell 7 still produces a successful enclosing gate. The stale final-gate record and two comment-width errors are minor but outstanding.

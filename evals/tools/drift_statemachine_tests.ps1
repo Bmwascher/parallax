@@ -65,7 +65,9 @@
 # (test_multi_model_verify.py::TestDriftStateMachine::test_run_state_machine).
 #
 # Windows PowerShell 5.1, ASCII ONLY (same rules as the script under test).
-# Exit code = number of failed assertions (0 = all pass).
+# Exit code = failed assertions PLUS skipped scenarios (0 = every scenario
+# ran and every assertion passed). A skip counts because the only thing the
+# pytest caller reads is this number.
 
 param(
     [switch]$KeepTemp
@@ -1261,8 +1263,14 @@ Complete-Scenario $b
 $b = $script:failCount
 $pwshCmd = Get-Command pwsh.exe -ErrorAction SilentlyContinue
 if (-not $pwshCmd) {
-    # NOT a pass. CI runs both hosts, so this is a local-machine gap and it
-    # is named rather than swallowed.
+    # NOT a pass, and NOT a quiet one either: the skip is counted into the
+    # exit code, so a machine without pwsh.exe FAILS this harness instead of
+    # reporting success over a measurement it never made.
+    #
+    # This suite is local-only and opt-in - it is NOT in the CI dual-host
+    # job - so nothing else in the pipeline would make this measurement if
+    # this run declined to. An earlier version of this comment claimed CI
+    # covered it. It does not.
     Write-Output ""
     Write-Output "SCENARIO agy-allow-depth-over-boundary SKIPPED: pwsh.exe not on PATH"
     $script:skipCount++
@@ -1361,17 +1369,17 @@ Complete-Scenario $b
 # --- summary -----------------------------------------------------------------------
 
 Write-Output ""
-# A skip is reported even when everything else passes. "ALL SCENARIOS PASS"
-# on a run that silently skipped one would be a claim wider than the run.
+# A skip is reported AND counted into the exit code. The only thing the
+# pytest caller reads is that exit code, so a qualified summary line on a
+# zero exit would still let an unmade measurement pass the actual gate -
+# which is the exact shape this suite exists to catch.
 foreach ($n in $script:skipNames) { Write-Output "SKIPPED: $n" }
-if ($script:failCount -eq 0) {
-    if ($script:skipCount -eq 0) {
-        Write-Output "ALL SCENARIOS PASS"
-    } else {
-        Write-Output "ALL SCENARIOS RUN PASS - $($script:skipCount) SKIPPED, listed above"
-    }
+if ($script:failCount -eq 0 -and $script:skipCount -eq 0) {
+    Write-Output "ALL SCENARIOS PASS"
+} elseif ($script:failCount -eq 0) {
+    Write-Output "$($script:skipCount) SCENARIO(S) SKIPPED - the run is NOT clean; a measurement that was not made is not a passing one"
 } else {
-    Write-Output "$($script:failCount) ASSERTION(S) FAILED"
+    Write-Output "$($script:failCount) ASSERTION(S) FAILED, $($script:skipCount) SCENARIO(S) SKIPPED"
 }
 
 } finally {
@@ -1402,4 +1410,6 @@ if ($script:failCount -eq 0) {
     }
 }
 
-exit $script:failCount
+# Failures AND skips. The caller (test_multi_model_verify.py) asserts only
+# that this is 0, so a skip left out of it would read as a clean run.
+exit ($script:failCount + $script:skipCount)

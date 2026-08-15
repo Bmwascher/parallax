@@ -366,10 +366,13 @@ if (-not $agyExe) {
                 # THE POSTCONDITION, MEASURED. A value nested deeper than
                 # the serializer can represent would be written to the
                 # snapshot as rendered text and every later comparison would
-                # run against that instead of the value - silently, because
-                # ConvertTo-Json does not warn when it truncates. Depth is
-                # therefore measured rather than trusted, and a value past
-                # the ceiling is a FINDING. Diff debate, round 4.
+                # run against that instead of the value - silently on
+                # Windows PowerShell 5.1, which emits NO warning when it
+                # truncates. PowerShell 7 does warn; see Get-ValueToken
+                # above for both measurements. A guard built on the warning
+                # would therefore work on one host and do nothing on the
+                # other, so depth is measured rather than trusted, and a
+                # value past the ceiling is a FINDING. Diff debate, round 4.
                 # THE THRESHOLD IS $JsonMaxDepth + 1, NOT $JsonMaxDepth, and
                 # the difference was a real false positive. Get-ValueDepth
                 # counts the scalar leaf as level 1, while -Depth counts
