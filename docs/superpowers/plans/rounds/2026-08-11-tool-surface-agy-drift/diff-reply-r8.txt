@@ -1,0 +1,42 @@
+The status and gate-input corrections stand. The range is still not dry: the timing attribution remains unbound to a specific tree, and item 48’s corrected inventory still contains false and incomplete statements.
+
+1. Every numbered item now appears exactly once with an explicit status. The corrected headings for 12, 15, 27 and 28 say OPEN (`docs/superpowers/plans/2026-07-27-0150-backlog.md:1106`, `docs/superpowers/plans/2026-07-27-0150-backlog.md:1193`, `docs/superpowers/plans/2026-07-27-0150-backlog.md:2204`, `docs/superpowers/plans/2026-07-27-0150-backlog.md:2233`). Mechanical enumeration yields 22 DONE/CLOSED, 2 PARTIAL, 1 GONE and 23 OPEN, exactly matching the four summary partitions (`docs/superpowers/plans/2026-07-27-0150-backlog.md:25`, `docs/superpowers/plans/2026-07-27-0150-backlog.md:31`, `docs/superpowers/plans/2026-07-27-0150-backlog.md:33`, `docs/superpowers/plans/2026-07-27-0150-backlog.md:34`). The missing-status rule is now explicit (`docs/superpowers/plans/2026-07-27-0150-backlog.md:17-23`).
+
+   **PASS**
+
+2. The first timing triple is still not tied to a specific tree. Item 44 labels `1186/1152/1092` only as “the gate run that preceded the round-6 fixes” (`docs/superpowers/plans/2026-07-27-0150-backlog.md:2955-2964`). But the checkpoint already retains a different run after round 5 and before the round-6 fixes—`1190/1161/1104` (`.git/parallax/application-checkpoints/2026-08-11-1630-7945ac1-0240-build.md:1155-1163`). Its shipping-tree run is separately and correctly bound to `e713081` with `1184/1148/1097` (`.git/parallax/application-checkpoints/2026-08-11-1630-7945ac1-0240-build.md:1112-1124`).
+
+   Thus “before the fixes” does not uniquely identify the first triple, and no retained section identifies its commit or distinguishes it from the checkpoint’s other pre-fix run.
+
+   **FIX — bind `1186/1152/1092` to a commit/tree and retain that run beside the others; otherwise mark those exact timings unverified or remove them.**
+
+3. Two corrected implementation readings stand: `new-kimi-lane-login.ps1` launches its validator under the current process host (`tools/new-kimi-lane-login.ps1:279-286`), `kimi-lane-lock.ps1` merely classifies transparent ancestor processes (`tools/kimi-lane-lock.ps1:884-887`), and `Invoke-Drift` defaults its optional host inside the helper (`evals/tools/drift_statemachine_tests.ps1:535-542`).
+
+   The broader inventory still fails:
+
+   - `check-drift.ps1` has one execution-host pin, not two. The scheduled-task action selects `powershell.exe` (`tools/check-drift.ps1:94-102`); the AppId is passed to `CreateToastNotifier` and selects notification identity, not the interpreter executing the watcher (`tools/check-drift.ps1:60-69`). Calling both “5.1 pins” and both proven migration work is wider than the code (`docs/superpowers/plans/2026-07-27-0150-backlog.md:3233-3240`).
+   - The claimed “working re-exec pattern” does not change hosts or re-execute itself. It launches a sibling validator under the same host with a fixed argument set (`tools/new-kimi-lane-login.ps1:279-286`). It supplies reusable mechanics, but it is not evidence that a 5.1-to-7 re-exec preserves arbitrary caller arguments (`docs/superpowers/plans/2026-07-27-0150-backlog.md:3318-3327`).
+   - Visible launch edges are missing from the seven-item seed inventory (`docs/superpowers/plans/2026-07-27-0150-backlog.md:3279-3306`): `new-kimi-lane-home.ps1` independently launches the credential validator under the current host (`tools/new-kimi-lane-home.ps1:256-265`); `new-review-mirror.ps1` launches the context probe under its current host (`tools/new-review-mirror.ps1:1141-1149`); and the brief-encoding test directly hardcodes `powershell.exe` independently of the state-machine entry (`evals/multi-model-verify/test_multi_model_verify.py:2900-2915`).
+   - The pre-push entry says it is not installed in this checkout (`docs/superpowers/plans/2026-07-27-0150-backlog.md:3285-3289`), but this checkout’s Git configuration sets `core.hooksPath = .githooks` (`.git/config:1`, `.git/config:8`), exactly the activation method documented by the hook itself (`.githooks/pre-push:10`). It is active here, not merely a sample.
+
+   **FIX — distinguish execution-host selection from toast identity; narrow the Kimi wrapper to reusable same-host mechanics; add script-to-script and test-runner launch edges; correct the pre-push installation state.**
+
+4. The scheduled-task consequence is correct. Registration writes a complete `/TR` command containing `powershell.exe`; changing the script later does not rewrite an already registered Task Scheduler action (`tools/check-drift.ps1:94-102`). Re-registration or an explicit migration is required.
+
+   There is another installed-state layer: plugin installs are versioned cache copies, and checkout edits do not reach them until version bump, plugin update and—where hooks change—restart (`CLAUDE.md:90-102`). Item 48 surveys checkout `hooks/hooks.json` but does not explicitly include the installed cache that actually supplies the live hook (`docs/superpowers/plans/2026-07-27-0150-backlog.md:3285`). By contrast, this checkout’s pre-push hook points at the tracked `.githooks` directory and therefore is not a detached copied artifact (`.git/config:8`, `.githooks/pre-push:10`).
+
+   **FIX — retain the scheduled-task consequence and add the versioned plugin cache as a distinct installed entry point, while distinguishing it from the tracked `.githooks` path.**
+
+5. The “no gate input changed” reasoning is established. The behavioral sweep explicitly excludes `docs/**` because retained plans and round evidence are historical rather than dispatch surfaces (`evals/multi-model-verify/test_backup_lane.py:1115-1133`), and contract coverage enumerates only `skills`, `agents` and `commands` documents (`evals/multi-model-verify/test_contract_coverage.py:609-615`). The newly tracked round files identify themselves as retained round-7 input and reply (`docs/superpowers/plans/rounds/2026-08-11-tool-surface-agy-drift/diff-brief-r7.md:1-7`, `docs/superpowers/plans/rounds/2026-08-11-tool-surface-agy-drift/diff-reply-r7.txt:1-7`). I found no evaluation path reading the backlog.
+
+   Therefore not rerunning the long code-sensitive gates is justified by unchanged inputs; this is stronger than merely assuming Markdown cannot matter.
+
+   **PASS**
+
+UNVERIFIED:
+
+- The existence and exact results of the `1186/1152/1092` run. Those values appear only in item 44 and are not retained with a tree identifier (`docs/superpowers/plans/2026-07-27-0150-backlog.md:2955-2964`).
+- The claimed round-8 executions of the four static gates and contract-coverage suite. Their success is in the commit message but not in a file-based gate record; the checkpoint’s latest static-gate record predates this correction (`.git/parallax/application-checkpoints/2026-08-11-1630-7945ac1-0240-build.md:1122-1128`).
+- The live Task Scheduler state on this machine. The registration semantics are readable, but no scheduler query was retained (`tools/check-drift.ps1:94-102`).
+
+**Is this range DRY? No.** There is no new code defect. The remaining defects are moderate record/plan errors: one unbound measurement and an item-48 entry-point baseline that still confuses notification identity with execution, overstates a same-host child launch as re-exec proof, omits known launch edges, and misstates the active pre-push configuration.
