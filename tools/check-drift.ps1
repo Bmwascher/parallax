@@ -178,13 +178,27 @@ function Get-ValueToken($v) {
 
       AND THE POSTCONDITION IS MEASURED, not assumed. Round 4 objected that
       "nothing representable is lost" rested on trusting the parser, and
-      asked for truncation to be turned into a finding. It could not be
-      done the obvious way: MEASURED on Windows PowerShell 5.1,
-      ConvertTo-Json emits NO WARNING when it truncates - zero warnings
-      while silently writing `@{d=}` in place of the value. There is
-      nothing to catch. So the depth of the value is measured directly
-      instead, and anything past the serializer's limit is a FINDING rather
-      than a silently shortened record.
+      asked truncation to be turned into a finding. It is - by measuring
+      the VALUE'S DEPTH rather than by catching a warning, and the reason
+      is a HOST DIFFERENCE that was itself measured wrong once.
+
+      Measured 2026-08-15, both hosts, warnings captured rather than
+      suppressed:
+
+        Windows PowerShell 5.1  truncates SILENTLY. Zero warnings, for a
+                                Hashtable and for a PSCustomObject alike.
+        PowerShell 7            emits one warning: "Resulting JSON is
+                                truncated as serialization has exceeded
+                                the set depth of N."
+
+      An earlier measurement here concluded "no warning on either host"
+      and this comment said so. That measurement had passed
+      -WarningAction SilentlyContinue, which is how a check reports the
+      absence of the thing it silenced. Corrected.
+
+      So a warning-based guard would work on 7 and do nothing on 5.1,
+      which is the shape that has bitten this repo before. Measuring the
+      depth works identically on both, so that is what this does.
     #>
 
     if ($null -eq $v) { return "null" }
@@ -356,8 +370,41 @@ if (-not $agyExe) {
                 # ConvertTo-Json does not warn when it truncates. Depth is
                 # therefore measured rather than trusted, and a value past
                 # the ceiling is a FINDING. Diff debate, round 4.
+                # THE THRESHOLD IS $JsonMaxDepth + 1, NOT $JsonMaxDepth, and
+                # the difference was a real false positive. Get-ValueDepth
+                # counts the scalar leaf as level 1, while -Depth counts
+                # CONTAINER levels, so a value that serialises perfectly at
+                # -Depth 100 measures 101. The first version fired on it.
+                # Reproduced on 5.1 by the diff debate at round 5 and again
+                # here: at 99 nested objects the value parses, measures 101,
+                # serialises INTACT - and the guard raised a CRITICAL
+                # finding against it. A watcher that reports drift on a
+                # healthy file is its own kind of false measurement.
+                #
+                # WHERE IT CAN AND CANNOT FIRE, measured on both hosts
+                # rather than argued. `ConvertFrom-Json` on Windows
+                # PowerShell 5.1 has its own recursion limit and THROWS at
+                # 100 nested levels; 99 parses, measures 101, and
+                # serialises intact. So with the corrected threshold the
+                # deepest value 5.1 can even parse does NOT fire this, and
+                # on that host the protection that actually fires is the
+                # unparseable-settings finding above - which IS covered by
+                # a scenario. An earlier version of this comment called the
+                # guard "unreachable on 5.1"; it was reachable, as exactly
+                # the false positive described above.
+                #
+                # PowerShell 7's parser accepts far deeper input than the
+                # serializer can write, so the gap between what parses and
+                # what -Depth 100 represents is real there, and this is the
+                # guard for it. BOTH directions are covered, on the host
+                # each one needs: the 5.1 boundary scenario proves the
+                # deepest parseable value stays clean, and an over-boundary
+                # scenario naming pwsh.exe proves a value past the ceiling
+                # is reported. The rest of the harness still drives 5.1
+                # only (backlog item 41); that one scenario names its host
+                # rather than the harness changing hosts.
                 $agyAllowDepth = Get-ValueDepth $agyAllowNonWorkspace $null
-                if ($agyAllowDepth -gt $JsonMaxDepth) {
+                if ($agyAllowDepth -gt ($JsonMaxDepth + 1)) {
                     $findings += "[CRITICAL] agy settings.json allowNonWorkspaceAccess nests $agyAllowDepth levels, deeper than the $JsonMaxDepth this watcher can record - the value would be stored truncated and every later comparison would run against the truncation, so it is NOT recorded this run"
                     $agyAllowPresent = $false
                     $agyAllowNonWorkspace = $null

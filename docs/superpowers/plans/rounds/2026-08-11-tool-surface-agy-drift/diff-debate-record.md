@@ -241,3 +241,42 @@ a decision the session made for itself.
 
 Watched to fail against the pre-fix code: two probe cases with 48 green,
 and five drift assertions.
+
+### Round 5 — 2026-08-15, FRESH session, binding CLEAN, verdict DRY: NO
+
+**Dispatched FRESH rather than resumed, and that was a deliberate trade.**
+Rounds 1 to 4 ran in one session across 08-12 to 08-14. It was now a new
+day, and a refreshed preamble is the condition item 42 describes; a day
+boundary is the one cause observed to produce it, and it had already cost
+a whole round on 08-14. Rather than spend the single authorised round on a
+dispatch likely to be discarded unread, the session gave up the reviewer's
+continuity instead. The brief said so, pointed the reviewer at its own
+retained replies, and told it to treat the claims as claims rather than as
+agreed history.
+
+Brief `diff-brief-r5.md`, canonical sha256 `2d16391ca8b1a663...`. Reply
+retained verbatim at `diff-reply-r5.txt`. **One PASS, four FIX, DRY: NO.**
+
+| # | Finding | Disposition |
+|---|---|---|
+| 1 | the bare-object case went red for the WRONG reason - a pass-2 object failed the disabled-feature policy, so it never demonstrated the false clean it names | FIXED, moved to the baseline |
+| 2 | the depth guard FIRES on a value that parses and serialises intact: an off-by-one, reproduced on 5.1, and "unreachable on 5.1" was false | FIXED, threshold is `+ 1`; boundary case added |
+| 3 | the nested-array scenario covered round-trip only; round 4 asked for round-trip AND change | FIXED, change scenario added on a measured collapsing shape |
+| 4 | item 42's TITLE omitted "non-identical"; the round-5 brief said the dispatch was "known to fail" | FIXED in the title; the brief is a verbatim artifact, so the correction is recorded below rather than rewritten |
+| 5 | the two mis-set fail-watches and the 92 correction are candidly recorded; keeping the labelled non-discriminating assertion is appropriate | PASS |
+
+**The reviewer reproduced finding 2 independently, and so did this side
+afterwards:** at 99 nested objects the value parses, measures 101,
+serialises intact at `-Depth 100`, and the guard raised a CRITICAL finding
+against it. A watcher that reports drift on a healthy file is its own
+false measurement. Three of round 5's four findings were defects in round
+5's own fixes.
+
+**CORRECTION to `diff-brief-r5.md`, recorded here rather than in the
+brief.** That brief said resuming across a day boundary was "known to
+fail". It was not known: a day boundary is the single OBSERVED cause of a
+refreshed preamble, and the refreshed preamble is the binding condition.
+The accurate statement is that resuming RISKED REPRODUCING the one
+observed failure, which is why the round was dispatched fresh. Briefs and
+replies are verbatim artifacts and are never rewritten - this file is the
+synthesized standing record, so the correction belongs here.

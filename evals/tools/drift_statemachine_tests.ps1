@@ -89,6 +89,11 @@ foreach ($name in @("PATH", "USERPROFILE", "HOME", "TEMP", "TMP",
 }
 
 $script:failCount = 0
+# A scenario that cannot run on this machine is NOT a passing one, so it is
+# counted separately and named in the summary. Silence would let a missing
+# interpreter read as coverage.
+$script:skipCount = 0
+$script:skipNames = @()
 $script:LastExit = -1
 $script:LastReport = ""
 $script:LastToastLog = ""
@@ -525,7 +530,14 @@ function Set-SnapshotWithKimi($claude, $codex, $sp, $kimi) {
     ConvertTo-Json -InputObject $snap | Set-Content -Path $SnapshotFile
 }
 
-function Invoke-Drift($scenario, $claudeMode, $codexMode, $timeoutMs) {
+function Invoke-Drift($scenario, $claudeMode, $codexMode, $timeoutMs, $psHost) {
+    # $psHost is OPTIONAL and defaults to Windows PowerShell 5.1, which is
+    # what every scenario but one uses. The one exception needs a host whose
+    # JSON parser accepts input deeper than the serializer can write, and
+    # that host is PowerShell 7. This is not backlog item 41: the harness
+    # still drives 5.1: a single scenario names a different host for a
+    # reason it states.
+    if (-not $psHost) { $psHost = "powershell.exe" }
     Write-Output ""
     Write-Output "SCENARIO $scenario"
     $toastLog = Join-Path $Root "$scenario-toasts.txt"
@@ -535,7 +547,7 @@ function Invoke-Drift($scenario, $claudeMode, $codexMode, $timeoutMs) {
     $env:CLAUDE_STUB_MODE = $claudeMode
     $env:CODEX_STUB_MODE = $codexMode
     $script:LastToastLog = $toastLog
-    $script:LastOut = (& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $DriftScript 2>&1 | Out-String)
+    $script:LastOut = (& $psHost -NoProfile -ExecutionPolicy Bypass -File $DriftScript 2>&1 | Out-String)
     $script:LastExit = $LASTEXITCODE
     $script:LastReport = ""
     if (Test-Path $ReportsDir) {
@@ -1191,6 +1203,82 @@ Assert-True ($arrText -match '"c"') "a nested ARRAY round-trips into the snapsho
 Assert-True ($snapArr.agyAllowNonWorkspaceAccess.rules -is [System.Array]) "a nested array stays an ARRAY in the snapshot"
 Complete-Scenario $b
 
+# --- scenario: agy-allow-nested-array-change --------------------------------
+# The array half of the CHANGE direction. Round 4 asked for nested-array
+# round-trip AND change cases; only round-trip was built, which is the
+# same half-a-fix shape this cycle keeps repeating, and round 5 said so.
+#
+# The shape is MEASURED, not chosen: tokenising candidates the way the
+# pre-fix watcher did, `rules:[{paths:[{leaf:X}]}]` renders as
+# `{"rules":[{"paths":""}]}` for BOTH values - the differing leaf vanishes
+# entirely - while a shallower `rules:[{leaf:X}]` still shows it. So this
+# uses the collapsing shape.
+
+$b = $script:failCount
+Reset-State
+Set-SnapshotWithAgyAllow "1.2.3" "7.7.7" "6.2.0" "1.1.12" @{ rules = @(@{ paths = @(@{ leaf = "ONE" }) }) }
+Set-AgySettings '{"allowNonWorkspaceAccess": {"rules": [{"paths": [{"leaf": "TWO"}]}]}, "trustedWorkspaces": ["C:\\fake\\repo"]}'
+Invoke-Drift "agy-allow-nested-array-change" "noaction" "" 60000
+Assert-True ($script:LastReport -match 'allowNonWorkspaceAccess.*leaf') "a change inside a nested ARRAY is reported, not collapsed into equality"
+Assert-True ($script:LastReport -match 'TWO') "the array change note carries the NEW value rather than a rendered placeholder"
+Complete-Scenario $b
+
+# --- scenario: agy-allow-depth-boundary -------------------------------------
+# THE DIRECTION THAT WAS WRONG. The depth guard first fired on a value that
+# parses AND serialises intact, because Get-ValueDepth counts the scalar
+# leaf while -Depth counts container levels. Round 5 reproduced it.
+#
+# 5.1's own parser throws at 100 nested levels, so 99 is the deepest value
+# this host can even present. It measures 101 and serialises intact, so it
+# must reach the report CLEAN. This case is the boundary, and it is the
+# only direction of the guard the 5.1-only harness can exercise at all
+# (backlog item 41).
+
+$b = $script:failCount
+Reset-State
+$deepInner = '"leaf":"x"'
+for ($i = 99; $i -ge 1; $i--) { $deepInner = '"n' + $i + '":{' + $deepInner + '}' }
+Set-AgySettings ('{"allowNonWorkspaceAccess": {' + $deepInner + '}, "trustedWorkspaces": ["C:\\fake\\repo"]}')
+Invoke-Drift "agy-allow-depth-boundary" "noaction" "" 60000
+Assert-True (-not ($script:LastReport -match 'nests \d+ levels')) "the deepest value this host can parse is NOT reported as too deep to record"
+Assert-True ($script:LastExit -eq 0) "a value the serializer represents intact leaves the run clean"
+Complete-Scenario $b
+
+# --- scenario: agy-allow-depth-over-boundary (PowerShell 7) ------------------
+# THE OTHER DIRECTION, which round 5 asked for in the same sentence as the
+# boundary case above and which was first delivered as nothing.
+#
+# The guard cannot be made to FIRE on 5.1: that parser throws at 100 nested
+# levels, so a value past the serializer ceiling never reaches the guard
+# there. PowerShell 7's parser accepts far deeper input, so the gap between
+# what parses and what -Depth 100 can write is real, and this is the only
+# host that can present it. The scenario therefore names its host. That is
+# not backlog item 41 - the harness still drives 5.1 everywhere else.
+#
+# 150 levels is comfortably past the ceiling and comfortably inside PS7's
+# parser limit, so the case tests the guard rather than the parser.
+
+$b = $script:failCount
+$pwshCmd = Get-Command pwsh.exe -ErrorAction SilentlyContinue
+if (-not $pwshCmd) {
+    # NOT a pass. CI runs both hosts, so this is a local-machine gap and it
+    # is named rather than swallowed.
+    Write-Output ""
+    Write-Output "SCENARIO agy-allow-depth-over-boundary SKIPPED: pwsh.exe not on PATH"
+    $script:skipCount++
+    $script:skipNames += "agy-allow-depth-over-boundary (no pwsh.exe)"
+} else {
+    Reset-State
+    $overInner = '"leaf":"x"'
+    for ($i = 150; $i -ge 1; $i--) { $overInner = '"n' + $i + '":{' + $overInner + '}' }
+    Set-AgySettings ('{"allowNonWorkspaceAccess": {' + $overInner + '}, "trustedWorkspaces": ["C:\\fake\\repo"]}')
+    Invoke-Drift "agy-allow-depth-over-boundary" "noaction" "" 60000 $pwshCmd.Source
+    Assert-True ($script:LastReport -match 'nests \d+ levels, deeper than the 100 this watcher can record') "a value past the serializer ceiling IS reported as too deep to record"
+    Assert-True ($script:LastReport -match 'NOT recorded this run') "the finding says the value was not recorded, rather than recording a truncation"
+    Assert-True ($script:LastExit -ne 0) "a value that cannot be recorded intact makes the run non-clean"
+    Complete-Scenario $b
+}
+
 # --- scenario: agy-settings-null --------------------------------------------
 # A settings file that PARSES and yields nothing. Measured 2026-08-12:
 # `null`, `false` and `[]` all parse without throwing and are all falsy in
@@ -1273,8 +1361,15 @@ Complete-Scenario $b
 # --- summary -----------------------------------------------------------------------
 
 Write-Output ""
+# A skip is reported even when everything else passes. "ALL SCENARIOS PASS"
+# on a run that silently skipped one would be a claim wider than the run.
+foreach ($n in $script:skipNames) { Write-Output "SKIPPED: $n" }
 if ($script:failCount -eq 0) {
-    Write-Output "ALL SCENARIOS PASS"
+    if ($script:skipCount -eq 0) {
+        Write-Output "ALL SCENARIOS PASS"
+    } else {
+        Write-Output "ALL SCENARIOS RUN PASS - $($script:skipCount) SKIPPED, listed above"
+    }
 } else {
     Write-Output "$($script:failCount) ASSERTION(S) FAILED"
 }

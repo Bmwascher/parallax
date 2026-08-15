@@ -753,12 +753,25 @@ class TestEveryFeatureEntryIsReadable:
         # accepted and could reach CLEAN. Round 3 asked for `data` to be
         # validated as the expected collection and the coercion was left
         # in. Diff debate, round 4.
-        proc = run_probe(pass1=HEALTHY, pass2=EMPTY, features1=FEATURES,
-                         features2=json.dumps({"name": "memories",
-                                               "enabled": False}))
+        #
+        # THE BARE OBJECT GOES IN THE BASELINE, and that placement is the
+        # whole case. A first version put it in pass 2, where it DID go red
+        # against the pre-fix code - but for the wrong reason: a pass-2
+        # object supplying only `memories` still failed the disabled-feature
+        # policy on the missing `plugins` and `apps`, so the red proved the
+        # policy worked, not that the coercion was a false clean. A test is
+        # not evidence until it fails for the reason it CLAIMS, and that one
+        # did not. Round 5 caught it. Here pass 2 is valid, so the pre-fix
+        # code reaches a CLEAN report off a malformed baseline - which is
+        # the defect.
+        proc = run_probe(pass1=HEALTHY, pass2=EMPTY,
+                         features1=json.dumps({"name": "memories",
+                                               "enabled": True}),
+                         features2=DISABLED_FEATURES)
         v = verdict(proc)
         assert v["status"] == "blocked", v
         assert "not a list" in v["reason"], v
+        assert "pass 1" in v["reason"], v
 
     def test_a_feature_with_two_enablement_members_blocks(self):
         # `enabled:false` AND `value:true` - the surface says two different
