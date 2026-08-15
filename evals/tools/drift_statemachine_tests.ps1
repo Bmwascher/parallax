@@ -507,7 +507,12 @@ function Set-SnapshotWithAgy($claude, $codex, $sp, $agy) {
 function Set-SnapshotWithAgyAllow($claude, $codex, $sp, $agy, $allow) {
     $snap = @{ claude = $claude; codex = $codex; superpowers = $sp; agy = $agy
                agyAllowNonWorkspaceAccess = $allow; updated = "2026-01-01T00:00:00" }
-    ConvertTo-Json -InputObject $snap | Set-Content -Path $SnapshotFile
+    # -Depth 100 because a fixture written at the default depth 2 would
+    # truncate a NESTED seeded value to "System.Collections.Hashtable", and
+    # the nested scenarios would then be measuring this helper's defect
+    # rather than the watcher's. A fixture must not be able to fail in the
+    # direction the case is looking.
+    ConvertTo-Json -InputObject $snap -Depth 100 | Set-Content -Path $SnapshotFile
 }
 
 function Get-SavedSnapshot {
@@ -1108,6 +1113,54 @@ Set-AgySettings '{"allowNonWorkspaceAccess": "", "trustedWorkspaces": ["C:\\fake
 Invoke-Drift "agy-allow-null-to-empty" "noaction" "" 60000
 Assert-True ($script:LastReport -match 'allowNonWorkspaceAccess null -> ""') "a null to empty-string change is REPORTED, not absorbed as equal"
 Assert-True ($script:LastExit -eq 0) "a recorded value changing is a note, so the run stays clean"
+Complete-Scenario $b
+
+# --- scenario: agy-allow-nested ---------------------------------------------
+# THE TOKEN CAN BE EXACT AND THE STORED VALUE STILL WRONG. ConvertTo-Json
+# defaults to depth 2 and truncates SILENTLY past it - a nested value comes
+# back as the literal text "System.Collections.Hashtable" - so two
+# different nested settings produced the same token and a real change read
+# as equal. That is the defect the typed token was written to close, one
+# level further down, and it lived in both the token function and the
+# snapshot write. Diff debate round 3.
+
+$b = $script:failCount
+Reset-State
+Set-AgySettings '{"allowNonWorkspaceAccess": {"scope": {"paths": {"deep": "one"}}}, "trustedWorkspaces": ["C:\\fake\\repo"]}'
+Invoke-Drift "agy-allow-nested" "noaction" "" 60000
+$snapNested = Get-SavedSnapshot
+$nestedText = ConvertTo-Json $snapNested.agyAllowNonWorkspaceAccess -Compress -Depth 100
+Assert-True ($nestedText -match '"deep"\s*:\s*"one"') "a nested value round-trips into the snapshot instead of being truncated"
+# THE MARKER MATTERS. A first draft of this asserted the stored text does
+# not contain "System.Collections", which is what a truncated HASHTABLE
+# renders as - and it PASSED against the defect, because settings.json is
+# parsed to PSCustomObject and THAT truncates to the string "@{deep=one}"
+# instead. A vacuous assertion, in the fixture written to catch vacuous
+# behaviour. What the defect actually does is turn an OBJECT into a
+# STRING, so that is what this measures.
+Assert-True ($snapNested.agyAllowNonWorkspaceAccess.scope.paths -isnot [string]) "a nested value stays an OBJECT in the snapshot and is never flattened into a string"
+Complete-Scenario $b
+
+# --- scenario: agy-allow-nested-change --------------------------------------
+# A REGRESSION GUARD, and it is labelled one because it does NOT
+# discriminate the defect it was written for.
+#
+# The theory was that two nested values differing only below the default
+# JSON depth would render as the same truncated text and be called equal.
+# MEASURED against the pre-fix watcher: this scenario PASSED. A truncated
+# PSCustomObject renders as `@{deep=one}` - a string that still CARRIES the
+# differing text - so the comparison saw a difference and wrote its note
+# anyway. The truncation defect is real and corrupts the STORED value, as
+# the scenario above shows; it did not blind change detection for this
+# shape. Recorded rather than dropped, so nobody later reads a green tick
+# here as evidence that it was ever red.
+
+$b = $script:failCount
+Reset-State
+Set-SnapshotWithAgyAllow "1.2.3" "7.7.7" "6.2.0" "1.1.12" @{ scope = @{ paths = @{ deep = "one" } } }
+Set-AgySettings '{"allowNonWorkspaceAccess": {"scope": {"paths": {"deep": "TWO"}}}, "trustedWorkspaces": ["C:\\fake\\repo"]}'
+Invoke-Drift "agy-allow-nested-change" "noaction" "" 60000
+Assert-True ($script:LastReport -match 'allowNonWorkspaceAccess.*deep') "a change BELOW the default json depth is still reported as drift"
 Complete-Scenario $b
 
 # --- scenario: agy-settings-null --------------------------------------------

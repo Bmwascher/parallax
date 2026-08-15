@@ -674,7 +674,24 @@ class TestANullSurfaceIsNotAnEmptyOne:
         v = verdict(proc)
         assert v["status"] == "blocked", v
         assert proc.returncode == 1
-        assert "no data member" in v["reason"], v
+        # The reason must describe the fault that HAPPENED. An earlier
+        # version of this case required the words "no data member" for a
+        # response whose data member was present and null - a test locking
+        # in a message that would send a reader to the wrong place. Diff
+        # debate, round 3.
+        assert "null" in v["reason"], v
+        assert "no data member" not in v["reason"], v
+
+    def test_a_missing_data_member_and_a_null_one_report_different_reasons(self):
+        # The two were collapsed into one flag. They are different faults:
+        # one response never carried a surface, the other carried one and
+        # said it was nothing.
+        missing = verdict(run_probe(pass1=HEALTHY, pass2=EMPTY, mode="nodata"))
+        null_data = verdict(run_probe(pass1=HEALTHY, pass2=EMPTY, mode="datanull"))
+        assert missing["status"] == "blocked", missing
+        assert null_data["status"] == "blocked", null_data
+        assert "no data member" in missing["reason"], missing
+        assert missing["reason"] != null_data["reason"], (missing, null_data)
 
     def test_a_feature_result_whose_data_is_null_blocks(self):
         # The feature surface has no calibration pass behind it, so a null
@@ -684,6 +701,83 @@ class TestANullSurfaceIsNotAnEmptyOne:
         assert v["status"] == "blocked", v
         assert proc.returncode == 1
         assert "experimentalFeature/list" in v["reason"], v
+
+
+class TestEveryFeatureEntryIsReadable:
+    """Round 2's accepted fix asked for readable feature-entry schema and
+    only the policed names were ever checked, so a malformed entry ANYWHERE
+    ELSE in the list still reached the clean report. That is the same
+    half-built-fix shape as the policy itself, one level down. Found by the
+    diff debate at round 3.
+
+    Deliberately strict, and the direction is safe: all 88 features in the
+    live 2026-08-14 reading carry a non-empty string name and a real
+    boolean, so a future entry that does not blocks loudly instead of being
+    silently reduced.
+    """
+
+    def _pass2_with(self, extra_entry):
+        return json.dumps([
+            {"name": "plugins", "enabled": False},
+            {"name": "apps", "enabled": False},
+            {"name": "memories", "enabled": False},
+            extra_entry,
+        ])
+
+    def test_an_unpoliced_entry_with_no_name_blocks(self):
+        proc = run_probe(pass1=HEALTHY, pass2=EMPTY, features1=FEATURES,
+                         features2=self._pass2_with({"enabled": True}))
+        v = verdict(proc)
+        assert v["status"] == "blocked", v
+        assert "no usable name" in v["reason"], v
+
+    def test_an_unpoliced_entry_with_a_non_boolean_enablement_blocks(self):
+        proc = run_probe(
+            pass1=HEALTHY, pass2=EMPTY, features1=FEATURES,
+            features2=self._pass2_with({"name": "something", "enabled": "yes"}))
+        v = verdict(proc)
+        assert v["status"] == "blocked", v
+        assert "non-boolean" in v["reason"], v
+        assert "something" in v["reason"], v
+
+    def test_an_unpoliced_entry_with_no_enablement_member_blocks(self):
+        proc = run_probe(pass1=HEALTHY, pass2=EMPTY, features1=FEATURES,
+                         features2=self._pass2_with({"name": "something"}))
+        v = verdict(proc)
+        assert v["status"] == "blocked", v
+        assert "never reported" in v["reason"], v
+
+    def test_a_null_entry_in_the_feature_list_blocks(self):
+        # `@($null)` skipped it in silence, so a list with a hole in it read
+        # as a shorter list rather than an unreadable one.
+        proc = run_probe(pass1=HEALTHY, pass2=EMPTY, features1=FEATURES,
+                         features2=self._pass2_with(None))
+        v = verdict(proc)
+        assert v["status"] == "blocked", v
+        assert "null entry" in v["reason"], v
+
+
+class TestTheDisabledNameIsMatchedCaseSensitively:
+    """PowerShell's `-eq` is case-INSENSITIVE, so `Memories=False` satisfied
+    a requirement derived from `--disable memories`. Round 2 DECLARED the
+    limit that a flag name not matching a feature name must fail as "never
+    reported"; `-eq` quietly made one whole class of mismatch match instead,
+    so the code did not do what its own declared limit said. Found by the
+    diff debate at round 3.
+    """
+
+    def test_a_differently_cased_feature_name_is_treated_as_missing(self):
+        mixed = json.dumps([
+            {"name": "plugins", "enabled": False},
+            {"name": "apps", "enabled": False},
+            {"name": "Memories", "enabled": False},
+        ])
+        proc = run_probe(pass1=HEALTHY, pass2=EMPTY,
+                         features1=FEATURES, features2=mixed)
+        v = verdict(proc)
+        assert v["status"] == "blocked", v
+        assert "memories" in v["reason"], v
+        assert "UNMEASURED" in v["reason"], v
 
 
 class TestTheTwoIdRangesCannotCollide:

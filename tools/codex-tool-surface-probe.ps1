@@ -414,7 +414,14 @@ function Get-LastResponse($text, $minId, $maxId) {
     $sawError = $null
     $sawUnreadable = $false
     $sawAnyOutput = $false
-    $sawResultWithoutData = $false
+    # TWO flags, not one. They were collapsed, so a present-but-null `data`
+    # blocked with the reason "carrying no data member" - which is not what
+    # happened, and a test had been written to REQUIRE that inaccurate
+    # sentence. A blocked reason is read by a person deciding what broke;
+    # one that describes the wrong fault sends them to the wrong place.
+    # Found by the diff debate at round 3.
+    $sawResultNoDataMember = $false
+    $sawResultNullData = $false
     foreach ($line in ($text -split "`n")) {
         $t = $line.Trim()
         if (-not $t) { continue }
@@ -440,8 +447,11 @@ function Get-LastResponse($text, $minId, $maxId) {
         }
         if ($obj.PSObject.Properties.Name -contains "result") {
             if ($null -eq $obj.result -or
-                -not ($obj.result.PSObject.Properties.Name -contains "data") -or
-                $null -eq $obj.result.data) {
+                -not ($obj.result.PSObject.Properties.Name -contains "data")) {
+                $sawResultNoDataMember = $true
+                continue
+            }
+            if ($null -eq $obj.result.data) {
                 # `data: null` is the THIRD reading of this rule, and the
                 # first two were both false-cleans. Member PRESENCE alone
                 # let `{"data":null}` through, and the reducers then walked
@@ -450,7 +460,7 @@ function Get-LastResponse($text, $minId, $maxId) {
                 # {}` - whose single element they skip, producing an empty
                 # surface and a clean report. A null surface is not a
                 # surface of nothing. Found by the diff debate at round 2.
-                $sawResultWithoutData = $true
+                $sawResultNullData = $true
                 continue
             }
             $found = $obj.result
@@ -461,7 +471,8 @@ function Get-LastResponse($text, $minId, $maxId) {
         RpcError     = $sawError
         Unreadable   = $sawUnreadable
         SawAnyOutput = $sawAnyOutput
-        ResultNoData = $sawResultWithoutData
+        ResultNoDataMember = $sawResultNoDataMember
+        ResultNullData     = $sawResultNullData
     }
 }
 
@@ -527,7 +538,7 @@ function Test-Transport($pass, $label, $asJson) {
                   $pass.FeatureMin $pass.FeatureMax $asJson
     return @{
         Servers  = (Get-Surface $status)
-        Features = (Get-Features $features)
+        Features = (Get-Features $features $label $asJson)
     }
 }
 
@@ -539,10 +550,15 @@ function Read-Surface($pass, $label, $method, $minId, $maxId, $asJson) {
             "), so no surface was reported") $asJson
     }
     if ($null -eq $parsed.Result) {
-        if ($parsed.ResultNoData) {
+        if ($parsed.ResultNoDataMember) {
             Write-Blocked ($label + ": the app server answered " + $method +
                 " with a result carrying no data member, and a response that" +
                 " carries no surface is not a surface of nothing") $asJson
+        }
+        if ($parsed.ResultNullData) {
+            Write-Blocked ($label + ": the app server answered " + $method +
+                " with a result whose data value is null, and a null surface" +
+                " is not a surface of nothing") $asJson
         }
         if ($parsed.Unreadable) {
             Write-Blocked ($label + ": the app server wrote output that is not" +
@@ -561,15 +577,20 @@ function Read-Surface($pass, $label, $method, $minId, $maxId, $asJson) {
             " readable JSON-RPC frame, so the surface read from the rest is a" +
             " partial stream reported as a whole one") $asJson
     }
-    if ($parsed.ResultNoData) {
+    if ($parsed.ResultNoDataMember) {
         Write-Blocked ($label + ": one " + $method + " result carried no data" +
             " member, so part of what was reported cannot be read as a" +
+            " surface") $asJson
+    }
+    if ($parsed.ResultNullData) {
+        Write-Blocked ($label + ": one " + $method + " result carried a null" +
+            " data value, so part of what was reported cannot be read as a" +
             " surface") $asJson
     }
     return $parsed.Result
 }
 
-function Get-Features($result) {
+function Get-Features($result, $label, $asJson) {
     <#
       Reduce the feature response to NAME plus resolved enablement.
 
@@ -587,13 +608,55 @@ function Get-Features($result) {
       the plan had not done. Diff debate, round 2.
     #>
     $features = @()
+    $index = -1
     foreach ($f in @($result.data)) {
-        if ($null -eq $f) { continue }
-        $enabled = $null
-        foreach ($k in @("enabled", "isEnabled", "value")) {
-            if ($f.PSObject.Properties.Name -contains $k) { $enabled = $f.$k; break }
+        $index++
+        # EVERY ENTRY IS VALIDATED, not just the ones the policy names.
+        # Round 2's accepted fix asked for readable feature-entry schema and
+        # this function was left accepting anything: a null element was
+        # skipped, any name was cast to a string, and any enablement value
+        # was taken. Only the disabled names were checked downstream, so a
+        # malformed entry anywhere ELSE in the list still reached the clean
+        # report - the same half-built-fix shape as the policy itself. Found
+        # by the diff debate at round 3.
+        #
+        # This is deliberately strict, and the direction is safe: every one
+        # of the 88 features in the live 2026-08-14 reading carries a
+        # non-empty string name and a real boolean. A future feature that
+        # does not will BLOCK loudly rather than be silently reduced.
+        if ($null -eq $f) {
+            Write-Blocked ($label + ": the feature surface carried a null" +
+                " entry at position " + $index + ", and a list with an" +
+                " unreadable entry is not a readable surface") $asJson
         }
-        $features += ,@{ Name = [string]$f.name; Enabled = $enabled }
+        $name = $null
+        if ($f.PSObject.Properties.Name -contains "name") { $name = $f.name }
+        if ($name -isnot [string] -or -not $name.Trim()) {
+            Write-Blocked ($label + ": the feature surface entry at position " +
+                $index + " has no usable name (" +
+                $(if ($null -eq $name) { "no name member" }
+                  else { $name.GetType().Name }) +
+                "), so what it describes cannot be read") $asJson
+        }
+        $enabled = $null
+        $sawMember = $false
+        foreach ($k in @("enabled", "isEnabled", "value")) {
+            if ($f.PSObject.Properties.Name -contains $k) {
+                $enabled = $f.$k; $sawMember = $true; break
+            }
+        }
+        if (-not $sawMember) {
+            Write-Blocked ($label + ": the feature '" + $name + "' carries no" +
+                " enabled/isEnabled/value member, so its resolved enablement" +
+                " was never reported") $asJson
+        }
+        if ($enabled -isnot [bool]) {
+            Write-Blocked ($label + ": the feature '" + $name + "' reports a" +
+                " non-boolean enablement (" +
+                $(if ($null -eq $enabled) { "null" } else { $enabled.GetType().Name }) +
+                "), and an unreadable value is not a disabled one") $asJson
+        }
+        $features += ,@{ Name = $name; Enabled = $enabled }
     }
     return $features
 }
@@ -679,7 +742,15 @@ for ($i = 0; $i -lt $dispatchArgs.Count - 1; $i++) {
     if ($dispatchArgs[$i] -eq "--disable") { $requiredFalse += $dispatchArgs[$i + 1] }
 }
 foreach ($name in $requiredFalse) {
-    $hits = @($read2.Features | Where-Object { $_.Name -eq $name })
+    # `-ceq`, CASE-SENSITIVE, and the case matters more than it looks.
+    # PowerShell's `-eq` is case-INSENSITIVE, so `Memories=False` satisfied
+    # a requirement derived from `--disable memories`. Round 2 declared the
+    # limit that a flag name not matching a feature name must fail as
+    # "never reported"; `-eq` quietly made one class of mismatch match
+    # instead, so the code did not do what its own declared limit said.
+    # Found by the diff debate at round 3. The live reading records these
+    # names in lower case, so this compares what was measured.
+    $hits = @($read2.Features | Where-Object { $_.Name -ceq $name })
     if ($hits.Count -eq 0) {
         Write-Blocked ("pass 2 (dispatch) disabled '" + $name + "' but the" +
             " feature surface never reported it, so whether the flag took" +

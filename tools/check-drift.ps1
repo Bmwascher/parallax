@@ -161,9 +161,19 @@ function Get-ValueToken($v) {
       rendering does not: `[string]$null` and `[string]""` are both the
       empty string, and `[string]$true` and `[string]"True"` are both
       "True". It is also what a reader sees in settings.json.
+
+      -Depth 100 IS LOAD-BEARING, not tidiness. ConvertTo-Json defaults to
+      depth 2 and TRUNCATES SILENTLY past it: a nested value comes back as
+      the literal text "System.Collections.Hashtable", measured on 5.1. So
+      the default would have recorded two different nested settings as the
+      same token and called a real change equal - the exact defect the
+      typed token was written to close, one level further down. 100 is the
+      maximum PowerShell accepts, so nothing this file can be handed is
+      representable and lost. Found by the diff debate at round 3.
     #>
+
     if ($null -eq $v) { return "null" }
-    return (ConvertTo-Json $v -Compress)
+    return (ConvertTo-Json $v -Compress -Depth 100)
 }
 # PRESENCE, tracked separately from the VALUE. Reading presence off the
 # value's truthiness made `"allowNonWorkspaceAccess": null` and `""` - both
@@ -591,7 +601,13 @@ if ($agyAllowPresent) {
     # measured this week came back as a different value next week.
     $newSnapshot.agyAllowNonWorkspaceAccess = $snapshot.agyAllowNonWorkspaceAccess
 }
-$newSnapshot | ConvertTo-Json | Set-Content -Path $SnapshotFile
+# -Depth 100 for the same reason as Get-ValueToken: the default is 2 and it
+# truncates SILENTLY, so a nested settings value would be written to the
+# snapshot as the text "System.Collections.Hashtable" and every later
+# comparison would run against that instead of the value. The token
+# function alone was not enough - the token can be exact and the STORED
+# value still wrong. Diff debate, round 3.
+$newSnapshot | ConvertTo-Json -Depth 100 | Set-Content -Path $SnapshotFile
 
 # --- unresolved prior run (pending disposition) --------------------------------
 # Changelog findings exist only during a version transition, and the

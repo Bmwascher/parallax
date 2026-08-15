@@ -109,8 +109,15 @@ emitted in this session, so novel text cannot reach the reviewer ahead of
 the brief. A refreshed environment context has never been emitted in that
 session. This is the rule working, on a case it was never measured
 against: the bound was earned from rounds that all ran inside one day.
-Filed as backlog item 42, priority HIGH, because it blocks the repo's own
-review process on any debate that spans midnight.
+Filed as backlog item 42, priority HIGH.
+
+**Narrowed at round 3, in place.** This entry first said the item blocks
+"any debate that spans midnight". That is wider than the evidence. The
+binder applies its identity test only when a resumed slice carries TWO
+user records, so the condition is a resumed slice carrying a REFRESHED,
+NON-IDENTICAL preamble ahead of the brief. A day boundary is the one cause
+OBSERVED to produce that refresh, once. A resume that refreshes nothing
+binds normally.
 
 **Meters are UNCHANGED at 1 of 4 and 1 of 4.** A transport failure is not
 an exchange. Nothing was adjudicated, contested, or conceded, because
@@ -152,3 +159,36 @@ run and exactly two drift assertions failing.
 Meters after this round: **2 contested exchanges of 4; 2 fix-verify units
 of 4.** Not terminal: termination needs an adjudicated DRY round, and this
 one found five things.
+
+### Round 3 — 2026-08-14, same-day resume, binding CLEAN
+
+Brief `diff-brief-r3.md`, canonical sha256 `e79ba5ac0fef7627...`. Reply
+retained verbatim at `diff-reply-r3.txt`. **Four FIX, three PASS.**
+Adjudications: build checkpoint amendment 12.
+
+| # | Finding | Disposition |
+|---|---|---|
+| 1a | missing `data` and null `data` collapsed, so a null blocked with the wrong reason - and a case REQUIRED that wrong sentence | FIXED, reported separately |
+| 1b | round 2's feature-entry schema was only applied to POLICED names, so a malformed entry elsewhere still read clean | FIXED, every entry validated |
+| 2 | `-eq` is case-insensitive, so `Memories` satisfied `--disable memories` and contradicted round 2's own declared limit | FIXED, `-ceq` |
+| 3 | `ConvertTo-Json` truncates silently at depth 2, in the token AND the snapshot write | FIXED, `-Depth 100` in both |
+| 4 | item 42 said "not measured" after the retry measured it; "spans midnight" was wider than one observed cause | FIXED at all three sites |
+| - | the derived id windows, the percent refusal, the corrected false sentence | PASS |
+
+Seven new probe cases were watched RED against the pre-fix code with 41
+existing cases green in the same run.
+
+**Two claims were NARROWED by measurement rather than confirmed**, and one
+of them was this record's own. Of three new drift assertions only one went
+red; measuring why showed a Hashtable truncates to a type name but a
+PSCustomObject truncates to `@{deep=one}`, a string that still carries the
+nested text. One assertion had therefore been checking the wrong marker and
+passed against the defect - vacuous, in a fixture written to catch vacuous
+behaviour - and the nested-CHANGE scenario passed pre-fix because the
+truncated text still differed. The truncation corrupts the STORED value; it
+did not blind change detection for this shape. Corrected assertion now red;
+the change scenario kept and labelled a regression guard.
+
+Meters after this round: **3 contested exchanges of 4; 3 fix-verify units
+of 4.** Round 4 reaches both caps. Exhaustion PAUSES for user
+authorization; it never certifies.
