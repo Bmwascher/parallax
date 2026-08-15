@@ -194,10 +194,26 @@ flowchart TD
   or unreadable measurement is never a clean one. **Two things it does
   not mean.** The user's global `AGENTS.md` survives a clean result and
   is recorded rather than removed — nothing available removes it. And the
-  reviewer's TOOL surface (configured MCP servers, the memories feature)
-  is not in the prompt and is not measured: observed 2026-07-28, an MCP
-  tool ran inside a round that passed every check above. Tracked as
-  backlog item 7.
+  reviewer's TOOL surface is not in the prompt, so it is measured by a
+  different probe, below.
+- **Reviewer tool surface (0.24.0)**: `tools/codex-tool-surface-probe.ps1`
+  speaks JSON-RPC to `codex app-server --stdio` and reads
+  `mcpServerStatus/list`, which names every resolved MCP server and every
+  tool. It starts no turn, so it spends no tokens. Two passes: the first
+  carries no isolation flags and is an INSTRUMENT CALIBRATION, blocking if
+  it cannot see a running server with a tool; the second carries the
+  dispatch flags, and any tool outside the declared allowlist blocks.
+  **A tool ABSENT from the second pass is a MITIGATION, not proof of
+  removal** — measured 2026-08-11, a server disabled by config and a
+  server that failed to launch report the same thing, and no field
+  separates them. It also reads a DIFFERENT SUBCOMMAND from the one the
+  review runs: the probe reads `codex app-server`, the review dispatches
+  `codex exec`, and the two resolve their MCP servers independently for
+  everything measured so far. `codex exec` was measured only to ACCEPT the
+  same flags, so a clean second pass is a proxy for the reviewer's surface
+  rather than a direct reading of it. This closed backlog item 7, which had said no free
+  tool-list view existed; that was true of `codex debug` and false of
+  codex.
 
 ## Lane credential ownership
 

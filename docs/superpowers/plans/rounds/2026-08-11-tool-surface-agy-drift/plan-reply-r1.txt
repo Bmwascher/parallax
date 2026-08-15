@@ -1,0 +1,56 @@
+Applicability: the live branch was already beyond the stated `ef428c3` and advanced again during review. I froze the adjudication to `99a2099`, the clean snapshot containing the unchanged round-1 plan and probe record.
+
+## Claims
+
+1. The API surface and local measurements are properly bounded. The record identifies `mcpServerStatus/list` and `experimentalFeature/list`, says neither starts a turn, and explicitly frames every result as a local measurement (`docs/superpowers/plans/rounds/2026-08-11-tool-surface-agy-drift/probe-record.md:3-5,20-27`). The two repeated arms support exactly 128 baseline tools, three dispatch survivors, and the named `node_repl` tools—nothing broader (`probe-record.md:34-68`). **PASS**
+
+2. The empty-table override was tested beyond parsing and produced the same one-server, three-tool surface; the two effective levers are described only by their observed control-plane effects (`probe-record.md:70-87`). That confirms item 7’s warning that parsing alone cannot establish removal (`docs/superpowers/plans/2026-07-27-0150-backlog.md:510-519`). **PASS**
+
+3. Disabled and deliberately crashed `node_repl` returned identical status records, so zero tools cannot prove deliberate removal (`probe-record.md:89-105`). The race statement is adequately bounded: one healthy run, one machine, fifteen samples beginning at 0.41 seconds, with an explicit statement that races are not ruled out generally (`probe-record.md:107-118`). **PASS**
+
+4. The baseline is a positive control for the instrument under baseline conditions, but not for the MCP subsystem under pass-2 conditions. The plan would call “pass 2 within the allowlist” clean (`docs/superpowers/plans/2026-08-11-tool-surface-agy-drift.md:87-107,149-156`), even though an empty pass 2 is observationally identical to the deliberate crash (`probe-record.md:92-105`). That means the two-pass design supports unexpected-survivor detection but not a verified-removal control. **FIX — call pass 1 an instrument calibration, label pass-2 empty results a mitigation rather than proof of removal, and do not describe the overall pair as a positive removal control unless DQ1 first supplies a pass-2 survivor or failure diagnostic.**
+
+5. The version movement is real—item 11 records 1.1.8, while the snapshot records 1.1.12—and the drift watcher merely reads and rewrites the agy version (`docs/superpowers/plans/2026-07-27-0150-backlog.md:779-785`; `tools/drift-snapshot.json:7`; `tools/check-drift.ps1:127-130,352-360`). But “three contracts have no check anywhere” is false. The Flash wrapper already checks `agy models`, `trustedWorkspaces`, and persisted write rules before dispatch, then blocks missing transcripts and forbids bypass flags (`agents/flash-implementer.md:45-59,81-105`). **FIX — restate the gap as “not covered by the weekly drift watcher and incompletely mirrored by doctor,” preserving the existing per-dispatch and post-run enforcement instead of claiming those checks do not exist.**
+
+6. The transcript contract is already enforced at the only lifecycle point where it can exist: after a run, using the conversation ID, with a missing transcript explicitly blocking (`agents/flash-implementer.md:81-92`). The plan clearly says the pre-dispatch watcher makes only the narrower brain-root assertion and does not inherit the transcript claim (`docs/superpowers/plans/2026-08-11-tool-surface-agy-drift.md:169-181`). No follow-up is needed merely for that lifecycle split. **PASS**
+
+7. The current record correctly limits the new observation to the key, its value, and the absence of an operational reader for that key (`probe-record.md:164-185`). But the claim that the repository has no measurement of what agy does with it is false: the 0.12.0 implementation deliberately set it false, observed trusted-workspace print-mode writes soft-deny, restored true, and recorded that true was required on agy 1.1.7 (`docs/superpowers/plans/2026-07-25-flash-implementer.md:590-603`; `docs/superpowers/plans/rounds/2026-07-25-flash-implementer/diff-round1-header.txt:4135-4145`). Recording `true` as stable drift also cannot close item 11’s security property. **FIX — incorporate the prior 1.1.7 measurement, narrow the remaining unknown to what “outside workspace” permits on current agy, and keep item 11 partially open or explicitly mark that security contract UNMEASURED rather than clean.**
+
+8. A hard floor means versions below it make a lane unavailable, as the existing Kimi implementation demonstrates (`tools/check-drift.ps1:250-257`). No agy breakage boundary has been measured; 1.1.12 is merely today’s observed version. The proposed contract checks target behavior directly and require failures to surface (`docs/superpowers/plans/2026-08-11-tool-surface-agy-drift.md:160-196`). Declining a semantic floor at 1.1.12 is correct. **PASS**
+
+9. “Gap, not live exposure” is correct because this repo’s `.codex` is empty (`probe-record.md:129-136`), and the global `~/.codex/AGENTS.md` is a separately surfaced source, not evidence about repository-local `.codex` (`skills/multi-model-verify/SKILL.md:114-117`). But the gap was not newly found: standing reference text already says repository `.codex/` remains unswept and unprobed (`skills/multi-model-verify/references/model-prompting-notes.md:288-291`). The new probe record also retains no `.codex` canary artifact comparable to its tool-surface reproductions (`probe-record.md:199-213`). **FIX — describe this as a previously known, now reconfirmed enumeration gap; either retain evidence proving untrusted project-local `.codex` loading or continue to call that reachability unprobed.**
+
+10. The plan does not retire all stated surfaces. Task 3 names only the context-probe header and backlog item 7 (`docs/superpowers/plans/2026-08-11-tool-surface-agy-drift.md:133-142`); it does not actually name the `client-probe-scope-limit` edit. More importantly, `README.md` independently says the tool surface is unmeasured and tracked as item 7 (`README.md:185-200`). The exact stale SKILL text is also pinned by a dedicated test (`evals/multi-model-verify/test_multi_model_verify.py:762-782`), while the region remains declared (`evals/multi-model-verify/test_contract_coverage.py:666-676`). **FIX — Task 3 must explicitly update four standing surfaces: the probe header, SKILL region, README, and item 7; it must also update the exact SKILL pin/coverage fixture in the same task.**
+
+## Design questions
+
+**DQ1 — Survivor control**
+
+No sound survivor exists in the measured configuration. After the shipped flags, `node_repl` is the only remaining MCP server (`probe-record.md:45-51`); Shape A removes the only possible survivor, and the status record cannot distinguish that from its crash (`probe-record.md:89-105`). `experimentalFeature/list` proves only that app-server answered (`docs/superpowers/plans/2026-08-11-tool-surface-agy-drift.md:83-85`).
+
+Recommendation: label Shape A’s absence result a **mitigation**, not a control. A real control requires a newly measured MCP failure diagnostic, resolved-config echo, or harmless pass-2 survivor. Baseline visibility alone is insufficient.
+
+**DQ2 — Shape A or B**
+
+Choose **Shape A**, applied to both fresh and resume dispatches, which currently carry identical isolation flags (`skills/multi-model-verify/SKILL.md:175-188,237-250`). Nothing measured shows that disabling `node_repl` breaks review behavior. Shape B would affirmatively accept an unmeasured JavaScript execution surface, which the plan correctly refuses (`docs/superpowers/plans/2026-08-11-tool-surface-agy-drift.md:118-131`).
+
+What breaks A is only its proposed evidentiary description: it does not prove deliberate removal rather than launch failure. Ship A as risk reduction with an empty allowlist, but do not call it verified isolation.
+
+**DQ3 — agy floor**
+
+Do not add a 1.1.12 floor. Instead:
+
+- report version changes;
+- run the behavioral contract checks on every drift run;
+- block failed or unreadable checks;
+- retain 1.1.12 as the observed baseline, not a compatibility boundary.
+
+That gives stronger protection than an unsupported “all versions at least 1.1.12 work” assertion.
+
+**DQ4 — `allowNonWorkspaceAccess: true`**
+
+Watch it and open the focused measurement item; do not flip it this cycle. Existing evidence shows `false` blocked the lane’s intended trusted-workspace writes on agy 1.1.7 (`diff-round1-header.txt:4135-4145`). What remains unmeasured is whether `true` expands reach outside the workspace on 1.1.12.
+
+The plan must incorporate that prior result, re-probe current behavior in the follow-up, and keep the security contract explicitly unresolved meanwhile.
+
+Meters after this exchange: **1/4 consecutive contested exchanges; 1/6 total fix-verify units; not dry.**

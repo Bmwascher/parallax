@@ -2,8 +2,19 @@
 # given from a working directory, classify every ADVERTISED SKILL by the
 # directory it came from, and check the named instruction and feature
 # blocks around them. It does not classify instruction TEXT, and it does
-# not read the reviewer's tool surface at all - see the
-# `client-probe-scope-limit` region in SKILL.md, and backlog item 7.
+# not read the reviewer's tool surface - see the
+# `client-probe-scope-limit` region in SKILL.md.
+#
+# The tool surface is measured by a SEPARATE script,
+# tools/codex-tool-surface-probe.ps1 (0.24.0, backlog item 7 CLOSED). This
+# header used to say the tool surface could not be measured at all, on the
+# strength of `codex debug` offering no tool-list view. True of
+# `codex debug`; false of codex. The app server answers
+# `mcpServerStatus/list`, free and local. Read that script's own header
+# before trusting either probe: a clean tool-surface result is a
+# MITIGATION, not proof of removal, and it reads `codex app-server` while
+# the review dispatches `codex exec`, so it is a PROXY for the reviewer's
+# own surface rather than a reading of it (backlog item 39).
 #
 # Preflight 3 has only ever enumerated the REVIEWED TREE. Every source that
 # hijacked a review on 2026-07-28 - the user's codex plugin cache, the

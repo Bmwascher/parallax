@@ -79,6 +79,17 @@ jobs:
       # exactly this reason. The hook tests are deliberately absent -
       # hooks.json invokes the hook as `pwsh`, so another host would not
       # match how it runs.
+      #
+      # The 0.24.0 tool-surface probe was NOT added when it was written. It
+      # was in neither list until the final gate run for that same release
+      # went looking, which is the whole reason this comment names it.
+      # Its module skips wherever no host is found, so the ubuntu job ran
+      # it under the pwsh that runner ships and windows-latest ran it under
+      # nothing at all. That left Windows PowerShell 5.1 uncovered - and
+      # 5.1 is the host the probe was BROKEN ON: 5.1 built the process's
+      # stdin from Console.InputEncoding and put a byte-order mark on the
+      # first JSON-RPC frame, so the app server rejected it. pwsh alone
+      # would have passed that defect straight through.
       - name: PowerShell-facing tests under Windows PowerShell 5.1
         env:
           PARALLAX_PS_HOST: powershell.exe
@@ -86,6 +97,7 @@ jobs:
           python -m pytest
           evals/multi-model-verify/test_attestation.py
           evals/multi-model-verify/test_codex_context_probe.py
+          evals/multi-model-verify/test_codex_tool_surface_probe.py
           evals/multi-model-verify/test_review_mirror.py
           evals/multi-model-verify/test_kimi_round_evidence.py
           evals/multi-model-verify/test_kimi_lane_lock.py
@@ -102,6 +114,7 @@ jobs:
           python -m pytest
           evals/multi-model-verify/test_attestation.py
           evals/multi-model-verify/test_codex_context_probe.py
+          evals/multi-model-verify/test_codex_tool_surface_probe.py
           evals/multi-model-verify/test_review_mirror.py
           evals/multi-model-verify/test_kimi_round_evidence.py
           evals/multi-model-verify/test_kimi_lane_lock.py

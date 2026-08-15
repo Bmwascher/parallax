@@ -1,0 +1,57 @@
+The round is **not DRY**. The propagation failure repeated in the debate README, and two new corrections contain same-file defects.
+
+## Six corrections
+
+1. **Calibration versus control**
+
+The main calibration/detection language is now correct (`docs/superpowers/plans/2026-08-11-tool-surface-agy-drift.md:84-122`; `docs/superpowers/plans/rounds/2026-08-11-tool-surface-agy-drift/probe-record.md:32-79,131-155`). But three remnants survive:
+
+- The plan twice says Shape A “removes” the only survivor (`plan:131-138,378-384`).
+- Finding 5 still says the two levers “DO work,” although the `node_repl` lever establishes only zero reported tools (`probe-record.md:93-110`).
+- The debate README still calls presence a control and says Shape A removes the server (`rounds/.../README.md:89-93,122-125`).
+
+**FIX — use “makes `node_repl` unreported, with disable versus launch failure unresolved”; retitle Finding 5 as “Two levers change their reported surfaces”; and append the round-2 correction to the debate README.**
+
+2. **Existing agy enforcement**
+
+The Task 5 body now distinguishes known operational enforcement from drift watching and correctly limits doctor to declaration/reachability (`plan:250-290`; `probe-record.md:256-304`). But the Goal says four of five contracts lack drift-side checks while Task 5 and the probe record both say the watcher covers none (`plan:16-19,258-261`; `probe-record.md:283-288,301-304`). Item 11’s five contracts do not include the stored version string (`docs/superpowers/plans/2026-07-27-0150-backlog.md:787-800`).
+
+The debate README also retains the rejected “doctor mirrors two” conclusion (`rounds/.../README.md:95-100`).
+
+**FIX — change the Goal to “none of the five declared contracts has a drift-side check,” and update the debate README to the model-declaration/reachability wording.**
+
+3. **`allowNonWorkspaceAccess` residual**
+
+The plan and probe record now correctly preserve both 1.1.12 questions and keep the 1.1.7 result past-tense (`plan:334-356,397-401`; `probe-record.md:228-254`). The debate README still says `true` is a current requirement and that the only residual is outside-workspace access (`rounds/.../README.md:102-107`).
+
+**FIX — propagate the two-question residual into the debate README and label its round-1 wording superseded.**
+
+4. **`.codex` provenance**
+
+The plan, probe record, standing reference, and debate README consistently say the gap was known, reachability remains unprobed, and the untrusted-loading claim was retracted (`plan:358-366`; `probe-record.md:157-182`; `skills/multi-model-verify/references/model-prompting-notes.md:288-291`; `rounds/.../README.md:109-114`). **PASS**
+
+5. **Standing surfaces**
+
+The newly added reviewer-isolation design treatment is correct: it preserves prompt flag-parity as a separate unknown while retracting the false tool-list premise and item-7 linkage (`plan:177-218`; `docs/superpowers/specs/2026-07-28-reviewer-isolation-design.md:184-197,378-395`).
+
+Five is nevertheless incomplete because the debate README is now a sixth standing surface. It says item 7 is why the context probe is not full isolation and repeats the superseded control/removal conclusions (`rounds/.../README.md:28-30,89-127`). Unlike the retained briefs and replies, this README is a synthesized standing record, not a verbatim historical artifact.
+
+The repository sweep found no seventh operative surface. The mirror design’s statement that item 7 was outside its past cycle remains historical and correctly stays untouched (`docs/superpowers/specs/2026-07-29-mirror-z-capture-design.md:354-360`).
+
+**FIX — make the debate README surface 6, preserving its round-1 history but appending the round-2 adjudication and marking the superseded conclusions explicitly.**
+
+6. **Agy version reporting**
+
+Successful version-change reporting is now executable and test-directed (`plan:292-304,316-332`). But unreadable or unparseable versions are specified as mere notes (`plan:301-304,323-326`). In the current watcher, notes coexist with “No findings,” and zero findings exit clean (`tools/check-drift.ps1:334-348,411-413`). That violates the invariant that an unreadable measurement is never clean.
+
+**FIX — a changed readable version may be a note; an absent, unreadable, or unparseable agy version must be a finding with non-clean exit, preserve the prior snapshot value, and have tests asserting both the finding text and nonzero verdict.**
+
+## Propagation verdict
+
+The newly discovered propagation surface is the debate README. Retained `plan-brief-r*.md` and `plan-reply-r*.txt` files should remain verbatim; their superseded claims belong in the README’s adjudication history rather than being rewritten.
+
+Task 3’s operative count is therefore **six, not five**.
+
+The round is **not DRY**.
+
+Meters: **3/4 consecutive contested exchanges; 3/6 total fix-verify units.**

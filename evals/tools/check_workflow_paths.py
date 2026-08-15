@@ -61,6 +61,13 @@ WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "skill-evals.yml"
 REQUIRED_DUAL_HOST_MODULES = [
     "evals/multi-model-verify/test_attestation.py",
     "evals/multi-model-verify/test_codex_context_probe.py",
+    # 0.24.0. Added to the workflow AND to this list in one act: a module
+    # named in both host steps but absent from this list is not locked, so
+    # deleting it from one step would leave the guard green. The probe is
+    # the module that most needs the lock - it was broken on Windows
+    # PowerShell 5.1 alone, by a byte-order mark on its first JSON-RPC
+    # frame, so a pwsh-only run is precisely the run that misses it.
+    "evals/multi-model-verify/test_codex_tool_surface_probe.py",
     "evals/multi-model-verify/test_review_mirror.py",
     "evals/multi-model-verify/test_kimi_round_evidence.py",
     "evals/multi-model-verify/test_kimi_lane_lock.py",

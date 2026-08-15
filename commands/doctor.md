@@ -126,22 +126,65 @@ If check 1 found a version mismatch, say so here: any behavioral run made
 WITHOUT `--head` tested the stale cache, not the checkout. A `--head` run is
 unaffected by the mismatch.
 
-## 7. agy transport (Flash implementer lane)
+## 7. agy transport and lane contracts (Flash implementer lane)
 
-Resolve the INSTALLED copy's `agents/flash-implementer.md` under the
-`installPath` from check 1 and parse the canonical model literal from its
-Lane note (the pinned model-ID token declared there) — the agent file is the ONE
-place the implementer model is defined; carry no literal here. A missing
-declaration is itself BROKEN. Then:
+FOUR measurements roll into ONE row, and none of them generates anything.
+`tools/check-drift.ps1` asserts these same four contracts on its weekly
+run. Doctor and drift are aligned deliberately: two instruments that
+disagree about the same fact are worse than one instrument, because the
+quieter one reads as a second opinion.
 
-- `& "$env:LOCALAPPDATA\agy\bin\agy.exe" --version` — missing binary =
-  BROKEN (the Flash lane cannot dispatch), report the install one-liner.
-- `agy models` — output must contain the parsed literal. Sign-out or a
-  missing model = BROKEN with the actual output. No generation probe —
-  this is a reachability check, and agy free-tier quota is opaque.
+**Aggregate verdict, a TOTAL order.** An absent client short-circuits the
+whole row to N/A before any contract below is checked. Otherwise the row
+is the WORST substate observed, by `BROKEN > STALE > N/A > OK`, and every
+substate observed is still named in the detail text.
 
-Report the route language as declared in the agent file: evidence is
-client-side, requested and propagated only.
+- **Client and version.** Look under `$env:LOCALAPPDATA\agy\bin` for
+  `agy.exe` and then `agy.cmd`, and use the ABSOLUTE path of the first
+  that exists as `<agy>` below, never a bare `agy` resolved from PATH.
+  Neither present is N/A, short-circuit, reported as
+  `Flash implementer lane unavailable, reviewer lanes unaffected`,
+  with the install one-liner as the fix.
+  A client that IS present but exits non-zero, or does not
+  report a usable `<major>.<minor>.<patch>` version, is BROKEN with the
+  actual output: an unmade version check is never a passing one.
+
+- **Model identity.** Resolve the INSTALLED copy's
+  `agents/flash-implementer.md` under the `installPath` from check 1 and
+  parse the canonical model literal from its Lane note (the pinned
+  model-ID token declared there). The agent file is the ONE place the
+  implementer model is defined; carry no literal here, and a missing
+  declaration is itself BROKEN. Then run `& <agy> models`: a non-zero
+  exit is BROKEN, because the lane's only reachability and identity check
+  could not be made. Output that does not contain the parsed literal is
+  also BROKEN, with the actual output, and the reading is that the model
+  was renamed or the account cannot see it. No generation probe: this is
+  a reachability check, and agy free-tier quota is opaque.
+
+- **Workspace trust.** Read
+  `$env:USERPROFILE\.gemini\antigravity-cli\settings.json`. A missing
+  file is BROKEN, because the lane blocks on it at dispatch. A file that
+  does not parse as JSON is BROKEN, and an unreadable settings file is
+  never reported as an empty one. A parsed file with no
+  `trustedWorkspaces` key is BROKEN, because the lane cannot write in any
+  workspace. A `trustedWorkspaces` that is present but NOT an array is
+  BROKEN: the lane's preflight reads it positionally, so a changed shape
+  is not a shorter list. Report `allowNonWorkspaceAccess` in the detail
+  when the key is present, as an informational VALUE and never as a
+  verdict, and say plainly that what it permits outside the workspace is
+  UNMEASURED (backlog item 36).
+
+- **Authorship evidence root.** Verify
+  `$env:USERPROFILE\.gemini\antigravity-cli\brain` exists. Missing is
+  BROKEN: it is where the lane's authorship evidence is read from, and a
+  lane whose evidence cannot be located must stop rather than proceed
+  unverified.
+
+Report the resolved client path, the version, the model literal with
+whether `agy models` listed it, the trustedWorkspaces verdict with
+`allowNonWorkspaceAccess` when present, and the brain root. Report the
+route language as declared in the agent file: evidence is client-side,
+requested and propagated only.
 
 ## 8. Backup reviewer transport (kimi-code)
 

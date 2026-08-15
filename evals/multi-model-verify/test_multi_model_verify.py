@@ -141,10 +141,27 @@ class TestTransportContract:
         # --disable plugins removes all 31 and the recommended-plugins
         # block; --disable apps removes the apps block.
         text = read(SKILL_MD)
-        assert text.count("--disable plugins --disable apps") >= 2, (
+        assert text.count("--disable plugins --disable apps --disable memories") >= 2, (
             "the isolation flags must ride BOTH the dispatch and the resume"
             " - nothing carries across a resume by itself, which is the"
             " same trap --sandbox read-only already documents"
+        )
+
+    def test_the_reviewers_cross_session_memory_is_disabled(self):
+        # 0.24.0, diff debate round 1. Measured on the live client that day:
+        # the review configuration reported `memories=True`, so the auditor
+        # carried a cross-session store while `plugins` and `apps` were
+        # correctly false. Backlog item 7 names that store in its own
+        # problem statement, beside the MCP tools.
+        #
+        # Continuity WITHIN a review is not lost by this: the debate already
+        # resumes the same session for every round after the first, which is
+        # where a review's memory is supposed to live.
+        text = read(SKILL_MD)
+        assert text.count("--disable memories") >= 2, (
+            "the memories flag must ride BOTH the fresh dispatch and the"
+            " resume: a flag on the fresh call alone leaves every later"
+            " round of the same debate holding the store"
         )
 
     def test_the_verified_override_is_what_gets_dispatched(self):
@@ -244,7 +261,9 @@ class TestTransportContract:
         # debate's model (cross-review finding, 2026-07-12).
         assert re.search(
             r"codex exec --sandbox read-only --disable plugins"
-            r" --disable apps -c \$override -m <canonical-model-id>"
+            r" --disable apps --disable memories"
+            r" -c mcp_servers\.node_repl\.enabled=false"
+            r" -c \$override -m <canonical-model-id>"
             r" -c model_reasoning_effort=<canonical-effort>"
             r" [^\n]*resume <SESSION_ID>", text
         ), (
@@ -482,6 +501,8 @@ class TestTransportContract:
         assert re.search(
             r"\$brief \| codex exec"
             r" --sandbox read-only --disable plugins --disable apps"
+            r" --disable memories"
+            r" -c mcp_servers\.node_repl\.enabled=false"
             r" -c \$override -m <canonical-model-id>"
             r" -c model_reasoning_effort=<canonical-effort>"
             r" [^\n]*resume <SESSION_ID> -", text
@@ -764,22 +785,85 @@ class TestTransportContract:
         # caught an MCP tool running inside a round that passed every
         # check the probe makes, so the skill must not let a clean probe
         # read as full reviewer isolation.
+        #
+        # REWRITTEN AT 0.24.0, and the reason is the point. This region
+        # used to say `codex debug` offers no tool-list view "to measure
+        # instead". True of `codex debug`, false of codex: the app server
+        # answers `mcpServerStatus/list`, and item 7 closed on that
+        # measurement. What must SURVIVE the rewrite is the stop itself -
+        # a clean prompt probe is still not full reviewer isolation - and
+        # the reasons are now three rather than two, because the tool
+        # surface moved from unmeasured to measured-with-a-mitigation
+        # while the prompt flag-parity limit stayed unverified.
         text = read(SKILL_MD)
         assert (
             "   State what a clean probe means, and never more. It means exactly this:\n"
             "   no skill is advertised, no plugin or apps block is present, and no\n"
-            "   instruction source sits inside the reviewed tree. Two things it does\n"
+            "   instruction source sits inside the reviewed tree. Three things it does\n"
             "   NOT mean. The global `AGENTS.md` above survives a clean probe and is\n"
             "   still instructing the reviewer; the probe records it rather than\n"
-            "   removing it. And the reviewer's TOOL surface is not read at all,\n"
-            "   because tools are not in the prompt: measured 2026-07-28, the rendered\n"
-            "   prompt names neither a configured MCP server nor the memories feature,\n"
-            "   `codex debug` offers no tool-list view to measure instead, and a round\n"
-            "   dispatched with the flags and the verified override still logged\n"
-            "   `mcp: node_repl/js started` three times in its own transcript. Backlog\n"
-            "   item 7 holds the tool half. Do not call a passing probe full reviewer\n"
-            "   isolation."
+            "   removing it. It says nothing about the TOOL surface, which is not in\n"
+            "   the prompt and is measured separately by the tool-surface probe in\n"
+            "   references/model-prompting-notes.md, where a clean result is a\n"
+            "   mitigation, never proof of removal. And full flag parity with the\n"
+            "   dispatch cannot be REQUESTED: `prompt-input` rejects `--sandbox` and\n"
+            "   `-m`, so whether either changes rendered content is UNVERIFIED. Do not\n"
+            "   call a passing probe full reviewer isolation."
         ) in text
+
+    def test_the_tool_surface_probe_is_a_calibration_not_a_control(self):
+        # 0.24.0, backlog item 7. The asymmetry between the two passes is
+        # the whole design, and it exists because a server disabled by
+        # config and a server that failed to launch were MEASURED to be
+        # indistinguishable. A later edit that lets the absence direction
+        # read as a removal would rebuild the false-clean this probe was
+        # written to prevent.
+        text = read(REFERENCES / "model-prompting-notes.md")
+        assert (
+            "  The probe runs TWO passes and their directions are NOT symmetric. Pass 1\n"
+            "  carries no isolation flags and is an INSTRUMENT CALIBRATION: if it\n"
+            "  cannot see a running server with at least one tool, this probe is not\n"
+            "  known to be able to see a tool at all, the measurement is UNMADE, and\n"
+            "  the verdict is BLOCKED. Pass 2 carries the dispatch flags. A tool\n"
+            "  reported there and not named by the ALLOWLIST is a DETECTION and blocks.\n"
+            "  A tool ABSENT from pass 2 is a MITIGATION and never proof of removal:\n"
+            "  measured 2026-08-11, a server disabled by config and a server that\n"
+            "  failed to launch both report a null serverInfo with zero tools, and no\n"
+            "  field separates them. Never report a clean tool-surface probe as\n"
+            "  verified reviewer isolation."
+        ) in text
+
+    def test_the_tool_allowlist_is_empty_and_names_the_inert_lever(self):
+        # The allowlist is what the reviewer MAY hold, so widening it is a
+        # decision about the auditor's powers and must not happen quietly.
+        # `-c mcp_servers={}` is named here specifically because it was
+        # proposed as a control in backlog item 7 on the strength of
+        # parsing, and then measured to do nothing at all.
+        text = read(REFERENCES / "model-prompting-notes.md")
+        assert (
+            "  The ALLOWLIST is EMPTY, and the dispatch carries\n"
+            "  `-c mcp_servers.node_repl.enabled=false` on the fresh call and on every\n"
+            "  resume. Measured 2026-08-11: `--disable plugins --disable apps` alone\n"
+            "  leaves `node_repl` and its `js` JavaScript-execution tool resolved, so\n"
+            "  the two feature flags alone are not the whole control. Widening this\n"
+            "  allowlist widens what the auditor may hold and belongs in the debate\n"
+            "  record with its reason. `-c mcp_servers={}` must NEVER be used in its\n"
+            "  place: it parses, exits 0, and was measured to change nothing at all.\n"
+            "  The dispatch also carries `--disable memories` on the fresh call and on\n"
+            "  every resume. Measured 2026-08-12: without it the review configuration\n"
+            "  reports `memories=True`, so the auditor holds a CROSS-SESSION store no\n"
+            "  other control touches; with it the same probe reports `memories=False`.\n"
+            "  Continuity within one review comes from resuming that review's own\n"
+            "  session, never from the store."
+        ) in text
+
+    def test_both_dispatches_disable_the_surviving_mcp_server(self):
+        # Shape A applies to the fresh call AND every resume. A resume that
+        # dropped the flag would silently restore the JavaScript execution
+        # tool for every round after the first, which is the direction that
+        # matters: round 1 is the one anybody checks.
+        text = read(SKILL_MD)
+        assert text.count("-c mcp_servers.node_repl.enabled=false") == 2
 
     def test_brief_carries_a_scope_guard(self):
         # The guard is prose, so it is a mitigation. The controls are three
@@ -2585,6 +2669,36 @@ class TestDoctorCommand:
         )
         assert "app-server" in body and "account/rateLimits/read" in body
         assert "experimental" in body.lower()
+
+    def test_the_agy_row_asserts_the_same_contracts_the_drift_run_does(self):
+        # 0.24.0, backlog item 11. `tools/check-drift.ps1` asserts FOUR
+        # things about the Flash implementer lane every week; the doctor
+        # asserted one of them, the version. Two instruments that disagree
+        # about the same fact are worse than one instrument, because the
+        # quieter one reads as a second opinion.
+        body = read(self.DOCTOR)
+        for anchor in (
+            "agy.cmd",                    # both installed client forms
+            "& <agy> models",             # the resolved path, not bare PATH
+            "trustedWorkspaces",          # the workspace-trust contract
+            "allowNonWorkspaceAccess",    # recorded, and never a verdict
+            "antigravity-cli",            # where both of those live
+            "brain",                      # the authorship-evidence root
+            "backlog item 36",            # what the recorded value does NOT say
+        ):
+            assert anchor in body, "agy contract anchor missing: " + anchor
+
+    def test_an_absent_agy_client_is_not_a_broken_row(self):
+        # The Flash lane is OPTIONAL and the drift run records its absence
+        # as a NOTE, not a finding. A doctor that calls the same machine
+        # BROKEN teaches the user to ignore BROKEN - the identical argument
+        # check 9 already makes for repo-scoped hits.
+        body = read(self.DOCTOR)
+        assert "Flash implementer lane unavailable" in body
+        assert re.search(
+            r"[Nn]either present is N/A[^.]{0,120}short-circuit", body), (
+            "an absent agy client must short-circuit the row to N/A"
+        )
 
 
 class TestIntakeCommand:

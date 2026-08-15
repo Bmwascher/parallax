@@ -1,0 +1,48 @@
+The range is not dry. The functional feature-schema fix stands, but its false-clean test does not; the depth guard has a reproducible boundary defect; nested-array change detection remains untested; and item 42 still contains two overstatements.
+
+1. The production feature parser now requires an array, validates every entry’s name and boolean enablement, and blocks multiple recognized enablement members. I found no remaining malformed `data` or entry shape that reaches CLEAN unread (`tools/codex-tool-surface-probe.ps1:610-685`).
+
+   However, the bare-object test places the malformed object in pass 2 (`evals/multi-model-verify/test_codex_tool_surface_probe.py:750-761`). Pre-fix, that object supplied only `memories`; the downstream policy still required `plugins`, `apps`, and `memories`, so it blocked for a missing required feature rather than reaching CLEAN (`tools/codex-tool-surface-probe.ps1:764-800`). Its RED therefore did not demonstrate the claimed false-clean. Rework it so baseline `features1` is the bare object while pass 2 contains all three valid disabled features, then watch the pre-fix code return CLEAN.
+
+   **FIX — retain the production code, but replace the pass-2 bare-object case with a genuinely discriminating baseline false-clean case and watch it RED.**
+
+2. The guard is worth keeping for PowerShell 7, but its reach declaration and threshold are wrong. `Get-ValueDepth` defines a scalar as 1 and each container as one plus its deepest member, then blocks values greater than 100 (`tools/check-drift.ps1:194-223`; `tools/check-drift.ps1:349-364`).
+
+   I reproduced this boundary on Windows PowerShell 5.1:
+
+   - A settings value with 100 nested object members parses successfully.
+   - The metric returns 101, so the new guard fires.
+   - That value serializes intact inside the snapshot at `-Depth 100`; it is not truncated.
+   - At 101 nested members, parsing throws before the guard.
+
+   Thus the guard is reachable on 5.1 precisely as a false-positive against the deepest parseable, serializable value. The statement that it is unreachable is false (`docs/superpowers/plans/rounds/2026-08-11-tool-surface-agy-drift/diff-debate-record.md:226-233`). With the current metric, the truncating boundary is greater than `$JsonMaxDepth + 1`, not greater than `$JsonMaxDepth`; the snapshot write is at `tools/check-drift.ps1:633-670`.
+
+   **FIX — change the threshold to account for the metric’s scalar level, add a 5.1 boundary case proving the deepest parseable value remains clean, add a PowerShell 7 over-boundary finding case, and correct the reach declaration.**
+
+3. The corrected object scenario is genuinely discriminating. Its exact values produce the stated identical pre-fix tokens, and its assertions require both the leaf name and new value in the report (`evals/tools/drift_statemachine_tests.ps1:1155-1173`). “Four levels plus the leaf” is correct for that authored shape.
+
+   The nested-array scenario only checks snapshot round-trip and array type; it never seeds an old array value, changes a deep element, or asserts a change note (`evals/tools/drift_statemachine_tests.ps1:1175-1192`). A pre-fix pair such as `rules:[{paths:[{leaf:"ONE"}]}]` versus `leaf:"TWO"` collapses to equal default-depth tokens, yet no current array scenario exercises that failure. Round 4 explicitly requested nested-array round-trip and change cases (`docs/superpowers/plans/rounds/2026-08-11-tool-surface-agy-drift/diff-reply-r4.txt:12-14`).
+
+   **FIX — add a nested-array change scenario with an old snapshot and different deep new leaf, assert the report carries the leaf and new value, and watch it RED against the pre-depth watcher.**
+
+4. The item body and workaround are now narrow: they distinguish the actual refreshed, non-identical preamble condition from a day boundary and expressly say same-day resumes are not guaranteed safe (`docs/superpowers/plans/2026-07-27-0150-backlog.md:2740-2766`). The debate record makes the same distinction (`docs/superpowers/plans/rounds/2026-08-11-tool-surface-agy-drift/diff-debate-record.md:134-144`).
+
+   Two statements remain wider:
+
+   - The title says any “REFRESHED PREAMBLE” cannot bind, omitting the necessary “non-identical” qualification that the body supplies (`docs/superpowers/plans/2026-07-27-0150-backlog.md:2705`; `docs/superpowers/plans/2026-07-27-0150-backlog.md:2740-2747`).
+   - The round-5 brief says crossing a day boundary makes this dispatch “known to fail,” although the item says the boundary is only the single observed cause and not the binding condition (`docs/superpowers/plans/rounds/2026-08-11-tool-surface-agy-drift/diff-brief-r5.md:3`; `docs/superpowers/plans/2026-07-27-0150-backlog.md:2740-2747`).
+
+   **FIX — add “NON-IDENTICAL” to the item title and narrow the round-5 historical explanation from “known to fail” to “risked reproducing the one observed failure.”**
+
+5. The two mistaken fail-watch setups are candidly recorded, including the wrong commit and off-by-one scenario (`.git/parallax/application-checkpoints/2026-08-11-1630-7945ac1-0240-build.md:720-730`). The two shipped count references now say 92 (`tools/codex-tool-surface-probe.ps1:634-637`; `evals/multi-model-verify/test_codex_tool_surface_probe.py:706-716`).
+
+   Keeping the non-discriminating array-type assertion is appropriate. It asserts a useful independent shape invariant and is explicitly labelled as not having gone RED, so it cannot honestly be mistaken for truncation evidence (`evals/tools/drift_statemachine_tests.ps1:1187-1191`).
+
+   **PASS**
+
+UNVERIFIED:
+
+- The exact historical “two RED with 48 green” and “five drift assertions RED” runs. The retained files record the totals but do not retain the failing output; moreover, the bare-object case did not exercise its claimed CLEAN consequence (`docs/superpowers/plans/rounds/2026-08-11-tool-surface-agy-drift/diff-debate-record.md:242-243`; `.git/parallax/application-checkpoints/2026-08-11-1630-7945ac1-0240-build.md:980-982`).
+- The live count of 92 and “all boolean” cannot be independently recounted because the raw output is deliberately absent. I verified the aggregate record and both corrections, not the underlying output (`.git/parallax/application-checkpoints/2026-08-11-1630-7945ac1-0240-build.md:932-954`).
+
+**Is this range DRY? No.** It remains open with one moderate functional availability defect in the depth guard, two moderate evidence/coverage gaps, and a minor item-42 width cleanup. None of the unverified material is needed for that verdict.

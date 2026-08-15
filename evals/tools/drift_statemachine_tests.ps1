@@ -46,6 +46,17 @@
 #   kimi-unparseable-version version does not parse against the floor
 #   kimi-version-carry a present-but-broken probe is a finding, not a note,
 #                      and still never clobbers the snapshot
+#   agy-contracts-clean   the positive control: a healthy lane is silent
+#   agy-version-unreadable an unreadable version is a FINDING with a
+#                      NON-CLEAN exit, and the prior value survives
+#   agy-version-fail   a failed --version is the same class
+#   agy-version-changed a changed version is REPORTED, not carried silently
+#   agy-model-renamed  the lane's model literal is gone from `agy models`
+#   agy-models-fail    the identity check could not be made at all
+#   agy-settings-missing / -malformed / -trustedworkspaces-shape /
+#                      -trustedworkspaces-absent  the settings contract
+#   agy-brain-missing  the authorship-evidence root is gone
+#   agy-absent         an optional lane that is not installed is a NOTE
 #   triage-timeout     hung agent is killed at the cap
 #
 # Runtime: several minutes - four scenarios re-run the full pytest suite
@@ -54,7 +65,9 @@
 # (test_multi_model_verify.py::TestDriftStateMachine::test_run_state_machine).
 #
 # Windows PowerShell 5.1, ASCII ONLY (same rules as the script under test).
-# Exit code = number of failed assertions (0 = all pass).
+# Exit code = failed assertions PLUS skipped scenarios (0 = every scenario
+# ran and every assertion passed). A skip counts because the only thing the
+# pytest caller reads is this number.
 
 param(
     [switch]$KeepTemp
@@ -68,8 +81,9 @@ New-Item -ItemType Directory -Force -Path $Root | Out-Null
 # Save EVERY variable we touch; restored in the finally block at the bottom.
 $savedEnv = @{}
 foreach ($name in @("PATH", "USERPROFILE", "HOME", "TEMP", "TMP",
+                    "LOCALAPPDATA",
                     "CLAUDE_STUB_MODE", "CODEX_STUB_MODE",
-                    "KIMI_STUB_MODE",
+                    "KIMI_STUB_MODE", "AGY_STUB_MODE",
                     "PARALLAX_DRIFT_STATEMACHINE",
                     "PARALLAX_DRIFT_TOAST_LOG",
                     "PARALLAX_DRIFT_TRIAGE_TIMEOUT_MS")) {
@@ -77,6 +91,11 @@ foreach ($name in @("PATH", "USERPROFILE", "HOME", "TEMP", "TMP",
 }
 
 $script:failCount = 0
+# A scenario that cannot run on this machine is NOT a passing one, so it is
+# counted separately and named in the summary. Silence would let a missing
+# interpreter read as coverage.
+$script:skipCount = 0
+$script:skipNames = @()
 $script:LastExit = -1
 $script:LastReport = ""
 $script:LastToastLog = ""
@@ -112,12 +131,35 @@ $PendingFile = Join-Path $ToolsDir "drift-pending.json"
 $StubDir = Join-Path $Root "stubs"
 New-Item -ItemType Directory -Force -Path $StubDir | Out-Null
 
+function Write-StubFile($body, $path) {
+    <#
+      Write a stub with CRLF line endings, ALWAYS. This is not cosmetic.
+
+      cmd.exe cannot find a batch LABEL in an LF-only file: `goto badfix`
+      fails with "The system cannot find the batch label specified", the
+      stub exits 1 having done nothing, and the drift script correctly
+      reports an untrusted auto-triage. The scenario then fails while
+      looking like a fault in the thing under test.
+
+      The stub bodies below are here-strings, so they inherit THE LINE
+      ENDINGS OF THIS FILE. That made every .cmd stub silently depend on
+      git rewriting this file to CRLF at checkout: fine on a fresh clone,
+      broken the moment an editor writes LF. Measured 2026-08-11 -
+      `gate-failure` fell over on a working copy whose endings had been
+      normalized to LF, while the same scenario passed in a checked-out
+      baseline worktree an hour earlier. A test harness must not depend on
+      how its own source happens to be stored.
+    #>
+    [IO.File]::WriteAllText($path, (($body -replace "`r?`n", "`r`n") + "`r`n"),
+                            (New-Object System.Text.ASCIIEncoding))
+}
+
 # claude.cmd: version probe + the triage agent, mode via CLAUDE_STUB_MODE.
 # fixes/badfix write into the CWD, which the script sets to the worktree:
 # 'fixes' makes a harmless change, 'badfix' plants a FAILING test so the
 # script's own pytest gate is what has to catch it.
 # The hang mode never exits on its own so the kill path always fires.
-@'
+$claudeStub = @'
 @echo off
 if "%~1"=="--version" goto version
 if "%CLAUDE_STUB_MODE%"=="version-fail" exit /b 1
@@ -176,7 +218,8 @@ echo     assert False, "planted by the state-machine harness">> evals\multi-mode
 echo Applied a fix that breaks the suite.
 echo VERDICT: FIXES-APPLIED stub fix that breaks the gate
 exit /b 0
-'@ | Set-Content -Path (Join-Path $StubDir "claude.cmd") -Encoding ASCII
+'@
+Write-StubFile $claudeStub (Join-Path $StubDir "claude.cmd")
 
 # codex.ps1: healthy transport by default.
 #   drop-config  - exec --help omits --config, so the flag probe raises
@@ -184,7 +227,7 @@ exit /b 0
 #                  itself must stay healthy)
 #   bad-review   - the cross-review answers off-grammar, which must read as
 #                  UNAVAILABLE, never as a passed review
-@'
+$codexStub = @'
 $null = @($input)
 $argList = @($args)
 if ($argList -contains "--version") { Write-Output "codex-cli 7.7.7"; exit 0 }
@@ -229,7 +272,8 @@ if ($idx -ge 0 -and ($idx + 1) -lt $argList.Count) {
     Set-Content -Path $argList[$idx + 1] -Value $verdict
 }
 exit 0
-'@ | Set-Content -Path (Join-Path $StubDir "codex.ps1") -Encoding ASCII
+'@
+Write-StubFile $codexStub (Join-Path $StubDir "codex.ps1")
 
 $env:PATH = "$StubDir;" + $env:PATH
 
@@ -279,7 +323,7 @@ ConvertTo-Json -InputObject $registry -Depth 5 | Set-Content -Path (Join-Path $F
 # stubbed offline; production tries kimi.exe first, then kimi.cmd.
 $KimiBin = Join-Path $FakeProfile ".kimi-code\bin"
 New-Item -ItemType Directory -Force -Path $KimiBin | Out-Null
-@'
+$kimiStub = @'
 @echo off
 if "%~1"=="--version" goto version
 if "%~1"=="--help" goto help
@@ -309,10 +353,127 @@ exit /b 0
 )
 echo usage: kimi [--agent-file FILE] [--skills-dir DIR] [-m MODEL] [-p PROMPT] [--session ID]
 exit /b 0
-'@ | Set-Content -Path (Join-Path $KimiBin "kimi.cmd") -Encoding ASCII
+'@
+Write-StubFile $kimiStub (Join-Path $KimiBin "kimi.cmd")
+
+# agy stub, and LOCALAPPDATA redirected to reach it.
+#
+# THIS REDIRECTION IS NOT TIDINESS. 0.24.0 added agy CONTRACT checks to
+# check-drift, including an `agy models` call. LOCALAPPDATA was not
+# redirected here, so every scenario in this offline harness would have
+# found the REAL agy on the developer's machine and made a REAL network
+# call against a lane whose free-tier quota the doctor already calls
+# opaque. An offline harness that reaches a live service is not offline,
+# and the failure would have been slow and quota-shaped rather than red.
+$FakeLocalAppData = Join-Path $FakeProfile "AppData\Local"
+$AgyBin = Join-Path $FakeLocalAppData "agy\bin"
+New-Item -ItemType Directory -Force -Path $AgyBin | Out-Null
+# Same .cmd-only constraint as kimi above: a .cmd renamed .exe does not
+# execute on Windows, so only the .cmd name can be stubbed offline, and
+# production tries agy.exe first then agy.cmd.
+#
+# THE MODEL LITERAL HAS ONE HOME and this harness must not become a second
+# one. `test_flash_literal_single_source` sweeps evals/**/*.ps1 and fails
+# on a copy; it caught this file. The pin is right for a reason beyond
+# tidiness: a stub carrying the name keeps asserting the OLD name after a
+# rename, which is the exact drift the check it exercises exists to catch.
+$FlashAgentFile = Join-Path $RepoRoot "agents\flash-implementer.md"
+$AgyModelLiteral = ""
+if (Test-Path $FlashAgentFile) {
+    if ((Get-Content -Raw -LiteralPath $FlashAgentFile) -match 'Canonical model literal:\s*`?\s*[\r\n]*\s*`([^`]+)`') {
+        $AgyModelLiteral = $Matches[1].Trim()
+    }
+}
+if (-not $AgyModelLiteral) {
+    Write-Output "FATAL: could not parse the canonical model literal from $FlashAgentFile - this harness reads it rather than carrying a copy"
+    exit 1
+}
+# The rename the check must catch. It must NOT contain the canonical
+# literal as a substring, or the watcher's -notmatch test would still find
+# the canonical name inside it and report no drift.
+$AgyRenamedLiteral = "renamed-model-not-the-canonical-one"
+
+$agyStub = @"
+@echo off
+if "%~1"=="--version" goto version
+if "%~1"=="models" goto models
+exit /b 0
+
+:version
+if "%AGY_STUB_MODE%"=="version-fail" exit /b 1
+if "%AGY_STUB_MODE%"=="version-fail-loud" (
+echo 1.1.12
+exit /b 1
+)
+if "%AGY_STUB_MODE%"=="unparseable" (
+echo agy version devbuild
+exit /b 0
+)
+if "%AGY_STUB_MODE%"=="version-changed" (
+echo 2.0.0
+exit /b 0
+)
+echo 1.1.12
+exit /b 0
+
+:models
+REM NO PARENTHESES IN THESE ECHOES. The real `agy models` prints
+REM "Gemini 3.6 Flash (Medium)", and copying that shape here broke the
+REM stub silently: a ")" inside an IF block closes the block early, so cmd
+REM mis-parsed everything after it and the DEFAULT branch printed nothing
+REM at all. Exit 0, no output, and the watcher correctly reported the
+REM model as missing - a stub bug wearing the face of a real finding, in
+REM four scenarios at once. The contract only needs the literal.
+if "%AGY_STUB_MODE%"=="models-fail" exit /b 4
+if "%AGY_STUB_MODE%"=="model-renamed" (
+echo $AgyRenamedLiteral  Renamed Flash Model
+exit /b 0
+)
+echo $AgyModelLiteral  Canonical Flash Model
+exit /b 0
+"@
+Write-StubFile $agyStub (Join-Path $AgyBin "agy.cmd")
+
+# Check the stubs THEMSELVES, before any scenario runs. An LF-only .cmd
+# does not announce itself: `goto` fails, the stub exits 1 having done
+# nothing, and the drift script honestly reports an untrusted auto-triage
+# three hundred lines later. That reads as a fault in the thing under test.
+# Measured 2026-08-11: it cost an hour and two full harness runs to trace
+# back. This names the cause on line one instead.
+foreach ($stub in @((Join-Path $StubDir "claude.cmd"),
+                    (Join-Path $KimiBin "kimi.cmd"),
+                    (Join-Path $AgyBin "agy.cmd"))) {
+    $bytes = [IO.File]::ReadAllBytes($stub)
+    $lf = 0
+    $crlf = 0
+    for ($i = 0; $i -lt $bytes.Length; $i++) {
+        if ($bytes[$i] -eq 10) {
+            $lf++
+            if ($i -gt 0 -and $bytes[$i - 1] -eq 13) { $crlf++ }
+        }
+    }
+    Assert-True ($lf -gt 0 -and $lf -eq $crlf) `
+        ("stub is CRLF: " + (Split-Path -Leaf $stub) +
+         " - cmd.exe cannot find a batch label in an LF-only file")
+}
+
+# The agy settings file and brain root the contract checks read. Both live
+# under USERPROFILE, which is already redirected.
+$AgyHome = Join-Path $FakeProfile ".gemini\antigravity-cli"
+New-Item -ItemType Directory -Force -Path (Join-Path $AgyHome "brain") | Out-Null
+$script:AgySettingsPath = Join-Path $AgyHome "settings.json"
+function Set-AgySettings($json) {
+    [IO.File]::WriteAllText($script:AgySettingsPath, $json)
+}
+Set-AgySettings '{"allowNonWorkspaceAccess": true, "trustedWorkspaces": ["C:\\fake\\repo"]}'
+# Kept so the agy-absent scenario can delete the stub and Reset-State can
+# put it back.
+$script:AgyStubBackup = Join-Path $Root "agy-stub-backup.cmd"
+Copy-Item (Join-Path $AgyBin "agy.cmd") $script:AgyStubBackup -Force
 
 $env:USERPROFILE = $FakeProfile
 $env:HOME = $FakeProfile
+$env:LOCALAPPDATA = $FakeLocalAppData
 # Unlocks the script's test seams (they are inert in production without it)
 # AND guards the pytest wrapper for this harness against recursing when the
 # script re-runs the suite inside its worktree.
@@ -334,6 +495,36 @@ function Reset-State {
     Copy-Item $PinnedFixture $SpTemplate -Force
     if (Test-Path $PendingFile) { Remove-Item $PendingFile -Force }
     if (Test-Path $ReportsDir) { Remove-Item -Recurse -Force $ReportsDir }
+    # agy back to a healthy lane: default stub mode, a settings file that
+    # parses with the right shape, and a brain root that exists. Without
+    # this reset a scenario that broke one of them would leak into every
+    # scenario after it, and the leak would look like a real finding.
+    $env:AGY_STUB_MODE = ""
+    Set-AgySettings '{"allowNonWorkspaceAccess": true, "trustedWorkspaces": ["C:\\fake\\repo"]}'
+    New-Item -ItemType Directory -Force -Path (Join-Path $FakeProfile ".gemini\antigravity-cli\brain") | Out-Null
+    $agyStub = Join-Path $FakeLocalAppData "agy\bin\agy.cmd"
+    if (-not (Test-Path $agyStub)) { Copy-Item $script:AgyStubBackup $agyStub -Force }
+}
+
+function Set-SnapshotWithAgy($claude, $codex, $sp, $agy) {
+    $snap = @{ claude = $claude; codex = $codex; superpowers = $sp; agy = $agy; updated = "2026-01-01T00:00:00" }
+    ConvertTo-Json -InputObject $snap | Set-Content -Path $SnapshotFile
+}
+
+function Set-SnapshotWithAgyAllow($claude, $codex, $sp, $agy, $allow) {
+    $snap = @{ claude = $claude; codex = $codex; superpowers = $sp; agy = $agy
+               agyAllowNonWorkspaceAccess = $allow; updated = "2026-01-01T00:00:00" }
+    # -Depth 100 because a fixture written at the default depth 2 would
+    # truncate a NESTED seeded value to "System.Collections.Hashtable", and
+    # the nested scenarios would then be measuring this helper's defect
+    # rather than the watcher's. A fixture must not be able to fail in the
+    # direction the case is looking.
+    ConvertTo-Json -InputObject $snap -Depth 100 | Set-Content -Path $SnapshotFile
+}
+
+function Get-SavedSnapshot {
+    if (Test-Path $SnapshotFile) { return (Get-Content -Raw $SnapshotFile | ConvertFrom-Json) }
+    return $null
 }
 
 function Set-SnapshotWithKimi($claude, $codex, $sp, $kimi) {
@@ -341,7 +532,14 @@ function Set-SnapshotWithKimi($claude, $codex, $sp, $kimi) {
     ConvertTo-Json -InputObject $snap | Set-Content -Path $SnapshotFile
 }
 
-function Invoke-Drift($scenario, $claudeMode, $codexMode, $timeoutMs) {
+function Invoke-Drift($scenario, $claudeMode, $codexMode, $timeoutMs, $psHost) {
+    # $psHost is OPTIONAL and defaults to Windows PowerShell 5.1, which is
+    # what every scenario but one uses. The one exception needs a host whose
+    # JSON parser accepts input deeper than the serializer can write, and
+    # that host is PowerShell 7. This is not backlog item 41: the harness
+    # still drives 5.1: a single scenario names a different host for a
+    # reason it states.
+    if (-not $psHost) { $psHost = "powershell.exe" }
     Write-Output ""
     Write-Output "SCENARIO $scenario"
     $toastLog = Join-Path $Root "$scenario-toasts.txt"
@@ -351,7 +549,7 @@ function Invoke-Drift($scenario, $claudeMode, $codexMode, $timeoutMs) {
     $env:CLAUDE_STUB_MODE = $claudeMode
     $env:CODEX_STUB_MODE = $codexMode
     $script:LastToastLog = $toastLog
-    $script:LastOut = (& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $DriftScript 2>&1 | Out-String)
+    $script:LastOut = (& $psHost -NoProfile -ExecutionPolicy Bypass -File $DriftScript 2>&1 | Out-String)
     $script:LastExit = $LASTEXITCODE
     $script:LastReport = ""
     if (Test-Path $ReportsDir) {
@@ -733,6 +931,429 @@ Assert-True ($script:LastReport -match [regex]::Escape("did not report a usable 
 Remove-Item Env:KIMI_STUB_MODE -ErrorAction SilentlyContinue
 Complete-Scenario $b
 
+# --- agy lane contracts (0.24.0, backlog item 11) ---------------------------
+#
+# Until 0.24.0 the watcher ran `agy --version`, stored the string, and
+# compared it to nothing. That is how the item's own quoted 1.1.8 became
+# 1.1.12 across four releases with no report ever saying so.
+#
+# Every scenario below runs with the "noaction" claude stub so triage
+# dismisses quickly: these cases are about what the REPORT and the EXIT
+# CODE say, not about the triage loop, and a findings-week that re-ran the
+# full pytest suite would add ten minutes each for nothing.
+
+# --- scenario: agy-contracts-clean ------------------------------------------
+# The positive control. Without it every "no agy finding" assertion below
+# is satisfied by a watcher that never looked at agy at all.
+
+$b = $script:failCount
+Reset-State
+Invoke-Drift "agy-contracts-clean" "noaction" "" 60000
+Assert-True (-not ($script:LastReport -match 'agy')) "a healthy agy lane produces no agy finding and no agy note"
+Assert-True ($script:LastExit -eq 0) "a clean run exits 0"
+$snap = Get-SavedSnapshot
+Assert-True ($snap.agy -eq "1.1.12") "the probed agy version is written to the snapshot"
+Assert-True ("$($snap.agyAllowNonWorkspaceAccess)" -eq "True") "allowNonWorkspaceAccess is RECORDED so a change to it is visible next week"
+Complete-Scenario $b
+
+# --- scenario: agy-version-unreadable ---------------------------------------
+# THE ONE THAT MATTERS MOST. The 0.24.0 plan's round-2 fix specified this
+# as a NOTE. Notes print beside "No findings." and the exit is decided by
+# findings alone, so an unmade measurement would have exited CLEAN - the
+# exact false-clean the plan opens by forbidding. Round 3 caught it.
+#
+# Assert the EXIT CODE, not only the text: a report-only assertion passes
+# identically whether the run exited 0 or non-zero, which is what made the
+# defect invisible in the first place.
+
+$b = $script:failCount
+Reset-State
+Set-SnapshotWithAgy "1.2.3" "7.7.7" "6.2.0" "1.1.9"
+$env:AGY_STUB_MODE = "unparseable"
+Invoke-Drift "agy-version-unreadable" "noaction" "" 60000
+Assert-True ($script:LastReport -match '\[CRITICAL\] agy is installed at .* but did not report a usable version') "an unreadable agy version is a FINDING, not a note"
+Assert-True ($script:LastExit -ne 0) "an unreadable agy version makes the run NON-CLEAN - a note would have exited 0"
+$snap = Get-SavedSnapshot
+Assert-True ($snap.agy -eq "1.1.9") "the prior snapshot value is PRESERVED, not overwritten with an empty one"
+Complete-Scenario $b
+
+# --- scenario: agy-version-fail ---------------------------------------------
+# The binary is there and `--version` exits non-zero. Same class as above
+# and the same direction: silence is not a version.
+
+$b = $script:failCount
+Reset-State
+$env:AGY_STUB_MODE = "version-fail"
+Invoke-Drift "agy-version-fail" "noaction" "" 60000
+Assert-True ($script:LastReport -match '\[CRITICAL\] agy is installed at') "a failed agy --version is a finding"
+Assert-True ($script:LastExit -ne 0) "a failed agy --version makes the run non-clean"
+Complete-Scenario $b
+
+# --- scenario: agy-version-fail-loud ----------------------------------------
+# The divergent state the whole-branch review named: a client that exits
+# NON-ZERO while printing something a version regex matches. The doctor
+# calls that BROKEN. This block took stdout from a failed call as a
+# measurement, recorded it, and stayed clean - so the two instruments the
+# branch says were aligned disagreed about one fact. The kimi block one
+# screen below has required exit 0 all along, so it was also a
+# disagreement inside a single file.
+
+$b = $script:failCount
+Reset-State
+Set-SnapshotWithAgy "1.2.3" "7.7.7" "6.2.0" "1.1.8"
+$env:AGY_STUB_MODE = "version-fail-loud"
+Invoke-Drift "agy-version-fail-loud" "noaction" "" 60000
+Assert-True ($script:LastReport -match "'agy --version' exited 1") "a non-zero exit is a finding even when the output parses as a version"
+Assert-True ($script:LastExit -ne 0) "a failed version call makes the run non-clean"
+$snapAfter = Get-SavedSnapshot
+Assert-True ($snapAfter.agy -eq "1.1.8") "the version printed by a FAILED call is discarded, not saved as measured"
+# The assertion above is ALSO satisfied by a watcher that died before it
+# rewrote the snapshot at all, which would leave the seeded file intact.
+# It discriminated the defect it was written for - pre-fix, 1.1.12 was
+# saved - but this closes the residual reading. Whole-branch review, second
+# pass, minor 3.
+Assert-True ($snapAfter.updated -ne "2026-01-01T00:00:00") "the snapshot was actually rewritten, so the carried version is a decision and not a leftover"
+Complete-Scenario $b
+
+# --- scenario: agy-allow-removed --------------------------------------------
+# Removal is a change. The carry-forward restored last week's value
+# whenever this run's read was empty, including when the key had VANISHED
+# from a settings file that parsed - so the snapshot asserted a value the
+# file no longer carried and no note fired. "A change to it is watched"
+# was true of a changed value and false of a removed one.
+
+$b = $script:failCount
+Reset-State
+Set-SnapshotWithAgyAllow "1.2.3" "7.7.7" "6.2.0" "1.1.12" "True"
+Set-AgySettings '{"trustedWorkspaces": ["C:\\fake\\repo"]}'
+Invoke-Drift "agy-allow-removed" "noaction" "" 60000
+Assert-True ($script:LastReport -match 'allowNonWorkspaceAccess.*absent') "a REMOVED key is reported, not absorbed by the carry-forward"
+$snapAfter = Get-SavedSnapshot
+Assert-True (-not ($snapAfter.PSObject.Properties.Name -contains "agyAllowNonWorkspaceAccess")) "the removed key does not survive in the snapshot as a measured value"
+Complete-Scenario $b
+
+# --- scenario: agy-version-changed ------------------------------------------
+# The gap item 11 was actually about. codex and superpowers had change
+# notes; agy was carried forward and saved in silence.
+
+$b = $script:failCount
+Reset-State
+Set-SnapshotWithAgy "1.2.3" "7.7.7" "6.2.0" "1.1.8"
+Invoke-Drift "agy-version-changed" "noaction" "" 60000
+Assert-True ($script:LastReport -match 'agy 1\.1\.8 -> 1\.1\.12') "an agy version change is REPORTED, not carried silently"
+Assert-True ($script:LastExit -eq 0) "a readable version change is a note, so the run stays clean"
+Complete-Scenario $b
+
+# --- scenario: agy-model-renamed --------------------------------------------
+# The lane's only reachability and identity check. A renamed model is the
+# failure item 11 names first, and the literal is read from the agent file
+# so this check cannot drift away from the lane it watches.
+
+$b = $script:failCount
+Reset-State
+$env:AGY_STUB_MODE = "model-renamed"
+Invoke-Drift "agy-model-renamed" "noaction" "" 60000
+Assert-True ($script:LastReport -match ("no longer lists '" + [regex]::Escape($AgyModelLiteral) + "'")) "a renamed model is a finding naming the literal it looked for"
+Assert-True ($script:LastExit -ne 0) "a renamed model makes the run non-clean"
+Complete-Scenario $b
+
+# --- scenario: agy-models-fail ----------------------------------------------
+# An `agy models` that cannot run is not a passing identity check. Sign-out
+# lands here, and the doctor already records that agy quota is opaque.
+
+$b = $script:failCount
+Reset-State
+$env:AGY_STUB_MODE = "models-fail"
+Invoke-Drift "agy-models-fail" "noaction" "" 60000
+Assert-True ($script:LastReport -match "'agy models' exited 4") "a failed models call is a finding carrying the exit code"
+Assert-True ($script:LastExit -ne 0) "a failed models call makes the run non-clean"
+Complete-Scenario $b
+
+# --- scenario: agy-settings-missing -----------------------------------------
+
+$b = $script:failCount
+Reset-State
+Remove-Item -Force (Join-Path $FakeProfile ".gemini\antigravity-cli\settings.json")
+Invoke-Drift "agy-settings-missing" "noaction" "" 60000
+Assert-True ($script:LastReport -match '\[CRITICAL\] agy settings\.json is missing') "a missing settings file is a finding"
+Assert-True ($script:LastExit -ne 0) "a missing settings file makes the run non-clean"
+Complete-Scenario $b
+
+# --- scenario: agy-settings-malformed ---------------------------------------
+# An unreadable settings file is not an empty one. Parsing to nothing and
+# then finding no forbidden key is the false-clean shape.
+
+$b = $script:failCount
+Reset-State
+Set-AgySettings '{"trustedWorkspaces": ['
+Invoke-Drift "agy-settings-malformed" "noaction" "" 60000
+Assert-True ($script:LastReport -match 'did not parse as JSON') "an unparseable settings file is a finding, not an empty config"
+Assert-True ($script:LastExit -ne 0) "an unparseable settings file makes the run non-clean"
+Complete-Scenario $b
+
+# --- scenario: agy-allow-null -----------------------------------------------
+# PRESENCE is not the same question as VALUE. A key holding `null` is
+# PRESENT, and reading presence off the value's truthiness made this run
+# report the key as REMOVED, write a note saying so, and drop it from the
+# snapshot - all about a key that is still sitting in the file. Diff debate
+# round 1, claim 4, inside the fix written for the review's minor 6.
+
+$b = $script:failCount
+Reset-State
+Set-SnapshotWithAgyAllow "1.2.3" "7.7.7" "6.2.0" "1.1.12" "True"
+Set-AgySettings '{"allowNonWorkspaceAccess": null, "trustedWorkspaces": ["C:\\fake\\repo"]}'
+Invoke-Drift "agy-allow-null" "noaction" "" 60000
+Assert-True (-not ($script:LastReport -match 'allowNonWorkspaceAccess.*absent')) "a key holding null is PRESENT, and is never reported as removed"
+$snapAfter = Get-SavedSnapshot
+Assert-True ($snapAfter.PSObject.Properties.Name -contains "agyAllowNonWorkspaceAccess") "a present key with a null value still survives in the snapshot"
+# SURVIVING IS NOT THE SAME AS SURVIVING AS ITSELF. Both assertions above
+# are satisfied by a run that saves the WRONG value, and one did: the
+# watcher cast every value through `[string]`, so `null` was recorded as
+# the empty string. Diff debate round 2 named it, and these two close it.
+Assert-True ($null -eq $snapAfter.agyAllowNonWorkspaceAccess) "a null value is saved as NULL, not flattened to an empty string"
+Complete-Scenario $b
+
+# --- scenario: agy-allow-null-to-empty --------------------------------------
+# The change that the `[string]` cast made INVISIBLE. `null` and `""` are
+# different settings values, and the whole point of recording this key is
+# that a change to it is drift - but both rendered as the empty string, so
+# the comparison found them equal and no note was written. Diff debate
+# round 2.
+
+$b = $script:failCount
+Reset-State
+Set-SnapshotWithAgyAllow "1.2.3" "7.7.7" "6.2.0" "1.1.12" $null
+Set-AgySettings '{"allowNonWorkspaceAccess": "", "trustedWorkspaces": ["C:\\fake\\repo"]}'
+Invoke-Drift "agy-allow-null-to-empty" "noaction" "" 60000
+Assert-True ($script:LastReport -match 'allowNonWorkspaceAccess null -> ""') "a null to empty-string change is REPORTED, not absorbed as equal"
+Assert-True ($script:LastExit -eq 0) "a recorded value changing is a note, so the run stays clean"
+Complete-Scenario $b
+
+# --- scenario: agy-allow-nested ---------------------------------------------
+# THE TOKEN CAN BE EXACT AND THE STORED VALUE STILL WRONG. ConvertTo-Json
+# defaults to depth 2 and truncates SILENTLY past it - a nested value comes
+# back as the literal text "System.Collections.Hashtable" - so two
+# different nested settings produced the same token and a real change read
+# as equal. That is the defect the typed token was written to close, one
+# level further down, and it lived in both the token function and the
+# snapshot write. Diff debate round 3.
+
+$b = $script:failCount
+Reset-State
+Set-AgySettings '{"allowNonWorkspaceAccess": {"scope": {"paths": {"deep": "one"}}}, "trustedWorkspaces": ["C:\\fake\\repo"]}'
+Invoke-Drift "agy-allow-nested" "noaction" "" 60000
+$snapNested = Get-SavedSnapshot
+$nestedText = ConvertTo-Json $snapNested.agyAllowNonWorkspaceAccess -Compress -Depth 100
+Assert-True ($nestedText -match '"deep"\s*:\s*"one"') "a nested value round-trips into the snapshot instead of being truncated"
+# THE MARKER MATTERS. A first draft of this asserted the stored text does
+# not contain "System.Collections", which is what a truncated HASHTABLE
+# renders as - and it PASSED against the defect, because settings.json is
+# parsed to PSCustomObject and THAT truncates to the string "@{deep=one}"
+# instead. A vacuous assertion, in the fixture written to catch vacuous
+# behaviour. What the defect actually does is turn an OBJECT into a
+# STRING, so that is what this measures.
+Assert-True ($snapNested.agyAllowNonWorkspaceAccess.scope.paths -isnot [string]) "a nested value stays an OBJECT in the snapshot and is never flattened into a string"
+Complete-Scenario $b
+
+# --- scenario: agy-allow-nested-change --------------------------------------
+# A LIVE DISCRIMINATING CASE, sitting PAST the collapse boundary, and the
+# depth is measured rather than guessed.
+#
+# An earlier version of this used a shallower value and PASSED against the
+# defect, which this session then wrote up as "truncation corrupts the
+# stored value but does not blind change detection". That narrowing was
+# WRONG, and round 4 said so. A truncated PSCustomObject renders via
+# ToString, which keeps carrying the differing text for a while and then
+# stops.
+#
+# THE BOUNDARY IS MEASURED, and was got wrong once by counting it rather
+# than running it. Tokenising the two values the way the pre-fix watcher
+# did: at 2 and 3 nesting levels the tokens still DIFFER, and at FOUR they
+# are byte-identical - both `{"l1":{"l2":{"l3":"@{l4=}"}}}` - so two
+# genuinely different settings compare EQUAL and no note is written at
+# all. A first attempt here used three levels, passed against the defect,
+# and proved nothing.
+#
+# So truncation does hide change. Four levels plus the leaf is the
+# shallowest shape that discriminates, which is exactly what this uses.
+
+$b = $script:failCount
+Reset-State
+Set-SnapshotWithAgyAllow "1.2.3" "7.7.7" "6.2.0" "1.1.12" @{ l1 = @{ l2 = @{ l3 = @{ l4 = @{ leaf = "ONE" } } } } }
+Set-AgySettings '{"allowNonWorkspaceAccess": {"l1": {"l2": {"l3": {"l4": {"leaf": "TWO"}}}}}, "trustedWorkspaces": ["C:\\fake\\repo"]}'
+Invoke-Drift "agy-allow-nested-change" "noaction" "" 60000
+Assert-True ($script:LastReport -match 'allowNonWorkspaceAccess.*leaf') "a change PAST the truncation boundary is reported, not collapsed into equality"
+Assert-True ($script:LastReport -match 'TWO') "the note carries the NEW value rather than a rendered placeholder"
+Complete-Scenario $b
+
+# --- scenario: agy-allow-nested-array ---------------------------------------
+# The ARRAY shape, which the object scenarios above never reach. Round 4
+# asked for it by name: an admitted value can be a list, and a list nests
+# the same way an object does.
+
+$b = $script:failCount
+Reset-State
+Set-AgySettings '{"allowNonWorkspaceAccess": {"rules": [{"paths": ["a", "b"]}, {"paths": ["c"]}]}, "trustedWorkspaces": ["C:\\fake\\repo"]}'
+Invoke-Drift "agy-allow-nested-array" "noaction" "" 60000
+$snapArr = Get-SavedSnapshot
+$arrText = ConvertTo-Json $snapArr.agyAllowNonWorkspaceAccess -Compress -Depth 100
+Assert-True ($arrText -match '"c"') "a nested ARRAY round-trips into the snapshot instead of being truncated"
+# The round-trip above is the DISCRIMINATING one; it was watched red. The
+# assertion below was NOT - truncation renders the list's elements but
+# leaves a list, so `-is [System.Array]` stays true either way. Kept as a
+# shape companion and labelled, rather than left looking like evidence.
+Assert-True ($snapArr.agyAllowNonWorkspaceAccess.rules -is [System.Array]) "a nested array stays an ARRAY in the snapshot"
+Complete-Scenario $b
+
+# --- scenario: agy-allow-nested-array-change --------------------------------
+# The array half of the CHANGE direction. Round 4 asked for nested-array
+# round-trip AND change cases; only round-trip was built, which is the
+# same half-a-fix shape this cycle keeps repeating, and round 5 said so.
+#
+# The shape is MEASURED, not chosen: tokenising candidates the way the
+# pre-fix watcher did, `rules:[{paths:[{leaf:X}]}]` renders as
+# `{"rules":[{"paths":""}]}` for BOTH values - the differing leaf vanishes
+# entirely - while a shallower `rules:[{leaf:X}]` still shows it. So this
+# uses the collapsing shape.
+
+$b = $script:failCount
+Reset-State
+Set-SnapshotWithAgyAllow "1.2.3" "7.7.7" "6.2.0" "1.1.12" @{ rules = @(@{ paths = @(@{ leaf = "ONE" }) }) }
+Set-AgySettings '{"allowNonWorkspaceAccess": {"rules": [{"paths": [{"leaf": "TWO"}]}]}, "trustedWorkspaces": ["C:\\fake\\repo"]}'
+Invoke-Drift "agy-allow-nested-array-change" "noaction" "" 60000
+Assert-True ($script:LastReport -match 'allowNonWorkspaceAccess.*leaf') "a change inside a nested ARRAY is reported, not collapsed into equality"
+Assert-True ($script:LastReport -match 'TWO') "the array change note carries the NEW value rather than a rendered placeholder"
+Complete-Scenario $b
+
+# --- scenario: agy-allow-depth-boundary -------------------------------------
+# THE DIRECTION THAT WAS WRONG. The depth guard first fired on a value that
+# parses AND serialises intact, because Get-ValueDepth counts the scalar
+# leaf while -Depth counts container levels. Round 5 reproduced it.
+#
+# 5.1's own parser throws at 100 nested levels, so 99 is the deepest value
+# this host can even present. It measures 101 and serialises intact, so it
+# must reach the report CLEAN. This case is the boundary, and it is the
+# only direction of the guard the 5.1-only harness can exercise at all
+# (backlog item 41).
+
+$b = $script:failCount
+Reset-State
+$deepInner = '"leaf":"x"'
+for ($i = 99; $i -ge 1; $i--) { $deepInner = '"n' + $i + '":{' + $deepInner + '}' }
+Set-AgySettings ('{"allowNonWorkspaceAccess": {' + $deepInner + '}, "trustedWorkspaces": ["C:\\fake\\repo"]}')
+Invoke-Drift "agy-allow-depth-boundary" "noaction" "" 60000
+Assert-True (-not ($script:LastReport -match 'nests \d+ levels')) "the deepest value this host can parse is NOT reported as too deep to record"
+Assert-True ($script:LastExit -eq 0) "a value the serializer represents intact leaves the run clean"
+Complete-Scenario $b
+
+# --- scenario: agy-allow-depth-over-boundary (PowerShell 7) ------------------
+# THE OTHER DIRECTION, which round 5 asked for in the same sentence as the
+# boundary case above and which was first delivered as nothing.
+#
+# The guard cannot be made to FIRE on 5.1: that parser throws at 100 nested
+# levels, so a value past the serializer ceiling never reaches the guard
+# there. PowerShell 7's parser accepts far deeper input, so the gap between
+# what parses and what -Depth 100 can write is real, and this is the only
+# host that can present it. The scenario therefore names its host. That is
+# not backlog item 41 - the harness still drives 5.1 everywhere else.
+#
+# 150 levels is comfortably past the ceiling and comfortably inside PS7's
+# parser limit, so the case tests the guard rather than the parser.
+
+$b = $script:failCount
+$pwshCmd = Get-Command pwsh.exe -ErrorAction SilentlyContinue
+if (-not $pwshCmd) {
+    # NOT a pass, and NOT a quiet one either: the skip is counted into the
+    # exit code, so a machine without pwsh.exe FAILS this harness instead of
+    # reporting success over a measurement it never made.
+    #
+    # This suite is local-only and opt-in - it is NOT in the CI dual-host
+    # job - so nothing else in the pipeline would make this measurement if
+    # this run declined to. An earlier version of this comment claimed CI
+    # covered it. It does not.
+    Write-Output ""
+    Write-Output "SCENARIO agy-allow-depth-over-boundary SKIPPED: pwsh.exe not on PATH"
+    $script:skipCount++
+    $script:skipNames += "agy-allow-depth-over-boundary (no pwsh.exe)"
+} else {
+    Reset-State
+    $overInner = '"leaf":"x"'
+    for ($i = 150; $i -ge 1; $i--) { $overInner = '"n' + $i + '":{' + $overInner + '}' }
+    Set-AgySettings ('{"allowNonWorkspaceAccess": {' + $overInner + '}, "trustedWorkspaces": ["C:\\fake\\repo"]}')
+    Invoke-Drift "agy-allow-depth-over-boundary" "noaction" "" 60000 $pwshCmd.Source
+    Assert-True ($script:LastReport -match 'nests \d+ levels, deeper than the 100 this watcher can record') "a value past the serializer ceiling IS reported as too deep to record"
+    Assert-True ($script:LastReport -match 'NOT recorded this run') "the finding says the value was not recorded, rather than recording a truncation"
+    Assert-True ($script:LastExit -ne 0) "a value that cannot be recorded intact makes the run non-clean"
+    Complete-Scenario $b
+}
+
+# --- scenario: agy-settings-null --------------------------------------------
+# A settings file that PARSES and yields nothing. Measured 2026-08-12:
+# `null`, `false` and `[]` all parse without throwing and are all falsy in
+# PowerShell, so the object guard skipped every contract below it in
+# silence and the run exited CLEAN. An unmade measurement must never look
+# like a passing one. Whole-branch review, second pass, minor 2.
+
+$b = $script:failCount
+Reset-State
+Set-AgySettings 'null'
+Invoke-Drift "agy-settings-null" "noaction" "" 60000
+Assert-True ($script:LastReport -match 'parsed but yielded no object') "a settings file that parses to nothing is a finding, not a skipped check"
+Assert-True ($script:LastExit -ne 0) "a settings file that measures no contract makes the run non-clean"
+Complete-Scenario $b
+
+# --- scenario: agy-trustedworkspaces-shape ----------------------------------
+# The SHAPE, which item 11 names explicitly. The lane's preflight reads
+# this key positionally, so a string where an array belongs is a silent
+# behaviour change rather than an error.
+
+$b = $script:failCount
+Reset-State
+Set-AgySettings '{"allowNonWorkspaceAccess": true, "trustedWorkspaces": "C:\\fake\\repo"}'
+Invoke-Drift "agy-trustedworkspaces-shape" "noaction" "" 60000
+Assert-True ($script:LastReport -match 'trustedWorkspaces is not an array') "a changed settings shape is a finding"
+Assert-True ($script:LastExit -ne 0) "a changed settings shape makes the run non-clean"
+Complete-Scenario $b
+
+# --- scenario: agy-trustedworkspaces-absent ---------------------------------
+
+$b = $script:failCount
+Reset-State
+Set-AgySettings '{"allowNonWorkspaceAccess": true}'
+Invoke-Drift "agy-trustedworkspaces-absent" "noaction" "" 60000
+Assert-True ($script:LastReport -match 'has no trustedWorkspaces key') "a missing trustedWorkspaces key is a finding"
+Assert-True ($script:LastExit -ne 0) "a missing trustedWorkspaces key makes the run non-clean"
+Complete-Scenario $b
+
+# --- scenario: agy-brain-missing --------------------------------------------
+# NARROWER than item 11 asks for, deliberately. The transcript itself only
+# exists after a run, so a pre-dispatch check asserts the brain ROOT and
+# says so; the transcript stays enforced in the implementer's own evidence
+# step, where a missing one already blocks.
+
+$b = $script:failCount
+Reset-State
+Remove-Item -Recurse -Force (Join-Path $FakeProfile ".gemini\antigravity-cli\brain")
+Invoke-Drift "agy-brain-missing" "noaction" "" 60000
+Assert-True ($script:LastReport -match 'agy brain root is missing') "a missing brain root is a finding: the lane's authorship evidence lives there"
+Assert-True ($script:LastExit -ne 0) "a missing brain root makes the run non-clean"
+Complete-Scenario $b
+
+# --- scenario: agy-absent ---------------------------------------------------
+# The lane is OPTIONAL, like the backup reviewer lane, so an absent agy is
+# a NOTE that says the lane is unavailable - not a finding, and never
+# silence. The contract checks must not fire against a lane that is not
+# installed, or the report cries wolf on every machine without agy.
+
+$b = $script:failCount
+Reset-State
+Remove-Item -Force (Join-Path $FakeLocalAppData "agy\bin\agy.cmd")
+Invoke-Drift "agy-absent" "noaction" "" 60000
+Assert-True ($script:LastReport -match 'agy absent - the Flash implementer lane is UNAVAILABLE') "an absent agy is reported as an unavailable lane"
+Assert-True (-not ($script:LastReport -match '\[CRITICAL\] agy')) "an absent lane raises no CRITICAL - the contracts do not fire against a lane that is not installed"
+Assert-True ($script:LastExit -eq 0) "an absent optional lane does not fail the run"
+Complete-Scenario $b
+
 # --- scenario: triage-timeout (LAST - see header) ----------------------------------
 # A hung agent is killed at the cap and the run falls to manual.
 
@@ -748,10 +1369,17 @@ Complete-Scenario $b
 # --- summary -----------------------------------------------------------------------
 
 Write-Output ""
-if ($script:failCount -eq 0) {
+# A skip is reported AND counted into the exit code. The only thing the
+# pytest caller reads is that exit code, so a qualified summary line on a
+# zero exit would still let an unmade measurement pass the actual gate -
+# which is the exact shape this suite exists to catch.
+foreach ($n in $script:skipNames) { Write-Output "SKIPPED: $n" }
+if ($script:failCount -eq 0 -and $script:skipCount -eq 0) {
     Write-Output "ALL SCENARIOS PASS"
+} elseif ($script:failCount -eq 0) {
+    Write-Output "$($script:skipCount) SCENARIO(S) SKIPPED - the run is NOT clean; a measurement that was not made is not a passing one"
 } else {
-    Write-Output "$($script:failCount) ASSERTION(S) FAILED"
+    Write-Output "$($script:failCount) ASSERTION(S) FAILED, $($script:skipCount) SCENARIO(S) SKIPPED"
 }
 
 } finally {
@@ -782,4 +1410,6 @@ if ($script:failCount -eq 0) {
     }
 }
 
-exit $script:failCount
+# Failures AND skips. The caller (test_multi_model_verify.py) asserts only
+# that this is 0, so a skip left out of it would read as a clean run.
+exit ($script:failCount + $script:skipCount)

@@ -124,10 +124,308 @@ if (-not $codexVersion) {
     $findings += "[CRITICAL] codex --version failed or unparseable: $codexRaw"
 }
 
+# --- agy: the Flash implementer lane's CONTRACTS, not just its version ---
+#
+# 0.24.0, backlog item 11. Until now this block ran `agy --version` and
+# stored the string, and nothing compared it to the snapshot. That is how
+# the item's own quoted version, 1.1.8, became 1.1.12 across four releases
+# without a word in any report.
+#
+# The lane's KNOWN OPERATIONAL CHECKS are enforced -
+# `agents/flash-implementer.md:45-59` runs three of them as a per-dispatch
+# preflight and blocks a missing transcript after the run. That is not the
+# same as the lane's contracts being enforced: the security property in
+# backlog item 11 is UNMEASURED and stays open. What was missing is any
+# check EARLIER than dispatch, so a drift surfaced mid-build on a frozen
+# plan with the round's budget already committed. These checks move the
+# discovery earlier. They do not replace the enforcement, and they do not
+# cover what was never measured.
 $agyVersion = ""
-$agyExe = Join-Path $env:LOCALAPPDATA "agy\bin\agy.exe"
-if (Test-Path $agyExe) {
-    $agyVersion = (& $agyExe --version 2>$null | Select-Object -First 1)
+$agyExe = ""
+# The VALUE, kept with its JSON TYPE. `[string]` was applied here and at
+# every comparison, which collapsed `null` and `""` to the same saved text:
+# a settings file changing `null` to `""` was a real relaxation of a
+# recorded contract that produced no note at all. Recording a value so a
+# CHANGE to it is visible only works if the recording can tell the values
+# apart. Found by the diff debate at round 2. $null is the unmeasured
+# state; $agyAllowPresent, not this, says whether the key was there.
+$agyAllowNonWorkspace = $null
+
+# The serializer's ceiling, named once and used everywhere it matters: the
+# token, the depth postcondition, and the snapshot write. 100 is the
+# maximum ConvertTo-Json accepts.
+$JsonMaxDepth = 100
+
+function Get-ValueToken($v) {
+    <#
+      A type-preserving token for one settings value, used for BOTH the
+      comparison and the note text.
+
+      JSON is the token because it separates every case this contract can
+      hold - `null`, `""`, `false`, `true`, `"true"` - which plain string
+      rendering does not: `[string]$null` and `[string]""` are both the
+      empty string, and `[string]$true` and `[string]"True"` are both
+      "True". It is also what a reader sees in settings.json.
+
+      -Depth 100 IS LOAD-BEARING, not tidiness. ConvertTo-Json defaults to
+      depth 2 and TRUNCATES SILENTLY past it: a nested value comes back as
+      the literal text "System.Collections.Hashtable", measured on 5.1. So
+      the default would have recorded two different nested settings as the
+      same token and called a real change equal - the exact defect the
+      typed token was written to close, one level further down. 100 is the
+      maximum PowerShell accepts, so nothing this file can be handed is
+      representable and lost. Found by the diff debate at round 3.
+
+      AND THE POSTCONDITION IS MEASURED, not assumed. Round 4 objected that
+      "nothing representable is lost" rested on trusting the parser, and
+      asked truncation to be turned into a finding. It is - by measuring
+      the VALUE'S DEPTH rather than by catching a warning, and the reason
+      is a HOST DIFFERENCE that was itself measured wrong once.
+
+      Measured 2026-08-15, both hosts, warnings captured rather than
+      suppressed:
+
+        Windows PowerShell 5.1  truncates SILENTLY. Zero warnings, for a
+                                Hashtable and for a PSCustomObject alike.
+        PowerShell 7            emits one warning: "Resulting JSON is
+                                truncated as serialization has exceeded
+                                the set depth of N."
+
+      An earlier measurement here concluded "no warning on either host"
+      and this comment said so. That measurement had passed
+      -WarningAction SilentlyContinue, which is how a check reports the
+      absence of the thing it silenced. Corrected.
+
+      So a warning-based guard would work on 7 and do nothing on 5.1,
+      which is the shape that has bitten this repo before. Measuring the
+      depth works identically on both, so that is what this does.
+    #>
+
+    if ($null -eq $v) { return "null" }
+    return (ConvertTo-Json $v -Compress -Depth $JsonMaxDepth)
+}
+
+function Get-ValueDepth($v, $seen) {
+    <#
+      How many levels of object or array nesting a value carries. Used to
+      prove, rather than hope, that the serializer above can represent it.
+
+      1 is a scalar. A list or object is 1 + the deepest of its members.
+      $seen guards a cycle: ConvertFrom-Json cannot produce one, but this
+      function is not given only parsed JSON forever, and an unbounded walk
+      is a hang rather than a finding.
+    #>
+    if ($null -eq $v) { return 1 }
+    if ($null -eq $seen) { $seen = New-Object System.Collections.ArrayList }
+    if ($v -is [string] -or $v -is [bool] -or $v -is [valuetype]) { return 1 }
+    foreach ($s in $seen) { if ([object]::ReferenceEquals($s, $v)) { return 1 } }
+    [void]$seen.Add($v)
+    $deepest = 0
+    if ($v -is [System.Array]) {
+        foreach ($item in $v) {
+            $d = Get-ValueDepth $item $seen
+            if ($d -gt $deepest) { $deepest = $d }
+        }
+    } elseif ($v.PSObject -and $v.PSObject.Properties) {
+        foreach ($p in $v.PSObject.Properties) {
+            $d = Get-ValueDepth $p.Value $seen
+            if ($d -gt $deepest) { $deepest = $d }
+        }
+    } else {
+        return 1
+    }
+    return (1 + $deepest)
+}
+# PRESENCE, tracked separately from the VALUE. Reading presence off the
+# value's truthiness made `"allowNonWorkspaceAccess": null` and `""` - both
+# legal, both PRESENT - read as a removed key: the run then wrote a
+# "removed" note about a key that is still there and dropped it from the
+# snapshot. Found by the diff debate at round 1, in the fix written for the
+# review's minor 6.
+$agyAllowPresent = $false
+# Whether settings.json was READ AND PARSED this run. Distinguishing that
+# from "no value" is what separates a key that was REMOVED from a key that
+# was never measured, and the two must not share a carry-forward.
+$agySettingsParsed = $false
+$agyBin = Join-Path $env:LOCALAPPDATA "agy\bin"
+# Either name, for the same reason the kimi lookup below takes either: an
+# .exe-only lookup cannot be stubbed offline, and that is what left every
+# state-machine scenario for that lane asserting nothing.
+foreach ($n in @("agy.exe", "agy.cmd")) {
+    $candidate = Join-Path $agyBin $n
+    if (Test-Path $candidate) { $agyExe = $candidate; break }
+}
+if (-not $agyExe) {
+    $notes += "agy absent - the Flash implementer lane is UNAVAILABLE (lane optional; reviewer lanes unaffected)"
+} else {
+    $agyRaw = ""
+    $agyVersionExit = $null
+    try {
+        $agyRaw = (& $agyExe --version 2>&1 | Out-String).Trim()
+        $agyVersionExit = $LASTEXITCODE
+    } catch { $agyRaw = $_.Exception.Message; $agyVersionExit = -1 }
+    if ($agyRaw -match '(\d+\.\d+\.\d+)') { $agyVersion = $Matches[1] }
+    # Both of these are FINDINGS, never notes. Notes print beside "No
+    # findings." and the exit code is decided by findings alone, so
+    # recording an unreadable version as a note would let an unmade
+    # measurement exit CLEAN. Caught in the 0.24.0 plan debate at round 3,
+    # in the fix written at round 2.
+    if ($agyVersionExit -ne 0) {
+        # A FAILED CALL IS NOT A MEASUREMENT, whatever it printed. This
+        # block fired only when the regex missed, so a client that printed
+        # a version AND exited non-zero was recorded as measured and the
+        # run stayed clean - while `commands/doctor.md` called the same
+        # machine BROKEN, and while the kimi block below had required exit
+        # 0 all along. Found by the 0.24.0 whole-branch review. The parsed
+        # value is DISCARDED so the snapshot carries the last good one
+        # forward instead of promoting an unmeasured version.
+        $agyVersion = ""
+        $findings += "[CRITICAL] agy is installed at $agyExe but 'agy --version' exited $agyVersionExit`: $agyRaw - a failed call is not a version measurement, whatever it printed, and the previous value is kept rather than overwritten"
+    } elseif (-not $agyVersion) {
+        $findings += "[CRITICAL] agy is installed at $agyExe but did not report a usable version (exit $agyVersionExit): $agyRaw - an unmade version check is never a passing one, and the previous value is kept rather than overwritten"
+    }
+
+    # Contract 1: the model literal resolves. The literal lives in ONE
+    # place, the agent file's Lane note; reading it from there is what
+    # stops this check drifting from the lane it claims to watch.
+    $flashAgent = Join-Path $PSScriptRoot "..\agents\flash-implementer.md"
+    $agyModelLiteral = ""
+    if (Test-Path $flashAgent) {
+        $agentText = Get-Content -Raw -LiteralPath $flashAgent
+        if ($agentText -match 'Canonical model literal:\s*`?\s*[\r\n]*\s*`([^`]+)`') {
+            $agyModelLiteral = $Matches[1].Trim()
+        }
+    }
+    if (-not $agyModelLiteral) {
+        $findings += "[CRITICAL] could not parse the canonical model literal from agents/flash-implementer.md - the Flash lane's identity check has nothing to compare against, which is an unmade check, not a passing one"
+    } else {
+        $agyModelsOut = ""
+        $agyModelsExit = $null
+        try {
+            $agyModelsOut = (& $agyExe models 2>&1 | Out-String)
+            $agyModelsExit = $LASTEXITCODE
+        } catch {
+            # -1, deliberately, so a client that could not be LAUNCHED lands
+            # on the "could not be made" finding below rather than falling
+            # through to the rename finding. An exception message does not
+            # contain the model literal, so the fall-through would have
+            # reported a launch failure as a renamed model: a true finding
+            # with a false cause.
+            $agyModelsOut = $_.Exception.Message
+            $agyModelsExit = -1
+        }
+        if ($agyModelsExit -ne 0 -and $null -ne $agyModelsExit) {
+            $findings += "[CRITICAL] 'agy models' exited $agyModelsExit - the Flash lane's only reachability and identity check could not be made"
+        } elseif ($agyModelsOut -notmatch [regex]::Escape($agyModelLiteral)) {
+            $findings += "[CRITICAL] 'agy models' no longer lists '$agyModelLiteral' - the Flash lane's model was renamed or the account cannot see it; update agents/flash-implementer.md's Lane note"
+        }
+    }
+
+    # Contract 2: the settings file, its shape, and the relaxation nobody
+    # was watching. `allowNonWorkspaceAccess` is RECORDED so a change to it
+    # is a drift. Recording is not measuring: what `true` permits outside
+    # the workspace is UNMEASURED on this version (backlog item 36).
+    $agySettings = Join-Path $env:USERPROFILE ".gemini\antigravity-cli\settings.json"
+    if (-not (Test-Path $agySettings)) {
+        $findings += "[CRITICAL] agy settings.json is missing at $agySettings - trustedWorkspaces cannot be checked, and the Flash lane blocks on it at dispatch"
+    } else {
+        $agyCfg = $null
+        $agyParseThrew = $false
+        try {
+            $agyCfg = (Get-Content -Raw -LiteralPath $agySettings) | ConvertFrom-Json
+        } catch {
+            $agyParseThrew = $true
+            $findings += "[CRITICAL] agy settings.json did not parse as JSON: $($_.Exception.Message) - an unreadable settings file is not an empty one"
+        }
+        if (-not $agyParseThrew -and -not $agyCfg) {
+            # A SUCCESSFUL PARSE THAT YIELDS NO OBJECT. Measured 2026-08-12:
+            # `null`, `false` AND `[]` all parse without throwing and are all
+            # falsy in PowerShell, so the guard below skipped every contract
+            # in SILENCE - no trustedWorkspaces finding, no shape finding, no
+            # recorded relaxation, and a clean exit. That is an unmade
+            # measurement wearing the face of a passing one, which is the one
+            # outcome this script may never produce. Found by the 0.24.0
+            # whole-branch review, second pass, which named two of the three
+            # shapes; the third turned up while measuring it.
+            $findings += "[CRITICAL] agy settings.json parsed but yielded no object (a bare null, false or empty array): every trustedWorkspaces and shape check below would be SKIPPED IN SILENCE, and a file that measures no contract is not a passing one"
+        }
+        if ($agyCfg) {
+            $agySettingsParsed = $true
+            $tw = $null
+            if ($agyCfg.PSObject.Properties.Name -contains "trustedWorkspaces") {
+                $tw = $agyCfg.trustedWorkspaces
+            }
+            if ($null -eq $tw) {
+                $findings += "[CRITICAL] agy settings.json has no trustedWorkspaces key - the Flash lane cannot write in any workspace"
+            } elseif (-not ($tw -is [System.Array])) {
+                $findings += "[CRITICAL] agy settings.json trustedWorkspaces is not an array (got $($tw.GetType().Name)) - the file's shape changed and the lane's preflight reads it positionally"
+            }
+            if ($agyCfg.PSObject.Properties.Name -contains "allowNonWorkspaceAccess") {
+                $agyAllowPresent = $true
+                $agyAllowNonWorkspace = $agyCfg.allowNonWorkspaceAccess
+                # THE POSTCONDITION, MEASURED. A value nested deeper than
+                # the serializer can represent would be written to the
+                # snapshot as rendered text and every later comparison would
+                # run against that instead of the value - silently on
+                # Windows PowerShell 5.1, which emits NO warning when it
+                # truncates. PowerShell 7 does warn; see Get-ValueToken
+                # above for both measurements. A guard built on the warning
+                # would therefore work on one host and do nothing on the
+                # other, so depth is measured rather than trusted, and a
+                # value past the ceiling is a FINDING. Diff debate, round 4.
+                # THE THRESHOLD IS $JsonMaxDepth + 1, NOT $JsonMaxDepth, and
+                # the difference was a real false positive. Get-ValueDepth
+                # counts the scalar leaf as level 1, while -Depth counts
+                # CONTAINER levels, so a value that serialises perfectly at
+                # -Depth 100 measures 101. The first version fired on it.
+                # Reproduced on 5.1 by the diff debate at round 5 and again
+                # here: at 99 nested objects the value parses, measures 101,
+                # serialises INTACT - and the guard raised a CRITICAL
+                # finding against it. A watcher that reports drift on a
+                # healthy file is its own kind of false measurement.
+                #
+                # WHERE IT CAN AND CANNOT FIRE, measured on both hosts
+                # rather than argued. `ConvertFrom-Json` on Windows
+                # PowerShell 5.1 has its own recursion limit and THROWS at
+                # 100 nested levels; 99 parses, measures 101, and
+                # serialises intact. So with the corrected threshold the
+                # deepest value 5.1 can even parse does NOT fire this, and
+                # on that host the protection that actually fires is the
+                # unparseable-settings finding above - which IS covered by
+                # a scenario. An earlier version of this comment called the
+                # guard "unreachable on 5.1"; it was reachable, as exactly
+                # the false positive described above.
+                #
+                # PowerShell 7's parser accepts far deeper input than the
+                # serializer can write, so the gap between what parses and
+                # what -Depth 100 represents is real there, and this is the
+                # guard for it. BOTH directions are covered, on the host
+                # each one needs: the 5.1 boundary scenario proves the
+                # deepest parseable value stays clean, and an over-boundary
+                # scenario naming pwsh.exe proves a value past the ceiling
+                # is reported. The rest of the harness still drives 5.1
+                # only (backlog item 41); that one scenario names its host
+                # rather than the harness changing hosts.
+                $agyAllowDepth = Get-ValueDepth $agyAllowNonWorkspace $null
+                if ($agyAllowDepth -gt ($JsonMaxDepth + 1)) {
+                    $findings += "[CRITICAL] agy settings.json allowNonWorkspaceAccess nests $agyAllowDepth levels, deeper than the $JsonMaxDepth this watcher can record - the value would be stored truncated and every later comparison would run against the truncation, so it is NOT recorded this run"
+                    $agyAllowPresent = $false
+                    $agyAllowNonWorkspace = $null
+                }
+            }
+        }
+    }
+
+    # Contract 3: the brain root. NARROWER than backlog item 11 asks for,
+    # deliberately. Item 11 lists the transcript path itself, but a
+    # transcript only exists AFTER a run, so a pre-dispatch check cannot
+    # assert it without asserting something it has not measured. The
+    # transcript stays enforced where it already blocks, in the Flash
+    # implementer's own evidence step.
+    $agyBrain = Join-Path $env:USERPROFILE ".gemini\antigravity-cli\brain"
+    if (-not (Test-Path $agyBrain)) {
+        $findings += "[CRITICAL] agy brain root is missing at $agyBrain - this is where the lane's authorship evidence is read from, and a lane whose evidence cannot be located must stop rather than proceed unverified"
+    }
 }
 
 $kimiVersion = ""
@@ -324,6 +622,39 @@ if ($snapshot -and $codexVersion -and $snapshot.codex -and ($snapshot.codex -ne 
 if ($snapshot -and $spVersion -and $snapshot.superpowers -and ($snapshot.superpowers -ne $spVersion)) {
     $notes += "superpowers $($snapshot.superpowers) -> $spVersion (template canary re-hashed above)"
 }
+# 0.24.0, backlog item 11. Until this line existed, agy was the only
+# tracked component whose version could move without the report saying so:
+# codex and superpowers had change notes, agy was carried forward and
+# saved in silence. That is exactly how 1.1.8 became 1.1.12 unremarked.
+if ($snapshot -and $agyVersion -and $snapshot.agy -and ($snapshot.agy -ne $agyVersion)) {
+    $notes += "agy $($snapshot.agy) -> $agyVersion (lane contracts re-probed above)"
+}
+# The relaxation, recorded so a CHANGE to it is visible. Recording is not
+# measuring, and the note says so: what `true` permits outside the
+# workspace is UNMEASURED on the installed version.
+# Compared and REPORTED as type-preserving tokens, so `null -> ""` is a
+# visible change rather than two renderings of the same empty string. One
+# consequence is stated rather than discovered later: the first run after
+# this change compares a token against a snapshot written by the old
+# `[string]` form, so an existing recorded value can emit ONE cosmetic note
+# such as `"True" -> true`. It is a note, so the run stays clean, and the
+# next run has a token on both sides.
+if ($agyAllowPresent -and $snapshot -and
+    ($snapshot.PSObject.Properties.Name -contains "agyAllowNonWorkspaceAccess") -and
+    ((Get-ValueToken $snapshot.agyAllowNonWorkspaceAccess) -ne (Get-ValueToken $agyAllowNonWorkspace))) {
+    $notes += "agy allowNonWorkspaceAccess $(Get-ValueToken $snapshot.agyAllowNonWorkspaceAccess) -> $(Get-ValueToken $agyAllowNonWorkspace) (what this permits outside the workspace is UNMEASURED - backlog item 36)"
+}
+# REMOVAL IS A CHANGE. The carry-forward below restored last week's value
+# whenever this run's read was empty, which silently included the key
+# VANISHING from a settings file that parsed - so the snapshot went on
+# asserting a value the file no longer carried and no note fired. "A change
+# to it is watched" was true of a changed value and false of a removed one.
+# Found by the 0.24.0 whole-branch review. Guarded on PARSED, because a
+# settings file that could not be read has measured nothing either way.
+if ($agySettingsParsed -and -not $agyAllowPresent -and $snapshot -and
+    ($snapshot.PSObject.Properties.Name -contains "agyAllowNonWorkspaceAccess")) {
+    $notes += "agy allowNonWorkspaceAccess $(Get-ValueToken $snapshot.agyAllowNonWorkspaceAccess) -> absent (the key was REMOVED from settings.json; what that changes for the lane is UNMEASURED - backlog item 36)"
+}
 
 # --- report, toast, snapshot ---------------------------------------------------
 
@@ -357,7 +688,36 @@ $newSnapshot = @{
     superpowers = $spVersionToSave
     updated     = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss")
 }
-$newSnapshot | ConvertTo-Json | Set-Content -Path $SnapshotFile
+# The relaxation is stored so a change to it is a drift next week. It is
+# carried forward when UNMEASURED, exactly like the versions: losing the
+# last known good value would destroy the comparison the next run needs.
+# What must never happen silently is the carry-forward, and the finding
+# above is what makes it audible.
+#
+# `-not $agySettingsParsed` is the whole correction. The carry-forward used
+# to fire on an empty value, which also covered a key REMOVED from a file
+# that parsed perfectly - so a deletion was restored from last week and the
+# snapshot went on asserting it. A parsed file with no key is a
+# MEASUREMENT of absence, and absence is what gets saved.
+# Saved on PRESENCE, never on truthiness. A key that is present and holds
+# `null` or `""` is a measured value and must be stored as one; storing on
+# truthiness dropped it and then reported it removed next week.
+if ($agyAllowPresent) {
+    $newSnapshot.agyAllowNonWorkspaceAccess = $agyAllowNonWorkspace
+} elseif (-not $agySettingsParsed -and $snapshot -and
+          ($snapshot.PSObject.Properties.Name -contains "agyAllowNonWorkspaceAccess")) {
+    # Carried forward with its TYPE. The `[string]` here turned a carried
+    # `null` into `""` on every unreadable-settings run, so a value nobody
+    # measured this week came back as a different value next week.
+    $newSnapshot.agyAllowNonWorkspaceAccess = $snapshot.agyAllowNonWorkspaceAccess
+}
+# -Depth 100 for the same reason as Get-ValueToken: the default is 2 and it
+# truncates SILENTLY, so a nested settings value would be written to the
+# snapshot as the text "System.Collections.Hashtable" and every later
+# comparison would run against that instead of the value. The token
+# function alone was not enough - the token can be exact and the STORED
+# value still wrong. Diff debate, round 3.
+$newSnapshot | ConvertTo-Json -Depth $JsonMaxDepth | Set-Content -Path $SnapshotFile
 
 # --- unresolved prior run (pending disposition) --------------------------------
 # Changelog findings exist only during a version transition, and the
