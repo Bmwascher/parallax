@@ -607,9 +607,20 @@ function Get-Features($result, $label, $asJson) {
       nothing here decides a verdict. That was the comment doing the work
       the plan had not done. Diff debate, round 2.
     #>
+    # `data` MUST BE AN ARRAY, checked rather than coerced. `@(...)` wraps a
+    # single object into a one-element list, so a server answering with one
+    # bare object where a list belongs was accepted and could reach CLEAN.
+    # Round 3's accepted fix asked for `data` to be validated as the
+    # expected collection and this coercion was left in place. Found by the
+    # diff debate at round 4.
+    if ($result.data -isnot [System.Array]) {
+        Write-Blocked ($label + ": the feature surface's data is not a list (" +
+            $result.data.GetType().Name + "), so what it reports cannot be" +
+            " read as a set of features") $asJson
+    }
     $features = @()
     $index = -1
-    foreach ($f in @($result.data)) {
+    foreach ($f in $result.data) {
         $index++
         # EVERY ENTRY IS VALIDATED, not just the ones the policy names.
         # Round 2's accepted fix asked for readable feature-entry schema and
@@ -621,7 +632,7 @@ function Get-Features($result, $label, $asJson) {
         # by the diff debate at round 3.
         #
         # This is deliberately strict, and the direction is safe: every one
-        # of the 88 features in the live 2026-08-14 reading carries a
+        # of the 92 features in the live 2026-08-14 reading carries a
         # non-empty string name and a real boolean. A future feature that
         # does not will BLOCK loudly rather than be silently reduced.
         if ($null -eq $f) {
@@ -638,12 +649,25 @@ function Get-Features($result, $label, $asJson) {
                   else { $name.GetType().Name }) +
                 "), so what it describes cannot be read") $asJson
         }
+        # EXACTLY ONE enablement member, not the first one found. The loop
+        # took the first of `enabled`, `isEnabled`, `value` and ignored the
+        # rest, so an entry carrying `enabled:false` AND `value:true` was
+        # certified as disabled while the surface said two different things
+        # about it. Round 3's accepted fix asked for an UNAMBIGUOUS boolean
+        # enablement field and this took the first match instead. Found by
+        # the diff debate at round 4.
+        $present = @(@("enabled", "isEnabled", "value") |
+                     Where-Object { $f.PSObject.Properties.Name -contains $_ })
+        if ($present.Count -gt 1) {
+            Write-Blocked ($label + ": the feature '" + $name + "' carries " +
+                $present.Count + " enablement members (" +
+                ($present -join ", ") + "), so its resolved enablement is" +
+                " ambiguous and cannot be read") $asJson
+        }
         $enabled = $null
         $sawMember = $false
-        foreach ($k in @("enabled", "isEnabled", "value")) {
-            if ($f.PSObject.Properties.Name -contains $k) {
-                $enabled = $f.$k; $sawMember = $true; break
-            }
+        if ($present.Count -eq 1) {
+            $enabled = $f.($present[0]); $sawMember = $true
         }
         if (-not $sawMember) {
             Write-Blocked ($label + ": the feature '" + $name + "' carries no" +

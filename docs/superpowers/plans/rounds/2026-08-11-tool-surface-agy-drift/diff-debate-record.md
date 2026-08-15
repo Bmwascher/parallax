@@ -131,11 +131,17 @@ telling the reviewer its earlier answer was never read and must not be
 referred back to. Canonical sha256 `629f3a81a89e5787...`. Reply retained
 verbatim at `diff-reply-r2.txt`.
 
-**This retry also MEASURED what item 42 records as unknown.** With the
-environment context already refreshed inside the session, the same-day
-resume carried the brief ALONE - one user record, no preamble - and bound
-clean. Item 42 stands unchanged: that is a workaround available only while
-a debate stays inside one day, not a fix.
+**This retry MEASURED what item 42 had recorded as unknown, and the item
+has since been updated to say so.** With the environment context already
+refreshed inside the session, the same-day resume carried the brief ALONE -
+one user record, no preamble - and bound clean.
+
+That is a workaround, not a fix, and the workaround is that **a resume
+carrying no refreshed preamble binds**. Staying inside one day is the only
+way observed to get that rather than the condition itself; what else
+triggers a refresh is unmeasured. This paragraph said "records as
+unknown", "stands unchanged" and "inside one day" after all three had
+stopped being true - stale record text found by round 4.
 
 **Five FIX, four PASS.** Every finding was verified against the code
 before anything changed. Two were faults in fixes made at round 1, and one
@@ -192,3 +198,46 @@ the change scenario kept and labelled a regression guard.
 Meters after this round: **3 contested exchanges of 4; 3 fix-verify units
 of 4.** Round 4 reaches both caps. Exhaustion PAUSES for user
 authorization; it never certifies.
+
+### Round 4 — the CAP round, binding CLEAN, verdict DRY: NO
+
+Brief `diff-brief-r4.md`, canonical sha256 `20777e224eb333ee...`. Reply
+retained verbatim at `diff-reply-r4.txt`. **Two PASS, four FIX.** The brief
+asked for the dry question to be answered explicitly, and told the
+reviewer not to soften it to help the branch land nor invent an objection
+to look rigorous. It answered **DRY: NO**, naming one Important functional
+false-clean, one moderate serialization workstream, and one minor repeated
+record-width cleanup.
+
+| # | Finding | Disposition |
+|---|---|---|
+| 1 | `data` coerced with `@()` instead of checked; two enablement members read as the first | FIXED, the Important one |
+| 2 | `-Depth 100` had no truncation detection; nested-array cases missing | FIXED, by measuring depth - see below |
+| 3 | round 3's "truncation does not blind change detection" held only for the tested shape | RETRACTED, scenario made discriminating |
+| 4 | item 42's title, workaround sentence and a stale record paragraph still wide | FIXED at all three |
+| - | the two data reasons, and case-sensitive name matching | PASS |
+
+**Meters EXHAUSTED at 4 of 4 and 4 of 4 with findings outstanding, so the
+debate PAUSED.** The user was given the size of the remainder and
+authorised: fix all three, then a SINGLE round 5 to adjudicate the fixes.
+Written down because an unrecorded authorization is indistinguishable from
+a decision the session made for itself.
+
+### The round-5 fixes, and what measuring them changed
+
+- The reviewer's remedy for finding 2 could NOT be built as written.
+  `ConvertTo-Json` emits no warning when it truncates, measured on 5.1, so
+  there is nothing to turn into a finding. Depth is measured directly
+  instead - and that check is unreachable on 5.1, because
+  `ConvertFrom-Json` throws its own recursion error first, so no
+  red-green record is claimed for it.
+- Finding 3 was confirmed against this session, not the reviewer. The
+  collapse boundary is FOUR nesting levels, measured by tokenising the
+  values rather than counting them.
+- Two of this session's own instruments were wrong and were caught by
+  running them: a fail-watch aimed at a commit that already had the fix,
+  and a scenario built one level shallower than the measured boundary.
+  Both proved nothing until corrected.
+
+Watched to fail against the pre-fix code: two probe cases with 48 green,
+and five drift assertions.

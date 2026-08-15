@@ -151,6 +151,11 @@ $agyExe = ""
 # state; $agyAllowPresent, not this, says whether the key was there.
 $agyAllowNonWorkspace = $null
 
+# The serializer's ceiling, named once and used everywhere it matters: the
+# token, the depth postcondition, and the snapshot write. 100 is the
+# maximum ConvertTo-Json accepts.
+$JsonMaxDepth = 100
+
 function Get-ValueToken($v) {
     <#
       A type-preserving token for one settings value, used for BOTH the
@@ -170,10 +175,52 @@ function Get-ValueToken($v) {
       typed token was written to close, one level further down. 100 is the
       maximum PowerShell accepts, so nothing this file can be handed is
       representable and lost. Found by the diff debate at round 3.
+
+      AND THE POSTCONDITION IS MEASURED, not assumed. Round 4 objected that
+      "nothing representable is lost" rested on trusting the parser, and
+      asked for truncation to be turned into a finding. It could not be
+      done the obvious way: MEASURED on Windows PowerShell 5.1,
+      ConvertTo-Json emits NO WARNING when it truncates - zero warnings
+      while silently writing `@{d=}` in place of the value. There is
+      nothing to catch. So the depth of the value is measured directly
+      instead, and anything past the serializer's limit is a FINDING rather
+      than a silently shortened record.
     #>
 
     if ($null -eq $v) { return "null" }
-    return (ConvertTo-Json $v -Compress -Depth 100)
+    return (ConvertTo-Json $v -Compress -Depth $JsonMaxDepth)
+}
+
+function Get-ValueDepth($v, $seen) {
+    <#
+      How many levels of object or array nesting a value carries. Used to
+      prove, rather than hope, that the serializer above can represent it.
+
+      1 is a scalar. A list or object is 1 + the deepest of its members.
+      $seen guards a cycle: ConvertFrom-Json cannot produce one, but this
+      function is not given only parsed JSON forever, and an unbounded walk
+      is a hang rather than a finding.
+    #>
+    if ($null -eq $v) { return 1 }
+    if ($null -eq $seen) { $seen = New-Object System.Collections.ArrayList }
+    if ($v -is [string] -or $v -is [bool] -or $v -is [valuetype]) { return 1 }
+    foreach ($s in $seen) { if ([object]::ReferenceEquals($s, $v)) { return 1 } }
+    [void]$seen.Add($v)
+    $deepest = 0
+    if ($v -is [System.Array]) {
+        foreach ($item in $v) {
+            $d = Get-ValueDepth $item $seen
+            if ($d -gt $deepest) { $deepest = $d }
+        }
+    } elseif ($v.PSObject -and $v.PSObject.Properties) {
+        foreach ($p in $v.PSObject.Properties) {
+            $d = Get-ValueDepth $p.Value $seen
+            if ($d -gt $deepest) { $deepest = $d }
+        }
+    } else {
+        return 1
+    }
+    return (1 + $deepest)
 }
 # PRESENCE, tracked separately from the VALUE. Reading presence off the
 # value's truthiness made `"allowNonWorkspaceAccess": null` and `""` - both
@@ -302,6 +349,19 @@ if (-not $agyExe) {
             if ($agyCfg.PSObject.Properties.Name -contains "allowNonWorkspaceAccess") {
                 $agyAllowPresent = $true
                 $agyAllowNonWorkspace = $agyCfg.allowNonWorkspaceAccess
+                # THE POSTCONDITION, MEASURED. A value nested deeper than
+                # the serializer can represent would be written to the
+                # snapshot as rendered text and every later comparison would
+                # run against that instead of the value - silently, because
+                # ConvertTo-Json does not warn when it truncates. Depth is
+                # therefore measured rather than trusted, and a value past
+                # the ceiling is a FINDING. Diff debate, round 4.
+                $agyAllowDepth = Get-ValueDepth $agyAllowNonWorkspace $null
+                if ($agyAllowDepth -gt $JsonMaxDepth) {
+                    $findings += "[CRITICAL] agy settings.json allowNonWorkspaceAccess nests $agyAllowDepth levels, deeper than the $JsonMaxDepth this watcher can record - the value would be stored truncated and every later comparison would run against the truncation, so it is NOT recorded this run"
+                    $agyAllowPresent = $false
+                    $agyAllowNonWorkspace = $null
+                }
             }
         }
     }
@@ -607,7 +667,7 @@ if ($agyAllowPresent) {
 # comparison would run against that instead of the value. The token
 # function alone was not enough - the token can be exact and the STORED
 # value still wrong. Diff debate, round 3.
-$newSnapshot | ConvertTo-Json -Depth 100 | Set-Content -Path $SnapshotFile
+$newSnapshot | ConvertTo-Json -Depth $JsonMaxDepth | Set-Content -Path $SnapshotFile
 
 # --- unresolved prior run (pending disposition) --------------------------------
 # Changelog findings exist only during a version transition, and the

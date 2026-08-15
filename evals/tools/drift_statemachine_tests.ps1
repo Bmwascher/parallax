@@ -1142,25 +1142,53 @@ Assert-True ($snapNested.agyAllowNonWorkspaceAccess.scope.paths -isnot [string])
 Complete-Scenario $b
 
 # --- scenario: agy-allow-nested-change --------------------------------------
-# A REGRESSION GUARD, and it is labelled one because it does NOT
-# discriminate the defect it was written for.
+# A LIVE DISCRIMINATING CASE, sitting PAST the collapse boundary, and the
+# depth is measured rather than guessed.
 #
-# The theory was that two nested values differing only below the default
-# JSON depth would render as the same truncated text and be called equal.
-# MEASURED against the pre-fix watcher: this scenario PASSED. A truncated
-# PSCustomObject renders as `@{deep=one}` - a string that still CARRIES the
-# differing text - so the comparison saw a difference and wrote its note
-# anyway. The truncation defect is real and corrupts the STORED value, as
-# the scenario above shows; it did not blind change detection for this
-# shape. Recorded rather than dropped, so nobody later reads a green tick
-# here as evidence that it was ever red.
+# An earlier version of this used a shallower value and PASSED against the
+# defect, which this session then wrote up as "truncation corrupts the
+# stored value but does not blind change detection". That narrowing was
+# WRONG, and round 4 said so. A truncated PSCustomObject renders via
+# ToString, which keeps carrying the differing text for a while and then
+# stops.
+#
+# THE BOUNDARY IS MEASURED, and was got wrong once by counting it rather
+# than running it. Tokenising the two values the way the pre-fix watcher
+# did: at 2 and 3 nesting levels the tokens still DIFFER, and at FOUR they
+# are byte-identical - both `{"l1":{"l2":{"l3":"@{l4=}"}}}` - so two
+# genuinely different settings compare EQUAL and no note is written at
+# all. A first attempt here used three levels, passed against the defect,
+# and proved nothing.
+#
+# So truncation does hide change. Four levels plus the leaf is the
+# shallowest shape that discriminates, which is exactly what this uses.
 
 $b = $script:failCount
 Reset-State
-Set-SnapshotWithAgyAllow "1.2.3" "7.7.7" "6.2.0" "1.1.12" @{ scope = @{ paths = @{ deep = "one" } } }
-Set-AgySettings '{"allowNonWorkspaceAccess": {"scope": {"paths": {"deep": "TWO"}}}, "trustedWorkspaces": ["C:\\fake\\repo"]}'
+Set-SnapshotWithAgyAllow "1.2.3" "7.7.7" "6.2.0" "1.1.12" @{ l1 = @{ l2 = @{ l3 = @{ l4 = @{ leaf = "ONE" } } } } }
+Set-AgySettings '{"allowNonWorkspaceAccess": {"l1": {"l2": {"l3": {"l4": {"leaf": "TWO"}}}}}, "trustedWorkspaces": ["C:\\fake\\repo"]}'
 Invoke-Drift "agy-allow-nested-change" "noaction" "" 60000
-Assert-True ($script:LastReport -match 'allowNonWorkspaceAccess.*deep') "a change BELOW the default json depth is still reported as drift"
+Assert-True ($script:LastReport -match 'allowNonWorkspaceAccess.*leaf') "a change PAST the truncation boundary is reported, not collapsed into equality"
+Assert-True ($script:LastReport -match 'TWO') "the note carries the NEW value rather than a rendered placeholder"
+Complete-Scenario $b
+
+# --- scenario: agy-allow-nested-array ---------------------------------------
+# The ARRAY shape, which the object scenarios above never reach. Round 4
+# asked for it by name: an admitted value can be a list, and a list nests
+# the same way an object does.
+
+$b = $script:failCount
+Reset-State
+Set-AgySettings '{"allowNonWorkspaceAccess": {"rules": [{"paths": ["a", "b"]}, {"paths": ["c"]}]}, "trustedWorkspaces": ["C:\\fake\\repo"]}'
+Invoke-Drift "agy-allow-nested-array" "noaction" "" 60000
+$snapArr = Get-SavedSnapshot
+$arrText = ConvertTo-Json $snapArr.agyAllowNonWorkspaceAccess -Compress -Depth 100
+Assert-True ($arrText -match '"c"') "a nested ARRAY round-trips into the snapshot instead of being truncated"
+# The round-trip above is the DISCRIMINATING one; it was watched red. The
+# assertion below was NOT - truncation renders the list's elements but
+# leaves a list, so `-is [System.Array]` stays true either way. Kept as a
+# shape companion and labelled, rather than left looking like evidence.
+Assert-True ($snapArr.agyAllowNonWorkspaceAccess.rules -is [System.Array]) "a nested array stays an ARRAY in the snapshot"
 Complete-Scenario $b
 
 # --- scenario: agy-settings-null --------------------------------------------

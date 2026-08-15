@@ -1,0 +1,30 @@
+1. Missing and null `data` now set distinct flags, and both the no-result and partial-stream paths give accurate reasons (`tools/codex-tool-surface-probe.ps1:417-475`, `tools/codex-tool-surface-probe.ps1:552-588`). The changed null assertion rejects the former missing-member reason, while the comparison case requires distinct reasons; the checkpoint reconciles both among the seven watched-red cases (`evals/multi-model-verify/test_codex_tool_surface_probe.py:672-703`, `.git/parallax/application-checkpoints/2026-08-11-1630-7945ac1-0240-build.md:879-885`). **PASS**
+
+2. Strict refusal is the correct default: the clean report represents feature enablement, so an entry it cannot represent must not be silently omitted (`tools/codex-tool-surface-probe.ps1:623-659`, `tools/codex-tool-surface-probe.ps1:804-827`). However, the accepted schema fix remains incomplete in two ways:
+
+   - `data` is still coerced with `@(...)` rather than validated as the expected array. A singleton object on the baseline surface is therefore accepted as a list and can reach CLEAN (`docs/superpowers/plans/rounds/2026-08-11-tool-surface-agy-drift/diff-reply-r3.txt:5-10`, `tools/codex-tool-surface-probe.ps1:610-659`, `tools/codex-tool-surface-probe.ps1:820-826`).
+   - An entry carrying multiple recognized enablement members is not unambiguous: the loop takes the first of `enabled`, `isEnabled`, and `value` and ignores the rest. Thus `enabled:false, value:true` can certify a disabled feature as false (`tools/codex-tool-surface-probe.ps1:641-659`, `tools/codex-tool-surface-probe.ps1:744-777`).
+
+   **FIX — require `data` to be an array and require exactly one recognized boolean enablement member; add watched-fail baseline-non-array and conflicting-alias cases.**
+
+3. The disabled-name comparison is now case-sensitive, matching the measured lowercase names and causing a differently cased name to take the safe unmeasured path (`tools/codex-tool-surface-probe.ps1:745-757`, `evals/multi-model-verify/test_codex_tool_surface_probe.py:760-780`). If the server legitimately changes casing later, blocking is correct because identity with the flag name has not been measured. **PASS**
+
+4. Both production serialization calls and the fixture seeder use depth 100 (`tools/check-drift.ps1:154-176`, `tools/check-drift.ps1:604-610`, `evals/tools/drift_statemachine_tests.ps1:507-515`). But the accepted fix required checked truncation handling and fail-first nested-object and nested-array cases; the implementation merely selects the maximum depth and has only object-valued scenarios (`docs/superpowers/plans/rounds/2026-08-11-tool-surface-agy-drift/diff-reply-r3.txt:16`, `evals/tools/drift_statemachine_tests.ps1:1118-1164`). Neither production call converts a serialization warning into a finding, so the stated “nothing representable is lost” postcondition is enforced only by an assumption about the intended host’s parser (`tools/check-drift.ps1:165-176`, `tools/check-drift.ps1:604-610`).
+
+   **FIX — make truncation warnings non-clean and prevent a truncated snapshot from replacing the prior value; add watched-fail nested-array round-trip and change cases.**
+
+5. The checkpoint’s correction is narrow, and the item body now records the same-day measurement (`.git/parallax/application-checkpoints/2026-08-11-1630-7945ac1-0240-build.md:523-542`, `docs/superpowers/plans/2026-07-27-0150-backlog.md:2740-2758`). Three standing sentences remain wider:
+
+   - The item title still says any later-day resume cannot bind (`docs/superpowers/plans/2026-07-27-0150-backlog.md:2705`).
+   - Its workaround says it holds “only while a debate stays inside one day,” despite the preceding text saying midnight is not the trigger and other refresh causes are unmeasured (`docs/superpowers/plans/2026-07-27-0150-backlog.md:2740-2747`, `docs/superpowers/plans/2026-07-27-0150-backlog.md:2760-2762`).
+   - The debate record still says item 42 “records as unknown,” “stands unchanged,” and that the workaround is limited to one day (`docs/superpowers/plans/rounds/2026-08-11-tool-surface-agy-drift/diff-debate-record.md:126-138`).
+
+   **FIX — retitle item 42 around the refreshed nonidentical-preamble condition, replace the same-day workaround claims with “a resume carrying no refreshed preamble binds,” and correct the stale retry paragraph.**
+
+6. The narrowing is correct only for the tested shape: its truncated text retained `deep=one/TWO`, so that scenario passed before repair (`evals/tools/drift_statemachine_tests.ps1:1144-1164`, `.git/parallax/application-checkpoints/2026-08-11-1630-7945ac1-0240-build.md:645-662`). It does not establish that truncation never hides change. The production comment itself identifies the counter-class—two values differing below the truncated object can produce the same token—while the regression scenario stops at a scalar `deep` value and never reaches that boundary (`tools/check-drift.ps1:165-172`, `evals/tools/drift_statemachine_tests.ps1:1148-1163`).
+
+   **FIX — deepen the change scenario by another object level so two differing leaf values collapse to the same pre-fix token, watch it fail against the pre-depth repair, and relabel it as a live discriminating case.**
+
+UNVERIFIED: The claimed live count of 88 uniformly boolean feature entries appears only in the current brief; I found no retained measurement record supporting that number (`docs/superpowers/plans/rounds/2026-08-11-tool-surface-agy-drift/diff-brief-r4.md:23`). It did not affect the verdict.
+
+**DRY: NO.** One Important functional false-clean remains in feature-schema handling (`tools/codex-tool-surface-probe.ps1:610-659`), alongside one moderate JSON-serialization evidence workstream covering claims 4 and 6 (`tools/check-drift.ps1:165-176`, `evals/tools/drift_statemachine_tests.ps1:1118-1164`) and one minor but repeated item-42 record-width cleanup (`docs/superpowers/plans/2026-07-27-0150-backlog.md:2705-2762`). The cap is exhausted with substantive findings outstanding, so the debate pauses without certification.

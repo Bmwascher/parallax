@@ -710,7 +710,7 @@ class TestEveryFeatureEntryIsReadable:
     half-built-fix shape as the policy itself, one level down. Found by the
     diff debate at round 3.
 
-    Deliberately strict, and the direction is safe: all 88 features in the
+    Deliberately strict, and the direction is safe: all 92 features in the
     live 2026-08-14 reading carry a non-empty string name and a real
     boolean, so a future entry that does not blocks loudly instead of being
     silently reduced.
@@ -746,6 +746,36 @@ class TestEveryFeatureEntryIsReadable:
         v = verdict(proc)
         assert v["status"] == "blocked", v
         assert "never reported" in v["reason"], v
+
+    def test_a_feature_data_that_is_a_bare_object_blocks(self):
+        # `@(...)` wraps a single object into a one-element list, so a
+        # server answering with one bare object where a list belongs was
+        # accepted and could reach CLEAN. Round 3 asked for `data` to be
+        # validated as the expected collection and the coercion was left
+        # in. Diff debate, round 4.
+        proc = run_probe(pass1=HEALTHY, pass2=EMPTY, features1=FEATURES,
+                         features2=json.dumps({"name": "memories",
+                                               "enabled": False}))
+        v = verdict(proc)
+        assert v["status"] == "blocked", v
+        assert "not a list" in v["reason"], v
+
+    def test_a_feature_with_two_enablement_members_blocks(self):
+        # `enabled:false` AND `value:true` - the surface says two different
+        # things about one feature. Taking the first alias certified it as
+        # disabled. Round 3 asked for an UNAMBIGUOUS field and this took
+        # the first match instead.
+        ambiguous = json.dumps([
+            {"name": "plugins", "enabled": False},
+            {"name": "apps", "enabled": False},
+            {"name": "memories", "enabled": False, "value": True},
+        ])
+        proc = run_probe(pass1=HEALTHY, pass2=EMPTY,
+                         features1=FEATURES, features2=ambiguous)
+        v = verdict(proc)
+        assert v["status"] == "blocked", v
+        assert "ambiguous" in v["reason"], v
+        assert "memories" in v["reason"], v
 
     def test_a_null_entry_in_the_feature_list_blocks(self):
         # `@($null)` skipped it in silence, so a list with a hole in it read
