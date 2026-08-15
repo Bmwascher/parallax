@@ -1,0 +1,43 @@
+The functional fixes stand, but the range is not dry because the newly added backlog record contains three unreconciled factual inconsistencies.
+
+1. The exit contract is correct for every fail/skip combination. Counts begin at zero; the missing-host branch increments `skipCount`; only `(0 failures, 0 skips)` prints `ALL SCENARIOS PASS`; and the exit code is their sum (`evals/tools/drift_statemachine_tests.ps1:93-98`, `evals/tools/drift_statemachine_tests.ps1:1263-1277`, `evals/tools/drift_statemachine_tests.ps1:1371-1383`, `evals/tools/drift_statemachine_tests.ps1:1413-1415`). The pytest caller checks exactly that exit code (`evals/multi-model-verify/test_multi_model_verify.py:2866-2879`).
+
+   The proof is honestly narrowed: the checkpoint records the combined `14 failed + 1 skipped = exit 15` observation and explicitly disclaims an isolated skip-only run (`.git/parallax/application-checkpoints/2026-08-11-1630-7945ac1-0240-build.md:1146-1153`). Because the implementation has no separate exit branch for the isolated combination, that missing run does not leave an unexamined code path.
+
+   **PASS**
+
+2. The CI statement is now accurate. The skip comment says the suite is local-only and opt-in and that CI would not make the missing measurement (`evals/tools/drift_statemachine_tests.ps1:1265-1273`). The dual-host workflow lists eleven modules but not the state-machine caller (`.github/workflows/skill-evals.yml:93-125`).
+
+   **PASS**
+
+3. The warning claim is correctly host-scoped. The principal measurement distinguishes silent Windows PowerShell 5.1 truncation from PowerShell 7’s warning (`tools/check-drift.ps1:185-201`), and the postcondition now repeats that distinction and explains why a warning-based guard would protect only one host (`tools/check-drift.ps1:366-375`).
+
+   **PASS**
+
+4. The refreshed checkpoint clearly identifies the shipping tree as `e713081`, records 44 scenarios, 132 assertions, zero failures and zero skips, and reconciles the added `2 + 2 + 3` assertions (`.git/parallax/application-checkpoints/2026-08-11-1630-7945ac1-0240-build.md:1112-1134`). The previous 41-scenario result is separately labelled superseded and retained below it (`.git/parallax/application-checkpoints/2026-08-11-1630-7945ac1-0240-build.md:1155-1166`).
+
+   **PASS**
+
+5. I found no remaining intentional skip path that can print a clean line or exit zero. The only skip increments the exit-bearing count (`evals/tools/drift_statemachine_tests.ps1:1263-1277`); the clean line requires both counters to be zero (`evals/tools/drift_statemachine_tests.ps1:1376-1383`); and the caller consumes the summed result (`evals/tools/drift_statemachine_tests.ps1:1413-1415`, `evals/multi-model-verify/test_multi_model_verify.py:2874-2879`). An unexpected fatal exception would terminate before the explicit zero exit, not produce a false clean.
+
+   **PASS**
+
+6. The corrected diagnosis is retained narrowly: removing `pwsh.exe` also breaks the four worktree scenarios, and the checkpoint records the resulting `14/1/15` arithmetic without claiming the isolated case (`.git/parallax/application-checkpoints/2026-08-11-1630-7945ac1-0240-build.md:1146-1153`). The earlier incorrect Python diagnosis does not affect the shipped exit logic.
+
+   **PASS**
+
+7. The newly in-range backlog record has three problems:
+
+   - It says item headings are the status source of truth (`docs/superpowers/plans/2026-07-27-0150-backlog.md:11-15`), but items 12, 15, 27 and 28 have no status in their headings even though the summary classifies them as open (`docs/superpowers/plans/2026-07-27-0150-backlog.md:26-27`, `docs/superpowers/plans/2026-07-27-0150-backlog.md:1098`, `docs/superpowers/plans/2026-07-27-0150-backlog.md:1185`, `docs/superpowers/plans/2026-07-27-0150-backlog.md:2196`, `docs/superpowers/plans/2026-07-27-0150-backlog.md:2225`). Either mark those headings OPEN or declare the missing-status-means-open convention.
+   - Item 44 calls `1186/1152/1092` the final gate timings (`docs/superpowers/plans/2026-07-27-0150-backlog.md:2947-2951`), while the retained shipping-tree gate records `1184/1148/1097` (`.git/parallax/application-checkpoints/2026-08-11-1630-7945ac1-0240-build.md:1122-1126`). If these are separate runs, identify both; otherwise reconcile the numbers.
+   - Item 48 says four named scripts all drive `powershell.exe` (`docs/superpowers/plans/2026-07-27-0150-backlog.md:3205-3210`). `new-kimi-lane-login.ps1` explicitly relaunches under the current host and says a `pwsh` invocation never spawns `powershell.exe` (`tools/new-kimi-lane-login.ps1:52-56`, `tools/new-kimi-lane-login.ps1:279-286`). The same inventory also says the state machine hardcodes 5.1 “at its Invoke-Drift call,” whereas it actually defaults the optional host inside the helper (`docs/superpowers/plans/2026-07-27-0150-backlog.md:3249-3251`, `evals/tools/drift_statemachine_tests.ps1:535-542`). Correct the entry-point inventory before using it as item 48’s investigative baseline.
+
+   **FIX — make the status-source rule true, reconcile or distinguish the gate timing records, and correct item 48’s host-launch inventory.**
+
+UNVERIFIED:
+
+- The exact historical count of “67 places” requiring `pwsh`, and the original incorrect Python diagnosis. The checkpoint retains the corrected causal summary but no raw transcript for those details (`.git/parallax/application-checkpoints/2026-08-11-1630-7945ac1-0240-build.md:1146-1153`).
+- The contents of external commits `DannyMac180/fable-advisor@3088622` and `@ad2bdc3`; their asserted changes are not retained in files read from this repository (`docs/superpowers/plans/2026-07-27-0150-backlog.md:2971-2979`, `docs/superpowers/plans/2026-07-27-0150-backlog.md:3151-3159`).
+- Item 12’s `service_tier="fast"` screenshot lead, which the backlog itself correctly labels unverified (`docs/superpowers/plans/2026-07-27-0150-backlog.md:1120-1137`).
+
+**Is this range DRY? No.** The round-7 code fixes are sound, and I found no remaining functional false-clean. What remains is a minor-to-moderate record defect: three inconsistencies in the newly added backlog/status material, including a false host-invocation premise for the planned PowerShell 7 investigation.
