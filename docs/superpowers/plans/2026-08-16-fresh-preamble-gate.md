@@ -1033,7 +1033,19 @@ In `evals/multi-model-verify/test_multi_model_verify.py`, inside
         'envelope. Instruction text inside a field VALUE binds too, '
         'since fresh compares no values, and so does instruction text '
         'spelled as an unknown field NAME, which the openness clause '
-        'accepts by design. This record becomes the '
+        'accepts by design. WIDER THAN ALL THREE: only '
+        '`response_item` records whose `payload.type` is `message` and '
+        'whose `payload.role` is `user` are counted or checked at all, '
+        'so a record of any other type or role sits in the slice '
+        'unexamined - the measured client emits three non-user '
+        '`response_item` records ahead of the first user record in all '
+        '60 sessions sampled 2026-08-16, and a record placed there '
+        'carrying arbitrary instruction text binds clean. And '
+        'structure-lock RELOCATES a drift failure rather than removing '
+        'it: a field the client adds now binds on the fresh path and '
+        'refuses at the first day-boundary refresh instead, because the '
+        'resumed path keeps its closed set, so the failure presents as '
+        'intermittent and position-dependent. This record becomes the '
         "session's BASELINE for every later resumed round, so the "
         'check is a baseline admission gate rather than a per-round '
         'one, and a miss admits the whole session wherever a later '
@@ -1096,7 +1108,17 @@ ahead of it, so refusing that direction would refuse the large majority of
 real traffic, while nothing in either measured population carried text AFTER
 the envelope. Instruction text inside a field VALUE binds too, since fresh
 compares no values, and so does instruction text spelled as an unknown field
-NAME, which the openness clause accepts by design. This record becomes the
+NAME, which the openness clause accepts by design. WIDER THAN ALL THREE:
+only `response_item` records whose `payload.type` is `message` and whose
+`payload.role` is `user` are counted or checked at all, so a record of any
+other type or role sits in the slice unexamined - the measured client emits
+three non-user `response_item` records ahead of the first user record in all
+60 sessions sampled 2026-08-16, and a record placed there carrying arbitrary
+instruction text binds clean. And structure-lock RELOCATES a drift failure
+rather than removing it: a field the client adds now binds on the fresh path
+and refuses at the first day-boundary refresh instead, because the resumed
+path keeps its closed set, so the failure presents as intermittent and
+position-dependent. This record becomes the
 session's BASELINE for every
 later resumed round, so the check is a baseline admission gate rather than a
 per-round one, and a miss admits the whole session wherever a later resumed
@@ -1282,10 +1304,10 @@ difference.
 
 It was run twelve times while this plan was written, and every expected
 output below is one of those runs rather than a prediction. Three were
-end-to-end - against the backlog as it stands today (exit 0, 29 ranked
+end-to-end - against the backlog as it stands today (exit 0, 30 ranked
 entries), against a simulation of Steps 1 and 2 alone (exit 1, naming
 exactly the six edits still owed at that point), and against a simulation
-of the finished task (exit 0, 26 ranked entries). NINE were CONTROLS, each
+of the finished task (exit 0, 27 ranked entries). NINE were CONTROLS, each
 a deliberately broken file that an earlier version of this checker reported
 as OK, and each now refusing by name: an empty ranked section; two headings
 for one item; two rows for one status group; a DONE item still ranked on an
@@ -1516,8 +1538,8 @@ Expected: exit 1, with these six failures and no others.
 DONE               26: 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 13, 14, 17, 18, 19, 20, 21, 22, 23, 24, 25, 30, 42, 52, 56, 57
 PARTIALLY CLOSED    2: 11, 26
 GONE                1: 16
-OPEN               31: 12, 15, 27, 28, 29, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 43, 44, 45, 46, 47, 48, 49, 50, 51, 53, 54, 55, 58, 59, 60
-ranked entries    29
+OPEN               32: 12, 15, 27, 28, 29, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 43, 44, 45, 46, 47, 48, 49, 50, 51, 53, 54, 55, 58, 59, 60, 61
+ranked entries    30
 FAIL: status block 'DONE': block has no extras, headings say [52, 56, 57]
 FAIL: status block 'PARTIALLY CLOSED': block has [57], headings say no omissions
 FAIL: status block 'OPEN': block has [52, 56], headings say no omissions
@@ -1552,9 +1574,9 @@ delete these three whole:
 - entry **25**, opening `25. **57** (its (a) and (b) halves; (c) closed in
   0.25.0)`
 
-Then renumber so the list reads 1 to 26 with no gaps: former `8.` becomes
+Then renumber so the list reads 1 to 27 with no gaps: former `8.` becomes
 `6.`, former `24.` becomes `22.`, former `26.` becomes `23.`, and former
-`29.` becomes `26.`. Nothing inside any entry changes. Do not delete the
+`30.` becomes `27.`. Nothing inside any entry changes. Do not delete the
 group headers between entries (`**Second - ...**`, `**Third - ...**`,
 `**Last - ...**`) - they are not numbered entries and the checker does not
 count them.
@@ -1565,8 +1587,8 @@ Verify with the same command as Step 3. Expected now: exit 0.
 DONE               26: 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 13, 14, 17, 18, 19, 20, 21, 22, 23, 24, 25, 30, 42, 52, 56, 57
 PARTIALLY CLOSED    2: 11, 26
 GONE                1: 16
-OPEN               31: 12, 15, 27, 28, 29, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 43, 44, 45, 46, 47, 48, 49, 50, 51, 53, 54, 55, 58, 59, 60
-ranked entries    26
+OPEN               32: 12, 15, 27, 28, 29, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 43, 44, 45, 46, 47, 48, 49, 50, 51, 53, 54, 55, 58, 59, 60, 61
+ranked entries    27
 OK
 ```
 
