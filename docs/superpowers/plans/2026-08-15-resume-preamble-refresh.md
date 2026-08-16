@@ -1229,8 +1229,8 @@ upgrade also refreshes the preamble has never been measured.
 
 The list opens at `:57` with "First - the six that break the repo's own
 review process." and its entries are numbered continuously across all
-groups, ending at entry 23 on `:162`. Item 42 is entry 1, so removing it
-renumbers all twenty-two entries below it. Make exactly these edits:
+groups, ending at entry 24. Item 42 is entry 1, so removing it renumbers
+all twenty-three entries below it. Make exactly these edits:
 
 - Change the group heading at `:57` from "First - the six that break the
   repo's own review process." to "First - the five that break the repo's
@@ -1239,7 +1239,7 @@ renumbers all twenty-two entries below it. Make exactly these edits:
   "IN PROGRESS on branch" sentence.
 - Renumber every remaining entry so numbering stays continuous from 1:
   each one decreases by exactly one, so 50 becomes 1 and the final entry,
-  12, becomes 22.
+  12, becomes 23.
 - No other group heading count changes. Only the first group lost an
   entry, so leave "Second - the three that tax every cycle.", "Third -
   four changes to the workflow itself", "Fourth", "Fifth" and "Last"
@@ -1251,7 +1251,7 @@ VERIFY the result mechanically rather than by eye. From the repo root:
 python -c "import re,pathlib; L=pathlib.Path('docs/superpowers/plans/2026-07-27-0150-backlog.md').read_text(encoding='utf-8').splitlines()[:170]; n=[int(m.group(1)) for m in (re.match(r'\s*(\d+)\. \*\*', x) for x in L) if m]; print(n); print('OK' if n==list(range(1,len(n)+1)) else 'NOT CONTINUOUS - STOP')"
 ```
 
-Expected: the printed list is `1` through `22` and the second line reads
+Expected: the printed list is `1` through `23` and the second line reads
 `OK`.
 
 If the file's actual numbering or group counts differ from the description
