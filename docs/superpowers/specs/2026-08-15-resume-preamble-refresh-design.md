@@ -1,7 +1,7 @@
 # Design: a resumed round binds across a refreshed client preamble
 
 Backlog item 42, in `docs/superpowers/plans/2026-07-27-0150-backlog.md`
-(located by heading; items 50 to 53 were appended on 2026-08-15 and line
+(located by heading; items 50 to 54 were appended on 2026-08-15 and line
 numbers into that file no longer hold).
 Design settled 2026-08-15 by a user-invoked PANEL (Sol + Fable) in mode
 plan. Panel invariant satisfied: Sol is the cross-vendor lane.

@@ -930,6 +930,30 @@ code inside the old condition:
         }
 ```
 
+- [ ] **Step 8a: Rewrite the test docstring the change makes false**
+
+`evals/multi-model-verify/test_codex_round_evidence.py:545-553`, the
+docstring of `test_a_resume_slice_with_an_unexplained_extra_record_is_refused`,
+says the rule "is now about IDENTITY rather than arithmetic: the only
+record allowed in front of the brief is one the client already emitted in
+this session." Task 2 makes that false. The CASE stays exactly as it is -
+`"something else entirely"` is still refused, and its `"preamble"` needle
+still matches - but a passing test whose docstring describes a rule the
+code no longer has is a record defect inside the test suite.
+
+Replace the second paragraph of that docstring with:
+
+```python
+    This used to be a COUNT rule - a resumed slice must carry exactly
+    one. That bound was falsified in the field, and the IDENTITY rule
+    that replaced it was falsified in turn on 2026-08-14 by a refreshed
+    preamble. Two paths are allowed in front of the brief now: a record
+    the client already emitted in this session, or one recognised as a
+    client environment preamble by structure and confirmed field by
+    field against this session's own baseline. Free text is neither,
+    which is what this case pins.
+```
+
 - [ ] **Step 8b: Rewrite the rationale comment the change makes false**
 
 `tools/read-codex-round-evidence.ps1:622-638` explains the rule in the
@@ -973,7 +997,7 @@ that begins with the comment line `# The resumed half was a COUNT until
 2026-08-04, when the client` and ends with the closing of the resumed
 assertion at `:341-343`.
 
-That span is a five-line comment, then a FRESH-slice assertion, then the
+That span is a FOUR-line comment, then a FRESH-slice assertion, then the
 resumed assertion. The replacement below reproduces the fresh assertion
 unchanged in the middle, because the span contains it and dropping it
 would silently delete a pin. Replacing only `:341-343` would instead leave
@@ -1152,14 +1176,14 @@ happen: stop and report instead.
 
 **Files:**
 - Modify: `docs/superpowers/plans/2026-07-27-0150-backlog.md`, the item 42
-  section and the ranked list at `:57-162`. The list's entries are
-  numbered continuously across all of its groups and run to entry 23, so
-  removing entry 1 reaches every one of them. An earlier draft declared
-  `:57-83`, which would have told the implementer to stop editing halfway
-  down a renumbering. The item 42 heading's line number is deliberately
-  NOT quoted here: items 50 to 53 were appended after this plan was
-  written and the section has moved once already. Find it by its heading
-  text.
+  section and the ranked list at `:57-169`. The list's entries are
+  numbered continuously across all of its groups and run to entry 24, so
+  removing entry 1 reaches every one of them. Two earlier drafts declared
+  a range that stopped short - first `:57-83`, then `:57-162` - each of
+  which would have told the implementer to stop editing partway down a
+  renumbering. The item 42 heading's line number is deliberately NOT
+  quoted here: items 50 to 54 were appended after this plan was written
+  and the section has moved twice already. Find it by its heading text.
 - Modify: `.claude-plugin/plugin.json`
 
 **Interfaces:**
@@ -1256,9 +1280,10 @@ Expected: the printed list is `1` through `23` and the second line reads
 
 If the file's actual numbering or group counts differ from the description
 above, STOP and report rather than improvising. That description was true
-on 2026-08-15 after items 50 to 53 were filed; the list has already moved
-once during this branch, which is exactly why it is verified rather than
-trusted.
+on 2026-08-15 after items 50 to 54 were filed; the list has already moved
+TWICE during this branch, and both times the plan's description of it went
+stale before anyone executed it. That is exactly why it is verified with a
+command rather than trusted.
 
 - [ ] **Step 5: Bump the version LAST**
 
@@ -1285,8 +1310,9 @@ python evals/tools/run_trigger_evals.py
 python -m pytest evals/multi-model-verify/test_contract_coverage.py -q
 ```
 
-Expected: all PASS. Report these as results on the FINAL head, separately
-from Step 1's full-suite results on the earlier tree.
+Expected: all PASS. Report these as results on the FINAL UNCOMMITTED TREE,
+separately from Step 1's full-suite results on the earlier tree. They
+become results on the final head once Step 7 commits, and not before.
 
 - [ ] **Step 7: Commit**
 
