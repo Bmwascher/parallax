@@ -203,17 +203,25 @@ git commit -m "validate the record ahead of the brief after the brief itself"
 
 **Interfaces:**
 - Consumes: the relocated resume block from Task 1.
-- Produces: four PowerShell functions.
+- Produces: SIX PowerShell functions. All six are listed because a task
+  that declares four while its steps define six is a task whose interface
+  block cannot be trusted as a contract.
   - `Get-CanonicalText([string]$text)` returns the text with CRLF folded
     to LF and leading and trailing whitespace removed. Extracted from
     `Get-CanonicalSha256`, which now calls it, so one definition serves
     both.
+  - `New-EnvelopeResult($fields, $fault)` returns the two-key hashtable
+    every envelope reader returns. Constructor only; no logic.
   - `Get-EnvironmentEnvelopeFields([string]$canonicalText)` returns a
     hashtable with two keys: `Fields`, an `OrderedDictionary` of field
     name to raw inner text, and `Fault`, a phrase naming why the text is
     not an envelope. Exactly one of the two is ever non-null.
   - `Get-BaselineEnvelopeFields([string]$canonicalText)` returns the same
-    shape for the single envelope embedded in a larger record text.
+    shape for the single envelope embedded in a larger record text. When
+    the embedded envelope parses but is faulty, it PROPAGATES the
+    scanner's own phrase rather than collapsing every cause into one.
+  - `Get-EnvDate([string]$value)` returns a `[datetime]` when the value is
+    a calendar date in invariant `yyyy-MM-dd` form, else `$null`.
   - `Get-RefreshedPreambleFault([string]$extraText, [string]$baseText)`
     returns `$null` when the extra record is an acceptable refresh of the
     baseline, else a phrase naming the fault.
@@ -490,15 +498,60 @@ def test_a_baseline_with_two_envelopes_disables_the_structural_path(tmp_path):
                   "carries no single recognisable environment preamble")
 
 
-def test_a_baseline_with_a_duplicate_field_disables_the_structural_path(tmp_path):
-    """The baseline is parsed by the same strict scanner as the refresh.
-    A baseline nobody can read is a baseline nothing can be checked
-    against."""
+def test_a_refreshed_preamble_with_stray_text_between_fields_is_refused(tmp_path):
+    """Inside the envelope, every character is a field or whitespace."""
+    row = user_row(["<environment_context>\n  stray text\n</environment_context>"])
+    f, prior, sha = resumed_case(tmp_path, row)
+    assert_failed(run_resume(f, prior, sha), "carries text outside its fields")
+
+
+def test_a_refreshed_preamble_with_an_unterminated_tag_is_refused(tmp_path):
+    """A `<` that never reaches a `>` is not a field and is not
+    whitespace, so it is unaccounted-for text."""
+    row = user_row(["<environment_context>\n  <cwd\n</environment_context>"])
+    f, prior, sha = resumed_case(tmp_path, row)
+    assert_failed(run_resume(f, prior, sha), "carries an unterminated tag")
+
+
+def test_a_refreshed_preamble_with_an_unclosed_field_is_refused(tmp_path):
+    """An opened field with no closing tag has no determinable value."""
+    row = user_row(["<environment_context>\n  <cwd>x\n</environment_context>"])
+    f, prior, sha = resumed_case(tmp_path, row)
+    assert_failed(run_resume(f, prior, sha),
+                  "never closes the environment field 'cwd'")
+
+
+def test_an_empty_refreshed_preamble_is_refused(tmp_path):
+    """A well-formed envelope carrying nothing is still a shape nothing
+    has emitted, and it would otherwise satisfy the scanner."""
+    row = user_row(["<environment_context></environment_context>"])
+    f, prior, sha = resumed_case(tmp_path, row)
+    assert_failed(run_resume(f, prior, sha), "carries no environment fields at all")
+
+
+def test_a_baseline_with_a_duplicate_field_names_the_duplicate(tmp_path):
+    """The baseline is parsed by the same strict scanner as the refresh,
+    and its fault PROPAGATES. Collapsing it into "no single recognisable
+    preamble" would report a two-envelope record and a repeated field as
+    the same thing."""
     base = user_row([env_text(full_fields() + [("timezone", "Etc/UTC")])])
     f, prior, sha = resumed_case(tmp_path, refresh_row(core_fields(BASE_DATE)),
                                  baseline_row=base)
     assert_failed(run_resume(f, prior, sha),
-                  "carries no single recognisable environment preamble")
+                  "this session's own preamble repeats the environment field 'timezone'")
+
+
+def test_a_baseline_without_a_current_date_disables_the_structural_path(tmp_path):
+    """The lower bound needs a baseline date to bound against. A baseline
+    envelope that parses but carries no date leaves the one novel field
+    unbounded."""
+    base = user_row([env_text([("cwd", "C:\\repo"), ("shell", "powershell"),
+                               ("timezone", "America/Chicago"),
+                               ("filesystem", FS_VALUE)])])
+    f, prior, sha = resumed_case(tmp_path, refresh_row(core_fields(BASE_DATE)),
+                                 baseline_row=base)
+    assert_failed(run_resume(f, prior, sha),
+                  "carries no current_date to bound the refreshed one")
 
 
 def test_a_baseline_with_an_impossible_date_disables_the_structural_path(tmp_path):
@@ -590,9 +643,12 @@ line:
 $script:EnvOpen = "<environment_context>"
 $script:EnvClose = "</environment_context>"
 $script:EnvAllowed = @("cwd", "shell", "current_date", "timezone", "filesystem")
-# Present in BOTH measured shapes. Requiring them keeps the rule no wider
-# than the evidence: a preamble carrying only a date is a shape nothing
-# has ever emitted.
+# Present in BOTH measured shapes. The allowed set is their UNION and the
+# core is their INTERSECTION, so a shape between the two - one carrying
+# `cwd` but not `shell` - is admitted by DERIVATION and was never itself
+# observed. That is the narrowest rule two measurements will carry, and it
+# is still wider than the measurements. Requiring the core keeps out the
+# shapes below both, such as a preamble carrying only a date.
 $script:EnvCore = @("current_date", "timezone", "filesystem")
 
 function New-EnvelopeResult($fields, $fault) {
@@ -658,7 +714,7 @@ function Get-EnvironmentEnvelopeFields([string]$canonicalText) {
         $i = $end + $closeTag.Length
     }
     if ($fields.Count -lt 1) {
-        return New-EnvelopeResult $null "is not a recognised client environment preamble"
+        return New-EnvelopeResult $null "carries no environment fields at all"
     }
     New-EnvelopeResult $fields $null
 }
@@ -684,7 +740,14 @@ function Get-BaselineEnvelopeFields([string]$canonicalText) {
     }
     $inner = Get-EnvironmentEnvelopeFields $canonicalText.Substring(
         $first, $close + $script:EnvClose.Length - $first)
-    if ($null -eq $inner.Fields) { return New-EnvelopeResult $null $unavailable }
+    if ($null -eq $inner.Fields) {
+        # PROPAGATE, do not collapse. Every scanner fault reaching here
+        # would otherwise report as "no single recognisable preamble",
+        # which is true of a record with two envelopes and misleading for
+        # one whose single envelope repeats a field.
+        return New-EnvelopeResult $null (
+            "cannot be checked: this session's own preamble " + $inner.Fault)
+    }
     $inner
 }
 ```
@@ -875,21 +938,34 @@ WHOLE inside ONE pin, and the pin for this region is the assertion at
 Step 11 makes that assertion fail. It is not optional and it is not
 satisfied by the clause pins above.
 
-In that assertion's string, find the two sentences from Step 11 - they
-appear there wrapped across several adjacent string literals - and replace
-them with the new text, wrapped the same way. Nothing else in the pin
-changes.
-
-Verify the splice MECHANICALLY rather than by eye, because a hand-retyped
-sixty-line literal is exactly where a transcription error hides. From the
-repo root:
+Do NOT retype the literal or choose the wrapping by hand. GENERATE the
+replacement block from the file you just edited. From the repo root, run
+this exactly and save its output:
 
 ```powershell
-python -c "import re,pathlib; t=pathlib.Path('skills/multi-model-verify/references/model-prompting-notes.md').read_text(encoding='utf-8'); m=re.search(r'contract:start id=codex-brief-binding-record -->(.*?)<!-- contract:end', t, re.S); print(' '.join(m.group(1).split()))"
+python -c "import re,pathlib,textwrap; t=pathlib.Path('skills/multi-model-verify/references/model-prompting-notes.md').read_text(encoding='utf-8'); m=re.search(r'contract:start id=codex-brief-binding-record -->(.*?)<!-- contract:end', t, re.S); s=' '.join(m.group(1).split()); parts=textwrap.wrap(s, 58, drop_whitespace=False, break_long_words=True); assert ''.join(parts)==s, 'wrapping is not lossless - STOP'; q=chr(34); print('        assert ('); [print('        ' + repr(p)) for p in parts]; print('        ) in notes, ('); print('        ' + q + 'region codex-brief-binding-record must sit WHOLE in one pin' + q + ')')" > pin-block.txt
 ```
 
-That prints the exact normalized region text the pin must contain. The pin
-is correct when that output appears inside the pin's concatenated string.
+The `chr(34)` is not decoration. This whole command is inside PowerShell
+double quotes, so a literal `"` in the Python source ends the argument and
+the run dies with a syntax error. That was measured while writing this
+plan, not guessed. The command was then run against the CURRENT contract
+region and its output reproduced the existing pin's first lines exactly,
+which is what makes it a generator rather than a hope.
+
+The `assert ''.join(parts)==s` inside that command is the guard: if the
+wrapping ever loses or adds a character the command STOPS instead of
+printing a wrong literal.
+
+Now replace the ENTIRE second assertion in
+`test_multi_model_verify.py` - the one currently spanning `:391-450` and
+ending `"region codex-brief-binding-record must sit WHOLE in one pin")` -
+with the contents of `pin-block.txt`. Replace the whole assertion, do not
+splice inside it. Delete `pin-block.txt` afterwards; it is scratch, not a
+repo file.
+
+The generated literal uses Python `repr`, so quotes and backslashes inside
+the contract text are escaped correctly without anyone deciding how.
 
 - [ ] **Step 13: Run the contract gates**
 
@@ -917,13 +993,33 @@ Expected: all four PASS.
 
 - [ ] **Step 15: Commit**
 
+Use this template and fill the two bracketed slots from what Step 4 and
+Step 9 actually printed. Do not paraphrase the results and do not write
+the slots from memory.
+
 ```bash
 git add tools/read-codex-round-evidence.ps1 evals/multi-model-verify/test_codex_round_evidence.py skills/multi-model-verify/references/model-prompting-notes.md evals/multi-model-verify/test_multi_model_verify.py
-git commit -m "accept a refreshed client preamble recognised by structure and value"
+git commit -m "accept a refreshed client preamble recognised by structure and value
+
+Identity was the whole rule for a record ahead of the brief on a resume,
+and the field falsified it on 2026-08-14: a resume across a day boundary
+carried a refreshed preamble and a paid round was discarded unread. The
+rule is now identity OR a preamble recognised by structure and confirmed
+field by field against this session's own baseline envelope.
+
+The gate, its tests and its contract text ship in ONE commit. Split, the
+repo would hold a state whose pinned contract asserted identity-only
+while the code accepted a structural refresh.
+
+Watched RED before the implementation existed (Step 4):
+[paste the exact pytest short-test-summary lines from Step 4]
+
+Both hosts pass (Step 9):
+[paste the two summary lines with the host each was run under]"
 ```
 
-The commit message must list which cases were red in Step 4 and the two
-host names used in Step 9.
+If Step 4's output showed any new case PASSING, this commit does not
+happen: stop and report instead.
 
 ---
 
@@ -931,7 +1027,10 @@ host names used in Step 9.
 
 **Files:**
 - Modify: `docs/superpowers/plans/2026-07-27-0150-backlog.md:2849` and
-  `:57-83`
+  `:57-132`. The ranked list's entries are numbered continuously across
+  all of its groups and run to entry 19 at `:132`, so removing entry 1
+  reaches every one of them. Declaring the narrower `:57-83` would have
+  told the implementer to stop editing halfway down a renumbering.
 - Modify: `.claude-plugin/plugin.json`
 
 **Interfaces:**
@@ -997,10 +1096,10 @@ upgrade also refreshes the preamble has never been measured.
 
 - [ ] **Step 4: Remove item 42 from the ranked build order**
 
-The list at `:57-83` opens "First - the three that break the repo's own
-review process." Item 42 is entry 1 of that group and the entries are
-numbered continuously across all groups, so removing it renumbers
-everything below. Make exactly these edits:
+The list opens at `:57` with "First - the three that break the repo's own
+review process." and its entries are numbered continuously across all
+groups, ending at entry 19 on `:132`. Item 42 is entry 1, so removing it
+renumbers all eighteen entries below it. Make exactly these edits:
 
 - Change the group heading at `:57` from "First - the three that break the
   repo's own review process." to "First - the two that break the repo's
@@ -1027,8 +1126,10 @@ however much the checkout changes afterwards.
 
 - [ ] **Step 6: Re-run the fast gates on the FINAL head**
 
-The full suite in Step 1 ran on a tree that is now two commits old. The
-edits since are Markdown plus one manifest field, but "nothing under
+The full suite in Step 1 ran BEFORE the record and manifest edits in Steps
+2 to 5. Those edits are not yet committed - this task commits once, at
+Step 7 - so the tree under test has moved even though the commit count has
+not. The changes are Markdown plus one manifest field, but "nothing under
 `evals/` reads them" is a claim, so check it rather than assert it:
 
 ```powershell

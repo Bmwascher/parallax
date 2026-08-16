@@ -33,7 +33,9 @@ everything else.
 ## What was measured, and when
 
 Swept 2026-08-15 across every rollout under the user's codex session
-store (749 files at the first sweep). Two sweeps, both by the driver.
+store (749 files at the first sweep, 751 by the third). Three sweeps, all
+by the driver. The third was run only because review caught the second
+being read as evidence for something it never measured.
 
 **Sweep 1 - the shape of the environment element.** Every `input_text`
 element of a `response_item` / `message` / `role=user` record that carries
@@ -48,18 +50,37 @@ No matched element carried an unknown field, a duplicate direct field, or
 text outside the tag. The common core of both shapes is exactly
 `current_date`, `timezone`, `filesystem`.
 
-**Sweep 2 - the composition of the RECORD.** Ran because a claim about
-elements is not a claim about records, and the design depends on both.
-User records carrying an environment element come in three compositions:
+**Sweep 2 - the composition of ANY environment-carrying record.** Ran
+because a claim about elements is not a claim about records. User records
+carrying an environment element come in three compositions:
 
 - 454 records: 3 elements, one of them the environment element.
 - 196 records: 2 elements, one of them the environment element.
 - 122 records: 1 element, the environment element alone.
 
-The observed refresh is the one-element case. A session's FIRST user
-record is the two- or three-element case. Three elements is the most
-common composition, so any rule that assumes the baseline record holds
-exactly two elements is narrower than the store.
+The observed refresh is the one-element case.
+
+**Sweep 3 - the composition of the FIRST user record specifically.** Ran
+because sweep 2 does NOT establish it. Sweep 2 counted every
+environment-carrying user record in the store, and the baseline rule is
+about one particular record per session, so reading sweep 2 as a statement
+about first records was an attribution error. It was caught in review and
+answered by measuring rather than by reasoning. Of 751 rollouts, 748 were
+read and 3 were locked by a running process:
+
+- 449 first records: 3 elements, exactly one envelope.
+- 190 first records: 2 elements, exactly one envelope.
+- 73 first records: 1 element, exactly one envelope.
+- 36 first records: 1 element and NO envelope at all.
+
+Two things follow, and only these two. Where a first record carries an
+envelope it carries exactly ONE, across all 712 such records, which is
+what makes "the single envelope inside the first user record" a rule
+rather than a hope. And in 36 sessions - about one in twenty - the first
+record has no envelope, so the structural path being UNAVAILABLE is a
+measured ordinary case rather than a defensive branch nothing reaches.
+Three elements is the most common composition, so any rule assuming the
+baseline record holds exactly two is narrower than the store.
 
 A concrete pair to read:
 `C:/Users/Brandon/.codex/sessions/2026/08/12/rollout-2026-08-12T02-41-22-019ff4eb-346e-7be2-9af3-520ebc876707.jsonl`,
