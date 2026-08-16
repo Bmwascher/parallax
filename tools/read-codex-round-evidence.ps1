@@ -621,6 +621,20 @@ if ($Resume) {
     if ($priorBytes -lt 0) {
         Fail "prior state does not carry a usable byte offset"
     }
+    # A RESUME WITH NO PREFIX HAS NO EVIDENCE. A real resumed session
+    # always carries its own session_meta and at least one earlier round,
+    # so a zero offset means the prior state measured nothing. Left
+    # unrefused it binds clean: the boundary guard below has no byte to
+    # check, the prefix's own session_meta check reads the first line of
+    # the WHOLE file - this call's own slice - and a slice carrying one
+    # user record never reaches the preamble scan. Measured 2026-08-16.
+    # Same self-adoption class as the CRLF overrun: evidence from the
+    # slice mistaken for evidence from before it.
+    if ($priorBytes -eq 0) {
+        Fail ("prior state records an empty prefix: a resumed round must " +
+              "follow a session that already exists, so there is nothing " +
+              "for this call's slice to be measured against")
+    }
     if ($bytes.Length -lt $priorBytes) {
         Fail ("the rollout is shorter than the prior state records (" +
               $bytes.Length + " bytes now, " + $priorBytes + " before)")

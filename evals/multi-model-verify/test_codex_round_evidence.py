@@ -1595,3 +1595,25 @@ def test_a_resume_whose_first_user_record_is_unreadable_is_refused(tmp_path):
                     user_row("Round two brief."), assistant_row("ok2")])
     assert_failed(run_resume(f, prior, canon("Round two brief.")),
                   "carries an unreadable record")
+
+
+def test_a_resume_whose_prior_state_records_an_empty_prefix_is_refused(tmp_path):
+    """A resumed round must follow a session that already exists.
+
+    With `bytes = 0` there is no prefix at all, so the boundary guard has
+    no byte to check, the prefix's own session_meta check reads the first
+    line of the whole file - this call's OWN slice - and a one-user slice
+    never reaches the preamble scan. It bound clean having measured its
+    own bytes against themselves.
+    """
+    root, f = make_root(tmp_path, rows=[meta_row()])
+    open(f, "w", encoding="utf-8").close()
+    b = Path(f).read_bytes()
+    assert len(b) == 0
+    prior = state_file(tmp_path, {
+        "kind": "resume", "rolloutFile": str(f), "sessionId": SESSION,
+        "bytes": 0, "prefixSha256": hashlib.sha256(b).hexdigest()})
+    append_rows(f, [meta_row(), user_row("Round two brief."),
+                    assistant_row("ok")])
+    assert_failed(run_resume(f, prior, canon("Round two brief.")),
+                  "records an empty prefix")
