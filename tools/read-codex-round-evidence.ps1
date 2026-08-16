@@ -916,6 +916,15 @@ function Get-UserText($record) {
     # also carried something else - wider than the frozen rule, and wider
     # than anything measured. A non-candidate returns $null and can never
     # match.
+    # THE CONTAINER'S OWN SHAPE, established before anything is read out
+    # of it. `content` given as a JSON OBJECT is wrapped by `@()` into a
+    # one-element array holding that object, so every guard below then
+    # reads through a shape the contract never allowed. Found by round 1
+    # of the 0.26.0 diff debate and reproduced against the shipped
+    # script: an object `content` carrying array-valued `type` and `text`
+    # bound CLEAN. Both hosts agree that `-is [System.Array]` separates
+    # the two, measured 2026-08-16.
+    if (-not ($record.payload.content -is [System.Array])) { return $null }
     $elements = @($record.payload.content)
     if ($elements.Count -lt 1) { return $null }
     $sb = New-Object System.Text.StringBuilder
@@ -924,8 +933,16 @@ function Get-UserText($record) {
         # enumeration on both hosts, so `-not $el` never saw it. Same
         # nested-shape class as the payload guard above.
         if (-not ($el -is [System.Management.Automation.PSCustomObject])) { return $null }
+        # SCALAR STRINGS, tested before they are compared or appended.
+        # `-ne` with an ARRAY on the left FILTERS instead of comparing, so
+        # `@("input_text") -ne "input_text"` is empty and the type guard
+        # below never fired; and `[string]` on a one-element array yields
+        # its element, so an array `text` appended as if it were a string.
+        # Same round, same reproduction.
+        if (-not ($el.type -is [string])) { return $null }
         if ($el.type -ne "input_text") { return $null }
-        [void]$sb.Append([string]$el.text)
+        if (-not ($el.text -is [string])) { return $null }
+        [void]$sb.Append($el.text)
     }
     $sb.ToString()
 }
