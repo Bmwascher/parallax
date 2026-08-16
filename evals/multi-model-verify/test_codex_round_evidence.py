@@ -1545,7 +1545,7 @@ def test_a_crlf_rollout_still_binds_a_repeated_preamble(tmp_path):
     preamble = real_preamble_row()
     f, prior, sha = crlf_resumed_case(tmp_path, preamble,
                                       prefix_user_row=preamble)
-    assert parsed(run_resume(f, prior, sha))["status"] == "clean"
+    assert_clean(run_resume(f, prior, sha))
 
 
 def state_over_file(tmp_path, rollout):
