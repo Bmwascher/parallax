@@ -539,6 +539,39 @@ measured Codex client recorded for this call, never what the server or model
 received.
 <!-- contract:end -->
 
+<!-- contract:start id=codex-brief-binding-fresh-record -->
+**The fresh record in front of the brief.** A FRESH slice carries exactly
+two user records and the first is the client's own environment preamble, so
+that record is checked by SHAPE. It must carry exactly one
+`environment_context` envelope - zero or several is a refusal - the envelope
+must END the record after canonicalization, it must parse end to end with
+syntactically valid lowercase field names, none repeated and no text it
+cannot account for inside itself, and the three fields `current_date`,
+`timezone` and `filesystem` must all be present, matched ordinally and
+case-sensitively. Any OTHER field name is accepted and no value is compared,
+because a fresh call has no baseline to compare against: its own first record
+IS the baseline. That is a weaker rule than the resumed path's, deliberately.
+The closed set is an upper bound that rejects additions and has been
+falsified twice in ten days; the core is a lower bound that rejects envelopes
+carrying less than either measured composition, and neither falsification
+dropped a core field. Requiring one field alone would admit a junk wrapper as
+the session baseline, which then has no `current_date` and silently disables
+the structural refresh path for every later round. WHAT THIS DOES NOT CLAIM,
+stated because the gap is wider than the check. It is not provenance: the
+rollout is a local file, and anyone able to write it can forge a well-formed
+preamble. Text BEFORE the envelope is accepted and NOT bound - 658 of 767
+first user records measured 2026-08-16 carry the client's own instructions
+ahead of it, so refusing that direction would refuse the large majority of
+real traffic, while nothing in either measured population carried text AFTER
+the envelope. Instruction text inside a field VALUE binds too, since fresh
+compares no values, and so does instruction text spelled as an unknown field
+NAME, which the openness clause accepts by design. This record becomes the
+session's BASELINE for every
+later resumed round, so the check is a baseline admission gate rather than a
+per-round one, and a miss admits the whole session wherever a later resumed
+slice carries a record ahead of its brief.
+<!-- contract:end -->
+
 **Why the rollout and not the transcript.** Measured 2026-08-03, probe part
 4: a brief whose body carries delimiter-shaped payload lines put a SECOND
 `session id:` into the transcript, all zeroes, and a parser taking the last

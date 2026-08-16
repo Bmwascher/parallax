@@ -220,6 +220,31 @@ function Get-EnvironmentEnvelopeFields([string]$canonicalText) {
     New-EnvelopeResult $fields $null
 }
 
+function Find-EnvelopeSpan([string]$canonicalText) {
+    # WHERE the one envelope is, with no opinion about what a caller
+    # does when there is not exactly one. Kind is $null on success and
+    # "none" or "several" otherwise: the two callers word those two
+    # outcomes differently - a session BASELINE that cannot be
+    # identified and a FRESH record that is not a preamble are
+    # different faults - so the selection is shared and the message is
+    # not. Duplicating the selection instead is how the two paths drift
+    # apart later.
+    if ($null -eq $canonicalText) { return @{ Start = -1; Length = 0; Kind = "none" } }
+    $first = $canonicalText.IndexOf($script:EnvOpen, [System.StringComparison]::Ordinal)
+    if ($first -lt 0) { return @{ Start = -1; Length = 0; Kind = "none" } }
+    if ($canonicalText.IndexOf($script:EnvOpen, $first + 1, [System.StringComparison]::Ordinal) -ge 0) {
+        return @{ Start = -1; Length = 0; Kind = "several" }
+    }
+    $close = $canonicalText.IndexOf($script:EnvClose, $first, [System.StringComparison]::Ordinal)
+    if ($close -lt 0) { return @{ Start = -1; Length = 0; Kind = "none" } }
+    if ($canonicalText.IndexOf($script:EnvClose, $close + 1, [System.StringComparison]::Ordinal) -ge 0) {
+        return @{ Start = -1; Length = 0; Kind = "several" }
+    }
+    @{ Start = $first
+       Length = ($close + $script:EnvClose.Length - $first)
+       Kind = $null }
+}
+
 function Get-BaselineEnvelopeFields([string]$canonicalText) {
     # The session's FIRST user record joins one, two or three elements
     # (three being the most common composition measured), so the envelope
@@ -233,19 +258,11 @@ function Get-BaselineEnvelopeFields([string]$canonicalText) {
     $several = ("cannot be checked: this session's first user record carries " +
                 "more than one environment preamble, so which one is the " +
                 "baseline is undefined")
-    if ($null -eq $canonicalText) { return New-EnvelopeResult $null $none }
-    $first = $canonicalText.IndexOf($script:EnvOpen, [System.StringComparison]::Ordinal)
-    if ($first -lt 0) { return New-EnvelopeResult $null $none }
-    if ($canonicalText.IndexOf($script:EnvOpen, $first + 1, [System.StringComparison]::Ordinal) -ge 0) {
-        return New-EnvelopeResult $null $several
-    }
-    $close = $canonicalText.IndexOf($script:EnvClose, $first, [System.StringComparison]::Ordinal)
-    if ($close -lt 0) { return New-EnvelopeResult $null $none }
-    if ($canonicalText.IndexOf($script:EnvClose, $close + 1, [System.StringComparison]::Ordinal) -ge 0) {
-        return New-EnvelopeResult $null $several
-    }
+    $span = Find-EnvelopeSpan $canonicalText
+    if ($span.Kind -eq "none") { return New-EnvelopeResult $null $none }
+    if ($span.Kind -eq "several") { return New-EnvelopeResult $null $several }
     $inner = Get-EnvironmentEnvelopeFields $canonicalText.Substring(
-        $first, $close + $script:EnvClose.Length - $first)
+        $span.Start, $span.Length)
     if ($null -eq $inner.Fields) {
         # PROPAGATE, do not collapse. Every scanner fault reaching here
         # would otherwise report as one generic message, which is
@@ -254,6 +271,65 @@ function Get-BaselineEnvelopeFields([string]$canonicalText) {
             "cannot be checked: this session's own preamble " + $inner.Fault)
     }
     $inner
+}
+
+function Get-FreshPreambleFault([string]$text) {
+    # $null means the record reads as the client's own environment
+    # preamble. Anything else is a phrase naming what failed.
+    #
+    # THIS IS NOT Get-RefreshedPreambleFault AND MUST NOT CALL IT. That
+    # function rejects unknown names BEFORE it checks the core, then
+    # compares values against a baseline. A fresh call has no baseline:
+    # its own first record IS the one every later resumed round is
+    # measured against. So this checks SHAPE and nothing else.
+    #
+    # WHAT IT DOES NOT CLAIM. Not provenance - the rollout is a local
+    # file, and anyone able to write it can forge a well-formed
+    # preamble. Text BEFORE the envelope is accepted and NOT bound:
+    # measured 2026-08-16, 658 of 767 first user records in the whole
+    # session store carry the client's own instructions ahead of it,
+    # and refusing that direction would refuse the large majority of
+    # real traffic. Instruction text inside a field VALUE binds too,
+    # because no value is compared here.
+    $canonical = Get-CanonicalText $text
+    $span = Find-EnvelopeSpan $canonical
+    if ($span.Kind -eq "none") {
+        return "carries no environment preamble at all"
+    }
+    if ($span.Kind -eq "several") {
+        return ("carries more than one environment preamble, so which one " +
+                "the client sent is undefined")
+    }
+    # THE ENVELOPE MUST END THE RECORD. Nothing followed one in either
+    # measured population - 0 of 767 records and 0 of 372 of this
+    # repo's own debate dispatches - so that direction closes at no
+    # cost. CANONICAL, not raw: this script strips the ends everywhere
+    # else, so insignificant terminal whitespace must not decide a
+    # round.
+    if (($span.Start + $span.Length) -ne $canonical.Length) {
+        return "carries text after its environment preamble"
+    }
+    $env = Get-EnvironmentEnvelopeFields $canonical.Substring(
+        $span.Start, $span.Length)
+    if ($null -eq $env.Fields) { return $env.Fault }
+    # THE CORE, AND DELIBERATELY NOT THE CLOSED SET. They are different
+    # rules. The closed set is an UPPER bound that rejects additions,
+    # and it buys nothing here - every name and value comes from the
+    # record being tested, so a forger can use the five known names -
+    # while costing a total fresh-round outage the first time the
+    # client adds a field. That bound has been falsified twice, on
+    # 2026-08-04 and 2026-08-14, each time blocking paid rounds, and
+    # neither falsification dropped a core field. The core is a LOWER
+    # bound that keeps out shapes below both measured compositions.
+    # Without it a one-field junk wrapper binds and becomes a baseline
+    # with no current_date, silently disabling the structural refresh
+    # path for the rest of the session.
+    foreach ($name in $script:EnvCore) {
+        if (-not $env.Fields.Contains($name)) {
+            return ("omits the required environment field '" + $name + "'")
+        }
+    }
+    $null
 }
 
 function Get-EnvDate([string]$value) {
@@ -1015,6 +1091,35 @@ if ($Resume -and $userRecords.Count -eq 2) {
                   "from this session nor reads as a refreshed one: it " +
                   $fault)
         }
+    }
+}
+
+if ($Fresh) {
+    # VALIDATED AFTER THE BRIEF, for the same reason the resumed check
+    # above is: run before it, a slice ordered [brief, extra] is tested
+    # as though the brief were the preamble and reports the wrong
+    # direction. The count rule above guarantees exactly two user
+    # records and the checks above guarantee the brief is the last, so
+    # the record at index 0 is the one in front of it.
+    #
+    # WHY THIS EXISTS. The fresh path bounded that record by COUNT and
+    # never checked what it was, so arbitrary text bound clean -
+    # measured 2026-08-16 with a control. And whatever binds here
+    # becomes the BASELINE every later resumed round in this session is
+    # measured against, through both the identity path and the
+    # structural refresh path, so a miss admits the session rather than
+    # one round. This is a baseline admission gate.
+    $lead = Get-UserText $userRecords[0]
+    if ($null -eq $lead) {
+        Fail ("a fresh slice carries a record in front of the brief that is " +
+              "not a text-only user record, so it cannot be the client's " +
+              "own environment preamble")
+    }
+    $freshFault = Get-FreshPreambleFault $lead
+    if ($freshFault) {
+        Fail ("a fresh slice carries a record in front of the brief that " +
+              "does not read as the client's own environment preamble: it " +
+              $freshFault)
     }
 }
 
