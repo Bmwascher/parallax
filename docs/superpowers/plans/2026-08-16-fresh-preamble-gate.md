@@ -441,10 +441,22 @@ def test_a_date_that_is_not_a_calendar_date_is_still_refused(tmp_path):
 
 - [ ] **Step 2: Run them and watch three fail**
 
-Run: `python -m pytest evals/multi-model-verify/test_codex_round_evidence.py -q -k "newline or padded or calendar_date"`
-Expected: the first three FAIL, the control PASSES. Record which message each
-of the three actually produced before fixing anything - the failing message is
-the evidence that the case reaches the intended check.
+Select the four by NODE ID, not by `-k`. A substring selector silently picks
+up cases with similar names, and then the expected red/green split is not
+what actually ran:
+
+```powershell
+$m = "evals/multi-model-verify/test_codex_round_evidence.py"
+python -m pytest -q `
+  "$m::test_a_field_name_ending_in_a_newline_is_not_a_field_name" `
+  "$m::test_a_padded_current_date_is_read_like_every_other_field" `
+  "$m::test_a_padded_baseline_date_still_bounds_the_refresh" `
+  "$m::test_a_date_that_is_not_a_calendar_date_is_still_refused"
+```
+
+Expected: the first three FAIL, the fourth (the control) PASSES. Record which
+message each of the three actually produced before fixing anything - the
+failing message is the evidence that the case reaches the intended check.
 
 - [ ] **Step 3: Anchor the tag-name pattern**
 
@@ -755,10 +767,35 @@ regression net and a second copy of it would be duplication.
 
 - [ ] **Step 4: Run them and watch the negatives fail**
 
-Run: `python -m pytest evals/multi-model-verify/test_codex_round_evidence.py -q -k "fresh_preamble or novel_text or text_after or one_field or unknown_field or fresh_field_name or trailing_whitespace_after"`
-Expected: every case asserting a REFUSAL fails (the tool binds them clean);
-every case asserting CLEAN already passes. That split is the evidence the
-group reaches the gap rather than some other check.
+Select them by NODE ID, not by `-k`. Measured while this plan was reviewed:
+a `-k` expression containing `unknown_field` also selects the existing
+resumed-path `test_a_refreshed_preamble_with_an_unknown_field_is_refused` at
+`evals/multi-model-verify/test_codex_round_evidence.py:1265`, which already
+passes, so the expected red/green split below would be false before the
+first line of code was written.
+
+```powershell
+$m = "evals/multi-model-verify/test_codex_round_evidence.py"
+python -m pytest -q `
+  "$m::test_novel_text_in_front_of_a_fresh_brief_is_refused" `
+  "$m::test_a_fresh_preamble_with_text_before_the_envelope_binds" `
+  "$m::test_a_fresh_preamble_that_is_the_envelope_alone_binds" `
+  "$m::test_text_after_a_fresh_envelope_is_refused" `
+  "$m::test_trailing_whitespace_after_a_fresh_envelope_still_binds" `
+  "$m::test_a_fresh_preamble_missing_a_core_field_is_refused" `
+  "$m::test_a_one_field_fresh_envelope_is_refused" `
+  "$m::test_an_unknown_field_name_in_a_fresh_preamble_binds" `
+  "$m::test_a_fresh_preamble_with_two_envelopes_is_refused" `
+  "$m::test_a_fresh_preamble_repeating_a_field_is_refused" `
+  "$m::test_a_fresh_field_name_ending_in_a_newline_is_refused" `
+  "$m::test_a_fresh_preamble_is_not_value_checked"
+```
+
+Expected: 7 failed, 5 passed. The seven asserting a REFUSAL fail, because
+the tool binds them clean; the five asserting CLEAN already pass. That split
+is the evidence the group reaches the gap rather than some other check.
+Report the actual split - if any refusal case already passes, it is being
+intercepted somewhere else and proves nothing about the new gate.
 
 - [ ] **Step 5: Extract the envelope selection**
 
@@ -967,7 +1004,9 @@ In `evals/multi-model-verify/test_multi_model_verify.py`, inside
         'would refuse the large majority of real traffic, while '
         'nothing in either measured population carried text AFTER the '
         'envelope. Instruction text inside a field VALUE binds too, '
-        'since fresh compares no values. This record becomes the '
+        'since fresh compares no values, and so does instruction text '
+        'spelled as an unknown field NAME, which the openness clause '
+        'accepts by design. This record becomes the '
         "session's BASELINE for every later resumed round, so the "
         'check is a baseline admission gate rather than a per-round '
         'one, and a miss admits the whole session wherever a later '
@@ -1029,7 +1068,9 @@ first user records measured 2026-08-16 carry the client's own instructions
 ahead of it, so refusing that direction would refuse the large majority of
 real traffic, while nothing in either measured population carried text AFTER
 the envelope. Instruction text inside a field VALUE binds too, since fresh
-compares no values. This record becomes the session's BASELINE for every
+compares no values, and so does instruction text spelled as an unknown field
+NAME, which the openness clause accepts by design. This record becomes the
+session's BASELINE for every
 later resumed round, so the check is a baseline admission gate rather than a
 per-round one, and a miss admits the whole session wherever a later resumed
 slice carries a record ahead of its brief.
@@ -1088,51 +1129,234 @@ goes LAST because `plugin update` keys only on the version string: a version
 cached mid-branch reports "already at the latest version" and copies nothing,
 however much the checkout changed afterwards.
 
-- [ ] **Step 1: Close the items**
+Write no prose of your own in this task. Every word that goes into the file
+is given below verbatim. The one judgment call - which items are closed - was
+made when this plan was written.
 
-In `docs/superpowers/plans/2026-07-27-0150-backlog.md`. The format is item 42's,
-at line 2926 and line 3000: the heading gains ` — DONE` (an em dash, matching
-every other closed heading in that file), and a `**CLOSED 2026-08-16.**`
-paragraph goes at the END of the item's body, before the next `## Item`
-heading. Where something remains unmeasured, a final `STILL UNMEASURED`
-paragraph follows it, as item 42 has.
+- [ ] **Step 1: Change the three headings**
 
-- **Item 52** (line 3690), heading `— OPEN` becomes `— DONE`. Closing
-  paragraph: both lanes now canonicalize a brief identically, as UTF-8 with
-  CRLF folded to LF and the ends stripped; only the Kimi contract region moved,
-  because the codex region already declared the trim; and a mismatch now
-  re-hashes under the untrimmed rule and reports whether
-  trim-versus-untrimmed canonicalization explains it. State that it may not
-  say the CONTENT differs, because the tool holds an opaque digest and never
-  the brief.
-- **Item 56** (line 3932), `— OPEN` becomes `— DONE`. Closing paragraph: the
-  fresh record ahead of the brief is now checked by shape - one envelope,
-  ending the canonical record, structurally parsed, the three core fields
-  present, unknown names accepted, no value compared. Then a STILL UNMEASURED
-  paragraph naming what stays open: text BEFORE the envelope is unbound,
-  instruction text inside a field VALUE binds, and neither is provenance. Name
-  `codex-brief-binding-fresh-record` in
-  `skills/multi-model-verify/references/model-prompting-notes.md` as where
-  those gaps are written down, and the design spec at
-  `docs/superpowers/specs/2026-08-16-fresh-preamble-gate-design.md` as where
-  they were decided.
-- **Item 57** (line 3979), `— PARTIALLY CLOSED, 0.25.0` becomes `— DONE`.
-  Closing paragraph: (c) closed in 0.25.0, (a) and (b) closed here, and (a)
-  stopped being a diagnostic correction the moment the fresh gate started
-  using that scanner without a closed set behind it.
+In `docs/superpowers/plans/2026-07-27-0150-backlog.md`, three heading lines
+change. Each is given whole, before and after. The dash is an em dash, matching
+every other heading in that file; do not substitute a hyphen.
 
-- [ ] **Step 2: Rebuild and diff the status block**
+Line 3690, from:
 
-Rebuild the summary block from the item headings and diff it against what the
-file says, the way 0.25.0 did. Fix any entry that disagrees. Then renumber the
-ranked build order, removing 52, 56 and 57.
+```
+## Item 52: the two round-evidence validators canonicalize differently — OPEN
+```
 
-- [ ] **Step 3: Bump the version**
+to:
 
-In `.claude-plugin/plugin.json`, set the version to `0.26.0`. Nothing else in
-that file changes.
+```
+## Item 52: the two round-evidence validators canonicalize differently — DONE
+```
 
-- [ ] **Step 4: Commit**
+Line 3932, from:
+
+```
+## Item 56: the FRESH path bounds the record ahead of the brief by COUNT only — OPEN
+```
+
+to:
+
+```
+## Item 56: the FRESH path bounds the record ahead of the brief by COUNT only — DONE
+```
+
+Line 3979, from:
+
+```
+## Item 57: three edges in the round-evidence binder — PARTIALLY CLOSED, 0.25.0
+```
+
+to:
+
+```
+## Item 57: three edges in the round-evidence binder — DONE
+```
+
+- [ ] **Step 2: Append the three closing paragraphs**
+
+Each goes at the END of its item's body, after the last line of that item and
+before the next `## Item` heading, separated by one blank line on each side.
+That is item 42's shape, at line 3000. Paste them verbatim.
+
+Item 52:
+
+```markdown
+**CLOSED 2026-08-16.** Both lanes now canonicalize a brief the same way:
+UTF-8, CRLF folded to LF, leading and trailing whitespace stripped. Only
+the Kimi lane moved - the codex lane already declared the trim at
+`tools/read-codex-round-evidence.ps1:105-110` - so only ONE contract region
+changed, `brief-hash-binding` in
+`skills/multi-model-verify/references/backup-lane.md`. The trim lives in a
+new `ConvertTo-CanonicalBrief` rather than inside `ConvertTo-NormalizedLF`,
+because that function's four other callers compare an agent file's body and
+the client's recorded systemPrompt, where the ends are content. On a
+mismatch the tool now re-hashes the recorded prompt under the untrimmed rule
+and reports whether trim-versus-untrimmed canonicalization explains it. It
+may NOT say the content differs: the tool holds an opaque expected digest
+and never the brief itself, so it cannot separate changed content from a
+different encoding, a byte order mark, another newline rule or a caller
+defect. Both outcomes still refuse the round.
+```
+
+Item 56:
+
+```markdown
+**CLOSED 2026-08-16.** The record ahead of the brief on a fresh call is now
+checked by SHAPE, in three independent clauses: exactly one
+`environment_context` envelope, which must END the canonically normalized
+record; the envelope parses end to end with syntactically valid field names,
+none repeated and no text it cannot account for inside itself; and the three
+fields `current_date`, `timezone` and `filesystem` all present, matched
+ordinally and case-sensitively. Any other field name is accepted and no
+value is compared, because a fresh call has no baseline to compare against -
+its own first record IS the baseline every later resumed round is measured
+against, which is what makes this a baseline admission gate rather than a
+per-round check. The design decision this item asked for was taken by a
+two-lane panel plus one adjudication round; the panel record is retained at
+`docs/superpowers/plans/rounds/2026-08-16-fresh-preamble-gate/` and the
+settled design at
+`docs/superpowers/specs/2026-08-16-fresh-preamble-gate-design.md`.
+
+STILL OPEN, and the item closes saying so, because the gap is wider than the
+check. Text BEFORE the envelope is accepted and NOT bound: measured
+2026-08-16 across the whole session store, 658 of 767 first user records
+carry the client's own instructions ahead of it, so refusing that direction
+would refuse the large majority of real traffic. Instruction text inside a
+field VALUE binds, and so does instruction text spelled as an unknown field
+NAME. None of this is provenance: the rollout is a local file, and anyone
+able to write it can forge a well-formed preamble. All three are named in
+the contract region `codex-brief-binding-fresh-record` in
+`skills/multi-model-verify/references/model-prompting-notes.md`, so a later
+reader finds them written down rather than discovering them.
+```
+
+Item 57:
+
+```markdown
+**CLOSED 2026-08-16.** (c) closed in 0.25.0. (a) and (b) closed here. The
+tag-name test at `tools/read-codex-round-evidence.ps1:186` is anchored with
+`\z` instead of `$`, which in .NET matches before a trailing newline, and
+`Get-EnvDate` canonicalizes its value before parsing, so a padded
+`current_date` is read the way every other field already was. (a) stopped
+being a diagnostic correction the moment item 56's fresh gate started using
+that scanner with no closed set behind it: under `$`, a field name ending in
+a newline is accepted outright on that path.
+```
+
+- [ ] **Step 3: Rebuild the status block and compare**
+
+Write this file to your scratchpad as `status_block.py` and run it. It was
+run against the file as it stands today and its output matched the block
+exactly, so a difference now is a difference this task introduced.
+
+```python
+"""Rebuild the backlog's status block from every item heading.
+
+The headings are the source of truth and this block is a view of them, so
+the view is REGENERATED rather than edited. Prints one sorted list of item
+numbers per status group. Any difference from the block in the file is a
+defect in the block.
+
+The file spells the closed state two ways, DONE and CLOSED, and both mean
+the same thing; PARTIALLY CLOSED is a third state and is matched first by
+the alternation order. A heading with no status word at all is a defect in
+the file - the 0.24.0 diff debate found four of those while the block
+called them open.
+"""
+import re
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1] if len(sys.argv) > 1
+            else "docs/superpowers/plans/2026-07-27-0150-backlog.md")
+STATUS = re.compile(r"[-—]\s*(PARTIALLY CLOSED|DONE|CLOSED|GONE|OPEN)\b")
+groups = {}
+missing = []
+for line in path.read_text(encoding="utf-8").splitlines():
+    m = re.match(r"^## (?:Item )?(\d{1,3})[.:]\s*(.*)$", line)
+    if not m:
+        continue
+    num, rest = int(m.group(1)), m.group(2)
+    s = STATUS.search(rest)
+    if not s:
+        missing.append(num)
+        continue
+    word = s.group(1)
+    groups.setdefault("DONE" if word == "CLOSED" else word, []).append(num)
+for name in ("DONE", "PARTIALLY CLOSED", "GONE", "OPEN"):
+    got = sorted(groups.get(name, []))
+    print("%-18s %2d: %s" % (name, len(got), ", ".join(str(n) for n in got)))
+print("no status in heading:", missing or "none")
+```
+
+Expected output after Steps 1 and 2:
+
+```
+DONE               26: 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 13, 14, 17, 18, 19, 20, 21, 22, 23, 24, 25, 30, 42, 52, 56, 57
+PARTIALLY CLOSED    2: 11, 26
+GONE                1: 16
+OPEN               29: 12, 15, 27, 28, 29, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 43, 44, 45, 46, 47, 48, 49, 50, 51, 53, 54, 55, 58, 59
+```
+
+If it differs, Step 1 or 2 went wrong - fix that, do not adjust the expected
+output. Then edit the block near line 28 so its four lists match this output
+exactly, adding `52 (0.26.0)`, `56 (0.26.0)` and `57 (0.26.0)` to **Done**,
+removing 57 from **Partially closed**, and removing 52 and 56 from **Open**.
+The release annotations are not derivable from the headings, which is why
+this step reads the lists and the script reads only the membership.
+
+- [ ] **Step 4: Drop the two closed items from the ranked build order**
+
+In the `## Build order for the open items` section, delete entries **6** and
+**7** whole - they open `6. **52** - the two round-evidence validators` and
+`7. **56** - the FRESH path bounds the record ahead of the brief`. Entry 7
+runs to the end of its `**Build with 57 and 52: one file, one test module,
+one gate profile.**` sentence.
+
+Then renumber: every entry from `8.` to `28.` becomes two lower, so `8.`
+becomes `6.` and `28.` becomes `26.`. Nothing inside those entries changes.
+
+Verify with:
+
+```bash
+awk '/^## Build order for the open items/,0' docs/superpowers/plans/2026-07-27-0150-backlog.md | grep -c "^[0-9]\+\. \*\*"
+```
+
+Expected: `26`. Then confirm the list is contiguous 1 to 26 and that neither
+`**52**` nor `**56**` appears as a ranked entry any more.
+
+- [ ] **Step 5: Bump the version**
+
+In `.claude-plugin/plugin.json`, change `"version": "0.25.0"` to
+`"version": "0.26.0"`. Nothing else in that file changes.
+
+- [ ] **Step 6: Verify the terminal head**
+
+This is the tree that merges and the tree the attestation names, and no gate
+has run on it. A markdown edit can break the contract-coverage checker, which
+scans every Markdown file under `skills/`, and a malformed `plugin.json` is a
+plugin that will not load.
+
+```powershell
+python -c "import json; print(json.load(open('.claude-plugin/plugin.json'))['version'])"
+python evals/tools/skill_lint.py skills/multi-model-verify --strict
+python evals/tools/skill_scanner.py skills
+python evals/tools/check_exact_line_oracles.py
+python evals/tools/run_trigger_evals.py
+$env:PARALLAX_PS_HOST = "powershell"
+python -m pytest evals -q
+$env:PARALLAX_PS_HOST = "pwsh"
+python -m pytest evals -q
+$env:PARALLAX_PS_HOST = $null
+```
+
+Expected: `0.26.0`, then all four static checks pass, then the full suite
+passes on both hosts. Report the pass/skip counts for each host.
+
+- [ ] **Step 7: Commit**
 
 ```bash
 git add docs/superpowers/plans/2026-07-27-0150-backlog.md .claude-plugin/plugin.json
