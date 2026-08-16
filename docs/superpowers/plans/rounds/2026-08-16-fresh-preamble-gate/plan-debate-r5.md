@@ -13,10 +13,11 @@ classes plus a fourth if one exists.
 
 Verdict: **FIX**, but the plan itself is clean. All three known classes are
 DRY, and the checker fixes and Task 4's regenerated arithmetic are
-confirmed correct. The only remaining defects are FOUR wrong citations
-inside backlog item 60 - the item this side filed one round earlier - which
-the reviewer names as a fourth class: RECORD-INTEGRITY DRIFT, correct
-substance carried by wrong citations or metadata.
+confirmed correct. The only remaining defects are FOUR RECORD ERRORS
+inside backlog item 60 - the item this side filed one round earlier - one
+wrong CI tier and three wrong line citations, which the reviewer names as a
+fourth class: RECORD-INTEGRITY DRIFT, correct substance carried by wrong
+citations or metadata.
 
 All four were verified here against the files before being accepted, and
 all four are corrected.

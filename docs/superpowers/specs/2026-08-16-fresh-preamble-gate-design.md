@@ -207,9 +207,11 @@ Stated at its real width, because the gap is wider than the fix.
 In: `tools/read-codex-round-evidence.ps1`,
 `tools/read-kimi-round-evidence.ps1`, their test modules, the
 `brief-hash-binding` contract region in
-`skills/multi-model-verify/references/backup-lane.md`, and the
-`codex-brief-binding-record` region in
-`skills/multi-model-verify/references/model-prompting-notes.md`.
+`skills/multi-model-verify/references/backup-lane.md`, and a NEW
+`codex-brief-binding-fresh-record` region in
+`skills/multi-model-verify/references/model-prompting-notes.md`. The
+existing `codex-brief-binding-record` region beside it is NOT edited: it
+states the resumed rule, which this design leaves alone.
 
 Out: the resumed path's closed set; the `-Fresh` record COUNT rule, which
 works; anything in backlog items 58 and 59.

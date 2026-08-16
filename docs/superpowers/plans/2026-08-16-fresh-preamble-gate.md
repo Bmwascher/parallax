@@ -1206,7 +1206,7 @@ to:
 
 Each goes at the END of its item's body, after the last line of that item and
 before the next `## Item` heading, separated by one blank line on each side.
-That is item 42's shape, at line 3000. Paste them verbatim.
+That is item 42's shape, at lines 3000-3001 - a blank separator, then the paragraph. Paste them verbatim.
 
 Item 52:
 
