@@ -1240,7 +1240,7 @@ the Kimi lane moved - the codex lane already declared the trim at
 changed, `brief-hash-binding` in
 `skills/multi-model-verify/references/backup-lane.md`. The trim lives in a
 new `ConvertTo-CanonicalBrief` rather than inside `ConvertTo-NormalizedLF`,
-because that function's four other callers compare an agent file's body and
+because its four agent-file callers compare an agent file's body and
 the client's recorded systemPrompt, where the ends are content. On a
 mismatch the tool now re-hashes the recorded prompt under the untrimmed rule
 and reports whether trim-versus-untrimmed canonicalization explains it. It
@@ -1286,7 +1286,7 @@ Item 57:
 
 ```markdown
 **CLOSED 2026-08-16.** (c) closed in 0.25.0. (a) and (b) closed here. The
-tag-name test at `tools/read-codex-round-evidence.ps1:186` is anchored with
+tag-name test at `tools/read-codex-round-evidence.ps1:192` is anchored with
 `\z` instead of `$`, which in .NET matches before a trailing newline, and
 `Get-EnvDate` canonicalizes its value before parsing, so a padded
 `current_date` is read the way every other field already was. (a) stopped

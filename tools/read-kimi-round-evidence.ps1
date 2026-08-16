@@ -129,10 +129,11 @@ function ConvertTo-CanonicalBrief($s) {
     # ONE canonicalization for a brief, shared with the codex lane's
     # Get-CanonicalText: UTF-8, CRLF folded to LF, leading and trailing
     # whitespace stripped. Kept SEPARATE from ConvertTo-NormalizedLF
-    # rather than added to it: that function's other callers compare an
+    # rather than added to it: its four agent-file callers compare an
     # agent file's BODY and the client's recorded systemPrompt, where
     # the ends are content and trimming them would widen a different
-    # rule. Backlog item 52.
+    # rule. Its one remaining caller is the untrimmed re-hash on the
+    # mismatch path below, which is untrimmed by design. Item 52.
     return (ConvertTo-NormalizedLF $s).Trim()
 }
 
