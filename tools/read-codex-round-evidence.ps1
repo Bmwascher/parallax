@@ -156,8 +156,12 @@ function Get-EnvironmentEnvelopeFields([string]$canonicalText) {
     $inner = $canonicalText.Substring(
         $script:EnvOpen.Length,
         $canonicalText.Length - $script:EnvOpen.Length - $script:EnvClose.Length)
-    # Ordinal comparer: the DEFAULT ordered dictionary is
-    # case-insensitive, which would silently merge `cwd` and `CWD`.
+    # Ordinal comparer, kept as the innermost of several case layers.
+    # Its previous justification was wrong and is corrected here: an
+    # OrderedDictionary built with no comparer is already case-SENSITIVE
+    # (measured 2026-08-15 on both hosts, `Contains('CWD')` false). A
+    # PowerShell `@{}` hashtable is the type that merges `cwd` and `CWD`,
+    # and this is not one.
     $fields = New-Object System.Collections.Specialized.OrderedDictionary(
         [System.StringComparer]::Ordinal)
     $i = 0
@@ -171,8 +175,14 @@ function Get-EnvironmentEnvelopeFields([string]$canonicalText) {
             return New-EnvelopeResult $null "carries an unterminated tag"
         }
         $name = $inner.Substring($i + 1, $gt - $i - 1)
-        # Case-sensitive by construction, and no attributes: every
-        # measured direct field is a bare lowercase tag.
+        # THE OUTERMOST CASE LAYER, and the one that actually fires.
+        # Every measured direct field is a bare lowercase tag with no
+        # attributes, so this refuses any other name before the closed
+        # set at $script:EnvAllowed or the ordinal dictionary above ever
+        # sees it. Those two are the fallbacks behind it, not the
+        # discriminators: measured 2026-08-15, removing this test alone
+        # moves the refusal to the closed set rather than allowing
+        # anything through.
         if ($name -cnotmatch '^[a-z_]+$') {
             return New-EnvelopeResult $null (
                 "carries '" + $name + "', which is not a recognised environment field")

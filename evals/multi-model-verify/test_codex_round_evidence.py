@@ -1272,8 +1272,12 @@ def test_a_refreshed_preamble_with_an_unknown_field_is_refused(tmp_path):
 
 
 def test_a_refreshed_preamble_with_a_case_variant_field_is_refused(tmp_path):
-    """PowerShell compares case-insensitively by default, so the closed
-    set has to be matched ordinally or `CURRENT_DATE` walks through it."""
+    """`CURRENT_DATE` must not walk through the closed set. The refusal it
+    asserts comes from the tag-name test, which admits only bare lowercase
+    names and therefore fires FIRST; the ordinal closed-set match behind
+    it is the fallback, not the mechanism this case reaches. An earlier
+    version of this docstring credited the fallback, which made the case
+    read as pinning a layer it never exercises."""
     pairs = [("CURRENT_DATE", BASE_DATE)] + core_fields(BASE_DATE)[1:]
     f, prior, sha = resumed_case(tmp_path, refresh_row(pairs))
     assert_failed(run_resume(f, prior, sha),
