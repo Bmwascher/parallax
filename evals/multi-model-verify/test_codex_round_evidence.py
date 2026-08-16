@@ -1546,3 +1546,52 @@ def test_a_crlf_rollout_still_binds_a_repeated_preamble(tmp_path):
     f, prior, sha = crlf_resumed_case(tmp_path, preamble,
                                       prefix_user_row=preamble)
     assert parsed(run_resume(f, prior, sha))["status"] == "clean"
+
+
+def state_over_file(tmp_path, rollout):
+    """A resume state describing the file EXACTLY as it stands now.
+
+    `resume_state` is the same thing, but these two cases need to build
+    the state at a moment the ordinary helpers never produce: after a
+    deliberately damaged prefix has been written.
+    """
+    b = Path(rollout).read_bytes()
+    return state_file(tmp_path, {
+        "kind": "resume", "rolloutFile": str(rollout), "sessionId": SESSION,
+        "bytes": len(b), "prefixSha256": hashlib.sha256(b).hexdigest()})
+
+
+def test_a_resume_whose_prefix_ends_mid_record_is_refused(tmp_path):
+    """The prior state's offset must fall on a record boundary. It was
+    accepted on length and hash alone, so a prefix ending in an
+    unterminated fragment was silently discarded and the round bound
+    clean over a record stream that is not intact."""
+    root, f = make_root(tmp_path, rows=[meta_row(), real_preamble_row(),
+                                        user_row("Round one brief."),
+                                        assistant_row()])
+    with open(f, "a", encoding="utf-8", newline="\n") as fh:
+        fh.write('{"type":"note"')
+    prior = state_over_file(tmp_path, f)
+    append_rows(f, [real_preamble_row(), user_row("Round two brief."),
+                    assistant_row("ok2")])
+    assert_failed(run_resume(f, prior, canon("Round two brief.")),
+                  "does not fall on a record boundary")
+
+
+def test_a_resume_whose_first_user_record_is_unreadable_is_refused(tmp_path):
+    """The scan skipped any line it could not read, so a malformed FIRST
+    user record made it adopt the NEXT user record as the client's
+    preamble - and a slice repeating THAT record passed identity. The
+    baseline every later comparison rests on must be the record the
+    contract names, or the round refuses."""
+    root, f = make_root(tmp_path, rows=[meta_row()])
+    with open(f, "w", encoding="utf-8", newline="\n") as fh:
+        fh.write(json.dumps(meta_row()) + "\n")
+        fh.write(json.dumps(real_preamble_row()) + NBSP + "\n")
+        fh.write(json.dumps(user_row("Round one brief.")) + "\n")
+        fh.write(json.dumps(assistant_row()) + "\n")
+    prior = state_over_file(tmp_path, f)
+    append_rows(f, [user_row("Round one brief."),
+                    user_row("Round two brief."), assistant_row("ok2")])
+    assert_failed(run_resume(f, prior, canon("Round two brief.")),
+                  "carries an unreadable record")

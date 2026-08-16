@@ -634,6 +634,19 @@ if ($Resume) {
         Fail ("the rollout has no new bytes: this call appended nothing, so " +
               "there is no round to bind")
     }
+    # THE OFFSET MUST FALL ON A RECORD BOUNDARY, and length plus a
+    # matching hash does not prove that. The terminal-newline check below
+    # covers the whole file AFTER this call appended to it, so a prefix
+    # ending mid-record passes it. The scan then drops its final segment
+    # as though the offset were known to be a boundary, the slice decodes
+    # cleanly, identity passes, and a stream that is not intact binds
+    # clean. Measured 2026-08-16 against a prefix ending in an
+    # unterminated fragment.
+    if ($priorBytes -gt 0 -and $bytes[$priorBytes - 1] -ne 0x0A) {
+        Fail ("prior state's byte offset does not fall on a record " +
+              "boundary: the prefix it measures ends mid-record, so the " +
+              "record stream before this call is not intact")
+    }
     $sliceOffset = $priorBytes
 }
 
@@ -920,19 +933,34 @@ if ($Resume -and $userRecords.Count -eq 2) {
     # The final element is the tail after the last terminator, never a
     # record - the prefix ends at a record boundary the prior state
     # measured.
+    # THE SAME GATE AS EVERY OTHER LINE, AND IT REFUSES RATHER THAN
+    # SKIPS. This scan used to walk past any line it could not read, so a
+    # malformed FIRST user record made it adopt the NEXT one - round
+    # one's brief - as the client's preamble, and a slice repeating that
+    # record passed identity and bound clean. Measured 2026-08-16 with a
+    # user record followed by a non-breaking space, the shape the suite
+    # already knows parses but fails the object-line gate. The baseline
+    # every later comparison rests on must be the record the contract
+    # names, so an unreadable line before it stops the round.
     for ($p = 0; $p -lt $prefixParts.Length - 1; $p++) {
         $ln = $prefixParts[$p].TrimEnd("`r")
-        if (-not $ln.TrimStart($script:JsonWs).StartsWith("{")) { continue }
         $cand = $null
-        try { $cand = $ln | ConvertFrom-Json } catch { $cand = $null }
-        # THE SAME GATE AS EVERY OTHER LINE. This scan parsed and read
-        # properties directly, so the strictness the rest of the tool had
-        # just gained stopped at its edge - and this is the record the
-        # preamble exemption is measured against, which makes it the last
-        # place to take a line on trust.
-        if ($null -ne $cand -and
-            $null -eq (Get-JsonObjectLineFault $ln $cand) -and
-            (Test-RecordIsUserMessage $cand)) {
+        if ($ln.TrimStart($script:JsonWs).StartsWith("{")) {
+            try { $cand = $ln | ConvertFrom-Json } catch { $cand = $null }
+        }
+        $lineFault = $null
+        if ($null -eq $cand) {
+            $lineFault = "it is not a JSON object"
+        } else {
+            $lineFault = Get-JsonObjectLineFault $ln $cand
+        }
+        if ($lineFault) {
+            Fail ("the resumed rollout's prefix carries an unreadable " +
+                  "record at line " + ($p + 1) + ", before the client's " +
+                  "own preamble, so the record this slice must be " +
+                  "measured against cannot be identified: " + $lineFault)
+        }
+        if (Test-RecordIsUserMessage $cand) {
             $prefixPreamble = Get-UserText $cand
             break
         }
