@@ -386,6 +386,16 @@ class TestTheLauncherResolution:
     green because every test drove the one form that happened to work.
     """
 
+    # The two must-START cases below need a real cmd.exe: the probe's batch
+    # branch launches through it, so off Windows the start fails and the
+    # probe correctly reports BLOCKED - the fail-closed direction, not a
+    # defect. Measured on Linux CI run 31914649263, 2026-08-15, the first
+    # run to execute this module off Windows. The percent case stays
+    # ungated: its refusal is a string check that fires before any launch,
+    # so it passes everywhere for the same reason.
+    @pytest.mark.skipif(os.name != "nt",
+                        reason="the .cmd branch launches through cmd.exe,"
+                               " which only Windows has")
     def test_a_cmd_launcher_starts(self):
         cmd_stub = STUB.with_suffix(".cmd")
         assert cmd_stub.exists(), "the .cmd stub is the point of this case"
@@ -400,6 +410,9 @@ class TestTheLauncherResolution:
         assert v["status"] == "clean", v
         assert proc.returncode == 0
 
+    @pytest.mark.skipif(os.name != "nt",
+                        reason="the .cmd branch launches through cmd.exe,"
+                               " which only Windows has")
     def test_a_cmd_launcher_in_a_path_with_a_metacharacter_starts(self):
         # Diff debate round 1, claim 3. The batch branch hands the path to
         # `cmd.exe /c`, which RE-PARSES it, and the argument builder quoted
