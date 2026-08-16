@@ -268,9 +268,29 @@ rule now, not the wrong one.
 
 - [ ] **Step 6: Run them and watch all three fail**
 
-Run: `python -m pytest evals/multi-model-verify/test_kimi_round_evidence.py -q -k "padded or whitespace_only_mismatch or real_mismatch"`
-Expected: 3 FAILED. The first fails because the untrimmed hash does not match;
-the other two fail because the tool emits the single old message.
+```powershell
+$m = "evals/multi-model-verify/test_kimi_round_evidence.py"
+python -m pytest -q `
+  "$m::test_a_padded_recorded_prompt_binds_under_the_shared_rule" `
+  "$m::test_a_whitespace_only_mismatch_names_the_canonicalization" `
+  "$m::test_a_real_mismatch_says_it_is_not_the_canonicalization"
+```
+
+Expected: 3 failed. Each fails for a DIFFERENT reason, and the reasons are
+the evidence that each case reaches what it names:
+
+1. The padded-clean case fails because the OLD tool hashes the padded prompt
+   untrimmed, so the digest moves and the round is refused. The assertion
+   that fails is `assert_clean`.
+2. The whitespace-only diagnostic case fails because the old tool RETURNS
+   CLEAN. It is handed the untrimmed digest of the padded prompt, which is
+   exactly what the old rule computes, so the hashes agree. The assertion
+   that fails is `assert_failed` on `status`, not on the message.
+3. The real-mismatch control fails on the MESSAGE: the old tool refuses, but
+   with the single generic `brief-hash` line, so the needle is absent.
+
+If case 2 fails on a message rather than on status, it is not exercising
+what it names - stop and report it.
 
 - [ ] **Step 7: Add the shared canonicalization**
 
@@ -1246,87 +1266,247 @@ that scanner with no closed set behind it: under `$`, a field name ending in
 a newline is accepted outright on that path.
 ```
 
-- [ ] **Step 3: Rebuild the status block and compare**
+- [ ] **Step 3: Run the backlog checker and fix what it names**
 
-Write this file to your scratchpad as `status_block.py` and run it. It was
-run against the file as it stands today and its output matched the block
-exactly, so a difference now is a difference this task introduced.
+Write this file to your scratchpad as `check_backlog.py`. It is an ORACLE,
+not a report to read: it compares the status block against the headings and
+the ranked build order against the statuses, and exits non-zero naming each
+difference. It was validated three times while this plan was written -
+against the file as it stands today (exit 0), against a simulation of Steps
+1 and 2 alone (exit 1, naming exactly the six edits still owed), and against
+a simulation of the finished task (exit 0). The expected outputs below are
+those runs, not predictions.
 
 ```python
-"""Rebuild the backlog's status block from every item heading.
+"""Check the backlog against itself. The item headings are the source of
+truth; the status block and the ranked build order are views of them.
 
-The headings are the source of truth and this block is a view of them, so
-the view is REGENERATED rather than edited. Prints one sorted list of item
-numbers per status group. Any difference from the block in the file is a
-defect in the block.
+Four checks, each failing loudly rather than printing something to read:
 
-The file spells the closed state two ways, DONE and CLOSED, and both mean
-the same thing; PARTIALLY CLOSED is a third state and is matched first by
-the alternation order. A heading with no status word at all is a defect in
-the file - the 0.24.0 diff debate found four of those while the block
-called them open.
+1. Every `## Item N:` or `## N.` heading carries a status word. The file
+   spells the closed state two ways, DONE and CLOSED, and both mean the
+   same thing; PARTIALLY CLOSED is a third state, matched first by the
+   alternation order below. A heading with no status is a defect in the
+   file - the 0.24.0 diff debate found four of those while the block
+   called them open.
+2. The status block's four lists have exactly the membership the headings
+   give. This is what makes the block a VIEW rather than a second opinion.
+   The block annotates releases, which headings do not carry, so only the
+   item NUMBERS are compared.
+3. The ranked build order, bounded to its own section, numbers 1..N with
+   no gaps, and no item it ranks is closed. The section ends at the next
+   `## ` heading; unbounded, a scan to end of file also counts nine other
+   numbered bold lists in this document.
+4. Any paragraph named on the command line appears exactly once in the
+   file, inside the item whose number is given with it.
+
+    python check_backlog.py <backlog.md> [N=<paragraph-file> ...]
+
+Exit 0 when every check passes, 1 otherwise, with each failure named.
 """
 import re
 import sys
 from pathlib import Path
 
-path = Path(sys.argv[1] if len(sys.argv) > 1
-            else "docs/superpowers/plans/2026-07-27-0150-backlog.md")
+HEADING = re.compile(r"^## (?:Item )?(\d{1,3})[.:]\s*(.*)$")
 STATUS = re.compile(r"[-—]\s*(PARTIALLY CLOSED|DONE|CLOSED|GONE|OPEN)\b")
-groups = {}
-missing = []
-for line in path.read_text(encoding="utf-8").splitlines():
-    m = re.match(r"^## (?:Item )?(\d{1,3})[.:]\s*(.*)$", line)
+RANKED = re.compile(r"^(\d{1,3})\. \*\*")
+BLOCK_ROW = re.compile(r"^- \*\*(Done|Partially closed|Gone|Open)\.?\*\*")
+NUM = re.compile(r"\b(\d{1,3})\b")
+BLOCK_TO_STATUS = {"Done": "DONE", "Partially closed": "PARTIALLY CLOSED",
+                   "Gone": "GONE", "Open": "OPEN"}
+
+path = Path(sys.argv[1])
+lines = path.read_text(encoding="utf-8").splitlines()
+text = "\n".join(lines)
+fail = []
+
+# --- check 1: every heading carries a status ------------------------
+from_headings = {}
+heading_line = {}
+for i, line in enumerate(lines):
+    m = HEADING.match(line)
     if not m:
         continue
-    num, rest = int(m.group(1)), m.group(2)
-    s = STATUS.search(rest)
+    num = int(m.group(1))
+    heading_line[num] = i
+    s = STATUS.search(m.group(2))
     if not s:
-        missing.append(num)
+        fail.append("item %d: heading carries no status word" % num)
         continue
     word = s.group(1)
-    groups.setdefault("DONE" if word == "CLOSED" else word, []).append(num)
+    from_headings[num] = "DONE" if word == "CLOSED" else word
+
+groups = {}
+for num, st in from_headings.items():
+    groups.setdefault(st, set()).add(num)
 for name in ("DONE", "PARTIALLY CLOSED", "GONE", "OPEN"):
-    got = sorted(groups.get(name, []))
+    got = sorted(groups.get(name, ()))
     print("%-18s %2d: %s" % (name, len(got), ", ".join(str(n) for n in got)))
-print("no status in heading:", missing or "none")
+
+# --- check 2: the status block agrees with the headings -------------
+seen_groups = set()
+for i, line in enumerate(lines):
+    m = BLOCK_ROW.match(line)
+    if not m:
+        continue
+    name = BLOCK_TO_STATUS[m.group(1)]
+    seen_groups.add(name)
+    # The row wraps over following lines until the next list item or a
+    # blank line, and carries release annotations in parentheses. Only
+    # numbers OUTSIDE parentheses are item numbers.
+    body = [line]
+    for nxt in lines[i + 1:]:
+        if not nxt.strip() or nxt.startswith("- ") or nxt.startswith("#"):
+            break
+        body.append(nxt)
+    joined = re.sub(r"\([^)]*\)", " ", " ".join(body))
+    joined = joined.split("**", 2)[-1]
+    claimed = set(int(n) for n in NUM.findall(joined))
+    expected = groups.get(name, set())
+    if claimed != expected:
+        fail.append("status block '%s': block has %s, headings say %s"
+                    % (name, sorted(claimed - expected) or "no extras",
+                       sorted(expected - claimed) or "no omissions"))
+for name in ("DONE", "PARTIALLY CLOSED", "GONE", "OPEN"):
+    if name not in seen_groups:
+        fail.append("status block has no row for '%s'" % name)
+
+# --- check 3: the ranked build order --------------------------------
+start = next((i for i, l in enumerate(lines)
+              if l.startswith("## Build order for the open items")), None)
+if start is None:
+    fail.append("no build-order section")
+else:
+    end = next((i for i in range(start + 1, len(lines))
+                if lines[i].startswith("## ")), len(lines))
+    ranked = []
+    for line in lines[start:end]:
+        m = RANKED.match(line)
+        if m:
+            ranked.append((int(m.group(1)), line))
+    nums = [n for n, _ in ranked]
+    print("ranked entries    %2d" % len(nums))
+    if nums != list(range(1, len(nums) + 1)):
+        fail.append("ranked build order is not 1..%d in order: %s"
+                    % (len(nums), nums))
+    # PARTIALLY CLOSED items are legitimately ranked: the list ranks what
+    # REMAINS of them, and says so in the entry. Only DONE and GONE items
+    # have nothing left to rank.
+    closed = {n for n, st in from_headings.items() if st in ("DONE", "GONE")}
+    for n, line in ranked:
+        for item in (int(x) for x in re.findall(r"\*\*(\d{1,3})\*\*", line)):
+            if item in closed:
+                fail.append("ranked entry %d ranks item %d, which is %s"
+                            % (n, item, from_headings[item]))
+
+# --- check 4: named paragraphs are present, once, in their item -----
+for arg in sys.argv[2:]:
+    num_s, _, para_path = arg.partition("=")
+    num = int(num_s)
+    want = " ".join(Path(para_path).read_text(encoding="utf-8").split())
+    hay = " ".join(text.split())
+    if hay.count(want) != 1:
+        fail.append("item %d: its closing paragraph appears %d times, not once"
+                    % (num, hay.count(want)))
+        continue
+    if num not in heading_line:
+        fail.append("item %d: no heading" % num)
+        continue
+    stop = next((i for i in range(heading_line[num] + 1, len(lines))
+                 if HEADING.match(lines[i])), len(lines))
+    body = " ".join("\n".join(lines[heading_line[num]:stop]).split())
+    if want not in body:
+        fail.append("item %d: its closing paragraph is not inside that item"
+                    % num)
+
+print("no status in heading:",
+      sorted(set(heading_line) - set(from_headings)) or "none")
+for f in fail:
+    print("FAIL:", f)
+print("OK" if not fail else "%d FAILURE(S)" % len(fail))
+sys.exit(0 if not fail else 1)
 ```
 
-Expected output after Steps 1 and 2:
+Save each of Step 2's three paragraphs to its own scratch file as you paste
+it - `para-52.txt`, `para-56.txt`, `para-57.txt` - so the readback argument
+can check that each landed once, inside its own item. For item 56, whose
+closing text is two paragraphs, save only the first (`**CLOSED
+2026-08-16.**` through `...fresh-preamble-gate-design.md`).
+
+Run it now, after Steps 1 and 2 and before touching the status block:
+
+```powershell
+python check_backlog.py docs/superpowers/plans/2026-07-27-0150-backlog.md `
+  52=para-52.txt 56=para-56.txt 57=para-57.txt
+```
+
+Expected: exit 1, with these six failures and no others.
 
 ```
 DONE               26: 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 13, 14, 17, 18, 19, 20, 21, 22, 23, 24, 25, 30, 42, 52, 56, 57
 PARTIALLY CLOSED    2: 11, 26
 GONE                1: 16
-OPEN               29: 12, 15, 27, 28, 29, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 43, 44, 45, 46, 47, 48, 49, 50, 51, 53, 54, 55, 58, 59
+OPEN               30: 12, 15, 27, 28, 29, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 43, 44, 45, 46, 47, 48, 49, 50, 51, 53, 54, 55, 58, 59
+ranked entries    28
+no status in heading: none
+FAIL: status block 'DONE': block has no extras, headings say [52, 56, 57]
+FAIL: status block 'PARTIALLY CLOSED': block has [57], headings say no omissions
+FAIL: status block 'OPEN': block has [52, 56], headings say no omissions
+FAIL: ranked entry 6 ranks item 52, which is DONE
+FAIL: ranked entry 7 ranks item 56, which is DONE
+FAIL: ranked entry 25 ranks item 57, which is DONE
+6 FAILURE(S)
 ```
 
-If it differs, Step 1 or 2 went wrong - fix that, do not adjust the expected
-output. Then edit the block near line 28 so its four lists match this output
-exactly, adding `52 (0.26.0)`, `56 (0.26.0)` and `57 (0.26.0)` to **Done**,
-removing 57 from **Partially closed**, and removing 52 and 56 from **Open**.
-The release annotations are not derivable from the headings, which is why
-this step reads the lists and the script reads only the membership.
+A different set of failures means Step 1 or 2 went wrong. Fix that; do not
+adjust the expected output.
 
-- [ ] **Step 4: Drop the two closed items from the ranked build order**
+Now edit the status block near line 28 so its four lists match the four
+membership lines above: append `52 (0.26.0), 56 (0.26.0), 57 (0.26.0)` to
+**Done** after `42 (0.25.0)`, remove `57 (0.25.0)` from **Partially
+closed**, and remove `52` and `56` from **Open**. The release annotations
+are not derivable from the headings, which is why this step writes them and
+the checker compares only the item NUMBERS.
 
-In the `## Build order for the open items` section, delete entries **6** and
-**7** whole - they open `6. **52** - the two round-evidence validators` and
-`7. **56** - the FRESH path bounds the record ahead of the brief`. Entry 7
-runs to the end of its `**Build with 57 and 52: one file, one test module,
-one gate profile.**` sentence.
+- [ ] **Step 4: Drop the three closed items from the ranked build order**
 
-Then renumber: every entry from `8.` to `28.` becomes two lower, so `8.`
-becomes `6.` and `28.` becomes `26.`. Nothing inside those entries changes.
+THREE entries go, not two. Item 57 has its own ranked entry as well as 52
+and 56, and it is now fully closed rather than partially closed, so nothing
+of it remains to rank. In the `## Build order for the open items` section
+delete these three whole:
 
-Verify with:
+- entry **6**, opening `6. **52** - the two round-evidence validators`
+- entry **7**, opening `7. **56** - the FRESH path bounds the record ahead
+  of the brief`, running to the end of its `**Build with 57 and 52: one
+  file, one test module, one gate profile.**` sentence
+- entry **25**, opening `25. **57** (its (a) and (b) halves; (c) closed in
+  0.25.0)`
 
-```bash
-awk '/^## Build order for the open items/,0' docs/superpowers/plans/2026-07-27-0150-backlog.md | grep -c "^[0-9]\+\. \*\*"
+Then renumber so the list reads 1 to 25 with no gaps: former `8.` becomes
+`6.`, former `24.` becomes `22.`, former `26.` becomes `23.`, and former
+`28.` becomes `25.`. Nothing inside any entry changes. Do not delete the
+group headers between entries (`**Second - ...**`, `**Third - ...**`) - they
+are not numbered entries and the checker does not count them.
+
+Verify with the same command as Step 3. Expected now: exit 0, `ranked
+entries 25`, and the same four membership lines.
+
+```
+DONE               26: 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 13, 14, 17, 18, 19, 20, 21, 22, 23, 24, 25, 30, 42, 52, 56, 57
+PARTIALLY CLOSED    2: 11, 26
+GONE                1: 16
+OPEN               30: 12, 15, 27, 28, 29, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 43, 44, 45, 46, 47, 48, 49, 50, 51, 53, 54, 55, 58, 59
+ranked entries    25
+no status in heading: none
+OK
 ```
 
-Expected: `26`. Then confirm the list is contiguous 1 to 26 and that neither
-`**52**` nor `**56**` appears as a ranked entry any more.
+Do not use a bare `grep -c` over the rest of the file to count the entries.
+Measured while this plan was reviewed: nine other numbered bold lists sit
+below this section, at backlog lines 1124, 1129, 1591, 1593, 1597, 2112,
+2115, 3413 and 3421, so an unbounded count reports 34 where the section
+holds 25. The checker bounds the scan at the next `## ` heading.
 
 - [ ] **Step 5: Bump the version**
 
@@ -1341,6 +1521,8 @@ scans every Markdown file under `skills/`, and a malformed `plugin.json` is a
 plugin that will not load.
 
 ```powershell
+python check_backlog.py docs/superpowers/plans/2026-07-27-0150-backlog.md `
+  52=para-52.txt 56=para-56.txt 57=para-57.txt
 python -c "import json; print(json.load(open('.claude-plugin/plugin.json'))['version'])"
 python evals/tools/skill_lint.py skills/multi-model-verify --strict
 python evals/tools/skill_scanner.py skills
@@ -1353,8 +1535,11 @@ python -m pytest evals -q
 $env:PARALLAX_PS_HOST = $null
 ```
 
-Expected: `0.26.0`, then all four static checks pass, then the full suite
-passes on both hosts. Report the pass/skip counts for each host.
+Expected: the checker exits 0, then `0.26.0`, then all four static checks
+pass, then the full suite passes on both hosts. Report the pass/skip counts
+for each host. The checker runs again here, cheaply, because Step 4's clean
+run happened before Step 5 touched the tree, and the head that ships is what
+has to be checked rather than an earlier state of it.
 
 - [ ] **Step 7: Commit**
 
