@@ -143,11 +143,14 @@ following holds, and refused otherwise.
 The closed set is the UNION of the two measured shapes and the required
 core is their INTERSECTION. Every shape the rule admits between those two
 bounds - one carrying `cwd` but not `shell`, for instance - is admitted by
-derivation, not because it was observed. That is the narrowest rule these
-two measurements will carry, and it is still wider than the measurements
-themselves. Saying "no wider than the evidence" without this paragraph
-would be the claim-wider-than-its-evidence defect that this whole binding
-exists to refuse.
+derivation, not because it was observed. It is NOT the narrowest rule
+available: an exact allow-list of the two observed shapes would be
+strictly narrower. It is the rule this design chose, because an allow-list
+breaks again the first time the client changes which fields a refresh
+carries - which is the fault being fixed here, for the second time in this
+one guard. Saying "no wider than the evidence", or "the narrowest rule the
+measurement carries", would both be the claim-wider-than-its-evidence
+defect that this whole binding exists to refuse.
 
 The refresh record must be envelope-and-nothing-else, while the baseline
 record may carry other text around its envelope. The asymmetry is
@@ -234,10 +237,14 @@ Tests change before the tool - the contract is live-verified and locked.
    re-opening its own tag, stray text between fields, an unterminated tag,
    a field never closed, an empty envelope, an impossible date, a date
    before the baseline, a date after today.
-   REFUSED, baseline side: no envelope, two envelopes, a duplicate field,
-   an impossible date, no `current_date`, and each malformed-envelope
-   shape the scanner can report, so that every distinct message the
-   baseline path can produce is exercised rather than only every branch.
+   REFUSED, baseline side: no envelope, two envelopes (which report
+   DIFFERENT directions, since "there was none" and "there were two" are
+   different faults), a duplicate field, an impossible date, no
+   `current_date`, and each malformed-envelope shape the scanner can
+   report - stray text, unterminated tag, unclosed field, invalid name,
+   empty envelope, and a value re-opening its own tag - so that every
+   distinct message the baseline path can produce is exercised rather than
+   only every branch.
    Plus the resumed `[brief, extra]` ordering case, which today reports
    the wrong direction and has no coverage (the only ordering case,
    `test_codex_round_evidence.py:391-406`, is `-Fresh` only).

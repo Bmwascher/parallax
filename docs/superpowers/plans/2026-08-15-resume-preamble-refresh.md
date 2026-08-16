@@ -4,7 +4,10 @@
 
 **Goal:** A resumed debate round binds cleanly when the codex client puts a
 REFRESHED environment preamble in front of the brief, while every record
-the client did not demonstrably emit is still refused.
+outside the measured-and-derived structural and value bound is still
+refused. "Demonstrably emitted" would be the wrong claim: the bound admits
+field combinations between the two measured shapes that were never
+themselves observed.
 
 **Architecture:** `tools/read-codex-round-evidence.ps1` gains a second
 acceptance path for the one record allowed ahead of the brief on a resume.
@@ -51,7 +54,10 @@ commit atomicity, not about content.
 - Field names are matched ORDINAL and CASE-SENSITIVE. PowerShell's default
   string comparison is case-insensitive and the current code is immune
   only because it compares SHA-256 hashes.
-- No em dashes in any file this plan touches.
+- No em dashes in prose this plan NEWLY writes. Text copied verbatim from
+  an existing file keeps that file's punctuation: the item 42 heading
+  Task 3 edits already contains an em dash, and retyping it as something
+  else would make the instruction fail to match the file.
 - The version bump in `.claude-plugin/plugin.json` goes LAST, in the final
   commit of the branch. `plugin update` keys only on the version string, so
   a number cached mid-branch copies nothing afterwards.
@@ -325,8 +331,9 @@ def test_a_resume_slice_with_a_refreshed_preamble_is_accepted(tmp_path):
     preamble - the three-field subset, a later date, no instructions
     block - so the identity test could not match it and a paid round was
     discarded unread. Identity was right to refuse novel text and wrong
-    about its width; a preamble RECOGNISED by structure and confirmed
-    field by field against the session's own baseline is not novel text.
+    about its width. In an accepted refresh the DATE is the one novel
+    value and it is bounded at both ends; every other field is text this
+    session already carried.
     """
     today = datetime.date.today().isoformat()
     f, prior, sha = resumed_case(tmp_path, refresh_row(core_fields(today)))
@@ -484,12 +491,15 @@ def test_a_refreshed_preamble_with_text_outside_the_envelope_is_refused(tmp_path
 
 def test_a_refreshed_preamble_reopening_its_own_tag_is_refused(tmp_path):
     """A value that re-opens its own tag makes the closing tag ambiguous.
-    Refuse rather than pick one."""
+    Refuse rather than pick one - and say WHICH field, because sharing the
+    generic envelope message with the text-outside case would let either
+    test pass on the other's fault."""
     pairs = [("current_date", BASE_DATE), ("timezone", "America/Chicago"),
              ("filesystem", FS_VALUE + "<filesystem>x</filesystem>")]
     f, prior, sha = resumed_case(tmp_path, refresh_row(pairs))
     assert_failed(run_resume(f, prior, sha),
-                  "it is not a recognised client environment preamble")
+                  "it carries an environment field whose value re-opens its"
+                  " own tag: 'filesystem'")
 
 
 def test_a_refreshed_preamble_with_stray_text_between_fields_is_refused(tmp_path):
@@ -558,18 +568,19 @@ def test_a_baseline_without_an_envelope_disables_the_structural_path(tmp_path):
     f, prior, sha = resumed_case(tmp_path, refresh_row(core_fields(BASE_DATE)),
                                  baseline_row=user_row("no context here"))
     assert_failed(run_resume(f, prior, sha),
-                  "carries no single recognisable environment preamble")
+                  "first user record carries no environment preamble")
 
 
 def test_a_baseline_with_two_envelopes_disables_the_structural_path(tmp_path):
     """Which one is the baseline? There is no rule, so there is no
-    comparison. This path returns BEFORE the embedded scanner runs, so its
-    message is the unavailable one rather than a propagated fault."""
+    comparison. This path returns BEFORE the embedded scanner runs, and it
+    says SEVERAL rather than none: sharing one message with the
+    no-envelope case would let either test pass on the other's fault."""
     doubled = user_row([env_text(full_fields()), env_text(full_fields())])
     f, prior, sha = resumed_case(tmp_path, refresh_row(core_fields(BASE_DATE)),
                                  baseline_row=doubled)
     assert_failed(run_resume(f, prior, sha),
-                  "carries no single recognisable environment preamble")
+                  "carries more than one environment preamble")
 
 
 # Every fault the scanner can report is also reachable through the
@@ -589,6 +600,8 @@ BASELINE_FAULTS = [
      "carries 'CWD', which is not a recognised environment field"),
     ("<environment_context></environment_context>",
      "carries no environment fields at all"),
+    ("<environment_context>\n  <cwd>a<cwd>b</cwd></cwd>\n</environment_context>",
+     "carries an environment field whose value re-opens its own tag: 'cwd'"),
 ]
 
 
@@ -687,9 +700,12 @@ $script:EnvAllowed = @("cwd", "shell", "current_date", "timezone", "filesystem")
 # Present in BOTH measured shapes. The allowed set is their UNION and the
 # core is their INTERSECTION, so a shape between the two - one carrying
 # `cwd` but not `shell` - is admitted by DERIVATION and was never itself
-# observed. That is the narrowest rule two measurements will carry, and it
-# is still wider than the measurements. Requiring the core keeps out the
-# shapes below both, such as a preamble carrying only a date.
+# observed. This is NOT the narrowest possible rule: an exact allow-list
+# of the two observed shapes would be narrower. It is the settled
+# field-by-field design, chosen because an allow-list breaks again the
+# first time the client changes which fields a refresh carries, which is
+# the fault this whole item exists to fix. Requiring the core keeps out
+# the shapes below both, such as a preamble carrying only a date.
 $script:EnvCore = @("current_date", "timezone", "filesystem")
 
 function New-EnvelopeResult($fields, $fault) {
@@ -749,7 +765,9 @@ function Get-EnvironmentEnvelopeFields([string]$canonicalText) {
         # A value that re-opens its own tag makes the close ambiguous.
         # Refuse rather than pick one.
         if ($value.Contains("<" + $name + ">")) {
-            return New-EnvelopeResult $null "is not a recognised client environment preamble"
+            return New-EnvelopeResult $null (
+                "carries an environment field whose value re-opens its own tag: '" +
+                $name + "'")
         }
         $fields[$name] = $value
         $i = $end + $closeTag.Length
@@ -765,27 +783,31 @@ function Get-BaselineEnvelopeFields([string]$canonicalText) {
     # (three being the most common composition measured), so the envelope
     # is SELECTED from that text rather than assumed to be all of it.
     # Exactly one, or the structural path is unavailable.
-    $unavailable = ("cannot be checked: this session's first user record " +
-                    "carries no single recognisable environment preamble to " +
-                    "compare it against")
-    if ($null -eq $canonicalText) { return New-EnvelopeResult $null $unavailable }
+    # ZERO and SEVERAL are different faults and say so. One shared message
+    # would make "the session never carried a preamble" and "the session
+    # carried two and nobody can say which is the baseline" read alike.
+    $none = ("cannot be checked: this session's first user record carries " +
+             "no environment preamble to compare it against")
+    $several = ("cannot be checked: this session's first user record carries " +
+                "more than one environment preamble, so which one is the " +
+                "baseline is undefined")
+    if ($null -eq $canonicalText) { return New-EnvelopeResult $null $none }
     $first = $canonicalText.IndexOf($script:EnvOpen, [System.StringComparison]::Ordinal)
-    if ($first -lt 0) { return New-EnvelopeResult $null $unavailable }
+    if ($first -lt 0) { return New-EnvelopeResult $null $none }
     if ($canonicalText.IndexOf($script:EnvOpen, $first + 1, [System.StringComparison]::Ordinal) -ge 0) {
-        return New-EnvelopeResult $null $unavailable
+        return New-EnvelopeResult $null $several
     }
     $close = $canonicalText.IndexOf($script:EnvClose, $first, [System.StringComparison]::Ordinal)
-    if ($close -lt 0) { return New-EnvelopeResult $null $unavailable }
+    if ($close -lt 0) { return New-EnvelopeResult $null $none }
     if ($canonicalText.IndexOf($script:EnvClose, $close + 1, [System.StringComparison]::Ordinal) -ge 0) {
-        return New-EnvelopeResult $null $unavailable
+        return New-EnvelopeResult $null $several
     }
     $inner = Get-EnvironmentEnvelopeFields $canonicalText.Substring(
         $first, $close + $script:EnvClose.Length - $first)
     if ($null -eq $inner.Fields) {
         # PROPAGATE, do not collapse. Every scanner fault reaching here
-        # would otherwise report as "no single recognisable preamble",
-        # which is true of a record with two envelopes and misleading for
-        # one whose single envelope repeats a field.
+        # would otherwise report as one generic message, which is
+        # misleading for a single envelope that merely repeats a field.
         return New-EnvelopeResult $null (
             "cannot be checked: this session's own preamble " + $inner.Fault)
     }
@@ -884,8 +906,10 @@ prefix read above it is unchanged:
             # a later date, and the instructions block absent - and the
             # identity rule discarded a paid round unread. A preamble
             # recognised by structure and confirmed field by field against
-            # this session's own baseline is text this client demonstrably
-            # emitted. Anything else still fails here.
+            # this session's own baseline falls inside the measured and
+            # derived bound; every value but the date is text this session
+            # already carried, and the date is bounded at both ends.
+            # Anything else still fails here.
             $fault = Get-RefreshedPreambleFault $extra $prefixPreamble
             if ($fault) {
                 Fail ("a resumed slice carries a user record in front of the " +
@@ -964,8 +988,10 @@ re-emitted preamble and blocked a legitimate round. It was then IDENTITY
 until 2026-08-14, when a resume across a day boundary carried a refreshed
 preamble - a later date, the instructions block absent - and discarded a
 paid round unread. Each bound was narrower than the client's real
-behaviour, and each replacement is the narrowest rule its measurement
-carries.
+behaviour. Neither replacement is the narrowest rule available: an exact
+allow-list of the observed shapes would be narrower, and it would break
+again the first time the client changes which fields it sends, which is
+the fault being fixed here for the second time.
 ```
 
 Nothing else in the region changes. The sentence that follows
@@ -996,8 +1022,13 @@ pin, which is what makes it a generator rather than a hope. Its SOURCE
 spelling differs and is expected to: `repr` emits single-quoted literals
 where the existing pin is hand-written with double quotes. An earlier
 draft of this paragraph claimed the output reproduced the existing lines
-exactly. It does not, and the difference is visible in the first line of
-the output.
+exactly. It does not, and the difference shows on the first GENERATED
+LITERAL line - not the first line of output, which is `assert (` in both.
+
+Two things about that run are worth stating at their real width. It was
+made by the driver while writing this plan and NO artifact of it was
+retained, so it is a claim rather than evidence. Step 13 is what actually
+verifies the pin, and it does so on the tree the implementer produces.
 
 The `assert ''.join(parts)==s` inside that command is the guard: if the
 wrapping ever loses or adds a character the command STOPS instead of
@@ -1212,9 +1243,13 @@ job, not this plan's.
 to a task and to at least one case: the reorder to Task 1; recognition,
 the closed set, the required core, the baseline rule, value comparison and
 the date bound to Task 2; the canonical-text rule to Task 2's whitespace
-acceptance case; the scope list to Tasks 2 and 3. The spec's "what this
-does not claim" section is carried verbatim into the item 42 closing text
-in Task 3, Step 3.
+acceptance case; the scope list to Tasks 2 and 3. Of the spec's two "what
+this does not claim" points, the item 42 closing text in Task 3, Step 3
+carries the unknown-refresh-trigger limitation ONLY. The client-echo
+evidence ceiling is not repeated there; it already lives in the contract
+region, which is where this binding's evidence class belongs. An earlier
+draft of this paragraph said the whole section was carried verbatim, which
+was not true of either draft it described.
 
 **Placeholder scan.** No TBD, no "handle edge cases", no "similar to Task
 N". Every code step carries the actual code, and Task 3's record edits are
