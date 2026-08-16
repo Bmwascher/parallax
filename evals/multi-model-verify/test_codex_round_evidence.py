@@ -1617,3 +1617,58 @@ def test_a_resume_whose_prior_state_records_an_empty_prefix_is_refused(tmp_path)
                     assistant_row("ok")])
     assert_failed(run_resume(f, prior, canon("Round two brief.")),
                   "records an empty prefix")
+
+
+# ---- item 57: two edges in the envelope scanner ---------------------
+
+def test_a_field_name_ending_in_a_newline_is_not_a_field_name(tmp_path):
+    """57(a). `$` matches before a trailing newline in .NET.
+
+    So `<cwd\\n>` passed the tag-name test and was refused one check
+    later, by the closed set, as an UNKNOWN field. Both refuse, and the
+    message sends the reader to the wrong place. It stops being
+    cosmetic the moment a path without the closed set uses this
+    scanner, which is what the fresh gate is.
+    """
+    pairs = [("cwd\n", "C:\\repo")] + core_fields()
+    f, prior, sha = resumed_case(tmp_path, refresh_row(pairs))
+    assert_failed(run_resume(f, prior, sha),
+                  "is not a recognised environment field")
+
+
+def test_a_padded_current_date_is_read_like_every_other_field(tmp_path):
+    """57(b). Every other field is compared through a canonicalizing
+    hash that folds CRLF and strips the ends. This one went raw to the
+    date parser, so a padded date was refused where a padded
+    anything-else was accepted. The asymmetry is the defect, not the
+    padding."""
+    pairs = [("cwd", "C:\\repo"), ("shell", "powershell"),
+             ("current_date", "  2020-01-03  "),
+             ("timezone", "America/Chicago"), ("filesystem", FS_VALUE)]
+    f, prior, sha = resumed_case(tmp_path, refresh_row(pairs))
+    assert_clean(run_resume(f, prior, sha))
+
+
+def test_a_padded_baseline_date_still_bounds_the_refresh(tmp_path):
+    """The same asymmetry on the BASELINE side, where it disabled the
+    whole structural path: an unparseable baseline date reports
+    `cannot be checked` and refuses every refreshed preamble for the
+    rest of the session."""
+    base = user_row([env_text([("cwd", "C:\\repo"), ("shell", "powershell"),
+                               ("current_date", " " + BASE_DATE + " "),
+                               ("timezone", "America/Chicago"),
+                               ("filesystem", FS_VALUE)])])
+    f, prior, sha = resumed_case(tmp_path, refresh_row(full_fields("2020-01-03")),
+                                 baseline_row=base)
+    assert_clean(run_resume(f, prior, sha))
+
+
+def test_a_date_that_is_not_a_calendar_date_is_still_refused(tmp_path):
+    """The control for both cases above. A fix that trimmed its way into
+    accepting any string would satisfy them and remove the check."""
+    pairs = [("cwd", "C:\\repo"), ("shell", "powershell"),
+             ("current_date", "  2020-13-99  "),
+             ("timezone", "America/Chicago"), ("filesystem", FS_VALUE)]
+    f, prior, sha = resumed_case(tmp_path, refresh_row(pairs))
+    assert_failed(run_resume(f, prior, sha),
+                  "not a calendar date in yyyy-MM-dd form")

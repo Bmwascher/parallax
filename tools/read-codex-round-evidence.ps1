@@ -183,7 +183,13 @@ function Get-EnvironmentEnvelopeFields([string]$canonicalText) {
         # discriminators: measured 2026-08-15, removing this test alone
         # moves the refusal to the closed set rather than allowing
         # anything through.
-        if ($name -cnotmatch '^[a-z_]+$') {
+        # `\z`, NOT `$`. In .NET `$` matches before a TRAILING NEWLINE,
+        # so a name of "cwd`n" satisfied `^[a-z_]+$` and reached the
+        # closed set, which refused it as an unknown field - the right
+        # verdict with the wrong reason. On the FRESH path there is no
+        # closed set behind this test, so `$` would admit the name
+        # outright. Backlog item 57(a).
+        if ($name -cnotmatch '^[a-z_]+\z') {
             return New-EnvelopeResult $null (
                 "carries '" + $name + "', which is not a recognised environment field")
         }
@@ -252,9 +258,16 @@ function Get-BaselineEnvelopeFields([string]$canonicalText) {
 
 function Get-EnvDate([string]$value) {
     # ParseExact, not a regex: `^\d{4}-\d{2}-\d{2}$` accepts 2026-02-31.
+    # CANONICALIZED FIRST, the same way every other field is. Every
+    # other field is compared through Get-CanonicalSha256, which folds
+    # CRLF and strips the ends, so a padded value passes there; this one
+    # went to the parser raw, and a padded date was refused where a
+    # padded anything-else was accepted. On the baseline side that
+    # asymmetry disabled the structural path for a whole session.
+    # Backlog item 57(b).
     $d = [datetime]::MinValue
     $ok = [datetime]::TryParseExact(
-        $value, 'yyyy-MM-dd',
+        (Get-CanonicalText $value), 'yyyy-MM-dd',
         [System.Globalization.CultureInfo]::InvariantCulture,
         [System.Globalization.DateTimeStyles]::None, [ref]$d)
     if ($ok) { $d } else { $null }
