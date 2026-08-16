@@ -1,0 +1,311 @@
+# Design: a resumed round binds across a refreshed client preamble
+
+Backlog item 42, in `docs/superpowers/plans/2026-07-27-0150-backlog.md`
+(located by heading; items 50 to 54 were appended on 2026-08-15 and line
+numbers into that file no longer hold).
+Design settled 2026-08-15 by a user-invoked PANEL (Sol + Fable) in mode
+plan. Panel invariant satisfied: Sol is the cross-vendor lane.
+
+Subject revision, round 1 claims section:
+`13f3ba53bcfb7ed44b3151f5cbe61a72455dc462ccd4834918c6b633a52fea4b`.
+
+## The defect
+
+`tools/read-codex-round-evidence.ps1:639-687` accepts a user record ahead
+of the brief on a resumed round only when that record canonically equals
+the session's FIRST user record. On 2026-08-14 a resume carried a
+REFRESHED environment preamble - a different date, and the instructions
+block absent - so the identity test could not match it, the round was
+discarded unread, and its quota was spent for nothing. Record:
+`docs/superpowers/plans/rounds/2026-08-11-tool-surface-agy-drift/diff-debate-record.md:85-104`.
+
+The guard was RIGHT to refuse. Its purpose is that novel text cannot reach
+the reviewer ahead of the brief, and under the old rule it enforced that
+by demanding the record be one this client had already emitted verbatim.
+What is wrong is the rule's WIDTH: the comment at
+`tools/read-codex-round-evidence.ps1:622-638` records that this bound was
+once arithmetic and that the field falsified it; identity replaced it, and
+the field has now falsified identity in turn.
+
+This design does not relax the guard to "any record may precede the
+brief", and it does not preserve "already emitted" either - stating it
+that way would misdescribe what ships. What replaces it is narrower than
+the first and wider than the second, in three parts. Every value except
+the date must be ATTRIBUTABLE: canonically equal to the same field in this
+session's own baseline envelope. The date is BOUNDED NOVEL content: it is
+allowed to be new, and it is confined to a real calendar date between the
+baseline's date and today. And the accepted field-set width is
+MEASURED-AND-DERIVED, admitting combinations between the two observed
+shapes that were not themselves observed. Everything outside those three
+is refused.
+
+## What was measured, and when
+
+Swept 2026-08-15 across every rollout under the user's codex session
+store (749 files at the first sweep, 751 by the third). Three sweeps, all
+by the driver. The third was run only because review caught the second
+being read as evidence for something it never measured.
+
+**Sweep 1 - the shape of the environment element.** Every `input_text`
+element of a `response_item` / `message` / `role=user` record that carries
+an `environment_context` tag falls into exactly two shapes:
+
+- 748 elements: exactly one `environment_context` tag with five direct
+  fields - `cwd`, `shell`, `current_date`, `timezone`, `filesystem`.
+- 16 elements: the same tag with three - `current_date`, `timezone`,
+  `filesystem`. A strict subset of the first.
+
+No matched element carried an unknown field, a duplicate direct field, or
+text outside the tag. The common core of both shapes is exactly
+`current_date`, `timezone`, `filesystem`.
+
+**Sweep 2 - the composition of ANY environment-carrying record.** Ran
+because a claim about elements is not a claim about records. User records
+carrying an environment element come in three compositions:
+
+- 454 records: 3 elements, one of them the environment element.
+- 196 records: 2 elements, one of them the environment element.
+- 122 records: 1 element, the environment element alone.
+
+The observed refresh is the one-element case.
+
+**Sweep 3 - the composition of the FIRST user record specifically.** Ran
+because sweep 2 does NOT establish it. Sweep 2 counted every
+environment-carrying user record in the store, and the baseline rule is
+about one particular record per session, so reading sweep 2 as a statement
+about first records was an attribution error. It was caught in review and
+answered by measuring rather than by reasoning. Of 751 rollouts, 748 were
+read and 3 were locked by a running process:
+
+- 449 first records: 3 elements, exactly one envelope.
+- 190 first records: 2 elements, exactly one envelope.
+- 73 first records: 1 element, exactly one envelope.
+- 36 first records: 1 element and NO envelope at all.
+
+Two things follow, and only these two, and both are statements about the
+748 READABLE rollouts rather than about the store. Where a first record
+carries an envelope it carries exactly ONE, across all 712 such records,
+which is what makes "the single envelope inside the first user record" a
+rule rather than a hope. And in 36 sessions - about one in twenty - the
+first record has no envelope, so the structural path being UNAVAILABLE is
+a measured ordinary case rather than a defensive branch nothing reaches.
+Three elements is the most common composition, so any rule assuming the
+baseline record holds exactly two is narrower than the store.
+
+The three locked files could hold a fourth composition, or zero or several
+envelopes, and nothing here rules that out. It would change the observed
+distribution and could not make the gate permissive: any number of content
+elements is simply joined before the scan, while zero or several envelopes
+refuse. An unmeasured shape lands on a refusal, which is the direction
+this whole binding is built to fail in.
+
+A concrete pair to read:
+`C:/Users/Brandon/.codex/sessions/2026/08/12/rollout-2026-08-12T02-41-22-019ff4eb-346e-7be2-9af3-520ebc876707.jsonl`,
+user records 1 and 3. The same file carries `environment_context` text
+inside a `type=compacted` record at line 218; that record is not a
+`response_item`, so `Test-RecordIsUserMessage` never sees it and it is out
+of scope here.
+
+## The rule
+
+Applies ONLY on `-Resume`, ONLY when the slice carries two user records,
+and ONLY to the record ahead of the brief. The at-most-two cap, the
+brief-must-be-last rule, the brief hash match
+(`tools/read-codex-round-evidence.ps1:698-718`) and the entire `-Fresh`
+path are untouched.
+
+**Order of checks - this changes.** Today the extra-record check runs
+BEFORE the brief is identified and proved last. On a resumed slice ordered
+`[brief, extra]` the tool therefore tests the BRIEF as though it were the
+record in front of the brief, and reports "does not repeat the client's
+own preamble" when the true fault is that a record follows the brief. Both
+panel lanes raised this independently, and it is convergent. The fixed
+order is: prove the brief present, unique and last, THEN validate the
+record ahead of it. The outcome was always a refusal, so this is a
+direction fix, not a permissiveness fix - but this design requires every
+refusal to name its true direction, so it is in scope.
+
+**Acceptance.** A record ahead of the brief is accepted when EITHER of the
+following holds, and refused otherwise.
+
+1. **Identity (today's rule, kept unchanged).** Its canonical text equals
+   the canonical text of the session's first user record.
+
+2. **Recognised refresh (new).** ALL of the following hold.
+   - Its canonical text is exactly one `environment_context` envelope with
+     nothing before or after it.
+   - Every direct field name comes from the closed set `cwd`, `shell`,
+     `current_date`, `timezone`, `filesystem`. Names are matched ORDINAL
+     and CASE-SENSITIVE. PowerShell's default string comparison is
+     case-insensitive, and the current code is immune only because it
+     compares SHA-256 hashes; a naive port would accept `<CWD>`.
+   - No direct field appears more than once.
+   - The three fields of the measured common core - `current_date`,
+     `timezone`, `filesystem` - are all present. `cwd` and `shell` are
+     optional. Accepting a preamble carrying only `current_date` would be
+     accepting a shape never observed.
+   - Every present field EXCEPT `current_date` canonically equals the
+     same-named field inside the BASELINE envelope.
+   - `current_date` satisfies the date rule below.
+
+**The width is DERIVED, and the difference is stated rather than glossed.**
+The closed set is the UNION of the two measured shapes and the required
+core is their INTERSECTION. Every shape the rule admits between those two
+bounds - one carrying `cwd` but not `shell`, for instance - is admitted by
+derivation, not because it was observed. It is NOT the narrowest rule
+available: an exact allow-list of the two observed shapes would be
+strictly narrower. It is the rule this design chose, because an allow-list
+breaks again the first time the client changes which fields a refresh
+carries - which is the fault being fixed here, for the second time in this
+one guard. Saying "no wider than the evidence", or "the narrowest rule the
+measurement carries", would both be the claim-wider-than-its-evidence
+defect that this whole binding exists to refuse.
+
+The refresh record must be envelope-and-nothing-else, while the baseline
+record may carry other text around its envelope. The asymmetry is
+deliberate, and it does NOT rest on first records always being larger: 73
+of the 748 readable first records hold a single element too (sweep 3). It
+rests on what each side is: the refresh is the record this binding is
+deciding about, so it may carry nothing but the envelope, while the
+baseline is text the client already emitted and only has to CONTAIN a
+recognisable envelope. Widening the refresh side to "an envelope somewhere
+in the record" would admit exactly the unattributed text this guard exists
+to refuse.
+
+Every "canonically equals" in this design means the canonicalization the
+tool already declares and uses everywhere else - UTF-8 bytes, CRLF folded
+to LF, leading and trailing whitespace removed - applied here to a single
+field's value rather than to a whole record.
+
+**The baseline envelope.** The session's first user record may hold one,
+two or three elements (sweep 3, which measured first records specifically;
+sweep 2 counted a different population and does not establish this), and
+`Get-UserText`
+(`tools/read-codex-round-evidence.ps1:603-612`) joins them all, so "the
+element" must be defined rather than assumed. The baseline is the single
+`environment_context` envelope found in that record's joined canonical
+text. If there is no envelope, or more than one, the structural path is
+UNAVAILABLE and the record is refused. Duplicate direct fields inside the
+baseline, or a baseline `current_date` that is not a real date, disable it
+the same way.
+
+**The date rule.** `current_date` must parse as a real calendar date under
+invariant `yyyy-MM-dd` - `ParseExact`, not a regular expression, because
+`^\d{4}-\d{2}-\d{2}$` accepts `2026-02-31`. It must be no earlier than the
+baseline's own `current_date` and no later than the binder's local date at
+verification. The upper bound stays: the date is the only intentionally
+novel value in the record, so without it any future date rides through.
+Clock or timezone disagreement between the client and the binder is
+therefore a REFUSAL, which is the fail-closed direction; asserting the two
+share a clock is an unverified claim and is not made.
+
+**The scan.** A purpose-built cursor, not a general XML parser and not a
+global search for field tags. It consumes the envelope from its opening
+tag to its closing tag, recognises direct-child field boundaries only,
+matches each closing tag to its opening tag, treats a field's nested
+contents as an opaque value, and rejects every unconsumed character. A
+global search cannot tell a direct field from nested content, and the
+`filesystem` value demonstrably contains nested tags -
+`<workspace_roots>`, `<permission_profile>`, `<entry>`. The JSON line
+scanner at `tools/read-codex-round-evidence.ps1:157-189` is the in-repo
+pattern to follow: track structure, then reject anything left over.
+
+**Refusals.** Every refusal keeps the property that an unmade or
+unrecognised measurement never reads as clean, and each names its own
+direction: brief missing, brief ambiguous, brief not last, envelope
+unrecognised, baseline unavailable, unknown field, duplicate field,
+missing core field, value mismatch, invalid date, date earlier than the
+baseline, date later than today.
+
+## What this does NOT claim
+
+- It does not establish what triggers a refresh. A day boundary is the one
+  cause OBSERVED, once. Whether a changed cwd, permission profile or
+  client upgrade also refreshes the preamble is UNMEASURED, and a resume
+  that refreshes nothing still binds by the identity path.
+- It does not widen the evidence class. This remains a client-echo
+  binding: it proves what the measured client recorded for this call,
+  never what the server or model received.
+
+## Scope of change, in order
+
+Tests change before the tool - the contract is live-verified and locked.
+
+1. `evals/multi-model-verify/test_codex_round_evidence.py`. The
+   implementation plan holds the authoritative case list; this is the
+   inventory it must satisfy, and the two are kept in step.
+   ACCEPTED: the three-field refresh; the five-field refresh; a same-day
+   refresh, as the inclusive lower boundary; a refresh wrapped in CRLF and
+   spaces, which pins recognition running on canonical text; a nested
+   `<cwd>` inside the `filesystem` value, which is the discriminating case
+   for the cursor and a synthetic shape rather than an observed one; and
+   the same refresh against baselines of one, two and three elements.
+   REFUSED, refresh side: unknown field, case-variant field name,
+   duplicate field, each required core field removed on its own, changed
+   value, a field the baseline lacks, text outside the envelope, a value
+   re-opening its own tag, stray text between fields, an unterminated tag,
+   a field never closed, an empty envelope, an impossible date, a date
+   before the baseline, a date after today.
+   REFUSED, baseline side: no envelope, two envelopes (which report
+   DIFFERENT directions, since "there was none" and "there were two" are
+   different faults), a duplicate field, an impossible date, no
+   `current_date`, and each malformed-envelope shape the scanner can
+   report - stray text, unterminated tag, unclosed field, invalid name,
+   empty envelope, and a value re-opening its own tag - so that every
+   distinct message the baseline path can produce is exercised rather than
+   only every branch.
+   Plus the resumed `[brief, extra]` ordering case, which today reports
+   the wrong direction and has no coverage (the only ordering case,
+   `test_codex_round_evidence.py:391-406`, is `-Fresh` only).
+   Refusal needles must distinguish the refresh side from the baseline
+   side: the two wrappers nest, so a bare phrase matches both.
+   The existing `preamble_row()` fixture at
+   `test_codex_round_evidence.py:104-115` is a one-line placeholder, so
+   the structural cases need a realistic helper built from the measured
+   shapes.
+2. `tools/read-codex-round-evidence.ps1` - the reorder, the baseline
+   selection, the cursor, the field and date rules, the refusal messages.
+3. `skills/multi-model-verify/references/model-prompting-notes.md`,
+   contract region `codex-brief-binding-record` at lines 475-521. More
+   than the one identity sentence goes stale: the rationale at
+   `model-prompting-notes.md:490-493` ("the identity rule is what the
+   measurement supports") becomes false the moment the structural path
+   ships and is rewritten with the 2026-08-14 falsification.
+4. `evals/multi-model-verify/test_multi_model_verify.py:335-349`, where
+   that contract text is pinned - the resumed-identity sentence is pinned
+   at `:341-343`.
+5. `evals/multi-model-verify/test_contract_coverage.py` ONLY if the region
+   id or the declared region set changes. It excludes itself from pin
+   collection by design (`test_contract_coverage.py:617-622`), so it is
+   never where the pin lives.
+6. Item 42's text in the backlog, last.
+
+## Panel record
+
+- **Sol** (`gpt-5.6-sol`, codex lane), round 1, fresh, effective route
+  confirmed, brief binding CLEAN. Voted SHAPE-AND-VALUES and
+  FIELD-BY-FIELD. Offered no OPTION-C. Returned seven amendments, all
+  verified against the repo by the driver and all accepted.
+- **Fable** (`fable-panel-reviewer`, same-harness lane; harness 2.1.233,
+  above the 2.1.216 floor), round 1. Voted the same on both questions.
+  Verdict FIX on the subject revision above. Agreed with all seven relayed
+  findings, judging R7 partly stale because claim 6 had already folded it
+  in. Added two of its own: the required common core, and the stale
+  rationale sentence in scope item 3.
+- **Convergent** (raised independently by both lanes): the check-order
+  defect, and the ambiguity of "the element" in the baseline comparison.
+  Counted once, fixed once.
+- **Driver correction to a supporting detail, itself corrected twice.**
+  Fable stated that the first user record carries TWO content elements,
+  reading one file. The driver answered with sweep 2 - which counted every
+  environment-carrying user record, not first records, so it did not
+  answer the point either. Plan-review round 3 caught that, and sweep 3
+  measured first records directly: 449 with three elements, 190 with two,
+  73 with one, and 36 with no envelope, over 748 readable rollouts. The
+  conclusion Fable drew - that the baseline element must be selected
+  rather than assumed - was right throughout and is adopted; two
+  successive attempts to support it cited the wrong population, and both
+  are corrected
+  here rather than carried forward.
+- **Session verdict.** The design is ready to plan. No point was left
+  contested, and nothing was escalated to the user.

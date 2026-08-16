@@ -484,13 +484,32 @@ UTF-8, CRLF normalized to LF, leading and trailing whitespace stripped.
 Require exactly one candidate to equal the brief's SHA-256, and require it to
 be the LAST user record in the slice. Bound what may sit IN FRONT of it: a
 FRESH slice carries exactly two user records, the client's instructions
-preamble and the brief. A RESUMED slice carries at most two, and a record
-ahead of the brief must CANONICALLY EQUAL the first user record in that
-session's own prefix - the client repeating its own preamble, and nothing
-else. The resumed rule was a COUNT of exactly one until 2026-08-04, earned
-from three measured rounds and falsified by the fourth, which carried a
-re-emitted preamble and blocked a legitimate round; the identity rule is what
-the measurement supports. Equality is CANONICAL, not byte-for-byte: the same
+preamble and the brief. A RESUMED slice carries at most two, and a record ahead of the brief must
+either CANONICALLY EQUAL the first user record in that session's own
+prefix - the client repeating its own preamble - or be a client
+environment preamble RECOGNISED BY STRUCTURE: exactly one
+`environment_context` envelope and nothing else, its direct field names
+drawn ordinally and case-sensitively from the closed set `cwd`, `shell`,
+`current_date`, `timezone`, `filesystem`, none repeated, the three fields
+`current_date`, `timezone` and `filesystem` all present, every field but
+`current_date` canonically equal to the same field in that session's own
+baseline envelope, and `current_date` a calendar date no earlier than the
+baseline's and no later than the binder's local date. The baseline is the
+single envelope inside the session's FIRST user record; zero or several
+disables the structural path entirely. That closed set is the union of the
+two measured shapes and that core is their intersection, so a shape the
+rule admits without having been observed, such as one carrying `cwd` but
+not `shell`, is admitted by derivation rather than by measurement. The
+resumed rule was a COUNT of exactly one until 2026-08-04, earned from
+three measured rounds and falsified by the fourth, which carried a
+re-emitted preamble and blocked a legitimate round. It was then IDENTITY
+until 2026-08-14, when a resume across a day boundary carried a refreshed
+preamble - a later date, the instructions block absent - and discarded a
+paid round unread. Each bound was narrower than the client's real
+behaviour. Neither replacement is the narrowest rule available: an exact
+allow-list of the observed shapes would be narrower, and it would break
+again the first time the client changes which fields it sends, which is
+the fault being fixed here for the second time. Equality is CANONICAL, not byte-for-byte: the same
 UTF-8, CRLF-to-LF, ends-stripped rule used everywhere else here, so it
 tolerates line-ending and surrounding-whitespace differences and nothing more.
 Anything looser than this is unearned width: an unexplained user record before

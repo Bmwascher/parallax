@@ -102,13 +102,215 @@ function Get-Sha256Hex([byte[]]$bytes, [int]$offset, [int]$count) {
     ($h | ForEach-Object { $_.ToString("x2") }) -join ""
 }
 
-function Get-CanonicalSha256([string]$text) {
+function Get-CanonicalText([string]$text) {
     # The declared canonicalization, in one place. Both this script and the
     # caller that computes -ExpectedBriefSha256 must apply the same rule, so
     # it is stated rather than left to whichever side reads the bytes first.
-    $t = $text.Replace("`r`n", "`n").Trim()
+    $text.Replace("`r`n", "`n").Trim()
+}
+
+function Get-CanonicalSha256([string]$text) {
+    $t = Get-CanonicalText $text
     $bytes = [System.Text.Encoding]::UTF8.GetBytes($t)
     Get-Sha256Hex $bytes 0 $bytes.Length
+}
+
+# The client's environment preamble, recognised by SHAPE.
+# Measured 2026-08-15 across the whole session store: a matched element is
+# EXACTLY one envelope carrying five direct fields, or the three-field
+# subset a refresh carries. Nothing observed carried an unknown field, a
+# duplicate, or text outside the envelope.
+$script:EnvOpen = "<environment_context>"
+$script:EnvClose = "</environment_context>"
+$script:EnvAllowed = @("cwd", "shell", "current_date", "timezone", "filesystem")
+# Present in BOTH measured shapes. The allowed set is their UNION and the
+# core is their INTERSECTION, so a shape between the two - one carrying
+# `cwd` but not `shell` - is admitted by DERIVATION and was never itself
+# observed. This is NOT the narrowest possible rule: an exact allow-list
+# of the two observed shapes would be narrower. It is the settled
+# field-by-field design, chosen because an allow-list breaks again the
+# first time the client changes which fields a refresh carries, which is
+# the fault this whole item exists to fix. Requiring the core keeps out
+# the shapes below both, such as a preamble carrying only a date.
+$script:EnvCore = @("current_date", "timezone", "filesystem")
+
+function New-EnvelopeResult($fields, $fault) {
+    # BOTH OUTCOMES CARRY THEIR REASON. Returning a bare $null on failure
+    # collapses every structural fault into one message, and a refusal
+    # that cannot say what it found sends the operator to the wrong place.
+    @{ Fields = $fields; Fault = $fault }
+}
+
+function Get-EnvironmentEnvelopeFields([string]$canonicalText) {
+    # A CURSOR, NOT A SEARCH. The `filesystem` value carries nested tags
+    # of its own, so a global scan for field tags cannot tell a direct
+    # field from value content. This consumes the envelope end to end and
+    # refuses every character it cannot account for.
+    # The caller passes CANONICAL text: this compares from the very first
+    # character, so a raw record with a trailing newline would refuse.
+    if ($null -eq $canonicalText -or
+        -not $canonicalText.StartsWith($script:EnvOpen, [System.StringComparison]::Ordinal) -or
+        -not $canonicalText.EndsWith($script:EnvClose, [System.StringComparison]::Ordinal)) {
+        return New-EnvelopeResult $null "is not a recognised client environment preamble"
+    }
+    $inner = $canonicalText.Substring(
+        $script:EnvOpen.Length,
+        $canonicalText.Length - $script:EnvOpen.Length - $script:EnvClose.Length)
+    # Ordinal comparer, kept as the innermost of several case layers.
+    # Its previous justification was wrong and is corrected here: an
+    # OrderedDictionary built with no comparer is already case-SENSITIVE
+    # (measured 2026-08-15 on both hosts, `Contains('CWD')` false). A
+    # PowerShell `@{}` hashtable is the type that merges `cwd` and `CWD`,
+    # and this is not one.
+    $fields = New-Object System.Collections.Specialized.OrderedDictionary(
+        [System.StringComparer]::Ordinal)
+    $i = 0
+    while ($i -lt $inner.Length) {
+        if ($script:JsonWs -contains $inner[$i]) { $i++; continue }
+        if ($inner[$i] -ne '<') {
+            return New-EnvelopeResult $null "carries text outside its fields"
+        }
+        $gt = $inner.IndexOf('>', $i)
+        if ($gt -lt 0) {
+            return New-EnvelopeResult $null "carries an unterminated tag"
+        }
+        $name = $inner.Substring($i + 1, $gt - $i - 1)
+        # THE OUTERMOST CASE LAYER, and the one that actually fires.
+        # Every measured direct field is a bare lowercase tag with no
+        # attributes, so this refuses any other name before the closed
+        # set at $script:EnvAllowed or the ordinal dictionary above ever
+        # sees it. Those two are the fallbacks behind it, not the
+        # discriminators: measured 2026-08-15, removing this test alone
+        # moves the refusal to the closed set rather than allowing
+        # anything through.
+        if ($name -cnotmatch '^[a-z_]+$') {
+            return New-EnvelopeResult $null (
+                "carries '" + $name + "', which is not a recognised environment field")
+        }
+        if ($fields.Contains($name)) {
+            return New-EnvelopeResult $null (
+                "repeats the environment field '" + $name + "'")
+        }
+        $closeTag = "</" + $name + ">"
+        $end = $inner.IndexOf($closeTag, $gt + 1, [System.StringComparison]::Ordinal)
+        if ($end -lt 0) {
+            return New-EnvelopeResult $null (
+                "never closes the environment field '" + $name + "'")
+        }
+        $value = $inner.Substring($gt + 1, $end - $gt - 1)
+        # A value that re-opens its own tag makes the close ambiguous.
+        # Refuse rather than pick one.
+        if ($value.Contains("<" + $name + ">")) {
+            return New-EnvelopeResult $null (
+                "carries an environment field whose value re-opens its own tag: '" +
+                $name + "'")
+        }
+        $fields[$name] = $value
+        $i = $end + $closeTag.Length
+    }
+    if ($fields.Count -lt 1) {
+        return New-EnvelopeResult $null "carries no environment fields at all"
+    }
+    New-EnvelopeResult $fields $null
+}
+
+function Get-BaselineEnvelopeFields([string]$canonicalText) {
+    # The session's FIRST user record joins one, two or three elements
+    # (three being the most common composition measured), so the envelope
+    # is SELECTED from that text rather than assumed to be all of it.
+    # Exactly one, or the structural path is unavailable.
+    # ZERO and SEVERAL are different faults and say so. One shared message
+    # would make "the session never carried a preamble" and "the session
+    # carried two and nobody can say which is the baseline" read alike.
+    $none = ("cannot be checked: this session's first user record carries " +
+             "no environment preamble to compare it against")
+    $several = ("cannot be checked: this session's first user record carries " +
+                "more than one environment preamble, so which one is the " +
+                "baseline is undefined")
+    if ($null -eq $canonicalText) { return New-EnvelopeResult $null $none }
+    $first = $canonicalText.IndexOf($script:EnvOpen, [System.StringComparison]::Ordinal)
+    if ($first -lt 0) { return New-EnvelopeResult $null $none }
+    if ($canonicalText.IndexOf($script:EnvOpen, $first + 1, [System.StringComparison]::Ordinal) -ge 0) {
+        return New-EnvelopeResult $null $several
+    }
+    $close = $canonicalText.IndexOf($script:EnvClose, $first, [System.StringComparison]::Ordinal)
+    if ($close -lt 0) { return New-EnvelopeResult $null $none }
+    if ($canonicalText.IndexOf($script:EnvClose, $close + 1, [System.StringComparison]::Ordinal) -ge 0) {
+        return New-EnvelopeResult $null $several
+    }
+    $inner = Get-EnvironmentEnvelopeFields $canonicalText.Substring(
+        $first, $close + $script:EnvClose.Length - $first)
+    if ($null -eq $inner.Fields) {
+        # PROPAGATE, do not collapse. Every scanner fault reaching here
+        # would otherwise report as one generic message, which is
+        # misleading for a single envelope that merely repeats a field.
+        return New-EnvelopeResult $null (
+            "cannot be checked: this session's own preamble " + $inner.Fault)
+    }
+    $inner
+}
+
+function Get-EnvDate([string]$value) {
+    # ParseExact, not a regex: `^\d{4}-\d{2}-\d{2}$` accepts 2026-02-31.
+    $d = [datetime]::MinValue
+    $ok = [datetime]::TryParseExact(
+        $value, 'yyyy-MM-dd',
+        [System.Globalization.CultureInfo]::InvariantCulture,
+        [System.Globalization.DateTimeStyles]::None, [ref]$d)
+    if ($ok) { $d } else { $null }
+}
+
+function Get-RefreshedPreambleFault([string]$extraText, [string]$baseText) {
+    # $null means the record is an acceptable refresh. Anything else is a
+    # phrase naming the direction that failed.
+    $extra = Get-EnvironmentEnvelopeFields (Get-CanonicalText $extraText)
+    if ($null -eq $extra.Fields) { return $extra.Fault }
+    foreach ($name in @($extra.Fields.Keys)) {
+        if ($script:EnvAllowed -cnotcontains $name) {
+            return ("carries the unknown environment field '" + $name + "'")
+        }
+    }
+    foreach ($name in $script:EnvCore) {
+        if (-not $extra.Fields.Contains($name)) {
+            return ("omits the required environment field '" + $name + "'")
+        }
+    }
+    $base = Get-BaselineEnvelopeFields (Get-CanonicalText $baseText)
+    if ($null -eq $base.Fields) { return $base.Fault }
+    if (-not $base.Fields.Contains("current_date")) {
+        return ("cannot be checked: this session's own preamble carries no " +
+                "current_date to bound the refreshed one")
+    }
+    $baseDate = Get-EnvDate ([string]$base.Fields["current_date"])
+    if ($null -eq $baseDate) {
+        return ("cannot be checked: this session's own preamble carries a " +
+                "current_date that is not a calendar date in yyyy-MM-dd form")
+    }
+    foreach ($name in @($extra.Fields.Keys)) {
+        if ($name -ceq "current_date") { continue }
+        if (-not $base.Fields.Contains($name)) {
+            return ("carries the environment field '" + $name + "', which " +
+                    "this session's own preamble does not")
+        }
+        if ((Get-CanonicalSha256 ([string]$extra.Fields[$name])) -ne
+            (Get-CanonicalSha256 ([string]$base.Fields[$name]))) {
+            return ("carries an environment field that does not match this " +
+                    "session's own preamble: '" + $name + "'")
+        }
+    }
+    $newDate = Get-EnvDate ([string]$extra.Fields["current_date"])
+    if ($null -eq $newDate) {
+        return ("carries a current_date that is not a calendar date in " +
+                "yyyy-MM-dd form")
+    }
+    if ($newDate -lt $baseDate) {
+        return ("carries a current_date earlier than this session's own " +
+                "preamble, so it did not refresh from it")
+    }
+    if ($newDate -gt [datetime]::Now.Date) {
+        return "carries a current_date later than today"
+    }
+    $null
 }
 
 # The four characters JSON calls whitespace. Everything else that
@@ -419,6 +621,20 @@ if ($Resume) {
     if ($priorBytes -lt 0) {
         Fail "prior state does not carry a usable byte offset"
     }
+    # A RESUME WITH NO PREFIX HAS NO EVIDENCE. A real resumed session
+    # always carries its own session_meta and at least one earlier round,
+    # so a zero offset means the prior state measured nothing. Left
+    # unrefused it binds clean: the boundary guard below has no byte to
+    # check, the prefix's own session_meta check reads the first line of
+    # the WHOLE file - this call's own slice - and a slice carrying one
+    # user record never reaches the preamble scan. Measured 2026-08-16.
+    # Same self-adoption class as the CRLF overrun: evidence from the
+    # slice mistaken for evidence from before it.
+    if ($priorBytes -eq 0) {
+        Fail ("prior state records an empty prefix: a resumed round must " +
+              "follow a session that already exists, so there is nothing " +
+              "for this call's slice to be measured against")
+    }
     if ($bytes.Length -lt $priorBytes) {
         Fail ("the rollout is shorter than the prior state records (" +
               $bytes.Length + " bytes now, " + $priorBytes + " before)")
@@ -431,6 +647,19 @@ if ($Resume) {
     if ($bytes.Length -eq $priorBytes) {
         Fail ("the rollout has no new bytes: this call appended nothing, so " +
               "there is no round to bind")
+    }
+    # THE OFFSET MUST FALL ON A RECORD BOUNDARY, and length plus a
+    # matching hash does not prove that. The terminal-newline check below
+    # covers the whole file AFTER this call appended to it, so a prefix
+    # ending mid-record passes it. The scan then drops its final segment
+    # as though the offset were known to be a boundary, the slice decodes
+    # cleanly, identity passes, and a stream that is not intact binds
+    # clean. Measured 2026-08-16 against a prefix ending in an
+    # unterminated fragment.
+    if ($priorBytes -gt 0 -and $bytes[$priorBytes - 1] -ne 0x0A) {
+        Fail ("prior state's byte offset does not fall on a record " +
+              "boundary: the prefix it measures ends mid-record, so the " +
+              "record stream before this call is not intact")
     }
     $sliceOffset = $priorBytes
 }
@@ -628,61 +857,25 @@ if ($userRecords.Count -lt 1) {
 # BLOCKED a legitimate round. A claim wider than its evidence, inside the
 # tool built to refuse those.
 #
-# The replacement is about IDENTITY, not arithmetic: at most two user
-# records, and a record in front of the brief must be one THIS CLIENT
-# ALREADY EMITTED in this session. Novel text still cannot get in front of
-# the reviewer, which is the whole point, and a re-emitted preamble no
-# longer reads as an attack. Comparing against the session's first user
-# record needs the PREFIX, so the prefix is read only as far as that
-# record - a bounded read near the top of the file, not the cumulative
-# whole.
+# The replacement was about IDENTITY, not arithmetic: at most two user
+# records, and a record in front of the brief had to be one THIS CLIENT
+# ALREADY EMITTED in this session. THE FIELD FALSIFIED THAT TOO, on
+# 2026-08-14: a resume across a day boundary carried a REFRESHED preamble
+# - a later date, the instructions block absent - and a paid round was
+# discarded unread. Identity is now the FIRST of two paths. The second
+# recognises a client environment preamble by STRUCTURE and confirms it by
+# VALUE: every field but `current_date` canonically equal to the same
+# field in this session's own baseline envelope, and the date bounded
+# below by the baseline's and above by today. Novel text still cannot get
+# in front of the reviewer; a bounded novel DATE can, and nothing else.
+# Comparing against the session's first user record needs the PREFIX, so
+# the prefix is read only as far as that record - a bounded read near the
+# top of the file, not the cumulative whole.
 if ($Resume) {
     if ($userRecords.Count -gt 2) {
         Fail ("a resumed slice may carry at most two user records, the " +
               "client's instructions preamble and the brief, found " +
               $userRecords.Count)
-    }
-    if ($userRecords.Count -eq 2) {
-        $prefixPreamble = $null
-        try {
-            $reader = New-Object System.IO.StreamReader(
-                $targetFile, (New-Object System.Text.UTF8Encoding($false, $true)))
-            try {
-                $consumed = 0
-                while ($null -ne ($ln = $reader.ReadLine())) {
-                    # Never read past this call's own slice: the record we
-                    # are looking for is the client's, from before it.
-                    $consumed += [System.Text.Encoding]::UTF8.GetByteCount($ln) + 1
-                    if ($consumed -gt $sliceOffset) { break }
-                    if ($ln.TrimStart($script:JsonWs).StartsWith("{")) {
-                        $cand = $null
-                        try { $cand = $ln | ConvertFrom-Json } catch { $cand = $null }
-                        # THE SAME GATE AS EVERY OTHER LINE. This scan
-                        # parsed and read properties directly, so the
-                        # strictness the rest of the tool had just gained
-                        # stopped at its edge - and this is the record the
-                        # preamble exemption is measured against, which
-                        # makes it the last place to take a line on trust.
-                        if ($null -ne $cand -and
-                            $null -eq (Get-JsonObjectLineFault $ln $cand) -and
-                            (Test-RecordIsUserMessage $cand)) {
-                            $prefixPreamble = Get-UserText $cand
-                            break
-                        }
-                    }
-                }
-            } finally { $reader.Dispose() }
-        } catch {
-            Fail ("the resumed rollout's prefix could not be read to find the " +
-                  "client's own preamble: " + $_.Exception.Message)
-        }
-        $extra = Get-UserText $userRecords[0]
-        if ($null -eq $prefixPreamble -or $null -eq $extra -or
-            (Get-CanonicalSha256 $extra) -ne (Get-CanonicalSha256 $prefixPreamble)) {
-            Fail ("a resumed slice carries a user record in front of the brief " +
-                  "that does not repeat the client's own preamble from this " +
-                  "session, so it is unattributed text in front of the reviewer")
-        }
     }
 }
 # A FRESH slice carried exactly TWO on every measured round: the client's
@@ -715,6 +908,101 @@ if ($matchIndexes[0] -ne ($userRecords.Count - 1)) {
     Fail ("the brief is not the last user record in this call's slice: " +
           ($userRecords.Count - 1 - $matchIndexes[0]) +
           " further user record(s) follow it")
+}
+
+if ($Resume -and $userRecords.Count -eq 2) {
+    # VALIDATED AFTER THE BRIEF, DELIBERATELY. Run before it, this test
+    # reads a slice ordered [brief, extra] as though the brief were the
+    # preamble and reports the wrong direction. The brief is proved
+    # present, unique and last above; only then is there a record that is
+    # meaningfully "in front of" it.
+    # DECODE THE PREFIX; DO NOT RECONSTRUCT ITS LENGTH. The scan that
+    # stood here rebuilt a byte offset from each decoded line plus a
+    # hardcoded one-byte terminator. ReadLine strips BOTH bytes of a
+    # CRLF, so on a CRLF rollout the count ran one byte short per line,
+    # the boundary guard below did not fire in time, and the scan read
+    # into THIS call's slice - taking the slice's own record ahead of the
+    # brief as the client's preamble, comparing it against itself, and
+    # returning clean for text the client never sent. Measured
+    # 2026-08-15: 203 CRLF prefix lines with no readable user record were
+    # enough, and no LF count reproduced it. The prefix bytes are already
+    # in memory, so they are split by exactly the rule the slice is split
+    # by above, which also removes the byte order mark divergence.
+    $prefixPreamble = $null
+    $prefixText = $null
+    try {
+        $prefixStrict = New-Object System.Text.UTF8Encoding($false, $true)
+        $prefixText = $prefixStrict.GetString($bytes, 0, $sliceOffset)
+    } catch {
+        Fail ("the resumed rollout's prefix does not decode as strict " +
+              "UTF-8, so the client's own preamble cannot be read: " +
+              $_.Exception.Message)
+    }
+    if ($prefixText.Length -gt 0 -and [int][char]$prefixText[0] -eq 0xFEFF) {
+        # A byte order mark at the start of the file is a file-level
+        # artifact and not part of any record, exactly as above.
+        $prefixText = $prefixText.Substring(1)
+    }
+    $prefixParts = $prefixText.Split("`n")
+    # The final element is the tail after the last terminator, never a
+    # record - the prefix ends at a record boundary the prior state
+    # measured.
+    # THE SAME GATE AS EVERY OTHER LINE, AND IT REFUSES RATHER THAN
+    # SKIPS. This scan used to walk past any line it could not read, so a
+    # malformed FIRST user record made it adopt the NEXT one - round
+    # one's brief - as the client's preamble, and a slice repeating that
+    # record passed identity and bound clean. Measured 2026-08-16 with a
+    # user record followed by a non-breaking space, the shape the suite
+    # already knows parses but fails the object-line gate. The baseline
+    # every later comparison rests on must be the record the contract
+    # names, so an unreadable line before it stops the round.
+    for ($p = 0; $p -lt $prefixParts.Length - 1; $p++) {
+        $ln = $prefixParts[$p].TrimEnd("`r")
+        $cand = $null
+        if ($ln.TrimStart($script:JsonWs).StartsWith("{")) {
+            try { $cand = $ln | ConvertFrom-Json } catch { $cand = $null }
+        }
+        $lineFault = $null
+        if ($null -eq $cand) {
+            $lineFault = "it is not a JSON object"
+        } else {
+            $lineFault = Get-JsonObjectLineFault $ln $cand
+        }
+        if ($lineFault) {
+            Fail ("the resumed rollout's prefix carries an unreadable " +
+                  "record at line " + ($p + 1) + ", before the client's " +
+                  "own preamble, so the record this slice must be " +
+                  "measured against cannot be identified: " + $lineFault)
+        }
+        if (Test-RecordIsUserMessage $cand) {
+            $prefixPreamble = Get-UserText $cand
+            break
+        }
+    }
+    $extra = Get-UserText $userRecords[0]
+    if ($null -eq $prefixPreamble -or $null -eq $extra) {
+        Fail ("a resumed slice carries a user record in front of the brief " +
+              "that does not repeat the client's own preamble from this " +
+              "session, so it is unattributed text in front of the reviewer")
+    }
+    if ((Get-CanonicalSha256 $extra) -ne (Get-CanonicalSha256 $prefixPreamble)) {
+        # NOT IDENTICAL IS NOT THE SAME AS NOVEL. Measured 2026-08-14:
+        # a resume across a day boundary carried a REFRESHED preamble -
+        # a later date, and the instructions block absent - and the
+        # identity rule discarded a paid round unread. A preamble
+        # recognised by structure and confirmed field by field against
+        # this session's own baseline falls inside the measured and
+        # derived bound; every value but the date is text this session
+        # already carried, and the date is bounded at both ends.
+        # Anything else still fails here.
+        $fault = Get-RefreshedPreambleFault $extra $prefixPreamble
+        if ($fault) {
+            Fail ("a resumed slice carries a user record in front of the " +
+                  "brief that neither repeats the client's own preamble " +
+                  "from this session nor reads as a refreshed one: it " +
+                  $fault)
+        }
+    }
 }
 
 # --------------------------------------------------------------------
