@@ -69,3 +69,28 @@ The other checkable design citations are aligned: canonicalization points to the
 - The twelve claimed checker executions and controls have no retained execution artifact ([plan:1283-1306](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-08-16-fresh-preamble-gate.md:1283)).
 - The debate headers’ session IDs, digests, rollout inventory, byte count, prefix hash, and binding verdicts cannot be recomputed without the underlying rollouts, briefs, transcript headers, and state files ([round 1:3-11](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/rounds/2026-08-16-fresh-preamble-gate/plan-debate-r1.md:3), [round 2:3-10](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/rounds/2026-08-16-fresh-preamble-gate/plan-debate-r2.md:3), [round 3:3-8](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/rounds/2026-08-16-fresh-preamble-gate/plan-debate-r3.md:3), [round 4:3-8](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/rounds/2026-08-16-fresh-preamble-gate/plan-debate-r4.md:3), [round 5:3-8](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/rounds/2026-08-16-fresh-preamble-gate/plan-debate-r5.md:3)).
 - Postimplementation dual-host suite results and pass/skip counts cannot exist until execution ([plan:1122-1132](/C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/2026-08-16-fresh-preamble-gate.md:1122)).
+---
+
+## Session final adjudication, 2026-08-16
+
+Every round-6 finding was verified against the live repo before it was
+accepted: the spec's Scope line, the item-42 line citation at the branch
+base, and the two imprecise descriptions. All four accepted, all four
+applied in commit `03b4eef`. None refuted, none struck.
+
+**Terminal verdict: the plan is APPROVED FOR EXECUTION, and the debate
+ended at BUDGET EXHAUSTION on the user's decision rather than on a dry
+round.** That distinction is the honest record and is not smoothed over.
+
+What supports the approval: the plan's LOGIC was swept clean twice running.
+Rounds 5 and 6 both found classes 1, 2 and 3 dry, and round 6 swept the two
+new contract region texts - the only prose here that becomes shipped,
+pinned contract - and found nothing.
+
+What the approval does NOT claim: that a seventh round would have been dry.
+Class 4 landed in rounds 5 and 6 in the prose written to correct the round
+before it, and there is no evidence that generation three would have been
+empty. The user was given that reading and chose to build. Recorded here so
+a later reader does not mistake this for a converged debate.
+
+Six rounds, six findings sets, every one accepted, not one contested.
