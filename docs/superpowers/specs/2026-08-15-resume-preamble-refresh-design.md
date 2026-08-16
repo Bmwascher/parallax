@@ -110,6 +110,16 @@ following holds, and refused otherwise.
      same-named field inside the BASELINE envelope.
    - `current_date` satisfies the date rule below.
 
+**The width is DERIVED, and the difference is stated rather than glossed.**
+The closed set is the UNION of the two measured shapes and the required
+core is their INTERSECTION. Every shape the rule admits between those two
+bounds - one carrying `cwd` but not `shell`, for instance - is admitted by
+derivation, not because it was observed. That is the narrowest rule these
+two measurements will carry, and it is still wider than the measurements
+themselves. Saying "no wider than the evidence" without this paragraph
+would be the claim-wider-than-its-evidence defect that this whole binding
+exists to refuse.
+
 The refresh record must be envelope-and-nothing-else, while the baseline
 record may carry other text around its envelope. That asymmetry is
 deliberate and follows sweep 2: the observed refresh is the one-element
