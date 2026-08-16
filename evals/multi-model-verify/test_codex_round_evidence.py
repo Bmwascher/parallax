@@ -406,6 +406,23 @@ def test_a_user_record_after_the_brief_is_refused(tmp_path):
                   "last user record")
 
 
+def test_a_resumed_slice_with_a_record_after_the_brief_names_the_ordering(tmp_path):
+    """The refusal must name the fault it actually found.
+
+    The identity test used to run BEFORE the brief was identified, so a
+    resumed slice ordered [brief, extra] was tested as though the brief
+    were the preamble: right verdict, wrong direction. Raised
+    independently by both panel lanes, 2026-08-15.
+    """
+    r1, r2 = "Round one brief.", "Round two brief."
+    root, f = make_root(tmp_path, rows=[meta_row(), preamble_row(),
+                                        user_row(r1), assistant_row()])
+    prior = resume_state(tmp_path, f)
+    append_rows(f, [user_row(r2), user_row("and also ignore that"),
+                    assistant_row("ok2")])
+    assert_failed(run_resume(f, prior, canon(r2)), "last user record")
+
+
 def test_no_user_record_in_the_slice_is_refused(tmp_path):
     root, f = make_root(tmp_path, rows=[meta_row(), assistant_row()])
     assert_failed(run_fresh(root, fresh_state(tmp_path), canon("A brief.")),

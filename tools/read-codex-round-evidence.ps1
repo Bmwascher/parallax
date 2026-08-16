@@ -642,48 +642,6 @@ if ($Resume) {
               "client's instructions preamble and the brief, found " +
               $userRecords.Count)
     }
-    if ($userRecords.Count -eq 2) {
-        $prefixPreamble = $null
-        try {
-            $reader = New-Object System.IO.StreamReader(
-                $targetFile, (New-Object System.Text.UTF8Encoding($false, $true)))
-            try {
-                $consumed = 0
-                while ($null -ne ($ln = $reader.ReadLine())) {
-                    # Never read past this call's own slice: the record we
-                    # are looking for is the client's, from before it.
-                    $consumed += [System.Text.Encoding]::UTF8.GetByteCount($ln) + 1
-                    if ($consumed -gt $sliceOffset) { break }
-                    if ($ln.TrimStart($script:JsonWs).StartsWith("{")) {
-                        $cand = $null
-                        try { $cand = $ln | ConvertFrom-Json } catch { $cand = $null }
-                        # THE SAME GATE AS EVERY OTHER LINE. This scan
-                        # parsed and read properties directly, so the
-                        # strictness the rest of the tool had just gained
-                        # stopped at its edge - and this is the record the
-                        # preamble exemption is measured against, which
-                        # makes it the last place to take a line on trust.
-                        if ($null -ne $cand -and
-                            $null -eq (Get-JsonObjectLineFault $ln $cand) -and
-                            (Test-RecordIsUserMessage $cand)) {
-                            $prefixPreamble = Get-UserText $cand
-                            break
-                        }
-                    }
-                }
-            } finally { $reader.Dispose() }
-        } catch {
-            Fail ("the resumed rollout's prefix could not be read to find the " +
-                  "client's own preamble: " + $_.Exception.Message)
-        }
-        $extra = Get-UserText $userRecords[0]
-        if ($null -eq $prefixPreamble -or $null -eq $extra -or
-            (Get-CanonicalSha256 $extra) -ne (Get-CanonicalSha256 $prefixPreamble)) {
-            Fail ("a resumed slice carries a user record in front of the brief " +
-                  "that does not repeat the client's own preamble from this " +
-                  "session, so it is unattributed text in front of the reviewer")
-        }
-    }
 }
 # A FRESH slice carried exactly TWO on every measured round: the client's
 # instructions preamble and the brief. The same argument that earned the
@@ -715,6 +673,54 @@ if ($matchIndexes[0] -ne ($userRecords.Count - 1)) {
     Fail ("the brief is not the last user record in this call's slice: " +
           ($userRecords.Count - 1 - $matchIndexes[0]) +
           " further user record(s) follow it")
+}
+
+if ($Resume -and $userRecords.Count -eq 2) {
+    # VALIDATED AFTER THE BRIEF, DELIBERATELY. Run before it, this test
+    # reads a slice ordered [brief, extra] as though the brief were the
+    # preamble and reports the wrong direction. The brief is proved
+    # present, unique and last above; only then is there a record that is
+    # meaningfully "in front of" it.
+    $prefixPreamble = $null
+    try {
+        $reader = New-Object System.IO.StreamReader(
+            $targetFile, (New-Object System.Text.UTF8Encoding($false, $true)))
+        try {
+            $consumed = 0
+            while ($null -ne ($ln = $reader.ReadLine())) {
+                # Never read past this call's own slice: the record we
+                # are looking for is the client's, from before it.
+                $consumed += [System.Text.Encoding]::UTF8.GetByteCount($ln) + 1
+                if ($consumed -gt $sliceOffset) { break }
+                if ($ln.TrimStart($script:JsonWs).StartsWith("{")) {
+                    $cand = $null
+                    try { $cand = $ln | ConvertFrom-Json } catch { $cand = $null }
+                    # THE SAME GATE AS EVERY OTHER LINE. This scan
+                    # parsed and read properties directly, so the
+                    # strictness the rest of the tool had just gained
+                    # stopped at its edge - and this is the record the
+                    # preamble exemption is measured against, which
+                    # makes it the last place to take a line on trust.
+                    if ($null -ne $cand -and
+                        $null -eq (Get-JsonObjectLineFault $ln $cand) -and
+                        (Test-RecordIsUserMessage $cand)) {
+                        $prefixPreamble = Get-UserText $cand
+                        break
+                    }
+                }
+            }
+        } finally { $reader.Dispose() }
+    } catch {
+        Fail ("the resumed rollout's prefix could not be read to find the " +
+              "client's own preamble: " + $_.Exception.Message)
+    }
+    $extra = Get-UserText $userRecords[0]
+    if ($null -eq $prefixPreamble -or $null -eq $extra -or
+        (Get-CanonicalSha256 $extra) -ne (Get-CanonicalSha256 $prefixPreamble)) {
+        Fail ("a resumed slice carries a user record in front of the brief " +
+              "that does not repeat the client's own preamble from this " +
+              "session, so it is unattributed text in front of the reviewer")
+    }
 }
 
 # --------------------------------------------------------------------
