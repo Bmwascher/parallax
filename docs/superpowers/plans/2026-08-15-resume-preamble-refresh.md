@@ -1202,7 +1202,7 @@ one as both is a record defect this repo has already made.
 - [ ] **Step 2: Replace the item 42 heading**
 
 In `docs/superpowers/plans/2026-07-27-0150-backlog.md`, find the item 42
-heading by its text - not by line number, which has already moved once
+heading by its text - not by line number, which has already moved twice
 since this plan was written - and change:
 
 ```text
