@@ -879,38 +879,53 @@ if ($Resume -and $userRecords.Count -eq 2) {
     # preamble and reports the wrong direction. The brief is proved
     # present, unique and last above; only then is there a record that is
     # meaningfully "in front of" it.
+    # DECODE THE PREFIX; DO NOT RECONSTRUCT ITS LENGTH. The scan that
+    # stood here rebuilt a byte offset from each decoded line plus a
+    # hardcoded one-byte terminator. ReadLine strips BOTH bytes of a
+    # CRLF, so on a CRLF rollout the count ran one byte short per line,
+    # the boundary guard below did not fire in time, and the scan read
+    # into THIS call's slice - taking the slice's own record ahead of the
+    # brief as the client's preamble, comparing it against itself, and
+    # returning clean for text the client never sent. Measured
+    # 2026-08-15: 203 CRLF prefix lines with no readable user record were
+    # enough, and no LF count reproduced it. The prefix bytes are already
+    # in memory, so they are split by exactly the rule the slice is split
+    # by above, which also removes the byte order mark divergence.
     $prefixPreamble = $null
+    $prefixText = $null
     try {
-        $reader = New-Object System.IO.StreamReader(
-            $targetFile, (New-Object System.Text.UTF8Encoding($false, $true)))
-        try {
-            $consumed = 0
-            while ($null -ne ($ln = $reader.ReadLine())) {
-                # Never read past this call's own slice: the record we
-                # are looking for is the client's, from before it.
-                $consumed += [System.Text.Encoding]::UTF8.GetByteCount($ln) + 1
-                if ($consumed -gt $sliceOffset) { break }
-                if ($ln.TrimStart($script:JsonWs).StartsWith("{")) {
-                    $cand = $null
-                    try { $cand = $ln | ConvertFrom-Json } catch { $cand = $null }
-                    # THE SAME GATE AS EVERY OTHER LINE. This scan
-                    # parsed and read properties directly, so the
-                    # strictness the rest of the tool had just gained
-                    # stopped at its edge - and this is the record the
-                    # preamble exemption is measured against, which
-                    # makes it the last place to take a line on trust.
-                    if ($null -ne $cand -and
-                        $null -eq (Get-JsonObjectLineFault $ln $cand) -and
-                        (Test-RecordIsUserMessage $cand)) {
-                        $prefixPreamble = Get-UserText $cand
-                        break
-                    }
-                }
-            }
-        } finally { $reader.Dispose() }
+        $prefixStrict = New-Object System.Text.UTF8Encoding($false, $true)
+        $prefixText = $prefixStrict.GetString($bytes, 0, $sliceOffset)
     } catch {
-        Fail ("the resumed rollout's prefix could not be read to find the " +
-              "client's own preamble: " + $_.Exception.Message)
+        Fail ("the resumed rollout's prefix does not decode as strict " +
+              "UTF-8, so the client's own preamble cannot be read: " +
+              $_.Exception.Message)
+    }
+    if ($prefixText.Length -gt 0 -and [int][char]$prefixText[0] -eq 0xFEFF) {
+        # A byte order mark at the start of the file is a file-level
+        # artifact and not part of any record, exactly as above.
+        $prefixText = $prefixText.Substring(1)
+    }
+    $prefixParts = $prefixText.Split("`n")
+    # The final element is the tail after the last terminator, never a
+    # record - the prefix ends at a record boundary the prior state
+    # measured.
+    for ($p = 0; $p -lt $prefixParts.Length - 1; $p++) {
+        $ln = $prefixParts[$p].TrimEnd("`r")
+        if (-not $ln.TrimStart($script:JsonWs).StartsWith("{")) { continue }
+        $cand = $null
+        try { $cand = $ln | ConvertFrom-Json } catch { $cand = $null }
+        # THE SAME GATE AS EVERY OTHER LINE. This scan parsed and read
+        # properties directly, so the strictness the rest of the tool had
+        # just gained stopped at its edge - and this is the record the
+        # preamble exemption is measured against, which makes it the last
+        # place to take a line on trust.
+        if ($null -ne $cand -and
+            $null -eq (Get-JsonObjectLineFault $ln $cand) -and
+            (Test-RecordIsUserMessage $cand)) {
+            $prefixPreamble = Get-UserText $cand
+            break
+        }
     }
     $extra = Get-UserText $userRecords[0]
     if ($null -eq $prefixPreamble -or $null -eq $extra) {
