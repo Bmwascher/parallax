@@ -125,6 +125,17 @@ function ConvertTo-NormalizedLF($s) {
     return ([string]$s) -replace "`r`n", "`n"
 }
 
+function ConvertTo-CanonicalBrief($s) {
+    # ONE canonicalization for a brief, shared with the codex lane's
+    # Get-CanonicalText: UTF-8, CRLF folded to LF, leading and trailing
+    # whitespace stripped. Kept SEPARATE from ConvertTo-NormalizedLF
+    # rather than added to it: that function's other callers compare an
+    # agent file's BODY and the client's recorded systemPrompt, where
+    # the ends are content and trimming them would widen a different
+    # rule. Backlog item 52.
+    return (ConvertTo-NormalizedLF $s).Trim()
+}
+
 function Get-Sha256HexOfBytes($bytes) {
     # An explicit [byte[]] cast on a POSSIBLY-EMPTY or POSSIBLY-Object[]
     # value, taken INSIDE the function rather than trusted from the
@@ -890,10 +901,32 @@ if ($Resume) {
 
 # Rule 15: the brief hash.
 $briefText = ((@($turnPrompt.input) | ForEach-Object { $_.text }) -join "")
-$briefTextNorm = ConvertTo-NormalizedLF $briefText
-$briefHash = Get-Sha256HexOfBytes (Get-Utf8BytesNoBom $briefTextNorm)
+$briefHash = Get-Sha256HexOfBytes (Get-Utf8BytesNoBom (ConvertTo-CanonicalBrief $briefText))
 if ($briefHash -ne $ExpectedBriefSha256) {
-    Fail "brief-hash: turn.prompt does not hash to -ExpectedBriefSha256"
+    # SAY WHAT THE MISMATCH IS NOT. This tool holds an opaque expected
+    # digest and never the brief itself, so a failed alternate hash
+    # cannot separate changed content from a different encoding, a byte
+    # order mark, another newline rule or a caller defect. Naming the
+    # one cause that CAN be ruled in or out is the whole of what the
+    # evidence supports, and claiming more would be the overclaim this
+    # tool exists to refuse. Both directions still fail the round; only
+    # the message differs, and the extra hash is computed only here.
+    # `-eq`, matching the primary comparison above. `-notmatch` at the
+    # argument check is case-INSENSITIVE, so an uppercase expected
+    # digest reaches here; comparing the alternate case-sensitively
+    # would then diagnose it as unexplained when the whitespace rule
+    # explains it exactly.
+    $untrimmed = Get-Sha256HexOfBytes (Get-Utf8BytesNoBom (ConvertTo-NormalizedLF $briefText))
+    if ($untrimmed -eq $ExpectedBriefSha256) {
+        Fail ("brief-hash: turn.prompt does not hash to " +
+              "-ExpectedBriefSha256, and the mismatch is explained by " +
+              "trim-versus-untrimmed canonicalization: the recorded " +
+              "prompt hashes to the expected digest under the untrimmed " +
+              "rule this lane used before 2026-08-16")
+    }
+    Fail ("brief-hash: turn.prompt does not hash to -ExpectedBriefSha256, " +
+          "and the mismatch is not explained by surrounding-whitespace " +
+          "canonicalization")
 }
 
 # Rule 16: success.

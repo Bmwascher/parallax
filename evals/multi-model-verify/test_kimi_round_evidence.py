@@ -1808,3 +1808,75 @@ def test_a_zero_width_prefixed_directory_is_not_a_session_leaf(tmp_path):
 
     p = assert_clean(run_fresh(root, FIXTURE_SESSION_ID, state_path))
     assert p["nextState"]["sessionId"] == FIXTURE_SESSION_ID, p
+
+
+def pad_the_recorded_brief(lines, lead="", tail=""):
+    """The fixture's turn.prompt with whitespace added around its text.
+
+    The trim is the whole of item 52's behaviour change, so every case
+    below needs a recorded prompt whose ENDS differ from the brief the
+    hash was taken over, and nothing else different.
+    """
+    idx = find_index(lines, "turn.prompt")
+    return mutate(lines, idx, lambda o: o["input"][0].__setitem__(
+        "text", lead + o["input"][0]["text"] + tail))
+
+
+def recorded_prompt(lines):
+    """The turn.prompt text as the tool concatenates it: every `input[]`
+    element's `text`, in order."""
+    obj = json.loads(lines[find_index(lines, "turn.prompt")])
+    return "".join(x.get("text", "") for x in obj.get("input", []))
+
+
+def test_a_padded_recorded_prompt_binds_under_the_shared_rule(tmp_path):
+    """Both lanes canonicalize a brief the same way from 0.26.0 on.
+
+    The codex lane folded CRLF and stripped the ends; this lane folded
+    and did not strip, so one expected digest could not serve both. The
+    trim is the whole change, and this is the case that shows it:
+    surrounding whitespace on the recorded prompt no longer moves the
+    hash. Backlog item 52.
+    """
+    wire = pad_the_recorded_brief(fresh_wire(), lead="  \n", tail="\n  ")
+    root, sess_dir = build_fresh_layout(tmp_path, wire, fresh_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+    assert_clean(run_fresh(root, FIXTURE_SESSION_ID, state_path))
+
+
+def test_a_whitespace_only_mismatch_names_the_canonicalization(tmp_path):
+    """The refusal must name the one cause the evidence can rule in.
+
+    A caller that computed its expected digest under the old untrimmed
+    rule, over a brief carrying surrounding whitespace, sees a mismatch
+    that looks exactly like a corrupted brief. Re-hashing under the
+    untrimmed rule separates the two, and nothing else does.
+    """
+    wire = pad_the_recorded_brief(fresh_wire(), tail="\n\n")
+    untrimmed = brief_sha256(recorded_prompt(wire))
+    assert untrimmed != ROUND1_BRIEF_SHA, (
+        "the padding must actually move the untrimmed hash, or this case "
+        "proves nothing")
+    root, sess_dir = build_fresh_layout(tmp_path, wire, fresh_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+    assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path,
+                            expected_brief_sha=untrimmed),
+                  "explained by trim-versus-untrimmed canonicalization")
+
+
+def test_a_real_mismatch_says_it_is_not_the_canonicalization(tmp_path):
+    """The control, and the message that must NOT overclaim.
+
+    This tool holds an opaque digest and never the brief, so it cannot
+    say the content differs - only that surrounding whitespace does not
+    explain the difference. Without this case the message above could be
+    emitted for every mismatch and still look right.
+    """
+    root, sess_dir = build_fresh_layout(tmp_path, fresh_wire(), fresh_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+    assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path,
+                            expected_brief_sha=EMPTY_SHA256),
+                  "not explained by surrounding-whitespace canonicalization")
