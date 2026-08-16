@@ -73,14 +73,22 @@ read and 3 were locked by a running process:
 - 73 first records: 1 element, exactly one envelope.
 - 36 first records: 1 element and NO envelope at all.
 
-Two things follow, and only these two. Where a first record carries an
-envelope it carries exactly ONE, across all 712 such records, which is
-what makes "the single envelope inside the first user record" a rule
-rather than a hope. And in 36 sessions - about one in twenty - the first
-record has no envelope, so the structural path being UNAVAILABLE is a
-measured ordinary case rather than a defensive branch nothing reaches.
+Two things follow, and only these two, and both are statements about the
+748 READABLE rollouts rather than about the store. Where a first record
+carries an envelope it carries exactly ONE, across all 712 such records,
+which is what makes "the single envelope inside the first user record" a
+rule rather than a hope. And in 36 sessions - about one in twenty - the
+first record has no envelope, so the structural path being UNAVAILABLE is
+a measured ordinary case rather than a defensive branch nothing reaches.
 Three elements is the most common composition, so any rule assuming the
 baseline record holds exactly two is narrower than the store.
+
+The three locked files could hold a fourth composition, or zero or several
+envelopes, and nothing here rules that out. It would change the observed
+distribution and could not make the gate permissive: any number of content
+elements is simply joined before the scan, while zero or several envelopes
+refuse. An unmeasured shape lands on a refusal, which is the direction
+this whole binding is built to fail in.
 
 A concrete pair to read:
 `C:/Users/Brandon/.codex/sessions/2026/08/12/rollout-2026-08-12T02-41-22-019ff4eb-346e-7be2-9af3-520ebc876707.jsonl`,
@@ -142,11 +150,15 @@ would be the claim-wider-than-its-evidence defect that this whole binding
 exists to refuse.
 
 The refresh record must be envelope-and-nothing-else, while the baseline
-record may carry other text around its envelope. That asymmetry is
-deliberate and follows sweep 2: the observed refresh is the one-element
-case, and a session's first record is the two- or three-element case.
-Widening the refresh side to "an envelope somewhere in the record" would
-admit exactly the unattributed text this guard exists to refuse.
+record may carry other text around its envelope. The asymmetry is
+deliberate, and it does NOT rest on first records always being larger: 73
+of the 748 readable first records hold a single element too (sweep 3). It
+rests on what each side is: the refresh is the record this binding is
+deciding about, so it may carry nothing but the envelope, while the
+baseline is text the client already emitted and only has to CONTAIN a
+recognisable envelope. Widening the refresh side to "an envelope somewhere
+in the record" would admit exactly the unattributed text this guard exists
+to refuse.
 
 Every "canonically equals" in this design means the canonicalization the
 tool already declares and uses everywhere else - UTF-8 bytes, CRLF folded
@@ -154,7 +166,9 @@ to LF, leading and trailing whitespace removed - applied here to a single
 field's value rather than to a whole record.
 
 **The baseline envelope.** The session's first user record may hold one,
-two or three elements (sweep 2), and `Get-UserText`
+two or three elements (sweep 3, which measured first records specifically;
+sweep 2 counted a different population and does not establish this), and
+`Get-UserText`
 (`tools/read-codex-round-evidence.ps1:603-612`) joins them all, so "the
 element" must be defined rather than assumed. The baseline is the single
 `environment_context` envelope found in that record's joined canonical
@@ -205,18 +219,34 @@ baseline, date later than today.
 
 Tests change before the tool - the contract is live-verified and locked.
 
-1. `evals/multi-model-verify/test_codex_round_evidence.py`. New cases:
-   the three-field refresh ACCEPTED; unknown field, duplicate field,
-   case-variant field name, missing core field, value mismatch, invalid
-   date, date earlier than the baseline, date later than today, text
-   outside the envelope, nested delimiter-shaped value content, baseline
-   with no envelope, baseline with two envelopes - all REFUSED; and the
-   resumed `[brief, extra]` ordering case, which today reports the wrong
-   direction and has no coverage (the only ordering case,
-   `test_codex_round_evidence.py:391-406`, is `-Fresh` only). The existing
-   `preamble_row()` fixture at `test_codex_round_evidence.py:104-115` is a
-   one-line placeholder, so the structural cases need a realistic helper
-   built from the measured shapes.
+1. `evals/multi-model-verify/test_codex_round_evidence.py`. The
+   implementation plan holds the authoritative case list; this is the
+   inventory it must satisfy, and the two are kept in step.
+   ACCEPTED: the three-field refresh; the five-field refresh; a same-day
+   refresh, as the inclusive lower boundary; a refresh wrapped in CRLF and
+   spaces, which pins recognition running on canonical text; a nested
+   `<cwd>` inside the `filesystem` value, which is the discriminating case
+   for the cursor and a synthetic shape rather than an observed one; and
+   the same refresh against baselines of one, two and three elements.
+   REFUSED, refresh side: unknown field, case-variant field name,
+   duplicate field, each required core field removed on its own, changed
+   value, a field the baseline lacks, text outside the envelope, a value
+   re-opening its own tag, stray text between fields, an unterminated tag,
+   a field never closed, an empty envelope, an impossible date, a date
+   before the baseline, a date after today.
+   REFUSED, baseline side: no envelope, two envelopes, a duplicate field,
+   an impossible date, no `current_date`, and each malformed-envelope
+   shape the scanner can report, so that every distinct message the
+   baseline path can produce is exercised rather than only every branch.
+   Plus the resumed `[brief, extra]` ordering case, which today reports
+   the wrong direction and has no coverage (the only ordering case,
+   `test_codex_round_evidence.py:391-406`, is `-Fresh` only).
+   Refusal needles must distinguish the refresh side from the baseline
+   side: the two wrappers nest, so a bare phrase matches both.
+   The existing `preamble_row()` fixture at
+   `test_codex_round_evidence.py:104-115` is a one-line placeholder, so
+   the structural cases need a realistic helper built from the measured
+   shapes.
 2. `tools/read-codex-round-evidence.ps1` - the reorder, the baseline
    selection, the cursor, the field and date rules, the refusal messages.
 3. `skills/multi-model-verify/references/model-prompting-notes.md`,
@@ -249,12 +279,17 @@ Tests change before the tool - the contract is live-verified and locked.
 - **Convergent** (raised independently by both lanes): the check-order
   defect, and the ambiguity of "the element" in the baseline comparison.
   Counted once, fixed once.
-- **Driver correction to a supporting detail.** Fable stated that the
-  first user record carries TWO content elements, reading one file. Sweep
-  2 measured the store: three-element records are the most common
-  composition at 454. The conclusion Fable drew from it - that the
-  baseline element must be selected rather than assumed - is unaffected
-  and is adopted; the supporting count was too narrow and is corrected
+- **Driver correction to a supporting detail, itself corrected twice.**
+  Fable stated that the first user record carries TWO content elements,
+  reading one file. The driver answered with sweep 2 - which counted every
+  environment-carrying user record, not first records, so it did not
+  answer the point either. Plan-review round 3 caught that, and sweep 3
+  measured first records directly: 449 with three elements, 190 with two,
+  73 with one, and 36 with no envelope, over 748 readable rollouts. The
+  conclusion Fable drew - that the baseline element must be selected
+  rather than assumed - was right throughout and is adopted; two
+  successive attempts to support it cited the wrong population, and both
+  are corrected
   here rather than carried forward.
 - **Session verdict.** The design is ready to plan. No point was left
   contested, and nothing was escalated to the user.
