@@ -43,6 +43,13 @@ task), pytest, Markdown contract regions locked by string pins.
 - **Do not bump `.claude-plugin/plugin.json` before Task 4.** `plugin update`
   keys only on the version string; a mid-branch bump is consumed before the
   branch is finished.
+- **A green `run_trigger_evals.py` proves less than it looks.** Measured
+  2026-08-16: it can print `all clear` and exit 0 having compared nothing
+  for a skill, because a missing case file only warns and the one
+  comparison is guarded by `if pos and neg:`. It IS measuring today - 5
+  positives against 5 near-misses - so a green run here is real. Filed as
+  backlog item 60; not fixed on this branch, which does not touch that
+  tool.
 - **Line numbers here are as of the branch base**, commit `a170756`. Every
   edit also quotes the code it replaces - locate by that content, not by the
   number, because each task shifts the numbers below it.
@@ -1273,18 +1280,30 @@ not a report to read: it compares the status block against the headings and
 the ranked build order against the statuses, and exits non-zero naming each
 difference.
 
-It was run ten times while this plan was written, and every expected output
-below is one of those runs rather than a prediction. Three were
-end-to-end - against the backlog as it stands today (exit 0, 28 ranked
+It was run twelve times while this plan was written, and every expected
+output below is one of those runs rather than a prediction. Three were
+end-to-end - against the backlog as it stands today (exit 0, 29 ranked
 entries), against a simulation of Steps 1 and 2 alone (exit 1, naming
 exactly the six edits still owed at that point), and against a simulation
-of the finished task (exit 0, 25 ranked entries). Seven were CONTROLS, each
+of the finished task (exit 0, 26 ranked entries). NINE were CONTROLS, each
 a deliberately broken file that an earlier version of this checker reported
-as OK, and each now refuses by name: an empty ranked section; two headings
+as OK, and each now refusing by name: an empty ranked section; two headings
 for one item; two rows for one status group; a DONE item still ranked on an
 entry's CONTINUATION line, which a first-line-only scan cannot see; a
-closing block pasted somewhere other than the end of its item; an empty
-block file; and item 56 missing its second paragraph.
+ranked item with no status-bearing heading at all; a closing block pasted
+somewhere other than the end of its item; a closing block with no blank
+line before it; an empty block file; and item 56 missing its second
+paragraph.
+
+Two of those controls had to be rebuilt before they proved anything, which
+is worth knowing if you ever extend this script. The continuation-line
+control first fired on the STATUS BLOCK check, because making an item DONE
+also makes the block stale; it was rebuilt with the block corrected, so the
+ranked scan is the only thing left that can fail. And the no-heading
+control first edited an entry number that Task 4's renumbering had already
+changed, so it modified nothing and the checker passed - a control that
+changes nothing proves nothing, which is the same class this plan spent
+four debate rounds on.
 
 ```python
 """Check the backlog against itself. The item headings are the source of
@@ -1308,19 +1327,20 @@ first by the alternation order below.
    the membership the headings give. The block annotates releases, which
    headings do not carry, so only the item NUMBERS are compared.
 3. The ranked build order, bounded to its own section, is NON-EMPTY and
-   numbers 1..N with no gaps, and no item it ranks is DONE or GONE. The
-   section ends at the next `## ` heading; unbounded, a scan to end of file
-   also counts nine other numbered bold lists in this document. Each entry
-   is read WHOLE, to the start of the next entry: entry 24 carries an item
-   number on its continuation line, so a first-line-only scan would miss
-   it. PARTIALLY CLOSED items are legitimately ranked - the list ranks what
-   REMAINS of them and says so in the entry - so only DONE and GONE are
-   refused.
+   numbers 1..N with no gaps; every item it ranks HAS a status-bearing
+   heading, and none is DONE or GONE. The section ends at the next `## `
+   heading; unbounded, a scan to end of file also counts nine other
+   numbered bold lists in this document. Each entry is read WHOLE, to the
+   start of the next entry: entry 24 carries an item number on its
+   continuation line, so a first-line-only scan would miss it. PARTIALLY
+   CLOSED items are legitimately ranked - the list ranks what REMAINS of
+   them and says so in the entry - so only DONE and GONE are refused.
 4. Any paragraph block named on the command line is non-empty, appears
-   exactly once in the file, and is the TERMINAL content of the item whose
-   number is given with it. Compared as raw text with newlines already
+   exactly once in the file, and is the TERMINAL content of its item with
+   one blank line before it. Compared as raw text with newlines already
    folded by the reader, not whitespace-collapsed, so a missing blank line
-   between two paragraphs is caught rather than normalized away.
+   - between item 56's two paragraphs, or between the block and the prose
+   above it - is caught rather than normalized away.
 5. Nothing passes vacuously. Every check above fails when it finds nothing
    to measure, because an unmade measurement and a clean one must never
    look alike.
@@ -1429,7 +1449,16 @@ else:
         stop = starts[k + 1] if k + 1 < len(starts) else end
         entry = "\n".join(lines[i:stop])
         for item in (int(x) for x in BOLD_NUM.findall(entry)):
-            if item in closed:
+            # AN UNKNOWN NUMBER IS NOT AN ABSENT ONE. Asking only whether
+            # the number is closed reports OK for a ranked item that has
+            # no status-bearing heading at all, which is the checker
+            # passing without knowing what it ranks. Measured: every bold
+            # number in this section today is a real item, so requiring
+            # it costs nothing and closes the hole.
+            if item not in from_headings:
+                fail.append("ranked entry %d ranks item %d, which has no "
+                            "status-bearing heading" % (nums[k], item))
+            elif item in closed:
                 fail.append("ranked entry %d ranks item %d, which is %s"
                             % (nums[k], item, from_headings[item]))
 
@@ -1452,9 +1481,14 @@ for arg in sys.argv[2:]:
     stop = next((i for i in range(heading_line[num] + 1, len(lines))
                  if HEADING.match(lines[i])), len(lines))
     body = "\n".join(lines[heading_line[num]:stop]).rstrip()
-    if not body.endswith(want):
+    # A BLANK LINE BEFORE IT, not merely terminal position. The block is
+    # a paragraph; pasted hard against the prose above it, Markdown joins
+    # the two and `endswith` alone would still pass. There is no "after"
+    # side to check: the block ends the item, and the next `## ` heading
+    # carries its own separator.
+    if not body.endswith("\n\n" + want):
         fail.append("item %d: its closing block is not the last thing in "
-                    "that item" % num)
+                    "that item, preceded by one blank line" % num)
 
 for f in fail:
     print("FAIL:", f)
@@ -1482,8 +1516,8 @@ Expected: exit 1, with these six failures and no others.
 DONE               26: 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 13, 14, 17, 18, 19, 20, 21, 22, 23, 24, 25, 30, 42, 52, 56, 57
 PARTIALLY CLOSED    2: 11, 26
 GONE                1: 16
-OPEN               30: 12, 15, 27, 28, 29, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 43, 44, 45, 46, 47, 48, 49, 50, 51, 53, 54, 55, 58, 59
-ranked entries    28
+OPEN               31: 12, 15, 27, 28, 29, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 43, 44, 45, 46, 47, 48, 49, 50, 51, 53, 54, 55, 58, 59, 60
+ranked entries    29
 FAIL: status block 'DONE': block has no extras, headings say [52, 56, 57]
 FAIL: status block 'PARTIALLY CLOSED': block has [57], headings say no omissions
 FAIL: status block 'OPEN': block has [52, 56], headings say no omissions
@@ -1518,9 +1552,9 @@ delete these three whole:
 - entry **25**, opening `25. **57** (its (a) and (b) halves; (c) closed in
   0.25.0)`
 
-Then renumber so the list reads 1 to 25 with no gaps: former `8.` becomes
+Then renumber so the list reads 1 to 26 with no gaps: former `8.` becomes
 `6.`, former `24.` becomes `22.`, former `26.` becomes `23.`, and former
-`28.` becomes `25.`. Nothing inside any entry changes. Do not delete the
+`29.` becomes `26.`. Nothing inside any entry changes. Do not delete the
 group headers between entries (`**Second - ...**`, `**Third - ...**`,
 `**Last - ...**`) - they are not numbered entries and the checker does not
 count them.
@@ -1531,16 +1565,15 @@ Verify with the same command as Step 3. Expected now: exit 0.
 DONE               26: 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 13, 14, 17, 18, 19, 20, 21, 22, 23, 24, 25, 30, 42, 52, 56, 57
 PARTIALLY CLOSED    2: 11, 26
 GONE                1: 16
-OPEN               30: 12, 15, 27, 28, 29, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 43, 44, 45, 46, 47, 48, 49, 50, 51, 53, 54, 55, 58, 59
-ranked entries    25
+OPEN               31: 12, 15, 27, 28, 29, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 43, 44, 45, 46, 47, 48, 49, 50, 51, 53, 54, 55, 58, 59, 60
+ranked entries    26
 OK
 ```
 
 Do not use a bare `grep -c` over the rest of the file to count the entries.
 Measured while this plan was reviewed: nine other numbered bold lists sit
-below this section, at backlog lines 1124, 1129, 1591, 1593, 1597, 2112,
-2115, 3413 and 3421, so an unbounded count reports 34 where the section
-holds 25. The checker bounds the scan at the next `## ` heading.
+below this section, so an unbounded count reports far more than the section
+holds. The checker bounds the scan at the next `## ` heading.
 
 - [ ] **Step 5: Bump the version**
 
