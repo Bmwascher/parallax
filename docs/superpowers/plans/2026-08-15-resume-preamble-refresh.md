@@ -75,7 +75,10 @@ commit atomicity, not about content.
   builder and the new accept/refuse cases. The existing `preamble_row()`
   placeholder stays exactly as it is, so no currently-passing case moves.
 - `tools/read-codex-round-evidence.ps1` - MODIFY. Gains SIX helper
-  functions and the reordered resume block. No other section changes.
+  functions, the reordered resume block, and a rewrite of the rationale
+  comment at `:622-638`, which currently states in the present tense that
+  the replacement rule IS identity. Left alone, that comment and the new
+  one inside the block would contradict each other in the same file.
 - `skills/multi-model-verify/references/model-prompting-notes.md` -
   MODIFY. The `codex-brief-binding-record` contract region states the
   identity rule as the whole rule and must state the new one.
@@ -352,8 +355,11 @@ def test_a_refreshed_preamble_keeping_all_five_fields_is_accepted(tmp_path):
 def test_a_refreshed_preamble_dated_the_same_day_is_accepted(tmp_path):
     """The lower bound is INCLUSIVE: no earlier than the baseline, not
     strictly later. This is a boundary case for the rule, not a claim
-    that a same-day refresh has been observed - the recorded same-day
-    resumes carried no refreshed preamble at all.
+    that a same-day refresh has been observed. Three same-day resumes are
+    on the record and all three carried the brief ALONE, with no preamble
+    ahead of it, and bound clean; see backlog item 42's "MEASURED after
+    this item was first written, 2026-08-14" paragraph and
+    docs/superpowers/plans/rounds/2026-08-11-tool-surface-agy-drift/diff-debate-record.md:134-144.
     """
     f, prior, sha = resumed_case(tmp_path, refresh_row(core_fields(BASE_DATE)))
     assert_clean(run_resume(f, prior, sha))
@@ -890,8 +896,12 @@ a value mismatch on whichever field happens to be compared first.
 
 - [ ] **Step 8: Use it in the relocated resume block**
 
-In the block Task 1 moved, replace the single `Fail` at its end. The
-prefix read above it is unchanged:
+In the block Task 1 moved, replace the span that begins with the line
+`$extra = Get-UserText $userRecords[0]` and ends with the closing brace of
+the `if` that follows it - that is, the whole combined null-and-identity
+condition and its `Fail`, and nothing above or below it. The prefix read
+above that span is unchanged. Replacing only the `Fail` would nest the new
+code inside the old condition:
 
 ```powershell
         $extra = Get-UserText $userRecords[0]
@@ -920,6 +930,33 @@ prefix read above it is unchanged:
         }
 ```
 
+- [ ] **Step 8b: Rewrite the rationale comment the change makes false**
+
+`tools/read-codex-round-evidence.ps1:622-638` explains the rule in the
+PRESENT TENSE: "The replacement is about IDENTITY, not arithmetic ... a
+record in front of the brief must be one THIS CLIENT ALREADY EMITTED in
+this session." After Step 8 that is no longer what the code does, and it
+would sit fifty lines above a new comment saying otherwise. Replace the
+paragraph beginning "The replacement is about IDENTITY" and ending
+"...not the cumulative whole." with:
+
+```powershell
+# The replacement was about IDENTITY, not arithmetic: at most two user
+# records, and a record in front of the brief had to be one THIS CLIENT
+# ALREADY EMITTED in this session. THE FIELD FALSIFIED THAT TOO, on
+# 2026-08-14: a resume across a day boundary carried a REFRESHED preamble
+# - a later date, the instructions block absent - and a paid round was
+# discarded unread. Identity is now the FIRST of two paths. The second
+# recognises a client environment preamble by STRUCTURE and confirms it by
+# VALUE: every field but `current_date` canonically equal to the same
+# field in this session's own baseline envelope, and the date bounded
+# below by the baseline's and above by today. Novel text still cannot get
+# in front of the reviewer; a bounded novel DATE can, and nothing else.
+# Comparing against the session's first user record needs the PREFIX, so
+# the prefix is read only as far as that record - a bounded read near the
+# top of the file, not the cumulative whole.
+```
+
 - [ ] **Step 9: Run the binder module on both hosts**
 
 Run: `python -m pytest evals/multi-model-verify/test_codex_round_evidence.py -q`
@@ -931,8 +968,17 @@ failure here is a real finding.
 
 - [ ] **Step 10: Update the two clause pins and watch them fail**
 
-In `evals/multi-model-verify/test_multi_model_verify.py`, replace the
-resumed-identity clause pin at `:341-343` with these two:
+In `evals/multi-model-verify/test_multi_model_verify.py`, replace the span
+that begins with the comment line `# The resumed half was a COUNT until
+2026-08-04, when the client` and ends with the closing of the resumed
+assertion at `:341-343`.
+
+That span is a five-line comment, then a FRESH-slice assertion, then the
+resumed assertion. The replacement below reproduces the fresh assertion
+unchanged in the middle, because the span contains it and dropping it
+would silently delete a pin. Replacing only `:341-343` would instead leave
+the comment above it saying "It is an IDENTITY rule now", which the same
+commit makes false.
 
 ```python
         # The resumed half was a COUNT until 2026-08-04 and an IDENTITY
@@ -940,6 +986,8 @@ resumed-identity clause pin at `:341-343` with these two:
         # no instructions block - discarded a paid round. The rule is
         # identity OR a preamble recognised by structure and confirmed
         # field by field, and the contract has to say what the tool does.
+        assert ("a FRESH slice carries exactly two user records, the"
+                " client's instructions preamble and the brief") in notes
         assert ("A RESUMED slice carries at most two, and a record"
                 " ahead of the brief must either CANONICALLY EQUAL the"
                 " first user record in that session's own prefix - the"
@@ -1103,11 +1151,15 @@ happen: stop and report instead.
 ### Task 3: Item 42 closes and the version bumps
 
 **Files:**
-- Modify: `docs/superpowers/plans/2026-07-27-0150-backlog.md:2849` and
-  `:57-132`. The ranked list's entries are numbered continuously across
-  all of its groups and run to entry 19 at `:132`, so removing entry 1
-  reaches every one of them. Declaring the narrower `:57-83` would have
-  told the implementer to stop editing halfway down a renumbering.
+- Modify: `docs/superpowers/plans/2026-07-27-0150-backlog.md`, the item 42
+  section and the ranked list at `:57-162`. The list's entries are
+  numbered continuously across all of its groups and run to entry 23, so
+  removing entry 1 reaches every one of them. An earlier draft declared
+  `:57-83`, which would have told the implementer to stop editing halfway
+  down a renumbering. The item 42 heading's line number is deliberately
+  NOT quoted here: items 50 to 53 were appended after this plan was
+  written and the section has moved once already. Find it by its heading
+  text.
 - Modify: `.claude-plugin/plugin.json`
 
 **Interfaces:**
@@ -1125,7 +1177,9 @@ one as both is a record defect this repo has already made.
 
 - [ ] **Step 2: Replace the item 42 heading**
 
-At `docs/superpowers/plans/2026-07-27-0150-backlog.md:2849`, change:
+In `docs/superpowers/plans/2026-07-27-0150-backlog.md`, find the item 42
+heading by its text - not by line number, which has already moved once
+since this plan was written - and change:
 
 ```text
 ## Item 42: a resume carrying a refreshed NON-IDENTICAL preamble cannot be bound — OPEN
@@ -1173,26 +1227,38 @@ upgrade also refreshes the preamble has never been measured.
 
 - [ ] **Step 4: Remove item 42 from the ranked build order**
 
-The list opens at `:57` with "First - the three that break the repo's own
+The list opens at `:57` with "First - the six that break the repo's own
 review process." and its entries are numbered continuously across all
-groups, ending at entry 19 on `:132`. Item 42 is entry 1, so removing it
-renumbers all eighteen entries below it. Make exactly these edits:
+groups, ending at entry 23 on `:162`. Item 42 is entry 1, so removing it
+renumbers all twenty-two entries below it. Make exactly these edits:
 
-- Change the group heading at `:57` from "First - the three that break the
-  repo's own review process." to "First - the two that break the repo's
+- Change the group heading at `:57` from "First - the six that break the
+  repo's own review process." to "First - the five that break the repo's
   own review process."
-- Delete entries 1 (item 42) and its three lines entirely.
-- Renumber the remaining entries so numbering stays continuous from 1: 31
-  becomes 1, 32 becomes 2, 48 becomes 3, 43 becomes 4, 44 becomes 5, 49
-  becomes 6, and every entry after it decreases by one.
-- Change the second group's heading count only if that group's entry count
-  changed. It did not, so leave "Second - the three that tax every cycle."
-  exactly as it is.
+- Delete entry 1 (item 42) and all of its lines entirely, including the
+  "IN PROGRESS on branch" sentence.
+- Renumber every remaining entry so numbering stays continuous from 1:
+  each one decreases by exactly one, so 50 becomes 1 and the final entry,
+  12, becomes 22.
+- No other group heading count changes. Only the first group lost an
+  entry, so leave "Second - the three that tax every cycle.", "Third -
+  four changes to the workflow itself", "Fourth", "Fifth" and "Last"
+  exactly as they are.
 
-If the file's actual numbering or group counts differ from this
-description, STOP and report rather than improvising: the list was rebuilt
-by reading every heading on 2026-08-15 and a mismatch means it moved
-again.
+VERIFY the result mechanically rather than by eye. From the repo root:
+
+```powershell
+python -c "import re,pathlib; L=pathlib.Path('docs/superpowers/plans/2026-07-27-0150-backlog.md').read_text(encoding='utf-8').splitlines()[:170]; n=[int(m.group(1)) for m in (re.match(r'\s*(\d+)\. \*\*', x) for x in L) if m]; print(n); print('OK' if n==list(range(1,len(n)+1)) else 'NOT CONTINUOUS - STOP')"
+```
+
+Expected: the printed list is `1` through `22` and the second line reads
+`OK`.
+
+If the file's actual numbering or group counts differ from the description
+above, STOP and report rather than improvising. That description was true
+on 2026-08-15 after items 50 to 53 were filed; the list has already moved
+once during this branch, which is exactly why it is verified rather than
+trusted.
 
 - [ ] **Step 5: Bump the version LAST**
 
@@ -1201,12 +1267,14 @@ In `.claude-plugin/plugin.json`, change `version` from `0.24.0` to
 only on the version string, so a number cached mid-branch copies nothing
 however much the checkout changes afterwards.
 
-- [ ] **Step 6: Re-run the fast gates on the FINAL head**
+- [ ] **Step 6: Re-run the fast gates on the final uncommitted tree**
 
 The full suite in Step 1 ran BEFORE the record and manifest edits in Steps
 2 to 5. Those edits are not yet committed - this task commits once, at
 Step 7 - so the tree under test has moved even though the commit count has
-not. The changes are Markdown plus one manifest field, but "nothing under
+not. This is the tree that BECOMES the final head at Step 7; calling it
+the final head before that commit exists would be describing something
+that is not there yet. The changes are Markdown plus one manifest field, but "nothing under
 `evals/` reads them" is a claim, so check it rather than assert it:
 
 ```powershell
@@ -1252,9 +1320,12 @@ draft of this paragraph said the whole section was carried verbatim, which
 was not true of either draft it described.
 
 **Placeholder scan.** No TBD, no "handle edge cases", no "similar to Task
-N". Every code step carries the actual code, and Task 3's record edits are
-given as verbatim replacement text rather than as instructions to compose
-some.
+N". Every code-changing step supplies EITHER complete replacement code OR
+an exact cut-and-paste span naming its first and last line. Task 1, Step 3
+is the second kind: it says `<the cut body, unchanged>` because the body
+moves verbatim, and reprinting it would invite a retyped copy that differs
+from the original. Task 3's record edits are given as verbatim replacement
+text rather than as instructions to compose some.
 
 **Type consistency.** `Get-CanonicalText`, `New-EnvelopeResult`,
 `Get-EnvironmentEnvelopeFields`, `Get-BaselineEnvelopeFields`,

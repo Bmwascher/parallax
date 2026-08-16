@@ -1,6 +1,8 @@
 # Design: a resumed round binds across a refreshed client preamble
 
-Backlog item 42, `docs/superpowers/plans/2026-07-27-0150-backlog.md:2849`.
+Backlog item 42, in `docs/superpowers/plans/2026-07-27-0150-backlog.md`
+(located by heading; items 50 to 53 were appended on 2026-08-15 and line
+numbers into that file no longer hold).
 Design settled 2026-08-15 by a user-invoked PANEL (Sol + Fable) in mode
 plan. Panel invariant satisfied: Sol is the cross-vendor lane.
 
@@ -17,18 +19,25 @@ block absent - so the identity test could not match it, the round was
 discarded unread, and its quota was spent for nothing. Record:
 `docs/superpowers/plans/rounds/2026-08-11-tool-surface-agy-drift/diff-debate-record.md:85-104`.
 
-The guard was RIGHT to refuse. Its rule is that anything in front of the
-brief must be text this client already emitted in this session, so novel
-text cannot reach the reviewer ahead of the brief. What is wrong is the
-rule's WIDTH: the comment at `tools/read-codex-round-evidence.ps1:622-638`
-records that this bound was once arithmetic and that the field falsified
-it; identity replaced it, and the field has now falsified identity in
-turn.
+The guard was RIGHT to refuse. Its purpose is that novel text cannot reach
+the reviewer ahead of the brief, and under the old rule it enforced that
+by demanding the record be one this client had already emitted verbatim.
+What is wrong is the rule's WIDTH: the comment at
+`tools/read-codex-round-evidence.ps1:622-638` records that this bound was
+once arithmetic and that the field falsified it; identity replaced it, and
+the field has now falsified identity in turn.
 
 This design does not relax the guard to "any record may precede the
-brief". It teaches the guard to RECOGNISE the one thing the client
-legitimately emits, by structure and by value, and to keep refusing
-everything else.
+brief", and it does not preserve "already emitted" either - stating it
+that way would misdescribe what ships. What replaces it is narrower than
+the first and wider than the second, in three parts. Every value except
+the date must be ATTRIBUTABLE: canonically equal to the same field in this
+session's own baseline envelope. The date is BOUNDED NOVEL content: it is
+allowed to be new, and it is confined to a real calendar date between the
+baseline's date and today. And the accepted field-set width is
+MEASURED-AND-DERIVED, admitting combinations between the two observed
+shapes that were not themselves observed. Everything outside those three
+is refused.
 
 ## What was measured, and when
 
