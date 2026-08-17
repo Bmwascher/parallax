@@ -406,6 +406,61 @@ function Get-RefreshedPreambleFault([string]$extraText, [string]$baseText) {
 # .NET considers whitespace is content as far as this parser goes.
 $script:JsonWs = [char[]]@(' ', "`t", "`r", "`n")
 
+function Test-PropertyIsDeclaredKind($obj, [string]$name, [type]$kind) {
+    # PRESENT is not the same as ABSENT, and property access cannot tell
+    # them apart - a missing property and an explicit JSON null both read
+    # as `$null`. So the question asked is whether the property is THERE.
+    # An absent one is not a fault and must not become one: measured
+    # 2026-08-16 across 60 sessions and 32437 records, 250 carry a payload
+    # with no `type` property at all, and failing on those would refuse
+    # every round that logs a tool call.
+    if (-not ($obj.PSObject.Properties.Name -contains $name)) { return $true }
+    return ($obj.$name -is $kind)
+}
+
+function Get-RecordDiscriminatorFault($rec) {
+    # THE RECORD'S OWN KIND FIELDS, established before anything filters on
+    # them. `-ne` and `-eq` with an ARRAY on the left FILTER instead of
+    # comparing, so `@("user") -eq "user"` is truthy and a record whose
+    # kind fields are arrays reads as a user message; and a `payload`
+    # given as an array answers `payload.type` through member enumeration
+    # while not being an object at all.
+    #
+    # WHY THIS FAILS RATHER THAN FILTERS, which is the whole finding.
+    # Round 1 of the 0.26.0 debate asked for scalar guards inside
+    # Test-RecordIsUserMessage; this side refused, because a filter that
+    # rejects a record makes it INVISIBLE rather than refused. Round 2
+    # showed the refusal was half right and so was the request. Measured,
+    # one malformed record, two positions, two filter widths:
+    #
+    #   malformed record IS the brief   wide filter -> CLEAN
+    #                                   narrow      -> refused
+    #   malformed record is an EXTRA    wide filter -> refused
+    #                                   narrow      -> CLEAN
+    #
+    # Each width is safe exactly where the other is not, so neither is the
+    # answer. Refusing the record closes both, and closes three more paths
+    # measured the same day that neither side had named: a payload given
+    # as an array, a `type` that is an explicit null, and a malformed
+    # record in a RESUMED slice's prefix, which moved the session baseline
+    # to the next record.
+    if (-not (Test-PropertyIsDeclaredKind $rec "type" ([string]))) {
+        return "carries a 'type' that is not a string"
+    }
+    if ($rec.PSObject.Properties.Name -contains "payload") {
+        if (-not ($rec.payload -is [System.Management.Automation.PSCustomObject])) {
+            return "carries a 'payload' that is not an object"
+        }
+        if (-not (Test-PropertyIsDeclaredKind $rec.payload "type" ([string]))) {
+            return "carries a 'payload.type' that is not a string"
+        }
+        if (-not (Test-PropertyIsDeclaredKind $rec.payload "role" ([string]))) {
+            return "carries a 'payload.role' that is not a string"
+        }
+    }
+    return $null
+}
+
 function Get-JsonObjectLineFault([string]$raw, $parsed) {
     # Returns $null when the line is a lone JSON object, else a phrase
     # naming the fault. Two faults, and an operator has to be able to
@@ -813,6 +868,12 @@ for ($i = 0; $i -lt $lines.Count; $i++) {
         Fail ("rollout line " + ($i + 1) + " of this call's slice " +
               $lineFault)
     }
+    $discFault = Get-RecordDiscriminatorFault $rec
+    if ($discFault) {
+        Fail ("rollout line " + ($i + 1) + " of this call's slice " +
+              $discFault + ", so whether it is a record this call must " +
+              "measure was never established")
+    }
     $records += ,$rec
 }
 
@@ -1079,6 +1140,19 @@ if ($Resume -and $userRecords.Count -eq 2) {
                   "record at line " + ($p + 1) + ", before the client's " +
                   "own preamble, so the record this slice must be " +
                   "measured against cannot be identified: " + $lineFault)
+        }
+        # THE SAME GATE AS THE SLICE, for the same reason one line up. A
+        # readable line whose RECORD SHAPE was never established was
+        # skipped here, so the baseline moved to the next record - the
+        # unreadable-line hole reached through a line that reads fine.
+        # Measured 2026-08-16: a prefix whose first user record carried an
+        # array `payload.role` bound clean.
+        $discFault = Get-RecordDiscriminatorFault $cand
+        if ($discFault) {
+            Fail ("the resumed rollout's prefix carries a record at line " +
+                  ($p + 1) + " that " + $discFault + ", before the " +
+                  "client's own preamble, so the record this slice must " +
+                  "be measured against cannot be identified")
         }
         if (Test-RecordIsUserMessage $cand) {
             $prefixPreamble = Get-UserText $cand
