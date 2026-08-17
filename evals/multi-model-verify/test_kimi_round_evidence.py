@@ -1973,3 +1973,104 @@ def test_two_config_updates_where_one_carries_everything_are_refused(tmp_path):
     write_json(state_path, fresh_prior_state())
     assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path),
                   "record-malformed")
+
+
+# ---------------------------------------------------------------------
+# Round 5 of the 0.26.0 diff debate. Two findings, one of which was right
+# about the defect and wrong about what it does - and reproducing it
+# uncovered a third that neither side had named.
+# ---------------------------------------------------------------------
+
+def test_a_turn_prompt_with_no_input_elements_is_refused(tmp_path):
+    """`Test-TurnPromptShape` required an ARRAY and not an ELEMENT, so an
+    empty `input` ran its checks zero times and returned true. The record
+    then reached the brief hash having had no text measured at all, which
+    is the vacuity class exactly: the contract hashes the recorded prompt
+    THROUGH these elements, so a record with none carries no prompt.
+    """
+    lines = fresh_wire()
+    idx = find_index(lines, "turn.prompt", 1)
+    wire = mutate(lines, idx, lambda o: o.__setitem__("input", []))
+    root, sess_dir = build_fresh_layout(tmp_path, wire, fresh_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+    assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path),
+                  "record-malformed")
+
+
+def extract_ps_function(name):
+    """The text of one PowerShell function from the binder, from its
+    `function <name>` line to the first column-zero closing brace."""
+    src = SCRIPT.read_text(encoding="utf-8").splitlines()
+    start = next(i for i, l in enumerate(src) if l.startswith("function " + name))
+    end = next(i for i, l in enumerate(src[start:], start) if l == "}")
+    return "\n".join(src[start:end + 1])
+
+
+def test_an_empty_value_hashes_to_the_sha256_of_zero_bytes(tmp_path):
+    """THE THIRD FINDING, and the reason the case above did not behave
+    the way the review predicted.
+
+    The review expected an empty `input` to hash to the SHA-256 of the
+    empty string and to bind against that digest. Measured with the
+    script instrumented, it hashed
+    6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d,
+    which is SHA-256 of a single 0x00 byte. `Get-Utf8BytesNoBom` returns
+    an empty array, PowerShell UNROLLS it to nothing through the return,
+    the callee receives $null, and its `[byte[]]@($bytes)` guard - whose
+    own comment says it exists so an empty value hashes zero bytes -
+    turned that into a one-element array of 0x00.
+
+    This pins the helper directly. The round-level symptom is closed by
+    the case above, so a round-level test would hide this rather than
+    measure it.
+    """
+    probe = tmp_path / "probe.ps1"
+    probe.write_text(
+        extract_ps_function("Get-Sha256HexOfBytes") + "\n"
+        + "$empty = (New-Object System.Text.UTF8Encoding($false)).GetBytes('')\n"
+        + "Write-Output (Get-Sha256HexOfBytes $empty)\n"
+        + "Write-Output (Get-Sha256HexOfBytes $null)\n"
+        + "Write-Output (Get-Sha256HexOfBytes (New-Object byte[] 0))\n",
+        encoding="utf-8")
+    proc = subprocess.run(
+        [POWERSHELL, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(probe)],
+        capture_output=True, text=True, timeout=60)
+    assert proc.returncode == 0, (proc.stdout, proc.stderr)
+    got = [l.strip() for l in proc.stdout.splitlines() if l.strip()]
+    assert got == [EMPTY_SHA256] * 3, (got, EMPTY_SHA256, proc.stderr)
+
+
+def test_an_llm_config_line_with_decoy_fields_before_the_marker_is_refused(tmp_path):
+    """The selector picks the line because it CONTAINS `llm config`, and
+    the parser then matched the first field run ANYWHERE in it. A line
+    carrying the expected values before the marker and the real,
+    disagreeing ones after it was ACCEPTED on both hosts, and every field
+    comparison downstream read the decoy."""
+    log = list(fresh_log())
+    idx = next(i for i, l in enumerate(log) if "llm config" in l)
+    decoy = ("provider=" + FIXTURE_PROVIDER + " model=x modelAlias=" + FIXTURE_MODEL
+             + " thinkingEffort=" + FIXTURE_EFFORT
+             + " systemPromptChars=462 toolCount=5")
+    real = ("provider=wrong model=wrong modelAlias=wrong thinkingEffort=off"
+            " systemPromptChars=0 toolCount=0")
+    log[idx] = ("2026-07-31T23:20:21.958Z INFO  " + decoy
+                + "  llm config  turnStep=0.1 " + real)
+    root, sess_dir = build_fresh_layout(tmp_path, fresh_wire(), log)
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+    assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path),
+                  "log-config-field")
+
+
+def test_an_llm_config_line_with_two_markers_is_refused(tmp_path):
+    """Two markers leave no single suffix to parse, and picking either
+    one would be the defect above with an extra step."""
+    log = list(fresh_log())
+    idx = next(i for i, l in enumerate(log) if "llm config" in l)
+    log[idx] = log[idx] + "  llm config  provider=wrong"
+    root, sess_dir = build_fresh_layout(tmp_path, fresh_wire(), log)
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+    assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path),
+                  "log-config-malformed")

@@ -144,7 +144,26 @@ function Get-Sha256HexOfBytes($bytes) {
     # $null in PowerShell (confirmed live), and ComputeHash($null) throws
     # "ambiguous overloads" rather than hashing zero bytes. Get-BytePrefix
     # below is the caller-side fix; this cast is the belt-and-braces one.
-    $safeBytes = [byte[]]@($bytes)
+    #
+    # AND THE CAST ALONE DID THE OPPOSITE OF WHAT THE LINE ABOVE CLAIMS.
+    # `@($null)` is a ONE-element array holding $null, and `[byte[]]` turns
+    # that element into 0x00 - so an empty value hashed ONE ZERO BYTE
+    # rather than zero bytes. Measured 2026-08-17 with the script
+    # instrumented: an empty brief produced
+    # 6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d,
+    # which is SHA-256 of `0x00`, where SHA-256 of nothing is
+    # e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855.
+    # PowerShell UNROLLS an empty array through a function return, so
+    # every caller here hands this function $null for an empty sequence
+    # however carefully the caller built it. $null and an empty array are
+    # therefore the SAME INPUT at this boundary and both mean zero bytes.
+    # Found while reproducing round 5 of the 0.26.0 diff debate; neither
+    # side named it.
+    if ($null -eq $bytes) {
+        $safeBytes = New-Object byte[] 0
+    } else {
+        $safeBytes = [byte[]]@($bytes)
+    }
     $sha = [System.Security.Cryptography.SHA256]::Create()
     try {
         return ([System.BitConverter]::ToString($sha.ComputeHash($safeBytes)) `
@@ -522,6 +541,12 @@ function Get-SessionLeaves($root) {
 function Test-TurnPromptShape($rec) {
     if (-not (Test-HasKey $rec "input")) { return $false }
     if (-not ($rec.input -is [array])) { return $false }
+    # AT LEAST ONE ELEMENT. An empty array satisfied every line below by
+    # running the loop zero times, so the record passed a shape test
+    # having had no text measured at all - the contract hashes the
+    # recorded prompt THROUGH these elements, so a record with none of
+    # them carries no prompt. Round 5 of the 0.26.0 diff debate.
+    if (@($rec.input).Count -lt 1) { return $false }
     foreach ($item in @($rec.input)) {
         if (-not (Test-HasKey $item "text")) { return $false }
         if (-not ($item.text -is [string])) { return $false }
@@ -691,8 +716,27 @@ function Read-LogSlice($logPath, $offset) {
 }
 
 function Parse-LlmConfigLine($line) {
+    # PARSE THE SUFFIX AFTER THE MARKER, NEVER THE WHOLE LINE. The
+    # selector picks this line because it CONTAINS "llm config"; an
+    # unanchored match then took the first field run anywhere in it, so a
+    # line carrying the expected values BEFORE the marker and the real,
+    # disagreeing ones after it was accepted, and every field comparison
+    # downstream read the decoy. Reproduced on both hosts 2026-08-17,
+    # round 5 of the 0.26.0 diff debate.
+    #
+    # The marker must appear EXACTLY ONCE. Two of them leave no single
+    # suffix to parse, and picking either one would be this defect again
+    # with an extra step.
+    if ($null -eq $line) { return $null }
+    $marker = "llm config"
+    $first = $line.IndexOf($marker, [System.StringComparison]::Ordinal)
+    if ($first -lt 0) { return $null }
+    if ($line.IndexOf($marker, $first + 1, [System.StringComparison]::Ordinal) -ge 0) {
+        return $null
+    }
+    $suffix = $line.Substring($first + $marker.Length)
     $rx = [regex]'provider=(\S+)\s+model=(\S+)\s+modelAlias=(\S+)\s+thinkingEffort=(\S+)\s+systemPromptChars=(\d+)\s+toolCount=(\d+)'
-    $m = $rx.Match($line)
+    $m = $rx.Match($suffix)
     if (-not $m.Success) { return $null }
     return @{
         Provider = $m.Groups[1].Value
