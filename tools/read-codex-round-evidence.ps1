@@ -579,6 +579,16 @@ if ($priorFault) {
 }
 
 $wantKind = if ($Fresh) { "fresh" } else { "resume" }
+# THE SAME CLASS OUTSIDE THE RECORD STREAM. `-ne` with an ARRAY on the
+# left FILTERS instead of comparing, so a state of `{"kind":["fresh"]}`
+# satisfied the test below and bound clean - measured 2026-08-16, found
+# by round 3 of the diff debate. Assert-PriorField just below already
+# refuses a state with a MISSING field on the same reasoning; a field of
+# the wrong KIND says as little about the measurement as an absent one.
+if (-not (Test-PropertyIsDeclaredKind $prior "kind" ([string]))) {
+    Fail ("prior state kind is not a string, so the call it records " +
+          "having been made was never established")
+}
 if ($prior.kind -ne $wantKind) {
     Fail ("prior state kind is '" + [string]$prior.kind + "' but this call needs kind '" +
           $wantKind + "'")
@@ -900,6 +910,15 @@ if ($Fresh) {
     if ($metaRecords.Count -lt 1) {
         Fail "the fresh rollout carries no session_meta record"
     }
+    # A ONE-ELEMENT ARRAY CASTS TO ITS ELEMENT, so `[string]` on an `id`
+    # of `["<id>"]` produced the right string and the three sources
+    # "agreed" about a value the record never declared. Measured
+    # 2026-08-16, round 3 of the diff debate.
+    if (-not (Test-PropertyIsDeclaredKind $metaRecords[0].payload "id" ([string]))) {
+        Fail ("the fresh rollout's session_meta carries an 'id' that is " +
+              "not a string, so the identity read from it is not one it " +
+              "declares")
+    }
     $metaId = [string]$metaRecords[0].payload.id
     if ($metaId -ne $nameId -or $metaId -ne $expectSessionId) {
         Fail ("the session id disagrees across sources: filename '" + $nameId +
@@ -944,6 +963,18 @@ if ($Fresh) {
         Fail ("the resumed rollout's first line " + $firstFault + ", so it " +
               "is not a session_meta record whatever its properties read as")
     }
+    # THE THIRD RECORD-CONSUMPTION SITE, and the slice gate never reaches
+    # it: this record is parsed by itself, above the slice. The prefix
+    # scan below carries the same check, but it runs ONLY when the slice
+    # holds a record ahead of the brief, so a brief-only resume walked
+    # straight past. Measured 2026-08-16: `type: ["session_meta"]` on a
+    # one-user resumed slice bound clean.
+    $firstDiscFault = Get-RecordDiscriminatorFault $firstRec
+    if ($firstDiscFault) {
+        Fail ("the resumed rollout's first record " + $firstDiscFault +
+              ", so whether it is the session_meta record its identity " +
+              "is read from was never established")
+    }
     if ($firstRec.type -ne "session_meta") {
         Fail ("the resumed rollout's first record is not a session_meta " +
               "record, so its session identity was never measured")
@@ -951,6 +982,11 @@ if ($Fresh) {
     if (-not ($firstRec.payload -is [System.Management.Automation.PSCustomObject])) {
         Fail ("the resumed rollout's first record has no object payload, so " +
               "the session identity read from it is not one it declares")
+    }
+    if (-not (Test-PropertyIsDeclaredKind $firstRec.payload "id" ([string]))) {
+        Fail ("the resumed rollout's session_meta carries an 'id' that is " +
+              "not a string, so the identity read from it is not one it " +
+              "declares")
     }
     $prefixId = [string]$firstRec.payload.id
     if ($prefixId -ne $expectSessionId) {

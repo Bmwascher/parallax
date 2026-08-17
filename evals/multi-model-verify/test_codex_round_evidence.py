@@ -2064,3 +2064,75 @@ def test_a_payload_with_no_type_property_is_still_skipped(tmp_path):
     root, f = make_root(tmp_path, rows=[meta_row(), real_preamble_row(), quiet,
                                         user_row(brief), assistant_row()])
     assert_clean(run_fresh(root, fresh_state(tmp_path), canon(brief)))
+
+
+# =====================================================================
+# The same class OUTSIDE the record stream. Round 3 of the 0.26.0 diff
+# debate swept for a sixth kind and found three, all CLEAN at `00e4246`
+# and all reproduced here before they were accepted. A fourth, the
+# resumed twin of the fresh session-id case, was derived from them.
+#
+# Two of the three are not records at all. The PRIOR STATE this call is
+# handed is compared with `-ne`, and the SESSION ID is cast to `[string]`
+# - the same two operations that made every earlier instance of this
+# class, applied to values that arrive from somewhere other than the
+# rollout's record stream. The third is a record the slice gate never
+# sees: the resumed rollout's FIRST record is parsed separately, and the
+# prefix scan that would have caught it runs only when the slice carries
+# a record ahead of the brief, so a brief-only resume walks straight past.
+# =====================================================================
+
+def test_a_prior_state_whose_kind_is_an_array_is_refused(tmp_path):
+    """`{"kind": ["fresh"]}` bound CLEAN. `-ne` with an array on the left
+    filters, so the kind comparison passed on a state that never declared
+    one. Its neighbour `Assert-PriorField` already refuses a state with a
+    MISSING field, for exactly this reason."""
+    brief = "Round one brief."
+    root, f = make_root(tmp_path, brief=brief)
+    prior = state_file(tmp_path, {"kind": ["fresh"], "knownRollouts": []})
+    assert_failed(run_fresh(root, prior, canon(brief)),
+                  "prior state kind is not a string")
+
+
+def test_a_fresh_session_meta_id_that_is_an_array_is_refused(tmp_path):
+    """A one-element array casts to its element, so the identity check
+    compared the right string and the record had never declared one."""
+    brief = "Round one brief."
+    root, f = make_root(tmp_path, rows=[
+        {"timestamp": "2026-08-04T00:31:27.563Z", "type": "session_meta",
+         "payload": {"id": [SESSION], "cwd": "C:/repo"}},
+        preamble_row(), user_row(brief), assistant_row()])
+    assert_failed(run_fresh(root, fresh_state(tmp_path), canon(brief)),
+                  "session_meta carries an 'id' that is not a string")
+
+
+def test_a_resumed_session_meta_id_that_is_an_array_is_refused(tmp_path):
+    """The resumed twin of the case above. The resumed rollout's first
+    record is read by a SEPARATE parser, so closing one does not close
+    the other."""
+    r1, r2 = "Round one brief.", "Round two brief."
+    root, f = make_root(tmp_path, rows=[
+        {"timestamp": "2026-08-04T00:31:27.563Z", "type": "session_meta",
+         "payload": {"id": [SESSION], "cwd": "C:/repo"}},
+        preamble_row(), user_row(r1), assistant_row()])
+    prior = resume_state(tmp_path, f)
+    append_rows(f, [user_row(r2), assistant_row("ok2")])
+    assert_failed(run_resume(f, prior, canon(r2)),
+                  "session_meta carries an 'id' that is not a string")
+
+
+def test_a_resumed_first_record_whose_type_is_an_array_is_refused(tmp_path):
+    """THE THIRD RECORD-CONSUMPTION SITE. `type: ["session_meta"]` bound
+    CLEAN on a brief-only resumed slice: the identity reader's `-ne`
+    filtered, and the prefix scan that carries the discriminator gate is
+    reached only when the slice has a record AHEAD of the brief. This
+    slice has one user record, so it never ran."""
+    r1, r2 = "Round one brief.", "Round two brief."
+    root, f = make_root(tmp_path, rows=[
+        {"timestamp": "2026-08-04T00:31:27.563Z", "type": ["session_meta"],
+         "payload": {"id": SESSION, "cwd": "C:/repo"}},
+        preamble_row(), user_row(r1), assistant_row()])
+    prior = resume_state(tmp_path, f)
+    append_rows(f, [user_row(r2), assistant_row("ok2")])
+    assert_failed(run_resume(f, prior, canon(r2)),
+                  "carries a 'type' that is not a string")
