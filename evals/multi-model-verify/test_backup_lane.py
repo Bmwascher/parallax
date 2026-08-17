@@ -536,22 +536,42 @@ def test_brief_hash_binding_region():
     "the brief", the resumed payload is a rebuttal, and the coverage was
     an inference: read narrowly, every round after the first had its
     delivery unchecked, which is the exact gap the rule exists to close.
+
+    0.26.0 adds the trim, so ONE digest serves both lanes, and the
+    mismatch diagnostic that names the one cause the evidence can rule
+    in or out. It may not say the content differs: this binder never
+    holds the brief, only an opaque digest of it.
     """
     assert (
             "Hash the brief BEFORE dispatch and require the recorded prompt "
             "to match: SHA-256 over the brief canonicalized as UTF-8 with "
-            "CRLF normalized to LF, compared against the same hash of the "
-            "concatenation of every `turn.prompt` `input[]` element's "
-            "`text` field. The canonicalization is part of the rule rather "
-            "than an implementation detail: the measured evidence matched "
-            "only after newline normalization, so a rule saying merely that "
-            "the two hash to the same value leaves a driver to invent that "
-            "step. \"The brief\" here means the payload of EVERY call in the "
-            "debate, fresh and resumed alike: a resumed round's payload is a "
+            "CRLF normalized to LF and leading and trailing whitespace "
+            "stripped, compared against the same hash of the concatenation "
+            "of every `turn.prompt` `input[]` element's `text` field. The "
+            "canonicalization is part of the rule rather than an "
+            "implementation detail: the measured evidence matched only after "
+            "newline normalization, so a rule saying merely that the two "
+            "hash to the same value leaves a driver to invent that step. It "
+            "is the SAME canonicalization the codex lane declares, "
+            "deliberately: this lane folded newlines and did not strip the "
+            "ends until 2026-08-16, so one expected digest could not serve "
+            "both lanes, and a driver computing the wrong lane's value saw a "
+            "mismatch indistinguishable from a corrupted brief. \"The "
+            "brief\" here means the payload of EVERY call in the debate, "
+            "fresh and resumed alike: a resumed round's payload is a "
             "rebuttal rather than the opening brief, and it is bound by this "
             "same rule. Stating it removes an inference - a rule that named "
             "only round 1 would leave every later round's delivery "
-            "unchecked, which is the gap this rule exists to close."
+            "unchecked, which is the gap this rule exists to close. On a "
+            "mismatch, re-hash the recorded prompt under the untrimmed rule "
+            "and report which of the two it is: a match there means the "
+            "mismatch is explained by trim-versus-untrimmed "
+            "canonicalization, and no match means it is not explained by "
+            "surrounding-whitespace canonicalization. Neither says the "
+            "CONTENT differs, because this binder holds an opaque expected "
+            "digest and never the brief itself, so it cannot separate "
+            "changed content from a different encoding, a byte order mark, "
+            "another newline rule or a caller defect. Both outcomes refuse."
             ) in _norm(BACKUP_LANE)
 
 

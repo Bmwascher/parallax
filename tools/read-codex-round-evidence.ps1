@@ -183,7 +183,13 @@ function Get-EnvironmentEnvelopeFields([string]$canonicalText) {
         # discriminators: measured 2026-08-15, removing this test alone
         # moves the refusal to the closed set rather than allowing
         # anything through.
-        if ($name -cnotmatch '^[a-z_]+$') {
+        # `\z`, NOT `$`. In .NET `$` matches before a TRAILING NEWLINE,
+        # so a name of "cwd`n" satisfied `^[a-z_]+$` and reached the
+        # closed set, which refused it as an unknown field - the right
+        # verdict with the wrong reason. On the FRESH path there is no
+        # closed set behind this test, so `$` would admit the name
+        # outright. Backlog item 57(a).
+        if ($name -cnotmatch '^[a-z_]+\z') {
             return New-EnvelopeResult $null (
                 "carries '" + $name + "', which is not a recognised environment field")
         }
@@ -214,6 +220,31 @@ function Get-EnvironmentEnvelopeFields([string]$canonicalText) {
     New-EnvelopeResult $fields $null
 }
 
+function Find-EnvelopeSpan([string]$canonicalText) {
+    # WHERE the one envelope is, with no opinion about what a caller
+    # does when there is not exactly one. Kind is $null on success and
+    # "none" or "several" otherwise: the two callers word those two
+    # outcomes differently - a session BASELINE that cannot be
+    # identified and a FRESH record that is not a preamble are
+    # different faults - so the selection is shared and the message is
+    # not. Duplicating the selection instead is how the two paths drift
+    # apart later.
+    if ($null -eq $canonicalText) { return @{ Start = -1; Length = 0; Kind = "none" } }
+    $first = $canonicalText.IndexOf($script:EnvOpen, [System.StringComparison]::Ordinal)
+    if ($first -lt 0) { return @{ Start = -1; Length = 0; Kind = "none" } }
+    if ($canonicalText.IndexOf($script:EnvOpen, $first + 1, [System.StringComparison]::Ordinal) -ge 0) {
+        return @{ Start = -1; Length = 0; Kind = "several" }
+    }
+    $close = $canonicalText.IndexOf($script:EnvClose, $first, [System.StringComparison]::Ordinal)
+    if ($close -lt 0) { return @{ Start = -1; Length = 0; Kind = "none" } }
+    if ($canonicalText.IndexOf($script:EnvClose, $close + 1, [System.StringComparison]::Ordinal) -ge 0) {
+        return @{ Start = -1; Length = 0; Kind = "several" }
+    }
+    @{ Start = $first
+       Length = ($close + $script:EnvClose.Length - $first)
+       Kind = $null }
+}
+
 function Get-BaselineEnvelopeFields([string]$canonicalText) {
     # The session's FIRST user record joins one, two or three elements
     # (three being the most common composition measured), so the envelope
@@ -227,19 +258,11 @@ function Get-BaselineEnvelopeFields([string]$canonicalText) {
     $several = ("cannot be checked: this session's first user record carries " +
                 "more than one environment preamble, so which one is the " +
                 "baseline is undefined")
-    if ($null -eq $canonicalText) { return New-EnvelopeResult $null $none }
-    $first = $canonicalText.IndexOf($script:EnvOpen, [System.StringComparison]::Ordinal)
-    if ($first -lt 0) { return New-EnvelopeResult $null $none }
-    if ($canonicalText.IndexOf($script:EnvOpen, $first + 1, [System.StringComparison]::Ordinal) -ge 0) {
-        return New-EnvelopeResult $null $several
-    }
-    $close = $canonicalText.IndexOf($script:EnvClose, $first, [System.StringComparison]::Ordinal)
-    if ($close -lt 0) { return New-EnvelopeResult $null $none }
-    if ($canonicalText.IndexOf($script:EnvClose, $close + 1, [System.StringComparison]::Ordinal) -ge 0) {
-        return New-EnvelopeResult $null $several
-    }
+    $span = Find-EnvelopeSpan $canonicalText
+    if ($span.Kind -eq "none") { return New-EnvelopeResult $null $none }
+    if ($span.Kind -eq "several") { return New-EnvelopeResult $null $several }
     $inner = Get-EnvironmentEnvelopeFields $canonicalText.Substring(
-        $first, $close + $script:EnvClose.Length - $first)
+        $span.Start, $span.Length)
     if ($null -eq $inner.Fields) {
         # PROPAGATE, do not collapse. Every scanner fault reaching here
         # would otherwise report as one generic message, which is
@@ -250,11 +273,77 @@ function Get-BaselineEnvelopeFields([string]$canonicalText) {
     $inner
 }
 
+function Get-FreshPreambleFault([string]$text) {
+    # $null means the record reads as the client's own environment
+    # preamble. Anything else is a phrase naming what failed.
+    #
+    # THIS IS NOT Get-RefreshedPreambleFault AND MUST NOT CALL IT. That
+    # function rejects unknown names BEFORE it checks the core, then
+    # compares values against a baseline. A fresh call has no baseline:
+    # its own first record IS the one every later resumed round is
+    # measured against. So this checks SHAPE and nothing else.
+    #
+    # WHAT IT DOES NOT CLAIM. Not provenance - the rollout is a local
+    # file, and anyone able to write it can forge a well-formed
+    # preamble. Text BEFORE the envelope is accepted and NOT bound:
+    # measured 2026-08-16, 658 of 767 first user records in the whole
+    # session store carry the client's own instructions ahead of it,
+    # and refusing that direction would refuse the large majority of
+    # real traffic. Instruction text inside a field VALUE binds too,
+    # because no value is compared here.
+    $canonical = Get-CanonicalText $text
+    $span = Find-EnvelopeSpan $canonical
+    if ($span.Kind -eq "none") {
+        return "carries no environment preamble at all"
+    }
+    if ($span.Kind -eq "several") {
+        return ("carries more than one environment preamble, so which one " +
+                "the client sent is undefined")
+    }
+    # THE ENVELOPE MUST END THE RECORD. Nothing followed one in either
+    # measured population - 0 of 767 records and 0 of 372 of this
+    # repo's own debate dispatches - so that direction closes at no
+    # cost. CANONICAL, not raw: this script strips the ends everywhere
+    # else, so insignificant terminal whitespace must not decide a
+    # round.
+    if (($span.Start + $span.Length) -ne $canonical.Length) {
+        return "carries text after its environment preamble"
+    }
+    $env = Get-EnvironmentEnvelopeFields $canonical.Substring(
+        $span.Start, $span.Length)
+    if ($null -eq $env.Fields) { return $env.Fault }
+    # THE CORE, AND DELIBERATELY NOT THE CLOSED SET. They are different
+    # rules. The closed set is an UPPER bound that rejects additions,
+    # and it buys nothing here - every name and value comes from the
+    # record being tested, so a forger can use the five known names -
+    # while costing a total fresh-round outage the first time the
+    # client adds a field. That bound has been falsified twice, on
+    # 2026-08-04 and 2026-08-14, each time blocking paid rounds, and
+    # neither falsification dropped a core field. The core is a LOWER
+    # bound that keeps out shapes below both measured compositions.
+    # Without it a one-field junk wrapper binds and becomes a baseline
+    # with no current_date, silently disabling the structural refresh
+    # path for the rest of the session.
+    foreach ($name in $script:EnvCore) {
+        if (-not $env.Fields.Contains($name)) {
+            return ("omits the required environment field '" + $name + "'")
+        }
+    }
+    $null
+}
+
 function Get-EnvDate([string]$value) {
     # ParseExact, not a regex: `^\d{4}-\d{2}-\d{2}$` accepts 2026-02-31.
+    # CANONICALIZED FIRST, the same way every other field is. Every
+    # other field is compared through Get-CanonicalSha256, which folds
+    # CRLF and strips the ends, so a padded value passes there; this one
+    # went to the parser raw, and a padded date was refused where a
+    # padded anything-else was accepted. On the baseline side that
+    # asymmetry disabled the structural path for a whole session.
+    # Backlog item 57(b).
     $d = [datetime]::MinValue
     $ok = [datetime]::TryParseExact(
-        $value, 'yyyy-MM-dd',
+        (Get-CanonicalText $value), 'yyyy-MM-dd',
         [System.Globalization.CultureInfo]::InvariantCulture,
         [System.Globalization.DateTimeStyles]::None, [ref]$d)
     if ($ok) { $d } else { $null }
@@ -316,6 +405,63 @@ function Get-RefreshedPreambleFault([string]$extraText, [string]$baseText) {
 # The four characters JSON calls whitespace. Everything else that
 # .NET considers whitespace is content as far as this parser goes.
 $script:JsonWs = [char[]]@(' ', "`t", "`r", "`n")
+
+function Test-PropertyIsDeclaredKind($obj, [string]$name, [type]$kind) {
+    # PRESENT is not the same as ABSENT, and property access cannot tell
+    # them apart - a missing property and an explicit JSON null both read
+    # as `$null`. So the question asked is whether the property is THERE.
+    # An absent one is not a fault and must not become one: measured
+    # 2026-08-16 across 60 sessions and 32437 records, 250 carry a payload
+    # with no `type` property at all, and EVERY ONE of those 60 sessions
+    # carries at least one. That per-session figure is the measurement;
+    # an earlier draft said "every round that logs a tool call", which is
+    # an aggregate presented as a universal.
+    if (-not ($obj.PSObject.Properties.Name -contains $name)) { return $true }
+    return ($obj.$name -is $kind)
+}
+
+function Get-RecordDiscriminatorFault($rec) {
+    # THE RECORD'S OWN KIND FIELDS, established before anything filters on
+    # them. `-ne` and `-eq` with an ARRAY on the left FILTER instead of
+    # comparing, so `@("user") -eq "user"` is truthy and a record whose
+    # kind fields are arrays reads as a user message; and a `payload`
+    # given as an array answers `payload.type` through member enumeration
+    # while not being an object at all.
+    #
+    # WHY THIS FAILS RATHER THAN FILTERS, which is the whole finding.
+    # Round 1 of the 0.26.0 debate asked for scalar guards inside
+    # Test-RecordIsUserMessage; this side refused, because a filter that
+    # rejects a record makes it INVISIBLE rather than refused. Round 2
+    # showed the refusal was half right and so was the request. Measured,
+    # one malformed record, two positions, two filter widths:
+    #
+    #   malformed record IS the brief   wide filter -> CLEAN
+    #                                   narrow      -> refused
+    #   malformed record is an EXTRA    wide filter -> refused
+    #                                   narrow      -> CLEAN
+    #
+    # Each width is safe exactly where the other is not, so neither is the
+    # answer. Refusing the record closes both, and closes three more paths
+    # measured the same day that neither side had named: a payload given
+    # as an array, a `type` that is an explicit null, and a malformed
+    # record in a RESUMED slice's prefix, which moved the session baseline
+    # to the next record.
+    if (-not (Test-PropertyIsDeclaredKind $rec "type" ([string]))) {
+        return "carries a 'type' that is not a string"
+    }
+    if ($rec.PSObject.Properties.Name -contains "payload") {
+        if (-not ($rec.payload -is [System.Management.Automation.PSCustomObject])) {
+            return "carries a 'payload' that is not an object"
+        }
+        if (-not (Test-PropertyIsDeclaredKind $rec.payload "type" ([string]))) {
+            return "carries a 'payload.type' that is not a string"
+        }
+        if (-not (Test-PropertyIsDeclaredKind $rec.payload "role" ([string]))) {
+            return "carries a 'payload.role' that is not a string"
+        }
+    }
+    return $null
+}
 
 function Get-JsonObjectLineFault([string]$raw, $parsed) {
     # Returns $null when the line is a lone JSON object, else a phrase
@@ -435,6 +581,16 @@ if ($priorFault) {
 }
 
 $wantKind = if ($Fresh) { "fresh" } else { "resume" }
+# THE SAME CLASS OUTSIDE THE RECORD STREAM. `-ne` with an ARRAY on the
+# left FILTERS instead of comparing, so a state of `{"kind":["fresh"]}`
+# satisfied the test below and bound clean - measured 2026-08-16, found
+# by round 3 of the diff debate. Assert-PriorField just below already
+# refuses a state with a MISSING field on the same reasoning; a field of
+# the wrong KIND says as little about the measurement as an absent one.
+if (-not (Test-PropertyIsDeclaredKind $prior "kind" ([string]))) {
+    Fail ("prior state kind is not a string, so the call it records " +
+          "having been made was never established")
+}
 if ($prior.kind -ne $wantKind) {
     Fail ("prior state kind is '" + [string]$prior.kind + "' but this call needs kind '" +
           $wantKind + "'")
@@ -724,6 +880,12 @@ for ($i = 0; $i -lt $lines.Count; $i++) {
         Fail ("rollout line " + ($i + 1) + " of this call's slice " +
               $lineFault)
     }
+    $discFault = Get-RecordDiscriminatorFault $rec
+    if ($discFault) {
+        Fail ("rollout line " + ($i + 1) + " of this call's slice " +
+              $discFault + ", so whether it is a record this call must " +
+              "measure was never established")
+    }
     $records += ,$rec
 }
 
@@ -749,6 +911,15 @@ if ($Fresh) {
     })
     if ($metaRecords.Count -lt 1) {
         Fail "the fresh rollout carries no session_meta record"
+    }
+    # A ONE-ELEMENT ARRAY CASTS TO ITS ELEMENT, so `[string]` on an `id`
+    # of `["<id>"]` produced the right string and the three sources
+    # "agreed" about a value the record never declared. Measured
+    # 2026-08-16, round 3 of the diff debate.
+    if (-not (Test-PropertyIsDeclaredKind $metaRecords[0].payload "id" ([string]))) {
+        Fail ("the fresh rollout's session_meta carries an 'id' that is " +
+              "not a string, so the identity read from it is not one it " +
+              "declares")
     }
     $metaId = [string]$metaRecords[0].payload.id
     if ($metaId -ne $nameId -or $metaId -ne $expectSessionId) {
@@ -794,6 +965,18 @@ if ($Fresh) {
         Fail ("the resumed rollout's first line " + $firstFault + ", so it " +
               "is not a session_meta record whatever its properties read as")
     }
+    # THE THIRD RECORD-CONSUMPTION SITE, and the slice gate never reaches
+    # it: this record is parsed by itself, above the slice. The prefix
+    # scan below carries the same check, but it runs ONLY when the slice
+    # holds a record ahead of the brief, so a brief-only resume walked
+    # straight past. Measured 2026-08-16: `type: ["session_meta"]` on a
+    # one-user resumed slice bound clean.
+    $firstDiscFault = Get-RecordDiscriminatorFault $firstRec
+    if ($firstDiscFault) {
+        Fail ("the resumed rollout's first record " + $firstDiscFault +
+              ", so whether it is the session_meta record its identity " +
+              "is read from was never established")
+    }
     if ($firstRec.type -ne "session_meta") {
         Fail ("the resumed rollout's first record is not a session_meta " +
               "record, so its session identity was never measured")
@@ -801,6 +984,11 @@ if ($Fresh) {
     if (-not ($firstRec.payload -is [System.Management.Automation.PSCustomObject])) {
         Fail ("the resumed rollout's first record has no object payload, so " +
               "the session identity read from it is not one it declares")
+    }
+    if (-not (Test-PropertyIsDeclaredKind $firstRec.payload "id" ([string]))) {
+        Fail ("the resumed rollout's session_meta carries an 'id' that is " +
+              "not a string, so the identity read from it is not one it " +
+              "declares")
     }
     $prefixId = [string]$firstRec.payload.id
     if ($prefixId -ne $expectSessionId) {
@@ -827,6 +1015,15 @@ function Get-UserText($record) {
     # also carried something else - wider than the frozen rule, and wider
     # than anything measured. A non-candidate returns $null and can never
     # match.
+    # THE CONTAINER'S OWN SHAPE, established before anything is read out
+    # of it. `content` given as a JSON OBJECT is wrapped by `@()` into a
+    # one-element array holding that object, so every guard below then
+    # reads through a shape the contract never allowed. Found by round 1
+    # of the 0.26.0 diff debate and reproduced against the shipped
+    # script: an object `content` carrying array-valued `type` and `text`
+    # bound CLEAN. Both hosts agree that `-is [System.Array]` separates
+    # the two, measured 2026-08-16.
+    if (-not ($record.payload.content -is [System.Array])) { return $null }
     $elements = @($record.payload.content)
     if ($elements.Count -lt 1) { return $null }
     $sb = New-Object System.Text.StringBuilder
@@ -835,8 +1032,16 @@ function Get-UserText($record) {
         # enumeration on both hosts, so `-not $el` never saw it. Same
         # nested-shape class as the payload guard above.
         if (-not ($el -is [System.Management.Automation.PSCustomObject])) { return $null }
+        # SCALAR STRINGS, tested before they are compared or appended.
+        # `-ne` with an ARRAY on the left FILTERS instead of comparing, so
+        # `@("input_text") -ne "input_text"` is empty and the type guard
+        # below never fired; and `[string]` on a one-element array yields
+        # its element, so an array `text` appended as if it were a string.
+        # Same round, same reproduction.
+        if (-not ($el.type -is [string])) { return $null }
         if ($el.type -ne "input_text") { return $null }
-        [void]$sb.Append([string]$el.text)
+        if (-not ($el.text -is [string])) { return $null }
+        [void]$sb.Append($el.text)
     }
     $sb.ToString()
 }
@@ -974,6 +1179,19 @@ if ($Resume -and $userRecords.Count -eq 2) {
                   "own preamble, so the record this slice must be " +
                   "measured against cannot be identified: " + $lineFault)
         }
+        # THE SAME GATE AS THE SLICE, for the same reason one line up. A
+        # readable line whose RECORD SHAPE was never established was
+        # skipped here, so the baseline moved to the next record - the
+        # unreadable-line hole reached through a line that reads fine.
+        # Measured 2026-08-16: a prefix whose first user record carried an
+        # array `payload.role` bound clean.
+        $discFault = Get-RecordDiscriminatorFault $cand
+        if ($discFault) {
+            Fail ("the resumed rollout's prefix carries a record at line " +
+                  ($p + 1) + " that " + $discFault + ", before the " +
+                  "client's own preamble, so the record this slice must " +
+                  "be measured against cannot be identified")
+        }
         if (Test-RecordIsUserMessage $cand) {
             $prefixPreamble = Get-UserText $cand
             break
@@ -1002,6 +1220,35 @@ if ($Resume -and $userRecords.Count -eq 2) {
                   "from this session nor reads as a refreshed one: it " +
                   $fault)
         }
+    }
+}
+
+if ($Fresh) {
+    # VALIDATED AFTER THE BRIEF, for the same reason the resumed check
+    # above is: run before it, a slice ordered [brief, extra] is tested
+    # as though the brief were the preamble and reports the wrong
+    # direction. The count rule above guarantees exactly two user
+    # records and the checks above guarantee the brief is the last, so
+    # the record at index 0 is the one in front of it.
+    #
+    # WHY THIS EXISTS. The fresh path bounded that record by COUNT and
+    # never checked what it was, so arbitrary text bound clean -
+    # measured 2026-08-16 with a control. And whatever binds here
+    # becomes the BASELINE every later resumed round in this session is
+    # measured against, through both the identity path and the
+    # structural refresh path, so a miss admits the session rather than
+    # one round. This is a baseline admission gate.
+    $lead = Get-UserText $userRecords[0]
+    if ($null -eq $lead) {
+        Fail ("a fresh slice carries a record in front of the brief that is " +
+              "not a text-only user record, so it cannot be the client's " +
+              "own environment preamble")
+    }
+    $freshFault = Get-FreshPreambleFault $lead
+    if ($freshFault) {
+        Fail ("a fresh slice carries a record in front of the brief that " +
+              "does not read as the client's own environment preamble: it " +
+              $freshFault)
     }
 }
 

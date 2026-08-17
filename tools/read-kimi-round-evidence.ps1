@@ -125,6 +125,18 @@ function ConvertTo-NormalizedLF($s) {
     return ([string]$s) -replace "`r`n", "`n"
 }
 
+function ConvertTo-CanonicalBrief($s) {
+    # ONE canonicalization for a brief, shared with the codex lane's
+    # Get-CanonicalText: UTF-8, CRLF folded to LF, leading and trailing
+    # whitespace stripped. Kept SEPARATE from ConvertTo-NormalizedLF
+    # rather than added to it: its four agent-file callers compare an
+    # agent file's BODY and the client's recorded systemPrompt, where
+    # the ends are content and trimming them would widen a different
+    # rule. Its one remaining caller is the untrimmed re-hash on the
+    # mismatch path below, which is untrimmed by design. Item 52.
+    return (ConvertTo-NormalizedLF $s).Trim()
+}
+
 function Get-Sha256HexOfBytes($bytes) {
     # An explicit [byte[]] cast on a POSSIBLY-EMPTY or POSSIBLY-Object[]
     # value, taken INSIDE the function rather than trusted from the
@@ -132,7 +144,26 @@ function Get-Sha256HexOfBytes($bytes) {
     # $null in PowerShell (confirmed live), and ComputeHash($null) throws
     # "ambiguous overloads" rather than hashing zero bytes. Get-BytePrefix
     # below is the caller-side fix; this cast is the belt-and-braces one.
-    $safeBytes = [byte[]]@($bytes)
+    #
+    # AND THE CAST ALONE DID THE OPPOSITE OF WHAT THE LINE ABOVE CLAIMS.
+    # `@($null)` is a ONE-element array holding $null, and `[byte[]]` turns
+    # that element into 0x00 - so an empty value hashed ONE ZERO BYTE
+    # rather than zero bytes. Measured 2026-08-17 with the script
+    # instrumented: an empty brief produced
+    # 6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d,
+    # which is SHA-256 of `0x00`, where SHA-256 of nothing is
+    # e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855.
+    # PowerShell UNROLLS an empty array through a function return, so
+    # every caller here hands this function $null for an empty sequence
+    # however carefully the caller built it. $null and an empty array are
+    # therefore the SAME INPUT at this boundary and both mean zero bytes.
+    # Found while reproducing round 5 of the 0.26.0 diff debate; neither
+    # side named it.
+    if ($null -eq $bytes) {
+        $safeBytes = New-Object byte[] 0
+    } else {
+        $safeBytes = [byte[]]@($bytes)
+    }
     $sha = [System.Security.Cryptography.SHA256]::Create()
     try {
         return ([System.BitConverter]::ToString($sha.ComputeHash($safeBytes)) `
@@ -182,6 +213,91 @@ function ConvertFrom-StrictUtf8([byte[]]$bytes, [switch]$StripBom) {
         $text = $text.Substring(1)
     }
     return $text
+}
+
+$script:JsonWs = [char[]]@(' ', "`t", "`r", "`n")
+
+# A DELIBERATE COPY of `Get-JsonObjectLineFault` in
+# `tools/read-codex-round-evidence.ps1`, comments and all. The two
+# binders are standalone scripts invoked by path, with no shared module
+# between them, and this repository already carries the same duplication
+# for the canonicalization helpers. CHANGE BOTH. Round 4 of the 0.26.0
+# diff debate found this lane had no object-root gate at all, and two of
+# its four findings were CLEAN on PowerShell 7 and refused on 5.1 for
+# exactly the reason the copied comments describe.
+
+function Get-JsonObjectLineFault([string]$raw, $parsed) {
+    # Returns $null when the line is a lone JSON object, else a phrase
+    # naming the fault. Two faults, and an operator has to be able to
+    # tell them apart: one says the value is the wrong kind, the other
+    # says something rode in behind a value of the right kind.
+    # A JSONL RECORD IS AN OBJECT, AND `-is [PSCustomObject]` DOES NOT
+    # ESTABLISH THAT ON EVERY HOST. Measured 2026-08-04 on
+    # `'[{"type":"session_meta",...}]' | ConvertFrom-Json`:
+    #   Windows PowerShell 5.1 returns System.Object[] - the type test
+    #     catches it.
+    #   PowerShell 7.6.3 UNROLLS the single-element array and returns the
+    #     PSCustomObject inside it - the type test cannot see it, and the
+    #     line's properties then read straight through.
+    # So the shipped slice parser's object check, and the resume
+    # first-line check added hours earlier, both passed a JSON ARRAY on
+    # PowerShell 7 while refusing it on 5.1. That is the 0.16.0 lane-lock
+    # class this repo runs two host jobs for: a green suite on one
+    # interpreter proves one interpreter.
+    # The RAW TEXT decides instead. A JSON object begins with `{`, on
+    # every host, and combined with a successful parse that is the whole
+    # rule.
+    # AND `ConvertFrom-Json` IS NOT A STRICT-JSON GATE EITHER. Measured
+    # 2026-08-04: `{"type":"note"} // tail` is ACCEPTED on PowerShell
+    # 7.6.3 and refused on 5.1, because 7's parser allows JSON comments.
+    # Arbitrary trailing text and a second object are refused on both, so
+    # the divergence is comments specifically - narrow, and still enough
+    # to make the contract's strict-JSONL claim false on one interpreter.
+    # Delegating strictness to the parser is what went wrong; the scan
+    # below decides here, the same way for every host.
+    if ($null -eq $raw) { return "is not a JSON object" }
+    # JSON WHITESPACE ONLY. `.Trim()` strips Unicode whitespace, and both
+    # hosts accept a trailing U+00A0 after the value (measured
+    # 2026-08-04), so the tail check erased exactly the character it was
+    # supposed to catch. JSON defines whitespace as these four.
+    $t = $raw.Trim($script:JsonWs)
+    if (-not $t.StartsWith("{")) { return "is not a JSON object" }
+    if (-not ($parsed -is [System.Management.Automation.PSCustomObject])) {
+        return "is not a JSON object"
+    }
+    # Nothing but whitespace may follow the object's own closing brace.
+    # The parse already established well-formed JSON, so this only has to
+    # find where the value ends: track string literals so a brace inside
+    # one is not counted, and escapes so a quote inside one is not.
+    $depth = 0; $inStr = $false; $esc = $false; $end = -1
+    for ($i = 0; $i -lt $t.Length; $i++) {
+        $c = $t[$i]
+        if ($inStr) {
+            if ($esc) { $esc = $false }
+            elseif ($c -eq '\') { $esc = $true }
+            elseif ($c -eq '"') { $inStr = $false }
+            continue
+        }
+        if ($c -eq '"') { $inStr = $true; continue }
+        # NO `/` IS LEGAL OUTSIDE A JSON STRING, so one can only begin a
+        # comment. PowerShell 7.6.3 accepts comments INSIDE an object as
+        # well as after it (measured 2026-08-04; 5.1 refuses both), and a
+        # brace-depth scan with no comment state cannot see them - worse,
+        # a `}` or `"` inside a comment misleads the scan itself. Refusing
+        # the character is exact, host-independent, and cheaper than
+        # tracking comment state.
+        if ($c -eq '/') { return "carries a comment, which strict JSON has no room for" }
+        if ($c -eq '{') { $depth++; continue }
+        if ($c -eq '}') {
+            $depth--
+            if ($depth -eq 0) { $end = $i; break }
+        }
+    }
+    if ($end -lt 0) { return "is not a JSON object" }
+    if ($t.Substring($end + 1).Trim($script:JsonWs) -ne "") {
+        return "carries trailing content after its JSON value"
+    }
+    return $null
 }
 
 # ONE place decides whether an object carries a key, so ONE mutation
@@ -255,6 +371,18 @@ function Read-PriorState($path) {
     }
     if ($null -eq $obj) {
         Fail "prior-state-unusable: -PriorState parsed to null"
+    }
+    # THE RAW TEXT DECIDES WHAT THE ROOT WAS, not the parser. Measured
+    # 2026-08-16: a state wrapped in a one-element JSON array bound CLEAN
+    # on PowerShell 7, which UNROLLS the singleton and hands back the
+    # object inside it, and was refused on 5.1, which does not. Every
+    # shape check below then passed on a root the document never
+    # declared. Found by round 4 of the 0.26.0 diff debate.
+    $rootFault = Get-JsonObjectLineFault $raw $obj
+    if ($rootFault) {
+        Fail ("prior-state-unusable: -PriorState " + $rootFault +
+              " at its root, so the fields read from it are not the " +
+              "fields it declares")
     }
     $propNames = @($obj.PSObject.Properties.Name)
     if (-not (Test-HasKey $obj "kind")) {
@@ -413,6 +541,12 @@ function Get-SessionLeaves($root) {
 function Test-TurnPromptShape($rec) {
     if (-not (Test-HasKey $rec "input")) { return $false }
     if (-not ($rec.input -is [array])) { return $false }
+    # AT LEAST ONE ELEMENT. An empty array satisfied every line below by
+    # running the loop zero times, so the record passed a shape test
+    # having had no text measured at all - the contract hashes the
+    # recorded prompt THROUGH these elements, so a record with none of
+    # them carries no prompt. Round 5 of the 0.26.0 diff debate.
+    if (@($rec.input).Count -lt 1) { return $false }
     foreach ($item in @($rec.input)) {
         if (-not (Test-HasKey $item "text")) { return $false }
         if (-not ($item.text -is [string])) { return $false }
@@ -464,6 +598,26 @@ function Test-ConfigUpdateShape($rec) {
     $names = @($rec.PSObject.Properties.Name)
     $isFirst = (Test-HasKey $rec "profileName") -or (Test-HasKey $rec "systemPrompt")
     $isSecond = (Test-HasKey $rec "modelAlias") -or (Test-HasKey $rec "thinkingEffort")
+    # EXACTLY ONE GROUP. This returned true for a record carrying
+    # NEITHER, which is a shape test that passes on a record with no
+    # shape. Measured 2026-08-16: merge both groups into the first
+    # config.update and empty the second, and the count stays at two,
+    # both shape counts stay at one, and every value comparison reads
+    # the SAME record while the other one measures nothing. Round 4 of
+    # the diff debate.
+    #
+    # NEITHER is refused; BOTH is not, and that is deliberate. The
+    # reviewer asked for an exclusive-or. Measured instead: a record
+    # carrying BOTH groups is already caught downstream every way it can
+    # be arranged - the caller counts records by which group they carry
+    # and needs exactly one of each, so a both-groups record pushes one
+    # of those counts to two unless the OTHER record carries neither,
+    # which is the case this line now refuses. An exclusive-or is
+    # therefore no stronger here, and it made an existing case
+    # (`test_two_copies_of_second_config_update_shape_fails`) refuse at
+    # this shape test instead of at the count check it exists to reach,
+    # which would have hidden that check behind this one.
+    if (-not ($isFirst -or $isSecond)) { return $false }
     if ($isFirst) {
         if (-not ((Test-HasKey $rec "profileName") -and ($rec.profileName -is [string]))) { return $false }
         if (-not ((Test-HasKey $rec "systemPrompt") -and ($rec.systemPrompt -is [string]))) { return $false }
@@ -503,6 +657,21 @@ function Read-WireSlice($wirePath, $offset, $expectedFirstType) {
         }
         if ($null -eq $rec -or -not (Test-HasKey $rec "type")) {
             Fail "wire-malformed: a wire record has no type field"
+        }
+        # THE SAME TWO SHAPE QUESTIONS AS THE PRIOR STATE, one layer
+        # down, and both were unasked. A line wrapped in a one-element
+        # array bound CLEAN on PowerShell 7 and was refused on 5.1; and a
+        # `type` given as an ARRAY bound clean on BOTH, because presence
+        # was checked and kind was not, so `switch -CaseSensitive` below
+        # enumerates the array into its shape branch and the per-type
+        # `-ceq` counts treat the matching array as truthy. Measured
+        # 2026-08-16, round 4 of the diff debate.
+        $recFault = Get-JsonObjectLineFault $clean $rec
+        if ($recFault) {
+            Fail ("wire-malformed: a line in the wire slice " + $recFault)
+        }
+        if (-not ($rec.type -is [string])) {
+            Fail "wire-malformed: a wire record's type is not a string"
         }
         $shapeOk = $true
         # -CaseSensitive here is CONSISTENCY, not a load-bearing check, and
@@ -547,8 +716,27 @@ function Read-LogSlice($logPath, $offset) {
 }
 
 function Parse-LlmConfigLine($line) {
+    # PARSE THE SUFFIX AFTER THE MARKER, NEVER THE WHOLE LINE. The
+    # selector picks this line because it CONTAINS "llm config"; an
+    # unanchored match then took the first field run anywhere in it, so a
+    # line carrying the expected values BEFORE the marker and the real,
+    # disagreeing ones after it was accepted, and every field comparison
+    # downstream read the decoy. Reproduced on both hosts 2026-08-17,
+    # round 5 of the 0.26.0 diff debate.
+    #
+    # The marker must appear EXACTLY ONCE. Two of them leave no single
+    # suffix to parse, and picking either one would be this defect again
+    # with an extra step.
+    if ($null -eq $line) { return $null }
+    $marker = "llm config"
+    $first = $line.IndexOf($marker, [System.StringComparison]::Ordinal)
+    if ($first -lt 0) { return $null }
+    if ($line.IndexOf($marker, $first + 1, [System.StringComparison]::Ordinal) -ge 0) {
+        return $null
+    }
+    $suffix = $line.Substring($first + $marker.Length)
     $rx = [regex]'provider=(\S+)\s+model=(\S+)\s+modelAlias=(\S+)\s+thinkingEffort=(\S+)\s+systemPromptChars=(\d+)\s+toolCount=(\d+)'
-    $m = $rx.Match($line)
+    $m = $rx.Match($suffix)
     if (-not $m.Success) { return $null }
     return @{
         Provider = $m.Groups[1].Value
@@ -890,10 +1078,32 @@ if ($Resume) {
 
 # Rule 15: the brief hash.
 $briefText = ((@($turnPrompt.input) | ForEach-Object { $_.text }) -join "")
-$briefTextNorm = ConvertTo-NormalizedLF $briefText
-$briefHash = Get-Sha256HexOfBytes (Get-Utf8BytesNoBom $briefTextNorm)
+$briefHash = Get-Sha256HexOfBytes (Get-Utf8BytesNoBom (ConvertTo-CanonicalBrief $briefText))
 if ($briefHash -ne $ExpectedBriefSha256) {
-    Fail "brief-hash: turn.prompt does not hash to -ExpectedBriefSha256"
+    # SAY WHAT THE MISMATCH IS NOT. This tool holds an opaque expected
+    # digest and never the brief itself, so a failed alternate hash
+    # cannot separate changed content from a different encoding, a byte
+    # order mark, another newline rule or a caller defect. Naming the
+    # one cause that CAN be ruled in or out is the whole of what the
+    # evidence supports, and claiming more would be the overclaim this
+    # tool exists to refuse. Both directions still fail the round; only
+    # the message differs, and the extra hash is computed only here.
+    # `-eq`, matching the primary comparison above. `-notmatch` at the
+    # argument check is case-INSENSITIVE, so an uppercase expected
+    # digest reaches here; comparing the alternate case-sensitively
+    # would then diagnose it as unexplained when the whitespace rule
+    # explains it exactly.
+    $untrimmed = Get-Sha256HexOfBytes (Get-Utf8BytesNoBom (ConvertTo-NormalizedLF $briefText))
+    if ($untrimmed -eq $ExpectedBriefSha256) {
+        Fail ("brief-hash: turn.prompt does not hash to " +
+              "-ExpectedBriefSha256, and the mismatch is explained by " +
+              "trim-versus-untrimmed canonicalization: the recorded " +
+              "prompt hashes to the expected digest under the untrimmed " +
+              "rule this lane used before 2026-08-16")
+    }
+    Fail ("brief-hash: turn.prompt does not hash to -ExpectedBriefSha256, " +
+          "and the mismatch is not explained by surrounding-whitespace " +
+          "canonicalization")
 }
 
 # Rule 16: success.

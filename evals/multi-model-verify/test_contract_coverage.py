@@ -700,6 +700,14 @@ DECLARED_REGIONS = {
     # holds the prompt shape and the claim's ceiling.
     "codex-brief-binding-calls",
     "codex-brief-binding-record",
+    # 0.26.0, backlog item 56. The FRESH record ahead of the brief was
+    # bounded by COUNT alone, so arbitrary text bound clean and then
+    # became the session's baseline. A third region rather than more
+    # text in the RECORD region: a region must fit one pin, and this
+    # one says a different kind of thing - the resumed rule is a value
+    # comparison against a baseline, this is the admission of that
+    # baseline, and it carries the gaps it deliberately leaves open.
+    "codex-brief-binding-fresh-record",
     # 0.21.0, backlog item 21. The mirror copies into a NEW root, so a
     # destination legal in the source can be illegal in the mirror, and
     # that failure lands mid-copy leaving a partial tree that reads like

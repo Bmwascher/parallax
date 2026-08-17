@@ -1808,3 +1808,269 @@ def test_a_zero_width_prefixed_directory_is_not_a_session_leaf(tmp_path):
 
     p = assert_clean(run_fresh(root, FIXTURE_SESSION_ID, state_path))
     assert p["nextState"]["sessionId"] == FIXTURE_SESSION_ID, p
+
+
+def pad_the_recorded_brief(lines, lead="", tail=""):
+    """The fixture's turn.prompt with whitespace added around its text.
+
+    The trim is the whole of item 52's behaviour change, so every case
+    below needs a recorded prompt whose ENDS differ from the brief the
+    hash was taken over, and nothing else different.
+    """
+    idx = find_index(lines, "turn.prompt")
+    return mutate(lines, idx, lambda o: o["input"][0].__setitem__(
+        "text", lead + o["input"][0]["text"] + tail))
+
+
+def recorded_prompt(lines):
+    """The turn.prompt text as the tool concatenates it: every `input[]`
+    element's `text`, in order."""
+    obj = json.loads(lines[find_index(lines, "turn.prompt")])
+    return "".join(x.get("text", "") for x in obj.get("input", []))
+
+
+def test_a_padded_recorded_prompt_binds_under_the_shared_rule(tmp_path):
+    """Both lanes canonicalize a brief the same way from 0.26.0 on.
+
+    The codex lane folded CRLF and stripped the ends; this lane folded
+    and did not strip, so one expected digest could not serve both. The
+    trim is the whole change, and this is the case that shows it:
+    surrounding whitespace on the recorded prompt no longer moves the
+    hash. Backlog item 52.
+    """
+    wire = pad_the_recorded_brief(fresh_wire(), lead="  \n", tail="\n  ")
+    root, sess_dir = build_fresh_layout(tmp_path, wire, fresh_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+    assert_clean(run_fresh(root, FIXTURE_SESSION_ID, state_path))
+
+
+def test_a_whitespace_only_mismatch_names_the_canonicalization(tmp_path):
+    """The refusal must name the one cause the evidence can rule in.
+
+    A caller that computed its expected digest under the old untrimmed
+    rule, over a brief carrying surrounding whitespace, sees a mismatch
+    that looks exactly like a corrupted brief. Re-hashing under the
+    untrimmed rule separates the two, and nothing else does.
+    """
+    wire = pad_the_recorded_brief(fresh_wire(), tail="\n\n")
+    untrimmed = brief_sha256(recorded_prompt(wire))
+    assert untrimmed != ROUND1_BRIEF_SHA, (
+        "the padding must actually move the untrimmed hash, or this case "
+        "proves nothing")
+    root, sess_dir = build_fresh_layout(tmp_path, wire, fresh_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+    assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path,
+                            expected_brief_sha=untrimmed),
+                  "explained by trim-versus-untrimmed canonicalization")
+
+
+def test_a_real_mismatch_says_it_is_not_the_canonicalization(tmp_path):
+    """The control, and the message that must NOT overclaim.
+
+    This tool holds an opaque digest and never the brief, so it cannot
+    say the content differs - only that surrounding whitespace does not
+    explain the difference. Without this case the message above could be
+    emitted for every mismatch and still look right.
+    """
+    root, sess_dir = build_fresh_layout(tmp_path, fresh_wire(), fresh_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+    assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path,
+                            expected_brief_sha=EMPTY_SHA256),
+                  "not explained by surrounding-whitespace canonicalization")
+
+
+# ---------------------------------------------------------------------
+# The SHAPE class, reaching this lane. Round 4 of the 0.26.0 diff debate
+# declared the codex binder's surfaces guarded and read this one, which
+# no round had. Four instances, all reproduced on BOTH hosts before they
+# were accepted, and TWO OF THEM WERE INVISIBLE ON ONE HOST:
+#
+#     prior state wrapped in a JSON array   5.1 refused | PS7 CLEAN
+#     wire line wrapped in a JSON array     5.1 refused | PS7 CLEAN
+#     wire record `type` is an array        CLEAN on both
+#     merged + vacuously empty config       CLEAN on both
+#
+# The first two are the 0.16.0 lane-lock shape this repository runs two
+# host jobs for: `ConvertFrom-Json` on PowerShell 7 UNROLLS a
+# single-element array and returns the object inside it, while 5.1
+# returns the array. A gate that reads the PARSED value therefore asks
+# the parser what the document was. The RAW TEXT decides instead - a
+# JSON object begins with `{`, on every host.
+# ---------------------------------------------------------------------
+
+def test_a_prior_state_wrapped_in_a_json_array_is_refused(tmp_path):
+    """PowerShell 7 unrolled the singleton array and every later shape
+    check then passed on an object the document never declared at its
+    root. Windows PowerShell 5.1 refused it, which is exactly what makes
+    a single-host suite the wrong instrument here."""
+    root, sess_dir = build_fresh_layout(tmp_path, fresh_wire(), fresh_log())
+    state_path = tmp_path / "state.json"
+    state_path.write_text(json.dumps([fresh_prior_state()]), encoding="utf-8")
+    assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path),
+                  "prior-state-unusable")
+
+
+def test_a_wire_line_wrapped_in_a_json_array_is_refused(tmp_path):
+    """The same divergence one layer down. The wire reader checked the
+    parsed value for null and a `type` property and never asked whether
+    the LINE was an object, so on PowerShell 7 the array unrolled, the
+    record was counted as its type, and its unchanged text hashed
+    normally."""
+    lines = fresh_wire()
+    idx = next(i for i, l in enumerate(lines) if '"type":"turn.prompt"' in l)
+    wire = list(lines)
+    wire[idx] = "[" + wire[idx] + "]"
+    root, sess_dir = build_fresh_layout(tmp_path, wire, fresh_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+    assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path),
+                  "wire-malformed")
+
+
+def test_a_wire_record_whose_type_is_an_array_is_refused(tmp_path):
+    """CLEAN on both hosts. Presence of `type` was checked and its KIND
+    was not, so `switch -CaseSensitive` enumerated the array and matched
+    the shape branch, and the later per-type counts use `-ceq`, which
+    treats the matching array as truthy."""
+    lines = fresh_wire()
+    idx = next(i for i, l in enumerate(lines) if '"type":"turn.prompt"' in l)
+    wire = mutate(lines, idx,
+                  lambda o: o.__setitem__("type", ["turn.prompt"]))
+    root, sess_dir = build_fresh_layout(tmp_path, wire, fresh_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+    assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path),
+                  "wire-malformed")
+
+
+def test_two_config_updates_where_one_carries_everything_are_refused(tmp_path):
+    """CLEAN on both hosts, and not a parser divergence at all.
+
+    The contract wants TWO config.update records, one carrying the
+    profile and system prompt and one carrying the model alias and
+    effort. `Test-ConfigUpdateShape` returned true for a record carrying
+    NEITHER group - vacuously valid - so merging both groups into the
+    first record and emptying the second left the count at two, both
+    shape counts at one, and every value comparison reading the same
+    record. The second record measured nothing and was counted anyway.
+    """
+    lines = fresh_wire()
+    i1 = next(i for i, l in enumerate(lines)
+              if '"type":"config.update"' in l and '"profileName"' in l)
+    i2 = next(i for i, l in enumerate(lines)
+              if '"type":"config.update"' in l and '"modelAlias"' in l)
+    donor = json.loads(lines[i2])
+    wire = mutate(lines, i1, lambda o: o.update(
+        {"modelAlias": donor["modelAlias"],
+         "thinkingEffort": donor["thinkingEffort"]}))
+    wire = mutate(wire, i2, lambda o: [o.pop("modelAlias", None),
+                                       o.pop("thinkingEffort", None)])
+    root, sess_dir = build_fresh_layout(tmp_path, wire, fresh_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+    assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path),
+                  "record-malformed")
+
+
+# ---------------------------------------------------------------------
+# Round 5 of the 0.26.0 diff debate. Two findings, one of which was right
+# about the defect and wrong about what it does - and reproducing it
+# uncovered a third that neither side had named.
+# ---------------------------------------------------------------------
+
+def test_a_turn_prompt_with_no_input_elements_is_refused(tmp_path):
+    """`Test-TurnPromptShape` required an ARRAY and not an ELEMENT, so an
+    empty `input` ran its checks zero times and returned true. The record
+    then reached the brief hash having had no text measured at all, which
+    is the vacuity class exactly: the contract hashes the recorded prompt
+    THROUGH these elements, so a record with none carries no prompt.
+    """
+    lines = fresh_wire()
+    idx = find_index(lines, "turn.prompt", 1)
+    wire = mutate(lines, idx, lambda o: o.__setitem__("input", []))
+    root, sess_dir = build_fresh_layout(tmp_path, wire, fresh_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+    assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path),
+                  "record-malformed")
+
+
+def extract_ps_function(name):
+    """The text of one PowerShell function from the binder, from its
+    `function <name>` line to the first column-zero closing brace."""
+    src = SCRIPT.read_text(encoding="utf-8").splitlines()
+    start = next(i for i, l in enumerate(src) if l.startswith("function " + name))
+    end = next(i for i, l in enumerate(src[start:], start) if l == "}")
+    return "\n".join(src[start:end + 1])
+
+
+def test_an_empty_value_hashes_to_the_sha256_of_zero_bytes(tmp_path):
+    """THE THIRD FINDING, and the reason the case above did not behave
+    the way the review predicted.
+
+    The review expected an empty `input` to hash to the SHA-256 of the
+    empty string and to bind against that digest. Measured with the
+    script instrumented, it hashed
+    6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d,
+    which is SHA-256 of a single 0x00 byte. `Get-Utf8BytesNoBom` returns
+    an empty array, PowerShell UNROLLS it to nothing through the return,
+    the callee receives $null, and its `[byte[]]@($bytes)` guard - whose
+    own comment says it exists so an empty value hashes zero bytes -
+    turned that into a one-element array of 0x00.
+
+    This pins the helper directly. The round-level symptom is closed by
+    the case above, so a round-level test would hide this rather than
+    measure it.
+    """
+    probe = tmp_path / "probe.ps1"
+    probe.write_text(
+        extract_ps_function("Get-Sha256HexOfBytes") + "\n"
+        + "$empty = (New-Object System.Text.UTF8Encoding($false)).GetBytes('')\n"
+        + "Write-Output (Get-Sha256HexOfBytes $empty)\n"
+        + "Write-Output (Get-Sha256HexOfBytes $null)\n"
+        + "Write-Output (Get-Sha256HexOfBytes (New-Object byte[] 0))\n",
+        encoding="utf-8")
+    proc = subprocess.run(
+        [POWERSHELL, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(probe)],
+        capture_output=True, text=True, timeout=60)
+    assert proc.returncode == 0, (proc.stdout, proc.stderr)
+    got = [l.strip() for l in proc.stdout.splitlines() if l.strip()]
+    assert got == [EMPTY_SHA256] * 3, (got, EMPTY_SHA256, proc.stderr)
+
+
+def test_an_llm_config_line_with_decoy_fields_before_the_marker_is_refused(tmp_path):
+    """The selector picks the line because it CONTAINS `llm config`, and
+    the parser then matched the first field run ANYWHERE in it. A line
+    carrying the expected values before the marker and the real,
+    disagreeing ones after it was ACCEPTED on both hosts, and every field
+    comparison downstream read the decoy."""
+    log = list(fresh_log())
+    idx = next(i for i, l in enumerate(log) if "llm config" in l)
+    decoy = ("provider=" + FIXTURE_PROVIDER + " model=x modelAlias=" + FIXTURE_MODEL
+             + " thinkingEffort=" + FIXTURE_EFFORT
+             + " systemPromptChars=462 toolCount=5")
+    real = ("provider=wrong model=wrong modelAlias=wrong thinkingEffort=off"
+            " systemPromptChars=0 toolCount=0")
+    log[idx] = ("2026-07-31T23:20:21.958Z INFO  " + decoy
+                + "  llm config  turnStep=0.1 " + real)
+    root, sess_dir = build_fresh_layout(tmp_path, fresh_wire(), log)
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+    assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path),
+                  "log-config-field")
+
+
+def test_an_llm_config_line_with_two_markers_is_refused(tmp_path):
+    """Two markers leave no single suffix to parse, and picking either
+    one would be the defect above with an extra step."""
+    log = list(fresh_log())
+    idx = next(i for i, l in enumerate(log) if "llm config" in l)
+    log[idx] = log[idx] + "  llm config  provider=wrong"
+    root, sess_dir = build_fresh_layout(tmp_path, fresh_wire(), log)
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+    assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path),
+                  "log-config-malformed")
