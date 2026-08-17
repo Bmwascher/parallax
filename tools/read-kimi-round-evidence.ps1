@@ -196,6 +196,91 @@ function ConvertFrom-StrictUtf8([byte[]]$bytes, [switch]$StripBom) {
     return $text
 }
 
+$script:JsonWs = [char[]]@(' ', "`t", "`r", "`n")
+
+# A DELIBERATE COPY of `Get-JsonObjectLineFault` in
+# `tools/read-codex-round-evidence.ps1`, comments and all. The two
+# binders are standalone scripts invoked by path, with no shared module
+# between them, and this repository already carries the same duplication
+# for the canonicalization helpers. CHANGE BOTH. Round 4 of the 0.26.0
+# diff debate found this lane had no object-root gate at all, and two of
+# its four findings were CLEAN on PowerShell 7 and refused on 5.1 for
+# exactly the reason the copied comments describe.
+
+function Get-JsonObjectLineFault([string]$raw, $parsed) {
+    # Returns $null when the line is a lone JSON object, else a phrase
+    # naming the fault. Two faults, and an operator has to be able to
+    # tell them apart: one says the value is the wrong kind, the other
+    # says something rode in behind a value of the right kind.
+    # A JSONL RECORD IS AN OBJECT, AND `-is [PSCustomObject]` DOES NOT
+    # ESTABLISH THAT ON EVERY HOST. Measured 2026-08-04 on
+    # `'[{"type":"session_meta",...}]' | ConvertFrom-Json`:
+    #   Windows PowerShell 5.1 returns System.Object[] - the type test
+    #     catches it.
+    #   PowerShell 7.6.3 UNROLLS the single-element array and returns the
+    #     PSCustomObject inside it - the type test cannot see it, and the
+    #     line's properties then read straight through.
+    # So the shipped slice parser's object check, and the resume
+    # first-line check added hours earlier, both passed a JSON ARRAY on
+    # PowerShell 7 while refusing it on 5.1. That is the 0.16.0 lane-lock
+    # class this repo runs two host jobs for: a green suite on one
+    # interpreter proves one interpreter.
+    # The RAW TEXT decides instead. A JSON object begins with `{`, on
+    # every host, and combined with a successful parse that is the whole
+    # rule.
+    # AND `ConvertFrom-Json` IS NOT A STRICT-JSON GATE EITHER. Measured
+    # 2026-08-04: `{"type":"note"} // tail` is ACCEPTED on PowerShell
+    # 7.6.3 and refused on 5.1, because 7's parser allows JSON comments.
+    # Arbitrary trailing text and a second object are refused on both, so
+    # the divergence is comments specifically - narrow, and still enough
+    # to make the contract's strict-JSONL claim false on one interpreter.
+    # Delegating strictness to the parser is what went wrong; the scan
+    # below decides here, the same way for every host.
+    if ($null -eq $raw) { return "is not a JSON object" }
+    # JSON WHITESPACE ONLY. `.Trim()` strips Unicode whitespace, and both
+    # hosts accept a trailing U+00A0 after the value (measured
+    # 2026-08-04), so the tail check erased exactly the character it was
+    # supposed to catch. JSON defines whitespace as these four.
+    $t = $raw.Trim($script:JsonWs)
+    if (-not $t.StartsWith("{")) { return "is not a JSON object" }
+    if (-not ($parsed -is [System.Management.Automation.PSCustomObject])) {
+        return "is not a JSON object"
+    }
+    # Nothing but whitespace may follow the object's own closing brace.
+    # The parse already established well-formed JSON, so this only has to
+    # find where the value ends: track string literals so a brace inside
+    # one is not counted, and escapes so a quote inside one is not.
+    $depth = 0; $inStr = $false; $esc = $false; $end = -1
+    for ($i = 0; $i -lt $t.Length; $i++) {
+        $c = $t[$i]
+        if ($inStr) {
+            if ($esc) { $esc = $false }
+            elseif ($c -eq '\') { $esc = $true }
+            elseif ($c -eq '"') { $inStr = $false }
+            continue
+        }
+        if ($c -eq '"') { $inStr = $true; continue }
+        # NO `/` IS LEGAL OUTSIDE A JSON STRING, so one can only begin a
+        # comment. PowerShell 7.6.3 accepts comments INSIDE an object as
+        # well as after it (measured 2026-08-04; 5.1 refuses both), and a
+        # brace-depth scan with no comment state cannot see them - worse,
+        # a `}` or `"` inside a comment misleads the scan itself. Refusing
+        # the character is exact, host-independent, and cheaper than
+        # tracking comment state.
+        if ($c -eq '/') { return "carries a comment, which strict JSON has no room for" }
+        if ($c -eq '{') { $depth++; continue }
+        if ($c -eq '}') {
+            $depth--
+            if ($depth -eq 0) { $end = $i; break }
+        }
+    }
+    if ($end -lt 0) { return "is not a JSON object" }
+    if ($t.Substring($end + 1).Trim($script:JsonWs) -ne "") {
+        return "carries trailing content after its JSON value"
+    }
+    return $null
+}
+
 # ONE place decides whether an object carries a key, so ONE mutation
 # covers every shape branch below. -ccontains is case-EXACT: PowerShell's
 # -contains is not, and its property ACCESS is not either, so a record
@@ -267,6 +352,18 @@ function Read-PriorState($path) {
     }
     if ($null -eq $obj) {
         Fail "prior-state-unusable: -PriorState parsed to null"
+    }
+    # THE RAW TEXT DECIDES WHAT THE ROOT WAS, not the parser. Measured
+    # 2026-08-16: a state wrapped in a one-element JSON array bound CLEAN
+    # on PowerShell 7, which UNROLLS the singleton and hands back the
+    # object inside it, and was refused on 5.1, which does not. Every
+    # shape check below then passed on a root the document never
+    # declared. Found by round 4 of the 0.26.0 diff debate.
+    $rootFault = Get-JsonObjectLineFault $raw $obj
+    if ($rootFault) {
+        Fail ("prior-state-unusable: -PriorState " + $rootFault +
+              " at its root, so the fields read from it are not the " +
+              "fields it declares")
     }
     $propNames = @($obj.PSObject.Properties.Name)
     if (-not (Test-HasKey $obj "kind")) {
@@ -476,6 +573,26 @@ function Test-ConfigUpdateShape($rec) {
     $names = @($rec.PSObject.Properties.Name)
     $isFirst = (Test-HasKey $rec "profileName") -or (Test-HasKey $rec "systemPrompt")
     $isSecond = (Test-HasKey $rec "modelAlias") -or (Test-HasKey $rec "thinkingEffort")
+    # EXACTLY ONE GROUP. This returned true for a record carrying
+    # NEITHER, which is a shape test that passes on a record with no
+    # shape. Measured 2026-08-16: merge both groups into the first
+    # config.update and empty the second, and the count stays at two,
+    # both shape counts stay at one, and every value comparison reads
+    # the SAME record while the other one measures nothing. Round 4 of
+    # the diff debate.
+    #
+    # NEITHER is refused; BOTH is not, and that is deliberate. The
+    # reviewer asked for an exclusive-or. Measured instead: a record
+    # carrying BOTH groups is already caught downstream every way it can
+    # be arranged - the caller counts records by which group they carry
+    # and needs exactly one of each, so a both-groups record pushes one
+    # of those counts to two unless the OTHER record carries neither,
+    # which is the case this line now refuses. An exclusive-or is
+    # therefore no stronger here, and it made an existing case
+    # (`test_two_copies_of_second_config_update_shape_fails`) refuse at
+    # this shape test instead of at the count check it exists to reach,
+    # which would have hidden that check behind this one.
+    if (-not ($isFirst -or $isSecond)) { return $false }
     if ($isFirst) {
         if (-not ((Test-HasKey $rec "profileName") -and ($rec.profileName -is [string]))) { return $false }
         if (-not ((Test-HasKey $rec "systemPrompt") -and ($rec.systemPrompt -is [string]))) { return $false }
@@ -515,6 +632,21 @@ function Read-WireSlice($wirePath, $offset, $expectedFirstType) {
         }
         if ($null -eq $rec -or -not (Test-HasKey $rec "type")) {
             Fail "wire-malformed: a wire record has no type field"
+        }
+        # THE SAME TWO SHAPE QUESTIONS AS THE PRIOR STATE, one layer
+        # down, and both were unasked. A line wrapped in a one-element
+        # array bound CLEAN on PowerShell 7 and was refused on 5.1; and a
+        # `type` given as an ARRAY bound clean on BOTH, because presence
+        # was checked and kind was not, so `switch -CaseSensitive` below
+        # enumerates the array into its shape branch and the per-type
+        # `-ceq` counts treat the matching array as truthy. Measured
+        # 2026-08-16, round 4 of the diff debate.
+        $recFault = Get-JsonObjectLineFault $clean $rec
+        if ($recFault) {
+            Fail ("wire-malformed: a line in the wire slice " + $recFault)
+        }
+        if (-not ($rec.type -is [string])) {
+            Fail "wire-malformed: a wire record's type is not a string"
         }
         $shapeOk = $true
         # -CaseSensitive here is CONSISTENCY, not a load-bearing check, and

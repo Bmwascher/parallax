@@ -412,8 +412,10 @@ function Test-PropertyIsDeclaredKind($obj, [string]$name, [type]$kind) {
     # as `$null`. So the question asked is whether the property is THERE.
     # An absent one is not a fault and must not become one: measured
     # 2026-08-16 across 60 sessions and 32437 records, 250 carry a payload
-    # with no `type` property at all, and failing on those would refuse
-    # every round that logs a tool call.
+    # with no `type` property at all, and EVERY ONE of those 60 sessions
+    # carries at least one. That per-session figure is the measurement;
+    # an earlier draft said "every round that logs a tool call", which is
+    # an aggregate presented as a universal.
     if (-not ($obj.PSObject.Properties.Name -contains $name)) { return $true }
     return ($obj.$name -is $kind)
 }

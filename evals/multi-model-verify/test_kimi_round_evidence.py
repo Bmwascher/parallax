@@ -1880,3 +1880,96 @@ def test_a_real_mismatch_says_it_is_not_the_canonicalization(tmp_path):
     assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path,
                             expected_brief_sha=EMPTY_SHA256),
                   "not explained by surrounding-whitespace canonicalization")
+
+
+# ---------------------------------------------------------------------
+# The SHAPE class, reaching this lane. Round 4 of the 0.26.0 diff debate
+# declared the codex binder's surfaces guarded and read this one, which
+# no round had. Four instances, all reproduced on BOTH hosts before they
+# were accepted, and TWO OF THEM WERE INVISIBLE ON ONE HOST:
+#
+#     prior state wrapped in a JSON array   5.1 refused | PS7 CLEAN
+#     wire line wrapped in a JSON array     5.1 refused | PS7 CLEAN
+#     wire record `type` is an array        CLEAN on both
+#     merged + vacuously empty config       CLEAN on both
+#
+# The first two are the 0.16.0 lane-lock shape this repository runs two
+# host jobs for: `ConvertFrom-Json` on PowerShell 7 UNROLLS a
+# single-element array and returns the object inside it, while 5.1
+# returns the array. A gate that reads the PARSED value therefore asks
+# the parser what the document was. The RAW TEXT decides instead - a
+# JSON object begins with `{`, on every host.
+# ---------------------------------------------------------------------
+
+def test_a_prior_state_wrapped_in_a_json_array_is_refused(tmp_path):
+    """PowerShell 7 unrolled the singleton array and every later shape
+    check then passed on an object the document never declared at its
+    root. Windows PowerShell 5.1 refused it, which is exactly what makes
+    a single-host suite the wrong instrument here."""
+    root, sess_dir = build_fresh_layout(tmp_path, fresh_wire(), fresh_log())
+    state_path = tmp_path / "state.json"
+    state_path.write_text(json.dumps([fresh_prior_state()]), encoding="utf-8")
+    assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path),
+                  "prior-state-unusable")
+
+
+def test_a_wire_line_wrapped_in_a_json_array_is_refused(tmp_path):
+    """The same divergence one layer down. The wire reader checked the
+    parsed value for null and a `type` property and never asked whether
+    the LINE was an object, so on PowerShell 7 the array unrolled, the
+    record was counted as its type, and its unchanged text hashed
+    normally."""
+    lines = fresh_wire()
+    idx = next(i for i, l in enumerate(lines) if '"type":"turn.prompt"' in l)
+    wire = list(lines)
+    wire[idx] = "[" + wire[idx] + "]"
+    root, sess_dir = build_fresh_layout(tmp_path, wire, fresh_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+    assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path),
+                  "wire-malformed")
+
+
+def test_a_wire_record_whose_type_is_an_array_is_refused(tmp_path):
+    """CLEAN on both hosts. Presence of `type` was checked and its KIND
+    was not, so `switch -CaseSensitive` enumerated the array and matched
+    the shape branch, and the later per-type counts use `-ceq`, which
+    treats the matching array as truthy."""
+    lines = fresh_wire()
+    idx = next(i for i, l in enumerate(lines) if '"type":"turn.prompt"' in l)
+    wire = mutate(lines, idx,
+                  lambda o: o.__setitem__("type", ["turn.prompt"]))
+    root, sess_dir = build_fresh_layout(tmp_path, wire, fresh_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+    assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path),
+                  "wire-malformed")
+
+
+def test_two_config_updates_where_one_carries_everything_are_refused(tmp_path):
+    """CLEAN on both hosts, and not a parser divergence at all.
+
+    The contract wants TWO config.update records, one carrying the
+    profile and system prompt and one carrying the model alias and
+    effort. `Test-ConfigUpdateShape` returned true for a record carrying
+    NEITHER group - vacuously valid - so merging both groups into the
+    first record and emptying the second left the count at two, both
+    shape counts at one, and every value comparison reading the same
+    record. The second record measured nothing and was counted anyway.
+    """
+    lines = fresh_wire()
+    i1 = next(i for i, l in enumerate(lines)
+              if '"type":"config.update"' in l and '"profileName"' in l)
+    i2 = next(i for i, l in enumerate(lines)
+              if '"type":"config.update"' in l and '"modelAlias"' in l)
+    donor = json.loads(lines[i2])
+    wire = mutate(lines, i1, lambda o: o.update(
+        {"modelAlias": donor["modelAlias"],
+         "thinkingEffort": donor["thinkingEffort"]}))
+    wire = mutate(wire, i2, lambda o: [o.pop("modelAlias", None),
+                                       o.pop("thinkingEffort", None)])
+    root, sess_dir = build_fresh_layout(tmp_path, wire, fresh_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+    assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path),
+                  "record-malformed")
