@@ -91,20 +91,37 @@ Two traps in the dispatch scripts themselves, both measured 2026-08-04:
 The plugin is installed user-scope from a LOCAL marketplace pointing at
 this working copy, but installs are VERSIONED CACHE COPIES — checkout
 edits are NOT live until you: bump `.claude-plugin/plugin.json`, run
+`claude plugin marketplace update parallax`, THEN
 `claude plugin update parallax@parallax` (qualified name required),
 and restart the session when hooks/ or skills/ changed. A restart alone
-only reloads the cached version. GitHub remote (Bmwascher/parallax,
-public) serves stable installs on other machines.
+only reloads the cached version. The marketplace refresh is load-bearing:
+the directory-source catalog is read at session start, so with it skipped
+the update sees the OLD version and silently does nothing — measured
+2026-08-17, the same command copied nothing before the refresh and
+installed 0.26.1 after it. GitHub remote (Bmwascher/parallax, public)
+serves stable installs on other machines.
 
-BUMP THE VERSION LAST, not when the branch's first task touches it.
-`plugin update` keys ONLY on the version string: once a version has been
-cached, the same number reports "already at the latest version" and
-copies NOTHING, however much the checkout changed afterwards. Measured
-2026-08-03: 0.20.0 was bumped mid-branch, cached at 14:13, and then five
-diff-debate rounds rewrote `skills/`. The update refused, and the cache
-kept skill text the review had already retracted. A mid-branch bump is
-therefore a bump that gets consumed before the branch is finished, and
-the recovery is another bump.
+BUMP THE VERSION AFTER THE DIFF DEBATE, not when the branch's first task
+touches it and not merely as the last BUILD task. `plugin update` keys
+ONLY on the version string: once a version has been cached, the same
+number reports "already at the latest version" and copies NOTHING,
+however much the checkout changed afterwards. Measured 2026-08-03: 0.20.0
+was bumped mid-branch, cached at 14:13, and then five diff-debate rounds
+rewrote `skills/`. Measured again 2026-08-16: 0.26.0 bumped LAST in the
+build, exactly as this rule then read, and six debate rounds still moved
+the tree after the bump was cached — the installed copy was five commits
+stale and missing fixes the release existed to ship. The debate is what
+moves the tree after the final build task, so "last" means after it; a
+bump consumed before the branch is finished recovers only by another bump
+(that is what 0.26.1 is).
+
+VERIFY THE INSTALL BY CONTENT, never by the cache directory's name: a
+directory named `0.26.0` held code from five commits before the shipped
+head. The cheap check is `gitCommitSha` in
+`~/.claude/plugins/installed_plugins.json`, which records exactly which
+commit was copied; the thorough one is hashing the cached files against
+the checkout with CRLF normalized. Backlog item 65 holds the full record
+and the open question of a mechanical check.
 
 ## Skill editing rules
 The multi-model-verify skill's transport commands (codex exec flags, resume
