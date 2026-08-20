@@ -43,13 +43,22 @@ it near-verbatim; Fable-specific additions:
 - Never instruct a Fable seat to echo or transcribe its internal
   reasoning (the reasoning_extraction refusal class): report
   contracts ask for evidence and decisions, never thinking.
-- Same-harness Fable seats (panel lane, whole-branch reviewer,
-  escalation) resume probe, 2026-07-26, Claude Code 2.1.220:
-  conversation state persists across resume and the resume surface
-  carries no model parameter — full record with literal payloads at
-  docs/superpowers/plans/rounds/2026-07-26-seat-reshuffle/subagent-resume-probe.md;
+- Same-harness Fable seats that RESUME (panel lane, escalation - the
+  whole-branch reviewer is single-dispatch and never resumes) resume
+  probe, 2026-07-26, Claude Code 2.1.220, re-run across five
+  conditions 2026-08-19 on 2.1.237: the resume surface carries no
+  model parameter, and containment - model pin, system prompt,
+  read-only grant - survives a resume, verified by capability rather
+  than self-report. Conversation state usually persists and is NOT
+  guaranteed to - `No transcript found` was measured three times on
+  2.1.233, above the 2.1.216 floor. Full records with literal payloads
+  at
+  docs/superpowers/plans/rounds/2026-07-26-seat-reshuffle/subagent-resume-probe.md
+  and
+  docs/superpowers/plans/rounds/2026-08-19-item50-resume-probe/probe-record.md;
   the dead-agent case is narrowed to the 0.14.0 smoke's observation
-  scope.
+  scope. Round continuity is CHECKED per round, never assumed - see
+  references/panels.md.
 
 ### Opus 5
 

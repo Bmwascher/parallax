@@ -290,6 +290,20 @@ def test_notes_driver_seat_sections():
     assert m and m.group(1)
     assert (notes.index("Canonical model id:")
             < notes.index("Canonical backup reviewer model id:"))
+    # 0.27.0 item 50, found by the Fable pre-build sweep: this bullet
+    # asserted "conversation state persists across resume" for THREE
+    # named seats, one of which (the whole-branch reviewer) has no resume
+    # in its contract at all - verified by grep, zero hits. It is the same
+    # class the 0.27.0 cycle exists to close, in the file every dispatch
+    # reads, so leaving it would let the retired guarantee survive the fix.
+    nnotes = " ".join(notes.split())
+    assert ("Same-harness Fable seats that RESUME (panel lane, "
+            "escalation - the whole-branch reviewer is single-dispatch "
+            "and never resumes)") in nnotes
+    assert ("Conversation state usually persists and is NOT guaranteed "
+            "to - `No transcript found` was measured three times on "
+            "2.1.233, above the 2.1.216 floor.") in nnotes
+    assert "conversation state persists across resume and" not in nnotes
 
 
 def test_readme_reshuffle_pins():
