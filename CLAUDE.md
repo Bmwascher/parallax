@@ -156,6 +156,17 @@ variables, so any parent process can set them; no shipped caller does,
 and either one can only force the build to FAIL, never turn a failing
 build into a successful one.
 
+A pin that matches the RAW file text needs its phrase unbroken on ONE
+PHYSICAL LINE; a pin built on the whitespace-normalized read does not.
+Both forms are in use, in the same test file, and nothing marks which is
+which. So REFLOWING A PARAGRAPH CAN TURN A PIN RED WITHOUT CHANGING A
+WORD, and the failure names the pin rather than the wrap. Measured
+2026-08-19: one task was blocked twice on this, once when an edit made a
+pinned clause sentence-initial (the pins are case-sensitive) and once when
+the rewrap split the phrase across lines. Check which read a pin uses
+before editing near it, and prefer restructuring the prose to keep an
+existing pin green over editing the pin to fit new prose.
+
 Contract text inside `contract:start` / `contract:end` HTML comment
 markers must sit WHOLE inside a single pin in `evals/multi-model-verify/`.
 The checker scans all Markdown under `skills/`, plus `agents/*.md` and
