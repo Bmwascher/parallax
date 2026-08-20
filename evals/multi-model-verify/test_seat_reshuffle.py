@@ -150,6 +150,33 @@ def test_panels_reference_pins():
     # fallbacks.md AND panels.md's own paragraph 22 lines below it.
     assert "drops to its remaining lanes" not in nbody
     assert "panel-lane-unavailable" in nbody
+    # 0.27.0 item 50: this file said round continuity "is evidenced by
+    # transcript recall" and nothing made the driver CHECK it, so a resume
+    # that succeeded while state was quietly lost passed unnoticed. The
+    # recalled item must never ride the resume message or a re-primed
+    # agent echoes it back and the check self-satisfies.
+    assert ("Round continuity is not assumed, it is CHECKED. Each "
+            "resumed round the driver asks the seat for something "
+            "established in an EARLIER round that the current message "
+            "does not contain, and records the answer. An item that "
+            "rides the resume message proves nothing, because a freshly "
+            "re-primed agent echoes it back.") in nbody
+    # The old text named ONE failure mode, agent death. A failed resume
+    # leaves the agent not dead, so a driver meeting `No transcript found`
+    # did not recognize the panel-lane-loss case and re-dispatched fresh.
+    assert ("This lane has more than one failure mode. The agent can "
+            "die; a resume can fail to reach its transcript; and a "
+            "resume can succeed with the conversation state gone. All "
+            "three are lost round continuity and all three route to "
+            "fallbacks.md's panel-lane-loss. Only the first is agent "
+            "death.") in nbody
+    # The floor bounds CONTAINMENT, never continuity. Three failures were
+    # MEASURED on 2.1.233, above this floor.
+    assert ("The floor does NOT make resume reliable. Resume is "
+            "best-effort at every version above it. A version above the "
+            "floor buys containment, never continuity.") in nbody
+    # The retired overclaim must be gone, not merely qualified elsewhere.
+    assert "Everything in the paragraph above holds only at or above it" not in nbody
 
 
 def test_backup_lane_panel_participation():
