@@ -308,6 +308,17 @@ def test_notes_driver_seat_sections():
             "to - `No transcript found` was measured three times on "
             "2.1.233, above the 2.1.216 floor.") in nnotes
     assert "conversation state persists across resume and" not in nnotes
+    # 0.27.0, required Fable whole-branch review: this clause excused the
+    # untested resumes as UNTESTABLE, which is false for two of them - they
+    # ran on the read-only seat where the test was possible and was simply
+    # not asked. Overstating evidence completeness is the class this cycle
+    # exists to close, so the corrected clause is pinned rather than left
+    # to drift back.
+    assert ("containment - model pin, system prompt, read-only grant - "
+            "survived every resume where it was capability-tested, which "
+            "was two of the nine; of the rest, five ran on seats with "
+            "full tool grants where the test is not possible, and two "
+            "ran on the read-only seat and were simply not asked.") in nnotes
 
 
 def test_readme_reshuffle_pins():

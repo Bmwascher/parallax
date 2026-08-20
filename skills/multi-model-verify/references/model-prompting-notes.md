@@ -49,9 +49,10 @@ it near-verbatim; Fable-specific additions:
   Code 2.1.220, re-run across five conditions 2026-08-19 on 2.1.237:
   the resume surface carries no model parameter, and containment -
   model pin, system prompt, read-only grant - survived every resume
-  where it was capability-tested, which was two of the nine; the
-  other arms ran on seats with full tool grants, where the test is
-  not possible. That holds AT OR ABOVE the 2.1.216 floor - below it,
+  where it was capability-tested, which was two of the nine; of the
+  rest, five ran on seats with full tool grants where the test is not
+  possible, and two ran on the read-only seat and were simply not
+  asked. That holds AT OR ABOVE the 2.1.216 floor - below it,
   containment is precisely what failed silently. Conversation state
   usually persists and is NOT guaranteed to - `No transcript found`
   was measured three times on
