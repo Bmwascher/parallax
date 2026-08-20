@@ -252,14 +252,18 @@ def test_fallbacks_panel_lane_loss():
     # still reported as a panel. The Kimi lane already carries this class
     # (fallbacks.md "resume failure: one same-parameters retry"), so this
     # mirrors a proven shape rather than inventing one.
-    assert ("for the Fable panel seat, both a dead subagent and a resume "
-            "that cannot reach its transcript are directly this "
+    assert ("for the Fable panel seat, a dead subagent, a resume that "
+            "cannot reach its transcript, and a resume that returns "
+            "with its conversation state gone are all directly this "
             "class") in nfb
     assert ("Fable resume failure: a resume that returns no reachable "
             "transcript gets one same-parameters retry, then the consent "
-            "gate. The agent is not dead, so this is not agent death; it "
-            "is lost round continuity, and it is never resolved by a "
-            "silent fresh dispatch.") in nfb
+            "gate. A resume that SUCCEEDS with its conversation state "
+            "gone gets NO retry - the round is already spent and no "
+            "retry restores state - and goes straight to the gate. The "
+            "agent is not dead in either case, so this is not agent "
+            "death; it is lost round continuity, and it is never "
+            "resolved by a silent fresh dispatch.") in nfb
     assert ("A fresh dispatch the user consents to is RECORDED as a fresh "
             "dispatch, and the lane's round continuity is recorded as "
             "broken from that round on. A panel that lost continuity "
@@ -297,9 +301,9 @@ def test_notes_driver_seat_sections():
     # class the 0.27.0 cycle exists to close, in the file every dispatch
     # reads, so leaving it would let the retired guarantee survive the fix.
     nnotes = " ".join(notes.split())
-    assert ("Same-harness Fable seats that RESUME (panel lane, "
-            "escalation - the whole-branch reviewer is single-dispatch "
-            "and never resumes)") in nnotes
+    assert ("The one same-harness Fable seat that RESUMES is the panel "
+            "lane; the whole-branch reviewer and the escalation "
+            "implementer are single-dispatch and never resume.") in nnotes
     assert ("Conversation state usually persists and is NOT guaranteed "
             "to - `No transcript found` was measured three times on "
             "2.1.233, above the 2.1.216 floor.") in nnotes

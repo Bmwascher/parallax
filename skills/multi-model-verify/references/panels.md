@@ -57,7 +57,7 @@ A terminal verdict counts only when it cites the FINAL subject revision; a verdi
   subagent at round 1, resumed for later rounds. Per-round evidence
   class, recorded in these words: dispatch metadata - the round-1
   dispatch names the model pin, and the resume surface carries no
-  model parameter (probed 2026-07-26; record:
+  model parameter (probed 2026-07-26, re-confirmed 2026-08-19; record:
   docs/superpowers/plans/rounds/2026-07-26-seat-reshuffle/subagent-resume-probe.md),
   so the pin cannot be silently swapped mid-debate. Self-reported
   identity is priming-class and never evidence.

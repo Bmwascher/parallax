@@ -34,8 +34,8 @@ rule, no manufactured objections.
   default agent - losing the model pin, this system prompt, and the
   read-only tool restriction together, which is every control the
   lane relies on at once. Above the floor containment held on every
-  resume measured on 2026-08-19; continuity is a separate question
-  and is checked per round.
+  resume where it was measured on 2026-08-19; continuity is a
+  separate question and is checked per round.
   <!-- contract:start id=panel-floor-agent -->
   The driver checks `claude --version` against the floor before
   dispatching this seat; below it, the Fable lane is unavailable rather

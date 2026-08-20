@@ -168,7 +168,7 @@ The Fable sweep for the class *"a contract claim stated as a guarantee,
 resting on a probe narrower than the claim"* returned one clear instance
 (site 4, in scope and fixed here) and one borderline instance:
 
-`model-prompting-notes.md:337-342` states a subscription tier map
+`model-prompting-notes.md:350-355` states a subscription tier map
 ("free/Go tiers get Terra only; Plus and above get Sol - probed
 2026-07-12") on the strength of a probe one account could only have run
 from its own tier, with no probe record cited. The operative diagnostic
@@ -179,7 +179,7 @@ not a merge gate. Different subsystem from item 50.
 cycle scoped.
 
 The sweep explicitly cleared `backup-lane.md:195-209`, `:552-556`,
-`SKILL.md:64-72` and `model-prompting-notes.md:330-332`, which scope
+`SKILL.md:64-72` and `model-prompting-notes.md:343-345`, which scope
 their probes correctly or refuse to generalize.
 
 ## Verification
