@@ -660,6 +660,8 @@ DECLARED_REGIONS = {
     "panel-floor-reference",
     "panel-floor-agent",
     "panel-lane-loss-disposition",
+    "fable-resume-failure",
+    "fable-resume-redispatch-record",
     "panel-unavailable-principle",
     "panel-unavailable-procedure",
     "panel-unavailable-invariant",

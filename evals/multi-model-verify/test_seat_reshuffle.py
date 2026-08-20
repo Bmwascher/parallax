@@ -195,6 +195,25 @@ def test_fallbacks_panel_lane_loss():
             "least one cross-vendor lane, so a composition reduced to "
             "Fable alone is not a panel and cannot proceed as "
             "one.") in nfb
+    # 0.27.0 item 50: panel-lane-loss covered only "a dead Fable panel
+    # subagent". A resume that cannot reach a transcript leaves the agent
+    # NOT dead, so nothing routed it and the consent gate above was never
+    # reached - the reported session re-dispatched fresh and the panel
+    # still reported as a panel. The Kimi lane already carries this class
+    # (fallbacks.md "resume failure: one same-parameters retry"), so this
+    # mirrors a proven shape rather than inventing one.
+    assert ("for the Fable panel seat, both a dead subagent and a resume "
+            "that cannot reach its transcript are directly this "
+            "class") in nfb
+    assert ("Fable resume failure: a resume that returns no reachable "
+            "transcript gets one same-parameters retry, then the consent "
+            "gate. The agent is not dead, so this is not agent death; it "
+            "is lost round continuity, and it is never resolved by a "
+            "silent fresh dispatch.") in nfb
+    assert ("A fresh dispatch the user consents to is RECORDED as a fresh "
+            "dispatch, and the lane's round continuity is recorded as "
+            "broken from that round on. A panel that lost continuity "
+            "cannot report as an intact one.") in nfb
 
 
 def test_plan_format_panel_and_envelope_pins():
