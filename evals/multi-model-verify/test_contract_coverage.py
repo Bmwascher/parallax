@@ -662,6 +662,7 @@ DECLARED_REGIONS = {
     "panel-floor-scope",
     "panel-floor-reference",
     "panel-floor-agent",
+    "panel-seat-resume-best-effort",
     "panel-lane-loss-disposition",
     "fable-resume-failure",
     "fable-resume-redispatch-record",

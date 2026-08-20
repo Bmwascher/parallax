@@ -82,6 +82,20 @@ def test_fable_panel_reviewer_exists_and_pins():
             "unavailable rather than degraded, because a silently "
             "unpinned fully-tooled agent is not a weaker reviewer, it "
             "is a different one.") in nbody
+    # 0.27.0 item 50: this file stated flatly that "your conversation
+    # state persists across the resume". Three `No transcript found`
+    # failures were measured above the floor, so the seat must be told
+    # the truth: usually, not always, and say so when it does not have it.
+    assert ("Your conversation state USUALLY persists across a resume, "
+            "and it is not guaranteed to. A resume can fail outright, or "
+            "succeed with your earlier rounds gone. When the driver asks "
+            "you to recall something from an earlier round, answer "
+            "honestly - if you do not have it, say so plainly. A seat "
+            "that guesses hides the lane's failure.") in nbody
+    # The floor qualifies CONTAINMENT only; naming which half it bounds
+    # is the whole point of the 0.27.0 change.
+    assert "The CONTAINMENT half has a FLOOR" in nbody
+    assert "your conversation state persists across the resume" not in nbody
 
 
 def test_escalation_implementer_exists_and_pins():
