@@ -82,6 +82,20 @@ def test_fable_panel_reviewer_exists_and_pins():
             "unavailable rather than degraded, because a silently "
             "unpinned fully-tooled agent is not a weaker reviewer, it "
             "is a different one.") in nbody
+    # 0.27.0 item 50: this file stated flatly that "your conversation
+    # state persists across the resume". Three `No transcript found`
+    # failures were measured above the floor, so the seat must be told
+    # the truth: usually, not always, and say so when it does not have it.
+    assert ("Your conversation state USUALLY persists across a resume, "
+            "and it is not guaranteed to. A resume can fail outright, or "
+            "succeed with your earlier rounds gone. When the driver asks "
+            "you to recall something from an earlier round, answer "
+            "honestly - if you do not have it, say so plainly. A seat "
+            "that guesses hides the lane's failure.") in nbody
+    # The floor qualifies CONTAINMENT only; naming which half it bounds
+    # is the whole point of the 0.27.0 change.
+    assert "The CONTAINMENT half has a FLOOR" in nbody
+    assert "your conversation state persists across the resume" not in nbody
 
 
 def test_escalation_implementer_exists_and_pins():
@@ -150,6 +164,45 @@ def test_panels_reference_pins():
     # fallbacks.md AND panels.md's own paragraph 22 lines below it.
     assert "drops to its remaining lanes" not in nbody
     assert "panel-lane-unavailable" in nbody
+    # 0.27.0 item 50: this file said round continuity "is evidenced by
+    # transcript recall" and nothing made the driver CHECK it, so a resume
+    # that succeeded while state was quietly lost passed unnoticed. The
+    # recalled item must never ride the resume message or a re-primed
+    # agent echoes it back and the check self-satisfies.
+    assert ("Round continuity is not assumed, it is CHECKED. Each "
+            "resumed round the driver asks the seat for something "
+            "established in an EARLIER round that the current message "
+            "does not contain, and records the answer. An item that "
+            "rides the resume message proves nothing, because a freshly "
+            "re-primed agent echoes it back.") in nbody
+    # The old text named ONE failure mode, agent death. A failed resume
+    # leaves the agent not dead, so a driver meeting `No transcript found`
+    # did not recognize the panel-lane-loss case and re-dispatched fresh.
+    assert ("This lane has more than one failure mode. The agent can "
+            "die; a resume can fail to reach its transcript; and a "
+            "resume can succeed with the conversation state gone. All "
+            "three are lost round continuity and all three route to "
+            "fallbacks.md's panel-lane-loss. Only the first is agent "
+            "death.") in nbody
+    # The floor bounds CONTAINMENT, never continuity. Three failures were
+    # MEASURED on 2.1.233, above this floor.
+    assert ("The floor does NOT make resume reliable. Resume is "
+            "best-effort at every version above it. What the floor marks "
+            "is the release that fixed the silent revert; containment "
+            "was capability-tested on 2.1.237 only, so above the floor "
+            "it rests on that changelog mechanism rather than on a "
+            "measurement covering every version.") in nbody
+    # The retired overclaim must be gone, not merely qualified elsewhere.
+    assert "Everything in the paragraph above holds only at or above it" not in nbody
+    # The evidence this whole change rests on must not be deletable-green.
+    # 0.27.0 exists because a claim outran the probe behind it; shipping
+    # the replacement claim with its own evidence unpinned would reproduce
+    # that class exactly.
+    assert ("Measured: `No transcript found` three times on 2.1.233, "
+            "above this floor, and nine clean resumes across five "
+            "conditions on 2.1.237, which is too few to bound an "
+            "intermittent fault. Records: docs/superpowers/plans/rounds/"
+            "2026-08-19-item50-resume-probe/probe-record.md.") in nbody
 
 
 def test_backup_lane_panel_participation():
@@ -195,6 +248,29 @@ def test_fallbacks_panel_lane_loss():
             "least one cross-vendor lane, so a composition reduced to "
             "Fable alone is not a panel and cannot proceed as "
             "one.") in nfb
+    # 0.27.0 item 50: panel-lane-loss covered only "a dead Fable panel
+    # subagent". A resume that cannot reach a transcript leaves the agent
+    # NOT dead, so nothing routed it and the consent gate above was never
+    # reached - the reported session re-dispatched fresh and the panel
+    # still reported as a panel. The Kimi lane already carries this class
+    # (fallbacks.md "resume failure: one same-parameters retry"), so this
+    # mirrors a proven shape rather than inventing one.
+    assert ("for the Fable panel seat, a dead subagent, a resume that "
+            "cannot reach its transcript, and a resume that returns "
+            "with its conversation state gone are all directly this "
+            "class") in nfb
+    assert ("Fable resume failure: a resume that returns no reachable "
+            "transcript gets one same-parameters retry, then the consent "
+            "gate. A resume that SUCCEEDS with its conversation state "
+            "gone gets NO retry - the round is already spent and no "
+            "retry restores state - and goes straight to the gate. The "
+            "agent is not dead in either case, so this is not agent "
+            "death; it is lost round continuity, and it is never "
+            "resolved by a silent fresh dispatch.") in nfb
+    assert ("A fresh dispatch the user consents to is RECORDED as a fresh "
+            "dispatch, and the lane's round continuity is recorded as "
+            "broken from that round on. A panel that lost continuity "
+            "cannot report as an intact one.") in nfb
 
 
 def test_plan_format_panel_and_envelope_pins():
@@ -221,6 +297,40 @@ def test_notes_driver_seat_sections():
     assert m and m.group(1)
     assert (notes.index("Canonical model id:")
             < notes.index("Canonical backup reviewer model id:"))
+    # 0.27.0 item 50, found by the Fable pre-build sweep: this bullet
+    # asserted "conversation state persists across resume" for THREE
+    # named seats, one of which (the whole-branch reviewer) has no resume
+    # in its contract at all - verified by grep, zero hits. It is the same
+    # class the 0.27.0 cycle exists to close, in the file every dispatch
+    # reads, so leaving it would let the retired guarantee survive the fix.
+    nnotes = " ".join(notes.split())
+    assert ("The one same-harness Fable seat that RESUMES is the panel "
+            "lane; the whole-branch reviewer and the escalation "
+            "implementer are single-dispatch and never resume.") in nnotes
+    assert ("Conversation state usually persists and is NOT guaranteed "
+            "to - `No transcript found` was measured three times on "
+            "2.1.233, above the 2.1.216 floor.") in nnotes
+    assert "conversation state persists across resume and" not in nnotes
+    # 0.27.0, required Fable whole-branch review: this clause excused the
+    # untested resumes as UNTESTABLE, which is false for two of them - they
+    # ran on the read-only seat where the test was possible and was simply
+    # not asked. Overstating evidence completeness is the class this cycle
+    # exists to close, so the corrected clause is pinned rather than left
+    # to drift back.
+    assert ("containment - model pin, system prompt, read-only grant - "
+            "survived every resume where it was capability-tested, which "
+            "was two of the nine; of the rest, five ran on seats with "
+            "full tool grants where the test is not possible, and two "
+            "ran on the read-only seat and were simply not asked.") in nnotes
+    # 0.27.0 diff debate R1: "AT OR ABOVE the 2.1.216 floor" claimed
+    # containment held for every version above the floor, but every
+    # capability test ran on 2.1.237 only - a changelog mechanism, not a
+    # measurement covering the range. Narrowed to what was measured.
+    assert ("Every one of those capability tests ran on 2.1.237. Below "
+            "the 2.1.216 floor containment is precisely what failed "
+            "silently; above it no measurement covers every version, so "
+            "the floor names the release that fixed the silent revert "
+            "rather than a proven range.") in nnotes
 
 
 def test_readme_reshuffle_pins():

@@ -57,20 +57,40 @@ A terminal verdict counts only when it cites the FINAL subject revision; a verdi
   subagent at round 1, resumed for later rounds. Per-round evidence
   class, recorded in these words: dispatch metadata - the round-1
   dispatch names the model pin, and the resume surface carries no
-  model parameter (probed 2026-07-26; record:
+  model parameter (probed 2026-07-26, re-confirmed 2026-08-19; record:
   docs/superpowers/plans/rounds/2026-07-26-seat-reshuffle/subagent-resume-probe.md),
-  so the pin cannot be silently swapped mid-debate. Round continuity
-  is evidenced by transcript recall; the failure mode is agent death,
-  which is loud (class panel-lane-loss, fallbacks.md). Self-reported
+  so the pin cannot be silently swapped mid-debate. Self-reported
   identity is priming-class and never evidence.
-  **Harness floor: Claude Code 2.1.216.** Everything in the paragraph
-  above holds only at or above it. Below the floor a resumed background
-  agent silently reverted to the default agent, dropping the model pin,
-  the seat's system prompt, and its read-only tool restriction in one
-  step - so "the failure mode is agent death, which is loud" was false
-  there, and the silent mode defeated the pin and the allowlist
-  together. Both probes ran on 2.1.220, after the fix, which is why the
-  original wording read as a platform guarantee.
+  <!-- contract:start id=panel-round-continuity-check -->
+  Round continuity is not assumed, it is CHECKED. Each resumed round
+  the driver asks the seat for something established in an EARLIER
+  round that the current message does not contain, and records the
+  answer. An item that rides the resume message proves nothing,
+  because a freshly re-primed agent echoes it back.
+  <!-- contract:end -->
+  <!-- contract:start id=panel-resume-failure-mode -->
+  This lane has more than one failure mode. The agent can die; a
+  resume can fail to reach its transcript; and a resume can succeed
+  with the conversation state gone. All three are lost round
+  continuity and all three route to fallbacks.md's panel-lane-loss.
+  Only the first is agent death.
+  <!-- contract:end -->
+  **Harness floor: Claude Code 2.1.216.** It bounds ONE thing. Below
+  it a resumed background agent silently reverted to the default
+  agent, dropping the model pin, the seat's system prompt, and its
+  read-only tool restriction in one step - the silent mode that
+  defeats the pin and the allowlist together.
+  <!-- contract:start id=panel-floor-scope -->
+  The floor does NOT make resume reliable. Resume is best-effort at
+  every version above it. What the floor marks is the release that
+  fixed the silent revert; containment was capability-tested on 2.1.237
+  only, so above the floor it rests on that changelog mechanism rather
+  than on a measurement covering every version.
+  <!-- contract:end -->
+  Measured: `No transcript found` three times on 2.1.233, above this
+  floor, and nine clean resumes across five conditions on 2.1.237,
+  which is too few to bound an intermittent fault. Records:
+  docs/superpowers/plans/rounds/2026-08-19-item50-resume-probe/probe-record.md.
   <!-- contract:start id=panel-floor-reference -->
   Check `claude --version` before dispatching the Fable lane; below the
   floor the lane is UNAVAILABLE, not degraded, and the case routes to

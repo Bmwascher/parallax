@@ -209,13 +209,23 @@ choice.
 
 A reviewer lane failing mid-panel (references/panels.md) first
 resolves through its own transport classes above (codex classes for
-Sol, the backup-lane classes for Kimi; a dead Fable panel subagent is
+Sol, the backup-lane classes for Kimi; for the Fable panel seat, a
+dead subagent, a resume that cannot reach its transcript, and a
+resume that returns with its conversation state gone are all
 directly this class). If the lane cannot continue:
 <!-- contract:start id=panel-lane-loss-disposition -->
 A lost lane stops the panel at the consent gate - continuing with fewer lanes never happens automatically.
 <!-- contract:end -->
+<!-- contract:start id=fable-resume-failure -->
+Fable resume failure: a resume that returns no reachable transcript gets one same-parameters retry, then the consent gate. A resume that SUCCEEDS with its conversation state gone gets NO retry - the round is already spent and no retry restores state - and goes straight to the gate. The agent is not dead in either case, so this is not agent death; it is lost round continuity, and it is never resolved by a silent fresh dispatch.
+<!-- contract:end -->
+<!-- contract:start id=fable-resume-redispatch-record -->
+A fresh dispatch the user consents to is RECORDED as a fresh dispatch, and the lane's round continuity is recorded as broken from that round on. A panel that lost continuity cannot report as an intact one.
+<!-- contract:end -->
 The gate offers: continue with the remaining lanes; substitute the
-lost lane (the substitution machinery above, where applicable); or
+lost lane (the substitution machinery above, where applicable);
+re-dispatch a lost Fable seat fresh, with the full brief re-sent each
+round and the loss of continuity recorded per the region above; or
 abort. A single-lane remainder proceeds as a bilateral debate and is
 recorded as such, not as a panel - and its status splits by what
 remains: a surviving cross-vendor lane (Sol or Kimi) clean on
