@@ -52,8 +52,11 @@ it near-verbatim; Fable-specific additions:
   where it was capability-tested, which was two of the nine; of the
   rest, five ran on seats with full tool grants where the test is not
   possible, and two ran on the read-only seat and were simply not
-  asked. That holds AT OR ABOVE the 2.1.216 floor - below it,
-  containment is precisely what failed silently. Conversation state
+  asked. Every one of those capability tests ran on 2.1.237. Below the
+  2.1.216 floor containment is precisely what failed silently; above it
+  no measurement covers every version, so the floor names the release
+  that fixed the silent revert rather than a proven range. Conversation
+  state
   usually persists and is NOT guaranteed to - `No transcript found`
   was measured three times on
   2.1.233, above the 2.1.216 floor. Full records with literal payloads

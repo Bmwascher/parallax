@@ -82,8 +82,10 @@ A terminal verdict counts only when it cites the FINAL subject revision; a verdi
   defeats the pin and the allowlist together.
   <!-- contract:start id=panel-floor-scope -->
   The floor does NOT make resume reliable. Resume is best-effort at
-  every version above it. A version above the floor buys containment,
-  never continuity.
+  every version above it. What the floor marks is the release that
+  fixed the silent revert; containment was capability-tested on 2.1.237
+  only, so above the floor it rests on that changelog mechanism rather
+  than on a measurement covering every version.
   <!-- contract:end -->
   Measured: `No transcript found` three times on 2.1.233, above this
   floor, and nine clean resumes across five conditions on 2.1.237,
