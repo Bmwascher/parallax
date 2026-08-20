@@ -177,6 +177,15 @@ def test_panels_reference_pins():
             "floor buys containment, never continuity.") in nbody
     # The retired overclaim must be gone, not merely qualified elsewhere.
     assert "Everything in the paragraph above holds only at or above it" not in nbody
+    # The evidence this whole change rests on must not be deletable-green.
+    # 0.27.0 exists because a claim outran the probe behind it; shipping
+    # the replacement claim with its own evidence unpinned would reproduce
+    # that class exactly.
+    assert ("Measured: `No transcript found` three times on 2.1.233, "
+            "above this floor, and nine clean resumes across five "
+            "conditions on 2.1.237, which is too few to bound an "
+            "intermittent fault. Records: docs/superpowers/plans/rounds/"
+            "2026-08-19-item50-resume-probe/probe-record.md.") in nbody
 
 
 def test_backup_lane_panel_participation():
