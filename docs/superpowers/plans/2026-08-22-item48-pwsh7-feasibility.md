@@ -317,11 +317,21 @@ TSV = HERE / "entry-points.tsv"
 # .github/workflows/skill-evals.yml:71 - after an earlier version of this
 # script carried only the first two families.
 #
-# THESE THREE FAMILIES ARE A FILTER, NOT A PROOF. They are what is known to
-# catch entry points today, and the list has been wrong three times: two
-# classes prompted the third family, two more widened it, and a fifth put
-# Start-Job in the launch family. The record says so in its own words
-# rather than presenting this list as closed.
+# THESE THREE FAMILIES ARE A FILTER, NOT A PROOF. Count the corrections
+# honestly, because the last count was stale in the commit that wrote it:
+# across FOUR review rounds a reviewer produced a live entry point the
+# filter did not match EIGHT times - two prompted the third family, two
+# widened it, one put Start-Job in the launch family, one added the
+# line-wrapped backtick form, and two more added the generic call operator
+# and bare `python`. The record says so in its own words rather than
+# presenting this list as closed.
+#
+# ONE KNOWN MISS IS LEFT IN DELIBERATELY, with its instance named. Bare
+# `git` invocations - tools/check-drift.ps1:987, `git -C $worktree commit`
+# - are NOT matched. Matching bare `git` costs 179 further hits, almost all
+# of them prose and shell plumbing, against a class that never starts a
+# PowerShell host. That is a measured trade and not an empty set: the
+# instance above is real and is not in the inventory.
 #
 # The third family matches INVOCATION shapes rather than every mention of a
 # script. Its alternatives, and why each is here, all measured 2026-08-22:
@@ -374,6 +384,8 @@ FAMILIES = {
         r"|[\w\-/\\]+\.ps1(?=\s+-)"
         r"|&\s*['\"]?[\w\-/\\:.$()\[\]]*\.ps1"
         r"|&\s*['\"]?\$[\w:.\[\]]+"
+        r"|&\s*['\"]?[a-z][\w\-]*(\.exe)?(?![\w\-/\\.])"
+        r"|(?<![\w\-/\\.])python(\.exe)?\s+[\w\-]"
         r"|`[^`]*\.ps1[^`]*`"
         r"|`[^`]*\.ps1\s*$"
         r"|(?<![\w\-])\.[\\/][\w\-/\\.]*\.ps1"
@@ -397,7 +409,7 @@ CLASSES = {
 }
 MIGRATION = {"must-change", "no-change", "unknown"}
 
-# A prefix row NEVER covers these. Everything under them is executed by
+# A prefix row NEVER covers these. The scripts under them are EXECUTED by
 # this investigation, so classifying them wholesale as `record - never
 # executed` would attest the opposite of the truth.
 #
@@ -409,6 +421,19 @@ MIGRATION = {"must-change", "no-change", "unknown"}
 EXEMPT_FROM_PREFIX = (
     "docs/superpowers/plans/rounds/2026-08-22-item48-pwsh7-feasibility/",
     "docs/superpowers/plans/2026-08-22-item48-pwsh7-feasibility.md",
+)
+
+# ...except these two, which really are what the `record` class describes.
+# `feasibility-record.md` is the record itself and is never executed, and
+# it GROWS through Tasks 4 to 8. Exempting it would key explicit rows to
+# line numbers that every later task shifts, so the survey would go stale
+# on the record's own prose and block at Task 9 for a reason that is not an
+# entry point. `entry-points.tsv` is the inventory data file.
+NOT_EXEMPT = (
+    "docs/superpowers/plans/rounds/2026-08-22-item48-pwsh7-feasibility/"
+    "feasibility-record.md",
+    "docs/superpowers/plans/rounds/2026-08-22-item48-pwsh7-feasibility/"
+    "entry-points.tsv",
 )
 
 
@@ -487,7 +512,7 @@ def load_rows():
 
 def covered_by_prefix(key, prefixes):
     rel, _, fam = key
-    if rel.startswith(EXEMPT_FROM_PREFIX):
+    if rel.startswith(EXEMPT_FROM_PREFIX) and rel not in NOT_EXEMPT:
         return False
     for prel, pfam, _, _ in prefixes:
         if rel.startswith(prel) and (pfam == "*" or pfam == fam):
@@ -589,13 +614,15 @@ particular number; report what the run prints.
 
 **Split this task by FAMILY, one subagent each, in this order: `host`, then
 `launch`, then `bare`.** Measured against the repo on 2026-08-22 by running
-the scanner exactly as written above: 5186 matches, of which 4286 fall
-under the `docs/` prefix row and 900 need a hand-written row — 167 `host`,
-277 `launch` and 456 `bare`. The 900 includes the matches inside this plan
-and the record directory, which `EXEMPT_FROM_PREFIX` keeps out of the
-blanket row. One subagent classifying 900 lines in one pass is how a survey
-stops being read and starts being guessed, which is the exact failure this
-task exists to prevent.
+the scanner exactly as written above: 6346 matches, of which 5365 fall
+under the `docs/` prefix row and 981 need a hand-written row — 168 `host`,
+277 `launch` and 536 `bare`. The 981 includes the matches inside this plan
+and inside the record directory's SCRIPTS, which `EXEMPT_FROM_PREFIX` keeps
+out of the blanket row — but not `feasibility-record.md` or
+`entry-points.tsv`, which the blanket row does cover, because those two
+really are what `record` describes. One subagent classifying 981 lines in
+one pass is how a survey stops being read and starts being guessed, which
+is the exact failure this task exists to prevent.
 
 Each family's task ends on its own `FAMILY <name>: <n> hits, 0 unclassified`
 line AND on every EARLIER family's line still reading 0. Checking only your
@@ -710,8 +737,10 @@ Rules that are NOT judgment calls:
   one task later. The second version added a step to Task 4 whose check
   could not fail. This third version moves the rule into the code, where
   the ordinary unclassified gate carries it.
-- **A line matching both families produces TWO rows**, one per family, and
-  they may carry different classifications.
+- **A line produces ONE ROW PER FAMILY IT MATCHES.** There are three
+  families, so a line can carry up to three rows, and they may hold
+  different classifications. (This rule said "both families" and "TWO rows"
+  while the scanner already had three.)
 - **`migration` is `must-change` only if a move to PowerShell 7 would have
   to edit that line.** If you cannot tell from the line and its file, write
   `unknown` and say why in Step 3. `unknown` is an honest answer here;
@@ -765,7 +794,14 @@ awk -F'\t' '!/^#/ && NF==6 {print $5}' docs/superpowers/plans/rounds/2026-08-22-
      tracked file;
    - any file listed as `NOT SCANNED` by the survey, by name;
    - a classification that is syntactically valid and semantically wrong,
-     which no run of this script can detect.
+     which no run of this script can detect;
+   - anything UNTRACKED. `git ls-files` lists tracked files only, so a
+     generated or ignored file is invisible. The auto-triage wrapper
+     scripts under `tools/drift-reports/` are the live example: they invoke
+     a client and are not in the index, so no run of this survey will ever
+     see them;
+   - a bare `git` invocation, deliberately, with its instance named in
+     `survey.py`'s own comment: `tools/check-drift.ps1:987`.
    End the subsection with this sentence, which is the point of it:
    **this list is not itself provably complete, and a blind-spot list that
    reads as complete is the same defect one level up.** Record the count
@@ -1208,11 +1244,28 @@ Replace `NOT YET WRITTEN.` under `## Measurement 1: re-exec fidelity` with:
 
 The standing rule in Task 3 applies here, and `EXEMPT_FROM_PREFIX` in
 `survey.py` enforces it: every family match in the files this task created
-is UNCLASSIFIED until a row exists. Run:
+is UNCLASSIFIED until a row exists.
+
+**STAGE THE NEW FILES FIRST.** The scanner reads `git ls-files`, which
+lists TRACKED files only, so an untracked file is invisible to it — and
+"invisible" and "already classified" produce the identical empty output.
+Without this line the check below passes because the files cannot be seen,
+which is the same fail-open shape one layer down from the one the
+exemption was written to close.
 
 ```bash
+git add docs/superpowers/plans/rounds/2026-08-22-item48-pwsh7-feasibility/reexec/
 python docs/superpowers/plans/rounds/2026-08-22-item48-pwsh7-feasibility/survey.py --emit
 ```
+
+Confirm the staging worked before trusting the result:
+
+```bash
+git ls-files docs/superpowers/plans/rounds/2026-08-22-item48-pwsh7-feasibility/reexec/ | wc -l
+```
+
+Expected: 5, one per file this task created. A zero here means the emit
+above measured nothing.
 
 Take every emitted row under this task's own directory, OPEN THE LINE each
 one points at, and classify it by Task 3's table and Task 3's rule — the
@@ -1371,8 +1424,11 @@ git commit -m "record where PowerShell 7 is proven present and where it is not"
 
 **Interfaces:**
 - Consumes: the inventory from Task 3, AND the revision-bound successful CI
-  run id from Task 5 Step 2, which is the only evidence in this
-  investigation that anything PASSED under PowerShell 7.
+  run id from Task 5 Step 2. That run is the only evidence in this
+  investigation that the SHIPPED TEST MODULES passed under PowerShell 7.
+  (Task 4 independently runs four `pwsh7` arms and requires them to exit
+  zero, so it is evidence too — about the re-exec probe, not about the
+  shipped surface this task tabulates.)
 
 Item 48's warning is precise: "Not 'does it start'. 0.16.0's lock STARTED
 fine on 7 and did not lock." So this task maps COVERAGE, and does not
@@ -1564,6 +1620,19 @@ def main():
         "pwsh_on_real_path": shutil.which("pwsh"),
         "pwsh_after_stripping": still_there,
     }
+    if still_there is not None:
+        # STOP HERE. The strip failed, so whatever the invocation below
+        # produced would describe a machine that still has PowerShell 7.
+        # The task text says to stop and say so; without this the program
+        # ran on and could still exit 0, leaving the instruction as the
+        # only thing standing between a failed setup and a clean-looking
+        # result.
+        result["outcome"] = ("the PATH strip did not remove pwsh; nothing "
+                             "about a machine without it was measured")
+        (HERE / "results.json").write_text(json.dumps(result, indent=1),
+                                           encoding="utf-8")
+        print(json.dumps(result, indent=1))
+        return 1
     # The SHIPPED shape, not a convenient one. hooks/hooks.json:10 invokes
     # `pwsh -NoProfile -NonInteractive -File <script>`; a `-Command
     # Write-Output ok` call would measure a different caller path and then
@@ -1621,8 +1690,10 @@ outcomes, and the record names WHICH:
   not measured here.
 - **The call succeeds anyway.** See the paragraph below. Absence was not
   reproduced, and no failure text exists to report.
-- **The call times out.** The hook read stdin and nothing closed it. Report
-  it as a probe defect and fix the probe.
+- **The call times out.** The probe passes `stdin=subprocess.DEVNULL`, so a
+  blocked stdin read is NOT the explanation and must not be written as one.
+  Report it as a probe defect, say what the hook was doing when the 60
+  seconds elapsed if that is recoverable, and fix the probe.
 
 If `pwsh_after_stripping` is NOT null, the strip failed and nothing was
 measured; say so and stop rather than reporting a clean result.
@@ -1661,12 +1732,20 @@ Replace `NOT YET WRITTEN.` under
 The same standing rule as Task 4, and for the same reason.
 `missing-pwsh/probe.py` carries `pwsh`, `subprocess.run` and `-File`, and
 those paths are in `EXEMPT_FROM_PREFIX`, so every one of them is
-UNCLASSIFIED until a row exists. Run:
+UNCLASSIFIED until a row exists.
+
+**STAGE THE NEW FILE FIRST**, for the reason spelled out in Task 4 Step 7:
+`git ls-files` lists tracked files only, and an untracked file produces the
+same empty output as a fully classified one.
 
 ```bash
+git add docs/superpowers/plans/rounds/2026-08-22-item48-pwsh7-feasibility/missing-pwsh/
+git ls-files docs/superpowers/plans/rounds/2026-08-22-item48-pwsh7-feasibility/missing-pwsh/ | wc -l
 python docs/superpowers/plans/rounds/2026-08-22-item48-pwsh7-feasibility/survey.py --emit \
   | grep "2026-08-22-item48-pwsh7-feasibility/missing-pwsh"
 ```
+
+The `git ls-files` line must print 1 before the emit result means anything.
 
 Open each emitted line, classify it by Task 3's table and Task 3's rule —
 from the line, not from the path and not from what this plan expects — and
