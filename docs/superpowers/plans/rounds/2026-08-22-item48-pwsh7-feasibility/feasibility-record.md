@@ -625,38 +625,60 @@ match carries a syntactically valid row, and that no row points at a line
 that has changed or gone. It does NOT prove any classification is CORRECT,
 and it does not prove the three families detect every entry point.
 
-**Why a re-run today prints different numbers.** Re-running the command
-above after this section existed prints higher counts (`7215 hits, 7215
-classified, 0 unclassified, 0 stale`, still exit code `0`) than the 7163
-captured above. The cause is this section itself: its own prose now
-quotes `powershell.exe`, `pwsh.exe` and `.ps1` text about the inventory,
-adding matches inside `feasibility-record.md`. That file is covered by
-the `docs/` prefix row, so the new matches need no rows and do not turn
-the survey red; the 7163 above is the Step 3 run captured before this
-section was written, not a number this record keeps in sync with itself.
+**Why a re-run today prints different numbers — TWO causes, not one
+(corrected in the final-review fix; the number below was also stale until
+this fix re-ran the command rather than copying an old table).**
+Re-running the survey command above after this section existed prints
+`7481 hits, 7481 classified, 0 unclassified, 0 stale`, still exit code `0`
+— higher than the 7163 captured above, for two DIFFERENT reasons that this
+record previously conflated into one:
+
+1. **The hit-count growth** (7163 -> 7476, the `survey.py` run's own
+   total). This section's own prose quotes `powershell.exe`, `pwsh.exe` and
+   `.ps1` text about the inventory, adding matches inside
+   `feasibility-record.md` itself. That file is covered by the `docs/`
+   prefix row, so these new matches need no rows and do not turn the
+   survey red; the 7163 above is the Step 3 run captured before this
+   section was written, not a number this record keeps in sync with
+   itself.
+2. **The row-count growth in `entry-points.tsv`**, which is the actual
+   cause of the classification-counts table below moving. Task 4 (commit
+   `43cd165`) added 21 explicit rows for `<REC>/reexec/*.ps1`, and Task 7
+   (commit `8b8918c`) added 12 for `<REC>/missing-pwsh/probe.py` — both
+   scratch files this investigation itself created, under the `docs/`
+   prefix but matched by `EXEMPT_SUFFIXES`, which forces an explicit row
+   for any `.py`/`.ps1` file rather than letting the prefix row cover it.
+   33 rows (21 + 12) accounts for the table's total moving from 1078 to
+   1111; a further 3 rows, added by this final review's own Important 3
+   fix to `survey.py`'s own comment prose (the same self-quoting effect
+   as cause 1 above, but landing as classified rows because `survey.py`
+   itself sits under `EXEMPT_SUFFIXES`, not the `docs/` prefix), move the
+   table's actual total to 1114 below. Rows-versus-hits is a separate
+   distinction, explained where the table sits, and does not by itself
+   explain why the table's OWN total changed.
 
 ### Classification counts
 
-Produced by:
+Produced by, re-run for this fix rather than copied from an earlier table:
 `awk -F'\t' '!/^#/ && NF==6 {print $5}' docs/superpowers/plans/rounds/2026-08-22-item48-pwsh7-feasibility/entry-points.tsv | sort | uniq -c | sort -rn`
 
 | count | classification |
 |---|---|
-| 599 | not-a-launch |
-| 211 | test-harness |
+| 609 | not-a-launch |
+| 227 | test-harness |
 | 106 | doc-instruction |
 | 54 | launch-nonhost |
-| 38 | host-pin-nonexec |
-| 30 | fixture |
+| 46 | host-pin-nonexec |
+| 31 | fixture |
 | 15 | launch-explicit |
 | 13 | ci |
 | 7 | launch-inherit |
-| 4 | host-pin-exec |
+| 5 | host-pin-exec |
 | 1 | record |
 
-One row of the 7163 is a prefix row (`docs/	*	*	-	record	no-change`); the
-count above is the per-row classification, not per-hit, so the table's
-total (1078) is the hand-written row count, not the hit count (7163) the
+One row of the 7481 hits is a prefix row (`docs/	*	*	-	record	no-change`);
+the count above is the per-row classification, not per-hit, so the table's
+total (1114) is the hand-written row count, not the hit count (7481) the
 prefix row also covers.
 
 ### `must-change` rows, whole file
@@ -908,7 +930,7 @@ here.
   and a migration would have to edit it exactly like its two neighbours.
   `survey.py` was NOT widened to catch this shape: every count in this
   task was measured against the filter as it stands, and widening it now
-  would invalidate all 1078 hand-written rows and this whole inventory.
+  would invalidate all 1114 hand-written rows and this whole inventory.
   The plan's own remedy for a known miss is to NAME it, as this bullet
   and the bare-`git` bullet below both do, not to chase it into the
   filter. Consequence stated plainly: the `must-change` count above (83)
@@ -1126,10 +1148,17 @@ A green `powershell-hosts` job, `runs-on: windows-latest`, whose two steps
 powershell.exe` and `PARALLAX_PS_HOST: pwsh.exe` respectively and then run
 `python -m pytest` against the same eleven `evals/multi-model-verify/`
 modules, is direct evidence that a `pwsh.exe` host existed and worked on
-`windows-latest` for run `32391262449` on 2026-08-20. This proves PowerShell
-7 was present and functional on that one runner image on that one date; it
-does not prove every future `windows-latest` image carries it, only that the
-image GitHub served for this run did.
+`windows-latest` for run `32391262449` on 2026-08-20 — not merely a green
+job that a self-skipping module could have produced the same way with no
+host at all: one of those eleven modules, `test_lock_protocol_live.py`,
+calls `required_hosts()`, which `## Measurement 3` (`:1463`-`:1471`
+below) documents as the only host-selector in this repo that FAILS rather
+than skips when a host is missing, making a pass of that module the
+strongest host-presence evidence this record has, not just a green
+conclusion taken at face value. This proves PowerShell 7 was present and
+functional on that one runner image on
+that one date; it does not prove every future `windows-latest` image
+carries it, only that the image GitHub served for this run did.
 
 **Revision binding.** `gh run view 32391262449 --json headSha --jq
 '.headSha'` returned `a3134dcd76d9253057bf24935f3d7a7eef8eb0e4`. That SHA
@@ -1373,7 +1402,7 @@ exercises the SAME behaviour under 7:
    documentation, not exercised by a test against `pwsh` here.
 3. **Native argument splatting strips embedded double quotes without
    changing the argument count (0.21.0, item 20).** Covered: `##
-   Measurement 1: re-exec fidelity` in THIS record, produced by Task 2, ran
+   Measurement 1: re-exec fidelity` in THIS record, produced by Task 4, ran
    this exact class of corruption under both hosts as PARENT. The
    `pwsh7/splat/positional` and `pwsh7/splat/named` rows both show
    `stage B exact: true` - PowerShell 7 as the splatting parent forwarded
@@ -2187,7 +2216,7 @@ hosts, Windows PowerShell 5.1 and PowerShell 7, even though 5.1 is where
 every measured PowerShell-hosting defect in this repo's history has fired
 (`## Measurement 5: what is saved`, Step 4: two independent corruption
 defects in the Kimi lane's inline brief transport, both 5.1-only). This
-record's own entry-point survey found at least 83 lines that pin, invoke,
+record's own entry-point survey found at least 83 rows that pin, invoke,
 or document 5.1 specifically and would need to change to drop it
 (`## Entry point inventory`). Backlog items 51 (`docs/superpowers/plans/
 2026-07-27-0150-backlog.md:3748`, the Kimi lane's inline brief mangled by
@@ -2240,12 +2269,20 @@ without restating it:
    `pwsh`, in the order the inventory already groups them (host pins,
    launch pins, bare invocations, docs), re-running `survey.py` after each
    group to confirm no row is missed and none goes stale.
-4. Before this step, re-run the bilateral-mechanism sweep that
+4. Before this step, close condition (3)'s three sub-parts, not only the
+   bilateral sweep (the same gap fix round 3 found and fixed for condition
+   (5) in step 1, above): re-run the bilateral-mechanism sweep that
    `## Measurement 5` Step 6 ran four ways (not claimed exhaustive) at
    least once more, with a fifth method, to close the open question
    whether `test_measurement_20_ticks_and_date_string_types_diverge_
    across_hosts` and `TestTheFramesGoOutIntactOnBothHosts` are the
-   COMPLETE bilateral set. Only once steps 1-3 leave the code UNABLE to
+   COMPLETE bilateral set; audit whether the coverage table's ten covering
+   modules (`## Measurement 3` Step 2) actually assert the RIGHT behaviour
+   rather than merely invoking the script, widening the retained set for
+   any that do not; and decide whether `.githooks/pre-push` — proven on NO
+   host today, on either side of a migration — needs its own retained case
+   alongside the re-exec and refusal ones from step 1. Only once steps 1-3
+   leave the code UNABLE to
    run on 5.1 (every `must-change` row repinned, the refusal and re-exec
    cases proven under the new shape) AND the bilateral sweep above is
    settled: retire `test_measurement_20_ticks_and_date_string_
@@ -2266,7 +2303,7 @@ without restating it:
    `tools/check-drift.ps1` inherits its host from whatever launches it
    (the scheduled task's registered action, `tools/check-drift.ps1:96`
    above), so once every entry point capable of starting it is repinned to
-   `pwsh`, its `Get-Content -Raw` read at `:700` decodes on pwsh's UTF-8
+   `pwsh`, its `Get-Content -Raw` read at `:1060` decodes on pwsh's UTF-8
    default rather than the ANSI code page, and the defect no longer fires.
    Item 51 is NOT closed by construction the same way. The Kimi lane's
    inline brief transport WAS independently measured this cycle

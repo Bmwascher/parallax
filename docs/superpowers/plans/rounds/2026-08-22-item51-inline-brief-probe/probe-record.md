@@ -162,7 +162,7 @@ contract does not state anywhere.
 
 ## What this says about item 31
 
-Item 31 is the same class on the codex lane at `tools/check-drift.ps1:700`,
+Item 31 is the same class on the codex lane at `tools/check-drift.ps1:1060`,
 where the defective `Get-Content -Raw | codex exec` pipe still ships. This
 probe does not measure that site. It does establish that the class is live
 on two lanes at once and that only one of them has a brief-attribution

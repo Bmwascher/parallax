@@ -147,7 +147,7 @@ CLASSES = {
 }
 MIGRATION = {"must-change", "no-change", "unknown"}
 
-# A prefix row NEVER covers an EXECUTABLE file of this investigation's own,
+# A prefix row NEVER covers an EXECUTABLE file, anywhere under `docs/`,
 # because classifying one wholesale as `record - never executed` would
 # attest the opposite of the truth.
 #
@@ -157,18 +157,28 @@ MIGRATION = {"must-change", "no-change", "unknown"}
 # written to prove the rows existed printed zero either way. That fail-open
 # gate was itself written while closing a fail-open gate.
 #
-# THE TEST IS THE SUFFIX, not a list of exact paths. Everything else the
-# investigation writes under its own directory - `feasibility-record.md`,
-# `entry-points.tsv`, `results.json`, the probe scratch files - IS a record
-# and is correctly covered by the `docs/` prefix row. An earlier version
-# exempted the whole directory and then carved two files back out by name;
-# that left every generated sidecar exempt, so a result file would have
-# needed hand rows keyed to line numbers that change on every re-run, and
-# the record's own growing prose would have gone stale and blocked Task 9
-# for a reason that is not an entry point.
-EXEMPT_PREFIXES = (
-    "docs/superpowers/plans/rounds/2026-08-22-item48-pwsh7-feasibility/",
-)
+# THE TEST IS THE SUFFIX, not a list of exact paths, and not conjoined with
+# a prefix either - fixed at the final whole-branch review, which found the
+# suffix test ANDed with EXEMPT_PREFIXES below, so it only fired inside this
+# one item-48 directory. A `.py`/`.ps1` anywhere else under `docs/` fell
+# through to the general prefix loop and was swallowed by the `docs/`
+# prefix row as `record - never executed` - the exact attestation this
+# comment says must never happen. Latent on this branch (`git ls-files
+# 'docs/*'` filtered to `.py`/`.ps1` returns exactly the 7 files this
+# investigation itself created, all with explicit rows already), but this
+# script is meant to outlive the branch (the migration draft's own ordered
+# work re-runs it), so the guard is widened now rather than left narrower
+# than the invariant it states. Everything else the investigation writes
+# under its own directory - `feasibility-record.md`, `entry-points.tsv`,
+# `results.json`, the probe scratch files - IS a record and is correctly
+# covered by the `docs/` prefix row, because none of them end in `.py` or
+# `.ps1`; the suffix test alone already draws that line without needing a
+# prefix to narrow it. An earlier version exempted the whole directory and
+# then carved two files back out by name; that left every generated
+# sidecar exempt, so a result file would have needed hand rows keyed to
+# line numbers that change on every re-run, and the record's own growing
+# prose would have gone stale and blocked Task 9 for a reason that is not
+# an entry point.
 EXEMPT_SUFFIXES = (".py", ".ps1")
 EXEMPT_EXACT = (
     "docs/superpowers/plans/2026-08-22-item48-pwsh7-feasibility.md",
@@ -252,7 +262,7 @@ def covered_by_prefix(key, prefixes):
     rel, _, fam = key
     if rel in EXEMPT_EXACT:
         return False
-    if rel.startswith(EXEMPT_PREFIXES) and rel.endswith(EXEMPT_SUFFIXES):
+    if rel.endswith(EXEMPT_SUFFIXES):
         return False
     for prel, pfam, _, _ in prefixes:
         if rel.startswith(prel) and (pfam == "*" or pfam == fam):
