@@ -261,9 +261,9 @@ Measurement 1's own bucket:
   already scoped to what was tested rather than claimed for every
   possible shape.
 - One machine, one build of each host bears on generalizing this finding
-  elsewhere; already scoped by this record's own header (lines 4-5), so
-  does not add a limit specific to re-exec beyond what the whole record
-  already carries.
+  elsewhere; already scoped by this record's own header (the `Repo:` and
+  `Hosts under test:` lines), so does not add a limit specific to re-exec
+  beyond what the whole record already carries.
 - **Command-line length against the ~32767-character ceiling — bears, and
   is NOT dismissed (corrected in fix round 1).** The pre-fix text admitted
   this bearing ("not dismissed") and then closed the criterion NOT MET as
@@ -1121,8 +1121,9 @@ backtick, and a leading-dash flag-like token - does.
   `$PSVersionTable.PSVersion.ToString()` under each of the two absolute
   paths `run.py:22-23` pins. Neither host's build is recorded inside
   `results.json` itself. These match the two versions captured
-  independently by Task 1 for the record's own header (line 5), so the
-  two measurements agree rather than diverge. This measurement says
+  independently by Task 1 for the record's own header's `Hosts under
+  test:` line, so the two measurements agree rather than diverge. This
+  measurement says
   nothing about a different build of either host, or a second machine.
 
 ## Measurement 2: is PowerShell 7 present
@@ -1151,7 +1152,7 @@ Evidence, not declaration: `gh run list --workflow skill-evals.yml --limit 5
 returned the most recent successful run as `databaseId 32391262449`,
 `headSha a3134dcd76d9253057bf24935f3d7a7eef8eb0e4`, `conclusion: success`,
 `createdAt: 2026-08-20T16:18:35Z` — that SHA is the same commit this
-record's own header (line 4) names as the branch cut point.
+record's own header's `Repo:` line names as the branch cut point.
 `gh run view 32391262449 --json jobs --jq '.jobs[] | {name, conclusion,
 startedAt, completedAt, runnerName}'` returned the `powershell-hosts` job
 with `conclusion: success`, `startedAt: 2026-08-20T16:19:31Z`,
@@ -1222,8 +1223,9 @@ Files\PowerShell\7\pwsh.exe` and
 `C:\Users\Brandon\AppData\Local\Microsoft\WindowsApps\pwsh.exe`. Then
 `"C:\Program Files\PowerShell\7\pwsh.exe" -NoProfile -Command
 "$PSVersionTable.PSVersion.ToString()"` returned `7.6.5` — matching the
-`7.6.5` already captured in this record's header (line 5) and re-captured
-independently by Task 4. PowerShell 7 is present and working on this
+`7.6.5` already captured in this record's header's `Hosts under test:`
+line and re-captured independently by Task 4. PowerShell 7 is present
+and working on this
 machine, absolute path confirmed.
 
 ### Plugin user's machine
@@ -1293,7 +1295,7 @@ nothing enforces the list is exhaustive.
 **Revision binding.** Task 5 bound its cited green run
 (`32391262449`/job `96497936725`, `conclusion: success`) to
 `headSha a3134dcd76d9253057bf24935f3d7a7eef8eb0e4`, which this record's own
-header (line 4) names as this branch's cut point.
+header's `Repo:` line names as this branch's cut point.
 `git show a3134dcd76d9253057bf24935f3d7a7eef8eb0e4:.github/workflows/skill-evals.yml`
 read directly (not the working tree as a stand-in) and re-filtered the same
 way as above returned line-for-line identical step names and module lists
