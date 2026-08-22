@@ -633,7 +633,7 @@ Re-running the survey command above after this section existed prints
 — higher than the 7163 captured above, for two DIFFERENT reasons that this
 record previously conflated into one:
 
-1. **The hit-count growth** (7163 -> 7476, the `survey.py` run's own
+1. **The hit-count growth** (7163 -> 7481, the `survey.py` run's own
    total). This section's own prose quotes `powershell.exe`, `pwsh.exe` and
    `.ps1` text about the inventory, adding matches inside
    `feasibility-record.md` itself. That file is covered by the `docs/`
