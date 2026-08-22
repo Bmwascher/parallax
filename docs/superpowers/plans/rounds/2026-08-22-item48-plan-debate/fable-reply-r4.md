@@ -1,0 +1,31 @@
+Round 4, Fable lane. Continuity answered above from memory. Subject verdicted: the plan at commit `7b8ce9c` on `item51-inline-brief-transport`, re-read in full.
+
+All fourteen round-3 dispositions verified as applied where checkable: `EXEMPT_FROM_PREFIX` (409-412) with the `covered_by_prefix` short-circuit (488-495), Task 7's own Step 5 with the subagent-dispatch rationale (1659-1686), `Start-Job` in the launch family (368), the wrap alternative (378), `run_named`'s broken-arm handling (1057-1061, 1147-1150), measured counts (1074-1079), probe.py's nonzero timeout exit and `SystemExit` (1594-1608), both awk ranges with the headSha binding (1386-1408), the reworded Step 7 (1217-1222), the corrected cross-references (1186-1188, 1878), and the comment-block caveat (1313-1317). Arithmetic in the new counts is internally consistent (167+277+456=900).
+
+## B. EXEMPT_FROM_PREFIX
+
+Sound, and I could not make it fail open. Specifics checked: `str.startswith` on a tuple is valid Python; both tuple entries are forward-slash paths in exactly the form `git ls-files` emits, and the directory entry's trailing slash makes the prefix unambiguous. A prefix row deliberately aimed AT an exempt path is accepted by `load_rows` but inert, because the exemption short-circuits before prefixes are consulted (490-491) — so the one spoofing route is closed. `--emit` interacts correctly: exempt matches surface as ordinary UNCLASSIFIED stubs, which is what makes Task 4 Step 7 and Task 7 Step 5's zero-count checks able to fail (1231-1233). The stale check and duplicate refusal are unaffected.
+
+Fail CLOSED: yes, by design, and the one consequence worth naming is A3 below — Tasks 5, 6 and 8 write new `pwsh`/`-File`-bearing lines into `feasibility-record.md` and shift existing rows, so Task 9 Steps 1 and 6 will predictably come up red (stale + unclassified) with the repair happening there. That blocks nothing — the repair path is stated (1778-1779) — and it can never mislabel an executed file again. It costs noise, not truth.
+
+## A. Round-3 amendments, swept
+
+Three instances, all small, all real:
+
+1. **The Interfaces contract still carries the old final line.** Fix #12 updated Task 2 Step 4's expected output to include `&lt;S&gt; files not scanned` (573-575), but the Interfaces block at 266-268 still specifies the final line as `SURVEY: &lt;total&gt; hits, &lt;classified&gt; classified, &lt;unclassified&gt; unclassified, &lt;stale&gt; stale` — without the field the shipped code prints (528-531). The correction was applied at one of the two sites that state the contract, inside the fix for exactly this omission.
+2. **The widening count drifted the day it was fixed.** The comment at 320-324 enumerates five widenings ("two classes prompted the third family, two more widened it, and a fifth put Start-Job in the launch family") — but the same revision added a sixth, the wrap alternative (343-347, regex line 378), and your own brief counts six. Fix #13 standardized a count that was stale before the commit landed.
+3. **The standing rule's record-file half has no step carrying it.** The rule (703-706) says any task adding a matching LINE under the record directory adds rows before its own commit; Tasks 5, 6 and 8 all edit `feasibility-record.md` and none has such a step — and the plan's own Task 7 rationale (1682-1686) is that subagents never read Task 3's prose. Because of EXEMPT_FROM_PREFIX this is now fail-closed at Task 9 rather than a silent absorption, so it is a timing promise the structure won't honor, not a truth hazard. Cheapest fix: one sentence at Task 9 Step 1 saying stale/unclassified rows from Tasks 4-8's record edits are the expected finding there and how to repair them, or delete the "before its own commit" promise for lines (keep it for files, where steps exist).
+
+## C. The filter — a seventh, found
+
+**Bare `python` and `git` invocations from a shipped .ps1 match no family.** Live instance: `tools/check-drift.ps1:983` — `python -m pytest evals -q &gt; $null 2&gt;&amp;1` — the pytest gate the autotriage flow trusts, running inside the script whose scheduled task pins `powershell.exe` (`:96`); `git -C $worktree commit` at `:987` is the same shape. No host token, no launch-family token, and bare-family alternative 1 lists only `codex|kimi|claude`. Yet the plan's own vocabulary names **python and git first** in `launch-nonhost`'s examples (390, 667) — the inventory promises a class its filter cannot produce a row for, and the `### What this method cannot see` list (Task 3 Step 4.6) does not name it. Given the hit-volume cost of matching bare `git` everywhere, the proportionate fix is one bullet in that blind-spot list naming bare non-client native launches, with `check-drift.ps1:983` as the instance — widening is optional.
+
+Also found while hunting, lower confidence: `tools/drift-reports/*-autotriage-wrapper.cmd:2` runs `call "C:\...\claude.exe" -p ...`, and alternative 1 misses it because the closing quote sits between `claude.exe` and the space (`\s+` fails) — a quoted-absolute-path client invocation evades the client alternative. Whether those wrappers are tracked I could not verify with read-only tools (UNVERIFIED); if they are, that is the same blind-spot bullet's second instance, and the quote-tolerant variant `(\.exe|\.cmd)?["']?\s+` is a two-character widening. Shapes I checked that are NOT missed: `[System.Diagnostics.Process]::Start` (both live uses carry the `System.` prefix — `tools/codex-tool-surface-probe.ps1:277`, `tools/new-review-mirror.ps1:108`), `subprocess.check_call`/`os.system` (no instances), dot-sourcing (no instances outside docs/), `.cmd` fixtures (`stub-appserver.cmd:14` uses `powershell.exe`, caught by the host family).
+
+## D. Anything else
+
+None. The budget block records the late declaration honestly (1908-1913), Task 9's rule set stands as verified in round 3, and the two probe drivers now have exit contracts that can fail on every path I traced.
+
+The plan is architecturally done; what remains is two stale-text corrections (A1, A2), one sentence reconciling the standing rule's timing with where the gate actually fires (A3), and one blind-spot bullet with a file:line (C). Each is a minutes-long edit, and I have nothing beyond them.
+
+FIX

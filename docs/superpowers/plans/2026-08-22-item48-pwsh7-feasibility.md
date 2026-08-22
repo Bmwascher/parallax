@@ -1149,10 +1149,19 @@ def run_named(host, form):
         # The first PARAMETER that differs, by name. `None` here would be
         # indistinguishable from "nothing differed", and the measurement
         # table asks every arm for a first difference.
+        #
+        # Compare the UNION of expected and received keys. Iterating only
+        # the expected ones returns None when the child bound everything
+        # correctly AND added a parameter nobody sent - stage B is false,
+        # and the field that says WHY says nothing. The current child
+        # writes exactly the three expected keys so that state is not
+        # reachable today; the field is written not to lie if it ever is.
         "first_difference": next(
-            (k for k in sorted(NAMED_EXPECTED)
+            (k for k in sorted(set(NAMED_EXPECTED)
+                               | (set(child_bound)
+                                  if isinstance(child_bound, dict) else set()))
              if not isinstance(child_bound, dict)
-             or child_bound.get(k) != NAMED_EXPECTED[k]),
+             or child_bound.get(k) != NAMED_EXPECTED.get(k)),
             None),
         "unparseable_output": broken_output,
         "parent_bound": parent_bound,
@@ -1292,9 +1301,9 @@ Replace `NOT YET WRITTEN.` under `## Measurement 1: re-exec fidelity` with:
 
 - [ ] **Step 7: Add explicit inventory rows for the files this task created**
 
-The standing rule in Task 3 applies here, and the exemption in `survey.py` in
-`survey.py` enforces it: every family match in the files this task created
-is UNCLASSIFIED until a row exists.
+The standing rule in Task 3 applies here, and the exemption in `survey.py`
+enforces it: every family match in the files this task created is
+UNCLASSIFIED until a row exists.
 
 **STAGE THE NEW FILES FIRST.** The scanner reads `git ls-files`, which
 lists TRACKED files only, so an untracked file is invisible to it — and

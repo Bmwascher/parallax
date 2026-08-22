@@ -1,0 +1,18 @@
+The amended plan still has two structural gate defects and several claim-width defects.
+
+1. `EXEMPT_FROM_PREFIX` fails open for Tasks 4 and 7. The scanner reads only `git ls-files` (`tracked_files()` literally runs `"git", "ls-files", "-z"` at `docs/superpowers/plans/2026-08-22-item48-pwsh7-feasibility.md:419-422`), and the plan correctly explains that “Until the file is tracked it cannot see itself” at `:556-562`. But Task 4 runs its inventory check at `:1207-1229` before its first `git add` at `:1235-1239`; Task 7 repeats that ordering at `:1659-1680` versus `:1688-1692`. Therefore both expected-zero checks pass while every new row is absent because the new files are invisible. Stage the created files before `--emit`.
+
+2. The exemption also fails closed on the mutable record. Its justification says, “Everything under them is executed” at `:400-402`, while the exempt prefix covers `feasibility-record.md`, which Task 1 identifies as the record at `:64-65`, and the vocabulary defines `record` as “historical record, never executed” at `:395`. More seriously, explicit rows are keyed by path, numeric line, and family at `:463-475`, and any moved key is stale at `:503-504`. The initial record contains `## Measurement 4: refusal when pwsh is missing` at `:147`; Task 3 classifies it, then replaces an earlier one-line inventory placeholder with substantial content at `:740-757`, shifting that heading and invalidating its row. `--emit` cannot expose the stale row because it prints only `unclassified` and immediately returns at `:506-510`. The final full survey at `:1884-1894` will consequently block. Exempt only executable investigation artifacts—not `feasibility-record.md`—or rebuild its explicit rows after the record is final.
+
+3. The per-family representation itself has no seam once a file is tracked: scanning iterates every family and keys hits by `(rel, n, fam)` at `:444-447`, while duplicate family keys are refused at `:475-483`. The tracking and mutable-record problems occur outside that mechanism.
+
+4. A seventh live filter miss exists. `tools/new-kimi-lane-home.ps1:691` invokes a native entry point as `$gitOutput = & git -C $gitCheckDir rev-parse --is-inside-work-tree 2>&1`. The BARE family recognizes literal `codex`, `kimi`, and `claude`, `.ps1` forms, and variable calls, but no generic literal call-operator invocation (`docs/superpowers/plans/2026-08-22-item48-pwsh7-feasibility.md:372-380`); the LAUNCH family at `:367-371` also omits it. This is squarely within the intended inventory because `launch-nonhost` explicitly names “python, git, codex, kimi” at `:667`.
+
+5. Additional sweep findings:
+
+   - Task 7 passes `stdin=subprocess.DEVNULL` at `:1581-1585`, but its timeout interpretation claims, “The hook read stdin and nothing closed it” at `:1624-1625`. That causal claim contradicts the probe.
+   - The plan says a non-null `pwsh_after_stripping` means “nothing was measured; say so and stop” at `:1627-1628`, but the program merely records `still_there` at `:1562-1566`, continues into the invocation, and can return 0 at `:1604`. Make this condition return nonzero before invoking the hook.
+   - Task 6 calls its CI run “the only evidence in this investigation that anything PASSED under PowerShell 7” at `:1373-1375`; Task 4 already runs four `pwsh7` arms at `:1137-1142` and requires an exit-zero measurement at `:1160-1165`. Narrow “anything” to the CI modules or shipped behavior the run actually covers.
+   - The classification rule still says, “A line matching both families produces TWO rows” at `:713-714`, although the scanner has three families at `:364-380`. It should say one row for each family matched.
+
+FIX

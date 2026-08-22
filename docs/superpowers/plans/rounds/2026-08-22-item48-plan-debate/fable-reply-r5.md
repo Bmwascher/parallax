@@ -1,0 +1,25 @@
+Round 5, Fable lane. Continuity answered above from memory; A1 conceded as refuted, cause named — I cited a round-3 read against a round-4 revision without re-reading. Subject verdicted: the plan at commit `ff34793`, changed regions re-read against the working tree.
+
+Round-4 dispositions verified as applied where checked: `NOT_EXEMPT` (432-437) with the exact-path carve-out in `covered_by_prefix` (513-516), the generic call-operator and bare-`python` alternatives (387-388), the declared `git` miss with its instance in both the scanner comment (329-334) and the blind-spot list (803-804), the untracked-files bullet with the drift-reports example (798-802), the strip-fail early return (1623-1635), the reworded timeout outcome (1696), the up-to-three-rows wording, and the eight-count in the scanner comment (320-327).
+
+## A. Round 4's amendments, swept — two instances
+
+1. **The staging fix's own oracles are wrong on the plan's happy path — fix #1 contains this round's instance of the class.** Task 4 Step 7 stages the whole directory and asserts `git ls-files .../reexec/ | wc -l` prints **5**, "one per file this task created" (1264-1268). But Step 5 already ran `run.py`, which leaves `results.json` plus the last arms' `parent-out.txt`, `child-out.txt`, `parent-out.json` and `child-out.json` in that directory, and `git add .../reexec/` (1257) stages all of them — a clean pass prints **10**, and the gate fails closed on success. Task 7 Step 5 is the same shape: Step 3's probe run wrote `missing-pwsh/results.json`, so `git add .../missing-pwsh/` (1742) makes the required "must print 1" (1748) print **2** on success. A gate that is red on the happy path either stalls the task or teaches the executor to override it, which un-guards the very check the fix added. Secondary effect: sweeping volatile probe artifacts into tracking under an EXEMPT directory means any artifact line that happens to match a family — a `results.json` stderr echoing `-File` from a failed 5.1 arm is plausible — becomes an UNCLASSIFIED hit keyed to a file whose digest changes on every re-run. FIX: delete the four `*-out.*` scratch files at the end of `main()` (keep `results.json`, the declared deliverable), stage explicitly by name, and state the expected counts as 6 and 2.
+
+2. **The five-vs-eight count survives at the second site.** Fix #5 updated the scanner comment to "EIGHT times across FOUR rounds" (320-327), but the blind-spot subsection's closing text still orders the record to say "across three review rounds the filter was widened FIVE times" (807-811). The same correction-applied-to-one-site-of-two as my round-4 A2 — and as the refuted A1's underlying shape — now between two passages the record will carry simultaneously.
+
+## B. NOT_EXEMPT and the staging fix
+
+`NOT_EXEMPT` cannot fail open: membership is exact-string against `git ls-files` format (forward slashes, verified against the tuple at 432-437), both entries are files rather than prefixes so nothing can nest under them, and both are genuinely what `record` describes — the record's own prose and the inventory data. It resolves the stale-churn blocker correctly: record-file growth no longer reds Task 9 for a non-entry-point reason. It cannot fail closed. The staging fix closes the third fail-open gate correctly — `git add` before `--emit`, count before trust — and its only defects are the two wrong expected counts and the artifact sweep in A1, which are fail-CLOSED and fixable in minutes.
+
+## C. The filter, eighth pass — none found
+
+Shapes hunted this round, each to a dead end: real `cmd /c` / `cmd.exe` invocations (only comments at `tools/codex-tool-surface-probe.ps1:220`; the actual launches route through `ProcessStartInfo`, which the launch family catches at its own lines); `&amp; &lt;literal&gt;.cmd` via call operator (alternative 5's `(\.exe)?` would miss a `.cmd`, but no live instance exists outside docs/); `gh` invocations (none tracked outside docs/ and the exempt plan's own bash blocks — same class as the declared `git` miss; the bullet at 803-804 names only `git`, and widening its wording to "git and similar CLI tools" is a one-word improvement, not a defect); `python3`/`py` (none); capitalized `&amp; Git` (none); `[Diagnostics.Process]::Start` without the `System.` prefix (none — both live uses carry it); dot-sourcing (none outside docs/); `subprocess.check_call`/`os.system` (none). The declared-miss instance `tools/check-drift.ps1:987` remains correctly outside the inventory and correctly named.
+
+## D. Anything else
+
+One cosmetic: probe.py's comment at 1636 cites `hooks\hooks.json:10` with a backslash where every other citation uses forward slashes. Nothing else — the verdict logic, exemption machinery, and both probe exit contracts now fail red on every path I can trace except the two happy-path count errors in A1.
+
+Two findings, both inside round-4 fixes, both mechanical: correct two expected counts plus artifact cleanup, and reconcile one number at its second site. Nothing else stands between this plan and PASS from this lane.
+
+FIX
