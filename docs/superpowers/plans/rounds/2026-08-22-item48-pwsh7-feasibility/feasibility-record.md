@@ -648,6 +648,17 @@ numbers instead of positions, and exists for the same reason: a claim this
 record makes about its own current state is a claim about a target that
 moves every time the claim is written down.
 
+**A figure does not inherit a binding from a nearby bound figure.**
+Corrected at debate round 3: a number sitting next to an "as measured at
+commit `<sha>`" citation is not itself bound by that citation unless it
+says so explicitly - the bound commit can be, and here was, provably
+wrong for the unbound figure beside it (`entry-points.tsv`'s must-change
+bullet count was 50 at the commit a neighbouring figure was bound to, and
+83 by the time this sentence was written). Every figure needs its own
+binding or its own invariant; proximity to one is not a substitute, and
+is the second time a rule of this kind was found narrower than it looked
+(the first was `survey.py`'s exit predicate not covering `skipped`).
+
 ## Entry point inventory
 
 Produced by classifying every match `survey.py` detects across the three
@@ -761,22 +772,28 @@ assume this table still matches a later commit.
 
 ### `must-change` rows, whole file
 
-Every row whose `migration` value is `must-change` — **83 rows, 83
-one-line entries, one per row**, matching the frozen plan's own format
-exactly (`path:line — what a migration must do to it`). Debate round 2
-corrected this from a prior state of 83 rows grouped into 50 bullets:
-disclosing that mismatch in round 1 repaired the overclaim but not the
-fidelity failure itself, so this round splits every grouped bullet into
-one line per row rather than leaving a formally-undisclosed deviation
-against a frozen-plan contract. Where five dual-family rows describe one
-real source line (the same line matched two regex families and produced
-two TSV rows), each still gets its own line below, marked as one of a
-family pair so the reader is not misled into counting two edits where
-there is one. The `unknown` list further down already held this format
-(3 bullets for 3 rows); it needed no change. Rows from the `host` and
-`launch` family tasks are described from reading the same lines during
-this pass, not re-classified; only the `bare` rows below were classified
-by this task.
+Every row whose `migration` value is `must-change` — **as measured at
+commit `b1e9cfa`: 83 rows, 83 one-line entries, one per row**, matching
+the frozen plan's own format exactly (`path:line — what a migration must
+do to it`). Corrected here (debate round 3): this count is a live figure
+of a mutable list, not a survey invariant, and does NOT inherit a binding
+from a nearby commit-bound figure just because it sits next to one - the
+preceding `a13d3c3` binding, checked directly, had 50 bullets at that
+commit, not 83, so proximity alone would have bound this claim to a
+commit that is provably wrong for it. Debate round 2 corrected this list
+from a prior state of 83 rows grouped into 50 bullets: disclosing that
+mismatch in round 1 repaired the overclaim but not the fidelity failure
+itself, so round 2 split every grouped bullet into one line per row
+rather than leaving a formally-undisclosed deviation against a
+frozen-plan contract. Where five dual-family rows describe one real
+source line (the same line matched two regex families and produced two
+TSV rows), each still gets its own line below, marked as one of a family
+pair so the reader is not misled into counting two edits where there is
+one. The `unknown` list further down **(as measured at the same commit)**
+already held this format (3 bullets for 3 rows); it needed no change.
+Rows from the `host` and `launch` family tasks are described from reading
+the same lines during this pass, not re-classified; only the `bare` rows
+below were classified by this task.
 
 - `.githooks/pre-push:24` (host-pin-exec, one of a family pair with the
   launch row directly below) — hardcodes `powershell.exe` as the
@@ -812,22 +829,22 @@ by this task.
   with the fallback it describes.
 - `evals/multi-model-verify/test_attestation.py:36` — the
   `shutil.which("powershell")` fallback itself; must be dropped.
-- `evals/multi-model-verify/test_backup_lane.py:1322` — `test_check_workflow_paths_flags_host_parity_gap` and its 15 neighbouring lines below build synthetic workflow text asserting BOTH a `powershell.exe` step and a `pwsh.exe` step exist with parity; dropping 5.1 removes the thing these tests enforce, so they must be rewritten or removed. (Rationale stated once here; the remaining 15 lines below are the same test group.)
-- `evals/multi-model-verify/test_backup_lane.py:1328` — same test group as `:1322` above.
-- `evals/multi-model-verify/test_backup_lane.py:1334` — same test group as `:1322` above.
-- `evals/multi-model-verify/test_backup_lane.py:1338` — same test group as `:1322` above.
-- `evals/multi-model-verify/test_backup_lane.py:1340` — same test group as `:1322` above.
-- `evals/multi-model-verify/test_backup_lane.py:1354` — same test group as `:1322` above.
-- `evals/multi-model-verify/test_backup_lane.py:1360` — same test group as `:1322` above.
-- `evals/multi-model-verify/test_backup_lane.py:1373` — same test group as `:1322` above.
-- `evals/multi-model-verify/test_backup_lane.py:1374` — same test group as `:1322` above.
-- `evals/multi-model-verify/test_backup_lane.py:1376` — same test group as `:1322` above.
-- `evals/multi-model-verify/test_backup_lane.py:1378` — same test group as `:1322` above.
-- `evals/multi-model-verify/test_backup_lane.py:1388` — same test group as `:1322` above.
-- `evals/multi-model-verify/test_backup_lane.py:1395` — same test group as `:1322` above.
-- `evals/multi-model-verify/test_backup_lane.py:1401` — same test group as `:1322` above.
-- `evals/multi-model-verify/test_backup_lane.py:1408` — same test group as `:1322` above.
-- `evals/multi-model-verify/test_backup_lane.py:1413` — same test group as `:1322` above.
+- `evals/multi-model-verify/test_backup_lane.py:1322` — corrected here: these 16 lines span THREE test functions, not one "test group" as an earlier draft of this split claimed. `:1322` is inside `test_check_workflow_paths_flags_host_parity_gap` (`:1316`-`:1342`), which builds synthetic workflow text asserting BOTH a `powershell.exe` step and a `pwsh.exe` step exist with parity; dropping 5.1 removes the thing this test enforces, so it must be rewritten or removed.
+- `evals/multi-model-verify/test_backup_lane.py:1328` — same test as `:1322` above (`test_check_workflow_paths_flags_host_parity_gap`).
+- `evals/multi-model-verify/test_backup_lane.py:1334` — same test as `:1322` above.
+- `evals/multi-model-verify/test_backup_lane.py:1338` — same test as `:1322` above.
+- `evals/multi-model-verify/test_backup_lane.py:1340` — same test as `:1322` above.
+- `evals/multi-model-verify/test_backup_lane.py:1354` — a DIFFERENT test from `:1322`: `test_check_workflow_paths_refuses_when_host_steps_are_not_found` (`:1343`-`:1370`), which asserts a renamed `PARALLAX_PS_HOST` env var is still caught as a missing host step for BOTH names; must change with the 5.1 half of that check.
+- `evals/multi-model-verify/test_backup_lane.py:1360` — same test as `:1354` above.
+- `evals/multi-model-verify/test_backup_lane.py:1373` — a THIRD test, different from both above: `test_check_workflow_paths_refuses_a_duplicate_host_step` (`:1371`-`:1415`), which asserts a second step for the same host is caught rather than silently overwriting the first, using an incomplete-`powershell.exe`/complete-`powershell.exe`/complete-`pwsh.exe` three-step fixture; must change with the 5.1 half of that fixture.
+- `evals/multi-model-verify/test_backup_lane.py:1374` — same test as `:1373` above.
+- `evals/multi-model-verify/test_backup_lane.py:1376` — same test as `:1373` above.
+- `evals/multi-model-verify/test_backup_lane.py:1378` — same test as `:1373` above.
+- `evals/multi-model-verify/test_backup_lane.py:1388` — same test as `:1373` above.
+- `evals/multi-model-verify/test_backup_lane.py:1395` — same test as `:1373` above.
+- `evals/multi-model-verify/test_backup_lane.py:1401` — same test as `:1373` above.
+- `evals/multi-model-verify/test_backup_lane.py:1408` — same test as `:1373` above.
+- `evals/multi-model-verify/test_backup_lane.py:1413` — same test as `:1373` above.
 - `evals/multi-model-verify/test_backup_lane.py:1741` — a separate test,
   roughly 330 lines later in the same file (not one of the
   `test_check_workflow_paths_flags_host_parity_gap` neighbours above): it
@@ -898,8 +915,20 @@ by this task.
   with 5.1.
 - `evals/multi-model-verify/test_lock_protocol_live.py:382` — same test as
   `:381` above.
-- `evals/multi-model-verify/test_lock_protocol_live.py:400` — same test as
-  `:381` above.
+- `evals/multi-model-verify/test_lock_protocol_live.py:400` — corrected
+  here: NOT the same test as `:381`/`:382` above, the tenth instance of
+  this record asserting and refuting the same characterization. `:400` is
+  inside a DIFFERENT test,
+  `test_measurement_20_a_failed_host_invocation_never_reads_as_divergence`
+  (which begins at `:393`), not
+  `test_measurement_20_ticks_and_date_string_types_diverge_across_hosts`.
+  It hardcodes `hosts["powershell.exe"]` as the host forced to fail; must
+  change once 5.1 is gone. `## Measurement 5` Step 6 (the "Is it the only
+  one?" search) covers this same line in full and correctly notes it is
+  NOT bilateral like the divergence test above - it tests the fail-closed
+  helper, not a two-host comparison, and could be rewritten for `pwsh.exe`
+  without losing its value; this bullet's migration action agrees with
+  that, only the earlier shorthand description did not.
 - `evals/multi-model-verify/test_multi_model_verify.py:2954` — the
   ONE genuine `os.name != "nt"` skip-reason string, naming "drives
   powershell.exe"; the module it gates hardcodes `powershell.exe` (see the
