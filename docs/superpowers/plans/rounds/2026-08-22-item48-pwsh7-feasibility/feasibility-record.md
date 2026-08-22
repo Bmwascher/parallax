@@ -610,6 +610,20 @@ already cited. A section anchor does not move under insertion. Line numbers
 into OTHER files (files this branch does not edit) are unaffected and stay
 as line citations throughout.
 
+**Convention: every absolute count this record publishes about its own
+survey or its own tree is either commit-bound or invariant, never a bare
+"is."** This record's own text is part of what `survey.py` scans, so a
+live figure about that scan — a hit count, a row count, a classification
+total — goes stale the moment ANY edit lands, including the edit that
+states the figure. State such a number as "as measured at commit `<sha>`,"
+which remains true forever because it describes a tree that no longer
+changes, or state only what `survey.py`'s exit code makes an actual
+invariant: `0 unclassified, 0 stale, 0 files not scanned`, exit `0`. This
+is the same discipline as the line-number convention above, applied to
+numbers instead of positions, and exists for the same reason: a claim this
+record makes about its own current state is a claim about a target that
+moves every time the claim is written down.
+
 ## Entry point inventory
 
 Produced by classifying every match `survey.py` detects across the three
@@ -619,7 +633,25 @@ by reading the line and its surrounding code, never from the path or from
 expectation. Two hand inventories of this exact question shipped wrong
 before this method existed.
 
-**Final survey run**, verbatim:
+**Every absolute count below is commit-bound, not a live figure — this is
+the structural fix, not another number.** This document is itself one of
+the files `survey.py` scans, and it quotes its own subject matter
+(`powershell.exe`, `pwsh.exe`, `.ps1`, `.cmd` and so on), so any edit to
+this record — including the edit that reports a count — can move the count
+it reports. That produced a stale live figure eight separate times across
+this branch's fix rounds before this rule was written down. The fix: every
+figure below is stated as **"as measured at commit `<sha>`,"** never as
+"is" or "currently prints." A commit-bound figure is a true historical
+statement no later edit can falsify, because it describes a tree that no
+longer changes. The only claims this record makes about whatever tree is
+CURRENT at read time are the invariants `survey.py`'s own exit code always
+states: `0 unclassified, 0 stale, 0 files not scanned`, exit `0`. Re-run
+the published commands for today's live numbers; do not trust a number
+printed here to still be current.
+
+**As measured at commit `6e80768`** (Task 3's own terminal commit, the
+last one before Task 4 began adding scratch-file rows), the survey
+printed, verbatim:
 
 ```
 FAMILY bare: 5491 hits, 0 unclassified
@@ -628,57 +660,60 @@ FAMILY launch: 529 hits, 0 unclassified
 SURVEY: 7163 hits, 7163 classified, 0 unclassified, 0 stale, 0 files not scanned
 ```
 
-Exit code: `0`.
+Exit code: `0`. `entry-points.tsv` held 1078 hand-written rows at that
+commit.
 
-**What this proves, and no more.** This green run proves every detected
-match carries a syntactically valid row, and that no row points at a line
-that has changed or gone. It does NOT prove any classification is CORRECT,
-and it does not prove the three families detect every entry point.
+**What this proves, and no more.** A green run proves every detected
+match carried a syntactically valid row at that commit, and that no row
+pointed at a line that had changed or gone. It does NOT prove any
+classification is CORRECT, and it does not prove the three families
+detect every entry point.
 
-**Why a re-run today prints different numbers — TWO causes, not one
-(corrected in the final-review fix; the numbers below moved AGAIN after
-the Fable whole-branch review's own fix, and were re-run rather than
-copied a third time).**
-Re-running the survey command above after this section existed prints
-`7484 hits, 7484 classified, 0 unclassified, 0 stale`, still exit code `0`
-— higher than the 7163 captured above, for two DIFFERENT reasons that this
-record previously conflated into one:
+**Why the count moved, commit by commit, rather than one "today" figure
+(previously described as a single live number, corrected across three
+prior fix rounds, and restructured here — the fourth attempt — to stop
+publishing a "today" figure at all):**
 
-1. **The hit-count growth** (7163 -> 7484, the `survey.py` run's own
-   total). This section's own prose quotes `powershell.exe`, `pwsh.exe` and
-   `.ps1` text about the inventory, adding matches inside
-   `feasibility-record.md` itself. That file is covered by the `docs/`
-   prefix row, so these new matches need no rows and do not turn the
-   survey red; the 7163 above is the Step 3 run captured before this
-   section was written, not a number this record keeps in sync with
-   itself.
-2. **The row-count growth in `entry-points.tsv`**, which is the actual
-   cause of the classification-counts table below moving. Task 4 (commit
-   `43cd165`) added 21 explicit rows for `<REC>/reexec/*.ps1`, and Task 7
-   (commit `8b8918c`) added 12 for `<REC>/missing-pwsh/probe.py` — both
-   scratch files this investigation itself created, under the `docs/`
-   prefix but matched by `EXEMPT_SUFFIXES`, which forces an explicit row
-   for any exempt-suffix file rather than letting the prefix row cover it.
-   33 rows (21 + 12) accounts for the table's total moving from 1078 to
-   1111. Two later fixes to `survey.py` itself added a further 5 rows the
-   same way (the same self-quoting effect as cause 1 above, but landing as
-   classified rows because `survey.py` sits under `EXEMPT_SUFFIXES`, not
-   the `docs/` prefix): 3 from the final-review Important 3 fix's own
-   comment prose (1078 -> 1111 -> 1114), and 2 more from the Fable
-   whole-branch review's Minor 4 fix, which added `.cmd` to
-   `EXEMPT_SUFFIXES` and, in the comment explaining why, added 2 more
-   self-matching lines (1114 -> 1116, the table's actual total below).
-   Rows-versus-hits is a separate distinction, explained where the table
-   sits, and does not by itself explain why the table's OWN total changed.
+| commit | what changed | rows | hits |
+|---|---|---|---|
+| `6e80768` | Task 3's own terminal commit | 1078 | 7163 |
+| `43cd165` | Task 4 added 21 rows for `<REC>/reexec/*.ps1` | 1099 | not separately measured |
+| `8b8918c` | Task 7 added 12 rows for `<REC>/missing-pwsh/probe.py` | 1111 | not separately measured |
+| `7764e86` | final-review Important 3 widened the `docs/` guard; its own comment prose added 3 self-matching rows | 1114 | 7481 |
+| `d0ceec2` | Fable-review Minor 4 added `.cmd` to `EXEMPT_SUFFIXES`; its own comment prose added 2 more | 1116 | 7484 |
+| `2d2c08b` | this debate-round fix narrowed the guard comment (finding 3) and closed `first_difference`'s blind spot (finding 4); the narrowed comment's own prose added 1 more self-matching row | 1117 | 7495 |
+| `4087bef` | this debate-round fix also named the second blind spot in the known-misses comment (finding 7b); the rewrap of the existing bare-`git` paragraph split one line into two, adding 1 more self-matching row and removing the original whole-line match it replaced (net rows unchanged, hits moved) | 1117 | 7497 |
+
+"Not separately measured" means exactly that, not zero: the hit count was
+not independently re-run and published at that specific commit, only the
+row count was. No number is invented to fill the gap.
+
+Two DIFFERENT mechanisms produced this growth, and this record previously
+conflated them into one:
+
+1. **Hit-count growth inside `feasibility-record.md` itself.** This
+   section's own prose quotes `powershell.exe`, `pwsh.exe`, `.ps1` and
+   `.cmd` text about the inventory, adding matches inside
+   `feasibility-record.md`. That file is covered by the `docs/` prefix
+   row, so these new matches need no rows and never turn the survey red —
+   they only inflate the hit total every time this section is edited,
+   which is exactly why no single hit-count figure can stay current past
+   the commit that states it.
+2. **Row-count growth inside `entry-points.tsv`**, which is what moves the
+   classification table below. Every commit in the table above except the
+   first added rows for the same reason: new text — a scratch file this
+   investigation created, or a comment explaining a guard fix — landed
+   under `EXEMPT_SUFFIXES`, which forces an explicit row rather than
+   letting the `docs/` prefix row cover it.
 
 ### Classification counts
 
-Produced by, re-run for this fix rather than copied from an earlier table:
+**As measured at commit `4087bef`**, produced by:
 `awk -F'\t' '!/^#/ && NF==6 {print $5}' docs/superpowers/plans/rounds/2026-08-22-item48-pwsh7-feasibility/entry-points.tsv | sort | uniq -c | sort -rn`
 
 | count | classification |
 |---|---|
-| 611 | not-a-launch |
+| 612 | not-a-launch |
 | 227 | test-harness |
 | 106 | doc-instruction |
 | 54 | launch-nonhost |
@@ -690,24 +725,40 @@ Produced by, re-run for this fix rather than copied from an earlier table:
 | 5 | host-pin-exec |
 | 1 | record |
 
-One of the 1116 rows is a prefix row (`docs/	*	*	-	record	no-change`);
-the count above is the per-row classification, not per-hit, so the table's
-total (1116) is the hand-written row count, not the hit count (7484) the
-prefix row also covers.
+One of the 1117 rows (at commit `4087bef`) is a prefix row (`docs/	*	*	-
+record	no-change`); the count above is the per-row classification, not
+per-hit, so the table's total (1117) is the hand-written row count at that
+commit, not the hit count (7497, same commit) the prefix row also covers.
+Re-run the command above for whatever the live total is today; do not
+assume this table still matches a later commit.
 
 ### `must-change` rows, whole file
 
-Every row whose `migration` value is `must-change`, one line each. Rows
-from the `host` and `launch` family tasks are described from reading the
-same lines during this pass, not re-classified; only the `bare` rows below
-were classified by this task.
+Every row whose `migration` value is `must-change` — **83 rows, grouped
+into 50 bullets, not 83 one-line entries** (corrected here: the plan asks
+for one line per row, and this list did not honour that until now
+described honestly). A bullet groups every row that shares one migration
+action — several source lines inside the same file that all need the same
+edit, or one of the five dual-family rows where a single source line
+matched two families and produced two TSV rows for one real change. Every
+distinct source line still appears somewhere below; the grouping is
+presentation, not an omission — the `unknown` list further down keeps a
+strict one-bullet-per-row format instead, because each of its 3 rows needs
+a DIFFERENT migration action described on its own. Rows from the `host`
+and `launch` family tasks are described from reading the same lines during
+this pass, not re-classified; only the `bare` rows below were classified
+by this task.
 
 - `.githooks/pre-push:24` (host-pin-exec / launch-explicit) — hardcodes
   `powershell.exe` as the attestation verifier's interpreter; must invoke
   `pwsh.exe` (or resolve dynamically) once 5.1 is gone.
-- `.github/workflows/skill-evals.yml:74` — the `run:` step body of the
-  "PowerShell-facing tests under Windows PowerShell 5.1" job step; the
-  whole step must be removed or repurposed with 5.1 dropped.
+- `.github/workflows/skill-evals.yml:74` — corrected here (was wrongly
+  described as the `run:` step body): it is COMMENT PROSE, `# are driven
+  by the pre-push hook through powershell.exe and by a`, naming the 5.1
+  host inside the "PowerShell-facing tests under Windows PowerShell 5.1"
+  job step, which itself begins at `:93`. The `must-change` value is
+  unaffected — the whole step, comment included, must be removed or
+  repurposed with 5.1 dropped.
 - `.github/workflows/skill-evals.yml:95` — `PARALLAX_PS_HOST:
   powershell.exe`, the 5.1 job step's env line; the whole step (this line,
   and `:96`/`:97` below) must go with it. (`:112`, the PAIRED `pwsh.exe`
@@ -946,12 +997,22 @@ here.
   comment instead, so no alternative matches it). It invokes 5.1 by name
   and a migration would have to edit it exactly like its two neighbours.
   `survey.py` was NOT widened to catch this shape: every count in this
-  task was measured against the filter as it stands, and widening it now
-  would invalidate all 1116 hand-written rows and this whole inventory.
-  The plan's own remedy for a known miss is to NAME it, as this bullet
-  and the bare-`git` bullet below both do, not to chase it into the
-  filter. Consequence stated plainly: the `must-change` count above (83)
-  is therefore known to be deflated by at least this one instance.
+  task was measured against the filter as it stands. **Widening it would
+  not invalidate the existing hand-written rows** — corrected here, this
+  bullet previously overstated that cost. Rows are keyed by path, line,
+  family and digest, and those keys stay valid under a wider filter; a row
+  is invalidated by its own line changing or disappearing, not by the
+  filter growing. The real cost is different and is demonstrated, not
+  argued: widening adds new hits that need their own classification and
+  moves every published count in this section, exactly the cascade the
+  commit table above documents happening from far smaller edits (a single
+  narrowed guard comment added 1 row and moved the hit count by 11). That
+  is real, and it is reason enough on its own not to widen the filter for
+  one named, already-worked-around miss. The plan's own remedy for a known
+  miss is to NAME it, as this bullet and the bare-`git` bullet below both
+  do, not to chase it into the filter. Consequence stated plainly: the
+  `must-change` count above (83) is therefore known to be deflated by at
+  least this one instance.
 - **A bare `git` invocation, deliberately.** Matching bare `git` was
   measured to cost 179 further hits, almost all prose and shell plumbing,
   against a class that never starts a PowerShell host — a measured trade,
@@ -1561,10 +1622,17 @@ job); two more
 harness both CI jobs leave switched off; and `.githooks/pre-push` has no
 `runs` row anywhere in this repo, on either host. Of backlog item 48's five
 named 5.1-specific traps, only 2 have coverage of the same behaviour class
-actually exercised under 7 by a real, evidenced run; the other 3 are
-"declared, not proven" under 7 - written up, reasoned about in comments,
-in one case measured under this record's own Measurement 1, but not
-covered by anything the dual-host CI job runs today. Three more
+actually exercised under 7 by a real, evidenced run — corrected here: it
+is ONE of the two, not one of the other three, whose evidence comes from
+this record's own measurement rather than the CI job. Trap 3 (native
+argument splatting) is covered by this record's own `## Measurement 1:
+re-exec fidelity`, produced by Task 4, not by anything the dual-host CI
+job runs; trap 5 (the tool-surface-probe stdin BOM) is covered by that CI
+job directly, through one of its eleven modules. The other 3 (JSON-depth
+truncation, em-dash/`$OutputEncoding` flattening, the `ConvertFrom-Json`
+nesting-limit throw) are "declared, not proven" under 7 - written up and
+reasoned about in comments, but not covered by anything this task can
+point to, whether the CI job or this record's own measurements. Three more
 host-sensitive behaviours turned up beyond item 48's named five (native
 stderr promotion, reparse-point traversal, and the Measurement-20
 `ConvertFrom-Json` type divergence); one of those three is real,
