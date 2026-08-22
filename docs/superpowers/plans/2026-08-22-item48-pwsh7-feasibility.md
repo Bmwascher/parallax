@@ -8,10 +8,12 @@ PowerShell 5.1.
 
 **Architecture:** The record is assembled in a fixed order: the NO-criteria
 are committed BEFORE any measurement, then a mechanically-verified entry
-point inventory, then five independent measurements, then the verdict. The
-inventory's completeness is enforced by a script that fails on any
-unclassified match, because both previous hand inventories of this item
-were wrong.
+point inventory, then five independent measurements, then the verdict. A
+script makes every DETECTED entry point impossible to pass over silently,
+by failing on any unclassified match, because both previous hand
+inventories of this item were wrong. It does not prove its own filter
+catches everything, and the record says so in those words: two reviewers
+found four classes the filter missed on the rounds after it was written.
 
 **Tech Stack:** Python 3.12 (survey script and probe drivers), Windows
 PowerShell 5.1.26100.9168 and PowerShell 7.6.5, `gh` CLI for CI evidence,
@@ -107,10 +109,21 @@ the answer cannot be shaped by the effort already spent:
 The entry point inventory is produced by `survey.py` in this directory and
 verified by re-running it, not by rereading it. Two earlier hand
 inventories of this item were wrong: the first in three of four entries,
-the second in four further ways after claiming to fix the first. The
-script matches two regex families across every tracked file and FAILS if
-any match lacks a written classification, so a missed entry point is a red
-gate rather than a silent omission.
+the second in four further ways after claiming to fix the first.
+
+The script matches THREE regex families across every tracked file it can
+read, and FAILS if any match lacks a written classification. So a DETECTED
+entry point cannot be passed over silently.
+
+It does not do more than that, and this record does not claim it does:
+
+- The families are a filter. They were two when first written, and two
+  reviewers then named four live classes the filter missed. It is three
+  families now, and there is no argument here that three is enough.
+- A green run says every detected match carries a row. It says nothing
+  about whether the row is CORRECT.
+- A file the script cannot read is listed as `NOT SCANNED`, by name. An
+  unread file is not a clean one.
 
 ## Entry point inventory
 
@@ -217,10 +230,16 @@ violation, so capture them instead of asserting them. Run:
 
 ```bash
 git rev-parse --abbrev-ref HEAD
-git rev-parse --short HEAD
+git merge-base main HEAD
 "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -Command "$PSVersionTable.PSVersion.ToString()"
 "C:\Program Files\PowerShell\7\pwsh.exe" -NoProfile -Command "$PSVersionTable.PSVersion.ToString()"
 ```
+
+`git merge-base`, not `git rev-parse HEAD`. The field says "cut from `main`
+at", and HEAD equals the cut point only while the branch has no commits of
+its own — which it will not, since the plan itself lands on the branch
+first. Capturing HEAD there would write a false statement produced BY the
+fix that was supposed to remove asserted facts.
 
 Edit the record's header lines to carry the four captured values, and add
 one line naming these four commands as their source. If a captured value
@@ -256,10 +275,17 @@ Create `<REC>/survey.py` with exactly this content:
 #!/usr/bin/env python3
 """Entry-point survey for backlog item 48.
 
-Completeness here is a property of the SCRIPT, not of anyone's reading.
-Two hand inventories of this item shipped wrong. This matches two regex
-families across every tracked file and fails on any match carrying no
-written classification, so a missed entry point is a red gate.
+This matches THREE regex families across every tracked file it can read,
+and fails on any match carrying no written classification. Two hand
+inventories of this item shipped wrong, so the gate exists to stop a match
+being passed over silently.
+
+WHAT IT DOES AND DOES NOT ESTABLISH. It makes a DETECTED match impossible
+to ignore. It does not prove the families detect every entry point - they
+are a filter, and the third family was added only after reviewers found two
+classes the first two missed. It does not prove any classification is
+correct. And a file it could not read is REPORTED rather than counted
+clean.
 
 Usage:
     python survey.py           verify every match is classified and current
@@ -290,14 +316,34 @@ TSV = HERE / "entry-points.tsv"
 # catch entry points today. A fourth class may exist; the record says so in
 # its own words rather than presenting this list as closed.
 #
-# The third family is deliberately narrowed to INVOCATION shapes rather
-# than mentions: a `.ps1` must be followed by a flag or preceded by the
-# call operator. Measured 2026-08-22, matching every `.ps1` mention instead
-# produced 251 hits outside docs/ where the invocation shape produces 44,
-# and the extra 207 were prose references that no migration would edit. A
-# survey nobody can finish classifies nothing, so the narrowing buys a
-# tractable inventory - and it is a REAL narrowing, recorded here, not a
-# claim that the wider set was empty.
+# The third family matches INVOCATION shapes rather than every mention of a
+# script. Its alternatives, and why each is here, all measured 2026-08-22:
+#
+#   - a literal client name followed by a word: tools/check-drift.ps1:1060
+#     (the item 31 site) and :500.
+#   - a `.ps1` followed by a flag: skills/multi-model-verify/SKILL.md:94.
+#   - a `.ps1` after the call operator, and the call operator applied to a
+#     VARIABLE: tools/new-kimi-lane-home.ps1:152 and
+#     tools/new-kimi-lane-login.ps1:214 both run `& $LockScript @LockArgs`
+#     with the path assigned at new-kimi-lane-home.ps1:96, and
+#     new-kimi-lane-login.ps1:442 runs `& $KimiBinaryPath "login"`. This
+#     alternative also catches evals/tools/drift_statemachine_tests.ps1:552,
+#     which launches a HOST through a variable - the dual-host harness
+#     itself, which no other family sees.
+#   - a backticked or dot-slash `.ps1` with no flag after it: README.md:392
+#     and CLAUDE.md:41, both instructions to run a shipped script by hand,
+#     which is entry point 6 in item 48's own survey.
+#   - a CI `run:` step, whose host the platform supplies with no token on
+#     the line: .github/workflows/skill-evals.yml:71.
+#
+# THE NARROWING IS STILL REAL AND IS STILL A TRADE. Matching every `.ps1`
+# mention gives 251 hits outside docs/ against 96 for the invocation
+# shapes. The 155 not matched were NOT read one by one, so nothing here
+# says they are all harmless - only that they do not carry an invocation
+# shape. The first draft of this comment claimed they "were prose
+# references that no migration would edit", which was a statement about 155
+# lines nobody had opened, and a reviewer found two counterexamples inside
+# the dropped set on the next round.
 FAMILIES = {
     "host": re.compile(r"powershell\.exe|(?<![\w.\-])pwsh(\.exe)?(?![\w\-])",
                        re.IGNORECASE),
@@ -309,7 +355,10 @@ FAMILIES = {
     "bare": re.compile(
         r"(?<![\w\-])(codex|kimi(-code)?|claude)(\.exe|\.cmd)?\s+[\w\-]"
         r"|[\w\-/\\]+\.ps1(?=\s+-)"
-        r"|&\s*['\"]?[\w\-/\\:.$()]*\.ps1"
+        r"|&\s*['\"]?[\w\-/\\:.$()\[\]]*\.ps1"
+        r"|&\s*['\"]?\$[\w:.\[\]]+"
+        r"|`[^`]*\.ps1[^`]*`"
+        r"|(?<![\w\-])\.[\\/][\w\-/\\.]*\.ps1"
         r"|^\s*-?\s*run:\s*\S"),
 }
 
@@ -326,6 +375,7 @@ CLASSES = {
     "doc-instruction":  "prose instructing a human or an agent to run it",
     "fixture":          "test data, never executed",
     "record":           "historical record, never executed",
+    "not-a-launch":     "matched the filter but starts no process at all",
 }
 MIGRATION = {"must-change", "no-change", "unknown"}
 
@@ -369,6 +419,7 @@ def scan():
 def load_rows():
     rows = {}
     prefixes = []
+    seen_prefixes = set()
     if not TSV.exists():
         return rows, prefixes
     for raw in TSV.read_text(encoding="utf-8").splitlines():
@@ -383,9 +434,22 @@ def load_rows():
         if mig not in MIGRATION:
             sys.exit("unknown migration value %r in row %r" % (mig, raw))
         if line == "*":
+            key = (rel, fam)
+            if key in seen_prefixes:
+                sys.exit("duplicate prefix row for %s (%s)" % (rel, fam))
+            seen_prefixes.add(key)
             prefixes.append((rel, fam, cls, mig))
         else:
-            rows[(rel, int(line), fam)] = (dg, cls, mig)
+            key = (rel, int(line), fam)
+            # A duplicate is REFUSED, never last-wins. Classification is
+            # split across three subagents; two rows for one match with
+            # different classifications would otherwise be invisible to
+            # every check here, including the per-family counts, which
+            # count matches rather than rows.
+            if key in rows:
+                sys.exit("duplicate row for %s:%s (%s) - two classifications "
+                         "for one match" % (rel, line, fam))
+            rows[key] = (dg, cls, mig)
     return rows, prefixes
 
 
@@ -456,12 +520,17 @@ git commit -m "add the item 48 entry-point survey, failing with nothing classifi
 ```
 
 This order is load-bearing and is NOT the usual test-then-commit shape.
-`survey.py` scans `git ls-files`, and its own source contains every host
-literal, launch verb and bare-invocation token in the three families. Until
-it is tracked it cannot see itself, so an N measured before this commit is
-smaller than the N measured after it, and Task 3 would inherit a count it
-could never reproduce. Committing first makes the two counts the same
-number.
+`survey.py` scans `git ls-files`, and its own source matches its own
+families in several places — `pwsh` in the host pattern, and `-File`,
+`subprocess.run` and `Start-Process` in the launch pattern, all written out
+as literals in the regexes. Until the file is tracked it cannot see itself,
+so an N measured before this commit is smaller than the N measured after
+it, and Task 3 would inherit a count it could never reproduce. Committing
+first makes the two counts the same number.
+
+(Not every literal self-matches — `powershell\.exe` is written escaped and
+does not match its own line. The conclusion holds on the ones that do; the
+claim is deliberately not "every token in the file matches itself".)
 
 - [ ] **Step 4: Run the survey and verify it FAILS**
 
@@ -486,17 +555,29 @@ particular number; report what the run prints.
 
 **Split this task by FAMILY, one subagent each, in this order: `host`, then
 `launch`, then `bare`.** Measured against the repo on 2026-08-22 with the
-families as written above, there are about 3977 matches, of which about
-3243 fall under the `docs/` prefix row and about 734 need a hand-written
-row: roughly 120 `host`, 241 `launch` and 373 `bare`. One subagent
-classifying 734 lines in one pass is how a survey stops being read and
-starts being guessed, which is the exact failure this task exists to
+families exactly as written above, there are about 5169 matches, of which
+about 4380 fall under the `docs/` prefix row and about 789 need a
+hand-written row: roughly 120 `host`, 241 `launch` and 428 `bare`. One
+subagent classifying 789 lines in one pass is how a survey stops being read
+and starts being guessed, which is the exact failure this task exists to
 prevent.
 
 Each family's task ends on its own `FAMILY <name>: <n> hits, 0 unclassified`
-line. The whole-survey exit code stays 1, and that is EXPECTED, until the
-last family is done — say so in the task report rather than treating it as
-a failure. Only the `bare` task runs Steps 3 through 5 below.
+line AND on every EARLIER family's line still reading 0. Checking only your
+own family leaves a seam: the `launch` task could delete or overwrite the
+`host` task's rows and still report itself green. The whole-survey exit
+code stays 1, and that is EXPECTED, until the last family is done — say so
+in the task report rather than treating it as a failure.
+
+Every family task COMMITS its own rows before handing over, even though the
+survey is still red. An uncommitted TSV between subagents loses work to a
+crash, and the plan's own constraint is to commit after every task.
+
+Only the `bare` task runs Steps 3 through 5 below.
+
+A duplicate row is now refused outright by `survey.py`, so two subagents
+writing the same match with different classifications stops the survey
+instead of last-wins overwriting one of them.
 
 Those counts are what one run printed. They are context for splitting the
 work, not a target: report what your own run prints.
@@ -565,15 +646,26 @@ Rules that are NOT judgment calls:
   exactly this row (TAB separated), and no other prefix rows:
   `docs/	*	*	-	record	no-change`
   Then add an EXPLICIT per-line row for every match inside the record
-  directory itself. An explicit row wins over a prefix row in `survey.py`,
-  so this works without changing the script.
+  directory AND for every match in this plan file itself,
+  `docs/superpowers/plans/2026-08-22-item48-pwsh7-feasibility.md`. An
+  explicit row wins over a prefix row in `survey.py`, so this works without
+  changing the script.
   **Why the exception exists.** `record` is defined as "never executed", and
   the blanket row would apply it to `survey.py`, to the probe scripts Tasks
   4 and 7 create, and to this plan — all of which ARE executed, this plan by
   its own first line. A green survey would then attest "never executed" over
-  running code, and any future entry point added under `docs/` would be
-  absorbed silently forever. Reviewers on both lanes found this
-  independently on 2026-08-22.
+  running code. Reviewers on both lanes found this independently on
+  2026-08-22, and a later round found that the first version of this
+  exception named the plan as its reason while scoping itself to the record
+  directory, which does not contain the plan.
+  **This exception is a STANDING RULE, not a one-time step.** Tasks 4 and 7
+  create new tracked files under the record directory that carry family
+  matches — `reexec/parent.ps1` alone has `-File` and `ProcessStartInfo`,
+  and `run.py` carries both host paths and `subprocess.run`. Any task that
+  adds a file under the record directory adds its explicit rows BEFORE its
+  own commit. Without that, the blanket row silently absorbs them and Task 9's
+  re-run comes back green with executed scripts attested "never executed" —
+  the same defect one task later, which is how it was found.
 - **A line matching both families produces TWO rows**, one per family, and
   they may carry different classifications.
 - **`migration` is `must-change` only if a move to PowerShell 7 would have
@@ -651,6 +743,7 @@ git commit -m "classify every entry-point match and write the item 48 inventory"
 - Create: `<REC>/reexec/child.ps1`
 - Create: `<REC>/reexec/child-named.ps1`
 - Create: `<REC>/reexec/parent.ps1`
+- Create: `<REC>/reexec/parent-named.ps1`
 - Create: `<REC>/reexec/run.py`
 - Modify: `<REC>/feasibility-record.md` (section `## Measurement 1: re-exec fidelity` only)
 
@@ -833,11 +926,23 @@ if __name__ == "__main__":
 
 - [ ] **Step 4: Add the NAMED-PARAMETER arm**
 
-Positional `$args` is not the shape a real migration forwards. Every
-shipped script in this repo declares named parameters — `tools/check-drift.ps1:30-34`
+Positional `$args` is not the shape a real migration forwards. Most shipped
+scripts in this repo declare named parameters — `tools/check-drift.ps1:30-34`
 declares `[switch]$Register`, `[switch]$TestNotify` and `[switch]$NoAutoTriage` —
-so a probe that only forwards positional arguments would answer a question
-nobody is asking.
+so a probe that only forwards positional arguments answers a narrower
+question than the one item 48 asks.
+
+**"Most", not "every".** `hooks/superpowers-review-companion.ps1:12-13` has
+no `param()` block at all and reads its input from stdin. An earlier draft
+of this paragraph said every shipped script declares named parameters,
+which was false about a file the glob in Task 6 had just been widened to
+include.
+
+**The parent needs its own named parameters too.** A real migration re-execs
+a script whose OWN parameters were already bound by the caller, then
+forwards those bound values. A parent that only carries `$args` measures
+binding at the child and never measures forwarding FROM a bound parent, so
+this step adds a second parent rather than reusing the positional one.
 
 Create `<REC>/reexec/child-named.ps1` with exactly this content:
 
@@ -869,8 +974,14 @@ NAMED_EXPECTED = {"register": True,
 
 
 def run_named(host, form):
+    """Same two stages as run(), so the results are comparable.
+
+    Stage A here is the PARENT's own bound parameters, written by
+    parent-named.ps1. Without it this arm would have no control at all,
+    and the arm that can produce a NO is the last place to drop one.
+    """
     child_out = HERE / "child-out.json"
-    parent_out = HERE / "parent-out.txt"
+    parent_out = HERE / "parent-out.json"
     for p in (child_out, parent_out):
         if p.exists():
             p.unlink()
@@ -884,25 +995,106 @@ def run_named(host, form):
     })
     proc = subprocess.run(
         [host, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
-         str(HERE / "parent.ps1")] + NAMED,
+         str(HERE / "parent-named.ps1")] + NAMED,
         capture_output=True, text=True, timeout=300, env=env)
-    bound = None
-    if child_out.exists():
+
+    def load(path):
+        if not path.exists():
+            return None
         try:
-            bound = json.loads(child_out.read_text(encoding="utf-8"))
+            return json.loads(path.read_text(encoding="utf-8"))
         except ValueError:
-            bound = "unparseable"
+            return "unparseable"
+
+    parent_bound = load(parent_out)
+    child_bound = load(child_out)
+    # SAME KEY NAMES as run(), so main() can treat every arm alike. An
+    # earlier draft returned a different key set, which made main()'s
+    # checks raise KeyError on exactly these arms.
     return {
         "returncode": proc.returncode,
         "stderr": proc.stderr.strip()[:400],
-        "child_ran": child_out.exists(),
-        "bound": bound,
-        "bound_exact": bound == NAMED_EXPECTED,
+        "stage_a_parent_exact": parent_bound == NAMED_EXPECTED,
+        "stage_a_parent_count": None if parent_bound is None else len(NAMED),
+        "stage_b_child_exact": child_bound == NAMED_EXPECTED,
+        "stage_b_child_count": None if child_bound is None else len(NAMED),
+        "sent_count": len(NAMED),
+        "first_difference": None,
+        "parent_bound": parent_bound,
+        "child_bound": child_bound,
     }
 ```
 
-Extend `main()`'s loop so each host/form pair also runs `run_named`, and
-extend the `broken` check so an arm whose `child_ran` is false is red.
+Create `<REC>/reexec/parent-named.ps1` with exactly this content. It is the
+positional parent with a `param()` block in front and its OWN bound values
+forwarded, rather than `$args`:
+
+```powershell
+param(
+  [switch]$Register,
+  [string]$RouteNote,
+  [string]$Path
+)
+$enc = New-Object System.Text.UTF8Encoding($false)
+$mine = @{
+  register  = [bool]$Register
+  routeNote = $RouteNote
+  path      = $Path
+}
+[System.IO.File]::WriteAllText($env:PROBE_PARENT_OUT,
+  ($mine | ConvertTo-Json -Compress -Depth 3), $enc)
+
+$forward = @()
+if ($Register) { $forward += '-Register' }
+$forward += '-RouteNote'; $forward += $RouteNote
+$forward += '-Path';      $forward += $Path
+
+function Esc([string]$s) {
+  $s = $s -replace '(\\*)"', '$1$1\"'
+  $s = $s -replace '(\\+)$', '$1$1'
+  return '"' + $s + '"'
+}
+
+if ($env:PROBE_FORM -eq 'splat') {
+  & $env:PROBE_TARGET_HOST -NoProfile -ExecutionPolicy Bypass -File $env:PROBE_CHILD @forward
+} else {
+  $cmd = '-NoProfile -ExecutionPolicy Bypass -File ' + (Esc $env:PROBE_CHILD)
+  foreach ($a in $forward) { $cmd = $cmd + ' ' + (Esc ([string]$a)) }
+  $psi = New-Object System.Diagnostics.ProcessStartInfo
+  $psi.FileName = $env:PROBE_TARGET_HOST
+  $psi.Arguments = $cmd
+  $psi.UseShellExecute = $false
+  $proc = [System.Diagnostics.Process]::Start($psi)
+  $proc.WaitForExit()
+}
+```
+
+Then DELETE the `main()` function written in Step 3 and put exactly this in
+its place, so every arm carries the same keys and one check covers all
+eight. Do not merge the two by hand — the file must end with one `main()`:
+
+```python
+def main():
+    results = {}
+    for host_name, host in (("ps51", PS51), ("pwsh7", PWSH)):
+        for form in ("splat", "escaped"):
+            results["%s/%s/positional" % (host_name, form)] = run(host, form)
+            results["%s/%s/named" % (host_name, form)] = run_named(host, form)
+    (HERE / "results.json").write_text(
+        json.dumps(results, indent=1), encoding="utf-8")
+    print(json.dumps(results, indent=1))
+
+    broken = [k for k, v in results.items()
+              if v["returncode"] != 0 or not v["stage_a_parent_exact"]
+              or v["stage_b_child_count"] is None]
+    if broken:
+        print("ARMS THAT DID NOT MEASURE ANYTHING: %s"
+              % ", ".join(sorted(broken)))
+        return 1
+    print("all eight arms ran; stage B exact: %s"
+          % {k: v["stage_b_child_exact"] for k, v in sorted(results.items())})
+    return 0
+```
 
 - [ ] **Step 5: Run it**
 
@@ -947,7 +1139,31 @@ Replace `NOT YET WRITTEN.` under `## Measurement 1: re-exec fidelity` with:
    isolated; parameter shapes not tried, including arrays, `ValueFromRemainingArguments`,
    and a script that re-execs ITSELF rather than a sibling.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Add explicit inventory rows for the files this task created**
+
+The standing rule in Task 3 applies here. `child.ps1`, `child-named.ps1`,
+`parent.ps1` and `run.py` all carry family matches, and the `docs/` blanket
+row would otherwise classify them `record — never executed`. Run:
+
+```bash
+SCRATCH="C:/Users/Brandon/AppData/Local/Temp/claude/C--Users-Brandon-Documents-parallax/90c32d4a-9b49-468b-a954-6e7c5c5a8792/scratchpad/item48"
+python docs/superpowers/plans/rounds/2026-08-22-item48-pwsh7-feasibility/survey.py --emit \
+  | grep "2026-08-22-item48-pwsh7-feasibility/reexec" > "$SCRATCH/stubs-reexec.tsv"
+wc -l "$SCRATCH/stubs-reexec.tsv"
+```
+
+Classify every row and append it to `<REC>/entry-points.tsv`. These are
+`test-harness` / `no-change`: they are this investigation's own probes and
+no migration edits them. Then confirm none is left prefix-covered:
+
+```bash
+python docs/superpowers/plans/rounds/2026-08-22-item48-pwsh7-feasibility/survey.py --emit \
+  | grep -c "2026-08-22-item48-pwsh7-feasibility/reexec"
+```
+
+Expected: `0`.
+
+- [ ] **Step 8: Commit**
 
 ```bash
 git add docs/superpowers/plans/rounds/2026-08-22-item48-pwsh7-feasibility/
@@ -1012,11 +1228,18 @@ stand-in.
 
 - [ ] **Step 3: Answer the Linux side separately**
 
-Determine whether ANY step in the `ubuntu-latest` job invokes `pwsh`. Run:
+Determine whether ANY step in the `ubuntu-latest` job invokes `pwsh`. Read
+the WHOLE job, not the lines just after `runs-on`:
 
 ```bash
-grep -n -A4 "runs-on: ubuntu" .github/workflows/skill-evals.yml
+awk '/^  skill-evals:/{f=1} f&&/^  [a-z-]+:/&&!/^  skill-evals:/{exit} f' .github/workflows/skill-evals.yml | grep -n "pwsh\|powershell\|shell:\|run:"
 ```
+
+An earlier version of this step ran `grep -A4` after `runs-on`, which reads
+about four lines of a job that runs from `.github/workflows/skill-evals.yml:16`
+to `:47`. That command could not answer the question the step asks, which
+is the same defect this plan exists to avoid: a check narrower than its
+claim.
 
 If no Linux step invokes `pwsh`, then PowerShell 7's presence on the Linux
 runner is UNPROVEN by this repo's own evidence. Write that as an unproven
@@ -1072,7 +1295,9 @@ git commit -m "record where PowerShell 7 is proven present and where it is not"
 - Modify: `<REC>/feasibility-record.md` (section `## Measurement 3: behaviour under 7` only)
 
 **Interfaces:**
-- Consumes: the inventory from Task 3.
+- Consumes: the inventory from Task 3, AND the revision-bound successful CI
+  run id from Task 5 Step 2, which is the only evidence in this
+  investigation that anything PASSED under PowerShell 7.
 
 Item 48's warning is precise: "Not 'does it start'. 0.16.0's lock STARTED
 fine on 7 and did not lock." So this task maps COVERAGE, and does not
@@ -1103,9 +1328,24 @@ command that counts them, which is the defect item 48 records about its own
 first inventory. Report the number the command prints.
 
 `hooks/*.ps1` is in the glob deliberately: `hooks/superpowers-review-companion.ps1`
-is a shipped script and is the ONLY one already running under PowerShell 7
-in production, through `hooks/hooks.json:10` and `hooks/hooks.json:22`. Both
-reviewers found it missing from an earlier version of this glob.
+is a shipped script, and the CHECKOUT's `hooks/hooks.json:10` and `:22`
+invoke it as bare `pwsh`. Both reviewers found it missing from an earlier
+version of this glob.
+
+**Say that at the width of the evidence.** An earlier draft called it "the
+ONLY one already running under PowerShell 7 in production". What was read
+was the checkout, and this plan states elsewhere that the versioned plugin
+cache is what actually runs and only changes on a version bump plus
+`plugin update`. No task here inspects the cache. Either read it and cite
+it:
+
+```bash
+python -c "import json;d=json.load(open(r'C:/Users/Brandon/.claude/plugins/installed_plugins.json'));print([v for k,v in d['plugins'].items() if 'parallax' in k])"
+```
+
+then read `hooks/hooks.json` inside that `installPath` and cite both — or
+write the claim about the CHECKOUT only and say the installed copy was not
+inspected.
 
 For each script, find candidate covering modules:
 
@@ -1135,9 +1375,17 @@ file and line, or write "no coverage under 7".
 
 - [ ] **Step 4: Write the measurement section**
 
+**What "proven" is allowed to mean here.** A `runs` row says a module
+invokes the script. It does not say that module PASSED under PowerShell 7.
+The evidence for passing is a successful CI run of the dual-host job,
+which Task 5 gathered and bound to its own revision. Cite that run id in
+this section, and where you cannot, write `exercised, pass not evidenced
+here` rather than `proven`.
+
 Replace `NOT YET WRITTEN.` under `## Measurement 3: behaviour under 7` with
 the two tables from Steps 2 and 3, and one paragraph stating how much of
-the shipped surface is proven under 7 today. Do not estimate a percentage
+the shipped surface is exercised under 7 today and how much of that is
+evidenced by a green run. Do not estimate a percentage
 that the tables do not support.
 
 - [ ] **Step 5: Commit**
@@ -1229,9 +1477,26 @@ def main():
                       / "superpowers-review-companion.ps1")
     result["invocation"] = ["pwsh", "-NoProfile", "-NonInteractive",
                             "-File", hook_script]
-    proc = subprocess.run(
-        result["invocation"],
-        capture_output=True, text=True, env=env, shell=False)
+    # stdin MUST be closed and there MUST be a timeout. The hook's first
+    # act is [Console]::In.ReadToEnd() (hooks/superpowers-review-companion.ps1:13).
+    # With inherited stdin and no timeout, the SUCCESS path - the one this
+    # probe pre-names as a finding - launches the real hook and blocks
+    # forever, and no oracle fires. The convenient `-Command Write-Output ok`
+    # this replaced could not hang; the faithful shape can.
+    try:
+        proc = subprocess.run(
+            result["invocation"],
+            capture_output=True, text=True, env=env, shell=False,
+            stdin=subprocess.DEVNULL, timeout=60)
+    except subprocess.TimeoutExpired:
+        result["outcome"] = "timed out after 60s"
+        result["returncode"] = None
+        result["stdout"] = ""
+        result["stderr"] = ""
+        (HERE / "results.json").write_text(json.dumps(result, indent=1),
+                                           encoding="utf-8")
+        print(json.dumps(result, indent=1))
+        return
     result["returncode"] = proc.returncode
     result["stdout"] = proc.stdout.strip()
     result["stderr"] = proc.stderr.strip()
@@ -1248,11 +1513,20 @@ if __name__ == "__main__":
 
 Run: `python docs/superpowers/plans/rounds/2026-08-22-item48-pwsh7-feasibility/missing-pwsh/probe.py`
 
-Expected: `pwsh_after_stripping` is `null`, and the call fails. If the call
-raises `FileNotFoundError` instead of returning, catch nothing and report
-the traceback text verbatim — that IS the user-facing failure mode and it
-is the finding. If `pwsh_after_stripping` is NOT null, the strip failed and
-nothing was measured; say so and stop rather than reporting a clean result.
+Expected: `pwsh_after_stripping` is `null`. Then exactly one of three
+outcomes, and the record names WHICH:
+
+- **The call fails to find `pwsh`.** Report the error or traceback text
+  verbatim. Call it "what THIS caller saw", not "the user-facing failure
+  mode": Claude Code's own hook runner may present it differently and was
+  not measured here.
+- **The call succeeds anyway.** See the paragraph below. Absence was not
+  reproduced, and no failure text exists to report.
+- **The call times out.** The hook read stdin and nothing closed it. Report
+  it as a probe defect and fix the probe.
+
+If `pwsh_after_stripping` is NOT null, the strip failed and nothing was
+measured; say so and stop rather than reporting a clean result.
 
 **One outcome that is a finding rather than a broken probe.** On Windows,
 when the executable is named without a full path, the process-creation call
@@ -1270,13 +1544,18 @@ PowerShell 7 genuinely absent.
 Replace `NOT YET WRITTEN.` under
 `## Measurement 4: refusal when pwsh is missing` with:
 
-1. The captured failure text, verbatim, in a fenced block.
-2. One sentence on whether that text names what to install. If it does not,
-   say so plainly: an undeclared prerequisite failing obscurely is worse
-   than a declared one, and item 48 names that as a NO-criterion.
-3. A named residual limit: only the bare-`pwsh` resolution path was
-   measured; entry points that today name `powershell.exe` were not, since
-   nothing about them changes until a migration edits them.
+1. Which of the three outcomes from Step 3 occurred, named explicitly.
+2. If a failure was produced: its text verbatim in a fenced block, and one
+   sentence on whether that text names what to install. If it does not, say
+   so plainly: an undeclared prerequisite failing obscurely is worse than a
+   declared one, and item 48 names that as a NO-criterion.
+   If NO failure was produced: write that no failure text exists because
+   absence was not reproduced, and do not substitute a description of what
+   a failure would probably look like.
+3. Named residual limits: only the bare-`pwsh` resolution path was measured;
+   entry points that today name `powershell.exe` were not, since nothing
+   about them changes until a migration edits them; and the harness's own
+   presentation of a hook failure was not measured by this probe.
 
 - [ ] **Step 5: Commit**
 
@@ -1341,7 +1620,10 @@ Replace `NOT YET WRITTEN.` under `## Measurement 5: what is saved` with:
    head, and a second pair of 20m22s against 18m50s, with item 48's own
    caveat that the 5.1 spread is wider than the gap.
 5. Item 44's 57 minutes across three serial passes, cited by item number,
-   and one sentence on how much of that this change would remove.
+   and the GROSS upper bound this change could remove from it. Not a net
+   figure: the retained-case decision has not been made yet, and a sentence
+   saying how much "this change would remove" would state as known a number
+   that Task 9 has not yet determined.
 
 - [ ] **Step 3: Commit**
 
@@ -1380,7 +1662,20 @@ measurement section was never filled, and the verdict is not written until
 it is. Without this check, every command in this plan passes over a verdict
 written on top of an empty Measurement 3.
 
-- [ ] **Step 2: Answer item 48's open questions, BEFORE the verdict**
+- [ ] **Step 2: Collect the residual limits, BEFORE anything is adjudicated**
+
+Replace `NOT YET WRITTEN.` under `## Residual limits` with every residual
+limit written by Tasks 3 through 8, gathered into one list, each naming the
+section it came from. Add any limit of the investigation as a whole: one
+machine, one ANSI code page, one Claude Code version, and the fact that no
+script was run under a migration it does not yet have.
+
+This comes first because Step 4's rules gate the verdict on these. An
+earlier draft collected them after the verdict was written, so the rule
+that was supposed to force CONDITIONAL pointed at a list that did not
+exist yet.
+
+- [ ] **Step 3: Answer item 48's open questions, BEFORE the verdict**
 
 Two of item 48's required answers are not NO-criteria, so a verdict written
 first would not be forced to consider them. Write them first, as
@@ -1396,7 +1691,13 @@ subsections under `## Verdict`:
 - `### Questions item 48 asked that this investigation did not answer`.
   List them by name, each with what would answer it.
 
-- [ ] **Step 3: Answer each NO-criterion in turn**
+- [ ] **Step 4: Answer each NO-criterion, and REPLACE the verdict placeholder**
+
+Delete the line `NOT YET WRITTEN. Filled by the final task, after every
+measurement below.` under `## Verdict`. It is the only remaining
+placeholder at this point, and nothing later removes it: say so explicitly,
+because an earlier draft said only "write subsections" and would have
+shipped the record with that sentence still standing under the verdict.
 
 Add a subsection per NO-criterion, in the order they appear under
 `## What would make the verdict NO`, each answering exactly one of **MET**,
@@ -1428,22 +1729,14 @@ The rules that produce that line, in order:
    **CONDITIONAL**, listing those rows by `path:line`. The survey gates on
    unclassified and stale only and never reads the migration column, so
    nothing else would catch this.
-4. Any residual limit from Step 4 that a reader could reasonably say
-   bears on a criterion must be explicitly dispositioned in that
-   criterion's subsection — "does not bear on this, because X" — or it
-   produces **CONDITIONAL**.
+4. Any residual limit from the `## Residual limits` list written in Step 2
+   that a reader could reasonably say bears on a criterion must be
+   explicitly dispositioned in that criterion's subsection — "does not bear
+   on this, because X" — or it produces **CONDITIONAL**.
 5. **YES** requires every criterion NOT MET with a citation to a
    measurement, no bearing unknowns, and every material residual
    dispositioned. A criterion answered from reasoning rather than from a
    measurement is UNKNOWN, not NOT MET.
-
-- [ ] **Step 4: Collect the residual limits**
-
-Replace `NOT YET WRITTEN.` under `## Residual limits` with every residual
-limit written by Tasks 3 through 8, gathered into one list, each naming the
-section it came from. Add any limit of the investigation as a whole: one
-machine, one ANSI code page, one Claude Code version, and the fact that no
-script was run under a migration it does not yet have.
 
 - [ ] **Step 5: If the verdict is YES or CONDITIONAL, draft the migration item**
 
@@ -1460,7 +1753,19 @@ restating it, and its ordered work must be consistent with it.
 Do NOT edit `docs/superpowers/plans/2026-07-27-0150-backlog.md` in this
 task. The backlog edit happens at merge, not here.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 6: Re-run both gates, now that the record is finished**
+
+```bash
+python docs/superpowers/plans/rounds/2026-08-22-item48-pwsh7-feasibility/survey.py
+grep -n "NOT YET WRITTEN" docs/superpowers/plans/rounds/2026-08-22-item48-pwsh7-feasibility/feasibility-record.md
+```
+
+Expected: survey exit code 0, and the grep finds NOTHING — exit code 1 from
+grep, with no output. Step 1 tolerated one placeholder under `## Verdict`
+because the verdict had not been written; by now nothing may remain. Without
+this second run, the tolerance granted in Step 1 is never withdrawn.
+
+- [ ] **Step 7: Commit**
 
 ```bash
 git add docs/superpowers/plans/rounds/2026-08-22-item48-pwsh7-feasibility/
