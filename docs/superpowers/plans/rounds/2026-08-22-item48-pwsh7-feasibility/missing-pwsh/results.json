@@ -1,0 +1,14 @@
+{
+ "pwsh_on_real_path": "C:\\Program Files\\PowerShell\\7\\pwsh.EXE",
+ "pwsh_after_stripping": null,
+ "invocation": [
+  "pwsh",
+  "-NoProfile",
+  "-NonInteractive",
+  "-File",
+  "C:\\Users\\Brandon\\Documents\\parallax\\hooks\\superpowers-review-companion.ps1"
+ ],
+ "returncode": 0,
+ "stdout": "",
+ "stderr": ""
+}

@@ -1,0 +1,126 @@
+{
+ "ps51/splat/positional": {
+  "returncode": 0,
+  "stderr": "",
+  "stage_a_parent_exact": true,
+  "stage_a_parent_count": 10,
+  "stage_b_child_exact": false,
+  "stage_b_child_count": 8,
+  "sent_count": 10,
+  "first_difference": 2
+ },
+ "ps51/splat/named": {
+  "returncode": 0,
+  "stderr": "",
+  "stage_a_parent_exact": true,
+  "stage_a_parent_count": 3,
+  "stage_b_child_exact": false,
+  "stage_b_child_count": 3,
+  "sent_count": 3,
+  "first_difference": "path",
+  "unparseable_output": false,
+  "parent_bound": {
+   "path": "C:\\dir with space\\",
+   "routeNote": "a \"quoted\" note \u2014 here",
+   "register": true
+  },
+  "child_bound": {
+   "routeNote": "a quoted note \u2014 here",
+   "path": "C:\\dir with space\"",
+   "register": true
+  }
+ },
+ "ps51/escaped/positional": {
+  "returncode": 0,
+  "stderr": "",
+  "stage_a_parent_exact": true,
+  "stage_a_parent_count": 10,
+  "stage_b_child_exact": true,
+  "stage_b_child_count": 10,
+  "sent_count": 10,
+  "first_difference": null
+ },
+ "ps51/escaped/named": {
+  "returncode": 0,
+  "stderr": "",
+  "stage_a_parent_exact": true,
+  "stage_a_parent_count": 3,
+  "stage_b_child_exact": true,
+  "stage_b_child_count": 3,
+  "sent_count": 3,
+  "first_difference": null,
+  "unparseable_output": false,
+  "parent_bound": {
+   "path": "C:\\dir with space\\",
+   "routeNote": "a \"quoted\" note \u2014 here",
+   "register": true
+  },
+  "child_bound": {
+   "routeNote": "a \"quoted\" note \u2014 here",
+   "register": true,
+   "path": "C:\\dir with space\\"
+  }
+ },
+ "pwsh7/splat/positional": {
+  "returncode": 0,
+  "stderr": "",
+  "stage_a_parent_exact": true,
+  "stage_a_parent_count": 10,
+  "stage_b_child_exact": true,
+  "stage_b_child_count": 10,
+  "sent_count": 10,
+  "first_difference": null
+ },
+ "pwsh7/splat/named": {
+  "returncode": 0,
+  "stderr": "",
+  "stage_a_parent_exact": true,
+  "stage_a_parent_count": 3,
+  "stage_b_child_exact": true,
+  "stage_b_child_count": 3,
+  "sent_count": 3,
+  "first_difference": null,
+  "unparseable_output": false,
+  "parent_bound": {
+   "register": true,
+   "path": "C:\\dir with space\\",
+   "routeNote": "a \"quoted\" note \u2014 here"
+  },
+  "child_bound": {
+   "path": "C:\\dir with space\\",
+   "routeNote": "a \"quoted\" note \u2014 here",
+   "register": true
+  }
+ },
+ "pwsh7/escaped/positional": {
+  "returncode": 0,
+  "stderr": "",
+  "stage_a_parent_exact": true,
+  "stage_a_parent_count": 10,
+  "stage_b_child_exact": true,
+  "stage_b_child_count": 10,
+  "sent_count": 10,
+  "first_difference": null
+ },
+ "pwsh7/escaped/named": {
+  "returncode": 0,
+  "stderr": "",
+  "stage_a_parent_exact": true,
+  "stage_a_parent_count": 3,
+  "stage_b_child_exact": true,
+  "stage_b_child_count": 3,
+  "sent_count": 3,
+  "first_difference": null,
+  "unparseable_output": false,
+  "parent_bound": {
+   "register": true,
+   "path": "C:\\dir with space\\",
+   "routeNote": "a \"quoted\" note \u2014 here"
+  },
+  "child_bound": {
+   "path": "C:\\dir with space\\",
+   "register": true,
+   "routeNote": "a \"quoted\" note \u2014 here"
+  }
+ }
+}

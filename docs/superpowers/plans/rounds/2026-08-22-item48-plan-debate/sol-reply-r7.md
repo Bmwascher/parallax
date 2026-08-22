@@ -1,0 +1,3 @@
+Fixes 1–3 are correct. Fix 4 still misses an extra-key difference: `first_difference` iterates only `sorted(NAMED_EXPECTED)` at `docs/superpowers/plans/2026-08-22-item48-pwsh7-feasibility.md:1152-1156`. If `child_bound` contains every expected key/value plus an unexpected parameter, `stage_b_child_exact` is false at `:1144-1145`, but `first_difference` returns `None`. Compare the union of expected and received keys, including key presence.
+
+FIX

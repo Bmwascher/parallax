@@ -1,0 +1,1 @@
+The narrowed convention honestly matches the document; both unbound mentions and the directional pointer are fixed, with no new breakage in the range. **PASS**
