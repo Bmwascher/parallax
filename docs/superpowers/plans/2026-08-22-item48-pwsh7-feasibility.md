@@ -12,8 +12,9 @@ point inventory, then five independent measurements, then the verdict. A
 script makes every DETECTED entry point impossible to pass over silently,
 by failing on any unclassified match, because both previous hand
 inventories of this item were wrong. It does not prove its own filter
-catches everything, and the record says so in those words: two reviewers
-found four classes the filter missed on the rounds after it was written.
+catches everything, and the record says so in those words: across three
+review rounds the filter was widened five times, each time because a
+reviewer produced a live entry point it did not match.
 
 **Tech Stack:** Python 3.12 (survey script and probe drivers), Windows
 PowerShell 5.1.26100.9168 and PowerShell 7.6.5, `gh` CLI for CI evidence,
@@ -117,9 +118,11 @@ entry point cannot be passed over silently.
 
 It does not do more than that, and this record does not claim it does:
 
-- The families are a filter. They were two when first written, and two
-  reviewers then named four live classes the filter missed. It is three
-  families now, and there is no argument here that three is enough.
+- The families are a filter. They were two when first written. Across three
+  review rounds they were widened five times, each time because a reviewer
+  produced a live entry point in this repo that the current filter did not
+  match. There is no argument here that the current filter is enough; the
+  only honest statement is that nobody has produced a sixth yet.
 - A green run says every detected match carries a row. It says nothing
   about whether the row is CORRECT.
 - A file the script cannot read is listed as `NOT SCANNED`, by name. An
@@ -263,8 +266,10 @@ git commit -m "open the item 48 record with its NO-criteria fixed first"
 **Interfaces:**
 - Produces: `survey.py`, runnable as `python <REC>/survey.py` (verify) and
   `python <REC>/survey.py --emit` (print TSV stubs for every unclassified
-  match). Task 3 consumes both. The final line of a verify run is exactly
-  `SURVEY: <total> hits, <classified> classified, <unclassified> unclassified, <stale> stale`
+  match). Task 3 consumes both. A verify run ends with one
+  `FAMILY <name>: <n> hits, <n> unclassified` line per family and then
+  exactly
+  `SURVEY: <total> hits, <classified> classified, <unclassified> unclassified, <stale> stale, <skipped> files not scanned`
   and the exit code is 0 only when unclassified and stale are both 0.
 
 - [ ] **Step 1: Write the survey script**
@@ -309,12 +314,14 @@ TSV = HERE / "entry-points.tsv"
 # client or a `.ps1` path, and a CI `run:` step whose host the platform
 # chooses. Both were found by reviewers on 2026-08-22 with live instances -
 # tools/check-drift.ps1:1060, skills/multi-model-verify/SKILL.md:94, and
-# .github/workflows/skill-evals.yml:70 - after an earlier version of this
+# .github/workflows/skill-evals.yml:71 - after an earlier version of this
 # script carried only the first two families.
 #
 # THESE THREE FAMILIES ARE A FILTER, NOT A PROOF. They are what is known to
-# catch entry points today. A fourth class may exist; the record says so in
-# its own words rather than presenting this list as closed.
+# catch entry points today, and the list has been wrong three times: two
+# classes prompted the third family, two more widened it, and a fifth put
+# Start-Job in the launch family. The record says so in its own words
+# rather than presenting this list as closed.
 #
 # The third family matches INVOCATION shapes rather than every mention of a
 # script. Its alternatives, and why each is here, all measured 2026-08-22:
@@ -333,8 +340,18 @@ TSV = HERE / "entry-points.tsv"
 #   - a backticked or dot-slash `.ps1` with no flag after it: README.md:392
 #     and CLAUDE.md:41, both instructions to run a shipped script by hand,
 #     which is entry point 6 in item 48's own survey.
+#   - a backticked invocation whose flags WRAP to the next line, so the
+#     `.ps1` ends the line with the backtick still open:
+#     skills/multi-model-verify/references/backup-lane.md:119, :136 and
+#     :141. This scanner reads one line at a time, so without this
+#     alternative the first line has no flag and the second has no `.ps1`.
 #   - a CI `run:` step, whose host the platform supplies with no token on
 #     the line: .github/workflows/skill-evals.yml:71.
+#
+# `Start-Job` is in the LAUNCH family rather than here, for one token. It
+# spawns a child of the CURRENT host, and tools/check-drift.ps1:1054 is the
+# job the codex dispatch runs inside - so that line decides which host the
+# background dispatch child gets. No family saw it until round 3.
 #
 # THE NARROWING IS STILL REAL AND IS STILL A TRADE. Matching every `.ps1`
 # mention gives 251 hits outside docs/ against 96 for the invocation
@@ -348,7 +365,7 @@ FAMILIES = {
     "host": re.compile(r"powershell\.exe|(?<![\w.\-])pwsh(\.exe)?(?![\w\-])",
                        re.IGNORECASE),
     "launch": re.compile(
-        r"Start-Process|System\.Diagnostics\.Process|ProcessStartInfo"
+        r"Start-Process|Start-Job|System\.Diagnostics\.Process|ProcessStartInfo"
         r"|Get-Process\s+-Id\s+\$PID|schtasks|Register-ScheduledTask"
         r"|New-ScheduledTask\w*|subprocess\.(run|Popen|check_output|call)"
         r"|Invoke-Expression|(?<![\w\-])-File(?![\w\-])"),
@@ -358,6 +375,7 @@ FAMILIES = {
         r"|&\s*['\"]?[\w\-/\\:.$()\[\]]*\.ps1"
         r"|&\s*['\"]?\$[\w:.\[\]]+"
         r"|`[^`]*\.ps1[^`]*`"
+        r"|`[^`]*\.ps1\s*$"
         r"|(?<![\w\-])\.[\\/][\w\-/\\.]*\.ps1"
         r"|^\s*-?\s*run:\s*\S"),
 }
@@ -378,6 +396,20 @@ CLASSES = {
     "not-a-launch":     "matched the filter but starts no process at all",
 }
 MIGRATION = {"must-change", "no-change", "unknown"}
+
+# A prefix row NEVER covers these. Everything under them is executed by
+# this investigation, so classifying them wholesale as `record - never
+# executed` would attest the opposite of the truth.
+#
+# This is enforced HERE rather than by an instruction, because an
+# instruction to "add explicit rows" had no oracle: `--emit` prints only
+# UNCLASSIFIED matches, and a prefix-covered match is not unclassified, so
+# the check written to prove the rows existed printed zero either way. That
+# fail-open gate was itself written while fixing a fail-open gate.
+EXEMPT_FROM_PREFIX = (
+    "docs/superpowers/plans/rounds/2026-08-22-item48-pwsh7-feasibility/",
+    "docs/superpowers/plans/2026-08-22-item48-pwsh7-feasibility.md",
+)
 
 
 def digest(line):
@@ -455,6 +487,8 @@ def load_rows():
 
 def covered_by_prefix(key, prefixes):
     rel, _, fam = key
+    if rel.startswith(EXEMPT_FROM_PREFIX):
+        return False
     for prel, pfam, _, _ in prefixes:
         if rel.startswith(prel) and (pfam == "*" or pfam == fam):
             return True
@@ -554,13 +588,14 @@ particular number; report what the run prints.
 ### Task 3: Classify every match, and write the inventory section
 
 **Split this task by FAMILY, one subagent each, in this order: `host`, then
-`launch`, then `bare`.** Measured against the repo on 2026-08-22 with the
-families exactly as written above, there are about 5169 matches, of which
-about 4380 fall under the `docs/` prefix row and about 789 need a
-hand-written row: roughly 120 `host`, 241 `launch` and 428 `bare`. One
-subagent classifying 789 lines in one pass is how a survey stops being read
-and starts being guessed, which is the exact failure this task exists to
-prevent.
+`launch`, then `bare`.** Measured against the repo on 2026-08-22 by running
+the scanner exactly as written above: 5186 matches, of which 4286 fall
+under the `docs/` prefix row and 900 need a hand-written row — 167 `host`,
+277 `launch` and 456 `bare`. The 900 includes the matches inside this plan
+and the record directory, which `EXEMPT_FROM_PREFIX` keeps out of the
+blanket row. One subagent classifying 900 lines in one pass is how a survey
+stops being read and starts being guessed, which is the exact failure this
+task exists to prevent.
 
 Each family's task ends on its own `FAMILY <name>: <n> hits, 0 unclassified`
 line AND on every EARLIER family's line still reading 0. Checking only your
@@ -635,6 +670,7 @@ value from this closed vocabulary and `unknown` with one of `must-change`,
 | `doc-instruction` | the line is prose telling a human or an agent to run something |
 | `fixture` | the line is test data and is never executed |
 | `record` | the line is a historical record and is never executed |
+| `not-a-launch` | the line matched the filter but starts no process at all, such as a function called through a variable |
 
 Rules that are NOT judgment calls:
 
@@ -647,9 +683,10 @@ Rules that are NOT judgment calls:
   `docs/	*	*	-	record	no-change`
   Then add an EXPLICIT per-line row for every match inside the record
   directory AND for every match in this plan file itself,
-  `docs/superpowers/plans/2026-08-22-item48-pwsh7-feasibility.md`. An
-  explicit row wins over a prefix row in `survey.py`, so this works without
-  changing the script.
+  `docs/superpowers/plans/2026-08-22-item48-pwsh7-feasibility.md`.
+  You do not have to remember to: `survey.py` lists both paths in
+  `EXEMPT_FROM_PREFIX`, so no prefix row covers them and any missing row
+  shows up as `UNCLASSIFIED` and fails the survey.
   **Why the exception exists.** `record` is defined as "never executed", and
   the blanket row would apply it to `survey.py`, to the probe scripts Tasks
   4 and 7 create, and to this plan — all of which ARE executed, this plan by
@@ -658,14 +695,21 @@ Rules that are NOT judgment calls:
   2026-08-22, and a later round found that the first version of this
   exception named the plan as its reason while scoping itself to the record
   directory, which does not contain the plan.
-  **This exception is a STANDING RULE, not a one-time step.** Tasks 4 and 7
+  **This is a STANDING RULE, and the script enforces it.** Tasks 4 and 7
   create new tracked files under the record directory that carry family
   matches — `reexec/parent.ps1` alone has `-File` and `ProcessStartInfo`,
-  and `run.py` carries both host paths and `subprocess.run`. Any task that
-  adds a file under the record directory adds its explicit rows BEFORE its
-  own commit. Without that, the blanket row silently absorbs them and Task 9's
-  re-run comes back green with executed scripts attested "never executed" —
-  the same defect one task later, which is how it was found.
+  `run.py` carries both host paths and `subprocess.run`, and
+  `missing-pwsh/probe.py` carries `pwsh` and `subprocess.run`. Later tasks
+  also write new matching LINES into `feasibility-record.md` itself. Any
+  task that adds a file or a matching line under the record directory adds
+  its explicit rows before its own commit, and the exemption above makes
+  forgetting a red gate rather than a silent absorption.
+
+  The first version of this rule was prose only, and it was written to fix
+  exactly this defect at Task 3 while leaving Tasks 4 and 7 to reproduce it
+  one task later. The second version added a step to Task 4 whose check
+  could not fail. This third version moves the rule into the code, where
+  the ordinary unclassified gate carries it.
 - **A line matching both families produces TWO rows**, one per family, and
   they may carry different classifications.
 - **`migration` is `must-change` only if a move to PowerShell 7 would have
@@ -724,9 +768,11 @@ awk -F'\t' '!/^#/ && NF==6 {print $5}' docs/superpowers/plans/rounds/2026-08-22-
      which no run of this script can detect.
    End the subsection with this sentence, which is the point of it:
    **this list is not itself provably complete, and a blind-spot list that
-   reads as complete is the same defect one level up.** The third regex
-   family exists because two reviewers found two classes the first two
-   families missed, after that list had already been written once.
+   reads as complete is the same defect one level up.** Record the count
+   honestly: across three review rounds the filter was widened FIVE times,
+   each time because a reviewer produced a live entry point in this repo
+   that it did not match, and each widening came after the blind-spot list
+   had already been written.
 
 - [ ] **Step 5: Commit**
 
@@ -1008,18 +1054,32 @@ def run_named(host, form):
 
     parent_bound = load(parent_out)
     child_bound = load(child_out)
+    # "unparseable" is a BROKEN ARM, not a failed comparison. Without this,
+    # a child that emitted garbage JSON would compare unequal to
+    # NAMED_EXPECTED and be reported as stage B false - filed as evidence
+    # toward a NO by an arm that measured nothing about argument fidelity.
+    broken_output = "unparseable" in (parent_bound, child_bound)
     # SAME KEY NAMES as run(), so main() can treat every arm alike. An
     # earlier draft returned a different key set, which made main()'s
     # checks raise KeyError on exactly these arms.
     return {
         "returncode": proc.returncode,
         "stderr": proc.stderr.strip()[:400],
-        "stage_a_parent_exact": parent_bound == NAMED_EXPECTED,
-        "stage_a_parent_count": None if parent_bound is None else len(NAMED),
-        "stage_b_child_exact": child_bound == NAMED_EXPECTED,
-        "stage_b_child_count": None if child_bound is None else len(NAMED),
-        "sent_count": len(NAMED),
+        "stage_a_parent_exact": (not broken_output
+                                 and parent_bound == NAMED_EXPECTED),
+        # A COUNT OF WHAT CAME BACK, never the count of what was sent. The
+        # first draft returned len(NAMED) whenever the file merely existed,
+        # which is a sent count wearing a received count's name - and it
+        # read as a clean number even for the unparseable case.
+        "stage_a_parent_count": (len(parent_bound)
+                                 if isinstance(parent_bound, dict) else None),
+        "stage_b_child_exact": (not broken_output
+                                and child_bound == NAMED_EXPECTED),
+        "stage_b_child_count": (len(child_bound)
+                                if isinstance(child_bound, dict) else None),
+        "sent_count": len(NAMED_EXPECTED),
         "first_difference": None,
+        "unparseable_output": broken_output,
         "parent_bound": parent_bound,
         "child_bound": child_bound,
     }
@@ -1086,7 +1146,8 @@ def main():
 
     broken = [k for k, v in results.items()
               if v["returncode"] != 0 or not v["stage_a_parent_exact"]
-              or v["stage_b_child_count"] is None]
+              or v["stage_b_child_count"] is None
+              or v.get("unparseable_output")]
     if broken:
         print("ARMS THAT DID NOT MEASURE ANYTHING: %s"
               % ", ".join(sorted(broken)))
@@ -1104,12 +1165,15 @@ Expected: eight result blocks, exit code 0, and a final line listing stage
 B per arm.
 
 Exit code 1 means at least one arm measured NOTHING — a nonzero return
-code, a child that never wrote its file, or a stage A that did not survive.
-In that case the task STOPS and reports which arm and which condition. Per
-the driver's docstring, a stage-A failure is reported as **either** a probe
-defect **or** the host's own `-File` parsing mangling arguments before the
-script sees them; decide which by reading `parent-out.txt` against the
-payload, and say which one it was.
+code, a child that never wrote its file, an unparseable output file, or a
+stage A that did not survive. In that case the task STOPS and reports which
+arm and which condition. Per the driver's docstring, a stage-A failure is
+reported as **either** a probe defect **or** the host's own `-File` parsing
+mangling arguments before the script sees them; decide which by reading the
+parent's own output against what was sent, and say which one it was. The
+positional arms write `parent-out.txt` and are compared against `PAYLOAD`;
+the named arms write `parent-out.json` and are compared against
+`NAMED_EXPECTED`.
 
 A stage B of `false` is a RESULT, not a failure. It is what a NO looks
 like, and it is recorded as a finding.
@@ -1119,9 +1183,10 @@ like, and it is recorded as a finding.
 Replace `NOT YET WRITTEN.` under `## Measurement 1: re-exec fidelity` with:
 
 1. An eight-row table: host, forwarding form, positional or named, return
-   code, whether the child ran, stage A exact, stage B exact (or
-   `bound_exact` for the named arms), and the index of the first differing
-   argument. **The return code and the child-ran column are not optional**:
+   code, whether the child ran, `stage_a_parent_exact`,
+   `stage_b_child_exact`, and the index of the first differing argument.
+   Every arm reports those same field names, positional and named alike.
+   **The return code and the child-ran column are not optional**:
    without them a child that never started tabulates identically to a child
    that received corrupt arguments.
 2. Both payload lists, verbatim, so a reader knows exactly what was tried.
@@ -1141,27 +1206,31 @@ Replace `NOT YET WRITTEN.` under `## Measurement 1: re-exec fidelity` with:
 
 - [ ] **Step 7: Add explicit inventory rows for the files this task created**
 
-The standing rule in Task 3 applies here. `child.ps1`, `child-named.ps1`,
-`parent.ps1` and `run.py` all carry family matches, and the `docs/` blanket
-row would otherwise classify them `record — never executed`. Run:
+The standing rule in Task 3 applies here, and `EXEMPT_FROM_PREFIX` in
+`survey.py` enforces it: every family match in the files this task created
+is UNCLASSIFIED until a row exists. Run:
 
 ```bash
-SCRATCH="C:/Users/Brandon/AppData/Local/Temp/claude/C--Users-Brandon-Documents-parallax/90c32d4a-9b49-468b-a954-6e7c5c5a8792/scratchpad/item48"
-python docs/superpowers/plans/rounds/2026-08-22-item48-pwsh7-feasibility/survey.py --emit \
-  | grep "2026-08-22-item48-pwsh7-feasibility/reexec" > "$SCRATCH/stubs-reexec.tsv"
-wc -l "$SCRATCH/stubs-reexec.tsv"
+python docs/superpowers/plans/rounds/2026-08-22-item48-pwsh7-feasibility/survey.py --emit
 ```
 
-Classify every row and append it to `<REC>/entry-points.tsv`. These are
-`test-harness` / `no-change`: they are this investigation's own probes and
-no migration edits them. Then confirm none is left prefix-covered:
+Take every emitted row under this task's own directory, OPEN THE LINE each
+one points at, and classify it by Task 3's table and Task 3's rule — the
+classification comes from the line, never from the path and never from what
+this plan expects it to be. (Probe scripts written for this investigation
+will most likely read `test-harness` / `no-change`, but that is what you
+should expect to find, not what you should write without looking.)
+
+Then confirm nothing under this task's directory is still unclassified:
 
 ```bash
 python docs/superpowers/plans/rounds/2026-08-22-item48-pwsh7-feasibility/survey.py --emit \
   | grep -c "2026-08-22-item48-pwsh7-feasibility/reexec"
 ```
 
-Expected: `0`.
+Expected: `0`. This check can now fail: before `EXEMPT_FROM_PREFIX`
+existed, `--emit` never printed prefix-covered rows, so it printed zero
+whether or not the rows had been written.
 
 - [ ] **Step 8: Commit**
 
@@ -1241,6 +1310,12 @@ to `:47`. That command could not answer the question the step asks, which
 is the same defect this plan exists to avoid: a check narrower than its
 claim.
 
+**Read the hits before counting them.** The awk range runs to the next
+job key, so it also picks up the comment block at
+`.github/workflows/skill-evals.yml:49-58`, which discusses `pwsh` and
+`powershell.exe` in prose. Those are comments, not invocations. Say which
+hits were comments; a raw count here would answer the opposite question.
+
 If no Linux step invokes `pwsh`, then PowerShell 7's presence on the Linux
 runner is UNPROVEN by this repo's own evidence. Write that as an unproven
 statement, not as an absence of a problem.
@@ -1308,11 +1383,29 @@ re-run the suite.
 Run:
 
 ```bash
-grep -n -B4 -A25 "powershell-hosts" .github/workflows/skill-evals.yml
+awk '/^  powershell-hosts:/{f=1} f' .github/workflows/skill-evals.yml | grep -n "name:\|env:\|PARALLAX_PS_HOST\|test_"
 ```
+
+Read the WHOLE job. An earlier version asked for 25 lines after the job
+name; the job's two host steps and their module lists occupy
+`.github/workflows/skill-evals.yml:93` to `:125`, past the end of that
+window, so the command could not see the thing the step exists to record.
 
 Record, with line numbers, exactly which test modules the job re-runs under
 both hosts and how that list is selected.
+
+**Bind the list to the run you will cite.** The command above reads the
+WORKING TREE. Task 5 identified a successful run and its `headSha`; read
+the same job at that SHA and use it if the two differ:
+
+```bash
+git show <headSha>:.github/workflows/skill-evals.yml | awk '/^  powershell-hosts:/{f=1} f' | grep -n "name:\|test_"
+```
+
+The record must not tabulate modules from today's tree and cite a green run
+from another revision as evidence that THOSE modules passed. If the SHA is
+not available locally, say the module list is revision-unbound and do not
+present it as covered by the cited run.
 
 - [ ] **Step 2: List the shipped scripts and mark which are covered**
 
@@ -1364,7 +1457,9 @@ open it and decide which of these it is, and put that word in the table:
 
 Produce a table: script, covering module, `runs`/`reads`/`mentions` with a
 line citation, and whether that module is in the dual-host job from Step 1.
-Only `runs` rows count as behaviour proven under a host.
+Only a `runs` row can be evidence about behaviour under a host — and a
+`runs` row on its own says the module INVOKES the script, not that it
+passed. What a green run of the dual-host job adds is the passing half.
 
 - [ ] **Step 3: Name the host-sensitive behaviours with NO coverage under 7**
 
@@ -1496,17 +1591,21 @@ def main():
         (HERE / "results.json").write_text(json.dumps(result, indent=1),
                                            encoding="utf-8")
         print(json.dumps(result, indent=1))
-        return
+        # EXIT NONZERO. The task calls a timeout a probe defect that must
+        # be fixed; a bare return here would exit 0 over it, which is a
+        # command that cannot fail on the one path it was added to catch.
+        return 1
     result["returncode"] = proc.returncode
     result["stdout"] = proc.stdout.strip()
     result["stderr"] = proc.stderr.strip()
     (HERE / "results.json").write_text(json.dumps(result, indent=1),
                                        encoding="utf-8")
     print(json.dumps(result, indent=1))
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
 ```
 
 - [ ] **Step 3: Run it**
@@ -1557,7 +1656,36 @@ Replace `NOT YET WRITTEN.` under
    about them changes until a migration edits them; and the harness's own
    presentation of a hook failure was not measured by this probe.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: Add explicit inventory rows for the file this task created**
+
+The same standing rule as Task 4, and for the same reason.
+`missing-pwsh/probe.py` carries `pwsh`, `subprocess.run` and `-File`, and
+those paths are in `EXEMPT_FROM_PREFIX`, so every one of them is
+UNCLASSIFIED until a row exists. Run:
+
+```bash
+python docs/superpowers/plans/rounds/2026-08-22-item48-pwsh7-feasibility/survey.py --emit \
+  | grep "2026-08-22-item48-pwsh7-feasibility/missing-pwsh"
+```
+
+Open each emitted line, classify it by Task 3's table and Task 3's rule —
+from the line, not from the path and not from what this plan expects — and
+append the rows. Then confirm:
+
+```bash
+python docs/superpowers/plans/rounds/2026-08-22-item48-pwsh7-feasibility/survey.py --emit \
+  | grep -c "2026-08-22-item48-pwsh7-feasibility/missing-pwsh"
+```
+
+Expected: `0`.
+
+An earlier version of this plan gave Task 4 this step and not Task 7, which
+is the same asymmetry the standing rule was written to remove — a fix
+applied at one site while the next site reproduced it. Under
+subagent-per-task dispatch, a Task 7 subagent never reads Task 3's prose,
+so the step has to be here.
+
+- [ ] **Step 6: Commit**
 
 ```bash
 git add docs/superpowers/plans/rounds/2026-08-22-item48-pwsh7-feasibility/
@@ -1747,7 +1875,7 @@ must include, as a hard ordering rule taken from item 48: the code becomes
 UNABLE to run on 5.1 BEFORE any 5.1 test is deleted. It must also name
 backlog items 51 and 31 as absorbed by it, since both defects are 5.1-only.
 
-It cites the test-matrix answer already written in Step 2 rather than
+It cites the test-matrix answer already written in Step 3 rather than
 restating it, and its ordered work must be consistent with it.
 
 Do NOT edit `docs/superpowers/plans/2026-07-27-0150-backlog.md` in this
