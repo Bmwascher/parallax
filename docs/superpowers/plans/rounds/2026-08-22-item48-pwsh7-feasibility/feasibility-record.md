@@ -191,9 +191,17 @@ bucket) were walked entry by entry:
   entry point cannot reach 7" can be certified, for the same reason: they
   are, by definition, invisible to a method that reads tracked files. Same
   disposition — folded into condition (1).
-- `NOT SCANNED` files — **does not bear on this criterion today, because**
-  the survey's own final run reports `0 files not scanned`; there is
-  currently no unread file to name.
+- `NOT SCANNED` files — **does not bear on this criterion, structurally,
+  not just today.** Corrected at debate round 2: this used to rest on "the
+  survey's own final run reports `0 files not scanned` today", a live
+  snapshot claim finding 1 (same round) showed the exit code did not
+  actually guarantee — `survey.py`'s predicate omitted `skipped` from the
+  failure condition, so a run could report a nonzero `files not scanned`
+  count and still exit `0`. Fixed at the same commit that added this
+  sentence: `skipped` is now part of the exit predicate, so a green
+  (exit `0`) run of this survey GUARANTEES `0 files not scanned`, not
+  merely reports it. This disposition now rests on that guarantee, which
+  holds for every future green run, not on a point-in-time reading.
 - A classification that is syntactically valid but semantically wrong —
   bears on whether a `must-change` row's STATED fix is actually the RIGHT
   fix, which this record cannot verify by construction. Folded into
@@ -486,10 +494,14 @@ limits` entries not walked inside a criterion subsection above.
 3. The 3 `migration=unknown` rows bearing on criterion 1 independently
    force CONDITIONAL (listed above by `path:line`).
 4. **Checkable Rule 4 sweep (fix round 2 rewrite — fix round 1's version
-   of this claim was itself wrong; see below).** `## Residual limits` holds
-   34 bulleted entries across 7 buckets, machine-counted by `awk` over the
-   section (command and output in the fix-round report; any reader can
-   re-run it):
+   of this claim was itself wrong; corrected again at debate round 2 to
+   bind the count to a commit rather than assert it as current, the same
+   self-referential-count gap findings 1 and 2 of that round raised
+   against the survey figures elsewhere in this record).** **As measured
+   at commit `b416508`**, `## Residual limits` held 34 bulleted entries
+   across 7 buckets, machine-counted by `awk` over the section (command
+   and output in the fix-round report; any reader can re-run it for
+   today's live count):
 
    | Bucket | Entries | Where walked |
    |---|---|---|
@@ -501,6 +513,9 @@ limits` entries not walked inside a criterion subsection above.
    | Measurement 5 (Task 8) | 6 | Criterion 4 sweep |
    | Investigation-wide | 4 | `### Residuals bearing on none of the four criteria` |
    | **Total** | **34** | all 34 placed; 0 unplaced |
+
+   (Counts as of commit `b416508`; re-run the command below for today's
+   total before trusting this table against a later commit.)
 
    Verify by running, from the repo root:
    `awk '/^## Residual limits/{r=1} /^## Draft: the migration item/{r=0} r&&/^### /{if(b!="")print b": "c;b=$0;c=0;next} r&&/^- /{c++} END{if(b!="")print b": "c}' docs/superpowers/plans/rounds/2026-08-22-item48-pwsh7-feasibility/feasibility-record.md`
@@ -600,15 +615,24 @@ It does not do more than that, and this record does not claim it does:
 - A file the script cannot read is listed as `NOT SCANNED`, by name. An
   unread file is not a clean one.
 
-**Convention: this record cites itself by section anchor, never by line
-number.** Any place below that points at another part of THIS file names a
-heading, a sub-heading, or a bolded lead sentence instead of a `:NNNN` line
-range. A line number into this file goes stale on the next edit, because
-this record quotes its own line counts and prose, and every edit — proven
-repeatedly across this document's own fix rounds — moves the lines it
-already cited. A section anchor does not move under insertion. Line numbers
-into OTHER files (files this branch does not edit) are unaffected and stay
-as line citations throughout.
+**Convention: this record cites itself, and any file this branch edits,
+by name rather than by line number.** Any place below that points at
+another part of THIS file names a heading, a sub-heading, or a bolded lead
+sentence instead of a `:NNNN` line range. Widened at debate round 2: the
+same hazard was found in citations into `reexec/run.py` (a file this
+investigation's own tasks created and edited across three separate fix
+rounds), not only in self-citations to this record — a `_MISSING`-sentinel
+fix to `run.py` shifted four such citations, one of which was already
+wrong before that fix. Both classes get the same treatment now: a
+function name, a variable name, or a bolded lead sentence, never a line
+range, for anything inside `feasibility-record.md`, `survey.py`,
+`entry-points.tsv`, or `reexec/*.py`/`*.ps1` — every file this branch can
+still edit. A line number into any of these goes stale on the next edit to
+that same file; a name does not move under insertion or refactor. Line
+numbers into files OUTSIDE this investigation's own directory (this branch
+never edits repo source under `evals/`, `tools/`, `.github/`, and so on)
+are unaffected and stay as line citations throughout — those files' line
+numbers cannot move because of anything this branch does.
 
 **Convention: every absolute count this record publishes about its own
 survey or its own tree is either commit-bound or invariant, never a bare
@@ -683,6 +707,9 @@ publishing a "today" figure at all):**
 | `d0ceec2` | Fable-review Minor 4 added `.cmd` to `EXEMPT_SUFFIXES`; its own comment prose added 2 more | 1116 | 7484 |
 | `2d2c08b` | this debate-round fix narrowed the guard comment (finding 3) and closed `first_difference`'s blind spot (finding 4); the narrowed comment's own prose added 1 more self-matching row | 1117 | 7495 |
 | `4087bef` | this debate-round fix also named the second blind spot in the known-misses comment (finding 7b); the rewrap of the existing bare-`git` paragraph split one line into two, adding 1 more self-matching row and removing the original whole-line match it replaced (net rows unchanged, hits moved) | 1117 | 7497 |
+| `fdd931e` | round 1's own record-only commit (finding 1's restructure plus findings 5, 6, 7a, 8); no row changed, but the new prose itself quotes more subject-matter text, moving hits alone | 1117 | 7498 |
+| `b416508` | round 2's predicate fix (finding 1 below): added `skipped` to the exit condition; the added comment explaining why moved hits again, no row changed | 1117 | 7500 |
+| `a13d3c3` | round 2's finding-5 fix: reworded the known-gaps comment to separate corrections from misses (25 lines of prose shifted, no genuinely new match); the record's own quote of this same comment was removed the same round, not reproduced any further | 1117 | 7507 |
 
 "Not separately measured" means exactly that, not zero: the hit count was
 not independently re-run and published at that specific commit, only the
@@ -708,7 +735,7 @@ conflated them into one:
 
 ### Classification counts
 
-**As measured at commit `4087bef`**, produced by:
+**As measured at commit `a13d3c3`**, produced by:
 `awk -F'\t' '!/^#/ && NF==6 {print $5}' docs/superpowers/plans/rounds/2026-08-22-item48-pwsh7-feasibility/entry-points.tsv | sort | uniq -c | sort -rn`
 
 | count | classification |
@@ -725,33 +752,39 @@ conflated them into one:
 | 5 | host-pin-exec |
 | 1 | record |
 
-One of the 1117 rows (at commit `4087bef`) is a prefix row (`docs/	*	*	-
+One of the 1117 rows (at commit `a13d3c3`) is a prefix row (`docs/	*	*	-
 record	no-change`); the count above is the per-row classification, not
 per-hit, so the table's total (1117) is the hand-written row count at that
-commit, not the hit count (7497, same commit) the prefix row also covers.
+commit, not the hit count (7507, same commit) the prefix row also covers.
 Re-run the command above for whatever the live total is today; do not
 assume this table still matches a later commit.
 
 ### `must-change` rows, whole file
 
-Every row whose `migration` value is `must-change` — **83 rows, grouped
-into 50 bullets, not 83 one-line entries** (corrected here: the plan asks
-for one line per row, and this list did not honour that until now
-described honestly). A bullet groups every row that shares one migration
-action — several source lines inside the same file that all need the same
-edit, or one of the five dual-family rows where a single source line
-matched two families and produced two TSV rows for one real change. Every
-distinct source line still appears somewhere below; the grouping is
-presentation, not an omission — the `unknown` list further down keeps a
-strict one-bullet-per-row format instead, because each of its 3 rows needs
-a DIFFERENT migration action described on its own. Rows from the `host`
-and `launch` family tasks are described from reading the same lines during
+Every row whose `migration` value is `must-change` — **83 rows, 83
+one-line entries, one per row**, matching the frozen plan's own format
+exactly (`path:line — what a migration must do to it`). Debate round 2
+corrected this from a prior state of 83 rows grouped into 50 bullets:
+disclosing that mismatch in round 1 repaired the overclaim but not the
+fidelity failure itself, so this round splits every grouped bullet into
+one line per row rather than leaving a formally-undisclosed deviation
+against a frozen-plan contract. Where five dual-family rows describe one
+real source line (the same line matched two regex families and produced
+two TSV rows), each still gets its own line below, marked as one of a
+family pair so the reader is not misled into counting two edits where
+there is one. The `unknown` list further down already held this format
+(3 bullets for 3 rows); it needed no change. Rows from the `host` and
+`launch` family tasks are described from reading the same lines during
 this pass, not re-classified; only the `bare` rows below were classified
 by this task.
 
-- `.githooks/pre-push:24` (host-pin-exec / launch-explicit) — hardcodes
-  `powershell.exe` as the attestation verifier's interpreter; must invoke
-  `pwsh.exe` (or resolve dynamically) once 5.1 is gone.
+- `.githooks/pre-push:24` (host-pin-exec, one of a family pair with the
+  launch row directly below) — hardcodes `powershell.exe` as the
+  attestation verifier's interpreter; must invoke `pwsh.exe` (or resolve
+  dynamically) once 5.1 is gone.
+- `.githooks/pre-push:24` (launch-explicit, the paired row for the same
+  source line above) — same hardcoded `powershell.exe` invocation; one
+  migration action covers both rows.
 - `.github/workflows/skill-evals.yml:74` — corrected here (was wrongly
   described as the `run:` step body): it is COMMENT PROSE, `# are driven
   by the pre-push hook through powershell.exe and by a`, naming the 5.1
@@ -764,25 +797,37 @@ by this task.
   and `:96`/`:97` below) must go with it. (`:112`, the PAIRED `pwsh.exe`
   env line for the step that SURVIVES, is `no-change` — see the
   correction note at the end of this list.)
-- `.github/workflows/skill-evals.yml:96`, `:97` (bare) — `run: >` and
-  `python -m pytest ...`, the body of that same 5.1 job step. Read on
-  their own these lines are host-neutral text; they are `must-change`
-  because deleting the step they belong to (per `:95` above) deletes them
-  with it — the step and its env line, run header, and command body stand
-  or fall together, and the `host` family's `:95` row already reads
+- `.github/workflows/skill-evals.yml:96` (bare) — `run: >`, the 5.1 job
+  step's run header. Host-neutral text on its own; `must-change` because
+  deleting the step it belongs to (per `:95` above) deletes it with it.
+- `.github/workflows/skill-evals.yml:97` (bare) — `python -m pytest ...`,
+  that same step's command body. Same reasoning as `:96`: stands or falls
+  with the step, and the `host` family's `:95` row already reads
   `must-change`.
 - `evals/multi-model-verify/test_attestation.py:10` — docstring stating
   the module "runs wherever a PowerShell host exists: Windows
   powershell.exe or pwsh"; the 5.1 half of that sentence must go.
-- `evals/multi-model-verify/test_attestation.py:30`, `:36` — the
-  `POWERSHELL` host-selector's comment and its
-  `shutil.which("powershell")` fallback; the fallback must be dropped.
-- `evals/multi-model-verify/test_backup_lane.py:1322,1328,1334,1338,1340,
-  1354,1360,1373,1374,1376,1378,1388,1395,1401,1408,1413` —
-  `test_check_workflow_paths_flags_host_parity_gap` and its neighbours
-  build synthetic workflow text asserting BOTH a `powershell.exe` step and
-  a `pwsh.exe` step exist with parity; dropping 5.1 removes the thing
-  these tests enforce, so they must be rewritten or removed.
+- `evals/multi-model-verify/test_attestation.py:30` — the `POWERSHELL`
+  host-selector's comment naming the 5.1 fallback; must be dropped along
+  with the fallback it describes.
+- `evals/multi-model-verify/test_attestation.py:36` — the
+  `shutil.which("powershell")` fallback itself; must be dropped.
+- `evals/multi-model-verify/test_backup_lane.py:1322` — `test_check_workflow_paths_flags_host_parity_gap` and its 15 neighbouring lines below build synthetic workflow text asserting BOTH a `powershell.exe` step and a `pwsh.exe` step exist with parity; dropping 5.1 removes the thing these tests enforce, so they must be rewritten or removed. (Rationale stated once here; the remaining 15 lines below are the same test group.)
+- `evals/multi-model-verify/test_backup_lane.py:1328` — same test group as `:1322` above.
+- `evals/multi-model-verify/test_backup_lane.py:1334` — same test group as `:1322` above.
+- `evals/multi-model-verify/test_backup_lane.py:1338` — same test group as `:1322` above.
+- `evals/multi-model-verify/test_backup_lane.py:1340` — same test group as `:1322` above.
+- `evals/multi-model-verify/test_backup_lane.py:1354` — same test group as `:1322` above.
+- `evals/multi-model-verify/test_backup_lane.py:1360` — same test group as `:1322` above.
+- `evals/multi-model-verify/test_backup_lane.py:1373` — same test group as `:1322` above.
+- `evals/multi-model-verify/test_backup_lane.py:1374` — same test group as `:1322` above.
+- `evals/multi-model-verify/test_backup_lane.py:1376` — same test group as `:1322` above.
+- `evals/multi-model-verify/test_backup_lane.py:1378` — same test group as `:1322` above.
+- `evals/multi-model-verify/test_backup_lane.py:1388` — same test group as `:1322` above.
+- `evals/multi-model-verify/test_backup_lane.py:1395` — same test group as `:1322` above.
+- `evals/multi-model-verify/test_backup_lane.py:1401` — same test group as `:1322` above.
+- `evals/multi-model-verify/test_backup_lane.py:1408` — same test group as `:1322` above.
+- `evals/multi-model-verify/test_backup_lane.py:1413` — same test group as `:1322` above.
 - `evals/multi-model-verify/test_backup_lane.py:1741` — a separate test,
   roughly 330 lines later in the same file (not one of the
   `test_check_workflow_paths_flags_host_parity_gap` neighbours above): it
@@ -796,10 +841,13 @@ by this task.
   `POWERSHELL` selector's `shutil.which("powershell")` fallback; drop it.
 - `evals/multi-model-verify/test_codex_round_evidence.py:58` — same
   `POWERSHELL` selector pattern; drop the `powershell` fallback.
-- `evals/multi-model-verify/test_codex_tool_surface_probe.py:40`, `:515` —
-  the selector fallback, and a test that explicitly resolves both
-  `shutil.which("powershell")` and `shutil.which("pwsh")` to drive every
-  present host; both must lose their 5.1 half.
+- `evals/multi-model-verify/test_codex_tool_surface_probe.py:40` — the
+  `POWERSHELL` selector's `shutil.which("powershell")` fallback; must lose
+  its 5.1 half.
+- `evals/multi-model-verify/test_codex_tool_surface_probe.py:515` — a test
+  that explicitly resolves both `shutil.which("powershell")` and
+  `shutil.which("pwsh")` to drive every present host; must lose its 5.1
+  half.
 - `evals/multi-model-verify/test_home_skill_canary.py:62` — same selector
   fallback pattern; drop it.
 - `evals/multi-model-verify/test_kimi_credential_state.py:70` — same
@@ -842,26 +890,43 @@ by this task.
 - `evals/multi-model-verify/test_lock_protocol_live.py:78` — docstring on
   `ps_host()` stating "the plan's own verification runs this module
   twice, once per host"; false once there is one host.
-- `evals/multi-model-verify/test_lock_protocol_live.py:381`, `:382`,
-  `:400` — `test_measurement_20_ticks_and_date_string_types_diverge_
-  across_hosts`, which asserts `powershell.exe` and `pwsh.exe` return
-  DIFFERENT `ConvertFrom-Json` types for the same value; the test's whole
-  premise is the divergence between two hosts, so it must be removed with
-  5.1.
+- `evals/multi-model-verify/test_lock_protocol_live.py:381` — one of
+  three lines inside `test_measurement_20_ticks_and_date_string_types_
+  diverge_across_hosts`, which asserts `powershell.exe` and `pwsh.exe`
+  return DIFFERENT `ConvertFrom-Json` types for the same value; the test's
+  whole premise is the divergence between two hosts, so it must be removed
+  with 5.1.
+- `evals/multi-model-verify/test_lock_protocol_live.py:382` — same test as
+  `:381` above.
+- `evals/multi-model-verify/test_lock_protocol_live.py:400` — same test as
+  `:381` above.
 - `evals/multi-model-verify/test_multi_model_verify.py:2954` — the
   ONE genuine `os.name != "nt"` skip-reason string, naming "drives
   powershell.exe"; the module it gates hardcodes `powershell.exe` (see the
   next bullet) and must change with it.
-- `evals/multi-model-verify/test_multi_model_verify.py:2960`-`:2962`,
-  `:2998`-`:3000` — corrected grouping (an earlier draft misdescribed
-  `:2961` and `:2999` as skip-reason strings/comments; they are not): the
-  two `subprocess.run(["powershell.exe", ...])` calls (`test_run_state_
-  machine` and `TestBriefEncodingOverStdin._run`), each spanning the
-  call's opening (`:2960`/`:2998`), the literal `["powershell.exe", ...]`
-  interpreter array itself (`:2961`/`:2999` — the actual hardcode), and
-  the `"-File", str(...)` argument-list half (`:2962`/`:3000`); all six
-  lines hardcode, or belong to a call that hardcodes, `powershell.exe` as
-  the literal interpreter and must be changed to `pwsh.exe`.
+- `evals/multi-model-verify/test_multi_model_verify.py:2960` —
+  `test_run_state_machine`'s `subprocess.run(["powershell.exe", ...])`
+  call's opening line; hardcodes, or belongs to a call that hardcodes,
+  `powershell.exe` and must change to `pwsh.exe`. (Corrected grouping,
+  stated once here: an earlier draft misdescribed `:2961`/`:2999` below as
+  skip-reason strings/comments; they are the literal interpreter array
+  itself.)
+- `evals/multi-model-verify/test_multi_model_verify.py:2961` — the literal
+  `["powershell.exe", ...]` interpreter array inside that same call, the
+  actual hardcode; must change to `pwsh.exe`.
+- `evals/multi-model-verify/test_multi_model_verify.py:2962` — the
+  `"-File", str(...)` argument-list half of that same call; belongs to the
+  hardcoded call and must change with it.
+- `evals/multi-model-verify/test_multi_model_verify.py:2998` —
+  `TestBriefEncodingOverStdin._run`'s equivalent
+  `subprocess.run(["powershell.exe", ...])` call's opening line; same
+  reasoning as `:2960` above.
+- `evals/multi-model-verify/test_multi_model_verify.py:2999` — the literal
+  `["powershell.exe", ...]` interpreter array in that call, the actual
+  hardcode; must change to `pwsh.exe`.
+- `evals/multi-model-verify/test_multi_model_verify.py:3000` — the
+  `"-File", str(...)` argument-list half of that call; belongs to the
+  hardcoded call and must change with it.
 - `evals/multi-model-verify/test_review_mirror.py:38` — comment stating
   the `powershell-hosts` job "runs this module under BOTH powershell.exe
   and pwsh.exe"; the 5.1 half must go.
@@ -872,9 +937,14 @@ by this task.
   and pwsh"; false once there is one host.
 - `evals/multi-model-verify/test_skill_report_shapes.py:45` — same
   selector fallback pattern; drop it.
-- `evals/tools/check_workflow_paths.py:41,42,43` — docstring/comment
-  defining the required host MULTISET as "exactly one `powershell.exe`
-  and one `pwsh.exe`"; the checker's whole contract changes with 5.1 gone.
+- `evals/tools/check_workflow_paths.py:41` — one of three lines of
+  docstring/comment defining the required host MULTISET as "exactly one
+  `powershell.exe` and one `pwsh.exe`"; the checker's whole contract
+  changes with 5.1 gone.
+- `evals/tools/check_workflow_paths.py:42` — same docstring/comment as
+  `:41` above.
+- `evals/tools/check_workflow_paths.py:43` — same docstring/comment as
+  `:41` above.
 - `evals/tools/check_workflow_paths.py:85` — `REQUIRED_HOST_NAMES =
   {"powershell.exe", "pwsh.exe"}`; must drop `"powershell.exe"`.
 - `evals/tools/check_workflow_paths.py:153` — comment restating the
@@ -896,10 +966,12 @@ by this task.
 - `tools/check-drift.ps1:68` — `$appId =
   '{...}\WindowsPowerShell\v1.0\powershell.exe'`, the toast notifier's
   hardcoded AppID path; must point at the PS7 identity once 5.1 is gone.
-- `tools/check-drift.ps1:96` (host and launch rows, both `must-change`) —
-  `$action = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File
-  ..."`, the scheduled task's registered action; must register `pwsh.exe`
-  instead.
+- `tools/check-drift.ps1:96` (host-pin-exec, one of a family pair with
+  the launch row directly below) — `$action = "powershell.exe -NoProfile
+  -ExecutionPolicy Bypass -File ..."`, the scheduled task's registered
+  action; must register `pwsh.exe` instead.
+- `tools/check-drift.ps1:96` (not-a-launch, the paired row for the same
+  source line above) — same line, same required change.
 - `tools/check-drift.ps1:21` — comment: "Written for Windows PowerShell
   5.1 (what schtasks runs): no &&, no ternary, ASCII ONLY"; the whole
   premise (a script written for 5.1's syntax limits) goes away once 5.1
@@ -908,28 +980,40 @@ by this task.
   naming pwsh.exe proves a value past the ceiling is reported"; the
   surrounding paragraph's premise — that 5.1 is the default and pwsh.exe
   is named as the one exception (`:406`-`:407`) — goes away with 5.1.
-- `README.md:413`, `:414` (bare) — `powershell tools/check-drift.ps1
-  -Register` / `-TestNotify`; both name the literal 5.1 launcher
-  (`powershell`, not `pwsh`) and must change to `pwsh` once 5.1 is
-  dropped.
-- `commands/doctor.md:340` (launch and bare rows, both `must-change`) —
-  `powershell -NoProfile -File <installPath>\tools\codex-context-probe.ps1
-  ...`; same literal-launcher problem as above, must change to `pwsh`.
-- `skills/multi-model-verify/SKILL.md:326` (launch and bare rows, both
-  `must-change`) — `powershell -NoProfile -File
-  <plugin-root>/tools/write-attestation.ps1 ...`; same literal-launcher
-  problem, must change to `pwsh`.
+- `README.md:413` (bare) — `powershell tools/check-drift.ps1 -Register`;
+  names the literal 5.1 launcher (`powershell`, not `pwsh`) and must
+  change to `pwsh` once 5.1 is dropped.
+- `README.md:414` (bare) — `powershell tools/check-drift.ps1 -TestNotify`;
+  same required change as `:413` above.
+- `commands/doctor.md:340` (doc-instruction, launch family, one of a
+  family pair with the bare row directly below) — `powershell -NoProfile
+  -File <installPath>\tools\codex-context-probe.ps1 ...`; same
+  literal-launcher problem as above, must change to `pwsh`.
+- `commands/doctor.md:340` (doc-instruction, bare family, the paired row
+  for the same source line above) — same line, same required change.
+- `skills/multi-model-verify/SKILL.md:326` (doc-instruction, launch
+  family, one of a family pair with the bare row directly below) —
+  `powershell -NoProfile -File <plugin-root>/tools/write-attestation.ps1
+  ...`; same literal-launcher problem, must change to `pwsh`.
+- `skills/multi-model-verify/SKILL.md:326` (doc-instruction, bare family,
+  the paired row for the same source line above) — same line, same
+  required change.
 - `evals/multi-model-verify/fixtures/stub-appserver/stub-appserver.cmd:14`
-  (host and launch families, both rows) — `powershell.exe -NoProfile
-  -NonInteractive -File "%~dp0stub-appserver.ps1" %*`. This is live
-  executable code, not description: the file's own comment at `:12`-`:13`
-  states that driving the probe through THIS file is what proves the
-  `.cmd` branch launches at all, and the line it drives through hardcodes
-  `powershell.exe`. Settled to `must-change` on both rows (the `host`
-  family's row previously read `unknown`; see the correction note below):
-  once 5.1 is gone, `powershell.exe` either does not exist or is no
-  longer the intended target, so the line must change to `pwsh.exe` for
+  (test-harness, host family, one of a family pair with the launch row
+  directly below) — `powershell.exe -NoProfile -NonInteractive -File
+  "%~dp0stub-appserver.ps1" %*`. This is live executable code, not
+  description: the file's own comment at `:12`-`:13` states that driving
+  the probe through THIS file is what proves the `.cmd` branch launches at
+  all, and the line it drives through hardcodes `powershell.exe`. Settled
+  to `must-change` on this row (it previously read `unknown` for the
+  `host` family specifically; see the reasoning in the rest of this
+  bullet): once 5.1 is gone, `powershell.exe` either does not exist or is
+  no longer the intended target, so the line must change to `pwsh.exe` for
   the stub to keep proving what it exists to prove.
+- `evals/multi-model-verify/fixtures/stub-appserver/stub-appserver.cmd:14`
+  (test-harness, launch family, the paired row for the same source line
+  above) — same line, same required change; this row read `must-change`
+  already and was never the one that needed settling.
 
 ### `unknown` rows, whole file
 
@@ -1021,31 +1105,18 @@ here.
 
 This list is not itself provably complete, and a blind-spot list that
 reads as complete is the same defect one level up. The count is not
-restated here from memory or from this instruction; it is copied from the
-single place that carries it, `survey.py`'s own FAMILIES comment:
-
-> THE CORRECTIONS, enumerated. Across FIVE review rounds a reviewer
-> produced a live entry point this filter did not match NINE times:
->   1-2. two classes prompted the third family at all;
->   3-4. two more widened it (call operator through a variable; flagless
->        instruction invocations);
->   5.   Start-Job joined the launch family;
->   6.   the line-wrapped backtick form;
->   7-8. the generic call operator with a literal command, and bare
->        `python`;
->   9.   bare `agy`, the Flash implementer's client - live at
->        agents/flash-implementer.md:47 and :78, and used across six
->        non-docs files.
->
-> Nobody has produced a tenth. That is the only honest statement available,
-> and it is not the same as saying there is none.
->
-> ONE KNOWN MISS IS LEFT IN DELIBERATELY, with its instance named. Bare
-> `git` invocations - tools/check-drift.ps1:987, `git -C $worktree commit`
-> - are NOT matched. Matching bare `git` costs 179 further hits, almost all
-> of them prose and shell plumbing, against a class that never starts a
-> PowerShell host. That is a measured trade and not an empty set: the
-> instance above is real and is not in the inventory.
+restated here from memory or from this instruction; it is `survey.py`'s
+own FAMILIES comment that carries it, NOT REPRODUCED here (corrected at
+debate round 2): an earlier draft of this section quoted that comment
+verbatim, and the quote went stale twice while nobody was sweeping for it
+- once when round 1 widened "ONE known miss" to "TWO", once more when
+round 2 corrected "NINE live misses" to "NINE corrections/widenings" (a
+tenth miss exists; a tenth correction does not). Reproducing prose that
+survey.py's own comment already carries makes this record a SECOND place
+that same prose can go stale in, which is the opposite of the single-
+source discipline this paragraph exists to state. Read `survey.py`'s
+FAMILIES comment directly for the current enumeration, corrections count,
+and named blind spots; this record does not keep its own copy.
 
 ## Measurement 1: re-exec fidelity
 
@@ -1074,13 +1145,15 @@ early; had any Stage A been false the task would have reported BLOCKED
 instead of writing this section.)
 
 `first difference` for the named shape names the first PARAMETER NAME, in
-ALPHABETICAL order over the union of expected and received keys
-(`run.py:164-166`), that differs - not send order. `routeNote` was sent
+ALPHABETICAL order over the union of expected and received keys (the
+`"first_difference"` comparison inside `run_named()` in `run.py`), that
+differs - not send order. `routeNote` was sent
 first and also differed for `ps51/splat/named`; `path` sorts first
 alphabetically, which is why it is the name shown.
 
 **Comparison fixed after the debate round-1 review, results unaffected.**
-The comparison at `run.py:164-166` originally read each side with a plain
+The `"first_difference"` comparison inside `run_named()` originally read
+each side with a plain
 `.get(k)` (`None` default), which cannot tell "key absent" from "key
 present with value `None`" - a child that bound every expected key
 correctly but also emitted one extra key holding `null` would still show
@@ -1150,13 +1223,16 @@ form (a hand-built, hand-quoted command-line string passed through
 Under Windows PowerShell 5.1, splat corrupted both the positional payload
 (the child received 8 of 10 items and the first index that differs is 2;
 which two items were dropped is not recorded by this run - the positional
-arm keeps no per-item child data on the success path, by design, per
-`run.py:201-204`) and the named payload (an embedded quote and a trailing
+arm keeps no per-item child data on the success path, by design: `run()`'s
+own return statement in `run.py` holds only a count and a first-difference
+index, never the received list itself) and the named payload (an embedded quote and a trailing
 backslash both mangled). The escaped form survived every payload shape
 under BOTH parent hosts, and PowerShell 7 as the PARENT host survived
 every payload shape under BOTH forwarding forms. The CHILD host was
-PowerShell 7 in every one of the eight arms - `run.py:63` and `run.py:112`
-pin `PROBE_TARGET_HOST` to `PWSH` unconditionally - so no arm measured
+PowerShell 7 in every one of the eight arms - the `PROBE_TARGET_HOST`
+assignment inside `run()` and the same-named assignment inside
+`run_named()`, both in `run.py`, pin it to `PWSH` unconditionally - so no
+arm measured
 PowerShell 5.1 as a target; the corruption is specific to 5.1 acting as
 the SPLAT-forwarding parent, not to PowerShell 7 as a target, and not to
 escaping as a technique.
@@ -1195,7 +1271,8 @@ backtick, and a leading-dash flag-like token - does.
   machine against exactly one installed build of each host: Windows
   PowerShell `5.1.26100.9168` and PowerShell `7.6.5`, captured by running
   `$PSVersionTable.PSVersion.ToString()` under each of the two absolute
-  paths `run.py:22-23` pins. Neither host's build is recorded inside
+  paths the module-level `PS51`/`PWSH` constants in `run.py` pin. Neither
+  host's build is recorded inside
   `results.json` itself. These match the two versions captured
   independently by Task 1 for the record's own header's `Hosts under
   test:` line, so the two measurements agree rather than diverge. This
@@ -1310,9 +1387,11 @@ Not measurable at all from here — no telemetry, no fleet, no way to run a
 command on a machine this session cannot reach.
 
 **The half-requirement that already exists regardless of any migration:**
-`hooks/hooks.json:10` and `:22` (both rows present in
-`entry-points.tsv:159-160` (`host` family) and `:429-430` (`launch`
-family), classified `host-pin-exec` / `launch-explicit`, `no-change`) each
+`hooks/hooks.json:10` and `:22` (each present in `entry-points.tsv` as a
+`host`-family row and a `launch`-family row keyed to that same
+source-file line, not cited by the TSV's own line number since a TSV row
+insertion elsewhere would move it, classified `host-pin-exec` /
+`launch-explicit`, `no-change`) each
 invoke `"command": "pwsh -NoProfile -NonInteractive -File
 \"${CLAUDE_PLUGIN_ROOT}/hooks/superpowers-review-companion.ps1\""`. Any
 plugin user who has the hook installed and enabled already needs `pwsh` on
@@ -1421,9 +1500,11 @@ it were one of the 21):
   a test double standing in for an external app server INSIDE the test
   suite, not a script the product ships to run in production. (Its sibling
   `stub-appserver.cmd` already has its own `must-change` row in
-  `entry-points.tsv:70`/`:225` for hardcoding `powershell.exe`, so this
-  exclusion is not hiding that finding, only scoping THIS table to scripts
-  under the four brief-named directories.)
+  `entry-points.tsv` (host and launch families, both keyed to
+  `stub-appserver.cmd:14`, not cited by the TSV's own line number for the
+  same reason as the `hooks/hooks.json` rows above) for hardcoding
+  `powershell.exe`, so this exclusion is not hiding that finding, only
+  scoping THIS table to scripts under the four brief-named directories.)
 - `evals/multi-model-verify/fixtures/stub-codex/stub-codex.ps1` - the same
   kind of test double, standing in for the codex CLI inside the test
   suite rather than a script the product ships to run in production. It
