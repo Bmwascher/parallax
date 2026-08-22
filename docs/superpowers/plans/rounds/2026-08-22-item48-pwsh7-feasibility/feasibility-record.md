@@ -1143,7 +1143,218 @@ PowerShell 7 genuinely not installed anywhere on it).
 
 ## Measurement 5: what is saved
 
-NOT YET WRITTEN.
+Answers the brief's own question - what the change actually saves - against
+the cost the earlier measurements have already surfaced. A section that
+lists only savings is not a ledger; both sides are recorded here.
+
+### Step 1: CI wall-clock, STEP timings not job timings
+
+`gh run list --workflow skill-evals.yml --limit 10 --json
+databaseId,conclusion,headSha,createdAt --jq '.[] | select(.conclusion==
+"success")'` returned seven successful runs; the first five, newest first:
+`32391262449` (2026-08-20), `32085653133` (2026-08-18), `32082761519`
+(2026-08-18), `32078875878` (2026-08-17), `31956013509` (2026-08-16). These
+differ from Measurement 2's cited run only by including four MORE runs
+after it in the same list - `32391262449` is the same run Measurement 2
+cites (`headSha a3134dcd...`), so the two sections do not disagree, they
+just cover different windows of the same run history.
+
+For each id, `gh run view <ID> --json jobs --jq '.jobs[] | select(.name==
+"powershell-hosts") | {job: .name, jobStart: .startedAt, jobEnd:
+.completedAt, steps: [.steps[] | select(.name | test("PowerShell-facing
+tests under")) | {name, startedAt, completedAt}]}'` returned real
+`startedAt`/`completedAt` timestamps for both named steps AND the job
+itself, for all five runs - no run needed to be marked unmeasured. Per the
+brief's own warning, the job total is shown ONLY as context (it also pays
+for checkout, Python setup and pytest install, none of which a migration
+removes); the two step columns are the load-bearing numbers.
+
+| run id | date | `powershell-hosts` job | `...5.1` step | `...7` step |
+|---|---|---|---|---|
+| 32391262449 | 2026-08-20 | 45m45s | 22m44s | 22m37s |
+| 32085653133 | 2026-08-18 | 46m05s | 22m56s | 22m39s |
+| 32082761519 | 2026-08-18 | 43m29s | 20m58s | 21m40s |
+| 32078875878 | 2026-08-17 | 46m41s | 23m25s | 22m56s |
+| 31956013509 | 2026-08-16 | 45m07s | 22m46s | 22m01s |
+
+**GROSS saving, as a range across these five runs, not one number:** the
+5.1 step alone ran between **20m58s and 23m25s** (1258s-1405s) across the
+five. That range - not a single averaged figure - is what dropping the 5.1
+step removes from the `powershell-hosts` job on each of these five
+occasions. It is a GROSS figure: it is what disappears from the job if the
+5.1 step is deleted outright, not what disappears from a migration that
+keeps some 5.1-starting cases.
+
+**The NET saving is not determined by this task.** Item 48's own answer to
+"what does the test matrix become" (`docs/superpowers/plans/2026-07-27-0150-backlog.md:3561`-
+`:3563`) is "probably not 'one host' but 'one host plus a small number of
+cases proving the refusal and the re-exec work when started from 5.1'."
+Which cases those are, and how long they cost to keep running, is Task 9's
+decision, not this one's. So: **the net saving is bounded above by the
+gross range above (20m58s-23m25s per run of this job) and is not stated as
+a number here.** Any sentence claiming a net figure at this point would
+state as known something Task 9 has not yet decided.
+
+### Step 2: the already-recorded local pair (cited, not re-measured)
+
+Backlog item 48 itself records local timing evidence, gathered during the
+0.27.0 gate, same tree and head, back to back:
+`docs/superpowers/plans/2026-07-27-0150-backlog.md:3380`-`:3386` - `2558
+passed, 14 skipped` in **32m23s** under Windows PowerShell 5.1 against
+**18m33s** under `pwsh.exe`, and a second pair the same night, **20m22s**
+against **18m50s**. Counts identical on both hosts both times. Item 48's
+own caveat, carried forward rather than dropped: "the runs were not
+isolated from other load, and the 5.1 spread (32m to 20m) is wider than the
+gap itself" - so this pair is indicative, not a benchmark, and is cited
+here rather than re-measured.
+
+### Step 3: item 44's 57 minutes, GROSS upper bound only
+
+Item 44 (`docs/superpowers/plans/2026-07-27-0150-backlog.md:3098`-`:3126`)
+measured the gate's three serial passes - full pytest, then the
+PowerShell-facing modules under 5.1, then the same modules under 7 - at
+**1187s / 1153s / 1092s**, about **57 minutes** total, on the tree
+committed as `99d1961`. The GROSS upper bound this change could remove from
+that 57 minutes is the 5.1 pass's own duration: **1153s, about 19m13s**.
+That is not a net figure: Task 9 has not yet decided which 5.1-starting
+cases a migration keeps, and item 44's own "about 20 minutes instead" figure
+(`:3105`-`:3108`) is about PARALLELIZING the three passes, a different
+change from dropping one of them, so it is not substituted here either.
+
+### Step 4: defects avoided (cited, not re-derived)
+
+`docs/superpowers/plans/rounds/2026-08-22-item51-inline-brief-probe/probe-record.md`
+measured two independent corruption defects in the Kimi lane's inline
+brief transport, BOTH 5.1-only: Defect 1, the READ (`Get-Content -Raw`
+decoding a no-BOM UTF-8 file with the ANSI code page, mangling non-ASCII
+text) at `probe-record.md:75`-`:89`; Defect 2, the ARGUMENT (5.1 not
+escaping embedded double quotes in a native argument, silently dropping
+them when the count is balanced and SHATTERING the brief across multiple
+argv elements when the count is odd) at `probe-record.md:91`-`:110`. Its
+own summary table (`probe-record.md:67`-`:73`) shows every PowerShell-7
+row exact and every corrupted row under 5.1. Dropping 5.1 removes both
+defect classes outright, since PowerShell 7 was never the host on which
+either fired. This is a real saving and it is already measured elsewhere;
+it is cited here, not re-derived.
+
+### Step 5: the edit cost (cited, not recounted)
+
+The other side of "maintenance" - what this change costs to MAKE, as
+opposed to what running two hosts costs going forward - is the entry point
+inventory's own count, already recorded above (`## Entry point inventory`,
+line 369 of this record): **83 `must-change` rows, plus 3 further rows left
+`unknown`** because their answer depends on the environment the code runs
+in rather than on the line itself. That number lives in one place in this
+record (the `## Entry point inventory` section); it is not restated from
+memory here, only pointed at.
+
+### Step 6: the cost side - the bilateral test, verified against source
+
+Measurement 3 flagged `evals/multi-model-verify/test_lock_protocol_live.py:379`-
+`:390` forward to this section rather than resolving it itself. Verified
+directly against the source, not taken from the forward pointer's
+characterization:
+
+- `test_measurement_20_ticks_and_date_string_types_diverge_across_hosts`
+  (`:379`-`:390`) calls `required_hosts()` (`:380`), then runs the SAME
+  script under `hosts["powershell.exe"]` and `hosts["pwsh.exe"]`
+  (`:381`-`:382`) and asserts the two hosts report DIFFERENT
+  `ConvertFrom-Json` types for the same value - `String` on 5.1,
+  `DateTime` on 7 (`:389`-`:390`). Its entire premise is the divergence
+  BETWEEN the two hosts; there is no way to rewrite it to run under one
+  host and still test what it exists to test, because "these two things
+  differ" requires both things.
+- `required_hosts()` itself (`:77`-`:91`) loops over the literal tuple
+  `("powershell.exe", "pwsh.exe")` (`:83`) and calls `pytest.fail` (`:86`-
+  `:89`) - not `pytest.skip` - if either binary is not found on PATH. Read
+  against the rest of this file's module docstring (`:14`-`:23`): every
+  OTHER host-selection function in this repo's test suite (the sibling
+  pattern named at `test_codex_context_probe.py:35`-`:67`, and this same
+  file's own `ps_host()` at `:63`-`:74`, which reads `PARALLAX_PS_HOST` or
+  falls back to whichever single host is on PATH) tolerates a missing host
+  by skipping. `required_hosts()` is the only one in this repo that FAILS
+  instead - a red mark on the gate, not a quiet skip - when either host is
+  absent. That makes it, as the module docstring itself claims
+  (`:16`-`:23`), the single strongest piece of host-presence evidence this
+  whole investigation has, and it exists only because BOTH hosts are
+  required by name.
+
+**Verified: dropping 5.1 destroys this test.** It is not editable into a
+one-host form; deleting the 5.1 half of `required_hosts()`'s tuple removes
+the premise the test asserts. That is not a saving - it is an asset the
+change consumes, and it belongs on the cost side.
+
+**Is it the only one?** Searched three ways, not just re-read the forward
+pointer:
+
+1. `grep -rn "required_hosts\|diverge" evals/multi-model-verify/*.py
+   evals/tools/*.py` - the only other hit inside this file is
+   `test_measurement_20_a_failed_host_invocation_never_reads_as_divergence`
+   (`test_lock_protocol_live.py:393`-`:400`), which ALSO calls
+   `required_hosts()` and so is ALSO destroyed by a 5.1 drop as written -
+   but its own assertion does not compare the two hosts' behaviour against
+   each other: it forces `hosts["powershell.exe"]` to exit nonzero and
+   checks that the measurement helper fails closed rather than reading an
+   empty result as "the type differs" (`:398`-`:400`). Unlike the
+   divergence test above, this one COULD be rewritten to exercise
+   `pwsh.exe` instead without losing what it tests - its value comes from
+   testing the fail-closed helper, not from comparing two hosts. So it
+   shares the same fatal gate today but is not, itself, a bilateral asset.
+2. A script (see the tool call recorded in this task's report) searched
+   every `evals/multi-model-verify/*.py` and `evals/tools/*.py` function
+   body for BOTH literal host names co-occurring in the same function.
+   Besides the two above, it found: `check_host_parity` in
+   `evals/tools/check_workflow_paths.py` (`REQUIRED_HOST_NAMES` at `:85`)
+   and its unit tests `test_check_workflow_paths_flags_host_parity_gap` /
+   `test_check_workflow_paths_refuses_a_duplicate_host_step`
+   (`test_backup_lane.py`, already itemized in this record's own
+   `must-change` list), plus `test_no_module_claims_ci_skips_the_windows_suites`
+   (`test_backup_lane.py:1707`-`:1747`). All three require BOTH host NAMES
+   to appear as declared steps in the CI workflow TEXT - a parity/coverage
+   check on the YAML, not a live measurement of either host's runtime
+   behaviour. Per this record's own `must-change` list, dropping 5.1 means
+   these get REWRITTEN to require `pwsh.exe` alone, the same way the
+   workflow step itself gets edited rather than the checker losing its
+   reason to exist - a cost already counted once in the edit-cost figure
+   above, not a second, separate asset destroyed.
+3. No other `subprocess.run` call anywhere in the two directories was
+   found comparing a result from `powershell.exe` against a result from
+   `pwsh.exe` within the same assertion.
+
+**Conclusion: `test_measurement_20_ticks_and_date_string_types_diverge_across_hosts`
+(`test_lock_protocol_live.py:379`-`:390`) is the only test found whose
+entire value comes from comparing the two hosts' live BEHAVIOUR against
+each other, in a way no edit can preserve on one host.** Everything else
+found either (a) shares the same fail-hard `required_hosts()` gate without
+itself being a cross-host comparison (item 1 above - destroyed as written,
+but rewritable to test the same thing on one host), or (b) requires both
+host NAMES in declared CI text, which the must-change list already prices
+as an edit, not a destroyed asset (item 2 above).
+
+### Ledger
+
+**Saved:**
+- CI wall-clock: gross 20m58s-23m25s per run of the `powershell-hosts` job
+  (Step 1), net not yet determined (bounded above by that range).
+- The already-recorded local pair, 32m23s/18m33s and 20m22s/18m50s, cited
+  with its own wider-spread caveat (Step 2).
+- Item 44's structural 57-minute gate cost: a GROSS upper bound of about
+  19m13s removable, not a net figure (Step 3).
+- Two independent 5.1-only corruption defects in the Kimi lane's inline
+  brief transport, removed outright (Step 4).
+
+**Costs:**
+- 83 `must-change` edit rows (plus 3 `unknown`), already counted once in
+  `## Entry point inventory` (Step 5).
+- One test whose entire value is destroyed outright, not merely edited:
+  `test_measurement_20_ticks_and_date_string_types_diverge_across_hosts`
+  (`test_lock_protocol_live.py:379`-`:390`), gated by the one fail-hard
+  host requirement in this repo's whole test suite (`:77`-`:91`) - verified
+  against source, searched for siblings, found none that share its shape
+  (Step 6).
+- The retained-case set from item 48's own "one host plus a small number of
+  cases" answer is not yet chosen (Task 9), so its ongoing cost is not
+  priced here either.
 
 ## Residual limits
 
