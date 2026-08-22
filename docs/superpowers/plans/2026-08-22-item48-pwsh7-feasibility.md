@@ -1146,7 +1146,14 @@ def run_named(host, form):
         "stage_b_child_count": (len(child_bound)
                                 if isinstance(child_bound, dict) else None),
         "sent_count": len(NAMED_EXPECTED),
-        "first_difference": None,
+        # The first PARAMETER that differs, by name. `None` here would be
+        # indistinguishable from "nothing differed", and the measurement
+        # table asks every arm for a first difference.
+        "first_difference": next(
+            (k for k in sorted(NAMED_EXPECTED)
+             if not isinstance(child_bound, dict)
+             or child_bound.get(k) != NAMED_EXPECTED[k]),
+            None),
         "unparseable_output": broken_output,
         "parent_bound": parent_bound,
         "child_bound": child_bound,
@@ -1261,8 +1268,10 @@ Replace `NOT YET WRITTEN.` under `## Measurement 1: re-exec fidelity` with:
 
 1. An eight-row table: host, forwarding form, positional or named, return
    code, whether the child ran, `stage_a_parent_exact`,
-   `stage_b_child_exact`, and the index of the first differing argument.
-   Every arm reports those same field names, positional and named alike.
+   `stage_b_child_exact`, and `first_difference` — an argument INDEX for
+   the positional arms and a parameter NAME for the named ones, which is
+   what each of them can honestly report. Every arm carries those same
+   field names.
    **The return code and the child-ran column are not optional**:
    without them a child that never started tabulates identically to a child
    that received corrupt arguments.
@@ -1283,7 +1292,7 @@ Replace `NOT YET WRITTEN.` under `## Measurement 1: re-exec fidelity` with:
 
 - [ ] **Step 7: Add explicit inventory rows for the files this task created**
 
-The standing rule in Task 3 applies here, and `EXEMPT_FROM_PREFIX` in
+The standing rule in Task 3 applies here, and the exemption in `survey.py` in
 `survey.py` enforces it: every family match in the files this task created
 is UNCLASSIFIED until a row exists.
 
@@ -1295,9 +1304,11 @@ which is the same fail-open shape one layer down from the one the
 exemption was written to close.
 
 Stage the five source files BY NAME. Do not stage the directory: `run.py`
-leaves `results.json` and four `*-out.*` scratch files there on a
-successful run, so a whole-directory `git add` tracks build products and
-makes any count you assert wrong on the path where everything worked.
+leaves `results.json` there, and on a FAILED run the four `*-out.*` scratch
+files as well — it deletes those only on the success path, deliberately, so
+that a stage-A adjudication still has the parent's output to read. A
+whole-directory `git add` would track build products and make any count you
+assert wrong on at least one of those paths.
 
 ```bash
 REC=docs/superpowers/plans/rounds/2026-08-22-item48-pwsh7-feasibility
@@ -1311,11 +1322,19 @@ it is a number and a hope, and this plan has already shipped three checks
 that could not fail.
 
 ```bash
-test "$(git ls-files $REC/reexec/ | wc -l)" -eq 5 && echo STAGED_OK || echo STAGED_WRONG
+test "$(git ls-files $REC/reexec/ | wc -l)" -eq 5 || { echo STAGED_WRONG; exit 1; }
+echo STAGED_OK
 ```
 
-Expected: `STAGED_OK`. Anything else and the `--emit` below measures
-nothing, because `git ls-files` lists tracked files only.
+Expected: `STAGED_OK`, exit 0. On failure: `STAGED_WRONG`, exit 1.
+
+**Write it in exactly that shape.** The obvious spelling,
+`test ... && echo STAGED_OK || echo STAGED_WRONG`, PRINTS the failure and
+still exits 0, because the `echo` on the failure branch succeeds and its
+status becomes the command's. Measured in this shell on 2026-08-22: the
+`&&`/`||` form printed `STAGED_WRONG` and exited 0; the form above printed
+`STAGED_WRONG` and exited 1. This was the FIFTH gate in this plan that
+could not fail, and it was written to replace the fourth.
 
 ```bash
 python $REC/survey.py --emit
@@ -1335,7 +1354,7 @@ python docs/superpowers/plans/rounds/2026-08-22-item48-pwsh7-feasibility/survey.
   | grep -c "2026-08-22-item48-pwsh7-feasibility/reexec"
 ```
 
-Expected: `0`. This check can now fail: before `EXEMPT_FROM_PREFIX`
+Expected: `0`. This check can now fail: before the exemption in `survey.py`
 existed, `--emit` never printed prefix-covered rows, so it printed zero
 whether or not the rows had been written.
 
@@ -1785,7 +1804,7 @@ Replace `NOT YET WRITTEN.` under
 
 The same standing rule as Task 4, and for the same reason.
 `missing-pwsh/probe.py` carries `pwsh`, `subprocess.run` and `-File`, and
-those paths are in `EXEMPT_FROM_PREFIX`, so every one of them is
+those paths are in the exemption in `survey.py`, so every one of them is
 UNCLASSIFIED until a row exists.
 
 **STAGE THE NEW FILE FIRST**, for the reason spelled out in Task 4 Step 7:
@@ -1799,11 +1818,14 @@ the assertion below wrong on the path where the probe worked.
 ```bash
 REC=docs/superpowers/plans/rounds/2026-08-22-item48-pwsh7-feasibility
 git add $REC/missing-pwsh/probe.py
-test "$(git ls-files $REC/missing-pwsh/ | wc -l)" -eq 1 && echo STAGED_OK || echo STAGED_WRONG
+test "$(git ls-files $REC/missing-pwsh/ | wc -l)" -eq 1 || { echo STAGED_WRONG; exit 1; }
+echo STAGED_OK
 python $REC/survey.py --emit | grep "2026-08-22-item48-pwsh7-feasibility/missing-pwsh"
 ```
 
-`STAGED_OK` must appear before the emit result means anything.
+`STAGED_OK` must appear before the emit result means anything. The
+`|| { ...; exit 1; }` shape is required for the reason given in Task 4
+Step 7: the `&&`/`||` spelling prints the failure and exits 0.
 
 Open each emitted line, classify it by Task 3's table and Task 3's rule —
 from the line, not from the path and not from what this plan expects — and
