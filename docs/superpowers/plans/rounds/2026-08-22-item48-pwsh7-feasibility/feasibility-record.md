@@ -136,10 +136,12 @@ survey. Both bear, and both leave this criterion open.
 
 **From the entry-point survey (`## Entry point inventory`, Task 3):** 0
 unclassified, 0 stale, every `must-change` row names a stated fix (at
-least 83 rows, known-deflated per the inventory's own words). On its face
-this looks NOT MET.
+least 83 rows - canonical count bound in `### `must-change` rows,
+whole file`, commit `b1e9cfa` - known-deflated per the inventory's own
+words). On its face this looks NOT MET.
 
-But 3 rows carry `migration=unknown`, all concerning the same
+But 3 rows (canonical count, same section, commit `b1e9cfa`) carry
+`migration=unknown`, all concerning the same
 `$TransparentHosts` allowlist (`pwsh.exe`, `powershell.exe`, `cmd.exe`,
 `conhost.exe`) `kimi-lane-lock.ps1`'s ancestry walk uses to decide which
 processes are legitimate transparent intermediaries for a credential
@@ -404,8 +406,10 @@ remainder of Measurement 5's bucket:
   describe the SIZE of the benefit from dropping 5.1, not whether a 5.1
   code path must be kept; a smaller or larger saving does not change
   whether the "small number of cases" is needed.
-- The edit cost's "at least 83 rows, plus 3 further `unknown`" — **does
-  not add a new bearing item here**; the 3 `unknown` rows are the same
+- The edit cost's "at least 83 rows, plus 3 further `unknown`" (canonical
+  counts, `### `must-change` rows, whole file` and `### `unknown` rows,
+  whole file`, both bound at commit `b1e9cfa`) — **does not add a new
+  bearing item here**; the 3 `unknown` rows are the same
   `$TransparentHosts` rows already dispositioned under criterion 1, not a
   separate cost-side fact about criterion 4.
 - The retained-case set not yet chosen, cost not priced — this is the
@@ -649,15 +653,40 @@ record makes about its own current state is a claim about a target that
 moves every time the claim is written down.
 
 **A figure does not inherit a binding from a nearby bound figure.**
-Corrected at debate round 3: a number sitting next to an "as measured at
-commit `<sha>`" citation is not itself bound by that citation unless it
-says so explicitly - the bound commit can be, and here was, provably
-wrong for the unbound figure beside it (`entry-points.tsv`'s must-change
-bullet count was 50 at the commit a neighbouring figure was bound to, and
-83 by the time this sentence was written). Every figure needs its own
-binding or its own invariant; proximity to one is not a substitute, and
-is the second time a rule of this kind was found narrower than it looked
-(the first was `survey.py`'s exit predicate not covering `skipped`).
+Corrected at debate round 3, then corrected AGAIN at debate round 4 (the
+eleventh instance of this record's own defect class, found inside the
+very sentence written to state the rule against it - twice over: it
+mislabelled which artifact holds rows versus bullets, and its own example
+was itself the unbound live figure the sentence prohibits). A number
+sitting next to an "as measured at commit `<sha>`" citation is not itself
+bound by that citation unless it says so explicitly - the bound commit
+can be, and here was, provably wrong for the unbound figure beside it.
+Bound explicitly, both sides, both commits: `entry-points.tsv` (the TSV
+has ROWS, not bullets) held **83 `must-change` rows** at commit
+`a13d3c3`, while this record's own must-change list (which has BULLETS,
+not rows) held only **50 bullets** at that same commit - grouped, not yet
+split. As measured at commit `b1e9cfa`, both figures are **83**: the
+split landed, one bullet per row. Every figure needs its own binding or
+its own invariant; proximity to one is not a substitute, and this is the
+second time a rule of this kind was found narrower than it looked (the
+first was `survey.py`'s exit predicate not covering `skipped`).
+
+**A count about this record's own inventory is stated once, bound once,
+and referenced everywhere else.** Added at debate round 4, the structural
+fix for the root cause behind findings 1 and 2 of that round: this
+record states its inventory figures (the `must-change` count, the
+`unknown` count, the dual-family count) in many places, and binding each
+one separately is the same defect as repointing line numbers one at a
+time - it works until the next edit, and every new mention re-arms it.
+The canonical binding for all three lives in ONE place,
+`### `must-change` rows, whole file` below (and its
+`### `unknown` rows, whole file` neighbour for the unknown count), each
+tagged CANONICAL. Every other mention of these figures anywhere in this
+record points at that canonical paragraph rather than restating the
+binding - it may still carry the number inline where a sentence needs it
+to read well, but the binding itself is stated once, not duplicated,
+because a duplicated binding is exactly the drift risk the duplicated
+`survey.py` quote already demonstrated once.
 
 ## Entry point inventory
 
@@ -772,28 +801,54 @@ assume this table still matches a later commit.
 
 ### `must-change` rows, whole file
 
+**CANONICAL BINDING for this record's inventory figures (debate round 4:
+bound once, here, rather than restated at each of the many places this
+record discusses them - see the `## Method` convention's third clause).
+Every other mention of the `must-change` count, the `unknown` count, or
+the dual-family count anywhere else in this record points AT this
+paragraph rather than restating the numbers independently.**
+
 Every row whose `migration` value is `must-change` — **as measured at
-commit `b1e9cfa`: 83 rows, 83 one-line entries, one per row**, matching
-the frozen plan's own format exactly (`path:line — what a migration must
-do to it`). Corrected here (debate round 3): this count is a live figure
-of a mutable list, not a survey invariant, and does NOT inherit a binding
-from a nearby commit-bound figure just because it sits next to one - the
-preceding `a13d3c3` binding, checked directly, had 50 bullets at that
-commit, not 83, so proximity alone would have bound this claim to a
-commit that is provably wrong for it. Debate round 2 corrected this list
-from a prior state of 83 rows grouped into 50 bullets: disclosing that
-mismatch in round 1 repaired the overclaim but not the fidelity failure
-itself, so round 2 split every grouped bullet into one line per row
-rather than leaving a formally-undisclosed deviation against a
-frozen-plan contract. Where five dual-family rows describe one real
-source line (the same line matched two regex families and produced two
-TSV rows), each still gets its own line below, marked as one of a family
-pair so the reader is not misled into counting two edits where there is
-one. The `unknown` list further down **(as measured at the same commit)**
-already held this format (3 bullets for 3 rows); it needed no change.
-Rows from the `host` and `launch` family tasks are described from reading
-the same lines during this pass, not re-classified; only the `bare` rows
-below were classified by this task.
+commit `b1e9cfa`: 83 TSV rows, 83 one-line record entries**, matching the
+frozen plan's own format exactly (`path:line — what a migration must do
+to it`). Corrected here (debate round 4, the eleventh instance of this
+record's own defect class, found INSIDE the paragraph written to state
+the rule against it): the prior wording of this sentence called `50`
+"`entry-points.tsv`'s must-change bullet count" - backwards; the TSV has
+ROWS, the record has BULLETS, and this same paragraph gets that
+distinction right two sentences later. Both sides, bound explicitly at
+both commits: **as measured at commit `a13d3c3`, `entry-points.tsv` held
+83 `must-change` rows and this record's list held 50 bullets** (grouped,
+pre-split); **as measured at commit `b1e9cfa`, both are 83** (post-split,
+one bullet per row). The prior wording also gave "83 by the time this
+sentence was written" as its own example of an unbound live figure -
+which was itself exactly the unbound live figure the paragraph prohibits,
+now replaced by the two commit-bound pairs above.
+
+Debate round 2 performed the split (83 rows grouped into 50 bullets ->
+83 rows, 83 bullets): disclosing the mismatch in round 1 repaired the
+overclaim but not the fidelity failure itself, so round 2 split every
+grouped bullet into one line per row rather than leaving a
+formally-undisclosed deviation against a frozen-plan contract. **Five
+dual-family PAIRS — corrected at debate round 4, this was miscounted as
+"five dual-family rows," wrong by a factor of two — comprise TEN of the
+83 rows**: one real source line each, matched by two regex families,
+producing two TSV rows per line. Each of the ten still gets its own line
+below, marked as one of a pair so the reader is not misled into counting
+two edits where there is one. **The `unknown` list further down, as
+measured at the same commit (`b1e9cfa`), holds 3 rows in 3 bullets** -
+already this format before the round-2 split, needing no change of its
+own. Rows from the `host` and `launch` family tasks are described from
+reading the same lines during this pass, not re-classified; only the
+`bare` rows below were classified by this task.
+
+(These migration-value counts can never be stated as survey invariants:
+`survey.py` accepts any of the three `migration` values for a row, and
+its exit predicate checks only `unclassified`, `stale` and `skipped` -
+never `migration`. A `must-change` count changing, even a row's
+`migration` value flipping, moves none of the zeroes the exit code
+guarantees. Binding to a commit, as this paragraph now does twice over,
+is the only form available for these particular figures.)
 
 - `.githooks/pre-push:24` (host-pin-exec, one of a family pair with the
   launch row directly below) — hardcodes `powershell.exe` as the
@@ -829,7 +884,23 @@ below were classified by this task.
   with the fallback it describes.
 - `evals/multi-model-verify/test_attestation.py:36` — the
   `shutil.which("powershell")` fallback itself; must be dropped.
-- `evals/multi-model-verify/test_backup_lane.py:1322` — corrected here: these 16 lines span THREE test functions, not one "test group" as an earlier draft of this split claimed. `:1322` is inside `test_check_workflow_paths_flags_host_parity_gap` (`:1316`-`:1342`), which builds synthetic workflow text asserting BOTH a `powershell.exe` step and a `pwsh.exe` step exist with parity; dropping 5.1 removes the thing this test enforces, so it must be rewritten or removed.
+- `evals/multi-model-verify/test_backup_lane.py:1322` — corrected twice
+  now: these 16 lines span THREE test functions, not one "test group" as
+  an earlier draft of this split claimed (fixed at debate round 3); and
+  `:1322`'s own test description overstated what the test does (fixed at
+  debate round 4 - the reviewer read the source and found it wrong).
+  `:1322` is inside `test_check_workflow_paths_flags_host_parity_gap`
+  (`:1316`-`:1342`), which builds a `powershell.exe` step with the
+  COMPLETE module list and a `pwsh.exe` step MISSING its first module
+  (`REQUIRED_DUAL_HOST_MODULES[1:]`, deliberately incomplete), then
+  asserts `check_host_parity` reports the gap - an error naming both
+  `pwsh.exe` and the missing module, and no error naming `powershell.exe`.
+  It does NOT assert both steps exist with parity; it asserts the
+  DETECTOR correctly flags a parity gap it was built to catch, which is
+  what its own name says (`flags_host_parity_gap`). Dropping 5.1 still
+  removes the thing this test exercises either way (the two-host parity
+  check itself), so the migration consequence is unchanged; only the
+  description was wrong.
 - `evals/multi-model-verify/test_backup_lane.py:1328` — same test as `:1322` above (`test_check_workflow_paths_flags_host_parity_gap`).
 - `evals/multi-model-verify/test_backup_lane.py:1334` — same test as `:1322` above.
 - `evals/multi-model-verify/test_backup_lane.py:1338` — same test as `:1322` above.
@@ -1046,6 +1117,11 @@ below were classified by this task.
 
 ### `unknown` rows, whole file
 
+**CANONICAL BINDING for the `unknown` count (debate round 4): as measured
+at commit `b1e9cfa`, 3 rows, 3 bullets, one per row - matches the frozen
+plan's format and needed no split. Every other mention of the `unknown`
+count elsewhere in this record points here rather than restating it.**
+
 Every row whose `migration` value is `unknown`, with why it could not be
 determined from the line. `migration` is a property of the LINE, not of
 the family row — one line has one answer, and where the `host` and
@@ -1124,8 +1200,9 @@ here.
   one named, already-worked-around miss. The plan's own remedy for a known
   miss is to NAME it, as this bullet and the bare-`git` bullet below both
   do, not to chase it into the filter. Consequence stated plainly: the
-  `must-change` count above (83) is therefore known to be deflated by at
-  least this one instance.
+  `must-change` count (the canonical figure, `### `must-change` rows,
+  whole file` below, bound at commit `b1e9cfa`) is therefore known to be
+  deflated by at least this one instance.
 - **A bare `git` invocation, deliberately.** Matching bare `git` was
   measured to cost 179 further hits, almost all prose and shell plumbing,
   against a class that never starts a PowerShell host — a measured trade,
@@ -2047,10 +2124,12 @@ at least this one instance" (the `README.md:412` miss, named there), and
 that sub-heading's closing paragraph adds "this list is not itself
 provably complete, and a blind-spot list that reads as complete is the
 same defect one level up." So the figure carried into this ledger is
-**at least 83 `must-change` rows, plus 3 further rows left `unknown`,
-known-deflated and not provably complete** - the same discipline Step 2
-above already applied to item 48's own timing caveat, applied here to the
-edit-cost side.
+**at least 83 `must-change` rows, plus 3 further rows left `unknown`**
+(both canonical counts, bound at commit `b1e9cfa` in
+`### `must-change` rows, whole file` and `### `unknown` rows, whole
+file`), known-deflated and not provably complete - the same discipline
+Step 2 above already applied to item 48's own timing caveat, applied here
+to the edit-cost side.
 
 ### Step 6: the cost side - the bilateral test, verified against source
 
@@ -2174,7 +2253,8 @@ differently - this SAMENESS-form loop is bilateral too, even though it
 never compares the two hosts' results TO EACH OTHER (each host's result is
 checked against a fixed expectation, independently, inside the `for`
 loop). Its host-resolution line (`:515`) is already one of the 83
-`must-change` rows (Step 5's inventory: "`:40`, `:515` - the selector
+`must-change` rows (the canonical count, bound at commit `b1e9cfa`; Step
+5's inventory: "`:40`, `:515` - the selector
 fallback, and a test that explicitly resolves both `shutil.which
 ("powershell")` and `shutil.which("pwsh")` to drive every present host;
 both must lose their 5.1 half"), so editing it is already priced once.
@@ -2190,8 +2270,11 @@ demonstrated caught, because there is no longer a second host for the
 defect to hide on. The assertion form survives an edit; the guarantee it
 was built to provide does not.
 
-**Reconciling the destroyed-asset bullet against the 83, so the two do not
-silently overlap.** The `must-change` inventory already lists eight lines
+**Reconciling the destroyed-asset bullet against the 83 (the canonical
+count, `### `must-change` rows, whole file`, bound at commit `b1e9cfa` -
+every further "83" in this reconciliation refers back to that same bound
+figure, not a fresh count), so the two do not silently overlap.** The
+`must-change` inventory already lists eight lines
 inside `test_lock_protocol_live.py` as `must-change`: `:21`, `:55`, `:71`,
 `:78`, `:83`, `:381`, `:382`, `:400` - all already inside the "at least 83"
 counted in Step 5. Putting "one test destroyed outright" on the cost side
@@ -2210,8 +2293,9 @@ counted once by row, about what the edit at those particular rows costs
 beyond a find-and-replace.
 
 **Conclusion.** Two bilateral mechanisms were found and verified against
-source this round, both already inside the 83 `must-change` rows by line
-count, both adding something the flat row count does not itself say:
+source this round, both already inside the 83 `must-change` rows (same
+canonical count as above, bound at commit `b1e9cfa`) by line count, both
+adding something the flat row count does not itself say:
 `test_measurement_20_ticks_and_date_string_types_diverge_across_hosts`
 (`:379`-`:390`) loses its cross-host divergence claim outright while its
 two pwsh-only assertions survive a rewrite; `TestTheFramesGoOutIntactOnBothHosts`
@@ -2243,9 +2327,12 @@ two different machines, by two different methods:
   brief transport, removed outright (Step 4).
 
 **Costs:**
-- At least 83 `must-change` edit rows (plus 3 `unknown`), known-deflated
-  and not provably complete per the inventory's own words, already counted
-  once in `## Entry point inventory` (Step 5).
+- At least 83 `must-change` edit rows (plus 3 `unknown`) - canonical
+  counts, bound at commit `b1e9cfa` in `## Entry point inventory`'s
+  `### `must-change` rows, whole file` and `### `unknown` rows, whole
+  file` - known-deflated and not provably complete per the inventory's
+  own words, already counted once, not restated here as a fresh figure
+  (Step 5).
 - Inside those rows, two bilateral mechanisms verified against source and
   classified rather than counted a second time (Step 6):
   `test_measurement_20_ticks_and_date_string_types_diverge_across_hosts`
@@ -2389,7 +2476,8 @@ is re-derived.
   not determined by Measurement 5 and is explicitly left to this task's
   decision on the retained test set.
 - The edit cost is "at least 83" `must-change` rows plus 3 further
-  `unknown` rows, known-deflated and not provably complete, not a flat
+  `unknown` rows (canonical counts, `## Entry point inventory`, bound at
+  commit `b1e9cfa`), known-deflated and not provably complete, not a flat
   count.
 - The bilateral-mechanism sweep (tests comparing both hosts) was run four
   ways this round but is not claimed exhaustive.
@@ -2443,7 +2531,9 @@ every measured PowerShell-hosting defect in this repo's history has fired
 defects in the Kimi lane's inline brief transport, both 5.1-only). This
 record's own entry-point survey found at least 83 rows that pin, invoke,
 or document 5.1 specifically and would need to change to drop it
-(`## Entry point inventory`). Backlog items 51 (`docs/superpowers/plans/
+(canonical count, `## Entry point inventory`'s
+`### `must-change` rows, whole file`, bound at commit `b1e9cfa` - not
+restated as a fresh figure here). Backlog items 51 (`docs/superpowers/plans/
 2026-07-27-0150-backlog.md:3748`, the Kimi lane's inline brief mangled by
 5.1) and 31 (`docs/superpowers/plans/2026-07-27-0150-backlog.md:2510`, the
 drift autofix dispatch's `Get-Content -Raw | codex exec` degrading on 5.1's
