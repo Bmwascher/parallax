@@ -543,7 +543,126 @@ backtick, and a leading-dash flag-like token - does.
 
 ## Measurement 2: is PowerShell 7 present
 
-NOT YET WRITTEN.
+Answers the blunt question under one of the four pre-committed NO-criteria
+("any entry point that cannot be made to reach 7") for the four places this
+code has to run: the Windows CI runner, the Linux CI runner, a developer
+machine, and a plugin user's machine. Only the developer machine (this one)
+is directly observable; the other three are evidenced differently, and each
+subsection below says which.
+
+**What the workflow file declares (`.github/workflows/skill-evals.yml`),
+working tree read via
+`grep -n "runs-on\|shell:\|pwsh\|powershell" .github/workflows/skill-evals.yml`:**
+`:17` `runs-on: ubuntu-latest`; `:53`, `:55` comment prose mentioning
+`pwsh`/`powershell.exe`; `:59` `powershell-hosts:`; `:60`
+`runs-on: windows-latest`; `:74`, `:75`, `:78`, `:80`, `:87`, `:91` more
+comment prose; `:95` `PARALLAX_PS_HOST: powershell.exe`; `:112`
+`PARALLAX_PS_HOST: pwsh.exe`. No `shell:` key appears anywhere in the file
+(the grep for it produced zero hits).
+
+### Windows CI runner
+
+Evidence, not declaration: `gh run list --workflow skill-evals.yml --limit 5
+--json databaseId,headSha,status,conclusion,createdAt` (run 2026-08-22)
+returned the most recent successful run as `databaseId 32391262449`,
+`headSha a3134dcd76d9253057bf24935f3d7a7eef8eb0e4`, `conclusion: success`,
+`createdAt: 2026-08-20T16:18:35Z` — that SHA is the same commit this
+record's own header (line 4) names as the branch cut point.
+`gh run view 32391262449 --json jobs --jq '.jobs[] | {name, conclusion,
+startedAt, completedAt, runnerName}'` returned the `powershell-hosts` job
+with `conclusion: success`, `startedAt: 2026-08-20T16:19:31Z`,
+`completedAt: 2026-08-20T17:05:16Z`. (`runnerName` came back `null` for
+both jobs — GitHub-hosted runners do not report a runner name through this
+field; that is a property of the API, not evidence of anything about the
+runner.)
+
+A green `powershell-hosts` job, `runs-on: windows-latest`, whose two steps
+(`skill-evals.yml:93-108` and `:110-125`) set `PARALLAX_PS_HOST:
+powershell.exe` and `PARALLAX_PS_HOST: pwsh.exe` respectively and then run
+`python -m pytest` against the same eleven `evals/multi-model-verify/`
+modules, is direct evidence that a `pwsh.exe` host existed and worked on
+`windows-latest` for run `32391262449` on 2026-08-20. This proves PowerShell
+7 was present and functional on that one runner image on that one date; it
+does not prove every future `windows-latest` image carries it, only that the
+image GitHub served for this run did.
+
+**Revision binding.** `gh run view 32391262449 --json headSha --jq
+'.headSha'` returned `a3134dcd76d9253057bf24935f3d7a7eef8eb0e4`. That SHA
+exists locally (`git cat-file -e` succeeded), so `git show
+a3134dcd76d9253057bf24935f3d7a7eef8eb0e4:.github/workflows/skill-evals.yml
+| grep -n "runs-on\|shell:\|pwsh\|powershell"` was run directly (not the
+working tree read as a stand-in) and returned the identical line numbers
+and text as the working-tree read above — no drift. This is not a
+coincidence to be glossed over: the working tree happens to sit at that
+same commit right now, but the comparison was still made against the
+commit's own blob via `git show`, not assumed from the tree matching by
+name.
+
+### Linux CI runner
+
+`awk '/^  skill-evals:/{f=1} f&&/^  [a-z-]+:/&&!/^  skill-evals:/{exit}
+f{print NR": "$0}' .github/workflows/skill-evals.yml | grep
+"pwsh\|powershell\|shell:\|run:"` was run over the WHOLE `skill-evals:`
+job (`skill-evals.yml:16-47`), not just the lines after `runs-on`. It
+returned five `run:` step headers (`:28`, `:36`, `:39`, `:42`, `:45`), none
+of which contain `pwsh` or `powershell`, plus two more hits at `:53` and
+`:55`. Both of those are comment lines (`#  lock that read every lock as
+unusable on pwsh...` and `#  powershell.exe when both are installed...`),
+part of the prose block at `:49-58` that explains why the `powershell-hosts`
+job below exists — not invocations. So: **zero steps in the `ubuntu-latest`
+job invoke `pwsh` or `powershell`.**
+
+PowerShell 7's presence on the `ubuntu-latest` Linux runner is **unproven by
+this repo's own evidence.** Nothing in this workflow starts a PowerShell
+host on Linux, so there is no green job to point at the way there is for
+Windows. What would prove it: a Linux CI step that runs `pwsh -Command
+'$PSVersionTable.PSVersion'` (or equivalent) and captures a real version
+string, the way `powershell-hosts` does for Windows.
+
+### Developer machine (this one)
+
+Measured directly. `where.exe pwsh` returned two paths: `C:\Program
+Files\PowerShell\7\pwsh.exe` and
+`C:\Users\Brandon\AppData\Local\Microsoft\WindowsApps\pwsh.exe`. Then
+`"C:\Program Files\PowerShell\7\pwsh.exe" -NoProfile -Command
+"$PSVersionTable.PSVersion.ToString()"` returned `7.6.5` — matching the
+`7.6.5` already captured in this record's header (line 5) and re-captured
+independently by Task 4. PowerShell 7 is present and working on this
+machine, absolute path confirmed.
+
+### Plugin user's machine
+
+Not measurable at all from here — no telemetry, no fleet, no way to run a
+command on a machine this session cannot reach.
+
+**The half-requirement that already exists regardless of any migration:**
+`hooks/hooks.json:10` and `:22` (both rows present in
+`entry-points.tsv:159-160` (`host` family) and `:424-425` (`launch`
+family), classified `host-pin-exec` / `launch-explicit`, `no-change`) each
+invoke `"command": "pwsh -NoProfile -NonInteractive -File
+\"${CLAUDE_PLUGIN_ROOT}/hooks/superpowers-review-companion.ps1\""`. Any
+plugin user who has the hook installed and enabled already needs `pwsh` on
+PATH today, before any 5.1-removal work — this is a fact about the repo as
+it stands, not a claim about any user's machine.
+
+**The preinstall claim**, in the cited form the brief requires (background
+knowledge is not an acceptable substitute for a claim this specific):
+Microsoft's own installation documentation, `Install PowerShell 7 on
+Windows`, https://learn.microsoft.com/en-us/powershell/scripting/install/installing-powershell-on-windows
+(read 2026-08-22), states: "PowerShell 7 doesn't replace Windows PowerShell
+5.1. It installs to a new directory and runs side-by-side with Windows
+PowerShell 5.1," and, describing the Start Menu entries left after
+installing PowerShell 7: "The first and last entries shown are for Windows
+PowerShell 5.1, which are installed by default on Windows." Read together,
+Windows PowerShell 5.1 ships by default and PowerShell 7 is a separate,
+opt-in install (WinGet, MSI, MSIX, ZIP, or `dotnet tool`) that a user or an
+administrator has to add. So a plugin user's machine having `pwsh` present
+is **unproven** for any given machine, and per this citation is **not the
+default state** of a stock Windows install; it is present only where
+someone installed it. What would additionally prove it for a *specific*
+fleet: a device inventory or telemetry report showing `pwsh.exe` present
+across the actual population of plugin users, which this measurement does
+not have access to.
 
 ## Measurement 3: behaviour under 7
 
