@@ -1108,6 +1108,6 @@ docs/superpowers/plans/rounds/2026-08-22-item48-pwsh7-feasibility/missing-pwsh/p
 docs/superpowers/plans/rounds/2026-08-22-item48-pwsh7-feasibility/missing-pwsh/probe.py	49	host	719cd0ae4888	not-a-launch	no-change
 docs/superpowers/plans/rounds/2026-08-22-item48-pwsh7-feasibility/missing-pwsh/probe.py	56	host	ba4f4e38368b	not-a-launch	no-change
 docs/superpowers/plans/rounds/2026-08-22-item48-pwsh7-feasibility/missing-pwsh/probe.py	56	launch	ba4f4e38368b	not-a-launch	no-change
-docs/superpowers/plans/rounds/2026-08-22-item48-pwsh7-feasibility/missing-pwsh/probe.py	61	host	3ac513f8ec11	host-pin-nonexec	no-change
+docs/superpowers/plans/rounds/2026-08-22-item48-pwsh7-feasibility/missing-pwsh/probe.py	61	host	3ac513f8ec11	host-pin-exec	no-change
 docs/superpowers/plans/rounds/2026-08-22-item48-pwsh7-feasibility/missing-pwsh/probe.py	62	launch	e35a4094ec11	test-harness	no-change
 docs/superpowers/plans/rounds/2026-08-22-item48-pwsh7-feasibility/missing-pwsh/probe.py	70	launch	6f83cb40c9a3	test-harness	no-change

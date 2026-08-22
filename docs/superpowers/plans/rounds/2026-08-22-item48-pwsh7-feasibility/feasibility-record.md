@@ -994,7 +994,7 @@ scripts, 2-of-5 named traps, or 3-of-8 total behaviours supports.
 
 ## Measurement 4: refusal when pwsh is missing
 
-Measured by `<REC>/missing-pwsh/probe.py`, which strips every `PATH` entry
+Attempted by `<REC>/missing-pwsh/probe.py`, which strips every `PATH` entry
 containing `pwsh.exe` from a CHILD environment dict only (the real PATH,
 this process's own `os.environ`, and the real `pwsh.exe` binary are never
 touched - see `hooks/hooks.json:10` for the invocation shape reproduced,
@@ -1003,8 +1003,11 @@ own shipped shape - `pwsh -NoProfile -NonInteractive -File
 hooks/superpowers-review-companion.ps1` - through that stripped
 environment, with `stdin=subprocess.DEVNULL` and a 60-second timeout.
 
-**Outcome, named explicitly: the second of the three the task pre-named -
-the call succeeded anyway.** Verbatim captured output
+Outcome, named explicitly: the second of the three the task pre-named -
+the call succeeded anyway. **Absence of PowerShell 7 was NOT reproduced by
+this probe, and item 48's NO-criterion this measurement exists to answer
+remains untested by it - see the closing note at the end of this
+section.** Verbatim captured output
 (`<REC>/missing-pwsh/results.json`, also printed to stdout by the run):
 
 ```
@@ -1034,14 +1037,46 @@ stripped `env` dict shows the CHILD's own `%PATH%` correctly excludes both
 `C:\Program Files\PowerShell\7` and
 `C:\Users\Brandon\AppData\Local\Microsoft\WindowsApps`, and that child's
 own `where pwsh`, searching ITS OWN received environment, genuinely fails
-(`INFO: Could not find files for the given pattern(s)`, returncode 1). So
-the stripped environment IS what the new process receives once it exists.
-What differs is resolving the bare executable NAME `"pwsh"` to start that
-process in the first place: Windows resolves a bare command name using the
-PARENT process's own environment for that search, not the `env` dict handed
-to the child being created - exactly the outcome the brief pre-named ("the
-process-creation call resolves it using the PARENT process's environment,
-not the child environment being passed in").
+(`INFO: Could not find files for the given pattern(s)`, returncode 1).
+
+The command run (a Python one-liner reusing `probe.py`'s own
+`stripped_path()`) and its full verbatim captured output, not merely a
+characterisation of it:
+
+```
+env = dict(os.environ); env["PATH"] = stripped_path()
+proc = subprocess.run(["cmd", "/c", "echo %PATH% & where pwsh"],
+                      capture_output=True, text=True, env=env)
+```
+
+```
+RETURNCODE: 1
+---STDOUT---
+C:\Users\Brandon\bin;C:\Program Files\Git\mingw64\bin;C:\Program Files\Git\usr\local\bin;C:\Program Files\Git\usr\bin;C:\Program Files\Git\usr\bin;C:\Program Files\Git\mingw64\bin;C:\Program Files\Git\usr\bin;C:\Users\Brandon\bin;C:\Users\Brandon\AppData\Roaming\Code\User\globalStorage\github.copilot-chat\debugCommand;C:\Users\Brandon\AppData\Roaming\Code\User\globalStorage\github.copilot-chat\copilotCli;C:\WINDOWS\system32;C:\WINDOWS;C:\WINDOWS\System32\Wbem;C:\WINDOWS\System32\WindowsPowerShell\v1.0;C:\WINDOWS\System32\OpenSSH;C:\Program Files\NVIDIA Corporation\NVIDIA App\NvDLISR;C:\Program Files (x86)\NVIDIA Corporation\PhysX\Common;C:\Program Files\Git\cmd;C:\Program Files\nodejs;C:\Users\Brandon\.kimi-code\bin;C:\Users\Brandon\AppData\Local\agy\bin;C:\Users\Brandon\Documents\WoW-Dev\lua51\bin;C:\Users\Brandon\AppData\Local\Microsoft\dotnet;C:\Users\Brandon\AppData\Roaming\luarocks\bin;C:\Users\Brandon\scoop\apps\mingw\current\bin;C:\Users\Brandon\scoop\persist\luarocks\rocks\bin;C:\Users\Brandon\scoop\shims;C:\Users\Brandon\AppData\Local\Programs\Python\Python312\Scripts;C:\Users\Brandon\AppData\Local\Programs\Python\Python312;C:\Users\Brandon\AppData\Local\Programs\Python\Launcher;C:\Users\Brandon\AppData\Local\Programs\Microsoft VS Code\bin;C:\Users\Brandon\AppData\Roaming\npm;C:\Users\Brandon\AppData\Local\Programs\luacheck;C:\Users\Brandon\.local\bin;C:\Users\Brandon\AppData\Local\Microsoft\WinGet\Packages\ajeetdsouza.zoxide_Microsoft.Winget.Source_8wekyb3d8bbwe;C:\Users\Brandon\.bun\bin;C:\Users\Brandon\AppData\Local\Microsoft\WinGet\Packages\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\ffmpeg-8.1.1-full_build\bin;C:\Users\Brandon\AppData\Local\npm-global;C:\Users\Brandon\AppData\Local\Microsoft\WinGet\Packages\GitHub.cli_Microsoft.Winget.Source_8wekyb3d8bbwe\bin;C:\Users\Brandon\.dotnet\tools;C:\Users\Brandon\AppData\Local\Programs\Orca\resources\bin;C:\Program Files\Git\usr\bin\vendor_perl;C:\Program Files\Git\usr\bin\core_perl;C:\Users\Brandon\.claude\plugins\cache\claude-plugins-official\claude-md-management\1.0.0\bin;C:\Users\Brandon\.claude\plugins\cache\claude-plugins-official\security-guidance\2.0.7\bin;C:\Users\Brandon\.claude\plugins\cache\claude-plugins-official\superpowers\6.3.0\bin;C:\Users\Brandon\.claude\plugins\cache\claude-plugins-official\claude-code-setup\1.0.0\bin;C:\Users\Brandon\.claude\plugins\cache\openai-codex\codex\1.0.6\bin;C:\Users\Brandon\Documents\parallax\bin;C:\Users\Brandon\.claude\plugins\cache\claude-plugins-official\frontend-design\unknown\bin;C:\Users\Brandon\.claude\plugins\cache\i-have-adhd\i-have-adhd\0.2.0\bin;C:\Users\Brandon\.claude\plugins\cache\claude-plugins-official\code-simplifier\1.0.0\bin
+---STDERR---
+INFO: Could not find files for the given pattern(s).
+```
+
+Neither `PowerShell\7` nor `WindowsApps` appears anywhere in that printed
+`%PATH%` line - confirmed by reading it, not merely asserted - which is
+what makes the `where pwsh` failure on the next line direct rather than
+coincidental. So the stripped environment IS what the new process receives
+once it exists. What differs is resolving the bare executable NAME
+`"pwsh"` to start that process in the first place: Windows resolves a bare
+command name using the PARENT process's own environment for that search,
+not the `env` dict handed to the child being created - exactly the outcome
+the brief pre-named ("the process-creation call resolves it using the
+PARENT process's environment, not the child environment being passed in").
+This account is specific to the PATH search step of that resolution -
+`CreateProcess` also checks the calling process's own directory, the
+current directory, `System32`, and the Windows directory before it
+consults PATH, and none of those were independently tried. They are ruled
+out here only because both known copies of `pwsh.exe` on this machine
+live exclusively in PATH-listed directories (`C:\Program
+Files\PowerShell\7\` and the WindowsApps alias directory), neither of
+which is the probe's own working/calling directory or a system directory
+- that placement is the load-bearing elimination, not a direct test of
+each of those other locations.
 
 1. **Which outcome:** the call succeeded anyway (outcome 2 of 3). Not a
    failure and not a timeout.
@@ -1066,7 +1101,19 @@ not the child environment being passed in").
    - The harness's own presentation of a hook failure - what Claude Code's
      hook runner shows a user when a `PostToolUse`/`PostToolUseFailure`
      command hook errors - was not measured by this probe. This probe only
-     captures what the OS-level child process produced.
+     captures what the OS-level child process produced. Nor was the
+     runner's METHOD of resolving the bare name `pwsh` measured, and that
+     is a separate thing from its presentation: this probe's own outcome
+     was decided by Python's `subprocess.run` resolving a bare executable
+     name against the PARENT's environment rather than the child's. If
+     Claude Code's hook runner instead starts the command through a shell
+     (rather than the same direct bare-name process-creation path Python
+     used here), a shell-mediated resolution would consult the CHILD's own
+     PATH - and the `cmd`/`where` cross-check above is direct evidence that
+     resolution behaves differently in that case (it correctly failed
+     against the same stripped environment). Which mechanism the real
+     runner uses is not asserted here in either direction; this bullet
+     names it as unmeasured rather than leaving the gap implicit.
    - **What this probe actually measured, and what it did not.** It proved
      that stripping `PATH` of every directory holding `pwsh.exe` does not,
      by itself, reproduce "PowerShell 7 is absent" on this machine when the
@@ -1083,6 +1130,16 @@ not the child environment being passed in").
      Measurement 2's own `where.exe pwsh` output); both directories were
      confirmed stripped from the child's `PATH` string, and the outcome
      above still occurred, so a wider PATH search was not the gap here.
+
+**Item 48's NO-criterion, left open.** This measurement therefore leaves
+item 48's NO-criterion "a user-facing failure mode worse than the bugs
+being removed" (see `## What would make the verdict NO` above) UNANSWERED,
+and item 48's own requirement that the failure "must stop with a message
+naming what to install" is UNTESTED by this task - no failure text was
+produced to check that requirement against. `## Verdict` may not treat
+this criterion as satisfied on the strength of this section; what would
+answer it is named above (a machine, container, or CI runner with
+PowerShell 7 genuinely not installed anywhere on it).
 
 ## Measurement 5: what is saved
 
