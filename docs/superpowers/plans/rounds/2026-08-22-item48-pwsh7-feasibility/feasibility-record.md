@@ -211,14 +211,29 @@ bucket) were walked entry by entry:
   citation is scoped to the checkout — **does not add a new bearing
   item**; it is the same Linux-runner and plugin-cache gaps already named
   above under Measurement 2 and the entry-point survey, counted once.
+- **Missed in fix round 1, added in fix round 2: "The green Windows CI run
+  cited proves PowerShell 7 present on the runner image served for that
+  one run on that one date, not that every future `windows-latest` image
+  carries it"** (Measurement 2's own bucket) — **bears, and is a
+  DIFFERENT KIND of gap than the two above, not folded into condition
+  (1).** The Linux-runner and plugin-machine gaps above are "unproven,
+  ever." This one is "proven once (run `32391262449`, 2026-08-20),
+  durability unproven" — a positive result whose SCOPE is narrower than a
+  reader could take "proven" (used two paragraphs above) to mean. Judged
+  on its own merits rather than folded for convenience: this is a real,
+  separate open question about whether the ONE proven place stays proven,
+  not the same question as whether the TWO unproven places ever become
+  proven. **Added to the verdict's condition list as condition (5)
+  below.**
 
-**Criterion: UNKNOWN, for two independent reasons** — the 3
+**Criterion: UNKNOWN, for THREE independent reasons** — the 3
 `migration=unknown` rows (`test_backup_lane.py:270`, `backup-lane.md:111`,
-`kimi-lane-lock.ps1:887`), and PowerShell 7's unproven presence on the
-Linux CI runner and on any plugin user's machine (Measurement 2). Per
-Rule 5, a criterion resting on an unresolved question is UNKNOWN, not
-NOT MET, and NOT MET would in any case be too wide a claim while either
-reason stands.
+`kimi-lane-lock.ps1:887`); PowerShell 7's unproven presence on the Linux CI
+runner and on any plugin user's machine (Measurement 2); and the Windows CI
+runner's proof being scoped to one run rather than shown durable
+(Measurement 2, added in fix round 2). Per Rule 5, a criterion resting on
+an unresolved question is UNKNOWN, not NOT MET, and NOT MET would in any
+case be too wide a claim while any of the three reasons stands.
 
 ### Criterion: "A re-exec that cannot pass arguments through provably intact"
 
@@ -389,11 +404,43 @@ remainder of Measurement 5's bucket:
   ALREADY-central fact behind this criterion's UNKNOWN status below, not a
   new item.
 
+**Further sweep entries, from Measurement 3's bucket (missed in fix round
+1, walked in fix round 2):**
+
+- "This section maps INVOCATION..., not that the invoking module's
+  assertions are the RIGHT check, and does not re-derive
+  `entry-points.tsv`'s own classifications" — **bears on this criterion.**
+  The coverage table's "10 of 16 covered" claim is only as strong as the
+  covering modules' assertions actually testing the right behaviour, which
+  this record does not verify. A wider retained-case set could be needed
+  than the coverage table alone suggests. **Folded into condition (3)**
+  ("fixing the final retained test set's shape") — this is a REASON that
+  shape is not yet fixed, not a new fact standing outside it.
+- "The 6 uncovered scripts are not equally unproven" —
+  `superpowers-review-companion.ps1` has a narrower gap (runs under a real
+  `pwsh`, just outside the dual-host job) than `.githooks/pre-push` (no
+  `runs` row anywhere, on any host) — **bears.** `.githooks/pre-push` is a
+  candidate for a THIRD kind of retained case beyond item 48's
+  re-exec/refusal pair, since nothing today proves its behaviour under
+  EITHER host. **Folded into condition (3)**, same reason as above — this
+  widens what "fixing the shape" has to decide, it does not add a new
+  question outside that shape.
+- "The three extra host-sensitive behaviours found beyond item 48's named
+  five are not claimed to be the complete set a wider search would find"
+  — **bears, the same way the bilateral-sweep's non-exhaustiveness bears
+  above:** an incomplete search for host-sensitive behaviours means the
+  retained-case set could be missing a case this record has not yet found.
+  **Folded into condition (3)** — the same open question as the
+  bilateral-sweep bullet, about the SAME unresolved shape, not a second
+  incompleteness question.
+
 **Criterion: UNKNOWN** — the measurements support that broad dual-host
 retention is not needed, but do not yet fix the final small retained set
-(particularly the refusal case, blocked on Measurement 4, and now also the
-open bilateral-sweep completeness above), so this criterion rests on an
-incomplete measurement rather than a settled one, per Rule 5.
+(particularly the refusal case, blocked on Measurement 4; the open
+bilateral-sweep completeness; whether coverage-table modules' assertions
+are the right check; and whether `.githooks/pre-push` needs its own case),
+so this criterion rests on an incomplete measurement rather than a settled
+one, per Rule 5.
 
 ### Residuals bearing on none of the four criteria, or already fully covered above
 
@@ -417,8 +464,8 @@ limits` entries not walked inside a criterion subsection above.
   unreproduced absence (criterion 3) already are.
 - **No script was run under a migration it does not yet have**
   (investigation-wide) — bears, diffusely, on all four criteria at once:
-  none of them observes the actual migrated code. It is not a fifth,
-  separate condition; it is why the four conditions in the verdict line
+  none of them observes the actual migrated code. It is not a sixth,
+  separate condition; it is why the five conditions in the verdict line
   below exist in the first place — each one names the specific unmeasured
   piece of "the migrated code's real behaviour" that this bullet describes
   in general terms.
@@ -427,24 +474,46 @@ limits` entries not walked inside a criterion subsection above.
 
 1. No criterion is MET — does not force NO by itself.
 2. Criteria 1, 3 and 4 are UNKNOWN — forces CONDITIONAL. Criterion 1 is
-   UNKNOWN for two independent reasons (the 3 `migration=unknown`
-   `TransparentHosts` rows, and PowerShell 7's unproven presence on the
-   Linux CI runner and any plugin user's machine). Criterion 3 is UNKNOWN
-   because Measurement 4 never reproduced the condition it set out to
-   test. Criterion 4 is UNKNOWN because the final retained 5.1-starting
-   test set's shape is not fixed (blocked on criterion 3's own gap, and on
-   the bilateral-sweep completeness question above).
+   UNKNOWN for THREE independent reasons (the 3 `migration=unknown`
+   `TransparentHosts` rows; PowerShell 7's unproven presence on the Linux
+   CI runner and any plugin user's machine; and the Windows CI runner's
+   proof being scoped to one run, added in fix round 2). Criterion 3 is
+   UNKNOWN because Measurement 4 never reproduced the condition it set out
+   to test. Criterion 4 is UNKNOWN because the final retained 5.1-starting
+   test set's shape is not fixed (blocked on criterion 3's own gap, on the
+   bilateral-sweep completeness question, and on the two further
+   Measurement-3 gaps added in fix round 2).
 3. The 3 `migration=unknown` rows bearing on criterion 1 independently
    force CONDITIONAL (listed above by `path:line`).
-4. **Fix round 1 performed the Rule 4 sweep this section previously
-   claimed without doing.** Every entry in `## Residual limits` was walked
-   inside the criterion subsection it plausibly bears on, or, where it
-   bears on none, in `### Residuals bearing on none of the four criteria`
-   above. Two residuals were found ADMITTED-BEARING and undispositioned in
-   the pre-fix text — the command-line-length ceiling under criterion 2,
-   and the non-exhaustive bilateral sweep under criterion 4 — both now
-   carried into the condition list below as condition (4) and part of (3)
-   respectively, rather than closed silently.
+4. **Checkable Rule 4 sweep (fix round 2 rewrite — fix round 1's version
+   of this claim was itself wrong; see below).** `## Residual limits` holds
+   34 bulleted entries across 7 buckets, machine-counted by `awk` over the
+   section (command and output in the fix-round report; any reader can
+   re-run it):
+
+   | Bucket | Entries | Where walked |
+   |---|---|---|
+   | Entry point inventory (Task 3) | 8 | Criterion 1 sweep |
+   | Measurement 1 (Task 4) | 5 | Criterion 2 sweep |
+   | Measurement 2 (Task 5) | 3 | Criterion 1 (2 in the main paragraph, 1 — the green-CI-run bullet — in the sweep, fix round 2) |
+   | Measurement 3 (Task 6) | 4 | Criterion 1 sweep (1) + Criterion 4 sweep (3, fix round 2) |
+   | Measurement 4 (Task 7) | 4 | Criterion 3 sweep |
+   | Measurement 5 (Task 8) | 6 | Criterion 4 sweep |
+   | Investigation-wide | 4 | `### Residuals bearing on none of the four criteria` |
+   | **Total** | **34** | all 34 placed; 0 unplaced |
+
+   Verify by running, from the repo root:
+   `awk '/^## Residual limits/{r=1} /^## Draft: the migration item/{r=0} r&&/^### /{if(b!="")print b": "c;b=$0;c=0;next} r&&/^- /{c++} END{if(b!="")print b": "c}' docs/superpowers/plans/rounds/2026-08-22-item48-pwsh7-feasibility/feasibility-record.md`
+   and summing the printed counts (the closing-gate subsection prints `0`
+   because it is a prose paragraph, not a bulleted residual list, and is
+   already self-dispositioned inline — "not claimed to bear on any
+   criterion above" — so it is not counted among the 34). Fix round 1's
+   prose claim ("every entry... was walked") was checked by sampling and
+   found FALSE for 4 of the 34 entries, all inside the Measurement 2 and
+   Measurement 3 buckets; fix round 2 walked those 4 (recorded in the
+   criterion 1 and criterion 4 sweeps above) and rewrote this item so the
+   claim is a count a reader can re-derive rather than a sentence they have
+   to trust.
 5. YES is unavailable: three of four criteria are UNKNOWN, not NOT MET.
 
 **VERDICT: CONDITIONAL ON** (1) resolving whether the `$TransparentHosts`
@@ -455,34 +524,44 @@ recognize `"powershell.exe"`, AND proving PowerShell 7 present on the Linux
 (`ubuntu-latest`) CI runner and on the machines of plugin users who would
 lose the 5.1 fallback (Measurement 2 found both unproven); (2) reproducing
 and verifying a genuine pwsh-missing refusal, which Measurement 4 did not;
-(3) fixing the final retained 5.1-starting test set's shape and cost,
-which cannot be finished until (2) is answered, and confirming the
+(3) fixing the final retained 5.1-starting test set's shape and cost —
+which cannot be finished until (2) is answered, requires confirming the
 bilateral-mechanism sweep (only run four ways so far) has found every test
-whose value depends on comparing two hosts; and (4) confirming that the
-escaped re-exec form's ~32000-character command-line ceiling — bracketed
-by this record's own item-51 probe at 31995 exact / 32967 throws, a loud
-failure symmetric on both hosts, not silent corruption — does not bind any
-real migration payload, or specifying a fallback transport for a payload
-that would exceed it.
+whose value depends on comparing two hosts, requires deciding whether the
+coverage table's covering modules are actually asserting the right thing,
+and requires deciding whether `.githooks/pre-push` (proven on NO host
+today) needs its own retained case; (4) confirming that the escaped
+re-exec form's ~32000-character command-line ceiling — bracketed by this
+record's own item-51 probe at 31995 exact / 32967 throws, a loud failure
+symmetric on both hosts, not silent corruption — does not bind any real
+migration payload, or specifying a fallback transport for a payload that
+would exceed it; and (5) confirming that PowerShell 7's proven presence on
+the Windows CI runner (Measurement 2, run `32391262449`, 2026-08-20) holds
+for the images GitHub actually serves going forward, not just the one run
+this record cites (added in fix round 2 — Measurement 2's own text never
+claimed more than the one run, but the pre-fix verdict read "proven" as if
+it had).
 
 Only ONE of the four criteria is actually NOT MET — criterion 2, re-exec
-fidelity, and even that is scoped to what was measured rather than claimed
-unconditionally (fix round 1 corrected an earlier draft that closed it
-wider than its own admitted residual). Criterion 1's underlying survey
-finding also points this record's own way — every classified line has a
-stated migration path — but that finding is not the criterion's final
-status: two independent gaps (the 3 `$TransparentHosts` rows, and
-PowerShell 7's unproven presence on two of the four places this code has
-to run) leave criterion 1 itself UNKNOWN, not NOT MET. Criteria 3 and 4
-open onto genuine gaps rather than close ones — the refusal probe could
-not reproduce PowerShell 7's absence at all, so item 48's own failure-mode
-requirement is untested rather than met, and that same gap, plus the
-unresolved allowlist and environment findings and the not-yet-exhaustive
-bilateral sweep, leaves the final retained test set undetermined. None of
-these four conditions is evidence of a NO — nothing measured here points
-at an unreachable entry point, a corrupting re-exec, or a worse failure
-mode — they are unmeasured or only partially measured, which Rule 2 and
-Rule 4 do not permit reading as clean.
+fidelity, and even that is scoped to what was
+measured rather than claimed unconditionally (fix round 1 corrected an
+earlier draft that closed it wider than its own admitted residual).
+Criterion 1's underlying survey finding also points this record's own way
+— every classified line has a stated migration path — but that finding is
+not the criterion's final status: three independent gaps (the 3
+`$TransparentHosts` rows, PowerShell 7's unproven presence on two of the
+four places this code has to run, and the Windows CI runner's proof being
+scoped to one run) leave criterion 1 itself UNKNOWN, not NOT MET. Criteria
+3 and 4 open onto genuine gaps rather than close ones — the refusal probe
+could not reproduce PowerShell 7's absence at all, so item 48's own
+failure-mode requirement is untested rather than met, and that same gap,
+plus the unresolved allowlist and environment findings, the not-yet-
+exhaustive bilateral sweep, and the two further coverage-confidence gaps
+Measurement 3 itself names, leaves the final retained test set
+undetermined. None of these five conditions is evidence of a NO — nothing
+measured here points at an unreachable entry point, a corrupting re-exec,
+or a worse failure mode — they are unmeasured or only partially measured,
+which Rule 2 and Rule 4 do not permit reading as clean.
 
 ## What would make the verdict NO
 
@@ -2118,11 +2197,14 @@ ANSI code page) are both instances of this same 5.1-only defect class and
 are absorbed by this item rather than fixed independently.
 
 **What would close it.** This record's verdict is CONDITIONAL, not YES: the
-four open conditions named in `## Verdict` above (the `$TransparentHosts`
+five open conditions named in `## Verdict` above (the `$TransparentHosts`
 allowlist rows and the unproven pwsh-presence environments; the
 unreproduced pwsh-missing refusal; the final retained test set, including
-the not-yet-exhaustive bilateral sweep; and the escaped-form command-line
-ceiling) must be resolved before or as part of this work, not skipped. As a
+the not-yet-exhaustive bilateral sweep and the two further coverage-
+confidence gaps added in fix round 2; the escaped-form command-line
+ceiling; and the Windows CI runner's proof being scoped to one run, also
+added in fix round 2) must be resolved before or as part of this work, not
+skipped. As a
 hard ordering rule, taken from item 48 itself: **the code becomes UNABLE to
 run on 5.1 BEFORE any 5.1 test is deleted.** Pinning the tests without
 pinning the code first is the one outcome this item may not produce (the
@@ -2201,5 +2283,5 @@ without restating it:
 **Priority.** Medium-high, unchanged from item 48's own assessment: it
 gates a large cleanup, retires the single largest source of measured
 defects in this repo, and makes item 44 smaller — but it is CONDITIONAL,
-not ready to execute as scoped, until the four open conditions in
+not ready to execute as scoped, until the five open conditions in
 `## Verdict` above are resolved.
