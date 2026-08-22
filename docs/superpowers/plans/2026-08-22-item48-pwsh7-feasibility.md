@@ -1905,7 +1905,12 @@ git commit -m "write the item 48 verdict against its own NO-criteria"
 ## Debate record
 
 **Participants:** not yet dispatched
-**Rounds used:** 0 of 12
+**Rounds used:** 3, panel (Sol + Fable), both lanes every round
+**Fix-verify budget:** declared by the user after round 3, at 3 further
+rounds. Not declared before round 1, which the protocol requires; recorded
+here as a process defect of this debate rather than left silent. If both
+lanes have not returned PASS by round 6, the debate PAUSES and returns to
+the user rather than converting into a verdict.
 **Outcome:** pending
 **Verification status:** pending
 **Degradation:** none
