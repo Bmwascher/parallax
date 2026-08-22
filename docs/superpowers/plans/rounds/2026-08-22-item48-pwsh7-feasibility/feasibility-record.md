@@ -16,7 +16,265 @@ test is deleted.**
 
 ## Verdict
 
-NOT YET WRITTEN. Filled by the final task, after every measurement below.
+Written last, after `## Residual limits` below was collected (Task 9, Step
+2 before Step 4 — an earlier draft got this backwards and the rule meant to
+force CONDITIONAL pointed at a list that did not exist yet). Nothing below
+re-derives a measurement; every claim cites the section that made it.
+
+### What the test matrix becomes
+
+Item 48's own guess: "probably not 'one host' but 'one host plus a small
+number of cases proving the refusal and the re-exec work when started from
+5.1'."
+
+**The re-exec half: technique proven, test not yet built.** Measurement 1
+(Task 4) found the mechanism a kept test would assert: the ESCAPED
+forwarding form (`Esc` + `ProcessStartInfo`), not the native `@args` splat
+form, carried all eleven tested hostile shapes through intact under both
+hosts as parent. But the harness that proved this — `<REC>/reexec/*.ps1`
+and `run.py` — is this investigation's own scratch, explicitly excluded
+from Measurement 3's shipped-script table as "not shipped product surface."
+So this half of the guess is confirmed in TECHNIQUE, not yet built as a
+kept, shipped test.
+
+**The refusal half: not decided by any measurement.** Measurement 4 (Task
+7) set out to reproduce "PowerShell 7 absent" and did not — the call
+succeeded anyway, because Windows resolves a bare `pwsh` name against the
+PARENT process's environment, not the stripped child environment being
+passed in. No failure text was produced, so there is nothing to write a
+"proves the refusal" assertion against yet. What would decide it is named
+in `## Residual limits` below, under Measurement 4: a machine, container, or
+CI runner with PowerShell 7 genuinely not installed anywhere.
+
+**Two findings the guess did not anticipate.** Measurement 3 Step 3 (via
+Measurement 5 Step 6, verified against source) found two of today's
+dual-host tests cannot simply collapse to one host:
+`test_measurement_20_ticks_and_date_string_types_diverge_across_hosts`
+(`test_lock_protocol_live.py:379`-`:390`) loses its cross-host DIVERGENCE
+claim outright — no one-host form exists for "these two things differ" —
+though its two pwsh-only type assertions (`:388`,`:390`) survive as a
+rewritten regression pin. `TestTheFramesGoOutIntactOnBothHosts`
+(`test_codex_tool_surface_probe.py:490`-`:529`) can be rewritten to run
+`pwsh` alone, but loses the guarantee that a green run on one host cannot
+hide a defect that only shows up on the OTHER — exactly the BOM-on-first-
+frame defect it exists to catch, 5.1-only.
+
+**Conclusion.** The shape becomes: most of the 11 dual-host CI modules'
+content collapses to `pwsh` alone with no special handling (Measurement 3's
+own coverage table); the divergence test is retired outright, accepted as a
+cost rather than a reason to keep 5.1 (see criterion 4 below); the frame
+test is rewritten to one host, at the cost of the hiding-defect guarantee;
+and at least one NEW test is added proving the escaped-form re-exec
+technique under a 5.1-starting parent. What the "refusal" case looks like,
+and therefore the exact final count of retained cases, is **not decided by
+this investigation** — repeating item 48's own guess as a settled
+conclusion would be wider than the evidence.
+
+### Questions item 48 asked that this investigation did not answer
+
+1. **Is PowerShell 7 present on the Linux (`ubuntu-latest`) CI runner?**
+   (Measurement 2.) Answered by a Linux CI step running `pwsh -Command
+   '$PSVersionTable.PSVersion'` and capturing a real version string — no
+   such step exists today.
+2. **Is PowerShell 7 present on a plugin user's machine?** (Measurement 2.)
+   Not reachable from this session at all; answered by a device inventory
+   or telemetry report across the actual population of plugin users.
+3. **Do the JSON-depth-truncation trap and the `ConvertFrom-Json`
+   nesting-limit trap (item 48's traps 1 and 4) behave correctly under
+   `pwsh`?** (Measurement 3 Step 3.) Answered by un-gating
+   `evals/tools/drift_statemachine_tests.ps1`'s `agy-allow-depth-over-
+   boundary` scenario inside a CI job — today it self-skips when
+   `pwsh.exe` is absent, and the harness itself is switched off in both CI
+   jobs.
+4. **Does the em-dash/`$OutputEncoding` flattening trap (item 48's trap 2)
+   need a mitigation under `pwsh`, or does 7's UTF-8 default already avoid
+   it?** (Measurement 3 Step 3.) Answered by adding a `pwsh`-driven case to
+   `TestBriefEncodingOverStdin`, which today hardcodes `powershell.exe` at
+   `test_multi_model_verify.py:2999`.
+5. **What does a user actually see when `pwsh` is genuinely absent?**
+   (Measurement 4, explicitly UNANSWERED.) Answered by running the probe on
+   a machine, container, or CI runner with PowerShell 7 genuinely not
+   installed anywhere — no `Program Files\PowerShell\7`, no WindowsApps
+   alias, no `App Paths` registry entry.
+6. **Do the 3 `migration=unknown` rows (the `TransparentHosts` allowlist at
+   `tools/kimi-lane-lock.ps1:887` and its two doc/test siblings) still need
+   to recognize `"powershell.exe"`?** (Entry point inventory, `unknown`
+   rows.) Answered by deciding whether a leftover 5.1 install can still
+   legitimately appear as an ancestor process in a PS7-only deployment — an
+   environment question, not one the line itself answers.
+7. **What is the NET time saving, once the final retained 5.1-starting test
+   set exists?** (Measurement 5, explicitly left undetermined.) Answered by
+   re-timing the `powershell-hosts` CI job, or its replacement, once that
+   set is actually built (see `### What the test matrix becomes` above).
+8. **Has the installed plugin cache, or any already-registered scheduled
+   task, drifted from the checkout?** (Entry point inventory, "What this
+   method cannot see.") Answered by inspecting the actual cache directory
+   content and the real Task Scheduler entry, neither of which the survey
+   can see.
+
+### Criterion: "Any entry point that cannot be made to reach 7"
+
+Decided by the entry-point survey (`## Entry point inventory`, Task 3):
+0 unclassified, 0 stale, every `must-change` row names a stated fix (at
+least 83 rows, known-deflated per the inventory's own words). On its face
+this looks NOT MET.
+
+But 3 rows carry `migration=unknown`, all concerning the same
+`$TransparentHosts` allowlist (`pwsh.exe`, `powershell.exe`, `cmd.exe`,
+`conhost.exe`) `kimi-lane-lock.ps1`'s ancestry walk uses to decide which
+processes are legitimate transparent intermediaries for a credential
+operation: `evals/multi-model-verify/test_backup_lane.py:270`,
+`skills/multi-model-verify/references/backup-lane.md:111`,
+`tools/kimi-lane-lock.ps1:887`. The inventory's own words: whether
+`"powershell.exe"` must be removed "depends on whether the ancestry walk
+can still legitimately meet that name after a 5.1 drop" — a question about
+the *environment* the migrated repo runs in (can a user still legitimately
+invoke this repo's tooling from a lingering 5.1 outer shell), not about
+what the line itself does.
+
+**Disposition (Rule 3): these 3 rows bear on this criterion.** They are not
+about whether this repo's own scripts can be made to invoke `pwsh` — the
+survey already answers that. They are about whether an entry point that
+already reaches 7 (the credential lock) keeps working correctly for a
+legitimate caller who has not migrated their own outer shell, or should be
+tightened once 5.1 is dropped inside this repo. That is undecided, so this
+record cannot certify every entry point's post-migration behaviour is fully
+settled.
+
+**Criterion: UNKNOWN** — NOT MET for every classified line except these 3
+`migration=unknown` rows, which are undetermined and bear on this criterion
+per Rule 3 (`test_backup_lane.py:270`, `backup-lane.md:111`,
+`kimi-lane-lock.ps1:887`). Per Rule 5, a criterion resting on an unresolved
+question is UNKNOWN, not NOT MET.
+
+### Criterion: "A re-exec that cannot pass arguments through provably intact"
+
+Decided by Measurement 1 (Task 4) — a direct measurement, not reasoning: 8
+arms (2 hosts x 2 forwarding forms x 2 argument shapes), 11 hostile payload
+shapes. Under the ESCAPED form, every arm survived under both hosts as
+parent (stage B exact `true` in all 4 escaped rows). Under the native SPLAT
+form, PowerShell 5.1 as parent corrupted both shapes (`ps51/splat/
+positional`: 8 of 10 items received; `ps51/splat/named`: embedded quote and
+trailing backslash both mangled); PowerShell 7 as parent survived splat
+cleanly. Measurement 1's own section, headed "Answer to the NO-criterion,"
+states this without hedging.
+
+**Residuals dispositioned (Rule 4)**, all from Measurement 1's own section
+(listed in full under `## Residual limits` below):
+- Command-line length against the ~32767-character ceiling bears on this
+  criterion for a very large brief (multi-model-verify's own payload
+  shape) — not dismissed: the technique is proven for the shapes actually
+  sent (short strings), not for arbitrarily large ones. This narrows the
+  claim to "these eleven shapes, at this size, survive," not "any argument
+  survives."
+- The host's own `-File` parsing was not isolated from the forwarding
+  mechanism — bears on this criterion only in that a future corruption
+  could not be immediately localized to parent-vs-child; it does not
+  weaken the positive finding for the escaped form.
+- Untried parameter shapes (arrays, `ValueFromRemainingArguments`,
+  self-re-exec) bear on this criterion for those specific shapes only, not
+  for the ones measured.
+- One machine, one build of each host bears on generalizing this finding
+  elsewhere; already scoped by this record's own header (lines 4-5), so
+  not a new limit specific to re-exec.
+
+None of these residuals overturns the measurement for the shapes and sizes
+actually tested.
+
+**Criterion: NOT MET** — decided by Measurement 1, for the argument shapes
+and payload sizes it tested, via the escaped forwarding form.
+
+### Criterion: "A user-facing failure mode worse than the bugs being removed"
+
+Decided by Measurement 4 (Task 7). The probe stripped every PATH entry
+containing `pwsh.exe` from a child environment and ran the hook's exact
+shipped invocation shape. The call succeeded anyway (`returncode: 0`,
+empty stdout/stderr) — Windows resolved the bare name `pwsh` against the
+PARENT process's own environment, not the stripped child environment being
+passed in; a `cmd /c where pwsh` check confirmed the strip itself was
+genuine.
+
+Measurement 4's own words, verbatim, at its close: "item 48's NO-criterion
+'a user-facing failure mode worse than the bugs being removed'... [is]
+UNANSWERED, and item 48's own requirement that the failure 'must stop with
+a message naming what to install' is UNTESTED by this task — no failure
+text was produced to check that requirement against. `## Verdict` may not
+treat this criterion as satisfied on the strength of this section." No
+residual to disposition beyond that citation — the section already names
+itself as not deciding this.
+
+**Criterion: UNKNOWN** — Measurement 4 explicitly could not reproduce the
+condition it set out to test. Per Rule 2, UNKNOWN, not NOT MET, and it
+cannot produce YES on its own strength.
+
+### Criterion: "Any need to keep a 5.1 code path 'just in case', which would mean paying for both hosts and testing one"
+
+Decided jointly by `### What the test matrix becomes` above and
+Measurement 5's ledger. What the measurements DO establish: most of today's
+dual-host coverage needs no hedge — Measurement 3 found most of the 11
+dual-host CI modules have no behaviour that depends on comparing two hosts;
+those collapse to `pwsh` alone. That is the opposite of "paying for both
+hosts and testing one."
+
+What the measurements do NOT establish: the exact shape and cost of the
+"small number of cases" item 48 anticipated keeping. The re-exec case has a
+proven technique but no built test. The refusal case cannot be specified at
+all, because Measurement 4 never reproduced the condition it would test
+against. Measurement 5 states outright: "The retained-case set... is not
+yet chosen (Task 9), so its ongoing cost is not priced here either" — and
+`### What the test matrix becomes` above confirms that determination stays
+open for the refusal half.
+
+**Residual dispositioned (Rule 4):** the two bilateral tests found in
+Measurement 5 Step 6 (`test_measurement_20_ticks_and_date_string_types_
+diverge_across_hosts`, `TestTheFramesGoOutIntactOnBothHosts`) bear on this
+criterion — they are existing cases whose value today depends on running
+something under both hosts. This does NOT bear as "evidence 5.1 must be
+retained": the record's own reconciliation is that the divergence claim is
+lost outright (accepted as a cost, not preserved by a hedge) and the frame
+test's assertion form survives a one-host rewrite. Dispositioned as: a real
+accepted loss on the cost side, not a reason to keep 5.1.
+
+**Criterion: UNKNOWN** — the measurements support that broad dual-host
+retention is not needed, but do not yet fix the final small retained set
+(particularly the refusal case, blocked on Measurement 4), so this
+criterion rests on an incomplete measurement rather than a settled one, per
+Rule 5.
+
+### Applying the rules
+
+1. No criterion is MET — does not force NO by itself.
+2. Criteria 1, 3 and 4 are UNKNOWN — forces CONDITIONAL, naming: the 3
+   `migration=unknown` `TransparentHosts` rows; the unreproduced
+   pwsh-missing refusal; and the undetermined final retained test set.
+3. The 3 `migration=unknown` rows bearing on criterion 1 independently
+   force CONDITIONAL (listed above by `path:line`).
+4. Every residual limit that a reader could reasonably say bears on a
+   criterion has been dispositioned inside that criterion's subsection
+   above.
+5. YES is unavailable: three of four criteria are UNKNOWN, not NOT MET.
+
+**VERDICT: CONDITIONAL ON** (1) resolving whether the `$TransparentHosts`
+allowlist (`tools/kimi-lane-lock.ps1:887`,
+`evals/multi-model-verify/test_backup_lane.py:270`,
+`skills/multi-model-verify/references/backup-lane.md:111`) still needs to
+recognize `"powershell.exe"`; (2) reproducing and verifying a genuine
+pwsh-missing refusal, which Measurement 4 did not; and (3) fixing the final
+retained 5.1-starting test set's shape and cost, which cannot be finished
+until (2) is answered.
+
+Two of the four NO-criteria are answered cleanly, and in this record's own
+favor, by direct measurement: the entry-point survey finds every classified
+line has a stated migration path, and the re-exec probe proves the escaped
+forwarding form carries the tested argument shapes through intact under
+both hosts. The other two open onto genuine gaps rather than close ones —
+the refusal probe could not reproduce PowerShell 7's absence at all, so
+item 48's own failure-mode requirement is untested rather than met, and
+that same gap, plus three unresolved allowlist rows, leaves the final
+retained test set undetermined. None of these three gaps is evidence of a
+NO — nothing measured here points at an unreachable entry point, a
+corrupting re-exec, or a worse failure mode — they are unmeasured, which
+Rule 2 does not permit reading as clean.
 
 ## What would make the verdict NO
 
@@ -1470,4 +1728,222 @@ two different machines, by two different methods:
 
 ## Residual limits
 
-NOT YET WRITTEN.
+Every residual limit named by Tasks 3 through 8, gathered here BEFORE any
+criterion in `## Verdict` above was adjudicated (Task 9 Step 2, ahead of
+Step 4) — an earlier draft of this plan collected these after the verdict
+was written, so the rule meant to force CONDITIONAL pointed at a list that
+did not exist yet. Each item names the section it came from; nothing here
+is re-derived.
+
+### From `## Entry point inventory` (Task 3) — "What this method cannot see"
+
+- The versioned plugin cache copy of `hooks/hooks.json`, not the checkout,
+  is what actually runs; the survey cannot see whether the installed cache
+  has drifted from it.
+- An already-registered scheduled task keeps the host written into its
+  action at registration time; the survey reads source, not Task
+  Scheduler.
+- Any instruction relayed verbally or from memory, never written to a
+  tracked file, leaves no line for the survey to match.
+- Any file the survey cannot read is listed `NOT SCANNED` by name (0
+  today).
+- A classification can be syntactically valid and semantically wrong; the
+  survey checks that a row exists and its digest matches the current line,
+  not that the chosen classification is correct.
+- Anything untracked is invisible to `git ls-files` (named instance: the
+  `tools/drift-reports/` auto-triage wrapper scripts).
+- A shape none of the three regex families matches leaves no row at all
+  (named instance: `README.md:412`), which is why the `must-change` count
+  is "known to be deflated by at least this one instance."
+- Bare `git` invocations are deliberately unmatched — a measured trade
+  (179 further hits, almost all prose/plumbing), named instance
+  `tools/check-drift.ps1:987`.
+
+### From `## Measurement 1: re-exec fidelity` (Task 4)
+
+- Command-line length was not measured against the ~32767-character
+  Windows command-line ceiling; every tested payload item was short. A
+  migration relying on the escaped form for a very large brief (the kind
+  multi-model-verify sends) is not covered.
+- The measurement ran end-to-end through the target host's own `-File`
+  parsing, not isolated from it, so a stage-B corruption cannot be
+  localized further than "between parent construction and child binding."
+- Arrays, `ValueFromRemainingArguments`, and a script re-execing ITSELF
+  (rather than a sibling script) were not tried.
+- All eight arms ran on one machine, one build of each host (Windows
+  PowerShell `5.1.26100.9168`, PowerShell `7.6.5`); a different build or a
+  second machine is not covered.
+
+### From `## Measurement 2: is PowerShell 7 present` (Task 5)
+
+- PowerShell 7's presence on the Linux (`ubuntu-latest`) CI runner is
+  unproven by this repo's own evidence — nothing in the workflow starts a
+  PowerShell host there.
+- PowerShell 7's presence on any plugin user's machine is not measurable
+  at all from this session, and per Microsoft's own install documentation
+  is NOT the default state of a stock Windows install.
+- The green Windows CI run cited proves PowerShell 7 present on the runner
+  image served for that one run on that one date, not that every future
+  `windows-latest` image carries it.
+
+### From `## Measurement 3: behaviour under 7` (Task 6)
+
+- This section maps INVOCATION (a script was started as a process), not
+  that the invoking module's assertions are the RIGHT check, and does not
+  re-derive `entry-points.tsv`'s own classifications.
+- The 6 uncovered scripts are not equally unproven:
+  `superpowers-review-companion.ps1` runs under a real `pwsh` just outside
+  the dual-host job (gated by an unresolved presence-skip on
+  `ubuntu-latest`); `.githooks/pre-push` has no `runs` row anywhere, on
+  any host.
+- The three extra host-sensitive behaviours found beyond item 48's named
+  five are not claimed to be the complete set a wider search would find.
+- `pwsh` presence on `ubuntu-latest` for Tier 2b was not independently
+  re-verified here (Measurement 2 already records it unproven); the
+  `hooks/hooks.json` citation is scoped to the checkout — the installed
+  plugin cache was not inspected.
+
+### From `## Measurement 4: refusal when pwsh is missing` (Task 7)
+
+- Only the bare-`pwsh` resolution path (as `hooks/hooks.json` already
+  invokes it) was measured; entry points that today name `powershell.exe`
+  explicitly were not probed.
+- Claude Code's own hook-runner presentation of a failure, and its METHOD
+  of resolving a bare name (direct process-creation vs. shell-mediated),
+  were not measured.
+- The probe did not reproduce genuine absence of PowerShell 7 on this
+  machine (two resolvable copies exist); what would prove it is a machine,
+  container, or CI runner with PowerShell 7 genuinely not installed
+  anywhere.
+- **Item 48's NO-criterion "a user-facing failure mode worse than the bugs
+  being removed" is UNANSWERED by this record** — stated in bold at the
+  section's own close, and carried forward here as an open question rather
+  than a cleared one.
+
+### From `## Measurement 5: what is saved` (Task 8)
+
+- The four saved-time figures (CI wall-clock, the local pair, item 44's
+  57-minute gate, the two corruption defects) are deliberately never
+  summed; they measure overlapping wall-clock by different methods.
+- CI wall-clock is a 5-run sample, not isolated from other load; the local
+  pair carries the same caveat, wider than the gap itself.
+- Item 44's ~19m13s figure is a GROSS upper bound only; the NET saving is
+  not determined by Measurement 5 and is explicitly left to this task's
+  decision on the retained test set.
+- The edit cost is "at least 83" `must-change` rows plus 3 further
+  `unknown` rows, known-deflated and not provably complete, not a flat
+  count.
+- The bilateral-mechanism sweep (tests comparing both hosts) was run four
+  ways this round but is not claimed exhaustive.
+- The retained 5.1-starting case set (item 48's "one host plus a small
+  number of cases" guess) was not yet chosen when Measurement 5 was
+  written, so its ongoing cost was not priced there — `## Verdict`'s
+  `### What the test matrix becomes` above is where that gets decided as
+  far as the evidence allows.
+
+### Of the investigation as a whole
+
+- One machine throughout (this developer machine), one build of each host
+  (Windows PowerShell `5.1.26100.9168`, PowerShell `7.6.5`).
+- One ANSI code page (this machine's own) for every code-page-sensitive
+  measurement — the em-dash/`$OutputEncoding` trap is untested against
+  `pwsh` at all (Measurement 3 Step 3, trap 2), and no other code page was
+  tried anywhere in this record.
+- One Claude Code version (this session's), not varied against any floor
+  this repo's CLAUDE.md names for other lanes.
+- No script in this repo was run under a migration it does not yet have —
+  every measurement above ran against the CURRENT, unmigrated code.
+  Nothing in this record observes the actual edited entry points behaving
+  post-migration.
+
+### This task's own closing gate (Step 6), for the record
+
+Not new evidence about any of item 48's four criteria — the full `evals`
+suite, re-run once per host after this record was otherwise finished, to
+confirm nothing above broke what already passed. Windows PowerShell 5.1:
+`2558 passed, 14 skipped, 5 warnings in 1153.61s (0:19:13)`. PowerShell 7:
+`2558 passed, 14 skipped in 1115.16s (0:18:35)`. Identical pass and skip
+counts on both hosts; zero `FAILED` lines in either log. The 5.1 run's 5
+warnings are `PytestWarning: (rm_rf) unknown function <built-in function
+scandir>` / `PermissionError: [WinError 5]` teardown noise from
+`test_an_unreadable_source_path0`, a test that deliberately makes a path
+unreadable; the pwsh7 run reports none. That is a real, if immaterial, host
+difference in teardown noise — recorded here rather than dropped, not
+claimed to bear on any criterion above.
+
+## Draft: the migration item
+
+Drafted because `## Verdict` above is CONDITIONAL, per Task 9 Step 5. This
+is a DRAFT only — it is not added to
+`docs/superpowers/plans/2026-07-27-0150-backlog.md` by this task; that edit
+happens at merge, not here.
+
+**Problem.** This repo runs its PowerShell-facing code and tests on two
+hosts, Windows PowerShell 5.1 and PowerShell 7, even though 5.1 is where
+every measured PowerShell-hosting defect in this repo's history has fired
+(`## Measurement 5: what is saved`, Step 4: two independent corruption
+defects in the Kimi lane's inline brief transport, both 5.1-only). This
+record's own entry-point survey found at least 83 lines that pin, invoke,
+or document 5.1 specifically and would need to change to drop it
+(`## Entry point inventory`). Backlog items 51 (`docs/superpowers/plans/
+2026-07-27-0150-backlog.md:3748`, the Kimi lane's inline brief mangled by
+5.1) and 31 (`docs/superpowers/plans/2026-07-27-0150-backlog.md:2510`, the
+drift autofix dispatch's `Get-Content -Raw | codex exec` degrading on 5.1's
+ANSI code page) are both instances of this same 5.1-only defect class and
+are absorbed by this item rather than fixed independently.
+
+**What would close it.** This record's verdict is CONDITIONAL, not YES: the
+three open conditions named in `## Verdict` above (the `$TransparentHosts`
+allowlist rows, the unreproduced pwsh-missing refusal, and the final
+retained test set) must be resolved before or as part of this work, not
+skipped. As a hard ordering rule, taken from item 48 itself: **the code
+becomes UNABLE to run on 5.1 BEFORE any 5.1 test is deleted.** Pinning the
+tests without pinning the code first is the one outcome this item may not
+produce (the same lesson 0.16.0's own history already argues for — a suite
+green on one interpreter proves one interpreter, not both).
+
+**Ordered work**, consistent with `### What the test matrix becomes` above
+without restating it:
+
+1. Resolve the three open verdict conditions first, since later steps
+   depend on their answers: decide the `$TransparentHosts` allowlist rows
+   (`tools/kimi-lane-lock.ps1:887` and its two doc/test siblings); measure
+   a genuine pwsh-missing refusal on a machine, container, or CI runner
+   that truly lacks PowerShell 7, and confirm it stops with a message
+   naming what to install (item 48's own requirement); use that failure
+   text to write the retained "refusal" test case Measurement 4 could not
+   specify.
+2. Build the retained "re-exec" test case from the technique Measurement 1
+   already proved — the escaped forwarding form, not native splat — as a
+   shipped, kept test (not scratch), asserting fidelity for a 5.1-starting
+   parent.
+3. Re-point every `must-change` row in the entry-point inventory at
+   `pwsh`, in the order the inventory already groups them (host pins,
+   launch pins, bare invocations, docs), re-running `survey.py` after each
+   group to confirm no row is missed and none goes stale.
+4. Only once steps 1-3 leave the code UNABLE to run on 5.1 (every
+   `must-change` row repinned, the refusal and re-exec cases proven under
+   the new shape): retire `test_measurement_20_ticks_and_date_string_
+   types_diverge_across_hosts`'s cross-host divergence assertion (its two
+   pwsh-only type assertions survive as a rewritten regression pin, per
+   `## Measurement 5`, Step 6), rewrite `TestTheFramesGoOutIntactOnBothHosts`
+   to run `pwsh` alone (accepting the loss of its one-host-hides-a-defect
+   guarantee), and remove the `powershell-hosts` CI job's 5.1 step
+   (`.github/workflows/skill-evals.yml:93`-`:108`) and every other 5.1-only
+   test named `must-change` in the inventory. No 5.1 test is deleted before
+   step 4, and no test is deleted at all until the code it exercises is
+   already unable to run on 5.1.
+5. Re-time the CI job (or its replacement) once the final retained set from
+   steps 1-2 exists, to answer the NET saving `## Measurement 5`
+   deliberately left undetermined.
+6. Fold in items 51 and 31 by construction: once every 5.1-only code path
+   named `must-change` no longer exists, both items' defective dispatch
+   shapes (`Get-Content -Raw` on the ANSI code page; native splat
+   corrupting embedded quotes) no longer run anywhere, closing both without
+   a separate fix.
+
+**Priority.** Medium-high, unchanged from item 48's own assessment: it
+gates a large cleanup, retires the single largest source of measured
+defects in this repo, and makes item 44 smaller — but it is CONDITIONAL,
+not ready to execute as scoped, until the three open conditions in
+`## Verdict` above are resolved.
