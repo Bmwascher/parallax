@@ -2214,12 +2214,16 @@ interpreter proves one interpreter, not both).
 **Ordered work**, consistent with `### What the test matrix becomes` above
 without restating it:
 
-1. Resolve the four open verdict conditions first, since later steps
+1. Resolve the five open verdict conditions first, since later steps
    depend on their answers: decide the `$TransparentHosts` allowlist rows
    (`tools/kimi-lane-lock.ps1:887` and its two doc/test siblings); prove
    PowerShell 7 present on the Linux (`ubuntu-latest`) CI runner and
    establish what fraction of plugin users actually have it (Measurement 2
-   found both unproven); measure a genuine pwsh-missing refusal on a
+   found both unproven); confirm PowerShell 7's presence on the Windows CI
+   runner holds durably rather than on the one run and date this record
+   actually observed (`32391262449`, 2026-08-20) — a repeated check across
+   several `windows-latest` runs over time, not a single cited run, is what
+   would settle condition (5); measure a genuine pwsh-missing refusal on a
    machine, container, or CI runner that truly lacks PowerShell 7, and
    confirm it stops with a message naming what to install (item 48's own
    requirement); use that failure text to write the retained "refusal"
