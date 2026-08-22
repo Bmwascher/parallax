@@ -487,7 +487,9 @@ limits` entries not walked inside a criterion subsection above.
 1. No criterion is MET — does not force NO by itself.
 2. Criteria 1, 3 and 4 are UNKNOWN — forces CONDITIONAL. Criterion 1 is
    UNKNOWN for THREE independent reasons (the 3 `migration=unknown`
-   `TransparentHosts` rows; PowerShell 7's unproven presence on the Linux
+   `TransparentHosts` rows - canonical count, `### `unknown` rows, whole
+   file`, bound at commit `b1e9cfa`; PowerShell 7's unproven presence on
+   the Linux
    CI runner and any plugin user's machine; and the Windows CI runner's
    proof being scoped to one run, added in fix round 2). Criterion 3 is
    UNKNOWN because Measurement 4 never reproduced the condition it set out
@@ -495,8 +497,9 @@ limits` entries not walked inside a criterion subsection above.
    test set's shape is not fixed (blocked on criterion 3's own gap, on the
    bilateral-sweep completeness question, and on the two further
    Measurement-3 gaps added in fix round 2).
-3. The 3 `migration=unknown` rows bearing on criterion 1 independently
-   force CONDITIONAL (listed above by `path:line`).
+3. The 3 `migration=unknown` rows (canonical count, `### `unknown` rows,
+   whole file`, bound at commit `b1e9cfa`) bearing on criterion 1
+   independently force CONDITIONAL (listed above by `path:line`).
 4. **Checkable Rule 4 sweep (fix round 2 rewrite — fix round 1's version
    of this claim was itself wrong; corrected again at debate round 2 to
    bind the count to a commit rather than assert it as current, the same
@@ -671,22 +674,31 @@ its own invariant; proximity to one is not a substitute, and this is the
 second time a rule of this kind was found narrower than it looked (the
 first was `survey.py`'s exit predicate not covering `skipped`).
 
-**A count about this record's own inventory is stated once, bound once,
-and referenced everywhere else.** Added at debate round 4, the structural
-fix for the root cause behind findings 1 and 2 of that round: this
-record states its inventory figures (the `must-change` count, the
-`unknown` count, the dual-family count) in many places, and binding each
-one separately is the same defect as repointing line numbers one at a
-time - it works until the next edit, and every new mention re-arms it.
-The canonical binding for all three lives in ONE place,
-`### `must-change` rows, whole file` below (and its
-`### `unknown` rows, whole file` neighbour for the unknown count), each
-tagged CANONICAL. Every other mention of these figures anywhere in this
-record points at that canonical paragraph rather than restating the
-binding - it may still carry the number inline where a sentence needs it
-to read well, but the binding itself is stated once, not duplicated,
-because a duplicated binding is exactly the drift risk the duplicated
-`survey.py` quote already demonstrated once.
+**Every mention of a count about this record's own inventory carries or
+points at the same historical binding, so no two mentions can ever
+disagree.** Narrowed at debate round 5 (the TWELFTH instance of this
+record's own defect class, found inside the paragraph that states the
+rule against it, for the third time running): the debate-round-4 wording
+of this rule said such a count is "stated once, bound once" - the
+document does not do that, and cannot without becoming harder to read.
+`entry-points.tsv`'s row-and-bullet bindings at commits `a13d3c3` and
+`b1e9cfa` appear in `## Method` here AND in the canonical section below;
+the `b1e9cfa` must-change binding is repeated inside that same canonical
+section; the unknown-count binding appears in both the must-change
+paragraph and its own canonical paragraph. That is DUPLICATION, not a
+single statement referenced elsewhere - and it is deliberate, not a
+lapse: deleting those bindings to satisfy a stricter sentence would make
+the document harder to read to save a rule from being wrong. The rule
+that actually holds, and that this record can actually keep: every
+numeric mention of the `must-change` count, the `unknown` count, or the
+dual-family count either carries its own "as measured at commit `<sha>`"
+binding, or explicitly points at a place that does
+(`### `must-change` rows, whole file` and `### `unknown` rows, whole
+file` below are the two canonical, authoritative bindings; every other
+mention traces back to one of them). No mention is a bare, unbound "is."
+That is weaker than "stated once" and it is the true property this
+document has - checkable directly: every duplicate found this round
+agreed with its canonical source, which is why none of them blocked.
 
 ## Entry point inventory
 
@@ -1201,7 +1213,7 @@ here.
   miss is to NAME it, as this bullet and the bare-`git` bullet below both
   do, not to chase it into the filter. Consequence stated plainly: the
   `must-change` count (the canonical figure, `### `must-change` rows,
-  whole file` below, bound at commit `b1e9cfa`) is therefore known to be
+  whole file` above, bound at commit `b1e9cfa`) is therefore known to be
   deflated by at least this one instance.
 - **A bare `git` invocation, deliberately.** Matching bare `git` was
   measured to cost 179 further hits, almost all prose and shell plumbing,
