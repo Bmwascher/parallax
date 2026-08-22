@@ -994,7 +994,95 @@ scripts, 2-of-5 named traps, or 3-of-8 total behaviours supports.
 
 ## Measurement 4: refusal when pwsh is missing
 
-NOT YET WRITTEN.
+Measured by `<REC>/missing-pwsh/probe.py`, which strips every `PATH` entry
+containing `pwsh.exe` from a CHILD environment dict only (the real PATH,
+this process's own `os.environ`, and the real `pwsh.exe` binary are never
+touched - see `hooks/hooks.json:10` for the invocation shape reproduced,
+already recorded in Measurement 2 as `no-change`) and then runs the hook's
+own shipped shape - `pwsh -NoProfile -NonInteractive -File
+hooks/superpowers-review-companion.ps1` - through that stripped
+environment, with `stdin=subprocess.DEVNULL` and a 60-second timeout.
+
+**Outcome, named explicitly: the second of the three the task pre-named -
+the call succeeded anyway.** Verbatim captured output
+(`<REC>/missing-pwsh/results.json`, also printed to stdout by the run):
+
+```
+{
+ "pwsh_on_real_path": "C:\\Program Files\\PowerShell\\7\\pwsh.EXE",
+ "pwsh_after_stripping": null,
+ "invocation": [
+  "pwsh",
+  "-NoProfile",
+  "-NonInteractive",
+  "-File",
+  "C:\\Users\\Brandon\\Documents\\parallax\\hooks\\superpowers-review-companion.ps1"
+ ],
+ "returncode": 0,
+ "stdout": "",
+ "stderr": ""
+}
+```
+
+`pwsh_after_stripping` came back `null` - `shutil.which("pwsh",
+path=env["PATH"])`, resolving directly against the stripped PATH string
+inside THIS process, found nothing, so the strip itself was not the
+failure. But the actual `subprocess.run(["pwsh", ...], env=env)` call still
+started `pwsh` and it exited `0`. This was checked further, not just
+accepted: a `cmd /c "echo %PATH% & where pwsh"` launched through the same
+stripped `env` dict shows the CHILD's own `%PATH%` correctly excludes both
+`C:\Program Files\PowerShell\7` and
+`C:\Users\Brandon\AppData\Local\Microsoft\WindowsApps`, and that child's
+own `where pwsh`, searching ITS OWN received environment, genuinely fails
+(`INFO: Could not find files for the given pattern(s)`, returncode 1). So
+the stripped environment IS what the new process receives once it exists.
+What differs is resolving the bare executable NAME `"pwsh"` to start that
+process in the first place: Windows resolves a bare command name using the
+PARENT process's own environment for that search, not the `env` dict handed
+to the child being created - exactly the outcome the brief pre-named ("the
+process-creation call resolves it using the PARENT process's environment,
+not the child environment being passed in").
+
+1. **Which outcome:** the call succeeded anyway (outcome 2 of 3). Not a
+   failure and not a timeout.
+2. **No failure text exists to report.** `returncode` is `0` and both
+   `stdout` and `stderr` are empty. Absence of PowerShell 7 was **not
+   reproduced** by this probe on this machine, so there is nothing to
+   quote as "what a user would see," and no failure text is substituted
+   here from a guess about what one would probably look like. Per the
+   pre-named handling for this outcome: this is not read as evidence that
+   the failure mode is benign, and the strip is not judged to have "failed"
+   either - `pwsh_after_stripping: null` and the `cmd`/`where` check above
+   both show the stripped environment was genuinely PATH-less for `pwsh`
+   from the child's own point of view. What defeated the probe is a
+   property of how the parent process asks Windows to CREATE the child
+   when given a bare name, not a leak in the environment dict itself.
+3. **Named residual limits:**
+   - Only the bare-`pwsh` resolution path (as this repo's hook already
+     invokes it, `hooks/hooks.json:10`/`:22`) was measured. Entry points
+     that today name `powershell.exe` explicitly (the `must-change` rows
+     in this record's inventory) were not probed here, since nothing about
+     them changes until a migration edits them.
+   - The harness's own presentation of a hook failure - what Claude Code's
+     hook runner shows a user when a `PostToolUse`/`PostToolUseFailure`
+     command hook errors - was not measured by this probe. This probe only
+     captures what the OS-level child process produced.
+   - **What this probe actually measured, and what it did not.** It proved
+     that stripping `PATH` of every directory holding `pwsh.exe` does not,
+     by itself, reproduce "PowerShell 7 is absent" on this machine when the
+     caller names the executable barely (as the shipped hook does) via
+     Python's `subprocess.run`. It did not measure the refusal message a
+     user sees when `pwsh` is genuinely absent, because genuine absence was
+     not achieved. What would prove it: a machine, container, or CI runner
+     with PowerShell 7 genuinely not installed anywhere on it (no
+     `Program Files\PowerShell\7`, no WindowsApps alias, no `App Paths`
+     registry entry) - not a PATH-stripped child of a machine that has it.
+   - This machine has two resolvable copies of `pwsh.exe`
+     (`C:\Program Files\PowerShell\7\pwsh.exe` and
+     `C:\Users\Brandon\AppData\Local\Microsoft\WindowsApps\pwsh.exe`, per
+     Measurement 2's own `where.exe pwsh` output); both directories were
+     confirmed stripped from the child's `PATH` string, and the outcome
+     above still occurred, so a wider PATH search was not the gap here.
 
 ## Measurement 5: what is saved
 

@@ -1099,3 +1099,15 @@ docs/superpowers/plans/rounds/2026-08-22-item48-pwsh7-feasibility/reexec/run.py	
 docs/superpowers/plans/rounds/2026-08-22-item48-pwsh7-feasibility/reexec/run.py	115	launch	6f83cb40c9a3	test-harness	no-change
 docs/superpowers/plans/rounds/2026-08-22-item48-pwsh7-feasibility/reexec/run.py	116	launch	12c5a12c13bc	test-harness	no-change
 docs/superpowers/plans/rounds/2026-08-22-item48-pwsh7-feasibility/reexec/run.py	179	host	c07dd1758ab4	host-pin-nonexec	no-change
+docs/superpowers/plans/rounds/2026-08-22-item48-pwsh7-feasibility/missing-pwsh/probe.py	2	host	ff6fa2f2ed71	not-a-launch	no-change
+docs/superpowers/plans/rounds/2026-08-22-item48-pwsh7-feasibility/missing-pwsh/probe.py	4	host	4a8cc9c6951c	not-a-launch	no-change
+docs/superpowers/plans/rounds/2026-08-22-item48-pwsh7-feasibility/missing-pwsh/probe.py	6	host	f0d94e317c32	not-a-launch	no-change
+docs/superpowers/plans/rounds/2026-08-22-item48-pwsh7-feasibility/missing-pwsh/probe.py	27	host	87df9b259666	host-pin-nonexec	no-change
+docs/superpowers/plans/rounds/2026-08-22-item48-pwsh7-feasibility/missing-pwsh/probe.py	37	host	28fa39a86803	host-pin-nonexec	no-change
+docs/superpowers/plans/rounds/2026-08-22-item48-pwsh7-feasibility/missing-pwsh/probe.py	39	host	e698b4cfd737	host-pin-nonexec	no-change
+docs/superpowers/plans/rounds/2026-08-22-item48-pwsh7-feasibility/missing-pwsh/probe.py	49	host	719cd0ae4888	not-a-launch	no-change
+docs/superpowers/plans/rounds/2026-08-22-item48-pwsh7-feasibility/missing-pwsh/probe.py	56	host	ba4f4e38368b	not-a-launch	no-change
+docs/superpowers/plans/rounds/2026-08-22-item48-pwsh7-feasibility/missing-pwsh/probe.py	56	launch	ba4f4e38368b	not-a-launch	no-change
+docs/superpowers/plans/rounds/2026-08-22-item48-pwsh7-feasibility/missing-pwsh/probe.py	61	host	3ac513f8ec11	host-pin-nonexec	no-change
+docs/superpowers/plans/rounds/2026-08-22-item48-pwsh7-feasibility/missing-pwsh/probe.py	62	launch	e35a4094ec11	test-harness	no-change
+docs/superpowers/plans/rounds/2026-08-22-item48-pwsh7-feasibility/missing-pwsh/probe.py	70	launch	6f83cb40c9a3	test-harness	no-change
