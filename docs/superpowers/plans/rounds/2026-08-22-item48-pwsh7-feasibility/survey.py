@@ -179,7 +179,17 @@ MIGRATION = {"must-change", "no-change", "unknown"}
 # line numbers that change on every re-run, and the record's own growing
 # prose would have gone stale and blocked Task 9 for a reason that is not
 # an entry point.
-EXEMPT_SUFFIXES = (".py", ".ps1")
+#
+# `.cmd` ADDED at the whole-branch review's Fable seat: the comment above
+# already claimed "anywhere under docs/", but the code only tested `.py`
+# and `.ps1` - the widening fix left a narrower version of the exact gap
+# it closed. This repo has a live `.cmd` executable this record itself
+# classifies `must-change`
+# (`evals/multi-model-verify/fixtures/stub-appserver/stub-appserver.cmd`),
+# so the suffix list is widened to match what the comment already claimed,
+# not narrowed to match what the code enforced. `git ls-files 'docs/*'`
+# has no `.cmd` today, so this is latent, the same way `.py`/`.ps1` were.
+EXEMPT_SUFFIXES = (".py", ".ps1", ".cmd")
 EXEMPT_EXACT = (
     "docs/superpowers/plans/2026-08-22-item48-pwsh7-feasibility.md",
 )

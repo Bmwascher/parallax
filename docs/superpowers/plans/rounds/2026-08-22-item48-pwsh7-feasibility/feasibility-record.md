@@ -626,14 +626,15 @@ that has changed or gone. It does NOT prove any classification is CORRECT,
 and it does not prove the three families detect every entry point.
 
 **Why a re-run today prints different numbers — TWO causes, not one
-(corrected in the final-review fix; the number below was also stale until
-this fix re-ran the command rather than copying an old table).**
+(corrected in the final-review fix; the numbers below moved AGAIN after
+the Fable whole-branch review's own fix, and were re-run rather than
+copied a third time).**
 Re-running the survey command above after this section existed prints
-`7481 hits, 7481 classified, 0 unclassified, 0 stale`, still exit code `0`
+`7484 hits, 7484 classified, 0 unclassified, 0 stale`, still exit code `0`
 — higher than the 7163 captured above, for two DIFFERENT reasons that this
 record previously conflated into one:
 
-1. **The hit-count growth** (7163 -> 7481, the `survey.py` run's own
+1. **The hit-count growth** (7163 -> 7484, the `survey.py` run's own
    total). This section's own prose quotes `powershell.exe`, `pwsh.exe` and
    `.ps1` text about the inventory, adding matches inside
    `feasibility-record.md` itself. That file is covered by the `docs/`
@@ -647,15 +648,18 @@ record previously conflated into one:
    (commit `8b8918c`) added 12 for `<REC>/missing-pwsh/probe.py` — both
    scratch files this investigation itself created, under the `docs/`
    prefix but matched by `EXEMPT_SUFFIXES`, which forces an explicit row
-   for any `.py`/`.ps1` file rather than letting the prefix row cover it.
+   for any exempt-suffix file rather than letting the prefix row cover it.
    33 rows (21 + 12) accounts for the table's total moving from 1078 to
-   1111; a further 3 rows, added by this final review's own Important 3
-   fix to `survey.py`'s own comment prose (the same self-quoting effect
-   as cause 1 above, but landing as classified rows because `survey.py`
-   itself sits under `EXEMPT_SUFFIXES`, not the `docs/` prefix), move the
-   table's actual total to 1114 below. Rows-versus-hits is a separate
-   distinction, explained where the table sits, and does not by itself
-   explain why the table's OWN total changed.
+   1111. Two later fixes to `survey.py` itself added a further 5 rows the
+   same way (the same self-quoting effect as cause 1 above, but landing as
+   classified rows because `survey.py` sits under `EXEMPT_SUFFIXES`, not
+   the `docs/` prefix): 3 from the final-review Important 3 fix's own
+   comment prose (1078 -> 1111 -> 1114), and 2 more from the Fable
+   whole-branch review's Minor 4 fix, which added `.cmd` to
+   `EXEMPT_SUFFIXES` and, in the comment explaining why, added 2 more
+   self-matching lines (1114 -> 1116, the table's actual total below).
+   Rows-versus-hits is a separate distinction, explained where the table
+   sits, and does not by itself explain why the table's OWN total changed.
 
 ### Classification counts
 
@@ -664,7 +668,7 @@ Produced by, re-run for this fix rather than copied from an earlier table:
 
 | count | classification |
 |---|---|
-| 609 | not-a-launch |
+| 611 | not-a-launch |
 | 227 | test-harness |
 | 106 | doc-instruction |
 | 54 | launch-nonhost |
@@ -676,9 +680,9 @@ Produced by, re-run for this fix rather than copied from an earlier table:
 | 5 | host-pin-exec |
 | 1 | record |
 
-One row of the 7481 hits is a prefix row (`docs/	*	*	-	record	no-change`);
+One of the 1116 rows is a prefix row (`docs/	*	*	-	record	no-change`);
 the count above is the per-row classification, not per-hit, so the table's
-total (1114) is the hand-written row count, not the hit count (7481) the
+total (1116) is the hand-written row count, not the hit count (7484) the
 prefix row also covers.
 
 ### `must-change` rows, whole file
@@ -783,17 +787,20 @@ were classified by this task.
   DIFFERENT `ConvertFrom-Json` types for the same value; the test's whole
   premise is the divergence between two hosts, so it must be removed with
   5.1.
-- `evals/multi-model-verify/test_multi_model_verify.py:2954`, `:2961`,
-  `:2999` — `os.name != "nt"` skip-reason strings and comments naming
-  "drives powershell.exe"; the module they gate hardcodes `powershell.exe`
-  (see the next bullet, `:2960`/`:2962`/`:2998`/`:3000`) and must change
-  with it.
-- `evals/multi-model-verify/test_multi_model_verify.py:2960`, `:2962`,
-  `:2998`, `:3000` — the two `subprocess.run(["powershell.exe", ...])`
-  calls (`test_run_state_machine` and `TestBriefEncodingOverStdin._run`)
-  and their `"-File", str(...)` argument-list halves; both hardcode
-  `powershell.exe` as the literal interpreter and must be changed to
-  `pwsh.exe`.
+- `evals/multi-model-verify/test_multi_model_verify.py:2954` — the
+  ONE genuine `os.name != "nt"` skip-reason string, naming "drives
+  powershell.exe"; the module it gates hardcodes `powershell.exe` (see the
+  next bullet) and must change with it.
+- `evals/multi-model-verify/test_multi_model_verify.py:2960`-`:2962`,
+  `:2998`-`:3000` — corrected grouping (an earlier draft misdescribed
+  `:2961` and `:2999` as skip-reason strings/comments; they are not): the
+  two `subprocess.run(["powershell.exe", ...])` calls (`test_run_state_
+  machine` and `TestBriefEncodingOverStdin._run`), each spanning the
+  call's opening (`:2960`/`:2998`), the literal `["powershell.exe", ...]`
+  interpreter array itself (`:2961`/`:2999` — the actual hardcode), and
+  the `"-File", str(...)` argument-list half (`:2962`/`:3000`); all six
+  lines hardcode, or belong to a call that hardcodes, `powershell.exe` as
+  the literal interpreter and must be changed to `pwsh.exe`.
 - `evals/multi-model-verify/test_review_mirror.py:38` — comment stating
   the `powershell-hosts` job "runs this module under BOTH powershell.exe
   and pwsh.exe"; the 5.1 half must go.
@@ -930,7 +937,7 @@ here.
   and a migration would have to edit it exactly like its two neighbours.
   `survey.py` was NOT widened to catch this shape: every count in this
   task was measured against the filter as it stands, and widening it now
-  would invalidate all 1114 hand-written rows and this whole inventory.
+  would invalidate all 1116 hand-written rows and this whole inventory.
   The plan's own remedy for a known miss is to NAME it, as this bullet
   and the bare-`git` bullet below both do, not to chase it into the
   filter. Consequence stated plainly: the `must-change` count above (83)
@@ -1152,9 +1159,12 @@ modules, is direct evidence that a `pwsh.exe` host existed and worked on
 job that a self-skipping module could have produced the same way with no
 host at all: one of those eleven modules, `test_lock_protocol_live.py`,
 calls `required_hosts()`, which `## Measurement 3` (`:1463`-`:1471`
-below) documents as the only host-selector in this repo that FAILS rather
-than skips when a host is missing, making a pass of that module the
-strongest host-presence evidence this record has, not just a green
+below) documents as FAILING rather than skipping when a host is missing —
+not the only resolver in this repo that does so (`## Measurement 5` Step 6
+corrects that uniqueness claim, `:1837`-`:1866`), but that is not what the
+argument here needs: if `pwsh` had been absent, this call would have
+FAILED, not skipped, so the module could not have produced a green run
+without both hosts actually present, not just a green
 conclusion taken at face value. This proves PowerShell 7 was present and
 functional on that one runner image on
 that one date; it does not prove every future `windows-latest` image
@@ -1211,7 +1221,7 @@ command on a machine this session cannot reach.
 
 **The half-requirement that already exists regardless of any migration:**
 `hooks/hooks.json:10` and `:22` (both rows present in
-`entry-points.tsv:159-160` (`host` family) and `:424-425` (`launch`
+`entry-points.tsv:159-160` (`host` family) and `:429-430` (`launch`
 family), classified `host-pin-exec` / `launch-explicit`, `no-change`) each
 invoke `"command": "pwsh -NoProfile -NonInteractive -File
 \"${CLAUDE_PLUGIN_ROOT}/hooks/superpowers-review-companion.ps1\""`. Any
@@ -1321,7 +1331,7 @@ it were one of the 21):
   a test double standing in for an external app server INSIDE the test
   suite, not a script the product ships to run in production. (Its sibling
   `stub-appserver.cmd` already has its own `must-change` row in
-  `entry-points.tsv:70`/`:220` for hardcoding `powershell.exe`, so this
+  `entry-points.tsv:70`/`:225` for hardcoding `powershell.exe`, so this
   exclusion is not hiding that finding, only scoping THIS table to scripts
   under the four brief-named directories.)
 - `evals/multi-model-verify/fixtures/stub-codex/stub-codex.ps1` - the same
@@ -1466,11 +1476,12 @@ c. **`ConvertFrom-Json` returns `String` on 5.1 and `DateTime` on 7 for the
    measures this directly - the exact coercion behind the 0.16.0 lane lock
    that "did not lock" (`skill-evals.yml:50`-`:53`,
    `2026-07-27-0150-backlog.md:3473`-`:3477`). Its `required_hosts()`
-   helper (`:77`-`:91`) is the only host-selection function found anywhere
-   in this repo's test suite that FAILS rather than skips when a host is
-   missing (`:83`-`:89`: "an unavailable host fails it rather than reading
-   as a skip"), which makes a pass of this test the strongest single piece
-   of host-presence evidence this record has found. Its module IS one of
+   helper (`:77`-`:91`) FAILS rather than skips when a host is missing
+   (`:83`-`:89`: "an unavailable host fails it rather than reading as a
+   skip") — not the only resolver in this repo that does so (`##
+   Measurement 5` Step 6 corrects that, `:1837`-`:1866`), but a pass of
+   this test is still real host-presence evidence for the same reason: a
+   missing host would have failed it, not skipped it. Its module IS one of
    the eleven, so the cited green run covers it. Verdict: **covered under
    7** - and the coverage is BILATERAL: `required_hosts()` demands both
    `powershell.exe` and `pwsh.exe` by literal name, so this exact test
@@ -1525,10 +1536,12 @@ in one case measured under this record's own Measurement 1, but not
 covered by anything the dual-host CI job runs today. Three more
 host-sensitive behaviours turned up beyond item 48's named five (native
 stderr promotion, reparse-point traversal, and the Measurement-20
-`ConvertFrom-Json` type divergence); one of those three is itself the
-strongest single piece of coverage evidence in this whole record, and is
-also the one asset a 5.1 drop would destroy outright - see Step 3 above
-and the forward pointer to Measurement 5. No percentage is given for any
+`ConvertFrom-Json` type divergence); one of those three is real,
+fail-hard-on-a-missing-host coverage evidence (not ranked here as the
+single strongest piece in the record - see `## Measurement 5` Step 6,
+`:1837`-`:1866`, for why that superlative was dropped), and is also the
+one asset a 5.1 drop would destroy outright - see Step 3 above and the
+forward pointer to Measurement 5. No percentage is given for any
 of these counts: the tables above are the width of what this task
 measured, and a single number would claim more precision than 10-of-16
 scripts, 2-of-5 named traps, or 3-of-8 total behaviours supports.
