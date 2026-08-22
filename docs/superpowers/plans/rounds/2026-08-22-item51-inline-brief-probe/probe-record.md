@@ -119,11 +119,22 @@ double a trailing backslash run.
 
 ```powershell
 function Esc([string]$s) {
-  $s = $s -replace '(\*)"', '$1$1\"'
-  $s = $s -replace '(\+)$', '$1$1'
+  $s = $s -replace '(\\*)"', '$1$1\"'
+  $s = $s -replace '(\\+)$', '$1$1'
   return '"' + $s + '"'
 }
 ```
+
+**The first committed version of this record printed a BROKEN form of that
+function**, with `'(\*)"'` and `'(\+)$'` — single backslashes, which match a
+literal asterisk and a literal plus and therefore escape nothing. That was
+the draft measured FAILING during this probe, transcribed into the record
+by mistake; the measurement above was made with the form now shown. Anyone
+who had built the item 51 fix from the earlier snippet would have built a
+non-escaping escaper that passes review by looking right. It is recorded
+rather than silently corrected because it is an instance of the same class
+this record exists to document: a claim whose supporting artifact does not
+support it. Found by the Fable lane, 2026-08-22.
 
 ## A third finding, not in item 51: the inline path has a hard ceiling
 
