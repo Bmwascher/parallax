@@ -64,12 +64,26 @@ TSV = HERE / "entry-points.tsv"
 # Nobody has produced a tenth. That is the only honest statement available,
 # and it is not the same as saying there is none.
 #
-# ONE KNOWN MISS IS LEFT IN DELIBERATELY, with its instance named. Bare
-# `git` invocations - tools/check-drift.ps1:987, `git -C $worktree commit`
-# - are NOT matched. Matching bare `git` costs 179 further hits, almost all
-# of them prose and shell plumbing, against a class that never starts a
-# PowerShell host. That is a measured trade and not an empty set: the
-# instance above is real and is not in the inventory.
+# TWO KNOWN MISSES ARE LEFT IN DELIBERATELY, with each instance named.
+# (Was ONE; the second was found after this comment was first written and
+# this comment went stale until the debate-round-1 fix caught it - the
+# same defect class this whole filter exists to measure, inside the
+# comment that tracks the filter's own known gaps.)
+#
+# 1. Bare `git` invocations - tools/check-drift.ps1:987, `git -C
+#    $worktree commit` - are NOT matched. Matching bare `git` costs 179
+#    further hits, almost all of them prose and shell plumbing, against a
+#    class that never starts a PowerShell host. That is a measured trade
+#    and not an empty set: the instance above is real and is not in the
+#    inventory.
+# 2. README.md:412 - a flagless invocation whose only trailing token is a
+#    comment, not a flag - is NOT matched by any of the three families'
+#    alternatives. Described in full in feasibility-record.md's own
+#    `### What this method cannot see` bullet rather than repeated here.
+#    Widening the filter to catch this one named, already-worked-around
+#    shape would add new hits needing their own classification and move
+#    every published count downstream - a cost this branch's own commit
+#    history has already demonstrated, not merely argued.
 #
 # The third family matches INVOCATION shapes rather than every mention of a
 # script. Its alternatives, and why each is here, all measured 2026-08-22:
