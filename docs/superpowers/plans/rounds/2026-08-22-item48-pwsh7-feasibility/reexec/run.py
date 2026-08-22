@@ -22,6 +22,12 @@ HERE = Path(__file__).resolve().parent
 PS51 = r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
 PWSH = r"C:\Program Files\PowerShell\7\pwsh.exe"
 
+# A dict .get(k) default of None is indistinguishable from a key that is
+# PRESENT with value None. _MISSING is a sentinel no real bound parameter
+# can ever equal, so "absent from one side" and "present as null" compare
+# unequal, as they must.
+_MISSING = object()
+
 # Hostile on purpose. Every one of these appears in a real brief, a real
 # path or a real flag somewhere in this repo.
 PAYLOAD = [
@@ -155,18 +161,23 @@ def run_named(host, form):
         # indistinguishable from "nothing differed", and the measurement
         # table asks every arm for a first difference.
         #
-        # Compare the UNION of expected and received keys. Iterating only
-        # the expected ones returns None when the child bound everything
-        # correctly AND added a parameter nobody sent - stage B is false,
-        # and the field that says WHY says nothing. The current child
-        # writes exactly the three expected keys so that state is not
-        # reachable today; the field is written not to lie if it ever is.
+        # Compare the UNION of expected and received keys, each side read
+        # with the _MISSING sentinel rather than a `None` default, so a key
+        # ABSENT from one dict is always a difference from a key PRESENT
+        # with value `None` in the other - a plain `.get(k) != .get(k)`
+        # comparison would miss that case, since both calls fall through to
+        # the same `None` default. Iterating only the expected keys would
+        # also return None when the child bound everything correctly AND
+        # added a parameter nobody sent - stage B is false, and the field
+        # that says WHY says nothing. The current child writes exactly the
+        # three expected keys so neither state is reachable today; the
+        # field is written not to lie if either ever is.
         "first_difference": next(
             (k for k in sorted(set(NAMED_EXPECTED)
                                | (set(child_bound)
                                   if isinstance(child_bound, dict) else set()))
              if not isinstance(child_bound, dict)
-             or child_bound.get(k) != NAMED_EXPECTED.get(k)),
+             or child_bound.get(k, _MISSING) != NAMED_EXPECTED.get(k, _MISSING)),
             None),
         "unparseable_output": broken_output,
         "parent_bound": parent_bound,

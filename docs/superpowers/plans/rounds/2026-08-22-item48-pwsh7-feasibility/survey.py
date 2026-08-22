@@ -147,9 +147,16 @@ CLASSES = {
 }
 MIGRATION = {"must-change", "no-change", "unknown"}
 
-# A prefix row NEVER covers an EXECUTABLE file, anywhere under `docs/`,
-# because classifying one wholesale as `record - never executed` would
-# attest the opposite of the truth.
+# A prefix row never covers a file under `docs/` whose name ends,
+# case-sensitively, in one of EXEMPT_SUFFIXES below, or that matches
+# EXEMPT_EXACT exactly. That is the WHOLE test - not "any executable
+# file", which this comment claimed twice before and which the code has
+# never actually enforced. A `.BAT`, `.PSM1`, `.SH`, or an upper-cased
+# `.PS1`/`.PY`/`.CMD` under `docs/` would still be swallowed by a prefix
+# row as `record - never executed`; none exists in this repo today
+# (checked directly: `git ls-files 'docs/*'` has no such name, in any
+# case), so this is a stated, checked scope limit on the guard, not a
+# silent gap in it.
 #
 # Enforced HERE rather than by an instruction, because an instruction to
 # "add explicit rows" had no oracle: `--emit` prints only UNCLASSIFIED
@@ -189,6 +196,16 @@ MIGRATION = {"must-change", "no-change", "unknown"}
 # so the suffix list is widened to match what the comment already claimed,
 # not narrowed to match what the code enforced. `git ls-files 'docs/*'`
 # has no `.cmd` today, so this is latent, the same way `.py`/`.ps1` were.
+#
+# THIRD occurrence of this comment overclaiming what the code enforces -
+# widened twice already (`.py`/`.ps1` freed from EXEMPT_PREFIXES, then
+# `.cmd` added), and each fix reproduced a narrower version of the same
+# gap. Debate round 1 stops widening the tuple: the opening paragraph
+# above now states EXACTLY the test the code runs - suffix, case-
+# sensitive, exact-path - instead of a general "any executable file"
+# claim the code was never going to fully enforce. Widening the tuple
+# again would only postpone the next instance; stating the true scope
+# ends the class, because there is no narrower truth left to overclaim.
 EXEMPT_SUFFIXES = (".py", ".ps1", ".cmd")
 EXEMPT_EXACT = (
     "docs/superpowers/plans/2026-08-22-item48-pwsh7-feasibility.md",

@@ -1018,6 +1018,21 @@ ALPHABETICAL order over the union of expected and received keys
 first and also differed for `ps51/splat/named`; `path` sorts first
 alphabetically, which is why it is the name shown.
 
+**Comparison fixed after the debate round-1 review, results unaffected.**
+The comparison at `run.py:164-166` originally read each side with a plain
+`.get(k)` (`None` default), which cannot tell "key absent" from "key
+present with value `None`" - a child that bound every expected key
+correctly but also emitted one extra key holding `null` would still show
+`first_difference: null`, contradicting its own `stage_b_child_exact:
+false`. Fixed to read both sides with a sentinel default instead of
+`None`, so absence and an explicit null no longer compare equal. **The
+eight stored arms above predate this fix and are unaffected by it**: the
+child script emits exactly the three expected keys in every arm run for
+this measurement, so the blind spot was never reachable in the data
+`results.json` holds, only in a shape no arm actually produced. Verified
+by rereading `child-named.ps1` and `results.json`, not by rerunning the
+probe - the round-1 brief that ordered this fix also forbade rerunning it.
+
 | host | form | shape | return code | child ran | stage A exact | stage B exact | first difference |
 |---|---|---|---|---|---|---|---|
 | ps51 | splat | positional | 0 | yes | true | **false** | index 2 (`has"quote`) |
