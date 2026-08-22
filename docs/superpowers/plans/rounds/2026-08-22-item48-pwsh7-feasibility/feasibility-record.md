@@ -1241,51 +1241,82 @@ it is cited here, not re-derived.
 
 The other side of "maintenance" - what this change costs to MAKE, as
 opposed to what running two hosts costs going forward - is the entry point
-inventory's own count, already recorded above (`## Entry point inventory`,
-line 369 of this record): **83 `must-change` rows, plus 3 further rows left
-`unknown`** because their answer depends on the environment the code runs
-in rather than on the line itself. That number lives in one place in this
-record (the `## Entry point inventory` section); it is not restated from
-memory here, only pointed at.
+inventory's own count, already recorded above (`## Entry point inventory`).
+That section's own text, not restated from memory here: **"at least 83"**,
+not a flat 83 - `feasibility-record.md:369`-`:370` states the count "is
+therefore known to be deflated by at least this one instance" (the
+`README.md:412` miss, named there), and `:377`-`:378` adds "this list is
+not itself provably complete, and a blind-spot list that reads as complete
+is the same defect one level up." So the figure carried into this ledger is
+**at least 83 `must-change` rows, plus 3 further rows left `unknown`,
+known-deflated and not provably complete** - the same discipline Step 2
+above already applied to item 48's own timing caveat, applied here to the
+edit-cost side.
 
 ### Step 6: the cost side - the bilateral test, verified against source
 
 Measurement 3 flagged `evals/multi-model-verify/test_lock_protocol_live.py:379`-
 `:390` forward to this section rather than resolving it itself. Verified
 directly against the source, not taken from the forward pointer's
-characterization:
+characterization.
+
+**Correction to an earlier draft of this section, recorded rather than
+silently fixed.** An earlier draft claimed this file's own `ps_host()`
+"tolerates a missing host by skipping" and that `required_hosts()` "is the
+only one in this repo that FAILS instead", then attributed a "single
+strongest piece of host-presence evidence" superlative to the module
+docstring. Both claims were checked against the source during this
+fix-round and both are wrong:
+
+- `ps_host()` itself (`:63`-`:74`) calls `pytest.fail` (`:69`-`:73`), not
+  `pytest.skip`. Its own docstring says so directly: "A host that fails to
+  resolve is a setup failure, not a reason to skip" (`:67`-`:68`).
+- `test_lane_credential_live.py`'s `host()` fixture (`:54`-`:62`) also
+  calls `pytest.fail` (`:57`-`:61`), under its own banner: "Every failure
+  here is `pytest.fail`, never `pytest.skip`" (`:51`-`:52`).
+- The "single strongest piece of host-presence evidence" line was this
+  task's own judgment, presented as though the module docstring (`:14`-
+  `:23`) said it. It does not; that docstring's own words are quoted above
+  and say only that a resolvable-but-missing host is a FAILED measurement
+  here, never a skipped one. Dropped rather than re-attributed, since it
+  added a claim of comparative strength this task cannot actually rank
+  against every other measurement in the record.
+
+**The narrow claim that IS true, verified directly:** `required_hosts()`
+(`:77`-`:91`) loops over the literal tuple `("powershell.exe", "pwsh.exe")`
+(`:83`) and fails if EITHER is missing. `ps_host()` and `host()` above both
+fail-hard too, but only when NO host resolves at all - either one of the
+two suffices to satisfy them. `required_hosts()` is the only resolver
+found in this repo that is not satisfied by a machine holding just one of
+the two hosts; a machine with only `pwsh` on PATH, which is exactly what a
+5.1 drop aims for, fails this specific gate by design.
 
 - `test_measurement_20_ticks_and_date_string_types_diverge_across_hosts`
   (`:379`-`:390`) calls `required_hosts()` (`:380`), then runs the SAME
   script under `hosts["powershell.exe"]` and `hosts["pwsh.exe"]`
-  (`:381`-`:382`) and asserts the two hosts report DIFFERENT
-  `ConvertFrom-Json` types for the same value - `String` on 5.1,
-  `DateTime` on 7 (`:389`-`:390`). Its entire premise is the divergence
-  BETWEEN the two hosts; there is no way to rewrite it to run under one
-  host and still test what it exists to test, because "these two things
-  differ" requires both things.
-- `required_hosts()` itself (`:77`-`:91`) loops over the literal tuple
-  `("powershell.exe", "pwsh.exe")` (`:83`) and calls `pytest.fail` (`:86`-
-  `:89`) - not `pytest.skip` - if either binary is not found on PATH. Read
-  against the rest of this file's module docstring (`:14`-`:23`): every
-  OTHER host-selection function in this repo's test suite (the sibling
-  pattern named at `test_codex_context_probe.py:35`-`:67`, and this same
-  file's own `ps_host()` at `:63`-`:74`, which reads `PARALLAX_PS_HOST` or
-  falls back to whichever single host is on PATH) tolerates a missing host
-  by skipping. `required_hosts()` is the only one in this repo that FAILS
-  instead - a red mark on the gate, not a quiet skip - when either host is
-  absent. That makes it, as the module docstring itself claims
-  (`:16`-`:23`), the single strongest piece of host-presence evidence this
-  whole investigation has, and it exists only because BOTH hosts are
-  required by name.
+  (`:381`-`:382`) and asserts FOUR things: both hosts report `Int64` for
+  the same tick value (`:387`-`:388`), and the two hosts report DIFFERENT
+  `ConvertFrom-Json` types for the same date string - `String` on 5.1
+  (`:389`), `DateTime` on 7 (`:390`).
 
-**Verified: dropping 5.1 destroys this test.** It is not editable into a
-one-host form; deleting the 5.1 half of `required_hosts()`'s tuple removes
-the premise the test asserts. That is not a saving - it is an asset the
-change consumes, and it belongs on the cost side.
+**What a 5.1 drop actually destroys here, stated precisely rather than as
+a blanket "destroyed."** Two of those four assertions are single-host
+facts about PowerShell 7 that need nothing from 5.1 to keep asserting:
+`assert pwsh_report["ticksType"] == "Int64"` (`:388`) and `assert
+pwsh_report["whenType"] == "DateTime"` (`:390`). The fail-closed harness
+that produces `pwsh_report` - `measure_type_report` (`:353`-`:377`) and
+`TYPE_REPORT_SCRIPT` (`:344`-`:351`) - survives unchanged. A rewrite that
+drops the `ps1_report` half keeps a genuine regression pin on the exact
+`ConvertFrom-Json` coercion the lock code compensates for on the one host
+that would remain. **What is actually destroyed, and cannot be edited
+around, is narrower: the CROSS-HOST DIVERGENCE claim itself** - the
+demonstration that the two hosts disagree, which by definition needs both
+hosts to exist at once. That is still a real, uneditable loss; it is just
+smaller than "the test's entire value."
 
-**Is it the only one?** Searched three ways, not just re-read the forward
-pointer:
+**Is it the only one?** Searched four ways this round, not just re-read
+the forward pointer - the fourth added after the first fix-round's sweep
+was shown to miss a live instance:
 
 1. `grep -rn "required_hosts\|diverge" evals/multi-model-verify/*.py
    evals/tools/*.py` - the only other hit inside this file is
@@ -1300,40 +1331,109 @@ pointer:
    `pwsh.exe` instead without losing what it tests - its value comes from
    testing the fail-closed helper, not from comparing two hosts. So it
    shares the same fatal gate today but is not, itself, a bilateral asset.
-2. A script (see the tool call recorded in this task's report) searched
-   every `evals/multi-model-verify/*.py` and `evals/tools/*.py` function
-   body for BOTH literal host names co-occurring in the same function.
-   Besides the two above, it found: `check_host_parity` in
-   `evals/tools/check_workflow_paths.py` (`REQUIRED_HOST_NAMES` at `:85`)
-   and its unit tests `test_check_workflow_paths_flags_host_parity_gap` /
-   `test_check_workflow_paths_refuses_a_duplicate_host_step`
+2. The original co-occurrence script (function/class bodies containing
+   BOTH literal `"powershell.exe"` and `"pwsh.exe"`) found: `check_host_parity`
+   in `evals/tools/check_workflow_paths.py` (`REQUIRED_HOST_NAMES` at
+   `:85`) and its unit tests `test_check_workflow_paths_flags_host_parity_gap`
+   / `test_check_workflow_paths_refuses_a_duplicate_host_step`
    (`test_backup_lane.py`, already itemized in this record's own
    `must-change` list), plus `test_no_module_claims_ci_skips_the_windows_suites`
    (`test_backup_lane.py:1707`-`:1747`). All three require BOTH host NAMES
    to appear as declared steps in the CI workflow TEXT - a parity/coverage
    check on the YAML, not a live measurement of either host's runtime
-   behaviour. Per this record's own `must-change` list, dropping 5.1 means
-   these get REWRITTEN to require `pwsh.exe` alone, the same way the
-   workflow step itself gets edited rather than the checker losing its
-   reason to exist - a cost already counted once in the edit-cost figure
-   above, not a second, separate asset destroyed.
-3. No other `subprocess.run` call anywhere in the two directories was
-   found comparing a result from `powershell.exe` against a result from
-   `pwsh.exe` within the same assertion.
+   behaviour. These get REWRITTEN to require `pwsh.exe` alone, a cost
+   already counted once in the edit-cost figure above, not a second,
+   separate asset destroyed.
+3. **Corrected sweep, this round.** The original script keyed only on the
+   `"powershell.exe"` / `"pwsh.exe"` literal spellings. `gh`-independent
+   re-run with the bare-name spelling too -
+   `grep -rn 'which("powershell"\|which("pwsh"' evals/multi-model-verify/*.py
+   evals/tools/*.py`, plus a repeat of the same function/class-body script
+   checking `which("powershell")` and `which("pwsh")` co-occurrence - found
+   one function this task had not previously flagged as bilateral:
+   `TestTheFramesGoOutIntactOnBothHosts.test_the_first_frame_reaches_the_server_with_no_byte_order_mark`
+   (`test_codex_tool_surface_probe.py:490`-`:529`). Its docstring
+   (`:509`-`:511`) states its purpose outright: "This case is the one that
+   does not depend on which host the suite happened to pick: it drives
+   EVERY host present... a green suite on one host proves one
+   interpreter." At `:515`-`:516` it builds `hosts = [h for h in
+   (shutil.which("powershell"), shutil.which("pwsh")) if h]` and at
+   `:521`-`:529` asserts the SAME clean verdict under each host present.
+   Everything else the corrected sweep turned up under the bare spelling
+   was the single-host `PARALLAX_PS_HOST or shutil.which("powershell") or
+   shutil.which("pwsh")` OR-fallback selector, already named per-file in
+   the `must-change` list - a preference chain that resolves to ONE host,
+   not a comparison between two, so those are not added here.
+4. No other `subprocess.run` call anywhere in the two directories was
+   found comparing a result from one host against a result from the other
+   within the same assertion, under either spelling.
 
-**Conclusion: `test_measurement_20_ticks_and_date_string_types_diverge_across_hosts`
-(`test_lock_protocol_live.py:379`-`:390`) is the only test found whose
-entire value comes from comparing the two hosts' live BEHAVIOUR against
-each other, in a way no edit can preserve on one host.** Everything else
-found either (a) shares the same fail-hard `required_hosts()` gate without
-itself being a cross-host comparison (item 1 above - destroyed as written,
-but rewritable to test the same thing on one host), or (b) requires both
-host NAMES in declared CI text, which the must-change list already prices
-as an edit, not a destroyed asset (item 2 above).
+**`TestTheFramesGoOutIntactOnBothHosts`, added to the cost side, and why
+its shape differs from the divergence test.** Under the brief's own
+definition - anything that asserts two hosts behave the same or
+differently - this SAMENESS-form loop is bilateral too, even though it
+never compares the two hosts' results TO EACH OTHER (each host's result is
+checked against a fixed expectation, independently, inside the `for`
+loop). Its host-resolution line (`:515`) is already one of the 83
+`must-change` rows (Step 5's inventory: "`:40`, `:515` - the selector
+fallback, and a test that explicitly resolves both `shutil.which
+("powershell")` and `shutil.which("pwsh")` to drive every present host;
+both must lose their 5.1 half"), so editing it is already priced once.
+What is NOT already priced, and belongs here: unlike the parity checks in
+item 2 above, editing this test to a single host does not just trim
+prose - per its own docstring, its entire reason to exist is proving that
+a green run on ONE host does not hide a defect that only shows up on the
+OTHER (the BOM-on-first-frame defect at `:494`-`:507` is the exact case in
+point: 5.1-only, and twenty single-host-green cases missed it). With one
+host, the class of defect this test exists to catch - one worked, one
+didn't, and the suite stayed green anyway - can never again be
+demonstrated caught, because there is no longer a second host for the
+defect to hide on. The assertion form survives an edit; the guarantee it
+was built to provide does not.
+
+**Reconciling the destroyed-asset bullet against the 83, so the two do not
+silently overlap.** The `must-change` inventory already lists eight lines
+inside `test_lock_protocol_live.py` as `must-change`: `:21`, `:55`, `:71`,
+`:78`, `:83`, `:381`, `:382`, `:400` - all already inside the "at least 83"
+counted in Step 5. Putting "one test destroyed outright" on the cost side
+as a SEPARATE line item from the 83 would double-bill the same lines. It
+is not separate. What Step 6 adds beyond the 83's flat edit count is a
+CLASSIFICATION of what kind of edit those specific lines require: most of
+the eight (`:21`, `:55`, `:71`, `:78`, `:83`, and the host-resolution calls
+at `:381`-`:382`) are edited the same way every other selector-fallback
+line in the inventory is - drop the 5.1 half, keep going. But `:381`-`:382`
+feed the divergence assertion (`:389`-`:390` compared against `:387`-`:388`)
+that this step already narrowed above: THAT comparison, specifically,
+cannot survive any edit, no matter how the surrounding lines are rewritten
+- because "these two things differ" has no one-host form. So this is not a
+second destroyed asset on top of the 83; it is one finding, already
+counted once by row, about what the edit at those particular rows costs
+beyond a find-and-replace.
+
+**Conclusion.** Two bilateral mechanisms were found and verified against
+source this round, both already inside the 83 `must-change` rows by line
+count, both adding something the flat row count does not itself say:
+`test_measurement_20_ticks_and_date_string_types_diverge_across_hosts`
+(`:379`-`:390`) loses its cross-host divergence claim outright while its
+two pwsh-only assertions survive a rewrite; `TestTheFramesGoOutIntactOnBothHosts`
+(`test_codex_tool_surface_probe.py:490`-`:529`) loses the guarantee that a
+single-host-green suite cannot hide a host-specific defect, while its
+assertion FORM survives a rewrite to one host. Everything else found
+either (a) shares a fail-hard host-resolution gate without itself being a
+cross-host comparison (item 1 above - destroyed as written, but rewritable
+to test the same thing on one host), or (b) requires both host NAMES in
+declared CI text, which the must-change list already prices as an edit,
+not a destroyed asset (item 2 above).
 
 ### Ledger
 
-**Saved:**
+**Saved.** These four figures measure overlapping wall-clock (a GitHub CI
+job, a local full-suite pair, and a local three-pass gate all cover
+substantially the same PowerShell-facing test runs from different angles)
+and are deliberately never summed anywhere in this record. **They are not
+additive** - adding, say, the 23m25s CI figure to the 19m13s item-44 figure
+would double-count the same underlying test execution measured twice, on
+two different machines, by two different methods:
 - CI wall-clock: gross 20m58s-23m25s per run of the `powershell-hosts` job
   (Step 1), net not yet determined (bounded above by that range).
 - The already-recorded local pair, 32m23s/18m33s and 20m22s/18m50s, cited
@@ -1344,14 +1444,26 @@ as an edit, not a destroyed asset (item 2 above).
   brief transport, removed outright (Step 4).
 
 **Costs:**
-- 83 `must-change` edit rows (plus 3 `unknown`), already counted once in
-  `## Entry point inventory` (Step 5).
-- One test whose entire value is destroyed outright, not merely edited:
+- At least 83 `must-change` edit rows (plus 3 `unknown`), known-deflated
+  and not provably complete per the inventory's own words, already counted
+  once in `## Entry point inventory` (Step 5).
+- Inside those rows, two bilateral mechanisms verified against source and
+  classified rather than counted a second time (Step 6):
   `test_measurement_20_ticks_and_date_string_types_diverge_across_hosts`
-  (`test_lock_protocol_live.py:379`-`:390`), gated by the one fail-hard
-  host requirement in this repo's whole test suite (`:77`-`:91`) - verified
-  against source, searched for siblings, found none that share its shape
-  (Step 6).
+  (`test_lock_protocol_live.py:379`-`:390`, rows `:21`,`:55`,`:71`,`:78`,
+  `:83`,`:381`,`:382`,`:400` of the 83) loses its cross-host DIVERGENCE
+  claim outright - no edit preserves "these two things differ" on one
+  host - while its two pwsh-only type assertions (`:388`,`:390`) survive a
+  rewrite as a regression pin. `TestTheFramesGoOutIntactOnBothHosts`
+  (`test_codex_tool_surface_probe.py:490`-`:529`, row `:515` of the 83)
+  loses the guarantee that a single-host-green suite cannot hide a
+  host-specific defect (the exact BOM defect it was built to catch,
+  `:494`-`:507`), while its assertion form survives a rewrite to one host.
+- Measurement 4's NO-criterion - "a user-facing failure mode worse than the
+  bugs being removed" - is UNANSWERED by this record (`## Measurement 4:
+  refusal when pwsh is missing`, closing note), not merely uncosted; a
+  verdict reader should weigh this ledger against an open question, not a
+  cleared one.
 - The retained-case set from item 48's own "one host plus a small number of
   cases" answer is not yet chosen (Task 9), so its ongoing cost is not
   priced here either.
