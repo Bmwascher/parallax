@@ -600,6 +600,16 @@ It does not do more than that, and this record does not claim it does:
 - A file the script cannot read is listed as `NOT SCANNED`, by name. An
   unread file is not a clean one.
 
+**Convention: this record cites itself by section anchor, never by line
+number.** Any place below that points at another part of THIS file names a
+heading, a sub-heading, or a bolded lead sentence instead of a `:NNNN` line
+range. A line number into this file goes stale on the next edit, because
+this record quotes its own line counts and prose, and every edit — proven
+repeatedly across this document's own fix rounds — moves the lines it
+already cited. A section anchor does not move under insertion. Line numbers
+into OTHER files (files this branch does not edit) are unaffected and stay
+as line citations throughout.
+
 ## Entry point inventory
 
 Produced by classifying every match `survey.py` detects across the three
@@ -1158,10 +1168,12 @@ modules, is direct evidence that a `pwsh.exe` host existed and worked on
 `windows-latest` for run `32391262449` on 2026-08-20 — not merely a green
 job that a self-skipping module could have produced the same way with no
 host at all: one of those eleven modules, `test_lock_protocol_live.py`,
-calls `required_hosts()`, which `## Measurement 3` (`:1463`-`:1471`
-below) documents as FAILING rather than skipping when a host is missing —
-not the only resolver in this repo that does so (`## Measurement 5` Step 6
-corrects that uniqueness claim, `:1837`-`:1866`), but that is not what the
+calls `required_hosts()`, which `## Measurement 3` item c below (the
+`ConvertFrom-Json` type-divergence test) documents as FAILING rather than
+skipping when a host is missing — not the only resolver in this repo that
+does so (`## Measurement 5` Step 6's correction, "Correction to an earlier
+draft of this section, recorded rather than silently fixed," corrects that
+uniqueness claim), but that is not what the
 argument here needs: if `pwsh` had been absent, this call would have
 FAILED, not skipped, so the module could not have produced a green run
 without both hosts actually present, not just a green
@@ -1479,7 +1491,9 @@ c. **`ConvertFrom-Json` returns `String` on 5.1 and `DateTime` on 7 for the
    helper (`:77`-`:91`) FAILS rather than skips when a host is missing
    (`:83`-`:89`: "an unavailable host fails it rather than reading as a
    skip") — not the only resolver in this repo that does so (`##
-   Measurement 5` Step 6 corrects that, `:1837`-`:1866`), but a pass of
+   Measurement 5` Step 6's correction, "Correction to an earlier draft of
+   this section, recorded rather than silently fixed," corrects that), but
+   a pass of
    this test is still real host-presence evidence for the same reason: a
    missing host would have failed it, not skipped it. Its module IS one of
    the eleven, so the cited green run covers it. Verdict: **covered under
@@ -1538,8 +1552,10 @@ host-sensitive behaviours turned up beyond item 48's named five (native
 stderr promotion, reparse-point traversal, and the Measurement-20
 `ConvertFrom-Json` type divergence); one of those three is real,
 fail-hard-on-a-missing-host coverage evidence (not ranked here as the
-single strongest piece in the record - see `## Measurement 5` Step 6,
-`:1837`-`:1866`, for why that superlative was dropped), and is also the
+single strongest piece in the record - see `## Measurement 5` Step 6's
+correction, "Correction to an earlier draft of this section, recorded
+rather than silently fixed," for why that superlative was dropped), and
+is also the
 one asset a 5.1 drop would destroy outright - see Step 3 above and the
 forward pointer to Measurement 5. No percentage is given for any
 of these counts: the tables above are the width of what this task
@@ -1830,11 +1846,12 @@ The other side of "maintenance" - what this change costs to MAKE, as
 opposed to what running two hosts costs going forward - is the entry point
 inventory's own count, already recorded above (`## Entry point inventory`).
 That section's own text, not restated from memory here: **"at least 83"**,
-not a flat 83 - `feasibility-record.md:369`-`:370` states the count "is
-therefore known to be deflated by at least this one instance" (the
-`README.md:412` miss, named there), and `:377`-`:378` adds "this list is
-not itself provably complete, and a blind-spot list that reads as complete
-is the same defect one level up." So the figure carried into this ledger is
+not a flat 83 - `### What this method cannot see`'s `README.md:412`
+blind-spot bullet states the count "is therefore known to be deflated by
+at least this one instance" (the `README.md:412` miss, named there), and
+that sub-heading's closing paragraph adds "this list is not itself
+provably complete, and a blind-spot list that reads as complete is the
+same defect one level up." So the figure carried into this ledger is
 **at least 83 `must-change` rows, plus 3 further rows left `unknown`,
 known-deflated and not provably complete** - the same discipline Step 2
 above already applied to item 48's own timing caveat, applied here to the
