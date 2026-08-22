@@ -80,6 +80,16 @@ match carries a syntactically valid row, and that no row points at a line
 that has changed or gone. It does NOT prove any classification is CORRECT,
 and it does not prove the three families detect every entry point.
 
+**Why a re-run today prints different numbers.** Re-running the command
+above after this section existed prints higher counts (`7215 hits, 7215
+classified, 0 unclassified, 0 stale`, still exit code `0`) than the 7163
+captured above. The cause is this section itself: its own prose now
+quotes `powershell.exe`, `pwsh.exe` and `.ps1` text about the inventory,
+adding matches inside `feasibility-record.md`. That file is covered by
+the `docs/` prefix row, so the new matches need no rows and do not turn
+the survey red; the 7163 above is the Step 3 run captured before this
+section was written, not a number this record keeps in sync with itself.
+
 ### Classification counts
 
 Produced by:
@@ -90,12 +100,12 @@ Produced by:
 | 599 | not-a-launch |
 | 211 | test-harness |
 | 106 | doc-instruction |
-| 53 | launch-nonhost |
+| 54 | launch-nonhost |
 | 38 | host-pin-nonexec |
 | 30 | fixture |
 | 15 | launch-explicit |
 | 13 | ci |
-| 8 | launch-inherit |
+| 7 | launch-inherit |
 | 4 | host-pin-exec |
 | 1 | record |
 
@@ -117,9 +127,18 @@ were classified by this task.
 - `.github/workflows/skill-evals.yml:74` — the `run:` step body of the
   "PowerShell-facing tests under Windows PowerShell 5.1" job step; the
   whole step must be removed or repurposed with 5.1 dropped.
-- `.github/workflows/skill-evals.yml:95`, `:112` — `PARALLAX_PS_HOST:
-  powershell.exe` / the paired `pwsh.exe` env line; the 5.1 line and the
-  step it configures must go.
+- `.github/workflows/skill-evals.yml:95` — `PARALLAX_PS_HOST:
+  powershell.exe`, the 5.1 job step's env line; the whole step (this line,
+  and `:96`/`:97` below) must go with it. (`:112`, the PAIRED `pwsh.exe`
+  env line for the step that SURVIVES, is `no-change` — see the
+  correction note at the end of this list.)
+- `.github/workflows/skill-evals.yml:96`, `:97` (bare) — `run: >` and
+  `python -m pytest ...`, the body of that same 5.1 job step. Read on
+  their own these lines are host-neutral text; they are `must-change`
+  because deleting the step they belong to (per `:95` above) deletes them
+  with it — the step and its env line, run header, and command body stand
+  or fall together, and the `host` family's `:95` row already reads
+  `must-change`.
 - `evals/multi-model-verify/test_attestation.py:10` — docstring stating
   the module "runs wherever a PowerShell host exists: Windows
   powershell.exe or pwsh"; the 5.1 half of that sentence must go.
@@ -127,11 +146,17 @@ were classified by this task.
   `POWERSHELL` host-selector's comment and its
   `shutil.which("powershell")` fallback; the fallback must be dropped.
 - `evals/multi-model-verify/test_backup_lane.py:1322,1328,1334,1338,1340,
-  1354,1360,1373,1374,1376,1378,1388,1395,1401,1408,1413,1741` —
+  1354,1360,1373,1374,1376,1378,1388,1395,1401,1408,1413` —
   `test_check_workflow_paths_flags_host_parity_gap` and its neighbours
   build synthetic workflow text asserting BOTH a `powershell.exe` step and
   a `pwsh.exe` step exist with parity; dropping 5.1 removes the thing
   these tests enforce, so they must be rewritten or removed.
+- `evals/multi-model-verify/test_backup_lane.py:1741` — a separate test,
+  roughly 330 lines later in the same file (not one of the
+  `test_check_workflow_paths_flags_host_parity_gap` neighbours above): it
+  reads the real `skill-evals.yml` and asserts a `PARALLAX_PS_HOST:` marker
+  exists for BOTH `"powershell.exe"` and `"pwsh.exe"`; the 5.1 half of that
+  assertion must go with the step it checks for.
 - `evals/multi-model-verify/test_codex_context_probe.py:52` — comment
   stating `powershell-hosts` runs the module "under BOTH powershell.exe
   and pwsh.exe"; the 5.1 half must go.
@@ -172,10 +197,16 @@ were classified by this task.
   explaining "Measurement 20's divergence test... needs BOTH
   powershell.exe and pwsh.exe to have actually run"; the whole rationale,
   and the test it describes, must go with 5.1.
-- `evals/multi-model-verify/test_lock_protocol_live.py:55`, `:71`, `:83` —
-  the selector fallback, and the `required_hosts()` helper that demands
-  BOTH literal `powershell.exe` and `pwsh.exe` be on PATH; must be
-  rewritten to require only `pwsh.exe`.
+- `evals/multi-model-verify/test_lock_protocol_live.py:55` — the
+  `POWERSHELL` selector's `shutil.which("powershell")` fallback; drop it.
+- `evals/multi-model-verify/test_lock_protocol_live.py:71` — inside
+  `ps_host()` (not `required_hosts()`, which starts lower at `:77`), the
+  `pytest.fail` text "and neither powershell nor pwsh is on PATH"; the 5.1
+  half of that message must go.
+- `evals/multi-model-verify/test_lock_protocol_live.py:83` — inside
+  `required_hosts()`, the literal `for name in ("powershell.exe",
+  "pwsh.exe")` loop that demands BOTH hosts be on PATH; must be rewritten
+  to require only `pwsh.exe`.
 - `evals/multi-model-verify/test_lock_protocol_live.py:78` — docstring on
   `ps_host()` stating "the plan's own verification runs this module
   twice, once per host"; false once there is one host.
@@ -188,7 +219,14 @@ were classified by this task.
 - `evals/multi-model-verify/test_multi_model_verify.py:2954`, `:2961`,
   `:2999` — `os.name != "nt"` skip-reason strings and comments naming
   "drives powershell.exe"; the module they gate hardcodes `powershell.exe`
-  (see next item) and must change with it.
+  (see the next bullet, `:2960`/`:2962`/`:2998`/`:3000`) and must change
+  with it.
+- `evals/multi-model-verify/test_multi_model_verify.py:2960`, `:2962`,
+  `:2998`, `:3000` — the two `subprocess.run(["powershell.exe", ...])`
+  calls (`test_run_state_machine` and `TestBriefEncodingOverStdin._run`)
+  and their `"-File", str(...)` argument-list halves; both hardcode
+  `powershell.exe` as the literal interpreter and must be changed to
+  `pwsh.exe`.
 - `evals/multi-model-verify/test_review_mirror.py:38` — comment stating
   the `powershell-hosts` job "runs this module under BOTH powershell.exe
   and pwsh.exe"; the 5.1 half must go.
@@ -223,37 +261,51 @@ were classified by this task.
 - `tools/check-drift.ps1:68` — `$appId =
   '{...}\WindowsPowerShell\v1.0\powershell.exe'`, the toast notifier's
   hardcoded AppID path; must point at the PS7 identity once 5.1 is gone.
-- `tools/check-drift.ps1:96` — `$action = "powershell.exe -NoProfile
-  -ExecutionPolicy Bypass -File ..."`, the scheduled task's registered
-  action; must register `pwsh.exe` instead.
-- `tools/check-drift.ps1:405` — comment: "the rest of the harness still
-  drives 5.1 only... that one scenario names its host"; the premise
-  (a 5.1-driven harness) goes away with 5.1.
+- `tools/check-drift.ps1:96` (host and launch rows, both `must-change`) —
+  `$action = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File
+  ..."`, the scheduled task's registered action; must register `pwsh.exe`
+  instead.
+- `tools/check-drift.ps1:21` — comment: "Written for Windows PowerShell
+  5.1 (what schtasks runs): no &&, no ternary, ASCII ONLY"; the whole
+  premise (a script written for 5.1's syntax limits) goes away once 5.1
+  is dropped.
+- `tools/check-drift.ps1:405` — comment: "an over-boundary scenario
+  naming pwsh.exe proves a value past the ceiling is reported"; the
+  surrounding paragraph's premise — that 5.1 is the default and pwsh.exe
+  is named as the one exception (`:406`-`:407`) — goes away with 5.1.
 - `README.md:413`, `:414` (bare) — `powershell tools/check-drift.ps1
   -Register` / `-TestNotify`; both name the literal 5.1 launcher
   (`powershell`, not `pwsh`) and must change to `pwsh` once 5.1 is
   dropped.
-- `commands/doctor.md:340` (bare) — `powershell -NoProfile -File
-  <installPath>\tools\codex-context-probe.ps1 ...`; same literal-launcher
-  problem as above, must change to `pwsh`.
-- `skills/multi-model-verify/SKILL.md:326` (bare) — `powershell -NoProfile
-  -File <plugin-root>/tools/write-attestation.ps1 ...`; same
-  literal-launcher problem, must change to `pwsh`.
+- `commands/doctor.md:340` (launch and bare rows, both `must-change`) —
+  `powershell -NoProfile -File <installPath>\tools\codex-context-probe.ps1
+  ...`; same literal-launcher problem as above, must change to `pwsh`.
+- `skills/multi-model-verify/SKILL.md:326` (launch and bare rows, both
+  `must-change`) — `powershell -NoProfile -File
+  <plugin-root>/tools/write-attestation.ps1 ...`; same literal-launcher
+  problem, must change to `pwsh`.
+- `evals/multi-model-verify/fixtures/stub-appserver/stub-appserver.cmd:14`
+  (host and launch families, both rows) — `powershell.exe -NoProfile
+  -NonInteractive -File "%~dp0stub-appserver.ps1" %*`. This is live
+  executable code, not description: the file's own comment at `:12`-`:13`
+  states that driving the probe through THIS file is what proves the
+  `.cmd` branch launches at all, and the line it drives through hardcodes
+  `powershell.exe`. Settled to `must-change` on both rows (the `host`
+  family's row previously read `unknown`; see the correction note below):
+  once 5.1 is gone, `powershell.exe` either does not exist or is no
+  longer the intended target, so the line must change to `pwsh.exe` for
+  the stub to keep proving what it exists to prove.
 
 ### `unknown` rows, whole file
 
 Every row whose `migration` value is `unknown`, with why it could not be
-determined from the line:
+determined from the line. `migration` is a property of the LINE, not of
+the family row — one line has one answer, and where the `host` and
+`launch` rows for the same line disagreed (`stub-appserver.cmd:14`,
+below), that has been settled to a single value rather than left as two
+answers; the settlement is recorded in the `must-change` list above, not
+here.
 
-- `evals/multi-model-verify/fixtures/stub-appserver/stub-appserver.cmd:14`
-  (host family) — `powershell.exe -NoProfile -NonInteractive -File
-  "%~dp0stub-appserver.ps1" %*`. The stub exists to prove a `.cmd`-shim
-  launch path works at all (a real 2026-08-11 failure, not symmetry); it
-  is not itself testing 5.1-versus-7 behaviour, so whether a
-  PS7-only world still needs this exact stub, or needs it launched via
-  `pwsh.exe` instead, cannot be told from the line alone. (The `launch`
-  family's row for the same line reads `must-change`; the two family rows
-  are independent judgments and are allowed to disagree.)
 - `evals/multi-model-verify/test_backup_lane.py:270` — an `assert` string
   checking that `backup-lane.md` documents `-ResolveOwner`'s four-name
   "TRANSPORTS" allowlist, `pwsh.exe`, `powershell.exe`, `cmd.exe`,
@@ -298,6 +350,24 @@ determined from the line:
   auto-triage wrapper scripts under `tools/drift-reports/` are the live
   example: they invoke a client and are not in the index, so no run of
   this survey will ever see them.
+- **A shape the filter does not match at all, so no row exists and this
+  record cannot list it as `must-change`.** `--emit` only ever offers a
+  row for a DETECTED match; a shape none of the three families' regexes
+  catch leaves nothing to classify and nothing to sweep for. Named
+  instance: `README.md:412`,
+  `powershell tools/check-drift.ps1            # one-shot` — the first
+  line of the SAME fenced block whose next two lines, `:413` and `:414`,
+  ARE in the inventory as `must-change` (they end in a flag, which the
+  `bare` family's `.ps1` alternative requires; `:412` ends in a `#`
+  comment instead, so no alternative matches it). It invokes 5.1 by name
+  and a migration would have to edit it exactly like its two neighbours.
+  `survey.py` was NOT widened to catch this shape: every count in this
+  task was measured against the filter as it stands, and widening it now
+  would invalidate all 1078 hand-written rows and this whole inventory.
+  The plan's own remedy for a known miss is to NAME it, as this bullet
+  and the bare-`git` bullet below both do, not to chase it into the
+  filter. Consequence stated plainly: the `must-change` count above (83)
+  is therefore known to be deflated by at least this one instance.
 - **A bare `git` invocation, deliberately.** Matching bare `git` was
   measured to cost 179 further hits, almost all prose and shell plumbing,
   against a class that never starts a PowerShell host — a measured trade,

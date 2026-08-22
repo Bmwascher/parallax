@@ -11,7 +11,7 @@ docs/	*	*	-	record	no-change
 .github/workflows/skill-evals.yml	87	host	00fcfa1fbe2f	not-a-launch	no-change
 .github/workflows/skill-evals.yml	91	host	b514290d0da5	not-a-launch	no-change
 .github/workflows/skill-evals.yml	95	host	b30cd831149a	host-pin-nonexec	must-change
-.github/workflows/skill-evals.yml	112	host	b9007a01920e	host-pin-nonexec	must-change
+.github/workflows/skill-evals.yml	112	host	b9007a01920e	host-pin-nonexec	no-change
 docs/superpowers/plans/2026-08-22-item48-pwsh7-feasibility.md	49	host	5bfb31281372	host-pin-nonexec	no-change
 docs/superpowers/plans/2026-08-22-item48-pwsh7-feasibility.md	50	host	51d7f35e5337	host-pin-nonexec	no-change
 docs/superpowers/plans/2026-08-22-item48-pwsh7-feasibility.md	75	host	e0b48e0c48a1	not-a-launch	no-change
@@ -67,7 +67,7 @@ evals/multi-model-verify/fixtures/codex-prompt-input/malformed-block.json	8	host
 evals/multi-model-verify/fixtures/codex-prompt-input/missing-block-plugins-off.json	8	host	35aa76d06cfc	fixture	no-change
 evals/multi-model-verify/fixtures/codex-prompt-input/repo-agents.json	8	host	a40ed4d7ca52	fixture	no-change
 evals/multi-model-verify/fixtures/codex-prompt-input/suppressed.json	8	host	35aa76d06cfc	fixture	no-change
-evals/multi-model-verify/fixtures/stub-appserver/stub-appserver.cmd	14	host	088fbff0261c	test-harness	unknown
+evals/multi-model-verify/fixtures/stub-appserver/stub-appserver.cmd	14	host	088fbff0261c	test-harness	must-change
 evals/multi-model-verify/test_attestation.py	10	host	9af19a063eb2	not-a-launch	must-change
 evals/multi-model-verify/test_attestation.py	11	host	4135ec3d785f	not-a-launch	no-change
 evals/multi-model-verify/test_attestation.py	30	host	bdbb8953e8a6	not-a-launch	must-change
@@ -429,7 +429,7 @@ tools/check-drift.ps1	96	launch	6df2fd517b78	not-a-launch	must-change
 tools/check-drift.ps1	101	launch	2ff191a3e100	launch-nonhost	no-change
 tools/check-drift.ps1	102	launch	0d844768b972	launch-nonhost	no-change
 tools/check-drift.ps1	903	launch	291a768989f3	not-a-launch	no-change
-tools/check-drift.ps1	923	launch	499b48d9688c	launch-inherit	no-change
+tools/check-drift.ps1	923	launch	499b48d9688c	launch-nonhost	no-change
 tools/check-drift.ps1	1054	launch	cd405a9c40e6	launch-inherit	no-change
 tools/codex-context-probe.ps1	737	launch	202ceee84d6b	not-a-launch	no-change
 tools/codex-tool-surface-probe.ps1	165	launch	5370a73c74b6	not-a-launch	no-change
@@ -466,8 +466,8 @@ tools/read-codex-round-evidence.ps1	719	launch	fb189553ff7a	not-a-launch	no-chan
 .github/workflows/skill-evals.yml	46	bare	197439ad9063	ci	no-change
 .github/workflows/skill-evals.yml	47	bare	fff4202e9626	ci	no-change
 .github/workflows/skill-evals.yml	71	bare	ceca4f0dd946	ci	no-change
-.github/workflows/skill-evals.yml	96	bare	ef28b34e8fe0	ci	no-change
-.github/workflows/skill-evals.yml	97	bare	2b47bdea195d	ci	no-change
+.github/workflows/skill-evals.yml	96	bare	ef28b34e8fe0	ci	must-change
+.github/workflows/skill-evals.yml	97	bare	2b47bdea195d	ci	must-change
 .github/workflows/skill-evals.yml	113	bare	ef28b34e8fe0	ci	no-change
 .github/workflows/skill-evals.yml	114	bare	2b47bdea195d	ci	no-change
 CLAUDE.md	12	bare	08ec5c0ba3d1	doc-instruction	no-change
