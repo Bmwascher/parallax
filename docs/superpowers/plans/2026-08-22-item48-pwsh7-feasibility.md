@@ -2072,25 +2072,108 @@ git commit -m "write the item 48 verdict against its own NO-criteria"
 
 ## Debate record
 
-**Participants:** not yet dispatched
-**Rounds used:** 3, panel (Sol + Fable), both lanes every round
-**Fix-verify budget:** declared by the user after round 3, at 3 further
-rounds. Not declared before round 1, which the protocol requires; recorded
-here as a process defect of this debate rather than left silent. If both
-lanes have not returned PASS by round 6, the debate PAUSES and returns to
-the user rather than converting into a verdict.
-**Outcome:** pending
-**Verification status:** pending
+**Participants:** Opus 5 (session, driver) / gpt-5.6-sol (codex exec,
+session `01a028cf-92f6-73b0-b0d9-0d3c5f8ae056`) / Fable
+(`parallax:fable-panel-reviewer`, agent `af8bb617783abeb22`)
+**Rounds used:** Sol 7 of 7 / Fable 7 of 7 — a panel, both lanes every
+round, each blind to the other's reply until the next round's brief
+relayed it anonymously
+**Outcome:** converged with amendments
+**Verification status:** FULL
 **Degradation:** none
-**Authorized by:** n/a
-**Raw rounds:** `docs/superpowers/plans/rounds/2026-08-22-item48-pwsh7-feasibility/`
+**Authorized by:** user at round 3 (three further rounds), user at round 6
+(one confirming round, scoped to round 6's four fixes)
+**Raw rounds:** `docs/superpowers/plans/rounds/2026-08-22-item48-plan-debate/`
+— fourteen briefs and fourteen replies, with the per-round evidence state
+chain and the probe-verified codex override under `evidence/`.
+
+**Fix-verify budget:** declared by the user AFTER round 3, at three further
+rounds, then extended by one confirming round after round 6. It was NOT
+declared before round 1, which the protocol requires of the caller.
+Recorded here as a process defect of this debate rather than left silent.
+
+**Route evidence.** All seven Sol rounds' transcript headers read
+`model: gpt-5.6-sol`, `provider: openai`, `sandbox: read-only`,
+`reasoning effort: high`, and the same `session id:` — matching the
+canonical declarations in `references/model-prompting-notes.md`. Per-round
+evidence was bound with `tools/read-codex-round-evidence.ps1`: round 1
+fresh, rounds 2 to 7 resume, the byte boundary strictly advancing on one
+rollout (450248, 689487, 963396, 1397379, 1795057, 2077114, 2137283).
+Round 7's binding was re-run at freeze time and returned `status: clean`.
+That is client-echo evidence and claims nothing about what any server
+received.
+
+**Terminal verdict (session adjudication).** Round 7 returned Fable PASS
+and Sol a single narrow FIX, which was verified by execution, applied, and
+committed at `69779a2` before this record was written. The plan is frozen
+at that head.
+
+### Verdicts by round
+
+| Round | Sol | Fable | What the round turned on |
+|---|---|---|---|
+| 1 | FIX | FIX | Oracle adequacy across all nine tasks; the completeness filter misses whole entry-point classes |
+| 2 | FIX | FIX | The claims the round-1 fixes made were still wider than the measurements under them |
+| 3 | FIX | FIX | The round-2 standing rule was written for one task and not applied to its twin |
+| 4 | FIX | FIX | The exemption added in round 3 fails open on untracked files and closed on the mutable record |
+| 5 | FIX | FIX | The staging checks were prose, not gates; three counts drifted the day one was fixed |
+| 6 | FIX | FIX | The round-5 gates print the failure and exit 0 — the fifth version of one rule |
+| 7 | FIX | PASS | One extra-key blind spot in the round-6 `first_difference` fix |
+
+Every round from 2 to 7 found its worst defect INSIDE the previous round's
+fixes. The findings shrank from structural to four lines. Round 6 was the
+first round in which both lanes' filter sweeps returned empty.
 
 ### Resolved points
 | # | Claim | Raised by | Outcome | Evidence |
 |---|-------|-----------|---------|----------|
-| — | none yet | — | — | — |
+| 1 | Every task's verification command can pass over a broken result; nine tasks, nine oracles, none adequate | Sol r1 | accepted — every task rewritten with a predicate that can fail | plan `:144`, `:156`, `:304-352`, `:597-636`, `:672-733` |
+| 2 | The filter misses bare `.ps1` invocation and host-inheriting direct script instructions | Sol r1, convergent with Fable r1 | accepted into the `bare` family | `README.md:392`, `CLAUDE.md:41` |
+| 3 | The filter misses bare native invocation and the platform-default host | Fable r1 | accepted into the `bare` family and the CI classification | `tools/check-drift.ps1:1060`, `.github/workflows/skill-evals.yml:70-71` |
+| 4 | Task 6's glob misses a shipped script | Fable r1 | accepted — glob widened | `hooks/superpowers-review-companion.ps1` |
+| 5 | "Across every tracked file" and five sibling claims are wider than their evidence | Sol r1 and Fable r1, convergent | accepted — each claim narrowed to what its check measures | plan `:95`, `:417-418`, `:449-454`, `:767`, `:722-724` |
+| 6 | The probe record transcribes an `Esc` function that escapes nothing | Fable r1 | accepted — corrected in `6d4559a`, with the first version's defect stated rather than silently swapped | `probe-record.md:122-123` |
+| 7 | The round-1 fixes left the top-level completeness claim unchanged | Sol r2 | accepted | plan header |
+| 8 | The `docs/` exception does not cover the plan file it claims to cover | Sol r2 | accepted — replaced first by an exact path, later by the suffix test | `survey.py` exemption |
+| 9 | The named-parameter arm is narrower than claimed and its stage A is not measured | Sol r2 | accepted — stage A added to the named arm | Task 4 `run_named` |
+| 10 | Amendment 12 is internally inconsistent and drops its own control; amendment 9 hangs on its success path | Fable r2 | accepted — both rewritten | Task 4, Task 7 |
+| 11 | Step 2b captures a value that does not measure the fact it asserts | Fable r2 | accepted | Task 2 |
+| 12 | The filter misses call-operator invocation through a variable | Sol r2 | accepted into the `bare` family | the `& $LockScript` shape |
+| 13 | Lost prior-family rows and double-written rows can both pass | Sol r2 | accepted — duplicate refusal added to `load_rows()` | `survey.py` |
+| 14 | The standing rule protects Task 4 and forgets Task 7, the same asymmetry that created it | Fable r3, convergent with Sol r3 | accepted — Task 7 given the same step | Task 7 Step 5 |
+| 15 | The explicit-row exception has a fail-open oracle | Sol r3 | accepted — first of five fail-open gates, each found inside the fix for the last | Task 3 |
+| 16 | An unparseable child JSON reads as a NO-shaped result instead of a broken arm | Fable r3 | accepted — `unparseable_output` recorded separately | Task 4 `run.py` |
+| 17 | The filter misses `Start-Job` and a backticked invocation wrapping across lines | Fable r3 and Sol r3, convergent | accepted into the `launch` and `bare` families | `tools/check-drift.ps1:1054` |
+| 18 | The prefix exemption fails open on untracked files, because `git ls-files` is tracked-only | Sol r4 | accepted — the staging step exists because of this | `survey.py` `tracked_files()` |
+| 19 | The same exemption fails closed on the mutable record | Sol r4 | accepted — narrowed to the `.py` and `.ps1` suffixes | `EXEMPT_SUFFIXES` |
+| 20 | The filter misses bare `git` and bare `python` | Sol r4 and Fable r4, convergent | accepted for `python`; `git` declared an open miss with its reason stated | `tools/new-kimi-lane-home.ps1:691` |
+| 21 | The correction count drifted the day it was fixed, and survived at three further sites | Fable r4, Sol r5, Fable r5 | accepted — the count now lives in exactly one place and every other site points at it | `survey.py` FAMILIES comment |
+| 22 | The staging checks are not executable assertions | Sol r5, convergent with Fable r5 | accepted — fourth version of the rule | Task 4 Step 7, Task 7 Step 5 |
+| 23 | The stated staging counts are wrong on the successful probe path | Sol r5 and Fable r5, convergent | accepted — sources staged by name, scratch files deleted on success | Task 4 `run.py` |
+| 24 | The round-5 gates print the failure and exit 0 | Sol r6 | accepted — fifth version, proven in-shell before and after the change | Task 4 Step 7, Task 7 Step 5 |
+| 25 | The cleanup amendment contradicts its own staging prose | Sol r6 | accepted | Task 4 Step 7 |
+| 26 | Three instructions still name the removed exemption identifier | Sol r6 and Fable r6, convergent | accepted | plan `:1284`, `:1338`, `:1784` |
+| 27 | `first_difference` is always `None` on the named arm, which reads identically to "nothing differed" | Sol r6 | accepted — returns the first differing parameter name | Task 4 `run_named` |
+| 28 | `first_difference` still misses an extra-key difference, because it iterates only the expected keys | Sol r7 | accepted — compares the union of expected and received keys; all six states verified by running them | `69779a2` |
+| R1 | The Task 2 Interfaces block is stale | Fable r4 | REFUTED — already correct; the lane later conceded and named a stale revision as the cause | plan Task 2 Interfaces |
+| R2 | A citation uses a Windows backslash | Fable r5 | REFUTED — forward slashes at both sites | plan `:1534`, `:1690` |
+| R3 | A round-5 edit silently dropped the path separators from a bare-family alternative, and two live entry points fell out of the filter | Fable r6 | REFUTED — the separators are present and both files match family `bare` when the live regex is RUN; the lane conceded in round 7, naming the cause as reading the working tree mid-round rather than the pinned blob | `commands/doctor.md:235`, `evals/multi-model-verify/test_kimi_lane_home.py:820` |
 
 ### Escalated points (user-decided)
 | # | Question | Session position | Reviewer position | Owner's call |
 |---|----------|------------------|-------------------|--------------|
-| — | none yet | — | — | — |
+| — | none | — | — | — |
+
+### What this debate is worth carrying
+
+- **Five fail-open gates, each written while closing the previous one.**
+  Rows 15, 18, 22, 23 and 24 are one rule restated five times, and only the
+  fifth can fail. A gate is not a gate until it has been RUN and seen to
+  exit non-zero.
+- **Every round from 2 to 7 found its worst defect inside the previous
+  round's fixes.** The sweep question is what found them: name an instance
+  of the CLASS, or report none.
+- **Three reviewer findings were refuted by running the code**, not by
+  argument. A reviewer can be right about a defect class and wrong about
+  the instance, and a lane reading the working tree mid-round is reviewing
+  a different subject than the one under review.
