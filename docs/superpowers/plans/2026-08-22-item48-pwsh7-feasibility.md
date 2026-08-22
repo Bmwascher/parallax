@@ -12,9 +12,11 @@ point inventory, then five independent measurements, then the verdict. A
 script makes every DETECTED entry point impossible to pass over silently,
 by failing on any unclassified match, because both previous hand
 inventories of this item were wrong. It does not prove its own filter
-catches everything, and the record says so in those words: across three
-review rounds the filter was widened five times, each time because a
-reviewer produced a live entry point it did not match.
+catches everything, and the record says so in those words. The filter has
+been corrected repeatedly, every time because a reviewer produced a live
+entry point it did not match; **the count and the enumeration live in one
+place only, `survey.py`'s own FAMILIES comment**, because restating the
+number elsewhere is how it went stale twice.
 
 **Tech Stack:** Python 3.12 (survey script and probe drivers), Windows
 PowerShell 5.1.26100.9168 and PowerShell 7.6.5, `gh` CLI for CI evidence,
@@ -118,11 +120,13 @@ entry point cannot be passed over silently.
 
 It does not do more than that, and this record does not claim it does:
 
-- The families are a filter. They were two when first written. Across three
-  review rounds they were widened five times, each time because a reviewer
-  produced a live entry point in this repo that the current filter did not
-  match. There is no argument here that the current filter is enough; the
-  only honest statement is that nobody has produced a sixth yet.
+- The families are a filter. They were two when first written and have been
+  corrected repeatedly, every time because a reviewer produced a live entry
+  point in this repo that the filter did not match. The count and the
+  enumerated list live in `survey.py`'s FAMILIES comment and nowhere else;
+  copy them from there. There is no argument that the current filter is
+  enough — only that nobody has produced the next miss yet, which is not
+  the same statement.
 - A green run says every detected match carries a row. It says nothing
   about whether the row is CORRECT.
 - A file the script cannot read is listed as `NOT SCANNED`, by name. An
@@ -317,14 +321,31 @@ TSV = HERE / "entry-points.tsv"
 # .github/workflows/skill-evals.yml:71 - after an earlier version of this
 # script carried only the first two families.
 #
-# THESE THREE FAMILIES ARE A FILTER, NOT A PROOF. Count the corrections
-# honestly, because the last count was stale in the commit that wrote it:
-# across FOUR review rounds a reviewer produced a live entry point the
-# filter did not match EIGHT times - two prompted the third family, two
-# widened it, one put Start-Job in the launch family, one added the
-# line-wrapped backtick form, and two more added the generic call operator
-# and bare `python`. The record says so in its own words rather than
-# presenting this list as closed.
+# THESE THREE FAMILIES ARE A FILTER, NOT A PROOF.
+#
+# THIS COMMENT IS THE SINGLE SOURCE FOR THE CORRECTION COUNT. Every other
+# place that mentions it - the plan's Architecture paragraph, the record
+# skeleton's Method section, Task 3's blind-spot instruction - points HERE
+# instead of repeating a number. The count was restated in three places and
+# went stale in two of them twice, which is its own instance of the defect
+# this plan is about, so the duplication is removed rather than
+# re-synchronised again.
+#
+# THE CORRECTIONS, enumerated. Across FIVE review rounds a reviewer
+# produced a live entry point this filter did not match NINE times:
+#   1-2. two classes prompted the third family at all;
+#   3-4. two more widened it (call operator through a variable; flagless
+#        instruction invocations);
+#   5.   Start-Job joined the launch family;
+#   6.   the line-wrapped backtick form;
+#   7-8. the generic call operator with a literal command, and bare
+#        `python`;
+#   9.   bare `agy`, the Flash implementer's client - live at
+#        agents/flash-implementer.md:47 and :78, and used across six
+#        non-docs files.
+#
+# Nobody has produced a tenth. That is the only honest statement available,
+# and it is not the same as saying there is none.
 #
 # ONE KNOWN MISS IS LEFT IN DELIBERATELY, with its instance named. Bare
 # `git` invocations - tools/check-drift.ps1:987, `git -C $worktree commit`
@@ -380,7 +401,7 @@ FAMILIES = {
         r"|New-ScheduledTask\w*|subprocess\.(run|Popen|check_output|call)"
         r"|Invoke-Expression|(?<![\w\-])-File(?![\w\-])"),
     "bare": re.compile(
-        r"(?<![\w\-])(codex|kimi(-code)?|claude)(\.exe|\.cmd)?\s+[\w\-]"
+        r"(?<![\w\-])(codex|kimi(-code)?|claude|agy)(\.exe|\.cmd)?\s+[\w\-]"
         r"|[\w\-/\\]+\.ps1(?=\s+-)"
         r"|&\s*['\"]?[\w\-/\\:.$()\[\]]*\.ps1"
         r"|&\s*['\"]?\$[\w:.\[\]]+"
@@ -409,31 +430,31 @@ CLASSES = {
 }
 MIGRATION = {"must-change", "no-change", "unknown"}
 
-# A prefix row NEVER covers these. The scripts under them are EXECUTED by
-# this investigation, so classifying them wholesale as `record - never
-# executed` would attest the opposite of the truth.
+# A prefix row NEVER covers an EXECUTABLE file of this investigation's own,
+# because classifying one wholesale as `record - never executed` would
+# attest the opposite of the truth.
 #
-# This is enforced HERE rather than by an instruction, because an
-# instruction to "add explicit rows" had no oracle: `--emit` prints only
-# UNCLASSIFIED matches, and a prefix-covered match is not unclassified, so
-# the check written to prove the rows existed printed zero either way. That
-# fail-open gate was itself written while fixing a fail-open gate.
-EXEMPT_FROM_PREFIX = (
+# Enforced HERE rather than by an instruction, because an instruction to
+# "add explicit rows" had no oracle: `--emit` prints only UNCLASSIFIED
+# matches, and a prefix-covered match is not unclassified, so the check
+# written to prove the rows existed printed zero either way. That fail-open
+# gate was itself written while closing a fail-open gate.
+#
+# THE TEST IS THE SUFFIX, not a list of exact paths. Everything else the
+# investigation writes under its own directory - `feasibility-record.md`,
+# `entry-points.tsv`, `results.json`, the probe scratch files - IS a record
+# and is correctly covered by the `docs/` prefix row. An earlier version
+# exempted the whole directory and then carved two files back out by name;
+# that left every generated sidecar exempt, so a result file would have
+# needed hand rows keyed to line numbers that change on every re-run, and
+# the record's own growing prose would have gone stale and blocked Task 9
+# for a reason that is not an entry point.
+EXEMPT_PREFIXES = (
     "docs/superpowers/plans/rounds/2026-08-22-item48-pwsh7-feasibility/",
-    "docs/superpowers/plans/2026-08-22-item48-pwsh7-feasibility.md",
 )
-
-# ...except these two, which really are what the `record` class describes.
-# `feasibility-record.md` is the record itself and is never executed, and
-# it GROWS through Tasks 4 to 8. Exempting it would key explicit rows to
-# line numbers that every later task shifts, so the survey would go stale
-# on the record's own prose and block at Task 9 for a reason that is not an
-# entry point. `entry-points.tsv` is the inventory data file.
-NOT_EXEMPT = (
-    "docs/superpowers/plans/rounds/2026-08-22-item48-pwsh7-feasibility/"
-    "feasibility-record.md",
-    "docs/superpowers/plans/rounds/2026-08-22-item48-pwsh7-feasibility/"
-    "entry-points.tsv",
+EXEMPT_SUFFIXES = (".py", ".ps1")
+EXEMPT_EXACT = (
+    "docs/superpowers/plans/2026-08-22-item48-pwsh7-feasibility.md",
 )
 
 
@@ -512,7 +533,9 @@ def load_rows():
 
 def covered_by_prefix(key, prefixes):
     rel, _, fam = key
-    if rel.startswith(EXEMPT_FROM_PREFIX) and rel not in NOT_EXEMPT:
+    if rel in EXEMPT_EXACT:
+        return False
+    if rel.startswith(EXEMPT_PREFIXES) and rel.endswith(EXEMPT_SUFFIXES):
         return False
     for prel, pfam, _, _ in prefixes:
         if rel.startswith(prel) and (pfam == "*" or pfam == fam):
@@ -614,15 +637,15 @@ particular number; report what the run prints.
 
 **Split this task by FAMILY, one subagent each, in this order: `host`, then
 `launch`, then `bare`.** Measured against the repo on 2026-08-22 by running
-the scanner exactly as written above: 6346 matches, of which 5365 fall
-under the `docs/` prefix row and 981 need a hand-written row — 168 `host`,
-277 `launch` and 536 `bare`. The 981 includes the matches inside this plan
-and inside the record directory's SCRIPTS, which `EXEMPT_FROM_PREFIX` keeps
-out of the blanket row — but not `feasibility-record.md` or
-`entry-points.tsv`, which the blanket row does cover, because those two
-really are what `record` describes. One subagent classifying 981 lines in
-one pass is how a survey stops being read and starts being guessed, which
-is the exact failure this task exists to prevent.
+the scanner exactly as written above: 6974 matches, of which 5931 fall
+under the `docs/` prefix row and 1043 need a hand-written row — 168 `host`,
+278 `launch` and 597 `bare`. The 1043 includes the matches inside this plan
+and inside the record directory's `.py` and `.ps1` files, which the
+exemption keeps out of the blanket row; everything else the investigation
+writes there is a record and the blanket row covers it. One subagent
+classifying 1043 lines in one pass is how a survey stops being read and
+starts being guessed, which is the exact failure this task exists to
+prevent.
 
 Each family's task ends on its own `FAMILY <name>: <n> hits, 0 unclassified`
 line AND on every EARLIER family's line still reading 0. Checking only your
@@ -708,12 +731,17 @@ Rules that are NOT judgment calls:
 - **`docs/` may be covered by one prefix row, WITH an exception.** Add
   exactly this row (TAB separated), and no other prefix rows:
   `docs/	*	*	-	record	no-change`
-  Then add an EXPLICIT per-line row for every match inside the record
-  directory AND for every match in this plan file itself,
+  Then add an EXPLICIT per-line row for every match in this investigation's
+  own EXECUTABLE files — the `.py` and `.ps1` files under the record
+  directory — and for every match in this plan file itself,
   `docs/superpowers/plans/2026-08-22-item48-pwsh7-feasibility.md`.
-  You do not have to remember to: `survey.py` lists both paths in
-  `EXEMPT_FROM_PREFIX`, so no prefix row covers them and any missing row
-  shows up as `UNCLASSIFIED` and fails the survey.
+  You do not have to remember to: `survey.py` exempts exactly those from
+  prefix coverage, so a missing row shows up as `UNCLASSIFIED` and fails
+  the survey.
+  **Everything else this investigation writes is covered by the `docs/`
+  row and needs no rows at all** — `feasibility-record.md`,
+  `entry-points.tsv`, `results.json` and the probe scratch files are
+  records, which is what the blanket row says they are.
   **Why the exception exists.** `record` is defined as "never executed", and
   the blanket row would apply it to `survey.py`, to the probe scripts Tasks
   4 and 7 create, and to this plan — all of which ARE executed, this plan by
@@ -723,20 +751,23 @@ Rules that are NOT judgment calls:
   exception named the plan as its reason while scoping itself to the record
   directory, which does not contain the plan.
   **This is a STANDING RULE, and the script enforces it.** Tasks 4 and 7
-  create new tracked files under the record directory that carry family
-  matches — `reexec/parent.ps1` alone has `-File` and `ProcessStartInfo`,
-  `run.py` carries both host paths and `subprocess.run`, and
-  `missing-pwsh/probe.py` carries `pwsh` and `subprocess.run`. Later tasks
-  also write new matching LINES into `feasibility-record.md` itself. Any
-  task that adds a file or a matching line under the record directory adds
-  its explicit rows before its own commit, and the exemption above makes
-  forgetting a red gate rather than a silent absorption.
+  create new `.ps1` and `.py` files under the record directory that carry
+  family matches — `reexec/parent.ps1` alone has `-File` and
+  `ProcessStartInfo`, `run.py` carries both host paths and
+  `subprocess.run`, and `missing-pwsh/probe.py` carries `pwsh` and
+  `subprocess.run`. Any task that adds an EXECUTABLE file under the record
+  directory adds its explicit rows before its own commit, and the exemption
+  above makes forgetting a red gate rather than a silent absorption.
 
-  The first version of this rule was prose only, and it was written to fix
-  exactly this defect at Task 3 while leaving Tasks 4 and 7 to reproduce it
-  one task later. The second version added a step to Task 4 whose check
-  could not fail. This third version moves the rule into the code, where
-  the ordinary unclassified gate carries it.
+  Matching lines written into `feasibility-record.md` need NO rows: that
+  file is a record and the blanket row covers it, which is both true and
+  what stops the survey going stale every time a task adds a paragraph.
+
+  Four versions of this rule, each fixing the last: prose only, which left
+  Tasks 4 and 7 to reproduce the defect one task later; a step in Task 4
+  whose check could not fail; the code exemption, which could not see the
+  files because they were not staged yet; and this one, which tests the
+  suffix so generated records are not swept in with the scripts.
 - **A line produces ONE ROW PER FAMILY IT MATCHES.** There are three
   families, so a line can carry up to three rows, and they may hold
   different classifications. (This rule said "both families" and "TWO rows"
@@ -805,10 +836,11 @@ awk -F'\t' '!/^#/ && NF==6 {print $5}' docs/superpowers/plans/rounds/2026-08-22-
    End the subsection with this sentence, which is the point of it:
    **this list is not itself provably complete, and a blind-spot list that
    reads as complete is the same defect one level up.** Record the count
-   honestly: across three review rounds the filter was widened FIVE times,
-   each time because a reviewer produced a live entry point in this repo
-   that it did not match, and each widening came after the blind-spot list
-   had already been written.
+   honestly by COPYING the enumerated list from `survey.py`'s FAMILIES
+   comment, which is the single place that carries it. Do not write the
+   count from this instruction or from memory: it was restated in three
+   places and went stale in two of them, twice, which is the same defect
+   one level up from the one this list documents.
 
 - [ ] **Step 5: Commit**
 
@@ -1190,6 +1222,15 @@ def main():
         return 1
     print("all eight arms ran; stage B exact: %s"
           % {k: v["stage_b_child_exact"] for k, v in sorted(results.items())})
+    # Remove the per-arm scratch files. Only results.json is a deliverable;
+    # the four *-out.* files are overwritten by every arm and hold nothing
+    # the JSON does not. Leaving them behind put build products next to the
+    # sources and broke the staging assertion in Step 7.
+    for name in ("parent-out.txt", "child-out.txt",
+                 "parent-out.json", "child-out.json"):
+        p = HERE / name
+        if p.exists():
+            p.unlink()
     return 0
 ```
 
@@ -1253,19 +1294,32 @@ Without this line the check below passes because the files cannot be seen,
 which is the same fail-open shape one layer down from the one the
 exemption was written to close.
 
-```bash
-git add docs/superpowers/plans/rounds/2026-08-22-item48-pwsh7-feasibility/reexec/
-python docs/superpowers/plans/rounds/2026-08-22-item48-pwsh7-feasibility/survey.py --emit
-```
-
-Confirm the staging worked before trusting the result:
+Stage the five source files BY NAME. Do not stage the directory: `run.py`
+leaves `results.json` and four `*-out.*` scratch files there on a
+successful run, so a whole-directory `git add` tracks build products and
+makes any count you assert wrong on the path where everything worked.
 
 ```bash
-git ls-files docs/superpowers/plans/rounds/2026-08-22-item48-pwsh7-feasibility/reexec/ | wc -l
+REC=docs/superpowers/plans/rounds/2026-08-22-item48-pwsh7-feasibility
+git add $REC/reexec/child.ps1 $REC/reexec/child-named.ps1 \
+        $REC/reexec/parent.ps1 $REC/reexec/parent-named.ps1 $REC/reexec/run.py
 ```
 
-Expected: 5, one per file this task created. A zero here means the emit
-above measured nothing.
+Now ASSERT the staging, with a command that exits nonzero when it is
+wrong. `wc -l` followed by a sentence saying what to expect is not a gate;
+it is a number and a hope, and this plan has already shipped three checks
+that could not fail.
+
+```bash
+test "$(git ls-files $REC/reexec/ | wc -l)" -eq 5 && echo STAGED_OK || echo STAGED_WRONG
+```
+
+Expected: `STAGED_OK`. Anything else and the `--emit` below measures
+nothing, because `git ls-files` lists tracked files only.
+
+```bash
+python $REC/survey.py --emit
+```
 
 Take every emitted row under this task's own directory, OPEN THE LINE each
 one points at, and classify it by Task 3's table and Task 3's rule — the
@@ -1738,14 +1792,18 @@ UNCLASSIFIED until a row exists.
 `git ls-files` lists tracked files only, and an untracked file produces the
 same empty output as a fully classified one.
 
+Stage the ONE source file by name. Step 3 already wrote `results.json`
+beside it, so staging the directory would track a build product and make
+the assertion below wrong on the path where the probe worked.
+
 ```bash
-git add docs/superpowers/plans/rounds/2026-08-22-item48-pwsh7-feasibility/missing-pwsh/
-git ls-files docs/superpowers/plans/rounds/2026-08-22-item48-pwsh7-feasibility/missing-pwsh/ | wc -l
-python docs/superpowers/plans/rounds/2026-08-22-item48-pwsh7-feasibility/survey.py --emit \
-  | grep "2026-08-22-item48-pwsh7-feasibility/missing-pwsh"
+REC=docs/superpowers/plans/rounds/2026-08-22-item48-pwsh7-feasibility
+git add $REC/missing-pwsh/probe.py
+test "$(git ls-files $REC/missing-pwsh/ | wc -l)" -eq 1 && echo STAGED_OK || echo STAGED_WRONG
+python $REC/survey.py --emit | grep "2026-08-22-item48-pwsh7-feasibility/missing-pwsh"
 ```
 
-The `git ls-files` line must print 1 before the emit result means anything.
+`STAGED_OK` must appear before the emit result means anything.
 
 Open each emitted line, classify it by Task 3's table and Task 3's rule —
 from the line, not from the path and not from what this plan expects — and
