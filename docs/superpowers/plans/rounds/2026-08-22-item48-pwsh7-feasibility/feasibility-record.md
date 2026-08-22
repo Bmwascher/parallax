@@ -404,7 +404,119 @@ single place that carries it, `survey.py`'s own FAMILIES comment:
 
 ## Measurement 1: re-exec fidelity
 
-NOT YET WRITTEN.
+Measured by `<REC>/reexec/run.py`, which drives a PARENT script under one
+host, has it forward its own arguments to a CHILD script under a NAMED
+target host, and compares what each side actually received (as UTF-8 hex
+dumps for the positional arm, as parsed JSON for the named arm) against
+what was sent. Two stages: Stage A is what the PARENT received (the
+control - if this is wrong, the probe measured nothing about forwarding).
+Stage B is what the CHILD received after the parent forwarded (the
+question). Two forwarding forms: `splat` (native `@args`/`@forward` through
+the PowerShell call operator `&`) and `escaped` (the parent hand-builds a
+quoted command-line string via an `Esc` function and starts the child
+through `System.Diagnostics.ProcessStartInfo`). Two argument shapes:
+positional (`$args`, ten hostile strings) and named (three bound
+parameters, one of them containing an embedded quote, an em dash and a
+trailing backslash). Eight arms in total. Full output verbatim in
+`<REC>/reexec/results.json`.
+
+**Stage A never failed.** Every one of the 8 arms shows
+`stage_a_parent_exact: true` - the parent always received exactly what
+`run.py` sent it, so every stage B result below is measuring forwarding,
+not a broken control. (Per Step 5's rule this means the task does not stop
+early; had any Stage A been false the task would have reported BLOCKED
+instead of writing this section.)
+
+| host | form | shape | return code | child ran | stage A exact | stage B exact | first difference |
+|---|---|---|---|---|---|---|---|
+| ps51 | splat | positional | 0 | yes | true | **false** | index 2 (`has"quote`) |
+| ps51 | splat | named | 0 | yes | true | **false** | `path` |
+| ps51 | escaped | positional | 0 | yes | true | true | none |
+| ps51 | escaped | named | 0 | yes | true | true | none |
+| pwsh7 | splat | positional | 0 | yes | true | true | none |
+| pwsh7 | splat | named | 0 | yes | true | true | none |
+| pwsh7 | escaped | positional | 0 | yes | true | true | none |
+| pwsh7 | escaped | named | 0 | yes | true | true | none |
+
+"child ran" is `stage_b_child_count is not None` for every arm - every
+child wrote its output file, including the two corrupted arms. That
+matters because it means the two `false` rows are a CORRUPTION finding,
+not a never-started child: `ps51/splat/positional`'s child received only 8
+of the 10 sent items (`stage_b_child_count: 8` against `sent_count: 10`),
+and `ps51/splat/named`'s child bound all three parameters but with wrong
+values - `routeNote` lost its embedded quotes (`a "quoted" note — here`
+arrived as `a quoted note — here`) and `path` had its trailing backslash
+merge with the following argument's leading quote (`C:\dir with space\`
+arrived as `C:\dir with space"`).
+
+**Positional payload, verbatim (`PAYLOAD` in run.py):**
+
+```
+"plain"
+"has space"
+'has"quote'
+'odd"quote"count"'
+"em\u2014dash"
+""
+"trailing\\"
+"semi;colon &amp"
+"$var and `backtick`"
+"-looks-like-a-flag"
+```
+
+**Named payload, verbatim (`NAMED` sent / `NAMED_EXPECTED` bound, in run.py):**
+
+```
+NAMED = ["-Register", "-RouteNote", 'a "quoted" note \u2014 here',
+         "-Path", "C:\\dir with space\\"]
+NAMED_EXPECTED = {"register": True,
+                  "routeNote": 'a "quoted" note \u2014 here',
+                  "path": "C:\\dir with space\\"}
+```
+
+**Answer to the NO-criterion.** A 5.1 script CAN re-exec into PowerShell 7
+with these argument shapes intact - but only under the ESCAPED forwarding
+form (a hand-built, hand-quoted command-line string passed through
+`ProcessStartInfo`), never under the native `@args`/`@forward` SPLAT form.
+Under Windows PowerShell 5.1, splat corrupted both the positional payload
+(an embedded double quote, item 2, is where the count itself changes from
+10 to 8 received items) and the named payload (an embedded quote and a
+trailing backslash both mangled). The escaped form survived every payload
+shape on BOTH hosts, and PowerShell 7 as either host survived every
+payload shape under BOTH forwarding forms - the corruption is specific to
+5.1 acting as the SPLAT-forwarding parent, not to PowerShell 7 as a
+target, and not to escaping as a technique.
+
+**Width of the evidence.** This measured ten positional payload shapes and
+one named-parameter set (three parameters, one holding a string with an
+embedded quote, an em dash, and a trailing backslash) - not arbitrary
+arguments. Item 48's NO-criterion asks about arguments passing through
+"provably intact"; what is proved here is that these eleven shapes survive
+under the escaped form and that the same eleven shapes do NOT all survive
+under 5.1's native splat form. It does not establish that EVERY possible
+argument string survives the escaped form, only that this hostile set -
+spaces, quotes, an odd quote count, an em dash, an empty string, a
+trailing backslash, a semicolon and ampersand, a dollar sign and
+backtick, and a leading-dash flag-like token - does.
+
+**Residual limits, named:**
+
+- **Command-line length.** Not measured against the ~32767-character
+  Windows command-line ceiling; every payload item here is short. A
+  migration relying on the escaped form for a very large brief (the kind
+  `multi-model-verify` sends) is not covered by this measurement.
+- **The host's own `-File` parsing.** This measured the escaped form and
+  the splat form end-to-end - through the target host's own `-File`
+  argument parsing, not isolated from it - so a stage-A pass and a
+  stage-B fail together localize the corruption to what happens BETWEEN
+  the parent's command-line construction and the CHILD host's own
+  argument binding; this measurement cannot further separate "the parent
+  built a bad command line" from "the child host's `-File` parsing
+  mangled a well-formed one" beyond what `parent_bound`/`child_bound` in
+  `results.json` show for the named arm.
+- **Parameter shapes not tried.** Arrays, `ValueFromRemainingArguments`,
+  and a script that re-execs ITSELF (rather than a sibling script) were
+  not measured.
 
 ## Measurement 2: is PowerShell 7 present
 
