@@ -49,7 +49,12 @@ TSV = HERE / "entry-points.tsv"
 # re-synchronised again.
 #
 # THE CORRECTIONS, enumerated. Across FIVE review rounds a reviewer
-# produced a live entry point this filter did not match NINE times:
+# produced a live entry point this filter did not match, AND THE FILTER
+# WAS WIDENED IN RESPONSE, NINE times (corrected here: this counts
+# corrections/widenings, not every live miss ever produced - the two
+# deliberate misses named below were also produced, by these same review
+# rounds, and were NOT the ones counted here, because neither triggered a
+# widening):
 #   1-2. two classes prompted the third family at all;
 #   3-4. two more widened it (call operator through a variable; flagless
 #        instruction invocations);
@@ -61,8 +66,10 @@ TSV = HERE / "entry-points.tsv"
 #        agents/flash-implementer.md:47 and :78, and used across six
 #        non-docs files.
 #
-# Nobody has produced a tenth. That is the only honest statement available,
-# and it is not the same as saying there is none.
+# Nobody has produced a TENTH CORRECTION - a live miss that further widens
+# the filter. That is the only honest statement available, and it is not
+# the same as saying there is no tenth MISS: there are at least two more
+# (below), simply not corrected into the filter by choice, not by absence.
 #
 # TWO KNOWN MISSES ARE LEFT IN DELIBERATELY, with each instance named.
 # (Was ONE; the second was found after this comment was first written and
