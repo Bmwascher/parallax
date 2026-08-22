@@ -415,17 +415,24 @@ question). Two forwarding forms: `splat` (native `@args`/`@forward` through
 the PowerShell call operator `&`) and `escaped` (the parent hand-builds a
 quoted command-line string via an `Esc` function and starts the child
 through `System.Diagnostics.ProcessStartInfo`). Two argument shapes:
-positional (`$args`, ten hostile strings) and named (three bound
-parameters, one of them containing an embedded quote, an em dash and a
-trailing backslash). Eight arms in total. Full output verbatim in
+positional (`$args`, ten hostile strings) and named (three parameters,
+one holding an embedded quote and an em dash, another holding spaces and
+a trailing backslash). Eight arms in total. Full output verbatim in
 `<REC>/reexec/results.json`.
 
 **Stage A never failed.** Every one of the 8 arms shows
 `stage_a_parent_exact: true` - the parent always received exactly what
 `run.py` sent it, so every stage B result below is measuring forwarding,
-not a broken control. (Per Step 5's rule this means the task does not stop
+not a broken control. (If the parent did not receive what was sent,
+nothing downstream is measurable, so this means the task does not stop
 early; had any Stage A been false the task would have reported BLOCKED
 instead of writing this section.)
+
+`first difference` for the named shape names the first PARAMETER NAME, in
+ALPHABETICAL order over the union of expected and received keys
+(`run.py:164-166`), that differs - not send order. `routeNote` was sent
+first and also differed for `ps51/splat/named`; `path` sorts first
+alphabetically, which is why it is the name shown.
 
 | host | form | shape | return code | child ran | stage A exact | stage B exact | first difference |
 |---|---|---|---|---|---|---|---|
@@ -445,9 +452,11 @@ not a never-started child: `ps51/splat/positional`'s child received only 8
 of the 10 sent items (`stage_b_child_count: 8` against `sent_count: 10`),
 and `ps51/splat/named`'s child bound all three parameters but with wrong
 values - `routeNote` lost its embedded quotes (`a "quoted" note — here`
-arrived as `a quoted note — here`) and `path` had its trailing backslash
-merge with the following argument's leading quote (`C:\dir with space\`
-arrived as `C:\dir with space"`).
+arrived as `a quoted note — here`) and `path`'s trailing backslash is
+gone, with a quote standing in its place (`C:\dir with space\` arrived as
+`C:\dir with space"`). What produced that substitution is not recorded by
+this run - `results.json` holds the observation, not a cause, and no
+mechanism is asserted here.
 
 **Positional payload, verbatim (`PAYLOAD` in run.py):**
 
@@ -479,18 +488,23 @@ with these argument shapes intact - but only under the ESCAPED forwarding
 form (a hand-built, hand-quoted command-line string passed through
 `ProcessStartInfo`), never under the native `@args`/`@forward` SPLAT form.
 Under Windows PowerShell 5.1, splat corrupted both the positional payload
-(an embedded double quote, item 2, is where the count itself changes from
-10 to 8 received items) and the named payload (an embedded quote and a
-trailing backslash both mangled). The escaped form survived every payload
-shape on BOTH hosts, and PowerShell 7 as either host survived every
-payload shape under BOTH forwarding forms - the corruption is specific to
-5.1 acting as the SPLAT-forwarding parent, not to PowerShell 7 as a
-target, and not to escaping as a technique.
+(the child received 8 of 10 items and the first index that differs is 2;
+which two items were dropped is not recorded by this run - the positional
+arm keeps no per-item child data on the success path, by design, per
+`run.py:201-204`) and the named payload (an embedded quote and a trailing
+backslash both mangled). The escaped form survived every payload shape
+under BOTH parent hosts, and PowerShell 7 as the PARENT host survived
+every payload shape under BOTH forwarding forms. The CHILD host was
+PowerShell 7 in every one of the eight arms - `run.py:63` and `run.py:112`
+pin `PROBE_TARGET_HOST` to `PWSH` unconditionally - so no arm measured
+PowerShell 5.1 as a target; the corruption is specific to 5.1 acting as
+the SPLAT-forwarding parent, not to PowerShell 7 as a target, and not to
+escaping as a technique.
 
 **Width of the evidence.** This measured ten positional payload shapes and
-one named-parameter set (three parameters, one holding a string with an
-embedded quote, an em dash, and a trailing backslash) - not arbitrary
-arguments. Item 48's NO-criterion asks about arguments passing through
+one named-parameter set (three parameters, one holding an embedded quote
+and an em dash, another holding spaces and a trailing backslash) - not
+arbitrary arguments. Item 48's NO-criterion asks about arguments passing through
 "provably intact"; what is proved here is that these eleven shapes survive
 under the escaped form and that the same eleven shapes do NOT all survive
 under 5.1's native splat form. It does not establish that EVERY possible
@@ -517,6 +531,15 @@ backtick, and a leading-dash flag-like token - does.
 - **Parameter shapes not tried.** Arrays, `ValueFromRemainingArguments`,
   and a script that re-execs ITSELF (rather than a sibling script) were
   not measured.
+- **One machine, one build of each host.** All eight arms ran on this one
+  machine against exactly one installed build of each host: Windows
+  PowerShell `5.1.26100.9168` and PowerShell `7.6.5`, captured by running
+  `$PSVersionTable.PSVersion.ToString()` under each of the two absolute
+  paths `run.py:22-23` pins. Neither host's build is recorded inside
+  `results.json` itself. These match the two versions captured
+  independently by Task 1 for the record's own header (line 5), so the
+  two measurements agree rather than diverge. This measurement says
+  nothing about a different build of either host, or a second machine.
 
 ## Measurement 2: is PowerShell 7 present
 
