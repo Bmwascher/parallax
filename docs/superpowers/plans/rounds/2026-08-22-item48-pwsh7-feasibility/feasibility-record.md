@@ -709,7 +709,18 @@ dispatch note) confirms real execution rather than a skip: `773 passed in
 1363.25s` under `PARALLAX_PS_HOST: powershell.exe`, then `773 passed in
 1356.53s` under `PARALLAX_PS_HOST: pwsh.exe`, both steps' shell reported as
 `C:\Program Files\PowerShell\7\pwsh.EXE` (the Actions runner's own shell,
-not the env var the tests select internally).
+not the env var the tests select internally). Both lines are BARE `773
+passed` - no `skipped` or `deselected` count on either side, which pytest
+prints whenever either is nonzero - so a wholesale skip on one host cannot
+have produced this output; both invocations actually ran and passed the
+identical 773 items.
+
+**Module-level revision binding.** `git diff --name-only
+a3134dcd76d9253057bf24935f3d7a7eef8eb0e4..HEAD -- evals/ tools/ hooks/
+.githooks/` returns EMPTY output. So every `path:line` citation in the
+rest of this section against those four directories - not only the
+workflow file checked above - is safe to read against today's working
+tree: nothing under any of them has changed since the cited run's commit.
 
 ### Step 2: shipped scripts and which are covered
 
@@ -721,8 +732,12 @@ assumed). `hooks/*.ps1` is in the glob deliberately - it is what catches
 hand-written glob, and the checkout's `hooks/hooks.json:10`/`:22` invoke it
 as bare `pwsh`.
 
-**Exclusions, named.** A repo-wide `git ls-files '*.ps1'` returns 21 files,
-5 more than the 16 above. The 5 excluded, and why:
+**Exclusions, named.** A repo-wide `git ls-files '*.ps1'` returns 21
+files. Of the 16 entries the four-glob command above returns, only 15
+carry a `.ps1` extension - the 16th, `.githooks/pre-push`, has none - so
+the excluded `.ps1` set is 21 minus 15, **6 files**, not 5 (an earlier
+draft of this section subtracted 5, treating `.githooks/pre-push` as if
+it were one of the 21):
 - `docs/superpowers/plans/rounds/2026-08-22-item48-pwsh7-feasibility/reexec/{child,child-named,parent,parent-named}.ps1`
   (4 files) - this investigation's OWN measurement harness, built by an
   earlier task in this same plan to produce Measurement 1. Scratch for the
@@ -735,11 +750,13 @@ as bare `pwsh`.
   `entry-points.tsv:70`/`:220` for hardcoding `powershell.exe`, so this
   exclusion is not hiding that finding, only scoping THIS table to scripts
   under the four brief-named directories.)
-
-No `evals/multi-model-verify/fixtures/stub-codex/stub-codex.ps1` row
-appears in the repo-wide listing under a `.ps1` extension matching this
-glob's directories either; it is the same kind of test double as
-`stub-appserver.ps1` and excluded for the same reason.
+- `evals/multi-model-verify/fixtures/stub-codex/stub-codex.ps1` - the same
+  kind of test double, standing in for the codex CLI inside the test
+  suite rather than a script the product ships to run in production. It
+  DOES appear in the repo-wide `*.ps1` listing (an earlier draft of this
+  section said it did not, which was wrong - it is line 6 of that
+  listing); it is excluded for the same reason as `stub-appserver.ps1`,
+  not because it is absent.
 
 **Coverage table.** For each script, the covering module with the
 STRONGEST evidence found (a `runs` row inside a dual-host-job module, where
@@ -759,10 +776,10 @@ covering module is one of the eleven from Step 1.
 | `tools/verify-attestation.ps1` | `test_attestation.py` | runs (`:26` `VERIFY`, invoked at `:91` via `run_ps`) | yes |
 | `tools/write-attestation.ps1` | `test_attestation.py` | runs (`:25` `WRITE`, invoked at `:81`) | yes |
 | `hooks/superpowers-review-companion.ps1` | `test_multi_model_verify.py` | runs (`:22` `HOOK_SCRIPT`, invoked at `:2269` - hardcoded `shutil.which("pwsh")`, always host 7, never selector-driven) | **no** - this module is not one of the eleven; it runs only inside Tier 2b (`skill-evals.yml:44`-`:47`, `ubuntu-latest`), gated by a skip if `pwsh` is absent there, which this task did not check |
-| `tools/read-codex-round-evidence.ps1` | `test_codex_round_evidence.py` | runs (`:55` `SCRIPT`, invoked at `:247`,`:256`) | **no** - module not in the eleven |
+| `tools/read-codex-round-evidence.ps1` | `test_codex_round_evidence.py` | runs (`:55` `SCRIPT`, invoked at `:245`,`:254`) | **no** - module not in the eleven |
 | `tools/plant-home-skill-canary.ps1` | `test_home_skill_canary.py` | runs (`:48` `TOOL`, invoked at `:93` via `ps_host()`) | **no** - module not in the eleven |
-| `tools/check-drift.ps1` | `test_backup_lane.py` (`reads` only - `:1181` `DRIFT`, text asserted at `:1187`,`:1205`,`:1216`,`:1237`, never executed); `evals/tools/drift_statemachine_tests.ps1` (`runs` - `:120`-`:121` `Copy-Item`/`$DriftScript`, but this IS the local-only harness itself) | reads (dual-host module) / runs (non-CI harness) | **no** - the only `runs` evidence is inside `drift_statemachine_tests.ps1`, which `test_multi_model_verify.py:2955`-`:2958` gates behind `PARALLAX_STATEMACHINE`, unset in both CI jobs, so it skips in CI on both hosts |
-| `evals/tools/drift_statemachine_tests.ps1` | `test_multi_model_verify.py` | runs (`:2903` builds the path, executed under the `PARALLAX_STATEMACHINE`-gated test at `:2955`-`:2958`) | **no** - gated off in both CI jobs; local-only per this repo's own README/CLAUDE.md, opt-in |
+| `tools/check-drift.ps1` | `test_backup_lane.py` (`reads` only - `:1181` `DRIFT`, text asserted at `:1187`,`:1205`,`:1216`,`:1237`, never executed; NOT a dual-host module - `grep -c "test_backup_lane" .github/workflows/skill-evals.yml` returns `0`); `evals/tools/drift_statemachine_tests.ps1` (`runs` - `:120`-`:121` `Copy-Item`/`$DriftScript`, but this IS the local-only harness itself) | reads (non-dual-host module) / runs (non-CI harness) | **no**, and stronger than merely gated off: `test_multi_model_verify.py:2957`-`:2959` gates the harness invocation behind `PARALLAX_STATEMACHINE` (unset in both CI jobs), and the invocation itself (`:2961`) hardcodes `"powershell.exe"`. `tools/check-drift.ps1:406`-`:408` states outright "the rest of the harness still drives 5.1 only (backlog item 41); that one scenario names its host rather than the harness changing hosts" - and that one PS7-naming scenario, `agy-allow-depth-over-boundary` (`drift_statemachine_tests.ps1:1283`), SKIPS ITSELF when `pwsh.exe` is absent (`:1275`). `check-drift.ps1` has no PowerShell 7 execution path at all, in CI or locally, except one opt-in scenario that can skip itself. |
+| `evals/tools/drift_statemachine_tests.ps1` | `test_multi_model_verify.py` | runs (`:2903` builds the path, executed under the `PARALLAX_STATEMACHINE`-gated test at `:2957`-`:2959`) | **no** - gated off in both CI jobs; local-only per this repo's own README/CLAUDE.md, opt-in |
 | `.githooks/pre-push` | `test_attestation.py` | mentions only (`:5`,`:29` - docstring/comment naming what the hook calls; no module anywhere invokes `.githooks/pre-push` itself as a process) | **no** - no `runs` row exists for this script in the whole repo, on any host |
 
 **Count: 10 of 16 shipped scripts have a `runs` row inside a module that
@@ -786,18 +803,24 @@ exercises the SAME behaviour under 7:
    (0.24.0).** Mitigated in shipped code by hardcoding `-Depth 100` /
    `-Depth 3` (`tools/check-drift.ps1:205,765,1242`), with the rationale at
    `:376`-`:407` ("measured on both hosts rather than argued... an
-   over-boundary scenario naming pwsh.exe"). But the only harness that
-   drives this scenario live is `evals/tools/drift_statemachine_tests.ps1`,
-   gated behind `PARALLAX_STATEMACHINE` (`test_multi_model_verify.py:2955`-
-   `:2958`), unset in both CI jobs. **No coverage under 7** in any run this
-   task can point to; the comment's "measured on both hosts" describes a
-   past manual/local measurement, not a CI-repeatable one.
+   over-boundary scenario naming pwsh.exe"). But `:406`-`:408` of that same
+   comment says plainly "the rest of the harness still drives 5.1 only
+   (backlog item 41)": the only harness that drives this scenario live is
+   `evals/tools/drift_statemachine_tests.ps1`, gated behind
+   `PARALLAX_STATEMACHINE` (`test_multi_model_verify.py:2957`-`:2959`,
+   whose invocation is itself hardcoded to `"powershell.exe"` at `:2961`),
+   unset in both CI jobs - and even inside that opt-in harness, the one
+   scenario that names `pwsh.exe`, `agy-allow-depth-over-boundary`
+   (`drift_statemachine_tests.ps1:1283`), SKIPS ITSELF when `pwsh.exe` is
+   absent (`:1275`). **No coverage under 7** in any run this task can point
+   to; the comment's "measured on both hosts" describes a past manual/local
+   measurement, not a CI-repeatable one.
 2. **A no-BOM file reads with the ANSI code page and `$OutputEncoding`
    defaults to us-ascii, flattening an em dash (0.23.0).** Tested by
    `TestBriefEncodingOverStdin` in `test_multi_model_verify.py` (four
    `@pytest.mark.skipif(os.name != "nt", ...)` cases at `:3029`,`:3042`,
    `:3060`,`:3093`), whose `_run` helper (`:2986`-`:3000`) hardcodes
-   `"powershell.exe"` at `:2998` as the literal interpreter - never
+   `"powershell.exe"` at `:2999` as the literal interpreter - never
    selector-driven, never `pwsh`. **No coverage under 7**: every assertion
    about this behaviour is made against 5.1 only. Whether PowerShell 7 (which
    defaults `$OutputEncoding` to UTF-8, per this repo's own CLAUDE.md prose)
@@ -817,8 +840,11 @@ exercises the SAME behaviour under 7:
    `evals/tools/drift_statemachine_tests.ps1`, behind
    `PARALLAX_STATEMACHINE`, never set in CI. `tools/check-drift.ps1:387`-
    `:407`'s comment states an "over-boundary scenario naming pwsh.exe"
-   exists in that harness, but the harness does not run in either CI job.
-   **No coverage under 7** evidenced by a run this task can cite.
+   exists in that harness - the `agy-allow-depth-over-boundary` scenario at
+   `drift_statemachine_tests.ps1:1283` - but that scenario SKIPS ITSELF
+   when `pwsh.exe` is absent (`:1275`), and the harness does not run in
+   either CI job regardless. **No coverage under 7** evidenced by a run
+   this task can cite.
 5. **The tool-surface probe built the process's stdin from
    `Console.InputEncoding` and put a byte-order mark on the first JSON-RPC
    frame, rejected by the app server - broken on 5.1 only.** Covered:
@@ -830,20 +856,79 @@ exercises the SAME behaviour under 7:
    module IS one of the eleven dual-host-job modules, so the green run
    cited above covers this behaviour under `pwsh.exe` directly.
 
-**2 of 5 named traps (native-splat corruption, tool-surface-probe stdin
-BOM) have real coverage of the same behaviour under PowerShell 7. 3 of 5
-(JSON-depth truncation, em-dash/`$OutputEncoding` flattening, the
+**Beyond item 48's five: other host-sensitive behaviours found while
+reading these scripts.** Item 48's own list is not presented as
+exhaustive - `docs/superpowers/plans/2026-07-27-0150-backlog.md:3485`-
+`:3490` treats its own entry-point count as "a claim, not a fact" and
+records rounds that kept finding more. Reading the 16 shipped scripts for
+Steps 1-2 surfaced three more host-sensitive behaviours; recording them
+here rather than silently narrowing the search to the five names already
+given:
+
+a. **Native stderr promoted to a terminating error.**
+   `tools/new-kimi-lane-home.ps1:671`-`:679`: "Windows PowerShell 5.1 turns
+   ANY native-command stderr line into a terminating `NativeCommandError`
+   under `$ErrorActionPreference = "Stop"`, even when that stderr is being
+   captured rather than displayed - so the preference is relaxed for just
+   this call and restored immediately after" - a shipped save/restore
+   workaround (`:678`-`:679`,`:695`,`:699`). CLAUDE.md carries the same
+   rule for the codex-dispatch scripts, so this is a recurring class, not
+   a one-off. Its covering module, `test_kimi_lane_home.py`, IS one of the
+   eleven and this code path runs on every home build the tests do under
+   `pwsh` in the cited green run - but no assertion in that module measures
+   whether PowerShell 7 exhibits the same stderr-promotion behaviour.
+   Verdict: **exercised, divergence not measured**.
+b. **Reparse-point traversal during a recursive directory walk.**
+   `tools/plant-home-skill-canary.ps1:70`-`:73`: "Walk MANUALLY and never
+   step through a reparse point. `Get-ChildItem -Recurse` follows junctions
+   on some hosts, which would take this scan into whatever the junction
+   aims at." Its only covering module, `test_home_skill_canary.py:93`, is
+   outside the eleven (see this script's own row in Step 2's table).
+   Verdict: **no coverage under 7** - neither the divergence itself nor the
+   manual-walk mitigation is exercised by anything the dual-host job runs.
+c. **`ConvertFrom-Json` returns `String` on 5.1 and `DateTime` on 7 for the
+   same ISO-8601 timestamp.** `test_lock_protocol_live.py:379`-`:390`
+   `test_measurement_20_ticks_and_date_string_types_diverge_across_hosts`
+   measures this directly - the exact coercion behind the 0.16.0 lane lock
+   that "did not lock" (`skill-evals.yml:50`-`:53`,
+   `2026-07-27-0150-backlog.md:3473`-`:3477`). Its `required_hosts()`
+   helper (`:77`-`:91`) is the only host-selection function found anywhere
+   in this repo's test suite that FAILS rather than skips when a host is
+   missing (`:83`-`:89`: "an unavailable host fails it rather than reading
+   as a skip"), which makes a pass of this test the strongest single piece
+   of host-presence evidence this record has found. Its module IS one of
+   the eleven, so the cited green run covers it. Verdict: **covered under
+   7** - and the coverage is BILATERAL: `required_hosts()` demands both
+   `powershell.exe` and `pwsh.exe` by literal name, so this exact test
+   cannot survive a 5.1 drop unmodified. That is not a coverage caveat, it
+   is an asset a 5.1 drop destroys - flagged forward to `## Measurement 5:
+   what is saved`, not resolved here.
+
+These three are counted separately below, not folded into item 48's own
+"2 of 5" tally, so the scope decision stays visible rather than being
+silently absorbed either way.
+
+**2 of item 48's 5 named traps (native-splat corruption, tool-surface-probe
+stdin BOM) have real coverage of the same behaviour under PowerShell 7. 3
+of 5 (JSON-depth truncation, em-dash/`$OutputEncoding` flattening, the
 `ConvertFrom-Json` nesting-limit throw) have no coverage under 7 evidenced
 by this task** - two because the only harness that exercises them is
-gated off in both CI jobs, one because the shipped test that guards the fix
-is written to run 5.1 only, by design, and nothing here tests the pwsh side
-of that same claim.
+gated off in both CI jobs (and, for the one scenario inside it that DOES
+name `pwsh.exe`, self-skipping whenever `pwsh.exe` is absent), one because
+the shipped test that guards the fix is written to run 5.1 only, by
+design, and nothing here tests the pwsh side of that same claim. Counting
+the three additional behaviours above alongside the five named traps: 3 of
+8 host-sensitive behaviours this task identified are covered under 7
+(traps 3 and 5, plus the Measurement-20 divergence); 5 of 8 are not (traps
+1, 2 and 4, plus the reparse-point walk, plus the stderr-promotion
+behaviour - the last one "exercised but not measured" rather than
+untouched entirely).
 
 ### Summary
 
 Of the 16 shipped PowerShell-facing scripts (derived mechanically from
 `git ls-files 'tools/*.ps1' '.githooks/*' 'evals/tools/*.ps1' 'hooks/*.ps1'`,
-5 further tracked `.ps1` files excluded and named above), 10 have a `runs`
+6 further tracked `.ps1` files excluded and named above), 10 have a `runs`
 row inside a module the dual-host CI job actually runs, and that job's most
 recent green run at this branch's cut commit
 (`32391262449`/`96497936725`, headSha `a3134dcd76d9253057bf24935f3d7a7eef8eb0e4`,
@@ -863,42 +948,49 @@ named 5.1-specific traps, only 2 have coverage of the same behaviour class
 actually exercised under 7 by a real, evidenced run; the other 3 are
 "declared, not proven" under 7 - written up, reasoned about in comments,
 in one case measured under this record's own Measurement 1, but not
-covered by anything the dual-host CI job runs today. No percentage is
-given for either count: the tables above are the width of what this task
+covered by anything the dual-host CI job runs today. Three more
+host-sensitive behaviours turned up beyond item 48's named five (native
+stderr promotion, reparse-point traversal, and the Measurement-20
+`ConvertFrom-Json` type divergence); one of those three is itself the
+strongest single piece of coverage evidence in this whole record, and is
+also the one asset a 5.1 drop would destroy outright - see Step 3 above
+and the forward pointer to Measurement 5. No percentage is given for any
+of these counts: the tables above are the width of what this task
 measured, and a single number would claim more precision than 10-of-16
-scripts or 2-of-5 traps supports.
+scripts, 2-of-5 named traps, or 3-of-8 total behaviours supports.
 
 **Residual limits, named.**
 - This section maps INVOCATION, per the interfaces the brief sets: a
   `runs` row is not a claim that the invoking module's assertions are
   correct, only that the script was actually started as a process by test
   code. Whether each assertion inside those ten modules is the RIGHT check
-  is outside this task's scope, as it was outside Measurement 2's.
-  Whether the assertions the passing run actually exercised are the
-  ones described in the entry-point rows above `-` `entry-points.tsv`
-  classifies LINES, not test coverage, and this section does not re-derive
-  that inventory.
+  is outside this task's scope, as it was outside Measurement 2's. Nor
+  does this section claim the passing run's assertions match every
+  classification in `entry-points.tsv` - that inventory classifies LINES,
+  not test coverage, and this section does not re-derive it.
 - The 6 uncovered scripts are not all equally unproven: `run_hook` in
   `test_multi_model_verify.py:2269` DOES invoke
   `superpowers-review-companion.ps1` under a real `pwsh`, just outside the
   dual-host job and gated by a presence skip this task did not resolve
   either way on `ubuntu-latest`. That is a narrower gap than
   `.githooks/pre-push`, which no test anywhere invokes.
-- Trap coverage above is checked against the FIVE traps item 48 names, not
-  against every host-divergence this repo has found. `test_lock_protocol_live.py:381`-
-  `:400`'s `test_measurement_20_ticks_and_date_string_types_diverge_across_hosts`
-  is a sixth, adjacent, real divergence (`ConvertFrom-Json` returning
-  `String` vs `DateTime` for the same value) that IS exercised under both
-  hosts in a dual-host-job module - it is not counted in the 2-of-5 above
-  because it is not one of the five item 48 names, and naming it here is
-  the residual-limit disclosure this record's own method requires rather
-  than a claim that the five-trap list is exhaustive.
+- The three behaviours found beyond item 48's named five (Step 3, above)
+  are not claimed to be the complete set of what a wider search would
+  find; they are what this task's reading of the 16 shipped scripts
+  surfaced, disclosed rather than dropped for not matching the five given
+  names.
 - This section did not independently re-verify whether `pwsh` is present
   on the `ubuntu-latest` runner that executes Tier 2b
   (`skill-evals.yml:44`-`:47`) or the module that hook test runs inside
   when it does. Measurement 2 already recorded that PowerShell 7's presence
   on the Linux runner is unproven by this repo's own evidence; this section
   does not contradict that, and does not attempt to resolve it.
+- This section's `hooks/hooks.json:10`/`:22` citation (Step 2, `runs`
+  classification for `hooks/superpowers-review-companion.ps1`) is scoped to
+  the CHECKOUT, matching Measurement 2's own scoping. The versioned plugin
+  cache copy actually installed was not inspected by this task either;
+  Measurement 2 already names that gap in its own "half-requirement"
+  paragraph, and this section does not re-measure or contradict it.
 
 ## Measurement 4: refusal when pwsh is missing
 
