@@ -345,7 +345,13 @@ def main():
           "%d files not scanned"
           % (len(hits), len(hits) - len(unclassified), len(unclassified),
              len(stale), len(skipped)))
-    return 1 if (unclassified or stale) else 0
+    # `skipped` ADDED to the predicate at debate round 2: an unreadable or
+    # binary file used to print "N files not scanned" and still exit 0,
+    # which meant the exit code guaranteed only two of the three zeroes
+    # feasibility-record.md's own convention claims it does. Exit 0 now
+    # means all three are actually zero, not two of three plus a printed
+    # line nobody's automation checks.
+    return 1 if (unclassified or stale or skipped) else 0
 
 
 if __name__ == "__main__":
