@@ -293,7 +293,7 @@ $FakeProfile = Join-Path $Root "profile"
 $SpTemplate = Join-Path $FakeProfile ".claude\plugins\cache\claude-plugins-official\superpowers\6.2.0\skills\requesting-code-review\code-reviewer.md"
 $FakeSp = Join-Path $FakeProfile ".claude\plugins\cache\claude-plugins-official\superpowers\6.2.0"
 New-Item -ItemType Directory -Force -Path (Split-Path $SpTemplate) | Out-Null
-$PinnedFixture = Join-Path $Clone "evals\multi-model-verify\fixtures\superpowers-code-reviewer-6.2.0.md"
+$PinnedFixture = Join-Path $Clone "evals\multi-model-verify\fixtures\superpowers-code-reviewer-6.3.0.md"
 Copy-Item $PinnedFixture $SpTemplate -Force
 # A fake USERPROFILE needs a real profile's shell-folder skeleton: PS 5.1
 # resolves its job persistence path through USERPROFILE-expanded folders,
