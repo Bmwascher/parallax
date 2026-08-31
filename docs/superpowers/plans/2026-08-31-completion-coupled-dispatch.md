@@ -867,7 +867,11 @@ process is started here.
    the tool and never contains the body's text. Task 4 builds the
    wrapper's full shape; for this task write a wrapper that runs
    `body.ps1` as a child and nothing else, so the tests above pass.
-6. Write the receipt LAST, with create-new semantics.
+6. Write the receipt LAST, with create-new semantics. **The receipt's
+   BYTES must be final before step 5 writes the wrapper**, because the
+   wrapper carries their digest. Compose the receipt in memory, hash it,
+   write the wrapper, then write the receipt file. "Last" is about which
+   file lands last, not about when its content is decided.
 7. Print `command`, `taskName`, `wrapper`, `dispatchDir`, `round`.
 
 A failure at any step leaves the reserved directory in place and no
@@ -1380,10 +1384,35 @@ Document it in the script header as builder contract, with the sentence
 that makes it safe: its only reachable effect is to delay or fail a
 wrapper, never to turn a failing round into a successful one.
 
-Verify, do not assume, that `& '<tool>.ps1'` calling `exit N` sets
-`$LASTEXITCODE` to N on both hosts. If it does not, the wrapper captures
-the classifier's code another way and the plan's design section is
-corrected in the same commit.
+**This is MEASURED, not assumed.** The backup reviewer lane argued that
+`& '<tool>.ps1'` where the tool ends in `exit N` would terminate the
+WRAPPER's own process, so a successful first mirror verification would
+exit the wrapper 0 before the client ever ran - a false success at the one
+surface this design makes authoritative. Measured 2026-08-31 on both
+hosts, and it does not:
+
+```
+outer: before
+inner ran
+outer: AFTER  (LASTEXITCODE=0)
+wrapper exit code: 3
+```
+
+The inner `exit` ends the inner SCRIPT, sets `$LASTEXITCODE`, and the
+caller continues. A non-zero inner exit propagates correctly and the
+guard fires:
+
+```
+after inner 0: LASTEXITCODE=0
+after inner 7: LASTEXITCODE=7
+GUARD FIRED CORRECTLY
+```
+
+So the in-process form is correct for the verifier and the classifier, and
+`exit $LASTEXITCODE` as the wrapper's last statement carries the
+classifier's code. Do not change these three calls to child processes: the
+body is a child for a different reason - a body can call
+`[Environment]::Exit`, and a tool in this repo does not.
 
 - [ ] **Step 4: Run the tests on both hosts**
 
@@ -1596,11 +1625,14 @@ def test_both_lanes_decide_the_workdir_evidence_explicitly(body_skill, body_back
         assert ("-WorkdirEvidence" in body) or ("-NoWorkdirEvidence" in body)
 
 
-def test_every_call_site_passes_the_seal(body_skill, body_backup_lane):
-    # Five call sites, so five occurrences across the two files.
+def test_every_ROUND_call_site_passes_the_seal(body_skill, body_backup_lane):
+    # FOUR round sites, not five. The write probe runs no round-evidence
+    # binder today, and this count must not silently settle the question
+    # the task header says to settle deliberately. If the probe is given
+    # a binder, raise this to 5 in the commit that records why.
     total = body_skill.count("-SealedPriorStateSha256") \
         + body_backup_lane.count("-SealedPriorStateSha256")
-    assert total >= 5
+    assert total >= 4
 
 
 def test_the_write_probe_is_migrated_too(body_backup_lane):
@@ -1615,7 +1647,7 @@ forms:
 - `assert "-Poll" not in body` - negative membership, excluded.
 - `assert ("-WorkdirEvidence" in body) or ("-NoWorkdirEvidence" in body)` -
   membership inside an `or`, which contributes nothing from either side.
-- `test_every_call_site_passes_the_seal` - it sums two counts into a
+- `test_every_ROUND_call_site_passes_the_seal` - it sums two counts into a
   variable and asserts on the name, so its needles are reached through a
   variable and pin nothing.
 
@@ -2017,7 +2049,9 @@ as a stated limit rather than fixed. They belong in the
    documents this boundary in its own header; Task 1a must not widen the
    claim beyond it. Narrower than the ordinary edit Task 1a fixes.
 2. **A caller who reads the run-time nonce out of `classification` and
-   hands it to `-Classify`.** They get that round's disk state. No
+   hands it to `-Classify`, or who edits the WRAPPER itself.** The digest
+   binds the receipt; nothing binds the wrapper's own text after
+   preparation. They get that round's disk state. No
    filesystem mechanism can stop the owner of the filesystem. The
    authoritative answer remains the harness task's exit code.
 3. **A change made to the mirror and undone again before the client
@@ -2037,6 +2071,18 @@ as a stated limit rather than fixed. They belong in the
 5. **No bound on how long a hung round may sit.** Filed as a backlog item
    by Task 11; a hung round can never read as success, so this costs
    waiting, not truth.
+
+6. **Review inputs copied into the mirror AFTER construction stop
+   working.** The backup lane documents copying in any input the mirror
+   cannot inherit - a standards file above the repo root, a spec kept
+   outside the tree - and enumerating it before the round. `mirrorStateSha256`
+   is minted at construction, and Task 1a provides no way to re-mint it,
+   so anything copied in afterwards fails `-Prepare` and the wrapper's
+   first check. The direction is conservative - it BLOCKS, it never
+   false-passes - but a documented workflow becomes unrunnable. **Task 1a
+   must either add a re-mint path or say plainly in `backup-lane.md` that
+   inputs are copied in BEFORE the identity record is taken.** Found by
+   the backup lane, which is the lane that uses it.
 
 **One thing that is NOT shippable as a residual:** the preparation-time
 verifier output. `identity: verified` in front of `-Prepare`'s JSON breaks
@@ -2320,6 +2366,52 @@ intact, and found four things worth fixing:
 
 Its reply is retained at
 `docs/superpowers/plans/rounds/2026-08-31-completion-coupled-dispatch/fable-plan-review-r2.md`.
+
+## The round-8 review: the backup lane, seeing the plan for the first time
+
+The backup lane took part in the options poll and gave the only PASS in
+this cycle, then did not see the plan until now. Verdict FIX.
+
+**Its central finding is REFUTED, and I measured it rather than argue.**
+It held that the wrapper's in-process `& '<tool>.ps1'` calls would be
+terminated by those tools' own `exit N`, so a successful first mirror
+verification would exit the wrapper 0 before the client ran - a false
+success at the authoritative surface. Measured on both hosts: the inner
+`exit` ends the inner SCRIPT, sets `$LASTEXITCODE`, and the caller
+continues; a non-zero inner exit propagates and the guard fires. The
+measurement is now in the design section, replacing a hedge that had been
+sitting there unmeasured since Task 4 was written. The finding was wrong;
+raising it is what got the assumption measured.
+
+**Five of its other findings are real, and four are things only this lane
+would have noticed**, because they are about its own call sites:
+
+1. **All THREE backup-lane bodies** write `$code` into the exit file and
+   none runs `exit $code` - the same shape the plan had called out for the
+   write probe alone. Under the child contract every one of them would
+   report a failed client as a success. All five sites now get it.
+2. **Task 7 breaks three pins in `test_backup_lane.py`**, which its file
+   list did not name - the same class as Task 1a's pinned sentence,
+   recreated in a later task, differing only in that these fail loud.
+3. **The seal-count pin foreclosed a decision the same task says to make
+   deliberately.** `total >= 5` is only satisfiable by giving the write
+   probe a binder, so the pin decided the either/or the header poses. It
+   is now `>= 4`, the number of ROUND sites.
+4. **Copied-in review inputs stop working.** The lane documents copying in
+   inputs the mirror cannot inherit; the mirror digest is minted at
+   construction and Task 1a offered no way to re-mint it. Conservative -
+   it blocks rather than false-passes - but it silently breaks a
+   documented workflow, and Task 1a now has to resolve it.
+5. The backlog carries the same "three recorded values" sentence as a live
+   item's premise, and it is a working document, not a record.
+
+It also caught that the receipt's bytes must be final before the wrapper
+is written, since the wrapper carries their digest, while Task 2 said the
+receipt is written last - and that the wrapper's own text is unbound after
+preparation, now folded into residual 2.
+
+Its reply is retained at
+`docs/superpowers/plans/rounds/2026-08-31-completion-coupled-dispatch/kimi-plan-review-r1.md`.
 
 ## Where the plan stands
 
