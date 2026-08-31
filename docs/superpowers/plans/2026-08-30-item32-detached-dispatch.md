@@ -74,7 +74,7 @@ Cases, each named for what it protects:
 - `test_a_receipt_path_inside_the_dispatch_directory_is_blocked` — the receipt path equal to the dispatch directory, and inside it at one and two levels down. Expect exit 1 and expect NO dispatch directory to have been created, because the check runs first. Round 9's finding: the separation was a claim with no mechanism, and a receipt inside the directory it authenticates is the round 7 defect returning.
 - `test_force_is_not_accepted_in_any_argument_order` — assert the script source contains no `-Force` on the reservation, checked by parsing the command rather than by string order. Round 4 found the previous pin only forbade the exact token order `-ItemType Directory -Force`.
 - `test_a_committed_launch_publishes_pid_then_marker_then_receipt` — assert ALL THREE positions, by content rather than by timestamp: `pid` and `startticks` exist before `launch.committed`, and the RECEIPT is written after both. Round 10's finding: four places called the commit marker the last artifact while the executable sequence published the receipt after it, and the test name carried the wrong claim into the suite.
-- `test_a_failure_after_start_kills_the_tree_and_blocks` — inject a failure between start and commit; expect exit 1 and the started process gone. This is the state Sol said cannot be eliminated, so the tool must at least not leave it silently.
+- `test_a_failure_after_start_kills_the_tree_and_blocks` — inject a failure between start and commit; expect exit 1 and the started process gone. This is the HANDLED case: the `catch` runs, the tree dies, and nothing is left behind. Round 15's finding: it used to claim it was "the state Sol said cannot be eliminated", which is the opposite of what it is. The irreducible case is the separate hard-kill test below, which bypasses the `catch` entirely and lands on `no-receipt`. Keeping the two straight matters, because a handled failure that looks like the irreducible one makes the irreducible one look already covered.
 - `test_poll_reports_launch_unknown_when_the_marker_is_gone` — launch to success, then DELETE `launch.committed` and poll with that launch's own receipt and its matching expected pair. Expect `launch-unknown`. Not running, not failed, not complete. **This is the only way the state is reachable**, and round 13's rewrite of the hard-kill case is why: the marker is written before the receipt, so a valid receipt proves the marker once existed, and a directory that never got one has no receipt to poll with either. The previous wording said "a reserved directory with no `launch.committed`", which describes an input that stops at `no-receipt` instead.
 - `test_a_refused_launch_writes_no_receipt_and_cannot_be_polled` — **the round 6 regression, rewritten because round 7 showed the previous version was impossible to run.** It said to poll with "the token the second launch would have used", and a refused launch mints nothing. Instead: run a stub launch to completion against receipt `R1`, so the directory holds a real commit, pid, `exit` of `0` and a reply. Launch AGAIN on the same directory naming a FRESH receipt path `R2`. Take the refusal, assert `R2` was never created, then poll `-Receipt R2`. Expect `no-receipt`, never `reply-present`.
 - `test_a_stale_receipt_is_refused_against_the_expected_act` — **round 8's finding.** Poll the finished directory with `R1` while `-ExpectedDispatchDir` and `-ExpectedRound` name the SECOND round's directory and label. Expect `receipt-not-expected`. Then run the same case with only the label differing and again with only the directory differing, because a retry can reuse a label and a mistake can reuse a directory; both must be refused on their own.
@@ -825,7 +825,20 @@ sec=$(sed -n '/^### The mechanism/,/^## /p' docs/superpowers/specs/2026-08-30-it
 for t in "dispatch-detached.ps1" "-ReceiptPath" "-ExpectedDispatchDir" "-ExpectedRound" "no-receipt" "receipt-not-expected"; do printf '%s: ' "$t"; printf '%s' "$sec" | grep -c -- "$t"; printf '%s' "$sec" | grep -q -- "$t" || exit 1; done
 ```
 
-Expected: every one of the six at least 1, AND exit 0. Round 14's finding: three tokens let a spec omit `-ExpectedRound` entirely and still pass, and none of them required the receipt-last consequences to appear at all. The `|| exit 1` is the whole oracle. Round 12's finding on the SECOND attempt at this same check: a loop's status is its last iteration's, so a missing first token printed `0` and the block still succeeded, which is the defect this step exists to catch, reproduced inside its own fix. Round 10's finding: every oracle in this step searched only for what should be gone, so a section deleted and never rewritten passed it. Round 11's finding on the first attempt at a fix: `grep -c "A\|B\|C"` counts LINES matching any alternative, so three lines carrying only the first token satisfied "at least three" while the other two were absent, and it was not scoped to the section at all.
+Then assert the two REPLACEMENTS arrived, each scoped to its own section, because a negative grep is equally satisfied by a section deleted and by a section rewritten wrongly. Round 15's finding.
+
+```bash
+orph=$(sed -n '/^### The orphan half/,/^#\{2,3\} /p' docs/superpowers/specs/2026-08-30-item32-detached-dispatch-design.md)
+for t in "every committed launch" "interrupted" "no receipt"; do printf '%s' "$orph" | grep -qi -- "$t" || exit 1; done
+stat=$(sed -n '/never be readable as a$/,/^#\{2,3\} /p' docs/superpowers/specs/2026-08-30-item32-detached-dispatch-design.md)
+for t in "no-receipt" "receipt-not-expected" "launch-unknown" "launch-not-ours" "pid-unreadable" "running"; do printf '%s' "$stat" | grep -q -- "$t" || exit 1; done
+printf '%s' "$stat" | grep -q "LIVENESS IS CHECKED FIRST" && exit 1
+echo "spec sections reconciled"
+```
+
+Expected: `spec sections reconciled` and exit 0. The orphan section must say the pid is on disk for every committed launch AND that the interrupted one leaves no receipt; the state section must name all six ordered states and must no longer claim liveness is first. "Liveness is second" would have passed every earlier check while contradicting the executable order.
+
+Expected of the token loop above: every one of the six at least 1, AND exit 0. Round 14's finding: three tokens let a spec omit `-ExpectedRound` entirely and still pass, and none of them required the receipt-last consequences to appear at all. The `|| exit 1` is the whole oracle. Round 12's finding on the SECOND attempt at this same check: a loop's status is its last iteration's, so a missing first token printed `0` and the block still succeeded, which is the defect this step exists to catch, reproduced inside its own fix. Round 10's finding: every oracle in this step searched only for what should be gone, so a section deleted and never rewritten passed it. Round 11's finding on the first attempt at a fix: `grep -c "A\|B\|C"` counts LINES matching any alternative, so three lines carrying only the first token satisfied "at least three" while the other two were absent, and it was not scoped to the section at all.
 - `-Token` and `-DispatchDir <dispatch-dir> -Json` are stale because the poll now names a RECEIPT.
 
 - [ ] **Step 4: Run the five local gates, detached**
@@ -863,9 +876,9 @@ git commit -m "close items 32 and 33"
 
 ## What the debate changed
 
-Sol session `01a055c5-935e-76e3-ad1d-83721bc67d79`, FOURTEEN review rounds plus a two-lane poll, plus one round refused by the evidence binder and discarded unread. Every finding was reproduced against the repository before acceptance and none was refuted. Two reviewer rulings reversed decisions I had already reported to the user: the Kimi lane's scope, and the whole launch mechanism.
+Sol session `01a055c5-935e-76e3-ad1d-83721bc67d79`. Fifteen numbered dispatches: **fourteen full review rounds and one two-lane poll, which was dispatch 5**. Round 7 took two attempts; the first was refused by the round-evidence binder and discarded unread. That refusal's only artifact is a renamed reply file in the session scratchpad, outside this repository, so it is recorded here and is NOT repo-verifiable - round 15's point, and it is stated rather than dropped. Every finding was reproduced against the repository before acceptance and none was refuted. Two reviewer rulings reversed decisions I had already reported to the user: the Kimi lane's scope, and the whole launch mechanism.
 
-Rounds 1 to 9 each found at least one way for one act's artifact to be read as another act's result. Rounds 10 to 14 found none, and each named the shapes it had swept for. What they found instead was oracles that could not fail and text left behind by a mechanism change - twice, an oracle written to fix the previous round's oracle.
+**Rounds 1 to 4 and 6 to 9** each found at least one way for one act's artifact to be read as another act's result - eight rounds, not nine, because dispatch 5 was the poll and not a review. Rounds 10 to 15 found none, and each named the shapes it had swept for. What they found instead was oracles that could not fail and text left behind by a mechanism change - twice, an oracle written to fix the previous round's oracle.
 
 Round 4 is where this plan stopped being a set of copied snippets: it found the launch was never centralized at all. Round 13 is the deepest single finding after that - a test that could never have passed, because moving the receipt to last in revision 10 changed which state an interrupted launch produces and nothing else was updated.
 
@@ -877,7 +890,7 @@ Round 4 is where this plan stopped being a set of copied snippets: it found the 
 
 **Round 4** — the reservation was not fail-closed; an eighth condition existed outside the state model entirely, reachable three ways; `>= N` counts bound nothing to a call site; the launch was never actually centralized; eight of ten oracles were still weak and one task had none; the spec was still stale in ways the convergence grep did not search for.
 
-**Round 5** — the wrapper body's own quoting and the round-numbered path rule.
+**Round 5 was the POLL, not a review round** — it is described below.
 
 **Rounds 6 and 7** — the fifth false-completion path: an old completed directory answering after a refused launch. A launch token was proposed, supplied, and then refused as evidence, because a token stored inside the artifact it authenticates can be read out of that artifact by the caller. The receipt replaced it. Also: the documented call hardcoded `powershell`, silently forcing 5.1 on a PowerShell 7 session.
 
@@ -887,7 +900,7 @@ Round 4 is where this plan stopped being a set of copied snippets: it found the 
 
 **Rounds 10 to 12** — no new completion path. The point-of-use text carried a stale exit mapping; two tasks expected a red-then-green cycle on a guard that was already green; and two Task 9 oracles could not fail, the second being the fix for the first.
 
-**Rounds 13 and 14** — the receipt-last ordering, applied in revision 10, had never been propagated. The hard-kill test named a state it could not reach, `LAUNCH UNKNOWN` meant two different things, and four passages plus two spec sections still described the older mechanism.
+**Rounds 13 to 15** — the receipt-last ordering, applied in revision 10, had never been propagated. The hard-kill test named a state it could not reach, `LAUNCH UNKNOWN` meant two different things, four passages plus two spec sections still described the older mechanism, and one test still called a HANDLED failure the irreducible one. Round 15 also caught this record itself overcounting the reviews and mis-stating which rounds found completion paths.
 
 **The poll** — both lanes independently chose the shipped tool. Sol conditioned it on not claiming the failure is eliminated; Fable observed that the stub gate could not have caught the defect at all, because the launch sequence sat outside the wrapper it ran. Both required the anchored path, and both cited the three existing bare relative paths as item 58's own cause.
 
