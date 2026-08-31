@@ -73,6 +73,7 @@ Prepare:  -Prepare -DispatchDir <path> -WrapperBody <path>
           -ReceiptPath <path> -Round <label> -WorkingDirectory <path>
           -RepoRoot <path> -SourceHead <sha> -MirrorHead <sha>
           -SourceStatusSha256 <hex> -MirrorStateSha256 <hex>
+          -ExpectedMirrorPath <path>
           -DispatchHost <pwsh|powershell> -PriorStateFile <path>
           (-WorkdirEvidence <literal> | -NoWorkdirEvidence) [-Json]
 
@@ -107,7 +108,8 @@ non-null, no extras. The table is the only place the set is written down:
 | `sourceHead` | 40 lowercase hex | source identity, for `-VerifyIdentity` |
 | `mirrorHead` | 40 lowercase hex | mirror identity, for `-VerifyIdentity` |
 | `sourceStatusSha256` | 64 lowercase hex | source status digest, for `-VerifyIdentity` |
-| `mirrorStateSha256` | 64 lowercase hex | mirror content digest, added by Task 2a |
+| `mirrorStateSha256` | 64 lowercase hex | mirror content digest, added by Task 1a |
+| `expectedMirrorPath` | non-empty string | the canonical path the build recorded |
 | `schema` | the integer `2` | so a version-1 receipt cannot be read as this one |
 
 `startTicks` is gone with the liveness model.
@@ -138,6 +140,7 @@ try { $b = $utf8.GetBytes('reserved'); $r.Write($b, 0, $b.Length) } finally { $r
 & '<mirrorToolPath>' -VerifyIdentity -RepoRoot '<repoRoot>' -MirrorPath '<workingDirectory>' `
     -SourceHead '<sourceHead>' -MirrorHead '<mirrorHead>' `
     -SourceStatusSha256 '<sourceStatusSha256>' -MirrorStateSha256 '<mirrorStateSha256>' `
+    -ExpectedMirrorPath '<expectedMirrorPath>' `
     > "$PSScriptRoot/mirror.verify" 2>&1
 if ($LASTEXITCODE -ne 0) { throw 'mirror identity failed at dispatch time' }
 
@@ -147,6 +150,12 @@ $null | & '<hostPath>' -NoProfile -NonInteractive -File "$PSScriptRoot/body.ps1"
     > "$PSScriptRoot/body.out" 2> "$PSScriptRoot/body.err"
 $code = $LASTEXITCODE
 if ($null -eq $code) { $code = 1 }
+
+# The tree is verified a SECOND time, after the client has finished, so a
+# mutation that persisted through the round is caught. A change reverted
+# inside the round is not, and no before-and-after check could catch it.
+& '<mirrorToolPath>' -VerifyIdentity @mirrorArgs >> "$PSScriptRoot/mirror.verify" 2>&1
+if ($LASTEXITCODE -ne 0) { throw 'the mirror changed while the round ran' }
 
 # CONSUME the reservation BEFORE any terminal artifact is published, and
 # stamp it with a nonce minted HERE, at run time, that appears in no file
@@ -209,9 +218,9 @@ edit to a tracked file inside the mirror worktree, without a commit, moves
 neither head and changes no source-side value: it passes both
 verifications, and the client reads bytes nobody bound. The tool's own
 header already states this narrowness honestly; what is new here is that
-this design depends on the part it does not cover. Task 2a adds a
+this design depends on the part it does not cover. Task 1a adds a
 mirror-state digest and a source-is-not-the-mirror check before this
-design can rely on it.
+design can rely on it, and it runs BEFORE the tool is rewritten.
 
 **Capture the verifier's stdout at both call sites.** A successful
 `-VerifyIdentity` prints `identity: verified`. In `-Prepare` that line
@@ -496,6 +505,131 @@ git commit -m "rename the dispatch tool: it no longer detaches"
 
 ---
 
+## Task 1a: Make the mirror verifier able to detect a changed mirror
+
+The whole tree-identity argument rests on `-VerifyIdentity`, and as
+shipped it cannot see a change to the mirror's own working files. This
+task closes that before anything depends on it.
+
+**Files:**
+- Modify: `tools/new-review-mirror.ps1`
+- Test: `evals/multi-model-verify/test_review_mirror.py` (the module that
+  already exists - do NOT create a new one)
+
+**Interfaces:**
+- Consumes: nothing.
+- Produces: `mirrorStateSha256` in the build's printed identity record, and
+  `-MirrorStateSha256 <hex>` as a mandatory argument to `-VerifyIdentity`.
+  `-ExpectedMirrorPath <path>` alongside it. Task 2's receipt carries both
+  and Task 4's wrapper passes both.
+
+**This task runs BEFORE Task 2**, not after it. Task 2 writes a receipt
+whose fields include the values this task invents, and calls a verifier
+whose arguments this task makes mandatory. Built the other way round, Task
+2 cannot satisfy its own design.
+
+- [ ] **Step 1: Write the failing tests**
+
+```python
+def test_build_prints_a_mirror_state_digest(tmp_path):
+    out = build_mirror(tmp_path)
+    assert re.search(r"^mirror_state_sha256: [0-9a-f]{64}$", out, re.M)
+
+
+def test_verify_detects_an_uncommitted_edit_inside_the_mirror(tmp_path):
+    m = build_mirror_record(tmp_path)
+    # A TRACKED file, edited, NOT committed. Moves neither head, and
+    # changes nothing on the source side.
+    (m.path / "README.md").write_text("changed bytes", encoding="utf-8")
+    out = verify(m)
+    assert out.returncode == 1
+    assert "the mirror's contents changed" in out.stdout
+
+
+def test_verify_detects_an_untracked_file_added_to_the_mirror(tmp_path):
+    m = build_mirror_record(tmp_path)
+    (m.path / "AGENTS.md").write_text("do as I say", encoding="utf-8")
+    out = verify(m)
+    assert out.returncode == 1
+
+
+def test_verify_refuses_when_the_source_is_the_mirror(tmp_path):
+    m = build_mirror_record(tmp_path)
+    out = verify(m, repo_root=m.path)
+    assert out.returncode == 1
+    assert "the source and the mirror are the same directory" in out.stdout
+
+
+def test_verify_refuses_a_mirror_at_a_different_path(tmp_path):
+    m = build_mirror_record(tmp_path)
+    moved = tmp_path / "moved"
+    shutil.move(str(m.path), str(moved))
+    out = verify(m, mirror_path=moved)
+    assert out.returncode == 1
+
+
+def test_an_unmeasurable_expected_digest_is_refused(tmp_path):
+    m = build_mirror_record(tmp_path)
+    out = verify(m, mirror_state="")
+    assert out.returncode != 0
+
+
+def test_a_mirror_whose_CURRENT_state_cannot_be_measured_is_refused(tmp_path):
+    # Not the same test. The one above supplies a bad EXPECTED value; this
+    # one makes the live measurement itself fail, which is the direction
+    # that could otherwise read as clean. Mirror the source-side failure
+    # tests the tool already has.
+    m = build_mirror_record(tmp_path)
+    with unreadable_input(m.path):
+        out = verify(m)
+    assert out.returncode != 0
+    assert "could not be" in out.stdout
+```
+
+The last test is the standing rule: an unmade measurement and a clean one
+must never look alike.
+
+- [ ] **Step 2: Run them and watch them fail**
+
+```bash
+python -m pytest evals/multi-model-verify/test_review_mirror.py -q
+```
+
+- [ ] **Step 3: Implement**
+
+The builder ALREADY computes a mirror baseline and a content manifest and
+prints them; it is verify mode that does not accept them. Combine those
+two into one `mirrorStateSha256`, print it in the identity record beside
+the heads, and require it in verify mode. Recompute it over `MirrorPath`
+and refuse on any difference, with the message the test pins.
+
+Add two more refusals to verify mode, both before any digest work:
+
+- canonical `RepoRoot` equal to canonical `MirrorPath` - otherwise passing
+  the live repository as both satisfies every remaining comparison
+  whenever the two heads are equal, which they are whenever the mirror
+  needed no remediation commit;
+- a `MirrorPath` whose canonical form differs from `-ExpectedMirrorPath`.
+  This needs the new parameter: `mirrorStateSha256` carries baseline and
+  manifest state only, and nothing in the shipped interface records where
+  the mirror was built. Without that parameter the refusal cannot be
+  implemented and must not be promised.
+
+Correct the tool's own header in the same commit. It currently states the
+narrowness accurately for what it covered; it must now state what it
+covers after this change, and no more.
+
+- [ ] **Step 4: Run the tests on both hosts**
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add tools/new-review-mirror.ps1 evals/multi-model-verify/test_review_mirror.py
+git commit -m "let the mirror verifier see a changed mirror"
+```
+
+---
+
 ## Task 2: Delete `-Launch` and `-Poll`, add `-Prepare`
 
 **Files:**
@@ -530,6 +664,8 @@ def test_prepare_writes_the_whole_receipt_last(tmp_path):
         "-WorkingDirectory", str(mirror.path), "-RepoRoot", str(mirror.source),
         "-SourceHead", mirror.source_head, "-MirrorHead", mirror.mirror_head,
         "-SourceStatusSha256", mirror.source_status_sha256,
+        "-MirrorStateSha256", mirror.mirror_state_sha256,
+        "-ExpectedMirrorPath", str(mirror.path),
         "-DispatchHost", "powershell",
         "-PriorStateFile", str(prior), "-NoWorkdirEvidence", "-Json"])
     assert out.returncode == 0, out.stdout
@@ -538,7 +674,7 @@ def test_prepare_writes_the_whole_receipt_last(tmp_path):
         "dispatchDir", "token", "round", "workingDirectory",
         "dispatchHost", "priorStateSha256", "workdirEvidence",
         "repoRoot", "sourceHead", "mirrorHead", "sourceStatusSha256",
-        "schema"}
+        "mirrorStateSha256", "expectedMirrorPath", "schema"}
     assert got["schema"] == 2
     assert got["round"] == "Sol R1"
     assert got["workdirEvidence"] == "none"
@@ -616,11 +752,16 @@ process is started here.
    comes from this explicit pre-check.
 
 1a. **BLOCK if the working directory does not verify as the named
-   mirror.** Run
-   `tools/new-review-mirror.ps1 -VerifyIdentity -RepoRoot <repoRoot>
-   -MirrorPath <workingDirectory> -SourceHead <sourceHead>
-   -MirrorHead <mirrorHead> -SourceStatusSha256 <sourceStatusSha256>`
-   and BLOCK on any non-zero exit.
+   mirror.** Run `tools/new-review-mirror.ps1 -VerifyIdentity` with every
+   argument Task 1a made mandatory - `-RepoRoot`, `-MirrorPath`,
+   `-SourceHead`, `-MirrorHead`, `-SourceStatusSha256`,
+   `-MirrorStateSha256`, `-ExpectedMirrorPath` - and BLOCK on any non-zero
+   exit.
+
+   **CAPTURE its stdout.** A successful verification prints
+   `identity: verified`, and `-Prepare`'s own output is JSON a caller
+   parses. Assign the call's output to a variable or redirect it; a line
+   in front of the JSON breaks the caller, not just the eye.
 
    **There is no identity marker inside a mirror, and this plan must not
    invent one.** An earlier version of this task said to read a record
@@ -681,108 +822,6 @@ git commit -m "replace launch and poll with a fail-closed prepare"
 
 ---
 
-## Task 2a: Make the mirror verifier able to detect a changed mirror
-
-The whole tree-identity argument rests on `-VerifyIdentity`, and as
-shipped it cannot see a change to the mirror's own working files. This
-task closes that before anything depends on it.
-
-**Files:**
-- Modify: `tools/new-review-mirror.ps1`
-- Test: `evals/multi-model-verify/test_new_review_mirror.py`
-
-**Interfaces:**
-- Consumes: nothing.
-- Produces: `mirrorStateSha256` in the build's printed identity record, and
-  `-MirrorStateSha256 <hex>` as a mandatory argument to `-VerifyIdentity`.
-  Task 2's receipt carries it and Task 4's wrapper passes it.
-
-- [ ] **Step 1: Write the failing tests**
-
-```python
-def test_build_prints_a_mirror_state_digest(tmp_path):
-    out = build_mirror(tmp_path)
-    assert re.search(r"^mirror_state_sha256: [0-9a-f]{64}$", out, re.M)
-
-
-def test_verify_detects_an_uncommitted_edit_inside_the_mirror(tmp_path):
-    m = build_mirror_record(tmp_path)
-    # A TRACKED file, edited, NOT committed. Moves neither head, and
-    # changes nothing on the source side.
-    (m.path / "README.md").write_text("changed bytes", encoding="utf-8")
-    out = verify(m)
-    assert out.returncode == 1
-    assert "the mirror's contents changed" in out.stdout
-
-
-def test_verify_detects_an_untracked_file_added_to_the_mirror(tmp_path):
-    m = build_mirror_record(tmp_path)
-    (m.path / "AGENTS.md").write_text("do as I say", encoding="utf-8")
-    out = verify(m)
-    assert out.returncode == 1
-
-
-def test_verify_refuses_when_the_source_is_the_mirror(tmp_path):
-    m = build_mirror_record(tmp_path)
-    out = verify(m, repo_root=m.path)
-    assert out.returncode == 1
-    assert "the source and the mirror are the same directory" in out.stdout
-
-
-def test_verify_refuses_a_mirror_at_a_different_path(tmp_path):
-    m = build_mirror_record(tmp_path)
-    moved = tmp_path / "moved"
-    shutil.move(str(m.path), str(moved))
-    out = verify(m, mirror_path=moved)
-    assert out.returncode == 1
-
-
-def test_an_unmeasurable_mirror_state_is_refused_not_skipped(tmp_path):
-    m = build_mirror_record(tmp_path)
-    out = verify(m, mirror_state="")
-    assert out.returncode != 0
-```
-
-The last test is the standing rule: an unmade measurement and a clean one
-must never look alike.
-
-- [ ] **Step 2: Run them and watch them fail**
-
-```bash
-python -m pytest evals/multi-model-verify/test_new_review_mirror.py -q
-```
-
-- [ ] **Step 3: Implement**
-
-The builder ALREADY computes a mirror baseline and a content manifest and
-prints them; it is verify mode that does not accept them. Combine those
-two into one `mirrorStateSha256`, print it in the identity record beside
-the heads, and require it in verify mode. Recompute it over `MirrorPath`
-and refuse on any difference, with the message the test pins.
-
-Add two more refusals to verify mode, both before any digest work:
-
-- canonical `RepoRoot` equal to canonical `MirrorPath` - otherwise passing
-  the live repository as both satisfies every remaining comparison
-  whenever the two heads are equal, which they are whenever the mirror
-  needed no remediation commit;
-- a `MirrorPath` that is not the canonical path the build recorded.
-
-Correct the tool's own header in the same commit. It currently states the
-narrowness accurately for what it covered; it must now state what it
-covers after this change, and no more.
-
-- [ ] **Step 4: Run the tests on both hosts**
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add tools/new-review-mirror.ps1 evals/multi-model-verify/test_new_review_mirror.py
-git commit -m "let the mirror verifier see a changed mirror"
-```
-
----
-
 ## Task 3: `-Classify`, its state order and its exit map
 
 **Files:**
@@ -790,7 +829,7 @@ git commit -m "let the mirror verifier see a changed mirror"
 - Test: `evals/multi-model-verify/test_dispatch_round.py`
 
 **Interfaces:**
-- Consumes: the receipt from Task 2, all twelve fields.
+- Consumes: the receipt from Task 2, every field in the table above.
 - Produces: `-Classify -DispatchDir <d> -ReceiptPath <r> -ExpectedRound
   <label> -ExpectedToken <t> -ExpectedPriorStateSha256 <hex> -Redeem
   <nonce>`, exit 0 only on `reply-present`. Task 4's wrapper calls it with
@@ -1153,7 +1192,7 @@ def test_prepare_refuses_a_mirror_whose_head_does_not_match(tmp_path):
 def test_the_wrapper_reverifies_the_tree_before_the_client_runs(tmp_path):
     # Post-preparation mutation that moves NEITHER head: a tracked file in
     # the mirror worktree, edited, not committed. This is the case the
-    # shipped verifier could not see, and it is why Task 2a exists. Do not
+    # shipped verifier could not see, and it is why Task 1a exists. Do not
     # weaken it to a commit - a commit moves the mirror head and would
     # test the check that already worked.
     p = prepare(tmp_path, body=OK_BODY)
@@ -1814,6 +1853,39 @@ git commit -m "correct the dispatch rules CLAUDE.md still states as measured"
 
 ---
 
+## The residuals this plan SHIPS, stated rather than hidden
+
+Each of these was found by a reviewer lane, is real, and is being shipped
+as a stated limit rather than fixed. They belong in the
+`round-dispatch-states` region, not only here.
+
+1. **A tracked file whose bytes change while git still reports it clean.**
+   `-VerifyIdentity` hashes what git's status listing names plus the
+   content manifest. A path hidden behind `assume-unchanged`,
+   `skip-worktree`, or another clean-filter condition can change without
+   moving HEAD, the baseline, or the manifest. The mirror tool already
+   documents this boundary in its own header; Task 1a must not widen the
+   claim beyond it. Narrower than the ordinary edit Task 1a fixes.
+2. **A caller who reads the run-time nonce out of `classification` and
+   hands it to `-Classify`.** They get that round's disk state. No
+   filesystem mechanism can stop the owner of the filesystem. The
+   authoritative answer remains the harness task's exit code.
+3. **An external process that mutates the mirror after verification and
+   while the client is reading it.** The wrapper checks before the client
+   runs and, per Task 4, again after the child returns - so persistent
+   in-round mutation is caught, and only a change-and-revert inside the
+   round is not. This is filesystem ownership after dispatch, explicitly
+   trusted.
+4. **The harness trailer's format is measured, not pinned across
+   versions.** Nothing in this repo parses it mechanically.
+5. **No bound on how long a hung round may sit.** Filed as a backlog item
+   by Task 11; a hung round can never read as success, so this costs
+   waiting, not truth.
+
+**One thing that is NOT shippable as a residual:** the preparation-time
+verifier output. `identity: verified` in front of `-Prepare`'s JSON breaks
+a machine-readable interface. Task 2 captures it.
+
 ## What this plan deliberately does NOT do
 
 - **It does not bump the plugin version.** The bump goes after the diff
@@ -1980,6 +2052,42 @@ had removed only one of the four restated counts.
 
 Its reply is retained at
 `docs/superpowers/plans/rounds/2026-08-31-completion-coupled-dispatch/sol-plan-review-r3.md`.
+
+## The round-5 review this plan has also answered
+
+The cross-vendor lane's fourth pass, bound clean, FIX. **It found no new
+false-success path in the wrapper or the classifier**, and said the
+wrapper and classifier design is now good enough. Everything it raised was
+wiring:
+
+1. **Task 2a was not connected to Task 2.** It made an argument mandatory
+   that Task 2 never passed, invented a receipt field Task 2 never wrote,
+   and modified neither the tool nor its tests. Built in that order, Task
+   2 could not satisfy its own design. It is now **Task 1a and runs first**,
+   and Task 2 passes and records both new values.
+2. **The "refuse a moved mirror" promise had no interface.** Nothing
+   recorded where the mirror was built, so the refusal could not be
+   implemented. `-ExpectedMirrorPath` is added; without it the promise
+   would have been deleted rather than left standing.
+3. **The preparation-time verifier output was still uncaptured**, so
+   `identity: verified` would have landed in front of `-Prepare`'s JSON.
+   Named explicitly as the one item that must NOT ship as a residual.
+4. **The test module I named does not exist.** The repo's mirror tests are
+   in `test_review_mirror.py`; I invented `test_new_review_mirror.py`.
+   Verified.
+5. A stale field count, and a measurement-failure test that only exercised
+   a bad EXPECTED value rather than a failure to measure the CURRENT one -
+   which is the direction that could read as clean.
+
+It also accepted a cheap strengthening it proposed: the wrapper verifies
+the tree AGAIN after the client returns, so a mutation that persisted
+through the round is caught.
+
+And it ranked what could honestly ship as a stated residual, which is now
+its own section above rather than scattered through the design.
+
+Its reply is retained at
+`docs/superpowers/plans/rounds/2026-08-31-completion-coupled-dispatch/sol-plan-review-r4.md`.
 
 Neither lane has yet seen THIS version.
 
