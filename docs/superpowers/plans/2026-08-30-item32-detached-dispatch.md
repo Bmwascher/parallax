@@ -14,7 +14,7 @@
 
 ## What the two lanes conditioned their answer on, and what this plan does with it
 
-- **Sol: the tool does NOT make the failure impossible.** A hard kill between `Start-Process` returning and the pid being recorded still leaves a live untracked process. So `LAUNCH UNKNOWN` is a named state in the contract, not an eliminated one. This plan takes Sol's weaker claim over Fable's stronger one because Fable stated it had not re-verified the round 4 finding and took the relay.
+- **Sol: the tool does NOT make the failure impossible.** A hard kill between `Start-Process` returning and the receipt being published still leaves a live untracked process. So the contract names that state rather than eliminating it. Since revision 13 the state is `NO RECEIPT`, not `LAUNCH UNKNOWN`: the receipt is the transaction's last act, so an interrupted launch has none. `LAUNCH UNKNOWN` now means something narrower - a valid receipt whose marker has since disappeared. This plan takes Sol's weaker claim over Fable's stronger one because Fable stated it had not re-verified the round 4 finding and took the relay.
 - **Both: anchor the call.** All three tools the skill calls today use bare relative paths — `SKILL.md:94`, `:121`, `:228` — which is item 58's own cause. The new call uses `${CLAUDE_PLUGIN_ROOT}`. The three existing ones stay item 58's, and Task 9 records the asymmetry rather than widening scope silently.
 - **Fable: the stub gate could not have caught this.** Task 7 runs the WRAPPER, while reserve-write-launch-record sits outside the wrapper in every copy. With the tool, that sequence is inside a real script with a real test file, which is the point.
 
@@ -50,7 +50,7 @@ This is the whole point of revision 5. The four steps become one transaction in 
 - **`-Poll` names a RECEIPT, never a directory.** Round 6 asked for a launch token and revision 6 supplied one; round 7 showed a token stored inside the artifact it authenticates is not evidence of anything, because the caller can read it out of the old directory it is already looking at and hand it straight back. So the receipt is written OUTSIDE the dispatch directory, at a path `-Launch` refuses if it already exists, LAST of all and only on success. **`-Launch` ENFORCES the separation rather than describing it:** it resolves both paths and BLOCKS before anything is created if the receipt path is equal to, or inside, the dispatch directory. Round 9's finding - the guarantee was claimed in prose while the parameter accepted any path, so a receipt written inside the directory it authenticates would have quietly restored the round 7 defect. A refused launch writes no receipt, so there is nothing for a caller to substitute from the directory it was refused.
 - The receipt is JSON: the dispatch directory, the minted token, the `-Round` label, and the launched process's start-time ticks. `-Poll` reads it, and its own JSON echoes `round` back. That is the visibility half: a poll answering for a different round says so in the field the caller records.
 - **`-Poll` is told, INDEPENDENTLY of the receipt, which directory and which round it is polling for**, and compares both before it opens anything. A mismatch is `receipt-not-expected`. Round 8's finding: the receipt alone binds a receipt to its own directory, and nothing bound it to the act the caller believes it is performing, so handing an earlier attempt's receipt to a later poll returned the earlier attempt's `reply-present`. The label alone is not enough - `Sol R1` is reusable across a retry of the same round - which is why the expected DIRECTORY is required as well. The caller already knows both values: it passed them to `-Launch`.
-- **The residual that remains, stated rather than claimed closed.** A caller that supplies an earlier attempt's receipt AND that attempt's directory AND its label gets that attempt's result, because at that point every value the caller supplied describes the earlier act. Nothing inside the tool can distinguish a caller that is confused about all three. The controls are a FRESH round-numbered receipt path per round and a `-Launch` that refuses an existing one. This is NARROWED, exactly like LAUNCH UNKNOWN, and the contract says so in the same words.
+- **The residual that remains, stated rather than claimed closed.** A caller that supplies an earlier attempt's receipt AND that attempt's directory AND its label gets that attempt's result, because at that point every value the caller supplied describes the earlier act. Nothing inside the tool can distinguish a caller that is confused about all three. The controls are a FRESH round-numbered receipt path per round and a `-Launch` that refuses an existing one. This is NARROWED, exactly like the interrupted launch that leaves NO RECEIPT, and the contract says so in the same words.
 - `-Launch` prints, and `-Poll` returns, JSON with `state` drawn from exactly TWELVE names: `no-receipt`, `receipt-not-expected`, `launch-unknown`, `launch-not-ours`, `pid-unreadable`, `running`, `no-exit-file`, `exit-unreadable`, `exit-nonzero`, `no-reply`, `reply-empty`, `reply-present`.
 - `no-receipt` deliberately FOLDS three inputs - the receipt path is absent, or unreadable, or fails the schema below. They are folded because their disposition is identical and no branch follows any of them. It is a decision, not an omission.
 - **The receipt schema is stated, because "not this tool's JSON" is not a boundary an implementer can apply.** Round 8's finding. A valid receipt is a JSON object with exactly these four fields, all present: `dispatchDir`, a non-empty string; `token`, a non-empty string; `round`, a non-empty string; `startTicks`, a value that parses as a 64-bit integer. A top-level value that is not a JSON object, a missing field, an empty string where a string is required, a `startTicks` that does not parse, or ANY field holding the wrong JSON type is `no-receipt`. Unknown extra fields are also `no-receipt`, so a future field cannot be silently ignored by an old tool.
@@ -296,7 +296,7 @@ Insert AFTER the sentence ending `is spent for nothing.` and BEFORE `Measured re
 
 - [ ] **Step 2: Declare the four regions**
 
-Add to `DECLARED_REGIONS` with a comment recording: backlog item 32; that TOOL replaced a launch that had been five copied snippets; that STATES leads with NO RECEIPT, then RECEIPT NOT EXPECTED, then LAUNCH UNKNOWN, because the cross-vendor reviewer refused the claim that a tool eliminates the last one, then refused a launch token stored inside the artifact it authenticates, then caught this very ordering stated two ways in one document; and that NAMING is separate because it is the only unenforced one.
+Add to `DECLARED_REGIONS` with a comment recording: backlog item 32; that TOOL replaced a launch that had been five copied snippets; that STATES leads with NO RECEIPT, then RECEIPT NOT EXPECTED, then LAUNCH UNKNOWN, because the cross-vendor reviewer refused the claim that a tool eliminates the irreducible interrupted launch, then refused a launch token stored inside the artifact it authenticates, then caught this very ordering stated two ways in one document, and finally caught the irreducible case sitting under the wrong state name once the receipt became the last artifact published; and that NAMING is separate because it is the only unenforced one.
 
 - [ ] **Step 3: Write one pin per region**
 
@@ -795,6 +795,11 @@ python -c "import io,re;t=io.open('docs/superpowers/specs/2026-08-30-item32-deta
 
 Expected: `scope table ok` and exit 0. Any other five values, or a row that lost its task number, raises and fails the step.
 
+**Replace two more spec passages that the receipt-last ordering made false.** Round 14's finding, and both are consequences of a change three revisions earlier rather than fresh mistakes:
+
+- `docs/superpowers/specs/2026-08-30-item32-detached-dispatch-design.md:175-183` says the orphan half of item 32 has a documented answer because "the pid is on disk". After revision 13 that is exactly backwards for the dangerous case: an interrupted launch leaves NO RECEIPT and may leave no pid either, which is the one case `taskkill /PID <id>` cannot clear. Rewrite it to say the pid is on disk for every COMMITTED launch, and that the interrupted one is the residual the contract names and does not remedy.
+- `design.md:190-194` says LIVENESS IS CHECKED FIRST. It is now checked sixth: receipt validity, expected-act identity, the marker, the token and the pid all precede it. Replace the sentence with the ordered list the plan builds.
+
 **Replace the spec's mechanism section outright.** `docs/superpowers/specs/2026-08-30-item32-detached-dispatch-design.md:136-148` still describes the SESSION running `Start-Process`, writing the pid file, and polling it - the design the debate rejected in favour of a shipped tool. Round 10's finding: Task 9 updated five things around that section and never replaced the section itself, and the convergence grep does not search for a session-owned launch. Replace it with the transaction this plan builds: the session writes a wrapper body and calls the tool; the tool checks the receipt path, reserves the directory, installs the wrapper, starts the process, records the pid and start ticks, writes the commit marker, and publishes the receipt; later calls poll the RECEIPT with the expected directory and round.
 
 Also update: the state model to the tool's ordered checks, whose first three states are NO RECEIPT, then RECEIPT NOT EXPECTED, then LAUNCH UNKNOWN - round 8 caught this step saying LAUNCH UNKNOWN comes first, which was true only of revision 6, and round 9 caught the correction itself already stale, because adding RECEIPT NOT EXPECTED moved LAUNCH UNKNOWN again; the region inventory to the four that exist plus `back-channel-auto-mirror`; the encoding claim to be lane-specific, since an argument-passing lane carries no preamble; the quoting claim, since a wrapper file removes one serialization boundary and not every quoting layer; and question 2, which the user reopened and answered the other way on 2026-08-30. Say plainly that a settled decision was reversed and by whom.
@@ -802,7 +807,7 @@ Also update: the state model to the tool's ordered checks, whose first three sta
 - [ ] **Step 3: TASK-LOCAL ORACLE for convergence**
 
 ```bash
-grep -ni "detached-dispatch-codex\|detached-dispatch-backup\|no quoting layer at all\|encoding preamble moves INSIDE the wrapper\|every wrapper\|four states\|five states\|six states\|seven states\|eight states\|nine states\|ten states\|eleven states\|not detached\|The session launches it with\|sidecar exit-code file\|powershell -NoProfile -File\|-Token\|-DispatchDir <dispatch-dir> -Json" docs/superpowers/specs/2026-08-30-item32-detached-dispatch-design.md
+grep -ni "detached-dispatch-codex\|detached-dispatch-backup\|no quoting layer at all\|encoding preamble moves INSIDE the wrapper\|every wrapper\|four states\|five states\|six states\|seven states\|eight states\|nine states\|ten states\|eleven states\|not detached\|The session launches it with\|sidecar exit-code file\|LIVENESS IS CHECKED FIRST\|the pid is on disk, so a session can find\|powershell -NoProfile -File\|-Token\|-DispatchDir <dispatch-dir> -Json" docs/superpowers/specs/2026-08-30-item32-detached-dispatch-design.md
 ```
 
 Expected: no hits outside a passage explicitly narrating history. Round 4 found the previous grep searching for none of the terms it claimed to; round 6 found it still missing the encoding claim, which is the very claim the plan says is refuted, so the stale text would have passed.
@@ -817,10 +822,10 @@ Then run a POSITIVE oracle, because a grep for stale words cannot show that the 
 
 ```bash
 sec=$(sed -n '/^### The mechanism/,/^## /p' docs/superpowers/specs/2026-08-30-item32-detached-dispatch-design.md)
-for t in "dispatch-detached.ps1" "-ReceiptPath" "-ExpectedDispatchDir"; do printf '%s: ' "$t"; printf '%s' "$sec" | grep -c -- "$t"; printf '%s' "$sec" | grep -q -- "$t" || exit 1; done
+for t in "dispatch-detached.ps1" "-ReceiptPath" "-ExpectedDispatchDir" "-ExpectedRound" "no-receipt" "receipt-not-expected"; do printf '%s: ' "$t"; printf '%s' "$sec" | grep -c -- "$t"; printf '%s' "$sec" | grep -q -- "$t" || exit 1; done
 ```
 
-Expected: every one of the three at least 1, AND exit 0. The `|| exit 1` is the whole oracle. Round 12's finding on the SECOND attempt at this same check: a loop's status is its last iteration's, so a missing first token printed `0` and the block still succeeded, which is the defect this step exists to catch, reproduced inside its own fix. Round 10's finding: every oracle in this step searched only for what should be gone, so a section deleted and never rewritten passed it. Round 11's finding on the first attempt at a fix: `grep -c "A\|B\|C"` counts LINES matching any alternative, so three lines carrying only the first token satisfied "at least three" while the other two were absent, and it was not scoped to the section at all.
+Expected: every one of the six at least 1, AND exit 0. Round 14's finding: three tokens let a spec omit `-ExpectedRound` entirely and still pass, and none of them required the receipt-last consequences to appear at all. The `|| exit 1` is the whole oracle. Round 12's finding on the SECOND attempt at this same check: a loop's status is its last iteration's, so a missing first token printed `0` and the block still succeeded, which is the defect this step exists to catch, reproduced inside its own fix. Round 10's finding: every oracle in this step searched only for what should be gone, so a section deleted and never rewritten passed it. Round 11's finding on the first attempt at a fix: `grep -c "A\|B\|C"` counts LINES matching any alternative, so three lines carrying only the first token satisfied "at least three" while the other two were absent, and it was not scoped to the section at all.
 - `-Token` and `-DispatchDir <dispatch-dir> -Json` are stale because the poll now names a RECEIPT.
 
 - [ ] **Step 4: Run the five local gates, detached**
@@ -845,7 +850,7 @@ Expected: all five green, zero FAILED and zero ERROR. Do not pipe through `tail`
 
 Both headings `OPEN` to `DONE` with the version. Remove item 32's ranking entry and renumber below it. Rebuild the `**Open.**` and `**Done.**` lists by reading the headings.
 
-State in item 32 what was NOT done: item 51 still owns the argv escaping repair; item 31 is untouched; **item 58 is untouched except that this cycle's ONE new tool call is anchored while the three existing ones at `SKILL.md:94`, `:121` and `:228` are still bare relative paths** — record that asymmetry rather than leaving it to be discovered; the resume-after-a-kill recovery is still unmeasured; and LAUNCH UNKNOWN is narrowed, not eliminated.
+State in item 32 what was NOT done: item 51 still owns the argv escaping repair; item 31 is untouched; **item 58 is untouched except that this cycle's ONE new tool call is anchored while the three existing ones at `SKILL.md:94`, `:121` and `:228` are still bare relative paths** — record that asymmetry rather than leaving it to be discovered; the resume-after-a-kill recovery is still unmeasured; and the interrupted launch that leaves NO RECEIPT, possibly with a live untracked child and no pid on disk, is narrowed, not eliminated.
 
 - [ ] **Step 8: Commit**
 
@@ -858,7 +863,11 @@ git commit -m "close items 32 and 33"
 
 ## What the debate changed
 
-Sol session `01a055c5-935e-76e3-ad1d-83721bc67d79`, four review rounds plus a two-lane poll. Round 1: 12 claims, 8 FIX. Round 2: 7 of 11 closed. Round 3: 4 of 8 closed. Round 4: nothing closed, and it named why. Every finding was reproduced before acceptance and none was refuted. Two reviewer rulings reversed decisions I had already reported to the user: the Kimi lane's scope, and the whole launch mechanism.
+Sol session `01a055c5-935e-76e3-ad1d-83721bc67d79`, FOURTEEN review rounds plus a two-lane poll, plus one round refused by the evidence binder and discarded unread. Every finding was reproduced against the repository before acceptance and none was refuted. Two reviewer rulings reversed decisions I had already reported to the user: the Kimi lane's scope, and the whole launch mechanism.
+
+Rounds 1 to 9 each found at least one way for one act's artifact to be read as another act's result. Rounds 10 to 14 found none, and each named the shapes it had swept for. What they found instead was oracles that could not fail and text left behind by a mechanism change - twice, an oracle written to fix the previous round's oracle.
+
+Round 4 is where this plan stopped being a set of copied snippets: it found the launch was never centralized at all. Round 13 is the deepest single finding after that - a test that could never have passed, because moving the receipt to last in revision 10 changed which state an interrupted launch produces and nothing else was updated.
 
 **Round 1** — a stale exit file plus a fresh reply plus a killed wrapper read as complete; the exit write sat inside the `try`; `check-drift.ps1` was excluded for a wrong reason; the backup-lane pins do not prove byte identity; a third Kimi call existed; Task 5 asserted detachment and implemented none; the wrapper-file claim overreached; mirror construction runs `git commit` with the reviewed repo's hooks live; `Start-Process` was called the only mechanism; streams were inherited; the plan contradicted itself on the timeout; two harness facts were not repo-verifiable.
 
@@ -867,6 +876,18 @@ Sol session `01a055c5-935e-76e3-ad1d-83721bc67d79`, four review rounds plus a tw
 **Round 3** — create-new semantics were promised and not specified; the state count disagreed across three documents; the Kimi lane had wrappers but no launch and no reply artifact, so every successful call would have been discarded; extraction could select the wrong fence and a PATH stub cannot intercept an absolute binary; seven tasks could pass their own verification with their change absent.
 
 **Round 4** — the reservation was not fail-closed; an eighth condition existed outside the state model entirely, reachable three ways; `>= N` counts bound nothing to a call site; the launch was never actually centralized; eight of ten oracles were still weak and one task had none; the spec was still stale in ways the convergence grep did not search for.
+
+**Round 5** — the wrapper body's own quoting and the round-numbered path rule.
+
+**Rounds 6 and 7** — the fifth false-completion path: an old completed directory answering after a refused launch. A launch token was proposed, supplied, and then refused as evidence, because a token stored inside the artifact it authenticates can be read out of that artifact by the caller. The receipt replaced it. Also: the documented call hardcoded `powershell`, silently forcing 5.1 on a PowerShell 7 session.
+
+**Round 8** — the receipt bound itself to its own directory and nothing bound it to the act being performed; the receipt had no schema; twelve states were mapped onto three imported exit codes by nobody.
+
+**Round 9** — `running` exited 0 with "exit 0 is not a result" written beside it, which is a rule in prose where a mechanism belongs. It exits 3 now. The receipt-outside-the-directory guarantee was claimed and unenforced.
+
+**Rounds 10 to 12** — no new completion path. The point-of-use text carried a stale exit mapping; two tasks expected a red-then-green cycle on a guard that was already green; and two Task 9 oracles could not fail, the second being the fix for the first.
+
+**Rounds 13 and 14** — the receipt-last ordering, applied in revision 10, had never been propagated. The hard-kill test named a state it could not reach, `LAUNCH UNKNOWN` meant two different things, and four passages plus two spec sections still described the older mechanism.
 
 **The poll** — both lanes independently chose the shipped tool. Sol conditioned it on not claiming the failure is eliminated; Fable observed that the stub gate could not have caught the defect at all, because the launch sequence sat outside the wrapper it ran. Both required the anchored path, and both cited the three existing bare relative paths as item 58's own cause.
 
