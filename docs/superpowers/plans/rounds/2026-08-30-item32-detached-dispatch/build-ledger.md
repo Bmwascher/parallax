@@ -87,7 +87,7 @@ supplies its own exit status, so two runs read as exit 0 while pytest was
 failing. That is the trap CLAUDE.md names, and it fired here.
 
 **Task 4: the plan mandates a backslash in a file a green gate forbids one
-in.** The frozen wrapper body writes `$PSScriptRooteply`, and the frozen
+in.** The frozen wrapper body writes `$PSScriptRoot\reply`, and the frozen
 step-1 oracle asserts that literal. `references/backup-lane.md` is covered
 by TWO blanket backslash bans, `test_backup_files_no_backslash_paths` and
 `test_no_backslash_paths_anywhere`. The implementer narrowed the first to
