@@ -303,101 +303,123 @@ Canonical reasoning effort: `high`
   The launch is ONE TRANSACTION and it lives in ONE PLACE:
   `<plugin-root>/tools/dispatch-detached.ps1`, written
   `${CLAUDE_PLUGIN_ROOT}` in SKILL.md, where the harness substitutes it,
-  and `<plugin-checkout>` in backup-lane.md, which is a references file
-  the session reads raw and where nothing substitutes anything. It reserves a
-  directory, installs the wrapper, starts the process, records the pid
-  and its start ticks, writes the internal launch-commit marker, and
-  publishes the EXTERNAL RECEIPT last of all; a failure at any point
-  after the process starts kills the tree and BLOCKS rather than leaving
-  it unrecorded. The two are not interchangeable: the marker is what
-  makes the directory a committed launch, and the receipt is what makes
-  the launch pollable, so the receipt is the transaction's final act. No
-  lane writes its own launch. A lane supplies a WRAPPER BODY carrying
-  its client invocation verbatim and, where its client needs one, a
-  working directory; it changes nothing else. This replaced five copied
-  snippets, which regenerated the same defect across four debate rounds:
-  reserve, write, start and record are four steps, and a rule written in
-  one place while the steps are copied to five cannot make them atomic.
-  The path NAMES the plugin root because the three tool calls this skill
+  and `<plugin-checkout>` in backup-lane.md, which is a references file the
+  session reads raw and where nothing substitutes anything. Its `-Prepare`
+  mode reserves a directory, installs the wrapper, mints the launch token,
+  writes the internal launch-commit marker, and publishes the EXTERNAL
+  RECEIPT last of all; a failure at any point after the directory is
+  reserved removes nothing and publishes no receipt. `-PREPARE` STARTS NO
+  PROCESS: the caller runs the prepared wrapper itself, AS A TRACKED
+  BACKGROUND COMMAND named for its lane and round (`Sol R1 debate round`,
+  or with no lane its kind, `Gate: pytest 5.1`) - the harness already
+  reports on a command run this way by name, with no 600-second tool-call
+  ceiling. The marker and the receipt are not interchangeable: the marker
+  is what makes the directory a committed launch, and the receipt is what
+  makes the launch pollable, so the receipt is the transaction's final act.
+  No lane writes its own launch. A lane supplies a WRAPPER BODY carrying
+  its client invocation verbatim; it changes nothing else. This replaced
+  five copied snippets, which regenerated the same defect across four
+  debate rounds: reserve, write and record are steps, and a rule written in
+  one place while the steps are copied to five cannot make them atomic. The
+  path NAMES the plugin root because the three tool calls this skill
   already makes are bare relative paths, which is backlog item 58's own
-  cause; a new call must not join that. Naming is not always resolving:
-  in SKILL.md the harness substitutes the token, and in backup-lane.md
-  the placeholder is filled in by the session, which is weaker and is
-  said rather than blurred.
+  cause; a new call must not join that. Naming is not always resolving: in
+  SKILL.md the harness substitutes the token, and in backup-lane.md the
+  placeholder is filled in by the session, which is weaker and is said
+  rather than blurred. THE TRADE THIS DESIGN MAKES: a tracked background
+  task belongs to the session and probably dies with it, where a detached
+  process would have survived.
   <!-- contract:end -->
   <!-- contract:start id=detached-dispatch-states -->
-  The tool's `-Poll` mode names a RECEIPT, never a directory, and the
-  ORDER of its checks is the contract. First, a receipt that is absent,
-  unreadable, or not this tool's own JSON means NO RECEIPT: no directory
-  is opened at all. A refused launch writes no receipt, so a caller
-  cannot poll the directory it was just refused. NO RECEIPT IS NOT
-  EVIDENCE THAT NOTHING STARTED. The receipt is the transaction's last
-  act, so a launch interrupted at any earlier point - a hard kill
-  between process creation and publication above all - leaves no receipt
-  and may well have left a LIVE UNTRACKED CHILD. Shipping the
-  transaction in one tool NARROWS that window; it does not remove it,
-  and in its worst form no pid was written either, so the whole-tree
-  kill below cannot clear it. It is never success. Second, a receipt whose
-  directory or round is not the one the caller says it is polling for is
-  RECEIPT NOT EXPECTED, and still nothing is opened: the receipt binds
-  itself to its own directory, and only this second, independently
-  supplied pair binds it to the act being performed. Third, a VALID
-  receipt whose directory holds no launch-commit marker is LAUNCH
-  UNKNOWN. Since the marker is written before the receipt, a receipt
-  that exists proves the marker once existed, so this state means the
-  marker has since gone - removed, or lost with the directory. It is
-  never success, and it is a different condition from the interrupted
-  launch above, which produces NO RECEIPT instead. Fourth, a commit artifact not holding the
-  receipt's token is LAUNCH NOT OURS: the directory belongs to another
-  launch and none of its artifacts describe this one. Fifth, a missing
-  or unreadable pid under a valid commit is PID UNREADABLE, because a
-  committed launch always wrote one. Sixth, liveness is PID PLUS START
-  TIME, never a pid alone: a live pid whose start time cannot be read is
-  PID UNREADABLE, and a live pid whose start time differs from the
-  receipt's is a RECYCLED pid, which means our own process is gone. Only
-  a live pid whose start time matches is RUNNING, and there NOTHING ELSE
-  IS READ - a reply being written is not a reply. Only then come the
-  terminal states: no exit file, an exit file unreadable or not a plain
-  integer, a non-zero code, zero with no reply artifact, zero with an
-  empty reply artifact, and zero with a reply artifact that has content.
-  Only the last can become a review result, and it is not one by itself:
-  the lane's round-evidence binder must also return clean. Every other
-  state is a transport failure per fallbacks.md, except RUNNING, which
-  is UNFINISHED. The receipt NARROWS misattribution and does not remove
-  it either: a caller that supplies an earlier act's receipt AND that
-  act's directory AND its label is truthfully told that act's result,
-  because every value it supplied describes the earlier act. The
-  controls for that are a fresh receipt path per round and a launch that
-  refuses an existing one. EXIT ZERO MEANS REPLY PRESENT AND NOTHING
-  ELSE. An unfinished round exits THREE, so a caller reading only the
-  exit status cannot take a still-being-written reply for a finished
-  one; a rule saying to read the state field would have been prose where
-  a mechanism belongs.
+  The tool's `-Poll` mode names a RECEIPT, never a directory, and the ORDER
+  of its checks is the contract, computing exactly one of THIRTEEN state
+  names and stopping at the first that matches. First, a receipt that is
+  absent, unreadable, or not this tool's own JSON means NO RECEIPT: no
+  directory is opened at all. A refused prepare writes no receipt, so a
+  caller cannot poll the directory it was just refused. `-Prepare` STARTS
+  NO PROCESS, so unlike the launcher it replaced, NO RECEIPT never admits a
+  live untracked child of its own: the wrapper the caller runs is copied
+  into the directory only as part of a SUCCESSFUL prepare, whose receipt is
+  published last, so a failed or not-yet-attempted prepare leaves nothing
+  running. It is never success. Second, a receipt whose directory or round
+  is not the one the caller says it is polling for is RECEIPT NOT EXPECTED,
+  and still nothing is opened: the receipt binds itself to its own
+  directory, and only this second, independently supplied pair binds it to
+  the act being performed. Third, a VALID receipt whose directory holds no
+  launch-commit marker is LAUNCH UNKNOWN. Since the marker is written
+  before the receipt, a receipt that exists proves the marker once existed,
+  so this state means the marker has since gone - removed, or lost with the
+  directory. It is never success, and it is a different condition from the
+  interrupted prepare above, which produces NO RECEIPT instead. Fourth, a
+  commit artifact not holding the receipt's token is LAUNCH NOT OURS: the
+  directory belongs to another launch and none of its artifacts describe
+  this one. Fifth, a valid, expected, committed receipt whose directory
+  holds no `pid` file is NOT STARTED: the receipt now exists before any pid
+  does, because `-Prepare` publishes it before any wrapper has run, so this
+  state covers two situations without distinguishing them - the prepared
+  wrapper was never run as the caller's tracked background command, or it
+  died before it could publish its own identity - because neither is a
+  result to a caller. The brief window where a live wrapper has not yet
+  written its pid also lands here, which is conservative in the correct
+  direction: a live round reads as NOT STARTED rather than as finished.
+  Sixth, a `pid` file present but unreadable or not an integer is PID
+  UNREADABLE; the startticks FILE the wrapper writes beside its pid gets
+  the same treatment, because pid and startticks are a pair the wrapper
+  self-publishes as its own first act and either half failing to read is
+  the same cannot-confirm-identity outcome, folded together rather than
+  adding a fourteenth state. Seventh, liveness is PID PLUS START TIME,
+  never a pid alone, and is computed against the startticks FILE the
+  wrapper wrote beside its pid, never against the receipt's own
+  `startTicks` field, which `-Prepare` never populates with a real value:
+  no such process is DEAD, continue; the process exists but its start time
+  cannot be read is PID UNREADABLE, stop; the process exists and its ticks
+  differ from the startticks file's, meaning the pid was recycled, is DEAD,
+  continue; ticks match is RUNNING, stop, and there NOTHING ELSE IS READ -
+  a reply being written is not a reply. Only then come the terminal states:
+  no exit file, an exit file unreadable or not a plain integer, a non-zero
+  code, zero with no reply artifact, zero with an empty reply artifact, and
+  zero with a reply artifact that has content. Only the last can become a
+  review result, and it is not one by itself: the lane's round-evidence
+  binder must also return clean. Every other state is a transport failure
+  per fallbacks.md, except RUNNING, which is UNFINISHED. The receipt
+  NARROWS misattribution and does not remove it either: a caller that
+  supplies an earlier act's receipt AND that act's directory AND its label
+  is truthfully told that act's result, because every value it supplied
+  describes the earlier act. The controls for that are a fresh receipt path
+  per round and a prepare that refuses an existing one. EXIT ZERO MEANS
+  REPLY PRESENT AND NOTHING ELSE. An unfinished round exits THREE, so a
+  caller reading only the exit status cannot take a still-being-written
+  reply for a finished one; a rule saying to read the state field would
+  have been prose where a mechanism belongs.
   <!-- contract:end -->
   <!-- contract:start id=detached-dispatch-operation -->
-  Each poll is BOUNDED and returns; a poll that waits indefinitely is
-  the blocking form again. At THIRTY MINUTES without a terminal state,
-  stop polling, report the round UNFINISHED, and ask the user whether to
-  keep waiting or abandon it. Neither answer is a review result. To
-  abandon a round whose pid is on disk, fell the whole tree with
-  `taskkill /PID <id> /T /F`: killing the launcher alone leaves the
-  client orphaned, which is what the 2026-08-11 report of this item
-  observed at zero CPU growth. NO RECEIPT after an interrupted launch is
-  the case that command CANNOT clear, and the two must not be run
-  together in one sentence: in its dangerous form no pid was ever
-  written, so there is no `<id>` to pass. There is a SECOND case that
-  command cannot clear, and stating only the first misleads an operator
-  into believing nothing is running: a COMMITTED launch whose wrapper
-  host has died while the client child lives on. The pid on disk is the
-  dead wrapper, so felling that tree reports process-not-found and
-  never reaches the orphan. The poll classifies it safely - DEAD, then
-  no exit file or a non-zero code, never success - so it is the REMEDY
-  that fails, not the completion model. Clearing either one means
-  finding the process by another route - its command line, its working
-  directory - and both are unmeasured here, so surface them to the user
-  rather than claiming a remedy. Never poll
-  with `ps -p` from Git Bash, which cannot see Windows pids and reports
-  a live process as gone.
+  Each poll is BOUNDED and returns; a poll that waits indefinitely is the
+  blocking form again. At THIRTY MINUTES without a terminal state, stop
+  polling, report the round UNFINISHED, and ask the user whether to keep
+  waiting or abandon it. Neither answer is a review result. THERE IS NO
+  TOOL-OWNED CHILD TO KILL: `-Prepare` starts no process at all, so unlike
+  the launcher it replaced, this tool never has a tree of its own to fell,
+  and an interrupted `-Prepare` cannot leave a live untracked child behind,
+  because the wrapper the caller runs is only ever copied into a directory
+  that goes on to receive a committed receipt. To abandon a round, STOP THE
+  HARNESS'S TRACKED BACKGROUND TASK first - the wrapper runs as that task,
+  and the harness, not this tool, owns it - then RE-CHECK IDENTITY with a
+  fresh `-Poll` before reaching for a manual `taskkill`: stopping the task
+  does not by itself prove the round is gone, and a manual kill aimed at a
+  pid that has already exited or been recycled is aimed at nothing. There
+  remains a SECOND case a manual `taskkill /PID <id> /T /F` cannot clear
+  even after the harness task is stopped, and stating only the tool's own
+  absence of a tree misleads an operator into believing nothing else can go
+  wrong: a COMMITTED launch whose wrapper host has died while its own
+  client child lives on. The pid on disk is the dead wrapper, so felling
+  that tree reports process-not-found and never reaches the orphan. The
+  poll classifies it safely - DEAD, then no exit file or a non-zero code,
+  never success - so it is the REMEDY that fails, not the completion model.
+  Clearing it means finding the process by another route - its command
+  line, its working directory - and that is unmeasured here, so surface it
+  to the user rather than claiming a remedy. Never poll with `ps -p` from
+  Git Bash, which cannot see Windows pids and reports a live process as
+  gone.
   <!-- contract:end -->
   <!-- contract:start id=background-task-naming -->
   Name the backgrounded call for the person watching it. The reviewer
