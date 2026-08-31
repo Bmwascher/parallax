@@ -47,15 +47,20 @@ This is the whole point of revision 5. The four steps become one transaction in 
 - Produces two modes, and every later task depends on these exact names:
   - `-Launch -DispatchDir <path> -WrapperBody <path> -ReceiptPath <path> -Round <label> [-WorkingDirectory <path>] [-Json]`
   - `-Poll -Receipt <path> -ExpectedDispatchDir <path> -ExpectedRound <label> [-Json]`
-- **`-Poll` names a RECEIPT, never a directory.** Round 6 asked for a launch token and revision 6 supplied one; round 7 showed a token stored inside the artifact it authenticates is not evidence of anything, because the caller can read it out of the old directory it is already looking at and hand it straight back. So the receipt is written OUTSIDE the dispatch directory, at a path `-Launch` refuses if it already exists, LAST of all and only on success. A refused launch writes no receipt, so there is nothing for a caller to substitute from the directory it was refused.
+- **`-Poll` names a RECEIPT, never a directory.** Round 6 asked for a launch token and revision 6 supplied one; round 7 showed a token stored inside the artifact it authenticates is not evidence of anything, because the caller can read it out of the old directory it is already looking at and hand it straight back. So the receipt is written OUTSIDE the dispatch directory, at a path `-Launch` refuses if it already exists, LAST of all and only on success. **`-Launch` ENFORCES the separation rather than describing it:** it resolves both paths and BLOCKS before anything is created if the receipt path is equal to, or inside, the dispatch directory. Round 9's finding - the guarantee was claimed in prose while the parameter accepted any path, so a receipt written inside the directory it authenticates would have quietly restored the round 7 defect. A refused launch writes no receipt, so there is nothing for a caller to substitute from the directory it was refused.
 - The receipt is JSON: the dispatch directory, the minted token, the `-Round` label, and the launched process's start-time ticks. `-Poll` reads it, and its own JSON echoes `round` back. That is the visibility half: a poll answering for a different round says so in the field the caller records.
 - **`-Poll` is told, INDEPENDENTLY of the receipt, which directory and which round it is polling for**, and compares both before it opens anything. A mismatch is `receipt-not-expected`. Round 8's finding: the receipt alone binds a receipt to its own directory, and nothing bound it to the act the caller believes it is performing, so handing an earlier attempt's receipt to a later poll returned the earlier attempt's `reply-present`. The label alone is not enough - `Sol R1` is reusable across a retry of the same round - which is why the expected DIRECTORY is required as well. The caller already knows both values: it passed them to `-Launch`.
 - **The residual that remains, stated rather than claimed closed.** A caller that supplies an earlier attempt's receipt AND that attempt's directory AND its label gets that attempt's result, because at that point every value the caller supplied describes the earlier act. Nothing inside the tool can distinguish a caller that is confused about all three. The controls are a FRESH round-numbered receipt path per round and a `-Launch` that refuses an existing one. This is NARROWED, exactly like LAUNCH UNKNOWN, and the contract says so in the same words.
 - `-Launch` prints, and `-Poll` returns, JSON with `state` drawn from exactly TWELVE names: `no-receipt`, `receipt-not-expected`, `launch-unknown`, `launch-not-ours`, `pid-unreadable`, `running`, `no-exit-file`, `exit-unreadable`, `exit-nonzero`, `no-reply`, `reply-empty`, `reply-present`.
 - `no-receipt` deliberately FOLDS three inputs - the receipt path is absent, or unreadable, or fails the schema below. They are folded because their disposition is identical and no branch follows any of them. It is a decision, not an omission.
-- **The receipt schema is stated, because "not this tool's JSON" is not a boundary an implementer can apply.** Round 8's finding. A valid receipt is a JSON object with exactly these four fields, all present: `dispatchDir`, a non-empty string; `token`, a non-empty string; `round`, a non-empty string; `startTicks`, a value that parses as a 64-bit integer. A missing field, an empty string where a string is required, a `startTicks` that does not parse, or a value of the wrong JSON type is `no-receipt`. Unknown extra fields are also `no-receipt`, so a future field cannot be silently ignored by an old tool.
-- **`-Poll`'s exit codes map onto the states, and the mapping is part of the contract.** Round 8's finding: importing the mirror's three meanings without mapping twelve states onto them left the implementer to invent it. Exit 0 for `running` and `reply-present` ONLY - the two states where nothing is wrong. Exit 1 for every other state, each of which is a transport failure per fallbacks.md, with the state name on stdout. Exit 2 only when the poll could not be taken at all: bad arguments, an unreadable argument, an internal error. **Exit 0 is not a result**, because it covers both an unfinished round and a finished one; the caller reads the `state` field and the contract says so in those words.
-- Exit codes match `new-review-mirror.ps1:17-18`: 0 clean, 1 blocked with the reason on stdout, 2 script or environment error.
+- **The receipt schema is stated, because "not this tool's JSON" is not a boundary an implementer can apply.** Round 8's finding. A valid receipt is a JSON object with exactly these four fields, all present: `dispatchDir`, a non-empty string; `token`, a non-empty string; `round`, a non-empty string; `startTicks`, a value that parses as a 64-bit integer. A top-level value that is not a JSON object, a missing field, an empty string where a string is required, a `startTicks` that does not parse, or ANY field holding the wrong JSON type is `no-receipt`. Unknown extra fields are also `no-receipt`, so a future field cannot be silently ignored by an old tool.
+- **`-Poll`'s exit codes map onto the states, and the mapping is part of the contract.** Round 8's finding: importing the mirror's three meanings without mapping twelve states onto them left the implementer to invent it.
+  - **0 for `reply-present` and NOTHING ELSE.**
+  - **3 for `running`**, meaning UNFINISHED.
+  - 1 for every other state, each a transport failure per fallbacks.md, with the state name on stdout.
+  - 2 ONLY for a failure to bind the parameters or an internal execution error. Reading the receipt's CONTENT is never exit 2: an absent, unreadable or schema-failing receipt is `no-receipt` at exit 1, which round 9 found the previous wording contradicting by listing "an unreadable argument" under 2.
+- **Why `running` is not 0.** Revision 8 gave it 0 and wrote "exit 0 is not a result" beside it. Round 9's finding: that is the exact shape this whole cycle exists to remove - a safety rule in prose next to a command instead of a mechanism inside it. A caller branching on exit status alone would take the success path while the wrapper was still writing the reply, and Task 8 deliberately builds that arrangement. A distinct code makes the unfinished round unrepresentable as success without reading anything.
+- `-Launch`'s exit codes match `new-review-mirror.ps1:17-18`: 0 launched and committed, 1 blocked with the reason on stdout, 2 script or environment error. `-Poll` extends that set with 3 and narrows 2 as above; say so in the header, because a reader who assumes the three-code convention is exactly the reader this mapping protects.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -64,15 +69,18 @@ This is the whole point of revision 5. The four steps become one transaction in 
 Cases, each named for what it protects:
 
 - `test_a_taken_directory_blocks_and_starts_nothing` — pre-create the directory; expect exit 1, the reason on stdout, and no process started. The reservation is `New-Item -ItemType Directory` with `-ErrorAction Stop` and no `-Force`; round 4 found that without `-ErrorAction Stop` the error is non-terminating and the following statements run with no valid path.
+- `test_a_receipt_path_inside_the_dispatch_directory_is_blocked` — the receipt path equal to the dispatch directory, and inside it at one and two levels down. Expect exit 1 and expect NO dispatch directory to have been created, because the check runs first. Round 9's finding: the separation was a claim with no mechanism, and a receipt inside the directory it authenticates is the round 7 defect returning.
 - `test_force_is_not_accepted_in_any_argument_order` — assert the script source contains no `-Force` on the reservation, checked by parsing the command rather than by string order. Round 4 found the previous pin only forbade the exact token order `-ItemType Directory -Force`.
 - `test_a_committed_launch_publishes_pid_then_commit_last` — `launch.committed` is written AFTER `pid`, and its presence is what distinguishes a committed launch. Assert the order by content, not by timestamp.
 - `test_a_failure_after_start_kills_the_tree_and_blocks` — inject a failure between start and commit; expect exit 1 and the started process gone. This is the state Sol said cannot be eliminated, so the tool must at least not leave it silently.
 - `test_poll_reports_launch_unknown_when_commit_is_absent` — a reserved directory with no `launch.committed`; expect `launch-unknown`. Not running, not failed, not complete.
 - `test_a_refused_launch_writes_no_receipt_and_cannot_be_polled` — **the round 6 regression, rewritten because round 7 showed the previous version was impossible to run.** It said to poll with "the token the second launch would have used", and a refused launch mints nothing. Instead: run a stub launch to completion against receipt `R1`, so the directory holds a real commit, pid, `exit` of `0` and a reply. Launch AGAIN on the same directory naming a FRESH receipt path `R2`. Take the refusal, assert `R2` was never created, then poll `-Receipt R2`. Expect `no-receipt`, never `reply-present`.
-- `test_a_stale_receipt_is_refused_against_the_expected_act` — **round 8's finding.** Poll the finished directory with `R1` while `-ExpectedDispatchDir` and `-ExpectedRound` name the SECOND round's directory and label. Expect `receipt-not-expected` and assert no artifact of the first round was read. Then run the same case with only the label differing and again with only the directory differing, because a retry can reuse a label and a mistake can reuse a directory; both must be refused on their own.
+- `test_a_stale_receipt_is_refused_against_the_expected_act` — **round 8's finding.** Poll the finished directory with `R1` while `-ExpectedDispatchDir` and `-ExpectedRound` name the SECOND round's directory and label. Expect `receipt-not-expected`. Then run the same case with only the label differing and again with only the directory differing, because a retry can reuse a label and a mistake can reuse a directory; both must be refused on their own.
+- `test_the_expected_act_is_checked_before_any_directory_is_opened` — **round 9's finding, and it replaces an assertion that could not be made.** The previous version said to "assert no artifact of the first round was read", which names no observation. This one is observable: point a MISMATCHED receipt at a `dispatchDir` that does not exist, and at a second one that exists but holds no `launch.committed`. Expect `receipt-not-expected` in both. An implementation that checks the commit artifact first returns `launch-unknown` and fails here, which is what makes the ORDER testable rather than merely written down.
 - `test_a_stale_receipt_matching_every_expected_value_still_answers_for_its_own_round` — supply `R1` with R1's own directory and label. It DOES report `reply-present`, because at that point every value the caller supplied describes the earlier act. Assert the returned `round` is R1's label. This is the residual the contract admits, and the test exists so the residual is a measured behaviour rather than a hope.
-- `test_a_receipt_failing_the_schema_is_no_receipt` — one case per way to fail it: each of the four fields missing in turn, an empty string in each string field, a `startTicks` that does not parse, a wrong JSON type, and an unknown extra field. Expect `no-receipt` every time, and assert no directory was opened.
-- `test_every_state_maps_to_its_documented_exit_code` — one case per state name. `running` and `reply-present` exit 0; every other state exits 1 with the state name on stdout; a malformed argument exits 2. Round 8's finding: the exit codes were imported from `new-review-mirror.ps1:17-18` and never mapped, so an implementer had to invent them.
+- `test_a_receipt_failing_the_schema_is_no_receipt` — one case per way to fail it: a top-level value that is not an object (an array, a bare string, a number); each of the four fields missing in turn; an empty string in each of the three string fields; a `startTicks` that does not parse; **each of the four fields in turn holding the wrong JSON type**, not one representative case; and an unknown extra field. Expect `no-receipt` every time. Round 9's finding: the previous list said "a wrong JSON type" once, so an implementer type-checking three fields and not the fourth passed it.
+- `test_every_state_maps_to_its_documented_exit_code` — one case per state name. `reply-present` exits 0; `running` exits 3; every other state exits 1 with the state name on stdout; a malformed argument exits 2. Round 8's finding: the exit codes were imported from `new-review-mirror.ps1:17-18` and never mapped, so an implementer had to invent them. Round 9's finding: revision 8's mapping gave `running` a 0 and defended it with a sentence, which is the defect class this cycle exists to remove.
+- `test_a_running_round_can_never_exit_zero` — named separately from the mapping test and kept separate on purpose. Build the Task 8 arrangement in miniature: a stub that writes a NONEMPTY reply and then sleeps. Poll while it sleeps. Expect exit 3 and `state` of `running`, and assert the reply's content is not returned. A caller that branches on exit status alone must not be able to reach that reply.
 - `test_poll_rejects_a_receipt_whose_token_is_not_the_committed_one` — a receipt pointing at a directory whose `launch.committed` holds a different token; expect `launch-not-ours`.
 - `test_poll_reports_pid_unreadable_when_the_pid_is_missing_or_malformed` — a committed directory whose `pid` is absent, empty, or not an integer. Round 6 found the poll jumping from commit existence straight to "pid alive", so such an input fell through to the terminal branches and could reach `reply-present`.
 - `test_a_recycled_pid_is_not_read_as_running` — the receipt's start-time ticks do not match the live process now holding that pid. Expect the poll to treat our process as GONE and continue to the terminal artifacts, never `running`. Round 7's finding: pid identity was numeric only. `tools/kimi-lane-lock.ps1:219-236` already solves this exact problem in this repo - `Get-Liveness` compares `StartTime.ToUniversalTime().Ticks` and returns LIVE, DEAD or UNMEASURABLE - so copy that shape rather than inventing one.
@@ -105,13 +113,14 @@ Expected: every test FAILS or ERRORS because the script does not exist. Read the
 
 `-Launch`, in order, under `$ErrorActionPreference = 'Stop'`:
 
-1. `$d = (New-Item -ItemType Directory -Path $DispatchDir -ErrorAction Stop).FullName`. Failure here is BLOCKED and nothing has started.
-2. Copy `$WrapperBody` to `$d\wrapper.ps1`; create the empty `$d\stdin.empty`.
-3. `$proc = Start-Process -FilePath (Get-Process -Id $PID).Path -ArgumentList @("-NoProfile", "-NonInteractive", "-File", "`"$d\wrapper.ps1`"") -NoNewWindow -PassThru -ErrorAction Stop -RedirectStandardInput "$d\stdin.empty" -RedirectStandardOutput "$d\launch.out" -RedirectStandardError "$d\launch.err"`, plus `-WorkingDirectory` when given.
-4. If `PARALLAX_DISPATCH_HOLD_BEFORE_PUBLISH` is set, create `<value>.started` and wait, bounded at sixty seconds, for `<value>.release`; on timeout, fail through the same `catch` as any other failure. This is the barrier the hard-kill test needs and it exists nowhere else.
-5. Write `$d\pid` and `$d\startticks` (the launched process's `StartTime.ToUniversalTime().Ticks`), then write `$d\launch.committed` with the minted token as its content.
-6. Write the RECEIPT last of all, and only now: JSON holding `dispatchDir`, `token`, `round`, `startTicks`. `-ReceiptPath` is created with create-new semantics and an existing path is BLOCKED before step 1 runs, beside the directory reservation.
-7. Wrap steps 3 to 6 in a `catch` that runs `taskkill /PID $proc.Id /T /F` when `$proc` exists, then exits 1. Never leave a started process unrecorded and unreported.
+1. Resolve `-ReceiptPath` and `-DispatchDir` to full paths and BLOCK if the receipt path is equal to the dispatch directory or sits inside it, and BLOCK if the receipt path already exists. Both checks run before anything is created, so a refusal leaves no directory behind either.
+2. `$d = (New-Item -ItemType Directory -Path $DispatchDir -ErrorAction Stop).FullName`. Failure here is BLOCKED and nothing has started.
+3. Copy `$WrapperBody` to `$d\wrapper.ps1`; create the empty `$d\stdin.empty`.
+4. `$proc = Start-Process -FilePath (Get-Process -Id $PID).Path -ArgumentList @("-NoProfile", "-NonInteractive", "-File", "`"$d\wrapper.ps1`"") -NoNewWindow -PassThru -ErrorAction Stop -RedirectStandardInput "$d\stdin.empty" -RedirectStandardOutput "$d\launch.out" -RedirectStandardError "$d\launch.err"`, plus `-WorkingDirectory` when given.
+5. If `PARALLAX_DISPATCH_HOLD_BEFORE_PUBLISH` is set, create `<value>.started` and wait, bounded at sixty seconds, for `<value>.release`; on timeout, fail through the same `catch` as any other failure. This is the barrier the hard-kill test needs and it exists nowhere else.
+6. Write `$d\pid` and `$d\startticks` (the launched process's `StartTime.ToUniversalTime().Ticks`), then write `$d\launch.committed` with the minted token as its content.
+7. Write the RECEIPT last of all, and only now: JSON holding `dispatchDir`, `token`, `round`, `startTicks`. `-ReceiptPath` is created with create-new semantics and an existing path is BLOCKED before step 1 runs, beside the directory reservation.
+8. Wrap steps 4 to 7 in a `catch` that runs `taskkill /PID $proc.Id /T /F` when `$proc` exists, then exits 1. Never leave a started process unrecorded and unreported.
 
 The token is minted with `[System.Guid]::NewGuid()`. It binds a receipt to the directory it names. It is NOT a secret from the caller and the contract must not describe it as one: it also sits in `launch.committed`, so a caller determined to launder an old directory can read it there. What the receipt adds is that a REFUSED launch produces no receipt at all.
 
@@ -133,7 +142,7 @@ Every `-Poll` result carries the receipt's `round` label back in its JSON, whate
 - [ ] **Step 4: TASK-LOCAL ORACLE**
 
 Run: `python -m pytest evals/multi-model-verify/test_dispatch_detached.py -q` on BOTH hosts.
-Expected: all PASS on both. Then run one negative check by hand: delete the `catch` written in step 7 of the script below - step 5 writes the pid and the start ticks, and round 8 caught this reference naming the wrong one - confirm `test_a_failure_after_start_kills_the_tree_and_blocks` goes red, and restore it. A test suite that cannot fail is what this task exists to prevent.
+Expected: all PASS on both. Then run one negative check by hand: delete the `catch` written in step 8 of the script below - step 6 writes the pid and the start ticks, and round 8 caught this reference naming the wrong step, then revision 9 renumbered them again when the receipt-path check became step 1 - confirm `test_a_failure_after_start_kills_the_tree_and_blocks` goes red, and restore it. A test suite that cannot fail is what this task exists to prevent.
 
 - [ ] **Step 5: Commit**
 
@@ -194,19 +203,20 @@ Insert AFTER the sentence ending `is spent for nothing.` and BEFORE `Measured re
   ORDER of its checks is the contract. First, a receipt that is absent,
   unreadable, or not this tool's own JSON means NO RECEIPT: no directory
   is opened at all. A refused launch writes no receipt, so a caller
-  cannot poll the directory it was just refused. Second, no launch-commit
-  artifact means LAUNCH UNKNOWN: the directory was reserved and the
-  launch never completed, which may mean nothing started or may mean a
-  live untracked process, and those are not distinguishable from disk.
+  cannot poll the directory it was just refused. Second, a receipt whose
+  directory or round is not the one the caller says it is polling for is
+  RECEIPT NOT EXPECTED, and still nothing is opened: the receipt binds
+  itself to its own directory, and only this second, independently
+  supplied pair binds it to the act being performed. Third, no
+  launch-commit artifact means LAUNCH UNKNOWN: the directory was
+  reserved and the launch never completed, which may mean nothing
+  started or may mean a live untracked process, and those are not
+  distinguishable from disk.
   It is never success. Shipping the transaction in one tool NARROWS this
   state; it does not remove it, because a hard kill between process
   creation and the recording of the pid is still reachable, and in
   exactly that form no pid exists on disk, so the whole-tree kill below
-  cannot clear it. Third, a receipt whose directory or round is not the
-  one the caller says it is polling for is RECEIPT NOT EXPECTED, and
-  still nothing is opened: the receipt binds itself to its own
-  directory, and only this second, independently supplied pair binds it
-  to the act being performed. Fourth, a commit artifact not holding the
+  cannot clear it. Fourth, a commit artifact not holding the
   receipt's token is LAUNCH NOT OURS: the directory belongs to another
   launch and none of its artifacts describe this one. Fifth, a missing
   or unreadable pid under a valid commit is PID UNREADABLE, because a
@@ -227,8 +237,11 @@ Insert AFTER the sentence ending `is spent for nothing.` and BEFORE `Measured re
   act's directory AND its label is truthfully told that act's result,
   because every value it supplied describes the earlier act. The
   controls for that are a fresh receipt path per round and a launch that
-  refuses an existing one. EXIT 0 IS NOT A RESULT: it covers RUNNING as
-  well as REPLY PRESENT, so the state field is read, always.
+  refuses an existing one. EXIT ZERO MEANS REPLY PRESENT AND NOTHING
+  ELSE. An unfinished round exits THREE, so a caller reading only the
+  exit status cannot take a still-being-written reply for a finished
+  one; a rule saying to read the state field would have been prose where
+  a mechanism belongs.
   <!-- contract:end -->
 ```
 
@@ -270,7 +283,7 @@ Insert AFTER the sentence ending `is spent for nothing.` and BEFORE `Measured re
 
 - [ ] **Step 2: Declare the four regions**
 
-Add to `DECLARED_REGIONS` with a comment recording: backlog item 32; that TOOL replaced a launch that had been five copied snippets; that STATES leads with NO RECEIPT and keeps LAUNCH UNKNOWN second, because the cross-vendor reviewer refused the claim that a tool eliminates the second one and then refused a launch token stored inside the artifact it authenticates; and that NAMING is separate because it is the only unenforced one.
+Add to `DECLARED_REGIONS` with a comment recording: backlog item 32; that TOOL replaced a launch that had been five copied snippets; that STATES leads with NO RECEIPT, then RECEIPT NOT EXPECTED, then LAUNCH UNKNOWN, because the cross-vendor reviewer refused the claim that a tool eliminates the last one, then refused a launch token stored inside the artifact it authenticates, then caught this very ordering stated two ways in one document; and that NAMING is separate because it is the only unenforced one.
 
 - [ ] **Step 3: Write one pin per region**
 
@@ -748,7 +761,7 @@ The ceiling decision was made in Task 3 step 5, where it has to be: strict lint 
 
 - [ ] **Step 2: Reconcile the spec with the plan**
 
-Update: the state model to the tool's ordered checks, whose FIRST state is NO RECEIPT and whose second is LAUNCH UNKNOWN - round 8 caught this step still saying LAUNCH UNKNOWN comes first, which was true only of revision 6; the region inventory to the four that exist plus `back-channel-auto-mirror`; the encoding claim to be lane-specific, since an argument-passing lane carries no preamble; the quoting claim, since a wrapper file removes one serialization boundary and not every quoting layer; and question 2, which the user reopened and answered the other way on 2026-08-30. Say plainly that a settled decision was reversed and by whom.
+Update: the state model to the tool's ordered checks, whose first three states are NO RECEIPT, then RECEIPT NOT EXPECTED, then LAUNCH UNKNOWN - round 8 caught this step saying LAUNCH UNKNOWN comes first, which was true only of revision 6, and round 9 caught the correction itself already stale, because adding RECEIPT NOT EXPECTED moved LAUNCH UNKNOWN again; the region inventory to the four that exist plus `back-channel-auto-mirror`; the encoding claim to be lane-specific, since an argument-passing lane carries no preamble; the quoting claim, since a wrapper file removes one serialization boundary and not every quoting layer; and question 2, which the user reopened and answered the other way on 2026-08-30. Say plainly that a settled decision was reversed and by whom.
 
 - [ ] **Step 3: TASK-LOCAL ORACLE for convergence**
 
