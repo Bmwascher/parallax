@@ -65,7 +65,7 @@ This is the whole point of revision 5. The four steps become one transaction in 
   - 1 for every other state, each a transport failure per fallbacks.md, with the state name on stdout.
   - 2 ONLY for a failure to bind the parameters or an internal execution error. Reading the receipt's CONTENT is never exit 2: an absent, unreadable or schema-failing receipt is `no-receipt` at exit 1, which round 9 found the previous wording contradicting by listing "an unreadable argument" under 2.
 - **Why `running` is not 0.** Revision 8 gave it 0 and wrote "exit 0 is not a result" beside it. Round 9's finding: that is the exact shape this whole cycle exists to remove - a safety rule in prose next to a command instead of a mechanism inside it. A caller branching on exit status alone would take the success path while the wrapper was still writing the reply, and Task 8 deliberately builds that arrangement. A distinct code makes the unfinished round unrepresentable as success without reading anything.
-- **`${CLAUDE_PLUGIN_ROOT}` in SKILL TEXT: MEASURED, and the answer is that the harness substitutes it.** The Fable lane found this unverified and it was a real gap: `hooks/hooks.json:10` and `:22` use the token where the harness substitutes before any shell runs, but skill body text today uses a `<plugin-root>` PLACEHOLDER (`SKILL.md:326`) that the session fills in by guessing - which is item 58's own defect. And in PowerShell `${NAME}` is variable syntax, so an unsubstituted token expands to EMPTY and the path becomes the drive root. Measured 2026-08-31 rather than assumed: see Task 1 step 0. The token is therefore the form this plan ships, in every documented call and every test literal, with no conditional anywhere.
+- **`${CLAUDE_PLUGIN_ROOT}` in SKILL TEXT: MEASURED, and the answer is that the harness substitutes it.** The Fable lane found this unverified and it was a real gap: `hooks/hooks.json:10` and `:22` use the token where the harness substitutes before any shell runs, but skill body text today uses a `<plugin-root>` PLACEHOLDER (`SKILL.md:326`) that the session fills in by guessing - which is item 58's own defect. And in PowerShell `${NAME}` is variable syntax, so an unsubstituted token expands to EMPTY and the path becomes the drive root. Measured 2026-08-31 rather than assumed: see Task 1 step 0. The token is therefore the SKILL.md form, with no conditional anywhere; `references/backup-lane.md` carries `<plugin-checkout>` instead, per the split above. Round 21 caught this sentence still claiming one form for every call, which revision 21 had made false for three of the five.
 - `-Launch`'s exit codes match `new-review-mirror.ps1:17-18`: 0 launched and committed, 1 blocked with the reason on stdout, 2 script or environment error. `-Poll` extends that set with 3 and narrows 2 as above; say so in the header, because a reader who assumes the three-code convention is exactly the reader this mapping protects.
 
 - [ ] **Step 0: Record the plugin-root measurement, and re-take it**
@@ -76,7 +76,7 @@ What was measured. `openai-codex/codex/1.0.6/skills/codex-cli-runtime/SKILL.md:1
 
 So: the documented calls keep `${CLAUDE_PLUGIN_ROOT}` verbatim, and Task 1's outer-command test substitutes the installed plugin path itself, with a comment naming this measurement as the reason a test may do what the skill relies on the harness for.
 
-RE-TAKE it here rather than trusting this paragraph, because a client upgrade could change it and because the plan's own rule is that a recorded measurement is bound to the conditions it was made under. Write the result into Task 8's probe record as `plugin_root_token=<substituted|verbatim>` with `client_version=<version>`, which Task 8's schema and its test both carry. **If it comes back `verbatim`, STOP and surface it**: the anchoring claim collapses to "named, not resolved", five documented literals and one contract region are wrong, and that is a plan change rather than a task decision.
+RE-TAKE it here rather than trusting this paragraph, because a client upgrade could change it and because the plan's own rule is that a recorded measurement is bound to the conditions it was made under. Write the result into Task 8's probe record as `plugin_root_token=<substituted|verbatim>` with `client_version=<version>`, which Task 8's schema and its test both carry. **If it comes back `verbatim`, STOP and surface it**: the two `SKILL.md` call sites and region one's SKILL.md clause are wrong, and the anchoring claim for those two collapses to "named, not resolved". Round 21 caught the earlier wording naming five literals, which was written before the split; the three `backup-lane.md` calls carry a placeholder and stand either way. It is a plan change rather than a task decision.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -855,7 +855,7 @@ Round 4 found this task had no oracle and round 18 found the replacement countin
 - `boundary`: `launch_return_seconds` parses as a number and is **under 15**, `alive_in_later_call=true`, `exit_file_after_sleep=true`. The number is the plan's whole claim - a call that took 90 seconds returned only when the child did, which is the blocking form again.
 - `states`: `killed_tree=no-exit-file`, `refused_receipt=no-receipt`, `empty_reply=reply-empty`, compared exactly against those state names.
 - `encoding`: `binder=accepted`, `prompt_sha256_matches=true`, `prompt_bytes_match=true`.
-- `kimi_reply`: `bytes_match=true`, `bom_present=false`. This is the Kimi lane's INBOUND encoding, which both lanes found unmeasured; Task 7 step 4 below is where it is exercised.
+- `kimi_reply`: `bytes_match=true`, `bom_present=false`. This is the Kimi lane's INBOUND encoding, which both lanes found unmeasured; Task 7 step 4 is where it is exercised.
 - `harness`: `plugin_root_token=substituted`, and `client_version` non-empty. If the token ever measures `verbatim` this assertion goes red, which is the intended behaviour: it is a plan-level change, not something a task may absorb.
 
 Then prove the oracle can fail: change ONE recorded value in a scratch copy - `alive_in_later_call` to `false` - confirm the test goes red naming that field, and restore it. A record whose test only counts its rows is the "presence is not meaning" defect this debate found five times, and Task 8 is the one task whose rows are the evidence rather than a description of it.
@@ -934,10 +934,7 @@ def section(head):
     return ' '.join(t[i:(len(t) if j < 0 else j)].split())
 
 orph = section('### The orphan half')
-assert "counts five exact strings" in con, (
-    "the corrected count is absent from the constraints section;"
-    " deleting the sentence is not a fix, and a history paragraph"
-    " elsewhere in the file is not the constraint")
+con = section('## Constraints that must survive')
 
 for clause in ("the pid is on disk for every committed launch",
                "an interrupted launch leaves no receipt",
@@ -945,7 +942,10 @@ for clause in ("the pid is on disk for every committed launch",
                "the pid on disk is the dead wrapper"):
     assert clause in orph, "orphan section missing: " + clause
 
-con = section('## Constraints that must survive')
+assert "counts five exact strings" in con, (
+    "the corrected count is absent from the constraints section;"
+    " deleting the sentence is not a fix, and a history paragraph"
+    " elsewhere in the file is not the constraint")
 assert "LIVENESS IS CHECKED FIRST" not in con, "the stale liveness claim survives"
 order = ["no-receipt", "receipt-not-expected", "launch-unknown",
          "launch-not-ours", "pid-unreadable", "running"]
@@ -956,6 +956,8 @@ assert at == sorted(at), "states out of order: " + str(list(zip(order, at)))
 print("spec sections reconciled")
 PY
 ```
+
+**Both sections are bound at the top, before any assertion uses either.** Round 21's finding, and it is the third time in this debate that an oracle was broken by the fix to the previous oracle: round 20's scoping repair moved the exact-strings assertion onto `con` and left it ABOVE the line that assigns `con`, so the block raised `NameError` on every run, including against a perfectly reconciled spec. A check that can never pass is the round 13 class.
 
 Expected: `spec sections reconciled` and exit 0. The orphan section must carry all FOUR clauses verbatim - round 20 caught this sentence saying three while the oracle above it required four; the state section must name the six states in the executable order, positions strictly increasing, and must not claim liveness is first. Any other arrangement raises and names what it found.
 
@@ -1003,7 +1005,7 @@ Sol session `01a055c5-935e-76e3-ad1d-83721bc67d79`.
 
 **As of `92c892f`, the commit this paragraph was written on top of: SEVENTEEN numbered dispatches - sixteen full review rounds and one two-lane poll, which was dispatch 5.** Later rounds are recorded below by number without restating a total. Round 7 took two attempts; the first was refused by the round-evidence binder and discarded unread. That refusal's only artifact is a renamed reply file in the session scratchpad, outside this repository, so it is recorded here and is NOT repo-verifiable - round 15's point, and it is stated rather than dropped. Every finding was reproduced against the repository before acceptance and none was refuted. Two reviewer rulings reversed decisions I had already reported to the user: the Kimi lane's scope, and the whole launch mechanism.
 
-The record below runs to round 19 and the two Fable-lane rounds. Round 19's own finding, that this promise had outrun the entries, is why.
+The record below runs to round 21 and the four Fable-lane rounds. Round 19 found this promise outrunning its entries once; round 21 found it again, which is why the entries now end where the debate does rather than where the last edit left them.
 
 **Rounds 1 to 4 and 6 to 9** each found at least one FALSE-COMPLETION PATH OR UNCLASSIFIED COMPLETION CONDITION - eight rounds, not nine, because dispatch 5 was the poll and not a review. Round 16's correction: not all eight were cross-act substitution. Round 4 found a condition outside the state model entirely, and round 9 found an unfinished round exiting zero; neither is one act's artifact read as another's. Rounds 10 onward found none - through round 17 as this was written - and each named the shapes it had swept for. What they found instead was oracles that could not fail and text left behind by a mechanism change - twice, an oracle written to fix the previous round's oracle.
 
@@ -1026,6 +1028,10 @@ Round 4 is where this plan stopped being a set of copied snippets: it found the 
 **Round 9** — `running` exited 0 with "exit 0 is not a result" written beside it, which is a rule in prose where a mechanism belongs. It exits 3 now. The receipt-outside-the-directory guarantee was claimed and unenforced.
 
 **Rounds 10 to 12** — no new completion path. The point-of-use text carried a stale exit mapping; two tasks expected a red-then-green cycle on a guard that was already green; and two Task 9 oracles could not fail, the second being the fix for the first.
+
+**Rounds 20 and 21** — no new completion path in either. Round 20 refused a `-join` claim I had taken from the other lane uncritically, and found four bookkeeping contradictions the previous revision had introduced. Round 21 found the Task 9 oracle raising `NameError` before it could assert anything, because round 20's own scoping fix had moved an assertion above the line that binds its section - the third oracle in this debate broken by the fix to the previous oracle.
+
+**The Fable lane's third and fourth rounds** — the scope gap that mattered most in this stretch: the `${CLAUDE_PLUGIN_ROOT}` measurement covers plugin SKILL BODY text, and I had extended it silently to a references file holding three of the five detached calls, where an unsubstituted token expands to EMPTY. The fix needed no new measurement, because `backup-lane.md` already had a pinned placeholder convention. Its fourth round then judged the split as written, rather than as its own recommendation, and named what guards each hazard.
 
 **Round 18** — Task 8's oracle counted the probe record's ROWS instead of reading them, so a record stating that every measurement failed would have passed. It now asserts each measured value and requires a red demonstration.
 
