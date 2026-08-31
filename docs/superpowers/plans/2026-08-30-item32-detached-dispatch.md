@@ -1053,3 +1053,116 @@ Round 17 also answered, when asked directly, whether the remaining defect rate b
 ## After the tasks
 
 The version bump comes AFTER the diff debate, not here. `plugin update` keys only on the version string, and a number cached before the debate rewrites the tree installs nothing afterwards.
+
+
+---
+
+## Debate record
+
+**Participants:** claude-opus-5 (session) / gpt-5.6-sol (codex exec, session `01a055c5-935e-76e3-ad1d-83721bc67d79`) / claude-fable-5 (parallax:fable-panel-reviewer, six rounds)
+**Rounds used:** 23 numbered dispatches to the cross-vendor lane (22 full review rounds and one two-lane poll, which was dispatch 5), plus six Fable-lane rounds. No cap was set by the user; the user asked for rounds to continue until PASS and then for one confirming round per lane.
+**Outcome:** converged with amendments
+**Verification status:** FULL
+**Degradation:** none
+**Authorized by:** n/a
+**Raw rounds:** `docs/superpowers/plans/rounds/2026-08-30-item32-plan-debate/` - `sol-brief-r*.md` and `sol-reply-r*.md` for every cross-vendor round, `fable-reply-r1.md` through `fable-reply-r6.md` for the Claude-side lane, and `evidence/` holding each round's prior-state JSON, the verified skills override, and the dispatch harness. Two dispatches are retained as failures rather than results: `sol-reply-r7.DISCARDED-brief-attribution.md`, refused by the round-evidence binder and never read, and round 21's first attempt, which ended `ERROR: Selected model is at capacity` with no reply written, so `sol-brief-r21.md` stands with no reply beside it and the round was re-dispatched as `r21b`. Round 7 was likewise re-dispatched as `r7b` against the same brief.
+
+### How this debate actually ran, stated because the shape is the finding
+
+Every round's reply was bound to the brief this side sent with
+`tools/read-codex-round-evidence.ps1 -Resume`, and every round's mirror was
+rebuilt at the SAME path with a fresh skills override, because a mirror
+rebuilt at a new path makes the binder refuse a resumed round - measured
+once, at the cost of a round. Every effective route was checked against the
+canonical declarations before the reply was read. The plan file in each
+mirror was hash-compared to the source before dispatch.
+
+**Rounds 1 to 4 and 6 to 9 each found a false-completion path or an
+unclassified completion condition. Rounds 10 to 23 found none.** What they
+found instead, round after round, was a rule written in prose where a
+mechanism belongs and an oracle that could not fail - including three
+oracles broken by the fix to the previous oracle. The plan's own text
+records which round found what, and both lanes were asked every round to
+sweep the CLASS and either name an instance or say explicitly that they
+searched and found none, naming the shapes searched.
+
+**The second lane was dispatched because eighteen rounds on one resumed
+session is a great deal of anchoring, and it paid for itself in one pass.**
+The Fable lane's first round found six defects neither the session nor the
+cross-vendor lane had named, two of them mechanism-level. Its third found
+the defect this debate would otherwise have shipped: the
+`${CLAUDE_PLUGIN_ROOT}` measurement covers plugin SKILL BODY text, and the
+session had extended it silently to a references file holding three of the
+five detached calls, where an unsubstituted token expands to EMPTY.
+
+### Resolved points
+
+Twenty-three rounds produced far more than a table can hold; the per-round
+narrative above is the record, and the raw replies are retained. The points
+that changed the DESIGN rather than the text:
+
+| # | Claim | Raised by | Outcome | Evidence |
+|---|-------|-----------|---------|----------|
+| 1 | The launch is four steps copied to five sites; a rule pinned elsewhere cannot make them atomic | reviewer (r4) | accepted - the whole launch became one shipped tool, `tools/dispatch-detached.ps1` | plan Task 1 |
+| 2 | The Kimi lane cannot be deferred pending item 51 | reviewer (r2) | accepted, session's deferral withdrawn | `rounds/2026-08-22-item51-inline-brief-probe/probe-record.md:27-31` |
+| 3 | A launch token stored inside the artifact it authenticates is not evidence | reviewer (r7) | accepted - replaced by an external receipt written last, at a path `-Launch` refuses if it exists | plan Task 1 interface |
+| 4 | The receipt binds itself to its own directory and nothing binds it to the act being performed | reviewer (r8) | accepted - `-Poll` takes `-ExpectedDispatchDir` and `-ExpectedRound` | plan `-Poll` order, check 2 |
+| 5 | `running` exiting 0 with "exit 0 is not a result" beside it is a rule in prose where a mechanism belongs | reviewer (r9) | accepted - `running` exits 3 | plan exit mapping |
+| 6 | Liveness is a pid alone; a recycled pid reads as RUNNING | reviewer (r13) | accepted - pid plus start-time ticks, copying `tools/kimi-lane-lock.ps1:219-236` | plan `-Poll` order, check 6 |
+| 7 | The receipt became the last artifact and the hard-kill case still named `launch-unknown`, which it can no longer reach | reviewer (r13) | accepted - the interrupted launch lands on `no-receipt`, and `launch-unknown` was redefined | region `detached-dispatch-states` |
+| 8 | The Kimi lane's reply crosses a PowerShell redirect that decodes with the OEM code page and re-encodes per host | Fable (r1) | accepted - the wrapper sets `[Console]::OutputEncoding` and writes the reply with .NET, no BOM | plan Task 4 wrapper |
+| 9 | `${CLAUDE_PLUGIN_ROOT}` in skill text was unverified, and an unsubstituted token expands to EMPTY in PowerShell | Fable (r1) | accepted - MEASURED on Claude Code 2.1.251, see Task 1 step 0 | plan Task 1 step 0 |
+| 10 | That measurement covers skill BODY text and was extended silently to a references file holding three of the five calls | Fable (r3) | accepted - the plan ships two forms and says why | Global Constraints, region one, plan Task 4 |
+| 11 | `taskkill /PID` cannot clear a committed launch whose wrapper died while the client lives | Fable (r1) | accepted - named as a second uncleaable case | region `detached-dispatch-operation` |
+| 12 | The session claimed the launch was centralized while five literal copies remained | reviewer (r4) | accepted, session's report to the user corrected | plan Task 1 |
+
+### Escalated points (user-decided)
+
+| # | Question | Session position | Reviewer position | Owner's call |
+|---|----------|------------------|-------------------|--------------|
+| 1 | Prose-only rule, a wrapper tool, or change the command itself | change the command | — | user chose "change the command itself" |
+| 2 | Which calls are in scope | the two codex calls | all five long client calls | user: "literally every call should be in the background" |
+| 3 | Copied wrapper snippets or one shipped tool | copies, as designed | both lanes independently chose a shipped tool | user chose the tool, reversing the design-phase decision |
+| 4 | Should the mirror still be built by asking | ask each time | — | user: "this should never prompt either" - item 33 folded in |
+| 5 | Round timeout | — | — | user: "30 minutes is fine" |
+
+### The floor, stated so a reader does not believe it is covered
+
+When all nine tasks are done, these remain NOT verified:
+
+- Recovery from an interrupted launch that may leave a live untracked child with no pid on disk. The contract names it and does not remedy it, and `taskkill /PID` cannot clear it.
+- The committed launch whose wrapper died while the client lives, which the same command also cannot clear.
+- Misattribution when a caller supplies an earlier act's receipt AND its directory AND its label. The tool truthfully answers that earlier act.
+- The Kimi lane's detached dispatch never touches the real client: stub-run only. The live backup-lane suite is opt-in and is not in Task 9's gates.
+- The `[Console]::OutputEncoding` repair NARROWS the inbound encoding defect. The decode is non-strict, so it does not prove byte identity, and the client's own stdout encoding is unverified.
+- The three backup-lane calls NAME the plugin root through a session-filled placeholder; only the two SKILL.md calls are harness-resolved.
+- Item 51's argv escaping, item 31's shipped pipes, and the three existing bare relative paths at `SKILL.md:94`, `:121`, `:228` are all untouched.
+- Background-task naming is a documentation-presence pin. Nothing enforces it.
+- The version bump and the install happen after this plan, not in it.
+
+### Why the debate stopped here
+
+Both lanes were asked directly, in their final rounds, whether the remaining
+find rate was evidence of residual plan defects or of two reviewers reading
+the same prose. Both answered the same way and neither hedged.
+
+The cross-vendor lane: the remaining find rate is evidence of repeated edits
+to the debate history, not of undiscovered mechanism defects; another full
+review round is not justified.
+
+The Fable lane: repair churn, not residual plan defect - no completion-model
+hole in thirteen of its counterpart's rounds and six of its own, severity
+falling monotonically, and both lanes converging on the same single finding
+for two rounds running, which means two independent samplers were drawing
+from a pool with about one item in it, and that item was always the newest
+edit. It predicted a further round would find exactly one word-level defect
+inside whatever edit fixed the last one, and nothing in the mechanism, the
+states, the exit mapping, the pins or the task oracles.
+
+Both prescribed the same closing move: make the named word-level
+corrections, verify the diff is exactly those strings, and freeze without
+another full round. That is what was done, at `e237590`.
+
+**FROZEN at `e237590`.** No task may be edited from here without reopening the
+debate; anything this plan leaves open is a plan defect, found in mode diff
+as drift.
