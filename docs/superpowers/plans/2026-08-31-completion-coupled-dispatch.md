@@ -136,12 +136,20 @@ $utf8 = New-Object System.Text.UTF8Encoding($false)
 $r = [System.IO.File]::Open("$PSScriptRoot/classification", 'CreateNew', 'Write', 'None')
 try { $b = $utf8.GetBytes('reserved'); $r.Write($b, 0, $b.Length) } finally { $r.Close() }
 
-# The tree is re-verified HERE, at run time, not merely at preparation.
-& '<mirrorToolPath>' -VerifyIdentity -RepoRoot '<repoRoot>' -MirrorPath '<workingDirectory>' `
-    -SourceHead '<sourceHead>' -MirrorHead '<mirrorHead>' `
-    -SourceStatusSha256 '<sourceStatusSha256>' -MirrorStateSha256 '<mirrorStateSha256>' `
-    -ExpectedMirrorPath '<expectedMirrorPath>' `
-    > "$PSScriptRoot/mirror.verify" 2>&1
+# ONE argument set, defined once, used by BOTH verifications.
+$mirrorArgs = @{
+    VerifyIdentity      = $true
+    RepoRoot            = '<repoRoot>'
+    MirrorPath          = '<workingDirectory>'
+    SourceHead          = '<sourceHead>'
+    MirrorHead          = '<mirrorHead>'
+    SourceStatusSha256  = '<sourceStatusSha256>'
+    MirrorStateSha256   = '<mirrorStateSha256>'
+    ExpectedMirrorPath  = '<expectedMirrorPath>'
+}
+
+# The tree is verified HERE, at run time, not merely at preparation.
+& '<mirrorToolPath>' @mirrorArgs > "$PSScriptRoot/mirror.verify" 2>&1
 if ($LASTEXITCODE -ne 0) { throw 'mirror identity failed at dispatch time' }
 
 Set-Location -LiteralPath '<workingDirectory>' -ErrorAction Stop
@@ -154,7 +162,9 @@ if ($null -eq $code) { $code = 1 }
 # The tree is verified a SECOND time, after the client has finished, so a
 # mutation that persisted through the round is caught. A change reverted
 # inside the round is not, and no before-and-after check could catch it.
-& '<mirrorToolPath>' -VerifyIdentity @mirrorArgs >> "$PSScriptRoot/mirror.verify" 2>&1
+# 'Stop' is restored FIRST: see the note below, this line is load-bearing.
+$ErrorActionPreference = 'Stop'
+& '<mirrorToolPath>' @mirrorArgs >> "$PSScriptRoot/mirror.verify" 2>&1
 if ($LASTEXITCODE -ne 0) { throw 'the mirror changed while the round ran' }
 
 # CONSUME the reservation BEFORE any terminal artifact is published, and
@@ -221,6 +231,27 @@ header already states this narrowness honestly; what is new here is that
 this design depends on the part it does not cover. Task 1a adds a
 mirror-state digest and a source-is-not-the-mirror check before this
 design can rely on it, and it runs BEFORE the tool is rewritten.
+
+**Why `$ErrorActionPreference = 'Stop'` is restored before the second
+verification, and why the arguments are one defined hashtable.** MEASURED
+2026-08-31 on both hosts: under `Continue`, a call that fails to BIND -
+splatting a variable that does not exist, for instance - raises a
+non-terminating error and leaves `$LASTEXITCODE` at the previous command's
+value. The previous command is the client, which had just succeeded. So
+the guard reads a stale zero and the verification silently does not
+happen:
+
+```
+after successful child: LASTEXITCODE=0
+after splat of undefined: LASTEXITCODE=0
+GUARD DID NOT FIRE - false success
+```
+
+An earlier version of this plan wrote the second call with an undefined
+`@mirrorArgs`, and that is exactly what it would have done: the
+strengthening added to catch a mutated tree would itself have been the
+false-success path. One hashtable defined before the first call, used by
+both, and `Stop` restored before the second, removes both halves.
 
 **Capture the verifier's stdout at both call sites.** A successful
 `-VerifyIdentity` prints `identity: verified`. In `-Prepare` that line
@@ -432,7 +463,7 @@ authoritative.
 | `evals/multi-model-verify/test_contract_coverage.py` | `DECLARED_REGIONS` |
 | `evals/multi-model-verify/test_multi_model_verify.py` | call-site pins |
 | `skills/multi-model-verify/SKILL.md` | two call sites |
-| `skills/multi-model-verify/references/backup-lane.md` | two call sites |
+| `skills/multi-model-verify/references/backup-lane.md` | three call sites |
 | `skills/multi-model-verify/references/model-prompting-notes.md` | four contract regions |
 | `skills/multi-model-verify/references/fallbacks.md` | the bookmark rule |
 | `CLAUDE.md` | the dispatch digest |
@@ -1202,6 +1233,35 @@ def test_the_wrapper_reverifies_the_tree_before_the_client_runs(tmp_path):
     assert not (p.dispatch_dir / "reply").exists()
 
 
+def test_a_mirror_mutated_DURING_the_round_fails_the_wrapper(tmp_path):
+    # The test above mutates before the wrapper starts, so it only
+    # exercises the FIRST verification. This one exercises the second:
+    # the child itself edits a tracked file, writes a good reply, and
+    # exits zero. Everything on disk says success.
+    p = prepare(tmp_path, body='''
+[System.IO.File]::WriteAllText("<workingDirectory>/README.md", "changed mid-round")
+[System.IO.File]::WriteAllText("$PSScriptRoot/reply", "a verdict")
+exit 0
+''')
+    out = run_wrapper(p.wrapper)
+    assert out.returncode != 0
+    # And the reservation was never consumed, so no later call can redeem
+    # it either.
+    assert (p.dispatch_dir / "classification").read_text().strip() == "reserved"
+
+
+def test_a_second_verification_that_cannot_RUN_fails_the_wrapper(tmp_path):
+    # Regression for the defect this design introduced and then removed:
+    # under Continue, a call that fails to bind leaves $LASTEXITCODE at
+    # the client's successful zero, so the guard passes and the check
+    # never happened. Break the verifier tool's path and require failure.
+    p = prepare(tmp_path, body=OK_BODY)
+    break_mirror_tool_path(p.wrapper)
+    out = run_wrapper(p.wrapper)
+    assert out.returncode != 0
+    assert (p.dispatch_dir / "classification").read_text().strip() == "reserved"
+
+
 def test_the_mirror_verifier_output_never_reaches_the_wrapper_stdout(tmp_path):
     d = prepare_and_run(tmp_path, body=OK_BODY)
     assert "identity: verified" not in d.stdout
@@ -1557,7 +1617,7 @@ git commit -m "rewrite all five call sites for completion-coupled dispatch"
 
 ---
 
-## Task 8: Rewrite the four contract regions
+## Task 8: Rewrite the dispatch contract regions
 
 **Files:**
 - Modify: `skills/multi-model-verify/references/model-prompting-notes.md`
@@ -1870,12 +1930,15 @@ as a stated limit rather than fixed. They belong in the
    hands it to `-Classify`.** They get that round's disk state. No
    filesystem mechanism can stop the owner of the filesystem. The
    authoritative answer remains the harness task's exit code.
-3. **An external process that mutates the mirror after verification and
-   while the client is reading it.** The wrapper checks before the client
-   runs and, per Task 4, again after the child returns - so persistent
-   in-round mutation is caught, and only a change-and-revert inside the
-   round is not. This is filesystem ownership after dispatch, explicitly
-   trusted.
+3. **A change made to the mirror and undone again before the client
+   finishes.** The wrapper verifies before the client runs and again after
+   the child returns, so a mutation that PERSISTS through the round is
+   caught and the round fails. Only change-and-revert survives, and no
+   before-and-after check could catch it. This is filesystem ownership
+   during dispatch, explicitly trusted. Note that this residual is
+   correctly stated ONLY because the second verification actually runs -
+   an earlier version wrote that call so it could not bind, which turned
+   this from a narrow residual into an unstated correctness defect.
 4. **The harness trailer's format is measured, not pinned across
    versions.** Nothing in this repo parses it mechanically.
 5. **No bound on how long a hung round may sit.** Filed as a backlog item
@@ -2089,5 +2152,55 @@ its own section above rather than scattered through the design.
 Its reply is retained at
 `docs/superpowers/plans/rounds/2026-08-31-completion-coupled-dispatch/sol-plan-review-r4.md`.
 
-Neither lane has yet seen THIS version.
+## The round-6 review, the last one, and what it found
+
+The cross-vendor lane's fifth pass, bound clean, FIX - and it caught the
+pattern one final time, in the strengthening I had just added at its own
+suggestion.
+
+**The second mirror verification could not run.** I wrote its arguments as
+a splat of `$mirrorArgs`, a variable no part of the plan defined. The lane
+then measured what that actually does, and I reproduced it on both hosts:
+under `$ErrorActionPreference = 'Continue'` - which the wrapper sets
+before running the client, deliberately, because of the codex stderr trap
+- a call that fails to BIND raises a non-terminating error and leaves
+`$LASTEXITCODE` at the previous command's value. The previous command is
+the client, which had just succeeded.
+
+```
+after successful child: LASTEXITCODE=0
+after splat of undefined: LASTEXITCODE=0
+GUARD DID NOT FIRE - false success
+```
+
+So the check would have been skipped, its guard would have read the
+client's stale zero, and a round whose tree was mutated mid-flight would
+have classified `reply-present`. **The strengthening added to catch a
+mutated tree would itself have been the false-success path.**
+
+Fixed by defining ONE `$mirrorArgs` hashtable before the first
+verification and using it for both, restoring `Stop` before the second
+call, and adding two regression tests: a child that mutates the tree
+mid-round and still reports success, and a second verification that cannot
+run at all. Both must fail the wrapper with the reservation unconsumed.
+
+It also confirmed the other five changes CLOSE their findings, walked all
+twelve tasks in their new order and found only Task 4 unbuildable, judged
+the residual list honest once this defect was fixed, and named two
+editorial stale counts, both corrected.
+
+Its reply is retained at
+`docs/superpowers/plans/rounds/2026-08-31-completion-coupled-dispatch/sol-plan-review-r5.md`.
+
+## Where the plan stands
+
+Six review rounds across two lanes. The cross-vendor lane's own summary of
+this last one: "one small correction short of buildable". That correction
+is applied above, and its regression tests are written. Nothing else it
+raised is outstanding.
+
+**This version has not been reviewed.** The correction is small, it is
+measured, and it is tested - but the honest statement is that five of six
+rounds found that a fix of mine had moved its defect rather than removed
+it, and this version's fix has not been through a round.
 
