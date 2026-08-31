@@ -1,17 +1,15 @@
-"""Contract pins for tools/dispatch-detached.ps1 (Task 1, 2026-08-31
-tracked-background-dispatch plan).
+"""Contract pins for tools/dispatch-detached.ps1 (Task 1, 2026-08-30
+item32-detached-dispatch plan).
 
 Drives the REAL script against stub payloads (stub wrapper .ps1 bodies
 written per test, never the real codex/kimi transports). WINDOWS ONLY,
-whole module: -Poll reads real process liveness (Get-Process, StartTime
-ticks), and several fixtures run a real wrapper.ps1 as its own Windows
-process the way the harness now does, per
-docs/superpowers/specs/2026-08-31-tracked-background-dispatch-design.md.
-PARALLAX_PS_HOST selects which host runs these tests, same pattern as
-test_kimi_lane_lock.py - a selector that merely finds A host would
-happily collect them on a non-Windows CI box too, where the platform
-semantics under test do not exist there the same way. A green suite on
-one host proves ONE interpreter.
+whole module: the tool launches real detached Windows processes, reads
+real process liveness (Get-Process, StartTime ticks) and kills real
+process trees (taskkill /T /F). PARALLAX_PS_HOST selects which host runs
+these tests, same pattern as test_kimi_lane_lock.py - a selector that
+merely finds A host would happily collect them on a non-Windows CI box
+too, where the platform semantics under test do not exist there the same
+way. A green suite on one host proves ONE interpreter.
 """
 import json
 import os
@@ -24,7 +22,7 @@ from pathlib import Path
 import pytest
 
 REPO = Path(__file__).resolve().parents[2]
-TOOL_PATH = REPO / "tools" / "dispatch-detached.ps1"
+SCRIPT = REPO / "tools" / "dispatch-detached.ps1"
 
 POWERSHELL = (os.environ.get("PARALLAX_PS_HOST")
               or shutil.which("powershell") or shutil.which("pwsh"))
@@ -35,27 +33,13 @@ pytestmark = pytest.mark.skipif(
            "PowerShell host and the detached-process / liveness "
            "platform it targets")
 
-ROUND = "R1"
 
 # ---------------------------------------------------------------------
 # Stub wrapper bodies. Each is copied into the dispatch directory by
-# -Prepare, and RUN SEPARATELY by the test (the way the harness now runs
-# it, as a tracked background command - -Prepare itself starts nothing).
-# They stand in for the real codex/kimi transport wrappers Task 3/6 will
-# generate, and open with the same two lines every real wrapper body
-# gains per the design spec section 3: publish pid and startticks as the
-# wrapper's own first act, before any client call.
+# -Launch and run as the detached child. They stand in for the real
+# codex/kimi transport wrappers Task 3/6 will generate.
 # ---------------------------------------------------------------------
-PUBLISH_IDENTITY = (
-    "[System.IO.File]::WriteAllText(\"$PSScriptRoot/pid\", \"$PID\", "
-    "(New-Object System.Text.UTF8Encoding($false)))\n"
-    "[System.IO.File]::WriteAllText(\"$PSScriptRoot/startticks\", "
-    "((Get-Process -Id $PID).StartTime.ToUniversalTime().Ticks), "
-    "(New-Object System.Text.UTF8Encoding($false)))\n"
-)
-
 FAST_WRAPPER = (
-    PUBLISH_IDENTITY +
     "$dir = $PSScriptRoot\n"
     "Set-Content -LiteralPath (Join-Path $dir 'reply') -Value 'hello-world' "
     "-NoNewline -Encoding Ascii\n"
@@ -67,7 +51,6 @@ FAST_WRAPPER = (
 # arrangement in miniature (a reply being written is not a reply while
 # the process is still alive).
 SLOW_WRAPPER = (
-    PUBLISH_IDENTITY +
     "$dir = $PSScriptRoot\n"
     "Set-Content -LiteralPath (Join-Path $dir 'reply') -Value "
     "'premature-reply-content' -NoNewline -Encoding Ascii\n"
@@ -76,37 +59,55 @@ SLOW_WRAPPER = (
     "-NoNewline -Encoding Ascii\n"
 )
 
-# A generic wrapper body for tests that only need a legitimate,
-# installable file - it publishes its identity and sleeps, never
-# reaching a reply/exit. Content only matters when a test actually runs
-# it; most callers only ever -Prepare it.
-SLEEPER_WRAPPER = PUBLISH_IDENTITY + "Start-Sleep -Seconds 20\n"
-
-# The wrapper shape Task 3 ships, reduced to a sleep and a fixed reply:
-# publish identity first, then a short pause a test can observe as
-# "running" before it completes on its own.
-IDENTITY_THEN_SLEEP_WRAPPER = (
-    PUBLISH_IDENTITY +
-    "Start-Sleep -Seconds 5\n"
-    "Set-Content -LiteralPath (Join-Path $PSScriptRoot 'reply') -Value "
-    "'fixed-reply-content' -NoNewline -Encoding Ascii\n"
-    "Set-Content -LiteralPath (Join-Path $PSScriptRoot 'exit') -Value '0' "
-    "-NoNewline -Encoding Ascii\n"
+# Records its own pid to an EXTERNAL path (outside the dispatch
+# directory, via an inherited env var) before sleeping, so a test can
+# verify it was actually killed even if the dispatch directory itself
+# gets removed out from under it.
+PID_CAPTURE_WRAPPER = (
+    "$dir = $PSScriptRoot\n"
+    "$capture = $env:PARALLAX_TEST_WRAPPER_PID_PATH\n"
+    "if ($capture) {\n"
+    "    try { Set-Content -LiteralPath $capture -Value ([string]$PID) "
+    "-NoNewline -Encoding Ascii } catch { }\n"
+    "}\n"
+    "Start-Sleep -Seconds 20\n"
 )
 
-# Task 1a (2026-08-31 plan): the wrapper's SECOND act, right after
-# publishing its identity, is Set-Location to the `cwd` file -Prepare
-# writes. This stub proves that act rather than assuming it: it reports
-# $PWD.Path as its reply, so a test that starts the wrapper somewhere
-# OTHER than the recorded mirror can tell whether Set-Location actually
-# ran.
-PWD_REPORTING_WRAPPER = (
-    PUBLISH_IDENTITY +
-    "Set-Location -LiteralPath ([System.IO.File]::ReadAllText(\"$PSScriptRoot/cwd\", "
-    "(New-Object System.Text.UTF8Encoding($false, $true))))\n"
-    "Set-Content -LiteralPath (Join-Path $PSScriptRoot 'reply') -Value $PWD.Path "
+# Busy-polls its OWN directory (a snapshot per iteration, not a fixed
+# per-file check order, so the loop itself cannot bias which artifact it
+# records first) plus an externally-named receipt path, recording the
+# CONTENT of the order it observed rather than relying on file
+# timestamps - see test_a_committed_launch_publishes_pid_then_marker_then_receipt.
+ORDER_WRAPPER = (
+    "$dir = $PSScriptRoot\n"
+    "$order = New-Object System.Collections.Generic.List[string]\n"
+    "$seen = @{}\n"
+    "$targets = @('pid','startticks','launch.committed')\n"
+    "$receiptPath = $env:PARALLAX_TEST_RECEIPT_PATH\n"
+    "$deadline = (Get-Date).AddSeconds(20)\n"
+    "while ($true) {\n"
+    "    $existing = @(Get-ChildItem -LiteralPath $dir -Name "
+    "-ErrorAction SilentlyContinue)\n"
+    "    foreach ($t in $targets) {\n"
+    "        if ((-not $seen.ContainsKey($t)) -and "
+    "($existing -contains $t)) {\n"
+    "            $seen[$t] = $true\n"
+    "            $order.Add($t)\n"
+    "        }\n"
+    "    }\n"
+    "    if ((-not $seen.ContainsKey('receipt')) -and $receiptPath -and "
+    "(Test-Path -LiteralPath $receiptPath)) {\n"
+    "        $seen['receipt'] = $true\n"
+    "        $order.Add('receipt')\n"
+    "    }\n"
+    "    if ($seen.Count -ge 4) { break }\n"
+    "    if ((Get-Date) -gt $deadline) { break }\n"
+    "}\n"
+    "Set-Content -LiteralPath (Join-Path $dir 'order.log') -Value "
+    "($order -join \"`n\") -Encoding Ascii\n"
+    "Set-Content -LiteralPath (Join-Path $dir 'reply') -Value 'ok' "
     "-NoNewline -Encoding Ascii\n"
-    "Set-Content -LiteralPath (Join-Path $PSScriptRoot 'exit') -Value '0' "
+    "Set-Content -LiteralPath (Join-Path $dir 'exit') -Value '0' "
     "-NoNewline -Encoding Ascii\n"
 )
 
@@ -118,7 +119,7 @@ def run_dispatch(args, env=None, timeout=30):
     full_env = dict(os.environ)
     if env:
         full_env.update(env)
-    cmd = [POWERSHELL, "-NoProfile", "-NonInteractive", "-File", str(TOOL_PATH)] + list(args)
+    cmd = [POWERSHELL, "-NoProfile", "-NonInteractive", "-File", str(SCRIPT)] + list(args)
     return subprocess.run(cmd, capture_output=True, text=True, env=full_env, timeout=timeout)
 
 
@@ -126,41 +127,9 @@ def start_dispatch_bg(args, env=None):
     full_env = dict(os.environ)
     if env:
         full_env.update(env)
-    cmd = [POWERSHELL, "-NoProfile", "-NonInteractive", "-File", str(TOOL_PATH)] + list(args)
+    cmd = [POWERSHELL, "-NoProfile", "-NonInteractive", "-File", str(SCRIPT)] + list(args)
     return subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                              text=True, env=full_env)
-
-
-def _run_wrapper_in_background(dispatch_dir, start_in=None):
-    """Start a prepared wrapper.ps1 the way the harness now does: as its
-    own tracked process, isolated from this test process's own stdio
-    (CREATE_NO_WINDOW - see the note below), matching the isolation
-    test_wrapper_renders_and_parses.py already found necessary.
-
-    CREATE_NO_WINDOW, never CREATE_NEW_CONSOLE. Both give the child its
-    OWN console, which is the isolation these tests need: a wrapper that
-    sets [Console]::OutputEncoding must not leak its code page to a later
-    test's child through a shared console. Only CREATE_NO_WINDOW does it
-    without drawing a window. CREATE_NEW_CONSOLE pops a real console per
-    spawn and STEALS FOCUS, and with 71 tests in this module that is a
-    storm of windows across the user's screen. STARTUPINFO's SW_HIDE does
-    NOT reliably suppress it: wShowWindow is advisory for a newly created
-    console and Windows may show it anyway, which is exactly what
-    happened here.
-
-    `start_in`, when given, starts the process in a directory OTHER than
-    the dispatch directory - the way the harness starts the tracked
-    background command from wherever the session happens to be, not from
-    inside the dispatch directory. That is what makes a test of the
-    wrapper's own Set-Location meaningful: without it, the wrapper's
-    working directory would already be the dispatch dir by accident of
-    how the test launched it."""
-    kwargs = {}
-    if start_in is not None:
-        kwargs["cwd"] = str(start_in)
-    return subprocess.Popen(
-        [POWERSHELL, "-NoProfile", "-NonInteractive", "-File", str(dispatch_dir / "wrapper.ps1")],
-        creationflags=subprocess.CREATE_NO_WINDOW, **kwargs)
 
 
 def write_wrapper(base, content, name):
@@ -170,22 +139,19 @@ def write_wrapper(base, content, name):
     return p
 
 
-def _wrapper(base, content=SLEEPER_WRAPPER, name="wrapper-src.ps1"):
-    """A legitimate, installable wrapper body for tests that only need
-    -Prepare to succeed and do not care what the wrapper would do."""
-    return write_wrapper(base, content, name)
-
-
-def _wait_for(path, timeout=15):
+def wait_for_file(path, timeout=15):
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         if path.exists():
-            # The wrapper's identity publish is two sequential writes
-            # (pid, then startticks) - Get-Process for the second one
-            # measured 15-30ms behind the first. A caller that waits for
-            # pid and immediately checks a sibling file needs that gap
-            # closed, not just the file it named.
-            time.sleep(0.15)
+            return True
+        time.sleep(0.02)
+    return False
+
+
+def wait_gone(path, timeout=10):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if not path.exists():
             return True
         time.sleep(0.02)
     return False
@@ -193,71 +159,25 @@ def _wait_for(path, timeout=15):
 
 def do_launch(base, round_label, wrapper_content=FAST_WRAPPER, env=None,
               dispatch_name="dispatch", receipt_name="receipt.json",
-              wrapper_name="wrapper-src.ps1", extra_args=None, cwd=None):
-    """Prepare a round and start its wrapper in the background - the two
-    steps the harness now performs separately, combined here so existing
-    fixture call sites keep their shape. Returns as soon as -Prepare has
-    returned; the wrapper keeps running on its own.
-
-    `cwd` is the -WorkingDirectory to record; callers that do not care
-    what it is get `base`, which this function always creates first."""
+              wrapper_name="wrapper-src.ps1", extra_args=None):
     base.mkdir(parents=True, exist_ok=True)
     dispatch_dir = base / dispatch_name
     receipt_path = base / receipt_name
     wrapper = write_wrapper(base, wrapper_content, wrapper_name)
-    working_dir = base if cwd is None else cwd
-    args = ["-Prepare", "-DispatchDir", str(dispatch_dir), "-WrapperBody", str(wrapper),
-            "-ReceiptPath", str(receipt_path), "-Round", round_label,
-            "-WorkingDirectory", str(working_dir), "-Json"]
+    args = ["-Launch", "-DispatchDir", str(dispatch_dir), "-WrapperBody", str(wrapper),
+            "-ReceiptPath", str(receipt_path), "-Round", round_label, "-Json"]
     if extra_args:
         args += extra_args
     result = run_dispatch(args, env=env)
-    if result.returncode == 0:
-        _run_wrapper_in_background(dispatch_dir)
     return dispatch_dir, receipt_path, result
 
 
 def successful_launch(base, round_label="R1"):
     dispatch_dir, receipt_path, result = do_launch(base, round_label)
     assert result.returncode == 0, (result.stdout, result.stderr)
-    assert _wait_for(dispatch_dir / "exit", timeout=15), "wrapper never wrote exit"
-    assert _wait_for(dispatch_dir / "reply", timeout=15), "wrapper never wrote reply"
+    assert wait_for_file(dispatch_dir / "exit", timeout=15), "wrapper never wrote exit"
+    assert wait_for_file(dispatch_dir / "reply", timeout=15), "wrapper never wrote reply"
     return dispatch_dir, receipt_path
-
-
-def _prepared(base, wrapper_content, round_label=ROUND, dispatch_name="dispatch",
-              receipt_name="receipt.json", wrapper_name="wrapper-src.ps1", cwd=None):
-    """-Prepare only - no wrapper is ever run. Returns (dispatch_dir,
-    wrapper_path, receipt_path).
-
-    `cwd` is the -WorkingDirectory to record; callers that do not care
-    what it is get `base`, which this function always creates first."""
-    base.mkdir(parents=True, exist_ok=True)
-    dispatch_dir = base / dispatch_name
-    receipt_path = base / receipt_name
-    wrapper = write_wrapper(base, wrapper_content, wrapper_name)
-    working_dir = base if cwd is None else cwd
-    args = ["-Prepare", "-DispatchDir", str(dispatch_dir), "-WrapperBody", str(wrapper),
-            "-ReceiptPath", str(receipt_path), "-Round", round_label,
-            "-WorkingDirectory", str(working_dir), "-Json"]
-    result = run_dispatch(args)
-    assert result.returncode == 0, (result.stdout, result.stderr)
-    return dispatch_dir, wrapper, receipt_path
-
-
-def _prepare_raw(dispatch_dir, wrapper_path, receipt_path, round_label, cwd=None):
-    """Run -Prepare with no assumption of success; return (exit code,
-    stdout text) for a caller that wants to inspect a refusal.
-
-    `cwd` is the -WorkingDirectory to record; callers that do not care
-    what it is get the wrapper body's own parent directory, which always
-    exists because `write_wrapper` just created it there."""
-    working_dir = wrapper_path.parent if cwd is None else cwd
-    args = ["-Prepare", "-DispatchDir", str(dispatch_dir), "-WrapperBody", str(wrapper_path),
-            "-ReceiptPath", str(receipt_path), "-Round", round_label,
-            "-WorkingDirectory", str(working_dir)]
-    result = run_dispatch(args)
-    return result.returncode, result.stdout
 
 
 def run_poll(receipt_path, expected_dispatch_dir, expected_round, env=None,
@@ -276,17 +196,29 @@ def poll_json(receipt_path, expected_dispatch_dir, expected_round, env=None, tim
     return result, obj
 
 
-def _poll(receipt_path, expected_dispatch_dir, expected_round):
-    """(state, exit code) - the shape the Step 1 tests read directly."""
-    result, obj = poll_json(receipt_path, expected_dispatch_dir, expected_round)
-    return obj["state"], result.returncode
-
-
 def write_receipt(path, dispatch_dir, token="1" * 32, round_label="R1",
                    start_ticks=638500000000000000):
     obj = {"dispatchDir": str(dispatch_dir), "token": token,
            "round": round_label, "startTicks": start_ticks}
     path.write_text(json.dumps(obj), encoding="utf-8")
+
+
+def is_process_alive(pid):
+    r = subprocess.run(
+        [POWERSHELL, "-NoProfile", "-NonInteractive", "-Command",
+         f"if (Get-Process -Id {pid} -ErrorAction SilentlyContinue) "
+         "{'yes'} else {'no'}"],
+        capture_output=True, text=True, timeout=15)
+    return r.stdout.strip() == "yes"
+
+
+def wait_process_dead(pid, timeout=15):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if not is_process_alive(pid):
+            return True
+        time.sleep(0.2)
+    return False
 
 
 def kill_pid_best_effort(pid):
@@ -298,7 +230,7 @@ def kill_pid_best_effort(pid):
 
 
 def cleanup_dispatch_pid(dispatch_dir):
-    """Best-effort teardown for a round left RUNNING (a sleeping
+    """Best-effort teardown for a launch left RUNNING (a sleeping
     wrapper) by a test, so the suite does not leak processes."""
     pid_file = dispatch_dir / "pid"
     if pid_file.exists():
@@ -311,145 +243,7 @@ def cleanup_dispatch_pid(dispatch_dir):
 
 
 # ---------------------------------------------------------------------
-# Step 1 (2026-08-31 plan): -Prepare replaces -Launch. These tests pin
-# the new state directly.
-# ---------------------------------------------------------------------
-def test_prepare_starts_no_process(tmp_path):
-    """-Prepare performs the transaction and creates NO child.
-
-    The whole point of the redesign: the harness owns the process, so the
-    tool must not spawn one. Proven by counting the dispatch directory's
-    own artifacts rather than by watching the process table, which races.
-    """
-    d, wrapper, receipt = _prepared(tmp_path, SLEEPER_WRAPPER)
-    assert (d / "launch.committed").exists()
-    assert receipt.exists()
-    assert not (d / "pid").exists(), "-Prepare must not publish a pid"
-    assert not (d / "startticks").exists()
-    assert not (d / "reply").exists()
-    assert not (d / "exit").exists()
-
-
-def test_a_prepared_but_unrun_round_is_not_started(tmp_path):
-    """The new state. A receipt with no pid is never a result."""
-    d, wrapper, receipt = _prepared(tmp_path, SLEEPER_WRAPPER)
-    state, code = _poll(receipt, d, ROUND)
-    assert state == "not-started"
-    assert code == 1
-
-
-def test_not_started_never_exits_zero_even_with_a_planted_reply(tmp_path):
-    """A reply that appears without a pid is not a completed round.
-
-    Same shape as the planted-reply test for `running`: the classification
-    must come from the completion model, never from a file's presence.
-    """
-    d, wrapper, receipt = _prepared(tmp_path, SLEEPER_WRAPPER)
-    (d / "reply").write_text("a reply nobody's round wrote", encoding="utf-8")
-    (d / "exit").write_text("0", encoding="utf-8")
-    state, code = _poll(receipt, d, ROUND)
-    assert state == "not-started"
-    assert code != 0
-
-
-def test_the_wrapper_publishes_its_own_identity_and_then_runs(tmp_path):
-    """Run a prepared wrapper the way the harness will, and watch the
-    states move: not-started, then running, then reply-present."""
-    d, wrapper, receipt = _prepared(tmp_path, IDENTITY_THEN_SLEEP_WRAPPER)
-    assert _poll(receipt, d, ROUND) == ("not-started", 1)
-    proc = _run_wrapper_in_background(d)
-    try:
-        _wait_for(d / "pid", timeout=20)
-        assert (d / "startticks").exists(), "ticks must land with the pid"
-        assert int((d / "pid").read_text()) == proc.pid
-        assert _poll(receipt, d, ROUND) == ("running", 3)
-    finally:
-        proc.wait(timeout=60)
-    assert _poll(receipt, d, ROUND) == ("reply-present", 0)
-
-
-def test_no_csharp_is_compiled_anywhere_in_the_script(tmp_path):
-    """The launcher is GONE, not disabled.
-
-    Round 1 of the diff debate found the top-level Add-Type running before
-    the script's own checks and outside any catch, so even -Poll depended
-    on compiling launch-only C#. Deleting the launcher removes the subject.
-    """
-    text = TOOL_PATH.read_text(encoding="utf-8")
-    for needle in ("Add-Type", "CreateProcess", "PROC_THREAD_ATTRIBUTE",
-                   "GetProcessTimes", "LaunchDetached"):
-        assert needle not in text, "the launcher survives: " + needle
-
-
-def test_prepare_refuses_an_existing_dispatch_directory(tmp_path):
-    d = tmp_path / "d"
-    d.mkdir()
-    code, out = _prepare_raw(d, _wrapper(tmp_path), tmp_path / "r.json", ROUND)
-    assert code == 1
-    assert "BLOCKED" in out
-    assert not (tmp_path / "r.json").exists(), "a refused prepare publishes no receipt"
-
-
-def test_prepare_publishes_no_receipt_when_the_wrapper_cannot_be_installed(tmp_path):
-    """Fail-closed after the directory exists."""
-    receipt = tmp_path / "r.json"
-    code, out = _prepare_raw(tmp_path / "d", tmp_path / "does-not-exist.ps1",
-                             receipt, ROUND)
-    assert code == 1
-    assert not receipt.exists()
-
-
-# ---------------------------------------------------------------------
-# Task 1a (2026-08-31 plan): -WorkingDirectory survives the launcher's
-# deletion. It is what puts the reviewer client inside the review mirror;
-# dropping it cost a real review round, discarded unread. See
-# docs/superpowers/specs/2026-08-31-tracked-background-dispatch-design.md
-# section 1.
-# ---------------------------------------------------------------------
-def test_prepare_requires_and_records_a_working_directory(tmp_path):
-    """Resolved at prepare time and written where the wrapper can read it.
-    A round that cannot say where it must run is not a runnable round."""
-    mirror = tmp_path / "mirror"
-    mirror.mkdir()
-    d, wrapper, receipt = _prepared(tmp_path, SLEEPER_WRAPPER, cwd=mirror)
-    assert (d / "cwd").exists(), "-Prepare must record the working directory"
-    assert Path((d / "cwd").read_text(encoding="utf-8").strip()) == mirror.resolve()
-
-
-def test_prepare_refuses_a_working_directory_that_does_not_exist(tmp_path):
-    receipt = tmp_path / "r.json"
-    code, out = _prepare_raw(tmp_path / "d", _wrapper(tmp_path), receipt, ROUND,
-                             cwd=tmp_path / "no-such-mirror")
-    assert code == 1
-    assert not receipt.exists(), "a refused prepare publishes no receipt"
-
-
-def test_a_dispatch_directory_with_no_cwd_is_not_started(tmp_path):
-    """Deleting the anchor must not silently fall back to the caller's
-    directory. It reads as not-started, which is never a result."""
-    d, wrapper, receipt = _prepared(tmp_path, SLEEPER_WRAPPER)
-    (d / "cwd").unlink()
-    state, code = _poll(receipt, d, ROUND)
-    assert state == "not-started"
-    assert code == 1
-
-
-def test_the_wrapper_runs_in_the_recorded_directory(tmp_path):
-    """End to end: the client's working directory is the mirror, not
-    wherever the harness happened to start the command."""
-    mirror = tmp_path / "mirror"
-    mirror.mkdir()
-    d, wrapper, receipt = _prepared(tmp_path, PWD_REPORTING_WRAPPER, cwd=mirror)
-    proc = _run_wrapper_in_background(d, start_in=tmp_path)
-    proc.wait(timeout=60)
-    assert _poll(receipt, d, ROUND) == ("reply-present", 0)
-    reported = (d / "reply").read_text(encoding="utf-8").strip()
-    assert Path(reported) == mirror.resolve(), (
-        "the wrapper ran in " + reported + " rather than the recorded mirror")
-
-
-# ---------------------------------------------------------------------
-# -Prepare: reservation and separation
+# -Launch: reservation and separation
 # ---------------------------------------------------------------------
 def test_a_taken_directory_blocks_and_starts_nothing(tmp_path):
     dispatch_dir = tmp_path / "dispatch"
@@ -457,9 +251,9 @@ def test_a_taken_directory_blocks_and_starts_nothing(tmp_path):
     receipt_path = tmp_path / "receipt.json"
     wrapper = write_wrapper(tmp_path, FAST_WRAPPER, "wrapper-src.ps1")
 
-    result = run_dispatch(["-Prepare", "-DispatchDir", str(dispatch_dir),
+    result = run_dispatch(["-Launch", "-DispatchDir", str(dispatch_dir),
                             "-WrapperBody", str(wrapper), "-ReceiptPath", str(receipt_path),
-                            "-Round", "R1", "-WorkingDirectory", str(tmp_path)])
+                            "-Round", "R1"])
     assert result.returncode == 1, (result.stdout, result.stderr)
     assert result.stdout.strip() != ""
     assert not receipt_path.exists()
@@ -474,9 +268,9 @@ def test_an_existing_receipt_blocks_before_the_directory_is_reserved(tmp_path):
     receipt_path.write_text("pre-existing", encoding="ascii")
     wrapper = write_wrapper(tmp_path, FAST_WRAPPER, "wrapper-src.ps1")
 
-    result = run_dispatch(["-Prepare", "-DispatchDir", str(dispatch_dir),
+    result = run_dispatch(["-Launch", "-DispatchDir", str(dispatch_dir),
                             "-WrapperBody", str(wrapper), "-ReceiptPath", str(receipt_path),
-                            "-Round", "R1", "-WorkingDirectory", str(tmp_path)])
+                            "-Round", "R1"])
     assert result.returncode == 1, (result.stdout, result.stderr)
     assert not dispatch_dir.exists(), "the directory must never be reserved when the receipt path is already taken"
     assert receipt_path.read_text(encoding="ascii") == "pre-existing"
@@ -489,17 +283,14 @@ def test_a_receipt_path_inside_the_dispatch_directory_is_blocked(tmp_path, relat
     receipt_path = dispatch_dir if relative == "" else dispatch_dir.joinpath(*relative.split("/"))
     wrapper = write_wrapper(tmp_path, FAST_WRAPPER, "wrapper-src.ps1")
 
-    result = run_dispatch(["-Prepare", "-DispatchDir", str(dispatch_dir),
+    result = run_dispatch(["-Launch", "-DispatchDir", str(dispatch_dir),
                             "-WrapperBody", str(wrapper), "-ReceiptPath", str(receipt_path),
-                            "-Round", "R1", "-WorkingDirectory", str(tmp_path)])
+                            "-Round", "R1"])
     assert result.returncode == 1, (result.stdout, result.stderr)
     assert not dispatch_dir.exists(), "the separation check must run before the directory is reserved"
 
 
-def test_a_receipt_that_appears_during_the_prepare_fails_closed(tmp_path):
-    """The exact race the create-new receipt write at the last step must
-    refuse rather than overwrite: a receipt planted after the directory
-    is reserved but before -Prepare publishes its own."""
+def test_a_receipt_that_appears_during_the_launch_fails_closed(tmp_path):
     dispatch_dir = tmp_path / "dispatch"
     receipt_path = tmp_path / "receipt.json"
     wrapper = write_wrapper(tmp_path, FAST_WRAPPER, "wrapper-src.ps1")
@@ -507,24 +298,30 @@ def test_a_receipt_that_appears_during_the_prepare_fails_closed(tmp_path):
     env = {"PARALLAX_DISPATCH_HOLD_BEFORE_PUBLISH": hold_base}
 
     proc = start_dispatch_bg(
-        ["-Prepare", "-DispatchDir", str(dispatch_dir), "-WrapperBody", str(wrapper),
-         "-ReceiptPath", str(receipt_path), "-Round", "R1",
-         "-WorkingDirectory", str(tmp_path), "-Json"], env=env)
+        ["-Launch", "-DispatchDir", str(dispatch_dir), "-WrapperBody", str(wrapper),
+         "-ReceiptPath", str(receipt_path), "-Round", "R1", "-Json"], env=env)
     try:
         started = Path(hold_base + ".started")
-        assert _wait_for(started, timeout=15), "hold barrier never signalled .started"
+        assert wait_for_file(started, timeout=15), "hold barrier never signalled .started"
 
-        # Receipt did not exist at the separation/freshness check; it
-        # appears now, during the hold - the exact race the create-new
-        # write must refuse rather than overwrite.
-        receipt_path.write_text("a-receipt-this-prepare-did-not-write", encoding="ascii")
+        # Receipt did not exist at step 1's check; it appears now, during
+        # the hold - the exact race the create-new write at step 7 must
+        # refuse rather than overwrite.
+        receipt_path.write_text("a-receipt-this-launch-did-not-write", encoding="ascii")
 
         Path(hold_base + ".release").write_text("go", encoding="ascii")
         stdout, stderr = proc.communicate(timeout=30)
         assert proc.returncode == 1, (stdout, stderr)
 
-        assert receipt_path.read_text(encoding="ascii") == "a-receipt-this-prepare-did-not-write", \
+        assert receipt_path.read_text(encoding="ascii") == "a-receipt-this-launch-did-not-write", \
             "the create-new write must never overwrite a receipt it did not write"
+
+        # pid was written at step 6, before the failing step 7 - use it to
+        # prove the catch actually killed the started process tree.
+        pid_file = dispatch_dir / "pid"
+        assert pid_file.exists()
+        pid = int(pid_file.read_text(encoding="ascii").strip())
+        assert wait_process_dead(pid, timeout=15), "the started process must not survive a failed launch"
     finally:
         if proc.poll() is None:
             proc.kill()
@@ -560,7 +357,7 @@ def test_force_is_not_accepted_in_any_argument_order(tmp_path):
         "ConvertTo-Json @($results) -Compress\n",
         encoding="ascii")
     result = subprocess.run(
-        [POWERSHELL, "-NoProfile", "-NonInteractive", "-File", str(analyzer), str(TOOL_PATH)],
+        [POWERSHELL, "-NoProfile", "-NonInteractive", "-File", str(analyzer), str(SCRIPT)],
         capture_output=True, text=True, timeout=30)
     assert result.returncode == 0, (result.stdout, result.stderr)
     calls = json.loads(result.stdout.strip())
@@ -570,7 +367,69 @@ def test_force_is_not_accepted_in_any_argument_order(tmp_path):
         assert c["hasForce"] is False, "the directory reservation must never carry -Force"
 
 
-def test_a_hard_kill_before_publication_is_never_success(tmp_path):
+def test_a_committed_launch_publishes_pid_then_marker_then_receipt(tmp_path):
+    dispatch_dir = tmp_path / "dispatch"
+    receipt_path = tmp_path / "receipt.json"
+    wrapper = write_wrapper(tmp_path, ORDER_WRAPPER, "order-wrapper.ps1")
+    env = {"PARALLAX_TEST_RECEIPT_PATH": str(receipt_path)}
+
+    result = run_dispatch(["-Launch", "-DispatchDir", str(dispatch_dir),
+                            "-WrapperBody", str(wrapper), "-ReceiptPath", str(receipt_path),
+                            "-Round", "R1", "-Json"], env=env)
+    assert result.returncode == 0, (result.stdout, result.stderr)
+
+    order_log = dispatch_dir / "order.log"
+    assert wait_for_file(order_log, timeout=25)
+    time.sleep(0.2)  # let the wrapper's loop settle before reading its content
+    lines = [l for l in order_log.read_text(encoding="ascii").splitlines() if l]
+    assert set(lines) >= {"pid", "startticks", "launch.committed", "receipt"}, lines
+    idx = {name: i for i, name in enumerate(lines)}
+    assert idx["pid"] <= idx["launch.committed"], lines
+    assert idx["startticks"] <= idx["launch.committed"], lines
+    assert idx["launch.committed"] < idx["receipt"], lines
+
+
+def test_a_failure_after_start_kills_the_tree_and_blocks(tmp_path):
+    dispatch_dir = tmp_path / "dispatch"
+    receipt_path = tmp_path / "receipt.json"
+    wrapper = write_wrapper(tmp_path, PID_CAPTURE_WRAPPER, "wrapper-src.ps1")
+    hold_base = str(tmp_path / "hold")
+    wrapper_pid_path = tmp_path / "wrapper.pid"
+    env = {"PARALLAX_DISPATCH_HOLD_BEFORE_PUBLISH": hold_base,
+           "PARALLAX_TEST_WRAPPER_PID_PATH": str(wrapper_pid_path)}
+
+    proc = start_dispatch_bg(
+        ["-Launch", "-DispatchDir", str(dispatch_dir), "-WrapperBody", str(wrapper),
+         "-ReceiptPath", str(receipt_path), "-Round", "R1", "-Json"], env=env)
+    try:
+        started = Path(hold_base + ".started")
+        assert wait_for_file(started, timeout=15), "hold barrier never signalled .started"
+        assert wait_for_file(wrapper_pid_path, timeout=15), "wrapper never recorded its own pid"
+        wrapper_pid = int(wrapper_pid_path.read_text(encoding="ascii").strip())
+        assert is_process_alive(wrapper_pid)
+
+        # Inject a failure strictly between start (step 4, already past)
+        # and commit (step 6): pre-occupy the "pid" path with a directory
+        # so step 6's Set-Content there throws. (Removing dispatch_dir
+        # itself does not work here - Start-Process's own redirected
+        # launch.out/launch.err handles are still open on it while the
+        # launcher is paused at the hold barrier, so Windows refuses the
+        # delete with a sharing violation; this is additive instead.)
+        (dispatch_dir / "pid").mkdir()
+
+        Path(hold_base + ".release").write_text("go", encoding="ascii")
+        stdout, stderr = proc.communicate(timeout=30)
+        assert proc.returncode == 1, (stdout, stderr)
+        assert not receipt_path.exists()
+        assert wait_process_dead(wrapper_pid, timeout=15), \
+            "a handled failure must kill the started process tree"
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+            proc.wait(timeout=15)
+
+
+def test_a_hard_kill_between_start_and_publication_is_never_success(tmp_path):
     dispatch_dir = tmp_path / "dispatch"
     receipt_path = tmp_path / "receipt.json"
     wrapper = write_wrapper(tmp_path, FAST_WRAPPER, "wrapper-src.ps1")
@@ -578,12 +437,11 @@ def test_a_hard_kill_before_publication_is_never_success(tmp_path):
     env = {"PARALLAX_DISPATCH_HOLD_BEFORE_PUBLISH": hold_base}
 
     proc = start_dispatch_bg(
-        ["-Prepare", "-DispatchDir", str(dispatch_dir), "-WrapperBody", str(wrapper),
-         "-ReceiptPath", str(receipt_path), "-Round", "R1",
-         "-WorkingDirectory", str(tmp_path), "-Json"], env=env)
+        ["-Launch", "-DispatchDir", str(dispatch_dir), "-WrapperBody", str(wrapper),
+         "-ReceiptPath", str(receipt_path), "-Round", "R1", "-Json"], env=env)
     try:
         started = Path(hold_base + ".started")
-        assert _wait_for(started, timeout=15), "hold barrier never signalled .started"
+        assert wait_for_file(started, timeout=15), "hold barrier never signalled .started"
 
         # Kill the TOOL itself here - never release the barrier. This is
         # the case the catch cannot reach.
@@ -610,14 +468,14 @@ def test_poll_reports_launch_unknown_when_the_marker_is_gone(tmp_path):
     assert result.returncode == 1
 
 
-def test_a_refused_prepare_writes_no_receipt_and_cannot_be_polled(tmp_path):
+def test_a_refused_launch_writes_no_receipt_and_cannot_be_polled(tmp_path):
     dispatch_dir, receipt_r1 = successful_launch(tmp_path, "R1")
 
     receipt_r2 = tmp_path / "receipt-r2.json"
     wrapper2 = write_wrapper(tmp_path, FAST_WRAPPER, "wrapper-r2.ps1")
-    result2 = run_dispatch(["-Prepare", "-DispatchDir", str(dispatch_dir),
+    result2 = run_dispatch(["-Launch", "-DispatchDir", str(dispatch_dir),
                              "-WrapperBody", str(wrapper2), "-ReceiptPath", str(receipt_r2),
-                             "-Round", "R2", "-WorkingDirectory", str(tmp_path), "-Json"])
+                             "-Round", "R2", "-Json"])
     assert result2.returncode == 1, (result2.stdout, result2.stderr)
     assert not receipt_r2.exists()
 
@@ -749,22 +607,13 @@ def test_poll_rejects_a_receipt_whose_token_is_not_the_committed_one(tmp_path):
     assert result.returncode == 1
 
 
-def test_poll_reports_not_started_when_the_pid_file_is_absent(tmp_path):
-    """A pid file that never appears (never run) and one that appeared
-    and was then removed (mid-run interruption before -Poll observes it)
-    read identically: neither is a result."""
-    dispatch_dir, receipt_path = successful_launch(tmp_path)
-    (dispatch_dir / "pid").unlink()
-    result, obj = poll_json(receipt_path, dispatch_dir, "R1")
-    assert obj["state"] == "not-started", obj
-    assert result.returncode == 1
-
-
-@pytest.mark.parametrize("mode", ["empty", "non-integer"])
-def test_poll_reports_pid_unreadable_when_the_pid_is_malformed(tmp_path, mode):
+@pytest.mark.parametrize("mode", ["missing", "empty", "non-integer"])
+def test_poll_reports_pid_unreadable_when_the_pid_is_missing_or_malformed(tmp_path, mode):
     dispatch_dir, receipt_path = successful_launch(tmp_path)
     pid_file = dispatch_dir / "pid"
-    if mode == "empty":
+    if mode == "missing":
+        pid_file.unlink()
+    elif mode == "empty":
         pid_file.write_bytes(b"")
     else:
         pid_file.write_text("not-an-integer", encoding="ascii")
@@ -773,34 +622,16 @@ def test_poll_reports_pid_unreadable_when_the_pid_is_malformed(tmp_path, mode):
     assert result.returncode == 1
 
 
-@pytest.mark.parametrize("mode", ["missing", "empty", "non-integer"])
-def test_poll_reports_pid_unreadable_when_startticks_is_missing_or_malformed(tmp_path, mode):
-    """A valid, readable pid with a startticks file that cannot be
-    trusted is the same "cannot confirm identity" outcome as a malformed
-    pid - folded together rather than adding a fourteenth state."""
-    dispatch_dir, receipt_path = successful_launch(tmp_path)
-    ticks_file = dispatch_dir / "startticks"
-    if mode == "missing":
-        ticks_file.unlink()
-    elif mode == "empty":
-        ticks_file.write_bytes(b"")
-    else:
-        ticks_file.write_text("not-an-integer", encoding="ascii")
-    result, obj = poll_json(receipt_path, dispatch_dir, "R1")
-    assert obj["state"] == "pid-unreadable", (mode, obj)
-    assert result.returncode == 1
-
-
 def test_a_recycled_pid_is_not_read_as_running(tmp_path):
-    """The completed round's own startticks file does not match the live
-    process now holding that pid: this process is genuinely alive, but it
-    is not the one that published that pid, so it was recycled and the
-    poll must treat it as gone."""
+    """The receipt's start-time ticks do not match the live process now
+    holding that pid: this process is genuinely alive, but it is not the
+    one the receipt describes, so the pid was recycled and the poll must
+    treat it as gone."""
     dispatch_dir, receipt_path = successful_launch(tmp_path)
-    original_ticks = (dispatch_dir / "startticks").read_text(encoding="ascii")
+    original_ticks = json.loads(receipt_path.read_text(encoding="utf-8"))["startTicks"]
     # Overwrite pid with THIS TEST PROCESS's own pid (genuinely alive for
-    # the whole run), while startticks keeps the original (now-dead)
-    # wrapper's ticks - which will not match this live process's actual
+    # the whole run), while the receipt keeps the original (now-dead)
+    # launch's ticks - which will not match this live process's actual
     # start time.
     (dispatch_dir / "pid").write_text(str(os.getpid()), encoding="ascii")
 
@@ -811,7 +642,7 @@ def test_a_recycled_pid_is_not_read_as_running(tmp_path):
     assert obj["state"] == "reply-present", obj
     assert result.returncode == 0
     # sanity: this really was a distinct process, not a coincidence.
-    assert str(os.getpid()) != original_ticks
+    assert str(os.getpid()) != json.loads(receipt_path.read_text(encoding="utf-8")).get("startTicks", "")
     assert original_ticks is not None
 
 
@@ -829,7 +660,7 @@ def test_poll_reports_running_while_the_pid_is_alive(tmp_path):
     dispatch_dir, receipt_path, result0 = do_launch(tmp_path, "R1", wrapper_content=SLOW_WRAPPER)
     assert result0.returncode == 0, (result0.stdout, result0.stderr)
     try:
-        assert _wait_for(dispatch_dir / "reply", timeout=15), "wrapper never wrote its premature reply"
+        assert wait_for_file(dispatch_dir / "reply", timeout=15), "wrapper never wrote its premature reply"
         assert not (dispatch_dir / "exit").exists(), "exit must not exist yet in this fixture"
 
         result, obj = poll_json(receipt_path, dispatch_dir, "R1")
@@ -848,7 +679,7 @@ def test_a_running_round_can_never_exit_zero(tmp_path):
     dispatch_dir, receipt_path, result0 = do_launch(tmp_path, "R1", wrapper_content=SLOW_WRAPPER)
     assert result0.returncode == 0, (result0.stdout, result0.stderr)
     try:
-        assert _wait_for(dispatch_dir / "reply", timeout=15)
+        assert wait_for_file(dispatch_dir / "reply", timeout=15)
         result, obj = poll_json(receipt_path, dispatch_dir, "R1")
         assert result.returncode == 3
         assert result.returncode != 0
@@ -890,7 +721,7 @@ def test_poll_distinguishes_every_terminal_state(tmp_path):
 
 
 # ---------------------------------------------------------------------
-# Exit code mapping, exhaustive over all thirteen states
+# Exit code mapping, exhaustive over all twelve states
 # ---------------------------------------------------------------------
 def _build_state_fixture(base, state):
     """Return (receipt_path, expected_dispatch_dir, expected_round) that
@@ -898,13 +729,10 @@ def _build_state_fixture(base, state):
     round_label = "R1"
     if state == "no-receipt":
         return base / "missing-receipt.json", base / "missing-dispatch", round_label
-    if state == "not-started":
-        dispatch_dir, wrapper, receipt_path = _prepared(base, SLEEPER_WRAPPER, round_label)
-        return receipt_path, dispatch_dir, round_label
     if state == "running":
         dispatch_dir, receipt_path, result = do_launch(base, round_label, wrapper_content=SLOW_WRAPPER)
         assert result.returncode == 0, (result.stdout, result.stderr)
-        assert _wait_for(dispatch_dir / "reply", timeout=15)
+        assert wait_for_file(dispatch_dir / "reply", timeout=15)
         return receipt_path, dispatch_dir, round_label
 
     dispatch_dir, receipt_path = successful_launch(base, round_label)
@@ -938,7 +766,6 @@ STATE_EXIT_CODES = {
     "receipt-not-expected": 1,
     "launch-unknown": 1,
     "launch-not-ours": 1,
-    "not-started": 1,
     "pid-unreadable": 1,
     "running": 3,
     "no-exit-file": 1,
@@ -974,7 +801,7 @@ def test_a_malformed_invocation_exits_two(tmp_path):
     no_args = run_dispatch([])
     assert no_args.returncode == 2, (no_args.stdout, no_args.stderr)
 
-    both = run_dispatch(["-Prepare", "-Poll", "-DispatchDir", str(tmp_path / "d"),
+    both = run_dispatch(["-Launch", "-Poll", "-DispatchDir", str(tmp_path / "d"),
                           "-WrapperBody", str(tmp_path / "w.ps1"),
                           "-ReceiptPath", str(tmp_path / "r.json"), "-Round", "R1",
                           "-Receipt", str(tmp_path / "r.json"),
@@ -986,8 +813,7 @@ def test_a_malformed_invocation_exits_two(tmp_path):
 
 
 # ---------------------------------------------------------------------
-# The documented outer commands, verbatim: prepare, run the wrapper the
-# way the harness now does, then poll.
+# The documented outer command, verbatim
 # ---------------------------------------------------------------------
 def test_the_documented_outer_command_works_on_this_host(tmp_path):
     # Step 0 measured (2026-08-31, Claude Code 2.1.251, see
@@ -1003,26 +829,17 @@ def test_the_documented_outer_command_works_on_this_host(tmp_path):
     receipt_path = tmp_path / "outer-receipt.json"
     wrapper = write_wrapper(tmp_path, FAST_WRAPPER, "outer-wrapper.ps1")
 
-    prepare_cmd = (
+    launch_cmd = (
         '& (Get-Process -Id $PID).Path -NoProfile -File '
-        '${CLAUDE_PLUGIN_ROOT}/tools/dispatch-detached.ps1 -Prepare '
+        '${CLAUDE_PLUGIN_ROOT}/tools/dispatch-detached.ps1 -Launch '
         f'-DispatchDir "{dispatch_dir}" -WrapperBody "{wrapper}" '
-        f'-ReceiptPath "{receipt_path}" -Round OuterR1 '
-        f'-WorkingDirectory "{tmp_path}" -Json'
+        f'-ReceiptPath "{receipt_path}" -Round OuterR1 -Json'
     ).replace("${CLAUDE_PLUGIN_ROOT}", str(REPO))
-    result = subprocess.run([POWERSHELL, "-NoProfile", "-NonInteractive", "-Command", prepare_cmd],
+    result = subprocess.run([POWERSHELL, "-NoProfile", "-NonInteractive", "-Command", launch_cmd],
                              capture_output=True, text=True, timeout=30)
     assert result.returncode == 0, (result.stdout, result.stderr)
-
-    # The caller runs the prepared wrapper itself, as a tracked background
-    # command - see the skill and the design spec. This test stands in
-    # for that with a plain background process.
-    wrapper_proc = _run_wrapper_in_background(dispatch_dir)
-    try:
-        assert _wait_for(dispatch_dir / "exit", timeout=15)
-        assert _wait_for(dispatch_dir / "reply", timeout=15)
-    finally:
-        wrapper_proc.wait(timeout=30)
+    assert wait_for_file(dispatch_dir / "exit", timeout=15)
+    assert wait_for_file(dispatch_dir / "reply", timeout=15)
 
     poll_cmd = (
         '& (Get-Process -Id $PID).Path -NoProfile -File '

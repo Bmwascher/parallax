@@ -1,27 +1,24 @@
-# dispatch-detached.ps1 - prepare a dispatch directory and receipt for a
-# PowerShell wrapper body, then poll its completion. The tool no longer
-# starts the wrapper itself: the caller runs it as a tracked background
-# command (see the skill), which the harness already reports on by name,
-# with no 600-second tool-call ceiling. See
-# docs/superpowers/specs/2026-08-31-tracked-background-dispatch-design.md
-# for why -Launch became -Prepare.
+# dispatch-detached.ps1 - launch a PowerShell wrapper body as a detached
+# child process and poll its completion without blocking the caller's
+# tool-call ceiling (foreground commands cap out at 600 seconds; a review
+# round or a live dispatch can run far longer than that).
 #
 # TWO MODES. Every later task depends on these exact names.
 #
-#   Prepare: -DispatchDir <path> -WrapperBody <path> -ReceiptPath <path>
-#            -Round <label> -WorkingDirectory <path> [-Json]
-#   Poll:    -Receipt <path> -ExpectedDispatchDir <path> -ExpectedRound <label>
-#            [-Json]
+#   Launch: -DispatchDir <path> -WrapperBody <path> -ReceiptPath <path>
+#           -Round <label> [-WorkingDirectory <path>] [-Json]
+#   Poll:   -Receipt <path> -ExpectedDispatchDir <path> -ExpectedRound <label>
+#           [-Json]
 #
 # -Poll NAMES A RECEIPT, NEVER A DIRECTORY. A caller that could poll a bare
 # directory could read a launch token straight out of the directory it is
 # already looking at and hand it back to itself, which proves nothing. The
-# receipt is written OUTSIDE the dispatch directory, at a path -Prepare
+# receipt is written OUTSIDE the dispatch directory, at a path -Launch
 # refuses if it already exists, LAST of all and only on success.
 #
-# -Prepare ENFORCES the separation rather than describing it: it resolves
+# -Launch ENFORCES the separation rather than describing it: it resolves
 # both paths and BLOCKS, before anything is created, if the receipt path
-# is equal to, or inside, the dispatch directory. A refused prepare writes
+# is equal to, or inside, the dispatch directory. A refused launch writes
 # no receipt, so there is nothing for a caller to substitute from the
 # directory it was refused.
 #
@@ -33,14 +30,12 @@
 # field, or an unknown extra field - is the SAME "no-receipt" outcome:
 # these are folded deliberately because their disposition is identical and
 # no branch follows any of them differently. It is a decision, not an
-# omission. startTicks in the RECEIPT no longer describes a real process -
-# -Prepare starts none - and is not what -Poll's liveness check compares
-# against; see the pid/startticks-file note at step 7 below.
+# omission.
 #
 # THE TOKEN IS NOT A SECRET. [System.Guid]::NewGuid() mints it, it also
 # sits in plain sight inside launch.committed, and a caller determined to
 # launder an old directory could read it there. What the receipt actually
-# adds is that a REFUSED prepare produces no receipt at all - there is
+# adds is that a REFUSED launch produces no receipt at all - there is
 # nothing to read back.
 #
 # -Poll is told, INDEPENDENTLY of the receipt, which directory and which
@@ -49,7 +44,7 @@
 # receipt-not-expected. The label alone would not be enough - a round
 # label such as "Sol R1" is reusable across a retry of the same round -
 # which is why the directory is checked too. The caller already has both
-# values: it passed them to -Prepare.
+# values: it passed them to -Launch.
 #
 # THE RESIDUAL, admitted rather than claimed closed: a caller that supplies
 # an EARLIER attempt's receipt, AND that attempt's directory, AND its
@@ -57,15 +52,15 @@
 # the caller supplied genuinely describes the earlier act, and nothing
 # inside this tool can distinguish that caller from one who is confused
 # about all three at once. The controls are a fresh round-numbered receipt
-# path per round and a -Prepare that refuses to overwrite an existing one.
-# This is NARROWED, the same way the interrupted prepare that leaves no
+# path per round and a -Launch that refuses to overwrite an existing one.
+# This is NARROWED, the same way the interrupted launch that leaves no
 # receipt at all is narrowed, not eliminated.
 #
-# -Poll computes exactly one of these THIRTEEN state names, in the fixed
+# -Poll computes exactly one of these TWELVE state names, in the fixed
 # order below, and stops at the first that matches:
 #   no-receipt, receipt-not-expected, launch-unknown, launch-not-ours,
-#   not-started, pid-unreadable, running, no-exit-file, exit-unreadable,
-#   exit-nonzero, no-reply, reply-empty, reply-present.
+#   pid-unreadable, running, no-exit-file, exit-unreadable, exit-nonzero,
+#   no-reply, reply-empty, reply-present.
 #
 # -Poll's exit codes MAP onto those states and are part of the contract:
 #   0  reply-present, and NOTHING ELSE.
@@ -79,21 +74,10 @@
 #      anything.
 #   1  every other state, with the state name printed on stdout.
 #   2  ONLY a failure to bind the parameters (an unknown mode, a missing
-#      required value, both or neither of -Prepare/-Poll) or an internal
+#      required value, both or neither of -Launch/-Poll) or an internal
 #      execution error. Reading the receipt's CONTENT is never exit 2: an
 #      absent, unreadable, or schema-failing receipt is no-receipt at
-#      exit 1. THE NARROWING, STATED PRECISELY: this promise covers only
-#      the binding and internal errors THIS SCRIPT ITSELF can see. This
-#      script carries no [CmdletBinding()], so an unrecognized switch is
-#      NOT rejected by the PowerShell binder at all - measured, not the
-#      assumption an earlier draft of this note made. PowerShell absorbs
-#      the unknown token into $args silently and the script runs on to
-#      its own mode-check, which finds neither -Prepare nor -Poll bound
-#      and exits 2 exactly as a bare invocation would. Measured
-#      2026-08-31 on `powershell -File tools/dispatch-detached.ps1
-#      -Reciept x`: exit 2 on both Windows PowerShell 5.1 and
-#      PowerShell 7 - never 0, because an unbound mode is already this
-#      script's own exit-2 case, not because the host rejected anything.
+#      exit 1.
 #
 # -Poll's own JSON (with -Json) echoes back the receipt's `round` label
 # whenever a receipt was successfully read, whatever the state that
@@ -105,72 +89,47 @@
 # the lane's round-evidence binder, and only a clean binding makes it one.
 # Do not read the state name as a verdict.
 #
-# -Prepare's exit codes match new-review-mirror.ps1:17-18: 0 prepared and
+# -Launch's exit codes match new-review-mirror.ps1:17-18: 0 launched and
 # committed, 1 blocked (reason on stdout), 2 script or environment error
-# (including a failure to bind the parameters this script itself sees).
-# -Poll extends that set with 3 and narrows 2 as described above.
+# (including a failure to bind the parameters). -Poll extends that set
+# with 3 and narrows 2 as described above.
 #
-# -Prepare, in order, under $ErrorActionPreference = 'Stop':
-#   1. Resolve -WorkingDirectory to a full path and BLOCK, before anything
-#      else is checked or created, if it does not exist or is not a
-#      directory. -WORKINGDIRECTORY SURVIVED THE LAUNCHER'S DELETION: an
-#      earlier draft of the design spec called it launcher-only, this
-#      tool dropped it, and the FIRST round dispatched under that version
-#      ran with the REAL REPOSITORY as its working directory, where a
-#      root AGENTS.md sits on disk and the reviewer client auto-ingests
-#      it as instructions - the instruction back-channel the preflight
-#      exists to stop. The round was discarded UNREAD; its cost is
-#      recorded in
-#      docs/superpowers/specs/2026-08-31-tracked-background-dispatch-design.md
-#      section 1. It is what puts the client inside the REVIEW MIRROR, so
-#      it moved out of launcher plumbing, which nothing pinned, and into
-#      wrapper text, which every per-site test pins (see the wrapper's
-#      first-act Set-Location at step 4 below).
-#   2. Resolve -ReceiptPath and -DispatchDir to full paths. BLOCK if the
+# -Launch, in order, under $ErrorActionPreference = 'Stop':
+#   1. Resolve -ReceiptPath and -DispatchDir to full paths. BLOCK if the
 #      receipt path is equal to, or inside, the dispatch directory, and
 #      BLOCK if the receipt path already exists. Both checks run before
 #      anything is created, so a refusal leaves no directory behind.
-#   3. Reserve the dispatch directory with New-Item -ItemType Directory
+#   2. Reserve the dispatch directory with New-Item -ItemType Directory
 #      and -ErrorAction Stop, and NO -Force: a taken directory must fail
 #      loudly rather than silently proceed with an unreliable path.
 #      Failure here is BLOCKED and nothing has started.
-#   4. Copy -WrapperBody into the directory as wrapper.ps1; create an
-#      empty stdin.empty beside it; write the resolved -WorkingDirectory
-#      to a `cwd` file beside them, UTF-8 without a BOM, so it is present
-#      before the receipt is published. NONE of the three is run -
-#      -Prepare starts no process at all. The caller runs wrapper.ps1
-#      itself, as a tracked background command named for its lane and
-#      round; see the skill and the design spec named above. The
-#      wrapper's own first act, right after publishing its pid and
-#      startticks, reads this `cwd` file and Set-Location's to it -
-#      that is what actually anchors the client to the review mirror.
+#   3. Copy -WrapperBody into the directory as wrapper.ps1; create an
+#      empty stdin.empty beside it.
+#   4. Launch the launching host itself against wrapper.ps1, detached, with
+#      stdin/stdout/stderr redirected into the directory. NOT Start-Process -
+#      see the handle-inheritance note just below $ErrorActionPreference for
+#      why, and HandleListLauncher.LaunchDetached for the mechanism. It
+#      returns the child's pid and start ticks together, read race-free off
+#      the same handle CreateProcess produced.
 #   5. If PARALLAX_DISPATCH_HOLD_BEFORE_PUBLISH is set (to a path), create
-#      "<value>.started" once launch.committed (step 6) has been written,
-#      then wait, bounded at sixty seconds, for "<value>.release" before
-#      writing the receipt. On timeout, fail through the same catch as
-#      any other failure. The deterministic barrier a
-#      fail-closed-before-publication test needs; without it, that test
-#      is the same millisecond race in a different costume. Unset, the
-#      seam does not exist.
-#   6. Mint the launch token and write launch.committed with it.
+#      "<value>.started" once the launch call above has returned, then wait,
+#      bounded at sixty seconds, for "<value>.release" before writing pid.
+#      On timeout, fail through the same catch as any other failure.
+#   6. Write pid and startticks (both already captured by step 4), THEN
+#      write launch.committed with the minted token as its content.
 #   7. Write the RECEIPT last of all, and only now, with create-new
 #      semantics (fails if the path was raced into existence since step
-#      2's check). Its path was already checked for freshness and for
-#      separation in step 2, so this can only fail on a race, and a race
-#      here fails through the same catch as any other failure. The
-#      receipt's startTicks field is a fixed placeholder (0): -Prepare
-#      has no process to describe yet, and it is not what -Poll's
-#      liveness check reads - see step 8 of the -Poll order below.
-#   8. Steps 4 through 7 are wrapped in one catch that publishes no
-#      receipt and exits 1 on any failure. The catch performs NO
-#      filesystem cleanup: a directory left behind is inert and
-#      inspectable, while a published receipt is not. That is
-#      deliberate, not an oversight - a reserved-but-abandoned dispatch
-#      directory is the expected shape of a handled failure, never
-#      evidence of one. -Prepare starts no process, so unlike the
-#      launcher this replaces, there is never a started tree to kill on
-#      this path - see the design spec for the three findings that
-#      closes by removing their subject rather than patching them.
+#      1's check). Its path was already checked for freshness and for
+#      separation in step 1, so this can only fail on a race, and a race
+#      here fails through the same catch as any other failure.
+#   8. Steps 4 through 7 are wrapped in one catch that runs
+#      "taskkill /PID <pid> /T /F" when the process was started, then
+#      exits 1. Never leave a started process unrecorded and unreported.
+#      The catch performs NO filesystem cleanup: a directory left behind
+#      is inert and inspectable, while a published receipt or a live,
+#      unrecorded child is not. That is deliberate, not an oversight - a
+#      reserved-but-abandoned dispatch directory is the expected shape of
+#      a handled failure, never evidence of one.
 #
 # -Poll computes the state in this fixed order and stops at the first
 # match, reading nothing further once it has:
@@ -181,51 +140,32 @@
 #      receipt-not-expected. Still nothing is opened.
 #   3. dispatchDir has no launch.committed -> launch-unknown.
 #   4. launch.committed's content != the receipt's token -> launch-not-ours.
-#   5. No `cwd` file -> not-started. A prepared round that cannot say
-#      where it must run is not runnable, and must never be run from
-#      wherever the caller happens to be - it must never fall back to the
-#      caller's own directory. Folded into the same state as a missing
-#      pid file, immediately below, because both mean the same thing to a
-#      caller: neither is a result.
-#   6. No pid file -> not-started. The prepared wrapper was never run, or
-#      it died before it could publish its own identity - this state
-#      deliberately does not distinguish the two, because both mean the
-#      same thing to a caller: neither is a result. The brief window
-#      where a live wrapper has not yet written its pid also lands here,
-#      which is conservative in the correct direction: a live round reads
-#      as not-started rather than as finished.
-#   7. pid unreadable or not an integer -> pid-unreadable. Same for the
-#      startticks FILE the wrapper writes beside it (missing, unreadable,
-#      or not an integer): pid and startticks are a pair the wrapper
-#      self-publishes as its first act (see the header of each wrapper
-#      body), and either half failing to read is the same "cannot confirm
-#      identity" outcome, folded together rather than adding a
-#      fourteenth state.
-#   8. Liveness, computed exactly the way tools/kimi-lane-lock.ps1:219-236
-#      computes Get-Liveness, comparing the live process's own StartTime
-#      against the startticks FILE (not the receipt's startTicks, which
-#      -Prepare never populated with a real value): no such process ->
-#      DEAD, continue; the process exists but its start time cannot be
-#      read -> pid-unreadable, stop; the process exists and its ticks
-#      differ from the startticks file's (the pid was recycled) -> DEAD,
-#      continue; ticks match -> running, stop, and NOTHING ELSE IS READ -
-#      a reply being written is not a reply.
-#   9. No exit file -> no-exit-file. Unreadable or not a plain integer ->
+#   5. pid missing, unreadable, or not an integer -> pid-unreadable.
+#   6. Liveness, computed exactly the way tools/kimi-lane-lock.ps1:219-236
+#      computes Get-Liveness: no such process -> DEAD, continue; the
+#      process exists but its start time cannot be read -> pid-unreadable,
+#      stop; the process exists and its ticks differ from the receipt's
+#      (the pid was recycled) -> DEAD, continue; ticks match -> running,
+#      stop, and NOTHING ELSE IS READ - a reply being written is not a
+#      reply.
+#   7. No exit file -> no-exit-file. Unreadable or not a plain integer ->
 #      exit-unreadable. Non-zero -> exit-nonzero.
-#  10. Zero and no reply file -> no-reply. Zero and reply is empty ->
+#   8. Zero and no reply file -> no-reply. Zero and reply is empty ->
 #      reply-empty. Zero and reply has content -> reply-present.
 #
-# ONE ENV-GATED TEST SEAM, BUILDER CONTRACT rather than test scaffolding,
-# the same shape as the two seams in tools/new-kimi-lane-home.ps1: it is
-# reachable by any parent process that sets the variable, no shipped
-# caller sets it, and it can only make an invocation FAIL or answer MORE
-# CONSERVATIVELY - never turn a failing prepare into a successful one.
-#   PARALLAX_DISPATCH_HOLD_BEFORE_PUBLISH - see step 5 above.
-#
-# -Poll KEEPS its own env-gated seam from the same family, unaffected by
-# this change:
+# TWO ENV-GATED TEST SEAMS, both BUILDER CONTRACT rather than test
+# scaffolding, the same shape as the two seams in
+# tools/new-kimi-lane-home.ps1: each is reachable by any parent process
+# that sets the variable, no shipped caller sets either one, and each can
+# only make an invocation FAIL or answer MORE CONSERVATIVELY - never turn
+# a failing launch into a successful one, and never turn an unmeasured
+# poll state into "running" or a terminal success.
+#   PARALLAX_DISPATCH_HOLD_BEFORE_PUBLISH - see step 5 above. The
+#     deterministic barrier a hard-kill-before-publication test needs;
+#     without it, that test is the same millisecond race in a different
+#     costume. Unset, the seam does not exist.
 #   PARALLAX_DISPATCH_POLL_STARTTIME_FAULT - forces the live-process
-#     start-time read in step 8 above to throw AFTER the pid lookup has
+#     start-time read in step 6 above to throw AFTER the pid lookup has
 #     already succeeded, so a test can reach pid-unreadable from a
 #     genuinely alive pid without depending on another user's process.
 #     Its only reachable effect is to turn what would have been "running"
@@ -244,7 +184,7 @@
 # Windows PowerShell 5.1 compatible, ASCII only.
 
 param(
-    [switch]$Prepare,
+    [switch]$Launch,
     [string]$DispatchDir,
     [string]$WrapperBody,
     [string]$ReceiptPath,
@@ -260,6 +200,206 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+
+# MEASURED 2026-08-31, not assumed: Start-Process's own -RedirectStandardOutput
+# / -RedirectStandardError forces .NET's Process class to request
+# bInheritHandles=TRUE for the CreateProcess call. That flag is process-wide -
+# it duplicates EVERY inheritable handle already open in THIS process into
+# the new child, not just the three handles Start-Process means to pass. When
+# the caller of -Launch captures ITS OWN stdout/stderr through a pipe (the
+# normal shape of a Bash/PowerShell tool call, and how every test in
+# evals/multi-model-verify/test_dispatch_detached.py drives this script),
+# those pipe write-ends are themselves inheritable, so the wrapper child
+# inherits them too - and the caller's pipe-read then blocks until the
+# wrapper exits, not until -Launch returns. Measured: -Launch built on plain
+# Start-Process -RedirectStandardOutput/-RedirectStandardError took the full
+# duration of a 25-second wrapper to return when its caller captured -Launch's
+# own stdout/stderr through a pipe; switching only the caller's capture mode
+# to a non-pipe target removed the delay, isolating the cause to handle
+# inheritance rather than anything else in this script's control flow. This
+# is exactly the class of caller this tool
+# exists to not block - see the header above - so a literal Start-Process
+# call cannot be the transport: it would make -Launch itself re-introduce
+# the 600-second-ceiling problem this whole tool exists to remove, and
+# test_poll_reports_running_while_the_pid_is_alive /
+# test_a_running_round_can_never_exit_zero could not pass against it (the
+# poll would only ever observe a launch that already reached exit/reply).
+#
+# The fix restricts the new process's inherited handles to EXACTLY the three
+# this script opens for it, via Windows' documented allowlist mechanism
+# (PROC_THREAD_ATTRIBUTE_HANDLE_LIST): CreateFile the three redirection
+# targets itself (marked inheritable), build a STARTUPINFOEX carrying an
+# attribute list naming only those three handles, and call CreateProcess
+# with EXTENDED_STARTUPINFO_PRESENT. bInheritHandles is still TRUE (required
+# for the three handles to pass at all), but the attribute list overrides the
+# default all-or-nothing inheritance, so nothing else open in this process -
+# including a caller's own piped stdout/stderr - reaches the child. This is
+# the same mechanism Microsoft documents for exactly this scenario ("Silently
+# Fixing a Process Launched with Inherited Handles").
+Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+using System.Text;
+
+namespace ParallaxDetachedDispatch {
+    public static class HandleListLauncher {
+        [StructLayout(LayoutKind.Sequential)]
+        public struct STARTUPINFO {
+            public int cb;
+            public IntPtr lpReserved;
+            public IntPtr lpDesktop;
+            public IntPtr lpTitle;
+            public int dwX, dwY, dwXSize, dwYSize, dwXCountChars, dwYCountChars, dwFillAttribute, dwFlags;
+            public short wShowWindow, cbReserved2;
+            public IntPtr lpReserved2;
+            public IntPtr hStdInput, hStdOutput, hStdError;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct STARTUPINFOEX {
+            public STARTUPINFO StartupInfo;
+            public IntPtr lpAttributeList;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct PROCESS_INFORMATION {
+            public IntPtr hProcess, hThread;
+            public int dwProcessId, dwThreadId;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct SECURITY_ATTRIBUTES {
+            public int nLength;
+            public IntPtr lpSecurityDescriptor;
+            public bool bInheritHandle;
+        }
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern bool InitializeProcThreadAttributeList(IntPtr lpAttributeList, int dwAttributeCount, int dwFlags, ref IntPtr lpSize);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern bool UpdateProcThreadAttribute(IntPtr lpAttributeList, uint dwFlags, IntPtr Attribute, IntPtr lpValue, IntPtr cbSize, IntPtr lpPreviousValue, IntPtr lpReturnSize);
+
+        [DllImport("kernel32.dll")]
+        public static extern void DeleteProcThreadAttributeList(IntPtr lpAttributeList);
+
+        [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        public static extern bool CreateProcess(
+            string lpApplicationName, StringBuilder lpCommandLine,
+            IntPtr lpProcessAttributes, IntPtr lpThreadAttributes,
+            bool bInheritHandles, uint dwCreationFlags,
+            IntPtr lpEnvironment, string lpCurrentDirectory,
+            ref STARTUPINFOEX lpStartupInfo,
+            out PROCESS_INFORMATION lpProcessInformation);
+
+        [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        public static extern IntPtr CreateFile(string lpFileName, uint dwDesiredAccess, uint dwShareMode,
+            ref SECURITY_ATTRIBUTES lpSecurityAttributes, uint dwCreationDisposition, uint dwFlagsAndAttributes, IntPtr hTemplateFile);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern bool CloseHandle(IntPtr hObject);
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct FILETIME {
+            public uint dwLowDateTime;
+            public uint dwHighDateTime;
+        }
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern bool GetProcessTimes(IntPtr hProcess, out FILETIME lpCreationTime,
+            out FILETIME lpExitTime, out FILETIME lpKernelTime, out FILETIME lpUserTime);
+
+        const int PROC_THREAD_ATTRIBUTE_HANDLE_LIST = 0x00020002;
+        const uint EXTENDED_STARTUPINFO_PRESENT = 0x00080000;
+        const uint CREATE_NO_WINDOW = 0x08000000;
+        const uint STARTF_USESTDHANDLES = 0x00000100;
+        const uint GENERIC_READ = 0x80000000;
+        const uint GENERIC_WRITE = 0x40000000;
+        const uint FILE_SHARE_READ = 1, FILE_SHARE_WRITE = 2, FILE_SHARE_DELETE = 4;
+        const uint OPEN_EXISTING = 3, CREATE_ALWAYS = 2;
+        const uint FILE_ATTRIBUTE_NORMAL = 0x80;
+
+        // Returns "pid,startTicks" as one string (keeping the PowerShell/C#
+        // boundary to a plain marshaled type). startTicks is read via
+        // GetProcessTimes on the EXACT handle CreateProcess just returned,
+        // before that handle is closed - a handle keeps its process object
+        // alive in the kernel regardless of how fast the process exits, so
+        // this cannot race a PID recycle the way a later Get-Process /
+        // OpenProcess(pid) lookup could for an already-finished wrapper.
+        // The FILETIME GetProcessTimes returns is 100ns ticks since 1601;
+        // converting through DateTime.FromFileTimeUtc gives the same .NET
+        // DateTime.Ticks epoch (0001) that Get-Process's own StartTime
+        // property uses, so -Poll's liveness check compares like with like.
+        public static string LaunchDetached(string exePath, string commandLine, string stdinPath,
+                                          string stdoutPath, string stderrPath, string workingDirectory) {
+            SECURITY_ATTRIBUTES sa = new SECURITY_ATTRIBUTES();
+            sa.nLength = Marshal.SizeOf(typeof(SECURITY_ATTRIBUTES));
+            sa.bInheritHandle = true;
+            sa.lpSecurityDescriptor = IntPtr.Zero;
+
+            IntPtr hIn = CreateFile(stdinPath, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, ref sa, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, IntPtr.Zero);
+            if (hIn == new IntPtr(-1)) throw new InvalidOperationException("CreateFile stdin failed: " + Marshal.GetLastWin32Error());
+            IntPtr hOut = CreateFile(stdoutPath, GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_DELETE, ref sa, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, IntPtr.Zero);
+            if (hOut == new IntPtr(-1)) throw new InvalidOperationException("CreateFile stdout failed: " + Marshal.GetLastWin32Error());
+            IntPtr hErr = CreateFile(stderrPath, GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_DELETE, ref sa, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, IntPtr.Zero);
+            if (hErr == new IntPtr(-1)) throw new InvalidOperationException("CreateFile stderr failed: " + Marshal.GetLastWin32Error());
+
+            IntPtr handleArray = Marshal.AllocHGlobal(IntPtr.Size * 3);
+            Marshal.WriteIntPtr(handleArray, 0 * IntPtr.Size, hIn);
+            Marshal.WriteIntPtr(handleArray, 1 * IntPtr.Size, hOut);
+            Marshal.WriteIntPtr(handleArray, 2 * IntPtr.Size, hErr);
+
+            IntPtr attrListSize = IntPtr.Zero;
+            InitializeProcThreadAttributeList(IntPtr.Zero, 1, 0, ref attrListSize);
+            IntPtr attrList = Marshal.AllocHGlobal(attrListSize);
+            if (!InitializeProcThreadAttributeList(attrList, 1, 0, ref attrListSize))
+                throw new InvalidOperationException("InitializeProcThreadAttributeList failed: " + Marshal.GetLastWin32Error());
+
+            if (!UpdateProcThreadAttribute(attrList, 0, (IntPtr)PROC_THREAD_ATTRIBUTE_HANDLE_LIST,
+                    handleArray, (IntPtr)(IntPtr.Size * 3), IntPtr.Zero, IntPtr.Zero))
+                throw new InvalidOperationException("UpdateProcThreadAttribute failed: " + Marshal.GetLastWin32Error());
+
+            STARTUPINFOEX siex = new STARTUPINFOEX();
+            siex.StartupInfo.cb = Marshal.SizeOf(typeof(STARTUPINFOEX));
+            siex.StartupInfo.dwFlags = (int)STARTF_USESTDHANDLES;
+            siex.StartupInfo.hStdInput = hIn;
+            siex.StartupInfo.hStdOutput = hOut;
+            siex.StartupInfo.hStdError = hErr;
+            siex.lpAttributeList = attrList;
+
+            PROCESS_INFORMATION pi;
+            StringBuilder cmdLineBuilder = new StringBuilder(commandLine);
+            bool ok = CreateProcess(exePath, cmdLineBuilder, IntPtr.Zero, IntPtr.Zero, true,
+                EXTENDED_STARTUPINFO_PRESENT | CREATE_NO_WINDOW, IntPtr.Zero,
+                string.IsNullOrEmpty(workingDirectory) ? null : workingDirectory,
+                ref siex, out pi);
+            int err = Marshal.GetLastWin32Error();
+
+            DeleteProcThreadAttributeList(attrList);
+            Marshal.FreeHGlobal(attrList);
+            Marshal.FreeHGlobal(handleArray);
+            CloseHandle(hIn);
+            CloseHandle(hOut);
+            CloseHandle(hErr);
+
+            if (!ok) throw new InvalidOperationException("CreateProcess failed: " + err);
+
+            CloseHandle(pi.hThread);
+            int pid = pi.dwProcessId;
+            long startTicks = 0;
+            FILETIME ftCreate, ftExit, ftKernel, ftUser;
+            if (GetProcessTimes(pi.hProcess, out ftCreate, out ftExit, out ftKernel, out ftUser)) {
+                long fileTime = ((long)ftCreate.dwHighDateTime << 32) | (uint)ftCreate.dwLowDateTime;
+                startTicks = DateTime.FromFileTimeUtc(fileTime).Ticks;
+            }
+            CloseHandle(pi.hProcess);
+            if (startTicks == 0)
+                throw new InvalidOperationException("GetProcessTimes failed: " + Marshal.GetLastWin32Error());
+            return pid.ToString() + "," + startTicks.ToString();
+        }
+    }
+}
+"@ -ErrorAction Stop
 
 function Resolve-UnresolvedPath([string]$Path) {
     return $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Path)
@@ -362,26 +502,6 @@ function Get-PidFileValue([string]$Path) {
     return $val
 }
 
-# The startticks FILE the wrapper writes beside its pid (see the header):
-# self-published, so it needs the same "readable or not" treatment as the
-# pid, just with a 64-bit parse since a tick count does not fit [int].
-function Get-StartTicksFileValue([string]$Path) {
-    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return $null }
-    $raw = $null
-    try {
-        $raw = [System.IO.File]::ReadAllText($Path).Trim()
-    } catch {
-        return $null
-    }
-    if ($raw -notmatch '^-?[0-9]+$') { return $null }
-    $val = [long]0
-    if (-not [long]::TryParse($raw, [System.Globalization.NumberStyles]::Integer,
-            [System.Globalization.CultureInfo]::InvariantCulture, [ref]$val)) {
-        return $null
-    }
-    return $val
-}
-
 function Get-ExitFileValue([string]$Path) {
     if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return @{ Present = $false } }
     $raw = $null
@@ -444,12 +564,12 @@ function Emit-PollResult([string]$State, $RoundLabel) {
 # the parameters") a promise this script keeps rather than an artifact of
 # whichever exit code the binder happens to choose.
 # ---------------------------------------------------------------------
-if ($Prepare -and $Poll) {
-    Write-Output "ERROR: -Prepare and -Poll are mutually exclusive"
+if ($Launch -and $Poll) {
+    Write-Output "ERROR: -Launch and -Poll are mutually exclusive"
     exit 2
 }
-if (-not $Prepare -and -not $Poll) {
-    Write-Output "ERROR: specify exactly one of -Prepare or -Poll"
+if (-not $Launch -and -not $Poll) {
+    Write-Output "ERROR: specify exactly one of -Launch or -Poll"
     exit 2
 }
 
@@ -494,25 +614,12 @@ if ($Poll) {
         Emit-PollResult -State "launch-not-ours" -RoundLabel $rec.Round
     }
 
-    $cwdPath = Join-Path $rec.DispatchDir "cwd"
-    if (-not (Test-Path -LiteralPath $cwdPath -PathType Leaf)) {
-        Emit-PollResult -State "not-started" -RoundLabel $rec.Round
-    }
-
-    $pidPath = Join-Path $rec.DispatchDir "pid"
-    if (-not (Test-Path -LiteralPath $pidPath -PathType Leaf)) {
-        Emit-PollResult -State "not-started" -RoundLabel $rec.Round
-    }
-    $pidVal = Get-PidFileValue $pidPath
+    $pidVal = Get-PidFileValue (Join-Path $rec.DispatchDir "pid")
     if ($null -eq $pidVal) {
         Emit-PollResult -State "pid-unreadable" -RoundLabel $rec.Round
     }
-    $ticksVal = Get-StartTicksFileValue (Join-Path $rec.DispatchDir "startticks")
-    if ($null -eq $ticksVal) {
-        Emit-PollResult -State "pid-unreadable" -RoundLabel $rec.Round
-    }
 
-    $liveness = Get-PollLiveness -PidValue $pidVal -ExpectedTicks $ticksVal
+    $liveness = Get-PollLiveness -PidValue $pidVal -ExpectedTicks $rec.StartTicks
     if ($liveness -eq "UNMEASURABLE") {
         Emit-PollResult -State "pid-unreadable" -RoundLabel $rec.Round
     }
@@ -548,39 +655,20 @@ if ($Poll) {
 }
 
 # ---------------------------------------------------------------------
-# -Prepare
+# -Launch
 # ---------------------------------------------------------------------
 if ([string]::IsNullOrWhiteSpace($DispatchDir) -or [string]::IsNullOrWhiteSpace($WrapperBody) -or
-    [string]::IsNullOrWhiteSpace($ReceiptPath) -or [string]::IsNullOrWhiteSpace($Round) -or
-    [string]::IsNullOrWhiteSpace($WorkingDirectory)) {
-    Write-Output "ERROR: -Prepare requires -DispatchDir, -WrapperBody, -ReceiptPath, -Round and -WorkingDirectory"
+    [string]::IsNullOrWhiteSpace($ReceiptPath) -or [string]::IsNullOrWhiteSpace($Round)) {
+    Write-Output "ERROR: -Launch requires -DispatchDir, -WrapperBody, -ReceiptPath and -Round"
     exit 2
 }
 
 try {
     $dispatchFull = Resolve-UnresolvedPath $DispatchDir
     $receiptFull = Resolve-UnresolvedPath $ReceiptPath
-    $workingDirFull = Resolve-UnresolvedPath $WorkingDirectory
 } catch {
-    Write-Output ("ERROR: could not resolve the prepare paths: " + $_.Exception.Message)
+    Write-Output ("ERROR: could not resolve the launch paths: " + $_.Exception.Message)
     exit 2
-}
-
-# Step 0a: -WorkingDirectory survived the launcher's deletion. It is what
-# puts the reviewer client inside the REVIEW MIRROR. An earlier draft of
-# the design spec called it launcher-only and this tool dropped it; the
-# FIRST round dispatched under that version ran with the REAL REPOSITORY
-# as its working directory, where a root AGENTS.md sits on disk and the
-# reviewer client auto-ingests it as instructions - the instruction
-# back-channel the preflight exists to stop. The round was discarded
-# UNREAD; its cost is recorded in
-# docs/superpowers/specs/2026-08-31-tracked-background-dispatch-design.md
-# section 1. Checked and BLOCKED here, before the dispatch directory is
-# reserved: a round that cannot say where it must run is not runnable.
-if (-not (Test-Path -LiteralPath $workingDirFull -PathType Container)) {
-    Write-Output ("BLOCKED: -WorkingDirectory does not exist or is not a directory (" +
-        $workingDirFull + ")")
-    exit 1
 }
 
 # Step 1: separation and freshness, before anything is created.
@@ -608,28 +696,32 @@ try {
     exit 1
 }
 
-# Steps 3-6: everything from here through the receipt write is one
-# transaction. -Prepare starts no process, so a failure here has nothing
-# to kill - it publishes no receipt and exits 1, with NO filesystem
-# cleanup, per the header.
+# Steps 3-7: everything from here through the receipt write is one
+# transaction. Any failure kills the started process tree (if one was
+# started) and blocks - with NO filesystem cleanup, per the header.
+$launchedPid = $null
 $token = $null
 try {
     $wrapperDest = Join-Path $d "wrapper.ps1"
     Copy-Item -LiteralPath $WrapperBody -Destination $wrapperDest -ErrorAction Stop
     New-Item -ItemType File -Path (Join-Path $d "stdin.empty") -ErrorAction Stop | Out-Null
 
-    # Write the resolved working directory in the same step that installs
-    # the wrapper, so it is present before the receipt is published (see
-    # the header). UTF-8 without a BOM, matching the wrapper's own read
-    # (New-Object System.Text.UTF8Encoding($false, $true)) as its second
-    # act, right after publishing its identity.
-    [System.IO.File]::WriteAllText((Join-Path $d "cwd"), $workingDirFull,
-        (New-Object System.Text.UTF8Encoding($false)))
+    # See the handle-inheritance note above $ErrorActionPreference: this is
+    # NOT Start-Process. LaunchDetached restricts the child's inherited
+    # handles to exactly the three redirection targets below.
+    $wrapperCmdLine = '"' + (Get-Process -Id $PID).Path + '" -NoProfile -NonInteractive -File "' + $wrapperDest + '"'
+    $launchResult = [ParallaxDetachedDispatch.HandleListLauncher]::LaunchDetached(
+        (Get-Process -Id $PID).Path,
+        $wrapperCmdLine,
+        (Join-Path $d "stdin.empty"),
+        (Join-Path $d "launch.out"),
+        (Join-Path $d "launch.err"),
+        $WorkingDirectory)
+    $parts = $launchResult.Split(",")
+    $launchedPid = [int]$parts[0]
+    $startTicks = [string]$parts[1]
 
-    $token = [System.Guid]::NewGuid().ToString()
-    Set-Content -LiteralPath (Join-Path $d "launch.committed") -Value $token -NoNewline -Encoding Ascii
-
-    # Step 4: the hold-before-publish barrier. See the header. Absent the
+    # Step 5: the hold-before-publish barrier. See the header. Absent the
     # env var, this block does nothing.
     $holdBase = $env:PARALLAX_DISPATCH_HOLD_BEFORE_PUBLISH
     if (-not [string]::IsNullOrEmpty($holdBase)) {
@@ -644,14 +736,20 @@ try {
         }
     }
 
-    # Step 6: the receipt, last of all, create-new only. startTicks is a
-    # fixed placeholder - see the header note on why it no longer
-    # describes a real process.
+    # Step 6: pid and startticks BEFORE the commit marker. Both were
+    # already captured race-free by LaunchDetached (see its comment) -
+    # this just publishes them.
+    Set-Content -LiteralPath (Join-Path $d "pid") -Value ([string]$launchedPid) -NoNewline -Encoding Ascii
+    Set-Content -LiteralPath (Join-Path $d "startticks") -Value $startTicks -NoNewline -Encoding Ascii
+    $token = [System.Guid]::NewGuid().ToString()
+    Set-Content -LiteralPath (Join-Path $d "launch.committed") -Value $token -NoNewline -Encoding Ascii
+
+    # Step 7: the receipt, last of all, create-new only.
     $receiptObj = [ordered]@{
         dispatchDir = $d
         token       = $token
         round       = $Round
-        startTicks  = [long]0
+        startTicks  = [long]$startTicks
     }
     $receiptJson = ConvertTo-Json $receiptObj -Compress
     $receiptBytes = [System.Text.Encoding]::UTF8.GetBytes($receiptJson)
@@ -664,13 +762,16 @@ try {
         $fs.Dispose()
     }
 } catch {
+    if ($launchedPid) {
+        try { & taskkill /PID $launchedPid /T /F 2>&1 | Out-Null } catch { }
+    }
     Write-Output ("BLOCKED: " + $_.Exception.Message)
     exit 1
 }
 
 if ($Json) {
     $obj = [ordered]@{
-        prepared    = $true
+        launched    = $true
         dispatchDir = $d
         token       = $token
         round       = $Round
@@ -678,6 +779,6 @@ if ($Json) {
     }
     Write-Output (ConvertTo-Json $obj -Compress)
 } else {
-    Write-Output ("PREPARED: " + $d)
+    Write-Output ("LAUNCHED: " + $d)
 }
 exit 0

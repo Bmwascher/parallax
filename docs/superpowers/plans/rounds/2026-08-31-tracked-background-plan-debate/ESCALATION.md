@@ -146,3 +146,35 @@ Four dispatches, two of them thrown away unread, both losses the
 session's own doing: one ran in the real repository because the spec
 deleted the anchor, one could not be attributed because the bookmark was
 two rounds stale. The reviewer was never at fault in either.
+
+## The code was reverted, 2026-08-31, on the owner's decision
+
+The three redesign commits' CODE is reverted. Their commits stay in
+history as evidence; the working tree returns to the reviewed item 32
+build.
+
+Reverted by path to `0105d3a`, the last commit before the redesign began:
+
+- `tools/dispatch-detached.ps1`
+- `evals/multi-model-verify/test_dispatch_detached.py`
+- `evals/multi-model-verify/test_multi_model_verify.py`
+- `skills/multi-model-verify/references/model-prompting-notes.md`
+
+`git revert` was ABANDONED for this: the popup fix at `dd7afaf` touched
+`test_dispatch_detached.py` after `7211e0b`, so a revert conflicted. A
+by-path restore keeps that fix and is what was done.
+
+**The popup regression came entirely from the redesign.** The
+pre-redesign `test_dispatch_detached.py` spawns no visible console at all,
+so reverting it removes that source outright rather than needing the fix.
+The other spawn site, in `test_wrapper_renders_and_parses.py`, predates the
+redesign and KEEPS the `CREATE_NO_WINDOW` correction.
+
+Not reverted, deliberately: the withdrawn plan and spec (they carry their
+own WITHDRAWN banners), the build ledger, and this record. They are the
+account of what was tried.
+
+**What the tree now holds:** the detached dispatch as reviewed - no
+tracked-task visibility, which is the gap the replacement exists to close -
+and none of the redesign's defects, including the reproduced
+false-completion race.
