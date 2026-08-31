@@ -78,13 +78,14 @@ Prepare:  -Prepare -DispatchDir <path> -WrapperBody <path>
           (-WorkdirEvidence <literal> | -NoWorkdirEvidence) [-Json]
 
 Classify: -Classify -DispatchDir <path> -ReceiptPath <path>
-          -ExpectedRound <label> -ExpectedToken <token>
-          -ExpectedPriorStateSha256 <hex> -Redeem <nonce> [-Json]
+          -ExpectedRound <label> -ExpectedReceiptSha256 <hex>
+          -Redeem <nonce> [-Json]
 ```
 
-`-Classify` is called by the wrapper and by nothing else. Its last three
-arguments are values `-Prepare` wrote into the wrapper's text, and they
-are what let it detect a receipt edited after preparation.
+`-Classify` is called by the wrapper and by nothing else.
+`-ExpectedReceiptSha256` is written into the wrapper's text by `-Prepare`
+and is what lets it detect a receipt edited after preparation, in any
+field. `-Redeem` is minted at run time by the wrapper itself.
 
 **`-Poll` is deleted outright.** A second, post-hoc path to a verdict is
 the class this cycle keeps reproducing. The only authoritative answer is
@@ -157,6 +158,15 @@ $ErrorActionPreference = 'Continue'
 $null | & '<hostPath>' -NoProfile -NonInteractive -File "$PSScriptRoot/body.ps1" `
     > "$PSScriptRoot/body.out" 2> "$PSScriptRoot/body.err"
 $code = $LASTEXITCODE
+# NOT a complete backstop, and the comment must not imply it is. If the
+# resolved host binary has been deleted since preparation, the call raises
+# a statement-terminating error under Continue and $LASTEXITCODE still
+# holds the FIRST verification's zero - a stale 0, not $null, so this line
+# does not fire. The round still cannot read as success: the body never
+# ran, so there is no reply and no transcript, and classification lands on
+# no-transcript or no-reply. But the exit file then records a 0 for a
+# client that never launched. Conservative, and worth knowing when reading
+# that file.
 if ($null -eq $code) { $code = 1 }
 
 # The tree is verified a SECOND time, after the client has finished, so a
@@ -175,8 +185,8 @@ $nonce = [System.Guid]::NewGuid().ToString('N')
 [System.IO.File]::WriteAllText("$PSScriptRoot/exit", "$code", $utf8)
 # test seam: PARALLAX_DISPATCH_HOLD_AFTER_EXIT_WRITE, see below
 & '<toolPath>' -Classify -DispatchDir '<dispatchDir>' -ReceiptPath '<receiptPath>' `
-    -ExpectedRound '<round>' -ExpectedToken '<token>' `
-    -ExpectedPriorStateSha256 '<priorStateSha256>' -Redeem $nonce
+    -ExpectedRound '<round>' -ExpectedReceiptSha256 '<receiptSha256>' `
+    -Redeem $nonce
 exit $LASTEXITCODE
 ```
 
@@ -259,14 +269,26 @@ would land in front of the JSON the caller parses; in the wrapper it would
 be a second line on the stdout that must carry exactly one. Assign it or
 redirect it; do not let it through.
 
-**The wrapper carries three values the receipt also carries.** `<token>`
-and `<priorStateSha256>` are written into the wrapper's text by
-`-Prepare`, and the classifier compares them against the receipt it reads.
-A receipt edited after preparation - the only way a caller could
-substitute an evidence boundary computed afterwards - no longer matches
-the wrapper and classifies as `receipt-altered`. This is what makes the
-receipt effectively immutable without a second copy of it, and it is what
-`token` is FOR; before this it was schema weight nothing read.
+**The wrapper carries a digest of the WHOLE receipt.** `-Prepare` writes
+the receipt, hashes its finished bytes, and writes that one digest into
+the wrapper's text as `<receiptSha256>`. `-Classify` re-hashes the receipt
+it reads and compares. Any edit to any field after preparation - the only
+way a caller could substitute an evidence boundary computed afterwards -
+classifies as `receipt-altered`.
+
+**A per-field compare would NOT have been enough, and the first version of
+this design got that wrong.** It bound `token` and `priorStateSha256`
+only, and claimed on that basis that the receipt was "effectively
+immutable". It has fourteen fields. Ten were editable with no detection,
+and one of those, `workdirEvidence`, GATES the working-directory states:
+editing it to the literal `none` silently switches off the B5 check for
+that round - the one carry-over the options poll specifically demanded be
+wired. Hashing the whole file costs one line and removes the class rather
+than four instances of it.
+
+`token` still earns its place: it is what the digest is minted over
+together with everything else, and it makes two preparations of the same
+directory produce different receipts.
 
 The lane body ends with `exit $code`, carrying the client's own exit code
 out of the child. It writes its reply and its transcript into
@@ -333,8 +355,8 @@ refused. In this fixed order, stopping at the first match:
 4. receipt absent, unreadable, or failing the schema -> `no-receipt`
 5. receipt's `dispatchDir` or `round` is not the pair supplied
    independently -> `receipt-not-expected`
-6. receipt's `token` or `priorStateSha256` differs from the values the
-   wrapper carries -> `receipt-altered`
+6. the receipt's own bytes do not hash to the digest the wrapper carries
+   -> `receipt-altered`
 7. no `claim` file in the dispatch directory -> `no-claim`
 8. `workingDirectory` missing, unresolvable, or not a filesystem
    container -> `cwd-unreadable`
@@ -544,8 +566,23 @@ task closes that before anything depends on it.
 
 **Files:**
 - Modify: `tools/new-review-mirror.ps1`
+- Modify: `skills/multi-model-verify/references/backup-lane.md` - the
+  paragraph telling the reader to re-run `-VerifyIdentity` with "the three
+  recorded values"
+- Modify: `evals/multi-model-verify/test_backup_lane.py` - the pin that
+  quotes that sentence verbatim
 - Test: `evals/multi-model-verify/test_review_mirror.py` (the module that
   already exists - do NOT create a new one)
+
+**THIS TASK BREAKS A PINNED SENTENCE, and the pin will not tell you.**
+`backup-lane.md` instructs the reader to re-run the verifier with "the
+three recorded values". After this task there are five, and that
+documented command fails at parameter binding. The sentence is pinned
+verbatim in `test_backup_lane.py`, so the gate stays GREEN while the
+instruction it locks becomes unrunnable and its count becomes false. Pins
+lock TEXT, not behaviour. Fix the sentence and its pin IN THIS TASK - the
+pin is a raw-text pin, so re-wrap it carefully - and do not leave it for a
+later task to notice.
 
 **Interfaces:**
 - Consumes: nothing.
@@ -862,10 +899,9 @@ git commit -m "replace launch and poll with a fail-closed prepare"
 **Interfaces:**
 - Consumes: the receipt from Task 2, every field in the table above.
 - Produces: `-Classify -DispatchDir <d> -ReceiptPath <r> -ExpectedRound
-  <label> -ExpectedToken <t> -ExpectedPriorStateSha256 <hex> -Redeem
-  <nonce>`, exit 0 only on `reply-present`. Task 4's wrapper calls it with
-  all six, and the last three are what make an edited receipt and an
-  outside caller detectable.
+  <label> -ExpectedReceiptSha256 <hex> -Redeem <nonce>`, exit 0 only on
+  `reply-present`. Task 4's wrapper calls it with all five; the last two
+  are what make an edited receipt and an outside caller detectable.
 
 - [ ] **Step 1: Write the failing tests, one per state**
 
@@ -1182,13 +1218,34 @@ def test_the_reservation_is_consumed_before_the_exit_file_appears(tmp_path, monk
     assert not (p.dispatch_dir / "classification").read_text().strip() == "reserved"
 
 
-def test_an_edited_receipt_is_detected(tmp_path):
+@pytest.mark.parametrize("field,value", [
+    ("priorStateSha256", "ff" * 32),
+    ("workdirEvidence", "none"),      # would switch OFF the B5 check
+    ("workingDirectory", "C:/elsewhere"),
+    ("round", "Sol R2"),
+])
+def test_an_edit_to_ANY_receipt_field_is_detected(tmp_path, field, value):
+    # A per-field compare bound four of fourteen fields and called the
+    # receipt immutable. The workdirEvidence case is the one that mattered:
+    # editing it to "none" silently disables the working-directory
+    # confirmation for that round.
     p = prepare(tmp_path, body=OK_BODY)
     got = json.loads(p.receipt.read_text(encoding="utf-8"))
-    got["priorStateSha256"] = "ff" * 32
+    got[field] = value
     p.receipt.write_text(json.dumps(got), encoding="utf-8")
     out = run_wrapper(p.wrapper)
     assert out.returncode == 1
+    assert "receipt-altered" in out.stdout
+
+
+def test_a_whitespace_only_receipt_edit_is_detected(tmp_path):
+    # The digest is over BYTES, so reformatting is an edit too. This is
+    # deliberate: a receipt nobody rewrote has bytes nobody changed.
+    p = prepare(tmp_path, body=OK_BODY)
+    p.receipt.write_text(p.receipt.read_text(encoding="utf-8") + "
+",
+                         encoding="utf-8")
+    out = run_wrapper(p.wrapper)
     assert "receipt-altered" in out.stdout
 
 
@@ -1238,8 +1295,10 @@ def test_a_mirror_mutated_DURING_the_round_fails_the_wrapper(tmp_path):
     # exercises the FIRST verification. This one exercises the second:
     # the child itself edits a tracked file, writes a good reply, and
     # exits zero. Everything on disk says success.
+    # The helper interpolates the real mirror path; the placeholder below
+    # is NOT written into the body literally.
     p = prepare(tmp_path, body='''
-[System.IO.File]::WriteAllText("<workingDirectory>/README.md", "changed mid-round")
+[System.IO.File]::WriteAllText("{workingDirectory}/README.md", "changed mid-round")
 [System.IO.File]::WriteAllText("$PSScriptRoot/reply", "a verdict")
 exit 0
 ''')
@@ -1254,9 +1313,16 @@ def test_a_second_verification_that_cannot_RUN_fails_the_wrapper(tmp_path):
     # Regression for the defect this design introduced and then removed:
     # under Continue, a call that fails to bind leaves $LASTEXITCODE at
     # the client's successful zero, so the guard passes and the check
-    # never happened. Break the verifier tool's path and require failure.
+    # never happened.
+    #
+    # The helper MUST break only the SECOND call site. The wrapper names
+    # the verifier tool twice and nothing in its text distinguishes them,
+    # so a helper that breaks both kills the wrapper at the FIRST
+    # verification - which the defective version did too, making the test
+    # pass against the bug it exists to catch. Break the second
+    # occurrence only, by index.
     p = prepare(tmp_path, body=OK_BODY)
-    break_mirror_tool_path(p.wrapper)
+    break_second_mirror_call_only(p.wrapper)
     out = run_wrapper(p.wrapper)
     assert out.returncode != 0
     assert (p.dispatch_dir / "classification").read_text().strip() == "reserved"
@@ -1471,6 +1537,15 @@ git commit -m "capture the bookmark per dispatch, in both lanes"
 
 ## Task 7: Rewrite ALL FIVE call sites
 
+**A DECISION this task must make deliberately, not incidentally.** The
+`kimi-write-probe` runs no round-evidence binder today: its PASS criteria
+are an explicit refusal in the reply, the marker absent on disk, and an
+empty mirror status delta. Giving it the uniform shape below adds a
+binding to it, which CHANGES what a probe PASS means. Either do that
+knowingly and say so at the site, or exempt the probe from the binder step
+and say that instead. What must not happen is the probe quietly acquiring
+a new PASS definition because it was swept up in a uniform rewrite.
+
 **There are FIVE, not four.** `backup-lane.md` carries a third
 tool-driven operation, `kimi-write-probe`, with its own `-Launch` and
 `-Poll` calls. Deleting those modes breaks it, and no earlier version of
@@ -1533,10 +1608,21 @@ def test_the_write_probe_is_migrated_too(body_backup_lane):
     assert "kimi-write-probe" in body_backup_lane
 ```
 
-**The first test is an ABSENCE check, not a pin.** `not in` is explicitly
-excluded from the three pin forms, so nothing it names may be counted
-toward locking a contract region. It is still worth having; it just is not
-coverage. Do not let it appear in any coverage argument.
+**THREE of the tests above pin NOTHING, and all three must be labelled,
+not just the obvious one.** The pin rules accept exactly three clause
+forms:
+
+- `assert "-Poll" not in body` - negative membership, excluded.
+- `assert ("-WorkdirEvidence" in body) or ("-NoWorkdirEvidence" in body)` -
+  membership inside an `or`, which contributes nothing from either side.
+- `test_every_call_site_passes_the_seal` - it sums two counts into a
+  variable and asserts on the name, so its needles are reached through a
+  variable and pin nothing.
+
+All three are worth having as behavioural tests. None may appear in a
+coverage argument. Singling out only the `not in` case, as an earlier
+version of this task did, is how a coverage claim rots: the next editor
+reads the warning as the complete list.
 
 - [ ] **Step 2: Run them and watch them fail**
 
@@ -1654,9 +1740,13 @@ That list is what makes a deleted region visible.
   and the exit map, and add BOTH ids to `DECLARED_REGIONS`. A region too
   long for one pin is two regions, and discovering that at the coverage
   gate is expected, not a failure of this plan.
-- `round-dispatch-states` must also state the residual plainly, the way
-  the old tool stated its own, and must NOT claim more than the mechanism
-  delivers. What it says: deleting `-Poll` does not remove the post-hoc
+- `round-dispatch-states` must carry ALL FIVE residuals from the
+  "residuals this plan SHIPS" section, not only the post-hoc one. That
+  section says they belong in this region; this is the task that writes
+  it, so this instruction is the normative one and the region is where a
+  reader will actually meet them. It must also state the post-hoc residual
+  plainly, the way the old tool stated its own, and must NOT claim more
+  than the mechanism delivers. What it says: deleting `-Poll` does not remove the post-hoc
   surface, because `-Classify` is still a standalone mode. What closes the
   natural case is the reservation being CONSUMED into a run-time nonce
   before any terminal artifact is published, so a killed round leaves a
@@ -1940,7 +2030,10 @@ as a stated limit rather than fixed. They belong in the
    an earlier version wrote that call so it could not bind, which turned
    this from a narrow residual into an unstated correctness defect.
 4. **The harness trailer's format is measured, not pinned across
-   versions.** Nothing in this repo parses it mechanically.
+   versions**, and neither is the premise beside it - that a killed task
+   reports a non-zero exit on the harness surface. Task 10 Step 2a
+   measures that premise on ONE harness version, with a STOP if it fails.
+   Nothing in this repo parses the trailer mechanically.
 5. **No bound on how long a hung round may sit.** Filed as a backlog item
    by Task 11; a hung round can never read as success, so this costs
    waiting, not truth.
@@ -2191,6 +2284,42 @@ editorial stale counts, both corrected.
 
 Its reply is retained at
 `docs/superpowers/plans/rounds/2026-08-31-completion-coupled-dispatch/sol-plan-review-r5.md`.
+
+## The round-7 review: the panel lane, on the corrected version
+
+The Claude-side lane reviewed the version the cross-vendor lane never saw.
+It called the `$mirrorArgs`/`Stop` correction itself a PASS, verified that
+all seven of its own round-1 requirements survived five later revisions
+intact, and found four things worth fixing:
+
+1. **Task 1a breaks a PINNED sentence, and the pin cannot tell you.**
+   `backup-lane.md` instructs the reader to re-run `-VerifyIdentity` with
+   "the three recorded values". Task 1a makes it five, so that documented
+   command fails at parameter binding - while the pin in
+   `test_backup_lane.py` that quotes the sentence verbatim stays GREEN,
+   because pins lock text and not behaviour. Verified directly. This is
+   this repo's most-recorded defect class, shipped inside the plan meant
+   to be careful about it. Task 1a now names both files.
+2. **One of the two new regression tests was vacuous.** Breaking the
+   verifier tool's path breaks BOTH call sites, so the wrapper dies at the
+   first verification - which the DEFECTIVE version did too. The test
+   passed against the bug it existed to catch. It must break the second
+   occurrence only, and the mutation test is the real lock.
+3. **The receipt-immutability claim was far wider than its mechanism.**
+   Binding `token` and `priorStateSha256` bound four fields of fourteen.
+   Ten were editable undetected, and one of them, `workdirEvidence`, GATES
+   the working-directory states: editing it to `none` silently switches
+   off the B5 check for that round. Replaced with a digest over the WHOLE
+   receipt, which costs one line and removes the class instead of four
+   instances of it.
+4. Three assertions pin nothing under the pin rules, not one; Task 8 was
+   told to write only one of the five residuals into the region the
+   residuals section says holds all five; the write probe would have
+   acquired a new PASS definition by being swept into a uniform rewrite;
+   and the `$code` backstop implies coverage it does not have.
+
+Its reply is retained at
+`docs/superpowers/plans/rounds/2026-08-31-completion-coupled-dispatch/fable-plan-review-r2.md`.
 
 ## Where the plan stands
 
