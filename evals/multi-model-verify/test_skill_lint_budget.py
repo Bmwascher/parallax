@@ -235,18 +235,21 @@ class TestVendoringObligations:
         below carries the full reason).
         """
         mod = load_lint()
-        assert mod.BODY_TOKEN_BUDGET == 6250
+        assert mod.BODY_TOKEN_BUDGET == 5250
         assert mod.BODY_TOKEN_CEILING == 6500
         # The four boundaries the plan froze, stated as literals so the
-        # band edges are readable without evaluating arithmetic.
-        assert (6250, 6251, 6500, 6501) == (
+        # band edges are readable without evaluating arithmetic. The
+        # budget is NOT the ceiling minus a band: task 3 authorized the
+        # ceiling raise alone, so the budget stayed at 5250 and the band
+        # between them is wide on purpose.
+        assert (5250, 5251, 6500, 6501) == (
             mod.BODY_TOKEN_BUDGET,
             mod.BODY_TOKEN_BUDGET + 1,
             mod.BODY_TOKEN_CEILING,
             mod.BODY_TOKEN_CEILING + 1,
         )
         text = LINT_PATH.read_text(encoding="utf-8")
-        assert "BODY_TOKEN_BUDGET = 6250" in text
+        assert "BODY_TOKEN_BUDGET = 5250" in text
         assert "BODY_TOKEN_CEILING = 6500" in text
 
     def test_the_2026_08_31_item32_raise_is_recorded_and_justified(self):
@@ -268,9 +271,10 @@ class TestVendoringObligations:
         one.
         """
         mod = load_lint()
-        assert mod.BODY_TOKEN_BUDGET == 6250
+        assert mod.BODY_TOKEN_BUDGET == 5250
         assert mod.BODY_TOKEN_CEILING == 6500
         text = LINT_PATH.read_text(encoding="utf-8")
+        assert "ONLY THE CEILING WAS RAISED." in text
         assert "RAISED 2026-08-31 (backlog item 32, task 3)." in text
         assert (
             "own command (`t.split('---',2)[2]`, `len(body)//4`) after routing both\n"

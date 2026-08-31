@@ -112,9 +112,18 @@ BODY_MAX_LINES = 500
 # foreground undetected (round 6's finding), so the duplication is the
 # point, not slack to trim. The resume section was already condensed to
 # the minimum that still satisfies its own per-site literals before this
-# number was accepted. Budget set at the measured baseline rounded up;
-# ceiling keeps the same 250-token warning band as the prior raise.
-BODY_TOKEN_BUDGET = 6250
+# number was accepted.
+#
+# ONLY THE CEILING WAS RAISED. Task 3 authorized raising BODY_TOKEN_CEILING
+# and nothing else; the first attempt raised the BUDGET to 6250 as well,
+# which widened the early-warning band by a thousand tokens that no step
+# asked for and that no gate outcome depended on, since strict lint exits 0
+# on a warning. The diff debate rejected that and it is reverted here. The
+# budget stays where it was, so a body over it still warns - and this body
+# IS over it, deliberately: the measurement above is a figure bound to task
+# 3's commit, not a promise about the file's size today, and the warning is
+# the honest signal that the body has grown.
+BODY_TOKEN_BUDGET = 5250
 BODY_TOKEN_CEILING = 6500
 
 KNOWN_KEYS = {"name", "description", "license", "compatibility", "metadata", "allowed-tools"}
