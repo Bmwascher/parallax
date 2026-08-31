@@ -327,3 +327,40 @@ Same family as the recorded trap that a `git checkout` of a path writes the
 INDEX. The remedy used here: untrack, then ALSO gitignore, so the sweep
 cannot re-add it. The preflight still sees it, because that enumeration
 uses `--others` WITHOUT `--exclude-standard`.
+
+### A voided round makes the NEXT round unbindable, and nothing warns you
+
+Two rounds were lost back to back, and the second loss was caused by the
+first.
+
+Round 2 was void: the working-directory defect above put the client in the
+real repository, so its reply was discarded unread. Round 2b was then
+dispatched on the SAME resumed session, correctly, into the mirror, with
+its route verified.
+
+The binder refused it: *"a resumed slice may carry at most two user
+records, the client's instructions preamble and the brief, found 4."*
+
+That is the binder working exactly as designed. The prior-state bookmark
+still pointed at the end of round 1, and the session had since grown by TWO
+rounds - the void one and 2b - so the slice held four user records and the
+reply could not be attributed to one brief. Round 2b's reply was discarded
+unread as well.
+
+**The trap: discarding a round's REPLY does not discard its RECORDS.** The
+void round is still in the client's append-only rollout forever. Any later
+resume measured from a bookmark taken before it will span more than one
+round and be refused.
+
+**The rule that follows:** capture a fresh prior state IMMEDIATELY BEFORE
+every dispatch, not from the previous round's `nextState`, and especially
+after any discarded attempt. `nextState` is only valid if the very next
+thing that touches the session is the next dispatch.
+
+Reconstructing a bookmark after the fact would have bound round 2b, and I
+did not do it: a bookmark computed to make a specific reply pass is exactly
+the shape that lets an unattributable round read as clean. The round was
+paid for and thrown away instead.
+
+Two rounds is what this cost. Both losses were the session's, not the
+reviewer's.
