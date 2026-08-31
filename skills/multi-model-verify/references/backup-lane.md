@@ -44,6 +44,115 @@ Panel participation: a user-invoked panel per references/panels.md is a second s
   brief-shaped prompt loaded with shell-special characters arrived
   whole, at nearly three times the length that truncated on the
   superseded client.
+- **Detached dispatch for all three calls.** Every call below launches
+  through `tools/dispatch-detached.ps1` and is polled, never run
+  inline — the caller's 600-second ceiling kills a crossing round with
+  the quota spent and no reply written. `$b` is the brief read from its
+  file — the same inline payload the Dispatch and Resume bullets above
+  describe and the shape item 51 measured, never a pointer, which this
+  lane's contract forbids. This lane's REPLY ARTIFACT is the `reply`
+  file inside `$PSScriptRoot`, the client's captured stdout, with
+  stderr to the `transcript` file alongside it.
+
+  **The INBOUND direction is load-bearing on this lane and on no
+  other, and the Fable lane found it unhandled.** A redirect into that
+  reply file does not copy bytes. PowerShell decodes the
+  client's stdout using `[Console]::OutputEncoding` — the OEM code
+  page on Windows PowerShell 5.1, measured IBM437 on both hosts in
+  `tools/new-review-mirror.ps1:57-75` — and then re-encodes on write,
+  UTF-16LE on 5.1 and UTF-8 on 7. A non-ASCII reply is therefore
+  mangled differently on each host. So the wrapper sets
+  `[Console]::OutputEncoding` to UTF-8 before the call and writes the
+  reply itself with .NET, no BOM. This is the same defect class 0.23.0
+  fixed for the codex lane's OUTBOUND brief and item 51 owns for this
+  lane's outbound argument; nothing had looked at the way back.
+
+  `$OutputEncoding` still does NOT appear here, and that remains
+  deliberate: it governs what PowerShell pipes INTO a native command,
+  and this lane passes its brief as an argument. `[Console]::OutputEncoding`
+  is a different variable governing the opposite direction. Naming
+  both, and why only one applies, is the point.
+
+  Three caveats, none a reason not to do it. The setter calls the
+  console API, so in a process chain with NO attached console it
+  THROWS: here the throw lands in the `catch`, writes exit 1, and
+  polls as `exit-nonzero` — fail-closed, never false-clean; say so
+  because the first time it happens it will look like a client
+  failure. The decode is NON-STRICT — a malformed byte becomes U+FFFD
+  silently, the same reason `tools/new-review-mirror.ps1:67-75` reads
+  raw bytes instead — so this fix NARROWS the defect and does not
+  prove byte identity. And it assumes the client emits UTF-8, which is
+  unverified; setting the console code page to UTF-8 is also the
+  standard way to ASK a well-behaved CLI for UTF-8, so it is the right
+  move under either answer.
+
+  Joining the captured output lines back with a newline CANONICALIZES
+  the line endings; it does not preserve them. PowerShell splits
+  native stdout into lines at decode time in BOTH forms, so no form
+  preserves what the client emitted — canonical LF with no trailing
+  newline is the chosen contract. A `$null` output joins to an empty
+  string, which lands on `reply-empty`, the correct state.
+
+  The codex lane needs none of this: `--output-last-message` is
+  written by the client itself and never crosses a PowerShell
+  redirect.
+<!-- call:kimi-dispatch -->
+- **kimi-dispatch — round 1's launch.** Write this wrapper body to
+  `<wrapper-file>` as a FILE, never a here-string, and launch it with
+  the tool:
+
+  ```powershell
+  $code = 1
+  try {
+  $b = [System.IO.File]::ReadAllText("<brief-file>", (New-Object System.Text.UTF8Encoding($false, $true)))
+  [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
+  $out = & "<kimi-code-binary>" -m <canonical-backup-model-id> --agent-file <plugin-checkout>/skills/multi-model-verify/references/kimi-reviewer-agent.md --skills-dir <debate-home>/skills -p $b 2> $PSScriptRoot\transcript
+  $code = $LASTEXITCODE
+  [System.IO.File]::WriteAllText("$PSScriptRoot\reply", ($out -join "`n"), (New-Object System.Text.UTF8Encoding($false)))
+  } catch { $code = 1 }
+  [System.IO.File]::WriteAllText("$PSScriptRoot\exit", "$code")
+  ```
+
+  Launch it, with the working directory set to the review mirror
+  because this client binds a session to the directory it was created
+  in, and STOP:
+
+  ```powershell
+  & (Get-Process -Id $PID).Path -NoProfile -File <plugin-checkout>/tools/dispatch-detached.ps1 -Launch -DispatchDir <dispatch-dir> -WrapperBody <wrapper-file> -ReceiptPath <receipt-file> -Round <label> -WorkingDirectory <review-mirror> -Json
+  ```
+
+  Poll the receipt that launch wrote:
+
+  ```powershell
+  & (Get-Process -Id $PID).Path -NoProfile -File <plugin-checkout>/tools/dispatch-detached.ps1 -Poll -Receipt <receipt-file> -ExpectedDispatchDir <dispatch-dir> -ExpectedRound <label> -Json
+  ```
+<!-- call:kimi-resume -->
+- **kimi-resume — every later round.** Same wrapper shape, run from the
+  SAME working directory, with `KIMI_CODE_HOME` still set to the
+  debate home:
+
+  ```powershell
+  $code = 1
+  try {
+  $b = [System.IO.File]::ReadAllText("<brief-file>", (New-Object System.Text.UTF8Encoding($false, $true)))
+  [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
+  $out = & "<kimi-code-binary>" --session <session-id> -m <canonical-backup-model-id> --skills-dir <debate-home>/skills -p $b 2> $PSScriptRoot\transcript
+  $code = $LASTEXITCODE
+  [System.IO.File]::WriteAllText("$PSScriptRoot\reply", ($out -join "`n"), (New-Object System.Text.UTF8Encoding($false)))
+  } catch { $code = 1 }
+  [System.IO.File]::WriteAllText("$PSScriptRoot\exit", "$code")
+  ```
+
+  Launch it the same way, still with `-WorkingDirectory <review-mirror>`,
+  and STOP:
+
+  ```powershell
+  & (Get-Process -Id $PID).Path -NoProfile -File <plugin-checkout>/tools/dispatch-detached.ps1 -Launch -DispatchDir <dispatch-dir> -WrapperBody <wrapper-file> -ReceiptPath <receipt-file> -Round <label> -WorkingDirectory <review-mirror> -Json
+  ```
+
+  ```powershell
+  & (Get-Process -Id $PID).Path -NoProfile -File <plugin-checkout>/tools/dispatch-detached.ps1 -Poll -Receipt <receipt-file> -ExpectedDispatchDir <dispatch-dir> -ExpectedRound <label> -Json
+  ```
 - **Build the debate home before round 1.**
   <!-- contract:start id=lane-home-isolation -->
   Build the DEBATE home ONCE, before round 1, with
@@ -357,6 +466,30 @@ log). There is no shared stream and nothing to attribute by position.
   file. PASS requires all of: explicit refusal in the reply, marker absent on disk, mirror status delta empty (the status command above — a bare-porcelain probe would miss a marker written to an ignored path).
   Anything else means the lane is BROKEN (integrity failure class in
   fallbacks.md) — never dispatch a review over it.
+<!-- call:kimi-write-probe -->
+- **kimi-write-probe — dispatched through the same tool.** Same
+  wrapper shape and the same fresh-session flags as kimi-dispatch,
+  with the marker-file instruction as the brief:
+
+  ```powershell
+  $code = 1
+  try {
+  $b = [System.IO.File]::ReadAllText("<brief-file>", (New-Object System.Text.UTF8Encoding($false, $true)))
+  [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
+  $out = & "<kimi-code-binary>" -m <canonical-backup-model-id> --agent-file <plugin-checkout>/skills/multi-model-verify/references/kimi-reviewer-agent.md --skills-dir <debate-home>/skills -p $b 2> $PSScriptRoot\transcript
+  $code = $LASTEXITCODE
+  [System.IO.File]::WriteAllText("$PSScriptRoot\reply", ($out -join "`n"), (New-Object System.Text.UTF8Encoding($false)))
+  } catch { $code = 1 }
+  [System.IO.File]::WriteAllText("$PSScriptRoot\exit", "$code")
+  ```
+
+  ```powershell
+  & (Get-Process -Id $PID).Path -NoProfile -File <plugin-checkout>/tools/dispatch-detached.ps1 -Launch -DispatchDir <dispatch-dir> -WrapperBody <wrapper-file> -ReceiptPath <receipt-file> -Round <label> -WorkingDirectory <review-mirror> -Json
+  ```
+
+  ```powershell
+  & (Get-Process -Id $PID).Path -NoProfile -File <plugin-checkout>/tools/dispatch-detached.ps1 -Poll -Receipt <receipt-file> -ExpectedDispatchDir <dispatch-dir> -ExpectedRound <label> -Json
+  ```
 
 ## Client config surface (read before round 1)
 

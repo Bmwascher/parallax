@@ -8,6 +8,8 @@ discipline, and fallback wiring - all offline, zero CLI calls.
 import re
 from pathlib import Path
 
+import pytest
+
 REPO = Path(__file__).resolve().parents[2]
 REFS = REPO / "skills" / "multi-model-verify" / "references"
 BACKUP_LANE = REFS / "backup-lane.md"
@@ -116,8 +118,31 @@ def test_agent_empties_the_subagent_list():
 
 
 def test_backup_files_no_backslash_paths():
-    for p in (BACKUP_LANE, AGENT_MD):
-        assert "\\" not in _read(p), str(p)
+    """Backslash is banned OUTSIDE the three per-call wrapper sections Task
+    4 adds. Those wrapper bodies are native PowerShell script blocks that
+    write `$PSScriptRoot\\reply` and read `$PSScriptRoot\\transcript` -
+    exactly the form the per-call test below pins as the reply artifact -
+    so a blanket ban would be at war with that oracle. Everywhere else in
+    the file - the prose, the Dispatch/Resume bullets, the contract
+    regions - keeps the single-form (forward-slash) convention this test
+    has always enforced, and AGENT_MD is untouched by Task 4 so it keeps
+    the unconditional check.
+
+    The stripped region is bounded the SAME way the per-call test scopes
+    a section: from a `<!-- call:NAME -->` marker to the next such marker
+    or end of file. For the last call (kimi-write-probe, which has no
+    marker after it) that reaches end of file, so this cannot see a
+    backslash reintroduced in the sections written after it either - a
+    real but accepted narrowing, because nothing this task adds there
+    needs one and re-deriving a tighter bound would duplicate the split
+    logic in test_each_kimi_call_is_launched_through_the_tool for no
+    measured gain.
+    """
+    assert "\\" not in _read(AGENT_MD), str(AGENT_MD)
+    body = _read(BACKUP_LANE)
+    stripped = re.sub(
+        r"<!-- call:[\w-]+ -->.*?(?=<!-- call:|\Z)", "", body, flags=re.S)
+    assert "\\" not in stripped, str(BACKUP_LANE)
 
 
 def test_backup_lane_dispatch_and_resume_pins():
@@ -1986,3 +2011,47 @@ def test_mirror_identity_gate_region():
             "blind to its bytes would be blind in the middle of the "
             "feature."
             ) in _norm(BACKUP_LANE)
+
+
+# --- Task 4: all three Kimi lane calls dispatched through the tool --------
+
+KIMI_CALLS = ("kimi-dispatch", "kimi-resume", "kimi-write-probe")
+
+
+@pytest.mark.parametrize("call", KIMI_CALLS)
+def test_each_kimi_call_is_launched_through_the_tool(call):
+    """Per-call, not a global count.
+
+    Round 4's finding: `>= 3` proved three launch strings existed
+    somewhere in the file and bound none of them to a call site, so a
+    section with two launches and a write-probe with none still passed.
+    """
+    body = _read(BACKUP_LANE)
+    marker = "<!-- call:%s -->" % call
+    assert body.count(marker) == 1, "exactly one section per call"
+    section = body.split(marker, 1)[1].split("<!-- call:", 1)[0]
+    assert (
+        "& (Get-Process -Id $PID).Path -NoProfile -File"
+        " <plugin-checkout>/tools/dispatch-detached.ps1 -Launch"
+        " -DispatchDir <dispatch-dir> -WrapperBody <wrapper-file>"
+        " -ReceiptPath <receipt-file> -Round <label>"
+        " -WorkingDirectory <review-mirror> -Json") in section, (
+        "this call has no launch; a lane described as detached with no"
+        " launch command is what four rounds kept finding")
+    assert (
+        "& (Get-Process -Id $PID).Path -NoProfile -File"
+        " <plugin-checkout>/tools/dispatch-detached.ps1 -Poll"
+        " -Receipt <receipt-file>"
+        " -ExpectedDispatchDir <dispatch-dir> -ExpectedRound <label>"
+        " -Json") in section, (
+        "this call has no poll; a launch whose result is never read is"
+        " a round thrown away")
+    assert '& "<kimi-code-binary>"' in section, (
+        "this call has no client invocation")
+    assert "$PSScriptRoot\\reply" in section, (
+        "no reply artifact: every successful call would land in"
+        " no-reply and be discarded")
+
+
+def test_the_backup_lane_writes_no_launch_of_its_own():
+    assert "Start-Process" not in _read(BACKUP_LANE)
