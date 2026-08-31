@@ -9,7 +9,7 @@
 # TWO MODES. Every later task depends on these exact names.
 #
 #   Prepare: -DispatchDir <path> -WrapperBody <path> -ReceiptPath <path>
-#            -Round <label> [-Json]
+#            -Round <label> -WorkingDirectory <path> [-Json]
 #   Poll:    -Receipt <path> -ExpectedDispatchDir <path> -ExpectedRound <label>
 #            [-Json]
 #
@@ -35,7 +35,7 @@
 # no branch follows any of them differently. It is a decision, not an
 # omission. startTicks in the RECEIPT no longer describes a real process -
 # -Prepare starts none - and is not what -Poll's liveness check compares
-# against; see the pid/startticks-file note at step 6 below.
+# against; see the pid/startticks-file note at step 7 below.
 #
 # THE TOKEN IS NOT A SECRET. [System.Guid]::NewGuid() mints it, it also
 # sits in plain sight inside launch.committed, and a caller determined to
@@ -111,37 +111,57 @@
 # -Poll extends that set with 3 and narrows 2 as described above.
 #
 # -Prepare, in order, under $ErrorActionPreference = 'Stop':
-#   1. Resolve -ReceiptPath and -DispatchDir to full paths. BLOCK if the
+#   1. Resolve -WorkingDirectory to a full path and BLOCK, before anything
+#      else is checked or created, if it does not exist or is not a
+#      directory. -WORKINGDIRECTORY SURVIVED THE LAUNCHER'S DELETION: an
+#      earlier draft of the design spec called it launcher-only, this
+#      tool dropped it, and the FIRST round dispatched under that version
+#      ran with the REAL REPOSITORY as its working directory, where a
+#      root AGENTS.md sits on disk and the reviewer client auto-ingests
+#      it as instructions - the instruction back-channel the preflight
+#      exists to stop. The round was discarded UNREAD; its cost is
+#      recorded in
+#      docs/superpowers/specs/2026-08-31-tracked-background-dispatch-design.md
+#      section 1. It is what puts the client inside the REVIEW MIRROR, so
+#      it moved out of launcher plumbing, which nothing pinned, and into
+#      wrapper text, which every per-site test pins (see the wrapper's
+#      first-act Set-Location at step 4 below).
+#   2. Resolve -ReceiptPath and -DispatchDir to full paths. BLOCK if the
 #      receipt path is equal to, or inside, the dispatch directory, and
 #      BLOCK if the receipt path already exists. Both checks run before
 #      anything is created, so a refusal leaves no directory behind.
-#   2. Reserve the dispatch directory with New-Item -ItemType Directory
+#   3. Reserve the dispatch directory with New-Item -ItemType Directory
 #      and -ErrorAction Stop, and NO -Force: a taken directory must fail
 #      loudly rather than silently proceed with an unreliable path.
 #      Failure here is BLOCKED and nothing has started.
-#   3. Copy -WrapperBody into the directory as wrapper.ps1; create an
-#      empty stdin.empty beside it. NEITHER is run - -Prepare starts no
-#      process at all. The caller runs wrapper.ps1 itself, as a tracked
-#      background command named for its lane and round; see the skill
-#      and the design spec named above.
-#   4. If PARALLAX_DISPATCH_HOLD_BEFORE_PUBLISH is set (to a path), create
-#      "<value>.started" once launch.committed (step 5) has been written,
+#   4. Copy -WrapperBody into the directory as wrapper.ps1; create an
+#      empty stdin.empty beside it; write the resolved -WorkingDirectory
+#      to a `cwd` file beside them, UTF-8 without a BOM, so it is present
+#      before the receipt is published. NONE of the three is run -
+#      -Prepare starts no process at all. The caller runs wrapper.ps1
+#      itself, as a tracked background command named for its lane and
+#      round; see the skill and the design spec named above. The
+#      wrapper's own first act, right after publishing its pid and
+#      startticks, reads this `cwd` file and Set-Location's to it -
+#      that is what actually anchors the client to the review mirror.
+#   5. If PARALLAX_DISPATCH_HOLD_BEFORE_PUBLISH is set (to a path), create
+#      "<value>.started" once launch.committed (step 6) has been written,
 #      then wait, bounded at sixty seconds, for "<value>.release" before
 #      writing the receipt. On timeout, fail through the same catch as
 #      any other failure. The deterministic barrier a
 #      fail-closed-before-publication test needs; without it, that test
 #      is the same millisecond race in a different costume. Unset, the
 #      seam does not exist.
-#   5. Mint the launch token and write launch.committed with it.
-#   6. Write the RECEIPT last of all, and only now, with create-new
+#   6. Mint the launch token and write launch.committed with it.
+#   7. Write the RECEIPT last of all, and only now, with create-new
 #      semantics (fails if the path was raced into existence since step
-#      1's check). Its path was already checked for freshness and for
-#      separation in step 1, so this can only fail on a race, and a race
+#      2's check). Its path was already checked for freshness and for
+#      separation in step 2, so this can only fail on a race, and a race
 #      here fails through the same catch as any other failure. The
 #      receipt's startTicks field is a fixed placeholder (0): -Prepare
 #      has no process to describe yet, and it is not what -Poll's
-#      liveness check reads - see step 6 of the -Poll order below.
-#   7. Steps 3 through 6 are wrapped in one catch that publishes no
+#      liveness check reads - see step 8 of the -Poll order below.
+#   8. Steps 4 through 7 are wrapped in one catch that publishes no
 #      receipt and exits 1 on any failure. The catch performs NO
 #      filesystem cleanup: a directory left behind is inert and
 #      inspectable, while a published receipt is not. That is
@@ -161,21 +181,27 @@
 #      receipt-not-expected. Still nothing is opened.
 #   3. dispatchDir has no launch.committed -> launch-unknown.
 #   4. launch.committed's content != the receipt's token -> launch-not-ours.
-#   5. No pid file -> not-started. The prepared wrapper was never run, or
+#   5. No `cwd` file -> not-started. A prepared round that cannot say
+#      where it must run is not runnable, and must never be run from
+#      wherever the caller happens to be - it must never fall back to the
+#      caller's own directory. Folded into the same state as a missing
+#      pid file, immediately below, because both mean the same thing to a
+#      caller: neither is a result.
+#   6. No pid file -> not-started. The prepared wrapper was never run, or
 #      it died before it could publish its own identity - this state
 #      deliberately does not distinguish the two, because both mean the
 #      same thing to a caller: neither is a result. The brief window
 #      where a live wrapper has not yet written its pid also lands here,
 #      which is conservative in the correct direction: a live round reads
 #      as not-started rather than as finished.
-#   6. pid unreadable or not an integer -> pid-unreadable. Same for the
+#   7. pid unreadable or not an integer -> pid-unreadable. Same for the
 #      startticks FILE the wrapper writes beside it (missing, unreadable,
 #      or not an integer): pid and startticks are a pair the wrapper
 #      self-publishes as its first act (see the header of each wrapper
 #      body), and either half failing to read is the same "cannot confirm
 #      identity" outcome, folded together rather than adding a
 #      fourteenth state.
-#   7. Liveness, computed exactly the way tools/kimi-lane-lock.ps1:219-236
+#   8. Liveness, computed exactly the way tools/kimi-lane-lock.ps1:219-236
 #      computes Get-Liveness, comparing the live process's own StartTime
 #      against the startticks FILE (not the receipt's startTicks, which
 #      -Prepare never populated with a real value): no such process ->
@@ -184,9 +210,9 @@
 #      differ from the startticks file's (the pid was recycled) -> DEAD,
 #      continue; ticks match -> running, stop, and NOTHING ELSE IS READ -
 #      a reply being written is not a reply.
-#   8. No exit file -> no-exit-file. Unreadable or not a plain integer ->
+#   9. No exit file -> no-exit-file. Unreadable or not a plain integer ->
 #      exit-unreadable. Non-zero -> exit-nonzero.
-#   9. Zero and no reply file -> no-reply. Zero and reply is empty ->
+#  10. Zero and no reply file -> no-reply. Zero and reply is empty ->
 #      reply-empty. Zero and reply has content -> reply-present.
 #
 # ONE ENV-GATED TEST SEAM, BUILDER CONTRACT rather than test scaffolding,
@@ -194,12 +220,12 @@
 # reachable by any parent process that sets the variable, no shipped
 # caller sets it, and it can only make an invocation FAIL or answer MORE
 # CONSERVATIVELY - never turn a failing prepare into a successful one.
-#   PARALLAX_DISPATCH_HOLD_BEFORE_PUBLISH - see step 4 above.
+#   PARALLAX_DISPATCH_HOLD_BEFORE_PUBLISH - see step 5 above.
 #
 # -Poll KEEPS its own env-gated seam from the same family, unaffected by
 # this change:
 #   PARALLAX_DISPATCH_POLL_STARTTIME_FAULT - forces the live-process
-#     start-time read in step 7 above to throw AFTER the pid lookup has
+#     start-time read in step 8 above to throw AFTER the pid lookup has
 #     already succeeded, so a test can reach pid-unreadable from a
 #     genuinely alive pid without depending on another user's process.
 #     Its only reachable effect is to turn what would have been "running"
@@ -223,6 +249,7 @@ param(
     [string]$WrapperBody,
     [string]$ReceiptPath,
     [string]$Round,
+    [string]$WorkingDirectory,
 
     [switch]$Poll,
     [string]$Receipt,
@@ -467,6 +494,11 @@ if ($Poll) {
         Emit-PollResult -State "launch-not-ours" -RoundLabel $rec.Round
     }
 
+    $cwdPath = Join-Path $rec.DispatchDir "cwd"
+    if (-not (Test-Path -LiteralPath $cwdPath -PathType Leaf)) {
+        Emit-PollResult -State "not-started" -RoundLabel $rec.Round
+    }
+
     $pidPath = Join-Path $rec.DispatchDir "pid"
     if (-not (Test-Path -LiteralPath $pidPath -PathType Leaf)) {
         Emit-PollResult -State "not-started" -RoundLabel $rec.Round
@@ -519,17 +551,36 @@ if ($Poll) {
 # -Prepare
 # ---------------------------------------------------------------------
 if ([string]::IsNullOrWhiteSpace($DispatchDir) -or [string]::IsNullOrWhiteSpace($WrapperBody) -or
-    [string]::IsNullOrWhiteSpace($ReceiptPath) -or [string]::IsNullOrWhiteSpace($Round)) {
-    Write-Output "ERROR: -Prepare requires -DispatchDir, -WrapperBody, -ReceiptPath and -Round"
+    [string]::IsNullOrWhiteSpace($ReceiptPath) -or [string]::IsNullOrWhiteSpace($Round) -or
+    [string]::IsNullOrWhiteSpace($WorkingDirectory)) {
+    Write-Output "ERROR: -Prepare requires -DispatchDir, -WrapperBody, -ReceiptPath, -Round and -WorkingDirectory"
     exit 2
 }
 
 try {
     $dispatchFull = Resolve-UnresolvedPath $DispatchDir
     $receiptFull = Resolve-UnresolvedPath $ReceiptPath
+    $workingDirFull = Resolve-UnresolvedPath $WorkingDirectory
 } catch {
     Write-Output ("ERROR: could not resolve the prepare paths: " + $_.Exception.Message)
     exit 2
+}
+
+# Step 0a: -WorkingDirectory survived the launcher's deletion. It is what
+# puts the reviewer client inside the REVIEW MIRROR. An earlier draft of
+# the design spec called it launcher-only and this tool dropped it; the
+# FIRST round dispatched under that version ran with the REAL REPOSITORY
+# as its working directory, where a root AGENTS.md sits on disk and the
+# reviewer client auto-ingests it as instructions - the instruction
+# back-channel the preflight exists to stop. The round was discarded
+# UNREAD; its cost is recorded in
+# docs/superpowers/specs/2026-08-31-tracked-background-dispatch-design.md
+# section 1. Checked and BLOCKED here, before the dispatch directory is
+# reserved: a round that cannot say where it must run is not runnable.
+if (-not (Test-Path -LiteralPath $workingDirFull -PathType Container)) {
+    Write-Output ("BLOCKED: -WorkingDirectory does not exist or is not a directory (" +
+        $workingDirFull + ")")
+    exit 1
 }
 
 # Step 1: separation and freshness, before anything is created.
@@ -566,6 +617,14 @@ try {
     $wrapperDest = Join-Path $d "wrapper.ps1"
     Copy-Item -LiteralPath $WrapperBody -Destination $wrapperDest -ErrorAction Stop
     New-Item -ItemType File -Path (Join-Path $d "stdin.empty") -ErrorAction Stop | Out-Null
+
+    # Write the resolved working directory in the same step that installs
+    # the wrapper, so it is present before the receipt is published (see
+    # the header). UTF-8 without a BOM, matching the wrapper's own read
+    # (New-Object System.Text.UTF8Encoding($false, $true)) as its second
+    # act, right after publishing its identity.
+    [System.IO.File]::WriteAllText((Join-Path $d "cwd"), $workingDirFull,
+        (New-Object System.Text.UTF8Encoding($false)))
 
     $token = [System.Guid]::NewGuid().ToString()
     Set-Content -LiteralPath (Join-Path $d "launch.committed") -Value $token -NoNewline -Encoding Ascii
