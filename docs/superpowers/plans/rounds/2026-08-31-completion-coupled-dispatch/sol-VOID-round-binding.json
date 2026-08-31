@@ -1,0 +1,1 @@
+{"status":"failed","reason":"a resumed slice carries a user record in front of the brief that neither repeats the client\u0027s own preamble from this session nor reads as a refreshed one: it carries an environment field that does not match this session\u0027s own preamble: \u0027cwd\u0027"}
