@@ -31,7 +31,9 @@
 - **The resume-after-a-kill recovery is NOT blessed.** Its soundness is unmeasured.
 - **These pins must stay green** (`test_multi_model_verify.py:609-650`): five exact strings at `>= 2` across `SKILL.md`; `test_resume_pipes_the_brief_on_stdin` matching `$brief | codex exec ... resume <SESSION_ID> -` with `[^\n]*`; and the raw pin forbidding a three-space-indented `& {`.
 - **`test_backup_lane.py:47-50` is a whitespace-NORMALIZED read.** Pins on it prove neither wrapping nor byte identity.
-- **THREE facts here are NOT repo-verifiable** and are cited as harness tool contract: each tool call gets a fresh shell; the Agent tool runs subagents in the background; and the harness SUBSTITUTES `${CLAUDE_PLUGIN_ROOT}` in plugin skill body text before the model sees it. The third was measured 2026-08-31 on Claude Code 2.1.251 - see Task 1 step 0 - and is stated here because a later client could change it.
+- **THREE facts here are NOT repo-verifiable** and are cited as harness tool contract: each tool call gets a fresh shell; the Agent tool runs subagents in the background; and the harness SUBSTITUTES `${CLAUDE_PLUGIN_ROOT}` in plugin SKILL BODY text before the model sees it. The third was measured 2026-08-31 on Claude Code 2.1.251 - see Task 1 step 0 - and is stated here because a later client could change it.
+
+  **That fact covers SKILL.md and nothing else, so this plan uses TWO forms and says why.** The Fable lane found the gap: a references file is not skill body, it is read raw with the Read tool, and three of the five detached calls live in `references/backup-lane.md`. Nothing measured says the token is substituted there, and an unsubstituted `${NAME}` pasted into PowerShell expands to EMPTY - the drive-root failure this constraint exists to name, on three of the five commands. So `SKILL.md` carries `${CLAUDE_PLUGIN_ROOT}`, where substitution is measured, and `references/backup-lane.md` carries `<plugin-checkout>`, which is ALREADY that file's own pinned convention for a plugin path (`skills/multi-model-verify/references/backup-lane.md:25`, pinned at `evals/multi-model-verify/test_backup_lane.py:139-142`). Extending the measurement to references files would need a fourth harness fact; the placeholder needs none, which is why it wins.
 - **Dispatch every round and gate DETACHED**, named with lane and round (`Sol R1 debate round`) or, with no lane, its kind (`Gate: pytest 5.1`).
 
 ---
@@ -43,6 +45,7 @@ This is the whole point of revision 5. The four steps become one transaction in 
 **Files:**
 - Create: `tools/dispatch-detached.ps1`
 - Create: `evals/multi-model-verify/test_dispatch_detached.py`
+- Create: `docs/superpowers/plans/rounds/2026-08-30-item32-detached-dispatch/wrapper-probe.md` - step 0 writes its `harness` line; Task 8 adds the host sections later
 
 **Interfaces:**
 - Consumes: nothing.
@@ -197,7 +200,10 @@ Insert AFTER the sentence ending `is spent for nothing.` and BEFORE `Measured re
 ```
   <!-- contract:start id=detached-dispatch-tool -->
   The launch is ONE TRANSACTION and it lives in ONE PLACE:
-  `${CLAUDE_PLUGIN_ROOT}/tools/dispatch-detached.ps1`. It reserves a
+  `<plugin-root>/tools/dispatch-detached.ps1`, written
+  `${CLAUDE_PLUGIN_ROOT}` in SKILL.md, where the harness substitutes it,
+  and `<plugin-checkout>` in backup-lane.md, which is a references file
+  the session reads raw and where nothing substitutes anything. It reserves a
   directory, installs the wrapper, starts the process, records the pid
   and its start ticks, writes the internal launch-commit marker, and
   publishes the EXTERNAL RECEIPT last of all; a failure at any point
@@ -562,7 +568,7 @@ def test_each_kimi_call_is_launched_through_the_tool(call):
     section = body.split(marker, 1)[1].split("<!-- call:", 1)[0]
     assert (
         "& (Get-Process -Id $PID).Path -NoProfile -File"
-        " ${CLAUDE_PLUGIN_ROOT}/tools/dispatch-detached.ps1 -Launch"
+        " <plugin-checkout>/tools/dispatch-detached.ps1 -Launch"
         " -DispatchDir <dispatch-dir> -WrapperBody <wrapper-file>"
         " -ReceiptPath <receipt-file> -Round <label>"
         " -WorkingDirectory <review-mirror> -Json") in section, (
@@ -570,7 +576,7 @@ def test_each_kimi_call_is_launched_through_the_tool(call):
         " launch command is what four rounds kept finding")
     assert (
         "& (Get-Process -Id $PID).Path -NoProfile -File"
-        " ${CLAUDE_PLUGIN_ROOT}/tools/dispatch-detached.ps1 -Poll"
+        " <plugin-checkout>/tools/dispatch-detached.ps1 -Poll"
         " -Receipt <receipt-file>"
         " -ExpectedDispatchDir <dispatch-dir> -ExpectedRound <label>"
         " -Json") in section, (
@@ -608,7 +614,9 @@ $code = $LASTEXITCODE
 [System.IO.File]::WriteAllText("$PSScriptRoot\exit", "$code")
 ```
 
-and the anchored `-Launch` call with `-WorkingDirectory <review-mirror>`, because this client binds a session to the directory it was created in, and the matching `-Poll` call naming the receipt that launch wrote.
+and the `-Launch` call with `-WorkingDirectory <review-mirror>`, because this client binds a session to the directory it was created in, and the matching `-Poll` call naming the receipt that launch wrote.
+
+**Both call literals in THIS file use `<plugin-checkout>/tools/dispatch-detached.ps1`, not `${CLAUDE_PLUGIN_ROOT}`.** See Global Constraints: the harness substitution was measured for skill BODY text, and this is a references file the session reads raw. `<plugin-checkout>` is already this file's convention at `backup-lane.md:25`. Using the token here would paste an empty path into PowerShell.
 
 State once, above the three: `$b` is the brief read from its file — the same inline payload the bullets describe and the shape item 51 measured, never a pointer, which this lane's contract forbids. This lane's REPLY ARTIFACT is `$PSScriptRoot\reply`, the client's captured stdout, with stderr to `transcript`.
 
@@ -622,7 +630,7 @@ Three caveats belong with it, all from the Fable lane's judgement on this exact 
 - The decode is NON-STRICT. A malformed byte becomes U+FFFD silently - `tools/new-review-mirror.ps1:67-75` states exactly this as its own reason for reading raw bytes instead. This fix NARROWS the defect and does not prove byte identity. Do not let a later document claim it does.
 - It assumes the client emits UTF-8, which is unverified. Setting the console code page to UTF-8 is also the standard way to ASK a well-behaved CLI for UTF-8, so it is the right move under either answer.
 
-`-join "`n"` discards nothing the redirect preserved: PowerShell splits native stdout into lines at decode time in BOTH forms, and the redirect then rejoins with CRLF and re-encodes. A `$null` output joins to an empty string, which lands on `reply-empty`, the correct state.
+`-join "`n"` CANONICALIZES the line endings; it does not preserve them, and round 20 refused the earlier wording that said it discarded nothing. PowerShell splits native stdout into lines at decode time in BOTH forms, so no form preserves what the client emitted; the redirect rejoins with CRLF and re-encodes, this joins with LF and appends no terminal newline. Canonical LF with no trailing newline is the chosen contract, so Task 7's payload is written without a terminal newline and the byte comparison expects none. A `$null` output joins to an empty string, which lands on `reply-empty`, the correct state.
 
 The codex lane needs none of this: `--output-last-message` is written by the client itself and never crosses a PowerShell redirect.
 
@@ -773,11 +781,13 @@ Round 19's finding, from both lanes: the previous version said "stub exits 0 wri
 **Kimi body:** the stub EMITS its reply on stdout and writes no file.
 
 - Exit 0 emitting a payload that contains at least one em dash, one non-Latin character and one astral-plane character: expect `exit` = `0`, and assert the reply file's BYTES equal the payload's UTF-8 encoding EXACTLY, with NO BOM. On both hosts. **This is the oracle for the `[Console]::OutputEncoding` line, which both lanes found stated in prose with nothing testing it** - restoring the defective `> $PSScriptRoot\reply` satisfied every other assertion in Tasks 4 and 7. Prove it can fail: delete that one line, confirm the byte comparison goes red on Windows PowerShell 5.1, and restore it.
+**The kimi stub MUST be a native executable, not a `.ps1`.** `&` on a script runs it in-process, so its output never crosses the console decode boundary and the byte comparison passes even with the `[Console]::OutputEncoding` line deleted - the red demonstration would simply refuse to appear. The Fable lane raised it; the demonstration would catch it operationally, and the implementer deserves the reason rather than the surprise.
+
 - Exit 3 emitting nothing: expect `3`.
 - Exit 0 emitting nothing: expect a reply file that is EMPTY, which polls as `reply-empty` and not as a missing artifact.
 - A pre-client throw: expect `exit` EXISTS with a non-zero code.
 
-Record the byte comparison's outcome into Task 8's probe record as `kimi_reply: bytes_match=<..> bom_present=<..>` per host.
+This task writes NOTHING into the probe record. Round 20's finding, from both lanes: the previous version had Task 7 writing `kimi_reply` rows into host sections that Task 8 creates two tasks later, and Task 7's commit staged no record. The byte comparison lives here as a TEST, which is where its value is; Task 8 records the same measurement when it writes the host sections.
 
 - [ ] **Step 5: TASK-LOCAL ORACLE**
 
@@ -808,6 +818,8 @@ Expected: the call returns in seconds, the process is alive in the next call, th
 
 - [ ] **Step 2: Measure the states the unit tests plant**
 
+Also record `kimi_reply` for this host by re-running Task 7's byte-comparison case and reading its result; that row belongs to this task because this task owns the host sections.
+
 Against a stub that writes the reply then sleeps thirty seconds. Kill the tree inside that window and poll: expect `no-exit-file`. Reserve the same directory twice, naming a fresh receipt path the second time: expect the second to BLOCK and expect that receipt path NOT to exist afterwards, then poll it and expect `no-receipt`. Let the stub exit zero with an empty reply: expect `reply-empty`.
 
 - [ ] **Step 3: Measure the brief's encoding through a real round**
@@ -832,7 +844,7 @@ encoding: binder=<accepted|refused> prompt_sha256_matches=<true|false> prompt_by
 kimi_reply: bytes_match=<true|false> bom_present=<true|false>
 ```
 
-The `harness` line is host-independent and appears once, above both host sections. It holds Task 1 step 0's re-taken measurement, which is the only place in this plan where a step in one task writes into a file another task creates - so Task 8's **Files** line says Modify for the record, not Create, and Task 1 step 0 creates it.
+The `harness` line is host-independent and appears once, above both host sections. It holds Task 1 step 0's re-taken measurement. That is the ONLY cross-task write into this file: Task 1 step 0 creates the record with that one line and stages it, Task 8 adds both host sections, and no other task writes here. Task 8's **Files** line therefore says Modify, not Create. Round 20 found the previous version claiming exactly this while Task 7 also wrote into it, in an order that could not work.
 
 Fill them from the measurements above. If any value comes out the other way, WRITE IT AS MEASURED and stop: a probe that records what it hoped for is worth less than no probe, and this task exists because nothing before it tested the plan's central promise end to end.
 
@@ -922,8 +934,10 @@ def section(head):
     return ' '.join(t[i:(len(t) if j < 0 else j)].split())
 
 orph = section('### The orphan half')
-assert "counts five exact strings" in ' '.join(t.split()), (
-    "the corrected count is absent; deleting the sentence is not a fix")
+assert "counts five exact strings" in con, (
+    "the corrected count is absent from the constraints section;"
+    " deleting the sentence is not a fix, and a history paragraph"
+    " elsewhere in the file is not the constraint")
 
 for clause in ("the pid is on disk for every committed launch",
                "an interrupted launch leaves no receipt",
@@ -943,7 +957,7 @@ print("spec sections reconciled")
 PY
 ```
 
-Expected: `spec sections reconciled` and exit 0. The orphan section must carry all three clauses verbatim; the state section must name the six states in the executable order, positions strictly increasing, and must not claim liveness is first. Any other arrangement raises and names what it found.
+Expected: `spec sections reconciled` and exit 0. The orphan section must carry all FOUR clauses verbatim - round 20 caught this sentence saying three while the oracle above it required four; the state section must name the six states in the executable order, positions strictly increasing, and must not claim liveness is first. Any other arrangement raises and names what it found.
 
 Expected of the token loop above: every one of the six at least 1, AND exit 0. Round 14's finding: three tokens let a spec omit `-ExpectedRound` entirely and still pass, and none of them required the receipt-last consequences to appear at all. The `|| exit 1` is the whole oracle. Round 12's finding on the SECOND attempt at this same check: a loop's status is its last iteration's, so a missing first token printed `0` and the block still succeeded, which is the defect this step exists to catch, reproduced inside its own fix. Round 10's finding: every oracle in this step searched only for what should be gone, so a section deleted and never rewritten passed it. Round 11's finding on the first attempt at a fix: `grep -c "A\|B\|C"` counts LINES matching any alternative, so three lines carrying only the first token satisfied "at least three" while the other two were absent, and it was not scoped to the section at all.
 - `-Token` and `-DispatchDir <dispatch-dir> -Json` are stale because the poll now names a RECEIPT.
@@ -964,13 +978,13 @@ Expected: all five green, zero FAILED and zero ERROR. Do not pipe through `tail`
 
 - [ ] **Step 6: Update CLAUDE.md**
 
-"Long-running commands" gains: a pointer to `${CLAUDE_PLUGIN_ROOT}/tools/dispatch-detached.ps1` as where the launch now lives; the four region names; and the background-task naming rule for gates and mirrors, which have no lane.
+"Long-running commands" gains: a pointer to `tools/dispatch-detached.ps1` as where the launch now lives, written as a plain repo-relative path because `CLAUDE.md` is neither skill body nor a lane's command literal - the Fable lane caught the token being carried into a third document the measurement never covered; the four region names; and the background-task naming rule for gates and mirrors, which have no lane.
 
 - [ ] **Step 7: Close items 32 and 33**
 
 Both headings `OPEN` to `DONE` with the version. Remove item 32's ranking entry and renumber below it. Rebuild the `**Open.**` and `**Done.**` lists by reading the headings.
 
-State in item 32 what was NOT done: item 51 still owns the argv escaping repair; item 31 is untouched; **item 58 is untouched except that this cycle's ONE new tool call is anchored - resolved by the harness, measured on Claude Code 2.1.251 per Task 1 step 0, not merely named - while the three existing ones at `SKILL.md:94`, `:121` and `:228` are still bare relative paths** — record that asymmetry rather than leaving it to be discovered; the resume-after-a-kill recovery is still unmeasured; and the interrupted launch that leaves NO RECEIPT, possibly with a live untracked child and no pid on disk, is narrowed, not eliminated.
+State in item 32 what was NOT done: item 51 still owns the argv escaping repair; item 31 is untouched; **item 58 is untouched except that this cycle's new tool calls name the plugin root instead of a bare relative path. The TWO in `SKILL.md` are resolved by the harness, measured on Claude Code 2.1.251 per Task 1 step 0. The THREE in `backup-lane.md` are a `<plugin-checkout>` placeholder the session still fills in, so they are NAMED and not resolved - honestly weaker, and recorded that way rather than folded into one claim. The three existing calls at `SKILL.md:94`, `:121` and `:228` are still bare relative paths** — record that asymmetry rather than leaving it to be discovered; the resume-after-a-kill recovery is still unmeasured; and the interrupted launch that leaves NO RECEIPT, possibly with a live untracked child and no pid on disk, is narrowed, not eliminated.
 
 - [ ] **Step 8: Commit**
 
