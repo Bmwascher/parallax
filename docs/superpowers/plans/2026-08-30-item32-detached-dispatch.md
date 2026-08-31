@@ -17,8 +17,8 @@
 - **Change the tests FIRST, then the skill.** The transport commands are live-verified contracts locked by `evals/multi-model-verify/test_multi_model_verify.py`; the backup lane's by `test_backup_lane.py`.
 - **Both PowerShell hosts.** A green suite on one host proves one interpreter. Set `$env:PARALLAX_PS_HOST` to reach the other.
 - **A killed, hung, or unfinished round must never be readable as a completed one.** FIVE states must stay distinguishable; see the `detached-dispatch-states` region in Task 3. Round 1 found a path that produced exactly this failure, so this constraint is the plan's primary output, not a caveat on it.
-- **Every control path is round-numbered and must not exist before the launch.** Wrapper, pid file, exit file, reply file, transcript file. The launch refuses if any is already present. `SKILL.md:220-226` already requires this of the reply and transcript only, which is what made the false-completion path reachable.
-- **Item 51 is NOT fixed here**, and the Kimi lane is therefore NOT detached here. See Task 5, which is a deferral with its reason, not an omission.
+- **Control paths are round-numbered, and INPUT and OUTPUT paths have different rules.** The two INPUTS - `<wrapper-file>` and `<empty-file>` - are created fresh by this round with create-new semantics, so creation fails if the path is taken. The six OUTPUTS - `<pid-file>`, `<exit-file>`, `<reply-file>`, `<transcript-file>`, `<launch-out-file>`, `<launch-err-file>` - must NOT exist, and the launch block refuses before starting anything if one does. Round 2 caught the first draft asserting a single rule for both, which is unsatisfiable: Task 4 has to write the wrapper before it can launch it. `SKILL.md:220-226` requires freshness of the reply and transcript only, which is what made the false-completion path reachable.
+- **Item 51 is NOT fixed here, but the Kimi lane IS detached here.** Round 2 refuted the deferral: item 51's probe record states it measured "a brief file is read and passed inline as `-p <brief>`, exactly the shape `references/backup-lane.md` documents", so reading the brief from a file into a variable IS the documented shape and a wrapper does not change the argv path. Item 51 keeps the escaping repair - the `CommandLineToArgvW` form at `probe-record.md:112-137`. Task 5 detaches all THREE Kimi calls with their native invocation unchanged.
 - **Item 31 is NOT fixed here.** `tools/check-drift.ps1:1060` and `commands/doctor.md:70` are not touched.
 - **The resume-after-a-kill recovery is NOT blessed.** Its soundness is unmeasured. This work stops the kill; it says nothing about recovering from one.
 - **These pins must stay green** (`evals/multi-model-verify/test_multi_model_verify.py:609-650`): five exact strings counted at `>= 2` across `SKILL.md`; `test_resume_pipes_the_brief_on_stdin` matching `$brief | codex exec ... resume <SESSION_ID> -` with `[^\n]*`, so that span stays on ONE physical line; and the raw pin forbidding a three-space-indented `& {`.
@@ -180,6 +180,26 @@ Add these to the class that already holds `test_the_brief_is_read_and_piped_as_u
             "-Wait restores the blocking form this item exists to remove"
         )
 
+    def test_the_launch_refuses_a_pre_existing_output_path(self):
+        """The staleness rule needs an implementation, not just a rule.
+
+        Round 2's finding: the first revision stated the rule, pinned
+        the rule, and wrote a probe for the rule, but the launch block
+        did not implement it - it went straight to Start-Process. A
+        contract nothing executes is the false-clean shape this item
+        exists to remove, one level up.
+        """
+        text = read(SKILL_MD)
+        assert text.count(
+            'foreach ($p in @("<pid-file>", "<exit-file>", "<reply-file>",'
+            ' "<transcript-file>", "<launch-out-file>",'
+            ' "<launch-err-file>")) { if (Test-Path -LiteralPath $p)'
+            ' { throw "output path already exists: $p" } }') >= 2, (
+            "every dispatch must refuse before launching when any output"
+            " path is already present; a stale exit file plus a fresh"
+            " reply is the documented false-completion path"
+        )
+
     def test_the_dispatch_is_not_carried_by_a_here_string(self):
         """A here-string terminator must sit at column 0.
 
@@ -261,19 +281,23 @@ Region two:
 
 ```
   <!-- contract:start id=detached-dispatch-states -->
-  A detached round is read from files, and FIVE states must stay apart.
-  Still running. Exited with NO exit file, which means the wrapper died
-  before it could report and is never the same as still running. Exited
-  with an exit file that is stale, missing or malformed. Exited with a
-  fresh valid exit file carrying a non-zero code. Exited with a fresh
-  valid exit file carrying zero AND a reply file this round's call
-  freshly wrote. ONLY THE LAST is a review result; the other four are
-  transport failures per fallbacks.md. Staleness is what makes this
-  real: every control path - wrapper, pid, exit, reply, transcript - is
-  round-numbered and MUST NOT exist before the launch, and the launch
-  refuses if one does. Without that, an exit file left by an earlier
-  round plus a reply the client wrote before the wrapper was killed
-  reads as the last state and accepts a round nobody finished.
+  A detached round is read from files, and SIX states must stay apart.
+  One, still running. Two, exited with NO exit file, which means the
+  wrapper died before it could report and is never the same as still
+  running. Three, exited with an exit file that is not a plain integer.
+  Four, exited with an exit file carrying a non-zero code. Five, exited
+  with an exit file carrying zero but NO reply file. Six, exited with an
+  exit file carrying zero AND a reply file. ONLY THE SIXTH is a review
+  result; the other five are transport failures per fallbacks.md, and
+  the fifth is the one an operator is most likely to wave through.
+  Freshness is what lets those states mean anything, and it is enforced
+  BEFORE the launch rather than inferred after it: the two INPUT paths,
+  the wrapper and the empty stdin file, are created with create-new
+  semantics, and the six OUTPUT paths - pid, exit, reply, transcript,
+  launch stdout and launch stderr - must not exist, with the launch
+  refusing if one does. Without that refusal an exit file left by an
+  earlier round, plus a reply the client wrote before the wrapper was
+  killed, reads as the sixth state and accepts a round nobody finished.
   <!-- contract:end -->
 ```
 
@@ -290,11 +314,26 @@ Region three:
   Neither answer is a review result. To abandon, fell the whole tree
   with `taskkill /PID <id> /T /F`: killing the launcher alone leaves the
   client orphaned, which is what the 2026-08-11 report of this item
-  observed at zero CPU growth. Name the backgrounded call for the person
-  watching it - the reviewer LANE and the ROUND lead the description, as
-  in `Sol R1 debate round`, and work with no lane leads with its kind,
-  as in `Gate: pytest 5.1`. Nothing enforces that name; it is convention
-  and this rule is its only carrier.
+  observed at zero CPU growth.
+  <!-- contract:end -->
+```
+
+Region four. It is SEPARATE from region three deliberately: round 2's
+finding is that an unenforced convention sharing a pin with completion
+safety makes one pin cover two contract strengths, so a naming edit would
+reopen a safety pin.
+
+```
+  <!-- contract:start id=background-task-naming -->
+  Name the backgrounded call for the person watching it. The reviewer
+  LANE and the ROUND lead the description, as in `Sol R1 debate round`
+  or `Kimi R2 debate round`; work with no lane leads with its kind, as
+  in `Gate: pytest 5.1` or `Mirror build`. A cycle runs several lanes
+  across several rounds at once and a name omitting either cannot be
+  read at a glance. NOTHING ENFORCES THIS. It is a convention about what
+  a human sees, its pin proves only that the rule is written down, and
+  it is stated here rather than beside the completion states because it
+  carries none of their weight.
   <!-- contract:end -->
 ```
 
@@ -312,16 +351,21 @@ Add to `DECLARED_REGIONS` in `evals/multi-model-verify/test_contract_coverage.py
     # unfinished round can be mistaken for a clean one - Sol round 1
     # found exactly that path in the first draft, so this region is the
     # plan's primary output. OPERATION is what the human driving it
-    # does: bounded polls, the thirty-minute escalation, the whole-tree
-    # kill, and what the background task is called.
+    # does: bounded polls, the thirty-minute escalation, and the
+    # whole-tree kill. NAMING is separate from all three, and separate
+    # from OPERATION in particular, because it is the only one of the
+    # four that nothing enforces - Sol round 2 refused to let an
+    # unenforced convention share a pin with completion safety, since a
+    # naming edit would then reopen a safety pin.
     "detached-dispatch-mechanism",
     "detached-dispatch-states",
     "detached-dispatch-operation",
+    "background-task-naming",
 ```
 
 - [ ] **Step 3: Write one pin per region**
 
-Add three tests beside `test_dispatch_traps_are_documented_in_the_notes`, named `test_the_detached_dispatch_mechanism_is_pinned`, `test_the_detached_dispatch_states_are_pinned`, and `test_the_detached_dispatch_operation_is_pinned`. Each reads `" ".join(read(REFERENCES / "model-prompting-notes.md").split())` and asserts its region's full text as one normalized string literal, in the style of the existing pin at `test_multi_model_verify.py:970-997`.
+Add four tests beside `test_dispatch_traps_are_documented_in_the_notes`, named `test_the_detached_dispatch_mechanism_is_pinned`, `test_the_detached_dispatch_states_are_pinned`, `test_the_detached_dispatch_operation_is_pinned`, and `test_the_background_task_naming_rule_is_documented`. That last name says what it is: a documentation-presence pin, not behavioural enforcement. Give it a docstring saying so, so nobody later reads a green suite as evidence that any session named anything correctly. Each reads `" ".join(read(REFERENCES / "model-prompting-notes.md").split())` and asserts its region's full text as one normalized string literal, in the style of the existing pin at `test_multi_model_verify.py:970-997`.
 
 Write each assertion by copying the region text from Step 1 and normalizing its whitespace, not by retyping it.
 
@@ -351,7 +395,7 @@ git commit -m "state and pin the detached dispatch contract"
 
 **Interfaces:**
 - Consumes: `BODY_TOKEN_CEILING = 5900` from Task 1; the three contract regions from Task 3; the failing tests from Task 2.
-- Produces: the finished round-1 and resume steps. Task 8 measures them.
+- Produces: the finished round-1 and resume steps. Task 8 parses them, Task 9 measures them.
 
 - [ ] **Step 1: Rewrite the round-1 step**
 
@@ -395,13 +439,20 @@ Then the launch block and its lead:
 ```
 
 ```powershell
+foreach ($p in @("<pid-file>", "<exit-file>", "<reply-file>", "<transcript-file>", "<launch-out-file>", "<launch-err-file>")) { if (Test-Path -LiteralPath $p) { throw "output path already exists: $p" } }
+[System.IO.File]::WriteAllText("<empty-file>", "")
 $proc = Start-Process -FilePath (Get-Process -Id $PID).Path -ArgumentList @("-NoProfile", "-NonInteractive", "-File", "`"<wrapper-file>`"") -NoNewWindow -PassThru -RedirectStandardInput <empty-file> -RedirectStandardOutput <launch-out-file> -RedirectStandardError <launch-err-file>
 [System.IO.File]::WriteAllText("<pid-file>", "$($proc.Id)")
 ```
 
+The refusal loop is the first thing in the block because it must run before
+anything is started. `<empty-file>` is created here rather than assumed:
+`-RedirectStandardInput` needs a real file, and a missing one fails the
+launch in a way that looks like a client problem.
+
 Keep the existing sentence "Both encoding lines are load-bearing on Windows PowerShell 5.1 (references/model-prompting-notes.md)." and everything from the `verified-override-dispatch` contract marker onward exactly as it is.
 
-**Three details in that block are load-bearing and a "tidy" breaks them.** `$priorOutputEncoding` is captured OUTSIDE the `try`, or the `finally` restores a variable that was never assigned when the failure is early. `catch` and `finally` are ONE clause on ONE line: a `} finally {` written after an already-closed `catch` is a PowerShell parse error, and the wrapper would then die before codex ran - a new way to spend a round on nothing, created by the fix for the old one. The exit write is the last line, outside every block. Transcribe the block exactly, and let Task 8 Step 1 be what proves it parses.
+**Three details in that block are load-bearing and a "tidy" breaks them.** `$priorOutputEncoding` is captured OUTSIDE the `try`, or the `finally` restores a variable that was never assigned when the failure is early. `catch` and `finally` are ONE clause on ONE line: a `} finally {` written after an already-closed `catch` is a PowerShell parse error, and the wrapper would then die before codex ran - a new way to spend a round on nothing, created by the fix for the old one. The exit write is the last line, outside every block. Transcribe the block exactly, and let Task 8 be what proves it parses, before any quota is spent.
 
 - [ ] **Step 2: Rewrite the resume step the same way**
 
@@ -431,44 +482,149 @@ git commit -m "dispatch both codex rounds detached"
 
 ---
 
-### Task 5: Record why the Kimi lane is NOT detached in this cycle
+### Task 5: Detach the Kimi lane's three client calls
 
-**This task writes no mechanism. It writes a deferral and its reason.** The previous revision of this plan claimed to detach the backup lane and in fact only added a paragraph asserting it was detached. Sol round 1 caught that. The honest resolution is not to write the missing mechanism here, because it cannot be written without deciding item 51.
+**Round 2 refuted the deferral this task used to be.** Item 51's probe record
+states it measured "a brief file is read and passed inline as `-p <brief>`,
+exactly the shape `references/backup-lane.md` documents"
+(`docs/superpowers/plans/rounds/2026-08-22-item51-inline-brief-probe/probe-record.md:27-31`).
+Reading the brief from a file into a variable IS the documented shape, so
+moving the call into a wrapper changes how the wrapper is STARTED and leaves
+the wrapper-to-client argv path exactly as it is - including its known 5.1
+corruption, which stays item 51's to repair with the `CommandLineToArgvW`
+form at `probe-record.md:112-137`.
 
-**Why it cannot be done here.** `references/backup-lane.md:24-30` passes the brief INLINE, in the dispatch's own `-p "<the whole brief>"` payload, and `test_backup_lane.py:137-148` documents that form. A wrapper has to get those brief bytes into the client somehow, and every option changes the argument path that item 51 exists to fix: embedding the brief as wrapper source needs byte-safe generation for arbitrary text, and reading it into a variable inside the wrapper replaces the literal argument with a variable expansion, which is precisely the 5.1 splatting surface item 51 measured. Detaching this lane therefore requires item 51's decision, and item 51 is out of scope for this cycle by the user's own constraint.
-
-**There are THREE Kimi client calls, not two.** Round 1 found the third: the write-probe at `references/backup-lane.md:353-359` runs before round 1 of every backup-lane debate, in a fresh disposable session with the full debate configuration, and `references/panels.md:51-53` makes panels inherit it. It can cross the ceiling like any other call. Any future work on this lane covers all three.
+**There are THREE calls, not two.** Round 1 found the third: the write-probe
+at `references/backup-lane.md:353-359` runs before round 1 of every
+backup-lane debate in a fresh disposable session with the full debate
+configuration, and `references/panels.md:51-53` makes panels inherit it.
 
 **Files:**
-- Modify: `skills/multi-model-verify/references/backup-lane.md`
-- Modify: `docs/superpowers/plans/2026-07-27-0150-backlog.md` (item 51)
+- Modify: `skills/multi-model-verify/references/backup-lane.md:21-35` and `:353-359`
+- Modify: `evals/multi-model-verify/test_backup_lane.py`
 
 **Interfaces:**
-- Consumes: nothing.
-- Produces: a paragraph in `backup-lane.md` stating the lane is NOT detached, and a note on item 51 naming the three calls.
+- Consumes: the four contract regions from Task 3. The states, operation and naming regions are lane-agnostic and this lane cites them rather than restating them.
+- Produces: a wrapper-and-launch contract for the backup lane, and `test_the_backup_lane_is_detached`.
 
-- [ ] **Step 1: State the gap in backup-lane.md**
+- [ ] **Step 1: Write the failing test**
 
-Add after the Resume bullet, as ONE physical line:
+Add to `evals/multi-model-verify/test_backup_lane.py`. Note it uses the RAW
+reader, not `_norm`: round 1 established that `_norm` proves neither wrapping
+nor byte identity, and this pin needs the native line intact on one physical
+line.
 
+```python
+def test_the_backup_lane_is_detached():
+    """All three client calls run in a wrapper, launched and left.
+
+    The command's FLAGS and their order are unchanged, and the brief is
+    still inline in -p. Item 51's probe measured exactly this shape - a
+    brief read from a file and passed inline - so the wrapper changes
+    how the call is started and not how the brief reaches the client.
+    Item 51 keeps the argv escaping repair.
+    """
+    body = _read(REFERENCES / "backup-lane.md")
+    assert (
+        '& "<kimi-code-binary>" -m <canonical-backup-model-id>'
+        " --agent-file <plugin-checkout>/skills/multi-model-verify/"
+        "references/kimi-reviewer-agent.md --skills-dir"
+        " <debate-home>/skills -p $b > <transcript-file> 2>&1") in body, (
+        "the dispatch wrapper must carry the documented flags in the"
+        " documented order, with the brief inline in -p"
+    )
+    assert (
+        '& "<kimi-code-binary>" --session <session-id>'
+        " -m <canonical-backup-model-id> --skills-dir"
+        " <debate-home>/skills -p $b > <transcript-file> 2>&1") in body, (
+        "the resume wrapper must carry its own documented flags; a bare"
+        " resume rejects --agent-file"
+    )
+    assert "-WorkingDirectory <review-mirror>" in body, (
+        "this client binds a session to the directory it was created in,"
+        " so the launch sets that directory rather than trusting the"
+        " caller's"
+    )
+    assert "the write-probe runs in a wrapper too" in body, (
+        "the third client call is not exempt"
+    )
 ```
-- This lane is NOT detached, and its three client calls - dispatch, resume, and the write-probe below - can each be killed by the caller's 600-second ceiling with the round's quota spent. Backlog item 32 detached the codex lane and deliberately did not touch this one: every way of getting the inline `-p` brief into a wrapper changes the argument path that backlog item 51 exists to fix, so detaching this lane is part of item 51's work and not separable from it.
-```
 
-- [ ] **Step 2: Add the note to item 51**
+- [ ] **Step 2: Run it to verify it fails**
 
-In `docs/superpowers/plans/2026-07-27-0150-backlog.md`, under item 51, record that item 32's cycle established item 51 now also owns detaching this lane's three calls, and name them with their line references.
+Run: `python -m pytest evals/multi-model-verify/test_backup_lane.py -q -k detached`
+Expected: 1 FAILED.
 
-- [ ] **Step 3: Verify**
+- [ ] **Step 3: Add the wrapper and launch to backup-lane.md**
+
+Keep the two existing Dispatch and Resume bullets EXACTLY as they are. They
+document the client contract - the binary, the flags, their order, and that
+the brief is inline - and `test_backup_lane.py:137-148` reads them. Add
+below them:
+
+    Both calls, and the write-probe below, run inside a WRAPPER launched
+    with `Start-Process` and left running; the mechanism, the six completion
+    states and the polling rules are lane-agnostic and live in
+    model-prompting-notes.md's detached-dispatch regions. `$b` below is the
+    brief read from its file, which is the same inline payload the bullets
+    above describe and the shape item 51 measured - not a pointer, which
+    this lane's contract forbids.
+
+    Dispatch wrapper:
+
+    ```powershell
+    $code = 1
+    try {
+    $b = [System.IO.File]::ReadAllText("<brief-file>", (New-Object System.Text.UTF8Encoding($false, $true)))
+    & "<kimi-code-binary>" -m <canonical-backup-model-id> --agent-file <plugin-checkout>/skills/multi-model-verify/references/kimi-reviewer-agent.md --skills-dir <debate-home>/skills -p $b > <transcript-file> 2>&1
+    $code = $LASTEXITCODE
+    } catch { $code = 1 }
+    [System.IO.File]::WriteAllText("<exit-file>", "$code")
+    ```
+
+    Resume wrapper: the same shape with the resume bullet's flags -
+
+    ```powershell
+    $code = 1
+    try {
+    $b = [System.IO.File]::ReadAllText("<brief-file>", (New-Object System.Text.UTF8Encoding($false, $true)))
+    & "<kimi-code-binary>" --session <session-id> -m <canonical-backup-model-id> --skills-dir <debate-home>/skills -p $b > <transcript-file> 2>&1
+    $code = $LASTEXITCODE
+    } catch { $code = 1 }
+    [System.IO.File]::WriteAllText("<exit-file>", "$code")
+    ```
+
+    Launch either one with the output-path refusal from SKILL.md's launch
+    block, plus `-WorkingDirectory <review-mirror>`, because this client has
+    no workspace flag and binds the session to the directory it was created
+    in. `KIMI_CODE_HOME` is set in the launching call's environment and the
+    child inherits it.
+
+No `$OutputEncoding` preamble appears here, and that is deliberate: this lane
+passes the brief as an ARGUMENT rather than through a pipe, which
+model-prompting-notes.md's `brief-encoding-transport` region already states,
+and adding one would imply a mechanism that does not apply.
+
+- [ ] **Step 4: Cover the write-probe**
+
+At `references/backup-lane.md:353-359`, add to the WRITE-PROBE bullet the
+sentence `the write-probe runs in a wrapper too`, with its own round-numbered
+control paths, and a pointer to the same regions. It is a real client call in
+a fresh session with the debate configuration and can cross the ceiling like
+any other.
+
+- [ ] **Step 5: Verify**
 
 Run: `python -m pytest evals/multi-model-verify/test_backup_lane.py -q`
-Expected: PASS, including `test_backup_lane.py:137-148` unamended. Those pins read whitespace-normalized text, so they do not prove byte identity; here they only confirm the two command strings were not disturbed by an added paragraph.
+Expected: PASS, including `test_backup_lane.py:137-148` unamended. Those pins
+read normalized text and prove only that the two display bullets were not
+disturbed; the new raw pin is what constrains the wrapper.
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add skills/multi-model-verify/references/backup-lane.md docs/superpowers/plans/2026-07-27-0150-backlog.md
-git commit -m "record that the kimi lane is not detached and why"
+git add skills/multi-model-verify/references/backup-lane.md evals/multi-model-verify/test_backup_lane.py
+git commit -m "dispatch all three kimi lane calls detached"
 ```
 
 ---
@@ -611,7 +767,71 @@ git commit -m "build the review mirror without asking"
 
 ---
 
-### Task 8: Measure the two things this plan asserts and has not proven
+### Task 8: Parse and stub-run every wrapper, before any quota is spent
+
+Round 2's finding, and it is about this plan rather than about the code: the
+tests count raw strings, so a wrapper that will not PARSE passes every one of
+them, and the first thing that would notice is a real round. The plan already
+records that transcription produced a parse error once. This task costs no
+quota and no client call.
+
+**Files:**
+- Create: `evals/multi-model-verify/test_wrapper_renders_and_parses.py`
+
+**Interfaces:**
+- Consumes: the finished blocks from Task 4 and Task 5.
+- Produces: a gate that fails on an unparseable or misbehaving wrapper. Task 9 runs only after this is green.
+
+- [ ] **Step 1: Render all four wrappers with concrete paths**
+
+Extract the four fenced `powershell` wrapper blocks - codex fresh, codex
+resume, kimi dispatch, kimi resume - from `SKILL.md` and `backup-lane.md`,
+and substitute every `<placeholder>` with a real scratch path. Extract them
+by reading the documents, never by keeping a second copy in the test: a copy
+would pass while the document rotted.
+
+- [ ] **Step 2: Parse each rendered wrapper on both hosts**
+
+Parse with PowerShell's own parser and assert zero errors:
+
+```powershell
+$errors = $null
+[System.Management.Automation.Language.Parser]::ParseFile($path, [ref]$null, [ref]$errors)
+if ($errors.Count -gt 0) { $errors | ForEach-Object { $_.Message }; exit 1 }
+```
+
+Run it under `$env:PARALLAX_PS_HOST` for each host in turn.
+Expected: zero parse errors on both.
+
+- [ ] **Step 3: Execute each wrapper against a stub, three outcomes each**
+
+Put a stub named `codex` or `kimi.exe` first on `PATH` and run each rendered
+wrapper for real. Three cases per wrapper:
+
+- stub exits 0 and writes a reply file. Expected: exit file contains `0`.
+- stub exits 3 and writes nothing. Expected: exit file contains `3`.
+- the override hash check throws, or the brief file is absent. Expected: the
+  exit file EXISTS and contains a non-zero code, which is the whole point of
+  `$code = 1` before the `try`.
+
+Assert no real client was invoked: the stub records its own invocation and
+the test reads that record.
+
+- [ ] **Step 4: Verify**
+
+Run: `python -m pytest evals/multi-model-verify/test_wrapper_renders_and_parses.py -q`
+Expected: PASS on both hosts.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add evals/multi-model-verify/test_wrapper_renders_and_parses.py
+git commit -m "parse and stub-run every wrapper before spending quota"
+```
+
+---
+
+### Task 9: Measure what the stubs cannot, on both hosts
 
 Three measurements, all on both hosts. Round 1 found that the first draft measured encoding only and never measured its own central promise.
 
@@ -619,7 +839,7 @@ Three measurements, all on both hosts. Round 1 found that the first draft measur
 - Create: `docs/superpowers/plans/rounds/2026-08-30-item32-detached-dispatch/wrapper-probe.md`
 
 **Interfaces:**
-- Consumes: the finished `SKILL.md` blocks from Task 4.
+- Consumes: the finished blocks from Tasks 4 and 5, and Task 8's parse gate.
 - Produces: a probe record with a per-host verdict for each measurement.
 
 - [ ] **Step 1: Measure the harness boundary**
@@ -632,9 +852,19 @@ Expected: the launching call returns in seconds, the process is alive in the nex
 
 Plant a stale `<exit-file>` containing `0` at the round's path, then run the launch. Expected: the launch REFUSES because a control path already exists.
 
-Then repeat with fresh paths, kill the wrapper tree with `taskkill /PID <id> /T /F` after the reply file appears but before the wrapper writes its exit file, and poll.
+Then repeat with fresh paths against a STUB, not the real client. Round 2's
+finding: killing the real wrapper between the reply appearing and the sidecar
+write is a millisecond race nobody can aim at. The stub writes the reply file
+and then sleeps thirty seconds, which makes the window deterministic. Kill the
+tree with `taskkill /PID <id> /T /F` inside it, then poll.
 
-Expected: the poll reports a transport failure, not a review result. If it reports a review result, STOP: that is the exact defect round 1 found and the fix did not close it.
+Expected: the poll reports a transport failure - state two, exited with no
+exit file - not a review result. Also plant a stale exit file containing `0`
+alongside a fresh reply and confirm the poll still refuses, since that is the
+combination round 1 found.
+
+If either reports a review result, STOP: that is the exact defect round 1
+found and the fix did not close it.
 
 - [ ] **Step 3: Measure the brief's encoding through the wrapper**
 
@@ -661,14 +891,14 @@ git commit -m "measure the detached wrapper on both hosts"
 
 ---
 
-### Task 9: Close the items and run the full gates
+### Task 10: Close the items and run the full gates
 
 **Files:**
 - Modify: `docs/superpowers/plans/2026-07-27-0150-backlog.md`
 - Modify: `CLAUDE.md`
 
 **Interfaces:**
-- Consumes: Tasks 1 to 8.
+- Consumes: Tasks 1 to 9.
 - Produces: a green gate set and closed items.
 
 - [ ] **Step 1: Run the five local gates, detached**
@@ -716,7 +946,7 @@ Sol session `01a055c5-935e-76e3-ad1d-83721bc67d79`, 12 claims, 8 FIX. Every find
 
 | Finding | Where it landed |
 |---|---|
-| A stale exit file plus a fresh reply plus a killed wrapper reads as a completed round | Four states became FIVE; every control path is round-numbered and must not pre-exist. Task 3 region two, Task 8 Step 2 |
+| A stale exit file plus a fresh reply plus a killed wrapper reads as a completed round | Four states became FIVE; every control path is round-numbered and must not pre-exist. Task 3 region two, Task 9 Step 2 |
 | The exit write sat inside the `try`, so it was not the last act and an early throw skipped it | `$code = 1` default, `catch`, write after `finally`. Task 2, Task 4 |
 | `check-drift.ps1` is not immune - it calls `Stop-Job` at 900 seconds | Reason corrected; it stays out of scope for the right reason |
 | The backup-lane pins read whitespace-normalized text and do not prove byte identity | Global Constraints corrected; the claim was withdrawn |
@@ -728,6 +958,25 @@ Sol session `01a055c5-935e-76e3-ad1d-83721bc67d79`, 12 claims, 8 FIX. Every find
 | Streams were inherited rather than redirected | All three redirected, matching `check-drift.ps1:923-927` |
 | The plan contradicted itself on the timeout | Policy frozen: bounded polls, thirty-minute escalation, continue-or-kill, never a review result |
 | Two harness facts are not repo-verifiable | Global Constraints marks both as tool contract, not repo evidence |
+
+## What round 2 changed
+
+Same Sol session, resumed. Eleven items re-judged: seven CLOSED, four not.
+Both new questions came back with fixes. Every finding below was reproduced
+before acceptance; the scope reversal was checked against item 51's own
+probe record rather than against the reviewer's summary of it.
+
+| Finding | Where it landed |
+|---|---|
+| The staleness rule was stated, pinned and probed, but no task implemented it | An executable refusal loop is now the first thing in the launch block; Task 2 pins it |
+| The freshness rule was unsatisfiable - the wrapper must exist before launch | INPUT paths (wrapper, empty stdin) are created fresh; six OUTPUT paths must not exist |
+| Five states duplicated one and omitted another | Six states; "exit zero with no reply" now has a name, and it is a transport failure |
+| The Kimi deferral was unsound: a wrapper need not change the argv path | Task 5 detaches all three calls with the native invocation unchanged; item 51 keeps the escaping repair |
+| The design's enumeration still said four commands and omitted the write-probe | Corrected in the spec to five: two codex, three kimi |
+| An unenforced naming convention shared a pin with completion safety | Its own `background-task-naming` region and a pin named as documentation-presence |
+| Raw-string tests pass a wrapper that will not parse | New Task 8: render, parse on both hosts, stub-execute three outcomes, zero quota |
+| The kill window in the probe was a millisecond race | Task 9 uses a stub that sleeps thirty seconds after writing the reply |
+| `<empty-file>` was never created and the launch logs were not in the inventory | Both fixed in the launch block and the constraint |
 
 ## After the tasks
 

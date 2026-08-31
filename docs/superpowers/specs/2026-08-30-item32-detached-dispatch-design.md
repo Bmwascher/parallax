@@ -55,17 +55,35 @@ prose-only, wrapper-tool, and change-the-command.
 
 ## Scope
 
-### In scope: four commands
+### In scope: five commands
 
-All four are shell calls that block the caller and can run past 600
-seconds.
+**Corrected 2026-08-30 after Sol round 1, which found a fifth.** The first
+version of this table said four and omitted the backup lane's write-probe.
+All five are shell calls that block the caller and can run past 600 seconds,
+and all five are detached by this work.
 
-| # | Site | Call |
-|---|---|---|
-| 1 | `skills/multi-model-verify/SKILL.md:186` | codex round 1 |
-| 2 | `skills/multi-model-verify/SKILL.md:248` | codex resume |
-| 3 | `skills/multi-model-verify/references/backup-lane.md:25` | kimi-code round 1 |
-| 4 | `skills/multi-model-verify/references/backup-lane.md:30` | kimi-code resume |
+| # | Site | Call | Disposition |
+|---|---|---|---|
+| 1 | `skills/multi-model-verify/SKILL.md:186` | codex round 1 | detached, Task 4 |
+| 2 | `skills/multi-model-verify/SKILL.md:248` | codex resume | detached, Task 4 |
+| 3 | `references/backup-lane.md:25` | kimi-code dispatch | detached, Task 5 |
+| 4 | `references/backup-lane.md:30` | kimi-code resume | detached, Task 5 |
+| 5 | `references/backup-lane.md:353-359` | kimi-code write-probe | detached, Task 5 |
+
+The write-probe runs before round 1 of every backup-lane debate, in a fresh
+disposable session carrying the full debate configuration, and
+`references/panels.md:51-53` makes panels inherit it. It is a real client
+call and nothing about it is cheaper than a review round.
+
+**The Kimi lane was briefly deferred out of this cycle and then restored.**
+The deferral argued that a wrapper must change the argument path item 51
+owns. Sol round 2 refuted it against item 51's own probe record, which
+states it measured "a brief file is read and passed inline as `-p <brief>`,
+exactly the shape `references/backup-lane.md` documents"
+(`docs/superpowers/plans/rounds/2026-08-22-item51-inline-brief-probe/probe-record.md:27-31`).
+Reading the brief from a file into a variable IS the documented shape, so
+the wrapper changes how the call is started and not how the brief reaches
+the client. Item 51 keeps the argv escaping repair.
 
 Panels need no separate work. `references/panels.md:49-52` routes the Sol
 lane to `SKILL.md` and the Kimi lane to `backup-lane.md` rather than
