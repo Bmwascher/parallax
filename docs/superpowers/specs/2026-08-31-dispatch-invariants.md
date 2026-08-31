@@ -129,12 +129,16 @@ task list, a completion notice, an open conversation.
 `background-task-naming` region is a documentation-presence pin. Nothing
 enforces that a dispatch is actually named, or named correctly.
 
-**D3. Visibility and survival are in tension, and the trade is
-UNMEASURED.** A tracked task belongs to the session. The withdrawn spec
-said the worker "probably" dies with the session and never measured it. The
-owner chose visibility over survival, and that choice is sound, but it is
-currently made against a guess. **Measure what happens to a running tracked
-command when the session ends before the replacement plan freezes this.**
+**D3. SURVIVAL IS NOT A REQUIREMENT. SETTLED by the owner, 2026-08-31:**
+"I'm not worried about survives session end." A round that dies with the
+session is acceptable; a round nobody can see is not.
+
+This closes the trade rather than measuring it. The earlier instruction to
+measure session-end behaviour before freezing the choice is WITHDRAWN: the
+measurement only mattered if survival were a competing requirement, and it
+is not. Any future design that reintroduces an OS-detached worker to buy
+survivability is reopening a decision the owner has already made, and needs
+his say-so, not a measurement.
 
 **D4. A design must test its own benefit.** The withdrawn plan measured
 preparation time and poll states and never once checked that a task row
@@ -155,12 +159,17 @@ session, each with different visibility, notification and evidence:
 | 5 | Foreground call auto-backgrounded at the ceiling | yes, mid-flight | yes | no | harness output file |
 
 Mechanism 2 is what item 32 shipped and is the one the owner objected to:
-it removes the blocking AND the visibility. Mechanism 5 is not a choice,
-it is the harness rescuing an overrun. Mechanism 4 nests: a subagent that
+it removes the blocking AND the visibility. It is now FORBIDDEN, and with
+survival dropped as a requirement it has no remaining argument in its
+favour. Mechanism 5 is not a choice, it is the harness rescuing an
+overrun. Mechanism 4 is the SAME FAMILY as 1 - the harness owns it, it
+gets a row, it notifies - so it stays available for subagent work; its
+known hazard is nesting, where a subagent that
 starts its own background command produced the stalled turns seen four
 times this cycle.
 
-**The standing rule: mechanism 1 is THE method.** A long call is dispatched
+**The standing rule, SETTLED by the owner 2026-08-31: mechanism 1 is the
+ONLY method.** Not the default, not the preferred one. The only one. A long call is dispatched
 by the harness as a tracked background command, named for its lane and
 round, or with no lane for its kind. Anything else must be justified in
 writing at the call site. A tool in this repo may PREPARE work and CLASSIFY
@@ -249,7 +258,7 @@ stated reason.
 5. Seal the evidence boundary into the receipt (E4), and fix the chaining
    rule in BOTH lanes (E2).
 6. Reject unknown arguments (F1).
-7. Measure D3 before freezing the trade, and add probes for D1.
+7. D3 needs no measurement: survival was dropped as a requirement. Add probes for D1.
 8. Move historical and rationale text out of `SKILL.md`, keeping the full
    operational shape at BOTH call sites, and do not raise the ceiling
    first. The body is 6372 of 6500; the preflight section holds 1976, most
