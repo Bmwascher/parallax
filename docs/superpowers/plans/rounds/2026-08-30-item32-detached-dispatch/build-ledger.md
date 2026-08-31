@@ -168,3 +168,69 @@ is also a single run against a nondeterministic executor. A like-for-like
 comparison needs the version bumped and the cache updated, which by this
 repo's rule happens AFTER the diff debate, not before it. Carried into the
 debate as an open question with these numbers, not as a finding.
+
+## The whole-branch review, and what it changed
+
+`parallax:fable-reviewer` reviewed the range `8af6ae0..98c8a75` before the
+diff debate. It found NO critical issue and reported the completion model
+closed on this range, having searched for other exit-0 paths, catches that
+convert failure into success, reply reads reachable while the pid is live,
+stale-artifact reuse, and seam effects that relax a classification.
+
+It raised three important findings. All three were REPRODUCED before being
+accepted, and all three were real.
+
+**1. The dual-host CI job never ran this branch's core modules.** The
+`powershell-hosts` job carries a hardcoded module list per host, and the
+branch added two Windows-only modules without touching it. On the Linux
+tier-2b job both skip on `os.name != "nt"`, so after merge NO CI job would
+have executed the dispatch tool's suite on any host - the exact 0.16.0
+class that job exists to prevent, and it would have made CLAUDE.md's claim
+that the job re-runs every PowerShell-facing module false. Verified by
+reading the workflow: `test_dispatch_detached.py` and
+`test_wrapper_renders_and_parses.py` appear in neither list. Both are now
+in both lists.
+
+**2. A corrupted root `AGENTS.md` had entered the range, unrecorded.** Not
+in any task, any commit subject, or any ledger row. It is a mechanical
+rebrand of `CLAUDE.md` that misinstructs: it says "Codex plugin" and gives
+the commands `Codex plugin marketplace update parallax` and `Codex plugin
+update parallax@parallax`, neither of which exists.
+
+Attribution, which the reviewer could not read under its grant: it was
+swept into the branch's FIRST commit, `fb3e2bb`, by a `git add` that took
+it along. It was untracked before the branch and was never authored for
+it.
+
+**It is also a preflight STOP condition for this skill's own flow.**
+`git ls-files --cached --others '*AGENTS.md' '.agents/*' '.kimi-code/*'`
+lists it, and a root AGENTS.md is an instruction back-channel into the
+reviewer. Every debate round this cycle was dispatched against a review
+MIRROR with `project_agents_md: false` after remediation, so no round read
+it; the defect is that it was about to ship to main.
+
+Untracked with `git rm --cached`, which restores exactly the pre-branch
+state. The file is left on disk untouched, because it is the user's to
+keep or delete, and it was there before this work started.
+
+**3. The behavioural reaper killed by pid alone.** My own code, committed
+at `be2da46`, and it violated the invariant this very branch pins: the
+`detached-dispatch-states` region says liveness is pid PLUS start time,
+never a pid alone, and `dispatch-detached.ps1` writes `startticks` beside
+`pid` for exactly that comparison. The reaper read `pid` and ignored
+`startticks`, so a recycled pid would have force-killed an unrelated
+process tree. It now compares both through `is_our_child`, treats anything
+unknown as NOT ours so it never kills on a guess, and re-checks identity
+immediately before the kill. That also removes the reviewer's minor 4: the
+old liveness probe was a substring search of a process listing, and the new
+one compares a tick count.
+
+The reviewer's remaining minors are recorded in its report and carried into
+the diff debate rather than fixed here: a `GetProcessTimes` failure path
+that can leave a started tree alive, unknown-parameter invocations that
+bypass the hand-rolled exit 2, and the stale budget-raise justification
+(the body measured 6225 when the budget was set to 6250 and 6356 after Task
+6, so it is already warning again - the self-quoting-count class).
+
+Verdict: **ready to merge WITH FIXES.** The two fix-before-merge items and
+the third are all done above.

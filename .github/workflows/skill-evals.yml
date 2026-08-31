@@ -99,6 +99,8 @@ jobs:
           evals/multi-model-verify/test_codex_context_probe.py
           evals/multi-model-verify/test_codex_tool_surface_probe.py
           evals/multi-model-verify/test_review_mirror.py
+          evals/multi-model-verify/test_dispatch_detached.py
+          evals/multi-model-verify/test_wrapper_renders_and_parses.py
           evals/multi-model-verify/test_kimi_round_evidence.py
           evals/multi-model-verify/test_kimi_lane_lock.py
           evals/multi-model-verify/test_lock_protocol_live.py
@@ -116,6 +118,8 @@ jobs:
           evals/multi-model-verify/test_codex_context_probe.py
           evals/multi-model-verify/test_codex_tool_surface_probe.py
           evals/multi-model-verify/test_review_mirror.py
+          evals/multi-model-verify/test_dispatch_detached.py
+          evals/multi-model-verify/test_wrapper_renders_and_parses.py
           evals/multi-model-verify/test_kimi_round_evidence.py
           evals/multi-model-verify/test_kimi_lane_lock.py
           evals/multi-model-verify/test_lock_protocol_live.py

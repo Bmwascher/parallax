@@ -452,6 +452,32 @@ def compact_stream(stdout):
     return "\n".join(lines)
 
 
+def is_our_child(pid, ticks):
+    """Is THIS pid still the process the launch transaction recorded?
+
+    A pid alone is not an identity: Windows recycles them, so a bare
+    `taskkill /PID` can force-kill an unrelated tree. The branch's own
+    contract says so - the `detached-dispatch-states` region in
+    `skills/multi-model-verify/references/model-prompting-notes.md` pins
+    liveness as pid PLUS start time - and `dispatch-detached.ps1` writes
+    `startticks` beside `pid` for exactly this comparison. Honour it here
+    too, rather than exempting a teardown from the rule the tool enforces.
+
+    Anything unknown reads as NOT ours, so the reaper never kills on a
+    guess, and the answer is a tick count rather than a substring search
+    of a process listing.
+    """
+    probe = subprocess.run(
+        ["powershell", "-NoProfile", "-Command",
+         "$p = Get-Process -Id %d -ErrorAction SilentlyContinue;"
+         " if ($null -eq $p) { 'gone' }"
+         " else { try { $p.StartTime.ToUniversalTime().Ticks }"
+         " catch { 'unreadable' } }" % pid],
+        capture_output=True, text=True)
+    answer = probe.stdout.strip()
+    return answer.isdigit() and int(answer) == ticks
+
+
 @contextmanager
 def reaped_tempdir(prefix):
     """A scratch dir that outlives nothing: reap, THEN delete.
@@ -469,7 +495,8 @@ def reaped_tempdir(prefix):
 
     The launch transaction writes each child's pid to `<dispatch-dir>/pid`,
     so the pids are on disk and are never guessed. Each gets a grace period
-    to finish on its own before the tree is killed.
+    to finish on its own before the tree is killed, and its identity is
+    re-checked immediately before the kill.
     """
     root = tempfile.mkdtemp(prefix=prefix)
     try:
@@ -478,19 +505,19 @@ def reaped_tempdir(prefix):
         for pid_file in Path(root).rglob("pid"):
             try:
                 pid = int(pid_file.read_text(encoding="utf-8").strip())
+                ticks = int((pid_file.parent / "startticks")
+                            .read_text(encoding="utf-8").strip())
             except (OSError, ValueError):
                 continue
             deadline = time.monotonic() + 20
             while time.monotonic() < deadline:
-                listed = subprocess.run(
-                    ["tasklist", "/FI", "PID eq %d" % pid, "/NH"],
-                    capture_output=True, text=True)
-                if str(pid) not in listed.stdout:
+                if not is_our_child(pid, ticks):
                     break
                 time.sleep(0.5)
             else:
-                subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"],
-                               capture_output=True)
+                if is_our_child(pid, ticks):
+                    subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"],
+                                   capture_output=True)
         # A killed process releases its handles asynchronously, so retry.
         # If the tree still will not go, say so BY PATH and carry on: a
         # leaked scratch dir must never cost a run its verdicts.
