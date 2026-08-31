@@ -367,11 +367,17 @@ In `test_multi_model_verify.py`, add:
             "this site has no client invocation")
         assert (
             "0 means `reply-present` and nothing else; 3 means"
-            " `running`, an UNFINISHED round") in section, (
-            "this site does not state the exit mapping. Round 10 found"
-            " the tool contract and the point of use disagreeing about"
-            " what exit 0 means, which is the only place a reader of the"
-            " skill would look")
+            " `running`, an UNFINISHED round; 1 is any other state, a"
+            " transport failure with the state name on stdout; 2 is a"
+            " parameter-binding failure or an internal execution"
+            " error.") in section, (
+            "this site does not state the WHOLE exit mapping. Round 10"
+            " found the tool contract and the point of use disagreeing"
+            " about exit 0, which is the only place a reader of the"
+            " skill would look; round 11 found the replacement asserting"
+            " two of its four clauses, so the 1 and 2 clauses could drift"
+            " or vanish while this test stayed green. All four clauses"
+            " are one literal on purpose")
 
     def test_no_codex_lane_writes_its_own_launch(self):
         """A CENTRALIZATION guard, and nothing more.
@@ -395,7 +401,7 @@ In `test_multi_model_verify.py`, add:
 - [ ] **Step 2: Run them to verify they fail**
 
 Run: `python -m pytest evals/multi-model-verify/test_multi_model_verify.py -q -k "launched_through_the_tool or writes_its_own_launch or sends_the_reader_to_the_states"`
-Expected: 4 FAILED - two parametrized cases and the two others. The parametrized cases now also fail on the exit-mapping sentence, which is the round 10 addition.
+Expected: **3 FAILED and 1 PASSED.** The two parametrized cases fail, and so does `test_the_point_of_use_sends_the_reader_to_the_states`. `test_no_codex_lane_writes_its_own_launch` ALREADY PASSES, because `Start-Process` does not appear in `SKILL.md` today - measured at 0 occurrences. Round 11's finding: expecting it to fail was impossible, and a red-then-green ritual that cannot go red teaches nothing. Note it in the commit message rather than letting a guard that was green all along read as coverage the task earned.
 
 - [ ] **Step 3: Rewrite the round-1 step**
 
@@ -456,7 +462,7 @@ Then the launch and the poll:
 & (Get-Process -Id $PID).Path -NoProfile -File ${CLAUDE_PLUGIN_ROOT}/tools/dispatch-detached.ps1 -Poll -Receipt <receipt-file> -ExpectedDispatchDir <dispatch-dir> -ExpectedRound <label> -Json
 ```
 
-`-ExpectedDispatchDir` and `-ExpectedRound` are the same two values passed to the launch, supplied again and INDEPENDENTLY of the receipt: that pair is what stops an earlier attempt's receipt answering for this one. The poll also echoes the `round` back, so record it. Its exit codes are: **0 means `reply-present` and nothing else; 3 means `running`, an UNFINISHED round; 1 is a transport failure with the state name on stdout; 2 is a bad invocation.** Round 10's finding: this sentence still carried revision 8's mapping, so the shipped skill would have told the reader that exit 0 covers a round still being written, while the tool said otherwise.
+`-ExpectedDispatchDir` and `-ExpectedRound` are the same two values passed to the launch, supplied again and INDEPENDENTLY of the receipt: that pair is what stops an earlier attempt's receipt answering for this one. The poll also echoes the `round` back, so record it. Its exit codes are: **0 means `reply-present` and nothing else; 3 means `running`, an UNFINISHED round; 1 is any other state, a transport failure with the state name on stdout; 2 is a parameter-binding failure or an internal execution error.** Round 10's finding: this sentence still carried revision 8's mapping, so the shipped skill would have told the reader that exit 0 covers a round still being written, while the tool said otherwise.
 
 `(Get-Process -Id $PID).Path` is the caller's own host, not a bare `powershell`. Round 6's finding: a bare name resolves to Windows PowerShell 5.1 even from a PowerShell 7 session, and the tool hands its own executable to the wrapper, so the wrapper would run on a host nobody chose.
 
@@ -553,7 +559,7 @@ def test_the_backup_lane_writes_no_launch_of_its_own():
 - [ ] **Step 2: Run it to verify it fails**
 
 Run: `python -m pytest evals/multi-model-verify/test_backup_lane.py -q -k "launched_through_the_tool or no_launch_of_its_own"`
-Expected: 4 FAILED — three parametrized cases and the negative.
+Expected: **3 FAILED and 1 PASSED** — the three parametrized cases fail, and `test_the_backup_lane_writes_no_launch_of_its_own` ALREADY PASSES, because `Start-Process` does not appear in `backup-lane.md` today either, measured at 0 occurrences. Round 11's finding, the same one as Task 3's.
 
 - [ ] **Step 3: Give each of the three calls its own marked section**
 
@@ -773,6 +779,8 @@ The ceiling decision was made in Task 3 step 5, where it has to be: strict lint 
 
 - [ ] **Step 2: Reconcile the spec with the plan**
 
+**Correct the scope table's task numbers.** `docs/superpowers/specs/2026-08-30-item32-detached-dispatch-design.md:65-71` assigns the two codex sites to Task 4 and the three kimi sites to Task 5. The plan implements them in Task 3 and Task 4, because the tool became Task 1 and pushed everything down. Round 11's finding: the reconciliation list named five things and not this one, and the convergence grep searches for stale prose rather than stale task numbers. Its oracle: after the edit, the table's five rows must read `Task 3`, `Task 3`, `Task 4`, `Task 4`, `Task 4`, checked by reading the five rows, and `grep -n "Task 5" docs/superpowers/specs/2026-08-30-item32-detached-dispatch-design.md` must return nothing outside a passage narrating history.
+
 **Replace the spec's mechanism section outright.** `docs/superpowers/specs/2026-08-30-item32-detached-dispatch-design.md:136-148` still describes the SESSION running `Start-Process`, writing the pid file, and polling it - the design the debate rejected in favour of a shipped tool. Round 10's finding: Task 9 updated five things around that section and never replaced the section itself, and the convergence grep does not search for a session-owned launch. Replace it with the transaction this plan builds: the session writes a wrapper body and calls the tool; the tool checks the receipt path, reserves the directory, installs the wrapper, starts the process, records the pid and start ticks, writes the commit marker, and publishes the receipt; later calls poll the RECEIPT with the expected directory and round.
 
 Also update: the state model to the tool's ordered checks, whose first three states are NO RECEIPT, then RECEIPT NOT EXPECTED, then LAUNCH UNKNOWN - round 8 caught this step saying LAUNCH UNKNOWN comes first, which was true only of revision 6, and round 9 caught the correction itself already stale, because adding RECEIPT NOT EXPECTED moved LAUNCH UNKNOWN again; the region inventory to the four that exist plus `back-channel-auto-mirror`; the encoding claim to be lane-specific, since an argument-passing lane carries no preamble; the quoting claim, since a wrapper file removes one serialization boundary and not every quoting layer; and question 2, which the user reopened and answered the other way on 2026-08-30. Say plainly that a settled decision was reversed and by whom.
@@ -791,13 +799,14 @@ Two of the patterns need their replacement wording stated exactly, or the reconc
 - The state count is TWELVE, so every spelled count below twelve is a stale hit, and `powershell -NoProfile -File` is stale because the documented call now uses the caller's own host.
 - The grep is `-i`. Round 7's finding: the spec spells `SEVEN states` in capitals at `docs/superpowers/specs/2026-08-30-item32-detached-dispatch-design.md:194`, and a case-sensitive pattern walked straight past the one stale count the step was written to catch.
 
-Then run a POSITIVE oracle, because a grep for stale words cannot show that the replacement arrived:
+Then run a POSITIVE oracle, because a grep for stale words cannot show that the replacement arrived. It is written as one count per token, inside the mechanism section only:
 
 ```bash
-grep -c "dispatch-detached.ps1\|-ReceiptPath\|-ExpectedDispatchDir" docs/superpowers/specs/2026-08-30-item32-detached-dispatch-design.md
+sec=$(sed -n '/^### The mechanism/,/^## /p' docs/superpowers/specs/2026-08-30-item32-detached-dispatch-design.md)
+for t in "dispatch-detached.ps1" "-ReceiptPath" "-ExpectedDispatchDir"; do printf '%s: ' "$t"; printf '%s' "$sec" | grep -c -- "$t"; done
 ```
 
-Expected: at least three, and read them to confirm they are in the mechanism section rather than scattered elsewhere. Round 10's finding: every oracle in this step searched only for what should be gone, so a section deleted and never rewritten passed it.
+Expected: every one of the three at least 1. Round 10's finding: every oracle in this step searched only for what should be gone, so a section deleted and never rewritten passed it. Round 11's finding on the first attempt at a fix: `grep -c "A\|B\|C"` counts LINES matching any alternative, so three lines carrying only the first token satisfied "at least three" while the other two were absent, and it was not scoped to the section at all.
 - `-Token` and `-DispatchDir <dispatch-dir> -Json` are stale because the poll now names a RECEIPT.
 
 - [ ] **Step 4: Run the five local gates, detached**
