@@ -586,10 +586,12 @@ later task to notice.
 
 **Interfaces:**
 - Consumes: nothing.
-- Produces: `mirrorStateSha256` in the build's printed identity record, and
-  `-MirrorStateSha256 <hex>` as a mandatory argument to `-VerifyIdentity`.
-  `-ExpectedMirrorPath <path>` alongside it. Task 2's receipt carries both
-  and Task 4's wrapper passes both.
+- Produces: `-ExtraInput <path>` on the BUILD, repeatable, copying each
+  named file in BEFORE the baseline and manifest are taken and listing it
+  in the printed record; `mirrorStateSha256` in that record; and
+  `-MirrorStateSha256 <hex>` plus `-ExpectedMirrorPath <path>` as
+  mandatory arguments to `-VerifyIdentity`. Task 2's receipt carries both
+  and Task 4's wrapper passes both. There is deliberately NO re-mint mode.
 
 **This task runs BEFORE Task 2**, not after it. Task 2 writes a receipt
 whose fields include the values this task invents, and calls a verifier
@@ -634,6 +636,26 @@ def test_verify_refuses_a_mirror_at_a_different_path(tmp_path):
     shutil.move(str(m.path), str(moved))
     out = verify(m, mirror_path=moved)
     assert out.returncode == 1
+
+
+def test_extra_inputs_are_covered_by_the_digest(tmp_path):
+    # Copied in as part of construction, so the identity record describes
+    # the tree the reviewer actually reads.
+    extra = tmp_path / "standards.md"
+    extra.write_text("house rules", encoding="utf-8")
+    m = build_mirror_record(tmp_path, extra_inputs=[extra])
+    assert (m.path / "standards.md").read_text() == "house rules"
+    assert "standards.md" in m.record
+    assert verify(m).returncode == 0
+    (m.path / "standards.md").write_text("tampered", encoding="utf-8")
+    assert verify(m).returncode == 1
+
+
+def test_there_is_no_reseal_or_remint_mode(tmp_path):
+    # Re-blessing a tree that changed since it was measured is exactly
+    # what the digest exists to deny.
+    for flag in ("-Reseal", "-Remint", "-UpdateIdentity"):
+        assert run_mirror_tool([flag]).returncode == 2
 
 
 def test_an_unmeasurable_expected_digest_is_refused(tmp_path):
