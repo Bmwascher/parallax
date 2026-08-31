@@ -69,6 +69,8 @@ This is the whole point of revision 5. The four steps become one transaction in 
 Cases, each named for what it protects:
 
 - `test_a_taken_directory_blocks_and_starts_nothing` — pre-create the directory; expect exit 1, the reason on stdout, and no process started. The reservation is `New-Item -ItemType Directory` with `-ErrorAction Stop` and no `-Force`; round 4 found that without `-ErrorAction Stop` the error is non-terminating and the following statements run with no valid path.
+- `test_an_existing_receipt_blocks_before_the_directory_is_reserved` — **round 13's finding: the requirement was in step 1 and in no test.** Create the receipt path first, then launch. Expect exit 1 and expect the dispatch directory NOT to exist afterwards, which is what proves the check ran before the reservation rather than after it.
+- `test_a_receipt_that_appears_during_the_launch_fails_closed` — use the hold barrier: wait for `.started`, create the receipt path while the tool waits, then release. The create-new write at step 7 must FAIL, the `catch` must kill the tree, and the exit must be 1. An overwrite here would publish a receipt over one this launch did not write, which is the round 7 defect arriving through a race instead of a caller.
 - `test_a_receipt_path_inside_the_dispatch_directory_is_blocked` — the receipt path equal to the dispatch directory, and inside it at one and two levels down. Expect exit 1 and expect NO dispatch directory to have been created, because the check runs first. Round 9's finding: the separation was a claim with no mechanism, and a receipt inside the directory it authenticates is the round 7 defect returning.
 - `test_force_is_not_accepted_in_any_argument_order` — assert the script source contains no `-Force` on the reservation, checked by parsing the command rather than by string order. Round 4 found the previous pin only forbade the exact token order `-ItemType Directory -Force`.
 - `test_a_committed_launch_publishes_pid_then_marker_then_receipt` — assert ALL THREE positions, by content rather than by timestamp: `pid` and `startticks` exist before `launch.committed`, and the RECEIPT is written after both. Round 10's finding: four places called the commit marker the last artifact while the executable sequence published the receipt after it, and the test name carried the wrong claim into the suite.
@@ -99,7 +101,9 @@ Cases, each named for what it protects:
   ```
 
   Task 3 documents these same two lines in the skill. If they ever disagree, this task's test is the one that fails, which is the point.
-- `test_a_hard_kill_between_start_and_publication_is_never_success` — kill the TOOL itself in that window rather than injecting a handled failure, and confirm the poll reports `launch-unknown`. The injected-failure case exercises the `catch`; this one exercises the case the `catch` cannot reach, which is the one the contract admits is irreducible.
+- `test_a_hard_kill_between_start_and_publication_is_never_success` — kill the TOOL itself in that window rather than injecting a handled failure, and confirm the poll reports **`no-receipt`**, never success. The injected-failure case exercises the `catch`; this one exercises the case the `catch` cannot reach, which is the one the contract admits is irreducible.
+
+  **Round 13's finding: this test previously expected `launch-unknown`, and could never have passed.** Once the receipt became the last artifact published, a kill before publication leaves no receipt at all, so the poll stops at check 1 and never reaches the marker check. The state is right in spirit and was wrong in name. What changes with it is where the DANGER lives: `no-receipt` now carries the irreducible case, and the contract must say that `no-receipt` is not evidence that nothing started.
 
   **This test needs a deterministic barrier, or it is the millisecond race again in a different costume.** Round 7's finding. Step 3 below adds one env-gated seam for it: with `PARALLAX_DISPATCH_HOLD_BEFORE_PUBLISH` set to a path, `-Launch` creates `<path>.started` after `Start-Process` returns and then waits, bounded at sixty seconds, for `<path>.release` to appear before it writes `pid`. The test waits for `.started`, kills the tool, and never writes `.release`. Unset, the seam does not exist. Like the two seams in `tools/new-kimi-lane-home.ps1`, it is BUILDER CONTRACT rather than test scaffolding, it is reachable by any parent process that sets the variable, no shipped caller sets it, and it can only make a launch FAIL - it can never turn a failing launch into a successful one. Say all of that in the script header, in those terms.
 
@@ -208,20 +212,24 @@ Insert AFTER the sentence ending `is spent for nothing.` and BEFORE `Measured re
   ORDER of its checks is the contract. First, a receipt that is absent,
   unreadable, or not this tool's own JSON means NO RECEIPT: no directory
   is opened at all. A refused launch writes no receipt, so a caller
-  cannot poll the directory it was just refused. Second, a receipt whose
+  cannot poll the directory it was just refused. NO RECEIPT IS NOT
+  EVIDENCE THAT NOTHING STARTED. The receipt is the transaction's last
+  act, so a launch interrupted at any earlier point - a hard kill
+  between process creation and publication above all - leaves no receipt
+  and may well have left a LIVE UNTRACKED CHILD. Shipping the
+  transaction in one tool NARROWS that window; it does not remove it,
+  and in its worst form no pid was written either, so the whole-tree
+  kill below cannot clear it. It is never success. Second, a receipt whose
   directory or round is not the one the caller says it is polling for is
   RECEIPT NOT EXPECTED, and still nothing is opened: the receipt binds
   itself to its own directory, and only this second, independently
-  supplied pair binds it to the act being performed. Third, no
-  launch-commit artifact means LAUNCH UNKNOWN: the directory was
-  reserved and the launch never completed, which may mean nothing
-  started or may mean a live untracked process, and those are not
-  distinguishable from disk.
-  It is never success. Shipping the transaction in one tool NARROWS this
-  state; it does not remove it, because a hard kill between process
-  creation and the recording of the pid is still reachable, and in
-  exactly that form no pid exists on disk, so the whole-tree kill below
-  cannot clear it. Fourth, a commit artifact not holding the
+  supplied pair binds it to the act being performed. Third, a VALID
+  receipt whose directory holds no launch-commit marker is LAUNCH
+  UNKNOWN. Since the marker is written before the receipt, a receipt
+  that exists proves the marker once existed, so this state means the
+  marker has since gone - removed, or lost with the directory. It is
+  never success, and it is a different condition from the interrupted
+  launch above, which produces NO RECEIPT instead. Fourth, a commit artifact not holding the
   receipt's token is LAUNCH NOT OURS: the directory belongs to another
   launch and none of its artifacts describe this one. Fifth, a missing
   or unreadable pid under a valid commit is PID UNREADABLE, because a
@@ -261,10 +269,10 @@ Insert AFTER the sentence ending `is spent for nothing.` and BEFORE `Measured re
   abandon a round whose pid is on disk, fell the whole tree with
   `taskkill /PID <id> /T /F`: killing the launcher alone leaves the
   client orphaned, which is what the 2026-08-11 report of this item
-  observed at zero CPU growth. LAUNCH UNKNOWN is the case that command
-  CANNOT clear, and the two must not be run together in one sentence: in
-  its dangerous form no pid was ever written, so there is no `<id>` to
-  pass. Clearing that one means finding the process by another route -
+  observed at zero CPU growth. NO RECEIPT after an interrupted launch is
+  the case that command CANNOT clear, and the two must not be run
+  together in one sentence: in its dangerous form no pid was ever
+  written, so there is no `<id>` to pass. Clearing that one means finding the process by another route -
   its command line, its working directory - and it is unmeasured here,
   so surface it to the user rather than claiming a remedy. Never poll
   with `ps -p` from Git Bash, which cannot see Windows pids and reports
