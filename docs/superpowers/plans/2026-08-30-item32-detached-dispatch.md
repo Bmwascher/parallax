@@ -10,7 +10,7 @@
 
 **Spec:** `docs/superpowers/specs/2026-08-30-item32-detached-dispatch-design.md`
 
-**Revision 19, 2026-08-31, at branch HEAD.** The revision number and the round counts are deliberately NOT restated in prose that goes stale: see `## What the debate changed`, whose figures are bound to a commit. The paragraph below is retained as the record of revision 5, when the design reversal happened, and is not a description of the current document.
+**This header carries NO revision number and no round count, deliberately.** Both belong in `## What the debate changed`, where every figure is bound to a commit. Round 19 caught the previous attempt printing "Revision 19" in the same sentence that said the number was not restated - a running number goes stale on the next revision, which is the whole defect. The paragraph below is retained as the record of revision 5, when the design reversal happened, and is NOT a description of the current document.
 
 **Revision 5, 2026-08-30.** Four Sol rounds on session `01a055c5-935e-76e3-ad1d-83721bc67d79` plus a two-lane poll. Round 4 closed nothing and named why: the launch is a four-step transaction that existed as five copied snippets, with the rule pinned somewhere else. Sol and Fable were polled separately on the fork and both chose a shipped tool. **The user approved reversing their design-phase choice on 2026-08-30**; the design's settled question 2 is reopened and the record says so plainly.
 
@@ -31,7 +31,7 @@
 - **The resume-after-a-kill recovery is NOT blessed.** Its soundness is unmeasured.
 - **These pins must stay green** (`test_multi_model_verify.py:609-650`): five exact strings at `>= 2` across `SKILL.md`; `test_resume_pipes_the_brief_on_stdin` matching `$brief | codex exec ... resume <SESSION_ID> -` with `[^\n]*`; and the raw pin forbidding a three-space-indented `& {`.
 - **`test_backup_lane.py:47-50` is a whitespace-NORMALIZED read.** Pins on it prove neither wrapping nor byte identity.
-- **Two facts here are NOT repo-verifiable** and are cited as harness tool contract: each tool call gets a fresh shell, and the Agent tool runs subagents in the background.
+- **THREE facts here are NOT repo-verifiable** and are cited as harness tool contract: each tool call gets a fresh shell; the Agent tool runs subagents in the background; and the harness SUBSTITUTES `${CLAUDE_PLUGIN_ROOT}` in plugin skill body text before the model sees it. The third was measured 2026-08-31 on Claude Code 2.1.251 - see Task 1 step 0 - and is stated here because a later client could change it.
 - **Dispatch every round and gate DETACHED**, named with lane and round (`Sol R1 debate round`) or, with no lane, its kind (`Gate: pytest 5.1`).
 
 ---
@@ -62,17 +62,18 @@ This is the whole point of revision 5. The four steps become one transaction in 
   - 1 for every other state, each a transport failure per fallbacks.md, with the state name on stdout.
   - 2 ONLY for a failure to bind the parameters or an internal execution error. Reading the receipt's CONTENT is never exit 2: an absent, unreadable or schema-failing receipt is `no-receipt` at exit 1, which round 9 found the previous wording contradicting by listing "an unreadable argument" under 2.
 - **Why `running` is not 0.** Revision 8 gave it 0 and wrote "exit 0 is not a result" beside it. Round 9's finding: that is the exact shape this whole cycle exists to remove - a safety rule in prose next to a command instead of a mechanism inside it. A caller branching on exit status alone would take the success path while the wrapper was still writing the reply, and Task 8 deliberately builds that arrangement. A distinct code makes the unfinished round unrepresentable as success without reading anything.
-- **`${CLAUDE_PLUGIN_ROOT}` in SKILL TEXT is a THIRD non-repo-verifiable harness fact, and this plan does not assume it.** The Fable lane found the gap: `hooks/hooks.json:10` and `:22` use the token where the HARNESS substitutes it before any shell runs, but skill body text today uses a `<plugin-root>` PLACEHOLDER instead (`SKILL.md:326`), which the session fills in - and a session filling it in by guessing is item 58's own defect. Worse, in PowerShell `${NAME}` is variable syntax, so an unsubstituted token expands to EMPTY and the path becomes the drive root, failing exactly like item 58's mislocated tool. Task 1 step 0 MEASURES which happens before anything is built, and the documented form follows the measurement. The backlog records the shape of item 58's fix as undecided (`docs/superpowers/plans/2026-07-27-0150-backlog.md:4496`), so this plan measures rather than inherits it.
+- **`${CLAUDE_PLUGIN_ROOT}` in SKILL TEXT: MEASURED, and the answer is that the harness substitutes it.** The Fable lane found this unverified and it was a real gap: `hooks/hooks.json:10` and `:22` use the token where the harness substitutes before any shell runs, but skill body text today uses a `<plugin-root>` PLACEHOLDER (`SKILL.md:326`) that the session fills in by guessing - which is item 58's own defect. And in PowerShell `${NAME}` is variable syntax, so an unsubstituted token expands to EMPTY and the path becomes the drive root. Measured 2026-08-31 rather than assumed: see Task 1 step 0. The token is therefore the form this plan ships, in every documented call and every test literal, with no conditional anywhere.
 - `-Launch`'s exit codes match `new-review-mirror.ps1:17-18`: 0 launched and committed, 1 blocked with the reason on stdout, 2 script or environment error. `-Poll` extends that set with 3 and narrows 2 as above; say so in the header, because a reader who assumes the three-code convention is exactly the reader this mapping protects.
 
-- [ ] **Step 0: Measure who resolves `${CLAUDE_PLUGIN_ROOT}` in skill text**
+- [ ] **Step 0: Record the plugin-root measurement, and re-take it**
 
-Before any test is written, because every documented call in Tasks 3 and 4 depends on the answer. Put the literal token in a scratch skill body, invoke that skill, and record what the model receives: the token verbatim, or an absolute path. Record the measurement in Task 8's probe record with the client version.
+**The measurement was taken 2026-08-31, before this plan was frozen, so no task carries a conditional.** Both reviewer lanes required it; the Fable lane found the gap and then found that a conditional left five downstream literals unconditional, which no single-task implementer could see.
 
-- If the harness SUBSTITUTES it, the documented calls keep `${CLAUDE_PLUGIN_ROOT}` as written and Task 1's outer-command test sets the same value the harness would, from the installed plugin path, and says so in a comment.
-- If it does NOT, the documented calls use the repo's existing skill-text convention, the `<plugin-root>` placeholder, and the plan's anchoring claim SHRINKS to "named, not resolved" - which is still better than a bare relative path and is honestly weaker than item 58's eventual fix. Say so in Task 9's closure text rather than letting the plan claim an anchor it does not have.
+What was measured. `openai-codex/codex/1.0.6/skills/codex-cli-runtime/SKILL.md:12` holds, on disk, the literal `node "${CLAUDE_PLUGIN_ROOT}/scripts/codex-companion.mjs"`. That skill was invoked on Claude Code **2.1.251** and the text that reached the model read `node "C:/Users/Brandon/.claude/plugins/cache/openai-codex/codex/1.0.6/scripts/codex-companion.mjs"`. **The harness substitutes the token in plugin skill body text, with an absolute path, before the model sees it.** It costs no tokens beyond loading a skill and has no side effect.
 
-Either way the tests, the skill text and the closure record use ONE form. Do not write a test that substitutes the token while the skill text relies on someone else doing it.
+So: the documented calls keep `${CLAUDE_PLUGIN_ROOT}` verbatim, and Task 1's outer-command test substitutes the installed plugin path itself, with a comment naming this measurement as the reason a test may do what the skill relies on the harness for.
+
+RE-TAKE it here rather than trusting this paragraph, because a client upgrade could change it and because the plan's own rule is that a recorded measurement is bound to the conditions it was made under. Write the result into Task 8's probe record as `plugin_root_token=<substituted|verbatim>` with `client_version=<version>`, which Task 8's schema and its test both carry. **If it comes back `verbatim`, STOP and surface it**: the anchoring claim collapses to "named, not resolved", five documented literals and one contract region are wrong, and that is a plan change rather than a task decision.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -164,7 +165,7 @@ Expected: all PASS on both. Then run one negative check by hand: delete the `cat
 - [ ] **Step 5: Commit**
 
 ```bash
-git add tools/dispatch-detached.ps1 evals/multi-model-verify/test_dispatch_detached.py
+git add tools/dispatch-detached.ps1 evals/multi-model-verify/test_dispatch_detached.py docs/superpowers/plans/rounds/2026-08-30-item32-detached-dispatch/wrapper-probe.md
 git commit -m "add the fail-closed detached dispatch tool"
 ```
 
@@ -611,9 +612,17 @@ and the anchored `-Launch` call with `-WorkingDirectory <review-mirror>`, becaus
 
 State once, above the three: `$b` is the brief read from its file — the same inline payload the bullets describe and the shape item 51 measured, never a pointer, which this lane's contract forbids. This lane's REPLY ARTIFACT is `$PSScriptRoot\reply`, the client's captured stdout, with stderr to `transcript`.
 
-**The INBOUND direction is load-bearing on this lane and on no other, and the Fable lane found it unhandled.** `> $PSScriptRoot\reply` does not copy bytes. PowerShell decodes the client's stdout using `[Console]::OutputEncoding` - the OEM code page on Windows PowerShell 5.1, measured IBM437 on both hosts in `tools/new-review-mirror.ps1:64-66` - and then re-encodes on write, UTF-16LE on 5.1 and UTF-8 on 7. A non-ASCII reply is therefore mangled differently on each host. So the wrapper sets `[Console]::OutputEncoding` to UTF-8 before the call and writes the reply itself with .NET, no BOM. This is the same defect class 0.23.0 fixed for the codex lane's OUTBOUND brief and item 51 owns for this lane's outbound argument; nothing had looked at the way back.
+**The INBOUND direction is load-bearing on this lane and on no other, and the Fable lane found it unhandled.** `> $PSScriptRoot\reply` does not copy bytes. PowerShell decodes the client's stdout using `[Console]::OutputEncoding` - the OEM code page on Windows PowerShell 5.1, measured IBM437 on both hosts in `tools/new-review-mirror.ps1:57-75` - and then re-encodes on write, UTF-16LE on 5.1 and UTF-8 on 7. A non-ASCII reply is therefore mangled differently on each host. So the wrapper sets `[Console]::OutputEncoding` to UTF-8 before the call and writes the reply itself with .NET, no BOM. This is the same defect class 0.23.0 fixed for the codex lane's OUTBOUND brief and item 51 owns for this lane's outbound argument; nothing had looked at the way back.
 
 `$OutputEncoding` still does NOT appear here, and that remains deliberate: it governs what PowerShell pipes INTO a native command, and this lane passes its brief as an argument. `[Console]::OutputEncoding` is a different variable governing the opposite direction. Naming both, and why only one applies, is the point.
+
+Three caveats belong with it, all from the Fable lane's judgement on this exact repair, and none of them is a reason not to do it:
+
+- The setter calls the console API, so in a process chain with NO attached console it THROWS. Here the throw lands in the `catch`, writes exit 1, and polls as `exit-nonzero`: fail-closed, never false-clean. Say so in the wrapper's prose, because the first time it happens it will look like a client failure.
+- The decode is NON-STRICT. A malformed byte becomes U+FFFD silently - `tools/new-review-mirror.ps1:67-75` states exactly this as its own reason for reading raw bytes instead. This fix NARROWS the defect and does not prove byte identity. Do not let a later document claim it does.
+- It assumes the client emits UTF-8, which is unverified. Setting the console code page to UTF-8 is also the standard way to ASK a well-behaved CLI for UTF-8, so it is the right move under either answer.
+
+`-join "`n"` discards nothing the redirect preserved: PowerShell splits native stdout into lines at decode time in BOTH forms, and the redirect then rejoins with CRLF and re-encodes. A `$null` output joins to an empty string, which lands on `reply-empty`, the correct state.
 
 The codex lane needs none of this: `--output-last-message` is written by the client itself and never crosses a PowerShell redirect.
 
@@ -753,9 +762,22 @@ if ($errors.Count -gt 0) { $errors | ForEach-Object { $_.Message }; exit 1 }
 
 Expected: zero parse errors on both hosts.
 
-- [ ] **Step 4: Stub-run each body, three outcomes**
+- [ ] **Step 4: Stub-run each body, PER LANE, because the two lanes produce their reply differently**
 
-Substitute `<kimi-code-binary>` with the stub's ABSOLUTE path — PATH shadowing does not intercept an absolute invocation — and shadow `codex` on PATH, which does work for a bare name. Per body: stub exits 0 writing a reply, expect `exit` = `0` and a reply present; stub exits 3 writing nothing, expect `3`; a pre-client throw, expect `exit` EXISTS with a non-zero code. Assert no real client ran.
+Substitute `<kimi-code-binary>` with the stub's ABSOLUTE path — PATH shadowing does not intercept an absolute invocation — and shadow `codex` on PATH, which does work for a bare name. Assert no real client ran.
+
+Round 19's finding, from both lanes: the previous version said "stub exits 0 writing a reply, expect a reply present" for BOTH bodies, and that is now wrong for one of them. The codex client writes its own reply with `--output-last-message`. The Kimi wrapper writes the reply ITSELF from captured stdout, so a Kimi stub that writes a reply file and prints nothing has its file overwritten with an empty string and the case cannot pass.
+
+**Codex body:** stub exits 0 writing the reply file, expect `exit` = `0` and a reply present; stub exits 3 writing nothing, expect `3`; a pre-client throw, expect `exit` EXISTS with a non-zero code.
+
+**Kimi body:** the stub EMITS its reply on stdout and writes no file.
+
+- Exit 0 emitting a payload that contains at least one em dash, one non-Latin character and one astral-plane character: expect `exit` = `0`, and assert the reply file's BYTES equal the payload's UTF-8 encoding EXACTLY, with NO BOM. On both hosts. **This is the oracle for the `[Console]::OutputEncoding` line, which both lanes found stated in prose with nothing testing it** - restoring the defective `> $PSScriptRoot\reply` satisfied every other assertion in Tasks 4 and 7. Prove it can fail: delete that one line, confirm the byte comparison goes red on Windows PowerShell 5.1, and restore it.
+- Exit 3 emitting nothing: expect `3`.
+- Exit 0 emitting nothing: expect a reply file that is EMPTY, which polls as `reply-empty` and not as a missing artifact.
+- A pre-client throw: expect `exit` EXISTS with a non-zero code.
+
+Record the byte comparison's outcome into Task 8's probe record as `kimi_reply: bytes_match=<..> bom_present=<..>` per host.
 
 - [ ] **Step 5: TASK-LOCAL ORACLE**
 
@@ -773,7 +795,7 @@ git commit -m "parse and stub-run every wrapper body"
 ### Task 8: Measure what the stubs cannot, on both hosts
 
 **Files:**
-- Create: `docs/superpowers/plans/rounds/2026-08-30-item32-detached-dispatch/wrapper-probe.md`
+- Modify: `docs/superpowers/plans/rounds/2026-08-30-item32-detached-dispatch/wrapper-probe.md` - Task 1 step 0 creates it with the `harness` line; this task adds the two host sections
 - Create: `evals/multi-model-verify/test_wrapper_probe_record.py`
 
 Round 7 caught this same omission on Task 9 and the Fable lane caught it here: step 6 writes the test and step 7 stages it, and no earlier version of this task listed it.
@@ -801,11 +823,16 @@ Expected: the binding ACCEPTS and the recorded prompt is byte-identical to the f
 Round 18's finding: an oracle over rows that only counts them accepts a record saying every measurement FAILED. The record therefore carries one section per host, and inside each, one row per measurement with named fields, not prose:
 
 ```
+harness: plugin_root_token=<substituted|verbatim> client_version=<version>
+
 ## host: <windows-powershell-5.1 | powershell-7>
 boundary: launch_return_seconds=<n> alive_in_later_call=<true|false> exit_file_after_sleep=<true|false>
 states: killed_tree=<state> refused_receipt=<state> empty_reply=<state>
 encoding: binder=<accepted|refused> prompt_sha256_matches=<true|false> prompt_bytes_match=<true|false>
+kimi_reply: bytes_match=<true|false> bom_present=<true|false>
 ```
+
+The `harness` line is host-independent and appears once, above both host sections. It holds Task 1 step 0's re-taken measurement, which is the only place in this plan where a step in one task writes into a file another task creates - so Task 8's **Files** line says Modify for the record, not Create, and Task 1 step 0 creates it.
 
 Fill them from the measurements above. If any value comes out the other way, WRITE IT AS MEASURED and stop: a probe that records what it hoped for is worth less than no probe, and this task exists because nothing before it tested the plan's central promise end to end.
 
@@ -816,6 +843,8 @@ Round 4 found this task had no oracle and round 18 found the replacement countin
 - `boundary`: `launch_return_seconds` parses as a number and is **under 15**, `alive_in_later_call=true`, `exit_file_after_sleep=true`. The number is the plan's whole claim - a call that took 90 seconds returned only when the child did, which is the blocking form again.
 - `states`: `killed_tree=no-exit-file`, `refused_receipt=no-receipt`, `empty_reply=reply-empty`, compared exactly against those state names.
 - `encoding`: `binder=accepted`, `prompt_sha256_matches=true`, `prompt_bytes_match=true`.
+- `kimi_reply`: `bytes_match=true`, `bom_present=false`. This is the Kimi lane's INBOUND encoding, which both lanes found unmeasured; Task 7 step 4 below is where it is exercised.
+- `harness`: `plugin_root_token=substituted`, and `client_version` non-empty. If the token ever measures `verbatim` this assertion goes red, which is the intended behaviour: it is a plan-level change, not something a task may absorb.
 
 Then prove the oracle can fail: change ONE recorded value in a scratch copy - `alive_in_later_call` to `false` - confirm the test goes red naming that field, and restore it. A record whose test only counts its rows is the "presence is not meaning" defect this debate found five times, and Task 8 is the one task whose rows are the evidence rather than a description of it.
 
@@ -850,7 +879,7 @@ Expected: `scope table ok` and exit 0. Any other five values, or a row that lost
 
 **Replace two more spec passages that the receipt-last ordering made false.** Round 14's finding, and both are consequences of a change three revisions earlier rather than fresh mistakes:
 
-- `docs/superpowers/specs/2026-08-30-item32-detached-dispatch-design.md:175-183` says the orphan half of item 32 has a documented answer because "the pid is on disk". After revision 13 that is exactly backwards for the dangerous case: an interrupted launch leaves NO RECEIPT and may leave no pid either, which is the one case `taskkill /PID <id>` cannot clear. Rewrite it to say the pid is on disk for every COMMITTED launch, and that the interrupted one is the residual the contract names and does not remedy.
+- `docs/superpowers/specs/2026-08-30-item32-detached-dispatch-design.md:175-183` says the orphan half of item 32 has a documented answer because "the pid is on disk". After revision 13 that is exactly backwards for the dangerous case: an interrupted launch leaves NO RECEIPT and may leave no pid either, which is the one case `taskkill /PID <id>` cannot clear. Rewrite it to say the pid is on disk for every COMMITTED launch; that the interrupted launch leaves no receipt and may leave no pid; and that a committed launch whose WRAPPER HOST DIED while the client child lives is a SECOND case the pid cannot clear, because the pid on disk is the dead wrapper. Round 19's finding: without the second case named here, the reconciled spec could omit it and every Task 9 check still passed.
 - `design.md:190-194` says LIVENESS IS CHECKED FIRST. It is now checked sixth: receipt validity, expected-act identity, the marker, the token and the pid all precede it. Replace the sentence with the ordered list the plan builds.
 
 **Replace the spec's mechanism section outright.** `docs/superpowers/specs/2026-08-30-item32-detached-dispatch-design.md:136-148` still describes the SESSION running `Start-Process`, writing the pid file, and polling it - the design the debate rejected in favour of a shipped tool. Round 10's finding: Task 9 updated five things around that section and never replaced the section itself, and the convergence grep does not search for a session-owned launch. Replace it with the transaction this plan builds: the session writes a wrapper body and calls the tool; the tool checks the receipt path, reserves the directory, installs the wrapper, starts the process, records the pid and start ticks, writes the commit marker, and publishes the receipt; later calls poll the RECEIPT with the expected directory and round.
@@ -867,7 +896,7 @@ Expected: no hits outside a passage explicitly narrating history. Round 4 found 
 
 Two of the patterns need their replacement wording stated exactly, or the reconciliation drifts again:
 
-- `design.md:208-210` says `test_the_brief_is_read_and_piped_as_utf8` "counts four exact strings". It holds FIVE `>= 2` counts (`evals/multi-model-verify/test_multi_model_verify.py:619-647`), and this plan's own Global Constraints say five. Correct the spec to five. The Fable lane found it; no grep in this step searched for a wrong number stated in words.
+- `design.md:208-210` says `test_the_brief_is_read_and_piped_as_utf8` "counts four exact strings". It holds FIVE `>= 2` counts (`evals/multi-model-verify/test_multi_model_verify.py:619-647`), and this plan's own Global Constraints say five. Correct the spec to read "counts five exact strings". The Fable lane found the wrong number; round 19 found that forbidding the old phrase is satisfied by DELETING the sentence, so the python oracle below requires the replacement positively.
 - The encoding claim becomes lane-specific. The codex lane's wrapper carries the `$OutputEncoding` preamble because its brief goes down a PIPE. The Kimi lane's wrapper carries none because its brief goes as an ARGUMENT, which is a different transport with a different defect, and item 51 owns that one.
 - The state count is TWELVE, so every spelled count below twelve is a stale hit, and `powershell -NoProfile -File` is stale because the documented call now uses the caller's own host.
 - The grep is `-i`. Round 7's finding: the spec spells `SEVEN states` in capitals at `docs/superpowers/specs/2026-08-30-item32-detached-dispatch-design.md:194`, and a case-sensitive pattern walked straight past the one stale count the step was written to catch.
@@ -893,9 +922,13 @@ def section(head):
     return ' '.join(t[i:(len(t) if j < 0 else j)].split())
 
 orph = section('### The orphan half')
+assert "counts five exact strings" in ' '.join(t.split()), (
+    "the corrected count is absent; deleting the sentence is not a fix")
+
 for clause in ("the pid is on disk for every committed launch",
                "an interrupted launch leaves no receipt",
-               "may leave no pid"):
+               "may leave no pid",
+               "the pid on disk is the dead wrapper"):
     assert clause in orph, "orphan section missing: " + clause
 
 con = section('## Constraints that must survive')
@@ -937,7 +970,7 @@ Expected: all five green, zero FAILED and zero ERROR. Do not pipe through `tail`
 
 Both headings `OPEN` to `DONE` with the version. Remove item 32's ranking entry and renumber below it. Rebuild the `**Open.**` and `**Done.**` lists by reading the headings.
 
-State in item 32 what was NOT done: item 51 still owns the argv escaping repair; item 31 is untouched; **item 58 is untouched except that this cycle's ONE new tool call is anchored while the three existing ones at `SKILL.md:94`, `:121` and `:228` are still bare relative paths** — record that asymmetry rather than leaving it to be discovered; the resume-after-a-kill recovery is still unmeasured; and the interrupted launch that leaves NO RECEIPT, possibly with a live untracked child and no pid on disk, is narrowed, not eliminated.
+State in item 32 what was NOT done: item 51 still owns the argv escaping repair; item 31 is untouched; **item 58 is untouched except that this cycle's ONE new tool call is anchored - resolved by the harness, measured on Claude Code 2.1.251 per Task 1 step 0, not merely named - while the three existing ones at `SKILL.md:94`, `:121` and `:228` are still bare relative paths** — record that asymmetry rather than leaving it to be discovered; the resume-after-a-kill recovery is still unmeasured; and the interrupted launch that leaves NO RECEIPT, possibly with a live untracked child and no pid on disk, is narrowed, not eliminated.
 
 - [ ] **Step 8: Commit**
 
@@ -955,6 +988,8 @@ Sol session `01a055c5-935e-76e3-ad1d-83721bc67d79`.
 **Every count in this section is bound to a commit, and that is deliberate.** A document that counts the rounds reviewing it is stale the moment the next round runs, and this section was wrong twice for exactly that reason - round 15 caught it recording four reviews while fourteen had happened, and round 17 caught the correction already one behind. Binding the figure to a fixed point makes it a claim that stays true instead of a running total that cannot. Item 70 is the general form of this hazard.
 
 **As of `92c892f`, the commit this paragraph was written on top of: SEVENTEEN numbered dispatches - sixteen full review rounds and one two-lane poll, which was dispatch 5.** Later rounds are recorded below by number without restating a total. Round 7 took two attempts; the first was refused by the round-evidence binder and discarded unread. That refusal's only artifact is a renamed reply file in the session scratchpad, outside this repository, so it is recorded here and is NOT repo-verifiable - round 15's point, and it is stated rather than dropped. Every finding was reproduced against the repository before acceptance and none was refuted. Two reviewer rulings reversed decisions I had already reported to the user: the Kimi lane's scope, and the whole launch mechanism.
+
+The record below runs to round 19 and the two Fable-lane rounds. Round 19's own finding, that this promise had outrun the entries, is why.
 
 **Rounds 1 to 4 and 6 to 9** each found at least one FALSE-COMPLETION PATH OR UNCLASSIFIED COMPLETION CONDITION - eight rounds, not nine, because dispatch 5 was the poll and not a review. Round 16's correction: not all eight were cross-act substitution. Round 4 found a condition outside the state model entirely, and round 9 found an unfinished round exiting zero; neither is one act's artifact read as another's. Rounds 10 onward found none - through round 17 as this was written - and each named the shapes it had swept for. What they found instead was oracles that could not fail and text left behind by a mechanism change - twice, an oracle written to fix the previous round's oracle.
 
@@ -977,6 +1012,10 @@ Round 4 is where this plan stopped being a set of copied snippets: it found the 
 **Round 9** — `running` exited 0 with "exit 0 is not a result" written beside it, which is a rule in prose where a mechanism belongs. It exits 3 now. The receipt-outside-the-directory guarantee was claimed and unenforced.
 
 **Rounds 10 to 12** — no new completion path. The point-of-use text carried a stale exit mapping; two tasks expected a red-then-green cycle on a guard that was already green; and two Task 9 oracles could not fail, the second being the fix for the first.
+
+**Round 18** — Task 8's oracle counted the probe record's ROWS instead of reading them, so a record stating that every measurement failed would have passed. It now asserts each measured value and requires a red demonstration.
+
+**A second lane, then round 19** — because eighteen dispatches on one resumed session is a great deal of anchoring, a Claude-side reviewer read the plan cold. It found SIX defects neither lane had named, two of them mechanism-level: the Kimi lane's reply crosses a PowerShell redirect that decodes with the OEM code page and re-encodes per host, which nobody had looked at in the inbound direction; and `${CLAUDE_PLUGIN_ROOT}` in skill text was unverified, where an unsubstituted token expands to EMPTY in PowerShell and fails exactly like item 58. Round 19 confirmed both diagnoses, refused the encoding repair as untested prose, and found that a measurement written as a conditional left five downstream literals unconditional. The token was then MEASURED - see Task 1 step 0 - and the fork removed. This is the strongest argument in the whole record for a second lane: a fresh reader found in one pass what eighteen rounds of an anchored one did not.
 
 **Rounds 13 to 17** — the receipt-last ordering, applied in revision 10, had never been propagated. The hard-kill test named a state it could not reach, `LAUNCH UNKNOWN` meant two different things, four passages plus two spec sections still described the older mechanism, and one test still called a HANDLED failure the irreducible one while promising that "nothing is left behind", which the transaction never guaranteed. Round 16 refused two replacement oracles that checked whether tokens were PRESENT rather than what they said, with a counter-example that contained every required token and stated the opposite of the contract; both are now python checks asserting verbatim clauses and comparing positions. Rounds 15 and 17 both caught this record miscounting the rounds that were reviewing it, which is why its figures are now bound to a commit.
 
