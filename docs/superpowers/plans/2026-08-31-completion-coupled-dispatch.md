@@ -107,66 +107,123 @@ any of them.
 
 ### The wrapper the tool composes
 
-The lane supplies ONLY its client invocation, which must set `$code` and
-must write nothing to stdout. `-Prepare` wraps it:
+The lane supplies ONLY its client invocation, in its own file. `-Prepare`
+installs it as `body.ps1` beside the wrapper and **the wrapper runs it as
+a CHILD PROCESS**, never inline:
 
 ```powershell
-# PROLOGUE, written by the tool
+# WRAPPER, written entirely by the tool
 $ErrorActionPreference = 'Stop'
 [System.IO.File]::Open("$PSScriptRoot/claim", 'CreateNew', 'Write', 'None').Close()
 Set-Location -LiteralPath '<workingDirectory>' -ErrorAction Stop
-$code = 1
 $ErrorActionPreference = 'Continue'
-
-# ---- lane body, verbatim ----
-
-# EPILOGUE, written by the tool
+& '<hostPath>' -NoProfile -NonInteractive -File "$PSScriptRoot/body.ps1"
+$code = $LASTEXITCODE
+if ($null -eq $code) { $code = 1 }
 [System.IO.File]::WriteAllText("$PSScriptRoot/exit", "$code", (New-Object System.Text.UTF8Encoding($false)))
-& '<tool-path>' -Classify -DispatchDir '<dispatchDir>' -ReceiptPath '<receiptPath>' -ExpectedRound '<round>'
+# test seam: PARALLAX_DISPATCH_HOLD_AFTER_EXIT_WRITE, see below
+& '<toolPath>' -Classify -DispatchDir '<dispatchDir>' -ReceiptPath '<receiptPath>' -ExpectedRound '<round>'
 exit $LASTEXITCODE
 ```
 
-Four things this ordering buys, each of them a finding from the poll:
+The lane body ends with `exit $code`, carrying the client's own exit code
+out of the child. It writes its reply and its transcript into
+`$PSScriptRoot`, which for `body.ps1` is the same dispatch directory.
+
+**The child process is not decoration, and it is not a performance
+choice.** If the body were inlined, a body containing `exit 0` - or
+`[Environment]::Exit(0)`, which no text scan can catch - would end the
+WRAPPER before the epilogue ever ran. The harness would then see exit 0
+with no classification ever computed, and an empty reply would read as a
+completed round. That is the one direction in which coupling the
+classification to the wrapper is WEAKER than classifying afterwards, and
+a child process removes it structurally: whatever the body does to its own
+process, the wrapper survives to classify.
+
+Five things this ordering buys:
 
 1. **The claim is create-new and it is the first act.** A second run of the
    same prepared wrapper dies before it can touch anything.
 2. **The relocation is terminating.** A missing reviewed tree fails the
    wrapper instead of continuing from whatever directory the harness had.
-3. **The wrapper's exit code IS the classification.** The harness trailer
+3. **The body cannot skip the classification.** It runs in its own
+   process.
+4. **The wrapper's exit code IS the classification.** The harness trailer
    and the outcome cannot disagree, which is R9.
-4. **Classification cannot outlive the process.** If the wrapper is
+5. **Classification cannot outlive the process.** If the wrapper is
    suspended, hangs in teardown, or is killed after writing `exit`, it
    never reaches `exit $LASTEXITCODE`, so the harness task does not report
    a successful completion. This is the exact hole Option C left open.
 
+### One test seam, and what it may and may not do
+
+`PARALLAX_DISPATCH_HOLD_AFTER_EXIT_WRITE`, set to a path, makes the
+wrapper create `<value>.started` after the `exit` file is written and then
+wait, bounded at sixty seconds, for `<value>.release` before calling the
+classifier. On timeout the wrapper fails through to a non-zero exit.
+
+This is BUILDER CONTRACT, not test scaffolding, the same shape as the
+seams in `tools/new-kimi-lane-home.ps1`: any parent process can set it, no
+shipped caller sets it, and its only reachable effect is to DELAY or FAIL
+a wrapper - never to turn a failing round into a successful one. Without
+it, the test that proves this whole design is a millisecond race in a
+different costume, which is what the previous cycle shipped.
+
 ### The states `-Classify` computes
 
-In this fixed order, stopping at the first match:
+`-Classify` takes an ANSWER CLAIM as its own first act: it creates
+`classification` in the dispatch directory with create-new semantics. If
+that file already exists it stops immediately at `already-classified`,
+exit 1, reading nothing else. Then, in this fixed order, stopping at the
+first match:
 
-1. receipt absent, unreadable, or failing the schema -> `no-receipt`
-2. receipt's `dispatchDir` or `round` is not the pair supplied
+1. `classification` already exists -> `already-classified`
+2. receipt absent, unreadable, or failing the schema -> `no-receipt`
+3. receipt's `dispatchDir` or `round` is not the pair supplied
    independently -> `receipt-not-expected`
-3. no `claim` file in the dispatch directory -> `no-claim`
-4. `workingDirectory` missing, unresolvable, or not a filesystem
+4. no `claim` file in the dispatch directory -> `no-claim`
+5. `workingDirectory` missing, unresolvable, or not a filesystem
    container -> `cwd-unreadable`
-5. no `exit` file -> `no-exit-file`
-6. `exit` unreadable or not a plain integer -> `exit-unreadable`
-7. `exit` non-zero -> `exit-nonzero`
-8. `workdirEvidence` is not `none` and the transcript does not contain it
-   -> `workdir-mismatch`
-9. no `reply` file -> `no-reply`
-10. `reply` is empty -> `reply-empty`
-11. otherwise -> `reply-present`
+6. no `exit` file -> `no-exit-file`
+7. `exit` unreadable or not a plain integer -> `exit-unreadable`
+8. `exit` non-zero -> `exit-nonzero`
+9. `workdirEvidence` is not `none` and no transcript file exists ->
+   `no-transcript`
+10. `workdirEvidence` is not `none` and the transcript does not contain it
+    -> `workdir-mismatch`
+11. no `reply` file -> `no-reply`
+12. `reply` is empty -> `reply-empty`
+13. otherwise -> `reply-present`
 
-Eleven states. Exit codes: **0 is `reply-present` and nothing else; 2 is a
-parameter-binding failure or an internal execution error; 1 is every other
-state**, with the state name on stdout. There is no exit 3, because
+Thirteen states. Exit codes: **0 is `reply-present` and nothing else; 2 is
+a parameter-binding failure or an internal execution error; 1 is every
+other state**, with the state name on stdout. There is no exit 3, because
 `running` cannot exist: the classifier runs only after the client has
 returned.
 
-`workdir-mismatch` sits before the reply states on purpose. A round that
-read the wrong tree is a worse failure than a missing reply, and a
-transcript that was never written must not fall through to a reply check.
+**Why the answer claim exists.** Deleting `-Poll` does not by itself
+remove the post-hoc path to a verdict, because `-Classify` is a standalone
+mode with the same inputs. Without the claim, a caller who runs
+`-Classify` by hand against a finished round's directory gets exit 0 for
+that round's artifacts while believing it is judging a later one - the
+residual the old tool documented and did not close. The create-new
+`classification` file closes it: the wrapper's own call takes the claim,
+and every later call, by hand or otherwise, is refused.
+
+**Why `no-transcript` is its own state.** Folding it into
+`workdir-mismatch` would put a made-sounding name on an unmade
+measurement: a mismatch indicts the mirror configuration, a missing
+transcript indicts the wrapper's redirection, and the operator's next act
+differs. The receipt's deviations are folded because nothing branches on
+which one occurred; here something does.
+
+**Why `exit-nonzero` is still checked before both of them.** First match
+wins, so some fact is always hidden. A round that ran in the wrong tree
+AND failed reads as `exit-nonzero`, because the client's own report of
+failure is the most actionable thing the operator has. This is a choice,
+not an oversight, and the operational region says so: a wrong-tree round
+that also failed is diagnosed from the transcript, not from the state
+name.
 
 ### What the caller does
 
@@ -209,6 +266,7 @@ authoritative.
 | `tools/dispatch-round.ps1` (renamed) | `-Prepare` and `-Classify` only |
 | `tools/dispatch-detached.ps1` | deleted |
 | `tools/read-codex-round-evidence.ps1` | gains `-SealedPriorStateSha256` |
+| `tools/read-kimi-round-evidence.ps1` | gains the SAME parameter |
 | `evals/multi-model-verify/test_dispatch_round.py` (renamed) | the tool's contract |
 | `evals/multi-model-verify/test_contract_coverage.py` | `DECLARED_REGIONS` |
 | `evals/multi-model-verify/test_multi_model_verify.py` | call-site pins |
@@ -337,6 +395,14 @@ def test_prepare_refuses_an_existing_dispatch_directory(tmp_path):
     assert "dispatch directory already exists" in out.stdout
 
 
+def test_prepare_installs_the_lane_body_as_its_own_script(tmp_path):
+    p = prepare(tmp_path, body="$code = 0\nexit $code\n")
+    assert (p.dispatch_dir / "body.ps1").read_text() == "$code = 0\nexit $code\n"
+    wrapper = (p.dispatch_dir / "wrapper.ps1").read_text()
+    assert "body.ps1" in wrapper
+    assert "$code = 0" not in wrapper  # the body is NOT inlined
+
+
 def test_prepare_refuses_a_receipt_inside_the_dispatch_directory(tmp_path):
     d = tmp_path / "d"
     out = prepare_default(tmp_path, dispatch_dir=d, receipt=d / "r.json")
@@ -383,17 +449,24 @@ process is started here.
 
 1. Resolve `-ReceiptPath`, `-DispatchDir`, `-WorkingDirectory`. BLOCK if
    the receipt path is equal to or inside the dispatch directory, if the
-   receipt path exists, or if the working directory is not an existing
-   filesystem container. All before anything is created.
+   receipt path exists, if the DISPATCH DIRECTORY already exists, or if
+   the working directory is not an existing filesystem container. All
+   before anything is created. Each block prints its own message; the
+   directory case prints exactly `dispatch directory already exists`.
+   Do not rely on `New-Item`'s exception text at step 4 to produce it -
+   that check stays as a race backstop, but the message the test pins
+   comes from this explicit pre-check.
 2. Resolve `-DispatchHost` to a full path with `Get-Command`. Exactly
    `pwsh` or `powershell` are accepted; anything else, or a name that does
    not resolve, exits 2.
 3. Read `-PriorStateFile` as raw bytes and compute its SHA256.
 4. Reserve the dispatch directory with `New-Item -ItemType Directory
    -ErrorAction Stop` and NO `-Force`.
-5. Compose `wrapper.ps1` into the directory: prologue, `-WrapperBody`
-   verbatim, epilogue. Task 4 builds the composition; for this task write
-   the body through unchanged so the test above passes.
+5. Copy `-WrapperBody` into the directory as `body.ps1`, byte for byte,
+   and write `wrapper.ps1` beside it. The wrapper is written ENTIRELY by
+   the tool and never contains the body's text. Task 4 builds the
+   wrapper's full shape; for this task write a wrapper that runs
+   `body.ps1` as a child and nothing else, so the tests above pass.
 6. Write the receipt LAST, with create-new semantics.
 7. Print `command`, `taskName`, `wrapper`, `dispatchDir`, `round`.
 
@@ -432,9 +505,10 @@ git commit -m "replace launch and poll with a fail-closed prepare"
 
 ```python
 STATES = [
-    ("no-receipt", 1), ("receipt-not-expected", 1), ("no-claim", 1),
-    ("cwd-unreadable", 1), ("no-exit-file", 1), ("exit-unreadable", 1),
-    ("exit-nonzero", 1), ("workdir-mismatch", 1), ("no-reply", 1),
+    ("already-classified", 1), ("no-receipt", 1),
+    ("receipt-not-expected", 1), ("no-claim", 1), ("cwd-unreadable", 1),
+    ("no-exit-file", 1), ("exit-unreadable", 1), ("exit-nonzero", 1),
+    ("no-transcript", 1), ("workdir-mismatch", 1), ("no-reply", 1),
     ("reply-empty", 1), ("reply-present", 0),
 ]
 
@@ -447,9 +521,44 @@ def test_each_state_and_its_exit_code(tmp_path, state, code):
     assert out.returncode == code
 
 
-def test_only_reply_present_exits_zero(tmp_path):
-    zero = [s for s, c in STATES if c == 0]
+def test_no_state_but_reply_present_can_exit_zero(tmp_path):
+    # Drive the TOOL for every state and collect the codes it really
+    # returned. Asserting over the STATES constant instead would assert
+    # the test module against itself and lock nothing.
+    zero = []
+    for state, _ in STATES:
+        d = build_dispatch_for_state(tmp_path / state, state)
+        if classify(d).returncode == 0:
+            zero.append(state)
     assert zero == ["reply-present"]
+
+
+def test_the_answer_claim_refuses_a_second_classification(tmp_path):
+    d = build_dispatch_for_state(tmp_path, "reply-present")
+    first = classify(d)
+    assert first.returncode == 0
+    second = classify(d)
+    assert second.returncode == 1
+    assert second.stdout.strip().endswith("already-classified")
+
+
+def test_a_missing_transcript_is_its_own_state(tmp_path):
+    d = build_dispatch_with_workdir_evidence(tmp_path, evidence="C:\\mirror")
+    (d / "exit").write_text("0", encoding="ascii")
+    (d / "reply").write_text("a verdict", encoding="utf-8")
+    # no transcript file at all
+    out = classify(d)
+    assert out.stdout.strip().endswith("no-transcript")
+    assert out.returncode == 1
+
+
+def test_a_failed_round_in_the_wrong_tree_reports_the_failure(tmp_path):
+    # First match wins, and exit-nonzero is deliberately earlier.
+    d = build_dispatch_with_workdir_evidence(tmp_path, evidence="C:\\mirror")
+    (d / "exit").write_text("1", encoding="ascii")
+    (d / "transcript").write_text("workdir: C:\\elsewhere", encoding="utf-8")
+    out = classify(d)
+    assert out.stdout.strip().endswith("exit-nonzero")
 
 
 def test_state_order_is_first_match_wins(tmp_path):
@@ -468,14 +577,6 @@ def test_workdir_mismatch_beats_a_missing_reply(tmp_path):
     out = classify(d)
     assert out.stdout.strip().endswith("workdir-mismatch")
     assert out.returncode == 1
-
-
-def test_a_missing_transcript_is_workdir_mismatch_not_a_reply_state(tmp_path):
-    d = build_dispatch_with_workdir_evidence(tmp_path, evidence="C:\\mirror")
-    (d / "exit").write_text("0", encoding="ascii")
-    (d / "reply").write_text("a verdict", encoding="utf-8")
-    out = classify(d)
-    assert out.stdout.strip().endswith("workdir-mismatch")
 
 
 def test_none_skips_the_workdir_check_only_on_the_exact_literal(tmp_path):
@@ -516,14 +617,26 @@ Expected: FAIL, `-Classify` is not a parameter.
 
 - [ ] **Step 3: Implement `-Classify`**
 
-Compute the eleven states in the documented order, stopping at the first
-match and reading nothing further. Print the state name on stdout; with
-`-Json`, print an object carrying `state` and the receipt's `round` when a
-receipt was read, `round` null otherwise.
+Take the answer claim first: create `classification` with create-new
+semantics, and stop at `already-classified` if it exists. Then compute the
+thirteen states in the documented order, stopping at the first match and
+reading nothing further. Print the state name on stdout; with `-Json`,
+print an object carrying `state` and the receipt's `round` when a receipt
+was read, `round` null otherwise.
+
+Write the resolved state INTO the `classification` file once it is known,
+so the file is both the claim and the record.
 
 Reject unknown arguments: add `[Parameter(ValueFromRemainingArguments =
 $true)] $Rest` to the parameter block and exit 2, naming the first
 unrecognised token, whenever it is non-empty. Do this for BOTH modes.
+
+**Verify, do not assume, that this works the same on both hosts.**
+`ValueFromRemainingArguments` promotes the script to an advanced script,
+which changes parameter binding. Run
+`test_an_unknown_argument_is_refused_not_absorbed` under 5.1 and under 7
+before moving on. If binding differs, an explicit `$args` check replaces
+it and this step is corrected in the same commit.
 
 - [ ] **Step 4: Run the tests**
 
@@ -607,43 +720,48 @@ def test_a_missing_working_directory_fails_the_wrapper(tmp_path):
     assert not (p.dispatch_dir / "reply").exists()
 
 
-def test_a_wrapper_killed_after_publishing_exit_and_reply_does_not_exit_zero(tmp_path):
-    # The Option C hole, made a test.
-    p = prepare(tmp_path, body=HOLD_AFTER_PUBLISH_BODY)
+def test_a_wrapper_killed_after_publishing_exit_and_reply_does_not_exit_zero(tmp_path, monkeypatch):
+    # THE test. Under Option C's post-hoc classifier this same directory
+    # reads reply-present at exit 0.
+    barrier = tmp_path / "hold"
+    monkeypatch.setenv("PARALLAX_DISPATCH_HOLD_AFTER_EXIT_WRITE", str(barrier))
+    p = prepare(tmp_path, body=OK_BODY)
     proc = start_wrapper(p.wrapper)
-    wait_for(p.dispatch_dir / "exit")
-    wait_for(p.dispatch_dir / "reply")
+    # The seam fires AFTER the wrapper writes the exit file and BEFORE it
+    # calls the classifier. That is exactly the interval in question.
+    wait_for(Path(str(barrier) + ".started"))
     assert (p.dispatch_dir / "exit").read_text().strip() == "0"
     assert (p.dispatch_dir / "reply").read_text().strip() != ""
+    assert not (p.dispatch_dir / "classification").exists()
     kill_tree(proc.pid)
     assert proc.wait() != 0
+    # And the disk state that would have fooled Option C is still there.
+    assert (p.dispatch_dir / "exit").read_text().strip() == "0"
+
+
+def test_a_body_that_exits_the_process_cannot_skip_the_classification(tmp_path):
+    # The body runs as a CHILD, so its own exit cannot end the wrapper.
+    d = prepare_and_run(tmp_path, body='[Environment]::Exit(0)\n')
+    assert d.returncode != 0
+    assert "no-reply" in d.stdout
 
 
 def test_the_wrapper_stdout_carries_only_the_classifier_line(tmp_path):
     d = prepare_and_run(tmp_path, body='''
-$code = 0
 Write-Output "this must not reach the harness"
 [System.IO.File]::WriteAllText("$PSScriptRoot/reply", "ok")
+exit 0
 ''')
-    # The lane body's own stdout is a lane defect, not a tool one, but the
-    # tool must not ADD any line of its own.
     assert d.stdout.strip().splitlines()[-1].endswith("reply-present")
 ```
 
-The seventh test is the one that separates D from C. Under Option C's
-classifier the same directory reads `reply-present` at exit 0. Under D the
-process never reaches its `exit` statement, so the task it belongs to
-cannot report success.
-
-`HOLD_AFTER_PUBLISH_BODY` writes `exit` and `reply`, then blocks on a
-sentinel file so the kill lands in the interval Sol named. Build it as a
-deterministic barrier, not a sleep: a millisecond race in a different
-costume is what the previous cycle shipped.
-
-Note also that `exit` is written by the EPILOGUE, so the body must publish
-`reply` and then hold; the epilogue's `exit` write happens when the body
-returns. Structure the barrier accordingly and say in a comment which
-statement the kill is landing between.
+The kill test is what separates D from C, and it only works because the
+seam gives it a deterministic interval. Do NOT build it on a sleep, and do
+NOT build it on the body holding: under this design the body is a child
+process and the `exit` file is written by the WRAPPER after that child
+returns, so a holding body never lets the exit file appear at all. The
+seam is in the wrapper, between the exit write and the classify call,
+because that is the only place the interval exists.
 
 - [ ] **Step 2: Run them and watch them fail**
 
@@ -651,15 +769,26 @@ statement the kill is landing between.
 python -m pytest evals/multi-model-verify/test_dispatch_round.py -q -k wrapper
 ```
 
-- [ ] **Step 3: Implement the composition**
+- [ ] **Step 3: Implement the composition and the seam**
 
-`-Prepare` writes `wrapper.ps1` as prologue + body + epilogue, exactly as
-in the design section above. Single-quote every interpolated path in the
-generated text and double any embedded single quote, so a path containing
-one cannot break the generated script.
+`-Prepare` writes `wrapper.ps1` exactly as in the design section above:
+the claim, the terminating relocation, the body run as a CHILD process
+under the resolved host, the exit-file write, the seam, the classifier
+call, and `exit $LASTEXITCODE` as the last statement. The body's text
+never appears in the wrapper.
+
+Single-quote every interpolated path in the generated text and double any
+embedded single quote, so a path containing one cannot break the generated
+script.
+
+Implement `PARALLAX_DISPATCH_HOLD_AFTER_EXIT_WRITE` as the design section
+states, bounded at sixty seconds, failing to a non-zero exit on timeout.
+Document it in the script header as builder contract, with the sentence
+that makes it safe: its only reachable effect is to delay or fail a
+wrapper, never to turn a failing round into a successful one.
 
 Verify, do not assume, that `& '<tool>.ps1'` calling `exit N` sets
-`$LASTEXITCODE` to N on both hosts. If it does not, the epilogue captures
+`$LASTEXITCODE` to N on both hosts. If it does not, the wrapper captures
 the classifier's code another way and the plan's design section is
 corrected in the same commit.
 
@@ -681,15 +810,21 @@ git commit -m "couple the outcome to the wrapper's own exit code"
 
 ---
 
-## Task 5: Seal the evidence boundary into the receipt
+## Task 5: Seal the evidence boundary into the receipt, in BOTH lanes
+
+The invariants say the chaining and sealing fixes go in both lanes. One
+lane sealed is one lane sealed, not the invariant discharged.
 
 **Files:**
 - Modify: `tools/read-codex-round-evidence.ps1`
+- Modify: `tools/read-kimi-round-evidence.ps1`
 - Test: `evals/multi-model-verify/test_codex_round_evidence.py`
+- Test: the kimi binder's own test module
 
 **Interfaces:**
 - Consumes: `priorStateSha256` written by Task 2.
-- Produces: `-SealedPriorStateSha256 <hex>` on the binder.
+- Produces: `-SealedPriorStateSha256 <hex>` on BOTH binders, with
+  identical semantics and identical failure text.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -719,19 +854,28 @@ passed one.
 
 - [ ] **Step 2: Run them and watch them fail**
 
-- [ ] **Step 3: Implement `-SealedPriorStateSha256`**
+- [ ] **Step 3: Implement `-SealedPriorStateSha256` in the codex binder**
 
 When supplied, hash the raw bytes of `-PriorState` and compare
 case-insensitively. A mismatch is exit 1 with reason `sealed-state-
 mismatch`. When omitted, report `sealed: "not-checked"` in the JSON.
 
-- [ ] **Step 4: Run the tests**
+- [ ] **Step 4: Implement the identical parameter in the kimi binder**
 
-- [ ] **Step 5: Commit**
+`tools/read-kimi-round-evidence.ps1` takes its own mandatory
+`-PriorState`. Add the same optional `-SealedPriorStateSha256`, with the
+same canonicalization (raw bytes), the same reason string, and the same
+`sealed: "not-checked"` when omitted. Copy the three tests from Step 1
+into that binder's test module rather than sharing them: the two binders
+read different clients and a shared test would hide a divergence.
+
+- [ ] **Step 5: Run the tests on both hosts**
+
+- [ ] **Step 6: Commit**
 
 ```bash
-git add tools/read-codex-round-evidence.ps1 evals/multi-model-verify/test_codex_round_evidence.py
-git commit -m "make captured-before-dispatch enforceable by sealing the digest"
+git add tools/read-codex-round-evidence.ps1 tools/read-kimi-round-evidence.ps1 evals/multi-model-verify
+git commit -m "make captured-before-dispatch enforceable in both lanes"
 ```
 
 ---
@@ -834,26 +978,62 @@ def test_both_lanes_read_the_exit_code_not_the_directory(body_skill, body_backup
 def test_both_lanes_name_the_host_explicitly(body_skill, body_backup_lane):
     for body in (body_skill, body_backup_lane):
         assert "-DispatchHost" in body
+
+
+def test_both_lanes_decide_the_workdir_evidence_explicitly(body_skill, body_backup_lane):
+    for body in (body_skill, body_backup_lane):
+        assert ("-WorkdirEvidence" in body) or ("-NoWorkdirEvidence" in body)
 ```
+
+**The first test is an ABSENCE check, not a pin.** `not in` is explicitly
+excluded from the three pin forms, so nothing it names may be counted
+toward locking a contract region. It is still worth having; it just is not
+coverage. Do not let it appear in any coverage argument.
 
 - [ ] **Step 2: Run them and watch them fail**
 
-- [ ] **Step 3: Rewrite each call site**
+- [ ] **Step 3: Measure what each client reports about its working
+      directory, before writing either call site**
+
+The codex lane's transcript header carries a `workdir:` line naming the
+resolved directory. Confirm it on a real round rather than trusting this
+sentence, and record the exact literal form.
+
+The kimi lane's transcript is the client's stderr and nothing in this repo
+establishes that it names a working directory at all. Run one real backup
+round and look. Two outcomes, both acceptable, neither assumed:
+
+- It names one. Then the kimi call site passes `-WorkdirEvidence` with the
+  resolved mirror path, exactly as the codex site does.
+- It does not. Then the kimi call site passes `-NoWorkdirEvidence`, AND
+  the call site states in one sentence that this lane's tree cannot be
+  confirmed from the client's own report, so B5 is unsatisfied for it.
+
+Write the measurement into the Task 10 record either way. An unmeasured
+absence and a measured one must not look alike.
+
+- [ ] **Step 4: Rewrite each call site**
 
 Each of the four keeps its COMPLETE operational shape independently. The
 new shape is: compose the brief, write the lane body to a file, run
-`-Prepare`, dispatch the printed `command` as a harness background command
-under the printed `taskName`, and STOP. On the completion notification for
-that exact task, read the harness output file: the trailer's exit code is
-the result, `0` meaning `reply-present` and nothing else, and the last
-stdout line names the state. Then run the lane's round-evidence binder,
-passing `-SealedPriorStateSha256` from the receipt. Only a clean binding
-makes `reply-present` a review result.
+`-Prepare` (naming `-DispatchHost`, and passing `-WorkdirEvidence` or
+`-NoWorkdirEvidence` per what Step 3 measured for that lane), dispatch the
+printed `command` as a harness background command under the printed
+`taskName`, and STOP.
+
+On the completion notification for that exact task, read the harness
+output file: the trailer's exit code is the result, `0` meaning
+`reply-present` and nothing else, and the last stdout line names the
+state. Then run the lane's round-evidence binder, passing
+`-SealedPriorStateSha256` from the receipt's `priorStateSha256`. Only a
+clean binding makes `reply-present` a review result.
 
 State plainly at each site: never re-read the dispatch directory to
-decide a verdict. It is diagnostic only.
+decide a verdict. Running `-Classify` by hand will now be refused
+outright, because the wrapper already took the answer claim - but the rule
+stands whether or not the mechanism catches you.
 
-- [ ] **Step 4: Run the tests and the lint**
+- [ ] **Step 5: Run the tests and the lint**
 
 ```bash
 python -m pytest evals/multi-model-verify -q
@@ -863,7 +1043,7 @@ python evals/tools/skill_lint.py skills/multi-model-verify --strict
 The lint's token budget will still warn. Task 9 addresses it. It must not
 have gone UP.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
 git add skills evals
@@ -899,10 +1079,22 @@ That list is what makes a deleted region visible.
   no lane writes its own dispatch; a lane supplies only its client
   invocation and its working directory; the tool composes the claim, the
   relocation and the classifying epilogue around it.
-- `round-dispatch-states`: the eleven states in order, the exit map, and
+- `round-dispatch-states`: the thirteen states in order, the exit map, and
   the sentence that carries the whole design - **the classification is the
   wrapper's own exit code, so a wrapper that does not reach its final
   statement cannot report success, whatever its directory holds.**
+  **Expect this to need SPLITTING into two regions.** A region must fit
+  whole inside a single pin, and thirteen states plus the exit map plus
+  that sentence will not. Split it at the boundary between the state list
+  and the exit map, and add BOTH ids to `DECLARED_REGIONS`. A region too
+  long for one pin is two regions, and discovering that at the coverage
+  gate is expected, not a failure of this plan.
+- `round-dispatch-states` must also state the residual plainly, the way
+  the old tool stated its own: deleting `-Poll` does not remove the
+  post-hoc surface, because `-Classify` is still a standalone mode; the
+  create-new answer claim is what closes it, and a caller who supplies an
+  earlier act's receipt, directory and label to a FRESH preparation is
+  still truthfully told that act's result.
 - `round-dispatch-operation`: there is no poll. The caller waits for the
   harness notification for that exact task. A round with no notification
   is UNFINISHED, never successful; recovery is a fresh `-Prepare` with a
@@ -1024,6 +1216,35 @@ conversation stays open.
 6. Repeat 1 to 5 with `-DispatchHost pwsh` and with `-DispatchHost
    powershell`.
 
+- [ ] **Step 2a: Measure the harness's FAILURE surface, which is the
+      design's own premise**
+
+The whole design rests on "a wrapper that does not finish cannot report
+success". That is a claim about what the HARNESS says, and nothing above
+tests it. This repo has already been burned once here: R9 exists because
+the harness announced a failed round as "completed (exit code 0)".
+
+Run two more rounds and record what the notification and the trailer
+actually say:
+
+- **A round that FAILS.** Give the lane body a client invocation that
+  exits non-zero. Expected non-zero at the trailer and `exit-nonzero` on
+  stdout; record what you actually see.
+- **A round that is KILLED.** Dispatch with
+  `PARALLAX_DISPATCH_HOLD_AFTER_EXIT_WRITE` set, wait for the sentinel,
+  then kill the task. Record the notification wording, the trailer, and
+  whether `classification` was ever created.
+
+If either comes back reporting success, STOP. That is not a defect in this
+plan's tests; it is the design's premise failing, and it goes back to the
+reviewer lanes before anything else is built.
+
+- [ ] **Step 2b: Record what each client says about its working
+      directory**
+
+Carry Task 7 Step 3's measurement into this record: the codex header's
+`workdir:` literal, and whether the kimi transcript names one at all.
+
 - [ ] **Step 3: Write the record**
 
 Every line is MEASURED or it is not in the record. If something could not
@@ -1103,10 +1324,19 @@ python evals/tools/run_behavioral_evals.py --changed
 Every skip is printed by name. Read the names; a skip that should have run
 is a finding.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 6: File the hung-round item**
+
+Add one entry to `docs/superpowers/plans/2026-07-27-0150-backlog.md`: no
+policy bounds how long a hung harness round may sit before it is killed
+and re-dispatched. Named by the Kimi lane in the options poll. It is not a
+correctness defect - a hung round can never read as success - so it costs
+waiting, not truth. Do not rank it; ranking means costing it and nobody
+has.
+
+- [ ] **Step 7: Commit**
 
 ```bash
-git add CLAUDE.md
+git add CLAUDE.md docs/superpowers/plans/2026-07-27-0150-backlog.md
 git commit -m "correct the dispatch rules CLAUDE.md still states as measured"
 ```
 
@@ -1124,7 +1354,8 @@ git commit -m "correct the dispatch rules CLAUDE.md still states as measured"
   hung-round policy and it is real: a hung harness task is classified
   correctly forever and nothing says how long it may sit. It is left open
   deliberately, because the answer is an operator convention and nobody
-  has costed it. File it rather than invent it here.
+  has costed it. **Task 11 files it as a backlog item**, because "file it
+  rather than invent it" is only true if someone actually files it.
 - **It does not measure what happens to a round when the session ends.**
   Survival was dropped as a requirement by the owner. Any future design
   that reintroduces a detached worker to buy survivability is reopening a
@@ -1135,15 +1366,43 @@ git commit -m "correct the dispatch rules CLAUDE.md still states as measured"
 | Required | Task |
 |---|---|
 | 1. Build Option D, not C | 2, 3, 4 |
-| 2. State and test the write ordering | 4 (all seven wrapper tests) |
-| 3. Test the benefit directly | 10 |
+| 2. State and test the write ordering | 4, whose test list is the check - do not cite a count here, since editing the list would make the count wrong |
+| 3. Test the benefit directly | 10, steps 2 and 2a |
 | 4. Name the interpreter and flags | 2 (`-DispatchHost`), 7 |
-| 5. Bind the cwd and check `workdir:` | 2 (receipt), 3 (`workdir-mismatch`) |
+| 5. Bind the cwd and check `workdir:` | 2 (receipt), 3 (`no-transcript`, `workdir-mismatch`), and 7 step 3, which is what makes a call site actually USE it |
 | 6. Rewrite the exit-3 contract at both call sites | 7, 8 |
 | 7. State the recovery rule | 8 (`round-dispatch-operation`) |
 | 8. Reject unknown arguments | 3 |
 | 9. Probe the no-window behaviour | 10, step 2, item 5 |
 
 Two further carry-overs, from the invariants rather than the poll: the
-evidence boundary is sealed in Task 5 (E4), and the cross-lane bookmark
-rule is fixed in Task 6 (E2).
+evidence boundary is sealed in BOTH lanes in Task 5 (E4), and the
+cross-lane bookmark rule is fixed in BOTH lanes in Task 6 (E2).
+
+**A mechanism no call site uses does not discharge a carry-over.** Row 5
+was written once as if building the check were enough; it is not, and the
+row now names the task that wires it.
+
+## The round-1 review this plan has already answered
+
+`docs/superpowers/plans/rounds/2026-08-31-completion-coupled-dispatch/fable-plan-review-r1.md`
+is the Fable panel lane's review of the FIRST version of this plan, at
+commit `b5b5716`. Verdict FIX. Every one of its seven required changes is
+applied above:
+
+1. The kill test's mechanics are stated, and the seam that makes them
+   deterministic is back.
+2. The E4 seal covers both binders.
+3. `-WorkdirEvidence` is measured per lane and wired at the call sites.
+4. Task 10 measures a failed round and a killed one.
+5. The post-hoc `-Classify` residual is closed by the answer claim AND
+   stated in the region.
+6. The body-self-exit bypass is closed structurally: the body runs as a
+   child process.
+7. The minor items - the vacuous test, the mislabelled absence checks, the
+   `dispatch directory already exists` message, the advanced-script
+   verification, the unfiled hung-round item - are all corrected.
+
+The cross-vendor lane has NOT reviewed this plan. That round was prepared
+and could not be dispatched.
+
