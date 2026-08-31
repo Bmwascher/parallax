@@ -71,6 +71,8 @@ Two modes replace the old two:
 ```
 Prepare:  -Prepare -DispatchDir <path> -WrapperBody <path>
           -ReceiptPath <path> -Round <label> -WorkingDirectory <path>
+          -RepoRoot <path> -SourceHead <sha> -MirrorHead <sha>
+          -SourceStatusSha256 <hex>
           -DispatchHost <pwsh|powershell> -PriorStateFile <path>
           (-WorkdirEvidence <literal> | -NoWorkdirEvidence) [-Json]
 
@@ -89,8 +91,8 @@ the exit code of the harness task the caller dispatched.
 
 ### The receipt
 
-A JSON object holding exactly eight fields, all present, all non-null, no
-extras:
+A JSON object holding exactly twelve fields, all present, all non-null,
+no extras:
 
 | field | type | meaning |
 |---|---|---|
@@ -100,7 +102,11 @@ extras:
 | `workingDirectory` | non-empty string | resolved reviewed tree |
 | `dispatchHost` | non-empty string | resolved full path to the host |
 | `priorStateSha256` | 64 lowercase hex | the sealed evidence boundary |
-| `workdirEvidence` | non-empty string | literal to find in the transcript, or exactly `none` |
+| `workdirEvidence` | non-empty string | the `workdir:` header value to expect, or exactly `none` |
+| `repoRoot` | non-empty string | the mirror's source repository |
+| `sourceHead` | 40 lowercase hex | source identity, for `-VerifyIdentity` |
+| `mirrorHead` | 40 lowercase hex | mirror identity, for `-VerifyIdentity` |
+| `sourceStatusSha256` | 64 lowercase hex | source status digest, for `-VerifyIdentity` |
 | `schema` | the integer `2` | so a version-1 receipt cannot be read as this one |
 
 `startTicks` is gone with the liveness model.
@@ -119,28 +125,60 @@ a CHILD PROCESS**, never inline:
 ```powershell
 # WRAPPER, written entirely by the tool
 $ErrorActionPreference = 'Stop'
-# ONE first act, two reservations, in this order.
+$utf8 = New-Object System.Text.UTF8Encoding($false)
+# ONE first act, two reservations, in this order. BOTH are create-new:
+# WriteAllText is NOT create-new, it overwrites, so the reservation is
+# opened with FileMode CreateNew and written through that handle.
 [System.IO.File]::Open("$PSScriptRoot/claim", 'CreateNew', 'Write', 'None').Close()
-[System.IO.File]::WriteAllText("$PSScriptRoot/classification", 'reserved', $utf8)  # create-new
+$r = [System.IO.File]::Open("$PSScriptRoot/classification", 'CreateNew', 'Write', 'None')
+try { $b = $utf8.GetBytes('reserved'); $r.Write($b, 0, $b.Length) } finally { $r.Close() }
+
+# The tree is re-verified HERE, at run time, not merely at preparation.
+& '<mirrorToolPath>' -VerifyIdentity -RepoRoot '<repoRoot>' -MirrorPath '<workingDirectory>' `
+    -SourceHead '<sourceHead>' -MirrorHead '<mirrorHead>' -SourceStatusSha256 '<sourceStatusSha256>'
+if ($LASTEXITCODE -ne 0) { throw 'mirror identity failed at dispatch time' }
+
 Set-Location -LiteralPath '<workingDirectory>' -ErrorAction Stop
 $ErrorActionPreference = 'Continue'
-& '<hostPath>' -NoProfile -NonInteractive -File "$PSScriptRoot/body.ps1" `
-    < NUL > "$PSScriptRoot/body.out" 2> "$PSScriptRoot/body.err"
+& '<hostPath>' -NoProfile -NonInteractive -InputFormat None -File "$PSScriptRoot/body.ps1" `
+    > "$PSScriptRoot/body.out" 2> "$PSScriptRoot/body.err"
 $code = $LASTEXITCODE
 if ($null -eq $code) { $code = 1 }
+
+# CONSUME the reservation BEFORE any terminal artifact is published, and
+# stamp it with a nonce minted HERE, at run time, that appears in no file
+# -Prepare wrote.
+$nonce = [System.Guid]::NewGuid().ToString('N')
+[System.IO.File]::WriteAllText("$PSScriptRoot/classification", "classifying:$nonce", $utf8)
 [System.IO.File]::WriteAllText("$PSScriptRoot/exit", "$code", $utf8)
 # test seam: PARALLAX_DISPATCH_HOLD_AFTER_EXIT_WRITE, see below
 & '<toolPath>' -Classify -DispatchDir '<dispatchDir>' -ReceiptPath '<receiptPath>' `
     -ExpectedRound '<round>' -ExpectedToken '<token>' `
-    -ExpectedPriorStateSha256 '<priorStateSha256>'
+    -ExpectedPriorStateSha256 '<priorStateSha256>' -Redeem $nonce
 exit $LASTEXITCODE
 ```
 
-**The child's three streams are owned, not inherited.** stdin is at EOF,
-stdout and stderr go to files in the dispatch directory. Without this the
-body's output reaches the WRAPPER's stdout and therefore the harness
-output file, next to the classifier's own line. That is invariant A4, and
-it is the reason `-NoProfile -NonInteractive` are on the child too.
+**The child's streams are owned, not inherited.** stdout and stderr go to
+files in the dispatch directory, and `-InputFormat None` stops the child
+reading stdin at all. Note that PowerShell has NO input redirection
+operator: `<` is reserved and a wrapper using it does not parse, on either
+host. Without this ownership the body's output reaches the WRAPPER's
+stdout and therefore the harness output file, beside the classifier's own
+line. That is invariant A4, and it is why `-NoProfile -NonInteractive` are
+on the child too.
+
+**The tree is verified at DISPATCH time, against values fixed at
+preparation time.** `tools/new-review-mirror.ps1` does not leave a marker
+in the mirror; it prints an identity record and offers `-VerifyIdentity`,
+which takes the source head, the mirror head, and the source status digest
+as ARGUMENTS - deliberately, because a file re-read later is mutable and
+would silently redefine the value it is supposed to pin. `-Prepare`
+records those three values in the receipt and writes them into the
+wrapper, and the wrapper re-checks them before the client runs. Checking
+only that the path exists, or only that it carried a marker at
+preparation time, leaves the tree free to be replaced at the same path
+afterwards, which is precisely the post-preparation mutation B4 requires
+be detected.
 
 **The wrapper carries three values the receipt also carries.** `<token>`
 and `<priorStateSha256>` are written into the wrapper's text by
@@ -204,35 +242,42 @@ different costume, which is what the previous cycle shipped.
 
 ### The states `-Classify` computes
 
-`-Classify` REDEEMS a reservation the wrapper already made. It never
-creates one. If `classification` is absent, no wrapper ever started here
-and there is nothing to judge; if it holds anything but `reserved`, it has
-been redeemed already. In this fixed order, stopping at the first match:
+`-Classify` REDEEMS a reservation the wrapper already consumed. It never
+creates one, and it accepts exactly one content: `classifying:<nonce>`
+where the nonce equals the `-Redeem` value it was given. Anything else is
+refused. In this fixed order, stopping at the first match:
 
 1. `classification` absent -> `never-reserved`
-2. `classification` holds anything but `reserved` -> `already-classified`
-3. receipt absent, unreadable, or failing the schema -> `no-receipt`
-4. receipt's `dispatchDir` or `round` is not the pair supplied
+2. `classification` holds `reserved` -> `not-ready`
+3. `classification` holds `classifying:<n>` with `n` not the `-Redeem`
+   value, or holds anything else -> `already-classified`
+4. receipt absent, unreadable, or failing the schema -> `no-receipt`
+5. receipt's `dispatchDir` or `round` is not the pair supplied
    independently -> `receipt-not-expected`
-5. receipt's `token` or `priorStateSha256` differs from the values the
+6. receipt's `token` or `priorStateSha256` differs from the values the
    wrapper carries -> `receipt-altered`
-6. no `claim` file in the dispatch directory -> `no-claim`
-7. `workingDirectory` missing, unresolvable, not a filesystem container,
-   or carrying no review-mirror identity record -> `cwd-unreadable`
-8. `workdirEvidence` is not `none` and no transcript file exists ->
+7. no `claim` file in the dispatch directory -> `no-claim`
+8. `workingDirectory` missing, unresolvable, or not a filesystem
+   container -> `cwd-unreadable`
+9. `workdirEvidence` is not `none` and no transcript file exists ->
    `no-transcript`
-9. `workdirEvidence` is not `none` and the transcript's FIRST `workdir:`
-   header line is absent -> `workdir-unconfirmed`
-10. that header line's value differs from `workdirEvidence` ->
+10. `workdirEvidence` is not `none` and the transcript's FIRST `workdir:`
+    header line is absent -> `workdir-unconfirmed`
+11. that header line's value differs from `workdirEvidence` ->
     `workdir-mismatch`
-11. no `exit` file -> `no-exit-file`
-12. `exit` unreadable or not a plain integer -> `exit-unreadable`
-13. `exit` non-zero -> `exit-nonzero`
-14. no `reply` file -> `no-reply`
-15. `reply` is empty -> `reply-empty`
-16. otherwise -> `reply-present`
+12. no `exit` file -> `no-exit-file`
+13. `exit` unreadable or not a plain integer -> `exit-unreadable`
+14. `exit` non-zero -> `exit-nonzero`
+15. no `reply` file -> `no-reply`
+16. `reply` is empty -> `reply-empty`
+17. otherwise -> `reply-present`
 
-Sixteen states. Exit codes: **0 is `reply-present` and nothing else; 2 is
+Seventeen states. The tree's IDENTITY is not among them: it is checked by
+the wrapper at dispatch time, before the client runs, and a failure there
+kills the wrapper rather than producing a state. A tree that was wrong
+never gets as far as being classified.
+
+Exit codes: **0 is `reply-present` and nothing else; 2 is
 a parameter-binding failure or an internal execution error; 1 is every
 other state**, with the state name on stdout. There is no exit 3, because
 `running` cannot exist: the classifier runs only after the client has
@@ -261,16 +306,37 @@ UNCONFIRMED - nothing was measured. A header line that disagrees is a real
 mismatch. Naming all three `workdir-mismatch` would put a made-sounding
 claim on an unmade measurement.
 
-**What the reservation does and does not close.** Reserving at wrapper
-start closes the sequence the cross-vendor lane found, because the file
-exists from the wrapper's first act onward. It does NOT make the tool
-proof against a caller who deliberately edits `classification` back to
-`reserved` and re-runs `-Classify`. Nothing on a filesystem the caller
-owns can prevent that, and the shipped tool already says as much about its
-own token. The control is not secrecy: it is that the authoritative answer
-is the exit code of the harness task, and a killed task's exit code is not
-zero however its directory reads afterwards. State this residual; do not
-claim it closed.
+**What the reservation does and does not close, stated exactly.**
+
+The FIRST attempt at this had `-Classify` create the reservation. A
+wrapper killed before classifying left it unclaimed, so a later standalone
+call created it and returned success. The SECOND attempt moved the
+creation to the wrapper's start - and still missed, because `-Classify`
+went on treating `reserved` as permission to proceed. After the very kill
+the flagship test performs, the file naturally says `reserved`, and no
+deliberate act was needed at all. The plan's own refusal test contradicted
+its own state machine, and that is how the miss survived a round.
+
+The transition is what fixes it. `reserved` is consumed into
+`classifying:<nonce>` BEFORE the `exit` file is written, so:
+
+- Killed before the transition: the file says `reserved`, `-Classify`
+  answers `not-ready`, and there is no `exit` file to succeed on anyway.
+- Killed after the transition: the file says `classifying:<nonce>` and
+  `-Classify` refuses it unless handed that exact nonce - which was minted
+  at run time and appears in nothing `-Prepare` wrote.
+- Completed: the file holds the state name, and every later call is
+  `already-classified`.
+
+**The residual, honestly bounded.** A caller who opens `classification`,
+reads the nonce out of it, and passes it to `-Classify` gets that round's
+disk state. Nothing on a filesystem the caller owns can prevent that, and
+the shipped tool says the same about its own token. What has changed is
+that this is now a DELIBERATE act on a file the caller had to go and read,
+where before it was the natural consequence of a killed round. The
+control is not secrecy: the authoritative answer is the exit code of the
+harness task, and a killed task's exit code is not zero however its
+directory reads afterwards.
 
 ### What the caller does
 
@@ -416,18 +482,24 @@ def test_prepare_writes_the_eight_field_receipt_last(tmp_path):
     body.write_text("$code = 0\n", encoding="ascii")
     prior = tmp_path / "prior.json"
     prior.write_text('{"kind":"fresh","knownRollouts":[]}', encoding="ascii")
-    cwd = tmp_path / "tree"
-    cwd.mkdir()
+    # A REAL mirror, built by the real tool, because -Prepare now refuses
+    # anything that does not verify as one. A bare mkdir cannot be used.
+    mirror = build_real_mirror(tmp_path)
     out = run_tool([
         "-Prepare", "-DispatchDir", str(d), "-WrapperBody", str(body),
         "-ReceiptPath", str(receipt), "-Round", "Sol R1",
-        "-WorkingDirectory", str(cwd), "-DispatchHost", "powershell",
+        "-WorkingDirectory", str(mirror.path), "-RepoRoot", str(mirror.source),
+        "-SourceHead", mirror.source_head, "-MirrorHead", mirror.mirror_head,
+        "-SourceStatusSha256", mirror.source_status_sha256,
+        "-DispatchHost", "powershell",
         "-PriorStateFile", str(prior), "-NoWorkdirEvidence", "-Json"])
     assert out.returncode == 0, out.stdout
     got = json.loads(receipt.read_text(encoding="utf-8"))
     assert set(got) == {
         "dispatchDir", "token", "round", "workingDirectory",
-        "dispatchHost", "priorStateSha256", "workdirEvidence", "schema"}
+        "dispatchHost", "priorStateSha256", "workdirEvidence",
+        "repoRoot", "sourceHead", "mirrorHead", "sourceStatusSha256",
+        "schema"}
     assert got["schema"] == 2
     assert got["round"] == "Sol R1"
     assert got["workdirEvidence"] == "none"
@@ -504,18 +576,38 @@ process is started here.
    that check stays as a race backstop, but the message the test pins
    comes from this explicit pre-check.
 
-1a. **BLOCK if the working directory is not a REVIEW MIRROR.** Read the
-   identity record `tools/new-review-mirror.ps1` writes into every mirror
-   it builds, and refuse any directory that does not carry one. Without
-   this the tool takes the caller's word for both the directory AND the
-   evidence literal, so a caller who supplies the LIVE REPOSITORY for both
-   gets a wrapper that deliberately relocates there, a client whose own
-   report agrees with the wrong value, and `reply-present`. Every check
-   downstream is self-consistent and every one of them is wrong. This is
-   invariant B4's "detect a wrong initial value", and B1's requirement
+1a. **BLOCK if the working directory does not verify as the named
+   mirror.** Run
+   `tools/new-review-mirror.ps1 -VerifyIdentity -RepoRoot <repoRoot>
+   -MirrorPath <workingDirectory> -SourceHead <sourceHead>
+   -MirrorHead <mirrorHead> -SourceStatusSha256 <sourceStatusSha256>`
+   and BLOCK on any non-zero exit.
+
+   **There is no identity marker inside a mirror, and this plan must not
+   invent one.** An earlier version of this task said to read a record
+   `tools/new-review-mirror.ps1` writes into the mirror; it writes no such
+   file. It PRINTS an identity record and offers `-VerifyIdentity`, taking
+   the three values as arguments on purpose - for the same reason the
+   codex brief binder takes a hash rather than a file: a file re-read
+   later is mutable and would silently redefine the value it pins.
+
+   Without this check the tool takes the caller's word for the directory
+   AND the evidence value, so a caller who supplies the LIVE REPOSITORY
+   for both gets a wrapper that deliberately relocates there, a client
+   whose own report agrees with the wrong value, and `reply-present`.
+   Every check downstream is self-consistent and every one is wrong. This
+   is invariant B4's "detect a wrong initial value" and B1's requirement
    that entering the live repository be impossible to get wrong silently.
-   There is no override switch. If a future caller has a legitimate
-   non-mirror use, that is a new decision, not a flag to leave open now.
+
+   Preparation-time verification is NOT sufficient on its own, which is
+   why the wrapper repeats it before the client runs: the tree can be
+   replaced at the same path in between, and B4 requires that
+   post-preparation mutation be detected.
+
+   There is no override switch, and that is a real consequence: a round
+   whose working directory is not a verified mirror cannot be prepared at
+   all. Every one of the five call sites already uses the mirror, so
+   nothing in this repo needs one.
 2. Resolve `-DispatchHost` to a full path with `Get-Command`. Exactly
    `pwsh` or `powershell` are accepted; anything else, or a name that does
    not resolve, exits 2.
@@ -550,27 +642,35 @@ git commit -m "replace launch and poll with a fail-closed prepare"
 
 ---
 
-## Task 3: `-Classify`, its sixteen states and its exit map
+## Task 3: `-Classify`, its state order and its exit map
 
 **Files:**
 - Modify: `tools/dispatch-round.ps1`
 - Test: `evals/multi-model-verify/test_dispatch_round.py`
 
 **Interfaces:**
-- Consumes: the eight-field receipt from Task 2.
+- Consumes: the receipt from Task 2, all twelve fields.
 - Produces: `-Classify -DispatchDir <d> -ReceiptPath <r> -ExpectedRound
-  <label>`, exit 0 only on `reply-present`. Task 4's epilogue calls it.
+  <label> -ExpectedToken <t> -ExpectedPriorStateSha256 <hex> -Redeem
+  <nonce>`, exit 0 only on `reply-present`. Task 4's wrapper calls it with
+  all six, and the last three are what make an edited receipt and an
+  outside caller detectable.
 
 - [ ] **Step 1: Write the failing tests, one per state**
 
 ```python
 STATES = [
-    ("already-classified", 1), ("no-receipt", 1),
-    ("receipt-not-expected", 1), ("no-claim", 1), ("cwd-unreadable", 1),
+    ("never-reserved", 1), ("not-ready", 1), ("already-classified", 1),
+    ("no-receipt", 1), ("receipt-not-expected", 1), ("receipt-altered", 1),
+    ("no-claim", 1), ("cwd-unreadable", 1),
+    ("no-transcript", 1), ("workdir-unconfirmed", 1),
+    ("workdir-mismatch", 1),
     ("no-exit-file", 1), ("exit-unreadable", 1), ("exit-nonzero", 1),
-    ("no-transcript", 1), ("workdir-mismatch", 1), ("no-reply", 1),
-    ("reply-empty", 1), ("reply-present", 0),
+    ("no-reply", 1), ("reply-empty", 1), ("reply-present", 0),
 ]
+# This list is the ONLY place the state count is written down. Do not
+# restate it as a number in prose: an edited list makes the prose wrong,
+# which is a drift class this repo has already recorded.
 
 
 @pytest.mark.parametrize("state,code", STATES)
@@ -593,13 +693,19 @@ def test_no_state_but_reply_present_can_exit_zero(tmp_path):
     assert zero == ["reply-present"]
 
 
-def test_the_answer_claim_refuses_a_second_classification(tmp_path):
-    d = build_dispatch_for_state(tmp_path, "reply-present")
-    first = classify(d)
-    assert first.returncode == 0
-    second = classify(d)
-    assert second.returncode == 1
-    assert second.stdout.strip().endswith("already-classified")
+def test_classify_accepts_only_its_own_nonce(tmp_path):
+    d, nonce = build_dispatch_ready_to_classify(tmp_path)
+    for content, expected in [
+        ("reserved", "not-ready"),
+        ("classifying:" + "0" * 32, "already-classified"),
+        ("reply-present", "already-classified"),
+    ]:
+        (d / "classification").write_text(content, encoding="utf-8")
+        out = classify(d, redeem=nonce)
+        assert out.returncode == 1
+        assert out.stdout.strip().endswith(expected), content
+    (d / "classification").write_text("classifying:" + nonce, encoding="utf-8")
+    assert classify(d, redeem=nonce).returncode == 0
 
 
 def test_a_missing_transcript_is_its_own_state(tmp_path):
@@ -612,13 +718,36 @@ def test_a_missing_transcript_is_its_own_state(tmp_path):
     assert out.returncode == 1
 
 
-def test_a_failed_round_in_the_wrong_tree_reports_the_failure(tmp_path):
-    # First match wins, and exit-nonzero is deliberately earlier.
+def test_a_failed_round_in_the_wrong_tree_reports_the_WRONG_TREE(tmp_path):
+    # First match wins, and the workdir states are deliberately EARLIER
+    # than the exit states. Both reviewer lanes overruled the opposite
+    # order: a round that read the wrong tree read an instruction
+    # back-channel, so its own failure report describes another subject.
     d = build_dispatch_with_workdir_evidence(tmp_path, evidence="C:\\mirror")
     (d / "exit").write_text("1", encoding="ascii")
     (d / "transcript").write_text("workdir: C:\\elsewhere", encoding="utf-8")
     out = classify(d)
-    assert out.stdout.strip().endswith("exit-nonzero")
+    assert out.stdout.strip().endswith("workdir-mismatch")
+
+
+def test_only_the_FIRST_workdir_header_counts(tmp_path):
+    # The transcript is prompt-steerable, so a later line proves nothing.
+    d = build_dispatch_with_workdir_evidence(tmp_path, evidence="C:\\mirror")
+    (d / "transcript").write_text(
+        "workdir: C:\\elsewhere\nuser\nworkdir: C:\\mirror\n", encoding="utf-8")
+    (d / "exit").write_text("0", encoding="ascii")
+    (d / "reply").write_text("a verdict", encoding="utf-8")
+    out = classify(d)
+    assert out.stdout.strip().endswith("workdir-mismatch")
+
+
+def test_a_transcript_with_no_header_is_unconfirmed_not_mismatched(tmp_path):
+    d = build_dispatch_with_workdir_evidence(tmp_path, evidence="C:\\mirror")
+    (d / "transcript").write_text("no header here at all", encoding="utf-8")
+    (d / "exit").write_text("0", encoding="ascii")
+    (d / "reply").write_text("a verdict", encoding="utf-8")
+    out = classify(d)
+    assert out.stdout.strip().endswith("workdir-unconfirmed")
 
 
 def test_state_order_is_first_match_wins(tmp_path):
@@ -677,10 +806,11 @@ Expected: FAIL, `-Classify` is not a parameter.
 
 - [ ] **Step 3: Implement `-Classify`**
 
-Redeem the wrapper's reservation: refuse at `never-reserved` when
-`classification` is absent, and at `already-classified` when it holds
-anything but `reserved`. NEVER create it. Then compute the
-sixteen states in the documented order, stopping at the first match and
+Redeem the wrapper's reservation, and NEVER create one. Refuse at
+`never-reserved` when `classification` is absent, at `not-ready` when it
+holds `reserved`, and at `already-classified` when it holds anything
+other than `classifying:<the -Redeem value>`. Then compute the remaining
+states in the documented order, stopping at the first match and
 reading nothing further. Print the state name on stdout; with `-Json`,
 print an object carrying `state` and the receipt's `round` when a receipt
 was read, `round` null otherwise.
@@ -711,7 +841,7 @@ Expected: PASS.
 
 ```bash
 git add tools/dispatch-round.ps1 evals/multi-model-verify/test_dispatch_round.py
-git commit -m "add classify: sixteen states, only reply-present exits zero"
+git commit -m "add classify: only reply-present exits zero"
 ```
 
 ---
@@ -742,7 +872,10 @@ $code = 0
 
 
 def test_a_failed_client_makes_the_wrapper_exit_nonzero(tmp_path):
-    d = prepare_and_run(tmp_path, body="$code = 1\n")
+    # The body is a CHILD SCRIPT now, so setting $code proves nothing.
+    # It must EXIT with the code, or the child exits zero and the round
+    # reads as a success with no reply.
+    d = prepare_and_run(tmp_path, body="exit 1\n")
     assert d.returncode == 1
     assert "exit-nonzero" in d.stdout
 
@@ -802,11 +935,18 @@ def test_a_wrapper_killed_after_publishing_exit_and_reply_does_not_exit_zero(tmp
 
 
 def test_a_hand_run_classify_after_that_kill_is_refused(tmp_path, monkeypatch):
-    # The hole the cross-vendor lane found in the FIRST version of this
-    # design: with the reservation taken by -Classify, a later standalone
-    # call won the unclaimed file and returned reply-present at exit 0.
+    # THE regression test for two failed attempts at this fix. Version one
+    # let -Classify CREATE the reservation, so a post-kill call won it.
+    # Version two moved creation to the wrapper but still treated
+    # "reserved" as permission, so the very kill above left the file in an
+    # acceptable state and no deliberate act was needed.
     p = killed_after_publish(tmp_path, monkeypatch)
-    out = classify(p.dispatch_dir)
+    body = (p.dispatch_dir / "classification").read_text().strip()
+    assert body.startswith("classifying:")   # consumed BEFORE exit was written
+    # A caller who does not know the run-time nonce is refused. Guessing
+    # every plausible argument does not help: the nonce is in no file
+    # -Prepare wrote.
+    out = classify(p.dispatch_dir, redeem="0" * 32)
     assert out.returncode == 1
     assert out.stdout.strip().endswith("already-classified")
 
@@ -814,10 +954,18 @@ def test_a_hand_run_classify_after_that_kill_is_refused(tmp_path, monkeypatch):
 def test_classify_never_creates_the_reservation(tmp_path):
     p = prepare(tmp_path, body=OK_BODY)  # prepared, never run
     assert not (p.dispatch_dir / "classification").exists()
-    out = classify(p.dispatch_dir)
+    out = classify(p.dispatch_dir, redeem="0" * 32)
     assert out.returncode == 1
     assert out.stdout.strip().endswith("never-reserved")
     assert not (p.dispatch_dir / "classification").exists()
+
+
+def test_the_reservation_is_consumed_before_the_exit_file_appears(tmp_path, monkeypatch):
+    # Ordering is the whole argument. If exit were written first, the
+    # post-kill directory would hold "reserved" plus a successful exit.
+    p = killed_after_publish(tmp_path, monkeypatch)
+    assert (p.dispatch_dir / "exit").exists()
+    assert not (p.dispatch_dir / "classification").read_text().strip() == "reserved"
 
 
 def test_an_edited_receipt_is_detected(tmp_path):
@@ -843,12 +991,28 @@ exit 0
     assert "stderr from the body" in (d.dispatch_dir / "body.err").read_text()
 
 
-def test_prepare_refuses_a_working_directory_that_is_not_a_mirror(tmp_path):
+def test_prepare_refuses_a_working_directory_that_does_not_verify(tmp_path):
     plain = tmp_path / "not-a-mirror"
     plain.mkdir()
     out = prepare_default(tmp_path, working_directory=plain)
     assert out.returncode == 1
-    assert "not a review mirror" in out.stdout
+    assert "mirror identity" in out.stdout
+
+
+def test_prepare_refuses_a_mirror_whose_head_does_not_match(tmp_path):
+    mirror = build_real_mirror(tmp_path)
+    out = prepare_default(tmp_path, mirror=mirror, mirror_head="0" * 40)
+    assert out.returncode == 1
+    assert "mirror identity" in out.stdout
+
+
+def test_the_wrapper_reverifies_the_tree_before_the_client_runs(tmp_path):
+    # Post-preparation mutation: same path, different contents.
+    p = prepare(tmp_path, body=OK_BODY)
+    swap_mirror_contents(p.working_directory)
+    out = run_wrapper(p.wrapper)
+    assert out.returncode != 0
+    assert not (p.dispatch_dir / "reply").exists()
 
 
 def test_a_body_that_exits_the_process_cannot_skip_the_classification(tmp_path):
@@ -1152,7 +1316,7 @@ absence and a measured one must not look alike.
 
 - [ ] **Step 4: Rewrite each call site**
 
-Each of the four keeps its COMPLETE operational shape independently. The
+Each of the five keeps its COMPLETE operational shape independently. The
 new shape is: compose the brief, write the lane body to a file, run
 `-Prepare` (naming `-DispatchHost`, and passing `-WorkdirEvidence` or
 `-NoWorkdirEvidence` per what Step 3 measured for that lane), dispatch the
@@ -1225,22 +1389,28 @@ That list is what makes a deleted region visible.
   no lane writes its own dispatch; a lane supplies only its client
   invocation and its working directory; the tool composes the claim, the
   relocation and the classifying epilogue around it.
-- `round-dispatch-states`: the sixteen states in order, the exit map, and
+- `round-dispatch-states`: the states in order, the exit map, and
   the sentence that carries the whole design - **the classification is the
   wrapper's own exit code, so a wrapper that does not reach its final
   statement cannot report success, whatever its directory holds.**
   **Expect this to need SPLITTING into two regions.** A region must fit
-  whole inside a single pin, and sixteen states plus the exit map plus
+  whole inside a single pin, and seventeen states plus the exit map plus
   that sentence will not. Split it at the boundary between the state list
   and the exit map, and add BOTH ids to `DECLARED_REGIONS`. A region too
   long for one pin is two regions, and discovering that at the coverage
   gate is expected, not a failure of this plan.
 - `round-dispatch-states` must also state the residual plainly, the way
-  the old tool stated its own: deleting `-Poll` does not remove the
-  post-hoc surface, because `-Classify` is still a standalone mode; the
-  create-new answer claim is what closes it, and a caller who supplies an
-  earlier act's receipt, directory and label to a FRESH preparation is
-  still truthfully told that act's result.
+  the old tool stated its own, and must NOT claim more than the mechanism
+  delivers. What it says: deleting `-Poll` does not remove the post-hoc
+  surface, because `-Classify` is still a standalone mode. What closes the
+  natural case is the reservation being CONSUMED into a run-time nonce
+  before any terminal artifact is published, so a killed round leaves a
+  state no outside caller is handed the key to. What remains is a caller
+  who opens the reservation file, reads the nonce, and passes it - a
+  deliberate act on a file they own, which no filesystem mechanism can
+  prevent. And a caller who supplies an earlier act's receipt, directory
+  and label to a FRESH preparation is still truthfully told that act's
+  result.
 - `round-dispatch-operation`: there is no poll. The caller waits for the
   harness notification for that exact task. A round with no notification
   is UNFINISHED, never successful; recovery is a fresh `-Prepare` with a
@@ -1584,5 +1754,42 @@ real hole in the fix above and five more things:
 It also rejected my ordering argument, agreeing with the panel lane: the
 working-directory states now precede the exit states.
 
-Neither lane has yet seen this version.
+## The round-3 review this plan has also answered
+
+The cross-vendor lane reviewed the revision above, bound clean, and
+returned FIX again. It found that **two of the six fixes moved their
+defects rather than removing them**, which is the outcome that brief
+specifically asked it to look for:
+
+1. **The reservation still authorised a post-kill classification.**
+   Moving creation to the wrapper was not enough, because `-Classify` went
+   on accepting `reserved` as permission to proceed - and after the very
+   kill the flagship test performs, the file naturally holds `reserved`.
+   No deliberate act was required, and the plan's own refusal test
+   contradicted its own state machine. Fixed by CONSUMING the reservation
+   into `classifying:<run-time nonce>` before any terminal artifact is
+   published.
+2. **The mirror identity record I told the engineer to read does not
+   exist.** `tools/new-review-mirror.ps1` writes no marker; it prints an
+   identity record and offers `-VerifyIdentity` taking three values as
+   arguments, deliberately, because a file re-read later is mutable.
+   Verified directly. Fixed by using that interface, recording the three
+   values in the receipt, and re-verifying in the WRAPPER before the
+   client runs - which also closes the same-path content swap the lane
+   raised.
+3. **`< NUL` is not valid PowerShell.** Verified on both hosts: `<` is a
+   reserved operator and the wrapper would not have parsed. Replaced with
+   `-InputFormat None`.
+4. **`WriteAllText` is not create-new**, it overwrites. The reservation is
+   now opened with `FileMode.CreateNew`.
+5. Task 3's state table was missing three states and still pinned the
+   superseded ordering; Task 3's interface omitted two parameters Task 4
+   called; Task 4's failed-client fixture set `$code` without exiting, so
+   under the child contract it would have produced `no-reply` rather than
+   the failure it claimed to test; Task 7 still said "four".
+
+Its reply is retained at
+`docs/superpowers/plans/rounds/2026-08-31-completion-coupled-dispatch/sol-plan-review-r2.md`.
+
+Neither lane has yet seen THIS version.
 
