@@ -215,7 +215,7 @@ toggled on, its stop-time review overlaps mode `diff` — expected, not a bug.
    state; the order of those checks is references/model-prompting-notes.md's detached-dispatch-states and `reply-present` is not a verdict on its own:
 
    ```powershell
-   & (Get-Process -Id $PID).Path -NoProfile -File ${CLAUDE_PLUGIN_ROOT}/tools/dispatch-detached.ps1 -Launch -DispatchDir <dispatch-dir> -WrapperBody <wrapper-file> -ReceiptPath <receipt-file> -Round <label> -Json
+   & (Get-Process -Id $PID).Path -NoProfile -File ${CLAUDE_PLUGIN_ROOT}/tools/dispatch-round.ps1 -Launch -DispatchDir <dispatch-dir> -WrapperBody <wrapper-file> -ReceiptPath <receipt-file> -Round <label> -Json
    ```
 
    `<receipt-file>` is a FRESH path for this round, alongside the fresh
@@ -225,7 +225,7 @@ toggled on, its stop-time review overlaps mode `diff` — expected, not a bug.
    launch that was refused has nothing to poll:
 
    ```powershell
-   & (Get-Process -Id $PID).Path -NoProfile -File ${CLAUDE_PLUGIN_ROOT}/tools/dispatch-detached.ps1 -Poll -Receipt <receipt-file> -ExpectedDispatchDir <dispatch-dir> -ExpectedRound <label> -Json
+   & (Get-Process -Id $PID).Path -NoProfile -File ${CLAUDE_PLUGIN_ROOT}/tools/dispatch-round.ps1 -Poll -Receipt <receipt-file> -ExpectedDispatchDir <dispatch-dir> -ExpectedRound <label> -Json
    ```
 
    `-ExpectedDispatchDir` and `-ExpectedRound` are the same two values passed
@@ -315,11 +315,11 @@ toggled on, its stop-time review overlaps mode `diff` — expected, not a bug.
    and `reply-present` is not a verdict on its own:
 
    ```powershell
-   & (Get-Process -Id $PID).Path -NoProfile -File ${CLAUDE_PLUGIN_ROOT}/tools/dispatch-detached.ps1 -Launch -DispatchDir <dispatch-dir> -WrapperBody <wrapper-file> -ReceiptPath <receipt-file> -Round <label> -Json
+   & (Get-Process -Id $PID).Path -NoProfile -File ${CLAUDE_PLUGIN_ROOT}/tools/dispatch-round.ps1 -Launch -DispatchDir <dispatch-dir> -WrapperBody <wrapper-file> -ReceiptPath <receipt-file> -Round <label> -Json
    ```
 
    ```powershell
-   & (Get-Process -Id $PID).Path -NoProfile -File ${CLAUDE_PLUGIN_ROOT}/tools/dispatch-detached.ps1 -Poll -Receipt <receipt-file> -ExpectedDispatchDir <dispatch-dir> -ExpectedRound <label> -Json
+   & (Get-Process -Id $PID).Path -NoProfile -File ${CLAUDE_PLUGIN_ROOT}/tools/dispatch-round.ps1 -Poll -Receipt <receipt-file> -ExpectedDispatchDir <dispatch-dir> -ExpectedRound <label> -Json
    ```
 
    Its exit codes are the same as round 1's: **0 means `reply-present` and nothing else; 3 means `running`, an UNFINISHED round; 1 is any other state, a transport failure with the state name on stdout; 2 is a parameter-binding failure or an internal execution error.**

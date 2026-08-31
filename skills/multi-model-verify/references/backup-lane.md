@@ -45,7 +45,7 @@ Panel participation: a user-invoked panel per references/panels.md is a second s
   whole, at nearly three times the length that truncated on the
   superseded client.
 - **Detached dispatch for all three calls.** Every call below launches
-  through `tools/dispatch-detached.ps1` and is polled, never run
+  through `tools/dispatch-round.ps1` and is polled, never run
   inline — the caller's 600-second ceiling kills a crossing round with
   the quota spent and no reply written. `$b` is the brief read from its
   file — the same inline payload the Dispatch and Resume bullets above
@@ -118,13 +118,13 @@ Panel participation: a user-invoked panel per references/panels.md is a second s
   in, and STOP:
 
   ```powershell
-  & (Get-Process -Id $PID).Path -NoProfile -File <plugin-checkout>/tools/dispatch-detached.ps1 -Launch -DispatchDir <dispatch-dir> -WrapperBody <wrapper-file> -ReceiptPath <receipt-file> -Round <label> -WorkingDirectory <review-mirror> -Json
+  & (Get-Process -Id $PID).Path -NoProfile -File <plugin-checkout>/tools/dispatch-round.ps1 -Launch -DispatchDir <dispatch-dir> -WrapperBody <wrapper-file> -ReceiptPath <receipt-file> -Round <label> -WorkingDirectory <review-mirror> -Json
   ```
 
   Poll the receipt that launch wrote:
 
   ```powershell
-  & (Get-Process -Id $PID).Path -NoProfile -File <plugin-checkout>/tools/dispatch-detached.ps1 -Poll -Receipt <receipt-file> -ExpectedDispatchDir <dispatch-dir> -ExpectedRound <label> -Json
+  & (Get-Process -Id $PID).Path -NoProfile -File <plugin-checkout>/tools/dispatch-round.ps1 -Poll -Receipt <receipt-file> -ExpectedDispatchDir <dispatch-dir> -ExpectedRound <label> -Json
   ```
 <!-- call:kimi-resume -->
 - **kimi-resume — every later round.** Same wrapper shape, run from the
@@ -147,11 +147,11 @@ Panel participation: a user-invoked panel per references/panels.md is a second s
   and STOP:
 
   ```powershell
-  & (Get-Process -Id $PID).Path -NoProfile -File <plugin-checkout>/tools/dispatch-detached.ps1 -Launch -DispatchDir <dispatch-dir> -WrapperBody <wrapper-file> -ReceiptPath <receipt-file> -Round <label> -WorkingDirectory <review-mirror> -Json
+  & (Get-Process -Id $PID).Path -NoProfile -File <plugin-checkout>/tools/dispatch-round.ps1 -Launch -DispatchDir <dispatch-dir> -WrapperBody <wrapper-file> -ReceiptPath <receipt-file> -Round <label> -WorkingDirectory <review-mirror> -Json
   ```
 
   ```powershell
-  & (Get-Process -Id $PID).Path -NoProfile -File <plugin-checkout>/tools/dispatch-detached.ps1 -Poll -Receipt <receipt-file> -ExpectedDispatchDir <dispatch-dir> -ExpectedRound <label> -Json
+  & (Get-Process -Id $PID).Path -NoProfile -File <plugin-checkout>/tools/dispatch-round.ps1 -Poll -Receipt <receipt-file> -ExpectedDispatchDir <dispatch-dir> -ExpectedRound <label> -Json
   ```
 - **Build the debate home before round 1.**
   <!-- contract:start id=lane-home-isolation -->
@@ -484,11 +484,11 @@ log). There is no shared stream and nothing to attribute by position.
   ```
 
   ```powershell
-  & (Get-Process -Id $PID).Path -NoProfile -File <plugin-checkout>/tools/dispatch-detached.ps1 -Launch -DispatchDir <dispatch-dir> -WrapperBody <wrapper-file> -ReceiptPath <receipt-file> -Round <label> -WorkingDirectory <review-mirror> -Json
+  & (Get-Process -Id $PID).Path -NoProfile -File <plugin-checkout>/tools/dispatch-round.ps1 -Launch -DispatchDir <dispatch-dir> -WrapperBody <wrapper-file> -ReceiptPath <receipt-file> -Round <label> -WorkingDirectory <review-mirror> -Json
   ```
 
   ```powershell
-  & (Get-Process -Id $PID).Path -NoProfile -File <plugin-checkout>/tools/dispatch-detached.ps1 -Poll -Receipt <receipt-file> -ExpectedDispatchDir <dispatch-dir> -ExpectedRound <label> -Json
+  & (Get-Process -Id $PID).Path -NoProfile -File <plugin-checkout>/tools/dispatch-round.ps1 -Poll -Receipt <receipt-file> -ExpectedDispatchDir <dispatch-dir> -ExpectedRound <label> -Json
   ```
 
 ## Client config surface (read before round 1)

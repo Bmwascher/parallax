@@ -1021,13 +1021,13 @@ class TestTransportContract:
         section = text.split(marker, 1)[1].split("<!-- call:", 1)[0]
         assert (
             "& (Get-Process -Id $PID).Path -NoProfile -File"
-            " ${CLAUDE_PLUGIN_ROOT}/tools/dispatch-detached.ps1 -Launch"
+            " ${CLAUDE_PLUGIN_ROOT}/tools/dispatch-round.ps1 -Launch"
             " -DispatchDir <dispatch-dir> -WrapperBody <wrapper-file>"
             " -ReceiptPath <receipt-file> -Round <label>"
             " -Json") in section, "this site has no launch"
         assert (
             "& (Get-Process -Id $PID).Path -NoProfile -File"
-            " ${CLAUDE_PLUGIN_ROOT}/tools/dispatch-detached.ps1 -Poll"
+            " ${CLAUDE_PLUGIN_ROOT}/tools/dispatch-round.ps1 -Poll"
             " -Receipt <receipt-file>"
             " -ExpectedDispatchDir <dispatch-dir> -ExpectedRound <label>"
             " -Json") in section, "this site has no poll"
@@ -1103,7 +1103,7 @@ def test_detached_dispatch_tool_region_is_pinned():
     notes = " ".join(read(REFERENCES / "model-prompting-notes.md").split())
     assert (
     "The launch is ONE TRANSACTION and it lives in ONE PLACE: "
-    "`<plugin-root>/tools/dispatch-detached.ps1`, written "
+    "`<plugin-root>/tools/dispatch-round.ps1`, written "
     "`${CLAUDE_PLUGIN_ROOT}` in SKILL.md, where the harness substitutes it, "
     "and `<plugin-checkout>` in backup-lane.md, which is a references file "
     "the session reads raw and where nothing substitutes anything. It "

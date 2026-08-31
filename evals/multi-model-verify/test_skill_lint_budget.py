@@ -230,7 +230,7 @@ class TestVendoringObligations:
         policy demands.
 
         RAISED 2026-08-31, backlog item 32 task 3: routing both codex
-        dispatch sites in SKILL.md through tools/dispatch-detached.ps1
+        dispatch sites in SKILL.md through tools/dispatch-round.ps1
         measured 6225 (test_the_2026_08_31_item32_raise_is_recorded_and_justified
         below carries the full reason).
         """
@@ -254,7 +254,7 @@ class TestVendoringObligations:
 
     def test_the_2026_08_31_item32_raise_is_recorded_and_justified(self):
         """Backlog item 32, task 3. The tool-based rewrite of SKILL.md's two
-        codex dispatch sites (routed through tools/dispatch-detached.ps1)
+        codex dispatch sites (routed through tools/dispatch-round.ps1)
         measured 6225 by the header's own estimate, over the prior 5500
         ceiling. A raise with no test is how the next raise goes unnoticed,
         so the date, the number, and the reason live here rather than only
@@ -278,7 +278,7 @@ class TestVendoringObligations:
         assert "RAISED 2026-08-31 (backlog item 32, task 3)." in text
         assert (
             "own command (`t.split('---',2)[2]`, `len(body)//4`) after routing both\n"
-            "# codex dispatch sites through tools/dispatch-detached.ps1: 6225."
+            "# codex dispatch sites through tools/dispatch-round.ps1: 6225."
         ) in text
         assert (
             "so the fresh and resumed dispatches each carry their\n"

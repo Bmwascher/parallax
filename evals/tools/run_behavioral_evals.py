@@ -459,7 +459,7 @@ def is_our_child(pid, ticks):
     `taskkill /PID` can force-kill an unrelated tree. The branch's own
     contract says so - the `detached-dispatch-states` region in
     `skills/multi-model-verify/references/model-prompting-notes.md` pins
-    liveness as pid PLUS start time - and `dispatch-detached.ps1` writes
+    liveness as pid PLUS start time - and `dispatch-round.ps1` writes
     `startticks` beside `pid` for exactly this comparison. Honour it here
     too, rather than exempting a teardown from the rule the tool enforces.
 
@@ -483,7 +483,7 @@ def reaped_tempdir(prefix):
     """A scratch dir that outlives nothing: reap, THEN delete.
 
     Since item 32 the skill launches its client through
-    `tools/dispatch-detached.ps1`, which by design returns while the client
+    `tools/dispatch-round.ps1`, which by design returns while the client
     is still writing into its dispatch directory. A case that ends before
     the round completes leaves a live grandchild holding
     `<dispatch-dir>/transcript` open, and plain TemporaryDirectory cleanup

@@ -101,7 +101,7 @@ BODY_MAX_LINES = 500
 #
 # RAISED 2026-08-31 (backlog item 32, task 3). Measured with the header's
 # own command (`t.split('---',2)[2]`, `len(body)//4`) after routing both
-# codex dispatch sites through tools/dispatch-detached.ps1: 6225. The
+# codex dispatch sites through tools/dispatch-round.ps1: 6225. The
 # tool-based design was expected to shrink the body — it replaces five
 # copied dispatch snippets with one tool the skill only calls — but each
 # call site's per-site test (test_each_codex_call_is_launched_through_the_tool)
@@ -113,6 +113,12 @@ BODY_MAX_LINES = 500
 # point, not slack to trim. The resume section was already condensed to
 # the minimum that still satisfies its own per-site literals before this
 # number was accepted.
+#
+# The tool was named tools/dispatch-detached.ps1 when that 6225 was
+# measured; the completion-coupled cycle renamed it to dispatch-round.ps1
+# because it no longer detaches. The path above is updated so it resolves,
+# and the original name is recorded here so the measurement still says
+# what it measured.
 #
 # ONLY THE CEILING WAS RAISED. Task 3 authorized raising BODY_TOKEN_CEILING
 # and nothing else; the first attempt raised the BUDGET to 6250 as well,

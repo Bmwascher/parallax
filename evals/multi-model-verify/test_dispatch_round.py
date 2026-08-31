@@ -1,4 +1,4 @@
-"""Contract pins for tools/dispatch-detached.ps1 (Task 1, 2026-08-30
+"""Contract pins for tools/dispatch-round.ps1 (Task 1, 2026-08-30
 item32-detached-dispatch plan).
 
 Drives the REAL script against stub payloads (stub wrapper .ps1 bodies
@@ -22,14 +22,14 @@ from pathlib import Path
 import pytest
 
 REPO = Path(__file__).resolve().parents[2]
-SCRIPT = REPO / "tools" / "dispatch-detached.ps1"
+SCRIPT = REPO / "tools" / "dispatch-round.ps1"
 
 POWERSHELL = (os.environ.get("PARALLAX_PS_HOST")
               or shutil.which("powershell") or shutil.which("pwsh"))
 
 pytestmark = pytest.mark.skipif(
     os.name != "nt" or POWERSHELL is None,
-    reason="dispatch-detached.ps1 is a Windows tool: it needs a "
+    reason="dispatch-round.ps1 is a Windows tool: it needs a "
            "PowerShell host and the detached-process / liveness "
            "platform it targets")
 
@@ -831,7 +831,7 @@ def test_the_documented_outer_command_works_on_this_host(tmp_path):
 
     launch_cmd = (
         '& (Get-Process -Id $PID).Path -NoProfile -File '
-        '${CLAUDE_PLUGIN_ROOT}/tools/dispatch-detached.ps1 -Launch '
+        '${CLAUDE_PLUGIN_ROOT}/tools/dispatch-round.ps1 -Launch '
         f'-DispatchDir "{dispatch_dir}" -WrapperBody "{wrapper}" '
         f'-ReceiptPath "{receipt_path}" -Round OuterR1 -Json'
     ).replace("${CLAUDE_PLUGIN_ROOT}", str(REPO))
@@ -843,7 +843,7 @@ def test_the_documented_outer_command_works_on_this_host(tmp_path):
 
     poll_cmd = (
         '& (Get-Process -Id $PID).Path -NoProfile -File '
-        '${CLAUDE_PLUGIN_ROOT}/tools/dispatch-detached.ps1 -Poll '
+        '${CLAUDE_PLUGIN_ROOT}/tools/dispatch-round.ps1 -Poll '
         f'-Receipt "{receipt_path}" -ExpectedDispatchDir "{dispatch_dir}" '
         '-ExpectedRound OuterR1 -Json'
     ).replace("${CLAUDE_PLUGIN_ROOT}", str(REPO))

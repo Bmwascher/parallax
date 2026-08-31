@@ -1,4 +1,4 @@
-# dispatch-detached.ps1 - launch a PowerShell wrapper body as a detached
+# dispatch-round.ps1 - launch a PowerShell wrapper body as a detached
 # child process and poll its completion without blocking the caller's
 # tool-call ceiling (foreground commands cap out at 600 seconds; a review
 # round or a live dispatch can run far longer than that).
@@ -208,7 +208,7 @@ $ErrorActionPreference = 'Stop'
 # the new child, not just the three handles Start-Process means to pass. When
 # the caller of -Launch captures ITS OWN stdout/stderr through a pipe (the
 # normal shape of a Bash/PowerShell tool call, and how every test in
-# evals/multi-model-verify/test_dispatch_detached.py drives this script),
+# evals/multi-model-verify/test_dispatch_round.py drives this script),
 # those pipe write-ends are themselves inheritable, so the wrapper child
 # inherits them too - and the caller's pipe-read then blocks until the
 # wrapper exits, not until -Launch returns. Measured: -Launch built on plain

@@ -1,7 +1,7 @@
 """Render, parse and stub-run every wrapper body (Task 7, 2026-08-30
 item32-detached-dispatch plan).
 
-Task 1's suite drives the real `tools/dispatch-detached.ps1` transaction
+Task 1's suite drives the real `tools/dispatch-round.ps1` transaction
 end to end, so it already covers reserve-write-launch-record. What it
 does NOT cover is whether the five COPIED wrapper bodies these skill
 documents embed - two under SKILL.md's new `<!-- wrapper:... -->`
@@ -25,12 +25,12 @@ pasted into this file, which would drift silently), substitutes its
     ITSELF from captured stdout).
 
 The wrapper bodies are run DIRECTLY via `powershell -File`, never through
-`tools/dispatch-detached.ps1` - Task 1's suite already drives that
+`tools/dispatch-round.ps1` - Task 1's suite already drives that
 transaction, and running the wrapper here with $PSScriptRoot bound to a
 throwaway directory is exactly what proves the copied body itself is
 sound, independent of the launch mechanism around it.
 
-WINDOWS ONLY, whole module: same reasoning as test_dispatch_detached.py -
+WINDOWS ONLY, whole module: same reasoning as test_dispatch_round.py -
 a selector that merely finds A host would collect these on a
 non-Windows box too, where the platform semantics under test (native
 process console-decode boundary, OEM code page) do not exist the same

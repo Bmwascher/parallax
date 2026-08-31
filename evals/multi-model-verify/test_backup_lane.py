@@ -2016,7 +2016,7 @@ def test_each_kimi_call_is_launched_through_the_tool(call):
     section = body.split(marker, 1)[1].split("<!-- call:", 1)[0]
     assert (
         "& (Get-Process -Id $PID).Path -NoProfile -File"
-        " <plugin-checkout>/tools/dispatch-detached.ps1 -Launch"
+        " <plugin-checkout>/tools/dispatch-round.ps1 -Launch"
         " -DispatchDir <dispatch-dir> -WrapperBody <wrapper-file>"
         " -ReceiptPath <receipt-file> -Round <label>"
         " -WorkingDirectory <review-mirror> -Json") in section, (
@@ -2024,7 +2024,7 @@ def test_each_kimi_call_is_launched_through_the_tool(call):
         " launch command is what four rounds kept finding")
     assert (
         "& (Get-Process -Id $PID).Path -NoProfile -File"
-        " <plugin-checkout>/tools/dispatch-detached.ps1 -Poll"
+        " <plugin-checkout>/tools/dispatch-round.ps1 -Poll"
         " -Receipt <receipt-file>"
         " -ExpectedDispatchDir <dispatch-dir> -ExpectedRound <label>"
         " -Json") in section, (

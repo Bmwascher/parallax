@@ -301,7 +301,7 @@ Canonical reasoning effort: `high`
   is spent for nothing.
   <!-- contract:start id=detached-dispatch-tool -->
   The launch is ONE TRANSACTION and it lives in ONE PLACE:
-  `<plugin-root>/tools/dispatch-detached.ps1`, written
+  `<plugin-root>/tools/dispatch-round.ps1`, written
   `${CLAUDE_PLUGIN_ROOT}` in SKILL.md, where the harness substitutes it,
   and `<plugin-checkout>` in backup-lane.md, which is a references file
   the session reads raw and where nothing substitutes anything. It reserves a

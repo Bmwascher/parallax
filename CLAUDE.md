@@ -87,7 +87,7 @@ Two traps in the dispatch scripts themselves, both measured 2026-08-04:
   `docs/superpowers/plans/rounds/2026-08-11-budget-flake-generator/`;
   do not read the rule above as a statement that the repo is clean.
 
-**The launch itself is no longer a copied snippet.** `tools/dispatch-detached.ps1`
+**The launch itself is no longer a copied snippet.** `tools/dispatch-round.ps1`
 now owns it as one fail-closed transaction — reserve the dispatch
 directory, install the wrapper, start the process, record the pid and
 start ticks, write the commit marker, and publish the receipt last of
