@@ -465,7 +465,7 @@ git commit -m "rename the dispatch tool: it no longer detaches"
 
 **Interfaces:**
 - Consumes: `tools/dispatch-round.ps1` from Task 1.
-- Produces: `-Prepare` with the eight-field receipt, and the two output
+- Produces: `-Prepare` with the receipt schema above, and the two output
   fields `command` and `taskName`. Task 3 consumes the receipt schema;
   Task 4 consumes the wrapper the prepare installs.
 
