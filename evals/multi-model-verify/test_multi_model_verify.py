@@ -997,6 +997,145 @@ def test_dispatch_traps_are_documented_in_the_notes():
         "needs, and truncating them costs the whole run again.") in notes
 
 
+def test_detached_dispatch_tool_region_is_pinned():
+    """Backlog item 32. The launch used to be five copied snippets,
+    regenerating the same defect across four debate rounds; this pins
+    the single-tool contract that replaced them."""
+    notes = " ".join(read(REFERENCES / "model-prompting-notes.md").split())
+    assert (
+    "The launch is ONE TRANSACTION and it lives in ONE PLACE: "
+    "`<plugin-root>/tools/dispatch-detached.ps1`, written "
+    "`${CLAUDE_PLUGIN_ROOT}` in SKILL.md, where the harness substitutes it, "
+    "and `<plugin-checkout>` in backup-lane.md, which is a references file "
+    "the session reads raw and where nothing substitutes anything. It "
+    "reserves a directory, installs the wrapper, starts the process, records "
+    "the pid and its start ticks, writes the internal launch-commit marker, "
+    "and publishes the EXTERNAL RECEIPT last of all; a failure at any point "
+    "after the process starts kills the tree and BLOCKS rather than leaving "
+    "it unrecorded. The two are not interchangeable: the marker is what makes "
+    "the directory a committed launch, and the receipt is what makes the "
+    "launch pollable, so the receipt is the transaction's final act. No lane "
+    "writes its own launch. A lane supplies a WRAPPER BODY carrying its "
+    "client invocation verbatim and, where its client needs one, a working "
+    "directory; it changes nothing else. This replaced five copied snippets, "
+    "which regenerated the same defect across four debate rounds: reserve, "
+    "write, start and record are four steps, and a rule written in one place "
+    "while the steps are copied to five cannot make them atomic. The path "
+    "NAMES the plugin root because the three tool calls this skill already "
+    "makes are bare relative paths, which is backlog item 58's own cause; a "
+    "new call must not join that. Naming is not always resolving: in SKILL.md "
+    "the harness substitutes the token, and in backup-lane.md the placeholder "
+    "is filled in by the session, which is weaker and is said rather than "
+    "blurred."
+    ) in notes, (
+        "region detached-dispatch-tool must sit WHOLE in one pin")
+
+
+def test_detached_dispatch_states_region_is_pinned():
+    """Backlog item 32. The state ordering - NO RECEIPT, then RECEIPT NOT
+    EXPECTED, then LAUNCH UNKNOWN - was earned across several rounds of
+    cross-vendor refusal, so the whole region is pinned rather than a
+    fragment of it."""
+    notes = " ".join(read(REFERENCES / "model-prompting-notes.md").split())
+    assert (
+    "The tool's `-Poll` mode names a RECEIPT, never a directory, and the "
+    "ORDER of its checks is the contract. First, a receipt that is absent, "
+    "unreadable, or not this tool's own JSON means NO RECEIPT: no directory "
+    "is opened at all. A refused launch writes no receipt, so a caller cannot "
+    "poll the directory it was just refused. NO RECEIPT IS NOT EVIDENCE THAT "
+    "NOTHING STARTED. The receipt is the transaction's last act, so a launch "
+    "interrupted at any earlier point - a hard kill between process creation "
+    "and publication above all - leaves no receipt and may well have left a "
+    "LIVE UNTRACKED CHILD. Shipping the transaction in one tool NARROWS that "
+    "window; it does not remove it, and in its worst form no pid was written "
+    "either, so the whole-tree kill below cannot clear it. It is never "
+    "success. Second, a receipt whose directory or round is not the one the "
+    "caller says it is polling for is RECEIPT NOT EXPECTED, and still nothing "
+    "is opened: the receipt binds itself to its own directory, and only this "
+    "second, independently supplied pair binds it to the act being performed. "
+    "Third, a VALID receipt whose directory holds no launch-commit marker is "
+    "LAUNCH UNKNOWN. Since the marker is written before the receipt, a "
+    "receipt that exists proves the marker once existed, so this state means "
+    "the marker has since gone - removed, or lost with the directory. It is "
+    "never success, and it is a different condition from the interrupted "
+    "launch above, which produces NO RECEIPT instead. Fourth, a commit "
+    "artifact not holding the receipt's token is LAUNCH NOT OURS: the "
+    "directory belongs to another launch and none of its artifacts describe "
+    "this one. Fifth, a missing or unreadable pid under a valid commit is PID "
+    "UNREADABLE, because a committed launch always wrote one. Sixth, liveness "
+    "is PID PLUS START TIME, never a pid alone: a live pid whose start time "
+    "cannot be read is PID UNREADABLE, and a live pid whose start time "
+    "differs from the receipt's is a RECYCLED pid, which means our own "
+    "process is gone. Only a live pid whose start time matches is RUNNING, "
+    "and there NOTHING ELSE IS READ - a reply being written is not a reply. "
+    "Only then come the terminal states: no exit file, an exit file "
+    "unreadable or not a plain integer, a non-zero code, zero with no reply "
+    "artifact, zero with an empty reply artifact, and zero with a reply "
+    "artifact that has content. Only the last can become a review result, and "
+    "it is not one by itself: the lane's round-evidence binder must also "
+    "return clean. Every other state is a transport failure per fallbacks.md, "
+    "except RUNNING, which is UNFINISHED. The receipt NARROWS misattribution "
+    "and does not remove it either: a caller that supplies an earlier act's "
+    "receipt AND that act's directory AND its label is truthfully told that "
+    "act's result, because every value it supplied describes the earlier act. "
+    "The controls for that are a fresh receipt path per round and a launch "
+    "that refuses an existing one. EXIT ZERO MEANS REPLY PRESENT AND NOTHING "
+    "ELSE. An unfinished round exits THREE, so a caller reading only the exit "
+    "status cannot take a still-being-written reply for a finished one; a "
+    "rule saying to read the state field would have been prose where a "
+    "mechanism belongs."
+    ) in notes, (
+        "region detached-dispatch-states must sit WHOLE in one pin")
+
+
+def test_detached_dispatch_operation_region_is_pinned():
+    """Backlog item 32. Bounded polling and the two cases the whole-tree
+    kill cannot clear."""
+    notes = " ".join(read(REFERENCES / "model-prompting-notes.md").split())
+    assert (
+    "Each poll is BOUNDED and returns; a poll that waits indefinitely is the "
+    "blocking form again. At THIRTY MINUTES without a terminal state, stop "
+    "polling, report the round UNFINISHED, and ask the user whether to keep "
+    "waiting or abandon it. Neither answer is a review result. To abandon a "
+    "round whose pid is on disk, fell the whole tree with `taskkill /PID <id> "
+    "/T /F`: killing the launcher alone leaves the client orphaned, which is "
+    "what the 2026-08-11 report of this item observed at zero CPU growth. NO "
+    "RECEIPT after an interrupted launch is the case that command CANNOT "
+    "clear, and the two must not be run together in one sentence: in its "
+    "dangerous form no pid was ever written, so there is no `<id>` to pass. "
+    "There is a SECOND case that command cannot clear, and stating only the "
+    "first misleads an operator into believing nothing is running: a "
+    "COMMITTED launch whose wrapper host has died while the client child "
+    "lives on. The pid on disk is the dead wrapper, so felling that tree "
+    "reports process-not-found and never reaches the orphan. The poll "
+    "classifies it safely - DEAD, then no exit file or a non-zero code, never "
+    "success - so it is the REMEDY that fails, not the completion model. "
+    "Clearing either one means finding the process by another route - its "
+    "command line, its working directory - and both are unmeasured here, so "
+    "surface them to the user rather than claiming a remedy. Never poll with "
+    "`ps -p` from Git Bash, which cannot see Windows pids and reports a live "
+    "process as gone."
+    ) in notes, (
+        "region detached-dispatch-operation must sit WHOLE in one pin")
+
+
+def test_background_task_naming_region_is_pinned():
+    """Backlog item 32. This is a DOCUMENTATION-PRESENCE pin, not
+    behavioural enforcement: nothing in the repo checks that a
+    backgrounded call is actually named this way."""
+    notes = " ".join(read(REFERENCES / "model-prompting-notes.md").split())
+    assert (
+    "Name the backgrounded call for the person watching it. The reviewer LANE "
+    "and the ROUND lead the description, as in `Sol R1 debate round` or `Kimi "
+    "R2 debate round`; work with no lane leads with its kind, as in `Gate: "
+    "pytest 5.1` or `Mirror build`. A cycle runs several lanes across several "
+    "rounds at once and a name omitting either cannot be read at a glance. "
+    "NOTHING ENFORCES THIS. It is a convention about what a human sees, and "
+    "its pin proves only that the rule is written down."
+    ) in notes, (
+        "region background-task-naming must sit WHOLE in one pin")
+
+
 class TestDebateProtocol:
     def test_round_cap_default(self):
         text = read(REFERENCES / "debate-protocol.md")

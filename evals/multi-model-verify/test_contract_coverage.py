@@ -728,13 +728,32 @@ DECLARED_REGIONS = {
     # fields it bridges, and the narrowed claim is only honest beside
     # the fingerprint that backs it.
     "mirror-identity-gate",
+    # 0.28.0, backlog item 32. TOOL replaced a launch that had been five
+    # copied snippets, regenerating the same defect across four debate
+    # rounds. STATES leads with NO RECEIPT, then RECEIPT NOT EXPECTED,
+    # then LAUNCH UNKNOWN, because the cross-vendor reviewer refused the
+    # claim that a tool eliminates the irreducible interrupted launch,
+    # then refused a launch token stored inside the artifact it
+    # authenticates, then caught this very ordering stated two ways in
+    # one document, and finally caught the irreducible case sitting
+    # under the wrong state name once the receipt became the last
+    # artifact published. NAMING is separate because it is the only
+    # unenforced one.
+    "detached-dispatch-tool",
+    "detached-dispatch-states",
+    "detached-dispatch-operation",
+    "background-task-naming",
 }
 
 
-def test_declared_regions_match_the_documents():
+def test_declared_regions_match_the_documents(doc_paths=DOC_PATHS):
     """Deleting a whole region takes its markers with it. Without this
-    check the coverage test would then pass over nothing at all."""
-    found = set(collect_regions(DOC_PATHS))
+    check the coverage test would then pass over nothing at all.
+
+    doc_paths is optional so the negative case (a scratch copy of one
+    document with a region's markers deleted) can be run directly,
+    without repointing the module-level DOC_PATHS constant."""
+    found = set(collect_regions(doc_paths))
     missing = sorted(DECLARED_REGIONS - found)
     extra = sorted(found - DECLARED_REGIONS)
     assert not missing, (
@@ -745,7 +764,7 @@ def test_declared_regions_match_the_documents():
         "Add them to DECLARED_REGIONS.")
 
 
-def test_every_marked_region_is_locked_by_a_pin():
-    regions = collect_regions(DOC_PATHS)
+def test_every_marked_region_is_locked_by_a_pin(doc_paths=DOC_PATHS):
+    regions = collect_regions(doc_paths)
     misses = uncovered(regions, collect_pins(PIN_PATHS))
     assert not misses, format_failure(misses)
