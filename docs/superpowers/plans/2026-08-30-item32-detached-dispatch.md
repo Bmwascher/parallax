@@ -762,11 +762,30 @@ Expected: the binding ACCEPTS and the recorded prompt is byte-identical to the f
 
 - [ ] **Step 4: Repeat on the other host**
 
-- [ ] **Step 5: TASK-LOCAL ORACLE**
+- [ ] **Step 5: Write the record in a FIXED shape, so its outcomes can be asserted**
 
-Round 4 found this task had no oracle. Add one: a test asserting the record file EXISTS and contains a row for each of the two hosts and each of the three measurements, so an unwritten or half-written record fails the suite rather than passing silently.
+Round 18's finding: an oracle over rows that only counts them accepts a record saying every measurement FAILED. The record therefore carries one section per host, and inside each, one row per measurement with named fields, not prose:
 
-- [ ] **Step 6: Commit**
+```
+## host: <windows-powershell-5.1 | powershell-7>
+boundary: launch_return_seconds=<n> alive_in_later_call=<true|false> exit_file_after_sleep=<true|false>
+states: killed_tree=<state> refused_receipt=<state> empty_reply=<state>
+encoding: binder=<accepted|refused> prompt_sha256_matches=<true|false> prompt_bytes_match=<true|false>
+```
+
+Fill them from the measurements above. If any value comes out the other way, WRITE IT AS MEASURED and stop: a probe that records what it hoped for is worth less than no probe, and this task exists because nothing before it tested the plan's central promise end to end.
+
+- [ ] **Step 6: TASK-LOCAL ORACLE**
+
+Round 4 found this task had no oracle and round 18 found the replacement counting rows rather than reading them. `evals/multi-model-verify/test_wrapper_probe_record.py` asserts the record EXISTS, that both host sections are present, and then asserts every value:
+
+- `boundary`: `launch_return_seconds` parses as a number and is **under 15**, `alive_in_later_call=true`, `exit_file_after_sleep=true`. The number is the plan's whole claim - a call that took 90 seconds returned only when the child did, which is the blocking form again.
+- `states`: `killed_tree=no-exit-file`, `refused_receipt=no-receipt`, `empty_reply=reply-empty`, compared exactly against those state names.
+- `encoding`: `binder=accepted`, `prompt_sha256_matches=true`, `prompt_bytes_match=true`.
+
+Then prove the oracle can fail: change ONE recorded value in a scratch copy - `alive_in_later_call` to `false` - confirm the test goes red naming that field, and restore it. A record whose test only counts its rows is the "presence is not meaning" defect this debate found five times, and Task 8 is the one task whose rows are the evidence rather than a description of it.
+
+- [ ] **Step 7: Commit**
 
 ```bash
 git add docs/superpowers/plans/rounds/2026-08-30-item32-detached-dispatch/wrapper-probe.md evals/multi-model-verify/test_wrapper_probe_record.py
