@@ -2079,10 +2079,19 @@ as a stated limit rather than fixed. They belong in the
    is minted at construction, and Task 1a provides no way to re-mint it,
    so anything copied in afterwards fails `-Prepare` and the wrapper's
    first check. The direction is conservative - it BLOCKS, it never
-   false-passes - but a documented workflow becomes unrunnable. **Task 1a
-   must either add a re-mint path or say plainly in `backup-lane.md` that
-   inputs are copied in BEFORE the identity record is taken.** Found by
+   false-passes - but a documented workflow becomes unrunnable. Found by
    the backup lane, which is the lane that uses it.
+
+   **SETTLED, so no implementer has to decide it: Task 1a adds
+   `-ExtraInput <path>` to the BUILD, repeatable, and adds NO re-mint
+   path.** The named files are copied in as part of construction, before
+   the baseline and manifest are taken, so the identity record covers them
+   and the printed record enumerates them. A re-mint mode would be the
+   ability to re-bless a tree that has changed since it was measured,
+   which is exactly the capability the digest exists to deny; it would be
+   a hole with a friendly name. If a round needs an input nobody thought
+   of until after construction, the answer is to rebuild the mirror, which
+   is cheap and leaves the record honest.
 
 **One thing that is NOT shippable as a residual:** the preparation-time
 verifier output. `identity: verified` in front of `-Prepare`'s JSON breaks
