@@ -966,6 +966,76 @@ class TestTransportContract:
             "control surface."
         ) in notes
 
+    CODEX_CALLS = ("codex-fresh", "codex-resume")
+
+    @pytest.mark.parametrize("call", CODEX_CALLS)
+    def test_each_codex_call_is_launched_through_the_tool(self, call):
+        """Per-site, not a global count.
+
+        Round 6's finding: a global `>= 2` is satisfied by two tool
+        calls under round 1 and none under resume, while the document
+        still contains no `Start-Process`. Centralization would be
+        proven and detachment of each site would not.
+
+        The anchor matters separately: the three tool calls this skill
+        already makes are bare relative paths (SKILL.md:94, :121, :228),
+        which is backlog item 58's own cause, and a new call must not
+        join that. The HOST matters too. A bare `powershell` starts the
+        tool under Windows PowerShell 5.1 even from a PowerShell 7
+        session, and the tool then hands its own executable to the
+        wrapper, so the wrapper silently runs on a host the caller never
+        chose. `(Get-Process -Id $PID).Path` is the caller's own host.
+        """
+        text = read(SKILL_MD)
+        marker = "<!-- call:%s -->" % call
+        assert text.count(marker) == 1, "exactly one section per call"
+        section = text.split(marker, 1)[1].split("<!-- call:", 1)[0]
+        assert (
+            "& (Get-Process -Id $PID).Path -NoProfile -File"
+            " ${CLAUDE_PLUGIN_ROOT}/tools/dispatch-detached.ps1 -Launch"
+            " -DispatchDir <dispatch-dir> -WrapperBody <wrapper-file>"
+            " -ReceiptPath <receipt-file> -Round <label>"
+            " -Json") in section, "this site has no launch"
+        assert (
+            "& (Get-Process -Id $PID).Path -NoProfile -File"
+            " ${CLAUDE_PLUGIN_ROOT}/tools/dispatch-detached.ps1 -Poll"
+            " -Receipt <receipt-file>"
+            " -ExpectedDispatchDir <dispatch-dir> -ExpectedRound <label>"
+            " -Json") in section, "this site has no poll"
+        assert "$brief | codex exec" in section, (
+            "this site has no client invocation")
+        assert (
+            "0 means `reply-present` and nothing else; 3 means"
+            " `running`, an UNFINISHED round; 1 is any other state, a"
+            " transport failure with the state name on stdout; 2 is a"
+            " parameter-binding failure or an internal execution"
+            " error.") in section, (
+            "this site does not state the WHOLE exit mapping. Round 10"
+            " found the tool contract and the point of use disagreeing"
+            " about exit 0, which is the only place a reader of the"
+            " skill would look; round 11 found the replacement asserting"
+            " two of its four clauses, so the 1 and 2 clauses could drift"
+            " or vanish while this test stayed green. All four clauses"
+            " are one literal on purpose")
+
+    def test_no_codex_lane_writes_its_own_launch(self):
+        """A CENTRALIZATION guard, and nothing more.
+
+        Round 6 established what this cannot show: an absent
+        `Start-Process` proves no second launch implementation exists,
+        never that every call site reaches the one that does. The
+        per-site test above is what proves that.
+        """
+        assert "Start-Process" not in read(SKILL_MD), (
+            "no lane writes its own launch; the tool owns the whole"
+            " transaction and a second copy is how it drifts"
+        )
+
+    def test_the_point_of_use_sends_the_reader_to_the_states(self):
+        text = read(SKILL_MD)
+        assert text.count("references/model-prompting-notes.md's"
+                          " detached-dispatch-states") >= 2
+
 
 def test_dispatch_traps_are_documented_in_the_notes():
     """Two measured ways to kill a round before the reviewer works.

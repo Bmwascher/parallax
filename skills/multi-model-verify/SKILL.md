@@ -171,10 +171,19 @@ toggled on, its stop-time review overlaps mode `diff` — expected, not a bug.
    `.wow-api-reference/` or a dated in-game probe result) — never memory.
    The position has no separate artifact — it IS the claims section of the
    step-2 brief.
+<!-- call:codex-fresh -->
 2. Compose the reviewer's debate brief per references/model-prompting-notes.md, write
-   it to a scratchpad file, then run round 1:
+   it to a scratchpad file, then write this wrapper body to `<wrapper-file>` — as
+   a FILE, never from a here-string, whose terminator cannot survive this block's
+   indentation — and launch it with the tool. Never run it inline: the caller's
+   600-second ceiling kills a crossing round with the quota spent and no reply
+   written.
+
+   The wrapper body is today's block with the exit scaffolding added and `$d`
+   supplied by the tool as the directory the wrapper runs in:
 
    ```powershell
+   $code = 1
    $priorOutputEncoding = $OutputEncoding
    try {
    $OutputEncoding = New-Object System.Text.UTF8Encoding($false)
@@ -183,9 +192,46 @@ toggled on, its stop-time review overlaps mode `diff` — expected, not a bug.
    $seen = ([System.BitConverter]::ToString(([System.Security.Cryptography.SHA256]::Create()).ComputeHash($bytes)) -replace '-', '').ToLower()
    if ($seen -cne "<override-sha256>") { throw "the override file changed after the probe verified it" }
    $override = (New-Object System.Text.UTF8Encoding($false, $true)).GetString($bytes)
-   $brief | codex exec --sandbox read-only --disable plugins --disable apps --disable memories -c mcp_servers.node_repl.enabled=false -c $override -m <canonical-model-id> -c model_reasoning_effort=<canonical-effort> --output-last-message <reply-file> - > <transcript-file> 2>&1
-   } finally { $OutputEncoding = $priorOutputEncoding }
+   $brief | codex exec --sandbox read-only --disable plugins --disable apps --disable memories -c mcp_servers.node_repl.enabled=false -c $override -m <canonical-model-id> -c model_reasoning_effort=<canonical-effort> --output-last-message $PSScriptRoot/reply - > $PSScriptRoot/transcript 2>&1
+   $code = $LASTEXITCODE
+   } catch { $code = 1 } finally { $OutputEncoding = $priorOutputEncoding }
+   [System.IO.File]::WriteAllText("$PSScriptRoot/exit", "$code")
    ```
+
+   `$PSScriptRoot` is the dispatch directory, because the tool installs the
+   wrapper into it. That removes the need to pass a path in and removes one
+   more thing a copy can get wrong.
+
+   Launch it and STOP. Read the round only when the poll reaches a terminal
+   state; the order of those checks is references/model-prompting-notes.md's detached-dispatch-states and `reply-present` is not a verdict on its own:
+
+   ```powershell
+   & (Get-Process -Id $PID).Path -NoProfile -File ${CLAUDE_PLUGIN_ROOT}/tools/dispatch-detached.ps1 -Launch -DispatchDir <dispatch-dir> -WrapperBody <wrapper-file> -ReceiptPath <receipt-file> -Round <label> -Json
+   ```
+
+   `<receipt-file>` is a FRESH path for this round, alongside the fresh
+   reply and transcript paths this skill already requires; the launch
+   refuses one that exists. `<label>` names the lane and the round, as in
+   `Sol R1`. The poll below reads the receipt, not the directory, so a
+   launch that was refused has nothing to poll:
+
+   ```powershell
+   & (Get-Process -Id $PID).Path -NoProfile -File ${CLAUDE_PLUGIN_ROOT}/tools/dispatch-detached.ps1 -Poll -Receipt <receipt-file> -ExpectedDispatchDir <dispatch-dir> -ExpectedRound <label> -Json
+   ```
+
+   `-ExpectedDispatchDir` and `-ExpectedRound` are the same two values passed
+   to the launch, supplied again and INDEPENDENTLY of the receipt: that pair
+   is what stops an earlier attempt's receipt answering for this one. The
+   poll also echoes the `round` back, so record it. Its exit codes are: **0 means `reply-present` and nothing else; 3 means `running`, an UNFINISHED round; 1 is any other state, a transport failure with the state name on stdout; 2 is a parameter-binding failure or an internal execution error.** Round 10's finding: this sentence still carried
+   revision 8's mapping, so the shipped skill would have told the reader
+   that exit 0 covers a round still being written, while the tool said
+   otherwise.
+
+   `(Get-Process -Id $PID).Path` is the caller's own host, not a bare
+   `powershell`. Round 6's finding: a bare name resolves to Windows
+   PowerShell 5.1 even from a PowerShell 7 session, and the tool hands its
+   own executable to the wrapper, so the wrapper would run on a host nobody
+   chose.
 
    Both encoding lines are load-bearing on Windows PowerShell 5.1
    (references/model-prompting-notes.md).
@@ -219,11 +265,10 @@ toggled on, its stop-time review overlaps mode `diff` — expected, not a bug.
    (fallbacks.md), never a review result — and capture the `session id:`
    line. Read the reviewer's reply from `<reply-file>` — the transcript
    logs every file the reviewer reads and can run tens of KB, with the
-   reply buried at the bottom. Every round writes FRESH round-numbered
-   `<reply-file>`/`<transcript-file>` paths: after a failed call, a reused
-   path serves the previous round's reply and reads exactly like success —
-   a reply not freshly written by this round's call is a stale reply, a
-   transport failure (fallbacks.md), never a review result.
+   reply buried at the bottom. **Every round names a FRESH dispatch
+   directory and a FRESH receipt path, and `-Launch` refuses either if it
+   already exists** — a reused path serves the previous round's reply and
+   reads exactly like success.
    Per-round evidence: bind the reply to the brief THIS side sent with
    `tools/read-codex-round-evidence.ps1` — `-Fresh` at round 1, `-Resume`
    after. `-PriorState` is an inventory of the session root captured
@@ -233,10 +278,14 @@ toggled on, its stop-time review overlaps mode `diff` — expected, not a bug.
    discarded unread. A clean verdict is client-echo evidence — what the
    client recorded, never what any server received.
 
-3. Later rounds keep the reviewer's state by resuming that session — flags MUST
-   precede the resume subcommand (flags after it are a usage error):
+<!-- call:codex-resume -->
+3. Later rounds keep the reviewer's state by resuming that session — flags
+   MUST precede the resume subcommand (flags after it are a usage error).
+   Compose the rebuttal and launch the same wrapper shape as round 1,
+   with the resumed call:
 
    ```powershell
+   $code = 1
    $priorOutputEncoding = $OutputEncoding
    try {
    $OutputEncoding = New-Object System.Text.UTF8Encoding($false)
@@ -245,9 +294,25 @@ toggled on, its stop-time review overlaps mode `diff` — expected, not a bug.
    $seen = ([System.BitConverter]::ToString(([System.Security.Cryptography.SHA256]::Create()).ComputeHash($bytes)) -replace '-', '').ToLower()
    if ($seen -cne "<override-sha256>") { throw "the override file changed after the probe verified it" }
    $override = (New-Object System.Text.UTF8Encoding($false, $true)).GetString($bytes)
-   $brief | codex exec --sandbox read-only --disable plugins --disable apps --disable memories -c mcp_servers.node_repl.enabled=false -c $override -m <canonical-model-id> -c model_reasoning_effort=<canonical-effort> --output-last-message <reply-file> resume <SESSION_ID> - > <transcript-file> 2>&1
-   } finally { $OutputEncoding = $priorOutputEncoding }
+   $brief | codex exec --sandbox read-only --disable plugins --disable apps --disable memories -c mcp_servers.node_repl.enabled=false -c $override -m <canonical-model-id> -c model_reasoning_effort=<canonical-effort> --output-last-message $PSScriptRoot/reply resume <SESSION_ID> - > $PSScriptRoot/transcript 2>&1
+   $code = $LASTEXITCODE
+   } catch { $code = 1 } finally { $OutputEncoding = $priorOutputEncoding }
+   [System.IO.File]::WriteAllText("$PSScriptRoot/exit", "$code")
    ```
+
+   Launch it and STOP, the same way as round 1; the order of the poll's
+   checks is references/model-prompting-notes.md's detached-dispatch-states
+   and `reply-present` is not a verdict on its own:
+
+   ```powershell
+   & (Get-Process -Id $PID).Path -NoProfile -File ${CLAUDE_PLUGIN_ROOT}/tools/dispatch-detached.ps1 -Launch -DispatchDir <dispatch-dir> -WrapperBody <wrapper-file> -ReceiptPath <receipt-file> -Round <label> -Json
+   ```
+
+   ```powershell
+   & (Get-Process -Id $PID).Path -NoProfile -File ${CLAUDE_PLUGIN_ROOT}/tools/dispatch-detached.ps1 -Poll -Receipt <receipt-file> -ExpectedDispatchDir <dispatch-dir> -ExpectedRound <label> -Json
+   ```
+
+   Its exit codes are the same as round 1's: **0 means `reply-present` and nothing else; 3 means `running`, an UNFINISHED round; 1 is any other state, a transport failure with the state name on stdout; 2 is a parameter-binding failure or an internal execution error.**
 
    The preamble repeats in full every round. Rounds are separate shell
    invocations, so a `$override` set in round 1 does not exist in round 3,

@@ -228,21 +228,60 @@ class TestVendoringObligations:
         so all of them would follow a renumber quietly. This one does not.
         Changing either value here is the deliberate, recorded act the
         policy demands.
+
+        RAISED 2026-08-31, backlog item 32 task 3: routing both codex
+        dispatch sites in SKILL.md through tools/dispatch-detached.ps1
+        measured 6225 (test_the_2026_08_31_item32_raise_is_recorded_and_justified
+        below carries the full reason).
         """
         mod = load_lint()
-        assert mod.BODY_TOKEN_BUDGET == 5250
-        assert mod.BODY_TOKEN_CEILING == 5500
+        assert mod.BODY_TOKEN_BUDGET == 6250
+        assert mod.BODY_TOKEN_CEILING == 6500
         # The four boundaries the plan froze, stated as literals so the
         # band edges are readable without evaluating arithmetic.
-        assert (5250, 5251, 5500, 5501) == (
+        assert (6250, 6251, 6500, 6501) == (
             mod.BODY_TOKEN_BUDGET,
             mod.BODY_TOKEN_BUDGET + 1,
             mod.BODY_TOKEN_CEILING,
             mod.BODY_TOKEN_CEILING + 1,
         )
         text = LINT_PATH.read_text(encoding="utf-8")
-        assert "BODY_TOKEN_BUDGET = 5250" in text
-        assert "BODY_TOKEN_CEILING = 5500" in text
+        assert "BODY_TOKEN_BUDGET = 6250" in text
+        assert "BODY_TOKEN_CEILING = 6500" in text
+
+    def test_the_2026_08_31_item32_raise_is_recorded_and_justified(self):
+        """Backlog item 32, task 3. The tool-based rewrite of SKILL.md's two
+        codex dispatch sites (routed through tools/dispatch-detached.ps1)
+        measured 6225 by the header's own estimate, over the prior 5500
+        ceiling. A raise with no test is how the next raise goes unnoticed,
+        so the date, the number, and the reason live here rather than only
+        in the comment beside the constants.
+
+        The reason is NOT that the rewrite failed to shrink anything: it
+        replaced five copied dispatch snippets with one tool. It is that
+        the per-site test (test_each_codex_call_is_launched_through_the_tool)
+        requires the full wrapper body, the launch command, the poll
+        command, and the whole four-clause exit-code sentence inside EACH
+        call site's own section - round 6's finding was that a global count
+        let one site stay foreground undetected - so the fresh and resumed
+        dispatches each carry a full copy of that shape rather than sharing
+        one.
+        """
+        mod = load_lint()
+        assert mod.BODY_TOKEN_BUDGET == 6250
+        assert mod.BODY_TOKEN_CEILING == 6500
+        text = LINT_PATH.read_text(encoding="utf-8")
+        assert "RAISED 2026-08-31 (backlog item 32, task 3)." in text
+        assert (
+            "own command (`t.split('---',2)[2]`, `len(body)//4`) after routing both\n"
+            "# codex dispatch sites through tools/dispatch-detached.ps1: 6225."
+        ) in text
+        assert (
+            "so the fresh and resumed dispatches each carry their\n"
+            "# own copy of that shape; a global count would have let one site stay\n"
+            "# foreground undetected (round 6's finding), so the duplication is the\n"
+            "# point, not slack to trim."
+        ) in text
 
     def test_the_documented_checks_and_exit_codes_match_behaviour(self):
         text = LINT_PATH.read_text(encoding="utf-8")

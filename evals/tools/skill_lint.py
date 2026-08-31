@@ -98,8 +98,24 @@ BODY_MAX_LINES = 500
 # the ceiling must either relocate text to a reference file or change
 # these numbers deliberately, with the measurement and the reason recorded
 # here. Neither remedy is "delete a sentence a review asked for".
-BODY_TOKEN_BUDGET = 5250
-BODY_TOKEN_CEILING = 5500
+#
+# RAISED 2026-08-31 (backlog item 32, task 3). Measured with the header's
+# own command (`t.split('---',2)[2]`, `len(body)//4`) after routing both
+# codex dispatch sites through tools/dispatch-detached.ps1: 6225. The
+# tool-based design was expected to shrink the body — it replaces five
+# copied dispatch snippets with one tool the skill only calls — but each
+# call site's per-site test (test_each_codex_call_is_launched_through_the_tool)
+# requires the FULL wrapper body, the launch command, the poll command,
+# and the whole four-clause exit-code sentence to appear inside that
+# site's own section, so the fresh and resumed dispatches each carry their
+# own copy of that shape; a global count would have let one site stay
+# foreground undetected (round 6's finding), so the duplication is the
+# point, not slack to trim. The resume section was already condensed to
+# the minimum that still satisfies its own per-site literals before this
+# number was accepted. Budget set at the measured baseline rounded up;
+# ceiling keeps the same 250-token warning band as the prior raise.
+BODY_TOKEN_BUDGET = 6250
+BODY_TOKEN_CEILING = 6500
 
 KNOWN_KEYS = {"name", "description", "license", "compatibility", "metadata", "allowed-tools"}
 
