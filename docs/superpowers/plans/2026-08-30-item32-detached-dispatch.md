@@ -1,8 +1,10 @@
-# Item 32 Detached Dispatch Implementation Plan
+# Items 32 and 33 Implementation Plan: detached dispatch, and the mirror prompt that always had one answer
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make the four dispatch commands the skill documents incapable of blocking the caller past the 600-second tool ceiling, so a review round can no longer be killed with its quota spent and no reply written.
+**Goal:** Make the four dispatch commands the skill documents incapable of blocking the caller past the 600-second tool ceiling, so a review round can no longer be killed with its quota spent and no reply written; and stop the preflight asking a question whose answer has never once differed.
+
+**Why two items in one cycle.** The user hit BOTH inside this cycle's own first debate: the dispatch was killed at 600 seconds, and then the preflight stopped to ask whether to build the review mirror. They share one file, one gate profile and one debate, and this backlog's own rule is that items sharing those are built together rather than paying the same slow gate twice. Item 33 was filed by the user on 2026-08-11 and restated by the user on 2026-08-30 in these words: "This should never prompt either, it should be implied to create the mirror."
 
 **Architecture:** Each documented dispatch keeps its existing pipeline verbatim, but that pipeline moves into a wrapper script which is launched with `Start-Process` and left running. The launching call returns at once, writing the child's process id to a file. Later calls poll that id and a sidecar exit-code file the wrapper writes as its own last act. Nothing about the brief, the flags, the route check or the round-evidence binding changes.
 
@@ -331,7 +333,7 @@ git commit -m "state and pin the detached dispatch contract"
 
 **Interfaces:**
 - Consumes: `BODY_TOKEN_CEILING = 5900` from Task 1; the two contract regions from Task 3; the three failing tests from Task 2.
-- Produces: the finished round-1 and resume steps. Task 6 measures them.
+- Produces: the finished round-1 and resume steps. Task 7 measures them.
 
 - [ ] **Step 1: Rewrite the round-1 step**
 
@@ -469,7 +471,105 @@ git commit -m "dispatch both backup-lane rounds detached"
 
 ---
 
-### Task 6: Measure a non-ASCII brief through the detached wrapper on both hosts
+### Task 6: Build the review mirror automatically instead of asking (backlog item 33)
+
+The preflight currently says "STOP and surface it to the user" and that clearing happens "only on the user's choice, never automatically". The answer has never differed. Item 33 also records a second, worse cost: the prompt put "skip the cross-vendor lane" one tap from the recommended answer, in the moment the user is least likely to be weighing it. Removing the prompt removes that path too.
+
+**Files:**
+- Modify: `skills/multi-model-verify/SKILL.md:90-93`
+- Modify: `evals/multi-model-verify/test_contract_coverage.py`
+- Modify: `evals/multi-model-verify/test_multi_model_verify.py`
+
+**Interfaces:**
+- Consumes: nothing from earlier tasks. It shares only the file Task 4 edits, so run it after Task 4 so two edits do not race on `SKILL.md`.
+- Produces: one marked region, `back-channel-auto-mirror`, locked by one pin.
+
+- [ ] **Step 1: Write the failing pin**
+
+Add to `evals/multi-model-verify/test_multi_model_verify.py`, in the class that already holds the preflight tests:
+
+```python
+    def test_the_back_channel_response_is_automatic(self):
+        """The prompt bought a round trip and offered a worse option.
+
+        Filed as backlog item 33 on 2026-08-11 with a screenshot from
+        ANOTHER repo, so it is a skill defect rather than a parallax
+        quirk, and restated by the user on 2026-08-30 when it fired
+        again. The two choices offered were building the mirror and
+        skipping the cross-vendor lane; a question whose recommended
+        answer never changes should not put dropping that lane one tap
+        away.
+
+        The CHECK is not what is being removed. Only the question is.
+        """
+        text = " ".join(read(SKILL_MD).split())
+        assert (
+            "If present: BUILD THE MIRROR AND REPORT. Do NOT ask first - "
+            "the mirror is a file COPY and every deletion happens in the "
+            "copy, so the user's tree is never touched and there is "
+            "nothing to consent to. What was found is still EVIDENCE and "
+            "still goes in the debate record with its paths, and the "
+            "post-mirror re-enumeration must still come back empty before "
+            "any round dispatches. A mirror that cannot be built - path "
+            "budget blown, scratch unavailable - is BLOCKED, never a "
+            "fallback to dispatching over the real tree.") in text
+```
+
+- [ ] **Step 2: Run it to verify it fails**
+
+Run: `python -m pytest evals/multi-model-verify/test_multi_model_verify.py -q -k back_channel_response`
+Expected: 1 FAILED, naming the missing string.
+
+- [ ] **Step 3: Replace the prompt with the report**
+
+In `skills/multi-model-verify/SKILL.md`, these two passages currently read:
+
+```
+   If present: STOP and surface it to the user - never dispatch a review
+   over an instruction back-channel.
+
+   Clearing it - only on the user's choice, never automatically: run
+```
+
+Replace both, together with the blank line between them, with:
+
+```
+   <!-- contract:start id=back-channel-auto-mirror -->
+   If present: BUILD THE MIRROR AND REPORT. Do NOT ask first - the mirror
+   is a file COPY and every deletion happens in the copy, so the user's
+   tree is never touched and there is nothing to consent to. What was
+   found is still EVIDENCE and still goes in the debate record with its
+   paths, and the post-mirror re-enumeration must still come back empty
+   before any round dispatches. A mirror that cannot be built - path
+   budget blown, scratch unavailable - is BLOCKED, never a fallback to
+   dispatching over the real tree.
+   <!-- contract:end -->
+   Run
+```
+
+The originals use em dashes and the replacement uses hyphens. That is deliberate and the pin depends on it: copy the replacement exactly rather than re-typing its punctuation.
+
+Leave everything from `` `tools/new-review-mirror.ps1 -RepoRoot <repo> -MirrorPath <scratch>`. `` onward untouched, including the short-scratch-path rule and the mirror construction paragraph.
+
+- [ ] **Step 4: Declare the region**
+
+Add `"back-channel-auto-mirror",` to `DECLARED_REGIONS` in `evals/multi-model-verify/test_contract_coverage.py`, with a comment noting it is backlog item 33 and that the region holds what SURVIVES the prompt's removal - the evidence duty, the empty re-enumeration, and the BLOCKED state - rather than the removal itself. A region naming only what was deleted would let a later edit delete the check along with the question.
+
+- [ ] **Step 5: Verify**
+
+Run: `python -m pytest evals/multi-model-verify -q && python evals/tools/skill_lint.py skills/multi-model-verify --strict`
+Expected: PASS, exit 0. If the lint reports a body-token error, Task 1's ceiling is too low for both items together; report the measured number rather than deleting text to fit.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add skills/multi-model-verify/SKILL.md evals/multi-model-verify/test_multi_model_verify.py evals/multi-model-verify/test_contract_coverage.py
+git commit -m "build the review mirror without asking"
+```
+
+---
+
+### Task 7: Measure a non-ASCII brief through the detached wrapper on both hosts
 
 This is the measurement the spec says must not be assumed. This repo has paid for this class three times: 0.23.0 found it with the round-evidence binding, and the `& { }` variant was found only after being reasoned about and shipped.
 
@@ -511,14 +611,14 @@ git commit -m "measure the detached wrapper's brief encoding on both hosts"
 
 ---
 
-### Task 7: Close the item and run the full gates
+### Task 8: Close both items and run the full gates
 
 **Files:**
 - Modify: `docs/superpowers/plans/2026-07-27-0150-backlog.md` (item 32's heading and the ranking's first entry)
 - Modify: `CLAUDE.md`
 
 **Interfaces:**
-- Consumes: Tasks 1 to 6.
+- Consumes: Tasks 1 to 7.
 - Produces: a green gate set and a closed item.
 
 - [ ] **Step 1: Run the five local gates, detached**
@@ -545,9 +645,9 @@ Expected: no regression against main. Record any case that goes red by NAME.
 
 That section currently tells a session to dispatch detached and names two traps. Add one sentence pointing at the skill's detached-dispatch regions as the place the mechanism now lives, so the instruction and the command do not drift apart again.
 
-- [ ] **Step 5: Close item 32 in the backlog**
+- [ ] **Step 5: Close items 32 AND 33 in the backlog**
 
-Change item 32's heading status from `OPEN` to `DONE`, add the version, move it out of the ranking's first entry, and renumber the entries below it. Update the `**Open.**` and `**Done.**` lists in the status block at the top by reading the headings, not by editing the previous list. State in the item what was NOT done: items 51 and 31 are untouched, and the resume-after-a-kill recovery is still unmeasured.
+Change item 32's heading status from `OPEN` to `DONE`, and item 33's the same way, add the version, move it out of the ranking's first entry, and renumber the entries below it. Update the `**Open.**` and `**Done.**` lists in the status block at the top by reading the headings, not by editing the previous list. State in the item what was NOT done: items 51 and 31 are untouched, and the resume-after-a-kill recovery is still unmeasured.
 
 - [ ] **Step 6: Commit**
 

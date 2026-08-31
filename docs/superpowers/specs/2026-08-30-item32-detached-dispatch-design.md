@@ -1,6 +1,10 @@
-# Item 32: the documented dispatch must not be able to block the caller
+# Items 32 and 33: the dispatch must not block, and the mirror must not ask
 
 Written 2026-08-30. Design only. Nothing is built yet.
+
+Item 33 was added on 2026-08-30, after the design below was approved and
+while this cycle's own first debate was being set up. See `## Item 33`
+at the end.
 
 Backlog item 32, promoted to first in the ranking by the user on
 2026-08-30 after the failure fired again on that session's first dispatch.
@@ -234,3 +238,71 @@ live-verified contracts.
    documented "kill the tree at N minutes" reintroduces a caller kill,
    just a later one. Leaving it out risks a session waiting on a hung
    process forever.
+
+## Item 33: build the review mirror instead of asking whether to
+
+Added 2026-08-30, mid-cycle. **This is a scope increase and it is recorded
+as one**, not folded in silently.
+
+### What happened
+
+The plan above was approved and this cycle's own plan debate was being
+prepared. The preflight enumeration found an untracked `AGENTS.md` in the
+repo root, and `SKILL.md:90-93` made the session stop and ask the user
+whether to build the review mirror. The user's reply: **"This should never
+prompt either, it should be implied to create the mirror."**
+
+That is backlog item 33, filed by the same user on 2026-08-11 against a
+screenshot from a DIFFERENT repo, which is what makes it a skill defect
+rather than a parallax quirk. Its recorded verbatim ask then was: "Reviews
+should always build the review mirror and copies repo to scratch folder if
+agents.md and .agents are found. No prompt needed."
+
+### Why it belongs in this cycle rather than its own
+
+- Both items fired inside this cycle's first debate, minutes apart.
+- Both are edits to `SKILL.md` under the same pins and the same gate
+  profile. The backlog's own ranking rule says items sharing a file and a
+  gate profile are built together rather than paying the same slow gate
+  twice.
+- Neither depends on the other, so a reviewer can reject one and keep the
+  other.
+
+### What changes
+
+`SKILL.md:90-93` currently says "STOP and surface it to the user" and that
+clearing happens "only on the user's choice, never automatically". Both
+passages are replaced by a marked contract region that says to build the
+mirror and report.
+
+### Why this is safe, stated precisely
+
+The mirror is a FILE COPY that preserves `.git`, and every deletion happens
+in the copy. The user's working tree is never touched, so there is no
+destructive act to consent to. That, and only that, is what makes removing
+the question reasonable.
+
+Item 33 records a second cost the prompt carried, and it is the stronger
+reason: the two options offered were building the mirror and skipping the
+cross-vendor lane. A question whose recommended answer has never once
+differed should not put dropping that lane one tap away, at the moment the
+user is least likely to be weighing it. Removing the question removes that
+path.
+
+### What must survive, or the fix is worse than the prompt
+
+- **The check is not the question.** Only the question goes.
+- The enumeration result stays EVIDENCE and stays in the debate record
+  with the paths it found. An automatic mirror that stops reporting what
+  it cleared trades a prompt for a blind spot.
+- The post-mirror re-enumeration must still come back empty before any
+  round dispatches.
+- A mirror that cannot be built - path budget blown, scratch unavailable -
+  is BLOCKED. It is never a fallback to dispatching over the real tree.
+
+### Non-goal
+
+Whether the old prompt should be available as an explicit opt-in is NOT
+decided here and no opt-in is built. Item 33 lists it as an open question;
+nobody has asked for it, and adding an unused lever to a preflight is how
+the lever later becomes the default again.
