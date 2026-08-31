@@ -33,6 +33,8 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
+from contextlib import contextmanager
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -450,11 +452,64 @@ def compact_stream(stdout):
     return "\n".join(lines)
 
 
+@contextmanager
+def reaped_tempdir(prefix):
+    """A scratch dir that outlives nothing: reap, THEN delete.
+
+    Since item 32 the skill launches its client through
+    `tools/dispatch-detached.ps1`, which by design returns while the client
+    is still writing into its dispatch directory. A case that ends before
+    the round completes leaves a live grandchild holding
+    `<dispatch-dir>/transcript` open, and plain TemporaryDirectory cleanup
+    then dies with WinError 32 - losing a whole run's verdicts to a file
+    lock. Measured 2026-08-31: three runs of diff-mode-spec-fidelity gave a
+    graded miss, that crash, then a clean pass, so it is a race, not a
+    constant, which is exactly what makes it worth removing rather than
+    tolerating.
+
+    The launch transaction writes each child's pid to `<dispatch-dir>/pid`,
+    so the pids are on disk and are never guessed. Each gets a grace period
+    to finish on its own before the tree is killed.
+    """
+    root = tempfile.mkdtemp(prefix=prefix)
+    try:
+        yield root
+    finally:
+        for pid_file in Path(root).rglob("pid"):
+            try:
+                pid = int(pid_file.read_text(encoding="utf-8").strip())
+            except (OSError, ValueError):
+                continue
+            deadline = time.monotonic() + 20
+            while time.monotonic() < deadline:
+                listed = subprocess.run(
+                    ["tasklist", "/FI", "PID eq %d" % pid, "/NH"],
+                    capture_output=True, text=True)
+                if str(pid) not in listed.stdout:
+                    break
+                time.sleep(0.5)
+            else:
+                subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"],
+                               capture_output=True)
+        # A killed process releases its handles asynchronously, so retry.
+        # If the tree still will not go, say so BY PATH and carry on: a
+        # leaked scratch dir must never cost a run its verdicts.
+        for attempt in range(10):
+            try:
+                shutil.rmtree(root)
+                break
+            except OSError:
+                if attempt == 9:
+                    print("  WARNING: could not remove %s - leaked" % root)
+                else:
+                    time.sleep(1.0)
+
+
 def run_case(case, model, timeout, artifacts=None, head=False):
     setup = case.get("setup", {})
     if setup.get("manual"):
         return "SKIPPED(manual)", setup["manual"], []
-    with tempfile.TemporaryDirectory(prefix="parallax-eval-") as tmp:
+    with reaped_tempdir("parallax-eval-") as tmp:
         ws, subs = build_workspace(setup, tmp)
         prompt = case["prompt"]
         for placeholder, value in subs.items():
