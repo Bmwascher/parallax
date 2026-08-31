@@ -234,3 +234,51 @@ bypass the hand-rolled exit 2, and the stale budget-raise justification
 
 Verdict: **ready to merge WITH FIXES.** The two fix-before-merge items and
 the third are all done above.
+
+## THE PREMISE WAS WRONG, and the user caught it
+
+Item 32's stated defect, carried in `CLAUDE.md` as measured fact since
+0.21.x, is that a review round dispatched in the FOREGROUND is KILLED at
+the 600-second tool ceiling: no `--output-last-message` file is written, so
+it is a transport failure rather than a review result, and the quota is
+spent for nothing.
+
+**That does not reproduce on Claude Code 2.1.251.** The user noticed that
+several commands today had overrun and been moved to the background rather
+than killed, and asked directly whether our own change had caused the loss
+of task visibility. Measuring the ceiling instead of arguing about it:
+
+    10:09:17  start
+              SURVIVED THE CEILING
+              exit 0
+    10:20:17
+
+An 11-minute command crossed the 600-second ceiling, was moved to the
+background by the harness, ran to completion and returned exit 0 with its
+output intact. Nothing was killed and nothing was lost. The same
+"moved to the background" message had already appeared twice earlier in
+this session, on commands that then completed.
+
+**The real defect is the one the user named, and it is different.** A
+foreground dispatch OWNS the session for its whole duration: the user
+cannot see which round is running, and cannot talk to the agent at all
+until it ends. A tracked background command has neither problem - it shows
+in the task list under its own name, which is what the lane-and-round
+naming convention exists for, and the conversation stays open.
+
+**What this costs the branch as built.** The shipped tool launches an
+OS-detached process, which the harness does not track. So it fixed the
+blocking, and in doing so removed the visibility the harness was already
+providing for free. The user identified that as the wrong trade and
+directed the design change: dispatch as a TRACKED BACKGROUND command,
+keeping the receipt and the completion-state machine.
+
+**What survives untouched.** The completion model, which is what the plan
+debate actually hardened over 23 rounds, and which both reviewers searched
+and found closed. A killed, hung or half-written round still cannot read as
+a completed one. That value never depended on the kill premise.
+
+**What this says about the record.** A rule recorded as measured, repeated
+in `CLAUDE.md` and treated as settled through five release cycles, was
+never re-measured against a newer client. Nobody checked because it was
+written down. The user re-derived it from what was in front of him.
