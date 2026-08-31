@@ -105,11 +105,13 @@ Add these to the class that already holds `test_the_brief_is_read_and_piped_as_u
         """
         text = read(SKILL_MD)
         assert text.count(
-            "} finally { $OutputEncoding = $priorOutputEncoding }\n"
+            "} catch { $code = 1 } finally"
+            " { $OutputEncoding = $priorOutputEncoding }\n"
             '[System.IO.File]::WriteAllText("<exit-file>", "$code")') >= 2, (
             "the exit code must be written after the finally, as the"
             " wrapper's last act, so encoding is restored before"
-            " completion is published"
+            " completion is published, and every failure path must reach"
+            " that write"
         )
 
     def test_every_pre_client_failure_still_writes_an_exit_code(self):
@@ -121,13 +123,20 @@ Add these to the class that already holds `test_the_brief_is_read_and_piped_as_u
         to tell them apart.
         """
         text = read(SKILL_MD)
-        assert text.count("$code = 1\ntry {") >= 2, (
+        assert text.count(
+            "$code = 1\n"
+            "$priorOutputEncoding = $OutputEncoding\n"
+            "try {") >= 2, (
             "the exit code defaults to failure, so any path that does not"
-            " reach the client reports failure rather than nothing"
+            " reach the client reports failure rather than nothing; and"
+            " the prior encoding is captured OUTSIDE the try, or the"
+            " finally restores a value that was never set"
         )
-        assert text.count("} catch { $code = 1 }") >= 2, (
+        assert text.count("} catch { $code = 1 } finally {") >= 2, (
             "an exception before or during the client call must still"
-            " produce an exit code"
+            " produce an exit code, and catch and finally are one clause:"
+            " a separate `} finally {` after a closed catch is a parse"
+            " error, which is a new way to spend a round on nothing"
         )
 
     def test_both_dispatches_are_launched_detached(self):
@@ -364,8 +373,8 @@ The wrapper block:
 
 ```powershell
 $code = 1
-try {
 $priorOutputEncoding = $OutputEncoding
+try {
 $OutputEncoding = New-Object System.Text.UTF8Encoding($false)
 $brief = [System.IO.File]::ReadAllText("<brief-file>", (New-Object System.Text.UTF8Encoding($false, $true)))
 $bytes = [System.IO.File]::ReadAllBytes("<verified-override-file>")
@@ -374,8 +383,7 @@ if ($seen -cne "<override-sha256>") { throw "the override file changed after the
 $override = (New-Object System.Text.UTF8Encoding($false, $true)).GetString($bytes)
 $brief | codex exec --sandbox read-only --disable plugins --disable apps --disable memories -c mcp_servers.node_repl.enabled=false -c $override -m <canonical-model-id> -c model_reasoning_effort=<canonical-effort> --output-last-message <reply-file> - > <transcript-file> 2>&1
 $code = $LASTEXITCODE
-} catch { $code = 1 }
-} finally { $OutputEncoding = $priorOutputEncoding }
+} catch { $code = 1 } finally { $OutputEncoding = $priorOutputEncoding }
 [System.IO.File]::WriteAllText("<exit-file>", "$code")
 ```
 
@@ -393,7 +401,7 @@ $proc = Start-Process -FilePath (Get-Process -Id $PID).Path -ArgumentList @("-No
 
 Keep the existing sentence "Both encoding lines are load-bearing on Windows PowerShell 5.1 (references/model-prompting-notes.md)." and everything from the `verified-override-dispatch` contract marker onward exactly as it is.
 
-**The brace nesting above is deliberate and is what the Task 2 pins require: the `catch` closes the inner block, the `finally` restores encoding, and the exit write follows both. Transcribe it exactly; do not "tidy" the braces.** If PowerShell rejects the shape, report that rather than reshaping it silently — the pins and the parser have to be reconciled in the open, and Task 8 Step 1 runs the wrapper for real.
+**Three details in that block are load-bearing and a "tidy" breaks them.** `$priorOutputEncoding` is captured OUTSIDE the `try`, or the `finally` restores a variable that was never assigned when the failure is early. `catch` and `finally` are ONE clause on ONE line: a `} finally {` written after an already-closed `catch` is a PowerShell parse error, and the wrapper would then die before codex ran - a new way to spend a round on nothing, created by the fix for the old one. The exit write is the last line, outside every block. Transcribe the block exactly, and let Task 8 Step 1 be what proves it parses.
 
 - [ ] **Step 2: Rewrite the resume step the same way**
 
