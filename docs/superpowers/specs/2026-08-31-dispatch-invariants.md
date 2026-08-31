@@ -70,6 +70,31 @@ schema has four fields and none of them is the working directory. Nothing
 detects a wrong initial value, a post-preparation mutation, a deleted
 target, or a non-filesystem provider.
 
+**B6. RESUMING A ROUND AND REBUILDING THE MIRROR ARE IN CONFLICT, and
+nothing in the skill says so. MEASURED 2026-08-31.** The skill tells later
+rounds to resume the reviewer's session, and D7 tells every round to run
+against a frozen copy at a named commit. When the tree moves between
+rounds - which is what happens the moment this side applies a fix - the
+new commit needs a new mirror, and a new mirror is a new working
+directory. The client's resumed slice then carries a preamble whose `cwd`
+differs from the session's first round, and the round-evidence binder
+REFUSES it:
+
+```
+a resumed slice carries a user record in front of the brief that
+neither repeats the client's own preamble from this session nor reads
+as a refreshed one: it carries an environment field that does not
+match this session's own preamble: 'cwd'
+```
+
+The binder is right and the reply is discarded unread. But the protocol as
+written walks into this every time, and the cost is a whole round. The
+options are to build every round of one debate in the SAME mirror path, or
+to dispatch fresh whenever the mirror moves and carry the prior round's
+reply into the tree so the fresh session can read it. This cycle took the
+second, because the first would mean a mirror that no longer matches its
+named commit. Neither is written down anywhere yet.
+
 **B5. The tree must be confirmed from the CLIENT's own report.** The route
 check reads `model:`, `provider:`, `reasoning effort:` and `sandbox:` from
 the transcript and never reads `workdir:`. The client states where it ran;
