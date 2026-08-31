@@ -9,6 +9,7 @@ check stayed green.
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -930,6 +931,107 @@ def test_a_tracked_back_channel_under_a_spaced_directory_is_committed(tmp_path):
         "a tracked deletion left uncommitted is a tracked modification in"
         " the baseline, which bars mode diff")
     assert "AGENTS.md" not in git(mirror, "status", "--porcelain")
+
+
+# --- item 33 round 1: hooks must not fire during the remediation commit ---
+#
+# The mirror is a FILE COPY that preserves .git, so it carries the real
+# repo's hooks too. `HOOKS_DIR_REL` is where new-review-mirror.ps1 creates
+# the verified-empty core.hooksPath override for its own `git add` and
+# `git commit` calls - inside the mirror's `.git`, where a plain filesystem
+# copy carries it along but `git status`/`ls-files` never see it, so it
+# cannot itself register as a back-channel or dirty the porcelain that
+# other cases assert clean.
+HOOKS_DIR_REL = Path(".git") / "parallax-mirror-hooks"
+
+NEVER_FALL_BACK = "never fall back to committing with hooks live"
+
+
+def plant_tracked_back_channel(repo):
+    """The route that reaches `git add` / `git commit` at all - remediation
+    only stages and commits when a TRACKED back-channel was found."""
+    (repo / "AGENTS.md").write_text("# planted\n")
+    git(repo, "add", "AGENTS.md")
+    commit(repo, "plant a tracked back-channel")
+
+
+def test_the_remediation_commit_suppresses_repository_hooks(tmp_path):
+    """Item 33 round 1: `new-review-mirror.ps1`'s own BLOCKED text already
+    says the mirror carries the real repo's hooks. A pre-commit hook that
+    fires here is blocking on the REVIEWED repo's own hook, never on
+    anything the mirror is checking. Both `git add` and `git commit` must
+    carry `-c core.hooksPath=` pointed at a directory the script created
+    and verified empty in this same run.
+    """
+    repo = make_repo(tmp_path)
+    plant_tracked_back_channel(repo)
+    hooks = repo / ".git" / "hooks"
+    hooks.mkdir(parents=True, exist_ok=True)
+    (hooks / "pre-commit").write_text(
+        "#!/bin/sh\necho HOOK FIRED >&2\nexit 1\n")
+    mirror = tmp_path / "mirror"
+    trace = tmp_path / "trace.log"
+    proc = run_mirror(repo, mirror, env={"GIT_TRACE2": str(trace)})
+    assert_built(proc)
+    assert "mirror commit failed" not in proc.stdout, (
+        "the reviewed repo's own hook blocked the remediation commit: "
+        + proc.stdout)
+    assert not (mirror / "AGENTS.md").exists()
+
+    lines = trace.read_text(encoding="utf-8", errors="replace").splitlines()
+    add_lines = [line for line in lines if " add -- " in line]
+    commit_lines = [line for line in lines if " commit -q -m " in line]
+    assert add_lines, "no 'git add' invocation was traced: " + "\n".join(lines)
+    assert commit_lines, "no 'git commit' invocation was traced: " + "\n".join(lines)
+    assert all("core.hooksPath=" in line for line in add_lines), add_lines
+    assert all("core.hooksPath=" in line for line in commit_lines), commit_lines
+
+    match = re.search(r"core\.hooksPath=(\S+)", commit_lines[0])
+    assert match, commit_lines[0]
+    hooks_dir = Path(match.group(1).strip("'\""))
+    assert hooks_dir.is_dir(), (
+        "the directory the flag points at must exist: " + str(hooks_dir))
+    assert list(hooks_dir.iterdir()) == [], (
+        "the hooksPath directory must stay empty - anything placed there"
+        " would run as a hook")
+    assert str(hooks_dir).lower().startswith(str(mirror).lower()), (
+        "the directory must be created fresh for this run, under the"
+        " mirror it belongs to: " + str(hooks_dir))
+    assert hooks_dir.parent.name == ".git" and hooks_dir.name == "parallax-mirror-hooks", (
+        "unexpected hooksPath directory shape: " + str(hooks_dir))
+
+
+def test_a_non_empty_hooks_directory_blocks_the_remediation_commit(tmp_path):
+    """The directory must be VERIFIED empty, not merely fresh from
+    `New-Item`'s point of view - a leftover entry there is exactly what a
+    real hook script looks like, and Step 3 requires blocking rather than
+    committing with hooks live."""
+    repo = make_repo(tmp_path)
+    plant_tracked_back_channel(repo)
+    leftover = repo / HOOKS_DIR_REL
+    leftover.mkdir(parents=True)
+    (leftover / "pre-commit").write_text("#!/bin/sh\nexit 1\n")
+    mirror = tmp_path / "mirror"
+    proc = run_mirror(repo, mirror)
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "not empty" in proc.stdout.lower(), proc.stdout
+    assert NEVER_FALL_BACK in proc.stdout.lower(), proc.stdout
+
+
+def test_an_unusable_hooks_directory_blocks_the_remediation_commit(tmp_path):
+    """A FILE occupying the hooks-directory path means a directory could
+    not be created there. The script must never proceed with a directory
+    it never verified, and must report the reason rather than silently
+    committing with the real hooks live."""
+    repo = make_repo(tmp_path)
+    plant_tracked_back_channel(repo)
+    leftover = repo / HOOKS_DIR_REL
+    leftover.parent.mkdir(parents=True, exist_ok=True)
+    leftover.write_text("not a directory\n")
+    mirror = tmp_path / "mirror"
+    proc = run_mirror(repo, mirror)
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert NEVER_FALL_BACK in proc.stdout.lower(), proc.stdout
 
 
 def test_a_spaced_mirror_path_builds(tmp_path):

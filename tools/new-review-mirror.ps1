@@ -1069,19 +1069,55 @@ foreach ($entry in $entries) {
     }
 }
 if ($tracked.Count -gt 0) {
+    # Suppress repository hooks for the remediation commit BELOW. The
+    # mirror carries the real repo's .git, hooks included (see the
+    # BLOCKED text on the commit call), so committing here without
+    # redirecting core.hooksPath would run whatever hook the reviewed
+    # repo ships. The directory lives inside the MIRROR's own .git,
+    # where a plain filesystem copy carries it along for free but
+    # `git status`/`ls-files` never see it, so it cannot register as a
+    # back-channel or dirty the porcelain itself.
+    #
+    # Created fresh and VERIFIED empty in this same run, then used for
+    # BOTH git calls below. Never fall back to committing with hooks
+    # live: either check failing exits BLOCKED before either call runs.
+    $hooksDir = Join-Path $MirrorPath (Join-Path ".git" "parallax-mirror-hooks")
+    try {
+        New-Item -ItemType Directory -Path $hooksDir -Force -ErrorAction Stop | Out-Null
+    } catch {
+        Write-Output ("BLOCKED: could not create an empty hooks directory" +
+            " for the remediation commit (" + $_.Exception.Message + ")." +
+            " Never fall back to committing with hooks live.")
+        exit 1
+    }
+    if (-not (Test-Path -LiteralPath $hooksDir -PathType Container)) {
+        Write-Output ("BLOCKED: the hooks directory for the remediation" +
+            " commit is not a directory. Never fall back to committing" +
+            " with hooks live.")
+        exit 1
+    }
+    $hooksDirEntries = @(Get-ChildItem -LiteralPath $hooksDir -Force)
+    if ($hooksDirEntries.Count -gt 0) {
+        Write-Output ("BLOCKED: the hooks directory for the remediation" +
+            " commit is not empty (" + $hooksDirEntries.Count +
+            " entries). Never fall back to committing with hooks live.")
+        exit 1
+    }
+    $hooksOverride = "core.hooksPath=" + $hooksDir
+
     # Stage exactly the entries that were tracked. `git add -A` over a
     # pathspec would fail when one of the two patterns matches nothing,
     # and `git add -A` over the whole tree would stage the untracked and
     # ignored files the mirror deliberately carries.
     $paths = @($tracked)
-    & git -C $MirrorPath add -- @paths 2>&1 | Out-Null
+    & git -C $MirrorPath -c $hooksOverride add -- @paths 2>&1 | Out-Null
     if ($LASTEXITCODE -ne 0) {
         Write-Output ("BLOCKED: could not stage the removed back-channels" +
             " in the mirror")
         exit 1
     }
-    & git -C $MirrorPath -c user.email=parallax@local -c user.name=parallax `
-        commit -q -m "remove instruction back-channels for review" 2>&1 | Out-Null
+    & git -C $MirrorPath -c $hooksOverride -c user.email=parallax@local `
+        -c user.name=parallax commit -q -m "remove instruction back-channels for review" 2>&1 | Out-Null
     if ($LASTEXITCODE -ne 0) {
         Write-Output ("BLOCKED: the mirror commit failed. The mirror carries" +
             " the real repo's .git, hooks included, so this is a" +
