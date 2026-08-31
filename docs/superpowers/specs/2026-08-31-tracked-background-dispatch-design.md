@@ -60,9 +60,8 @@ run; and every contract region and pin that states them.
 
 ### 1. The tool stops starting processes
 
-`-Launch` becomes `-Prepare`, with the same parameters minus
-`-WorkingDirectory`. It performs the same fail-closed transaction and stops
-short of creating a child:
+`-Launch` becomes `-Prepare`. It performs the same fail-closed transaction
+and stops short of creating a child:
 
 1. Resolve, and BLOCK if the receipt path equals or sits inside the
    dispatch directory, or already exists.
@@ -79,11 +78,29 @@ property the state machine is built on.
 `PROC_THREAD_ATTRIBUTE_HANDLE_LIST` allowlist, `LaunchDetached`, the
 `GetProcessTimes` capture, and the catch-side `taskkill`. Roughly 150 lines.
 
+
 That deletion resolves three findings from diff-debate round 1 by removing
 their subject rather than patching them: the launch catch's pid-only kill,
 the `GetProcessTimes` failure that leaves a started tree alive because the
 pid was not published yet, and the `Add-Type` compile that runs outside any
 catch and made even `-Poll` depend on compiling launch-only C#.
+
+**`-WorkingDirectory` is NOT deleted with it, and an early draft of this
+spec said it was.** That draft called the parameter launcher-only. It was
+not: it is what put the client inside the REVIEW MIRROR. Dropping it
+un-anchored the reviewed tree silently, and the first round dispatched
+under the new design ran with the real repository as its working directory,
+where a root `AGENTS.md` sits on disk and the client auto-ingests it as
+instructions. That is the instruction back-channel the preflight exists to
+stop. The round was discarded unread and its cost is recorded in the build
+ledger.
+
+So the working directory survives, and it moves to where a test can see it.
+`-Prepare` keeps `-WorkingDirectory` and writes its resolved value to a
+`cwd` file inside the dispatch directory. The wrapper's SECOND act, right
+after publishing its identity, is `Set-Location` to that value. A call site
+that omits it fails its own per-site test, which is strictly better than
+the old arrangement: as a launcher parameter, nothing pinned it at all.
 
 ### 2. The caller runs the wrapper as a TRACKED BACKGROUND command
 
@@ -106,9 +123,14 @@ any client call:
 
     [System.IO.File]::WriteAllText("$PSScriptRoot/pid", "$PID", (New-Object System.Text.UTF8Encoding($false)))
     [System.IO.File]::WriteAllText("$PSScriptRoot/startticks", ((Get-Process -Id $PID).StartTime.ToUniversalTime().Ticks), (New-Object System.Text.UTF8Encoding($false)))
+    Set-Location -LiteralPath ([System.IO.File]::ReadAllText("$PSScriptRoot/cwd", (New-Object System.Text.UTF8Encoding($false, $true))))
 
 A process reporting its own pid needs no handle games and cannot report
-another process's. The remaining wrapper shape - initialize failure, run
+another process's. The `Set-Location` is what anchors the client to the
+review mirror; it reads the value `-Prepare` resolved rather than trusting
+whatever directory the harness happened to start the command in.
+
+The remaining wrapper shape - initialize failure, run
 the client, write the reply with .NET and no BOM, write `exit` LAST inside
 a `finally` - is unchanged.
 
@@ -119,6 +141,10 @@ gains a state between `launch-not-ours` and `pid-unreadable`:
 
 **`not-started`** - the receipt is valid, expected, and its marker and token
 check out, and there is no `pid` file. Exit 1.
+
+`-Poll` also refuses a dispatch directory with no `cwd` file, as
+`not-started`: a prepared round that cannot say where it must run is not
+runnable, and must never be run from wherever the caller happens to be.
 
 It covers two situations and deliberately does not distinguish them,
 because both mean the same thing to a caller: the prepared wrapper was

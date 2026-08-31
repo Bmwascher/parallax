@@ -33,7 +33,7 @@
 - Test: `evals/multi-model-verify/test_dispatch_detached.py`
 
 **Interfaces:**
-- Produces: `-Prepare -DispatchDir <path> -WrapperBody <path> -ReceiptPath <path> -Round <label> [-Json]`, and `-Poll` unchanged apart from the new state.
+- Produces: `-Prepare -DispatchDir <path> -WrapperBody <path> -ReceiptPath <path> -Round <label> -WorkingDirectory <path> [-Json]`, and `-Poll` unchanged apart from the new state.
 - Consumes: nothing from other tasks.
 
 - [ ] **Step 1: Write the failing tests**
@@ -137,7 +137,7 @@ Expected: the new tests FAIL naming the missing `-Prepare` parameter; `test_no_c
 
 In `tools/dispatch-detached.ps1`:
 
-1. Rename the `Launch` parameter set to `Prepare`; drop `-WorkingDirectory`, which only the launcher used.
+1. Rename the `Launch` parameter set to `Prepare`. KEEP `-WorkingDirectory`: it is not launcher plumbing, it is what puts the client inside the review mirror. Task 1a below adds the mechanism that makes it survive the launcher's deletion.
 2. DELETE the whole `Add-Type` block, `LaunchDetached`, the `GetProcessTimes` capture and the catch-side `taskkill`.
 3. `-Prepare` performs, in order: separation and freshness checks; `New-Item -ItemType Directory -ErrorAction Stop`; copy the wrapper; create `stdin.empty`; mint the token and write `launch.committed`; write the RECEIPT last, create-new. On any failure after the directory exists, publish no receipt and exit 1.
 4. Delete step 6's pid and startticks writes. The wrapper owns them now.
@@ -166,6 +166,115 @@ Expected: non-zero, and NOT 0. Write the two observed codes into the header comm
 ```bash
 git add tools/dispatch-detached.ps1 evals/multi-model-verify/test_dispatch_detached.py
 git commit -m "prepare the round and let the harness run it"
+```
+
+---
+
+### Task 1a: Restore the working directory, where a test can see it
+
+**Files:**
+- Modify: `tools/dispatch-detached.ps1`
+- Test: `evals/multi-model-verify/test_dispatch_detached.py`
+
+**Interfaces:**
+- Consumes: Task 1's `-Prepare`.
+- Produces: `-WorkingDirectory <path>` on `-Prepare`, a `cwd` file in every dispatch directory, and the `Set-Location` line Tasks 3 and 4 put in every wrapper.
+
+**This task exists because the plan was wrong, and it cost a real review
+round.** Task 1's step 3 told the implementer to drop `-WorkingDirectory`
+as launcher-only. It was not launcher-only: it is what put the client
+inside the REVIEW MIRROR. With it gone, the first round dispatched under
+this design ran with the REAL REPOSITORY as its working directory, where a
+root `AGENTS.md` sits on disk and the client auto-ingests it as
+instructions. That is the instruction back-channel the preflight exists to
+stop, so the round was void and its reply was discarded UNREAD.
+
+The remedy moves the setting out of launcher plumbing, which nothing
+pinned, and into wrapper text, which every per-site test pins.
+
+- [ ] **Step 1: Write the failing tests**
+
+```python
+def test_prepare_requires_and_records_a_working_directory(tmp_path):
+    """Resolved at prepare time and written where the wrapper can read it.
+    A round that cannot say where it must run is not a runnable round."""
+    mirror = tmp_path / "mirror"
+    mirror.mkdir()
+    d, wrapper, receipt = _prepared(tmp_path, SLEEPER_WRAPPER, cwd=mirror)
+    assert (d / "cwd").exists(), "-Prepare must record the working directory"
+    assert Path((d / "cwd").read_text(encoding="utf-8").strip()) == mirror.resolve()
+
+
+def test_prepare_refuses_a_working_directory_that_does_not_exist(tmp_path):
+    receipt = tmp_path / "r.json"
+    code, out = _prepare_raw(tmp_path / "d", _wrapper(tmp_path), receipt, ROUND,
+                             cwd=tmp_path / "no-such-mirror")
+    assert code == 1
+    assert not receipt.exists(), "a refused prepare publishes no receipt"
+
+
+def test_a_dispatch_directory_with_no_cwd_is_not_started(tmp_path):
+    """Deleting the anchor must not silently fall back to the caller's
+    directory. It reads as not-started, which is never a result."""
+    d, wrapper, receipt = _prepared(tmp_path, SLEEPER_WRAPPER)
+    (d / "cwd").unlink()
+    state, code = _poll(receipt, d, ROUND)
+    assert state == "not-started"
+    assert code == 1
+
+
+def test_the_wrapper_runs_in_the_recorded_directory(tmp_path):
+    """End to end: the client's working directory is the mirror, not
+    wherever the harness happened to start the command."""
+    mirror = tmp_path / "mirror"
+    mirror.mkdir()
+    d, wrapper, receipt = _prepared(tmp_path, PWD_REPORTING_WRAPPER, cwd=mirror)
+    proc = _run_wrapper_in_background(d, start_in=tmp_path)
+    proc.wait(timeout=60)
+    assert _poll(receipt, d, ROUND) == ("reply-present", 0)
+    reported = (d / "reply").read_text(encoding="utf-8").strip()
+    assert Path(reported) == mirror.resolve(), (
+        "the wrapper ran in " + reported + " rather than the recorded mirror")
+```
+
+`PWD_REPORTING_WRAPPER` publishes identity, sets its location from the
+`cwd` file, then writes `$PWD.Path` as its reply.
+`_run_wrapper_in_background` gains a `start_in` argument so the test can
+start the command somewhere OTHER than the mirror. That is the whole
+point: if the wrapper did not set its own location, the reply would carry
+the caller's directory and the test would fail.
+
+- [ ] **Step 2: Run them and watch them fail**
+
+Run: `python -m pytest evals/multi-model-verify/test_dispatch_detached.py -q`
+Expected: four FAIL, naming the missing `-WorkingDirectory` parameter and
+the missing `cwd` file.
+
+- [ ] **Step 3: Make the change**
+
+1. `-Prepare` takes `-WorkingDirectory <path>`, MANDATORY. Resolve it, and
+   BLOCK if it does not exist or is not a directory, before the dispatch
+   directory is reserved.
+2. Write the resolved path to `<dispatch-dir>/cwd` as UTF-8 without a BOM,
+   in the same step that installs the wrapper, so it is present before the
+   receipt is published.
+3. `-Poll`: a dispatch directory with no readable `cwd` file is
+   `not-started`.
+4. Record in the header WHY this parameter survived the launcher's
+   deletion, naming the round it cost.
+
+- [ ] **Step 4: Run the suite on BOTH hosts**
+
+Run each as its own tracked background command:
+`python -m pytest evals/multi-model-verify/test_dispatch_detached.py -q`
+and the same with `PARALLAX_PS_HOST` set to PowerShell 7.
+Expected: all pass on both.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add tools/dispatch-detached.ps1 evals/multi-model-verify/test_dispatch_detached.py
+git commit -m "anchor the prepared round to its review mirror"
 ```
 
 ---
@@ -226,7 +335,7 @@ git commit -m "state the tracked background contract"
 
 - [ ] **Step 1: Write the failing per-site test**
 
-Parametrized over `("codex-fresh", "codex-resume")`, asserting that each `<!-- call:... -->` section carries, on the RAW read: the two identity lines as the wrapper's first act; `-Prepare` with all four parameters; the instruction to run the wrapper as a background command named for its lane and round; the `-Poll` command with all three parameters; and the whole exit-code sentence including `not-started`. Assert no section contains `-Launch`.
+Parametrized over `("codex-fresh", "codex-resume")`, asserting that each `<!-- call:... -->` section carries, on the RAW read: the two identity lines as the wrapper's first act; the `Set-Location` line reading the `cwd` file, as its second; `-Prepare` with all four parameters; the instruction to run the wrapper as a background command named for its lane and round; the `-Poll` command with all three parameters; and the whole exit-code sentence including `not-started`. Assert no section contains `-Launch`.
 
 - [ ] **Step 2: Run it and watch it fail**
 
@@ -239,6 +348,7 @@ The wrapper body for round 1, forward slashes throughout, `${CLAUDE_PLUGIN_ROOT}
 ```powershell
 [System.IO.File]::WriteAllText("$PSScriptRoot/pid", "$PID", (New-Object System.Text.UTF8Encoding($false)))
 [System.IO.File]::WriteAllText("$PSScriptRoot/startticks", ((Get-Process -Id $PID).StartTime.ToUniversalTime().Ticks), (New-Object System.Text.UTF8Encoding($false)))
+Set-Location -LiteralPath ([System.IO.File]::ReadAllText("$PSScriptRoot/cwd", (New-Object System.Text.UTF8Encoding($false, $true))))
 $code = 1
 $priorOutputEncoding = $OutputEncoding
 try {
@@ -297,7 +407,7 @@ git commit -m "prepare and background both codex rounds"
 
 - [ ] **Step 1: Write the failing per-site test**
 
-Parametrized over `("kimi-dispatch", "kimi-resume", "kimi-write-probe")`, same assertions as Task 3's, plus: the reply artifact is `$PSScriptRoot/reply` with a FORWARD slash, and `[Console]::OutputEncoding` is set before the client call. Assert no section contains `-Launch` and none contains a backslash.
+Parametrized over `("kimi-dispatch", "kimi-resume", "kimi-write-probe")`, same assertions as Task 3's, including the `Set-Location` line, plus: the reply artifact is `$PSScriptRoot/reply` with a FORWARD slash, and `[Console]::OutputEncoding` is set before the client call. Assert no section contains `-Launch` and none contains a backslash.
 
 - [ ] **Step 2: Run it and watch it fail**
 
@@ -310,6 +420,7 @@ Wrapper body, identity first, forward slashes, encoding line kept because this l
 ```powershell
 [System.IO.File]::WriteAllText("$PSScriptRoot/pid", "$PID", (New-Object System.Text.UTF8Encoding($false)))
 [System.IO.File]::WriteAllText("$PSScriptRoot/startticks", ((Get-Process -Id $PID).StartTime.ToUniversalTime().Ticks), (New-Object System.Text.UTF8Encoding($false)))
+Set-Location -LiteralPath ([System.IO.File]::ReadAllText("$PSScriptRoot/cwd", (New-Object System.Text.UTF8Encoding($false, $true))))
 $code = 1
 try {
 $b = [System.IO.File]::ReadAllText("<brief-file>", (New-Object System.Text.UTF8Encoding($false, $true)))
