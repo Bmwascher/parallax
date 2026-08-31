@@ -141,6 +141,37 @@ preparation time and poll states and never once checked that a task row
 appeared, that a notification arrived, or that the conversation stayed
 open. A benefit nothing tests is a benefit nobody has.
 
+**D6. THE METHOD OF BACKGROUNDING IS ITSELF THE CONTRACT, not an
+implementation detail.** Owner's instruction, 2026-08-31: backgrounding
+matters, and so does HOW. FIVE different mechanisms were used in a single
+session, each with different visibility, notification and evidence:
+
+| # | Mechanism | Task row | Notifies | Survives session end | Evidence |
+|---|---|---|---|---|---|
+| 1 | Bash tool `run_in_background` | yes, named | yes | no | harness output file |
+| 2 | `dispatch-detached.ps1 -Launch`, OS-detached | NO | NO | yes | receipt + poll |
+| 3 | `-Prepare` then (1) runs the wrapper | yes, named | yes | no | receipt + poll |
+| 4 | Agent tool subagent in background | yes | yes | no | agent report |
+| 5 | Foreground call auto-backgrounded at the ceiling | yes, mid-flight | yes | no | harness output file |
+
+Mechanism 2 is what item 32 shipped and is the one the owner objected to:
+it removes the blocking AND the visibility. Mechanism 5 is not a choice,
+it is the harness rescuing an overrun. Mechanism 4 nests: a subagent that
+starts its own background command produced the stalled turns seen four
+times this cycle.
+
+**The standing rule: mechanism 1 is THE method.** A long call is dispatched
+by the harness as a tracked background command, named for its lane and
+round, or with no lane for its kind. Anything else must be justified in
+writing at the call site. A tool in this repo may PREPARE work and CLASSIFY
+its completion; it may not launch its own process, because a process the
+harness does not own is a process the user cannot see.
+
+Corollary for the replacement plan: this makes D1 concrete. The
+requirement is not "the user can see it somehow", it is "the round is a
+harness-tracked task with a lane-and-round name", and the plan must test
+exactly that.
+
 **D5. Test children must not steal the screen. MEASURED 2026-08-31.**
 Spawning with a new visible console pops a window per spawn and takes
 focus; across 71 tests that is a storm. `STARTUPINFO`'s `SW_HIDE` is
@@ -148,6 +179,16 @@ advisory for a newly created console and Windows ignored it. The private
 console needed for encoding isolation must be obtained WITHOUT a window.
 
 ---
+
+**D7. A reviewer NEVER reads the live repository.** Owner's decision,
+2026-08-31, standing. Every round runs against a frozen file copy at a
+named commit, built by `tools/new-review-mirror.ps1`. Two reasons, both
+measured this cycle: the live tree carries instruction back-channels the
+copy has removed and re-verified as gone, and a live tree changes under a
+running review, so its verdict describes a state that no longer exists and
+nothing records which state was read. The snapshot's cost is accepted: a
+fix made mid-round is invisible to that round, and the answer is to
+re-dispatch rather than to pretend the reviewer saw newer code.
 
 ## E. Evidence-boundary lifecycle
 
