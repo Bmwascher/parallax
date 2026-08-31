@@ -129,3 +129,42 @@ mangling, and not host-specific.
 hosts, because the binder canonicalizes before hashing. The false value is
 pinned as measured rather than dropped, because hiding a measurement is the
 one result that record may never produce.
+
+### The behavioural gate: one crash class removed, one question left OPEN
+
+**Removed.** A case that ends before its detached round finishes leaves a
+live grandchild holding `<dispatch-dir>/transcript`, and
+`TemporaryDirectory` cleanup then died with WinError 32, losing the whole
+run's verdicts to a file lock. `reaped_tempdir` in
+`evals/tools/run_behavioral_evals.py` now waits out each pid the launch
+transaction wrote to disk, kills what survives, retries the delete, and
+names a leak by path instead of raising. Committed at `be2da46`. Verified:
+the case that crashed now completes and reports a verdict.
+
+A residual leak remains and is not the same defect. The leaked workspace
+inspected afterwards held NO dispatch directory and no pid file at all, so
+something other than a detached child holds it. It is named in the output,
+never hidden.
+
+**OPEN, and deliberately not claimed either way:
+`diff-mode-spec-fidelity`.** The counts:
+
+| Arm | Runs | Result |
+|---|---|---|
+| this branch, `--head` | 3 | FAIL 3/4, PASS 4/4, FAIL 3/4 |
+| installed cache 0.27.0 | 1 | PASS 4/4 |
+
+The miss is always expectation 2: the exact-range `git diff base..head`
+call returned only a name/stat listing, so the content-bearing line came
+from a different call. Nothing in this branch edits the diff-mode
+instructions.
+
+**The comparison is CONFOUNDED and must not be read as evidence that the
+branch caused it.** The two arms differ in two ways at once, not one:
+plugin CONTENT, and the LOAD MECHANISM. `--head` loads through
+`--plugin-dir`, and `run_behavioral_evals.py --help` says in its own text
+that shadowing against the installed copy is unverified. The control arm
+is also a single run against a nondeterministic executor. A like-for-like
+comparison needs the version bumped and the cache updated, which by this
+repo's rule happens AFTER the diff debate, not before it. Carried into the
+debate as an open question with these numbers, not as a finding.
