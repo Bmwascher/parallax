@@ -10,6 +10,8 @@
 
 **Spec:** `docs/superpowers/specs/2026-08-30-item32-detached-dispatch-design.md`
 
+**Revision 19, 2026-08-31, at branch HEAD.** The revision number and the round counts are deliberately NOT restated in prose that goes stale: see `## What the debate changed`, whose figures are bound to a commit. The paragraph below is retained as the record of revision 5, when the design reversal happened, and is not a description of the current document.
+
 **Revision 5, 2026-08-30.** Four Sol rounds on session `01a055c5-935e-76e3-ad1d-83721bc67d79` plus a two-lane poll. Round 4 closed nothing and named why: the launch is a four-step transaction that existed as five copied snippets, with the rule pinned somewhere else. Sol and Fable were polled separately on the fork and both chose a shipped tool. **The user approved reversing their design-phase choice on 2026-08-30**; the design's settled question 2 is reopened and the record says so plainly.
 
 ## What the two lanes conditioned their answer on, and what this plan does with it
@@ -60,7 +62,17 @@ This is the whole point of revision 5. The four steps become one transaction in 
   - 1 for every other state, each a transport failure per fallbacks.md, with the state name on stdout.
   - 2 ONLY for a failure to bind the parameters or an internal execution error. Reading the receipt's CONTENT is never exit 2: an absent, unreadable or schema-failing receipt is `no-receipt` at exit 1, which round 9 found the previous wording contradicting by listing "an unreadable argument" under 2.
 - **Why `running` is not 0.** Revision 8 gave it 0 and wrote "exit 0 is not a result" beside it. Round 9's finding: that is the exact shape this whole cycle exists to remove - a safety rule in prose next to a command instead of a mechanism inside it. A caller branching on exit status alone would take the success path while the wrapper was still writing the reply, and Task 8 deliberately builds that arrangement. A distinct code makes the unfinished round unrepresentable as success without reading anything.
+- **`${CLAUDE_PLUGIN_ROOT}` in SKILL TEXT is a THIRD non-repo-verifiable harness fact, and this plan does not assume it.** The Fable lane found the gap: `hooks/hooks.json:10` and `:22` use the token where the HARNESS substitutes it before any shell runs, but skill body text today uses a `<plugin-root>` PLACEHOLDER instead (`SKILL.md:326`), which the session fills in - and a session filling it in by guessing is item 58's own defect. Worse, in PowerShell `${NAME}` is variable syntax, so an unsubstituted token expands to EMPTY and the path becomes the drive root, failing exactly like item 58's mislocated tool. Task 1 step 0 MEASURES which happens before anything is built, and the documented form follows the measurement. The backlog records the shape of item 58's fix as undecided (`docs/superpowers/plans/2026-07-27-0150-backlog.md:4496`), so this plan measures rather than inherits it.
 - `-Launch`'s exit codes match `new-review-mirror.ps1:17-18`: 0 launched and committed, 1 blocked with the reason on stdout, 2 script or environment error. `-Poll` extends that set with 3 and narrows 2 as above; say so in the header, because a reader who assumes the three-code convention is exactly the reader this mapping protects.
+
+- [ ] **Step 0: Measure who resolves `${CLAUDE_PLUGIN_ROOT}` in skill text**
+
+Before any test is written, because every documented call in Tasks 3 and 4 depends on the answer. Put the literal token in a scratch skill body, invoke that skill, and record what the model receives: the token verbatim, or an absolute path. Record the measurement in Task 8's probe record with the client version.
+
+- If the harness SUBSTITUTES it, the documented calls keep `${CLAUDE_PLUGIN_ROOT}` as written and Task 1's outer-command test sets the same value the harness would, from the installed plugin path, and says so in a comment.
+- If it does NOT, the documented calls use the repo's existing skill-text convention, the `<plugin-root>` placeholder, and the plan's anchoring claim SHRINKS to "named, not resolved" - which is still better than a bare relative path and is honestly weaker than item 58's eventual fix. Say so in Task 9's closure text rather than letting the plan claim an anchor it does not have.
+
+Either way the tests, the skill text and the closure record use ONE form. Do not write a test that substitutes the token while the skill text relies on someone else doing it.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -272,9 +284,17 @@ Insert AFTER the sentence ending `is spent for nothing.` and BEFORE `Measured re
   observed at zero CPU growth. NO RECEIPT after an interrupted launch is
   the case that command CANNOT clear, and the two must not be run
   together in one sentence: in its dangerous form no pid was ever
-  written, so there is no `<id>` to pass. Clearing that one means finding the process by another route -
-  its command line, its working directory - and it is unmeasured here,
-  so surface it to the user rather than claiming a remedy. Never poll
+  written, so there is no `<id>` to pass. There is a SECOND case that
+  command cannot clear, and stating only the first misleads an operator
+  into believing nothing is running: a COMMITTED launch whose wrapper
+  host has died while the client child lives on. The pid on disk is the
+  dead wrapper, so felling that tree reports process-not-found and
+  never reaches the orphan. The poll classifies it safely - DEAD, then
+  no exit file or a non-zero code, never success - so it is the REMEDY
+  that fails, not the completion model. Clearing either one means
+  finding the process by another route - its command line, its working
+  directory - and both are unmeasured here, so surface them to the user
+  rather than claiming a remedy. Never poll
   with `ps -p` from Git Bash, which cannot see Windows pids and reports
   a live process as gone.
   <!-- contract:end -->
@@ -474,7 +494,9 @@ Then the launch and the poll:
 
 `(Get-Process -Id $PID).Path` is the caller's own host, not a bare `powershell`. Round 6's finding: a bare name resolves to Windows PowerShell 5.1 even from a PowerShell 7 session, and the tool hands its own executable to the wrapper, so the wrapper would run on a host nobody chose.
 
-Keep "Both encoding lines are load-bearing on Windows PowerShell 5.1 (references/model-prompting-notes.md)." and everything from the `verified-override-dispatch` marker onward exactly as it is.
+Keep "Both encoding lines are load-bearing on Windows PowerShell 5.1 (references/model-prompting-notes.md)." and everything from the `verified-override-dispatch` marker onward exactly as it is, WITH ONE EXCEPTION the Fable lane found.
+
+`SKILL.md:222-226` says every round writes FRESH round-numbered `<reply-file>` and `<transcript-file>` paths. After this rewrite those placeholders appear in no command: the reply is `$PSScriptRoot\reply` inside a dispatch directory the tool reserves, and the transcript sits beside it. Keeping the sentence verbatim leaves an instruction naming things that no longer exist. Rewrite it to carry the same rule onto the artifact that now holds it: **every round names a FRESH dispatch directory and a FRESH receipt path, and `-Launch` refuses either if it already exists** - so the freshness the old sentence asked a human to remember is now refused by the tool. Keep the reason verbatim, because it is the whole point: a reused path serves the previous round's reply and reads exactly like success.
 
 **Three details are load-bearing and a tidy breaks them.** `$priorOutputEncoding` is captured OUTSIDE the `try`, or the `finally` restores a variable never assigned on an early failure. `catch` and `finally` are ONE clause on ONE line: a `} finally {` after a closed `catch` is a parse error and the wrapper dies before codex runs. The exit write is the last line, outside every block.
 
@@ -577,15 +599,23 @@ Keep the existing Dispatch and Resume bullets EXACTLY as they are; they document
 $code = 1
 try {
 $b = [System.IO.File]::ReadAllText("<brief-file>", (New-Object System.Text.UTF8Encoding($false, $true)))
-& "<kimi-code-binary>" <that call's flags, in the documented order> -p $b > $PSScriptRoot\reply 2> $PSScriptRoot\transcript
+[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
+$out = & "<kimi-code-binary>" <that call's flags, in the documented order> -p $b 2> $PSScriptRoot\transcript
 $code = $LASTEXITCODE
+[System.IO.File]::WriteAllText("$PSScriptRoot\reply", ($out -join "`n"), (New-Object System.Text.UTF8Encoding($false)))
 } catch { $code = 1 }
 [System.IO.File]::WriteAllText("$PSScriptRoot\exit", "$code")
 ```
 
 and the anchored `-Launch` call with `-WorkingDirectory <review-mirror>`, because this client binds a session to the directory it was created in, and the matching `-Poll` call naming the receipt that launch wrote.
 
-State once, above the three: `$b` is the brief read from its file — the same inline payload the bullets describe and the shape item 51 measured, never a pointer, which this lane's contract forbids. This lane's REPLY ARTIFACT is `$PSScriptRoot\reply`, the client's captured stdout, with stderr to `transcript`. No `$OutputEncoding` preamble appears here, deliberately: the brief goes as an argument, which `brief-encoding-transport` already states, and adding one would imply a mechanism that does not apply.
+State once, above the three: `$b` is the brief read from its file — the same inline payload the bullets describe and the shape item 51 measured, never a pointer, which this lane's contract forbids. This lane's REPLY ARTIFACT is `$PSScriptRoot\reply`, the client's captured stdout, with stderr to `transcript`.
+
+**The INBOUND direction is load-bearing on this lane and on no other, and the Fable lane found it unhandled.** `> $PSScriptRoot\reply` does not copy bytes. PowerShell decodes the client's stdout using `[Console]::OutputEncoding` - the OEM code page on Windows PowerShell 5.1, measured IBM437 on both hosts in `tools/new-review-mirror.ps1:64-66` - and then re-encodes on write, UTF-16LE on 5.1 and UTF-8 on 7. A non-ASCII reply is therefore mangled differently on each host. So the wrapper sets `[Console]::OutputEncoding` to UTF-8 before the call and writes the reply itself with .NET, no BOM. This is the same defect class 0.23.0 fixed for the codex lane's OUTBOUND brief and item 51 owns for this lane's outbound argument; nothing had looked at the way back.
+
+`$OutputEncoding` still does NOT appear here, and that remains deliberate: it governs what PowerShell pipes INTO a native command, and this lane passes its brief as an argument. `[Console]::OutputEncoding` is a different variable governing the opposite direction. Naming both, and why only one applies, is the point.
+
+The codex lane needs none of this: `--output-last-message` is written by the client itself and never crosses a PowerShell redirect.
 
 - [ ] **Step 4: TASK-LOCAL ORACLE**
 
@@ -742,7 +772,11 @@ git commit -m "parse and stub-run every wrapper body"
 
 ### Task 8: Measure what the stubs cannot, on both hosts
 
-**Files:** Create `docs/superpowers/plans/rounds/2026-08-30-item32-detached-dispatch/wrapper-probe.md`
+**Files:**
+- Create: `docs/superpowers/plans/rounds/2026-08-30-item32-detached-dispatch/wrapper-probe.md`
+- Create: `evals/multi-model-verify/test_wrapper_probe_record.py`
+
+Round 7 caught this same omission on Task 9 and the Fable lane caught it here: step 6 writes the test and step 7 stages it, and no earlier version of this task listed it.
 
 - [ ] **Step 1: Measure the harness boundary**
 
@@ -826,13 +860,14 @@ Also update: the state model to the tool's ordered checks, whose first three sta
 - [ ] **Step 3: TASK-LOCAL ORACLE for convergence**
 
 ```bash
-grep -ni "detached-dispatch-codex\|detached-dispatch-backup\|no quoting layer at all\|encoding preamble moves INSIDE the wrapper\|every wrapper\|four states\|five states\|six states\|seven states\|eight states\|nine states\|ten states\|eleven states\|not detached\|The session launches it with\|sidecar exit-code file\|LIVENESS IS CHECKED FIRST\|the pid is on disk, so a session can find\|powershell -NoProfile -File\|-Token\|-DispatchDir <dispatch-dir> -Json" docs/superpowers/specs/2026-08-30-item32-detached-dispatch-design.md
+grep -ni "detached-dispatch-codex\|detached-dispatch-backup\|no quoting layer at all\|encoding preamble moves INSIDE the wrapper\|every wrapper\|four states\|five states\|six states\|seven states\|eight states\|nine states\|ten states\|eleven states\|four exact strings\|not detached\|The session launches it with\|sidecar exit-code file\|LIVENESS IS CHECKED FIRST\|the pid is on disk, so a session can find\|powershell -NoProfile -File\|-Token\|-DispatchDir <dispatch-dir> -Json" docs/superpowers/specs/2026-08-30-item32-detached-dispatch-design.md
 ```
 
 Expected: no hits outside a passage explicitly narrating history. Round 4 found the previous grep searching for none of the terms it claimed to; round 6 found it still missing the encoding claim, which is the very claim the plan says is refuted, so the stale text would have passed.
 
 Two of the patterns need their replacement wording stated exactly, or the reconciliation drifts again:
 
+- `design.md:208-210` says `test_the_brief_is_read_and_piped_as_utf8` "counts four exact strings". It holds FIVE `>= 2` counts (`evals/multi-model-verify/test_multi_model_verify.py:619-647`), and this plan's own Global Constraints say five. Correct the spec to five. The Fable lane found it; no grep in this step searched for a wrong number stated in words.
 - The encoding claim becomes lane-specific. The codex lane's wrapper carries the `$OutputEncoding` preamble because its brief goes down a PIPE. The Kimi lane's wrapper carries none because its brief goes as an ARGUMENT, which is a different transport with a different defect, and item 51 owns that one.
 - The state count is TWELVE, so every spelled count below twelve is a stale hit, and `powershell -NoProfile -File` is stale because the documented call now uses the caller's own host.
 - The grep is `-i`. Round 7's finding: the spec spells `SEVEN states` in capitals at `docs/superpowers/specs/2026-08-30-item32-detached-dispatch-design.md:194`, and a case-sensitive pattern walked straight past the one stale count the step was written to catch.
