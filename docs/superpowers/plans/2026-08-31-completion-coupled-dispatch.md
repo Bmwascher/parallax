@@ -72,13 +72,13 @@ Two modes replace the old two:
 Prepare:  -Prepare -DispatchDir <path> -WrapperBody <path>
           -ReceiptPath <path> -Round <label> -WorkingDirectory <path>
           -RepoRoot <path> -SourceHead <sha> -MirrorHead <sha>
-          -SourceStatusSha256 <hex>
+          -SourceStatusSha256 <hex> -MirrorStateSha256 <hex>
           -DispatchHost <pwsh|powershell> -PriorStateFile <path>
           (-WorkdirEvidence <literal> | -NoWorkdirEvidence) [-Json]
 
 Classify: -Classify -DispatchDir <path> -ReceiptPath <path>
           -ExpectedRound <label> -ExpectedToken <token>
-          -ExpectedPriorStateSha256 <hex> [-Json]
+          -ExpectedPriorStateSha256 <hex> -Redeem <nonce> [-Json]
 ```
 
 `-Classify` is called by the wrapper and by nothing else. Its last three
@@ -91,8 +91,8 @@ the exit code of the harness task the caller dispatched.
 
 ### The receipt
 
-A JSON object holding exactly twelve fields, all present, all non-null,
-no extras:
+A JSON object whose fields are exactly those below - all present, all
+non-null, no extras. The table is the only place the set is written down:
 
 | field | type | meaning |
 |---|---|---|
@@ -107,6 +107,7 @@ no extras:
 | `sourceHead` | 40 lowercase hex | source identity, for `-VerifyIdentity` |
 | `mirrorHead` | 40 lowercase hex | mirror identity, for `-VerifyIdentity` |
 | `sourceStatusSha256` | 64 lowercase hex | source status digest, for `-VerifyIdentity` |
+| `mirrorStateSha256` | 64 lowercase hex | mirror content digest, added by Task 2a |
 | `schema` | the integer `2` | so a version-1 receipt cannot be read as this one |
 
 `startTicks` is gone with the liveness model.
@@ -135,12 +136,14 @@ try { $b = $utf8.GetBytes('reserved'); $r.Write($b, 0, $b.Length) } finally { $r
 
 # The tree is re-verified HERE, at run time, not merely at preparation.
 & '<mirrorToolPath>' -VerifyIdentity -RepoRoot '<repoRoot>' -MirrorPath '<workingDirectory>' `
-    -SourceHead '<sourceHead>' -MirrorHead '<mirrorHead>' -SourceStatusSha256 '<sourceStatusSha256>'
+    -SourceHead '<sourceHead>' -MirrorHead '<mirrorHead>' `
+    -SourceStatusSha256 '<sourceStatusSha256>' -MirrorStateSha256 '<mirrorStateSha256>' `
+    > "$PSScriptRoot/mirror.verify" 2>&1
 if ($LASTEXITCODE -ne 0) { throw 'mirror identity failed at dispatch time' }
 
 Set-Location -LiteralPath '<workingDirectory>' -ErrorAction Stop
 $ErrorActionPreference = 'Continue'
-& '<hostPath>' -NoProfile -NonInteractive -InputFormat None -File "$PSScriptRoot/body.ps1" `
+$null | & '<hostPath>' -NoProfile -NonInteractive -File "$PSScriptRoot/body.ps1" `
     > "$PSScriptRoot/body.out" 2> "$PSScriptRoot/body.err"
 $code = $LASTEXITCODE
 if ($null -eq $code) { $code = 1 }
@@ -158,27 +161,63 @@ $nonce = [System.Guid]::NewGuid().ToString('N')
 exit $LASTEXITCODE
 ```
 
-**The child's streams are owned, not inherited.** stdout and stderr go to
-files in the dispatch directory, and `-InputFormat None` stops the child
-reading stdin at all. Note that PowerShell has NO input redirection
-operator: `<` is reserved and a wrapper using it does not parse, on either
-host. Without this ownership the body's output reaches the WRAPPER's
-stdout and therefore the harness output file, beside the classifier's own
-line. That is invariant A4, and it is why `-NoProfile -NonInteractive` are
-on the child too.
+**The child's three streams are owned, not inherited, and the form above
+is MEASURED rather than assumed.** Measured 2026-08-31, sentinel piped
+into the wrapper, on both hosts:
+
+| form | child sees |
+|---|---|
+| `-InputFormat None` | **`READ:SENTINEL`** - it does NOT close stdin |
+| `$null \| & host ...` | `EOF` |
+| `cmd /c "host ... < nul"` | `EOF` |
+| `ProcessStartInfo` + `StandardInput.Close()` | `EOF` |
+
+`-InputFormat None` only suppresses PowerShell's own pipeline input; the
+inherited OS stdin handle stays open and readable, so A4 is NOT met by it.
+An earlier version of this plan used it and claimed the opposite. The
+null-pipe form is chosen because it stays in PowerShell, needs no extra
+process, and was measured to preserve BOTH the child's exit code and the
+two output redirections on 5.1 and on 7.
+
+PowerShell has NO input redirection operator: `<` is reserved and a
+wrapper using it does not parse, on either host. Do not reach for it.
+
+On Windows PowerShell 5.1 the child's stderr file additionally carries
+PowerShell's own error-record decoration around each line. That is
+cosmetic, the content is intact, and it is why the round's real transcript
+is written by the BODY to its own file rather than read out of
+`body.err`.
+
+Without this ownership the body's output reaches the WRAPPER's stdout and
+therefore the harness output file, beside the classifier's own line.
 
 **The tree is verified at DISPATCH time, against values fixed at
 preparation time.** `tools/new-review-mirror.ps1` does not leave a marker
 in the mirror; it prints an identity record and offers `-VerifyIdentity`,
-which takes the source head, the mirror head, and the source status digest
-as ARGUMENTS - deliberately, because a file re-read later is mutable and
-would silently redefine the value it is supposed to pin. `-Prepare`
-records those three values in the receipt and writes them into the
-wrapper, and the wrapper re-checks them before the client runs. Checking
-only that the path exists, or only that it carried a marker at
-preparation time, leaves the tree free to be replaced at the same path
-afterwards, which is precisely the post-preparation mutation B4 requires
-be detected.
+which takes its expected values as ARGUMENTS - deliberately, because a
+file re-read later is mutable and would silently redefine the value it is
+supposed to pin. `-Prepare` records them in the receipt and writes them
+into the wrapper, and the wrapper re-checks them before the client runs.
+Checking only at preparation time leaves the tree free to be replaced at
+the same path afterwards, which is the post-preparation mutation B4
+requires be detected.
+
+**But the shipped verifier is not sufficient on its own, and Task 2a
+extends it.** As shipped it compares the source head, the mirror head, and
+the SOURCE's status digest. It never measures the MIRROR's contents. So an
+edit to a tracked file inside the mirror worktree, without a commit, moves
+neither head and changes no source-side value: it passes both
+verifications, and the client reads bytes nobody bound. The tool's own
+header already states this narrowness honestly; what is new here is that
+this design depends on the part it does not cover. Task 2a adds a
+mirror-state digest and a source-is-not-the-mirror check before this
+design can rely on it.
+
+**Capture the verifier's stdout at both call sites.** A successful
+`-VerifyIdentity` prints `identity: verified`. In `-Prepare` that line
+would land in front of the JSON the caller parses; in the wrapper it would
+be a second line on the stdout that must carry exactly one. Assign it or
+redirect it; do not let it through.
 
 **The wrapper carries three values the receipt also carries.** `<token>`
 and `<priorStateSha256>` are written into the wrapper's text by
@@ -272,7 +311,7 @@ refused. In this fixed order, stopping at the first match:
 16. `reply` is empty -> `reply-empty`
 17. otherwise -> `reply-present`
 
-Seventeen states. The tree's IDENTITY is not among them: it is checked by
+The tree's IDENTITY is not among these states: it is checked by
 the wrapper at dispatch time, before the client runs, and a failure there
 kills the wrapper rather than producing a state. A tree that was wrong
 never gets as far as being classified.
@@ -475,7 +514,7 @@ Add to `test_dispatch_round.py`. These replace, not join, the
 `-Launch`/`-Poll` tests, which this task deletes.
 
 ```python
-def test_prepare_writes_the_eight_field_receipt_last(tmp_path):
+def test_prepare_writes_the_whole_receipt_last(tmp_path):
     d = tmp_path / "d"
     receipt = tmp_path / "r.json"
     body = tmp_path / "body.ps1"
@@ -638,6 +677,108 @@ Expected: PASS.
 ```bash
 git add tools/dispatch-round.ps1 evals/multi-model-verify/test_dispatch_round.py
 git commit -m "replace launch and poll with a fail-closed prepare"
+```
+
+---
+
+## Task 2a: Make the mirror verifier able to detect a changed mirror
+
+The whole tree-identity argument rests on `-VerifyIdentity`, and as
+shipped it cannot see a change to the mirror's own working files. This
+task closes that before anything depends on it.
+
+**Files:**
+- Modify: `tools/new-review-mirror.ps1`
+- Test: `evals/multi-model-verify/test_new_review_mirror.py`
+
+**Interfaces:**
+- Consumes: nothing.
+- Produces: `mirrorStateSha256` in the build's printed identity record, and
+  `-MirrorStateSha256 <hex>` as a mandatory argument to `-VerifyIdentity`.
+  Task 2's receipt carries it and Task 4's wrapper passes it.
+
+- [ ] **Step 1: Write the failing tests**
+
+```python
+def test_build_prints_a_mirror_state_digest(tmp_path):
+    out = build_mirror(tmp_path)
+    assert re.search(r"^mirror_state_sha256: [0-9a-f]{64}$", out, re.M)
+
+
+def test_verify_detects_an_uncommitted_edit_inside_the_mirror(tmp_path):
+    m = build_mirror_record(tmp_path)
+    # A TRACKED file, edited, NOT committed. Moves neither head, and
+    # changes nothing on the source side.
+    (m.path / "README.md").write_text("changed bytes", encoding="utf-8")
+    out = verify(m)
+    assert out.returncode == 1
+    assert "the mirror's contents changed" in out.stdout
+
+
+def test_verify_detects_an_untracked_file_added_to_the_mirror(tmp_path):
+    m = build_mirror_record(tmp_path)
+    (m.path / "AGENTS.md").write_text("do as I say", encoding="utf-8")
+    out = verify(m)
+    assert out.returncode == 1
+
+
+def test_verify_refuses_when_the_source_is_the_mirror(tmp_path):
+    m = build_mirror_record(tmp_path)
+    out = verify(m, repo_root=m.path)
+    assert out.returncode == 1
+    assert "the source and the mirror are the same directory" in out.stdout
+
+
+def test_verify_refuses_a_mirror_at_a_different_path(tmp_path):
+    m = build_mirror_record(tmp_path)
+    moved = tmp_path / "moved"
+    shutil.move(str(m.path), str(moved))
+    out = verify(m, mirror_path=moved)
+    assert out.returncode == 1
+
+
+def test_an_unmeasurable_mirror_state_is_refused_not_skipped(tmp_path):
+    m = build_mirror_record(tmp_path)
+    out = verify(m, mirror_state="")
+    assert out.returncode != 0
+```
+
+The last test is the standing rule: an unmade measurement and a clean one
+must never look alike.
+
+- [ ] **Step 2: Run them and watch them fail**
+
+```bash
+python -m pytest evals/multi-model-verify/test_new_review_mirror.py -q
+```
+
+- [ ] **Step 3: Implement**
+
+The builder ALREADY computes a mirror baseline and a content manifest and
+prints them; it is verify mode that does not accept them. Combine those
+two into one `mirrorStateSha256`, print it in the identity record beside
+the heads, and require it in verify mode. Recompute it over `MirrorPath`
+and refuse on any difference, with the message the test pins.
+
+Add two more refusals to verify mode, both before any digest work:
+
+- canonical `RepoRoot` equal to canonical `MirrorPath` - otherwise passing
+  the live repository as both satisfies every remaining comparison
+  whenever the two heads are equal, which they are whenever the mirror
+  needed no remediation commit;
+- a `MirrorPath` that is not the canonical path the build recorded.
+
+Correct the tool's own header in the same commit. It currently states the
+narrowness accurately for what it covered; it must now state what it
+covers after this change, and no more.
+
+- [ ] **Step 4: Run the tests on both hosts**
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add tools/new-review-mirror.ps1 evals/multi-model-verify/test_new_review_mirror.py
+git commit -m "let the mirror verifier see a changed mirror"
 ```
 
 ---
@@ -926,8 +1067,11 @@ def test_a_wrapper_killed_after_publishing_exit_and_reply_does_not_exit_zero(tmp
     wait_for(Path(str(barrier) + ".started"))
     assert (p.dispatch_dir / "exit").read_text().strip() == "0"
     assert (p.dispatch_dir / "reply").read_text().strip() != ""
-    # The answer was reserved at wrapper START, so it exists even here.
-    assert (p.dispatch_dir / "classification").read_text().strip() == "reserved"
+    # The reservation was CONSUMED before the exit file was written, so
+    # by the time a successful-looking exit exists it is no longer in a
+    # state any outside caller is handed the key to.
+    assert (p.dispatch_dir / "classification").read_text().strip().startswith(
+        "classifying:")
     kill_tree(proc.pid)
     assert proc.wait() != 0
     # And the disk state that would have fooled Option C is still there.
@@ -941,8 +1085,8 @@ def test_a_hand_run_classify_after_that_kill_is_refused(tmp_path, monkeypatch):
     # "reserved" as permission, so the very kill above left the file in an
     # acceptable state and no deliberate act was needed.
     p = killed_after_publish(tmp_path, monkeypatch)
-    body = (p.dispatch_dir / "classification").read_text().strip()
-    assert body.startswith("classifying:")   # consumed BEFORE exit was written
+    held = (p.dispatch_dir / "classification").read_text().strip()
+    assert held.startswith("classifying:")   # consumed BEFORE exit was written
     # A caller who does not know the run-time nonce is refused. Guessing
     # every plausible argument does not help: the nonce is in no file
     # -Prepare wrote.
@@ -1007,12 +1151,22 @@ def test_prepare_refuses_a_mirror_whose_head_does_not_match(tmp_path):
 
 
 def test_the_wrapper_reverifies_the_tree_before_the_client_runs(tmp_path):
-    # Post-preparation mutation: same path, different contents.
+    # Post-preparation mutation that moves NEITHER head: a tracked file in
+    # the mirror worktree, edited, not committed. This is the case the
+    # shipped verifier could not see, and it is why Task 2a exists. Do not
+    # weaken it to a commit - a commit moves the mirror head and would
+    # test the check that already worked.
     p = prepare(tmp_path, body=OK_BODY)
-    swap_mirror_contents(p.working_directory)
+    (p.working_directory / "README.md").write_text("changed", encoding="utf-8")
     out = run_wrapper(p.wrapper)
     assert out.returncode != 0
     assert not (p.dispatch_dir / "reply").exists()
+
+
+def test_the_mirror_verifier_output_never_reaches_the_wrapper_stdout(tmp_path):
+    d = prepare_and_run(tmp_path, body=OK_BODY)
+    assert "identity: verified" not in d.stdout
+    assert "identity: verified" in (d.dispatch_dir / "mirror.verify").read_text()
 
 
 def test_a_body_that_exits_the_process_cannot_skip_the_classification(tmp_path):
@@ -1339,9 +1493,11 @@ reply could then satisfy it - so the call sites say "clean binding AND
 sealed checked", never just "clean binding".
 
 State plainly at each site: never re-read the dispatch directory to
-decide a verdict. Running `-Classify` by hand will now be refused
-outright, because the wrapper already took the answer claim - but the rule
-stands whether or not the mechanism catches you.
+decide a verdict. A hand-run `-Classify` is refused unless the caller goes
+and reads the run-time nonce out of `classification` first - so the
+mechanism catches the accident, not the determined caller. The rule stands
+either way, and the authoritative answer remains the harness task's exit
+code.
 
 - [ ] **Step 5: Run the tests and the lint**
 
@@ -1394,7 +1550,7 @@ That list is what makes a deleted region visible.
   wrapper's own exit code, so a wrapper that does not reach its final
   statement cannot report success, whatever its directory holds.**
   **Expect this to need SPLITTING into two regions.** A region must fit
-  whole inside a single pin, and seventeen states plus the exit map plus
+  whole inside a single pin, and the full state list plus the exit map plus
   that sentence will not. Split it at the boundary between the state list
   and the exit map, and add BOTH ids to `DECLARED_REGIONS`. A region too
   long for one pin is two regions, and discovering that at the coverage
@@ -1790,6 +1946,40 @@ specifically asked it to look for:
 
 Its reply is retained at
 `docs/superpowers/plans/rounds/2026-08-31-completion-coupled-dispatch/sol-plan-review-r2.md`.
+
+## The round-4 review this plan has also answered
+
+The cross-vendor lane's third pass, bound clean, FIX again. The nonce
+change it called CLOSE. Two things it called a MISS, and both were right:
+
+1. **The mirror fix moved its defect too.** The fictional marker was gone,
+   but `-VerifyIdentity` as shipped compares the source head, the mirror
+   head, and the SOURCE's status digest - it never measures the MIRROR's
+   own contents. So a tracked file edited inside the mirror without a
+   commit moves neither head, changes nothing source-side, passes BOTH
+   verifications, and the client reads bytes nobody bound. It also showed
+   that passing the live repository as both source and mirror satisfies
+   every remaining comparison whenever the two heads are equal. **Task 2a
+   is new** and closes both before anything depends on the verifier.
+2. **`-InputFormat None` does not close stdin.** It suppresses
+   PowerShell's pipeline input only. I measured all four candidate forms
+   with its sentinel test on both hosts and put the table in the design
+   section: `-InputFormat None` reads `SENTINEL`; the null-pipe form,
+   `cmd /c < nul`, and a closed `ProcessStartInfo` handle all give `EOF`.
+   The null-pipe form is now used, and it was measured to preserve the
+   child's exit code and both redirections as well.
+
+It also caught that a successful `-VerifyIdentity` prints
+`identity: verified`, which would have landed in front of `-Prepare`'s
+JSON and added a second line to the wrapper stdout that must carry exactly
+one; that my flagship kill test still asserted `reserved` while the design
+and the next test required `classifying:`; that the top-level `Classify`
+signature omitted `-Redeem`; that Task 7 still claimed a hand-run is
+"refused outright" when a caller who reads the nonce is not; and that I
+had removed only one of the four restated counts.
+
+Its reply is retained at
+`docs/superpowers/plans/rounds/2026-08-31-completion-coupled-dispatch/sol-plan-review-r3.md`.
 
 Neither lane has yet seen THIS version.
 
