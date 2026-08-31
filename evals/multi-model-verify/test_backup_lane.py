@@ -118,31 +118,15 @@ def test_agent_empties_the_subagent_list():
 
 
 def test_backup_files_no_backslash_paths():
-    """Backslash is banned OUTSIDE the three per-call wrapper sections Task
-    4 adds. Those wrapper bodies are native PowerShell script blocks that
-    write `$PSScriptRoot\\reply` and read `$PSScriptRoot\\transcript` -
-    exactly the form the per-call test below pins as the reply artifact -
-    so a blanket ban would be at war with that oracle. Everywhere else in
-    the file - the prose, the Dispatch/Resume bullets, the contract
-    regions - keeps the single-form (forward-slash) convention this test
-    has always enforced, and AGENT_MD is untouched by Task 4 so it keeps
-    the unconditional check.
-
-    The stripped region is bounded the SAME way the per-call test scopes
-    a section: from a `<!-- call:NAME -->` marker to the next such marker
-    or end of file. For the last call (kimi-write-probe, which has no
-    marker after it) that reaches end of file, so this cannot see a
-    backslash reintroduced in the sections written after it either - a
-    real but accepted narrowing, because nothing this task adds there
-    needs one and re-deriving a tighter bound would duplicate the split
-    logic in test_each_kimi_call_is_launched_through_the_tool for no
-    measured gain.
-    """
-    assert "\\" not in _read(AGENT_MD), str(AGENT_MD)
-    body = _read(BACKUP_LANE)
-    stripped = re.sub(
-        r"<!-- call:[\w-]+ -->.*?(?=<!-- call:|\Z)", "", body, flags=re.S)
-    assert "\\" not in stripped, str(BACKUP_LANE)
+    # Restored to its blanket form 2026-08-31. Task 4 had narrowed it to
+    # exempt the three per-call wrapper sections, which was a weakening
+    # with a self-declared blind spot (the last section ran to EOF) AND
+    # was incomplete: test_no_backslash_paths_anywhere covers the same
+    # file and stayed red. The wrapper bodies now use forward slashes,
+    # which .NET and PowerShell accept identically, so the exemption is
+    # not needed by anything.
+    for p in (BACKUP_LANE, AGENT_MD):
+        assert "\\" not in _read(p), str(p)
 
 
 def test_backup_lane_dispatch_and_resume_pins():
@@ -2048,7 +2032,7 @@ def test_each_kimi_call_is_launched_through_the_tool(call):
         " a round thrown away")
     assert '& "<kimi-code-binary>"' in section, (
         "this call has no client invocation")
-    assert "$PSScriptRoot\\reply" in section, (
+    assert "$PSScriptRoot/reply" in section, (
         "no reply artifact: every successful call would land in"
         " no-reply and be discarded")
 

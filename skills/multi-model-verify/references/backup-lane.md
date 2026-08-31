@@ -106,11 +106,11 @@ Panel participation: a user-invoked panel per references/panels.md is a second s
   try {
   $b = [System.IO.File]::ReadAllText("<brief-file>", (New-Object System.Text.UTF8Encoding($false, $true)))
   [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
-  $out = & "<kimi-code-binary>" -m <canonical-backup-model-id> --agent-file <plugin-checkout>/skills/multi-model-verify/references/kimi-reviewer-agent.md --skills-dir <debate-home>/skills -p $b 2> $PSScriptRoot\transcript
+  $out = & "<kimi-code-binary>" -m <canonical-backup-model-id> --agent-file <plugin-checkout>/skills/multi-model-verify/references/kimi-reviewer-agent.md --skills-dir <debate-home>/skills -p $b 2> $PSScriptRoot/transcript
   $code = $LASTEXITCODE
-  [System.IO.File]::WriteAllText("$PSScriptRoot\reply", ($out -join "`n"), (New-Object System.Text.UTF8Encoding($false)))
+  [System.IO.File]::WriteAllText("$PSScriptRoot/reply", ($out -join "`n"), (New-Object System.Text.UTF8Encoding($false)))
   } catch { $code = 1 }
-  [System.IO.File]::WriteAllText("$PSScriptRoot\exit", "$code")
+  [System.IO.File]::WriteAllText("$PSScriptRoot/exit", "$code")
   ```
 
   Launch it, with the working directory set to the review mirror
@@ -136,11 +136,11 @@ Panel participation: a user-invoked panel per references/panels.md is a second s
   try {
   $b = [System.IO.File]::ReadAllText("<brief-file>", (New-Object System.Text.UTF8Encoding($false, $true)))
   [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
-  $out = & "<kimi-code-binary>" --session <session-id> -m <canonical-backup-model-id> --skills-dir <debate-home>/skills -p $b 2> $PSScriptRoot\transcript
+  $out = & "<kimi-code-binary>" --session <session-id> -m <canonical-backup-model-id> --skills-dir <debate-home>/skills -p $b 2> $PSScriptRoot/transcript
   $code = $LASTEXITCODE
-  [System.IO.File]::WriteAllText("$PSScriptRoot\reply", ($out -join "`n"), (New-Object System.Text.UTF8Encoding($false)))
+  [System.IO.File]::WriteAllText("$PSScriptRoot/reply", ($out -join "`n"), (New-Object System.Text.UTF8Encoding($false)))
   } catch { $code = 1 }
-  [System.IO.File]::WriteAllText("$PSScriptRoot\exit", "$code")
+  [System.IO.File]::WriteAllText("$PSScriptRoot/exit", "$code")
   ```
 
   Launch it the same way, still with `-WorkingDirectory <review-mirror>`,
@@ -476,11 +476,11 @@ log). There is no shared stream and nothing to attribute by position.
   try {
   $b = [System.IO.File]::ReadAllText("<brief-file>", (New-Object System.Text.UTF8Encoding($false, $true)))
   [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
-  $out = & "<kimi-code-binary>" -m <canonical-backup-model-id> --agent-file <plugin-checkout>/skills/multi-model-verify/references/kimi-reviewer-agent.md --skills-dir <debate-home>/skills -p $b 2> $PSScriptRoot\transcript
+  $out = & "<kimi-code-binary>" -m <canonical-backup-model-id> --agent-file <plugin-checkout>/skills/multi-model-verify/references/kimi-reviewer-agent.md --skills-dir <debate-home>/skills -p $b 2> $PSScriptRoot/transcript
   $code = $LASTEXITCODE
-  [System.IO.File]::WriteAllText("$PSScriptRoot\reply", ($out -join "`n"), (New-Object System.Text.UTF8Encoding($false)))
+  [System.IO.File]::WriteAllText("$PSScriptRoot/reply", ($out -join "`n"), (New-Object System.Text.UTF8Encoding($false)))
   } catch { $code = 1 }
-  [System.IO.File]::WriteAllText("$PSScriptRoot\exit", "$code")
+  [System.IO.File]::WriteAllText("$PSScriptRoot/exit", "$code")
   ```
 
   ```powershell

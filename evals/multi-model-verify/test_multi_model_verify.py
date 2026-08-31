@@ -727,8 +727,14 @@ class TestTransportContract:
         assert ".agents/skills" in notes, (
             "the .agents ingestion probe must be documented in the notes"
         )
-        assert re.search(r"(?s)AGENTS\.md.{0,700}STOP and surface", text), (
-            "a present AGENTS.md must STOP the dispatch, not merely warn"
+        # Item 33 replaced STOP-and-ask with build-the-mirror. The
+        # property is unchanged and still pinned here: a present
+        # AGENTS.md may never be silently dispatched over. Only the
+        # mandated response moved, so the needle moved with it.
+        assert re.search(
+            r"(?s)AGENTS\.md.{0,700}BUILD THE MIRROR AND REPORT", text
+        ), (
+            "a present AGENTS.md must force the mirror, not merely warn"
         )
         assert "AGENTS.md" in notes, (
             "the ingestion probe results must be documented in the notes"
