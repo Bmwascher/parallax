@@ -4,7 +4,7 @@
 
 **Goal:** Make every long client call the skill documents incapable of blocking the caller past the 600-second tool ceiling, so a review round can no longer be killed with its quota spent and no reply written; and stop the preflight asking a question whose answer has never once differed.
 
-**Architecture:** A new shipped tool, `tools/dispatch-detached.ps1`, performs the whole launch as ONE fail-closed transaction: reserve a directory, install the wrapper, start the process, record the pid, and write a launch-commit artifact last. It also computes the completion state. Each documented call keeps its client invocation verbatim inside a lane-specific wrapper body and calls the tool to launch it.
+**Architecture:** A new shipped tool, `tools/dispatch-detached.ps1`, performs the whole launch as ONE fail-closed transaction: check that the receipt path is fresh and outside the dispatch directory, reserve the directory, install the wrapper, start the process, record the pid and its start ticks, write the internal launch-commit marker, and publish the EXTERNAL RECEIPT last of all. It also computes the completion state. Each documented call keeps its client invocation verbatim inside a lane-specific wrapper body and calls the tool to launch it.
 
 **Tech Stack:** PowerShell 5.1 and PowerShell 7, Markdown skill contracts under `skills/multi-model-verify/`, pytest pins under `evals/multi-model-verify/`.
 
@@ -71,13 +71,14 @@ Cases, each named for what it protects:
 - `test_a_taken_directory_blocks_and_starts_nothing` — pre-create the directory; expect exit 1, the reason on stdout, and no process started. The reservation is `New-Item -ItemType Directory` with `-ErrorAction Stop` and no `-Force`; round 4 found that without `-ErrorAction Stop` the error is non-terminating and the following statements run with no valid path.
 - `test_a_receipt_path_inside_the_dispatch_directory_is_blocked` — the receipt path equal to the dispatch directory, and inside it at one and two levels down. Expect exit 1 and expect NO dispatch directory to have been created, because the check runs first. Round 9's finding: the separation was a claim with no mechanism, and a receipt inside the directory it authenticates is the round 7 defect returning.
 - `test_force_is_not_accepted_in_any_argument_order` — assert the script source contains no `-Force` on the reservation, checked by parsing the command rather than by string order. Round 4 found the previous pin only forbade the exact token order `-ItemType Directory -Force`.
-- `test_a_committed_launch_publishes_pid_then_commit_last` — `launch.committed` is written AFTER `pid`, and its presence is what distinguishes a committed launch. Assert the order by content, not by timestamp.
+- `test_a_committed_launch_publishes_pid_then_marker_then_receipt` — assert ALL THREE positions, by content rather than by timestamp: `pid` and `startticks` exist before `launch.committed`, and the RECEIPT is written after both. Round 10's finding: four places called the commit marker the last artifact while the executable sequence published the receipt after it, and the test name carried the wrong claim into the suite.
 - `test_a_failure_after_start_kills_the_tree_and_blocks` — inject a failure between start and commit; expect exit 1 and the started process gone. This is the state Sol said cannot be eliminated, so the tool must at least not leave it silently.
 - `test_poll_reports_launch_unknown_when_commit_is_absent` — a reserved directory with no `launch.committed`; expect `launch-unknown`. Not running, not failed, not complete.
 - `test_a_refused_launch_writes_no_receipt_and_cannot_be_polled` — **the round 6 regression, rewritten because round 7 showed the previous version was impossible to run.** It said to poll with "the token the second launch would have used", and a refused launch mints nothing. Instead: run a stub launch to completion against receipt `R1`, so the directory holds a real commit, pid, `exit` of `0` and a reply. Launch AGAIN on the same directory naming a FRESH receipt path `R2`. Take the refusal, assert `R2` was never created, then poll `-Receipt R2`. Expect `no-receipt`, never `reply-present`.
 - `test_a_stale_receipt_is_refused_against_the_expected_act` — **round 8's finding.** Poll the finished directory with `R1` while `-ExpectedDispatchDir` and `-ExpectedRound` name the SECOND round's directory and label. Expect `receipt-not-expected`. Then run the same case with only the label differing and again with only the directory differing, because a retry can reuse a label and a mistake can reuse a directory; both must be refused on their own.
 - `test_the_expected_act_is_checked_before_any_directory_is_opened` — **round 9's finding, and it replaces an assertion that could not be made.** The previous version said to "assert no artifact of the first round was read", which names no observation. This one is observable: point a MISMATCHED receipt at a `dispatchDir` that does not exist, and at a second one that exists but holds no `launch.committed`. Expect `receipt-not-expected` in both. An implementation that checks the commit artifact first returns `launch-unknown` and fails here, which is what makes the ORDER testable rather than merely written down.
 - `test_a_stale_receipt_matching_every_expected_value_still_answers_for_its_own_round` — supply `R1` with R1's own directory and label. It DOES report `reply-present`, because at that point every value the caller supplied describes the earlier act. Assert the returned `round` is R1's label. This is the residual the contract admits, and the test exists so the residual is a measured behaviour rather than a hope.
+- `test_an_unreadable_receipt_is_no_receipt_at_exit_one` — **round 10's finding.** The classification was stated in prose and no case produced it, so an implementation returning exit 2 for an unreadable receipt satisfied every other case. Pass a DIRECTORY as `-Receipt`: it is a deterministic unreadable-file condition on both hosts and needs no permission juggling. Expect `no-receipt` and exit 1, never exit 2, because reading the receipt's content is never an invocation error.
 - `test_a_receipt_failing_the_schema_is_no_receipt` — one case per way to fail it: a top-level value that is not an object (an array, a bare string, a number); each of the four fields missing in turn; an empty string in each of the three string fields; a `startTicks` that does not parse; **each of the four fields in turn holding the wrong JSON type**, not one representative case; and an unknown extra field. Expect `no-receipt` every time. Round 9's finding: the previous list said "a wrong JSON type" once, so an implementer type-checking three fields and not the fourth passed it.
 - `test_every_state_maps_to_its_documented_exit_code` — one case per state name. `reply-present` exits 0; `running` exits 3; every other state exits 1 with the state name on stdout; a malformed argument exits 2. Round 8's finding: the exit codes were imported from `new-review-mirror.ps1:17-18` and never mapped, so an implementer had to invent them. Round 9's finding: revision 8's mapping gave `running` a 0 and defended it with a sentence, which is the defect class this cycle exists to remove.
 - `test_a_running_round_can_never_exit_zero` — named separately from the mapping test and kept separate on purpose. Build the Task 8 arrangement in miniature: a stub that writes a NONEMPTY reply and then sleeps. Poll while it sleeps. Expect exit 3 and `state` of `running`, and assert the reply's content is not returned. A caller that branches on exit status alone must not be able to reach that reply.
@@ -119,7 +120,7 @@ Expected: every test FAILS or ERRORS because the script does not exist. Read the
 4. `$proc = Start-Process -FilePath (Get-Process -Id $PID).Path -ArgumentList @("-NoProfile", "-NonInteractive", "-File", "`"$d\wrapper.ps1`"") -NoNewWindow -PassThru -ErrorAction Stop -RedirectStandardInput "$d\stdin.empty" -RedirectStandardOutput "$d\launch.out" -RedirectStandardError "$d\launch.err"`, plus `-WorkingDirectory` when given.
 5. If `PARALLAX_DISPATCH_HOLD_BEFORE_PUBLISH` is set, create `<value>.started` and wait, bounded at sixty seconds, for `<value>.release`; on timeout, fail through the same `catch` as any other failure. This is the barrier the hard-kill test needs and it exists nowhere else.
 6. Write `$d\pid` and `$d\startticks` (the launched process's `StartTime.ToUniversalTime().Ticks`), then write `$d\launch.committed` with the minted token as its content.
-7. Write the RECEIPT last of all, and only now: JSON holding `dispatchDir`, `token`, `round`, `startTicks`. `-ReceiptPath` is created with create-new semantics and an existing path is BLOCKED before step 1 runs, beside the directory reservation.
+7. Write the RECEIPT last of all, and only now: JSON holding `dispatchDir`, `token`, `round`, `startTicks`. It is created with create-new semantics; its path was already checked for freshness and for separation in step 1, so this step can only fail on a race, and a race here fails through the same `catch`.
 8. Wrap steps 4 to 7 in a `catch` that runs `taskkill /PID $proc.Id /T /F` when `$proc` exists, then exits 1. Never leave a started process unrecorded and unreported.
 
 The token is minted with `[System.Guid]::NewGuid()`. It binds a receipt to the directory it names. It is NOT a secret from the caller and the contract must not describe it as one: it also sits in `launch.committed`, so a caller determined to launder an old directory can read it there. What the receipt adds is that a REFUSED launch produces no receipt at all.
@@ -180,9 +181,13 @@ Insert AFTER the sentence ending `is spent for nothing.` and BEFORE `Measured re
   <!-- contract:start id=detached-dispatch-tool -->
   The launch is ONE TRANSACTION and it lives in ONE PLACE:
   `${CLAUDE_PLUGIN_ROOT}/tools/dispatch-detached.ps1`. It reserves a
-  directory, installs the wrapper, starts the process, records the pid,
-  and writes a launch-commit artifact LAST; a failure after the process
-  starts kills the tree and BLOCKS rather than leaving it unrecorded. No
+  directory, installs the wrapper, starts the process, records the pid
+  and its start ticks, writes the internal launch-commit marker, and
+  publishes the EXTERNAL RECEIPT last of all; a failure at any point
+  after the process starts kills the tree and BLOCKS rather than leaving
+  it unrecorded. The two are not interchangeable: the marker is what
+  makes the directory a committed launch, and the receipt is what makes
+  the launch pollable, so the receipt is the transaction's final act. No
   lane writes its own launch. A lane supplies a WRAPPER BODY carrying
   its client invocation verbatim and, where its client needs one, a
   working directory; it changes nothing else. This replaced five copied
@@ -360,6 +365,13 @@ In `test_multi_model_verify.py`, add:
             " -Json") in section, "this site has no poll"
         assert "$brief | codex exec" in section, (
             "this site has no client invocation")
+        assert (
+            "0 means `reply-present` and nothing else; 3 means"
+            " `running`, an UNFINISHED round") in section, (
+            "this site does not state the exit mapping. Round 10 found"
+            " the tool contract and the point of use disagreeing about"
+            " what exit 0 means, which is the only place a reader of the"
+            " skill would look")
 
     def test_no_codex_lane_writes_its_own_launch(self):
         """A CENTRALIZATION guard, and nothing more.
@@ -383,7 +395,7 @@ In `test_multi_model_verify.py`, add:
 - [ ] **Step 2: Run them to verify they fail**
 
 Run: `python -m pytest evals/multi-model-verify/test_multi_model_verify.py -q -k "launched_through_the_tool or writes_its_own_launch or sends_the_reader_to_the_states"`
-Expected: 4 FAILED - two parametrized cases and the two others.
+Expected: 4 FAILED - two parametrized cases and the two others. The parametrized cases now also fail on the exit-mapping sentence, which is the round 10 addition.
 
 - [ ] **Step 3: Rewrite the round-1 step**
 
@@ -444,7 +456,7 @@ Then the launch and the poll:
 & (Get-Process -Id $PID).Path -NoProfile -File ${CLAUDE_PLUGIN_ROOT}/tools/dispatch-detached.ps1 -Poll -Receipt <receipt-file> -ExpectedDispatchDir <dispatch-dir> -ExpectedRound <label> -Json
 ```
 
-`-ExpectedDispatchDir` and `-ExpectedRound` are the same two values passed to the launch, supplied again and INDEPENDENTLY of the receipt: that pair is what stops an earlier attempt's receipt answering for this one. The poll also echoes the `round` back, so record it. And read the `state` field, never the exit code alone: exit 0 covers `running` as well as `reply-present`.
+`-ExpectedDispatchDir` and `-ExpectedRound` are the same two values passed to the launch, supplied again and INDEPENDENTLY of the receipt: that pair is what stops an earlier attempt's receipt answering for this one. The poll also echoes the `round` back, so record it. Its exit codes are: **0 means `reply-present` and nothing else; 3 means `running`, an UNFINISHED round; 1 is a transport failure with the state name on stdout; 2 is a bad invocation.** Round 10's finding: this sentence still carried revision 8's mapping, so the shipped skill would have told the reader that exit 0 covers a round still being written, while the tool said otherwise.
 
 `(Get-Process -Id $PID).Path` is the caller's own host, not a bare `powershell`. Round 6's finding: a bare name resolves to Windows PowerShell 5.1 even from a PowerShell 7 session, and the tool hands its own executable to the wrapper, so the wrapper would run on a host nobody chose.
 
@@ -761,12 +773,14 @@ The ceiling decision was made in Task 3 step 5, where it has to be: strict lint 
 
 - [ ] **Step 2: Reconcile the spec with the plan**
 
-Update: the state model to the tool's ordered checks, whose first three states are NO RECEIPT, then RECEIPT NOT EXPECTED, then LAUNCH UNKNOWN - round 8 caught this step saying LAUNCH UNKNOWN comes first, which was true only of revision 6, and round 9 caught the correction itself already stale, because adding RECEIPT NOT EXPECTED moved LAUNCH UNKNOWN again; the region inventory to the four that exist plus `back-channel-auto-mirror`; the encoding claim to be lane-specific, since an argument-passing lane carries no preamble; the quoting claim, since a wrapper file removes one serialization boundary and not every quoting layer; and question 2, which the user reopened and answered the other way on 2026-08-30. Say plainly that a settled decision was reversed and by whom.
+**Replace the spec's mechanism section outright.** `docs/superpowers/specs/2026-08-30-item32-detached-dispatch-design.md:136-148` still describes the SESSION running `Start-Process`, writing the pid file, and polling it - the design the debate rejected in favour of a shipped tool. Round 10's finding: Task 9 updated five things around that section and never replaced the section itself, and the convergence grep does not search for a session-owned launch. Replace it with the transaction this plan builds: the session writes a wrapper body and calls the tool; the tool checks the receipt path, reserves the directory, installs the wrapper, starts the process, records the pid and start ticks, writes the commit marker, and publishes the receipt; later calls poll the RECEIPT with the expected directory and round.
+
+Also update: the state model to the tool's ordered checks, whose first three states are NO RECEIPT, then RECEIPT NOT EXPECTED, then LAUNCH UNKNOWN - round 8 caught this step saying LAUNCH UNKNOWN comes first, which was true only of revision 6, and round 9 caught the correction itself already stale, because adding RECEIPT NOT EXPECTED moved LAUNCH UNKNOWN again; the region inventory to the four that exist plus `back-channel-auto-mirror`; the encoding claim to be lane-specific, since an argument-passing lane carries no preamble; the quoting claim, since a wrapper file removes one serialization boundary and not every quoting layer; and question 2, which the user reopened and answered the other way on 2026-08-30. Say plainly that a settled decision was reversed and by whom.
 
 - [ ] **Step 3: TASK-LOCAL ORACLE for convergence**
 
 ```bash
-grep -ni "detached-dispatch-codex\|detached-dispatch-backup\|no quoting layer at all\|encoding preamble moves INSIDE the wrapper\|every wrapper\|four states\|five states\|six states\|seven states\|eight states\|nine states\|ten states\|eleven states\|not detached\|powershell -NoProfile -File\|-Token\|-DispatchDir <dispatch-dir> -Json" docs/superpowers/specs/2026-08-30-item32-detached-dispatch-design.md
+grep -ni "detached-dispatch-codex\|detached-dispatch-backup\|no quoting layer at all\|encoding preamble moves INSIDE the wrapper\|every wrapper\|four states\|five states\|six states\|seven states\|eight states\|nine states\|ten states\|eleven states\|not detached\|The session launches it with\|sidecar exit-code file\|powershell -NoProfile -File\|-Token\|-DispatchDir <dispatch-dir> -Json" docs/superpowers/specs/2026-08-30-item32-detached-dispatch-design.md
 ```
 
 Expected: no hits outside a passage explicitly narrating history. Round 4 found the previous grep searching for none of the terms it claimed to; round 6 found it still missing the encoding claim, which is the very claim the plan says is refuted, so the stale text would have passed.
@@ -776,6 +790,14 @@ Two of the patterns need their replacement wording stated exactly, or the reconc
 - The encoding claim becomes lane-specific. The codex lane's wrapper carries the `$OutputEncoding` preamble because its brief goes down a PIPE. The Kimi lane's wrapper carries none because its brief goes as an ARGUMENT, which is a different transport with a different defect, and item 51 owns that one.
 - The state count is TWELVE, so every spelled count below twelve is a stale hit, and `powershell -NoProfile -File` is stale because the documented call now uses the caller's own host.
 - The grep is `-i`. Round 7's finding: the spec spells `SEVEN states` in capitals at `docs/superpowers/specs/2026-08-30-item32-detached-dispatch-design.md:194`, and a case-sensitive pattern walked straight past the one stale count the step was written to catch.
+
+Then run a POSITIVE oracle, because a grep for stale words cannot show that the replacement arrived:
+
+```bash
+grep -c "dispatch-detached.ps1\|-ReceiptPath\|-ExpectedDispatchDir" docs/superpowers/specs/2026-08-30-item32-detached-dispatch-design.md
+```
+
+Expected: at least three, and read them to confirm they are in the mechanism section rather than scattered elsewhere. Round 10's finding: every oracle in this step searched only for what should be gone, so a section deleted and never rewritten passed it.
 - `-Token` and `-DispatchDir <dispatch-dir> -Json` are stale because the poll now names a RECEIPT.
 
 - [ ] **Step 4: Run the five local gates, detached**
