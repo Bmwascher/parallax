@@ -17,7 +17,7 @@
 ## What the two lanes conditioned their answer on, and what this plan does with it
 
 - **Sol: the tool does NOT make the failure impossible.** A hard kill between `Start-Process` returning and the receipt being published still leaves a live untracked process. So the contract names that state rather than eliminating it. Since revision 13 the state is `NO RECEIPT`, not `LAUNCH UNKNOWN`: the receipt is the transaction's last act, so an interrupted launch has none. `LAUNCH UNKNOWN` now means something narrower - a valid receipt whose marker has since disappeared. This plan takes Sol's weaker claim over Fable's stronger one because Fable stated it had not re-verified the round 4 finding and took the relay.
-- **Both: anchor the call.** All three tools the skill calls today use bare relative paths — `SKILL.md:94`, `:121`, `:228` — which is item 58's own cause. The new call uses `${CLAUDE_PLUGIN_ROOT}`. The three existing ones stay item 58's, and Task 9 records the asymmetry rather than widening scope silently.
+- **Both: anchor the call.** All three tools the skill calls today use bare relative paths — `SKILL.md:94`, `:121`, `:228` — which is item 58's own cause. The new calls name the plugin root instead: `${CLAUDE_PLUGIN_ROOT}` in `SKILL.md`, where the harness substitution is measured, and `<plugin-checkout>` in `references/backup-lane.md`, which is read raw - see Global Constraints for the split and its reason. The three existing ones stay item 58's, and Task 9 records both asymmetries rather than widening scope silently.
 - **Fable: the stub gate could not have caught this.** Task 7 runs the WRAPPER, while reserve-write-launch-record sits outside the wrapper in every copy. With the tool, that sequence is inside a real script with a real test file, which is the point.
 
 ## Global Constraints
@@ -27,7 +27,7 @@
 - **A killed, hung, or unfinished round must never be readable as a completed one.** Rounds 1, 2, 3 and 4 each found a hole in the completion model. Treat the class as open.
 - **The tool is fail-closed.** `$ErrorActionPreference = 'Stop'` around every step, `-ErrorAction Stop` on the reservation and the launch, and a `catch` that kills the process tree and exits non-zero if anything fails after the process starts.
 - **Item 51 is NOT fixed here, and the Kimi lane IS detached here.** Item 51's probe measured "a brief file is read and passed inline as `-p <brief>`, exactly the shape `references/backup-lane.md` documents" (`probe-record.md:27-31`). Item 51 keeps the `CommandLineToArgvW` escaping repair (`probe-record.md:112-137`).
-- **Item 31 is NOT fixed here**, and **item 58 is NOT fixed here** beyond anchoring this one new call.
+- **Item 31 is NOT fixed here**, and **item 58 is NOT fixed here** beyond naming the plugin root in the new calls - RESOLVED by the harness for the two in `SKILL.md`, only NAMED for the three in `backup-lane.md`.
 - **The resume-after-a-kill recovery is NOT blessed.** Its soundness is unmeasured.
 - **These pins must stay green** (`test_multi_model_verify.py:609-650`): five exact strings at `>= 2` across `SKILL.md`; `test_resume_pipes_the_brief_on_stdin` matching `$brief | codex exec ... resume <SESSION_ID> -` with `[^\n]*`; and the raw pin forbidding a three-space-indented `& {`.
 - **`test_backup_lane.py:47-50` is a whitespace-NORMALIZED read.** Pins on it prove neither wrapping nor byte identity.
@@ -217,9 +217,12 @@ Insert AFTER the sentence ending `is spent for nothing.` and BEFORE `Measured re
   snippets, which regenerated the same defect across four debate rounds:
   reserve, write, start and record are four steps, and a rule written in
   one place while the steps are copied to five cannot make them atomic.
-  The path is anchored to the plugin root because the three tool calls
-  this skill already makes are bare relative paths, which is backlog
-  item 58's own cause; a new call must not join that.
+  The path NAMES the plugin root because the three tool calls this skill
+  already makes are bare relative paths, which is backlog item 58's own
+  cause; a new call must not join that. Naming is not always resolving:
+  in SKILL.md the harness substitutes the token, and in backup-lane.md
+  the placeholder is filled in by the session, which is weaker and is
+  said rather than blurred.
   <!-- contract:end -->
 ```
 
