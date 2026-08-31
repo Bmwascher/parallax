@@ -87,6 +87,24 @@ Two traps in the dispatch scripts themselves, both measured 2026-08-04:
   `docs/superpowers/plans/rounds/2026-08-11-budget-flake-generator/`;
   do not read the rule above as a statement that the repo is clean.
 
+**The launch itself is no longer a copied snippet.** `tools/dispatch-detached.ps1`
+now owns it as one fail-closed transaction — reserve the dispatch
+directory, install the wrapper, start the process, record the pid and
+start ticks, write the commit marker, and publish the receipt last of
+all — and every lane calls it rather than writing its own. Written here
+as a plain repo-relative path: `CLAUDE.md` is neither skill body, where
+the harness substitutes `${CLAUDE_PLUGIN_ROOT}`, nor a lane's command
+literal, where `references/backup-lane.md` carries a session-filled
+`<plugin-checkout>` placeholder instead. The full contract lives in four
+regions in `skills/multi-model-verify/references/model-prompting-notes.md`:
+`detached-dispatch-tool`, `detached-dispatch-states`,
+`detached-dispatch-operation`, and `background-task-naming`.
+
+Name every backgrounded call for the person watching it. A reviewer round
+leads with its LANE and ROUND, as in `Sol R1 debate round` or
+`Kimi R2 debate round`. A gate or a mirror build has no lane, so it leads
+with its KIND instead, as in `Gate: pytest 5.1` or `Mirror build`.
+
 ## Dev loop
 The plugin is installed user-scope from a LOCAL marketplace pointing at
 this working copy, but installs are VERSIONED CACHE COPIES — checkout

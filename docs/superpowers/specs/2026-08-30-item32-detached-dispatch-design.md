@@ -62,13 +62,17 @@ version of this table said four and omitted the backup lane's write-probe.
 All five are shell calls that block the caller and can run past 600 seconds,
 and all five are detached by this work.
 
+**Corrected 2026-08-31, Task 9 reconciliation.** The tool became Task 1
+and pushed the two lanes down by one: the codex sites are Task 3, and the
+kimi sites are Task 4.
+
 | # | Site | Call | Disposition |
 |---|---|---|---|
-| 1 | `skills/multi-model-verify/SKILL.md:186` | codex round 1 | detached, Task 4 |
-| 2 | `skills/multi-model-verify/SKILL.md:248` | codex resume | detached, Task 4 |
-| 3 | `references/backup-lane.md:25` | kimi-code dispatch | detached, Task 5 |
-| 4 | `references/backup-lane.md:30` | kimi-code resume | detached, Task 5 |
-| 5 | `references/backup-lane.md:353-359` | kimi-code write-probe | detached, Task 5 |
+| 1 | `skills/multi-model-verify/SKILL.md:186` | codex round 1 | detached, Task 3 |
+| 2 | `skills/multi-model-verify/SKILL.md:248` | codex resume | detached, Task 3 |
+| 3 | `references/backup-lane.md:25` | kimi-code dispatch | detached, Task 4 |
+| 4 | `references/backup-lane.md:30` | kimi-code resume | detached, Task 4 |
+| 5 | `references/backup-lane.md:353-359` | kimi-code write-probe | detached, Task 4 |
 
 The write-probe runs before round 1 of every backup-lane debate, in a fresh
 disposable session carrying the full debate configuration, and
@@ -133,54 +137,86 @@ same." These are not the same, and the reason differs in each case.
   `check-drift.ps1` can use `Start-Job` precisely because it starts and
   waits inside one long-lived script.
 
-### The mechanism: a generated wrapper launched with `Start-Process`
+### The mechanism: a shipped tool launches and polls a generated wrapper body
 
-1. The session writes a **wrapper script** to its scratchpad containing
-   the existing pipeline verbatim — the `$OutputEncoding` preamble, the
-   strict-UTF-8 brief read, the override hash check, the native call, and
-   the `finally` restore.
-2. The session launches it with `Start-Process` on the PowerShell host,
-   `-NoNewWindow -PassThru`, and writes `$proc.Id` to a **pid file**. The
-   call returns at once.
-3. Later calls **poll** the pid, and read a **sidecar exit-code file** the
-   wrapper writes as its last act.
+**Corrected 2026-08-31, Task 9 reconciliation, round 10's finding.** The
+debate rejected a session-owned `Start-Process` launch in favour of one
+shipped tool. This section previously still described the rejected
+design; it now describes the transaction the plan builds.
+
+1. The session writes a **wrapper body** to a dispatch directory,
+   carrying the lane's client invocation verbatim — for the codex lane,
+   the `$OutputEncoding` preamble, the strict-UTF-8 brief read, the
+   override hash check, the native call, and the `finally` restore; for
+   the Kimi lane, its own inline `-p <brief>` invocation, unchanged.
+2. The session calls `tools/dispatch-detached.ps1 -Launch`, naming a
+   `-DispatchDir`, the `-WrapperBody` file, a `-ReceiptPath`, and a
+   `-Round` label. The tool runs the whole launch as ONE transaction: it
+   checks the receipt path is fresh and outside the dispatch directory,
+   reserves the directory, installs the wrapper, starts the process,
+   records the pid and its start ticks, writes the internal launch-commit
+   marker, and publishes the EXTERNAL RECEIPT last of all — a failure at
+   any point after the process starts kills the tree and BLOCKS rather
+   than leaving it unrecorded. The call returns at once and does not wait
+   on the wrapper.
+3. Later calls **poll the RECEIPT**, never a bare directory:
+   `tools/dispatch-detached.ps1 -Poll -Receipt <path> -ExpectedDispatchDir
+   <path> -ExpectedRound <label>`. A refused launch writes no receipt, so
+   a caller cannot poll the directory it was just refused — an absent,
+   unreadable, or schema-failing receipt is no-receipt, and a receipt
+   whose directory or round is not the one the caller says it is polling
+   for is receipt-not-expected; both stop before anything else is opened.
 4. Completion is read from the reply file as it is today; the route check
    and the round-evidence binding are unchanged.
 
 Three details are load-bearing, and each has in-repo precedent at
 `tools/check-drift.ps1:903-945`:
 
-- **The exit code comes from a sidecar file, not from `$proc.ExitCode`.**
-  On Windows PowerShell 5.1 the file-redirect form of `Start-Process`
-  never retains a native process handle, and `$proc.ExitCode` silently
-  reads null when the child exits before the next statement touches
-  `.Handle`. A review round always wins that race. The sidecar survives
-  it by construction.
-- **The encoding preamble moves INSIDE the wrapper.** `Start-Process`
-  starts a new process, which does not inherit the caller's
-  `$OutputEncoding`. Wrapping today's block without moving the preamble
-  would silently reinstate the 0.23.0 defect and send the reviewer a
-  brief nobody wrote. This is the single most likely way to get this
-  build wrong.
-- **A wrapper FILE rather than `-ArgumentList`.** PowerShell 5.1 native
-  argument splatting strips embedded double quotes, and
-  `Start-Process -ArgumentList` joins its array into one string. The
-  override `-c` value and the brief must not cross that boundary. A file
-  has no quoting layer at all.
+- **The exit code comes from a sidecar file, not from a captured process
+  handle.** On Windows PowerShell 5.1 a file-redirected child process
+  handle is not reliably retained across the launcher call, and a review
+  round always wins that race. The sidecar survives it by construction.
+- **The encoding preamble is lane-specific, not universal.** The codex
+  lane's wrapper carries the `$OutputEncoding` preamble because its brief
+  goes down a PIPE; moving that preamble outside the wrapper would
+  silently reinstate the 0.23.0 defect. The Kimi lane's wrapper carries no
+  such preamble, because its brief goes as an ARGUMENT — a different
+  transport with a different defect, which item 51 owns.
+- **A wrapper FILE removes one serialization boundary, not every quoting
+  layer.** PowerShell 5.1 native argument splatting strips embedded double
+  quotes, and a file for the codex lane's override `-c` value and brief
+  keeps them off that boundary. The Kimi lane's wrapper still passes its
+  brief inline as `-p <brief>`, so item 51's argv-escaping repair is
+  untouched by this design.
 
-Polling uses `Get-Process -Id` / `Wait-Process -Id`, never `ps -p` from
-Git Bash: Git Bash cannot see Windows PIDs and reports a live process as
-gone.
+Polling uses `Get-Process -Id`, never `ps -p` from Git Bash: Git Bash
+cannot see Windows PIDs and reports a live process as gone.
 
 ### The orphan half of item 32
 
+**Corrected 2026-08-31, Task 9 reconciliation, round 19's finding.**
+Revision 13 moved the receipt to be the transaction's last act, which made
+the earlier form of this section's answer exactly backwards for the
+dangerous case; both cases below must be stated or the reconciled spec
+could omit the second and every Task 9 check would still pass.
+
 Item 32 records that the killed codex process SURVIVES the caller's kill,
 idle at zero CPU, holding whatever the round held, and that nothing tells
-a session to look for one. The detached form gives that a documented
-answer: the pid is on disk, so a session can find the process and fell
-the tree with `taskkill /PID <id> /T /F`. `check-drift.ps1:944` already
-uses that form and records why `$proc.Kill()` alone is not enough — it
-stops only the wrapper and leaves the child running.
+a session to look for one. This gives that a documented answer: the pid
+is on disk for every committed launch, so a session can find the process
+and fell the tree with `taskkill /PID <id> /T /F`; `check-drift.ps1:944`
+already uses that form and records why `$proc.Kill()` alone is not
+enough — it stops only the wrapper and leaves the child running. That
+answer covers the committed case only. For the dangerous case, an
+interrupted launch leaves no receipt, and in its worst form may leave no
+pid either, which is the one case that command cannot clear, because
+there is no `<id>` to pass. There is a SECOND case that command cannot
+clear: a committed launch whose wrapper host died while the client child
+lives on — the pid on disk is the dead wrapper, so felling that tree
+reports process-not-found and never reaches the orphan. Clearing either
+one means finding the process by another route — its command line, its
+working directory — and both are unmeasured here, so surface them to the
+user rather than claiming a remedy.
 
 ## Constraints that must survive
 
@@ -188,26 +224,40 @@ Any implementation that breaks one of these is wrong even if the round
 completes.
 
 - **A killed, hung, or unfinished round must never be readable as a
-  completed one.** LIVENESS IS CHECKED FIRST and dominates: while the
-  recorded pid is alive the round is RUNNING and no file is interpreted,
-  because a reply being written is not a reply. After the process is
-  confirmed gone the poll must distinguish SEVEN states: running; no exit
-  file; an exit file that cannot be read or is not a plain integer; a
-  non-zero code; zero with no reply artifact; zero with a reply artifact
-  that is empty, unreadable, or refused by the lane's own round-evidence
-  binding; and zero with a reply artifact the binding ACCEPTS. Only the
-  last is a review result.
+  completed one.** **Corrected 2026-08-31, Task 9 reconciliation.** The
+  poll computes exactly one of twelve states, in one fixed order, and
+  stops at the first that matches: no-receipt, receipt-not-expected,
+  launch-unknown, launch-not-ours, pid-unreadable, running, no-exit-file,
+  exit-unreadable, exit-nonzero, no-reply, reply-empty, reply-present.
+  Liveness is checked sixth, not first: receipt validity, expected-act
+  identity, the commit marker, and the token and the pid all precede it,
+  because a receipt that does not even describe the act being polled must
+  never reach a liveness check at all. While the recorded pid is alive and
+  its start time matches the receipt's, the round is RUNNING and no
+  further file is interpreted, because a reply being written is not a
+  reply. Only reply-present is a review result, and not by itself: the
+  lane's own round-evidence binding must also accept it.
 
-  This count reached seven over three debate rounds and it is worth
-  recording how. The first draft said four. Round 1 found that a stale
-  exit file plus a fresh reply plus a killed wrapper read as complete.
-  Round 2 found the five-state replacement duplicating one state and
-  omitting "zero with no reply". Round 3 found that state accepting a
-  reply on PATH EXISTENCE alone, and that liveness was never given
-  priority. Treat the class as open.
-- **`test_the_brief_is_read_and_piped_as_utf8`** counts four exact
+  This count reached twelve over the whole debate and it is worth
+  recording how it grew past the seven an earlier revision settled on.
+  The first draft said four. Round 1 found that a stale exit file plus a
+  fresh reply plus a killed wrapper read as complete. Round 2 found the
+  five-state replacement duplicating one state and omitting "zero with no
+  reply". Round 3 found that state accepting a reply on PATH EXISTENCE
+  alone, and that liveness was never given priority. Round 4 found a
+  condition outside the state model entirely. Rounds 6 through 9 found a
+  fifth false-completion path — an old completed directory answering
+  after a refused launch — which is what the receipt, and its two new
+  states checked before anything else opens, exist to close. Treat the
+  class as open.
+- **`test_the_brief_is_read_and_piped_as_utf8`** counts five exact
   strings at `>= 2` occurrences each across `SKILL.md`. The wrapper body
-  must carry those lines verbatim in BOTH blocks.
+  must carry those lines verbatim in BOTH the fresh and the resumed codex
+  blocks. The encoding claim is lane-specific, not universal: the codex
+  lane's wrapper carries this preamble because its brief goes down a
+  PIPE, and the Kimi lane's wrapper carries none, because its brief goes
+  as an ARGUMENT — a different transport with a different defect, which
+  item 51 owns.
 - **`test_resume_pipes_the_brief_on_stdin`** matches
   `$brief | codex exec ... resume <SESSION_ID> -` with `[^\n]*`, so that
   span must stay on ONE physical line.
@@ -244,10 +294,11 @@ Tests change first, then the skill. That is the repo rule and these are
 live-verified contracts.
 
 - **New contract regions**, one pin each, added to `DECLARED_REGIONS` in
-  `evals/multi-model-verify/test_contract_coverage.py`. Proposed names:
-  `detached-dispatch-codex` and `detached-dispatch-backup`. Two rather
-  than one because a region must fit inside a single pin and the two
-  lanes state different things.
+  `evals/multi-model-verify/test_contract_coverage.py`: `detached-dispatch-tool`,
+  `detached-dispatch-states`, `detached-dispatch-operation`, and
+  `background-task-naming`, all four in `model-prompting-notes.md`, plus
+  `back-channel-auto-mirror` in `SKILL.md` for item 33's own scope
+  increase.
 - **Amend, do not duplicate**, the existing pins that lock the current
   command shape. `test_the_brief_is_read_and_piped_as_utf8` and
   `test_resume_pipes_the_brief_on_stdin` both encode review findings; the
@@ -271,10 +322,17 @@ later cycle would otherwise re-derive.
    `SKILL.md` had twenty characters of headroom before its soft warning,
    which decided it. `SKILL.md` names the state count at the point of use
    and cites the region for the rest.
-2. **Wrapper shipped under `tools/` or written per dispatch — SETTLED:
-   written per dispatch, into a directory the dispatch creates.** Item 58
-   is the argument against a new shipped tool: the skill has already
-   failed to find its own tooling once and reported a false BLOCKED.
+2. **Wrapper shipped under `tools/` or written per dispatch — SETTLED,
+   then REOPENED AND REVERSED on 2026-08-30, by the user.** The design
+   first settled on "written per dispatch, into a directory the dispatch
+   creates," on the argument that item 58 counts against a new shipped
+   tool: the skill has already failed to find its own tooling once and
+   reported a false BLOCKED. Sol and Fable were then polled separately on
+   that fork, during the debate, and both independently chose a shipped
+   tool. The user approved reversing the design-phase choice. The launch
+   and poll mechanism now ships as ONE tool, `tools/dispatch-detached.ps1`;
+   only the lane-specific wrapper body — the client invocation itself — is
+   still written fresh per dispatch, into the directory the tool reserves.
 3. **Whether a timeout is documented — SETTLED at THIRTY MINUTES**, by the
    user on 2026-08-30, after Sol round 1 refused to leave it open. Each
    poll is bounded and returns; at thirty minutes without a terminal state
@@ -284,11 +342,14 @@ later cycle would otherwise re-derive.
 
 ## The contract regions this design produces
 
-Five, in `model-prompting-notes.md`: `detached-dispatch-mechanism`,
-`detached-dispatch-launch`, `detached-dispatch-states`,
-`detached-dispatch-operation`, and `background-task-naming`. Naming is
-separate from operation because it is the only one nothing enforces, and
-a naming edit must not reopen a completion-safety pin.
+**Corrected 2026-08-31, Task 9 reconciliation.** Four, in
+`model-prompting-notes.md`: `detached-dispatch-tool`,
+`detached-dispatch-states`, `detached-dispatch-operation`, and
+`background-task-naming`. Naming is separate from operation because it is
+the only one nothing enforces, and a naming edit must not reopen a
+completion-safety pin. A fifth region, `back-channel-auto-mirror`, lives
+in `SKILL.md` instead and belongs to item 33's own scope increase, not to
+this design's four.
 
 ## Item 33: build the review mirror instead of asking whether to
 
