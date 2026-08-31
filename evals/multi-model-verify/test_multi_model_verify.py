@@ -734,6 +734,29 @@ class TestTransportContract:
             "the ingestion probe results must be documented in the notes"
         )
 
+    def test_the_back_channel_response_is_automatic(self):
+        """Backlog item 33. The CHECK is not removed; only the question.
+
+        Filed 2026-08-11 with a screenshot from ANOTHER repo, so a skill
+        defect rather than a parallax quirk, and restated by the user on
+        2026-08-30 when it fired again mid-cycle.
+        """
+        text = " ".join(read(SKILL_MD).split())
+        assert (
+            "If present: BUILD THE MIRROR AND REPORT. Do NOT ask first - "
+            "every deletion happens in a file COPY, and the remediation "
+            "commit runs with repository hooks suppressed, so nothing in "
+            "the reviewed tree executes and there is no destructive act "
+            "to consent to. What was found is still EVIDENCE and still "
+            "goes in the debate record with its paths, and the "
+            "post-mirror re-enumeration must still come back empty before "
+            "any round dispatches. A mirror that cannot be built - path "
+            "budget blown, scratch unavailable, hooks not suppressible - "
+            "is BLOCKED, never a fallback to dispatching over the real "
+            "tree.") in text
+        assert "only on the user's choice, never automatically" not in text
+        assert "STOP and surface it to the user" not in text
+
     def test_fresh_per_round_files(self):
         # After a failed call, a reused --output-last-message path serves
         # the PREVIOUS round's reply and reads exactly like success

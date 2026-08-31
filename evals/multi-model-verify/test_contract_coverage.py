@@ -743,6 +743,12 @@ DECLARED_REGIONS = {
     "detached-dispatch-states",
     "detached-dispatch-operation",
     "background-task-naming",
+    # 0.28.0, backlog item 33. The prompt put "skip the cross-vendor
+    # lane" one tap from the recommended answer, and the answer never
+    # differed. This region holds what SURVIVES the prompt's removal -
+    # the evidence duty, the empty re-enumeration, the hook suppression,
+    # and BLOCKED - rather than the removal itself.
+    "back-channel-auto-mirror",
 }
 
 
