@@ -779,7 +779,13 @@ The ceiling decision was made in Task 3 step 5, where it has to be: strict lint 
 
 - [ ] **Step 2: Reconcile the spec with the plan**
 
-**Correct the scope table's task numbers.** `docs/superpowers/specs/2026-08-30-item32-detached-dispatch-design.md:65-71` assigns the two codex sites to Task 4 and the three kimi sites to Task 5. The plan implements them in Task 3 and Task 4, because the tool became Task 1 and pushed everything down. Round 11's finding: the reconciliation list named five things and not this one, and the convergence grep searches for stale prose rather than stale task numbers. Its oracle: after the edit, the table's five rows must read `Task 3`, `Task 3`, `Task 4`, `Task 4`, `Task 4`, checked by reading the five rows, and `grep -n "Task 5" docs/superpowers/specs/2026-08-30-item32-detached-dispatch-design.md` must return nothing outside a passage narrating history.
+**Correct the scope table's task numbers.** `docs/superpowers/specs/2026-08-30-item32-detached-dispatch-design.md:65-71` assigns the two codex sites to Task 4 and the three kimi sites to Task 5. The plan implements them in Task 3 and Task 4, because the tool became Task 1 and pushed everything down. Round 11's finding: the reconciliation list named five things and not this one, and the convergence grep searches for stale prose rather than stale task numbers. Its oracle asserts the mapping EXACTLY, rather than only rejecting the old number. Round 12's finding: a grep for `Task 5` is satisfied by a table reading `Task 4` five times, and "read the five rows" is an instruction to a person, not a task-local oracle.
+
+```bash
+python -c "import io,re;t=io.open('docs/superpowers/specs/2026-08-30-item32-detached-dispatch-design.md',encoding='utf-8').read();rows=[l for l in t.splitlines() if re.match(r'^\| [1-5] \|',l)];got=[re.search(r'Task \d+',l).group(0) for l in rows];assert got==['Task 3','Task 3','Task 4','Task 4','Task 4'],got;print('scope table ok',got)"
+```
+
+Expected: `scope table ok` and exit 0. Any other five values, or a row that lost its task number, raises and fails the step.
 
 **Replace the spec's mechanism section outright.** `docs/superpowers/specs/2026-08-30-item32-detached-dispatch-design.md:136-148` still describes the SESSION running `Start-Process`, writing the pid file, and polling it - the design the debate rejected in favour of a shipped tool. Round 10's finding: Task 9 updated five things around that section and never replaced the section itself, and the convergence grep does not search for a session-owned launch. Replace it with the transaction this plan builds: the session writes a wrapper body and calls the tool; the tool checks the receipt path, reserves the directory, installs the wrapper, starts the process, records the pid and start ticks, writes the commit marker, and publishes the receipt; later calls poll the RECEIPT with the expected directory and round.
 
@@ -803,10 +809,10 @@ Then run a POSITIVE oracle, because a grep for stale words cannot show that the 
 
 ```bash
 sec=$(sed -n '/^### The mechanism/,/^## /p' docs/superpowers/specs/2026-08-30-item32-detached-dispatch-design.md)
-for t in "dispatch-detached.ps1" "-ReceiptPath" "-ExpectedDispatchDir"; do printf '%s: ' "$t"; printf '%s' "$sec" | grep -c -- "$t"; done
+for t in "dispatch-detached.ps1" "-ReceiptPath" "-ExpectedDispatchDir"; do printf '%s: ' "$t"; printf '%s' "$sec" | grep -c -- "$t"; printf '%s' "$sec" | grep -q -- "$t" || exit 1; done
 ```
 
-Expected: every one of the three at least 1. Round 10's finding: every oracle in this step searched only for what should be gone, so a section deleted and never rewritten passed it. Round 11's finding on the first attempt at a fix: `grep -c "A\|B\|C"` counts LINES matching any alternative, so three lines carrying only the first token satisfied "at least three" while the other two were absent, and it was not scoped to the section at all.
+Expected: every one of the three at least 1, AND exit 0. The `|| exit 1` is the whole oracle. Round 12's finding on the SECOND attempt at this same check: a loop's status is its last iteration's, so a missing first token printed `0` and the block still succeeded, which is the defect this step exists to catch, reproduced inside its own fix. Round 10's finding: every oracle in this step searched only for what should be gone, so a section deleted and never rewritten passed it. Round 11's finding on the first attempt at a fix: `grep -c "A\|B\|C"` counts LINES matching any alternative, so three lines carrying only the first token satisfied "at least three" while the other two were absent, and it was not scoped to the section at all.
 - `-Token` and `-DispatchDir <dispatch-dir> -Json` are stale because the poll now names a RECEIPT.
 
 - [ ] **Step 4: Run the five local gates, detached**
