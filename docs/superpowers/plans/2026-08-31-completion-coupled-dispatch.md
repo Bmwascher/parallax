@@ -566,11 +566,16 @@ task closes that before anything depends on it.
 
 **Files:**
 - Modify: `tools/new-review-mirror.ps1`
-- Modify: `skills/multi-model-verify/references/backup-lane.md` - the
-  paragraph telling the reader to re-run `-VerifyIdentity` with "the three
-  recorded values"
+- Modify: `skills/multi-model-verify/references/backup-lane.md` - TWO
+  paragraphs. The one telling the reader to re-run `-VerifyIdentity` with
+  "the three recorded values", and the copied-in-inputs paragraph, which
+  must now name inputs to the BUILD with `-ExtraInput` instead of copying
+  them in afterwards.
 - Modify: `evals/multi-model-verify/test_backup_lane.py` - the pin that
-  quotes that sentence verbatim
+  quotes the first of those sentences verbatim
+- Modify: `docs/superpowers/plans/2026-07-27-0150-backlog.md` - it states
+  the same "three recorded values" rule as a live item's standing premise.
+  A working document, not a historical record.
 - Test: `evals/multi-model-verify/test_review_mirror.py` (the module that
   already exists - do NOT create a new one)
 
