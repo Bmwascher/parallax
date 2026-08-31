@@ -190,6 +190,7 @@ toggled on, its stop-time review overlaps mode `diff` — expected, not a bug.
    The wrapper body is today's block with the exit scaffolding added and `$d`
    supplied by the tool as the directory the wrapper runs in:
 
+   <!-- wrapper:codex-fresh -->
    ```powershell
    $code = 1
    $priorOutputEncoding = $OutputEncoding
@@ -292,6 +293,7 @@ toggled on, its stop-time review overlaps mode `diff` — expected, not a bug.
    Compose the rebuttal and launch the same wrapper shape as round 1,
    with the resumed call:
 
+   <!-- wrapper:codex-resume -->
    ```powershell
    $code = 1
    $priorOutputEncoding = $OutputEncoding
