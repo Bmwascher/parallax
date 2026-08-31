@@ -188,9 +188,23 @@ Any implementation that breaks one of these is wrong even if the round
 completes.
 
 - **A killed, hung, or unfinished round must never be readable as a
-  completed one.** The poll must distinguish four states: still running;
-  exited non-zero; exited zero WITH a freshly written reply file; exited
-  zero with NO reply file. Only the third is a review result.
+  completed one.** LIVENESS IS CHECKED FIRST and dominates: while the
+  recorded pid is alive the round is RUNNING and no file is interpreted,
+  because a reply being written is not a reply. After the process is
+  confirmed gone the poll must distinguish SEVEN states: running; no exit
+  file; an exit file that cannot be read or is not a plain integer; a
+  non-zero code; zero with no reply artifact; zero with a reply artifact
+  that is empty, unreadable, or refused by the lane's own round-evidence
+  binding; and zero with a reply artifact the binding ACCEPTS. Only the
+  last is a review result.
+
+  This count reached seven over three debate rounds and it is worth
+  recording how. The first draft said four. Round 1 found that a stale
+  exit file plus a fresh reply plus a killed wrapper read as complete.
+  Round 2 found the five-state replacement duplicating one state and
+  omitting "zero with no reply". Round 3 found that state accepting a
+  reply on PATH EXISTENCE alone, and that liveness was never given
+  priority. Treat the class as open.
 - **`test_the_brief_is_read_and_piped_as_utf8`** counts four exact
   strings at `>= 2` occurrences each across `SKILL.md`. The wrapper body
   must carry those lines verbatim in BOTH blocks.
@@ -207,10 +221,15 @@ completes.
 
 ## Non-goals, stated so they are not read as done
 
-- **Item 51 is NOT fixed.** The kimi wrapper keeps the inline
-  `-p "<the whole brief>"` argument path exactly as documented today.
-  Backgrounding the launch does not touch 5.1's mangling of that
-  argument. Item 51 stays open and stays ranked second.
+- **Item 51 is NOT fixed, and the Kimi lane IS detached.** The kimi
+  wrapper keeps the inline `-p` argument path exactly as documented
+  today, and backgrounding the launch does not touch 5.1's mangling of
+  that argument. Item 51 stays open, stays ranked second, and keeps the
+  `CommandLineToArgvW` escaping repair. An earlier revision of this
+  design DEFERRED the whole lane on the theory that a wrapper must
+  change the argument path; Sol round 2 refuted that against item 51's
+  own probe record and the deferral was withdrawn. All three of the
+  lane's calls are detached by this work.
 - **Item 31 is NOT fixed.** The defective pipes at
   `tools/check-drift.ps1:1060` and `commands/doctor.md:70` are not
   touched here.
@@ -242,20 +261,34 @@ live-verified contracts.
 - Full gates: the five local gates, both PowerShell hosts, and the
   behavioural runner, because `skills/` changes.
 
-## Open questions for the plan debate
+## Questions the debate settled
 
-1. Where does the poll step live — a third fenced block in `SKILL.md`, or
-   `model-prompting-notes.md`? A third block in `SKILL.md` is more likely
-   to be read and costs the file's token budget, which item 19 already
-   trimmed once.
-2. Is the wrapper written per round to the scratchpad, or shipped under
-   `tools/`? This design says scratchpad. Item 58 is the argument against
-   a new shipped tool: the skill has already failed to find its own
-   tooling once and reported a false BLOCKED.
-3. Is a timeout documented at all, and what does the session do at it? A
-   documented "kill the tree at N minutes" reintroduces a caller kill,
-   just a later one. Leaving it out risks a session waiting on a hung
-   process forever.
+All three of this design's open questions are closed. They are kept with
+their answers rather than deleted, because the reasoning is the part a
+later cycle would otherwise re-derive.
+
+1. **Where the poll step lives — SETTLED: `model-prompting-notes.md`.**
+   `SKILL.md` had twenty characters of headroom before its soft warning,
+   which decided it. `SKILL.md` names the state count at the point of use
+   and cites the region for the rest.
+2. **Wrapper shipped under `tools/` or written per dispatch — SETTLED:
+   written per dispatch, into a directory the dispatch creates.** Item 58
+   is the argument against a new shipped tool: the skill has already
+   failed to find its own tooling once and reported a false BLOCKED.
+3. **Whether a timeout is documented — SETTLED at THIRTY MINUTES**, by the
+   user on 2026-08-30, after Sol round 1 refused to leave it open. Each
+   poll is bounded and returns; at thirty minutes without a terminal state
+   the round is reported UNFINISHED and the user chooses to keep waiting
+   or abandon. Neither answer is ever a review result, which is what
+   stops a timeout policy from recreating the failure it manages.
+
+## The contract regions this design produces
+
+Five, in `model-prompting-notes.md`: `detached-dispatch-mechanism`,
+`detached-dispatch-launch`, `detached-dispatch-states`,
+`detached-dispatch-operation`, and `background-task-naming`. Naming is
+separate from operation because it is the only one nothing enforces, and
+a naming edit must not reopen a completion-safety pin.
 
 ## Item 33: build the review mirror instead of asking whether to
 
