@@ -311,6 +311,18 @@ stray `AGENTS.md` reached this branch, and how it survived the first
 attempt to remove it: the cross-vendor reviewer found it still present at
 the declared head after the ledger said it was gone.
 
+It has a second, worse form, and I committed it while writing the
+paragraph above: `git add -A` run while a SUBAGENT is working in the same
+tree sweeps that agent's half-finished files into your commit. It happened
+here at `993c4f2`, which took 133 lines of an implementer's in-progress
+test file under a message about a ledger. Split back out immediately, but
+the branch would otherwise carry a commit whose message describes nothing
+it contains, and the agent would later commit a diff missing its own work.
+
+So the rule is not "be careful with `git add -A`". It is: NEVER `git add
+-A` while a subagent is live in the same working tree. Stage explicit
+paths, or commit with a pathspec.
+
 Same family as the recorded trap that a `git checkout` of a path writes the
 INDEX. The remedy used here: untrack, then ALSO gitignore, so the sweep
 cannot re-add it. The preflight still sees it, because that enumeration
