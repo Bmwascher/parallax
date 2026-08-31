@@ -282,3 +282,36 @@ a completed one. That value never depended on the kill premise.
 in `CLAUDE.md` and treated as settled through five release cycles, was
 never re-measured against a newer client. Nobody checked because it was
 written down. The user re-derived it from what was in front of him.
+
+## Two process defects this cycle produced, worth carrying forward
+
+### Subagents end a turn to wait instead of reporting
+
+FOUR implementer dispatches in this cycle ended a turn saying they would
+wait for a background notification, returning no report at all: Task 1 and
+Task 9 of the item 32 plan, and Tasks 1 and 1a of the tracked-background
+plan. Each needed a message telling it to read its own run's output file
+and finish. None had actually failed; the work was on disk every time.
+
+The prompt already said "End your turn with the report itself. Do not end a
+turn saying you will wait for a notification." That instruction does not
+hold. What recovers it, every time, is a follow-up naming the output file
+and telling the agent to read it with the Read tool.
+
+Worth a backlog item: the implementer agent should be told that a
+background run's output file is readable NOW and that waiting is never the
+right end of a turn.
+
+### `git add -A` re-tracks a file you just untracked
+
+`git rm --cached AGENTS.md` stages the deletion. A later `git add -A` in
+the same session re-adds the file, silently reversing it, and the commit
+then contains the file the earlier command removed. That is exactly how the
+stray `AGENTS.md` reached this branch, and how it survived the first
+attempt to remove it: the cross-vendor reviewer found it still present at
+the declared head after the ledger said it was gone.
+
+Same family as the recorded trap that a `git checkout` of a path writes the
+INDEX. The remedy used here: untrack, then ALSO gitignore, so the sweep
+cannot re-add it. The preflight still sees it, because that enumeration
+uses `--others` WITHOUT `--exclude-standard`.
