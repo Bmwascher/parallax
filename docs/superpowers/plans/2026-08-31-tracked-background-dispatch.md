@@ -1,5 +1,15 @@
 # Tracked Background Dispatch Implementation Plan
 
+> **WITHDRAWN 2026-08-31, before Task 3, on the owner's decision.** Do not
+> build from this file. A cross-vendor review returned ESCALATE and the
+> session REPRODUCED its headline finding: the two-write publication of
+> `pid` and `startticks` lets an unfinished second run read as a completed
+> one at exit 0, which is the exact class this whole cycle exists to close.
+> Five further blocking findings, the full reasoning, and what the
+> replacement plan must carry are in
+> `docs/superpowers/plans/rounds/2026-08-31-tracked-background-plan-debate/ESCALATION.md`.
+> Tasks 1, 1a and 2 remain committed as evidence and must not be built on.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Stop a review round from owning the session while it runs, without giving up the user's view of it: the tool prepares the round and the harness runs it as a TRACKED BACKGROUND command, named for its lane and round.

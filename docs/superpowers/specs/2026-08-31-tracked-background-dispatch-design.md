@@ -1,5 +1,13 @@
 # Tracked background dispatch: design
 
+> **The launch mechanism in this spec is WITHDRAWN, 2026-08-31.** Its
+> identity publication is not atomic and reintroduces a false-completion
+> path. The correction of the PREMISE below - that the 600-second ceiling
+> does not kill, and that the real defect is a foreground call owning the
+> session - is MEASURED and stands. Read
+> `docs/superpowers/plans/rounds/2026-08-31-tracked-background-plan-debate/ESCALATION.md`
+> before writing the replacement.
+
 **Supersedes the launch half of**
 `docs/superpowers/specs/2026-08-30-item32-detached-dispatch-design.md`.
 That spec's completion model, receipt transaction, state machine and exit
