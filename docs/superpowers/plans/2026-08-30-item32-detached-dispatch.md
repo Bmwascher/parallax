@@ -45,10 +45,13 @@ This is the whole point of revision 5. The four steps become one transaction in 
 **Interfaces:**
 - Consumes: nothing.
 - Produces two modes, and every later task depends on these exact names:
-  - `-Launch -DispatchDir <path> -WrapperBody <path> [-WorkingDirectory <path>] [-Json]`
-  - `-Poll -DispatchDir <path> -Token <token> [-Json]`
-- **`-Launch` mints an unpredictable TOKEN on success, writes it inside `launch.committed`, and returns it. `-Poll` requires it.** Round 6 found the fifth false-completion path without it: an old directory left by a finished round carries a commit marker, a dead pid, `exit` of zero and a real reply; a new round reusing that path is correctly REFUSED by `-Launch`, and then the poll reads the old round's artifacts and reports `reply-present`. The refusal was tested; polling the refused directory afterwards was not.
-- `-Launch` prints, and `-Poll` returns, JSON with `state` drawn from exactly: `launch-unknown`, `launch-not-ours`, `pid-unreadable`, `running`, `no-exit-file`, `exit-unreadable`, `exit-nonzero`, `no-reply`, `reply-empty`, `reply-present`.
+  - `-Launch -DispatchDir <path> -WrapperBody <path> -ReceiptPath <path> -Round <label> [-WorkingDirectory <path>] [-Json]`
+  - `-Poll -Receipt <path> [-Json]`
+- **`-Poll` names a RECEIPT, never a directory.** Round 6 asked for a launch token and revision 6 supplied one; round 7 showed a token stored inside the artifact it authenticates is not evidence of anything, because the caller can read it out of the old directory it is already looking at and hand it straight back. So the receipt is written OUTSIDE the dispatch directory, at a path `-Launch` refuses if it already exists, LAST of all and only on success. A refused launch writes no receipt, so there is nothing for a caller to substitute from the directory it was refused.
+- The receipt is JSON: the dispatch directory, the minted token, the `-Round` label, and the launched process's start-time ticks. `-Poll` reads it, and its own JSON echoes `round` back. That is the visibility half: a poll answering for a different round says so in the field the caller records.
+- **The residual, stated rather than claimed closed.** A caller that hands `-Poll` a PREVIOUS round's receipt file gets that round's result, and nothing inside the tool can tell. The controls are that every round uses a FRESH round-numbered receipt path, that `-Launch` refuses an existing one, and that the echoed `round` makes a mismatch visible in the record. This is NARROWED, exactly like LAUNCH UNKNOWN, and the contract says so in the same words.
+- `-Launch` prints, and `-Poll` returns, JSON with `state` drawn from exactly ELEVEN names: `no-receipt`, `launch-unknown`, `launch-not-ours`, `pid-unreadable`, `running`, `no-exit-file`, `exit-unreadable`, `exit-nonzero`, `no-reply`, `reply-empty`, `reply-present`.
+- `no-receipt` deliberately FOLDS three inputs - the receipt path is absent, or unreadable, or is not the JSON this tool writes. They are folded because their disposition is identical and no branch follows any of them. It is a decision, not an omission.
 - Exit codes match `new-review-mirror.ps1:17-18`: 0 clean, 1 blocked with the reason on stdout, 2 script or environment error.
 
 - [ ] **Step 1: Write the failing tests**
@@ -62,13 +65,28 @@ Cases, each named for what it protects:
 - `test_a_committed_launch_publishes_pid_then_commit_last` — `launch.committed` is written AFTER `pid`, and its presence is what distinguishes a committed launch. Assert the order by content, not by timestamp.
 - `test_a_failure_after_start_kills_the_tree_and_blocks` — inject a failure between start and commit; expect exit 1 and the started process gone. This is the state Sol said cannot be eliminated, so the tool must at least not leave it silently.
 - `test_poll_reports_launch_unknown_when_commit_is_absent` — a reserved directory with no `launch.committed`; expect `launch-unknown`. Not running, not failed, not complete.
-- `test_a_refused_launch_cannot_poll_the_old_rounds_reply` — **the round 6 regression.** Run a stub launch to completion so the directory holds a real commit, pid, `exit` of `0` and a reply. Launch AGAIN on the same path and take the refusal. Then poll with the token the second launch would have used. Expect `launch-not-ours`, never `reply-present`. This is the case the taken-directory test never reached, because it stopped at the refusal.
-- `test_poll_rejects_a_token_that_does_not_match` — a committed directory polled with any other token; expect `launch-not-ours`.
+- `test_a_refused_launch_writes_no_receipt_and_cannot_be_polled` — **the round 6 regression, rewritten because round 7 showed the previous version was impossible to run.** It said to poll with "the token the second launch would have used", and a refused launch mints nothing. Instead: run a stub launch to completion against receipt `R1`, so the directory holds a real commit, pid, `exit` of `0` and a reply. Launch AGAIN on the same directory naming a FRESH receipt path `R2`. Take the refusal, assert `R2` was never created, then poll `-Receipt R2`. Expect `no-receipt`, never `reply-present`.
+- `test_a_stale_receipt_answers_for_its_own_round_and_says_so` — poll the same finished directory with `R1`. It DOES report `reply-present`, because it truthfully describes R1's round; assert the returned `round` field is R1's label and not the second round's. This is the residual the contract admits, and the test exists so the residual is a measured behaviour rather than a hope.
+- `test_poll_rejects_a_receipt_whose_token_is_not_the_committed_one` — a receipt pointing at a directory whose `launch.committed` holds a different token; expect `launch-not-ours`.
 - `test_poll_reports_pid_unreadable_when_the_pid_is_missing_or_malformed` — a committed directory whose `pid` is absent, empty, or not an integer. Round 6 found the poll jumping from commit existence straight to "pid alive", so such an input fell through to the terminal branches and could reach `reply-present`.
+- `test_a_recycled_pid_is_not_read_as_running` — the receipt's start-time ticks do not match the live process now holding that pid. Expect the poll to treat our process as GONE and continue to the terminal artifacts, never `running`. Round 7's finding: pid identity was numeric only. `tools/kimi-lane-lock.ps1:219-236` already solves this exact problem in this repo - `Get-Liveness` compares `StartTime.ToUniversalTime().Ticks` and returns LIVE, DEAD or UNMEASURABLE - so copy that shape rather than inventing one.
+- `test_an_unmeasurable_start_time_is_pid_unreadable` — the live-pid branch cannot read a start time. Expect `pid-unreadable`, which is neither `running` nor terminal. `kimi-lane-lock.ps1` keeps UNMEASURABLE distinct from both for the same reason: an unmade measurement must never look like a made one.
 - `test_poll_reports_running_while_the_pid_is_alive` — and asserts that NO other file is read in that branch, because a reply being written is not a reply.
 - `test_poll_distinguishes_every_terminal_state` — one case per remaining state name above. **Each fixture is built by running a stub launch to a real successful completion and then altering ONLY the artifact that case is about.** Round 6's finding: fixtures assembled from planted files can describe an arrangement `-Launch` could never produce, which proves nothing about the production transition.
-- `test_the_documented_outer_command_works_on_this_host` — run the EXACT command string the skill documents, not the script directly. Round 6 found the tests exercising the script under `PARALLAX_PS_HOST` while the documented outer command was never run at all.
+- `test_the_documented_outer_command_works_on_this_host` — run the EXACT command string the skill documents, not the script directly. Round 6 found the tests exercising the script under `PARALLAX_PS_HOST` while the documented outer command was never run at all. Round 7's finding: that command must be HERE, not referred forward to Task 3, because Task 1's implementer sees only Task 1. It is, verbatim:
+
+  ```powershell
+  & (Get-Process -Id $PID).Path -NoProfile -File ${CLAUDE_PLUGIN_ROOT}/tools/dispatch-detached.ps1 -Launch -DispatchDir <dispatch-dir> -WrapperBody <wrapper-file> -ReceiptPath <receipt-file> -Round <label> -Json
+  ```
+
+  ```powershell
+  & (Get-Process -Id $PID).Path -NoProfile -File ${CLAUDE_PLUGIN_ROOT}/tools/dispatch-detached.ps1 -Poll -Receipt <receipt-file> -Json
+  ```
+
+  Task 3 documents these same two lines in the skill. If they ever disagree, this task's test is the one that fails, which is the point.
 - `test_a_hard_kill_between_start_and_publication_is_never_success` — kill the TOOL itself in that window rather than injecting a handled failure, and confirm the poll reports `launch-unknown`. The injected-failure case exercises the `catch`; this one exercises the case the `catch` cannot reach, which is the one the contract admits is irreducible.
+
+  **This test needs a deterministic barrier, or it is the millisecond race again in a different costume.** Round 7's finding. Step 3 below adds one env-gated seam for it: with `PARALLAX_DISPATCH_HOLD_BEFORE_PUBLISH` set to a path, `-Launch` creates `<path>.started` after `Start-Process` returns and then waits, bounded at sixty seconds, for `<path>.release` to appear before it writes `pid`. The test waits for `.started`, kills the tool, and never writes `.release`. Unset, the seam does not exist. Like the two seams in `tools/new-kimi-lane-home.ps1`, it is BUILDER CONTRACT rather than test scaffolding, it is reachable by any parent process that sets the variable, no shipped caller sets it, and it can only make a launch FAIL - it can never turn a failing launch into a successful one. Say all of that in the script header, in those terms.
 
 - [ ] **Step 2: Run them to verify they fail**
 
@@ -84,19 +102,24 @@ Expected: every test FAILS or ERRORS because the script does not exist. Read the
 1. `$d = (New-Item -ItemType Directory -Path $DispatchDir -ErrorAction Stop).FullName`. Failure here is BLOCKED and nothing has started.
 2. Copy `$WrapperBody` to `$d\wrapper.ps1`; create the empty `$d\stdin.empty`.
 3. `$proc = Start-Process -FilePath (Get-Process -Id $PID).Path -ArgumentList @("-NoProfile", "-NonInteractive", "-File", "`"$d\wrapper.ps1`"") -NoNewWindow -PassThru -ErrorAction Stop -RedirectStandardInput "$d\stdin.empty" -RedirectStandardOutput "$d\launch.out" -RedirectStandardError "$d\launch.err"`, plus `-WorkingDirectory` when given.
-4. Write `$d\pid`, then write `$d\launch.committed` LAST, with the minted token as its content.
-5. Wrap steps 3 to 4 in a `catch` that runs `taskkill /PID $proc.Id /T /F` when `$proc` exists, then exits 1. Never leave a started process unrecorded and unreported.
+4. If `PARALLAX_DISPATCH_HOLD_BEFORE_PUBLISH` is set, create `<value>.started` and wait, bounded at sixty seconds, for `<value>.release`; on timeout, fail through the same `catch` as any other failure. This is the barrier the hard-kill test needs and it exists nowhere else.
+5. Write `$d\pid` and `$d\startticks` (the launched process's `StartTime.ToUniversalTime().Ticks`), then write `$d\launch.committed` with the minted token as its content.
+6. Write the RECEIPT last of all, and only now: JSON holding `dispatchDir`, `token`, `round`, `startTicks`. `-ReceiptPath` is created with create-new semantics and an existing path is BLOCKED before step 1 runs, beside the directory reservation.
+7. Wrap steps 3 to 6 in a `catch` that runs `taskkill /PID $proc.Id /T /F` when `$proc` exists, then exits 1. Never leave a started process unrecorded and unreported.
 
-The token is minted with `[System.Guid]::NewGuid()`. It exists to bind a poll to the launch that created the directory, which is the only thing that stops an old completed round being read as this one.
+The token is minted with `[System.Guid]::NewGuid()`. It binds a receipt to the directory it names. It is NOT a secret from the caller and the contract must not describe it as one: it also sits in `launch.committed`, so a caller determined to launder an old directory can read it there. What the receipt adds is that a REFUSED launch produces no receipt at all.
 
 `-Poll` computes the state in this order, and the order is the contract:
 
-1. No `launch.committed` → `launch-unknown`. Stop. Nothing else is read.
-2. `launch.committed` does not contain the supplied token → `launch-not-ours`. Stop. This directory belongs to a different launch and none of its artifacts describe this round.
-3. `pid` missing, unreadable, or not an integer → `pid-unreadable`. Stop. A committed launch always wrote one, so its absence means the directory is not in a state this tool produced.
-4. Pid alive → `running`. Stop. Nothing else is read.
-5. No `exit` file → `no-exit-file`. Unreadable or not a plain integer → `exit-unreadable`. Non-zero → `exit-nonzero`.
-6. Zero and no `reply` → `no-reply`. Zero and `reply` is empty → `reply-empty`. Zero and `reply` has content → `reply-present`.
+1. Receipt absent, unreadable, or not this tool's JSON → `no-receipt`. Stop. Nothing else is read, and no directory is opened.
+2. The receipt's `dispatchDir` has no `launch.committed` → `launch-unknown`. Stop.
+3. `launch.committed` does not hold the receipt's token → `launch-not-ours`. Stop. That directory belongs to a different launch and none of its artifacts describe this one.
+4. `pid` missing, unreadable, or not an integer → `pid-unreadable`. Stop. A committed launch always wrote one, so its absence means the directory is not in a state this tool produced.
+5. Liveness, computed exactly as `tools/kimi-lane-lock.ps1:219-236` computes it: no such process → DEAD, continue to the terminal states; the process exists but its start time cannot be read → `pid-unreadable`, stop; the process exists and its ticks differ from the receipt's → DEAD, because the pid was recycled, continue to the terminal states; the process exists and the ticks match → `running`, stop, and NOTHING ELSE IS READ, because a reply being written is not a reply.
+6. No `exit` file → `no-exit-file`. Unreadable or not a plain integer → `exit-unreadable`. Non-zero → `exit-nonzero`.
+7. Zero and no `reply` → `no-reply`. Zero and `reply` is empty → `reply-empty`. Zero and `reply` has content → `reply-present`.
+
+Every `-Poll` result carries the receipt's `round` label back in its JSON, whatever the state.
 
 `reply-present` is NOT a review result on its own. The caller still runs the lane's round-evidence binder, and only a clean binding makes it one. Say that in the script header so nobody reads the state name as a verdict.
 
@@ -160,31 +183,40 @@ Insert AFTER the sentence ending `is spent for nothing.` and BEFORE `Measured re
 
 ```
   <!-- contract:start id=detached-dispatch-states -->
-  The tool's `-Poll` mode computes the state and the ORDER of the checks
-  is the contract. First, no launch-commit artifact means LAUNCH
-  UNKNOWN: the directory was reserved and the launch never completed,
-  which may mean nothing started or may mean a live untracked process,
-  and those are not distinguishable from disk. It is never success.
-  Shipping the transaction in one tool NARROWS this state; it does not
-  remove it, because a hard kill between process creation and the
-  recording of the pid is still reachable, and in exactly that form no
-  pid exists on disk, so the whole-tree kill below cannot clear it and
-  a separate targeted discovery is required. Second, a commit artifact
-  not carrying THIS launch's token is LAUNCH NOT OURS: the directory
-  belongs to another launch and none of its artifacts describe this
-  round. Without that check an old completed directory - commit, dead
-  pid, zero exit, real reply - is read as this round's success after
-  this round's launch was correctly refused. Third, a missing or
+  The tool's `-Poll` mode names a RECEIPT, never a directory, and the
+  ORDER of its checks is the contract. First, a receipt that is absent,
+  unreadable, or not this tool's own JSON means NO RECEIPT: no directory
+  is opened at all. A refused launch writes no receipt, so a caller
+  cannot poll the directory it was just refused. Second, no launch-commit
+  artifact means LAUNCH UNKNOWN: the directory was reserved and the
+  launch never completed, which may mean nothing started or may mean a
+  live untracked process, and those are not distinguishable from disk.
+  It is never success. Shipping the transaction in one tool NARROWS this
+  state; it does not remove it, because a hard kill between process
+  creation and the recording of the pid is still reachable, and in
+  exactly that form no pid exists on disk, so the whole-tree kill below
+  cannot clear it. Third, a commit artifact not holding the receipt's
+  token is LAUNCH NOT OURS: the directory belongs to another launch and
+  none of its artifacts describe this one. Fourth, a missing or
   unreadable pid under a valid commit is PID UNREADABLE, because a
-  committed launch always wrote one. Fourth, a live pid means RUNNING
-  and NOTHING ELSE IS READ - a reply being written is not a reply. Only
-  then come the terminal states: no exit file, an exit file unreadable
-  or not a plain integer, a non-zero code, zero with no reply artifact,
-  zero with an empty reply artifact, and zero with a reply artifact
-  that has content. Only the last can become a review result, and it is
-  not one by itself: the lane's round-evidence binder must also return
-  clean. Every other state is a transport failure per fallbacks.md,
-  except RUNNING, which is UNFINISHED.
+  committed launch always wrote one. Fifth, liveness is PID PLUS START
+  TIME, never a pid alone: a live pid whose start time cannot be read is
+  PID UNREADABLE, and a live pid whose start time differs from the
+  receipt's is a RECYCLED pid, which means our own process is gone. Only
+  a live pid whose start time matches is RUNNING, and there NOTHING ELSE
+  IS READ - a reply being written is not a reply. Only then come the
+  terminal states: no exit file, an exit file unreadable or not a plain
+  integer, a non-zero code, zero with no reply artifact, zero with an
+  empty reply artifact, and zero with a reply artifact that has content.
+  Only the last can become a review result, and it is not one by itself:
+  the lane's round-evidence binder must also return clean. Every other
+  state is a transport failure per fallbacks.md, except RUNNING, which
+  is UNFINISHED. The receipt NARROWS misattribution and does not remove
+  it either: a caller that supplies an EARLIER round's receipt is
+  truthfully told that round's result. The controls for that are a fresh
+  receipt path per round, a launch that refuses an existing one, and the
+  round label every poll echoes back so a mismatch is visible in the
+  record rather than silent.
   <!-- contract:end -->
 ```
 
@@ -196,10 +228,15 @@ Insert AFTER the sentence ending `is spent for nothing.` and BEFORE `Measured re
   the blocking form again. At THIRTY MINUTES without a terminal state,
   stop polling, report the round UNFINISHED, and ask the user whether to
   keep waiting or abandon it. Neither answer is a review result. To
-  abandon, or to clear a LAUNCH UNKNOWN that may hold a live process,
-  fell the whole tree with `taskkill /PID <id> /T /F`: killing the
-  launcher alone leaves the client orphaned, which is what the
-  2026-08-11 report of this item observed at zero CPU growth. Never poll
+  abandon a round whose pid is on disk, fell the whole tree with
+  `taskkill /PID <id> /T /F`: killing the launcher alone leaves the
+  client orphaned, which is what the 2026-08-11 report of this item
+  observed at zero CPU growth. LAUNCH UNKNOWN is the case that command
+  CANNOT clear, and the two must not be run together in one sentence: in
+  its dangerous form no pid was ever written, so there is no `<id>` to
+  pass. Clearing that one means finding the process by another route -
+  its command line, its working directory - and it is unmeasured here,
+  so surface it to the user rather than claiming a remedy. Never poll
   with `ps -p` from Git Bash, which cannot see Windows pids and reports
   a live process as gone.
   <!-- contract:end -->
@@ -221,7 +258,7 @@ Insert AFTER the sentence ending `is spent for nothing.` and BEFORE `Measured re
 
 - [ ] **Step 2: Declare the four regions**
 
-Add to `DECLARED_REGIONS` with a comment recording: backlog item 32; that TOOL replaced a launch that had been five copied snippets; that STATES leads with LAUNCH UNKNOWN because the cross-vendor reviewer refused the claim that a tool eliminates it; and that NAMING is separate because it is the only unenforced one.
+Add to `DECLARED_REGIONS` with a comment recording: backlog item 32; that TOOL replaced a launch that had been five copied snippets; that STATES leads with NO RECEIPT and keeps LAUNCH UNKNOWN second, because the cross-vendor reviewer refused the claim that a tool eliminates the second one and then refused a launch token stored inside the artifact it authenticates; and that NAMING is separate because it is the only unenforced one.
 
 - [ ] **Step 3: Write one pin per region**
 
@@ -288,11 +325,12 @@ In `test_multi_model_verify.py`, add:
             "& (Get-Process -Id $PID).Path -NoProfile -File"
             " ${CLAUDE_PLUGIN_ROOT}/tools/dispatch-detached.ps1 -Launch"
             " -DispatchDir <dispatch-dir> -WrapperBody <wrapper-file>"
+            " -ReceiptPath <receipt-file> -Round <label>"
             " -Json") in section, "this site has no launch"
         assert (
             "& (Get-Process -Id $PID).Path -NoProfile -File"
             " ${CLAUDE_PLUGIN_ROOT}/tools/dispatch-detached.ps1 -Poll"
-            " -DispatchDir <dispatch-dir> -Token <launch-token>"
+            " -Receipt <receipt-file>"
             " -Json") in section, "this site has no poll"
         assert "$brief | codex exec" in section, (
             "this site has no client invocation")
@@ -365,19 +403,22 @@ Then the launch and the poll:
 ```
 
 ```powershell
-& (Get-Process -Id $PID).Path -NoProfile -File ${CLAUDE_PLUGIN_ROOT}/tools/dispatch-detached.ps1 -Launch -DispatchDir <dispatch-dir> -WrapperBody <wrapper-file> -Json
+& (Get-Process -Id $PID).Path -NoProfile -File ${CLAUDE_PLUGIN_ROOT}/tools/dispatch-detached.ps1 -Launch -DispatchDir <dispatch-dir> -WrapperBody <wrapper-file> -ReceiptPath <receipt-file> -Round <label> -Json
 ```
 
 ```
-   The launch prints a TOKEN. Keep it; the poll below will not answer
-   without it. A poll carrying any other token, or none, is
-   `launch-not-ours`, which is how a directory left by an earlier round
-   is stopped from answering as this one:
+   `<receipt-file>` is a FRESH path for this round, alongside the fresh
+   reply and transcript paths this skill already requires; the launch
+   refuses one that exists. `<label>` names the lane and the round, as in
+   `Sol R1`. The poll below reads the receipt, not the directory, so a
+   launch that was refused has nothing to poll:
 ```
 
 ```powershell
-& (Get-Process -Id $PID).Path -NoProfile -File ${CLAUDE_PLUGIN_ROOT}/tools/dispatch-detached.ps1 -Poll -DispatchDir <dispatch-dir> -Token <launch-token> -Json
+& (Get-Process -Id $PID).Path -NoProfile -File ${CLAUDE_PLUGIN_ROOT}/tools/dispatch-detached.ps1 -Poll -Receipt <receipt-file> -Json
 ```
+
+Check the `round` the poll echoes back against the round you are running, and record it. A poll answering for an earlier round says so there, and nowhere else.
 
 `(Get-Process -Id $PID).Path` is the caller's own host, not a bare `powershell`. Round 6's finding: a bare name resolves to Windows PowerShell 5.1 even from a PowerShell 7 session, and the tool hands its own executable to the wrapper, so the wrapper would run on a host nobody chose.
 
@@ -391,7 +432,12 @@ Same wrapper shape, same two tool calls, under its own `<!-- call:codex-resume -
 
 - [ ] **Step 5: Measure the body, and raise the ceiling only if the measurement says so**
 
-Round 6's finding: deferring this to Task 9 is circular, because the oracle below cannot pass strict lint until the ceiling permits the body this task just wrote. Measure here, with the command in Task 2's preamble.
+Round 6's finding: deferring this to Task 9 is circular, because the oracle below cannot pass strict lint until the ceiling permits the body this task just wrote. Round 7's finding: the command belongs here too, not behind a pointer to another task, because this task's implementer sees only this task. It is:
+
+```bash
+python -c "import io;t=io.open('skills/multi-model-verify/SKILL.md',encoding='utf-8').read();b=t.split('---',2)[2];print('chars',len(b),'est_tokens',len(b)//4)"
+```
+
 
 If the estimated tokens are at or under 5500, change nothing and write the measured number in the commit message. If they are over, raise `BODY_TOKEN_CEILING` in `evals/tools/skill_lint.py` to a value this measurement justifies, write the date, the number and the reason beside it per `skill_lint.py:308-326`, and add one test asserting the new value with that reason in its docstring - a raise with no test is how the next raise goes unnoticed. Never delete skill text to fit. The tool-based design SHRANK these steps, so a raise may not be needed at all.
 
@@ -443,13 +489,14 @@ def test_each_kimi_call_is_launched_through_the_tool(call):
         "& (Get-Process -Id $PID).Path -NoProfile -File"
         " ${CLAUDE_PLUGIN_ROOT}/tools/dispatch-detached.ps1 -Launch"
         " -DispatchDir <dispatch-dir> -WrapperBody <wrapper-file>"
+        " -ReceiptPath <receipt-file> -Round <label>"
         " -WorkingDirectory <review-mirror> -Json") in section, (
         "this call has no launch; a lane described as detached with no"
         " launch command is what four rounds kept finding")
     assert (
         "& (Get-Process -Id $PID).Path -NoProfile -File"
         " ${CLAUDE_PLUGIN_ROOT}/tools/dispatch-detached.ps1 -Poll"
-        " -DispatchDir <dispatch-dir> -Token <launch-token>"
+        " -Receipt <receipt-file>"
         " -Json") in section, (
         "this call has no poll; a launch whose result is never read is"
         " a round thrown away")
@@ -483,7 +530,7 @@ $code = $LASTEXITCODE
 [System.IO.File]::WriteAllText("$PSScriptRoot\exit", "$code")
 ```
 
-and the anchored `-Launch` call with `-WorkingDirectory <review-mirror>`, because this client binds a session to the directory it was created in, and the matching `-Poll` call carrying the token that launch printed.
+and the anchored `-Launch` call with `-WorkingDirectory <review-mirror>`, because this client binds a session to the directory it was created in, and the matching `-Poll` call naming the receipt that launch wrote.
 
 State once, above the three: `$b` is the brief read from its file — the same inline payload the bullets describe and the shape item 51 measured, never a pointer, which this lane's contract forbids. This lane's REPLY ARTIFACT is `$PSScriptRoot\reply`, the client's captured stdout, with stderr to `transcript`. No `$OutputEncoding` preamble appears here, deliberately: the brief goes as an argument, which `brief-encoding-transport` already states, and adding one would imply a mechanism that does not apply.
 
@@ -652,7 +699,7 @@ Expected: the call returns in seconds, the process is alive in the next call, th
 
 - [ ] **Step 2: Measure the states the unit tests plant**
 
-Against a stub that writes the reply then sleeps thirty seconds. Kill the tree inside that window and poll: expect `no-exit-file`. Reserve the same directory twice: expect the second to BLOCK. Let the stub exit zero with an empty reply: expect `reply-empty`.
+Against a stub that writes the reply then sleeps thirty seconds. Kill the tree inside that window and poll: expect `no-exit-file`. Reserve the same directory twice, naming a fresh receipt path the second time: expect the second to BLOCK and expect that receipt path NOT to exist afterwards, then poll it and expect `no-receipt`. Let the stub exit zero with an empty reply: expect `reply-empty`.
 
 - [ ] **Step 3: Measure the brief's encoding through a real round**
 
@@ -679,7 +726,7 @@ git commit -m "measure the detached dispatch on both hosts"
 
 Round 4's finding: the spec still carried obsolete region names, a refuted claim that every wrapper carries the encoding preamble, and the refuted claim that a wrapper file has no quoting layer — and Task 10's grep searched for none of them. Reconciliation is a step with an oracle.
 
-**Files:** Modify the spec, `docs/superpowers/plans/2026-07-27-0150-backlog.md`, `CLAUDE.md`, and `evals/tools/skill_lint.py` if the budget needs it.
+**Files:** Modify the spec, `docs/superpowers/plans/2026-07-27-0150-backlog.md`, and `CLAUDE.md`; create `docs/superpowers/plans/rounds/2026-08-30-item32-detached-dispatch/round-record.md`. Round 7's finding: step 1 writes into that record and no earlier version of this task listed or staged it.
 
 - [ ] **Step 1: Record what Task 3 measured**
 
@@ -692,7 +739,7 @@ Update: the state model to the tool's ordered checks with LAUNCH UNKNOWN first; 
 - [ ] **Step 3: TASK-LOCAL ORACLE for convergence**
 
 ```bash
-grep -n "detached-dispatch-codex\|detached-dispatch-backup\|no quoting layer at all\|encoding preamble moves INSIDE the wrapper\|every wrapper\|four states\|five states\|six states\|seven states\|eight states\|nine states\|not detached\|powershell -NoProfile -File" docs/superpowers/specs/2026-08-30-item32-detached-dispatch-design.md
+grep -ni "detached-dispatch-codex\|detached-dispatch-backup\|no quoting layer at all\|encoding preamble moves INSIDE the wrapper\|every wrapper\|four states\|five states\|six states\|seven states\|eight states\|nine states\|ten states\|not detached\|powershell -NoProfile -File\|-Token\|-DispatchDir <dispatch-dir> -Json" docs/superpowers/specs/2026-08-30-item32-detached-dispatch-design.md
 ```
 
 Expected: no hits outside a passage explicitly narrating history. Round 4 found the previous grep searching for none of the terms it claimed to; round 6 found it still missing the encoding claim, which is the very claim the plan says is refuted, so the stale text would have passed.
@@ -700,7 +747,9 @@ Expected: no hits outside a passage explicitly narrating history. Round 4 found 
 Two of the patterns need their replacement wording stated exactly, or the reconciliation drifts again:
 
 - The encoding claim becomes lane-specific. The codex lane's wrapper carries the `$OutputEncoding` preamble because its brief goes down a PIPE. The Kimi lane's wrapper carries none because its brief goes as an ARGUMENT, which is a different transport with a different defect, and item 51 owns that one.
-- The state count is TEN, so every spelled count below ten is a stale hit, and `powershell -NoProfile -File` is stale because the documented call now uses the caller's own host.
+- The state count is ELEVEN, so every spelled count below eleven is a stale hit, and `powershell -NoProfile -File` is stale because the documented call now uses the caller's own host.
+- The grep is `-i`. Round 7's finding: the spec spells `SEVEN states` in capitals at `docs/superpowers/specs/2026-08-30-item32-detached-dispatch-design.md:194`, and a case-sensitive pattern walked straight past the one stale count the step was written to catch.
+- `-Token` and `-DispatchDir <dispatch-dir> -Json` are stale because the poll now names a RECEIPT.
 
 - [ ] **Step 4: Run the five local gates, detached**
 
@@ -729,7 +778,7 @@ State in item 32 what was NOT done: item 51 still owns the argv escaping repair;
 - [ ] **Step 8: Commit**
 
 ```bash
-git add CLAUDE.md docs/superpowers/plans/2026-07-27-0150-backlog.md docs/superpowers/specs/2026-08-30-item32-detached-dispatch-design.md
+git add CLAUDE.md docs/superpowers/plans/2026-07-27-0150-backlog.md docs/superpowers/specs/2026-08-30-item32-detached-dispatch-design.md docs/superpowers/plans/rounds/2026-08-30-item32-detached-dispatch/round-record.md
 git commit -m "close items 32 and 33"
 ```
 
