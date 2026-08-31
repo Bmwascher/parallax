@@ -170,6 +170,39 @@ race. The liveness model was load-bearing only for a launcher the owner
 has forbidden; keeping it would be carrying the cost of a decision already
 reversed.
 
+## R9, added by the poll: the harness's exit code is NOT a round result
+
+**Found by the Fable lane, CONFIRMED LIVE by the session the same hour.**
+
+The wrapper writes the client's exit code into an `exit` FILE and then
+ends. It never runs `exit $code`, so the WRAPPER PROCESS exits 0 whatever
+the client did. Under the detached design nobody read the wrapper's
+process exit, so this was invisible. Under the harness-tracked method the
+harness records it, puts it in the output trailer, and ANNOUNCES it in the
+completion notification.
+
+Confirmed on a real failed round, 2026-08-31: the Kimi poll round shattered
+its brief on Windows PowerShell 5.1, the client exited 1 and wrote no
+reply, the `exit` file correctly recorded `1`, and the harness reported:
+
+```
+[exited with code 0]
+```
+
+with a completion notification reading "completed (exit code 0)". A failed
+round announced itself as a success on the harness surface. The session was
+not misled only because it opened the `exit` file instead of trusting the
+notification.
+
+**This is a false-clean surface CREATED by the method being standardised
+on.** It is not R8 - the round is finished, not unfinished - which is why
+R1 to R8 did not forbid it.
+
+**R9. The harness's exit surface is never a round result.** Only the
+classifier's `reply-present` is. And the wrapper's last statement must be
+`exit $code`, so the trailer and the `exit` file cannot disagree in the
+first place.
+
 ## What the poll is being asked
 
 1. Is Option C's claim sound - that a create-new execution claim plus
