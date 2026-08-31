@@ -46,8 +46,9 @@ This is the whole point of revision 5. The four steps become one transaction in 
 - Consumes: nothing.
 - Produces two modes, and every later task depends on these exact names:
   - `-Launch -DispatchDir <path> -WrapperBody <path> [-WorkingDirectory <path>] [-Json]`
-  - `-Poll -DispatchDir <path> [-Json]`
-- `-Launch` prints, and `-Poll` returns, JSON with `state` drawn from exactly: `launch-unknown`, `running`, `no-exit-file`, `exit-unreadable`, `exit-nonzero`, `no-reply`, `reply-empty`, `reply-present`.
+  - `-Poll -DispatchDir <path> -Token <token> [-Json]`
+- **`-Launch` mints an unpredictable TOKEN on success, writes it inside `launch.committed`, and returns it. `-Poll` requires it.** Round 6 found the fifth false-completion path without it: an old directory left by a finished round carries a commit marker, a dead pid, `exit` of zero and a real reply; a new round reusing that path is correctly REFUSED by `-Launch`, and then the poll reads the old round's artifacts and reports `reply-present`. The refusal was tested; polling the refused directory afterwards was not.
+- `-Launch` prints, and `-Poll` returns, JSON with `state` drawn from exactly: `launch-unknown`, `launch-not-ours`, `pid-unreadable`, `running`, `no-exit-file`, `exit-unreadable`, `exit-nonzero`, `no-reply`, `reply-empty`, `reply-present`.
 - Exit codes match `new-review-mirror.ps1:17-18`: 0 clean, 1 blocked with the reason on stdout, 2 script or environment error.
 
 - [ ] **Step 1: Write the failing tests**
@@ -61,9 +62,13 @@ Cases, each named for what it protects:
 - `test_a_committed_launch_publishes_pid_then_commit_last` — `launch.committed` is written AFTER `pid`, and its presence is what distinguishes a committed launch. Assert the order by content, not by timestamp.
 - `test_a_failure_after_start_kills_the_tree_and_blocks` — inject a failure between start and commit; expect exit 1 and the started process gone. This is the state Sol said cannot be eliminated, so the tool must at least not leave it silently.
 - `test_poll_reports_launch_unknown_when_commit_is_absent` — a reserved directory with no `launch.committed`; expect `launch-unknown`. Not running, not failed, not complete.
+- `test_a_refused_launch_cannot_poll_the_old_rounds_reply` — **the round 6 regression.** Run a stub launch to completion so the directory holds a real commit, pid, `exit` of `0` and a reply. Launch AGAIN on the same path and take the refusal. Then poll with the token the second launch would have used. Expect `launch-not-ours`, never `reply-present`. This is the case the taken-directory test never reached, because it stopped at the refusal.
+- `test_poll_rejects_a_token_that_does_not_match` — a committed directory polled with any other token; expect `launch-not-ours`.
+- `test_poll_reports_pid_unreadable_when_the_pid_is_missing_or_malformed` — a committed directory whose `pid` is absent, empty, or not an integer. Round 6 found the poll jumping from commit existence straight to "pid alive", so such an input fell through to the terminal branches and could reach `reply-present`.
 - `test_poll_reports_running_while_the_pid_is_alive` — and asserts that NO other file is read in that branch, because a reply being written is not a reply.
-- `test_poll_distinguishes_every_terminal_state` — one case per remaining state name above, driven by planted files.
-- `test_poll_never_reports_reply_present_without_a_committed_launch`.
+- `test_poll_distinguishes_every_terminal_state` — one case per remaining state name above. **Each fixture is built by running a stub launch to a real successful completion and then altering ONLY the artifact that case is about.** Round 6's finding: fixtures assembled from planted files can describe an arrangement `-Launch` could never produce, which proves nothing about the production transition.
+- `test_the_documented_outer_command_works_on_this_host` — run the EXACT command string the skill documents, not the script directly. Round 6 found the tests exercising the script under `PARALLAX_PS_HOST` while the documented outer command was never run at all.
+- `test_a_hard_kill_between_start_and_publication_is_never_success` — kill the TOOL itself in that window rather than injecting a handled failure, and confirm the poll reports `launch-unknown`. The injected-failure case exercises the `catch`; this one exercises the case the `catch` cannot reach, which is the one the contract admits is irreducible.
 
 - [ ] **Step 2: Run them to verify they fail**
 
@@ -79,15 +84,19 @@ Expected: every test FAILS or ERRORS because the script does not exist. Read the
 1. `$d = (New-Item -ItemType Directory -Path $DispatchDir -ErrorAction Stop).FullName`. Failure here is BLOCKED and nothing has started.
 2. Copy `$WrapperBody` to `$d\wrapper.ps1`; create the empty `$d\stdin.empty`.
 3. `$proc = Start-Process -FilePath (Get-Process -Id $PID).Path -ArgumentList @("-NoProfile", "-NonInteractive", "-File", "`"$d\wrapper.ps1`"") -NoNewWindow -PassThru -ErrorAction Stop -RedirectStandardInput "$d\stdin.empty" -RedirectStandardOutput "$d\launch.out" -RedirectStandardError "$d\launch.err"`, plus `-WorkingDirectory` when given.
-4. Write `$d\pid`, then write `$d\launch.committed` LAST.
+4. Write `$d\pid`, then write `$d\launch.committed` LAST, with the minted token as its content.
 5. Wrap steps 3 to 4 in a `catch` that runs `taskkill /PID $proc.Id /T /F` when `$proc` exists, then exits 1. Never leave a started process unrecorded and unreported.
+
+The token is minted with `[System.Guid]::NewGuid()`. It exists to bind a poll to the launch that created the directory, which is the only thing that stops an old completed round being read as this one.
 
 `-Poll` computes the state in this order, and the order is the contract:
 
 1. No `launch.committed` → `launch-unknown`. Stop. Nothing else is read.
-2. Pid alive → `running`. Stop. Nothing else is read.
-3. No `exit` file → `no-exit-file`. Unreadable or not a plain integer → `exit-unreadable`. Non-zero → `exit-nonzero`.
-4. Zero and no `reply` → `no-reply`. Zero and `reply` is empty → `reply-empty`. Zero and `reply` has content → `reply-present`.
+2. `launch.committed` does not contain the supplied token → `launch-not-ours`. Stop. This directory belongs to a different launch and none of its artifacts describe this round.
+3. `pid` missing, unreadable, or not an integer → `pid-unreadable`. Stop. A committed launch always wrote one, so its absence means the directory is not in a state this tool produced.
+4. Pid alive → `running`. Stop. Nothing else is read.
+5. No `exit` file → `no-exit-file`. Unreadable or not a plain integer → `exit-unreadable`. Non-zero → `exit-nonzero`.
+6. Zero and no `reply` → `no-reply`. Zero and `reply` is empty → `reply-empty`. Zero and `reply` has content → `reply-present`.
 
 `reply-present` is NOT a review result on its own. The caller still runs the lane's round-evidence binder, and only a clean binding makes it one. Say that in the script header so nobody reads the state name as a verdict.
 
@@ -107,7 +116,13 @@ git commit -m "add the fail-closed detached dispatch tool"
 
 ### Task 2: State the contract in the notes, declare it, pin it
 
-Four regions. The explanation lives here because `SKILL.md` is budgeted; measured 2026-08-30 at `caa7e1b`, its body is 20983 chars against a 5250 soft budget and a 5500 hard ceiling.
+Four regions. The explanation lives here because `SKILL.md` is budgeted. Measure the body with:
+
+```bash
+python -c "import io;t=io.open('skills/multi-model-verify/SKILL.md',encoding='utf-8').read();b=t.split('---',2)[2];print('chars',len(b),'est_tokens',len(b)//4)"
+```
+
+Measured 2026-08-30 at `caa7e1b`: 20983 chars, 5245 estimated tokens, against a 5250 soft budget and a 5500 hard ceiling. Task 3 step 5 re-measures with this command once the dispatch steps are rewritten, which is where the ceiling decision belongs.
 
 **Files:**
 - Modify: `skills/multi-model-verify/references/model-prompting-notes.md:297-314`
@@ -152,15 +167,24 @@ Insert AFTER the sentence ending `is spent for nothing.` and BEFORE `Measured re
   and those are not distinguishable from disk. It is never success.
   Shipping the transaction in one tool NARROWS this state; it does not
   remove it, because a hard kill between process creation and the
-  recording of the pid is still reachable. Second, a live pid means
-  RUNNING and NOTHING ELSE IS READ - a reply being written is not a
-  reply. Only after those two come the terminal states: no exit file,
-  an exit file unreadable or not a plain integer, a non-zero code, zero
-  with no reply artifact, zero with an empty reply artifact, and zero
-  with a reply artifact that has content. Only the last can become a
-  review result, and it is not one by itself: the lane's round-evidence
-  binder must also return clean. Every other state is a transport
-  failure per fallbacks.md, except RUNNING, which is UNFINISHED.
+  recording of the pid is still reachable, and in exactly that form no
+  pid exists on disk, so the whole-tree kill below cannot clear it and
+  a separate targeted discovery is required. Second, a commit artifact
+  not carrying THIS launch's token is LAUNCH NOT OURS: the directory
+  belongs to another launch and none of its artifacts describe this
+  round. Without that check an old completed directory - commit, dead
+  pid, zero exit, real reply - is read as this round's success after
+  this round's launch was correctly refused. Third, a missing or
+  unreadable pid under a valid commit is PID UNREADABLE, because a
+  committed launch always wrote one. Fourth, a live pid means RUNNING
+  and NOTHING ELSE IS READ - a reply being written is not a reply. Only
+  then come the terminal states: no exit file, an exit file unreadable
+  or not a plain integer, a non-zero code, zero with no reply artifact,
+  zero with an empty reply artifact, and zero with a reply artifact
+  that has content. Only the last can become a review result, and it is
+  not one by itself: the lane's round-evidence binder must also return
+  clean. Every other state is a transport failure per fallbacks.md,
+  except RUNNING, which is UNFINISHED.
   <!-- contract:end -->
 ```
 
@@ -203,16 +227,20 @@ Add to `DECLARED_REGIONS` with a comment recording: backlog item 32; that TOOL r
 
 Four tests beside `test_dispatch_traps_are_documented_in_the_notes`, each asserting its region's full normalized text, built by copying the region and normalizing rather than retyping. The naming pin's docstring must say it is a documentation-presence pin, not behavioural enforcement.
 
-- [ ] **Step 4: TASK-LOCAL ORACLE**
+- [ ] **Step 4: Let the contract collector read an injected document set**
 
-Run: `python -m pytest evals/multi-model-verify/test_contract_coverage.py -q` and confirm `test_declared_regions_match_the_documents` and `test_every_marked_region_is_locked_by_a_pin` both pass. Then delete one region's markers in a scratch copy and confirm `test_declared_regions_match_the_documents` FAILS on it. Round 4 found this task's previous oracle satisfied by removing a whole region/declaration/pin triplet.
+Round 6's finding: the oracle below cannot be run today. `evals/multi-model-verify/test_contract_coverage.py:611` binds `DOC_PATHS` as a module constant and both tests read that constant directly at `:737` and `:749`, so nothing can point the collector at a scratch copy. Give `collect_regions` and those two tests an optional `doc_paths` argument defaulting to `DOC_PATHS`. It adds no assertion and changes no existing one; it only makes the negative case reachable.
 
-- [ ] **Step 5: Confirm the pre-existing trap pin is untouched**
+- [ ] **Step 5: TASK-LOCAL ORACLE**
+
+Run: `python -m pytest evals/multi-model-verify/test_contract_coverage.py -q` and confirm `test_declared_regions_match_the_documents` and `test_every_marked_region_is_locked_by_a_pin` both pass. Then, through the argument added in step 4, point the collector at a scratch copy of the notes with ONE region's markers deleted, and confirm `test_declared_regions_match_the_documents` FAILS naming that region. Round 4 found this task's previous oracle satisfied by removing a whole region/declaration/pin triplet; round 6 found the oracle itself unrunnable.
+
+- [ ] **Step 6: Confirm the pre-existing trap pin is untouched**
 
 Run: `python -m pytest evals/multi-model-verify/test_multi_model_verify.py -q -k dispatch_traps`
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add skills/multi-model-verify/references/model-prompting-notes.md evals/multi-model-verify/test_contract_coverage.py evals/multi-model-verify/test_multi_model_verify.py
@@ -232,40 +260,70 @@ git commit -m "state and pin the detached dispatch contract"
 In `test_multi_model_verify.py`, add:
 
 ```python
-    def test_both_dispatches_call_the_tool_anchored(self):
-        """One launch, in one place, reached by an anchored path.
+    CODEX_CALLS = ("codex-fresh", "codex-resume")
 
-        Four debate rounds found the same defect while the launch was
-        five copied snippets. The anchor matters separately: the three
-        tool calls this skill already makes are bare relative paths
-        (SKILL.md:94, :121, :228), which is backlog item 58's own cause,
-        and a new call must not join that.
+    @pytest.mark.parametrize("call", CODEX_CALLS)
+    def test_each_codex_call_is_launched_through_the_tool(self, call):
+        """Per-site, not a global count.
+
+        Round 6's finding: a global `>= 2` is satisfied by two tool
+        calls under round 1 and none under resume, while the document
+        still contains no `Start-Process`. Centralization would be
+        proven and detachment of each site would not.
+
+        The anchor matters separately: the three tool calls this skill
+        already makes are bare relative paths (SKILL.md:94, :121, :228),
+        which is backlog item 58's own cause, and a new call must not
+        join that. The HOST matters too. A bare `powershell` starts the
+        tool under Windows PowerShell 5.1 even from a PowerShell 7
+        session, and the tool then hands its own executable to the
+        wrapper, so the wrapper silently runs on a host the caller never
+        chose. `(Get-Process -Id $PID).Path` is the caller's own host.
         """
         text = read(SKILL_MD)
-        assert text.count(
-            "powershell -NoProfile -File"
+        marker = "<!-- call:%s -->" % call
+        assert text.count(marker) == 1, "exactly one section per call"
+        section = text.split(marker, 1)[1].split("<!-- call:", 1)[0]
+        assert (
+            "& (Get-Process -Id $PID).Path -NoProfile -File"
             " ${CLAUDE_PLUGIN_ROOT}/tools/dispatch-detached.ps1 -Launch"
             " -DispatchDir <dispatch-dir> -WrapperBody <wrapper-file>"
-            " -Json") >= 2
-        assert "Start-Process" not in text, (
+            " -Json") in section, "this site has no launch"
+        assert (
+            "& (Get-Process -Id $PID).Path -NoProfile -File"
+            " ${CLAUDE_PLUGIN_ROOT}/tools/dispatch-detached.ps1 -Poll"
+            " -DispatchDir <dispatch-dir> -Token <launch-token>"
+            " -Json") in section, "this site has no poll"
+        assert "$brief | codex exec" in section, (
+            "this site has no client invocation")
+
+    def test_no_codex_lane_writes_its_own_launch(self):
+        """A CENTRALIZATION guard, and nothing more.
+
+        Round 6 established what this cannot show: an absent
+        `Start-Process` proves no second launch implementation exists,
+        never that every call site reaches the one that does. The
+        per-site test above is what proves that.
+        """
+        assert "Start-Process" not in read(SKILL_MD), (
             "no lane writes its own launch; the tool owns the whole"
             " transaction and a second copy is how it drifts"
         )
 
     def test_the_point_of_use_sends_the_reader_to_the_states(self):
         text = read(SKILL_MD)
-        assert text.count(
-            "-Poll -DispatchDir <dispatch-dir> -Json") >= 2
         assert text.count("references/model-prompting-notes.md's"
                           " detached-dispatch-states") >= 2
 ```
 
 - [ ] **Step 2: Run them to verify they fail**
 
-Run: `python -m pytest evals/multi-model-verify/test_multi_model_verify.py -q -k "call_the_tool_anchored or sends_the_reader_to_the_states"`
-Expected: 2 FAILED.
+Run: `python -m pytest evals/multi-model-verify/test_multi_model_verify.py -q -k "launched_through_the_tool or writes_its_own_launch or sends_the_reader_to_the_states"`
+Expected: 4 FAILED - two parametrized cases and the two others.
 
 - [ ] **Step 3: Rewrite the round-1 step**
+
+Open this step's content with `<!-- call:codex-fresh -->` and step 4's with `<!-- call:codex-resume -->`, so the per-site test can split the file on them. Round 6's finding: with no per-site split, two tool calls under round 1 and none under resume satisfies a global count while the resume stays foreground.
 
 Prose, then the wrapper body, then the launch:
 
@@ -307,12 +365,21 @@ Then the launch and the poll:
 ```
 
 ```powershell
-powershell -NoProfile -File ${CLAUDE_PLUGIN_ROOT}/tools/dispatch-detached.ps1 -Launch -DispatchDir <dispatch-dir> -WrapperBody <wrapper-file> -Json
+& (Get-Process -Id $PID).Path -NoProfile -File ${CLAUDE_PLUGIN_ROOT}/tools/dispatch-detached.ps1 -Launch -DispatchDir <dispatch-dir> -WrapperBody <wrapper-file> -Json
+```
+
+```
+   The launch prints a TOKEN. Keep it; the poll below will not answer
+   without it. A poll carrying any other token, or none, is
+   `launch-not-ours`, which is how a directory left by an earlier round
+   is stopped from answering as this one:
 ```
 
 ```powershell
-powershell -NoProfile -File ${CLAUDE_PLUGIN_ROOT}/tools/dispatch-detached.ps1 -Poll -DispatchDir <dispatch-dir> -Json
+& (Get-Process -Id $PID).Path -NoProfile -File ${CLAUDE_PLUGIN_ROOT}/tools/dispatch-detached.ps1 -Poll -DispatchDir <dispatch-dir> -Token <launch-token> -Json
 ```
+
+`(Get-Process -Id $PID).Path` is the caller's own host, not a bare `powershell`. Round 6's finding: a bare name resolves to Windows PowerShell 5.1 even from a PowerShell 7 session, and the tool hands its own executable to the wrapper, so the wrapper would run on a host nobody chose.
 
 Keep "Both encoding lines are load-bearing on Windows PowerShell 5.1 (references/model-prompting-notes.md)." and everything from the `verified-override-dispatch` marker onward exactly as it is.
 
@@ -320,21 +387,27 @@ Keep "Both encoding lines are load-bearing on Windows PowerShell 5.1 (references
 
 - [ ] **Step 4: Rewrite the resume step identically**
 
-Same wrapper shape, same two tool calls. The `$brief | codex exec ... resume <SESSION_ID> -` line stays on ONE physical line and does not otherwise change.
+Same wrapper shape, same two tool calls, under its own `<!-- call:codex-resume -->` marker. The `$brief | codex exec ... resume <SESSION_ID> -` line stays on ONE physical line and does not otherwise change.
 
-- [ ] **Step 5: TASK-LOCAL ORACLE**
+- [ ] **Step 5: Measure the body, and raise the ceiling only if the measurement says so**
+
+Round 6's finding: deferring this to Task 9 is circular, because the oracle below cannot pass strict lint until the ceiling permits the body this task just wrote. Measure here, with the command in Task 2's preamble.
+
+If the estimated tokens are at or under 5500, change nothing and write the measured number in the commit message. If they are over, raise `BODY_TOKEN_CEILING` in `evals/tools/skill_lint.py` to a value this measurement justifies, write the date, the number and the reason beside it per `skill_lint.py:308-326`, and add one test asserting the new value with that reason in its docstring - a raise with no test is how the next raise goes unnoticed. Never delete skill text to fit. The tool-based design SHRANK these steps, so a raise may not be needed at all.
+
+- [ ] **Step 6: TASK-LOCAL ORACLE**
 
 Run: `python -m pytest evals/multi-model-verify/test_multi_model_verify.py -q && python evals/tools/skill_lint.py skills/multi-model-verify --strict && python evals/tools/skill_scanner.py skills`
-Expected: PASS, exit 0, including both new tests and `test_the_brief_is_read_and_piped_as_utf8` and `test_resume_pipes_the_brief_on_stdin` UNAMENDED. The `Start-Process` absence assertion is the oracle: it fails if any copied launch survives anywhere in the file.
+Expected: PASS, exit 0, including every new test and `test_the_brief_is_read_and_piped_as_utf8` and `test_resume_pipes_the_brief_on_stdin` UNAMENDED. The per-site parametrization is the oracle: it names each call, so a site left foreground fails by that site's name rather than by a count.
 
-If the lint reports a body-token error, the ceiling needs raising; do that as Task 9 Step 1 with the measurement recorded, and never by deleting text to fit.
-
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
-git add skills/multi-model-verify/SKILL.md evals/multi-model-verify/test_multi_model_verify.py
+git add skills/multi-model-verify/SKILL.md evals/multi-model-verify/test_multi_model_verify.py evals/tools/skill_lint.py
 git commit -m "dispatch both codex rounds through the tool"
 ```
+
+Stage `skill_lint.py` only if step 5 raised the ceiling.
 
 ---
 
@@ -367,12 +440,19 @@ def test_each_kimi_call_is_launched_through_the_tool(call):
     assert body.count(marker) == 1, "exactly one section per call"
     section = body.split(marker, 1)[1].split("<!-- call:", 1)[0]
     assert (
-        "powershell -NoProfile -File"
+        "& (Get-Process -Id $PID).Path -NoProfile -File"
         " ${CLAUDE_PLUGIN_ROOT}/tools/dispatch-detached.ps1 -Launch"
         " -DispatchDir <dispatch-dir> -WrapperBody <wrapper-file>"
         " -WorkingDirectory <review-mirror> -Json") in section, (
         "this call has no launch; a lane described as detached with no"
         " launch command is what four rounds kept finding")
+    assert (
+        "& (Get-Process -Id $PID).Path -NoProfile -File"
+        " ${CLAUDE_PLUGIN_ROOT}/tools/dispatch-detached.ps1 -Poll"
+        " -DispatchDir <dispatch-dir> -Token <launch-token>"
+        " -Json") in section, (
+        "this call has no poll; a launch whose result is never read is"
+        " a round thrown away")
     assert '& "<kimi-code-binary>"' in section, (
         "this call has no client invocation")
     assert "$PSScriptRoot\\reply" in section, (
@@ -403,7 +483,7 @@ $code = $LASTEXITCODE
 [System.IO.File]::WriteAllText("$PSScriptRoot\exit", "$code")
 ```
 
-and the anchored `-Launch` call with `-WorkingDirectory <review-mirror>`, because this client binds a session to the directory it was created in.
+and the anchored `-Launch` call with `-WorkingDirectory <review-mirror>`, because this client binds a session to the directory it was created in, and the matching `-Poll` call carrying the token that launch printed.
 
 State once, above the three: `$b` is the brief read from its file — the same inline payload the bullets describe and the shape item 51 measured, never a pointer, which this lane's contract forbids. This lane's REPLY ARTIFACT is `$PSScriptRoot\reply`, the client's captured stdout, with stderr to `transcript`. No `$OutputEncoding` preamble appears here, deliberately: the brief goes as an argument, which `brief-encoding-transport` already states, and adding one would imply a mechanism that does not apply.
 
@@ -601,9 +681,9 @@ Round 4's finding: the spec still carried obsolete region names, a refuted claim
 
 **Files:** Modify the spec, `docs/superpowers/plans/2026-07-27-0150-backlog.md`, `CLAUDE.md`, and `evals/tools/skill_lint.py` if the budget needs it.
 
-- [ ] **Step 1: Raise the token ceiling only if the measurement says so**
+- [ ] **Step 1: Record what Task 3 measured**
 
-Measure with the command in Task 2's preamble. If `SKILL.md`'s body is over 5500 estimated tokens, raise `BODY_TOKEN_CEILING` to a value the measurement justifies and write the date, the number and the reason beside it, per `skill_lint.py:308-326`. If it is under, change nothing and say so here. The tool-based design SHRANK the dispatch steps, so this may not be needed at all — do not raise a ceiling that does not need raising.
+The ceiling decision was made in Task 3 step 5, where it has to be: strict lint gates that task's own commit, so deferring the decision to here made the ordering circular. Round 6's finding. Copy the measured char count, the estimated token count, and whether `BODY_TOKEN_CEILING` was raised, into the round record. Do not re-decide it.
 
 - [ ] **Step 2: Reconcile the spec with the plan**
 
@@ -612,10 +692,15 @@ Update: the state model to the tool's ordered checks with LAUNCH UNKNOWN first; 
 - [ ] **Step 3: TASK-LOCAL ORACLE for convergence**
 
 ```bash
-grep -n "detached-dispatch-codex\|detached-dispatch-backup\|no quoting layer at all\|four states\|five states\|six states\|seven states\|not detached" docs/superpowers/specs/2026-08-30-item32-detached-dispatch-design.md
+grep -n "detached-dispatch-codex\|detached-dispatch-backup\|no quoting layer at all\|encoding preamble moves INSIDE the wrapper\|every wrapper\|four states\|five states\|six states\|seven states\|eight states\|nine states\|not detached\|powershell -NoProfile -File" docs/superpowers/specs/2026-08-30-item32-detached-dispatch-design.md
 ```
 
-Expected: no hits outside a passage explicitly narrating history. Round 4 found the previous grep searching for none of these.
+Expected: no hits outside a passage explicitly narrating history. Round 4 found the previous grep searching for none of the terms it claimed to; round 6 found it still missing the encoding claim, which is the very claim the plan says is refuted, so the stale text would have passed.
+
+Two of the patterns need their replacement wording stated exactly, or the reconciliation drifts again:
+
+- The encoding claim becomes lane-specific. The codex lane's wrapper carries the `$OutputEncoding` preamble because its brief goes down a PIPE. The Kimi lane's wrapper carries none because its brief goes as an ARGUMENT, which is a different transport with a different defect, and item 51 owns that one.
+- The state count is TEN, so every spelled count below ten is a stale hit, and `powershell -NoProfile -File` is stale because the documented call now uses the caller's own host.
 
 - [ ] **Step 4: Run the five local gates, detached**
 
