@@ -233,7 +233,7 @@ def render(call, tmp_path, mapping):
 def run_wrapper(ps1_path, env_overrides, timeout=60):
     """Run a rendered wrapper body as a genuinely fresh child process.
 
-    `CREATE_NEW_CONSOLE` matters and is not decoration: without it, a
+    A private console matters and is not decoration: without it, a
     console-subsystem child launched from this test process ATTACHES TO
     the ambient console it inherits, and `[Console]::OutputEncoding =`
     (SetConsoleOutputCP under the hood) changes THAT SHARED CONSOLE's
@@ -246,16 +246,21 @@ def run_wrapper(ps1_path, env_overrides, timeout=60):
     fresh Windows PowerShell 5.1 default. A hidden new console per call
     is what makes every stub-run test's result depend only on ITS OWN
     wrapper body, not on test execution order.
+
+    CREATE_NO_WINDOW, never CREATE_NEW_CONSOLE. Both give the child its
+    own console, so both isolate. Only CREATE_NO_WINDOW does it without
+    drawing one. CREATE_NEW_CONSOLE pops a real console per spawn and
+    STEALS FOCUS, which across a full run is a storm of windows over
+    whatever the user is doing. STARTUPINFO's SW_HIDE does NOT reliably
+    suppress it: wShowWindow is advisory for a newly created console,
+    and Windows showed them anyway.
     """
     full_env = dict(os.environ)
     full_env.update(env_overrides)
-    startupinfo = subprocess.STARTUPINFO()
-    startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-    startupinfo.wShowWindow = subprocess.SW_HIDE
     return subprocess.run(
         [POWERSHELL, "-NoProfile", "-NonInteractive", "-File", str(ps1_path)],
         capture_output=True, timeout=timeout, env=full_env,
-        creationflags=subprocess.CREATE_NEW_CONSOLE, startupinfo=startupinfo)
+        creationflags=subprocess.CREATE_NO_WINDOW)
 
 
 def read_transcript_loosely(path):

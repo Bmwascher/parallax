@@ -134,8 +134,19 @@ def start_dispatch_bg(args, env=None):
 def _run_wrapper_in_background(dispatch_dir, start_in=None):
     """Start a prepared wrapper.ps1 the way the harness now does: as its
     own tracked process, isolated from this test process's own stdio
-    (CREATE_NEW_CONSOLE), matching the isolation
+    (CREATE_NO_WINDOW - see the note below), matching the isolation
     test_wrapper_renders_and_parses.py already found necessary.
+
+    CREATE_NO_WINDOW, never CREATE_NEW_CONSOLE. Both give the child its
+    OWN console, which is the isolation these tests need: a wrapper that
+    sets [Console]::OutputEncoding must not leak its code page to a later
+    test's child through a shared console. Only CREATE_NO_WINDOW does it
+    without drawing a window. CREATE_NEW_CONSOLE pops a real console per
+    spawn and STEALS FOCUS, and with 71 tests in this module that is a
+    storm of windows across the user's screen. STARTUPINFO's SW_HIDE does
+    NOT reliably suppress it: wShowWindow is advisory for a newly created
+    console and Windows may show it anyway, which is exactly what
+    happened here.
 
     `start_in`, when given, starts the process in a directory OTHER than
     the dispatch directory - the way the harness starts the tracked
@@ -149,7 +160,7 @@ def _run_wrapper_in_background(dispatch_dir, start_in=None):
         kwargs["cwd"] = str(start_in)
     return subprocess.Popen(
         [POWERSHELL, "-NoProfile", "-NonInteractive", "-File", str(dispatch_dir / "wrapper.ps1")],
-        creationflags=subprocess.CREATE_NEW_CONSOLE, **kwargs)
+        creationflags=subprocess.CREATE_NO_WINDOW, **kwargs)
 
 
 def write_wrapper(base, content, name):
