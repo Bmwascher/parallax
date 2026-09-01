@@ -739,9 +739,24 @@ DECLARED_REGIONS = {
     # under the wrong state name once the receipt became the last
     # artifact published. NAMING is separate because it is the only
     # unenforced one.
-    "detached-dispatch-tool",
-    "detached-dispatch-states",
-    "detached-dispatch-operation",
+    #
+    # 2026-08-31, Task 8 of the completion-coupled dispatch plan renamed
+    # the launch/poll design's three regions for the -Prepare/-Classify
+    # design that replaced it: detached-dispatch-tool ->
+    # round-dispatch-tool, detached-dispatch-operation ->
+    # round-dispatch-operation. detached-dispatch-states did not survive
+    # as one region: the state list plus the exit map plus the framing
+    # sentence did not fit one pin, so it split at the boundary between
+    # the state list and the exit map into round-dispatch-states (the
+    # framing sentence, the 17-state order, and all five residuals this
+    # plan ships stated rather than fixed) and round-dispatch-exit-map
+    # (the exit code mapping alone). background-task-naming keeps its
+    # name; its only change is the new fact that -Prepare now prints the
+    # taskName.
+    "round-dispatch-tool",
+    "round-dispatch-states",
+    "round-dispatch-exit-map",
+    "round-dispatch-operation",
     "background-task-naming",
     # 0.28.0, backlog item 33. The prompt put "skip the cross-vendor
     # lane" one tap from the recommended answer, and the answer never
