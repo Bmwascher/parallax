@@ -45,9 +45,9 @@ Panel participation: a user-invoked panel per references/panels.md is a second s
   whole, at nearly three times the length that truncated on the
   superseded client.
 - **Detached dispatch for all three calls.** Every call below launches
-  through `tools/dispatch-round.ps1` and is polled, never run
-  inline — the caller's 600-second ceiling kills a crossing round with
-  the quota spent and no reply written. `$b` is the brief read from its
+  through `tools/dispatch-round.ps1` and is dispatched as a harness
+  background task, never run inline — the caller's 600-second ceiling
+  kills a crossing round with the quota spent and no reply written. `$b` is the brief read from its
   file — the same inline payload the Dispatch and Resume bullets above
   describe and the shape item 51 measured, never a pointer, which this
   lane's contract forbids. This lane's REPLY ARTIFACT is the `reply`
@@ -111,21 +111,36 @@ Panel participation: a user-invoked panel per references/panels.md is a second s
   [System.IO.File]::WriteAllText("$PSScriptRoot/reply", ($out -join "`n"), (New-Object System.Text.UTF8Encoding($false)))
   } catch { $code = 1 }
   [System.IO.File]::WriteAllText("$PSScriptRoot/exit", "$code")
+  exit $code
   ```
 
-  Launch it, with the working directory set to the review mirror
+  Run `-Prepare`, with the working directory set to the review mirror
   because this client binds a session to the directory it was created
-  in, and STOP:
+  in, naming `-DispatchHost` explicitly, and passing `-NoWorkdirEvidence`.
+  **This lane cannot confirm its own reviewed tree from client-reported
+  evidence, and that is a known and accepted limit, not an oversight.**
+  This lane's transcript is the client's own stderr and begins immediately
+  with the model's reasoning text, with no header block at all — measured
+  on a real round, and independently on the captured wire fixtures
+  (`evals/multi-model-verify/fixtures/kimi-round/fresh-wire.jsonl` and
+  `resume-wire.jsonl`), neither of which carries a `cwd`, `workdir`,
+  `working_directory`, `project_root` or `rootPath` field. The gap was
+  raised with the user and the decision was to ship this lane with it
+  recorded. What still binds the tree instead: the mirror-identity check
+  `-Prepare` runs before dispatch and the wrapper runs again after the
+  client returns, plus the terminating relocation into
+  `-WorkingDirectory` — neither depends on the client saying anything
+  about where it ran.
 
   ```powershell
-  & (Get-Process -Id $PID).Path -NoProfile -File <plugin-checkout>/tools/dispatch-round.ps1 -Launch -DispatchDir <dispatch-dir> -WrapperBody <wrapper-file> -ReceiptPath <receipt-file> -Round <label> -WorkingDirectory <review-mirror> -Json
+  & (Get-Process -Id $PID).Path -NoProfile -File <plugin-checkout>/tools/dispatch-round.ps1 -Prepare -DispatchDir <dispatch-dir> -WrapperBody <wrapper-file> -ReceiptPath <receipt-file> -Round <label> -WorkingDirectory <review-mirror> -RepoRoot <repo-root> -SourceHead <source-head> -MirrorHead <mirror-head> -SourceStatusSha256 <source-status-sha256> -MirrorStateSha256 <mirror-state-sha256> -ExpectedMirrorPath <review-mirror> -DispatchHost <dispatch-host> -PriorStateFile <prior-state-file> -NoWorkdirEvidence -Json
   ```
 
-  Poll the receipt that launch wrote:
+  `-Prepare` prints `command` and `taskName`: dispatch it as a harness background command, using `command` verbatim, under the `taskName` the tool printed, and STOP. On the completion notification for that exact task, read the harness output file: the exit code of that exact task is the result; never re-read the dispatch directory for a verdict.
 
-  ```powershell
-  & (Get-Process -Id $PID).Path -NoProfile -File <plugin-checkout>/tools/dispatch-round.ps1 -Poll -Receipt <receipt-file> -ExpectedDispatchDir <dispatch-dir> -ExpectedRound <label> -Json
-  ```
+  Bind the reply with `tools/read-kimi-round-evidence.ps1` in its FRESH
+  form, passing `-SealedPriorStateSha256` with this round's receipt
+  `priorStateSha256`.
 <!-- call:kimi-resume -->
 - **kimi-resume — every later round.** Same wrapper shape, run from the
   SAME working directory, with `KIMI_CODE_HOME` still set to the
@@ -141,18 +156,26 @@ Panel participation: a user-invoked panel per references/panels.md is a second s
   [System.IO.File]::WriteAllText("$PSScriptRoot/reply", ($out -join "`n"), (New-Object System.Text.UTF8Encoding($false)))
   } catch { $code = 1 }
   [System.IO.File]::WriteAllText("$PSScriptRoot/exit", "$code")
+  exit $code
   ```
 
-  Launch it the same way, still with `-WorkingDirectory <review-mirror>`,
-  and STOP:
+  Run `-Prepare` the same way, still with `-WorkingDirectory
+  <review-mirror>`, naming `-DispatchHost` explicitly, and passing
+  `-NoWorkdirEvidence` for the same measured reason as round 1: this
+  lane's transcript carries no `workdir:` header or equivalent field, a
+  known and accepted limit rather than an oversight — the mirror-identity
+  check before and after the client, plus the wrapper's terminating
+  relocation, still bind the tree.
 
   ```powershell
-  & (Get-Process -Id $PID).Path -NoProfile -File <plugin-checkout>/tools/dispatch-round.ps1 -Launch -DispatchDir <dispatch-dir> -WrapperBody <wrapper-file> -ReceiptPath <receipt-file> -Round <label> -WorkingDirectory <review-mirror> -Json
+  & (Get-Process -Id $PID).Path -NoProfile -File <plugin-checkout>/tools/dispatch-round.ps1 -Prepare -DispatchDir <dispatch-dir> -WrapperBody <wrapper-file> -ReceiptPath <receipt-file> -Round <label> -WorkingDirectory <review-mirror> -RepoRoot <repo-root> -SourceHead <source-head> -MirrorHead <mirror-head> -SourceStatusSha256 <source-status-sha256> -MirrorStateSha256 <mirror-state-sha256> -ExpectedMirrorPath <review-mirror> -DispatchHost <dispatch-host> -PriorStateFile <prior-state-file> -NoWorkdirEvidence -Json
   ```
 
-  ```powershell
-  & (Get-Process -Id $PID).Path -NoProfile -File <plugin-checkout>/tools/dispatch-round.ps1 -Poll -Receipt <receipt-file> -ExpectedDispatchDir <dispatch-dir> -ExpectedRound <label> -Json
-  ```
+  `-Prepare` prints `command` and `taskName`: dispatch it as a harness background command, using `command` verbatim, under the `taskName` the tool printed, and STOP. On the completion notification for that exact task, read the harness output file: the exit code of that exact task is the result; never re-read the dispatch directory for a verdict.
+
+  Bind the reply with `tools/read-kimi-round-evidence.ps1` in its RESUME
+  form, passing `-SealedPriorStateSha256` with THIS round's receipt
+  `priorStateSha256`, captured immediately before this dispatch.
 - **Build the debate home before round 1.**
   <!-- contract:start id=lane-home-isolation -->
   Build the DEBATE home ONCE, before round 1, with
@@ -487,15 +510,29 @@ log). There is no shared stream and nothing to attribute by position.
   [System.IO.File]::WriteAllText("$PSScriptRoot/reply", ($out -join "`n"), (New-Object System.Text.UTF8Encoding($false)))
   } catch { $code = 1 }
   [System.IO.File]::WriteAllText("$PSScriptRoot/exit", "$code")
+  exit $code
   ```
 
-  ```powershell
-  & (Get-Process -Id $PID).Path -NoProfile -File <plugin-checkout>/tools/dispatch-round.ps1 -Launch -DispatchDir <dispatch-dir> -WrapperBody <wrapper-file> -ReceiptPath <receipt-file> -Round <label> -WorkingDirectory <review-mirror> -Json
-  ```
+  Run `-Prepare` the same way as kimi-dispatch, naming `-DispatchHost`
+  explicitly and passing `-NoWorkdirEvidence` for the same measured
+  reason: this lane's transcript carries no `workdir:` header or
+  equivalent field, a known and accepted limit rather than an oversight —
+  the mirror-identity check before and after the client, plus the
+  wrapper's terminating relocation, still bind the tree.
 
   ```powershell
-  & (Get-Process -Id $PID).Path -NoProfile -File <plugin-checkout>/tools/dispatch-round.ps1 -Poll -Receipt <receipt-file> -ExpectedDispatchDir <dispatch-dir> -ExpectedRound <label> -Json
+  & (Get-Process -Id $PID).Path -NoProfile -File <plugin-checkout>/tools/dispatch-round.ps1 -Prepare -DispatchDir <dispatch-dir> -WrapperBody <wrapper-file> -ReceiptPath <receipt-file> -Round <label> -WorkingDirectory <review-mirror> -RepoRoot <repo-root> -SourceHead <source-head> -MirrorHead <mirror-head> -SourceStatusSha256 <source-status-sha256> -MirrorStateSha256 <mirror-state-sha256> -ExpectedMirrorPath <review-mirror> -DispatchHost <dispatch-host> -PriorStateFile <prior-state-file> -NoWorkdirEvidence -Json
   ```
+
+  `-Prepare` prints `command` and `taskName`: dispatch it as a harness background command, using `command` verbatim, under the `taskName` the tool printed, and STOP. On the completion notification for that exact task, read the harness output file: the exit code of that exact task is the result; never re-read the dispatch directory for a verdict.
+
+  **This call runs no round-evidence binder, deliberately.** Giving the
+  probe a binder would change what a probe PASS means, and the probe's
+  PASS criteria are already explicit and different in kind: an explicit
+  refusal in the reply, the marker absent on disk, and an empty mirror
+  status delta (stated above). The seal parameter binds a REVIEW result
+  to its evidence boundary; this dispatch produces no review result to
+  bind.
 
 ## Client config surface (read before round 1)
 

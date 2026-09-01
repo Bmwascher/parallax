@@ -205,42 +205,30 @@ toggled on, its stop-time review overlaps mode `diff` — expected, not a bug.
    $code = $LASTEXITCODE
    } catch { $code = 1 } finally { $OutputEncoding = $priorOutputEncoding }
    [System.IO.File]::WriteAllText("$PSScriptRoot/exit", "$code")
+   exit $code
    ```
 
    `$PSScriptRoot` is the dispatch directory, because the tool installs the
-   wrapper into it. That removes the need to pass a path in and removes one
-   more thing a copy can get wrong.
+   body into it as `body.ps1` and runs it there as a child process. That
+   removes the need to pass a path in and removes one more thing a copy
+   can get wrong.
 
-   Launch it and STOP. Read the round only when the poll reaches a terminal
-   state; the order of those checks is references/model-prompting-notes.md's detached-dispatch-states and `reply-present` is not a verdict on its own:
-
-   ```powershell
-   & (Get-Process -Id $PID).Path -NoProfile -File ${CLAUDE_PLUGIN_ROOT}/tools/dispatch-round.ps1 -Launch -DispatchDir <dispatch-dir> -WrapperBody <wrapper-file> -ReceiptPath <receipt-file> -Round <label> -Json
-   ```
-
-   `<receipt-file>` is a FRESH path for this round, alongside the fresh
-   reply and transcript paths this skill already requires; the launch
-   refuses one that exists. `<label>` names the lane and the round, as in
-   `Sol R1`. The poll below reads the receipt, not the directory, so a
-   launch that was refused has nothing to poll:
+   Run `-Prepare`, naming `-DispatchHost` explicitly as the caller's own
+   host (`pwsh` or `powershell`, matching `(Get-Process -Id $PID).Path`,
+   never a bare name) and passing `-WorkdirEvidence` with the resolved
+   mirror path — the codex lane's transcript header carries a `workdir:`
+   line naming it, confirmed on a real round:
 
    ```powershell
-   & (Get-Process -Id $PID).Path -NoProfile -File ${CLAUDE_PLUGIN_ROOT}/tools/dispatch-round.ps1 -Poll -Receipt <receipt-file> -ExpectedDispatchDir <dispatch-dir> -ExpectedRound <label> -Json
+   & (Get-Process -Id $PID).Path -NoProfile -File ${CLAUDE_PLUGIN_ROOT}/tools/dispatch-round.ps1 -Prepare -DispatchDir <dispatch-dir> -WrapperBody <wrapper-file> -ReceiptPath <receipt-file> -Round <label> -WorkingDirectory <mirror-path> -RepoRoot <repo-root> -SourceHead <source-head> -MirrorHead <mirror-head> -SourceStatusSha256 <source-status-sha256> -MirrorStateSha256 <mirror-state-sha256> -ExpectedMirrorPath <mirror-path> -DispatchHost <dispatch-host> -PriorStateFile <prior-state-file> -WorkdirEvidence <mirror-path> -Json
    ```
 
-   `-ExpectedDispatchDir` and `-ExpectedRound` are the same two values passed
-   to the launch, supplied again and INDEPENDENTLY of the receipt: that pair
-   is what stops an earlier attempt's receipt answering for this one. The
-   poll also echoes the `round` back, so record it. Its exit codes are: **0 means `reply-present` and nothing else; 3 means `running`, an UNFINISHED round; 1 is any other state, a transport failure with the state name on stdout; 2 is a parameter-binding failure or an internal execution error.** Round 10's finding: this sentence still carried
-   revision 8's mapping, so the shipped skill would have told the reader
-   that exit 0 covers a round still being written, while the tool said
-   otherwise.
+   `<receipt-file>` is a FRESH path, alongside the fresh reply and
+   transcript paths already required; `-Prepare` refuses one that
+   exists. `<label>` names the lane and the round, as in `Sol R1`.
+   `-Prepare` prints `command` and `taskName`: dispatch it as a harness background command, using `command` verbatim, under the `taskName` the tool printed, and STOP.
 
-   `(Get-Process -Id $PID).Path` is the caller's own host, not a bare
-   `powershell`. Round 6's finding: a bare name resolves to Windows
-   PowerShell 5.1 even from a PowerShell 7 session, and the tool hands its
-   own executable to the wrapper, so the wrapper would run on a host nobody
-   chose.
+   On the completion notification for that exact task, read the harness output file: the exit code of that exact task is the result, never re-read the dispatch directory for a verdict — **0 means `reply-present` and nothing else; 2 is a parameter-binding failure or an internal execution error; 1 is every other state, named on the wrapper's last stdout line.** The states -Classify computes are references/model-prompting-notes.md's detached-dispatch-states.
 
    Both encoding lines are load-bearing on Windows PowerShell 5.1
    (references/model-prompting-notes.md).
@@ -274,16 +262,18 @@ toggled on, its stop-time review overlaps mode `diff` — expected, not a bug.
    (fallbacks.md), never a review result — and capture the `session id:`
    line. Read the reviewer's reply from `<reply-file>` — the transcript
    logs every file the reviewer reads and can run tens of KB, with the
-   reply buried at the bottom. **Every round names a FRESH dispatch
-   directory and a FRESH receipt path, and `-Launch` refuses either if it
-   already exists** — a reused path serves the previous round's reply and
-   reads exactly like success.
+   reply buried at the bottom (a reused path, which `-Prepare` refuses,
+   would read exactly like success).
    Per-round evidence: bind the reply to the brief THIS side sent with
    `tools/read-codex-round-evidence.ps1` — `-Fresh` at round 1, `-Resume`
    after. `-PriorState` is captured immediately before EVERY dispatch —
    an inventory of the session root before round 1, then each round's
    own state — and is never inherited from the last clean round; a state
-   with a missing field is refused, never assumed empty. A verdict other
+   with a missing field is refused, never assumed empty. Pass
+   `-SealedPriorStateSha256` with the receipt's `priorStateSha256` on
+   EVERY call — mandatory here though optional on the binder for other
+   callers; `sealed: "not-checked"` is a transport failure, not a clean
+   round. A verdict other
    than clean is class `brief-attribution` (fallbacks.md): the reply is
    discarded unread. A clean verdict is client-echo evidence — what the
    client recorded, never what any server received.
@@ -309,21 +299,23 @@ toggled on, its stop-time review overlaps mode `diff` — expected, not a bug.
    $code = $LASTEXITCODE
    } catch { $code = 1 } finally { $OutputEncoding = $priorOutputEncoding }
    [System.IO.File]::WriteAllText("$PSScriptRoot/exit", "$code")
+   exit $code
    ```
 
-   Launch it and STOP, the same way as round 1; the order of the poll's
-   checks is references/model-prompting-notes.md's detached-dispatch-states
-   and `reply-present` is not a verdict on its own:
+   Run `-Prepare` the same way as round 1, with `-DispatchHost` and
+   `-WorkdirEvidence` set the same way:
 
    ```powershell
-   & (Get-Process -Id $PID).Path -NoProfile -File ${CLAUDE_PLUGIN_ROOT}/tools/dispatch-round.ps1 -Launch -DispatchDir <dispatch-dir> -WrapperBody <wrapper-file> -ReceiptPath <receipt-file> -Round <label> -Json
+   & (Get-Process -Id $PID).Path -NoProfile -File ${CLAUDE_PLUGIN_ROOT}/tools/dispatch-round.ps1 -Prepare -DispatchDir <dispatch-dir> -WrapperBody <wrapper-file> -ReceiptPath <receipt-file> -Round <label> -WorkingDirectory <mirror-path> -RepoRoot <repo-root> -SourceHead <source-head> -MirrorHead <mirror-head> -SourceStatusSha256 <source-status-sha256> -MirrorStateSha256 <mirror-state-sha256> -ExpectedMirrorPath <mirror-path> -DispatchHost <dispatch-host> -PriorStateFile <prior-state-file> -WorkdirEvidence <mirror-path> -Json
    ```
 
-   ```powershell
-   & (Get-Process -Id $PID).Path -NoProfile -File ${CLAUDE_PLUGIN_ROOT}/tools/dispatch-round.ps1 -Poll -Receipt <receipt-file> -ExpectedDispatchDir <dispatch-dir> -ExpectedRound <label> -Json
-   ```
+   `-Prepare` prints `command` and `taskName`: dispatch it as a harness background command, using `command` verbatim, under the `taskName` the tool printed, and STOP.
 
-   Its exit codes are the same as round 1's: **0 means `reply-present` and nothing else; 3 means `running`, an UNFINISHED round; 1 is any other state, a transport failure with the state name on stdout; 2 is a parameter-binding failure or an internal execution error.**
+   On the completion notification for that exact task, read the harness output file: the exit code of that exact task is the result, never re-read the dispatch directory for a verdict — **0 means `reply-present` and nothing else; 2 is a parameter-binding failure or an internal execution error; 1 is every other state, named on the wrapper's last stdout line.** The states -Classify computes are references/model-prompting-notes.md's detached-dispatch-states.
+
+   Bind the reply the same way as round 1, with `-Resume` in place of
+   `-Fresh`, and pass `-SealedPriorStateSha256` with THIS round's
+   `priorStateSha256`, captured immediately before this dispatch.
 
    The preamble repeats in full every round. Rounds are separate shell
    invocations, so a `$override` set in round 1 does not exist in round 3,

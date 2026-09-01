@@ -1014,6 +1014,11 @@ class TestTransportContract:
         session, and the tool then hands its own executable to the
         wrapper, so the wrapper silently runs on a host the caller never
         chose. `(Get-Process -Id $PID).Path` is the caller's own host.
+
+        Post-Task-7: `-Launch`/`-Poll` are gone, replaced by `-Prepare`
+        plus a harness-dispatched background task; the exit map lost its
+        `3 means running` clause because there is no more poll to return
+        it.
         """
         text = read(SKILL_MD)
         marker = "<!-- call:%s -->" % call
@@ -1021,31 +1026,26 @@ class TestTransportContract:
         section = text.split(marker, 1)[1].split("<!-- call:", 1)[0]
         assert (
             "& (Get-Process -Id $PID).Path -NoProfile -File"
-            " ${CLAUDE_PLUGIN_ROOT}/tools/dispatch-round.ps1 -Launch"
+            " ${CLAUDE_PLUGIN_ROOT}/tools/dispatch-round.ps1 -Prepare"
             " -DispatchDir <dispatch-dir> -WrapperBody <wrapper-file>"
             " -ReceiptPath <receipt-file> -Round <label>"
-            " -Json") in section, "this site has no launch"
-        assert (
-            "& (Get-Process -Id $PID).Path -NoProfile -File"
-            " ${CLAUDE_PLUGIN_ROOT}/tools/dispatch-round.ps1 -Poll"
-            " -Receipt <receipt-file>"
-            " -ExpectedDispatchDir <dispatch-dir> -ExpectedRound <label>"
-            " -Json") in section, "this site has no poll"
+            " -WorkingDirectory <mirror-path> -RepoRoot <repo-root>"
+            " -SourceHead <source-head> -MirrorHead <mirror-head>"
+            " -SourceStatusSha256 <source-status-sha256>"
+            " -MirrorStateSha256 <mirror-state-sha256>"
+            " -ExpectedMirrorPath <mirror-path>"
+            " -DispatchHost <dispatch-host>"
+            " -PriorStateFile <prior-state-file>"
+            " -WorkdirEvidence <mirror-path>"
+            " -Json") in section, "this site has no -Prepare dispatch"
         assert "$brief | codex exec" in section, (
             "this site has no client invocation")
         assert (
-            "0 means `reply-present` and nothing else; 3 means"
-            " `running`, an UNFINISHED round; 1 is any other state, a"
-            " transport failure with the state name on stdout; 2 is a"
-            " parameter-binding failure or an internal execution"
-            " error.") in section, (
-            "this site does not state the WHOLE exit mapping. Round 10"
-            " found the tool contract and the point of use disagreeing"
-            " about exit 0, which is the only place a reader of the"
-            " skill would look; round 11 found the replacement asserting"
-            " two of its four clauses, so the 1 and 2 clauses could drift"
-            " or vanish while this test stayed green. All four clauses"
-            " are one literal on purpose")
+            "0 means `reply-present` and nothing else; 2 is a"
+            " parameter-binding failure or an internal execution error;"
+            " 1 is every other state, named on the wrapper's last"
+            " stdout line.") in section, (
+            "this site does not state the whole exit mapping")
 
     def test_no_codex_lane_writes_its_own_launch(self):
         """A CENTRALIZATION guard, and nothing more.
@@ -3370,6 +3370,76 @@ def test_fallbacks_states_why_chaining_breaks():
 def test_the_backup_lane_carries_the_same_rule():
     body_backup_lane = read(REFERENCES / "backup-lane.md")
     assert "captured immediately before EVERY dispatch" in body_backup_lane
+
+
+# --- Task 7: rewrite all five call sites for completion-coupled dispatch --
+
+@pytest.fixture
+def body_skill():
+    return read(SKILL_MD)
+
+
+@pytest.fixture
+def body_backup_lane():
+    return read(REFERENCES / "backup-lane.md")
+
+
+def test_no_call_site_still_names_poll_or_exit_three(body_skill, body_backup_lane):
+    """NON-PINNING (1 of 3): both assertions are negative membership
+    (`not in`), which the pin rules exclude outright - a string under
+    `not` locks nothing, however real the behavioural check is."""
+    for body in (body_skill, body_backup_lane):
+        assert "-Poll" not in body
+        assert "3 means `running`" not in body
+
+
+def test_both_lanes_dispatch_the_printed_command_as_a_named_task(body_skill, body_backup_lane):
+    for body in (body_skill, body_backup_lane):
+        assert body.count("dispatch it as a harness background command") >= 1
+        assert "the `taskName` the tool printed" in body
+
+
+def test_both_lanes_read_the_exit_code_not_the_directory(body_skill, body_backup_lane):
+    for body in (body_skill, body_backup_lane):
+        assert "the exit code of that exact task is the result" in body
+        assert "never re-read the dispatch directory for a verdict" in body
+
+
+def test_both_lanes_name_the_host_explicitly(body_skill, body_backup_lane):
+    for body in (body_skill, body_backup_lane):
+        assert "-DispatchHost" in body
+
+
+def test_both_lanes_decide_the_workdir_evidence_explicitly(body_skill, body_backup_lane):
+    """NON-PINNING (2 of 3): the membership check sits inside an `or`,
+    which the pin rules say contributes nothing from either operand."""
+    for body in (body_skill, body_backup_lane):
+        assert ("-WorkdirEvidence" in body) or ("-NoWorkdirEvidence" in body)
+
+
+def test_every_ROUND_call_site_passes_the_seal(body_skill, body_backup_lane):
+    """NON-PINNING (3 of 3): the two counts are summed into a variable
+    and the assertion is made on that name, so the needles are reached
+    through a variable rather than appearing directly in the clause.
+
+    FOUR round sites, not five. The write probe runs no round-evidence
+    binder today, and this count must not silently settle the question
+    the task header says to settle deliberately. If the probe is given
+    a binder, raise this to 5 in the commit that records why.
+
+    All three of the tests above and this one are worth having as
+    behavioural checks. None may appear in a coverage argument. Labelling
+    only one of the three is how a coverage claim rots: the next editor
+    reads the warning as the complete list.
+    """
+    total = body_skill.count("-SealedPriorStateSha256") \
+        + body_backup_lane.count("-SealedPriorStateSha256")
+    assert total >= 4
+
+
+def test_the_write_probe_is_migrated_too(body_backup_lane):
+    assert body_backup_lane.count("-Prepare") >= 3
+    assert "kimi-write-probe" in body_backup_lane
 
 
 if __name__ == "__main__":
