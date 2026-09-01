@@ -210,7 +210,7 @@ toggled on, its stop-time review overlaps mode `diff` — expected, not a bug.
    `<receipt-file>` is a FRESH path, alongside the fresh reply and
    transcript paths already required; `-Prepare` refuses one that
    exists. `<label>` names the lane and the round, as in `Sol R1`.
-   `-Prepare` prints `command` and `taskName`: dispatch it as a harness background command, using `command` verbatim, under the `taskName` the tool printed, and STOP — but never END THE TURN with the round unfinished (round-dispatch-operation).
+   `-Prepare` prints `command` and `taskName`: dispatch it as a harness background command, using `command` verbatim, under the `taskName` the tool printed, and STOP — but never END THE TURN with the round unfinished (references/model-prompting-notes.md's round-dispatch-operation).
 
    On the completion notification for that exact task, read the harness output file: the exit code of that exact task is the result, never re-read the dispatch directory for a verdict — **0 means `reply-present` and nothing else; 2 is a parameter-binding failure or an internal execution error; 1 is every other state, named on the wrapper's last stdout line.** The states -Classify computes are references/model-prompting-notes.md's round-dispatch-states.
 
@@ -298,7 +298,7 @@ toggled on, its stop-time review overlaps mode `diff` — expected, not a bug.
    & (Get-Process -Id $PID).Path -NoProfile -File ${CLAUDE_PLUGIN_ROOT}/tools/dispatch-round.ps1 -Prepare -DispatchDir <dispatch-dir> -WrapperBody <wrapper-file> -ReceiptPath <receipt-file> -Round <label> -WorkingDirectory <mirror-path> -RepoRoot <repo-root> -SourceHead <source-head> -MirrorHead <mirror-head> -SourceStatusSha256 <source-status-sha256> -MirrorStateSha256 <mirror-state-sha256> -ExpectedMirrorPath <mirror-path> -DispatchHost <dispatch-host> -PriorStateFile <prior-state-file> -WorkdirEvidence <mirror-path> -Json
    ```
 
-   `-Prepare` prints `command` and `taskName`: dispatch it as a harness background command, using `command` verbatim, under the `taskName` the tool printed, and STOP — but never END THE TURN with the round unfinished (round-dispatch-operation).
+   `-Prepare` prints `command` and `taskName`: dispatch it as a harness background command, using `command` verbatim, under the `taskName` the tool printed, and STOP — but never END THE TURN with the round unfinished (references/model-prompting-notes.md's round-dispatch-operation).
 
    On the completion notification for that exact task, read the harness output file: the exit code of that exact task is the result, never re-read the dispatch directory for a verdict — **0 means `reply-present` and nothing else; 2 is a parameter-binding failure or an internal execution error; 1 is every other state, named on the wrapper's last stdout line.** The states -Classify computes are references/model-prompting-notes.md's round-dispatch-states.
 

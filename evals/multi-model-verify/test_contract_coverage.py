@@ -811,10 +811,23 @@ def test_every_cited_dispatch_region_id_resolves(doc_paths=DOC_PATHS):
 
     declared = set(collect_regions(doc_paths))
     cited = {}
-    pattern = re.compile(r"model-prompting-notes\.md's ([a-z][a-z0-9-]*)")
+    patterns = (
+        re.compile(r"model-prompting-notes\.md's ([a-z][a-z0-9-]*)"),
+        # A BARE parenthesised id, as in `(round-dispatch-operation)`.
+        # Three or more hyphen-separated lowercase words: measured
+        # 2026-09-01 over every document this checker scans, that shape
+        # matches region ids and nothing else in the prose. Without this
+        # second form a citation written that way is INVISIBLE to the
+        # guard, so renaming its region leaves a dead pointer nothing can
+        # see - which is what this cycle's own two new call sites were,
+        # added by the very fix that was meant to make them resolvable.
+        re.compile(r"\(([a-z][a-z0-9]*(?:-[a-z0-9]+){2,})\)"),
+    )
     for path in doc_paths:
-        for match in pattern.finditer(path.read_text(encoding="utf-8")):
-            cited.setdefault(match.group(1), set()).add(path.name)
+        text = path.read_text(encoding="utf-8")
+        for pattern in patterns:
+            for match in pattern.finditer(text):
+                cited.setdefault(match.group(1), set()).add(path.name)
     assert cited, (
         "no citation found at all; this guard silently stopped guarding")
     dangling = sorted(

@@ -139,7 +139,7 @@ Panel participation: a user-invoked panel per references/panels.md is a second s
   & (Get-Process -Id $PID).Path -NoProfile -File <plugin-checkout>/tools/dispatch-round.ps1 -Prepare -DispatchDir <dispatch-dir> -WrapperBody <wrapper-file> -ReceiptPath <receipt-file> -Round <label> -WorkingDirectory <review-mirror> -RepoRoot <repo-root> -SourceHead <source-head> -MirrorHead <mirror-head> -SourceStatusSha256 <source-status-sha256> -MirrorStateSha256 <mirror-state-sha256> -ExpectedMirrorPath <review-mirror> -DispatchHost <dispatch-host> -PriorStateFile <prior-state-file> -NoWorkdirEvidence -Json
   ```
 
-  `-Prepare` prints `command` and `taskName`: dispatch it as a harness background command, using `command` verbatim, under the `taskName` the tool printed, and STOP. On the completion notification for that exact task, read the harness output file: the exit code of that exact task is the result; never re-read the dispatch directory for a verdict.
+  `-Prepare` prints `command` and `taskName`: dispatch it as a harness background command, using `command` verbatim, under the `taskName` the tool printed, and STOP — but never END THE TURN with the round unfinished (references/model-prompting-notes.md's round-dispatch-operation). On the completion notification for that exact task, read the harness output file: the exit code of that exact task is the result; never re-read the dispatch directory for a verdict.
 
   Bind the reply with `tools/read-kimi-round-evidence.ps1` in its FRESH
   form, passing `-SealedPriorStateSha256` with this round's receipt
@@ -148,11 +148,18 @@ Panel participation: a user-invoked panel per references/panels.md is a second s
 - **kimi-resume — every later round.** Same wrapper shape, run from the
   SAME working directory, with `KIMI_CODE_HOME` still set to the
   debate home. The mirror must still be AT the path its identity was
-  recorded at, because `-Prepare` binds `-ExpectedMirrorPath` to it: a
-  tree rebuilt mid-debate must be rebuilt at the SAME path with `-Force`
-  and its identity fields re-recorded, or the round is dispatched FRESH
-  instead. A mirror at a new path is not a smaller problem than a
-  missing one; it refuses:
+  recorded at: a tree rebuilt mid-debate must be rebuilt at the SAME
+  path with `-Force` and its identity fields re-recorded, or the round
+  is dispatched FRESH instead.
+
+  NOTHING ENFORCES THAT ON THIS LANE. The rule is written here because
+  it is unenforced, not in spite of it. `-ExpectedMirrorPath` compares
+  two values this session supplies in the SAME command, so a session
+  that rebuilds elsewhere and passes the new path to both satisfies it
+  and is not refused. The codex lane's real refusal is its binder's
+  `cwd` check; the kimi binder records no working directory at all,
+  which is the same gap `-NoWorkdirEvidence` states above. The wrapper
+  shape is unchanged:
 
   ```powershell
   $code = 1
@@ -179,7 +186,7 @@ Panel participation: a user-invoked panel per references/panels.md is a second s
   & (Get-Process -Id $PID).Path -NoProfile -File <plugin-checkout>/tools/dispatch-round.ps1 -Prepare -DispatchDir <dispatch-dir> -WrapperBody <wrapper-file> -ReceiptPath <receipt-file> -Round <label> -WorkingDirectory <review-mirror> -RepoRoot <repo-root> -SourceHead <source-head> -MirrorHead <mirror-head> -SourceStatusSha256 <source-status-sha256> -MirrorStateSha256 <mirror-state-sha256> -ExpectedMirrorPath <review-mirror> -DispatchHost <dispatch-host> -PriorStateFile <prior-state-file> -NoWorkdirEvidence -Json
   ```
 
-  `-Prepare` prints `command` and `taskName`: dispatch it as a harness background command, using `command` verbatim, under the `taskName` the tool printed, and STOP. On the completion notification for that exact task, read the harness output file: the exit code of that exact task is the result; never re-read the dispatch directory for a verdict.
+  `-Prepare` prints `command` and `taskName`: dispatch it as a harness background command, using `command` verbatim, under the `taskName` the tool printed, and STOP — but never END THE TURN with the round unfinished (references/model-prompting-notes.md's round-dispatch-operation). On the completion notification for that exact task, read the harness output file: the exit code of that exact task is the result; never re-read the dispatch directory for a verdict.
 
   Bind the reply with `tools/read-kimi-round-evidence.ps1` in its RESUME
   form, passing `-SealedPriorStateSha256` with THIS round's receipt
@@ -532,7 +539,7 @@ log). There is no shared stream and nothing to attribute by position.
   & (Get-Process -Id $PID).Path -NoProfile -File <plugin-checkout>/tools/dispatch-round.ps1 -Prepare -DispatchDir <dispatch-dir> -WrapperBody <wrapper-file> -ReceiptPath <receipt-file> -Round <label> -WorkingDirectory <review-mirror> -RepoRoot <repo-root> -SourceHead <source-head> -MirrorHead <mirror-head> -SourceStatusSha256 <source-status-sha256> -MirrorStateSha256 <mirror-state-sha256> -ExpectedMirrorPath <review-mirror> -DispatchHost <dispatch-host> -PriorStateFile <prior-state-file> -NoWorkdirEvidence -Json
   ```
 
-  `-Prepare` prints `command` and `taskName`: dispatch it as a harness background command, using `command` verbatim, under the `taskName` the tool printed, and STOP. On the completion notification for that exact task, read the harness output file: the exit code of that exact task is the result; never re-read the dispatch directory for a verdict.
+  `-Prepare` prints `command` and `taskName`: dispatch it as a harness background command, using `command` verbatim, under the `taskName` the tool printed, and STOP — but never END THE TURN with the round unfinished (references/model-prompting-notes.md's round-dispatch-operation). On the completion notification for that exact task, read the harness output file: the exit code of that exact task is the result; never re-read the dispatch directory for a verdict.
 
   **This call runs no round-evidence binder, deliberately.** Giving the
   probe a binder would change what a probe PASS means, and the probe's

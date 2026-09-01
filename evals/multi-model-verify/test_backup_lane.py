@@ -2060,6 +2060,10 @@ def test_each_kimi_call_is_prepared_through_the_tool(call):
     assert "the `taskName` the tool printed" in section, (
         "an unnamed background task cannot be found by the person"
         " watching it")
+    assert "never END THE TURN with the round unfinished" in section, (
+        "a call site that stops at STOP with no clause reads as leave"
+        " for ending the turn; measured 2026-09-01, an unattended run"
+        " that did exactly that finished with no verdict at all")
     assert "the exit code of that exact task is the result" in section, (
         "a prepared round whose result is never read is a round thrown"
         " away, which is what the -Poll pin used to catch here")
