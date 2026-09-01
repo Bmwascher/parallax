@@ -785,6 +785,47 @@ def test_declared_regions_match_the_documents(doc_paths=DOC_PATHS):
         "Add them to DECLARED_REGIONS.")
 
 
+def test_every_cited_dispatch_region_id_resolves(doc_paths=DOC_PATHS):
+    """Prose that names a region id must name one that exists.
+
+    Backlog item 32, 2026-08-31. Task 8 renamed three regions and split
+    one. Two sentences in SKILL.md went on citing
+    `detached-dispatch-states`, an id that no longer existed, and the
+    test that was supposed to keep the reader pointed at the states
+    quoted the SAME stale id - so the pair agreed with each other and
+    the suite stayed green over a dead citation. A green gate proving a
+    dead citation is the worst kind of green.
+
+    SCOPE, stated rather than implied: this checks citations of
+    `model-prompting-notes.md`'s regions ONLY. A general check over
+    every document is not possible with this shape, because the same
+    `<file>.md's <token>` phrasing is ordinary prose elsewhere -
+    `backup-lane.md's per-round evidence`,
+    `debate-protocol.md's final-adjudication step`,
+    `fallbacks.md's panel-lane-loss class` and
+    `frozen-plan-format.md's lane envelope` are all English, not ids,
+    and none of them is a region. Backlog item 69 tracks the general
+    problem of citations into shipped text that nothing verifies.
+    """
+    import re
+
+    declared = set(collect_regions(doc_paths))
+    cited = {}
+    pattern = re.compile(r"model-prompting-notes\.md's ([a-z][a-z0-9-]*)")
+    for path in doc_paths:
+        for match in pattern.finditer(path.read_text(encoding="utf-8")):
+            cited.setdefault(match.group(1), set()).add(path.name)
+    assert cited, (
+        "no citation found at all; this guard silently stopped guarding")
+    dangling = sorted(
+        (rid, sorted(where)) for rid, where in cited.items()
+        if rid not in declared)
+    assert not dangling, (
+        "prose cites region id(s) that no document declares: "
+        f"{dangling}. A region was renamed, split or deleted and the "
+        "sentence pointing at it was left behind.")
+
+
 def test_every_marked_region_is_locked_by_a_pin(doc_paths=DOC_PATHS):
     regions = collect_regions(doc_paths)
     misses = uncovered(regions, collect_pins(PIN_PATHS))

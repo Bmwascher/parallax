@@ -228,7 +228,7 @@ toggled on, its stop-time review overlaps mode `diff` — expected, not a bug.
    exists. `<label>` names the lane and the round, as in `Sol R1`.
    `-Prepare` prints `command` and `taskName`: dispatch it as a harness background command, using `command` verbatim, under the `taskName` the tool printed, and STOP.
 
-   On the completion notification for that exact task, read the harness output file: the exit code of that exact task is the result, never re-read the dispatch directory for a verdict — **0 means `reply-present` and nothing else; 2 is a parameter-binding failure or an internal execution error; 1 is every other state, named on the wrapper's last stdout line.** The states -Classify computes are references/model-prompting-notes.md's detached-dispatch-states.
+   On the completion notification for that exact task, read the harness output file: the exit code of that exact task is the result, never re-read the dispatch directory for a verdict — **0 means `reply-present` and nothing else; 2 is a parameter-binding failure or an internal execution error; 1 is every other state, named on the wrapper's last stdout line.** The states -Classify computes are references/model-prompting-notes.md's round-dispatch-states.
 
    Both encoding lines are load-bearing on Windows PowerShell 5.1
    (references/model-prompting-notes.md).
@@ -311,7 +311,7 @@ toggled on, its stop-time review overlaps mode `diff` — expected, not a bug.
 
    `-Prepare` prints `command` and `taskName`: dispatch it as a harness background command, using `command` verbatim, under the `taskName` the tool printed, and STOP.
 
-   On the completion notification for that exact task, read the harness output file: the exit code of that exact task is the result, never re-read the dispatch directory for a verdict — **0 means `reply-present` and nothing else; 2 is a parameter-binding failure or an internal execution error; 1 is every other state, named on the wrapper's last stdout line.** The states -Classify computes are references/model-prompting-notes.md's detached-dispatch-states.
+   On the completion notification for that exact task, read the harness output file: the exit code of that exact task is the result, never re-read the dispatch directory for a verdict — **0 means `reply-present` and nothing else; 2 is a parameter-binding failure or an internal execution error; 1 is every other state, named on the wrapper's last stdout line.** The states -Classify computes are references/model-prompting-notes.md's round-dispatch-states.
 
    Bind the reply the same way as round 1, with `-Resume` in place of
    `-Fresh`, and pass `-SealedPriorStateSha256` with THIS round's

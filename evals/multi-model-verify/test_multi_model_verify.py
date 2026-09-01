@@ -1063,7 +1063,7 @@ class TestTransportContract:
     def test_the_point_of_use_sends_the_reader_to_the_states(self):
         text = read(SKILL_MD)
         assert text.count("references/model-prompting-notes.md's"
-                          " detached-dispatch-states") >= 2
+                          " round-dispatch-states") >= 2
 
 
 def test_dispatch_traps_are_documented_in_the_notes():
