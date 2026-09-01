@@ -629,11 +629,13 @@ proceed; do not infer either key's value.
   the reviewed work.
 - **Mirror identity, and the gate that keeps it fresh.**
   <!-- contract:start id=mirror-identity-gate -->
-  The record carries TWO identities and one fingerprint: `source_head`,
-  `mirror_head` and `source_status_sha256`. The two heads differ whenever
-  remediation committed, which is the ordinary case for a repo carrying a
-  tracked back-channel, so a record printing one of them twice is wrong
-  in the common case rather than the rare one. Construction is a
+  The record carries TWO identities, TWO fingerprints, and the path it
+  was built at: `source_head`, `mirror_head`, `source_status_sha256`,
+  `mirror_state_sha256`, and the mirror's own recorded path. The two
+  heads differ whenever remediation committed, which is the ordinary
+  case for a repo carrying a tracked back-channel, so a record printing
+  one of them twice is wrong in the common case rather than the rare
+  one. Construction is a
   six-step bridge. Capture the source head BEFORE the copy; copy;
   require the live source head still equals it; before remediation,
   require the COPIED tree's head equals it; remediate, then record
@@ -649,23 +651,36 @@ proceed; do not infer either key's value.
   thing that would close it is building from an immutable snapshot,
   which this release does not do. Before every fresh
   and resumed dispatch, re-run the tool with `-VerifyIdentity` and the
-  three recorded values. Missing, unreadable or unequal BLOCKS the
+  five recorded values. Missing, unreadable or unequal BLOCKS the
   round, and a value that was never recorded is never a value that
-  matched. What the gate proves is narrow and stated so: the two-HEAD
+  matched. Two refusals guard the comparison itself, both ahead of any
+  digest work: the source and the mirror must not be the same
+  directory — otherwise every remaining comparison is trivially
+  satisfied whenever the two heads already agree, which they do
+  whenever the mirror needed no remediation commit — and the live
+  `-MirrorPath` must canonically match `-ExpectedMirrorPath`, the path
+  recorded at construction, so a verify call cannot be pointed at a
+  different mirror than the one whose identity was measured. What the
+  gate proves is narrow and stated so: the two-HEAD
   gate proves committed-HEAD freshness. Non-HEAD inputs are bound in the
   constructed mirror's manifest AT CONSTRUCTION TIME, and source-side
   changes after construction are detected by the source-status
   comparison below WHEN THEY ARE VISIBLE TO IT: that is, changes that
   move the status listing, or that alter the content of a path the
-  listing names. A tracked file git reports CLEAN is in neither, so a
+  listing names. Changes made directly INSIDE the mirror after
+  construction — an edit to a file the mirror's own HEAD still calls
+  clean, or a file added to the mirror — are caught the same way, by a
+  second fingerprint over the mirror itself, `mirror_state_sha256`,
+  computed by the identical mechanism. A tracked file git reports CLEAN,
+  on either side, is covered by neither fingerprint, so a
   raw-byte change that survives the clean filter unchanged - the
   autocrlf case measured below is the mild one, a content-stripping
-  filter the severe one - moves neither HEAD nor this fingerprint and is
-  NOT covered. Round 2 of the mode-diff debate found the unqualified
-  claim. That comparison is a fingerprint over the status
-  capture AND the content of every path status names, not the status
-  listing alone: measured 2026-08-04, editing an already-ignored file
-  leaves the listing byte-identical, so a listing-only fingerprint
+  filter the severe one - moves neither HEAD nor either fingerprint and
+  is NOT covered. Round 2 of the mode-diff debate found the unqualified
+  claim. Each comparison is a fingerprint over its own status
+  capture AND the content of every path that capture names, not the
+  status listing alone: measured 2026-08-04, editing an already-ignored
+  file leaves the listing byte-identical, so a listing-only fingerprint
   verified clean across exactly the drift this check exists to catch.
   Ignored and untracked content is the entire reason this workspace is a
   mirror, so a gate blind to its bytes would be blind in the middle of
@@ -720,7 +735,10 @@ proceed; do not infer either key's value.
   the brief only when the recorded prompt IS the brief.
 - Any review input the mirror cannot inherit — a standards file living
   above the repo root, an assignment PDF, a spec kept outside the tree —
-  is copied in deliberately and enumerated before the round. An input the
+  is named to the BUILD with `-ExtraInput <path>`, repeated for each one,
+  so it is copied in as part of construction, before the baseline and
+  the manifest are taken. There is no way to add one after construction;
+  a round whose inputs changed needs the mirror rebuilt. An input the
   reviewer cannot read is a gap in the review, not a silent omission.
 - **THE STATUS COMMAND — `git -c core.quotepath=false status --porcelain
   --ignored -uall`, every capture without exception** (baseline,

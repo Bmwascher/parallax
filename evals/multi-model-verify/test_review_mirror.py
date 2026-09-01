@@ -1513,26 +1513,36 @@ def record_field(stdout, name):
     return None
 
 
-def build_and_read(repo, mirror):
-    proc = run_mirror(repo, mirror)
+def build_and_read(repo, mirror, *extra):
+    proc = run_mirror(repo, mirror, *extra)
     assert_built(proc)
     return proc, {
         "source_head": record_field(proc.stdout, "source_head"),
         "mirror_head": record_field(proc.stdout, "mirror_head"),
         "source_status_sha256": record_field(proc.stdout,
                                              "source_status_sha256"),
+        "mirror_state_sha256": record_field(proc.stdout,
+                                            "mirror_state_sha256"),
+        "mirror": record_field(proc.stdout, "mirror"),
     }
 
 
 def run_verify(repo, mirror, ident, **override):
+    """`mirror` is BOTH the live -MirrorPath argument (2nd positional)
+    AND, by default, -ExpectedMirrorPath - the path the identity was
+    recorded at. Pass `mirror=` in `override` to point the two at
+    different places on purpose (test_verify_refuses_a_mirror_at_a_
+    different_path)."""
     fields = dict(ident)
     fields.update(override)
     return subprocess.run(
         [ps_host(), "-NoProfile", "-NonInteractive", "-File", str(MIRROR),
          "-VerifyIdentity", "-RepoRoot", str(repo), "-MirrorPath", str(mirror),
+         "-ExpectedMirrorPath", str(fields["mirror"]),
          "-SourceHead", str(fields["source_head"]),
          "-MirrorHead", str(fields["mirror_head"]),
-         "-SourceStatusSha256", str(fields["source_status_sha256"])],
+         "-SourceStatusSha256", str(fields["source_status_sha256"]),
+         "-MirrorStateSha256", str(fields["mirror_state_sha256"])],
         capture_output=True, text=True)
 
 
@@ -1662,7 +1672,8 @@ def test_a_missing_identity_field_blocks_the_dispatch(tmp_path):
     repo = make_repo(tmp_path)
     mirror = tmp_path / "mirror"
     _, ident = build_and_read(repo, mirror)
-    for field in ("source_head", "mirror_head", "source_status_sha256"):
+    for field in ("source_head", "mirror_head", "source_status_sha256",
+                  "mirror_state_sha256"):
         proc = run_verify(repo, mirror, ident, **{field: ""})
         assert proc.returncode == 1, (field, proc.stdout + proc.stderr)
 
@@ -1783,3 +1794,145 @@ def test_a_relative_symlink_cycle_is_refused(tmp_path):
     # local skip was hiding it. A test that cannot run is exactly the
     # test whose assertion nobody has checked.
     assert "would never terminate" in proc.stdout, proc.stdout
+
+
+# =====================================================================
+# Mirror-state fingerprint and -ExtraInput (Task 1a, 2026-08-31
+# completion-coupled dispatch plan).
+#
+# The two-HEAD gate and the source-status fingerprint together still
+# missed one thing: an edit or an addition made directly INSIDE the
+# mirror after construction, without moving the mirror's own HEAD -
+# neither head sees it and source_status_sha256 measures the SOURCE, not
+# the mirror. mirror_state_sha256 closes that with the SAME algorithm
+# Get-StatusSha256 already used for the source, now applied to the
+# mirror. Two more refusals guard the comparison itself: the source and
+# the mirror must not be the same directory, and the live -MirrorPath
+# must canonically match -ExpectedMirrorPath, the path the identity was
+# recorded at.
+# =====================================================================
+
+
+def test_build_prints_a_mirror_state_digest(tmp_path):
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    proc = run_mirror(repo, mirror)
+    assert_built(proc)
+    assert re.search(r"^mirror_state_sha256: [0-9a-f]{64}$", proc.stdout,
+                     re.M), proc.stdout
+
+
+def test_verify_detects_an_uncommitted_edit_inside_the_mirror(tmp_path):
+    # kept.txt is TRACKED and clean at HEAD, in the repo and the mirror
+    # alike. Editing it in place, without committing, moves NEITHER head
+    # and changes nothing on the source side - only the mirror-state
+    # fingerprint can see it.
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    _, ident = build_and_read(repo, mirror)
+    (mirror / "kept.txt").write_text("changed bytes\n")
+    proc = run_verify(repo, mirror, ident)
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "the mirror's contents changed" in proc.stdout, proc.stdout
+
+
+def test_verify_detects_an_untracked_file_added_to_the_mirror(tmp_path):
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    _, ident = build_and_read(repo, mirror)
+    (mirror / "sneak.txt").write_text("added after construction\n")
+    proc = run_verify(repo, mirror, ident)
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "the mirror's contents changed" in proc.stdout, proc.stdout
+
+
+def test_verify_refuses_when_the_source_is_the_mirror(tmp_path):
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    _, ident = build_and_read(repo, mirror)
+    proc = run_verify(mirror, mirror, ident)
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert ("the source and the mirror are the same directory"
+            in proc.stdout), proc.stdout
+
+
+def test_verify_refuses_a_mirror_at_a_different_path(tmp_path):
+    """-MirrorPath is where verify looks; -ExpectedMirrorPath is where
+    construction recorded the identity. Moving the mirror and pointing
+    -MirrorPath at the new location, while -ExpectedMirrorPath (defaulted
+    by run_verify from the build record) still names the original path,
+    must refuse rather than silently verifying a different tree."""
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    _, ident = build_and_read(repo, mirror)
+    moved = tmp_path / "moved"
+    shutil.move(str(mirror), str(moved))
+    proc = run_verify(repo, moved, ident)
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+
+
+def test_extra_inputs_are_covered_by_the_digest(tmp_path):
+    # Copied in as part of construction, so the identity record describes
+    # the tree the reviewer actually reads.
+    repo = make_repo(tmp_path)
+    extra = tmp_path / "standards.md"
+    extra.write_text("house rules\n")
+    mirror = tmp_path / "mirror"
+    proc, ident = build_and_read(repo, mirror, "-ExtraInput", str(extra))
+    assert (mirror / "standards.md").read_text() == "house rules\n"
+    assert "standards.md" in proc.stdout, proc.stdout
+    ok = run_verify(repo, mirror, ident)
+    assert ok.returncode == 0, ok.stdout + ok.stderr
+    (mirror / "standards.md").write_text("tampered\n")
+    tampered = run_verify(repo, mirror, ident)
+    assert tampered.returncode == 1, tampered.stdout + tampered.stderr
+
+
+def test_there_is_no_reseal_or_remint_mode(tmp_path):
+    # Re-blessing a tree that changed since it was measured is exactly
+    # what the mirror-state digest exists to deny, so no flag does it.
+    # Each case is run against a full, otherwise-valid BUILD invocation:
+    # a bare unrecognized flag with nothing else would fail at
+    # PowerShell's own mandatory-parameter binding instead, which proves
+    # nothing about this tool's own refusal.
+    repo = make_repo(tmp_path)
+    for flag in ("-Reseal", "-Remint", "-UpdateIdentity"):
+        mirror = tmp_path / ("m" + flag)
+        proc = run_mirror(repo, mirror, flag)
+        assert proc.returncode == 2, (flag, proc.stdout + proc.stderr)
+        assert not mirror.exists(), (flag, "a rejected flag must not build")
+
+
+def test_an_unmeasurable_expected_digest_is_refused(tmp_path):
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    _, ident = build_and_read(repo, mirror)
+    proc = run_verify(repo, mirror, ident, mirror_state_sha256="")
+    assert proc.returncode != 0, proc.stdout + proc.stderr
+
+
+def test_a_mirror_whose_current_state_cannot_be_measured_is_refused(tmp_path):
+    # Not the same case as the one above: that one supplies a bad
+    # EXPECTED value, and this one makes the LIVE measurement itself
+    # fail - the direction that could otherwise read as clean. Mirrors
+    # the source-side version of this case (icacls deny, same shape).
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    _, ident = build_and_read(repo, mirror)
+    denied = mirror / "untracked.txt"
+    user = os.environ.get("USERNAME") or ""
+    if not user:
+        pytest.skip("USERNAME not set; cannot build a deny ACE")
+    deny = subprocess.run(["icacls", str(denied), "/deny", user + ":(RD)"],
+                          capture_output=True, text=True)
+    if deny.returncode != 0:
+        pytest.skip("icacls deny unavailable: " + deny.stdout + deny.stderr)
+    try:
+        proc = run_verify(repo, mirror, ident)
+        assert proc.returncode != 0, proc.stdout + proc.stderr
+        assert "could not be" in proc.stdout, proc.stdout
+    finally:
+        undo = subprocess.run(["icacls", str(denied), "/remove:d", user],
+                              capture_output=True, text=True)
+        assert undo.returncode == 0, undo.stdout + undo.stderr
+        assert denied.read_text(), "the deny ACE is still in force"

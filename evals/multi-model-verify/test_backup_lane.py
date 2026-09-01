@@ -1932,35 +1932,39 @@ def test_mirror_path_budget_region():
 
 
 def test_mirror_identity_gate_region():
-    """The identity gate's contract, locked whole (0.21.0, item 22).
+    """The identity gate's contract, locked whole (0.21.0, item 22;
+    reworked for Task 1a of the 2026-08-31 completion-coupled dispatch
+    plan, which adds the mirror-side fingerprint and its two refusals).
 
-    Three clauses carry the weight. TWO identities, because they differ
+    Four clauses carry the weight. TWO identities, because they differ
     whenever remediation committed and a record printing one twice would
     be wrong in the common case. The BRIDGE at steps three and four,
     because without it two individually valid commit ids prove nothing
-    about whether one tree came from the other. And the fingerprint
+    about whether one tree came from the other. The TWO fingerprints
     covering CONTENT rather than the status listing alone, which is
     measured: editing an already-ignored file leaves the listing
     byte-identical, so the listing-only version verified clean across
-    exactly the drift the check exists to catch.
+    exactly the drift the check exists to catch. And the two refusals
+    that keep the comparison from being pointed at the wrong tree.
     """
     assert (
-            "The record carries TWO identities and one fingerprint: "
-            "`source_head`, `mirror_head` and `source_status_sha256`. "
-            "The two heads differ whenever remediation committed, which "
-            "is the ordinary case for a repo carrying a tracked "
-            "back-channel, so a record printing one of them twice is "
-            "wrong in the common case rather than the rare one. "
-            "Construction is a six-step bridge. Capture the source head "
-            "BEFORE the copy; copy; require the live source head still "
-            "equals it; before remediation, require the COPIED tree's "
-            "head equals it; remediate, then record `mirror_head`. "
-            "Steps three and four are the bridge itself: without them "
-            "the record can hold two individually valid commit ids "
-            "while nothing proves the mirror was built FROM the "
-            "recorded source commit, which is two true facts arranged "
-            "to look like one. What the bridge proves is matching "
-            "OBSERVED ENDPOINTS, and that is weaker than an "
+            "The record carries TWO identities, TWO fingerprints, and "
+            "the path it was built at: `source_head`, `mirror_head`, "
+            "`source_status_sha256`, `mirror_state_sha256`, and the "
+            "mirror's own recorded path. The two heads differ whenever "
+            "remediation committed, which is the ordinary case for a "
+            "repo carrying a tracked back-channel, so a record printing "
+            "one of them twice is wrong in the common case rather than "
+            "the rare one. Construction is a six-step bridge. Capture "
+            "the source head BEFORE the copy; copy; require the live "
+            "source head still equals it; before remediation, require "
+            "the COPIED tree's head equals it; remediate, then record "
+            "`mirror_head`. Steps three and four are the bridge itself: "
+            "without them the record can hold two individually valid "
+            "commit ids while nothing proves the mirror was built FROM "
+            "the recorded source commit, which is two true facts "
+            "arranged to look like one. What the bridge proves is "
+            "matching OBSERVED ENDPOINTS, and that is weaker than an "
             "uninterrupted construction: a source that moves away and "
             "back during the copy satisfies both the before-and-after "
             "head equality and the before-and-after fingerprint, while "
@@ -1969,31 +1973,46 @@ def test_mirror_identity_gate_region():
             "would close it is building from an immutable snapshot, "
             "which this release does not do. Before every fresh and "
             "resumed dispatch, re-run the tool with `-VerifyIdentity` "
-            "and the three recorded values. Missing, unreadable or "
+            "and the five recorded values. Missing, unreadable or "
             "unequal BLOCKS the round, and a value that was never "
-            "recorded is never a value that matched. What the gate "
+            "recorded is never a value that matched. Two refusals guard "
+            "the comparison itself, both ahead of any digest work: the "
+            "source and the mirror must not be the same directory "
+            "— otherwise every remaining comparison is trivially "
+            "satisfied whenever the two heads already agree, which "
+            "they do whenever the mirror needed no remediation commit "
+            "— and the live `-MirrorPath` must canonically match "
+            "`-ExpectedMirrorPath`, the path recorded at construction, "
+            "so a verify call cannot be pointed at a different mirror "
+            "than the one whose identity was measured. What the gate "
             "proves is narrow and stated so: the two-HEAD gate proves "
             "committed-HEAD freshness. Non-HEAD inputs are bound in the "
             "constructed mirror's manifest AT CONSTRUCTION TIME, and "
             "source-side changes after construction are detected by the "
             "source-status comparison below WHEN THEY ARE VISIBLE TO "
             "IT: that is, changes that move the status listing, or that "
-            "alter the content of a path the listing names. A tracked "
-            "file git reports CLEAN is in neither, so a raw-byte change "
-            "that survives the clean filter unchanged - the autocrlf "
-            "case measured below is the mild one, a content-stripping "
-            "filter the severe one - moves neither HEAD nor this "
-            "fingerprint and is NOT covered. Round 2 of the mode-diff "
-            "debate found the unqualified claim. That comparison is a "
-            "fingerprint over the status capture AND the content of "
-            "every path status names, not the status listing alone: "
-            "measured 2026-08-04, editing an already-ignored file "
-            "leaves the listing byte-identical, so a listing-only "
-            "fingerprint verified clean across exactly the drift this "
-            "check exists to catch. Ignored and untracked content is "
-            "the entire reason this workspace is a mirror, so a gate "
-            "blind to its bytes would be blind in the middle of the "
-            "feature."
+            "alter the content of a path the listing names. Changes "
+            "made directly INSIDE the mirror after construction "
+            "— an edit to a file the mirror's own HEAD still calls "
+            "clean, or a file added to the mirror — are caught the "
+            "same way, by a second fingerprint over the mirror itself, "
+            "`mirror_state_sha256`, computed by the identical "
+            "mechanism. A tracked file git reports CLEAN, on either "
+            "side, is covered by neither fingerprint, so a raw-byte "
+            "change that survives the clean filter unchanged - the "
+            "autocrlf case measured below is the mild one, a "
+            "content-stripping filter the severe one - moves neither "
+            "HEAD nor either fingerprint and is NOT covered. Round 2 of "
+            "the mode-diff debate found the unqualified claim. Each "
+            "comparison is a fingerprint over its own status capture "
+            "AND the content of every path that capture names, not the "
+            "status listing alone: measured 2026-08-04, editing an "
+            "already-ignored file leaves the listing byte-identical, so "
+            "a listing-only fingerprint verified clean across exactly "
+            "the drift this check exists to catch. Ignored and "
+            "untracked content is the entire reason this workspace is a "
+            "mirror, so a gate blind to its bytes would be blind in the "
+            "middle of the feature."
             ) in _norm(BACKUP_LANE)
 
 

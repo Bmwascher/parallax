@@ -23,9 +23,20 @@
 # the moment the mirror is made.
 #
 #   Build:  -RepoRoot <src> -MirrorPath <dst> [-OverrideOut <p>] [-Force]
-#           [-SkipProbe] [-CodexCommand <exe>]
+#           [-SkipProbe] [-CodexCommand <exe>] [-ExtraInput <path>]...
 #   Verify: -VerifyIdentity -RepoRoot <src> -MirrorPath <dst>
-#           -SourceHead <sha> -MirrorHead <sha> -SourceStatusSha256 <hex>
+#           -ExpectedMirrorPath <path> -SourceHead <sha> -MirrorHead <sha>
+#           -SourceStatusSha256 <hex> -MirrorStateSha256 <hex>
+#
+# -ExtraInput names a file the mirror cannot inherit on its own - a
+# standards file living above the repo root, a spec kept outside the
+# tree - and may be repeated. Each one is copied into the mirror BEFORE
+# the baseline and the manifest are taken, so the identity record covers
+# it and the printed record enumerates it like any other mirror content.
+# There is deliberately no way to add one after construction, and no
+# re-mint or reseal mode: a tree that changed since it was measured is
+# exactly what -VerifyIdentity exists to refuse, so re-blessing one
+# would defeat it.
 #
 # The identity values are passed as ARGUMENTS rather than re-read from a
 # file the build wrote, for the reason the codex brief binding states
@@ -40,6 +51,10 @@ param(
     [AllowEmptyString()][string]$MirrorHead,
     [Parameter(ParameterSetName = "Verify", Mandatory = $true)]
     [AllowEmptyString()][string]$SourceStatusSha256,
+    [Parameter(ParameterSetName = "Verify", Mandatory = $true)]
+    [AllowEmptyString()][string]$MirrorStateSha256,
+    [Parameter(ParameterSetName = "Verify", Mandatory = $true)]
+    [string]$ExpectedMirrorPath,
 
     [Parameter(ParameterSetName = "Build", Mandatory = $true)]
     [Parameter(ParameterSetName = "Verify", Mandatory = $true)]
@@ -51,7 +66,16 @@ param(
     [Parameter(ParameterSetName = "Build")][string]$OverrideOut,
     [Parameter(ParameterSetName = "Build")][switch]$Force,
     [Parameter(ParameterSetName = "Build")][switch]$SkipProbe,
-    [Parameter(ParameterSetName = "Build")][string]$CodexCommand = "codex"
+    [Parameter(ParameterSetName = "Build")][string]$CodexCommand = "codex",
+    # Catches every remaining token so the BUILD can accept a repeated
+    # named flag. PowerShell's own parameter binder refuses to bind the
+    # SAME named parameter twice, even to an array - "Cannot bind
+    # parameter because parameter 'X' is specified more than once" -
+    # which is what a literal `-ExtraInput <path>` array parameter would
+    # do. -ExtraInput is parsed out of this list by hand below, and
+    # anything left over is a parameter this tool does not have.
+    [Parameter(ParameterSetName = "Build", ValueFromRemainingArguments = $true)]
+    [string[]]$BuildRemainingArgs
 )
 
 # This script decodes git's pathnames as STRICT UTF-8 and refuses to guess
@@ -511,11 +535,28 @@ function Get-HeadSha($repo) {
     return @{ Ok = $true; Sha = $out }
 }
 
+function Get-CombinedSha256($fields, $manifestLines) {
+    # ONE digest over a raw status capture's fields plus a content
+    # manifest's lines, NUL-joined - the separator git already emits
+    # them with, so no field value can forge a boundary. Shared by the
+    # source-side fingerprint below and the mirror-side one at
+    # construction and verify time, so the two are computed the same way
+    # by construction rather than by two call sites staying in sync.
+    $joined = ((@($fields) + @($manifestLines)) -join "`0")
+    $bytes = [System.Text.Encoding]::UTF8.GetBytes($joined)
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try { $digest = $sha.ComputeHash($bytes) } finally { $sha.Dispose() }
+    return (($digest | ForEach-Object { $_.ToString("x2") }) -join "")
+}
+
 function Get-StatusSha256($repo) {
-    # The source's non-HEAD fingerprint: the SAME status capture the
-    # mirror already uses, PLUS the content manifest of the paths that
-    # status names. Fields are joined on NUL, the separator git already
-    # emitted them with, so no field value can forge a boundary.
+    # A non-HEAD fingerprint for whichever repo it is given: the SAME
+    # status capture the mirror already uses, PLUS the content manifest
+    # of the paths that status names, combined by Get-CombinedSha256.
+    # Used on the SOURCE for source_status_sha256 and on the MIRROR
+    # itself for mirror_state_sha256 - one algorithm, so the two
+    # fingerprints cannot drift apart by drifting the code that computes
+    # them.
     #
     # THE CONTENT HALF IS NOT OPTIONAL, and measured 2026-08-04 rather
     # than assumed: editing an already-ignored file leaves the status
@@ -539,12 +580,8 @@ function Get-StatusSha256($repo) {
     if ($content.ContainsKey("Error")) {
         return @{ Ok = $false; Reason = $content.Error }
     }
-    $joined = ((@($captured.Fields) + @($content.Paths)) -join "`0")
-    $bytes = [System.Text.Encoding]::UTF8.GetBytes($joined)
-    $sha = [System.Security.Cryptography.SHA256]::Create()
-    try { $digest = $sha.ComputeHash($bytes) } finally { $sha.Dispose() }
     return @{ Ok = $true
-              Sha = (($digest | ForEach-Object { $_.ToString("x2") }) -join "") }
+              Sha = (Get-CombinedSha256 $captured.Fields $content.Paths) }
 }
 
 $toplevel = $true
@@ -559,20 +596,33 @@ $RepoRoot = (Resolve-Path $RepoRoot).Path
 # VERIFY MODE - step 6 of the construction bridge, run immediately before
 # every fresh and resumed dispatch.
 #
-# WHAT IT PROVES, narrowly: the two-HEAD gate proves committed-HEAD
-# freshness. Non-HEAD inputs are bound in the constructed mirror's
-# manifest AT CONSTRUCTION TIME, and source-side changes after
-# construction are detected by the source-status comparison here WHEN
-# THEY ARE VISIBLE TO IT: changes that move the status listing, or that
-# alter the content of a path the listing names. A tracked file git
-# reports CLEAN is in neither, so a raw-byte change surviving the clean
-# filter unchanged moves neither HEAD nor this fingerprint and is NOT
-# covered. The contract region carries the same qualification; this
-# comment said "are detected" flat until round 3 of the mode-diff debate
-# pointed out that the code and the contract had drifted apart again,
-# in the direction of the code claiming more.
+# WHAT IT PROVES: the two-HEAD gate proves committed-HEAD freshness.
+# Non-HEAD inputs are bound in the constructed mirror's manifest AT
+# CONSTRUCTION TIME, and changes after construction are caught by TWO
+# status-based fingerprints, one per side. The source-status comparison
+# catches source-side drift WHEN IT IS VISIBLE TO IT: changes that move
+# the status listing, or that alter the content of a path the listing
+# names. The mirror-state comparison catches the same class of change
+# made directly INSIDE the mirror after construction - an uncommitted
+# edit to a file the mirror's own HEAD still calls clean, or a file
+# added to the mirror - which the two-HEAD gate cannot see because
+# neither head moves. A tracked file git reports CLEAN, on either side,
+# is covered by neither fingerprint, so a raw-byte change surviving the
+# clean filter unchanged is NOT covered. The contract region carries the
+# same qualification; this comment said "are detected" flat until round
+# 3 of the mode-diff debate pointed out that the code and the contract
+# had drifted apart again, in the direction of the code claiming more.
 #
-# The status comparison is not decoration. An edit to an untracked or
+# Two further refusals guard the comparison itself, both ahead of any
+# digest work: the source and the mirror must not be the same directory
+# - otherwise every remaining comparison is trivially satisfied whenever
+# the two heads already agree, which they do whenever the mirror needed
+# no remediation commit - and the live -MirrorPath must canonically
+# match -ExpectedMirrorPath, the path recorded at construction, so a
+# verify call cannot be pointed at a different mirror than the one whose
+# identity was measured.
+#
+# Neither status comparison is decoration. An edit to an untracked or
 # ignored review input moves NEITHER head, and that content class is
 # precisely what the mirror exists to carry, so a gate built only on
 # HEADs would be blind in the middle of the feature.
@@ -587,6 +637,7 @@ if ($VerifyIdentity) {
     # but a tool should not teach one lesson in one mode and forget it
     # in the other.
     $MirrorPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($MirrorPath)
+    $ExpectedMirrorPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($ExpectedMirrorPath)
     $shaRx = '^[0-9a-f]{40}$'
     if ($SourceHead -cnotmatch $shaRx) {
         Write-Output ("BLOCKED: the recorded source head is missing or not a" +
@@ -603,6 +654,34 @@ if ($VerifyIdentity) {
             " malformed, so nothing was compared")
         exit 1
     }
+    if ($MirrorStateSha256 -cnotmatch '^[0-9a-f]{64}$') {
+        Write-Output ("BLOCKED: the recorded mirror state hash is missing or" +
+            " malformed, so nothing was compared")
+        exit 1
+    }
+
+    # BEFORE ANY DIGEST WORK. A source pointed at itself as the mirror
+    # would satisfy every remaining comparison trivially whenever the
+    # two heads already agree, which they do whenever the mirror needed
+    # no remediation commit.
+    $cmp = [System.StringComparison]::OrdinalIgnoreCase
+    $rrNorm = $RepoRoot.Replace("\", "/").TrimEnd("/")
+    $mpNorm = $MirrorPath.Replace("\", "/").TrimEnd("/")
+    if ($mpNorm.Equals($rrNorm, $cmp)) {
+        Write-Output ("BLOCKED: the source and the mirror are the same" +
+            " directory ($MirrorPath), so nothing was compared")
+        exit 1
+    }
+    # The live -MirrorPath must canonically match the path the identity
+    # was recorded at, so a verify call cannot be pointed at a different
+    # mirror than the one whose identity was measured.
+    $expNorm = $ExpectedMirrorPath.Replace("\", "/").TrimEnd("/")
+    if (-not $mpNorm.Equals($expNorm, $cmp)) {
+        Write-Output ("BLOCKED: the mirror at $MirrorPath is not the mirror" +
+            " this identity was recorded for ($ExpectedMirrorPath)")
+        exit 1
+    }
+
     if (-not (Test-Path -LiteralPath $MirrorPath -PathType Container)) {
         Write-Output ("BLOCKED: the mirror at $MirrorPath is gone, so its" +
             " identity could not be measured")
@@ -650,6 +729,24 @@ if ($VerifyIdentity) {
         exit 1
     }
 
+    # THE MIRROR-SIDE FINGERPRINT, recomputed live. Catches an
+    # uncommitted edit to a file the mirror's own HEAD still calls clean,
+    # or a file added to the mirror after construction - the case the
+    # two-HEAD gate cannot see because neither head moves for it.
+    $liveMirrorState = Get-StatusSha256 $MirrorPath
+    if (-not $liveMirrorState.Ok) {
+        Write-Output ("BLOCKED: the mirror's current state could not be" +
+            " measured (" + $liveMirrorState.Reason + ") - an unmade" +
+            " measurement is never a clean one")
+        exit 1
+    }
+    if ($liveMirrorState.Sha -ne $MirrorStateSha256) {
+        Write-Output ("BLOCKED: the mirror's contents changed since" +
+            " construction - something edited or added a file inside the" +
+            " mirror without moving its head. Rebuild the mirror.")
+        exit 1
+    }
+
     Write-Output "identity: verified"
     exit 0
 }
@@ -668,6 +765,42 @@ if ($VerifyIdentity) {
 $MirrorPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($MirrorPath)
 if ($OverrideOut) {
     $OverrideOut = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($OverrideOut)
+}
+
+# -EXTRAINPUT, PARSED BY HAND out of the remaining-argument catch-all.
+# PowerShell's own binder refuses to bind one named parameter twice, even
+# to an array, so a literal repeatable `-ExtraInput <path>` cannot be a
+# declared parameter. Anything left in $BuildRemainingArgs that is not an
+# "-ExtraInput <value>" pair is a parameter this tool does not have -
+# this is also what refuses a re-mint or reseal flag: there is
+# deliberately no such mode, so any flag claiming to be one lands here
+# and is rejected the same way an unrecognized parameter always is.
+$ExtraInputPaths = New-Object System.Collections.ArrayList
+# Measured on both hosts: when NOTHING would otherwise land in a
+# ValueFromRemainingArguments array, -File invocation still hands back
+# one PHANTOM $null element instead of a genuinely empty array. Neither
+# an -ExtraInput flag name nor a real value is ever $null or empty, so
+# filtering both out removes exactly the phantom and nothing a real
+# caller could have meant.
+$remaining = @($BuildRemainingArgs | Where-Object { $_ })
+$ri = 0
+while ($ri -lt $remaining.Count) {
+    $tok = [string]$remaining[$ri]
+    if ($tok -cne "-ExtraInput") {
+        Write-Output ("ERROR: unrecognized parameter '" + $tok + "'")
+        exit 2
+    }
+    if ($ri + 1 -ge $remaining.Count) {
+        Write-Output "ERROR: -ExtraInput requires a value"
+        exit 2
+    }
+    $eiPath = [string]$remaining[$ri + 1]
+    if (-not (Test-Path -LiteralPath $eiPath -PathType Leaf)) {
+        Write-Output ("ERROR: -ExtraInput '" + $eiPath + "' is not a file")
+        exit 2
+    }
+    [void]$ExtraInputPaths.Add((Resolve-Path -LiteralPath $eiPath).Path)
+    $ri += 2
 }
 
 # OVERLAP GUARD, before anything is created or deleted. -Force recursively
@@ -1139,6 +1272,16 @@ if ($after.Entries.Count -gt 0) {
     exit 1
 }
 
+# COPY EACH -ExtraInput IN NOW, as part of construction and BEFORE the
+# baseline and the manifest are taken below, so the identity record
+# covers it and the printed record enumerates it - it lands as an
+# ordinary untracked mirror file, the same as any other review input the
+# mirror cannot inherit on its own.
+foreach ($ei in @($ExtraInputPaths)) {
+    $dest = Join-Path $MirrorPath (Split-Path $ei -Leaf)
+    Copy-Item -LiteralPath $ei -Destination $dest -Force
+}
+
 $head = (& git -C $MirrorPath rev-parse HEAD 2>$null | Out-String).Trim()
 if (($LASTEXITCODE -ne 0) -or -not $head) {
     Write-Output ("BLOCKED: could not resolve the mirror's HEAD - the" +
@@ -1172,6 +1315,12 @@ if ($manifestResult.ContainsKey("Error")) {
 }
 $manifest = $manifestResult.Paths
 
+# ONE digest over the baseline just captured and the manifest just
+# built, so it describes exactly the tree those two printed sections
+# describe - not a second, separately-timed measurement of the mirror
+# that could disagree with what was printed above it.
+$mirrorStateSha256 = Get-CombinedSha256 $captured.Fields $manifest
+
 $probeLine = "skipped"
 $overrideFile = ""
 if (-not $SkipProbe) {
@@ -1200,6 +1349,7 @@ Write-Output ("mirror: " + $MirrorPath)
 Write-Output ("source_head: " + $sourceBefore.Sha)
 Write-Output ("mirror_head: " + $head)
 Write-Output ("source_status_sha256: " + $sourceStatus.Sha)
+Write-Output ("mirror_state_sha256: " + $mirrorStateSha256)
 Write-Output "baseline:"
 foreach ($b in $baseline) { Write-Output ("  " + $b) }
 Write-Output "manifest:"
