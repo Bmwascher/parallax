@@ -21,9 +21,31 @@
 # path to a verdict - the class of defect this cycle kept reproducing.
 # -Prepare only builds the directory and prints the command; the caller
 # dispatches that command itself as a harness-tracked background task, and
-# the WRAPPER this tool writes (a later task builds its full shape) calls
-# -Classify as its last act and exits with its status. See
+# the WRAPPER this tool writes calls -Classify as its last act and exits
+# with its status. See
 # docs/superpowers/plans/2026-08-31-completion-coupled-dispatch.md.
+#
+# THE WRAPPER, in order: reserves BOTH a `claim` file and a `classification`
+# file (create-new, so a second run of the same wrapper fails before
+# touching anything) as its first act; re-verifies the working directory
+# against the same mirror-identity values -Prepare recorded, BEFORE the
+# lane body runs; relocates to it terminatingly; runs body.ps1 as a CHILD
+# process (never inline, so a body that calls [Environment]::Exit cannot
+# skip the epilogue) with its streams redirected to body.out/body.err, never
+# to the wrapper's own stdout; re-verifies the working directory a SECOND
+# time, after the body returns; consumes the classification reservation
+# into `classifying:<nonce>` with a nonce minted at run time; writes the
+# `exit` file; calls -Classify as its last act; and exits with -Classify's
+# own exit code, so the harness task's exit code IS the classification.
+#
+# PARALLAX_DISPATCH_HOLD_AFTER_EXIT_WRITE, set to a path by a parent
+# process, is BUILDER CONTRACT the wrapper honors, the same shape as the
+# seams in tools/new-kimi-lane-home.ps1: it makes the wrapper create
+# `<value>.started` right after the `exit` file is written, then wait,
+# bounded at sixty seconds, for `<value>.release` before calling -Classify,
+# failing through to a non-zero exit on timeout. Its only reachable effect
+# is to DELAY or FAIL a wrapper - never to turn a failing round into a
+# successful one. No shipped caller sets it.
 #
 # -Classify REDEEMS a reservation the wrapper already made in the
 # `classification` file. It never creates one. It accepts exactly one
@@ -73,9 +95,9 @@
 #      not an existing filesystem container.
 #   1a. BLOCK if the working directory does not verify as the named
 #      mirror: tools/new-review-mirror.ps1 -VerifyIdentity is run with
-#      every value the caller supplied, and any non-zero exit BLOCKS.
-#      There is no override switch - every call site already uses the
-#      mirror.
+#      every value the caller supplied, and any non-zero exit BLOCKS with
+#      a "mirror identity" message. There is no override switch - every
+#      call site already uses the mirror.
 #   2. Resolve -DispatchHost to a full path with Get-Command. Only 'pwsh'
 #      and 'powershell' are accepted; anything else, or a name that does
 #      not resolve, exits 2.
@@ -84,16 +106,16 @@
 #      and NO -Force: a taken directory fails loudly instead of
 #      proceeding with an unreliable path.
 #   5. Copy -WrapperBody into the directory as body.ps1, byte for byte,
-#      and write wrapper.ps1 beside it. The wrapper is written ENTIRELY
-#      by this tool and never contains the body's text; it runs body.ps1
-#      as a child process and exits with its code. A later task builds
-#      the wrapper's full shape (the mirror re-verify at dispatch time,
-#      the classification reservation, the -Classify call).
-#   6. Write the receipt LAST, with create-new semantics. Its fields are
-#      exactly: dispatchDir, token, round, workingDirectory, dispatchHost,
-#      priorStateSha256, workdirEvidence, repoRoot, sourceHead,
-#      mirrorHead, sourceStatusSha256, mirrorStateSha256,
-#      expectedMirrorPath, schema (the integer 2).
+#      and write wrapper.ps1 beside it - the full shape described above,
+#      written ENTIRELY by this tool and never containing the body's text.
+#      The receipt's bytes are computed here too (in memory only) so their
+#      digest can be embedded in the wrapper as -ExpectedReceiptSha256.
+#   6. Write the receipt LAST, with create-new semantics, from the same
+#      bytes just hashed. Its fields are exactly: dispatchDir, token,
+#      round, workingDirectory, dispatchHost, priorStateSha256,
+#      workdirEvidence, repoRoot, sourceHead, mirrorHead,
+#      sourceStatusSha256, mirrorStateSha256, expectedMirrorPath, schema
+#      (the integer 2).
 #   7. Print command, taskName, wrapper, dispatchDir, round.
 #
 # A failure at any step leaves the reserved directory in place and no
@@ -201,6 +223,137 @@ function Test-ReceiptSchema($Obj) {
     if ([double]$schemaVal -ne 2) { return $false }
 
     return $true
+}
+
+# Doubles an embedded single quote so a value can be dropped inside a
+# single-quoted literal in generated PowerShell text without breaking it
+# out of the quotes it is placed in.
+function ConvertTo-PSSingleQuoteInner([string]$Value) {
+    return $Value.Replace("'", "''")
+}
+
+# Builds the wrapper's ENTIRE text, exactly as in the design section of
+# docs/superpowers/plans/2026-08-31-completion-coupled-dispatch.md: the
+# claim and classification reservations, the mirror re-verify before the
+# body runs, the body run as a CHILD process, the mirror re-verify after
+# the body returns, the classification-reservation consume, the exit-file
+# write, the PARALLAX_DISPATCH_HOLD_AFTER_EXIT_WRITE seam, the -Classify
+# call, and `exit $LASTEXITCODE` as the last statement. Every interpolated
+# value is dropped inside the template's own single quotes, with any
+# embedded single quote doubled, so a path containing one cannot break the
+# generated script.
+function Get-WrapperTemplate {
+    param(
+        [string]$MirrorToolPath,
+        [string]$RepoRoot,
+        [string]$WorkingDirectory,
+        [string]$SourceHead,
+        [string]$MirrorHead,
+        [string]$SourceStatusSha256,
+        [string]$MirrorStateSha256,
+        [string]$ExpectedMirrorPath,
+        [string]$HostPath,
+        [string]$ToolPath,
+        [string]$DispatchDir,
+        [string]$ReceiptPath,
+        [string]$Round,
+        [string]$ReceiptSha256
+    )
+
+    $template = @'
+$ErrorActionPreference = 'Stop'
+$utf8 = New-Object System.Text.UTF8Encoding($false)
+# ONE first act, two reservations, in this order. BOTH are create-new:
+# WriteAllText is NOT create-new, it overwrites, so the reservation is
+# opened with FileMode CreateNew and written through that handle.
+[System.IO.File]::Open("$PSScriptRoot/claim", 'CreateNew', 'Write', 'None').Close()
+$r = [System.IO.File]::Open("$PSScriptRoot/classification", 'CreateNew', 'Write', 'None')
+try { $b = $utf8.GetBytes('reserved'); $r.Write($b, 0, $b.Length) } finally { $r.Close() }
+
+# ONE argument set, defined once, used by BOTH verifications.
+$mirrorArgs = @{
+    VerifyIdentity      = $true
+    RepoRoot            = '<repoRoot>'
+    MirrorPath          = '<workingDirectory>'
+    SourceHead          = '<sourceHead>'
+    MirrorHead          = '<mirrorHead>'
+    SourceStatusSha256  = '<sourceStatusSha256>'
+    MirrorStateSha256   = '<mirrorStateSha256>'
+    ExpectedMirrorPath  = '<expectedMirrorPath>'
+}
+
+# The tree is verified HERE, at run time, not merely at preparation.
+& '<mirrorToolPath>' @mirrorArgs > "$PSScriptRoot/mirror.verify" 2>&1
+if ($LASTEXITCODE -ne 0) { throw 'mirror identity failed at dispatch time' }
+
+Set-Location -LiteralPath '<workingDirectory>' -ErrorAction Stop
+$ErrorActionPreference = 'Continue'
+$null | & '<hostPath>' -NoProfile -NonInteractive -File "$PSScriptRoot/body.ps1" `
+    > "$PSScriptRoot/body.out" 2> "$PSScriptRoot/body.err"
+$code = $LASTEXITCODE
+# NOT a complete backstop, and the comment must not imply it is. If the
+# resolved host binary has been deleted since preparation, the call raises
+# a statement-terminating error under Continue and $LASTEXITCODE still
+# holds the FIRST verification's zero - a stale 0, not $null, so this line
+# does not fire. The round still cannot read as success: the body never
+# ran, so there is no reply and no transcript, and classification lands on
+# no-transcript or no-reply. But the exit file then records a 0 for a
+# client that never launched. Conservative, and worth knowing when reading
+# that file.
+if ($null -eq $code) { $code = 1 }
+
+# The tree is verified a SECOND time, after the client has finished, so a
+# mutation that persisted through the round is caught. A change reverted
+# inside the round is not, and no before-and-after check could catch it.
+# 'Stop' is restored FIRST: see the note below, this line is load-bearing.
+$ErrorActionPreference = 'Stop'
+& '<mirrorToolPath>' @mirrorArgs >> "$PSScriptRoot/mirror.verify" 2>&1
+if ($LASTEXITCODE -ne 0) { throw 'the mirror changed while the round ran' }
+
+# CONSUME the reservation BEFORE any terminal artifact is published, and
+# stamp it with a nonce minted HERE, at run time, that appears in no file
+# -Prepare wrote.
+$nonce = [System.Guid]::NewGuid().ToString('N')
+[System.IO.File]::WriteAllText("$PSScriptRoot/classification", "classifying:$nonce", $utf8)
+[System.IO.File]::WriteAllText("$PSScriptRoot/exit", "$code", $utf8)
+# test seam: PARALLAX_DISPATCH_HOLD_AFTER_EXIT_WRITE, see below. BUILDER
+# CONTRACT, the same shape as the seams in tools/new-kimi-lane-home.ps1:
+# any parent process can set it, no shipped caller does, and its only
+# reachable effect is to DELAY or FAIL this wrapper - never to turn a
+# failing round into a successful one.
+$holdPath = $env:PARALLAX_DISPATCH_HOLD_AFTER_EXIT_WRITE
+if ($holdPath) {
+    [System.IO.File]::WriteAllText("$holdPath.started", 'started', $utf8)
+    $deadline = (Get-Date).AddSeconds(60)
+    while (-not (Test-Path -LiteralPath "$holdPath.release")) {
+        if ((Get-Date) -ge $deadline) {
+            exit 1
+        }
+        Start-Sleep -Milliseconds 200
+    }
+}
+& '<toolPath>' -Classify -DispatchDir '<dispatchDir>' -ReceiptPath '<receiptPath>' `
+    -ExpectedRound '<round>' -ExpectedReceiptSha256 '<receiptSha256>' `
+    -Redeem $nonce
+exit $LASTEXITCODE
+'@
+
+    $template = $template.Replace('<repoRoot>', (ConvertTo-PSSingleQuoteInner $RepoRoot))
+    $template = $template.Replace('<workingDirectory>', (ConvertTo-PSSingleQuoteInner $WorkingDirectory))
+    $template = $template.Replace('<sourceHead>', (ConvertTo-PSSingleQuoteInner $SourceHead))
+    $template = $template.Replace('<mirrorHead>', (ConvertTo-PSSingleQuoteInner $MirrorHead))
+    $template = $template.Replace('<sourceStatusSha256>', (ConvertTo-PSSingleQuoteInner $SourceStatusSha256))
+    $template = $template.Replace('<mirrorStateSha256>', (ConvertTo-PSSingleQuoteInner $MirrorStateSha256))
+    $template = $template.Replace('<expectedMirrorPath>', (ConvertTo-PSSingleQuoteInner $ExpectedMirrorPath))
+    $template = $template.Replace('<mirrorToolPath>', (ConvertTo-PSSingleQuoteInner $MirrorToolPath))
+    $template = $template.Replace('<hostPath>', (ConvertTo-PSSingleQuoteInner $HostPath))
+    $template = $template.Replace('<toolPath>', (ConvertTo-PSSingleQuoteInner $ToolPath))
+    $template = $template.Replace('<dispatchDir>', (ConvertTo-PSSingleQuoteInner $DispatchDir))
+    $template = $template.Replace('<receiptPath>', (ConvertTo-PSSingleQuoteInner $ReceiptPath))
+    $template = $template.Replace('<round>', (ConvertTo-PSSingleQuoteInner $Round))
+    $template = $template.Replace('<receiptSha256>', (ConvertTo-PSSingleQuoteInner $ReceiptSha256))
+
+    return $template -replace '\r?\n', "`r`n"
 }
 
 # ---------------------------------------------------------------------
@@ -316,12 +469,12 @@ $verifyOut = $null
 try {
     $verifyOut = & $mirrorToolPath @mirrorArgs 2>&1
 } catch {
-    Write-Output ("BLOCKED: the working directory did not verify as the named mirror: " +
+    Write-Output ("BLOCKED: mirror identity - the working directory did not verify as the named mirror: " +
         $_.Exception.Message)
     exit 1
 }
 if ($LASTEXITCODE -ne 0) {
-    Write-Output ("BLOCKED: the working directory did not verify as the named mirror: " +
+    Write-Output ("BLOCKED: mirror identity - the working directory did not verify as the named mirror: " +
         ((@($verifyOut) | Out-String).Trim()))
     exit 1
 }
@@ -376,16 +529,6 @@ try {
     $bodyDest = Join-Path $d "body.ps1"
     Copy-Item -LiteralPath $WrapperBody -Destination $bodyDest -ErrorAction Stop
 
-    # Written ENTIRELY by this tool and never carries the body's text.
-    # This is the minimal shape for this task: run body.ps1 as a child
-    # and exit with its code. A later task builds the wrapper's full
-    # shape.
-    $wrapperContent =
-        "`$ErrorActionPreference = 'Stop'`r`n" +
-        "& '" + $hostPath + "' -NoProfile -NonInteractive -File `"`$PSScriptRoot/body.ps1`"`r`n" +
-        "exit `$LASTEXITCODE`r`n"
-    Set-Content -LiteralPath $wrapperDest -Value $wrapperContent -Encoding Ascii -NoNewline
-
     $token = [System.Guid]::NewGuid().ToString()
     $workdirEvidenceValue = $WorkdirEvidence
     if ($NoWorkdirEvidence) {
@@ -409,6 +552,23 @@ try {
     }
     $receiptJson = ConvertTo-Json $receiptObj -Compress
     $receiptBytes = [System.Text.Encoding]::UTF8.GetBytes($receiptJson)
+    $receiptSha256 = Get-Sha256Hex $receiptBytes
+
+    # Written ENTIRELY by this tool and never carries the body's text: the
+    # claim and classification reservations, the mirror re-verify before
+    # and after the body runs (as a CHILD process), the classification
+    # consume, the exit-file write, the hold-after-exit-write seam, the
+    # -Classify call, and exit $LASTEXITCODE as the last statement. See
+    # docs/superpowers/plans/2026-08-31-completion-coupled-dispatch.md.
+    $wrapperContent = Get-WrapperTemplate `
+        -MirrorToolPath $mirrorToolPath -RepoRoot $repoRootFull `
+        -WorkingDirectory $workingFull -SourceHead $SourceHead `
+        -MirrorHead $MirrorHead -SourceStatusSha256 $SourceStatusSha256 `
+        -MirrorStateSha256 $MirrorStateSha256 -ExpectedMirrorPath $expectedMirrorFull `
+        -HostPath $hostPath -ToolPath $PSCommandPath -DispatchDir $d `
+        -ReceiptPath $receiptFull -Round $Round -ReceiptSha256 $receiptSha256
+    Set-Content -LiteralPath $wrapperDest -Value $wrapperContent -Encoding Ascii -NoNewline
+
     $fs = New-Object System.IO.FileStream($receiptFull, [System.IO.FileMode]::CreateNew,
         [System.IO.FileAccess]::Write, [System.IO.FileShare]::None)
     try {

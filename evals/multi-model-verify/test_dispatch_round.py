@@ -11,11 +11,13 @@ tests, same pattern as test_review_mirror.py - a selector that merely
 finds A host would happily collect them on a non-Windows CI box too. A
 green suite on one host proves ONE interpreter.
 """
+import concurrent.futures
 import hashlib
 import json
 import os
 import shutil
 import subprocess
+import time
 from pathlib import Path
 
 import pytest
@@ -42,6 +44,93 @@ def run_tool(args, env=None, timeout=30):
         full_env.update(env)
     cmd = [POWERSHELL, "-NoProfile", "-NonInteractive", "-File", str(SCRIPT)] + list(args)
     return subprocess.run(cmd, capture_output=True, text=True, env=full_env, timeout=timeout)
+
+
+def _force_remove(func, path, _exc):
+    """git marks its object files read-only, so a plain rmtree of a
+    mirror raises PermissionError on Windows before it reaches the
+    condition under test. Same fix as test_review_mirror.py's own
+    _force_remove."""
+    os.chmod(path, 0o700)
+    func(path)
+
+
+def run_wrapper(wrapper_path, env=None, timeout=60):
+    """Run a prepared wrapper.ps1 to completion and return its result -
+    the REAL end-to-end run this task exists to prove, not a simulation
+    of it."""
+    full_env = dict(os.environ)
+    if env:
+        full_env.update(env)
+    cmd = [POWERSHELL, "-NoProfile", "-NonInteractive", "-File", str(wrapper_path)]
+    return subprocess.run(cmd, capture_output=True, text=True, env=full_env, timeout=timeout)
+
+
+def start_wrapper(wrapper_path, env=None):
+    """Start a prepared wrapper.ps1 WITHOUT waiting for it, so a test can
+    observe an in-flight run (the hold-after-exit-write seam) and kill
+    it deliberately."""
+    full_env = dict(os.environ)
+    if env:
+        full_env.update(env)
+    cmd = [POWERSHELL, "-NoProfile", "-NonInteractive", "-File", str(wrapper_path)]
+    return subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                             text=True, env=full_env)
+
+
+def run_wrapper_concurrently(wrapper_a, wrapper_b, timeout=60):
+    """Start two wrapper runs (the same wrapper.ps1, or two different
+    ones) at the same time and return both results, so a race on the
+    create-new reservation is actually exercised rather than merely
+    argued about."""
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+        fut_a = pool.submit(run_wrapper, wrapper_a, None, timeout)
+        fut_b = pool.submit(run_wrapper, wrapper_b, None, timeout)
+        return fut_a.result(), fut_b.result()
+
+
+def wait_for(path, timeout=30):
+    """Poll for a file's existence, bounded, rather than sleeping a fixed
+    guess - the interval this test seam guarantees is deterministic, but
+    process start-up latency before it is not."""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if Path(path).exists():
+            return
+        time.sleep(0.05)
+    raise AssertionError("timed out waiting for " + str(path))
+
+
+def kill_tree(pid):
+    """Kill a process and any children it may have started (the wrapper
+    started body.ps1 as a child), the way a harness kill would."""
+    subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"],
+                    capture_output=True, text=True)
+
+
+def snapshot(dispatch_dir):
+    """A comparable snapshot of every file's bytes under a dispatch
+    directory, so a test can assert a second run wrote NOTHING rather
+    than merely that it exited nonzero."""
+    d = Path(dispatch_dir)
+    return {p.relative_to(d).as_posix(): p.read_bytes()
+            for p in sorted(d.rglob("*")) if p.is_file()}
+
+
+def _read_text(path):
+    """Decode a file PowerShell's own `>` / `2>` redirection wrote,
+    whose encoding is HOST-dependent: Windows PowerShell 5.1 defaults
+    that redirection to UTF-16LE with a BOM, PowerShell 7 to UTF-8
+    without one - measured directly against mirror.verify, body.out and
+    body.err on both hosts. Files this tool writes itself through
+    [System.IO.File]::WriteAllText carry no such BOM and read correctly
+    either way, so this helper is only needed for the three files above."""
+    data = Path(path).read_bytes()
+    if data[:2] in (b"\xff\xfe", b"\xfe\xff"):
+        return data.decode("utf-16")
+    if data[:3] == b"\xef\xbb\xbf":
+        return data.decode("utf-8-sig")
+    return data.decode("utf-8", errors="replace")
 
 
 def git(repo, *args):
@@ -114,12 +203,20 @@ DEFAULT_ROUND = "Sol R1"
 
 
 def _prepare_args(mirror, dispatch_dir, receipt_path, body, prior_state,
-                   round_label=DEFAULT_ROUND, host="powershell", json_mode=False):
+                   round_label=DEFAULT_ROUND, host="powershell", json_mode=False,
+                   working_directory=None, mirror_head=None):
+    """working_directory overrides -WorkingDirectory alone (leaving
+    -ExpectedMirrorPath at the mirror's real path, so a mismatch is
+    attributable to the working directory); mirror_head overrides
+    -MirrorHead alone. Both default to the mirror's own real values, so a
+    call with neither is unchanged from before."""
+    wd = working_directory if working_directory is not None else mirror.path
+    mh = mirror_head if mirror_head is not None else mirror.mirror_head
     args = [
         "-Prepare", "-DispatchDir", str(dispatch_dir), "-WrapperBody", str(body),
         "-ReceiptPath", str(receipt_path), "-Round", round_label,
-        "-WorkingDirectory", str(mirror.path), "-RepoRoot", str(mirror.source),
-        "-SourceHead", mirror.source_head, "-MirrorHead", mirror.mirror_head,
+        "-WorkingDirectory", str(wd), "-RepoRoot", str(mirror.source),
+        "-SourceHead", mirror.source_head, "-MirrorHead", mh,
         "-SourceStatusSha256", mirror.source_status_sha256,
         "-MirrorStateSha256", mirror.mirror_state_sha256,
         "-ExpectedMirrorPath", str(mirror.path),
@@ -139,42 +236,135 @@ def _default_body_and_prior(tmp_path):
 
 
 def prepare_default(tmp_path, dispatch_dir=None, receipt=None, host="powershell",
-                     json_mode=False, round_label=DEFAULT_ROUND):
+                     json_mode=False, round_label=DEFAULT_ROUND,
+                     working_directory=None, mirror=None, mirror_head=None):
     """A full, otherwise-valid -Prepare invocation (real mirror, real
     prior-state file, real body), with exactly the field(s) under test
-    overridden - so a block is attributable to that field alone."""
-    mirror = build_real_mirror(tmp_path)
+    overridden - so a block is attributable to that field alone. Pass an
+    already-built `mirror` to reuse one instead of building a fresh one
+    (needed when a test wants a REAL, otherwise-valid mirror and then
+    overrides just one of its recorded values)."""
+    mirror = mirror if mirror is not None else build_real_mirror(tmp_path)
     body, prior = _default_body_and_prior(tmp_path)
     d = dispatch_dir if dispatch_dir is not None else tmp_path / "dispatch"
     r = receipt if receipt is not None else tmp_path / "receipt.json"
     args = _prepare_args(mirror, d, r, body, prior, round_label=round_label,
-                          host=host, json_mode=json_mode)
+                          host=host, json_mode=json_mode,
+                          working_directory=working_directory,
+                          mirror_head=mirror_head)
     return run_tool(args)
 
 
 class Prepared(object):
-    def __init__(self, dispatch_dir, receipt_path, result):
+    def __init__(self, dispatch_dir, receipt_path, result, wrapper, working_directory):
         self.dispatch_dir = dispatch_dir
         self.receipt_path = receipt_path
+        self.receipt = receipt_path
         self.result = result
+        self.wrapper = wrapper
+        self.working_directory = working_directory
 
 
-def prepare(tmp_path, body, round_label=DEFAULT_ROUND):
+class RunResult(object):
+    """The result of running a prepared wrapper to completion, plus the
+    dispatch-directory context a test needs to inspect what it left
+    behind."""
+    def __init__(self, returncode, stdout, stderr, dispatch_dir, wrapper,
+                 working_directory):
+        self.returncode = returncode
+        self.stdout = stdout
+        self.stderr = stderr
+        self.dispatch_dir = dispatch_dir
+        self.wrapper = wrapper
+        self.working_directory = working_directory
+
+
+def prepare(tmp_path, body, round_label=DEFAULT_ROUND, working_directory=None,
+            mirror=None, mirror_head=None):
     """A -Prepare call expected to SUCCEED, returning the dispatch
     directory it built so a test can read body.ps1 / wrapper.ps1 back out
-    of it."""
-    mirror = build_real_mirror(tmp_path)
+    of it. `body` may contain the literal placeholder `{workingDirectory}`,
+    which is interpolated to the REAL working directory (forward-slashed,
+    so it is safe inside a double-quoted PowerShell string) before the
+    body is written - the placeholder itself is never written to disk."""
+    mirror = mirror if mirror is not None else build_real_mirror(tmp_path)
+    wd = working_directory if working_directory is not None else mirror.path
+    body_text = body.replace("{workingDirectory}", str(wd).replace("\\", "/"))
     body_path = tmp_path / "body.ps1"
-    body_path.write_text(body, encoding="ascii")
+    body_path.write_text(body_text, encoding="ascii")
     prior = tmp_path / "prior.json"
     prior.write_text('{"kind":"fresh","knownRollouts":[]}', encoding="ascii")
     dispatch_dir = tmp_path / "dispatch"
     receipt_path = tmp_path / "receipt.json"
     args = _prepare_args(mirror, dispatch_dir, receipt_path, body_path, prior,
-                          round_label=round_label, json_mode=False)
+                          round_label=round_label, json_mode=False,
+                          working_directory=wd, mirror_head=mirror_head)
     result = run_tool(args)
     assert result.returncode == 0, (result.stdout, result.stderr)
-    return Prepared(dispatch_dir, receipt_path, result)
+    wrapper_path = dispatch_dir / "wrapper.ps1"
+    receipt_sha256 = hashlib.sha256(receipt_path.read_bytes()).hexdigest()
+    _write_meta(tmp_path, receipt_path, round_label, receipt_sha256, "0" * 32)
+    return Prepared(dispatch_dir, receipt_path, result, wrapper_path, wd)
+
+
+def prepare_and_run(tmp_path, body, round_label=DEFAULT_ROUND, env=None, timeout=60):
+    """prepare() a wrapper and immediately run it to completion - the
+    convenience most Task 4 tests want, since what they are checking is
+    the wrapper's OWN exit code and output, not -Prepare's."""
+    p = prepare(tmp_path, body, round_label=round_label)
+    r = run_wrapper(p.wrapper, env=env, timeout=timeout)
+    return RunResult(r.returncode, r.stdout, r.stderr, p.dispatch_dir, p.wrapper,
+                      p.working_directory)
+
+
+# A lane body that succeeds cleanly: writes a reply and exits 0.
+OK_BODY = (
+    '[System.IO.File]::WriteAllText("$PSScriptRoot/reply", "a verdict")\n'
+    'exit 0\n'
+)
+
+# The same, but slow enough that two concurrent wrapper runs are still
+# both mid-flight when the second one attempts its own claim - widening
+# the race window test_two_concurrent_first_runs_leave_exactly_one_winner
+# depends on, rather than relying on the two OS process launches to
+# happen to overlap on their own.
+SLOW_OK_BODY = (
+    'Start-Sleep -Milliseconds 500\n'
+    '[System.IO.File]::WriteAllText("$PSScriptRoot/reply", "a verdict")\n'
+    'exit 0\n'
+)
+
+
+def killed_after_publish(tmp_path, monkeypatch):
+    """Prepare a wrapper with the hold-after-exit-write seam armed, run
+    it until the seam confirms `exit` and `reply` are published and the
+    reservation is consumed, then kill the whole process tree - the
+    interval Option C's post-hoc classifier would have read as success.
+    Returns the Prepared directory for the caller to inspect afterward."""
+    barrier = tmp_path / "hold"
+    monkeypatch.setenv("PARALLAX_DISPATCH_HOLD_AFTER_EXIT_WRITE", str(barrier))
+    p = prepare(tmp_path, body=OK_BODY)
+    proc = start_wrapper(p.wrapper)
+    wait_for(Path(str(barrier) + ".started"))
+    kill_tree(proc.pid)
+    proc.wait()
+    return p
+
+
+def break_second_mirror_call_only(wrapper_path):
+    """Break only the SECOND of the wrapper's two identical `@mirrorArgs`
+    splats, by index - the wrapper names the verifier tool twice and
+    nothing in its text distinguishes the two call sites, so a helper
+    that broke both would kill the wrapper at the FIRST verification,
+    which the defect this test guards against did too."""
+    text = Path(wrapper_path).read_text(encoding="ascii")
+    marker = "@mirrorArgs"
+    first = text.find(marker)
+    assert first != -1, "expected an @mirrorArgs splat in the wrapper"
+    second = text.find(marker, first + len(marker))
+    assert second != -1, "expected a SECOND @mirrorArgs splat in the wrapper"
+    broken = text[:second] + "@doesNotExistSplat" + text[second + len(marker):]
+    Path(wrapper_path).write_text(broken, encoding="ascii")
 
 
 # ---------------------------------------------------------------------
@@ -657,3 +847,254 @@ def test_an_unknown_argument_is_refused_not_absorbed(tmp_path):
     out = classify(d, extra=["-Jsoon"])
     assert out.returncode == 2
     assert "-Jsoon" in out.stdout
+
+
+# ---------------------------------------------------------------------
+# Task 4: the wrapper -Prepare composes, and the coupling it exists to
+# prove - the exit code of the ONE harness task the caller dispatches is
+# the classification, not a file a later reader happens to find on disk.
+# ---------------------------------------------------------------------
+def test_the_wrapper_exit_code_is_the_classification(tmp_path):
+    # A lane body that succeeds and writes a reply.
+    d = prepare_and_run(tmp_path, body="""
+$code = 0
+[System.IO.File]::WriteAllText("$PSScriptRoot/reply", "a verdict")
+""")
+    assert d.returncode == 0
+
+
+def test_a_failed_client_makes_the_wrapper_exit_nonzero(tmp_path):
+    # The body is a CHILD SCRIPT now, so setting $code proves nothing.
+    # It must EXIT with the code, or the child exits zero and the round
+    # reads as a success with no reply.
+    d = prepare_and_run(tmp_path, body="exit 1\n")
+    assert d.returncode == 1
+    assert "exit-nonzero" in d.stdout
+
+
+def test_the_claim_is_created_before_the_lane_body_runs(tmp_path):
+    d = prepare_and_run(tmp_path, body="""
+$code = 0
+if (-not (Test-Path "$PSScriptRoot/claim")) { throw "no claim yet" }
+[System.IO.File]::WriteAllText("$PSScriptRoot/reply", "ok")
+""")
+    assert d.returncode == 0
+
+
+def test_a_second_run_of_the_same_wrapper_fails_and_writes_nothing(tmp_path):
+    first = prepare_and_run(tmp_path, body=OK_BODY)
+    assert first.returncode == 0
+    before = snapshot(first.dispatch_dir)
+    second = run_wrapper(first.wrapper)
+    assert second.returncode != 0
+    assert snapshot(first.dispatch_dir) == before
+
+
+def test_two_concurrent_first_runs_leave_exactly_one_winner(tmp_path):
+    p = prepare(tmp_path, body=SLOW_OK_BODY)
+    a, b = run_wrapper_concurrently(p.wrapper, p.wrapper)
+    codes = sorted([a.returncode, b.returncode])
+    assert codes[0] == 0
+    assert codes[1] != 0
+
+
+def test_a_missing_working_directory_fails_the_wrapper(tmp_path):
+    p = prepare(tmp_path, body=OK_BODY)
+    # onerror=_force_remove: git marks its object files read-only, so a
+    # plain rmtree raises PermissionError on Windows before reaching the
+    # condition under test - see test_review_mirror.py's own helper.
+    shutil.rmtree(p.working_directory, onerror=_force_remove)
+    out = run_wrapper(p.wrapper)
+    assert out.returncode != 0
+    assert not (p.dispatch_dir / "reply").exists()
+
+
+def test_a_wrapper_killed_after_publishing_exit_and_reply_does_not_exit_zero(tmp_path, monkeypatch):
+    # THE test. Under Option C's post-hoc classifier this same directory
+    # reads reply-present at exit 0.
+    barrier = tmp_path / "hold"
+    monkeypatch.setenv("PARALLAX_DISPATCH_HOLD_AFTER_EXIT_WRITE", str(barrier))
+    p = prepare(tmp_path, body=OK_BODY)
+    proc = start_wrapper(p.wrapper)
+    # The seam fires AFTER the wrapper writes the exit file and BEFORE it
+    # calls the classifier. That is exactly the interval in question.
+    wait_for(Path(str(barrier) + ".started"))
+    assert (p.dispatch_dir / "exit").read_text().strip() == "0"
+    assert (p.dispatch_dir / "reply").read_text().strip() != ""
+    # The reservation was CONSUMED before the exit file was written, so
+    # by the time a successful-looking exit exists it is no longer in a
+    # state any outside caller is handed the key to.
+    assert (p.dispatch_dir / "classification").read_text().strip().startswith(
+        "classifying:")
+    kill_tree(proc.pid)
+    assert proc.wait() != 0
+    # And the disk state that would have fooled Option C is still there.
+    assert (p.dispatch_dir / "exit").read_text().strip() == "0"
+
+
+def test_a_hand_run_classify_after_that_kill_is_refused(tmp_path, monkeypatch):
+    # THE regression test for two failed attempts at this fix. Version one
+    # let -Classify CREATE the reservation, so a post-kill call won it.
+    # Version two moved creation to the wrapper but still treated
+    # "reserved" as permission, so the very kill above left the file in an
+    # acceptable state and no deliberate act was needed.
+    p = killed_after_publish(tmp_path, monkeypatch)
+    held = (p.dispatch_dir / "classification").read_text().strip()
+    assert held.startswith("classifying:")   # consumed BEFORE exit was written
+    # A caller who does not know the run-time nonce is refused. Guessing
+    # every plausible argument does not help: the nonce is in no file
+    # -Prepare wrote.
+    out = classify(p.dispatch_dir, redeem="0" * 32)
+    assert out.returncode == 1
+    assert out.stdout.strip().endswith("already-classified")
+
+
+def test_classify_never_creates_the_reservation(tmp_path):
+    p = prepare(tmp_path, body=OK_BODY)  # prepared, never run
+    assert not (p.dispatch_dir / "classification").exists()
+    out = classify(p.dispatch_dir, redeem="0" * 32)
+    assert out.returncode == 1
+    assert out.stdout.strip().endswith("never-reserved")
+    assert not (p.dispatch_dir / "classification").exists()
+
+
+def test_the_reservation_is_consumed_before_the_exit_file_appears(tmp_path, monkeypatch):
+    # Ordering is the whole argument. If exit were written first, the
+    # post-kill directory would hold "reserved" plus a successful exit.
+    p = killed_after_publish(tmp_path, monkeypatch)
+    assert (p.dispatch_dir / "exit").exists()
+    assert not (p.dispatch_dir / "classification").read_text().strip() == "reserved"
+
+
+@pytest.mark.parametrize("field,value,expected_state", [
+    ("priorStateSha256", "ff" * 32, "receipt-altered"),
+    ("workdirEvidence", "none", "receipt-altered"),      # would switch OFF the B5 check
+    ("workingDirectory", "C:/elsewhere", "receipt-altered"),
+    # round is also compared at state 5 (receipt-not-expected), which the
+    # already-locked -Classify order (Task 3) checks BEFORE the digest at
+    # state 6 - so editing round is caught there first, not as
+    # receipt-altered. Still detected, still a non-zero exit; only the
+    # NAME of the state that catches it differs for this one field.
+    ("round", "Sol R2", "receipt-not-expected"),
+])
+def test_an_edit_to_ANY_receipt_field_is_detected(tmp_path, field, value, expected_state):
+    # A per-field compare bound four of fourteen fields and called the
+    # receipt immutable. The workdirEvidence case is the one that mattered:
+    # editing it to "none" silently disables the working-directory
+    # confirmation for that round.
+    p = prepare(tmp_path, body=OK_BODY)
+    got = json.loads(p.receipt.read_text(encoding="utf-8"))
+    got[field] = value
+    p.receipt.write_text(json.dumps(got), encoding="utf-8")
+    out = run_wrapper(p.wrapper)
+    assert out.returncode == 1
+    assert expected_state in out.stdout
+
+
+def test_a_whitespace_only_receipt_edit_is_detected(tmp_path):
+    # The digest is over BYTES, so reformatting is an edit too. This is
+    # deliberate: a receipt nobody rewrote has bytes nobody changed.
+    p = prepare(tmp_path, body=OK_BODY)
+    p.receipt.write_text(p.receipt.read_text(encoding="utf-8") + "\n",
+                         encoding="utf-8")
+    out = run_wrapper(p.wrapper)
+    assert "receipt-altered" in out.stdout
+
+
+def test_the_body_streams_never_reach_the_wrapper_stdout(tmp_path):
+    d = prepare_and_run(tmp_path, body="""
+Write-Output "stdout from the body"
+[Console]::Error.WriteLine("stderr from the body")
+[System.IO.File]::WriteAllText("$PSScriptRoot/reply", "ok")
+exit 0
+""")
+    assert d.stdout.strip().splitlines() == [d.stdout.strip()]  # exactly one line
+    assert "from the body" not in d.stdout
+    assert "stdout from the body" in _read_text(d.dispatch_dir / "body.out")
+    assert "stderr from the body" in _read_text(d.dispatch_dir / "body.err")
+
+
+def test_prepare_refuses_a_working_directory_that_does_not_verify(tmp_path):
+    plain = tmp_path / "not-a-mirror"
+    plain.mkdir()
+    out = prepare_default(tmp_path, working_directory=plain)
+    assert out.returncode == 1
+    assert "mirror identity" in out.stdout
+
+
+def test_prepare_refuses_a_mirror_whose_head_does_not_match(tmp_path):
+    mirror = build_real_mirror(tmp_path)
+    out = prepare_default(tmp_path, mirror=mirror, mirror_head="0" * 40)
+    assert out.returncode == 1
+    assert "mirror identity" in out.stdout
+
+
+def test_the_wrapper_reverifies_the_tree_before_the_client_runs(tmp_path):
+    # Post-preparation mutation that moves NEITHER head: a tracked file in
+    # the mirror worktree, edited, not committed. This is the case the
+    # shipped verifier could not see, and it is why Task 1a exists. Do not
+    # weaken it to a commit - a commit moves the mirror head and would
+    # test the check that already worked.
+    p = prepare(tmp_path, body=OK_BODY)
+    (p.working_directory / "README.md").write_text("changed", encoding="utf-8")
+    out = run_wrapper(p.wrapper)
+    assert out.returncode != 0
+    assert not (p.dispatch_dir / "reply").exists()
+
+
+def test_a_mirror_mutated_DURING_the_round_fails_the_wrapper(tmp_path):
+    # The test above mutates before the wrapper starts, so it only
+    # exercises the FIRST verification. This one exercises the second:
+    # the child itself edits a tracked file, writes a good reply, and
+    # exits zero. Everything on disk says success.
+    # The helper interpolates the real mirror path; the placeholder below
+    # is NOT written into the body literally.
+    p = prepare(tmp_path, body="""
+[System.IO.File]::WriteAllText("{workingDirectory}/README.md", "changed mid-round")
+[System.IO.File]::WriteAllText("$PSScriptRoot/reply", "a verdict")
+exit 0
+""")
+    out = run_wrapper(p.wrapper)
+    assert out.returncode != 0
+    # And the reservation was never consumed, so no later call can redeem
+    # it either.
+    assert (p.dispatch_dir / "classification").read_text().strip() == "reserved"
+
+
+def test_a_second_verification_that_cannot_RUN_fails_the_wrapper(tmp_path):
+    # Regression for the defect this design introduced and then removed:
+    # under Continue, a call that fails to bind leaves $LASTEXITCODE at
+    # the client's successful zero, so the guard passes and the check
+    # never happened.
+    #
+    # The helper MUST break only the SECOND call site. The wrapper names
+    # the verifier tool twice and nothing in its text distinguishes them,
+    # so a helper that breaks both kills the wrapper at the FIRST
+    # verification - which the defective version did too, making the test
+    # pass against the bug it exists to catch. Break the second
+    # occurrence only, by index.
+    p = prepare(tmp_path, body=OK_BODY)
+    break_second_mirror_call_only(p.wrapper)
+    out = run_wrapper(p.wrapper)
+    assert out.returncode != 0
+    assert (p.dispatch_dir / "classification").read_text().strip() == "reserved"
+
+
+def test_the_mirror_verifier_output_never_reaches_the_wrapper_stdout(tmp_path):
+    d = prepare_and_run(tmp_path, body=OK_BODY)
+    assert "identity: verified" not in d.stdout
+    assert "identity: verified" in _read_text(d.dispatch_dir / "mirror.verify")
+
+
+def test_a_body_that_exits_the_process_cannot_skip_the_classification(tmp_path):
+    # The body runs as a CHILD, so its own exit cannot end the wrapper.
+    d = prepare_and_run(tmp_path, body="[Environment]::Exit(0)\n")
+    assert d.returncode != 0
+    assert "no-reply" in d.stdout
+
+
+def test_the_wrapper_stdout_is_the_classifier_line_and_nothing_else(tmp_path):
+    d = prepare_and_run(tmp_path, body=OK_BODY)
+    lines = d.stdout.strip().splitlines()
+    assert len(lines) == 1          # checking only the LAST line would let
+    assert lines[0].endswith("reply-present")   # a leaked line pass
