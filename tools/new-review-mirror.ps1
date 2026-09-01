@@ -1281,6 +1281,31 @@ foreach ($ei in @($ExtraInputPaths)) {
     $dest = Join-Path $MirrorPath (Split-Path $ei -Leaf)
     Copy-Item -LiteralPath $ei -Destination $dest -Force
 }
+# THE LAST SWEEP, after every writer into the mirror. The enumeration
+# above proves REMEDIATION worked. This one proves nothing put a
+# back-channel back afterwards. SKILL.md calls the enumeration the
+# PRIMARY control for the reviewed tree's skills and agents, "not
+# defence in depth", and a control that runs before the last writer
+# into the tree it clears is not that control. -ExtraInput is the only
+# shipped writer below the sweep above; this sweep sits after ALL of
+# them so the next writer added inherits it rather than slipping under
+# it. Measured 2026-08-31: without this, an AGENTS.md named as an
+# -ExtraInput reached the finished mirror and only the client probe
+# refused it.
+$final = Get-BackChannelEntry $MirrorPath
+if (-not $final.Ok) {
+    Write-Output ("ERROR: could not re-enumerate back-channels in the" +
+        " finished mirror: " + $final.Reason)
+    exit 2
+}
+if ($final.Entries.Count -gt 0) {
+    Write-Output ("BLOCKED: back-channel(s) present in the finished" +
+        " mirror: " + ($final.Entries -join "; ") + ". Remediation" +
+        " cleared the mirror, so this was carried back in afterwards -" +
+        " an -ExtraInput may not name an instruction channel.")
+    exit 1
+}
+
 
 $head = (& git -C $MirrorPath rev-parse HEAD 2>$null | Out-String).Trim()
 if (($LASTEXITCODE -ne 0) -or -not $head) {

@@ -1888,6 +1888,38 @@ def test_extra_inputs_are_covered_by_the_digest(tmp_path):
     assert tampered.returncode == 1, tampered.stdout + tampered.stderr
 
 
+def test_an_extra_input_cannot_smuggle_a_back_channel_into_the_mirror(tmp_path):
+    """-ExtraInput writes into the mirror, so what it writes must be
+    swept too.
+
+    Measured 2026-08-31 against this task's first build, which copied
+    extra inputs in AFTER the enumeration that clears the mirror: an
+    AGENTS.md named as an extra input landed in the finished mirror and
+    the mirror's own enumeration listed it. That build still refused,
+    but only downstream at the client probe, and SKILL.md states in
+    writing that the enumeration is the PRIMARY control for the reviewed
+    tree's skills and agents, "not defence in depth". A control that
+    runs before the last writer into the tree it clears is not that
+    control.
+
+    The message is deliberately NOT "survived remediation": remediation
+    did work here, and three tests above assert that phrase is absent
+    when it did.
+    """
+    repo = make_clean_repo(tmp_path)
+    extra = tmp_path / "AGENTS.md"
+    extra.write_text("# planted through the front door\n")
+    mirror = tmp_path / "mirror"
+    proc = run_mirror(repo, mirror, "-ExtraInput", str(extra))
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "back-channel(s) present in the finished mirror" in proc.stdout, (
+        proc.stdout)
+    assert SKIP_BLOCK not in proc.stdout, (
+        "it must refuse as a back-channel, not merely as an unmeasured "
+        "mirror: " + proc.stdout)
+    assert "survived remediation" not in proc.stdout, proc.stdout
+
+
 def test_there_is_no_reseal_or_remint_mode(tmp_path):
     # Re-blessing a tree that changed since it was measured is exactly
     # what the mirror-state digest exists to deny, so no flag does it.
