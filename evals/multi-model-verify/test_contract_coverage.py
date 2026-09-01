@@ -800,16 +800,30 @@ def test_every_region_citation_uses_a_resolvable_form(doc_paths=DOC_PATHS):
     regions at all (skill names like `gpt-5-4-prompting`, drift states
     like `manual-triage-needed`). This rule takes the other direction -
     it only ever looks at ids that ARE declared, so it cannot fire on
-    prose - and it makes every live citation resolvable, which is what
-    keeps the dangling check able to see one later.
+    prose - and it makes every live citation resolvable.
+
+    It does NOT by itself keep the dangling check able to see a citation
+    later; an earlier version of this docstring claimed that and was
+    wrong. What makes that true is the `<file>.md's <id>` pattern in the
+    dangling check, widened 2026-09-01 to read any file's possessive
+    rather than one file's. The two rules are a pair: this one forces
+    every citation into that spelling, and that one reads it.
     """
     import re
 
-    declared = set(collect_regions(doc_paths))
+    declared_in = {}
+    for path in doc_paths:
+        for rid in re.findall(r"contract:start id=([a-z][a-z0-9-]*)",
+                              path.read_text(encoding="utf-8")):
+            declared_in.setdefault(rid, set()).add(path.name)
+    declared = set(declared_in)
     assert declared, "no regions declared; this guard stopped guarding"
     bad = []
     for path in doc_paths:
-        text = path.read_text(encoding="utf-8")
+        # Normalized: a citation that wraps across two lines is still a
+        # citation, and reporting it as a bad form would be the reflow
+        # trap rather than a finding.
+        text = " ".join(path.read_text(encoding="utf-8").split())
         for rid in declared:
             for match in re.finditer(re.escape(rid), text):
                 start, end = match.start(), match.end()
@@ -820,7 +834,12 @@ def test_every_region_citation_uses_a_resolvable_form(doc_paths=DOC_PATHS):
                     continue
                 if end < len(text) and text[end] == "-":
                     continue
-                if text[:start].endswith(".md's "):
+                # Same file shape as the dangling check: no slash and no
+                # bracket, so `references/x.md's` and `(x.md's` both
+                # yield the bare file name the declaration is keyed by.
+                names = re.search(
+                    r"([A-Za-z][A-Za-z0-9._-]*\.md)'s $", text[:start])
+                if names and names.group(1) in declared_in.get(rid, ()):
                     continue
                 bad.append("%s cites %s" % (path.name, rid))
     assert not bad, (
@@ -854,8 +873,19 @@ def test_every_cited_dispatch_region_id_resolves(doc_paths=DOC_PATHS):
     """
     import re
 
-    declared = set(collect_regions(doc_paths))
+    declared_in = {}
+    for path in doc_paths:
+        for rid in re.findall(r"contract:start id=([a-z][a-z0-9-]*)",
+                              path.read_text(encoding="utf-8")):
+            declared_in.setdefault(rid, set()).add(path.name)
+    declared = set(declared_in)
     cited = {}
+    wrong_file = []
+    # `fallbacks.md's panel-lane-loss class` is English - the prefix of a
+    # real region id (`panel-lane-loss-disposition`) used as a noun. It is
+    # the ONLY such phrase over these documents, measured 2026-09-01, so
+    # it is excluded by name rather than by widening the shape.
+    non_ids = {("fallbacks.md", "panel-lane-loss")}
     patterns = (
         re.compile(r"model-prompting-notes\.md's ([a-z][a-z0-9-]*)"),
         # A BARE parenthesised id, as in `(round-dispatch-operation)`.
@@ -868,11 +898,30 @@ def test_every_cited_dispatch_region_id_resolves(doc_paths=DOC_PATHS):
         # added by the very fix that was meant to make them resolvable.
         re.compile(r"\(([a-z][a-z0-9]*(?:-[a-z0-9]+){2,})\)"),
     )
+    # ANY file's possessive, not just this one file's. Added 2026-09-01:
+    # the previous fix rewrote two citations into `backup-lane.md's <id>`
+    # and `SKILL.md's <id>` - forms the two patterns above cannot see - so
+    # both moved from one invisible spelling to another and the dead-
+    # pointer gap stayed open for the exact cases that motivated closing
+    # it. The file part is captured and checked too, because a citation
+    # naming the WRONG file resolves for nobody.
+    qualified = re.compile(
+        r"(?P<file>[A-Za-z][A-Za-z0-9._-]*\.md)'s "
+        r"(?P<id>[a-z][a-z0-9]*(?:-[a-z0-9]+){2,})")
     for path in doc_paths:
-        text = path.read_text(encoding="utf-8")
+        text = " ".join(path.read_text(encoding="utf-8").split())
         for pattern in patterns:
             for match in pattern.finditer(text):
                 cited.setdefault(match.group(1), set()).add(path.name)
+        for match in qualified.finditer(text):
+            fname, rid = match.group("file"), match.group("id")
+            if (fname, rid) in non_ids:
+                continue
+            cited.setdefault(rid, set()).add(path.name)
+            if rid in declared_in and fname not in declared_in[rid]:
+                wrong_file.append(
+                    "%s cites %s's %s, declared in %s"
+                    % (path.name, fname, rid, sorted(declared_in[rid])))
     assert cited, (
         "no citation found at all; this guard silently stopped guarding")
     dangling = sorted(
@@ -882,6 +931,10 @@ def test_every_cited_dispatch_region_id_resolves(doc_paths=DOC_PATHS):
         "prose cites region id(s) that no document declares: "
         f"{dangling}. A region was renamed, split or deleted and the "
         "sentence pointing at it was left behind.")
+    assert not wrong_file, (
+        "region citation(s) name the wrong file: "
+        f"{sorted(set(wrong_file))}. The id resolves, the pointer does "
+        "not, and a reader sent to that file finds nothing.")
 
 
 def test_every_marked_region_is_locked_by_a_pin(doc_paths=DOC_PATHS):

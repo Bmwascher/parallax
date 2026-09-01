@@ -287,9 +287,10 @@ toggled on, its stop-time review overlaps mode `diff` — expected, not a bug.
    ```
 
    Run `-Prepare` the same way as round 1, with `-DispatchHost` and
-   `-WorkdirEvidence` set the same way. `-ExpectedMirrorPath` is the path the
-   identity was RECORDED at, so a resumed round needs the mirror still at that
-   path: if the tree had to be rebuilt mid-debate, rebuild it at the SAME path
+   `-WorkdirEvidence` set the same way. `-ExpectedMirrorPath` and `-MirrorPath` are
+   both yours to supply in the same call, so matching them proves nothing
+   about a rebuild. A resumed round still needs the mirror at the path its
+   identity was recorded at: if the tree had to be rebuilt mid-debate, rebuild it at the SAME path
    with `-Force` and re-record its identity fields, because a mirror at a new
    path makes the binder refuse the resumed slice on `cwd` and the round is
    lost. If it cannot be rebuilt there, dispatch FRESH rather than resume.

@@ -153,8 +153,8 @@ Panel participation: a user-invoked panel per references/panels.md is a second s
   path with `-Force` and its identity fields re-recorded, or the round
   is dispatched FRESH instead.
 
-  NO DIRECT CHECK ENFORCES THAT ON THIS LANE, and the one that looks
-  like it does not. `-ExpectedMirrorPath` compares two values this
+  NO DIRECT CHECK ENFORCES THAT ON THIS LANE. The one argument that
+  looks like it does no such thing. `-ExpectedMirrorPath` compares two values this
   session supplies in the SAME command, so a session that rebuilds
   elsewhere and passes the new path to both satisfies it and is not
   refused. The codex lane's direct refusal is its binder's `cwd` check;
@@ -165,11 +165,15 @@ Panel participation: a user-invoked panel per references/panels.md is a second s
   because it is the only thing standing here. If the client binds a
   session to the directory it was created in, as the Transport section
   above says it does, then a resume from a different directory writes
-  under a different `wd_<workspace>` container. The sealed session
-  directory then gains no new bytes, and the round-freshness boundary
-  refuses a file that is absent or shorter than its offset. So the
+  under a different `wd_<workspace>` container. The sealed session files
+  then gain no new bytes. That is NOT the truncation rule: an unchanged
+  file is neither absent nor shorter than its offset, so it passes that
+  rule AND the prefix hash. What refuses it is the slice rule one step
+  later, because the slice past the offset is empty. The client may also
+  refuse the resume itself and never reach the binder at all. So the
   round fails closed — by consequence rather than by design, one layer
-  away from the thing it protects, and NOT MEASURED against a live
+  away from the thing it protects, through a rule named here by READING
+  the binder rather than by watching it, and NOT MEASURED against a live
   client. Do not count it as the check; rebuild at the same path. The
   wrapper shape is unchanged:
 

@@ -680,8 +680,8 @@ if ($VerifyIdentity) {
     # mirror rebuilt elsewhere with both arguments updated.
     $expNorm = $ExpectedMirrorPath.Replace("\", "/").TrimEnd("/")
     if (-not $mpNorm.Equals($expNorm, $cmp)) {
-        Write-Output ("BLOCKED: the mirror at $MirrorPath is not the mirror" +
-            " this identity was recorded for ($ExpectedMirrorPath)")
+        Write-Output ("BLOCKED: -MirrorPath ($MirrorPath) does not match" +
+            " -ExpectedMirrorPath ($ExpectedMirrorPath) in this same call")
         exit 1
     }
 

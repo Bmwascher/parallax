@@ -2043,7 +2043,12 @@ def test_each_kimi_call_is_prepared_through_the_tool(call):
     body = _read(BACKUP_LANE)
     marker = "<!-- call:%s -->" % call
     assert body.count(marker) == 1, "exactly one section per call"
-    section = body.split(marker, 1)[1].split("<!-- call:", 1)[0]
+    section = body.split(marker, 1)[1]
+    # Bound the section at the next call marker OR the next heading.
+    # Without the heading the LAST call in a file runs to EOF, and a
+    # clause that drifted out of the call site into a later section
+    # still satisfied the pin.
+    section = re.split(r"<!-- call:|\n## ", section, maxsplit=1)[0]
     assert (
         "& (Get-Process -Id $PID).Path -NoProfile -File"
         " <plugin-checkout>/tools/dispatch-round.ps1 -Prepare"

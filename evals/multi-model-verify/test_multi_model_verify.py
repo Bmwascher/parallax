@@ -3469,7 +3469,12 @@ def test_each_codex_call_carries_the_operation_clause(call, body_skill):
     """
     marker = "<!-- call:%s -->" % call
     assert body_skill.count(marker) == 1, "exactly one section per call"
-    section = body_skill.split(marker, 1)[1].split("<!-- call:", 1)[0]
+    section = body_skill.split(marker, 1)[1]
+    # Bound the section at the next call marker OR the next heading.
+    # Without the heading the LAST call in a file runs to EOF, and a
+    # clause that drifted out of the call site into a later section
+    # still satisfied the pin.
+    section = re.split(r"<!-- call:|\n## ", section, maxsplit=1)[0]
     assert "never END THE TURN with the round unfinished" in section, (
         "a call site that stops at STOP with no clause reads as leave"
         " for ending the turn; measured 2026-09-01, an unattended run"
