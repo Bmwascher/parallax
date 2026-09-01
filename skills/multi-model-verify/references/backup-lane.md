@@ -52,8 +52,8 @@ Panel participation: a user-invoked panel per references/panels.md is a second s
   "detached": the tool starts no process of its own, and OS-detached
   dispatch is the shape the invariants forbid. `$b` is the brief read from its
   file — the same inline payload the Dispatch and Resume bullets above
-  describe and the shape item 51 measured, never a pointer, which this
-  lane's contract forbids. This lane's REPLY ARTIFACT is the `reply`
+  describe: the brief's TEXT, never a path or other pointer to it, which
+  this lane's contract forbids. This lane's REPLY ARTIFACT is the `reply`
   file inside `$PSScriptRoot`, the client's captured stdout, with
   stderr to the `transcript` file alongside it.
 

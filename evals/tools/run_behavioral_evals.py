@@ -490,28 +490,31 @@ def is_our_child(pid, ticks):
 
 @contextmanager
 def reaped_tempdir(prefix):
-    """A scratch dir that outlives nothing: reap, THEN delete.
+    """A scratch dir that outlives nothing: reap what we can, THEN delete.
 
-    Since item 32 the skill launches its client through
-    `tools/dispatch-round.ps1`, which by design returns while the client
-    is still writing into its dispatch directory. A case that ends before
-    the round completes leaves a live grandchild holding
+    The hazard is real and was measured 2026-08-31: a case that ends while
+    a round is still running leaves a live grandchild holding
     `<dispatch-dir>/transcript` open, and plain TemporaryDirectory cleanup
     then dies with WinError 32 - losing a whole run's verdicts to a file
-    lock. Measured 2026-08-31: three runs of diff-mode-spec-fidelity gave a
-    graded miss, that crash, then a clean pass, so it is a race, not a
-    constant, which is exactly what makes it worth removing rather than
-    tolerating.
+    lock. Three runs of diff-mode-spec-fidelity gave a graded miss, that
+    crash, then a clean pass, so it is a race rather than a constant.
 
-    The launch transaction writes each child's pid to `<dispatch-dir>/pid`,
-    so the pids are on disk and are never guessed. Each gets a grace period
-    to finish on its own before the tree is killed, and its identity is
-    re-checked immediately before the kill.
+    WHAT ACTUALLY GUARDS THE VERDICTS HERE IS THE RETRY LOOP, not the
+    reaping. The reaping is VESTIGIAL as of 2026-09-01: it reads a pid and
+    a startticks file that the launching dispatch used to write, and since
+    `tools/dispatch-round.ps1` stopped launching anything, NO SHIPPED
+    CALLER WRITES EITHER FILE. The loop is kept because it costs nothing
+    and becomes correct again the moment a caller writes those files, but
+    it must not be read as an active control - so it says so, rather than
+    looking like one. The retry-and-warn below is unconditional and is
+    what keeps a held lock from costing a run its verdicts.
     """
     root = tempfile.mkdtemp(prefix=prefix)
     try:
         yield root
     finally:
+        # Vestigial since 2026-09-01 - see the docstring. No shipped
+        # caller writes `pid`, so this loop finds nothing today.
         for pid_file in Path(root).rglob("pid"):
             try:
                 pid = int(pid_file.read_text(encoding="utf-8").strip())
