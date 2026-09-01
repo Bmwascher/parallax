@@ -2022,12 +2022,19 @@ KIMI_CALLS = ("kimi-dispatch", "kimi-resume", "kimi-write-probe")
 
 
 @pytest.mark.parametrize("call", KIMI_CALLS)
-def test_each_kimi_call_is_launched_through_the_tool(call):
+def test_each_kimi_call_is_prepared_through_the_tool(call):
     """Per-call, not a global count.
 
     Round 4's finding: `>= 3` proved three launch strings existed
     somewhere in the file and bound none of them to a call site, so a
     section with two launches and a write-probe with none still passed.
+    That reasoning is unchanged; only the command it binds has changed.
+
+    Rewritten 2026-08-31 for completion-coupled dispatch. The tool no
+    longer launches or polls, so the two commands this pinned no longer
+    exist. Task 7's file list did not name this module and the plan's
+    own round-8 review said so; the three cases went red on the rewrite
+    and are repaired here rather than left red.
     """
     body = _read(BACKUP_LANE)
     marker = "<!-- call:%s -->" % call
@@ -2035,25 +2042,54 @@ def test_each_kimi_call_is_launched_through_the_tool(call):
     section = body.split(marker, 1)[1].split("<!-- call:", 1)[0]
     assert (
         "& (Get-Process -Id $PID).Path -NoProfile -File"
-        " <plugin-checkout>/tools/dispatch-round.ps1 -Launch"
+        " <plugin-checkout>/tools/dispatch-round.ps1 -Prepare"
         " -DispatchDir <dispatch-dir> -WrapperBody <wrapper-file>"
         " -ReceiptPath <receipt-file> -Round <label>"
-        " -WorkingDirectory <review-mirror> -Json") in section, (
-        "this call has no launch; a lane described as detached with no"
-        " launch command is what four rounds kept finding")
-    assert (
-        "& (Get-Process -Id $PID).Path -NoProfile -File"
-        " <plugin-checkout>/tools/dispatch-round.ps1 -Poll"
-        " -Receipt <receipt-file>"
-        " -ExpectedDispatchDir <dispatch-dir> -ExpectedRound <label>"
+        " -WorkingDirectory <review-mirror> -RepoRoot <repo-root>"
+        " -SourceHead <source-head> -MirrorHead <mirror-head>"
+        " -SourceStatusSha256 <source-status-sha256>"
+        " -MirrorStateSha256 <mirror-state-sha256>"
+        " -ExpectedMirrorPath <review-mirror>"
+        " -DispatchHost <dispatch-host>"
+        " -PriorStateFile <prior-state-file> -NoWorkdirEvidence"
         " -Json") in section, (
-        "this call has no poll; a launch whose result is never read is"
-        " a round thrown away")
+        "this call has no preparation; a lane described as dispatched"
+        " with no prepare command is what four rounds kept finding")
+    assert "dispatch it as a harness background command" in section, (
+        "this call prepares a round and never dispatches it")
+    assert "the `taskName` the tool printed" in section, (
+        "an unnamed background task cannot be found by the person"
+        " watching it")
+    assert "the exit code of that exact task is the result" in section, (
+        "a prepared round whose result is never read is a round thrown"
+        " away, which is what the -Poll pin used to catch here")
+    assert "never re-read the dispatch directory for a verdict" in section, (
+        "reading the directory instead of the exit code is the exact"
+        " false-completion path this cycle exists to close")
     assert '& "<kimi-code-binary>"' in section, (
         "this call has no client invocation")
     assert "$PSScriptRoot/reply" in section, (
         "no reply artifact: every successful call would land in"
         " no-reply and be discarded")
+
+
+def test_only_the_two_round_calls_carry_the_evidence_seal():
+    """The write probe's exemption, made mechanical.
+
+    Task 7's header required a deliberate decision: give the probe a
+    round-evidence binder and change what a probe PASS means, or exempt
+    it and say so. It was exempted. A decision recorded only in prose
+    drifts in either direction unnoticed, so both halves are pinned -
+    the two round calls carry the seal, and the probe does not.
+    """
+    body = _read(BACKUP_LANE)
+    carried = {}
+    for call in KIMI_CALLS:
+        section = body.split("<!-- call:%s -->" % call, 1)[1].split(
+            "<!-- call:", 1)[0]
+        carried[call] = "-SealedPriorStateSha256" in section
+    assert carried == {"kimi-dispatch": True, "kimi-resume": True,
+                       "kimi-write-probe": False}, carried
 
 
 def test_the_backup_lane_writes_no_launch_of_its_own():
