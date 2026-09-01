@@ -52,12 +52,22 @@ what they cover:
 
 ## Long-running commands
 
-DISPATCH DEBATE ROUNDS AND FULL GATES DETACHED, from the FIRST attempt.
-The foreground tool ceiling is 600 seconds and `run_in_background` has
-none. A codex round that crosses the ceiling is killed by the caller, not
-by the client: no `--output-last-message` file is written, so it is a
-transport failure rather than a review result, and the quota is spent for
-nothing. Measured repeatedly through 0.21.x.
+DISPATCH DEBATE ROUNDS AND FULL GATES IN THE BACKGROUND, from the FIRST
+attempt. The reason is VISIBILITY, not survival, and the difference
+matters because the reason written here before was false. A foreground
+call OWNS the session: while it runs, nobody can see the round, talk to
+the agent, or redirect it. A backgrounded call leaves the session
+answering, which is the property measured in
+`docs/superpowers/plans/rounds/2026-08-31-completion-coupled-dispatch/benefit-measurement.md`.
+
+THE 600-SECOND CEILING DOES NOT KILL. Measured 2026-09-01 on Claude Code
+2.1.251: a foreground call that ran past it was MOVED to the background
+by the harness under a new task id and completed with exit 0. The
+measured case was a local filesystem command rather than a codex round,
+so what it establishes is narrow and stated narrowly - the ceiling is not
+a kill. The text here previously said a crossing round is killed with the
+quota spent for nothing, and cited "measured repeatedly through 0.21.x";
+that claim is withdrawn, and this rule no longer rests on it.
 
 Two traps in the dispatch scripts themselves, both measured 2026-08-04:
 
@@ -87,23 +97,43 @@ Two traps in the dispatch scripts themselves, both measured 2026-08-04:
   `docs/superpowers/plans/rounds/2026-08-11-budget-flake-generator/`;
   do not read the rule above as a statement that the repo is clean.
 
-**The launch itself is no longer a copied snippet.** `tools/dispatch-round.ps1`
-now owns it as one fail-closed transaction — reserve the dispatch
-directory, install the wrapper, start the process, record the pid and
-start ticks, write the commit marker, and publish the receipt last of
-all — and every lane calls it rather than writing its own. Written here
-as a plain repo-relative path: `CLAUDE.md` is neither skill body, where
-the harness substitutes `${CLAUDE_PLUGIN_ROOT}`, nor a lane's command
-literal, where `references/backup-lane.md` carries a session-filled
-`<plugin-checkout>` placeholder instead. The full contract lives in four
-regions in `skills/multi-model-verify/references/model-prompting-notes.md`:
-`detached-dispatch-tool`, `detached-dispatch-states`,
-`detached-dispatch-operation`, and `background-task-naming`.
+**The dispatch is no longer a copied snippet, and the tool no longer
+starts anything.** `tools/dispatch-round.ps1` has two modes, and every
+lane calls it rather than writing its own.
+
+`-Prepare` builds the round as one fail-closed transaction: verify the
+working directory IS the named review mirror, resolve the host, hash the
+prior state, reserve the dispatch directory, install the lane's body and
+the wrapper around it, and write the receipt last of all. It then PRINTS
+the exact command line and the task name, and starts NO process. The
+caller dispatches that command as a harness background command.
+
+`-Classify` is the wrapper's own final act, and this is the sentence that
+carries the design: THE WRAPPER'S EXIT CODE IS THE CLASSIFICATION. `0`
+means `reply-present` and nothing else; `2` is a parameter-binding or
+internal failure; `1` is every other state, named on the wrapper's last
+stdout line. A wrapper that does not reach its final statement cannot
+report success, whatever its directory holds. Measured 2026-09-01: a
+round killed after publishing a zero exit file AND a non-empty reply
+reported `[killed]`, and left a reservation no later caller could redeem.
+Never re-read the dispatch directory to decide a verdict.
+
+Written here as a plain repo-relative path: `CLAUDE.md` is neither skill
+body, where the harness substitutes `${CLAUDE_PLUGIN_ROOT}`, nor a lane's
+command literal, where `references/backup-lane.md` carries a
+session-filled `<plugin-checkout>` placeholder instead. The full contract
+lives in five regions in
+`skills/multi-model-verify/references/model-prompting-notes.md`:
+`round-dispatch-tool`, `round-dispatch-states`,
+`round-dispatch-exit-map`, `round-dispatch-operation`, and
+`background-task-naming`.
 
 Name every backgrounded call for the person watching it. A reviewer round
 leads with its LANE and ROUND, as in `Sol R1 debate round` or
 `Kimi R2 debate round`. A gate or a mirror build has no lane, so it leads
 with its KIND instead, as in `Gate: pytest 5.1` or `Mirror build`.
+`-Prepare` now PRINTS the name, so the convention has a source; nothing
+enforces its use.
 
 ## Dev loop
 The plugin is installed user-scope from a LOCAL marketplace pointing at
