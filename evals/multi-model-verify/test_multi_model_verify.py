@@ -3351,5 +3351,26 @@ class TestBriefEncodingOverStdin:
         )
 
 
+def test_the_bookmark_is_captured_per_dispatch_not_chained():
+    """SHIPPED cross-lane defect: the codex-lane bookmark must never be
+    inherited from the last CLEAN round, because a round that was voided,
+    refused, or failed its binding still advances the client's rollout
+    without ever emitting a `nextState`."""
+    body_skill = read(SKILL_MD)
+    assert "captured immediately before EVERY dispatch" in body_skill
+    assert "never inherited from the last clean round" in body_skill
+
+
+def test_fallbacks_states_why_chaining_breaks():
+    body_fallbacks = read(REFERENCES / "fallbacks.md")
+    assert "a failed binding emits no `nextState`" in body_fallbacks
+    assert "advances the client's append-only rollout" in body_fallbacks
+
+
+def test_the_backup_lane_carries_the_same_rule():
+    body_backup_lane = read(REFERENCES / "backup-lane.md")
+    assert "captured immediately before EVERY dispatch" in body_backup_lane
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))

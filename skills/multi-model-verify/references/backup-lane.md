@@ -435,6 +435,12 @@ log). There is no shared stream and nothing to attribute by position.
   detectable from this class; the finish line's normalized
   `effective route confirmed` means every round's evidence matched THIS
   lane's canonical declarations under these rules.
+- The state a RESUME call hands to `read-kimi-round-evidence.ps1` is
+  captured immediately before EVERY dispatch, from that call's own
+  predecessor, and is never inherited from an earlier clean round: a
+  round whose binding failed still advanced the session's wire
+  transcript and log, so skipping it would misplace the next slice
+  boundary.
 
 ## Containment
 
