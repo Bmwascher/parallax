@@ -249,6 +249,57 @@ def test_prepare_refuses_an_unresolvable_host(tmp_path):
     assert out.returncode == 2
 
 
+def test_prepare_refuses_a_working_directory_that_is_not_the_verified_mirror(tmp_path):
+    """Step 1a's whole reason for existing, which the task's own test
+    list did not lock.
+
+    Without it the tool takes the caller's word for the directory AND
+    the evidence value, so a caller who supplies the LIVE REPOSITORY for
+    both gets a wrapper that deliberately relocates there, a client
+    whose own report agrees with the wrong value, and a clean result.
+    Every check downstream is self-consistent and every one is wrong.
+    That is invariant B4's "detect a wrong initial value" and B1's
+    requirement that entering the live repository be impossible to get
+    wrong silently.
+
+    Measured 2026-08-31: the guard does refuse. A guard with no test is
+    one refactor away from being deleted by someone who cannot see what
+    it was for.
+    """
+    mirror = build_real_mirror(tmp_path)
+    body, prior = _default_body_and_prior(tmp_path)
+    receipt = tmp_path / "receipt.json"
+    args = _prepare_args(mirror, tmp_path / "dispatch", receipt, body, prior)
+    # Every other value stays honest, so the refusal is attributable to
+    # the directory alone.
+    for i, a in enumerate(args):
+        if a in ("-WorkingDirectory", "-ExpectedMirrorPath"):
+            args[i + 1] = str(mirror.source)
+    out = run_tool(args)
+    assert out.returncode == 1, out.stdout + out.stderr
+    assert "did not verify as the named mirror" in out.stdout, out.stdout
+    assert not receipt.exists(), "a refused preparation writes no receipt"
+
+
+def test_prepare_refuses_a_mirror_mutated_after_construction(tmp_path):
+    """The other half of step 1a: the mirror verified at preparation
+    time must be the mirror that was measured at construction time.
+
+    only.txt is TRACKED and clean at the mirror's own HEAD, so editing
+    it in place moves neither head. Only the mirror-state fingerprint
+    Task 1a added can see it, which is why that task had to run first.
+    """
+    mirror = build_real_mirror(tmp_path)
+    (mirror.path / "only.txt").write_text("changed after construction\n")
+    body, prior = _default_body_and_prior(tmp_path)
+    receipt = tmp_path / "receipt.json"
+    out = run_tool(_prepare_args(mirror, tmp_path / "dispatch", receipt,
+                                 body, prior))
+    assert out.returncode == 1, out.stdout + out.stderr
+    assert "did not verify as the named mirror" in out.stdout, out.stdout
+    assert not receipt.exists(), "a refused preparation writes no receipt"
+
+
 def test_launch_and_poll_are_gone(tmp_path):
     for mode in ("-Launch", "-Poll"):
         out = run_tool([mode])
