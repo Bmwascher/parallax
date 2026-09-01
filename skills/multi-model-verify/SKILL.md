@@ -99,30 +99,15 @@ toggled on, its stop-time review overlaps mode `diff` — expected, not a bug.
    never a fallback to dispatching over the real tree.
    <!-- contract:end -->
    Run
-   `tools/new-review-mirror.ps1 -RepoRoot <repo> -MirrorPath <scratch>`.
-   Build at a SHORT `<scratch>` directly under the temp directory, such
-   as a `kerev<n>` folder, never inside the session scratchpad: the
-   mirror re-roots every path, and the tool refuses before creating
-   anything when the budget is blown.
-   It builds the **review mirror** (references/backup-lane.md owns its
-   construction, its baseline, and its identity fields — a file copy
-   preserving `.git`, NOT a clone), deletes the offending entries THERE,
-   commits when any were tracked, re-runs the enumeration above inside
-   the mirror, captures the baseline and the content manifest, runs the
-   client probe below with the mirror as the working directory, and
-   prints the record block; empty enumeration output is
-   the evidence, and the mirror's identity fields go in the debate
-   record. The mirror is then the reviewed tree for every lane in that
-   debate — dispatch codex with the mirror as cwd, and keep citations
-   resolvable in the real repo. Whether the removal needs a commit
-   branches on tracked-ness, and the difference misreads as a failure;
-   references/backup-lane.md states that branch and the hook behaviour
-   that comes with it.
-
-   Files above the repo's git root are NOT ingested (same probe), and
-   `~/.codex/AGENTS.md` is the user's own
-   global instruction file — note it in the debate record if it exists,
-   but it is not a stop.
+   `tools/new-review-mirror.ps1 -RepoRoot <repo> -MirrorPath <scratch>`
+   at a SHORT `<scratch>` directly under the temp directory, never inside
+   the session scratchpad, to build the **review mirror**, remediate the
+   offending entries there, re-run the enumeration and the client probe
+   below against it, and print the record block; empty enumeration
+   output is the evidence. Whether the removal needs a commit branches on
+   tracked-ness; references/backup-lane.md states that branch and the
+   hook behaviour that comes with it. Full construction detail and the
+   mirror's identity fields are in references/preflight-mirror.md.
 
    **The reviewer's own machine is the second half of this check, and the
    enumeration above cannot see it.** Run
