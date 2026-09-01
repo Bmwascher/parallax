@@ -1023,7 +1023,12 @@ class TestTransportContract:
         text = read(SKILL_MD)
         marker = "<!-- call:%s -->" % call
         assert text.count(marker) == 1, "exactly one section per call"
-        section = text.split(marker, 1)[1].split("<!-- call:", 1)[0]
+        section = text.split(marker, 1)[1]
+        # Bounded at the next heading as well as the next marker: these
+        # assertions are POSITIVE, so an unbounded last section let a
+        # pinned sentence drift two headings away and stay green.
+        section = re.split(r"<!-- call:|\n## ", section,
+                           maxsplit=1)[0]
         assert (
             "& (Get-Process -Id $PID).Path -NoProfile -File"
             " ${CLAUDE_PLUGIN_ROOT}/tools/dispatch-round.ps1 -Prepare"
@@ -3473,7 +3478,8 @@ def test_each_codex_call_carries_the_operation_clause(call, body_skill):
     # Bound the section at the next call marker OR the next heading.
     # Without the heading the LAST call in a file runs to EOF, and a
     # clause that drifted out of the call site into a later section
-    # still satisfied the pin.
+    # still satisfied the pin. `##` only: no file has a `###` after its
+    # last call site today, and a future one would not bound here.
     section = re.split(r"<!-- call:|\n## ", section, maxsplit=1)[0]
     assert "never END THE TURN with the round unfinished" in section, (
         "a call site that stops at STOP with no clause reads as leave"

@@ -2047,7 +2047,8 @@ def test_each_kimi_call_is_prepared_through_the_tool(call):
     # Bound the section at the next call marker OR the next heading.
     # Without the heading the LAST call in a file runs to EOF, and a
     # clause that drifted out of the call site into a later section
-    # still satisfied the pin.
+    # still satisfied the pin. `##` only: no file has a `###` after its
+    # last call site today, and a future one would not bound here.
     section = re.split(r"<!-- call:|\n## ", section, maxsplit=1)[0]
     assert (
         "& (Get-Process -Id $PID).Path -NoProfile -File"

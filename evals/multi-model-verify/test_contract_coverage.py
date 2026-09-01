@@ -860,16 +860,21 @@ def test_every_cited_dispatch_region_id_resolves(doc_paths=DOC_PATHS):
     the suite stayed green over a dead citation. A green gate proving a
     dead citation is the worst kind of green.
 
-    SCOPE, stated rather than implied: this checks citations of
-    `model-prompting-notes.md`'s regions ONLY. A general check over
-    every document is not possible with this shape, because the same
+    SCOPE, stated rather than implied. This began as a check of
+    `model-prompting-notes.md`'s regions only, because the same
     `<file>.md's <token>` phrasing is ordinary prose elsewhere -
     `backup-lane.md's per-round evidence`,
     `debate-protocol.md's final-adjudication step`,
-    `fallbacks.md's panel-lane-loss class` and
-    `frozen-plan-format.md's lane envelope` are all English, not ids,
-    and none of them is a region. Backlog item 69 tracks the general
-    problem of citations into shipped text that nothing verifies.
+    `fallbacks.md's panel-lane-loss` and
+    `frozen-plan-format.md's lane envelope` are all English, not ids.
+    It is GENERAL now: the three-or-more-word shape excludes the first,
+    second and fourth of those, and the one collision is excluded by
+    name below. Two shapes it still cannot see, neither with an instance
+    today: a declared TWO-word id (only `lane-lock`) cited under any
+    file but `model-prompting-notes.md`, and any citation in a file
+    outside DOC_PATHS, which is where the backlog's own pointer sits.
+    Backlog item 69 tracks the general problem of citations into shipped
+    text that nothing verifies.
     """
     import re
 
