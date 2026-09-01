@@ -11,6 +11,7 @@ tests, same pattern as test_review_mirror.py - a selector that merely
 finds A host would happily collect them on a non-Windows CI box too. A
 green suite on one host proves ONE interpreter.
 """
+import hashlib
 import json
 import os
 import shutil
@@ -304,3 +305,355 @@ def test_launch_and_poll_are_gone(tmp_path):
     for mode in ("-Launch", "-Poll"):
         out = run_tool([mode])
         assert out.returncode == 2
+
+
+# ---------------------------------------------------------------------
+# -Classify
+#
+# These fixtures build a dispatch directory (and a sidecar receipt) by
+# hand, never through -Prepare: -Classify's own contract is about the
+# STATE on disk, not about how it got there, and a real mirror is slow
+# to build for every one of seventeen states. `meta.json`, written next
+# to the dispatch directory, is test bookkeeping only - it is never read
+# by the tool - and it is what lets classify() supply -ReceiptPath,
+# -ExpectedRound, -ExpectedReceiptSha256 and -Redeem without every test
+# having to carry them by hand.
+# ---------------------------------------------------------------------
+CLASSIFY_ROUND = "Sol R1"
+CLASSIFY_NONCE = "1" * 32
+
+
+def _write_receipt(receipt_path, dispatch_dir, round_label=CLASSIFY_ROUND,
+                    working_directory=None, workdir_evidence="none"):
+    """A well-formed schema-2 receipt (Task 2's field set). Returns the
+    sha256 hex of the bytes written, which is what -ExpectedReceiptSha256
+    pins in the real wrapper."""
+    obj = {
+        "dispatchDir": str(dispatch_dir),
+        "token": "tok-" + os.urandom(4).hex(),
+        "round": round_label,
+        "workingDirectory": str(working_directory),
+        "dispatchHost": "C:\\ps.exe",
+        "priorStateSha256": "a" * 64,
+        "workdirEvidence": workdir_evidence,
+        "repoRoot": "C:\\repo",
+        "sourceHead": "b" * 40,
+        "mirrorHead": "c" * 40,
+        "sourceStatusSha256": "d" * 64,
+        "mirrorStateSha256": "e" * 64,
+        "expectedMirrorPath": "C:\\mirror",
+        "schema": 2,
+    }
+    data = json.dumps(obj)
+    Path(receipt_path).write_text(data, encoding="utf-8")
+    return hashlib.sha256(data.encode("utf-8")).hexdigest()
+
+
+def _write_meta(base, receipt_path, round_label, sha256, nonce):
+    (Path(base) / "meta.json").write_text(json.dumps({
+        "receipt": str(receipt_path), "round": round_label,
+        "sha256": sha256, "nonce": nonce}), encoding="utf-8")
+
+
+def _read_meta(d):
+    return json.loads((Path(d).parent / "meta.json").read_text(encoding="utf-8"))
+
+
+def classify(d, receipt=None, round_label=None, sha256=None, redeem=None,
+             extra=None, json_mode=False):
+    """Call -Classify against dispatch directory d, filling in
+    -ReceiptPath / -ExpectedRound / -ExpectedReceiptSha256 / -Redeem from
+    the meta.json sidecar the builder wrote, unless a test overrides one
+    to probe that field alone."""
+    meta = _read_meta(d)
+    args = [
+        "-Classify", "-DispatchDir", str(d),
+        "-ReceiptPath", str(receipt if receipt is not None else meta["receipt"]),
+        "-ExpectedRound", round_label if round_label is not None else meta["round"],
+        "-ExpectedReceiptSha256", sha256 if sha256 is not None else meta["sha256"],
+        "-Redeem", redeem if redeem is not None else meta["nonce"],
+    ]
+    if json_mode:
+        args.append("-Json")
+    if extra:
+        args += list(extra)
+    return run_tool(args)
+
+
+def build_dispatch(base):
+    """A dispatch directory reserved and ready for -Classify, with no
+    receipt written yet - the minimal fixture for receipt-schema tests."""
+    base = Path(base)
+    base.mkdir(parents=True, exist_ok=True)
+    d = base / "dispatch"
+    d.mkdir()
+    receipt_path = base / "receipt.json"
+    (d / "classification").write_text("classifying:" + CLASSIFY_NONCE, encoding="utf-8")
+    _write_meta(base, receipt_path, CLASSIFY_ROUND, "0" * 64, CLASSIFY_NONCE)
+    return d, receipt_path
+
+
+def build_dispatch_with_workdir_evidence(base, evidence):
+    """A dispatch directory built through the documented order up to and
+    including the cwd-container check (state 8): reserved, with a valid
+    matching receipt and a claim file, so only the workdir-evidence
+    states (9-11) and everything after them remain open. The caller adds
+    exit / reply / transcript by hand."""
+    base = Path(base)
+    base.mkdir(parents=True, exist_ok=True)
+    d = base / "dispatch"
+    d.mkdir()
+    workdir = base / "workdir"
+    workdir.mkdir()
+    receipt_path = base / "receipt.json"
+    (d / "classification").write_text("classifying:" + CLASSIFY_NONCE, encoding="utf-8")
+    (d / "claim").write_text("", encoding="utf-8")
+    sha = _write_receipt(receipt_path, d, working_directory=workdir,
+                          workdir_evidence=evidence)
+    _write_meta(base, receipt_path, CLASSIFY_ROUND, sha, CLASSIFY_NONCE)
+    return d
+
+
+def build_dispatch_ready_to_classify(base):
+    """A dispatch directory built all the way through reply-present, plus
+    the nonce that redeems it - test_classify_accepts_only_its_own_nonce
+    rewrites `classification` by hand and must still be able to redeem it
+    at the end."""
+    d = build_dispatch_for_state(base, "reply-present")
+    meta = _read_meta(d)
+    return d, meta["nonce"]
+
+
+def build_dispatch_for_state(base, state):
+    """Build a dispatch directory that satisfies every state EARLIER than
+    `state` in the documented order and leaves `state`'s own condition
+    unmet, so classify(d) with no overrides lands on exactly `state`."""
+    base = Path(base)
+    base.mkdir(parents=True, exist_ok=True)
+    d = base / "dispatch"
+    d.mkdir()
+    workdir = base / "workdir"
+    workdir.mkdir()
+    receipt_path = base / "receipt.json"
+    nonce = CLASSIFY_NONCE
+    round_label = CLASSIFY_ROUND
+
+    if state == "never-reserved":
+        _write_meta(base, receipt_path, round_label, "0" * 64, nonce)
+        return d
+    if state == "not-ready":
+        (d / "classification").write_text("reserved", encoding="utf-8")
+        _write_meta(base, receipt_path, round_label, "0" * 64, nonce)
+        return d
+    if state == "already-classified":
+        (d / "classification").write_text("done", encoding="utf-8")
+        _write_meta(base, receipt_path, round_label, "0" * 64, nonce)
+        return d
+
+    # Every state from here on requires a redeemable reservation.
+    (d / "classification").write_text("classifying:" + nonce, encoding="utf-8")
+
+    if state == "no-receipt":
+        _write_meta(base, receipt_path, round_label, "0" * 64, nonce)
+        return d
+
+    if state == "receipt-not-expected":
+        sha = _write_receipt(receipt_path, d, round_label="Some Other Round",
+                              working_directory=workdir)
+        _write_meta(base, receipt_path, round_label, sha, nonce)
+        return d
+
+    if state == "receipt-altered":
+        sha = _write_receipt(receipt_path, d, round_label=round_label,
+                              working_directory=workdir)
+        with open(receipt_path, "a", encoding="utf-8") as fh:
+            fh.write(" ")
+        _write_meta(base, receipt_path, round_label, sha, nonce)
+        return d
+
+    # From here on the receipt is valid, expected and unaltered.
+    if state == "no-claim":
+        sha = _write_receipt(receipt_path, d, round_label=round_label,
+                              working_directory=workdir)
+        _write_meta(base, receipt_path, round_label, sha, nonce)
+        return d
+    (d / "claim").write_text("", encoding="utf-8")
+
+    if state == "cwd-unreadable":
+        sha = _write_receipt(receipt_path, d, round_label=round_label,
+                              working_directory=base / "does-not-exist")
+        _write_meta(base, receipt_path, round_label, sha, nonce)
+        return d
+
+    if state in ("no-transcript", "workdir-unconfirmed", "workdir-mismatch"):
+        sha = _write_receipt(receipt_path, d, round_label=round_label,
+                              working_directory=workdir,
+                              workdir_evidence="C:\\mirror")
+        _write_meta(base, receipt_path, round_label, sha, nonce)
+        if state == "no-transcript":
+            return d
+        if state == "workdir-unconfirmed":
+            (d / "transcript").write_text("no header here at all", encoding="utf-8")
+            return d
+        (d / "transcript").write_text("workdir: C:\\elsewhere", encoding="utf-8")
+        return d
+
+    # workdirEvidence "none" for every remaining state: the check is
+    # skipped entirely, satisfying states 9-11 vacuously.
+    sha = _write_receipt(receipt_path, d, round_label=round_label,
+                          working_directory=workdir, workdir_evidence="none")
+    _write_meta(base, receipt_path, round_label, sha, nonce)
+
+    if state == "no-exit-file":
+        return d
+    if state == "exit-unreadable":
+        (d / "exit").write_text("not-a-number", encoding="ascii")
+        return d
+    if state == "exit-nonzero":
+        (d / "exit").write_text("7", encoding="ascii")
+        return d
+    (d / "exit").write_text("0", encoding="ascii")
+
+    if state == "no-reply":
+        return d
+    if state == "reply-empty":
+        (d / "reply").write_text("", encoding="utf-8")
+        return d
+    if state == "reply-present":
+        (d / "reply").write_text("a verdict", encoding="utf-8")
+        return d
+
+    raise ValueError("unknown state: " + state)
+
+
+STATES = [
+    ("never-reserved", 1), ("not-ready", 1), ("already-classified", 1),
+    ("no-receipt", 1), ("receipt-not-expected", 1), ("receipt-altered", 1),
+    ("no-claim", 1), ("cwd-unreadable", 1),
+    ("no-transcript", 1), ("workdir-unconfirmed", 1),
+    ("workdir-mismatch", 1),
+    ("no-exit-file", 1), ("exit-unreadable", 1), ("exit-nonzero", 1),
+    ("no-reply", 1), ("reply-empty", 1), ("reply-present", 0),
+]
+# This list is the ONLY place the state count is written down. Do not
+# restate it as a number in prose: an edited list makes the prose wrong,
+# which is a drift class this repo has already recorded.
+
+
+@pytest.mark.parametrize("state,code", STATES)
+def test_each_state_and_its_exit_code(tmp_path, state, code):
+    d = build_dispatch_for_state(tmp_path, state)
+    out = classify(d)
+    assert out.stdout.strip().endswith(state), out.stdout
+    assert out.returncode == code
+
+
+def test_no_state_but_reply_present_can_exit_zero(tmp_path):
+    # Drive the TOOL for every state and collect the codes it really
+    # returned. Asserting over the STATES constant instead would assert
+    # the test module against itself and lock nothing.
+    zero = []
+    for state, _ in STATES:
+        d = build_dispatch_for_state(tmp_path / state, state)
+        if classify(d).returncode == 0:
+            zero.append(state)
+    assert zero == ["reply-present"]
+
+
+def test_classify_accepts_only_its_own_nonce(tmp_path):
+    d, nonce = build_dispatch_ready_to_classify(tmp_path)
+    for content, expected in [
+        ("reserved", "not-ready"),
+        ("classifying:" + "0" * 32, "already-classified"),
+        ("reply-present", "already-classified"),
+    ]:
+        (d / "classification").write_text(content, encoding="utf-8")
+        out = classify(d, redeem=nonce)
+        assert out.returncode == 1
+        assert out.stdout.strip().endswith(expected), content
+    (d / "classification").write_text("classifying:" + nonce, encoding="utf-8")
+    assert classify(d, redeem=nonce).returncode == 0
+
+
+def test_a_missing_transcript_is_its_own_state(tmp_path):
+    d = build_dispatch_with_workdir_evidence(tmp_path, evidence="C:\\mirror")
+    (d / "exit").write_text("0", encoding="ascii")
+    (d / "reply").write_text("a verdict", encoding="utf-8")
+    # no transcript file at all
+    out = classify(d)
+    assert out.stdout.strip().endswith("no-transcript")
+    assert out.returncode == 1
+
+
+def test_a_failed_round_in_the_wrong_tree_reports_the_WRONG_TREE(tmp_path):
+    # First match wins, and the workdir states are deliberately EARLIER
+    # than the exit states. Both reviewer lanes overruled the opposite
+    # order: a round that read the wrong tree read an instruction
+    # back-channel, so its own failure report describes another subject.
+    d = build_dispatch_with_workdir_evidence(tmp_path, evidence="C:\\mirror")
+    (d / "exit").write_text("1", encoding="ascii")
+    (d / "transcript").write_text("workdir: C:\\elsewhere", encoding="utf-8")
+    out = classify(d)
+    assert out.stdout.strip().endswith("workdir-mismatch")
+
+
+def test_only_the_FIRST_workdir_header_counts(tmp_path):
+    # The transcript is prompt-steerable, so a later line proves nothing.
+    d = build_dispatch_with_workdir_evidence(tmp_path, evidence="C:\\mirror")
+    (d / "transcript").write_text(
+        "workdir: C:\\elsewhere\nuser\nworkdir: C:\\mirror\n", encoding="utf-8")
+    (d / "exit").write_text("0", encoding="ascii")
+    (d / "reply").write_text("a verdict", encoding="utf-8")
+    out = classify(d)
+    assert out.stdout.strip().endswith("workdir-mismatch")
+
+
+def test_a_transcript_with_no_header_is_unconfirmed_not_mismatched(tmp_path):
+    d = build_dispatch_with_workdir_evidence(tmp_path, evidence="C:\\mirror")
+    (d / "transcript").write_text("no header here at all", encoding="utf-8")
+    (d / "exit").write_text("0", encoding="ascii")
+    (d / "reply").write_text("a verdict", encoding="utf-8")
+    out = classify(d)
+    assert out.stdout.strip().endswith("workdir-unconfirmed")
+
+
+def test_state_order_is_first_match_wins(tmp_path):
+    # A directory broken in two ways reports the EARLIER state.
+    d = build_dispatch_for_state(tmp_path, "no-claim")
+    (d / "exit").write_text("7", encoding="ascii")
+    out = classify(d)
+    assert out.stdout.strip().endswith("no-claim")
+
+
+def test_workdir_mismatch_beats_a_missing_reply(tmp_path):
+    d = build_dispatch_with_workdir_evidence(tmp_path, evidence="C:\\mirror")
+    (d / "transcript").write_text("workdir: C:\\somewhere-else", encoding="utf-8")
+    (d / "exit").write_text("0", encoding="ascii")
+    # no reply file at all
+    out = classify(d)
+    assert out.stdout.strip().endswith("workdir-mismatch")
+    assert out.returncode == 1
+
+
+def test_none_skips_the_workdir_check_only_on_the_exact_literal(tmp_path):
+    d = build_dispatch_with_workdir_evidence(tmp_path, evidence="none")
+    (d / "exit").write_text("0", encoding="ascii")
+    (d / "reply").write_text("a verdict", encoding="utf-8")
+    out = classify(d)
+    assert out.returncode == 0
+
+
+def test_a_schema_one_receipt_is_no_receipt(tmp_path):
+    d, r = build_dispatch(tmp_path)
+    r.write_text(json.dumps({
+        "dispatchDir": str(d), "token": "t", "round": "Sol R1",
+        "startTicks": "1"}), encoding="utf-8")
+    out = classify(d, receipt=r)
+    assert out.stdout.strip().endswith("no-receipt")
+
+
+def test_an_unknown_argument_is_refused_not_absorbed(tmp_path):
+    d = build_dispatch_for_state(tmp_path, "reply-present")
+    out = classify(d, extra=["-Jsoon"])
+    assert out.returncode == 2
+    assert "-Jsoon" in out.stdout
