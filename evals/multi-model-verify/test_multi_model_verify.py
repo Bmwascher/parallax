@@ -1079,11 +1079,23 @@ def test_dispatch_traps_are_documented_in_the_notes():
     failure NAMES are what a second run needs, so piping an expensive
     run through tail or head costs the whole run again."""
     notes = " ".join(read(REFERENCES / "model-prompting-notes.md").split())
+    # CORRECTED 2026-09-01. This pin previously held the sentence
+    # "A round that crosses the caller's foreground timeout is killed by
+    # the CALLER ... the quota is spent for nothing." That claim was
+    # withdrawn in CLAUDE.md the same day, on a measurement: a foreground
+    # call that ran past the ceiling was MOVED to the background by the
+    # harness under a new task id and completed with exit 0. The pin was
+    # left holding the withdrawn sentence, so the suite ENFORCED in the
+    # shipped skill exactly what this repo's own instructions had
+    # retracted - and other repositories read the skill, not CLAUDE.md.
+    # Found by the whole-branch review, reproduced before acceptance.
     assert (
-        "A round that crosses the caller's foreground timeout is killed "
-        "by the CALLER, not by the client: no `--output-last-message` "
-        "file is written, so it is a transport failure rather than a "
-        "review result and the quota is spent for nothing.") in notes
+        "A foreground call OWNS the session: while it runs, nobody can "
+        "see the round, talk to the agent, or redirect it. The 600-second "
+        "ceiling is NOT a kill - measured 2026-09-01 on Claude Code "
+        "2.1.251, a foreground call that ran past it was moved to the "
+        "background by the harness and completed - so the reason to "
+        "dispatch in the background is VISIBILITY, not survival.") in notes
     assert (
         "Do NOT run the native `codex` call under `$ErrorActionPreference "
         "= 'Stop'`. codex prints a benign models-cache warning to STDERR "
@@ -1185,9 +1197,14 @@ def test_round_dispatch_states_region_is_pinned():
     "outside caller is handed the key to. What remains is a caller who "
     "opens the reservation file, reads the nonce, and passes it - a "
     "deliberate act on a file they own, which no filesystem mechanism can "
-    "prevent. And a caller who supplies an earlier act's receipt, "
-    "directory and label to a FRESH preparation is still truthfully told "
-    "that act's result. Third, a change made to the mirror and undone "
+    "prevent. Nor does anything bind the WRAPPER's own text after "
+    "preparation: the digest covers the receipt, so a caller who edits "
+    "wrapper.ps1 before the harness runs it - the expected receipt "
+    "digest, the second verification, or the body call itself - gets a "
+    "round that still exits 0. And a caller who supplies an earlier "
+    "act's receipt, directory and label to a FRESH preparation is still "
+    "truthfully told that act's result. Third, a change made to the "
+    "mirror and undone "
     "again before the client finishes: the wrapper verifies before the "
     "client runs and again after the child returns, so a mutation that "
     "PERSISTS through the round is caught and the round fails, but only "
@@ -1195,9 +1212,13 @@ def test_round_dispatch_states_region_is_pinned():
     "catch it - this is filesystem ownership during dispatch, explicitly "
     "trusted, and it is honest only because that second verification "
     "actually runs. Fourth, the harness trailer's format is measured, not "
-    "pinned across versions, and neither is the premise beside it - that "
-    "a killed task reports a non-zero exit on the harness surface; "
-    "nothing in this repo parses the trailer mechanically. Fifth, no "
+    "pinned across versions, and nothing in this repo parses it "
+    "mechanically. What was measured on 2026-09-01 is narrower than \"a "
+    "killed task reports a non-zero exit\": a killed task reported the "
+    "literal `[killed]` and NO exit code at all. So a trailer carrying "
+    "no exit code is UNFINISHED, exactly as a missing notification is, "
+    "and never a success; do not read the absence of a code as a zero. "
+    "Fifth, no "
     "bound on how long a hung round may sit: a hung round can never read "
     "as success, so this costs waiting, not truth."
     ) in notes, (
@@ -1231,7 +1252,18 @@ def test_round_dispatch_operation_region_is_pinned():
     "There is NO POLL. The caller dispatches the wrapper as a harness "
     "background task and then WAITS for the harness notification for that "
     "exact task; nothing in this tool watches a directory for the caller. "
-    "A round with no notification is UNFINISHED, never successful. "
+    "A round with no notification is UNFINISHED, never successful. A "
+    "SESSION MUST NEVER END ITS TURN WITH A DISPATCHED ROUND UNFINISHED. "
+    "In an interactive session the notification opens a new turn, so "
+    "stopping is correct. In a print-mode or otherwise unattended run "
+    "the turn a session ends is its last, so stopping there ends the run "
+    "with the round still in flight and no verdict at all - measured "
+    "2026-09-01, where a graded run did every step correctly, said it "
+    "would wait, and finished with no verdict. Where no notification can "
+    "reach the session, it WAITS on that exact task through the "
+    "harness's own task-output read, which is still the harness surface "
+    "and not a directory poll. Where it can do neither, it finishes as a "
+    "TRANSPORT FAILURE, never with a verdict-less finish line. "
     "Recovery is a FRESH `-Prepare` with a fresh evidence boundary, never "
     "a re-run of the same wrapper: the claim and classification files are "
     "reserved create-new on the first run, so the wrapper itself refuses "

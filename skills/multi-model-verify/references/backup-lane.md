@@ -44,10 +44,13 @@ Panel participation: a user-invoked panel per references/panels.md is a second s
   brief-shaped prompt loaded with shell-special characters arrived
   whole, at nearly three times the length that truncated on the
   superseded client.
-- **Detached dispatch for all three calls.** Every call below launches
-  through `tools/dispatch-round.ps1` and is dispatched as a harness
-  background task, never run inline — the caller's 600-second ceiling
-  kills a crossing round with the quota spent and no reply written. `$b` is the brief read from its
+- **Harness-tracked dispatch for all three calls.** Every call below is
+  PREPARED through `tools/dispatch-round.ps1` and dispatched as a harness
+  background task, never run inline — a foreground call owns the session,
+  so nobody can see the round or talk to the agent while it runs. The
+  ceiling is not a kill; visibility is the reason. Do not call this
+  "detached": the tool starts no process of its own, and OS-detached
+  dispatch is the shape the invariants forbid. `$b` is the brief read from its
   file — the same inline payload the Dispatch and Resume bullets above
   describe and the shape item 51 measured, never a pointer, which this
   lane's contract forbids. This lane's REPLY ARTIFACT is the `reply`
@@ -144,7 +147,12 @@ Panel participation: a user-invoked panel per references/panels.md is a second s
 <!-- call:kimi-resume -->
 - **kimi-resume — every later round.** Same wrapper shape, run from the
   SAME working directory, with `KIMI_CODE_HOME` still set to the
-  debate home:
+  debate home. The mirror must still be AT the path its identity was
+  recorded at, because `-Prepare` binds `-ExpectedMirrorPath` to it: a
+  tree rebuilt mid-debate must be rebuilt at the SAME path with `-Force`
+  and its identity fields re-recorded, or the round is dispatched FRESH
+  instead. A mirror at a new path is not a smaller problem than a
+  missing one; it refuses:
 
   ```powershell
   $code = 1

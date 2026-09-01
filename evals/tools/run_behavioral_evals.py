@@ -456,12 +456,22 @@ def is_our_child(pid, ticks):
     """Is THIS pid still the process the launch transaction recorded?
 
     A pid alone is not an identity: Windows recycles them, so a bare
-    `taskkill /PID` can force-kill an unrelated tree. The branch's own
-    contract says so - the `detached-dispatch-states` region in
-    `skills/multi-model-verify/references/model-prompting-notes.md` pins
-    liveness as pid PLUS start time - and `dispatch-round.ps1` writes
-    `startticks` beside `pid` for exactly this comparison. Honour it here
-    too, rather than exempting a teardown from the rule the tool enforces.
+    `taskkill /PID` can force-kill an unrelated tree. Honour that here
+    too, rather than exempting a teardown from the rule.
+
+    STALE AS OF 2026-09-01, and corrected rather than deleted. This was
+    written for `dispatch-detached.ps1 -Launch`, which started its own
+    process and wrote `pid` and `startticks` into the dispatch directory.
+    `dispatch-round.ps1` starts NOTHING: its wrapper writes `claim`,
+    `classification`, `mirror.verify`, `body.out`, `body.err` and `exit`,
+    and no pid or start ticks at all, because the harness owns the
+    process now. So the sweep below finds no `pid` file under the current
+    tool and is a no-op for it. It is kept because it costs nothing and
+    still reaps anything else that does write one; it is NOT evidence
+    that the launch model survives. The docstring previously cited a
+    `detached-dispatch-states` region, which no longer exists, and
+    claimed `dispatch-round.ps1` writes `startticks`, which it does
+    not. Found by the whole-branch review of 2026-09-01.
 
     Anything unknown reads as NOT ours, so the reaper never kills on a
     guess, and the answer is a tick count rather than a substring search

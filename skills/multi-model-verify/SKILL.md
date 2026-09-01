@@ -168,12 +168,11 @@ toggled on, its stop-time review overlaps mode `diff` — expected, not a bug.
 2. Compose the reviewer's debate brief per references/model-prompting-notes.md, write
    it to a scratchpad file, then write this wrapper body to `<wrapper-file>` — as
    a FILE, never from a here-string, whose terminator cannot survive this block's
-   indentation — and launch it with the tool. Never run it inline: the caller's
-   600-second ceiling kills a crossing round with the quota spent and no reply
-   written.
+   indentation — and prepare it with the tool. Never run it inline: a foreground
+   call owns the session, so nobody can see the round or talk to the agent while
+   it runs. The ceiling is not a kill; visibility is the reason.
 
-   The wrapper body is today's block with the exit scaffolding added and `$d`
-   supplied by the tool as the directory the wrapper runs in:
+   The wrapper body is today's block with the exit scaffolding added:
 
    <!-- wrapper:codex-fresh -->
    ```powershell
@@ -211,7 +210,7 @@ toggled on, its stop-time review overlaps mode `diff` — expected, not a bug.
    `<receipt-file>` is a FRESH path, alongside the fresh reply and
    transcript paths already required; `-Prepare` refuses one that
    exists. `<label>` names the lane and the round, as in `Sol R1`.
-   `-Prepare` prints `command` and `taskName`: dispatch it as a harness background command, using `command` verbatim, under the `taskName` the tool printed, and STOP.
+   `-Prepare` prints `command` and `taskName`: dispatch it as a harness background command, using `command` verbatim, under the `taskName` the tool printed, and STOP — but never END THE TURN with the round unfinished (round-dispatch-operation).
 
    On the completion notification for that exact task, read the harness output file: the exit code of that exact task is the result, never re-read the dispatch directory for a verdict — **0 means `reply-present` and nothing else; 2 is a parameter-binding failure or an internal execution error; 1 is every other state, named on the wrapper's last stdout line.** The states -Classify computes are references/model-prompting-notes.md's round-dispatch-states.
 
@@ -288,13 +287,18 @@ toggled on, its stop-time review overlaps mode `diff` — expected, not a bug.
    ```
 
    Run `-Prepare` the same way as round 1, with `-DispatchHost` and
-   `-WorkdirEvidence` set the same way:
+   `-WorkdirEvidence` set the same way. `-ExpectedMirrorPath` is the path the
+   identity was RECORDED at, so a resumed round needs the mirror still at that
+   path: if the tree had to be rebuilt mid-debate, rebuild it at the SAME path
+   with `-Force` and re-record its identity fields, because a mirror at a new
+   path makes the binder refuse the resumed slice on `cwd` and the round is
+   lost. If it cannot be rebuilt there, dispatch FRESH rather than resume.
 
    ```powershell
    & (Get-Process -Id $PID).Path -NoProfile -File ${CLAUDE_PLUGIN_ROOT}/tools/dispatch-round.ps1 -Prepare -DispatchDir <dispatch-dir> -WrapperBody <wrapper-file> -ReceiptPath <receipt-file> -Round <label> -WorkingDirectory <mirror-path> -RepoRoot <repo-root> -SourceHead <source-head> -MirrorHead <mirror-head> -SourceStatusSha256 <source-status-sha256> -MirrorStateSha256 <mirror-state-sha256> -ExpectedMirrorPath <mirror-path> -DispatchHost <dispatch-host> -PriorStateFile <prior-state-file> -WorkdirEvidence <mirror-path> -Json
    ```
 
-   `-Prepare` prints `command` and `taskName`: dispatch it as a harness background command, using `command` verbatim, under the `taskName` the tool printed, and STOP.
+   `-Prepare` prints `command` and `taskName`: dispatch it as a harness background command, using `command` verbatim, under the `taskName` the tool printed, and STOP — but never END THE TURN with the round unfinished (round-dispatch-operation).
 
    On the completion notification for that exact task, read the harness output file: the exit code of that exact task is the result, never re-read the dispatch directory for a verdict — **0 means `reply-present` and nothing else; 2 is a parameter-binding failure or an internal execution error; 1 is every other state, named on the wrapper's last stdout line.** The states -Classify computes are references/model-prompting-notes.md's round-dispatch-states.
 
