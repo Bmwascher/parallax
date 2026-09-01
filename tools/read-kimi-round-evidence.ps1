@@ -88,6 +88,7 @@ param(
     [Parameter(Mandatory = $true)][string]$Effort,
     [Parameter(Mandatory = $true)][string]$AgentFile,
     [Parameter(Mandatory = $true)][string]$ExpectedBriefSha256,
+    [string]$SealedPriorStateSha256,
     [switch]$Json
 )
 
@@ -95,11 +96,18 @@ $ErrorActionPreference = "Stop"
 
 $Kind = if ($Fresh) { "fresh" } else { "resume" }
 
+# "not-checked" until a supplied -SealedPriorStateSha256 is confirmed
+# against the raw bytes of -PriorState. Set before any Fail() can run, so
+# an unmade check never reports through a variable that still carries a
+# stale "sealed" value from nowhere.
+$script:Sealed = "not-checked"
+
 function Write-Result($status, $reason, $nextState, $asJson) {
     if ($asJson) {
         $obj = [ordered]@{ status = $status }
         if ($reason) { $obj.reason = $reason }
         if ($nextState) { $obj.nextState = $nextState }
+        $obj.sealed = $script:Sealed
         Write-Output (ConvertTo-Json $obj -Compress -Depth 6)
     } else {
         if ($status -eq "clean") {
@@ -754,6 +762,28 @@ function Parse-LlmConfigLine($line) {
 
 # Rule 1
 $priorStateObj = Read-PriorState $PriorState
+
+# -SealedPriorStateSha256 binds this call to the exact -PriorState bytes
+# named in the dispatch receipt's priorStateSha256 (Task 2's -Prepare).
+# RAW BYTES, not the canonicalized JSON Read-PriorState parsed: the
+# receipt hashed the file as written, and comparing anything else would
+# let a byte-identical tamper through undetected. Optional here because
+# other callers of this script exist; when a caller omits it, the check
+# was never made and must never read as though it passed.
+if ($PSBoundParameters.ContainsKey("SealedPriorStateSha256")) {
+    $priorRawBytes = $null
+    try {
+        $priorRawBytes = [System.IO.File]::ReadAllBytes($PriorState)
+    } catch {
+        Fail ("prior-state-unusable: could not read -PriorState: " + $_.Exception.Message)
+    }
+    $observedSealSha256 = Get-Sha256HexOfBytes $priorRawBytes
+    if ($observedSealSha256 -ine $SealedPriorStateSha256) {
+        $script:Sealed = "sealed-state-mismatch"
+        Fail "sealed-state-mismatch"
+    }
+    $script:Sealed = "sealed"
+}
 
 # Rule 2
 if ($priorStateObj.kind -cne $Kind) {
