@@ -608,7 +608,7 @@ claimed about it.
 
 <!-- contract:start id=codex-brief-binding-calls -->
 The backup lane fails a round when the prompt its client recorded does not
-match the brief that was sent (backup-lane.md, region `brief-hash-binding`).
+match the brief that was sent (backup-lane.md's brief-hash-binding).
 This lane had no equivalent, which is why corruption here could be silent
 while corruption there could not. It has one now, and it reads the
 PER-SESSION ROLLOUT rather than scraping the transcript.

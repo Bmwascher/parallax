@@ -3,7 +3,7 @@
 Construction detail for SKILL.md's preflight item 3, "build the review
 mirror" step. This is read only when the enumeration there actually found
 an `AGENTS.md`, `.agents/*`, or `.kimi-code/*` entry and
-`back-channel-auto-mirror` requires the mirror — the operational
+SKILL.md's back-channel-auto-mirror requires the mirror — the operational
 imperative and the do-not-ask rule stay in SKILL.md itself; this is the
 how, not the whether.
 

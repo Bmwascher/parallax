@@ -283,7 +283,7 @@ class TestTransportContract:
         Item 20's filed defect was the argument shape. The GAP the plan
         debate surfaced is wider: the backup lane fails the round when
         the recorded prompt does not match the brief
-        (backup-lane.md, region brief-hash-binding), and the codex lane
+        (backup-lane.md's brief-hash-binding), and the codex lane
         had no equivalent, which is exactly why corruption there could be
         silent while corruption on the backup lane could not.
 
@@ -370,7 +370,7 @@ class TestTransportContract:
         assert (
         "The backup lane fails a round when the prompt its client "
         "recorded does not match the brief that was sent "
-        "(backup-lane.md, region `brief-hash-binding`). This lane "
+        "(backup-lane.md's brief-hash-binding). This lane "
         "had no equivalent, which is why corruption here could be "
         "silent while corruption there could not. It has one now, "
         "and it reads the PER-SESSION ROLLOUT rather than scraping "
@@ -3453,6 +3453,30 @@ def test_no_call_site_still_names_poll_or_exit_three(body_skill, body_backup_lan
     for body in (body_skill, body_backup_lane):
         assert "-Poll" not in body
         assert "3 means `running`" not in body
+
+
+@pytest.mark.parametrize("call", ["codex-fresh", "codex-resume"])
+def test_each_codex_call_carries_the_operation_clause(call, body_skill):
+    """Per-call, not a whole-body `in`.
+
+    Added 2026-09-01. The clause below was written into two of the five
+    call sites in this skill and missed the other three, and every pin
+    that could have caught that read the WHOLE body, so one site
+    carrying the clause satisfied the suite for all of them. That is the
+    same defect `test_backup_lane.py` names in its own round-4 docstring,
+    reproduced here by the fix for it. The kimi sites are pinned per
+    section in that module; these are the codex two.
+    """
+    marker = "<!-- call:%s -->" % call
+    assert body_skill.count(marker) == 1, "exactly one section per call"
+    section = body_skill.split(marker, 1)[1].split("<!-- call:", 1)[0]
+    assert "never END THE TURN with the round unfinished" in section, (
+        "a call site that stops at STOP with no clause reads as leave"
+        " for ending the turn; measured 2026-09-01, an unattended run"
+        " that did exactly that finished with no verdict at all")
+    assert "references/model-prompting-notes.md's round-dispatch-operation"         in section, (
+        "the clause must name the file that carries the rule, in the"
+        " form the citation guard can resolve")
 
 
 def test_both_lanes_dispatch_the_printed_command_as_a_named_task(body_skill, body_backup_lane):

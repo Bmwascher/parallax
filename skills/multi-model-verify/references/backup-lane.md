@@ -67,8 +67,9 @@ Panel participation: a user-invoked panel per references/panels.md is a second s
   mangled differently on each host. So the wrapper sets
   `[Console]::OutputEncoding` to UTF-8 before the call and writes the
   reply itself with .NET, no BOM. This is the same defect class 0.23.0
-  fixed for the codex lane's OUTBOUND brief and item 51 owns for this
-  lane's outbound argument; nothing had looked at the way back.
+  fixed for the codex lane's OUTBOUND brief, and the one still open
+  for this lane's outbound argument; nothing had looked at the way
+  back.
 
   `$OutputEncoding` still does NOT appear here, and that remains
   deliberate: it governs what PowerShell pipes INTO a native command,
@@ -152,14 +153,25 @@ Panel participation: a user-invoked panel per references/panels.md is a second s
   path with `-Force` and its identity fields re-recorded, or the round
   is dispatched FRESH instead.
 
-  NOTHING ENFORCES THAT ON THIS LANE. The rule is written here because
-  it is unenforced, not in spite of it. `-ExpectedMirrorPath` compares
-  two values this session supplies in the SAME command, so a session
-  that rebuilds elsewhere and passes the new path to both satisfies it
-  and is not refused. The codex lane's real refusal is its binder's
-  `cwd` check; the kimi binder records no working directory at all,
-  which is the same gap `-NoWorkdirEvidence` states above. The wrapper
-  shape is unchanged:
+  NO DIRECT CHECK ENFORCES THAT ON THIS LANE, and the one that looks
+  like it does not. `-ExpectedMirrorPath` compares two values this
+  session supplies in the SAME command, so a session that rebuilds
+  elsewhere and passes the new path to both satisfies it and is not
+  refused. The codex lane's direct refusal is its binder's `cwd` check;
+  the kimi binder records no working directory at all, which is the
+  same gap `-NoWorkdirEvidence` states above.
+
+  What this lane has instead is a CONSEQUENCE, and it is worth stating
+  because it is the only thing standing here. If the client binds a
+  session to the directory it was created in, as the Transport section
+  above says it does, then a resume from a different directory writes
+  under a different `wd_<workspace>` container. The sealed session
+  directory then gains no new bytes, and the round-freshness boundary
+  refuses a file that is absent or shorter than its offset. So the
+  round fails closed — by consequence rather than by design, one layer
+  away from the thing it protects, and NOT MEASURED against a live
+  client. Do not count it as the check; rebuild at the same path. The
+  wrapper shape is unchanged:
 
   ```powershell
   $code = 1
@@ -716,9 +728,12 @@ proceed; do not infer either key's value.
   directory — otherwise every remaining comparison is trivially
   satisfied whenever the two heads already agree, which they do
   whenever the mirror needed no remediation commit — and the live
-  `-MirrorPath` must canonically match `-ExpectedMirrorPath`, the path
-  recorded at construction, so a verify call cannot be pointed at a
-  different mirror than the one whose identity was measured. What the
+  `-MirrorPath` must canonically match `-ExpectedMirrorPath`. Both are
+  CALLER ARGUMENTS in the SAME invocation rather than values read back
+  from the construction record, so the guarantee is narrow and is
+  stated narrowly: it catches a verify whose two path arguments
+  disagree, and it does NOT refuse a mirror rebuilt somewhere else with
+  both arguments updated to the new path. What the
   gate proves is narrow and stated so: the two-HEAD
   gate proves committed-HEAD freshness. Non-HEAD inputs are bound in the
   constructed mirror's manifest AT CONSTRUCTION TIME, and source-side

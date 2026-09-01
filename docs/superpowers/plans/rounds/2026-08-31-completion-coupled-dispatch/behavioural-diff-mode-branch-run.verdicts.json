@@ -1,0 +1,22 @@
+[
+  {
+    "expectation": 1,
+    "met": true,
+    "evidence": "The plan read visibly includes line 25, \"Verification status: FULL,\" showing the status was consulted."
+  },
+  {
+    "expectation": 2,
+    "met": true,
+    "evidence": "Tool call toolu_01F4acyEbRakeJBrK76Wvnjn runs `git diff 1270d40..55de5c6`, and its matching ok result shows the committed `Widgets/DemoWidget.lua` hunk containing `if elapsed < 0.5 then return end`."
+  },
+  {
+    "expectation": 3,
+    "met": true,
+    "evidence": "The debate brief identifies `Widgets/DemoWidget.lua` using 0.5 instead of the plan/reference-required 0.2 and labels it a spec- and port-fidelity violation."
+  },
+  {
+    "expectation": 4,
+    "met": false,
+    "evidence": "The run ends with \"I'll wait for the background task notification\" and never issues a terminal FIX verdict naming the throttle deviation."
+  }
+]

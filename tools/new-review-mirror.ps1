@@ -618,9 +618,11 @@ $RepoRoot = (Resolve-Path $RepoRoot).Path
 # - otherwise every remaining comparison is trivially satisfied whenever
 # the two heads already agree, which they do whenever the mirror needed
 # no remediation commit - and the live -MirrorPath must canonically
-# match -ExpectedMirrorPath, the path recorded at construction, so a
-# verify call cannot be pointed at a different mirror than the one whose
-# identity was measured.
+# match -ExpectedMirrorPath. Both are CALLER ARGUMENTS in the SAME
+# invocation rather than values read back from the construction record,
+# so the guarantee is narrow: it catches a verify whose two path
+# arguments disagree, and it does NOT refuse a mirror rebuilt somewhere
+# else with both arguments updated to the new path.
 #
 # Neither status comparison is decoration. An edit to an untracked or
 # ignored review input moves NEITHER head, and that content class is
@@ -672,9 +674,10 @@ if ($VerifyIdentity) {
             " directory ($MirrorPath), so nothing was compared")
         exit 1
     }
-    # The live -MirrorPath must canonically match the path the identity
-    # was recorded at, so a verify call cannot be pointed at a different
-    # mirror than the one whose identity was measured.
+    # The live -MirrorPath must canonically match -ExpectedMirrorPath.
+    # Both are caller arguments in this same invocation, so this catches
+    # a call whose two path arguments disagree. It does NOT refuse a
+    # mirror rebuilt elsewhere with both arguments updated.
     $expNorm = $ExpectedMirrorPath.Replace("\", "/").TrimEnd("/")
     if (-not $mpNorm.Equals($expNorm, $cmp)) {
         Write-Output ("BLOCKED: the mirror at $MirrorPath is not the mirror" +

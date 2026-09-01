@@ -508,6 +508,13 @@ def reaped_tempdir(prefix):
     it must not be read as an active control - so it says so, rather than
     looking like one. The retry-and-warn below is unconditional and is
     what keeps a held lock from costing a run its verdicts.
+
+    So state the consequence rather than implying it is handled: the
+    live grandchild named above is no longer killed, it outlives the
+    case, and the directory leaks with a warning while the round keeps
+    spending its quota. That is worse than the reaping was and better
+    than a crashed run, and it is what closing this properly has to
+    fix - by writing the pid again, or by waiting on the round.
     """
     root = tempfile.mkdtemp(prefix=prefix)
     try:

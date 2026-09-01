@@ -785,6 +785,51 @@ def test_declared_regions_match_the_documents(doc_paths=DOC_PATHS):
         "Add them to DECLARED_REGIONS.")
 
 
+def test_every_region_citation_uses_a_resolvable_form(doc_paths=DOC_PATHS):
+    """A declared id must be cited as `<file>.md's <id>`, never bare.
+
+    Added 2026-09-01, from the third whole-branch review. The dangling
+    check above reads two forms; a citation written in any OTHER form is
+    invisible to it, so renaming that region leaves a dead pointer no
+    gate can see. Two shipped citations were exactly that - a backticked
+    `brief-hash-binding` and a backticked `back-channel-auto-mirror`,
+    the second naming no file at all.
+
+    Widening the dangling regex to backticks was measured and REJECTED:
+    over these same documents it matches eight tokens, and six are not
+    regions at all (skill names like `gpt-5-4-prompting`, drift states
+    like `manual-triage-needed`). This rule takes the other direction -
+    it only ever looks at ids that ARE declared, so it cannot fire on
+    prose - and it makes every live citation resolvable, which is what
+    keeps the dangling check able to see one later.
+    """
+    import re
+
+    declared = set(collect_regions(doc_paths))
+    assert declared, "no regions declared; this guard stopped guarding"
+    bad = []
+    for path in doc_paths:
+        text = path.read_text(encoding="utf-8")
+        for rid in declared:
+            for match in re.finditer(re.escape(rid), text):
+                start, end = match.start(), match.end()
+                # its own marker, and any longer id that contains this one
+                if re.search(r"contract:start id=$", text[:start]):
+                    continue
+                if start and text[start - 1] == "-":
+                    continue
+                if end < len(text) and text[end] == "-":
+                    continue
+                if text[:start].endswith(".md's "):
+                    continue
+                bad.append("%s cites %s" % (path.name, rid))
+    assert not bad, (
+        "region citation(s) not written as `<file>.md's <id>`: "
+        f"{sorted(set(bad))}. A reader cannot resolve the region, and "
+        "the dangling check cannot see the citation to report it dead "
+        "when the region is renamed.")
+
+
 def test_every_cited_dispatch_region_id_resolves(doc_paths=DOC_PATHS):
     """Prose that names a region id must name one that exists.
 
