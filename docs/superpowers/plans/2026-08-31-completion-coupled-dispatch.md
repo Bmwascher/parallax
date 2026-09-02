@@ -2599,6 +2599,49 @@ zero-judgment rule forbids the implementer.
 | 1 | The backup lane cannot confirm which copy of the code it read | ship with the gap stated in the lane's own text | n/a - raised before the diff debate | SHIP, gap recorded |
 | 2 | Invariant D5 cannot be observed by any automated session | record as unobservable, or have a human watch | round 2 said it could not observe a screen either | USER WATCHED both hosts; observed, no window |
 
+### Gate provenance
+
+The two-host full suite ran at `4d042a0`: Windows PowerShell 5.1 2719
+passed / 14 skipped, PowerShell 7 2718 passed / 15 skipped, both exit 0.
+Commits after `4d042a0` are documentation only - this section and the one
+below it - and the four fast gates were re-run on the attested head. The
+attested head is therefore NOT the head the full suite ran on, and that
+is stated here rather than left for a reader to discover.
+
+### A required control the session did not run
+
+**The application checkpoint was never emitted, for any fix wave in this
+cycle.** `references/application-checkpoint.md` says it applies whenever
+THIS SESSION applies file changes following from a review verdict, and
+names "post-adjudication fixes during a debate" explicitly. That is what
+every fix wave here was: five Fable rounds and seven cross-vendor rounds,
+each followed by the session editing files. No checkpoint artifact exists
+in this cycle; the directory holds none, and nothing was emitted.
+
+The user's instructions ("apply the four fixes", "continue", "run the
+confirming round") are pre-authorization, which under that reference
+"skips only the wait - emission is never optional". So pre-authorization
+does not cover this. The control was skipped, not satisfied by a shortcut.
+
+What the control would have added, and what stood in for it:
+
+- Pre-stated dispositions per finding. In practice each finding was
+  reproduced before acceptance and the disposition written into the
+  commit message AFTERWARDS. That is a record, but it is the wrong side
+  of the edit.
+- A planned-changes table with exact paths and postconditions BEFORE
+  editing. This never existed. Scope was held to the findings by
+  judgment, not by a scope line.
+- An executed verification plan appended to the artifact. The gates were
+  run and their results reported, but into commit messages and this
+  record rather than a checkpoint artifact.
+
+This is recorded as a process failure of the session, not as a defect the
+reviewer found - it found none of it, because the debate reviews the code
+and the record, and nothing in either surfaces a missing checkpoint. It
+is written here so the merge record does not read as though every control
+in the skill was run.
+
 ### Degraded-mode note
 
 What was skipped: nothing was skipped by choice, and no cross-vendor lane
