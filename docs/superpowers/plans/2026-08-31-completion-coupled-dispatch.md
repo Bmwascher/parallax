@@ -2483,9 +2483,9 @@ debate record below carries that outcome and the status it earns.
 **Participants:** Opus 5 (session) / gpt-5.6-sol (codex exec, session
 `01a05f3b-400f-7500-b3e8-0716c7a4dc2f`) / claude-fable (fable-reviewer
 seat) / kimi-code/k3-256k (backup lane)
-**Rounds used:** Plan: 8 rounds. Diff: R1-R5 completed and retained; R1
+**Rounds used:** Plan: 8 rounds. Diff: R1-R7 completed and retained; R1
 raised the missing appendix and three further points, R2-R3 were the
-retrospective verification of this plan's final revision, R4-R5
+retrospective verification of this plan's final revision, R4-R7
 confirming.
 
 **Contested counter: 0 of 4 at the terminal boundary. Historical peak:
@@ -2536,7 +2536,7 @@ staleness, it moves it into prose that nothing checks.
   asserted here; what is checkable, and checked, is that the files do
   not exist
 - diff debate, which is where this plan's final revision was finally
-  reviewed: `sol-diff-debate-r1..r5.md`, each with its `-binding.json`.
+  reviewed: `sol-diff-debate-r1..r7.md`, each with its `-binding.json`.
   Every round of that debate is retained, including the ones whose only
   findings were against this appendix
 - whole-branch reviews: `fable-whole-branch-review-8af6ae0..3029599.md`
