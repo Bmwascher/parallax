@@ -2483,13 +2483,29 @@ debate record below carries that outcome and the status it earns.
 **Participants:** Opus 5 (session) / gpt-5.6-sol (codex exec, session
 `01a05f3b-400f-7500-b3e8-0716c7a4dc2f`) / claude-fable (fable-reviewer
 seat) / kimi-code/k3-256k (backup lane)
-**Rounds used:** 8 on the plan. On the diff debate, every round retained
-under Raw rounds below - a count is deliberately not written here,
-because a number about a directory this document sits beside goes stale
-on the next round, which is the trap this appendix exists to record.
-Round 1 raised the missing appendix and three other points recorded
-below; rounds 2 and 3 were the retrospective verification of this plan's
-final revision; the rounds after that confirm and correct
+**Rounds used:** Plan: 8 rounds. Diff: R1-R5 completed and retained; R1
+raised the missing appendix and three further points, R2-R3 were the
+retrospective verification of this plan's final revision, R4-R5
+confirming.
+
+**Contested: 1 of 5, and the session lost it.** The reviewer's suggested
+wording for this very field was "Contested counter: 0 of 5"; copying that
+would have been false. In R5 the session declined the reviewer's
+instruction to write a round count and argued for pointing at the
+directory instead. The reviewer overruled it in the next round on two
+grounds the session had not weighed: the count is a required field, and
+the substitute prose introduced a false claim. The session accepted the
+overrule. No reviewer finding on this branch was contested and sustained
+by the session; every one was reproduced and accepted.
+
+This count is bound to the terminal boundary and is updated there, which
+is the correct handling and not the one the session first tried. It
+first DELETED the count, on the reasoning that a number sitting beside
+the directory it counts goes stale; cross-vendor round 5 pointed out
+that this both violates the required format and, worse, replaced a
+stale number with a false claim - the prose then said every diff round
+was retained while R4 was not. Deleting a required field does not remove
+staleness, it moves it into prose that nothing checks.
 **Outcome:** escalated
 **Verification status:** DEGRADED
 **Degradation:** final-revision-reviewed-late
@@ -2502,7 +2518,9 @@ final revision; the rounds after that confirm and correct
   asserted here; what is checkable, and checked, is that the files do
   not exist
 - diff debate, which is where this plan's final revision was finally
-  reviewed: `sol-diff-debate-r1..r3.md`, each with its `-binding.json`
+  reviewed: `sol-diff-debate-r1..r5.md`, each with its `-binding.json`.
+  Every round of that debate is retained, including the ones whose only
+  findings were against this appendix
 - whole-branch reviews: `fable-whole-branch-review-8af6ae0..3029599.md`
   and `fable-whole-branch-review-rounds-2-5.md`
 
@@ -2536,7 +2554,7 @@ but the defect existed because a plan revision went unreviewed.
 | 2 | The plan's own tally said six rounds across two lanes against eight sections and three lanes | reviewer (diff r1) | accepted, corrected | `## Where the plan stands` above |
 | 3 | Both binders must check the seal before parsing the prior state | reviewer (diff r1) | accepted; kimi reordered, both lanes pinned | `tools/read-kimi-round-evidence.ps1:765-790` |
 | 4 | `body.ps1` is as unbound after preparation as `wrapper.ps1` and was not named in the residual list | reviewer (diff r1) | accepted; named, not sealed | `references/model-prompting-notes.md:374-385` |
-| 5 | `-ExtraInput` flattens to a leaf name and overwrites, so the plan's "each named file" is not what ships | reviewer (diff r2) | accepted; both collisions refused before any copy | `tools/new-review-mirror.ps1:1283-1316`, and Task 1a above |
+| 5 | `-ExtraInput` flattens to a leaf name and overwrites, so the plan's "each named file" is not what ships | reviewer (diff r2) | accepted; both collisions refused before any `-ExtraInput` copy | `tools/new-review-mirror.ps1:1283-1316`, and Task 1a above |
 | 6 | Task 5's "identical failure text" requires literal parity for a missing or unreadable prior-state file | session asked; reviewer (diff r3) decided | SCOPED, not required - see the interpretation below | `completion-coupled-dispatch.md:1480-1519` |
 
 **The Task 5 interpretation, in the reviewer's own words, recorded so the
