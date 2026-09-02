@@ -1280,6 +1280,37 @@ if ($after.Entries.Count -gt 0) {
 # covers it and the printed record enumerates it - it lands as an
 # ordinary untracked mirror file, the same as any other review input the
 # mirror cannot inherit on its own.
+# Two refusals BEFORE any of them is copied, so a rejected build never
+# leaves half the inputs in place. Every input is flattened to its leaf
+# name, because the mirror re-roots every path; that makes two different
+# files with one leaf name indistinguishable at the destination, and it
+# lets an outside file land on a name the copied tree already carries.
+# Cross-vendor round 2 found both: the loop wrote with -Force, so the
+# second of a colliding pair silently won and a tracked file could be
+# replaced by unreviewed content that the digest then certified. The
+# plan promises to copy in EACH named file, and there is no second
+# location it ever froze, so the honest answer is to refuse.
+$eiSeen = @{}
+foreach ($ei in @($ExtraInputPaths)) {
+    $leaf = Split-Path $ei -Leaf
+    $key = $leaf.ToLowerInvariant()
+    if ($eiSeen.ContainsKey($key)) {
+        Write-Output ("BLOCKED: two -ExtraInput files share the destination" +
+            " name '" + $leaf + "' (" + $eiSeen[$key] + " and " + $ei +
+            "); the mirror flattens every input to its leaf name, so one" +
+            " would silently replace the other")
+        exit 1
+    }
+    $eiSeen[$key] = $ei
+    $dest = Join-Path $MirrorPath $leaf
+    if (Test-Path -LiteralPath $dest) {
+        Write-Output ("BLOCKED: -ExtraInput '" + $leaf + "' would overwrite" +
+            " a file the mirror already has (" + $dest + "); reviewed" +
+            " content must not be replaced by unreviewed content the" +
+            " digest would then certify")
+        exit 1
+    }
+}
 foreach ($ei in @($ExtraInputPaths)) {
     $dest = Join-Path $MirrorPath (Split-Path $ei -Leaf)
     Copy-Item -LiteralPath $ei -Destination $dest -Force

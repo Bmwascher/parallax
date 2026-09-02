@@ -2459,8 +2459,65 @@ this last one: "one small correction short of buildable". That correction
 is applied above, and its regression tests are written. Nothing else it
 raised is outstanding.
 
-**This version has not been reviewed.** The correction is small, it is
-measured, and it is tested - but the honest statement is that five of six
-rounds found that a fix of mine had moved its defect rather than removed
-it, and this version's fix has not been through a round.
+This version was UNREVIEWED when it was frozen, and the line here used to
+stop at that. It has since been verified retrospectively: cross-vendor
+round 2 of the diff debate read the post-round-8 correction and judged it
+"directionally sound but incomplete", finding one open defect in it. The
+debate record below carries that outcome and the status it earns.
+
+---
+
+## Debate record
+
+**Participants:** Opus 5 (session) / gpt-5.6-sol (codex exec, session
+`01a05f3b-400f-7500-b3e8-0716c7a4dc2f`) / claude-fable (fable-reviewer
+seat) / kimi-code/k3-256k (backup lane)
+**Rounds used:** 8 on the plan, plus 2 retrospective rounds inside the
+diff debate that re-opened this plan's final revision
+**Outcome:** escalated
+**Verification status:** DEGRADED
+**Degradation:** final-revision-fix-outstanding
+**Authorized by:** not-authorized
+**Raw rounds:** `docs/superpowers/plans/rounds/2026-08-31-completion-coupled-dispatch/`
+(sol-plan-review-r1..r5, fable-plan-review-r1..r2, kimi-plan-review-r1,
+and the diff debate's own rounds)
+
+### Why this is DEGRADED and not FULL
+
+This status is the cross-vendor reviewer's own words, recorded rather than
+inferred, and the session did not upgrade it. It was asked directly which
+status the plan honestly earns and answered: `DEGRADED`, degradation
+`final-revision-fix-outstanding`, `Authorized by: not-authorized`.
+
+The frozen plan had NO debate record appendix at all until this one, which
+`references/frozen-plan-format.md` requires of every frozen plan. Eight
+review rounds had happened and none of them was recorded in the required
+shape, so nothing in the plan could be read as a verification status. That
+absence is the first half of the degradation.
+
+The second half is substantive. The correction made after the plan's
+round-8 review was never reviewed before implementation began, and when it
+finally was, it was found incomplete: the plan promises `-ExtraInput` will
+copy in EACH named file, while the implementation flattened every input to
+its leaf name and wrote it with `-Force`. Two inputs sharing a leaf name
+silently became one, and an outside file could replace a reviewed file
+that the mirror digest then certified. Both are now refused, with tests,
+but the defect existed because a plan revision went unreviewed.
+
+### Degraded-mode note
+
+What was skipped: nothing was skipped by choice, and no cross-vendor lane
+was unavailable at any point. What was MISSING is a record - the appendix
+this section now is - and what was LATE is the review of the final plan
+revision, which happened during the implementation's own diff debate
+rather than before implementation started.
+
+What that costs: a reader of this plan between its freezing and this
+appendix had no way to tell whether it had been verified, and the
+implementer built from a revision no reviewer had seen.
+
+This status is not upgraded by the fixes made in response to it. Upgrading
+it would require the thing that was missing - a review of the final
+revision BEFORE it was built from - and that is not recoverable after the
+fact.
 

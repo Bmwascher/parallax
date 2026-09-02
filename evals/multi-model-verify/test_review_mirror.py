@@ -1888,6 +1888,50 @@ def test_extra_inputs_are_covered_by_the_digest(tmp_path):
     assert tampered.returncode == 1, tampered.stdout + tampered.stderr
 
 
+def test_two_extra_inputs_with_one_leaf_name_are_refused(tmp_path):
+    """Cross-vendor round 2, 2026-09-01.
+
+    The plan promises to copy in EACH named file. The implementation
+    flattened every input to its leaf name and wrote it with -Force, so
+    two inputs called `standards.md` silently became one: the record
+    listed a destination that could not show which of them arrived, and
+    the reviewer read a tree the record misdescribed. Refusing is the
+    honest option, because the mirror re-roots every path and there is
+    no correct second location that the plan ever froze.
+    """
+    repo = make_repo(tmp_path)
+    a = tmp_path / "a"; a.mkdir(); (a / "standards.md").write_text("first\n")
+    b = tmp_path / "b"; b.mkdir(); (b / "standards.md").write_text("second\n")
+    mirror = tmp_path / "mirror"
+    proc = run_mirror(repo, mirror, "-ExtraInput", str(a / "standards.md"),
+                      "-ExtraInput", str(b / "standards.md"))
+    # Assert the REFUSAL, not the exit code: run_mirror passes -SkipProbe,
+    # which blocks every build at the end anyway, so `returncode == 1`
+    # alone passes whether or not this case is handled at all. The first
+    # draft of this test did exactly that and passed against the defect.
+    assert "share the destination name" in proc.stdout, proc.stdout
+    assert "standards.md" in proc.stdout, proc.stdout
+    assert not (mirror / "standards.md").exists(), "copied one of them anyway"
+
+
+def test_an_extra_input_cannot_overwrite_a_file_the_mirror_already_has(tmp_path):
+    """Same round, the other half of the collision.
+
+    An -ExtraInput landing on a name the copied tree already carries
+    replaces reviewed content with unreviewed content, and the digest
+    then certifies the replacement as the tree.
+    """
+    repo = make_repo(tmp_path)
+    outside = tmp_path / "outside"; outside.mkdir()
+    (outside / "kept.txt").write_text("unreviewed replacement\n")
+    mirror = tmp_path / "mirror"
+    proc = run_mirror(repo, mirror, "-ExtraInput", str(outside / "kept.txt"))
+    assert "would overwrite a file the mirror already has" in proc.stdout,         proc.stdout
+    assert "kept.txt" in proc.stdout, proc.stdout
+    assert (mirror / "kept.txt").read_text() == "tracked\n", (
+        "the reviewed file was replaced by an unreviewed one")
+
+
 def test_an_extra_input_cannot_smuggle_a_back_channel_into_the_mirror(tmp_path):
     """-ExtraInput writes into the mirror, so what it writes must be
     swept too.

@@ -59,23 +59,34 @@ documents, dispatched by the printed `command` verbatim.
 1. **A named task row appeared, carrying the tool's own `taskName`.**
    Observed on both.
 2. **The session answered a user message while the round ran.** Observed
-   on Sol R1: the session composed and sent a full reply to the user
-   between dispatch and notification. This is the property the foreground
-   form did not have.
+   on BOTH hosts. On `powershell` (5.1) at Sol R1: the session composed
+   and sent a full reply to the user between dispatch and notification.
+   On `pwsh` (7) at the `Sol R2 debate round`: the session wrote to the
+   user, the user replied, and the session answered again, all while the
+   round was in flight. This is the property the foreground form did not
+   have.
 3. **A completion notification arrived** carrying the task id and the
    output file path. Observed on both.
 4. **The trailer's exit code equals the classifier's mapping.** Observed
    on both: state `reply-present`, exit `0`, and stdout is that one line
    and nothing else.
-5. **No console window appeared.** NOT OBSERVED. The measuring session
-   cannot see the screen. This is invariant D5 and it remains unmeasured
-   for a harness-run wrapper; it is not recorded as passing.
-6. **Both hosts.** PARTLY. Items 1, 3 and 4 were observed on BOTH
-   hosts. Item 2 was observed on Sol R1 only, which is 5.1. Item 5 was
-   not observed at all. So the frozen instruction - repeat 1 to 5 on
-   both hosts - is NOT satisfied, and cross-vendor round 1 was right to
-   say so: the earlier "Done, above" here counted the items that were
-   done and skipped the two that were not.
+5. **No console window appeared.** OBSERVED on `pwsh`, by the USER, on
+   2026-09-01 during the `Sol R2 debate round` of this branch's own
+   cross-vendor debate. The user watched the screen for the duration and
+   reported that no console window appeared. The observation is theirs
+   and is recorded as theirs: the measuring session cannot see a screen,
+   which is why this item sat unmeasured until someone who could was
+   asked. This is invariant D5, and it is the FIRST time it has been
+   observed for a harness-run wrapper. STILL NOT OBSERVED on Windows
+   PowerShell 5.1: `Sol R1` ran on 5.1 and nobody was watching.
+6. **Both hosts.** NEARLY. Items 1, 2, 3 and 4 are observed on BOTH
+   hosts. Item 5 is observed on `pwsh` only. So the frozen instruction -
+   repeat 1 to 5 on both hosts - has exactly ONE cell outstanding: the
+   console window on Windows PowerShell 5.1. Cross-vendor round 1 was
+   right that the earlier "Done, above" counted the items that were done
+   and skipped the two that were not; two rounds of this debate closed
+   one of those and half of the other, by dispatching R2 on `pwsh` and
+   asking the user to watch.
 
 `mirror.verify` holding `identity: verified` twice is the evidence that
 the SECOND verification ran. An earlier draft of this design shipped a
@@ -149,10 +160,15 @@ not change that.
 
 ## What this measurement does not cover
 
-- Invariant D5, the console window, item 5 above.
 - The transcripts written by `>` under Windows PowerShell 5.1 are UTF-16.
   The classifier read the `workdir:` header out of them correctly on both
   hosts. That is observed here but was not the object of the test, and no
   test in this branch pins it.
 - Only `-DispatchHost powershell` was used for the FAIL and KILL rounds.
-  The success path was measured on both hosts; the failure path was not.
+  A successful wrapper EXECUTION ran on both hosts; the failure path ran
+  on one. That is narrower than "the success path was measured on both
+  hosts", which this line said until cross-vendor round 2 pointed out
+  that it contradicted item 6 immediately above it - the summary was
+  still carrying the overclaim after the itemized list had been
+  corrected.
+- Invariant D5 on Windows PowerShell 5.1. See item 5.

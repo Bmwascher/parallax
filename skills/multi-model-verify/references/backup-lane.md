@@ -62,7 +62,7 @@ Panel participation: a user-invoked panel per references/panels.md is a second s
   reply file does not copy bytes. PowerShell decodes the
   client's stdout using `[Console]::OutputEncoding` — the OEM code
   page on Windows PowerShell 5.1, measured IBM437 on both hosts in
-  `tools/new-review-mirror.ps1:57-75` — and then re-encodes on write,
+  `tools/new-review-mirror.ps1:81-99` — and then re-encodes on write,
   UTF-16LE on 5.1 and UTF-8 on 7. A non-ASCII reply is therefore
   mangled differently on each host. So the wrapper sets
   `[Console]::OutputEncoding` to UTF-8 before the call and writes the
