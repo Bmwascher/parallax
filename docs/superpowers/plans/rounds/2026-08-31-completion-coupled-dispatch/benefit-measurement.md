@@ -76,17 +76,20 @@ documents, dispatched by the printed `command` verbatim.
    reported that no console window appeared. The observation is theirs
    and is recorded as theirs: the measuring session cannot see a screen,
    which is why this item sat unmeasured until someone who could was
-   asked. This is invariant D5, and it is the FIRST time it has been
-   observed for a harness-run wrapper. STILL NOT OBSERVED on Windows
-   PowerShell 5.1: `Sol R1` ran on 5.1 and nobody was watching.
-6. **Both hosts.** NEARLY. Items 1, 2, 3 and 4 are observed on BOTH
-   hosts. Item 5 is observed on `pwsh` only. So the frozen instruction -
-   repeat 1 to 5 on both hosts - has exactly ONE cell outstanding: the
-   console window on Windows PowerShell 5.1. Cross-vendor round 1 was
-   right that the earlier "Done, above" counted the items that were done
-   and skipped the two that were not; two rounds of this debate closed
-   one of those and half of the other, by dispatching R2 on `pwsh` and
-   asking the user to watch.
+   asked. This is invariant D5, and it was the FIRST time it had been
+   observed for a harness-run wrapper. OBSERVED AGAIN on `powershell`
+   (5.1) during the `Sol R3 debate round` the same day, the same way,
+   with the same report. So D5 is measured on BOTH hosts, by the user,
+   for a harness-run wrapper. It sat unmeasured for the whole build
+   because the only party who could make it was never asked.
+6. **Both hosts.** COMPLETE. All five items are observed on BOTH hosts.
+   Cross-vendor round 1 was right that the earlier "Done, above" counted
+   the items that were done and skipped the two that were not: item 2
+   was one host and item 5 was nowhere. Three rounds of this branch's own
+   cross-vendor debate closed both, by dispatching R2 on `pwsh` and R3 on
+   `powershell` and asking the user to watch the screen each time. The
+   debate rounds were the measurement vehicle; no round was run for the
+   measurement's own sake.
 
 `mirror.verify` holding `identity: verified` twice is the evidence that
 the SECOND verification ran. An earlier draft of this design shipped a
@@ -171,4 +174,3 @@ not change that.
   that it contradicted item 6 immediately above it - the summary was
   still carrying the overclaim after the itemized list had been
   corrected.
-- Invariant D5 on Windows PowerShell 5.1. See item 5.

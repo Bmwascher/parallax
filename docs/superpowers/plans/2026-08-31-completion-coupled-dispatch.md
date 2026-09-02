@@ -593,7 +593,15 @@ later task to notice.
 - Consumes: nothing.
 - Produces: `-ExtraInput <path>` on the BUILD, repeatable, copying each
   named file in BEFORE the baseline and manifest are taken and listing it
-  in the printed record; `mirrorStateSha256` in that record; and
+  in the printed record. Every input is flattened to its LEAF NAME,
+  because the mirror re-roots every path, so two collisions are possible
+  and BOTH are refused before anything is copied: two inputs sharing a
+  destination name (compared case-insensitively), and an input whose
+  destination the copied tree already carries. Amended after cross-vendor
+  round 2 of the diff debate found the shipped build silently resolving
+  both with `-Force`; recorded as resolved point 5 in the debate record.
+  There is no second destination this plan ever froze, so refusing is the
+  only option that keeps the printed record true; `mirrorStateSha256` in that record; and
   `-MirrorStateSha256 <hex>` plus `-ExpectedMirrorPath <path>` as
   mandatory arguments to `-VerifyIdentity`. Task 2's receipt carries both
   and Task 4's wrapper passes both. There is deliberately NO re-mint mode.
@@ -2476,11 +2484,15 @@ seat) / kimi-code/k3-256k (backup lane)
 diff debate that re-opened this plan's final revision
 **Outcome:** escalated
 **Verification status:** DEGRADED
-**Degradation:** final-revision-fix-outstanding
+**Degradation:** final-revision-reviewed-late
 **Authorized by:** not-authorized
 **Raw rounds:** `docs/superpowers/plans/rounds/2026-08-31-completion-coupled-dispatch/`
-(sol-plan-review-r1..r5, fable-plan-review-r1..r2, kimi-plan-review-r1,
-and the diff debate's own rounds)
+- plan debate: `sol-plan-review-r1..r5.md`, `fable-plan-review-r1..r2.md`,
+  `kimi-plan-review-r1.md`, each with its `-binding.json`
+- diff debate, which is where this plan's final revision was finally
+  reviewed: `sol-diff-debate-r1..r3.md`, each with its `-binding.json`
+- whole-branch reviews: `fable-whole-branch-review-8af6ae0..3029599.md`
+  and `fable-whole-branch-review-rounds-2-5.md`
 
 ### Why this is DEGRADED and not FULL
 
@@ -2503,6 +2515,41 @@ its leaf name and wrote it with `-Force`. Two inputs sharing a leaf name
 silently became one, and an outside file could replace a reviewed file
 that the mirror digest then certified. Both are now refused, with tests,
 but the defect existed because a plan revision went unreviewed.
+
+### Resolved points
+
+| # | Claim | Raised by | Outcome | Evidence |
+|---|-------|-----------|---------|----------|
+| 1 | The plan carries no Debate record appendix, so no verification status can be read from it | reviewer (diff r1) | accepted; this appendix is the fix | `references/frozen-plan-format.md:43-58` |
+| 2 | The plan's own tally said six rounds across two lanes against eight sections and three lanes | reviewer (diff r1) | accepted, corrected | `## Where the plan stands` above |
+| 3 | Both binders must check the seal before parsing the prior state | reviewer (diff r1) | accepted; kimi reordered, both lanes pinned | `tools/read-kimi-round-evidence.ps1:765-790` |
+| 4 | `body.ps1` is as unbound after preparation as `wrapper.ps1` and was not named in the residual list | reviewer (diff r1) | accepted; named, not sealed | `references/model-prompting-notes.md:374-385` |
+| 5 | `-ExtraInput` flattens to a leaf name and overwrites, so the plan's "each named file" is not what ships | reviewer (diff r2) | accepted; both collisions refused before any copy | `tools/new-review-mirror.ps1:1283-1316`, Task 1a below |
+| 6 | Task 5's "identical failure text" requires literal parity for a missing or unreadable prior-state file | session asked; reviewer (diff r3) decided | SCOPED, not required - see the interpretation below | `completion-coupled-dispatch.md:1480-1519` |
+
+**The Task 5 interpretation, in the reviewer's own words, recorded so the
+remaining difference is never read later as an oversight:**
+
+> Task 5 parity applies to the `-SealedPriorStateSha256` outcomes
+> enumerated in Steps 1, 3, and 4: raw-byte comparison,
+> `sealed-state-mismatch`, and `sealed: not-checked`. When prior-state
+> bytes exist, seal comparison precedes JSON parsing. Missing or
+> unreadable `-PriorState` retains each binder's established file-error
+> vocabulary; both lanes fail before parsing, and neither claims that a
+> seal comparison occurred.
+
+The reviewer described its own round-2 reading as "too broad" and closed
+the point itself. The session did not argue it either way; it put both
+readings and the nine pinned assertions to the reviewer and asked for a
+decision, because choosing between them is the judgment call the
+zero-judgment rule forbids the implementer.
+
+### Escalated points (user-decided)
+
+| # | Question | Session position | Reviewer position | Owner's call |
+|---|----------|------------------|-------------------|--------------|
+| 1 | The backup lane cannot confirm which copy of the code it read | ship with the gap stated in the lane's own text | n/a - raised before the diff debate | SHIP, gap recorded |
+| 2 | Invariant D5 cannot be observed by any automated session | record as unobservable, or have a human watch | round 2 said it could not observe a screen either | USER WATCHED both hosts; observed, no window |
 
 ### Degraded-mode note
 
