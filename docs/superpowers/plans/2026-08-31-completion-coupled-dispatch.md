@@ -2488,15 +2488,33 @@ raised the missing appendix and three further points, R2-R3 were the
 retrospective verification of this plan's final revision, R4-R5
 confirming.
 
-**Contested: 1 of 5, and the session lost it.** The reviewer's suggested
-wording for this very field was "Contested counter: 0 of 5"; copying that
-would have been false. In R5 the session declined the reviewer's
-instruction to write a round count and argued for pointing at the
-directory instead. The reviewer overruled it in the next round on two
-grounds the session had not weighed: the count is a required field, and
-the substitute prose introduced a false claim. The session accepted the
-overrule. No reviewer finding on this branch was contested and sustained
-by the session; every one was reproduced and accepted.
+**Contested counter: 0 of 4 at the terminal boundary. Historical peak:
+1 of 4.** Four is the protocol's default cap on CONSECUTIVE CONTESTED
+exchanges, and the counter RESETS when no contested point is outstanding
+(`references/debate-protocol.md:57-63`); it is not a count of rounds.
+
+The one contested point: in the R5 brief the session declined the
+reviewer's instruction to write a round count and argued for pointing at
+the directory instead. The R5 reply overruled it on two grounds the
+session had not weighed - the count is a required field, and the
+substitute prose introduced a claim that was false. The session accepted
+the overrule in `fdcfd76`, so nothing was outstanding at R6 and the
+counter reset.
+
+An earlier version of this paragraph said the reviewer had proposed
+"Contested counter: 0 of 5". It proposed `0 of 4`
+(`rounds/2026-08-31-completion-coupled-dispatch/sol-diff-debate-r5.md:13`),
+and R6 caught the misquote - of a file retained in this same repository,
+two directories away.
+
+**On acceptance, stated so the retained artifacts are not contradicted:**
+every SUSTAINED finding in this diff debate was reproduced before being
+accepted, and the single contested point resolved against the session.
+The earlier Fable reviews are NOT the same: that artifact records one
+recommendation measured and REJECTED - widening the citation guard to
+backticked ids - and one sweep deliberately NARROWED, both with their
+reasons (`rounds/2026-08-31-completion-coupled-dispatch/fable-whole-branch-review-rounds-2-5.md`,
+section "What the session refused or narrowed").
 
 This count is bound to the terminal boundary and is updated there, which
 is the correct handling and not the one the session first tried. It
