@@ -374,11 +374,15 @@ Canonical reasoning effort: `high`
   outside caller is handed the key to. What remains is a caller who
   opens the reservation file, reads the nonce, and passes it - a
   deliberate act on a file they own, which no filesystem mechanism can
-  prevent. Nor does anything bind the WRAPPER's own text after
-  preparation: the digest covers the receipt, so a caller who edits
-  wrapper.ps1 before the harness runs it - the expected receipt digest,
-  the second verification, or the body call itself - gets a round that
-  still exits 0. And a caller who supplies an earlier act's receipt,
+  prevent. Nor does anything bind the WRAPPER's own text, or
+  the lane BODY installed beside it, after preparation: the digest
+  covers the receipt and NOTHING covers either script, so a caller who
+  edits wrapper.ps1 before the harness runs it - the expected receipt
+  digest, the second verification, or the body call itself - gets a
+  round that still exits 0, and a caller who replaces body.ps1 with one
+  that writes a plausible transcript and reply gets the same. Cross-vendor
+  round 1 named body.ps1 as missing from this list, and it was: sealing
+  either would reopen the design rather than amend this paragraph. And a caller who supplies an earlier act's receipt,
   directory and label to a FRESH preparation is still truthfully told
   that act's result. Third, a change made to the mirror and undone again before the
   client finishes: the wrapper verifies before the client runs and again

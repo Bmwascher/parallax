@@ -22,7 +22,12 @@ Rounds 4 and 5 were additionally asked to sweep four defect CLASSES over
 the WHOLE branch, not only their own range, and to report an instance or
 an explicit NONE. Both did.
 
-`ad62961` is the only commit no Fable round has seen. It implements
+As of the commit that ADDED this file, `ad62961` was the only commit
+no Fable round had seen. That sentence went stale the moment this file
+was committed, because the commit carrying it is unreviewed too - which
+is the self-quoting-document trap this repo has hit before, and
+cross-vendor round 1 caught it here. Read the table above against `git
+log` rather than trusting this sentence. It implements
 exactly the two edits round 5 named as its merge floor, plus three of its
 minors. Round 5 stated it would verify those "by running the suite and
 one grep rather than by a fifth whole-branch pass". The cross-vendor

@@ -36,6 +36,10 @@ recorded, not removed, exactly as the probe's scope limit states.
 
 ## Step 2, the success path, on both hosts
 
+The heading is the frozen task's wording. Read item 6 below for what was
+actually observed on which host; three of the five items were seen on
+both, one on one host, and one not at all.
+
 Two genuine reviewer rounds. Not stubs: real `codex exec` against
 `gpt-5.6-sol` at effort `high`, using the wrapper body SKILL.md now
 documents, dispatched by the printed `command` verbatim.
@@ -66,7 +70,12 @@ documents, dispatched by the printed `command` verbatim.
 5. **No console window appeared.** NOT OBSERVED. The measuring session
    cannot see the screen. This is invariant D5 and it remains unmeasured
    for a harness-run wrapper; it is not recorded as passing.
-6. **Both hosts.** Done, above.
+6. **Both hosts.** PARTLY. Items 1, 3 and 4 were observed on BOTH
+   hosts. Item 2 was observed on Sol R1 only, which is 5.1. Item 5 was
+   not observed at all. So the frozen instruction - repeat 1 to 5 on
+   both hosts - is NOT satisfied, and cross-vendor round 1 was right to
+   say so: the earlier "Done, above" here counted the items that were
+   done and skipped the two that were not.
 
 `mirror.verify` holding `identity: verified` twice is the evidence that
 the SECOND verification ran. An earlier draft of this design shipped a

@@ -2159,6 +2159,25 @@ def test_the_binder_refuses_a_prior_state_the_receipt_did_not_seal(tmp_path):
     assert_failed(out, "sealed-state-mismatch")
 
 
+def test_the_seal_is_checked_before_the_prior_state_is_parsed(tmp_path):
+    """The lane this one was already right about, locked so it stays right.
+
+    Cross-vendor round 1, 2026-09-01, found the two binders disagreed on
+    a prior state that is BOTH tampered and unparseable: this lane
+    reported `sealed-state-mismatch`, the kimi lane reported a parse
+    failure, and Task 5 froze IDENTICAL semantics. The kimi binder was
+    reordered to match THIS one, so the behaviour that was correct here
+    is now the contract and needs its own pin - otherwise the next edit
+    to this file could move the drift to the other side of the pair.
+    """
+    brief = "Round one brief."
+    root, f = make_root(tmp_path, brief=brief)
+    prior = tmp_path / "unparseable-state.json"
+    prior.write_bytes(b"{ this is not json at all")
+    out = run_fresh(root, prior, canon(brief), sealed="00" * 32)
+    assert_failed(out, "sealed-state-mismatch")
+
+
 def test_the_binder_accepts_the_sealed_prior_state(tmp_path):
     brief = "Round one brief."
     root, f = make_root(tmp_path, brief=brief)

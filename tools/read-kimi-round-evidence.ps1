@@ -760,9 +760,10 @@ function Parse-LlmConfigLine($line) {
 # MAIN
 # =======================================================================
 
-# Rule 1
-$priorStateObj = Read-PriorState $PriorState
-
+# The seal is the OUTER check and runs BEFORE the parse, matching
+# read-codex-round-evidence.ps1: Task 5 froze identical semantics in
+# both lanes, and parsing first reported a tampered-and-unparseable
+# state as a parse failure here and as a seal mismatch there.
 # -SealedPriorStateSha256 binds this call to the exact -PriorState bytes
 # named in the dispatch receipt's priorStateSha256 (Task 2's -Prepare).
 # RAW BYTES, not the canonicalized JSON Read-PriorState parsed: the
@@ -784,6 +785,9 @@ if ($PSBoundParameters.ContainsKey("SealedPriorStateSha256")) {
     }
     $script:Sealed = "sealed"
 }
+
+# Rule 1
+$priorStateObj = Read-PriorState $PriorState
 
 # Rule 2
 if ($priorStateObj.kind -cne $Kind) {

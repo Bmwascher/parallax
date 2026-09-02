@@ -2451,7 +2451,10 @@ Its reply is retained at
 
 ## Where the plan stands
 
-Six review rounds across two lanes. The cross-vendor lane's own summary of
+EIGHT review rounds across THREE lanes - five cross-vendor Sol rounds,
+two Fable, one Kimi backup-lane - each with its own section above. (This
+line said "six rounds across two lanes" until cross-vendor round 1 of the
+diff debate counted the sections and found otherwise.) The cross-vendor lane's own summary of
 this last one: "one small correction short of buildable". That correction
 is applied above, and its regression tests are written. Nothing else it
 raised is outstanding.

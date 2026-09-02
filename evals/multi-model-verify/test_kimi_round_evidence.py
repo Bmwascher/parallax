@@ -2098,6 +2098,29 @@ def test_the_binder_refuses_a_prior_state_the_receipt_did_not_seal(tmp_path):
     assert_failed(out, "sealed-state-mismatch")
 
 
+def test_the_seal_is_checked_before_the_prior_state_is_parsed(tmp_path):
+    """Cross-vendor round 1, 2026-09-01: the two binders disagreed.
+
+    Task 5 froze IDENTICAL seal semantics in both lanes. The codex binder
+    checked the seal before parsing; this one called Read-PriorState
+    first, so a prior state that was BOTH tampered and unparseable came
+    back as a parse failure here and as `sealed-state-mismatch` there.
+    Both are fail-closed, so nothing was ever let through - but the
+    frozen requirement was identical behaviour, and a caller comparing
+    the two lanes' reasons would be told two different stories about the
+    same tamper.
+
+    The seal is the outer check: it says these bytes are not the bytes
+    the receipt named, which is true whatever the bytes happen to parse
+    as.
+    """
+    root, sess_dir = build_fresh_layout(tmp_path, fresh_wire(), fresh_log())
+    state_path = tmp_path / "state.json"
+    state_path.write_bytes(b"{ this is not json at all")
+    out = run_fresh(root, FIXTURE_SESSION_ID, state_path, sealed="00" * 32)
+    assert_failed(out, "sealed-state-mismatch")
+
+
 def test_the_binder_accepts_the_sealed_prior_state(tmp_path):
     root, sess_dir = build_fresh_layout(tmp_path, fresh_wire(), fresh_log())
     state_path = tmp_path / "state.json"
