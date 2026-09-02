@@ -28,7 +28,7 @@ the agent files:
 | Cross-vendor reviewer (backup, consent-gated) | Kimi K3 | kimi-code, contained agent-file, read-only |
 | Panel reviewer (Claude lane, panels only) | Fable | `agents/fable-panel-reviewer.md`, read-only subagent |
 | Whole-branch reviewer (required before mode diff) | Fable | `agents/fable-reviewer.md`, read-only subagent |
-| Implementer (mechanical) | Gemini 3.6 Flash | Antigravity CLI (`agy`) via haiku wrapper, `agents/flash-implementer.md` |
+| Implementer (mechanical) | Gemini 3.8 Flash | Antigravity CLI (`agy`) via haiku wrapper, `agents/flash-implementer.md` |
 | Implementer (transcription) | Claude tier | `agents/implementer.md` (frontmatter default `sonnet`; haiku per dispatch) |
 | Implementer (escalation, judgment inside an envelope) | Fable | `agents/escalation-implementer.md` |
 
@@ -317,7 +317,7 @@ lineup is one configuration:
   lane never uses your ordinary credential — see
   [Lane credential ownership](#lane-credential-ownership)
 - Optional — Flash implementer lane: the Antigravity CLI (`agy`)
-  authenticated (Gemini 3.6 Flash; model literal pinned in
+  authenticated (Gemini 3.8 Flash; model literal pinned in
   `agents/flash-implementer.md`)
 - The Fable seats need no extra transport — they are Claude Code
   subagents

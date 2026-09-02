@@ -12,7 +12,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[2]
 FLASH = REPO / "agents" / "flash-implementer.md"
 CLASSIC = REPO / "agents" / "implementer.md"
-CANONICAL_ID = "gemini-3.6-flash-medium"
+CANONICAL_ID = "gemini-3.8-flash-high"
 SHARED_START = "<!-- shared-contract:start -->"
 SHARED_END = "<!-- shared-contract:end -->"
 
@@ -155,7 +155,7 @@ def test_flash_literal_single_source():
         for p in REPO.glob(pattern):
             if p.resolve() in ALLOWED:
                 continue
-            if "gemini-3.6-flash" in p.read_text(encoding="utf-8",
+            if "gemini-3.8-flash" in p.read_text(encoding="utf-8",
                                                  errors="replace"):
                 offenders.append(str(p))
     assert offenders == []
