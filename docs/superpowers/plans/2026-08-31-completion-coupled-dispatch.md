@@ -595,9 +595,12 @@ later task to notice.
   named file in BEFORE the baseline and manifest are taken and listing it
   in the printed record. Every input is flattened to its LEAF NAME,
   because the mirror re-roots every path, so two collisions are possible
-  and BOTH are refused before anything is copied: two inputs sharing a
-  destination name (compared case-insensitively), and an input whose
-  destination the copied tree already carries. Amended after cross-vendor
+  and BOTH are refused before any `-ExtraInput` is copied - the tree
+  itself has already been copied and remediated by that point, which is
+  what makes the second check able to see an existing destination at
+  all: two inputs sharing a destination name (compared
+  case-insensitively), and an input whose destination the copied tree
+  already carries. Amended after cross-vendor
   round 2 of the diff debate found the shipped build silently resolving
   both with `-Force`; recorded as resolved point 5 in the debate record.
   There is no second destination this plan ever froze, so refusing is the
@@ -2480,15 +2483,24 @@ debate record below carries that outcome and the status it earns.
 **Participants:** Opus 5 (session) / gpt-5.6-sol (codex exec, session
 `01a05f3b-400f-7500-b3e8-0716c7a4dc2f`) / claude-fable (fable-reviewer
 seat) / kimi-code/k3-256k (backup lane)
-**Rounds used:** 8 on the plan, plus 2 retrospective rounds inside the
-diff debate that re-opened this plan's final revision
+**Rounds used:** 8 on the plan. On the diff debate, every round retained
+under Raw rounds below - a count is deliberately not written here,
+because a number about a directory this document sits beside goes stale
+on the next round, which is the trap this appendix exists to record.
+Round 1 raised the missing appendix and three other points recorded
+below; rounds 2 and 3 were the retrospective verification of this plan's
+final revision; the rounds after that confirm and correct
 **Outcome:** escalated
 **Verification status:** DEGRADED
 **Degradation:** final-revision-reviewed-late
 **Authorized by:** not-authorized
 **Raw rounds:** `docs/superpowers/plans/rounds/2026-08-31-completion-coupled-dispatch/`
-- plan debate: `sol-plan-review-r1..r5.md`, `fable-plan-review-r1..r2.md`,
-  `kimi-plan-review-r1.md`, each with its `-binding.json`
+- plan debate: `sol-plan-review-r1..r5.md`, each with its
+  `-binding.json`; `fable-plan-review-r1..r2.md` and
+  `kimi-plan-review-r1.md`, which have NO binding files. Why they have
+  none is not recorded anywhere this session could check, so it is not
+  asserted here; what is checkable, and checked, is that the files do
+  not exist
 - diff debate, which is where this plan's final revision was finally
   reviewed: `sol-diff-debate-r1..r3.md`, each with its `-binding.json`
 - whole-branch reviews: `fable-whole-branch-review-8af6ae0..3029599.md`
@@ -2524,7 +2536,7 @@ but the defect existed because a plan revision went unreviewed.
 | 2 | The plan's own tally said six rounds across two lanes against eight sections and three lanes | reviewer (diff r1) | accepted, corrected | `## Where the plan stands` above |
 | 3 | Both binders must check the seal before parsing the prior state | reviewer (diff r1) | accepted; kimi reordered, both lanes pinned | `tools/read-kimi-round-evidence.ps1:765-790` |
 | 4 | `body.ps1` is as unbound after preparation as `wrapper.ps1` and was not named in the residual list | reviewer (diff r1) | accepted; named, not sealed | `references/model-prompting-notes.md:374-385` |
-| 5 | `-ExtraInput` flattens to a leaf name and overwrites, so the plan's "each named file" is not what ships | reviewer (diff r2) | accepted; both collisions refused before any copy | `tools/new-review-mirror.ps1:1283-1316`, Task 1a below |
+| 5 | `-ExtraInput` flattens to a leaf name and overwrites, so the plan's "each named file" is not what ships | reviewer (diff r2) | accepted; both collisions refused before any copy | `tools/new-review-mirror.ps1:1283-1316`, and Task 1a above |
 | 6 | Task 5's "identical failure text" requires literal parity for a missing or unreadable prior-state file | session asked; reviewer (diff r3) decided | SCOPED, not required - see the interpretation below | `completion-coupled-dispatch.md:1480-1519` |
 
 **The Task 5 interpretation, in the reviewer's own words, recorded so the

@@ -36,9 +36,11 @@ recorded, not removed, exactly as the probe's scope limit states.
 
 ## Step 2, the success path, on both hosts
 
-The heading is the frozen task's wording. Read item 6 below for what was
-actually observed on which host; three of the five items were seen on
-both, one on one host, and one not at all.
+The heading is the frozen task's wording, and it is now accurate: all
+five items in Step 2 are observed on BOTH hosts. It was NOT accurate for
+most of this branch's life, and this paragraph carried the correction
+while that was true. Item 6 below holds the per-item detail and the two
+observations that closed it.
 
 Two genuine reviewer rounds. Not stubs: real `codex exec` against
 `gpt-5.6-sol` at effort `high`, using the wrapper body SKILL.md now
