@@ -294,12 +294,158 @@ Canonical reasoning effort: `high`
   one conversation, one rollout, two writers — so run parallel rounds as
   separate debates, never as two turns of one. Quota is shared, which makes
   parallel rounds faster and not cheaper.
-- **Dispatch the round DETACHED, and do not let the shell kill it.** A
-  round that crosses the caller's foreground timeout is killed by the
-  CALLER, not by the client: no `--output-last-message` file is written,
-  so it is a transport failure rather than a review result and the quota
-  is spent for nothing. Measured repeatedly through 0.21.x. Two traps
-  live in the dispatch script itself, both measured 2026-08-04:
+- **Dispatch the round as a harness background command, never inline.**
+  A foreground call OWNS the session: while it runs, nobody can see the
+  round, talk to the agent, or redirect it. The 600-second ceiling is NOT
+  a kill - measured 2026-09-01 on Claude Code 2.1.251, a foreground call
+  that ran past it was moved to the background by the harness and
+  completed - so the reason to dispatch in the background is VISIBILITY,
+  not survival. This corrects a claim these notes carried until
+  2026-09-01, that a crossing round is killed by the caller with the
+  quota spent for nothing; it is withdrawn, and no rule here rests on
+  it.
+  <!-- contract:start id=round-dispatch-tool -->
+  The preparation is ONE TRANSACTION and it lives in ONE PLACE:
+  `<plugin-root>/tools/dispatch-round.ps1`, written
+  `${CLAUDE_PLUGIN_ROOT}` in SKILL.md, where the harness substitutes it,
+  and `<plugin-checkout>` in backup-lane.md, which is a references file
+  the session reads raw and where nothing substitutes anything.
+  `-Prepare` reserves the dispatch directory, writes the wrapper,
+  computes the receipt's bytes, and publishes the receipt last of all;
+  a failure at any point after the directory is reserved kills the tree
+  and BLOCKS rather than leaving a half-built launch behind. NO LANE
+  WRITES ITS OWN DISPATCH. A lane supplies only its CLIENT INVOCATION,
+  as a wrapper body file, and its WORKING DIRECTORY; it changes nothing
+  else. The tool composes everything else around that body: THE CLAIM, a
+  create-new reservation of both a `claim` file and a `classification`
+  file that fails a second run of the same wrapper before it touches
+  anything; THE RELOCATION, a terminating move into the working
+  directory, made only after the wrapper re-verifies it against the same
+  mirror-identity values `-Prepare` recorded; and THE CLASSIFYING
+  EPILOGUE, a second re-verification after the body returns, the
+  reservation consumed into a run-time nonce, the exit file written, and
+  `-Classify` called as the wrapper's own last act. This replaced five
+  copied snippets, which regenerated the same defect across four debate
+  rounds: reserve, write, start and record were four steps, and a rule
+  written in one place while the steps were copied to five could not
+  make them atomic. The path NAMES the plugin root because bare relative
+  paths are backlog item 58's own cause; a new call must not join that.
+  Naming is not always resolving: in SKILL.md the harness substitutes
+  the token, and in backup-lane.md the placeholder is filled in by the
+  session, which is weaker and is said rather than blurred.
+  <!-- contract:end -->
+  <!-- contract:start id=round-dispatch-states -->
+  THE CLASSIFICATION IS THE WRAPPER'S OWN EXIT CODE, so a wrapper that
+  does not reach its final statement cannot report success, whatever its
+  directory holds. `-Classify` computes the state in this fixed order,
+  stopping at the first match and reading nothing further: (1)
+  classification absent -> never-reserved; (2) classification holds
+  'reserved' -> not-ready; (3) classification holds classifying:<n> with
+  n not the redeemed value, or anything else -> already-classified; (4)
+  receipt absent, unreadable, or failing the schema -> no-receipt; (5)
+  receipt's dispatchDir or round is not the pair supplied independently
+  -> receipt-not-expected; (6) the receipt's own bytes do not hash to
+  -ExpectedReceiptSha256 -> receipt-altered; (7) no claim file in the
+  dispatch directory -> no-claim; (8) workingDirectory missing,
+  unresolvable, or not a filesystem container -> cwd-unreadable; (9)
+  workdirEvidence is not 'none' and no transcript file exists ->
+  no-transcript; (10) workdirEvidence is not 'none' and the transcript's
+  FIRST 'workdir:' header line is absent -> workdir-unconfirmed; (11)
+  that header line's value differs from workdirEvidence ->
+  workdir-mismatch; (12) no exit file -> no-exit-file; (13) exit
+  unreadable or not a plain integer -> exit-unreadable; (14) exit
+  non-zero -> exit-nonzero; (15) no reply file -> no-reply; (16) reply is
+  empty -> reply-empty; (17) otherwise -> reply-present. Only the last
+  state can become a review result, and it is not one by itself: the
+  lane's round-evidence binder must also return clean.
+
+  Five residuals ship here, stated rather than fixed, because this is
+  where a reader actually meets them. First, a tracked file whose bytes
+  change while git still reports it clean: `-VerifyIdentity` hashes what
+  git's status listing names plus the content manifest, and a path
+  hidden behind `assume-unchanged`, `skip-worktree`, or another
+  clean-filter condition can change without moving HEAD, the baseline,
+  or the manifest; the mirror tool documents this boundary in its own
+  header, and it is narrower than the ordinary edit Task 1a fixes.
+  Second, deleting `-Poll` does not remove the post-hoc surface, because
+  `-Classify` is still a standalone mode. What closes the natural case
+  is the reservation being CONSUMED into a run-time nonce before any
+  terminal artifact is published, so a killed round leaves a state no
+  outside caller is handed the key to. What remains is a caller who
+  opens the reservation file, reads the nonce, and passes it - a
+  deliberate act on a file they own, which no filesystem mechanism can
+  prevent. Nor does anything bind the WRAPPER's own text, or
+  the lane BODY installed beside it, after preparation: the digest
+  covers the receipt and NOTHING covers either script, so a caller who
+  edits wrapper.ps1 before the harness runs it - the expected receipt
+  digest, the second verification, or the body call itself - gets a
+  round that still exits 0, and a caller who replaces body.ps1 with one
+  that writes a plausible transcript and reply gets the same. Cross-vendor
+  round 1 named body.ps1 as missing from this list, and it was: sealing
+  either would reopen the design rather than amend this paragraph. And a caller who supplies an earlier act's receipt,
+  directory and label to a FRESH preparation is still truthfully told
+  that act's result. Third, a change made to the mirror and undone again before the
+  client finishes: the wrapper verifies before the client runs and again
+  after the child returns, so a mutation that PERSISTS through the round
+  is caught and the round fails, but only change-and-revert survives,
+  and no before-and-after check could catch it - this is filesystem
+  ownership during dispatch, explicitly trusted, and it is honest only
+  because that second verification actually runs. Fourth, the harness
+  trailer's format is measured, not pinned across versions, and nothing
+  in this repo parses it mechanically. What was measured on 2026-09-01 is
+  narrower than "a killed task reports a non-zero exit": a killed task
+  reported the literal `[killed]` and NO exit code at all. So a trailer
+  carrying no exit code is UNFINISHED, exactly as a missing notification
+  is, and never a success; do not read the absence of a code as a zero. Fifth, no bound on how long a hung round may sit: a hung
+  round can never read as success, so this costs waiting, not truth.
+  <!-- contract:end -->
+  <!-- contract:start id=round-dispatch-exit-map -->
+  `-Classify`'s exit code is the whole verdict: 0 means reply-present
+  and nothing else; 2 means a parameter-binding failure, an unrecognized
+  argument, or an internal execution error; 1 means every other state,
+  named on the wrapper's last stdout line. The wrapper's own last
+  statement is `exit $LASTEXITCODE` after calling `-Classify` as its
+  last act, so the wrapper's exit code IS the classification. A caller
+  reads the exit code of the harness task it dispatched, and never opens
+  the dispatch directory for a verdict.
+  <!-- contract:end -->
+  <!-- contract:start id=round-dispatch-operation -->
+  There is NO POLL. The caller dispatches the wrapper as a harness
+  background task and then WAITS for the harness notification for that
+  exact task; nothing in this tool watches a directory for the caller. A
+  round with no notification is UNFINISHED, never successful. A SESSION
+  MUST NEVER END ITS TURN WITH A DISPATCHED ROUND UNFINISHED. In an
+  interactive session the notification opens a new turn, so stopping is
+  correct. In a print-mode or otherwise unattended run the turn a
+  session ends is its last, so stopping there ends the run with the
+  round still in flight and no verdict at all - measured 2026-09-01,
+  where a graded run dispatched its round as a background task, said
+  it would wait, and ended its turn with no verdict. Where no notification can reach the session,
+  it WAITS on that exact task through the harness's own task-output
+  read, which is still the harness surface and not a directory poll.
+  Where it can do neither, it finishes as a TRANSPORT FAILURE, never
+  with a verdict-less finish line. Recovery
+  is a FRESH `-Prepare` with a fresh evidence boundary, never a re-run
+  of the same wrapper: the claim and classification files are reserved
+  create-new on the first run, so the wrapper itself refuses a second
+  run rather than retrying. To abandon a round, kill the harness task.
+  Never poll with `ps -p` from Git Bash, which cannot see Windows pids
+  and reports a live process as gone.
+  <!-- contract:end -->
+  <!-- contract:start id=background-task-naming -->
+  Name the backgrounded call for the person watching it. The reviewer
+  LANE and the ROUND lead the description, as in `Sol R1 debate round`
+  or `Kimi R2 debate round`; work with no lane leads with its kind, as
+  in `Gate: pytest 5.1` or `Mirror build`. A cycle runs several lanes
+  across several rounds at once and a name omitting either cannot be
+  read at a glance. NOTHING ENFORCES THIS. `-Prepare` now PRINTS the
+  `taskName` it expects the caller to dispatch under, so the convention
+  has a SOURCE even though nothing enforces its use. It is a convention
+  about what a human sees, and its pin proves only that the rule is
+  written down.
+  <!-- contract:end -->
+  Two traps live in the dispatch script itself, both measured
+  2026-08-04:
   - Do NOT run the native `codex` call under
     `$ErrorActionPreference = 'Stop'`. codex prints a benign models-cache
     warning to STDERR at startup, and `Stop` promotes ANY native stderr
@@ -466,7 +612,7 @@ claimed about it.
 
 <!-- contract:start id=codex-brief-binding-calls -->
 The backup lane fails a round when the prompt its client recorded does not
-match the brief that was sent (backup-lane.md, region `brief-hash-binding`).
+match the brief that was sent (backup-lane.md's brief-hash-binding).
 This lane had no equivalent, which is why corruption here could be silent
 while corruption there could not. It has one now, and it reads the
 PER-SESSION ROLLOUT rather than scraping the transcript.

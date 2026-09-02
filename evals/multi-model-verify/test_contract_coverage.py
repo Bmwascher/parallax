@@ -728,13 +728,53 @@ DECLARED_REGIONS = {
     # fields it bridges, and the narrowed claim is only honest beside
     # the fingerprint that backs it.
     "mirror-identity-gate",
+    # 0.28.0, backlog item 32. TOOL replaced a launch that had been five
+    # copied snippets, regenerating the same defect across four debate
+    # rounds. STATES leads with NO RECEIPT, then RECEIPT NOT EXPECTED,
+    # then LAUNCH UNKNOWN, because the cross-vendor reviewer refused the
+    # claim that a tool eliminates the irreducible interrupted launch,
+    # then refused a launch token stored inside the artifact it
+    # authenticates, then caught this very ordering stated two ways in
+    # one document, and finally caught the irreducible case sitting
+    # under the wrong state name once the receipt became the last
+    # artifact published. NAMING is separate because it is the only
+    # unenforced one.
+    #
+    # 2026-08-31, Task 8 of the completion-coupled dispatch plan renamed
+    # the launch/poll design's three regions for the -Prepare/-Classify
+    # design that replaced it: detached-dispatch-tool ->
+    # round-dispatch-tool, detached-dispatch-operation ->
+    # round-dispatch-operation. detached-dispatch-states did not survive
+    # as one region: the state list plus the exit map plus the framing
+    # sentence did not fit one pin, so it split at the boundary between
+    # the state list and the exit map into round-dispatch-states (the
+    # framing sentence, the 17-state order, and all five residuals this
+    # plan ships stated rather than fixed) and round-dispatch-exit-map
+    # (the exit code mapping alone). background-task-naming keeps its
+    # name; its only change is the new fact that -Prepare now prints the
+    # taskName.
+    "round-dispatch-tool",
+    "round-dispatch-states",
+    "round-dispatch-exit-map",
+    "round-dispatch-operation",
+    "background-task-naming",
+    # 0.28.0, backlog item 33. The prompt put "skip the cross-vendor
+    # lane" one tap from the recommended answer, and the answer never
+    # differed. This region holds what SURVIVES the prompt's removal -
+    # the evidence duty, the empty re-enumeration, the hook suppression,
+    # and BLOCKED - rather than the removal itself.
+    "back-channel-auto-mirror",
 }
 
 
-def test_declared_regions_match_the_documents():
+def test_declared_regions_match_the_documents(doc_paths=DOC_PATHS):
     """Deleting a whole region takes its markers with it. Without this
-    check the coverage test would then pass over nothing at all."""
-    found = set(collect_regions(DOC_PATHS))
+    check the coverage test would then pass over nothing at all.
+
+    doc_paths is optional so the negative case (a scratch copy of one
+    document with a region's markers deleted) can be run directly,
+    without repointing the module-level DOC_PATHS constant."""
+    found = set(collect_regions(doc_paths))
     missing = sorted(DECLARED_REGIONS - found)
     extra = sorted(found - DECLARED_REGIONS)
     assert not missing, (
@@ -745,7 +785,164 @@ def test_declared_regions_match_the_documents():
         "Add them to DECLARED_REGIONS.")
 
 
-def test_every_marked_region_is_locked_by_a_pin():
-    regions = collect_regions(DOC_PATHS)
+def test_every_region_citation_uses_a_resolvable_form(doc_paths=DOC_PATHS):
+    """A declared id must be cited as `<file>.md's <id>`, never bare.
+
+    Added 2026-09-01, from the third whole-branch review. The dangling
+    check above reads two forms; a citation written in any OTHER form is
+    invisible to it, so renaming that region leaves a dead pointer no
+    gate can see. Two shipped citations were exactly that - a backticked
+    `brief-hash-binding` and a backticked `back-channel-auto-mirror`,
+    the second naming no file at all.
+
+    Widening the dangling regex to backticks was measured and REJECTED:
+    over these same documents it matches eight tokens, and six are not
+    regions at all (skill names like `gpt-5-4-prompting`, drift states
+    like `manual-triage-needed`). This rule takes the other direction -
+    it only ever looks at ids that ARE declared, so it cannot fire on
+    prose - and it makes every live citation resolvable.
+
+    It does NOT by itself keep the dangling check able to see a citation
+    later; an earlier version of this docstring claimed that and was
+    wrong. What makes that true is the `<file>.md's <id>` pattern in the
+    dangling check, widened 2026-09-01 to read any file's possessive
+    rather than one file's. The two rules are a pair: this one forces
+    every citation into that spelling, and that one reads it.
+    """
+    import re
+
+    declared_in = {}
+    for path in doc_paths:
+        for rid in re.findall(r"contract:start id=([a-z][a-z0-9-]*)",
+                              path.read_text(encoding="utf-8")):
+            declared_in.setdefault(rid, set()).add(path.name)
+    declared = set(declared_in)
+    assert declared, "no regions declared; this guard stopped guarding"
+    bad = []
+    for path in doc_paths:
+        # Normalized: a citation that wraps across two lines is still a
+        # citation, and reporting it as a bad form would be the reflow
+        # trap rather than a finding.
+        text = " ".join(path.read_text(encoding="utf-8").split())
+        for rid in declared:
+            for match in re.finditer(re.escape(rid), text):
+                start, end = match.start(), match.end()
+                # its own marker, and any longer id that contains this one
+                if re.search(r"contract:start id=$", text[:start]):
+                    continue
+                if start and text[start - 1] == "-":
+                    continue
+                if end < len(text) and text[end] == "-":
+                    continue
+                # Same file shape as the dangling check: no slash and no
+                # bracket, so `references/x.md's` and `(x.md's` both
+                # yield the bare file name the declaration is keyed by.
+                names = re.search(
+                    r"([A-Za-z][A-Za-z0-9._-]*\.md)'s $", text[:start])
+                if names and names.group(1) in declared_in.get(rid, ()):
+                    continue
+                bad.append("%s cites %s" % (path.name, rid))
+    assert not bad, (
+        "region citation(s) not written as `<file>.md's <id>`: "
+        f"{sorted(set(bad))}. A reader cannot resolve the region, and "
+        "the dangling check cannot see the citation to report it dead "
+        "when the region is renamed.")
+
+
+def test_every_cited_dispatch_region_id_resolves(doc_paths=DOC_PATHS):
+    """Prose that names a region id must name one that exists.
+
+    Backlog item 32, 2026-08-31. Task 8 renamed three regions and split
+    one. Two sentences in SKILL.md went on citing
+    `detached-dispatch-states`, an id that no longer existed, and the
+    test that was supposed to keep the reader pointed at the states
+    quoted the SAME stale id - so the pair agreed with each other and
+    the suite stayed green over a dead citation. A green gate proving a
+    dead citation is the worst kind of green.
+
+    SCOPE, stated rather than implied. This began as a check of
+    `model-prompting-notes.md`'s regions only, because the same
+    `<file>.md's <token>` phrasing is ordinary prose elsewhere -
+    `backup-lane.md's per-round evidence`,
+    `debate-protocol.md's final-adjudication step`,
+    `fallbacks.md's panel-lane-loss` and
+    `frozen-plan-format.md's lane envelope` are all English, not ids.
+    It is GENERAL now: the three-or-more-word shape excludes the first,
+    second and fourth of those, and the one collision is excluded by
+    name below. Two shapes it still cannot see, neither with an instance
+    today: a declared TWO-word id (only `lane-lock`) cited under any
+    file but `model-prompting-notes.md`, and any citation in a file
+    outside DOC_PATHS, which is where the backlog's own pointer sits.
+    Backlog item 69 tracks the general problem of citations into shipped
+    text that nothing verifies.
+    """
+    import re
+
+    declared_in = {}
+    for path in doc_paths:
+        for rid in re.findall(r"contract:start id=([a-z][a-z0-9-]*)",
+                              path.read_text(encoding="utf-8")):
+            declared_in.setdefault(rid, set()).add(path.name)
+    declared = set(declared_in)
+    cited = {}
+    wrong_file = []
+    # `fallbacks.md's panel-lane-loss class` is English - the prefix of a
+    # real region id (`panel-lane-loss-disposition`) used as a noun. It is
+    # the ONLY such phrase over these documents, measured 2026-09-01, so
+    # it is excluded by name rather than by widening the shape.
+    non_ids = {("fallbacks.md", "panel-lane-loss")}
+    patterns = (
+        re.compile(r"model-prompting-notes\.md's ([a-z][a-z0-9-]*)"),
+        # A BARE parenthesised id, as in `(round-dispatch-operation)`.
+        # Three or more hyphen-separated lowercase words: measured
+        # 2026-09-01 over every document this checker scans, that shape
+        # matches region ids and nothing else in the prose. Without this
+        # second form a citation written that way is INVISIBLE to the
+        # guard, so renaming its region leaves a dead pointer nothing can
+        # see - which is what this cycle's own two new call sites were,
+        # added by the very fix that was meant to make them resolvable.
+        re.compile(r"\(([a-z][a-z0-9]*(?:-[a-z0-9]+){2,})\)"),
+    )
+    # ANY file's possessive, not just this one file's. Added 2026-09-01:
+    # the previous fix rewrote two citations into `backup-lane.md's <id>`
+    # and `SKILL.md's <id>` - forms the two patterns above cannot see - so
+    # both moved from one invisible spelling to another and the dead-
+    # pointer gap stayed open for the exact cases that motivated closing
+    # it. The file part is captured and checked too, because a citation
+    # naming the WRONG file resolves for nobody.
+    qualified = re.compile(
+        r"(?P<file>[A-Za-z][A-Za-z0-9._-]*\.md)'s "
+        r"(?P<id>[a-z][a-z0-9]*(?:-[a-z0-9]+){2,})")
+    for path in doc_paths:
+        text = " ".join(path.read_text(encoding="utf-8").split())
+        for pattern in patterns:
+            for match in pattern.finditer(text):
+                cited.setdefault(match.group(1), set()).add(path.name)
+        for match in qualified.finditer(text):
+            fname, rid = match.group("file"), match.group("id")
+            if (fname, rid) in non_ids:
+                continue
+            cited.setdefault(rid, set()).add(path.name)
+            if rid in declared_in and fname not in declared_in[rid]:
+                wrong_file.append(
+                    "%s cites %s's %s, declared in %s"
+                    % (path.name, fname, rid, sorted(declared_in[rid])))
+    assert cited, (
+        "no citation found at all; this guard silently stopped guarding")
+    dangling = sorted(
+        (rid, sorted(where)) for rid, where in cited.items()
+        if rid not in declared)
+    assert not dangling, (
+        "prose cites region id(s) that no document declares: "
+        f"{dangling}. A region was renamed, split or deleted and the "
+        "sentence pointing at it was left behind.")
+    assert not wrong_file, (
+        "region citation(s) name the wrong file: "
+        f"{sorted(set(wrong_file))}. The id resolves, the pointer does "
+        "not, and a reader sent to that file finds nothing.")
+
+
+def test_every_marked_region_is_locked_by_a_pin(doc_paths=DOC_PATHS):
+    regions = collect_regions(doc_paths)
     misses = uncovered(regions, collect_pins(PIN_PATHS))
     assert not misses, format_failure(misses)

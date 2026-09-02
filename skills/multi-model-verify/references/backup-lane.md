@@ -44,6 +44,169 @@ Panel participation: a user-invoked panel per references/panels.md is a second s
   brief-shaped prompt loaded with shell-special characters arrived
   whole, at nearly three times the length that truncated on the
   superseded client.
+- **Harness-tracked dispatch for all three calls.** Every call below is
+  PREPARED through `tools/dispatch-round.ps1` and dispatched as a harness
+  background task, never run inline — a foreground call owns the session,
+  so nobody can see the round or talk to the agent while it runs. The
+  ceiling is not a kill; visibility is the reason. Do not call this
+  "detached": the tool starts no process of its own, and OS-detached
+  dispatch is the shape the invariants forbid. `$b` is the brief read from its
+  file — the same inline payload the Dispatch and Resume bullets above
+  describe: the brief's TEXT, never a path or other pointer to it, which
+  this lane's contract forbids. This lane's REPLY ARTIFACT is the `reply`
+  file inside `$PSScriptRoot`, the client's captured stdout, with
+  stderr to the `transcript` file alongside it.
+
+  **The INBOUND direction is load-bearing on this lane and on no
+  other, and the Fable lane found it unhandled.** A redirect into that
+  reply file does not copy bytes. PowerShell decodes the
+  client's stdout using `[Console]::OutputEncoding` — the OEM code
+  page on Windows PowerShell 5.1, measured IBM437 on both hosts in
+  `tools/new-review-mirror.ps1:81-99` — and then re-encodes on write,
+  UTF-16LE on 5.1 and UTF-8 on 7. A non-ASCII reply is therefore
+  mangled differently on each host. So the wrapper sets
+  `[Console]::OutputEncoding` to UTF-8 before the call and writes the
+  reply itself with .NET, no BOM. This is the same defect class 0.23.0
+  fixed for the codex lane's OUTBOUND brief, and the one still open
+  for this lane's outbound argument; nothing had looked at the way
+  back.
+
+  `$OutputEncoding` still does NOT appear here, and that remains
+  deliberate: it governs what PowerShell pipes INTO a native command,
+  and this lane passes its brief as an argument. `[Console]::OutputEncoding`
+  is a different variable governing the opposite direction. Naming
+  both, and why only one applies, is the point.
+
+  Three caveats, none a reason not to do it. The setter calls the
+  console API, so in a process chain with NO attached console it
+  THROWS: here the throw lands in the `catch`, writes exit 1, and
+  polls as `exit-nonzero` — fail-closed, never false-clean; say so
+  because the first time it happens it will look like a client
+  failure. The decode is NON-STRICT — a malformed byte becomes U+FFFD
+  silently, the same reason `tools/new-review-mirror.ps1:67-75` reads
+  raw bytes instead — so this fix NARROWS the defect and does not
+  prove byte identity. And it assumes the client emits UTF-8, which is
+  unverified; setting the console code page to UTF-8 is also the
+  standard way to ASK a well-behaved CLI for UTF-8, so it is the right
+  move under either answer.
+
+  Joining the captured output lines back with a newline CANONICALIZES
+  the line endings; it does not preserve them. PowerShell splits
+  native stdout into lines at decode time in BOTH forms, so no form
+  preserves what the client emitted — canonical LF with no trailing
+  newline is the chosen contract. A `$null` output joins to an empty
+  string, which lands on `reply-empty`, the correct state.
+
+  The codex lane needs none of this: `--output-last-message` is
+  written by the client itself and never crosses a PowerShell
+  redirect.
+<!-- call:kimi-dispatch -->
+- **kimi-dispatch — round 1's launch.** Write this wrapper body to
+  `<wrapper-file>` as a FILE, never a here-string, and launch it with
+  the tool:
+
+  ```powershell
+  $code = 1
+  try {
+  $b = [System.IO.File]::ReadAllText("<brief-file>", (New-Object System.Text.UTF8Encoding($false, $true)))
+  [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
+  $out = & "<kimi-code-binary>" -m <canonical-backup-model-id> --agent-file <plugin-checkout>/skills/multi-model-verify/references/kimi-reviewer-agent.md --skills-dir <debate-home>/skills -p $b 2> $PSScriptRoot/transcript
+  $code = $LASTEXITCODE
+  [System.IO.File]::WriteAllText("$PSScriptRoot/reply", ($out -join "`n"), (New-Object System.Text.UTF8Encoding($false)))
+  } catch { $code = 1 }
+  [System.IO.File]::WriteAllText("$PSScriptRoot/exit", "$code")
+  exit $code
+  ```
+
+  Run `-Prepare`, with the working directory set to the review mirror
+  because this client binds a session to the directory it was created
+  in, naming `-DispatchHost` explicitly, and passing `-NoWorkdirEvidence`.
+  **This lane cannot confirm its own reviewed tree from client-reported
+  evidence, and that is a known and accepted limit, not an oversight.**
+  This lane's transcript is the client's own stderr and begins immediately
+  with the model's reasoning text, with no header block at all — measured
+  on a real round, and independently on the captured wire fixtures
+  (`evals/multi-model-verify/fixtures/kimi-round/fresh-wire.jsonl` and
+  `resume-wire.jsonl`), neither of which carries a `cwd`, `workdir`,
+  `working_directory`, `project_root` or `rootPath` field. The gap was
+  raised with the user and the decision was to ship this lane with it
+  recorded. What still binds the tree instead: the mirror-identity check
+  `-Prepare` runs before dispatch and the wrapper runs again after the
+  client returns, plus the terminating relocation into
+  `-WorkingDirectory` — neither depends on the client saying anything
+  about where it ran.
+
+  ```powershell
+  & (Get-Process -Id $PID).Path -NoProfile -File <plugin-checkout>/tools/dispatch-round.ps1 -Prepare -DispatchDir <dispatch-dir> -WrapperBody <wrapper-file> -ReceiptPath <receipt-file> -Round <label> -WorkingDirectory <review-mirror> -RepoRoot <repo-root> -SourceHead <source-head> -MirrorHead <mirror-head> -SourceStatusSha256 <source-status-sha256> -MirrorStateSha256 <mirror-state-sha256> -ExpectedMirrorPath <review-mirror> -DispatchHost <dispatch-host> -PriorStateFile <prior-state-file> -NoWorkdirEvidence -Json
+  ```
+
+  `-Prepare` prints `command` and `taskName`: dispatch it as a harness background command, using `command` verbatim, under the `taskName` the tool printed, and STOP — but never END THE TURN with the round unfinished (references/model-prompting-notes.md's round-dispatch-operation). On the completion notification for that exact task, read the harness output file: the exit code of that exact task is the result; never re-read the dispatch directory for a verdict.
+
+  Bind the reply with `tools/read-kimi-round-evidence.ps1` in its FRESH
+  form, passing `-SealedPriorStateSha256` with this round's receipt
+  `priorStateSha256`.
+<!-- call:kimi-resume -->
+- **kimi-resume — every later round.** Same wrapper shape, run from the
+  SAME working directory, with `KIMI_CODE_HOME` still set to the
+  debate home. The mirror must still be AT the path its identity was
+  recorded at: a tree rebuilt mid-debate must be rebuilt at the SAME
+  path with `-Force` and its identity fields re-recorded, or the round
+  is dispatched FRESH instead.
+
+  NO DIRECT CHECK ENFORCES THAT ON THIS LANE. The one argument that
+  looks like it does no such thing. `-ExpectedMirrorPath` compares two values this
+  session supplies in the SAME command, so a session that rebuilds
+  elsewhere and passes the new path to both satisfies it and is not
+  refused. The codex lane's direct refusal is its binder's `cwd` check;
+  the kimi binder records no working directory at all, which is the
+  same gap `-NoWorkdirEvidence` states above.
+
+  What this lane has instead is a CONSEQUENCE, and it is worth stating
+  because it is the only thing standing here. If the client binds a
+  session to the directory it was created in, as the Transport section
+  above says it does, then a resume from a different directory writes
+  under a different `wd_<workspace>` container. The sealed session files
+  then gain no new bytes. That is NOT the truncation rule: an unchanged
+  file is neither absent nor shorter than its offset, so it passes that
+  rule AND the prefix hash. What refuses it is the slice rule one step
+  later, because the slice past the offset is empty. The client may also
+  refuse the resume itself and never reach the binder at all. So the
+  round fails closed — by consequence rather than by design, one layer
+  away from the thing it protects, through a rule named here by READING
+  the binder rather than by watching it, and NOT MEASURED against a live
+  client. Do not count it as the check; rebuild at the same path. The
+  wrapper shape is unchanged:
+
+  ```powershell
+  $code = 1
+  try {
+  $b = [System.IO.File]::ReadAllText("<brief-file>", (New-Object System.Text.UTF8Encoding($false, $true)))
+  [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
+  $out = & "<kimi-code-binary>" --session <session-id> -m <canonical-backup-model-id> --skills-dir <debate-home>/skills -p $b 2> $PSScriptRoot/transcript
+  $code = $LASTEXITCODE
+  [System.IO.File]::WriteAllText("$PSScriptRoot/reply", ($out -join "`n"), (New-Object System.Text.UTF8Encoding($false)))
+  } catch { $code = 1 }
+  [System.IO.File]::WriteAllText("$PSScriptRoot/exit", "$code")
+  exit $code
+  ```
+
+  Run `-Prepare` the same way, still with `-WorkingDirectory
+  <review-mirror>`, naming `-DispatchHost` explicitly, and passing
+  `-NoWorkdirEvidence` for the same measured reason as round 1: this
+  lane's transcript carries no `workdir:` header or equivalent field, a
+  known and accepted limit rather than an oversight — the mirror-identity
+  check before and after the client, plus the wrapper's terminating
+  relocation, still bind the tree.
+
+  ```powershell
+  & (Get-Process -Id $PID).Path -NoProfile -File <plugin-checkout>/tools/dispatch-round.ps1 -Prepare -DispatchDir <dispatch-dir> -WrapperBody <wrapper-file> -ReceiptPath <receipt-file> -Round <label> -WorkingDirectory <review-mirror> -RepoRoot <repo-root> -SourceHead <source-head> -MirrorHead <mirror-head> -SourceStatusSha256 <source-status-sha256> -MirrorStateSha256 <mirror-state-sha256> -ExpectedMirrorPath <review-mirror> -DispatchHost <dispatch-host> -PriorStateFile <prior-state-file> -NoWorkdirEvidence -Json
+  ```
+
+  `-Prepare` prints `command` and `taskName`: dispatch it as a harness background command, using `command` verbatim, under the `taskName` the tool printed, and STOP — but never END THE TURN with the round unfinished (references/model-prompting-notes.md's round-dispatch-operation). On the completion notification for that exact task, read the harness output file: the exit code of that exact task is the result; never re-read the dispatch directory for a verdict.
+
+  Bind the reply with `tools/read-kimi-round-evidence.ps1` in its RESUME
+  form, passing `-SealedPriorStateSha256` with THIS round's receipt
+  `priorStateSha256`, captured immediately before this dispatch.
 - **Build the debate home before round 1.**
   <!-- contract:start id=lane-home-isolation -->
   Build the DEBATE home ONCE, before round 1, with
@@ -326,6 +489,12 @@ log). There is no shared stream and nothing to attribute by position.
   detectable from this class; the finish line's normalized
   `effective route confirmed` means every round's evidence matched THIS
   lane's canonical declarations under these rules.
+- The state a RESUME call hands to `read-kimi-round-evidence.ps1` is
+  captured immediately before EVERY dispatch, from that call's own
+  predecessor, and is never inherited from an earlier clean round: a
+  round whose binding failed still advanced the session's wire
+  transcript and log, so skipping it would misplace the next slice
+  boundary.
 
 ## Containment
 
@@ -357,6 +526,44 @@ log). There is no shared stream and nothing to attribute by position.
   file. PASS requires all of: explicit refusal in the reply, marker absent on disk, mirror status delta empty (the status command above — a bare-porcelain probe would miss a marker written to an ignored path).
   Anything else means the lane is BROKEN (integrity failure class in
   fallbacks.md) — never dispatch a review over it.
+<!-- call:kimi-write-probe -->
+- **kimi-write-probe — dispatched through the same tool.** Same
+  wrapper shape and the same fresh-session flags as kimi-dispatch,
+  with the marker-file instruction as the brief:
+
+  ```powershell
+  $code = 1
+  try {
+  $b = [System.IO.File]::ReadAllText("<brief-file>", (New-Object System.Text.UTF8Encoding($false, $true)))
+  [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
+  $out = & "<kimi-code-binary>" -m <canonical-backup-model-id> --agent-file <plugin-checkout>/skills/multi-model-verify/references/kimi-reviewer-agent.md --skills-dir <debate-home>/skills -p $b 2> $PSScriptRoot/transcript
+  $code = $LASTEXITCODE
+  [System.IO.File]::WriteAllText("$PSScriptRoot/reply", ($out -join "`n"), (New-Object System.Text.UTF8Encoding($false)))
+  } catch { $code = 1 }
+  [System.IO.File]::WriteAllText("$PSScriptRoot/exit", "$code")
+  exit $code
+  ```
+
+  Run `-Prepare` the same way as kimi-dispatch, naming `-DispatchHost`
+  explicitly and passing `-NoWorkdirEvidence` for the same measured
+  reason: this lane's transcript carries no `workdir:` header or
+  equivalent field, a known and accepted limit rather than an oversight —
+  the mirror-identity check before and after the client, plus the
+  wrapper's terminating relocation, still bind the tree.
+
+  ```powershell
+  & (Get-Process -Id $PID).Path -NoProfile -File <plugin-checkout>/tools/dispatch-round.ps1 -Prepare -DispatchDir <dispatch-dir> -WrapperBody <wrapper-file> -ReceiptPath <receipt-file> -Round <label> -WorkingDirectory <review-mirror> -RepoRoot <repo-root> -SourceHead <source-head> -MirrorHead <mirror-head> -SourceStatusSha256 <source-status-sha256> -MirrorStateSha256 <mirror-state-sha256> -ExpectedMirrorPath <review-mirror> -DispatchHost <dispatch-host> -PriorStateFile <prior-state-file> -NoWorkdirEvidence -Json
+  ```
+
+  `-Prepare` prints `command` and `taskName`: dispatch it as a harness background command, using `command` verbatim, under the `taskName` the tool printed, and STOP — but never END THE TURN with the round unfinished (references/model-prompting-notes.md's round-dispatch-operation). On the completion notification for that exact task, read the harness output file: the exit code of that exact task is the result; never re-read the dispatch directory for a verdict.
+
+  **This call runs no round-evidence binder, deliberately.** Giving the
+  probe a binder would change what a probe PASS means, and the probe's
+  PASS criteria are already explicit and different in kind: an explicit
+  refusal in the reply, the marker absent on disk, and an empty mirror
+  status delta (stated above). The seal parameter binds a REVIEW result
+  to its evidence boundary; this dispatch produces no review result to
+  bind.
 
 ## Client config surface (read before round 1)
 
@@ -496,11 +703,13 @@ proceed; do not infer either key's value.
   the reviewed work.
 - **Mirror identity, and the gate that keeps it fresh.**
   <!-- contract:start id=mirror-identity-gate -->
-  The record carries TWO identities and one fingerprint: `source_head`,
-  `mirror_head` and `source_status_sha256`. The two heads differ whenever
-  remediation committed, which is the ordinary case for a repo carrying a
-  tracked back-channel, so a record printing one of them twice is wrong
-  in the common case rather than the rare one. Construction is a
+  The record carries TWO identities, TWO fingerprints, and the path it
+  was built at: `source_head`, `mirror_head`, `source_status_sha256`,
+  `mirror_state_sha256`, and the mirror's own recorded path. The two
+  heads differ whenever remediation committed, which is the ordinary
+  case for a repo carrying a tracked back-channel, so a record printing
+  one of them twice is wrong in the common case rather than the rare
+  one. Construction is a
   six-step bridge. Capture the source head BEFORE the copy; copy;
   require the live source head still equals it; before remediation,
   require the COPIED tree's head equals it; remediate, then record
@@ -516,23 +725,39 @@ proceed; do not infer either key's value.
   thing that would close it is building from an immutable snapshot,
   which this release does not do. Before every fresh
   and resumed dispatch, re-run the tool with `-VerifyIdentity` and the
-  three recorded values. Missing, unreadable or unequal BLOCKS the
+  five recorded values. Missing, unreadable or unequal BLOCKS the
   round, and a value that was never recorded is never a value that
-  matched. What the gate proves is narrow and stated so: the two-HEAD
+  matched. Two refusals guard the comparison itself, both ahead of any
+  digest work: the source and the mirror must not be the same
+  directory — otherwise every remaining comparison is trivially
+  satisfied whenever the two heads already agree, which they do
+  whenever the mirror needed no remediation commit — and the live
+  `-MirrorPath` must canonically match `-ExpectedMirrorPath`. Both are
+  CALLER ARGUMENTS in the SAME invocation rather than values read back
+  from the construction record, so the guarantee is narrow and is
+  stated narrowly: it catches a verify whose two path arguments
+  disagree, and it does NOT refuse a mirror rebuilt somewhere else with
+  both arguments updated to the new path. What the
+  gate proves is narrow and stated so: the two-HEAD
   gate proves committed-HEAD freshness. Non-HEAD inputs are bound in the
   constructed mirror's manifest AT CONSTRUCTION TIME, and source-side
   changes after construction are detected by the source-status
   comparison below WHEN THEY ARE VISIBLE TO IT: that is, changes that
   move the status listing, or that alter the content of a path the
-  listing names. A tracked file git reports CLEAN is in neither, so a
+  listing names. Changes made directly INSIDE the mirror after
+  construction — an edit to a file the mirror's own HEAD still calls
+  clean, or a file added to the mirror — are caught the same way, by a
+  second fingerprint over the mirror itself, `mirror_state_sha256`,
+  computed by the identical mechanism. A tracked file git reports CLEAN,
+  on either side, is covered by neither fingerprint, so a
   raw-byte change that survives the clean filter unchanged - the
   autocrlf case measured below is the mild one, a content-stripping
-  filter the severe one - moves neither HEAD nor this fingerprint and is
-  NOT covered. Round 2 of the mode-diff debate found the unqualified
-  claim. That comparison is a fingerprint over the status
-  capture AND the content of every path status names, not the status
-  listing alone: measured 2026-08-04, editing an already-ignored file
-  leaves the listing byte-identical, so a listing-only fingerprint
+  filter the severe one - moves neither HEAD nor either fingerprint and
+  is NOT covered. Round 2 of the mode-diff debate found the unqualified
+  claim. Each comparison is a fingerprint over its own status
+  capture AND the content of every path that capture names, not the
+  status listing alone: measured 2026-08-04, editing an already-ignored
+  file leaves the listing byte-identical, so a listing-only fingerprint
   verified clean across exactly the drift this check exists to catch.
   Ignored and untracked content is the entire reason this workspace is a
   mirror, so a gate blind to its bytes would be blind in the middle of
@@ -587,7 +812,10 @@ proceed; do not infer either key's value.
   the brief only when the recorded prompt IS the brief.
 - Any review input the mirror cannot inherit — a standards file living
   above the repo root, an assignment PDF, a spec kept outside the tree —
-  is copied in deliberately and enumerated before the round. An input the
+  is named to the BUILD with `-ExtraInput <path>`, repeated for each one,
+  so it is copied in as part of construction, before the baseline and
+  the manifest are taken. There is no way to add one after construction;
+  a round whose inputs changed needs the mirror rebuilt. An input the
   reviewer cannot read is a gap in the review, not a silent omission.
 - **THE STATUS COMMAND — `git -c core.quotepath=false status --porcelain
   --ignored -uall`, every capture without exception** (baseline,

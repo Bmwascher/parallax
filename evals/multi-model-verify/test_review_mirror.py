@@ -9,6 +9,7 @@ check stayed green.
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -932,6 +933,107 @@ def test_a_tracked_back_channel_under_a_spaced_directory_is_committed(tmp_path):
     assert "AGENTS.md" not in git(mirror, "status", "--porcelain")
 
 
+# --- item 33 round 1: hooks must not fire during the remediation commit ---
+#
+# The mirror is a FILE COPY that preserves .git, so it carries the real
+# repo's hooks too. `HOOKS_DIR_REL` is where new-review-mirror.ps1 creates
+# the verified-empty core.hooksPath override for its own `git add` and
+# `git commit` calls - inside the mirror's `.git`, where a plain filesystem
+# copy carries it along but `git status`/`ls-files` never see it, so it
+# cannot itself register as a back-channel or dirty the porcelain that
+# other cases assert clean.
+HOOKS_DIR_REL = Path(".git") / "parallax-mirror-hooks"
+
+NEVER_FALL_BACK = "never fall back to committing with hooks live"
+
+
+def plant_tracked_back_channel(repo):
+    """The route that reaches `git add` / `git commit` at all - remediation
+    only stages and commits when a TRACKED back-channel was found."""
+    (repo / "AGENTS.md").write_text("# planted\n")
+    git(repo, "add", "AGENTS.md")
+    commit(repo, "plant a tracked back-channel")
+
+
+def test_the_remediation_commit_suppresses_repository_hooks(tmp_path):
+    """Item 33 round 1: `new-review-mirror.ps1`'s own BLOCKED text already
+    says the mirror carries the real repo's hooks. A pre-commit hook that
+    fires here is blocking on the REVIEWED repo's own hook, never on
+    anything the mirror is checking. Both `git add` and `git commit` must
+    carry `-c core.hooksPath=` pointed at a directory the script created
+    and verified empty in this same run.
+    """
+    repo = make_repo(tmp_path)
+    plant_tracked_back_channel(repo)
+    hooks = repo / ".git" / "hooks"
+    hooks.mkdir(parents=True, exist_ok=True)
+    (hooks / "pre-commit").write_text(
+        "#!/bin/sh\necho HOOK FIRED >&2\nexit 1\n")
+    mirror = tmp_path / "mirror"
+    trace = tmp_path / "trace.log"
+    proc = run_mirror(repo, mirror, env={"GIT_TRACE2": str(trace)})
+    assert_built(proc)
+    assert "mirror commit failed" not in proc.stdout, (
+        "the reviewed repo's own hook blocked the remediation commit: "
+        + proc.stdout)
+    assert not (mirror / "AGENTS.md").exists()
+
+    lines = trace.read_text(encoding="utf-8", errors="replace").splitlines()
+    add_lines = [line for line in lines if " add -- " in line]
+    commit_lines = [line for line in lines if " commit -q -m " in line]
+    assert add_lines, "no 'git add' invocation was traced: " + "\n".join(lines)
+    assert commit_lines, "no 'git commit' invocation was traced: " + "\n".join(lines)
+    assert all("core.hooksPath=" in line for line in add_lines), add_lines
+    assert all("core.hooksPath=" in line for line in commit_lines), commit_lines
+
+    match = re.search(r"core\.hooksPath=(\S+)", commit_lines[0])
+    assert match, commit_lines[0]
+    hooks_dir = Path(match.group(1).strip("'\""))
+    assert hooks_dir.is_dir(), (
+        "the directory the flag points at must exist: " + str(hooks_dir))
+    assert list(hooks_dir.iterdir()) == [], (
+        "the hooksPath directory must stay empty - anything placed there"
+        " would run as a hook")
+    assert str(hooks_dir).lower().startswith(str(mirror).lower()), (
+        "the directory must be created fresh for this run, under the"
+        " mirror it belongs to: " + str(hooks_dir))
+    assert hooks_dir.parent.name == ".git" and hooks_dir.name == "parallax-mirror-hooks", (
+        "unexpected hooksPath directory shape: " + str(hooks_dir))
+
+
+def test_a_non_empty_hooks_directory_blocks_the_remediation_commit(tmp_path):
+    """The directory must be VERIFIED empty, not merely fresh from
+    `New-Item`'s point of view - a leftover entry there is exactly what a
+    real hook script looks like, and Step 3 requires blocking rather than
+    committing with hooks live."""
+    repo = make_repo(tmp_path)
+    plant_tracked_back_channel(repo)
+    leftover = repo / HOOKS_DIR_REL
+    leftover.mkdir(parents=True)
+    (leftover / "pre-commit").write_text("#!/bin/sh\nexit 1\n")
+    mirror = tmp_path / "mirror"
+    proc = run_mirror(repo, mirror)
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "not empty" in proc.stdout.lower(), proc.stdout
+    assert NEVER_FALL_BACK in proc.stdout.lower(), proc.stdout
+
+
+def test_an_unusable_hooks_directory_blocks_the_remediation_commit(tmp_path):
+    """A FILE occupying the hooks-directory path means a directory could
+    not be created there. The script must never proceed with a directory
+    it never verified, and must report the reason rather than silently
+    committing with the real hooks live."""
+    repo = make_repo(tmp_path)
+    plant_tracked_back_channel(repo)
+    leftover = repo / HOOKS_DIR_REL
+    leftover.parent.mkdir(parents=True, exist_ok=True)
+    leftover.write_text("not a directory\n")
+    mirror = tmp_path / "mirror"
+    proc = run_mirror(repo, mirror)
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert NEVER_FALL_BACK in proc.stdout.lower(), proc.stdout
+
+
 def test_a_spaced_mirror_path_builds(tmp_path):
     # The paths this script is GIVEN can carry spaces too, not only the
     # pathnames it reads out of git. Four call sites still pass the repo as
@@ -1411,26 +1513,36 @@ def record_field(stdout, name):
     return None
 
 
-def build_and_read(repo, mirror):
-    proc = run_mirror(repo, mirror)
+def build_and_read(repo, mirror, *extra):
+    proc = run_mirror(repo, mirror, *extra)
     assert_built(proc)
     return proc, {
         "source_head": record_field(proc.stdout, "source_head"),
         "mirror_head": record_field(proc.stdout, "mirror_head"),
         "source_status_sha256": record_field(proc.stdout,
                                              "source_status_sha256"),
+        "mirror_state_sha256": record_field(proc.stdout,
+                                            "mirror_state_sha256"),
+        "mirror": record_field(proc.stdout, "mirror"),
     }
 
 
 def run_verify(repo, mirror, ident, **override):
+    """`mirror` is BOTH the live -MirrorPath argument (2nd positional)
+    AND, by default, -ExpectedMirrorPath - the path the identity was
+    recorded at. Pass `mirror=` in `override` to point the two at
+    different places on purpose (test_verify_refuses_a_mirror_at_a_
+    different_path)."""
     fields = dict(ident)
     fields.update(override)
     return subprocess.run(
         [ps_host(), "-NoProfile", "-NonInteractive", "-File", str(MIRROR),
          "-VerifyIdentity", "-RepoRoot", str(repo), "-MirrorPath", str(mirror),
+         "-ExpectedMirrorPath", str(fields["mirror"]),
          "-SourceHead", str(fields["source_head"]),
          "-MirrorHead", str(fields["mirror_head"]),
-         "-SourceStatusSha256", str(fields["source_status_sha256"])],
+         "-SourceStatusSha256", str(fields["source_status_sha256"]),
+         "-MirrorStateSha256", str(fields["mirror_state_sha256"])],
         capture_output=True, text=True)
 
 
@@ -1560,7 +1672,8 @@ def test_a_missing_identity_field_blocks_the_dispatch(tmp_path):
     repo = make_repo(tmp_path)
     mirror = tmp_path / "mirror"
     _, ident = build_and_read(repo, mirror)
-    for field in ("source_head", "mirror_head", "source_status_sha256"):
+    for field in ("source_head", "mirror_head", "source_status_sha256",
+                  "mirror_state_sha256"):
         proc = run_verify(repo, mirror, ident, **{field: ""})
         assert proc.returncode == 1, (field, proc.stdout + proc.stderr)
 
@@ -1681,3 +1794,221 @@ def test_a_relative_symlink_cycle_is_refused(tmp_path):
     # local skip was hiding it. A test that cannot run is exactly the
     # test whose assertion nobody has checked.
     assert "would never terminate" in proc.stdout, proc.stdout
+
+
+# =====================================================================
+# Mirror-state fingerprint and -ExtraInput (Task 1a, 2026-08-31
+# completion-coupled dispatch plan).
+#
+# The two-HEAD gate and the source-status fingerprint together still
+# missed one thing: an edit or an addition made directly INSIDE the
+# mirror after construction, without moving the mirror's own HEAD -
+# neither head sees it and source_status_sha256 measures the SOURCE, not
+# the mirror. mirror_state_sha256 closes that with the SAME algorithm
+# Get-StatusSha256 already used for the source, now applied to the
+# mirror. Two more refusals guard the comparison itself: the source and
+# the mirror must not be the same directory, and the live -MirrorPath
+# must canonically match -ExpectedMirrorPath, the path the identity was
+# recorded at.
+# =====================================================================
+
+
+def test_build_prints_a_mirror_state_digest(tmp_path):
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    proc = run_mirror(repo, mirror)
+    assert_built(proc)
+    assert re.search(r"^mirror_state_sha256: [0-9a-f]{64}$", proc.stdout,
+                     re.M), proc.stdout
+
+
+def test_verify_detects_an_uncommitted_edit_inside_the_mirror(tmp_path):
+    # kept.txt is TRACKED and clean at HEAD, in the repo and the mirror
+    # alike. Editing it in place, without committing, moves NEITHER head
+    # and changes nothing on the source side - only the mirror-state
+    # fingerprint can see it.
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    _, ident = build_and_read(repo, mirror)
+    (mirror / "kept.txt").write_text("changed bytes\n")
+    proc = run_verify(repo, mirror, ident)
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "the mirror's contents changed" in proc.stdout, proc.stdout
+
+
+def test_verify_detects_an_untracked_file_added_to_the_mirror(tmp_path):
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    _, ident = build_and_read(repo, mirror)
+    (mirror / "sneak.txt").write_text("added after construction\n")
+    proc = run_verify(repo, mirror, ident)
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "the mirror's contents changed" in proc.stdout, proc.stdout
+
+
+def test_verify_refuses_when_the_source_is_the_mirror(tmp_path):
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    _, ident = build_and_read(repo, mirror)
+    proc = run_verify(mirror, mirror, ident)
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert ("the source and the mirror are the same directory"
+            in proc.stdout), proc.stdout
+
+
+def test_verify_refuses_a_mirror_at_a_different_path(tmp_path):
+    """-MirrorPath is where verify looks; -ExpectedMirrorPath is where
+    construction recorded the identity. Moving the mirror and pointing
+    -MirrorPath at the new location, while -ExpectedMirrorPath (defaulted
+    by run_verify from the build record) still names the original path,
+    must refuse rather than silently verifying a different tree."""
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    _, ident = build_and_read(repo, mirror)
+    moved = tmp_path / "moved"
+    shutil.move(str(mirror), str(moved))
+    proc = run_verify(repo, moved, ident)
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+
+
+def test_extra_inputs_are_covered_by_the_digest(tmp_path):
+    # Copied in as part of construction, so the identity record describes
+    # the tree the reviewer actually reads.
+    repo = make_repo(tmp_path)
+    extra = tmp_path / "standards.md"
+    extra.write_text("house rules\n")
+    mirror = tmp_path / "mirror"
+    proc, ident = build_and_read(repo, mirror, "-ExtraInput", str(extra))
+    assert (mirror / "standards.md").read_text() == "house rules\n"
+    assert "standards.md" in proc.stdout, proc.stdout
+    ok = run_verify(repo, mirror, ident)
+    assert ok.returncode == 0, ok.stdout + ok.stderr
+    (mirror / "standards.md").write_text("tampered\n")
+    tampered = run_verify(repo, mirror, ident)
+    assert tampered.returncode == 1, tampered.stdout + tampered.stderr
+
+
+def test_two_extra_inputs_with_one_leaf_name_are_refused(tmp_path):
+    """Cross-vendor round 2, 2026-09-01.
+
+    The plan promises to copy in EACH named file. The implementation
+    flattened every input to its leaf name and wrote it with -Force, so
+    two inputs called `standards.md` silently became one: the record
+    listed a destination that could not show which of them arrived, and
+    the reviewer read a tree the record misdescribed. Refusing is the
+    honest option, because the mirror re-roots every path and there is
+    no correct second location that the plan ever froze.
+    """
+    repo = make_repo(tmp_path)
+    a = tmp_path / "a"; a.mkdir(); (a / "standards.md").write_text("first\n")
+    b = tmp_path / "b"; b.mkdir(); (b / "standards.md").write_text("second\n")
+    mirror = tmp_path / "mirror"
+    proc = run_mirror(repo, mirror, "-ExtraInput", str(a / "standards.md"),
+                      "-ExtraInput", str(b / "standards.md"))
+    # Assert the REFUSAL, not the exit code: run_mirror passes -SkipProbe,
+    # which blocks every build at the end anyway, so `returncode == 1`
+    # alone passes whether or not this case is handled at all. The first
+    # draft of this test did exactly that and passed against the defect.
+    assert "share the destination name" in proc.stdout, proc.stdout
+    assert "standards.md" in proc.stdout, proc.stdout
+    assert not (mirror / "standards.md").exists(), "copied one of them anyway"
+
+
+def test_an_extra_input_cannot_overwrite_a_file_the_mirror_already_has(tmp_path):
+    """Same round, the other half of the collision.
+
+    An -ExtraInput landing on a name the copied tree already carries
+    replaces reviewed content with unreviewed content, and the digest
+    then certifies the replacement as the tree.
+    """
+    repo = make_repo(tmp_path)
+    outside = tmp_path / "outside"; outside.mkdir()
+    (outside / "kept.txt").write_text("unreviewed replacement\n")
+    mirror = tmp_path / "mirror"
+    proc = run_mirror(repo, mirror, "-ExtraInput", str(outside / "kept.txt"))
+    assert "would overwrite a file the mirror already has" in proc.stdout,         proc.stdout
+    assert "kept.txt" in proc.stdout, proc.stdout
+    assert (mirror / "kept.txt").read_text() == "tracked\n", (
+        "the reviewed file was replaced by an unreviewed one")
+
+
+def test_an_extra_input_cannot_smuggle_a_back_channel_into_the_mirror(tmp_path):
+    """-ExtraInput writes into the mirror, so what it writes must be
+    swept too.
+
+    Measured 2026-08-31 against this task's first build, which copied
+    extra inputs in AFTER the enumeration that clears the mirror: an
+    AGENTS.md named as an extra input landed in the finished mirror and
+    the mirror's own enumeration listed it. That build still refused,
+    but only downstream at the client probe, and SKILL.md states in
+    writing that the enumeration is the PRIMARY control for the reviewed
+    tree's skills and agents, "not defence in depth". A control that
+    runs before the last writer into the tree it clears is not that
+    control.
+
+    The message is deliberately NOT "survived remediation": remediation
+    did work here, and three tests above assert that phrase is absent
+    when it did.
+    """
+    repo = make_clean_repo(tmp_path)
+    extra = tmp_path / "AGENTS.md"
+    extra.write_text("# planted through the front door\n")
+    mirror = tmp_path / "mirror"
+    proc = run_mirror(repo, mirror, "-ExtraInput", str(extra))
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "back-channel(s) present in the finished mirror" in proc.stdout, (
+        proc.stdout)
+    assert SKIP_BLOCK not in proc.stdout, (
+        "it must refuse as a back-channel, not merely as an unmeasured "
+        "mirror: " + proc.stdout)
+    assert "survived remediation" not in proc.stdout, proc.stdout
+
+
+def test_there_is_no_reseal_or_remint_mode(tmp_path):
+    # Re-blessing a tree that changed since it was measured is exactly
+    # what the mirror-state digest exists to deny, so no flag does it.
+    # Each case is run against a full, otherwise-valid BUILD invocation:
+    # a bare unrecognized flag with nothing else would fail at
+    # PowerShell's own mandatory-parameter binding instead, which proves
+    # nothing about this tool's own refusal.
+    repo = make_repo(tmp_path)
+    for flag in ("-Reseal", "-Remint", "-UpdateIdentity"):
+        mirror = tmp_path / ("m" + flag)
+        proc = run_mirror(repo, mirror, flag)
+        assert proc.returncode == 2, (flag, proc.stdout + proc.stderr)
+        assert not mirror.exists(), (flag, "a rejected flag must not build")
+
+
+def test_an_unmeasurable_expected_digest_is_refused(tmp_path):
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    _, ident = build_and_read(repo, mirror)
+    proc = run_verify(repo, mirror, ident, mirror_state_sha256="")
+    assert proc.returncode != 0, proc.stdout + proc.stderr
+
+
+def test_a_mirror_whose_current_state_cannot_be_measured_is_refused(tmp_path):
+    # Not the same case as the one above: that one supplies a bad
+    # EXPECTED value, and this one makes the LIVE measurement itself
+    # fail - the direction that could otherwise read as clean. Mirrors
+    # the source-side version of this case (icacls deny, same shape).
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    _, ident = build_and_read(repo, mirror)
+    denied = mirror / "untracked.txt"
+    user = os.environ.get("USERNAME") or ""
+    if not user:
+        pytest.skip("USERNAME not set; cannot build a deny ACE")
+    deny = subprocess.run(["icacls", str(denied), "/deny", user + ":(RD)"],
+                          capture_output=True, text=True)
+    if deny.returncode != 0:
+        pytest.skip("icacls deny unavailable: " + deny.stdout + deny.stderr)
+    try:
+        proc = run_verify(repo, mirror, ident)
+        assert proc.returncode != 0, proc.stdout + proc.stderr
+        assert "could not be" in proc.stdout, proc.stdout
+    finally:
+        undo = subprocess.run(["icacls", str(denied), "/remove:d", user],
+                              capture_output=True, text=True)
+        assert undo.returncode == 0, undo.stdout + undo.stderr
+        assert denied.read_text(), "the deny ACE is still in force"

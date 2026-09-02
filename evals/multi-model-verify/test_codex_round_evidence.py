@@ -241,22 +241,25 @@ def resume_state(tmp_path, rollout, session_id=SESSION):
 # Invocation
 # ---------------------------------------------------------------------
 
-def run_fresh(root, prior, brief_sha, session_id=SESSION):
-    return subprocess.run(
-        [POWERSHELL, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
-         str(SCRIPT), "-Fresh", "-SessionsRoot", str(root),
-         "-SessionIdFromStdout", session_id, "-PriorState", str(prior),
-         "-ExpectedBriefSha256", brief_sha, "-Json"],
-        capture_output=True, text=True, timeout=60)
+def run_fresh(root, prior, brief_sha, session_id=SESSION, sealed=None):
+    args = [POWERSHELL, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
+            str(SCRIPT), "-Fresh", "-SessionsRoot", str(root),
+            "-SessionIdFromStdout", session_id, "-PriorState", str(prior),
+            "-ExpectedBriefSha256", brief_sha]
+    if sealed is not None:
+        args += ["-SealedPriorStateSha256", sealed]
+    args.append("-Json")
+    return subprocess.run(args, capture_output=True, text=True, timeout=60)
 
 
-def run_resume(rollout, prior, brief_sha):
-    return subprocess.run(
-        [POWERSHELL, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
-         str(SCRIPT), "-Resume", "-RolloutFile", str(rollout),
-         "-PriorState", str(prior), "-ExpectedBriefSha256", brief_sha,
-         "-Json"],
-        capture_output=True, text=True, timeout=60)
+def run_resume(rollout, prior, brief_sha, sealed=None):
+    args = [POWERSHELL, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
+            str(SCRIPT), "-Resume", "-RolloutFile", str(rollout),
+            "-PriorState", str(prior), "-ExpectedBriefSha256", brief_sha]
+    if sealed is not None:
+        args += ["-SealedPriorStateSha256", sealed]
+    args.append("-Json")
+    return subprocess.run(args, capture_output=True, text=True, timeout=60)
 
 
 def parsed(proc):
@@ -2136,3 +2139,58 @@ def test_a_resumed_first_record_whose_type_is_an_array_is_refused(tmp_path):
     append_rows(f, [user_row(r2), assistant_row("ok2")])
     assert_failed(run_resume(f, prior, canon(r2)),
                   "carries a 'type' that is not a string")
+
+
+# =====================================================================
+# E4: the seal. -SealedPriorStateSha256 binds this call to the exact
+# -PriorState bytes the dispatch receipt recorded as priorStateSha256
+# (Task 2's -Prepare). Copied rather than shared with the kimi binder's
+# own module (test_kimi_round_evidence.py): the two binders read
+# different clients, and a shared test would hide a divergence between
+# them. An unmade check must never look like a passed one - the reason
+# this task exists.
+# =====================================================================
+
+def test_the_binder_refuses_a_prior_state_the_receipt_did_not_seal(tmp_path):
+    brief = "Round one brief."
+    root, f = make_root(tmp_path, brief=brief)
+    prior = fresh_state(tmp_path)
+    out = run_fresh(root, prior, canon(brief), sealed="00" * 32)
+    assert_failed(out, "sealed-state-mismatch")
+
+
+def test_the_seal_is_checked_before_the_prior_state_is_parsed(tmp_path):
+    """The lane this one was already right about, locked so it stays right.
+
+    Cross-vendor round 1, 2026-09-01, found the two binders disagreed on
+    a prior state that is BOTH tampered and unparseable: this lane
+    reported `sealed-state-mismatch`, the kimi lane reported a parse
+    failure, and Task 5 froze IDENTICAL semantics. The kimi binder was
+    reordered to match THIS one, so the behaviour that was correct here
+    is now the contract and needs its own pin - otherwise the next edit
+    to this file could move the drift to the other side of the pair.
+    """
+    brief = "Round one brief."
+    root, f = make_root(tmp_path, brief=brief)
+    prior = tmp_path / "unparseable-state.json"
+    prior.write_bytes(b"{ this is not json at all")
+    out = run_fresh(root, prior, canon(brief), sealed="00" * 32)
+    assert_failed(out, "sealed-state-mismatch")
+
+
+def test_the_binder_accepts_the_sealed_prior_state(tmp_path):
+    brief = "Round one brief."
+    root, f = make_root(tmp_path, brief=brief)
+    prior = fresh_state(tmp_path)
+    digest = hashlib.sha256(prior.read_bytes()).hexdigest()
+    assert_clean(run_fresh(root, prior, canon(brief), sealed=digest))
+
+
+def test_the_seal_is_optional_only_where_no_receipt_exists(tmp_path):
+    """Omitting the seal is still allowed for lanes with no prepared
+    dispatch, but omitting it does NOT read as a satisfied seal."""
+    brief = "Round one brief."
+    root, f = make_root(tmp_path, brief=brief)
+    prior = fresh_state(tmp_path)
+    p = assert_clean(run_fresh(root, prior, canon(brief)))
+    assert p["sealed"] == "not-checked"

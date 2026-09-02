@@ -236,7 +236,7 @@ def resume_prior_state(sess_dir, **overrides):
 
 def run_fresh(sessions_root, session_id, prior_state_path, agent_file=AGENT_FILE,
               model=FIXTURE_MODEL, provider=FIXTURE_PROVIDER, effort=FIXTURE_EFFORT,
-              expected_brief_sha=ROUND1_BRIEF_SHA):
+              expected_brief_sha=ROUND1_BRIEF_SHA, sealed=None):
     args = [
         POWERSHELL, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(SCRIPT),
         "-Fresh", "-SessionsRoot", str(sessions_root),
@@ -244,23 +244,27 @@ def run_fresh(sessions_root, session_id, prior_state_path, agent_file=AGENT_FILE
         "-PriorState", str(prior_state_path),
         "-Model", model, "-Provider", provider, "-Effort", effort,
         "-AgentFile", str(agent_file), "-ExpectedBriefSha256", expected_brief_sha,
-        "-Json",
     ]
+    if sealed is not None:
+        args += ["-SealedPriorStateSha256", sealed]
+    args.append("-Json")
     proc = subprocess.run(args, capture_output=True, text=True, timeout=60)
     return proc
 
 
 def run_resume(session_dir, prior_state_path, agent_file=AGENT_FILE,
                model=FIXTURE_MODEL, provider=FIXTURE_PROVIDER, effort=FIXTURE_EFFORT,
-               expected_brief_sha=ROUND2_BRIEF_SHA):
+               expected_brief_sha=ROUND2_BRIEF_SHA, sealed=None):
     args = [
         POWERSHELL, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(SCRIPT),
         "-Resume", "-SessionDir", str(session_dir),
         "-PriorState", str(prior_state_path),
         "-Model", model, "-Provider", provider, "-Effort", effort,
         "-AgentFile", str(agent_file), "-ExpectedBriefSha256", expected_brief_sha,
-        "-Json",
     ]
+    if sealed is not None:
+        args += ["-SealedPriorStateSha256", sealed]
+    args.append("-Json")
     proc = subprocess.run(args, capture_output=True, text=True, timeout=60)
     return proc
 
@@ -2074,3 +2078,62 @@ def test_an_llm_config_line_with_two_markers_is_refused(tmp_path):
     write_json(state_path, fresh_prior_state())
     assert_failed(run_fresh(root, FIXTURE_SESSION_ID, state_path),
                   "log-config-malformed")
+
+
+# =====================================================================
+# E4: the seal. -SealedPriorStateSha256 binds this call to the exact
+# -PriorState bytes the dispatch receipt recorded as priorStateSha256
+# (Task 2's -Prepare). Copied rather than shared with the codex binder's
+# own module (test_codex_round_evidence.py): the two binders read
+# different clients, and a shared test would hide a divergence between
+# them. An unmade check must never look like a passed one - the reason
+# this task exists.
+# =====================================================================
+
+def test_the_binder_refuses_a_prior_state_the_receipt_did_not_seal(tmp_path):
+    root, sess_dir = build_fresh_layout(tmp_path, fresh_wire(), fresh_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+    out = run_fresh(root, FIXTURE_SESSION_ID, state_path, sealed="00" * 32)
+    assert_failed(out, "sealed-state-mismatch")
+
+
+def test_the_seal_is_checked_before_the_prior_state_is_parsed(tmp_path):
+    """Cross-vendor round 1, 2026-09-01: the two binders disagreed.
+
+    Task 5 froze IDENTICAL seal semantics in both lanes. The codex binder
+    checked the seal before parsing; this one called Read-PriorState
+    first, so a prior state that was BOTH tampered and unparseable came
+    back as a parse failure here and as `sealed-state-mismatch` there.
+    Both are fail-closed, so nothing was ever let through - but the
+    frozen requirement was identical behaviour, and a caller comparing
+    the two lanes' reasons would be told two different stories about the
+    same tamper.
+
+    The seal is the outer check: it says these bytes are not the bytes
+    the receipt named, which is true whatever the bytes happen to parse
+    as.
+    """
+    root, sess_dir = build_fresh_layout(tmp_path, fresh_wire(), fresh_log())
+    state_path = tmp_path / "state.json"
+    state_path.write_bytes(b"{ this is not json at all")
+    out = run_fresh(root, FIXTURE_SESSION_ID, state_path, sealed="00" * 32)
+    assert_failed(out, "sealed-state-mismatch")
+
+
+def test_the_binder_accepts_the_sealed_prior_state(tmp_path):
+    root, sess_dir = build_fresh_layout(tmp_path, fresh_wire(), fresh_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+    digest = hashlib.sha256(state_path.read_bytes()).hexdigest()
+    assert_clean(run_fresh(root, FIXTURE_SESSION_ID, state_path, sealed=digest))
+
+
+def test_the_seal_is_optional_only_where_no_receipt_exists(tmp_path):
+    """Omitting the seal is still allowed for lanes with no prepared
+    dispatch, but omitting it does NOT read as a satisfied seal."""
+    root, sess_dir = build_fresh_layout(tmp_path, fresh_wire(), fresh_log())
+    state_path = tmp_path / "state.json"
+    write_json(state_path, fresh_prior_state())
+    p = assert_clean(run_fresh(root, FIXTURE_SESSION_ID, state_path))
+    assert p["sealed"] == "not-checked"

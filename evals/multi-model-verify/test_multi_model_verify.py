@@ -283,7 +283,7 @@ class TestTransportContract:
         Item 20's filed defect was the argument shape. The GAP the plan
         debate surfaced is wider: the backup lane fails the round when
         the recorded prompt does not match the brief
-        (backup-lane.md, region brief-hash-binding), and the codex lane
+        (backup-lane.md's brief-hash-binding), and the codex lane
         had no equivalent, which is exactly why corruption there could be
         silent while corruption on the backup lane could not.
 
@@ -370,7 +370,7 @@ class TestTransportContract:
         assert (
         "The backup lane fails a round when the prompt its client "
         "recorded does not match the brief that was sent "
-        "(backup-lane.md, region `brief-hash-binding`). This lane "
+        "(backup-lane.md's brief-hash-binding). This lane "
         "had no equivalent, which is why corruption here could be "
         "silent while corruption there could not. It has one now, "
         "and it reads the PER-SESSION ROLLOUT rather than scraping "
@@ -727,12 +727,41 @@ class TestTransportContract:
         assert ".agents/skills" in notes, (
             "the .agents ingestion probe must be documented in the notes"
         )
-        assert re.search(r"(?s)AGENTS\.md.{0,700}STOP and surface", text), (
-            "a present AGENTS.md must STOP the dispatch, not merely warn"
+        # Item 33 replaced STOP-and-ask with build-the-mirror. The
+        # property is unchanged and still pinned here: a present
+        # AGENTS.md may never be silently dispatched over. Only the
+        # mandated response moved, so the needle moved with it.
+        assert re.search(
+            r"(?s)AGENTS\.md.{0,700}BUILD THE MIRROR AND REPORT", text
+        ), (
+            "a present AGENTS.md must force the mirror, not merely warn"
         )
         assert "AGENTS.md" in notes, (
             "the ingestion probe results must be documented in the notes"
         )
+
+    def test_the_back_channel_response_is_automatic(self):
+        """Backlog item 33. The CHECK is not removed; only the question.
+
+        Filed 2026-08-11 with a screenshot from ANOTHER repo, so a skill
+        defect rather than a parallax quirk, and restated by the user on
+        2026-08-30 when it fired again mid-cycle.
+        """
+        text = " ".join(read(SKILL_MD).split())
+        assert (
+            "If present: BUILD THE MIRROR AND REPORT. Do NOT ask first - "
+            "every deletion happens in a file COPY, and the remediation "
+            "commit runs with repository hooks suppressed, so nothing in "
+            "the reviewed tree executes and there is no destructive act "
+            "to consent to. What was found is still EVIDENCE and still "
+            "goes in the debate record with its paths, and the "
+            "post-mirror re-enumeration must still come back empty before "
+            "any round dispatches. A mirror that cannot be built - path "
+            "budget blown, scratch unavailable, hooks not suppressible - "
+            "is BLOCKED, never a fallback to dispatching over the real "
+            "tree.") in text
+        assert "only on the user's choice, never automatically" not in text
+        assert "STOP and surface it to the user" not in text
 
     def test_fresh_per_round_files(self):
         # After a failed call, a reused --output-last-message path serves
@@ -966,6 +995,81 @@ class TestTransportContract:
             "control surface."
         ) in notes
 
+    CODEX_CALLS = ("codex-fresh", "codex-resume")
+
+    @pytest.mark.parametrize("call", CODEX_CALLS)
+    def test_each_codex_call_is_launched_through_the_tool(self, call):
+        """Per-site, not a global count.
+
+        Round 6's finding: a global `>= 2` is satisfied by two tool
+        calls under round 1 and none under resume, while the document
+        still contains no `Start-Process`. Centralization would be
+        proven and detachment of each site would not.
+
+        The anchor matters separately: the three tool calls this skill
+        already makes are bare relative paths (SKILL.md:94, :121, :228),
+        which is backlog item 58's own cause, and a new call must not
+        join that. The HOST matters too. A bare `powershell` starts the
+        tool under Windows PowerShell 5.1 even from a PowerShell 7
+        session, and the tool then hands its own executable to the
+        wrapper, so the wrapper silently runs on a host the caller never
+        chose. `(Get-Process -Id $PID).Path` is the caller's own host.
+
+        Post-Task-7: `-Launch`/`-Poll` are gone, replaced by `-Prepare`
+        plus a harness-dispatched background task; the exit map lost its
+        `3 means running` clause because there is no more poll to return
+        it.
+        """
+        text = read(SKILL_MD)
+        marker = "<!-- call:%s -->" % call
+        assert text.count(marker) == 1, "exactly one section per call"
+        section = text.split(marker, 1)[1]
+        # Bounded at the next heading as well as the next marker: these
+        # assertions are POSITIVE, so an unbounded last section let a
+        # pinned sentence drift two headings away and stay green.
+        section = re.split(r"<!-- call:|\n## ", section,
+                           maxsplit=1)[0]
+        assert (
+            "& (Get-Process -Id $PID).Path -NoProfile -File"
+            " ${CLAUDE_PLUGIN_ROOT}/tools/dispatch-round.ps1 -Prepare"
+            " -DispatchDir <dispatch-dir> -WrapperBody <wrapper-file>"
+            " -ReceiptPath <receipt-file> -Round <label>"
+            " -WorkingDirectory <mirror-path> -RepoRoot <repo-root>"
+            " -SourceHead <source-head> -MirrorHead <mirror-head>"
+            " -SourceStatusSha256 <source-status-sha256>"
+            " -MirrorStateSha256 <mirror-state-sha256>"
+            " -ExpectedMirrorPath <mirror-path>"
+            " -DispatchHost <dispatch-host>"
+            " -PriorStateFile <prior-state-file>"
+            " -WorkdirEvidence <mirror-path>"
+            " -Json") in section, "this site has no -Prepare dispatch"
+        assert "$brief | codex exec" in section, (
+            "this site has no client invocation")
+        assert (
+            "0 means `reply-present` and nothing else; 2 is a"
+            " parameter-binding failure or an internal execution error;"
+            " 1 is every other state, named on the wrapper's last"
+            " stdout line.") in section, (
+            "this site does not state the whole exit mapping")
+
+    def test_no_codex_lane_writes_its_own_launch(self):
+        """A CENTRALIZATION guard, and nothing more.
+
+        Round 6 established what this cannot show: an absent
+        `Start-Process` proves no second launch implementation exists,
+        never that every call site reaches the one that does. The
+        per-site test above is what proves that.
+        """
+        assert "Start-Process" not in read(SKILL_MD), (
+            "no lane writes its own launch; the tool owns the whole"
+            " transaction and a second copy is how it drifts"
+        )
+
+    def test_the_point_of_use_sends_the_reader_to_the_states(self):
+        text = read(SKILL_MD)
+        assert text.count("references/model-prompting-notes.md's"
+                          " round-dispatch-states") >= 2
+
 
 def test_dispatch_traps_are_documented_in_the_notes():
     """Two measured ways to kill a round before the reviewer works.
@@ -980,11 +1084,23 @@ def test_dispatch_traps_are_documented_in_the_notes():
     failure NAMES are what a second run needs, so piping an expensive
     run through tail or head costs the whole run again."""
     notes = " ".join(read(REFERENCES / "model-prompting-notes.md").split())
+    # CORRECTED 2026-09-01. This pin previously held the sentence
+    # "A round that crosses the caller's foreground timeout is killed by
+    # the CALLER ... the quota is spent for nothing." That claim was
+    # withdrawn in CLAUDE.md the same day, on a measurement: a foreground
+    # call that ran past the ceiling was MOVED to the background by the
+    # harness under a new task id and completed with exit 0. The pin was
+    # left holding the withdrawn sentence, so the suite ENFORCED in the
+    # shipped skill exactly what this repo's own instructions had
+    # retracted - and other repositories read the skill, not CLAUDE.md.
+    # Found by the whole-branch review, reproduced before acceptance.
     assert (
-        "A round that crosses the caller's foreground timeout is killed "
-        "by the CALLER, not by the client: no `--output-last-message` "
-        "file is written, so it is a transport failure rather than a "
-        "review result and the quota is spent for nothing.") in notes
+        "A foreground call OWNS the session: while it runs, nobody can "
+        "see the round, talk to the agent, or redirect it. The 600-second "
+        "ceiling is NOT a kill - measured 2026-09-01 on Claude Code "
+        "2.1.251, a foreground call that ran past it was moved to the "
+        "background by the harness and completed - so the reason to "
+        "dispatch in the background is VISIBILITY, not survival.") in notes
     assert (
         "Do NOT run the native `codex` call under `$ErrorActionPreference "
         "= 'Stop'`. codex prints a benign models-cache warning to STDERR "
@@ -995,6 +1111,200 @@ def test_dispatch_traps_are_documented_in_the_notes():
         "Do NOT pipe an expensive run's output through `tail`, `head` or "
         "`Select-Object -Last`. The failure NAMES are what a second run "
         "needs, and truncating them costs the whole run again.") in notes
+
+
+def test_round_dispatch_tool_region_is_pinned():
+    """Backlog item 32, Task 8. Renamed from detached-dispatch-tool for
+    the completion-coupled design: -Prepare builds the wrapper as one
+    transaction and the wrapper composes the claim, the relocation and
+    the classifying epilogue around the lane's body - there is no
+    separate launch/poll pair to attribute a receipt to."""
+    notes = " ".join(read(REFERENCES / "model-prompting-notes.md").split())
+    assert (
+    "The preparation is ONE TRANSACTION and it lives in ONE PLACE: "
+    "`<plugin-root>/tools/dispatch-round.ps1`, written "
+    "`${CLAUDE_PLUGIN_ROOT}` in SKILL.md, where the harness substitutes "
+    "it, and `<plugin-checkout>` in backup-lane.md, which is a references "
+    "file the session reads raw and where nothing substitutes anything. "
+    "`-Prepare` reserves the dispatch directory, writes the wrapper, "
+    "computes the receipt's bytes, and publishes the receipt last of all; "
+    "a failure at any point after the directory is reserved kills the "
+    "tree and BLOCKS rather than leaving a half-built launch behind. NO "
+    "LANE WRITES ITS OWN DISPATCH. A lane supplies only its CLIENT "
+    "INVOCATION, as a wrapper body file, and its WORKING DIRECTORY; it "
+    "changes nothing else. The tool composes everything else around that "
+    "body: THE CLAIM, a create-new reservation of both a `claim` file and "
+    "a `classification` file that fails a second run of the same wrapper "
+    "before it touches anything; THE RELOCATION, a terminating move into "
+    "the working directory, made only after the wrapper re-verifies it "
+    "against the same mirror-identity values `-Prepare` recorded; and THE "
+    "CLASSIFYING EPILOGUE, a second re-verification after the body "
+    "returns, the reservation consumed into a run-time nonce, the exit "
+    "file written, and `-Classify` called as the wrapper's own last act. "
+    "This replaced five copied snippets, which regenerated the same "
+    "defect across four debate rounds: reserve, write, start and record "
+    "were four steps, and a rule written in one place while the steps "
+    "were copied to five could not make them atomic. The path NAMES the "
+    "plugin root because bare relative paths are backlog item 58's own "
+    "cause; a new call must not join that. Naming is not always "
+    "resolving: in SKILL.md the harness substitutes the token, and in "
+    "backup-lane.md the placeholder is filled in by the session, which is "
+    "weaker and is said rather than blurred."
+    ) in notes, (
+        "region round-dispatch-tool must sit WHOLE in one pin")
+
+
+def test_round_dispatch_states_region_is_pinned():
+    """Backlog item 32, Task 8. Split from the exit map, which is now
+    its own region (round-dispatch-exit-map): a region must fit whole
+    inside one pin, and the full state list plus the exit map plus the
+    framing sentence does not. This region also carries all five
+    residuals the plan ships stated rather than fixed, because that
+    section says they belong here."""
+    notes = " ".join(read(REFERENCES / "model-prompting-notes.md").split())
+    assert (
+    "THE CLASSIFICATION IS THE WRAPPER'S OWN EXIT CODE, so a wrapper that "
+    "does not reach its final statement cannot report success, whatever "
+    "its directory holds. `-Classify` computes the state in this fixed "
+    "order, stopping at the first match and reading nothing further: (1) "
+    "classification absent -> never-reserved; (2) classification holds "
+    "'reserved' -> not-ready; (3) classification holds classifying:<n> "
+    "with n not the redeemed value, or anything else -> "
+    "already-classified; (4) receipt absent, unreadable, or failing the "
+    "schema -> no-receipt; (5) receipt's dispatchDir or round is not the "
+    "pair supplied independently -> receipt-not-expected; (6) the "
+    "receipt's own bytes do not hash to -ExpectedReceiptSha256 -> "
+    "receipt-altered; (7) no claim file in the dispatch directory -> "
+    "no-claim; (8) workingDirectory missing, unresolvable, or not a "
+    "filesystem container -> cwd-unreadable; (9) workdirEvidence is not "
+    "'none' and no transcript file exists -> no-transcript; (10) "
+    "workdirEvidence is not 'none' and the transcript's FIRST 'workdir:' "
+    "header line is absent -> workdir-unconfirmed; (11) that header "
+    "line's value differs from workdirEvidence -> workdir-mismatch; (12) "
+    "no exit file -> no-exit-file; (13) exit unreadable or not a plain "
+    "integer -> exit-unreadable; (14) exit non-zero -> exit-nonzero; (15) "
+    "no reply file -> no-reply; (16) reply is empty -> reply-empty; (17) "
+    "otherwise -> reply-present. Only the last state can become a review "
+    "result, and it is not one by itself: the lane's round-evidence "
+    "binder must also return clean. Five residuals ship here, stated "
+    "rather than fixed, because this is where a reader actually meets "
+    "them. First, a tracked file whose bytes change while git still "
+    "reports it clean: `-VerifyIdentity` hashes what git's status listing "
+    "names plus the content manifest, and a path hidden behind "
+    "`assume-unchanged`, `skip-worktree`, or another clean-filter "
+    "condition can change without moving HEAD, the baseline, or the "
+    "manifest; the mirror tool documents this boundary in its own header, "
+    "and it is narrower than the ordinary edit Task 1a fixes. Second, "
+    "deleting `-Poll` does not remove the post-hoc surface, because "
+    "`-Classify` is still a standalone mode. What closes the natural case "
+    "is the reservation being CONSUMED into a run-time nonce before any "
+    "terminal artifact is published, so a killed round leaves a state no "
+    "outside caller is handed the key to. What remains is a caller who "
+    "opens the reservation file, reads the nonce, and passes it - a "
+    "deliberate act on a file they own, which no filesystem mechanism can "
+    "prevent. Nor does anything bind the WRAPPER's own text, or the "
+    "lane BODY installed beside it, after preparation: the digest "
+    "covers the receipt and NOTHING covers either script, so a caller "
+    "who edits wrapper.ps1 before the harness runs it - the expected "
+    "receipt digest, the second verification, or the body call itself "
+    "- gets a round that still exits 0, and a caller who replaces "
+    "body.ps1 with one that writes a plausible transcript and reply "
+    "gets the same. Cross-vendor round 1 named body.ps1 as missing "
+    "from this list, and it was: sealing either would reopen the "
+    "design rather than amend this paragraph. And a caller who supplies an earlier "
+    "act's receipt, directory and label to a FRESH preparation is still "
+    "truthfully told that act's result. Third, a change made to the "
+    "mirror and undone "
+    "again before the client finishes: the wrapper verifies before the "
+    "client runs and again after the child returns, so a mutation that "
+    "PERSISTS through the round is caught and the round fails, but only "
+    "change-and-revert survives, and no before-and-after check could "
+    "catch it - this is filesystem ownership during dispatch, explicitly "
+    "trusted, and it is honest only because that second verification "
+    "actually runs. Fourth, the harness trailer's format is measured, not "
+    "pinned across versions, and nothing in this repo parses it "
+    "mechanically. What was measured on 2026-09-01 is narrower than \"a "
+    "killed task reports a non-zero exit\": a killed task reported the "
+    "literal `[killed]` and NO exit code at all. So a trailer carrying "
+    "no exit code is UNFINISHED, exactly as a missing notification is, "
+    "and never a success; do not read the absence of a code as a zero. "
+    "Fifth, no "
+    "bound on how long a hung round may sit: a hung round can never read "
+    "as success, so this costs waiting, not truth."
+    ) in notes, (
+        "region round-dispatch-states must sit WHOLE in one pin")
+
+
+def test_round_dispatch_exit_map_region_is_pinned():
+    """Backlog item 32, Task 8. Split off round-dispatch-states: a
+    region must fit whole inside one pin, and the state list plus the
+    exit map plus the framing sentence together do not."""
+    notes = " ".join(read(REFERENCES / "model-prompting-notes.md").split())
+    assert (
+    "`-Classify`'s exit code is the whole verdict: 0 means reply-present "
+    "and nothing else; 2 means a parameter-binding failure, an "
+    "unrecognized argument, or an internal execution error; 1 means every "
+    "other state, named on the wrapper's last stdout line. The wrapper's "
+    "own last statement is `exit $LASTEXITCODE` after calling `-Classify` "
+    "as its last act, so the wrapper's exit code IS the classification. A "
+    "caller reads the exit code of the harness task it dispatched, and "
+    "never opens the dispatch directory for a verdict."
+    ) in notes, (
+        "region round-dispatch-exit-map must sit WHOLE in one pin")
+
+
+def test_round_dispatch_operation_region_is_pinned():
+    """Backlog item 32, Task 8. Renamed from detached-dispatch-operation.
+    There is no poll in the completion-coupled design: the caller waits
+    for the harness notification for that exact task."""
+    notes = " ".join(read(REFERENCES / "model-prompting-notes.md").split())
+    assert (
+    "There is NO POLL. The caller dispatches the wrapper as a harness "
+    "background task and then WAITS for the harness notification for that "
+    "exact task; nothing in this tool watches a directory for the caller. "
+    "A round with no notification is UNFINISHED, never successful. A "
+    "SESSION MUST NEVER END ITS TURN WITH A DISPATCHED ROUND UNFINISHED. "
+    "In an interactive session the notification opens a new turn, so "
+    "stopping is correct. In a print-mode or otherwise unattended run "
+    "the turn a session ends is its last, so stopping there ends the run "
+    "with the round still in flight and no verdict at all - measured "
+    "2026-09-01, where a graded run dispatched its round as a background "
+    "task, said it would wait, and ended its turn with no verdict. Where "
+    "no notification can "
+    "reach the session, it WAITS on that exact task through the "
+    "harness's own task-output read, which is still the harness surface "
+    "and not a directory poll. Where it can do neither, it finishes as a "
+    "TRANSPORT FAILURE, never with a verdict-less finish line. "
+    "Recovery is a FRESH `-Prepare` with a fresh evidence boundary, never "
+    "a re-run of the same wrapper: the claim and classification files are "
+    "reserved create-new on the first run, so the wrapper itself refuses "
+    "a second run rather than retrying. To abandon a round, kill the "
+    "harness task. Never poll with `ps -p` from Git Bash, which cannot "
+    "see Windows pids and reports a live process as gone."
+    ) in notes, (
+        "region round-dispatch-operation must sit WHOLE in one pin")
+
+
+def test_background_task_naming_region_is_pinned():
+    """Backlog item 32. This is a DOCUMENTATION-PRESENCE pin, not
+    behavioural enforcement: nothing in the repo checks that a
+    backgrounded call is actually named this way. Task 8 adds the new
+    fact that -Prepare now prints the taskName, so the convention has a
+    source even though nothing enforces its use."""
+    notes = " ".join(read(REFERENCES / "model-prompting-notes.md").split())
+    assert (
+    "Name the backgrounded call for the person watching it. The reviewer "
+    "LANE and the ROUND lead the description, as in `Sol R1 debate round` "
+    "or `Kimi R2 debate round`; work with no lane leads with its kind, as "
+    "in `Gate: pytest 5.1` or `Mirror build`. A cycle runs several lanes "
+    "across several rounds at once and a name omitting either cannot be "
+    "read at a glance. NOTHING ENFORCES THIS. `-Prepare` now PRINTS the "
+    "`taskName` it expects the caller to dispatch under, so the "
+    "convention has a SOURCE even though nothing enforces its use. It is "
+    "a convention about what a human sees, and its pin proves only that "
+    "the rule is written down."
+    ) in notes, (
+        "region background-task-naming must sit WHOLE in one pin")
 
 
 class TestDebateProtocol:
@@ -3111,6 +3421,127 @@ class TestBriefEncodingOverStdin:
         assert before == after, (
             f"$OutputEncoding was not restored: {before} -> {after}"
         )
+
+
+def test_the_bookmark_is_captured_per_dispatch_not_chained():
+    """SHIPPED cross-lane defect: the codex-lane bookmark must never be
+    inherited from the last CLEAN round, because a round that was voided,
+    refused, or failed its binding still advances the client's rollout
+    without ever emitting a `nextState`."""
+    body_skill = read(SKILL_MD)
+    assert "captured immediately before EVERY dispatch" in body_skill
+    assert "never inherited from the last clean round" in body_skill
+
+
+def test_fallbacks_states_why_chaining_breaks():
+    body_fallbacks = read(REFERENCES / "fallbacks.md")
+    assert "a failed binding emits no `nextState`" in body_fallbacks
+    assert "advances the client's append-only rollout" in body_fallbacks
+
+
+def test_the_backup_lane_carries_the_same_rule():
+    body_backup_lane = read(REFERENCES / "backup-lane.md")
+    assert "captured immediately before EVERY dispatch" in body_backup_lane
+
+
+# --- Task 7: rewrite all five call sites for completion-coupled dispatch --
+
+@pytest.fixture
+def body_skill():
+    return read(SKILL_MD)
+
+
+@pytest.fixture
+def body_backup_lane():
+    return read(REFERENCES / "backup-lane.md")
+
+
+def test_no_call_site_still_names_poll_or_exit_three(body_skill, body_backup_lane):
+    """NON-PINNING (1 of 3): both assertions are negative membership
+    (`not in`), which the pin rules exclude outright - a string under
+    `not` locks nothing, however real the behavioural check is."""
+    for body in (body_skill, body_backup_lane):
+        assert "-Poll" not in body
+        assert "3 means `running`" not in body
+
+
+@pytest.mark.parametrize("call", ["codex-fresh", "codex-resume"])
+def test_each_codex_call_carries_the_operation_clause(call, body_skill):
+    """Per-call, not a whole-body `in`.
+
+    Added 2026-09-01. The clause below was written into two of the five
+    call sites in this skill and missed the other three, and every pin
+    that could have caught that read the WHOLE body, so one site
+    carrying the clause satisfied the suite for all of them. That is the
+    same defect `test_backup_lane.py` names in its own round-4 docstring,
+    reproduced here by the fix for it. The kimi sites are pinned per
+    section in that module; these are the codex two.
+    """
+    marker = "<!-- call:%s -->" % call
+    assert body_skill.count(marker) == 1, "exactly one section per call"
+    section = body_skill.split(marker, 1)[1]
+    # Bound the section at the next call marker OR the next heading.
+    # Without the heading the LAST call in a file runs to EOF, and a
+    # clause that drifted out of the call site into a later section
+    # still satisfied the pin. `##` only: no file has a `###` after its
+    # last call site today, and a future one would not bound here.
+    section = re.split(r"<!-- call:|\n## ", section, maxsplit=1)[0]
+    assert "never END THE TURN with the round unfinished" in section, (
+        "a call site that stops at STOP with no clause reads as leave"
+        " for ending the turn; measured 2026-09-01, an unattended run"
+        " that did exactly that finished with no verdict at all")
+    assert "references/model-prompting-notes.md's round-dispatch-operation"         in section, (
+        "the clause must name the file that carries the rule, in the"
+        " form the citation guard can resolve")
+
+
+def test_both_lanes_dispatch_the_printed_command_as_a_named_task(body_skill, body_backup_lane):
+    for body in (body_skill, body_backup_lane):
+        assert body.count("dispatch it as a harness background command") >= 1
+        assert "the `taskName` the tool printed" in body
+
+
+def test_both_lanes_read_the_exit_code_not_the_directory(body_skill, body_backup_lane):
+    for body in (body_skill, body_backup_lane):
+        assert "the exit code of that exact task is the result" in body
+        assert "never re-read the dispatch directory for a verdict" in body
+
+
+def test_both_lanes_name_the_host_explicitly(body_skill, body_backup_lane):
+    for body in (body_skill, body_backup_lane):
+        assert "-DispatchHost" in body
+
+
+def test_both_lanes_decide_the_workdir_evidence_explicitly(body_skill, body_backup_lane):
+    """NON-PINNING (2 of 3): the membership check sits inside an `or`,
+    which the pin rules say contributes nothing from either operand."""
+    for body in (body_skill, body_backup_lane):
+        assert ("-WorkdirEvidence" in body) or ("-NoWorkdirEvidence" in body)
+
+
+def test_every_ROUND_call_site_passes_the_seal(body_skill, body_backup_lane):
+    """NON-PINNING (3 of 3): the two counts are summed into a variable
+    and the assertion is made on that name, so the needles are reached
+    through a variable rather than appearing directly in the clause.
+
+    FOUR round sites, not five. The write probe runs no round-evidence
+    binder today, and this count must not silently settle the question
+    the task header says to settle deliberately. If the probe is given
+    a binder, raise this to 5 in the commit that records why.
+
+    All three of the tests above and this one are worth having as
+    behavioural checks. None may appear in a coverage argument. Labelling
+    only one of the three is how a coverage claim rots: the next editor
+    reads the warning as the complete list.
+    """
+    total = body_skill.count("-SealedPriorStateSha256") \
+        + body_backup_lane.count("-SealedPriorStateSha256")
+    assert total >= 4
+
+
+def test_the_write_probe_is_migrated_too(body_backup_lane):
+    assert body_backup_lane.count("-Prepare") >= 3
+    assert "kimi-write-probe" in body_backup_lane
 
 
 if __name__ == "__main__":

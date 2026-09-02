@@ -6,3 +6,11 @@ __pycache__/
 tools/drift-snapshot.json
 tools/drift-pending.json
 tools/drift-reports/
+
+# Not ours: a broken mechanical rebrand of CLAUDE.md that calls this a
+# "Codex plugin" and gives two update commands that do not exist. Ignored
+# so a `git add -A` cannot re-track it, which is exactly how it reached the
+# branch in the first place. The preflight still SEES it: that enumeration
+# uses --others WITHOUT --exclude-standard, so ignoring does not blind the
+# back-channel check.
+AGENTS.md

@@ -8,6 +8,8 @@ discipline, and fallback wiring - all offline, zero CLI calls.
 import re
 from pathlib import Path
 
+import pytest
+
 REPO = Path(__file__).resolve().parents[2]
 REFS = REPO / "skills" / "multi-model-verify" / "references"
 BACKUP_LANE = REFS / "backup-lane.md"
@@ -116,6 +118,13 @@ def test_agent_empties_the_subagent_list():
 
 
 def test_backup_files_no_backslash_paths():
+    # Restored to its blanket form 2026-08-31. Task 4 had narrowed it to
+    # exempt the three per-call wrapper sections, which was a weakening
+    # with a self-declared blind spot (the last section ran to EOF) AND
+    # was incomplete: test_no_backslash_paths_anywhere covers the same
+    # file and stayed red. The wrapper bodies now use forward slashes,
+    # which .NET and PowerShell accept identically, so the exemption is
+    # not needed by anything.
     for p in (BACKUP_LANE, AGENT_MD):
         assert "\\" not in _read(p), str(p)
 
@@ -1923,35 +1932,39 @@ def test_mirror_path_budget_region():
 
 
 def test_mirror_identity_gate_region():
-    """The identity gate's contract, locked whole (0.21.0, item 22).
+    """The identity gate's contract, locked whole (0.21.0, item 22;
+    reworked for Task 1a of the 2026-08-31 completion-coupled dispatch
+    plan, which adds the mirror-side fingerprint and its two refusals).
 
-    Three clauses carry the weight. TWO identities, because they differ
+    Four clauses carry the weight. TWO identities, because they differ
     whenever remediation committed and a record printing one twice would
     be wrong in the common case. The BRIDGE at steps three and four,
     because without it two individually valid commit ids prove nothing
-    about whether one tree came from the other. And the fingerprint
+    about whether one tree came from the other. The TWO fingerprints
     covering CONTENT rather than the status listing alone, which is
     measured: editing an already-ignored file leaves the listing
     byte-identical, so the listing-only version verified clean across
-    exactly the drift the check exists to catch.
+    exactly the drift the check exists to catch. And the two refusals
+    that keep the comparison from being pointed at the wrong tree.
     """
     assert (
-            "The record carries TWO identities and one fingerprint: "
-            "`source_head`, `mirror_head` and `source_status_sha256`. "
-            "The two heads differ whenever remediation committed, which "
-            "is the ordinary case for a repo carrying a tracked "
-            "back-channel, so a record printing one of them twice is "
-            "wrong in the common case rather than the rare one. "
-            "Construction is a six-step bridge. Capture the source head "
-            "BEFORE the copy; copy; require the live source head still "
-            "equals it; before remediation, require the COPIED tree's "
-            "head equals it; remediate, then record `mirror_head`. "
-            "Steps three and four are the bridge itself: without them "
-            "the record can hold two individually valid commit ids "
-            "while nothing proves the mirror was built FROM the "
-            "recorded source commit, which is two true facts arranged "
-            "to look like one. What the bridge proves is matching "
-            "OBSERVED ENDPOINTS, and that is weaker than an "
+            "The record carries TWO identities, TWO fingerprints, and "
+            "the path it was built at: `source_head`, `mirror_head`, "
+            "`source_status_sha256`, `mirror_state_sha256`, and the "
+            "mirror's own recorded path. The two heads differ whenever "
+            "remediation committed, which is the ordinary case for a "
+            "repo carrying a tracked back-channel, so a record printing "
+            "one of them twice is wrong in the common case rather than "
+            "the rare one. Construction is a six-step bridge. Capture "
+            "the source head BEFORE the copy; copy; require the live "
+            "source head still equals it; before remediation, require "
+            "the COPIED tree's head equals it; remediate, then record "
+            "`mirror_head`. Steps three and four are the bridge itself: "
+            "without them the record can hold two individually valid "
+            "commit ids while nothing proves the mirror was built FROM "
+            "the recorded source commit, which is two true facts "
+            "arranged to look like one. What the bridge proves is "
+            "matching OBSERVED ENDPOINTS, and that is weaker than an "
             "uninterrupted construction: a source that moves away and "
             "back during the copy satisfies both the before-and-after "
             "head equality and the before-and-after fingerprint, while "
@@ -1960,29 +1973,138 @@ def test_mirror_identity_gate_region():
             "would close it is building from an immutable snapshot, "
             "which this release does not do. Before every fresh and "
             "resumed dispatch, re-run the tool with `-VerifyIdentity` "
-            "and the three recorded values. Missing, unreadable or "
+            "and the five recorded values. Missing, unreadable or "
             "unequal BLOCKS the round, and a value that was never "
-            "recorded is never a value that matched. What the gate "
+            "recorded is never a value that matched. Two refusals guard "
+            "the comparison itself, both ahead of any digest work: the "
+            "source and the mirror must not be the same directory "
+            "— otherwise every remaining comparison is trivially "
+            "satisfied whenever the two heads already agree, which "
+            "they do whenever the mirror needed no remediation commit "
+            "— and the live `-MirrorPath` must canonically match "
+            "`-ExpectedMirrorPath`. Both are CALLER ARGUMENTS in the "
+            "SAME invocation rather than values read back from the "
+            "construction record, so the guarantee is narrow and is "
+            "stated narrowly: it catches a verify whose two path "
+            "arguments disagree, and it does NOT refuse a mirror "
+            "rebuilt somewhere else with both arguments updated to the "
+            "new path. What the gate "
             "proves is narrow and stated so: the two-HEAD gate proves "
             "committed-HEAD freshness. Non-HEAD inputs are bound in the "
             "constructed mirror's manifest AT CONSTRUCTION TIME, and "
             "source-side changes after construction are detected by the "
             "source-status comparison below WHEN THEY ARE VISIBLE TO "
             "IT: that is, changes that move the status listing, or that "
-            "alter the content of a path the listing names. A tracked "
-            "file git reports CLEAN is in neither, so a raw-byte change "
-            "that survives the clean filter unchanged - the autocrlf "
-            "case measured below is the mild one, a content-stripping "
-            "filter the severe one - moves neither HEAD nor this "
-            "fingerprint and is NOT covered. Round 2 of the mode-diff "
-            "debate found the unqualified claim. That comparison is a "
-            "fingerprint over the status capture AND the content of "
-            "every path status names, not the status listing alone: "
-            "measured 2026-08-04, editing an already-ignored file "
-            "leaves the listing byte-identical, so a listing-only "
-            "fingerprint verified clean across exactly the drift this "
-            "check exists to catch. Ignored and untracked content is "
-            "the entire reason this workspace is a mirror, so a gate "
-            "blind to its bytes would be blind in the middle of the "
-            "feature."
+            "alter the content of a path the listing names. Changes "
+            "made directly INSIDE the mirror after construction "
+            "— an edit to a file the mirror's own HEAD still calls "
+            "clean, or a file added to the mirror — are caught the "
+            "same way, by a second fingerprint over the mirror itself, "
+            "`mirror_state_sha256`, computed by the identical "
+            "mechanism. A tracked file git reports CLEAN, on either "
+            "side, is covered by neither fingerprint, so a raw-byte "
+            "change that survives the clean filter unchanged - the "
+            "autocrlf case measured below is the mild one, a "
+            "content-stripping filter the severe one - moves neither "
+            "HEAD nor either fingerprint and is NOT covered. Round 2 of "
+            "the mode-diff debate found the unqualified claim. Each "
+            "comparison is a fingerprint over its own status capture "
+            "AND the content of every path that capture names, not the "
+            "status listing alone: measured 2026-08-04, editing an "
+            "already-ignored file leaves the listing byte-identical, so "
+            "a listing-only fingerprint verified clean across exactly "
+            "the drift this check exists to catch. Ignored and "
+            "untracked content is the entire reason this workspace is a "
+            "mirror, so a gate blind to its bytes would be blind in the "
+            "middle of the feature."
             ) in _norm(BACKUP_LANE)
+
+
+# --- Task 4: all three Kimi lane calls dispatched through the tool --------
+
+KIMI_CALLS = ("kimi-dispatch", "kimi-resume", "kimi-write-probe")
+
+
+@pytest.mark.parametrize("call", KIMI_CALLS)
+def test_each_kimi_call_is_prepared_through_the_tool(call):
+    """Per-call, not a global count.
+
+    Round 4's finding: `>= 3` proved three launch strings existed
+    somewhere in the file and bound none of them to a call site, so a
+    section with two launches and a write-probe with none still passed.
+    That reasoning is unchanged; only the command it binds has changed.
+
+    Rewritten 2026-08-31 for completion-coupled dispatch. The tool no
+    longer launches or polls, so the two commands this pinned no longer
+    exist. Task 7's file list did not name this module and the plan's
+    own round-8 review said so; the three cases went red on the rewrite
+    and are repaired here rather than left red.
+    """
+    body = _read(BACKUP_LANE)
+    marker = "<!-- call:%s -->" % call
+    assert body.count(marker) == 1, "exactly one section per call"
+    section = body.split(marker, 1)[1]
+    # Bound the section at the next call marker OR the next heading.
+    # Without the heading the LAST call in a file runs to EOF, and a
+    # clause that drifted out of the call site into a later section
+    # still satisfied the pin. `##` only: no file has a `###` after its
+    # last call site today, and a future one would not bound here.
+    section = re.split(r"<!-- call:|\n## ", section, maxsplit=1)[0]
+    assert (
+        "& (Get-Process -Id $PID).Path -NoProfile -File"
+        " <plugin-checkout>/tools/dispatch-round.ps1 -Prepare"
+        " -DispatchDir <dispatch-dir> -WrapperBody <wrapper-file>"
+        " -ReceiptPath <receipt-file> -Round <label>"
+        " -WorkingDirectory <review-mirror> -RepoRoot <repo-root>"
+        " -SourceHead <source-head> -MirrorHead <mirror-head>"
+        " -SourceStatusSha256 <source-status-sha256>"
+        " -MirrorStateSha256 <mirror-state-sha256>"
+        " -ExpectedMirrorPath <review-mirror>"
+        " -DispatchHost <dispatch-host>"
+        " -PriorStateFile <prior-state-file> -NoWorkdirEvidence"
+        " -Json") in section, (
+        "this call has no preparation; a lane described as dispatched"
+        " with no prepare command is what four rounds kept finding")
+    assert "dispatch it as a harness background command" in section, (
+        "this call prepares a round and never dispatches it")
+    assert "the `taskName` the tool printed" in section, (
+        "an unnamed background task cannot be found by the person"
+        " watching it")
+    assert "never END THE TURN with the round unfinished" in section, (
+        "a call site that stops at STOP with no clause reads as leave"
+        " for ending the turn; measured 2026-09-01, an unattended run"
+        " that did exactly that finished with no verdict at all")
+    assert "the exit code of that exact task is the result" in section, (
+        "a prepared round whose result is never read is a round thrown"
+        " away, which is what the -Poll pin used to catch here")
+    assert "never re-read the dispatch directory for a verdict" in section, (
+        "reading the directory instead of the exit code is the exact"
+        " false-completion path this cycle exists to close")
+    assert '& "<kimi-code-binary>"' in section, (
+        "this call has no client invocation")
+    assert "$PSScriptRoot/reply" in section, (
+        "no reply artifact: every successful call would land in"
+        " no-reply and be discarded")
+
+
+def test_only_the_two_round_calls_carry_the_evidence_seal():
+    """The write probe's exemption, made mechanical.
+
+    Task 7's header required a deliberate decision: give the probe a
+    round-evidence binder and change what a probe PASS means, or exempt
+    it and say so. It was exempted. A decision recorded only in prose
+    drifts in either direction unnoticed, so both halves are pinned -
+    the two round calls carry the seal, and the probe does not.
+    """
+    body = _read(BACKUP_LANE)
+    carried = {}
+    for call in KIMI_CALLS:
+        section = body.split("<!-- call:%s -->" % call, 1)[1].split(
+            "<!-- call:", 1)[0]
+        carried[call] = "-SealedPriorStateSha256" in section
+    assert carried == {"kimi-dispatch": True, "kimi-resume": True,
+                       "kimi-write-probe": False}, carried
+
+
+def test_the_backup_lane_writes_no_launch_of_its_own():
+    assert "Start-Process" not in _read(BACKUP_LANE)

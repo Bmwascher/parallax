@@ -87,34 +87,27 @@ toggled on, its stop-time review overlaps mode `diff` — expected, not a bug.
    probe below reads what was loaded rather than where it might live.
    Widen the pathspec if that ever changes.
    <!-- contract:end -->
-   If present: STOP and surface it to the user — never dispatch a review
-   over an instruction back-channel.
-
-   Clearing it — only on the user's choice, never automatically: run
-   `tools/new-review-mirror.ps1 -RepoRoot <repo> -MirrorPath <scratch>`.
-   Build at a SHORT `<scratch>` directly under the temp directory, such
-   as a `kerev<n>` folder, never inside the session scratchpad: the
-   mirror re-roots every path, and the tool refuses before creating
-   anything when the budget is blown.
-   It builds the **review mirror** (references/backup-lane.md owns its
-   construction, its baseline, and its identity fields — a file copy
-   preserving `.git`, NOT a clone), deletes the offending entries THERE,
-   commits when any were tracked, re-runs the enumeration above inside
-   the mirror, captures the baseline and the content manifest, runs the
-   client probe below with the mirror as the working directory, and
-   prints the record block; empty enumeration output is
-   the evidence, and the mirror's identity fields go in the debate
-   record. The mirror is then the reviewed tree for every lane in that
-   debate — dispatch codex with the mirror as cwd, and keep citations
-   resolvable in the real repo. Whether the removal needs a commit
-   branches on tracked-ness, and the difference misreads as a failure;
-   references/backup-lane.md states that branch and the hook behaviour
-   that comes with it.
-
-   Files above the repo's git root are NOT ingested (same probe), and
-   `~/.codex/AGENTS.md` is the user's own
-   global instruction file — note it in the debate record if it exists,
-   but it is not a stop.
+   <!-- contract:start id=back-channel-auto-mirror -->
+   If present: BUILD THE MIRROR AND REPORT. Do NOT ask first - every
+   deletion happens in a file COPY, and the remediation commit runs with
+   repository hooks suppressed, so nothing in the reviewed tree executes
+   and there is no destructive act to consent to. What was found is
+   still EVIDENCE and still goes in the debate record with its paths,
+   and the post-mirror re-enumeration must still come back empty before
+   any round dispatches. A mirror that cannot be built - path budget
+   blown, scratch unavailable, hooks not suppressible - is BLOCKED,
+   never a fallback to dispatching over the real tree.
+   <!-- contract:end -->
+   Run
+   `tools/new-review-mirror.ps1 -RepoRoot <repo> -MirrorPath <scratch>`
+   at a SHORT `<scratch>` directly under the temp directory, never inside
+   the session scratchpad, to build the **review mirror**, remediate the
+   offending entries there, re-run the enumeration and the client probe
+   below against it, and print the record block; empty enumeration
+   output is the evidence. Whether the removal needs a commit branches on
+   tracked-ness; references/backup-lane.md states that branch and the
+   hook behaviour that comes with it. Full construction detail and the
+   mirror's identity fields are in references/preflight-mirror.md.
 
    **The reviewer's own machine is the second half of this check, and the
    enumeration above cannot see it.** Run
@@ -171,10 +164,19 @@ toggled on, its stop-time review overlaps mode `diff` — expected, not a bug.
    `.wow-api-reference/` or a dated in-game probe result) — never memory.
    The position has no separate artifact — it IS the claims section of the
    step-2 brief.
+<!-- call:codex-fresh -->
 2. Compose the reviewer's debate brief per references/model-prompting-notes.md, write
-   it to a scratchpad file, then run round 1:
+   it to a scratchpad file, then write this wrapper body to `<wrapper-file>` — as
+   a FILE, never from a here-string, whose terminator cannot survive this block's
+   indentation — and prepare it with the tool. Never run it inline: a foreground
+   call owns the session, so nobody can see the round or talk to the agent while
+   it runs. The ceiling is not a kill; visibility is the reason.
 
+   The wrapper body is today's block with the exit scaffolding added:
+
+   <!-- wrapper:codex-fresh -->
    ```powershell
+   $code = 1
    $priorOutputEncoding = $OutputEncoding
    try {
    $OutputEncoding = New-Object System.Text.UTF8Encoding($false)
@@ -183,9 +185,34 @@ toggled on, its stop-time review overlaps mode `diff` — expected, not a bug.
    $seen = ([System.BitConverter]::ToString(([System.Security.Cryptography.SHA256]::Create()).ComputeHash($bytes)) -replace '-', '').ToLower()
    if ($seen -cne "<override-sha256>") { throw "the override file changed after the probe verified it" }
    $override = (New-Object System.Text.UTF8Encoding($false, $true)).GetString($bytes)
-   $brief | codex exec --sandbox read-only --disable plugins --disable apps --disable memories -c mcp_servers.node_repl.enabled=false -c $override -m <canonical-model-id> -c model_reasoning_effort=<canonical-effort> --output-last-message <reply-file> - > <transcript-file> 2>&1
-   } finally { $OutputEncoding = $priorOutputEncoding }
+   $brief | codex exec --sandbox read-only --disable plugins --disable apps --disable memories -c mcp_servers.node_repl.enabled=false -c $override -m <canonical-model-id> -c model_reasoning_effort=<canonical-effort> --output-last-message $PSScriptRoot/reply - > $PSScriptRoot/transcript 2>&1
+   $code = $LASTEXITCODE
+   } catch { $code = 1 } finally { $OutputEncoding = $priorOutputEncoding }
+   [System.IO.File]::WriteAllText("$PSScriptRoot/exit", "$code")
+   exit $code
    ```
+
+   `$PSScriptRoot` is the dispatch directory, because the tool installs the
+   body into it as `body.ps1` and runs it there as a child process. That
+   removes the need to pass a path in and removes one more thing a copy
+   can get wrong.
+
+   Run `-Prepare`, naming `-DispatchHost` explicitly as the caller's own
+   host (`pwsh` or `powershell`, matching `(Get-Process -Id $PID).Path`,
+   never a bare name) and passing `-WorkdirEvidence` with the resolved
+   mirror path — the codex lane's transcript header carries a `workdir:`
+   line naming it, confirmed on a real round:
+
+   ```powershell
+   & (Get-Process -Id $PID).Path -NoProfile -File ${CLAUDE_PLUGIN_ROOT}/tools/dispatch-round.ps1 -Prepare -DispatchDir <dispatch-dir> -WrapperBody <wrapper-file> -ReceiptPath <receipt-file> -Round <label> -WorkingDirectory <mirror-path> -RepoRoot <repo-root> -SourceHead <source-head> -MirrorHead <mirror-head> -SourceStatusSha256 <source-status-sha256> -MirrorStateSha256 <mirror-state-sha256> -ExpectedMirrorPath <mirror-path> -DispatchHost <dispatch-host> -PriorStateFile <prior-state-file> -WorkdirEvidence <mirror-path> -Json
+   ```
+
+   `<receipt-file>` is a FRESH path, alongside the fresh reply and
+   transcript paths already required; `-Prepare` refuses one that
+   exists. `<label>` names the lane and the round, as in `Sol R1`.
+   `-Prepare` prints `command` and `taskName`: dispatch it as a harness background command, using `command` verbatim, under the `taskName` the tool printed, and STOP — but never END THE TURN with the round unfinished (references/model-prompting-notes.md's round-dispatch-operation).
+
+   On the completion notification for that exact task, read the harness output file: the exit code of that exact task is the result, never re-read the dispatch directory for a verdict — **0 means `reply-present` and nothing else; 2 is a parameter-binding failure or an internal execution error; 1 is every other state, named on the wrapper's last stdout line.** The states -Classify computes are references/model-prompting-notes.md's round-dispatch-states.
 
    Both encoding lines are load-bearing on Windows PowerShell 5.1
    (references/model-prompting-notes.md).
@@ -219,24 +246,31 @@ toggled on, its stop-time review overlaps mode `diff` — expected, not a bug.
    (fallbacks.md), never a review result — and capture the `session id:`
    line. Read the reviewer's reply from `<reply-file>` — the transcript
    logs every file the reviewer reads and can run tens of KB, with the
-   reply buried at the bottom. Every round writes FRESH round-numbered
-   `<reply-file>`/`<transcript-file>` paths: after a failed call, a reused
-   path serves the previous round's reply and reads exactly like success —
-   a reply not freshly written by this round's call is a stale reply, a
-   transport failure (fallbacks.md), never a review result.
+   reply buried at the bottom (a reused path, which `-Prepare` refuses,
+   would read exactly like success).
    Per-round evidence: bind the reply to the brief THIS side sent with
    `tools/read-codex-round-evidence.ps1` — `-Fresh` at round 1, `-Resume`
-   after. `-PriorState` is an inventory of the session root captured
-   BEFORE round 1 dispatches, then each later round's `nextState`; a state
-   with a missing field is refused, never assumed empty. A verdict other
+   after. `-PriorState` is captured immediately before EVERY dispatch —
+   an inventory of the session root before round 1, then each round's
+   own state — and is never inherited from the last clean round; a state
+   with a missing field is refused, never assumed empty. Pass
+   `-SealedPriorStateSha256` with the receipt's `priorStateSha256` on
+   EVERY call — mandatory here though optional on the binder for other
+   callers; `sealed: "not-checked"` is a transport failure, not a clean
+   round. A verdict other
    than clean is class `brief-attribution` (fallbacks.md): the reply is
    discarded unread. A clean verdict is client-echo evidence — what the
    client recorded, never what any server received.
 
-3. Later rounds keep the reviewer's state by resuming that session — flags MUST
-   precede the resume subcommand (flags after it are a usage error):
+<!-- call:codex-resume -->
+3. Later rounds keep the reviewer's state by resuming that session — flags
+   MUST precede the resume subcommand (flags after it are a usage error).
+   Compose the rebuttal and launch the same wrapper shape as round 1,
+   with the resumed call:
 
+   <!-- wrapper:codex-resume -->
    ```powershell
+   $code = 1
    $priorOutputEncoding = $OutputEncoding
    try {
    $OutputEncoding = New-Object System.Text.UTF8Encoding($false)
@@ -245,9 +279,32 @@ toggled on, its stop-time review overlaps mode `diff` — expected, not a bug.
    $seen = ([System.BitConverter]::ToString(([System.Security.Cryptography.SHA256]::Create()).ComputeHash($bytes)) -replace '-', '').ToLower()
    if ($seen -cne "<override-sha256>") { throw "the override file changed after the probe verified it" }
    $override = (New-Object System.Text.UTF8Encoding($false, $true)).GetString($bytes)
-   $brief | codex exec --sandbox read-only --disable plugins --disable apps --disable memories -c mcp_servers.node_repl.enabled=false -c $override -m <canonical-model-id> -c model_reasoning_effort=<canonical-effort> --output-last-message <reply-file> resume <SESSION_ID> - > <transcript-file> 2>&1
-   } finally { $OutputEncoding = $priorOutputEncoding }
+   $brief | codex exec --sandbox read-only --disable plugins --disable apps --disable memories -c mcp_servers.node_repl.enabled=false -c $override -m <canonical-model-id> -c model_reasoning_effort=<canonical-effort> --output-last-message $PSScriptRoot/reply resume <SESSION_ID> - > $PSScriptRoot/transcript 2>&1
+   $code = $LASTEXITCODE
+   } catch { $code = 1 } finally { $OutputEncoding = $priorOutputEncoding }
+   [System.IO.File]::WriteAllText("$PSScriptRoot/exit", "$code")
+   exit $code
    ```
+
+   Run `-Prepare` the same way as round 1, with `-DispatchHost` and
+   `-WorkdirEvidence` set the same way. A resumed round needs the
+   mirror at the path its identity was recorded at: if the tree had to be
+   rebuilt mid-debate, rebuild it at the SAME path
+   with `-Force` and re-record its identity fields, because a mirror at a new
+   path makes the binder refuse the resumed slice on `cwd` and the round is
+   lost. If it cannot be rebuilt there, dispatch FRESH rather than resume.
+
+   ```powershell
+   & (Get-Process -Id $PID).Path -NoProfile -File ${CLAUDE_PLUGIN_ROOT}/tools/dispatch-round.ps1 -Prepare -DispatchDir <dispatch-dir> -WrapperBody <wrapper-file> -ReceiptPath <receipt-file> -Round <label> -WorkingDirectory <mirror-path> -RepoRoot <repo-root> -SourceHead <source-head> -MirrorHead <mirror-head> -SourceStatusSha256 <source-status-sha256> -MirrorStateSha256 <mirror-state-sha256> -ExpectedMirrorPath <mirror-path> -DispatchHost <dispatch-host> -PriorStateFile <prior-state-file> -WorkdirEvidence <mirror-path> -Json
+   ```
+
+   `-Prepare` prints `command` and `taskName`: dispatch it as a harness background command, using `command` verbatim, under the `taskName` the tool printed, and STOP — but never END THE TURN with the round unfinished (references/model-prompting-notes.md's round-dispatch-operation).
+
+   On the completion notification for that exact task, read the harness output file: the exit code of that exact task is the result, never re-read the dispatch directory for a verdict — **0 means `reply-present` and nothing else; 2 is a parameter-binding failure or an internal execution error; 1 is every other state, named on the wrapper's last stdout line.** The states -Classify computes are references/model-prompting-notes.md's round-dispatch-states.
+
+   Bind the reply the same way as round 1, with `-Resume` in place of
+   `-Fresh`, and pass `-SealedPriorStateSha256` with THIS round's
+   `priorStateSha256`, captured immediately before this dispatch.
 
    The preamble repeats in full every round. Rounds are separate shell
    invocations, so a `$override` set in round 1 does not exist in round 3,
