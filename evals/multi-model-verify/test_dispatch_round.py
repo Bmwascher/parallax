@@ -431,7 +431,11 @@ def test_prepare_emits_a_command_naming_the_resolved_host(tmp_path):
     got = json.loads(out.stdout)
     assert got["command"].endswith(
         "-NoProfile -NonInteractive -File \"%s\"" % got["wrapper"])
-    assert got["command"].lower().startswith('"')
+    # The command must RUN AS PRINTED. A bare quoted path is a string
+    # expression in PowerShell, so a caller following SKILL.md's
+    # "verbatim" instruction got a ParserError and no round (measured
+    # 2026-09-03). The call operator is what makes verbatim true.
+    assert got["command"].startswith('& "')
     assert got["taskName"] == "Sol R1 debate round"
 
 
