@@ -485,8 +485,18 @@ git commit -m "update the fable seat notes for fable 5.1"
 2. Whole-branch review via `agents/fable-reviewer.md` over the exact
    `base..head` range, retained as a range-bound artifact.
 3. Mode-diff debate on the same range, citing that artifact.
-4. **Then** bump `.claude-plugin/plugin.json`, because the debate is what
+4. **Close item 74 in the backlog, in the same commit that changes its
+   heading.** Its heading says OPEN and its body describes `SKILL.md` and
+   `test_dispatch_round.py` in the PRESENT TENSE as saying things this
+   branch has already changed. Mark the heading DONE with its version,
+   move 74 out of the status block's Open list, remove its ranking entry
+   and renumber, and rewrite the present-tense descriptions as what the
+   defects WERE. The file's own rule requires the summary and the heading
+   to move together. Do the same for the two dispatch defects it carries,
+   which are fixed by this branch even though the item as a whole also
+   covers the notes rewrite.
+5. **Then** bump `.claude-plugin/plugin.json`, because the debate is what
    moves the tree after the last build task.
-5. Dev loop: marketplace update, then `plugin update parallax@parallax`,
+6. Dev loop: marketplace update, then `plugin update parallax@parallax`,
    then verify the install BY CONTENT rather than by the cache directory
    name.

@@ -29,10 +29,14 @@ update):
 
 From the official Fable 5.1 guide
 (platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-fable-5-1,
-fetched 2026-09-03) — the three seat-invariant rules above appear in it
-near-verbatim; Fable-specific additions:
+fetched 2026-09-03). Two bullets below are CARRIED FORWARD from the
+Fable 5 guide (fetched 2026-07-26) and are marked; nobody has re-checked
+them against the 5.1 document, and this note says so rather than
+re-attributing them silently.
 
-- Bug-finding recall is a documented strength — the basis for the
+- CARRIED FROM THE FABLE 5 GUIDE, not re-checked: the three
+  seat-invariant rules above appear in that guide near-verbatim, and
+  bug-finding recall is a documented strength there — the basis for the
   fable-reviewer seat.
 - **Which model the seats run is not established here.** All three of
   the seats declare the unversioned alias `model: fable`, so which model
@@ -41,9 +45,10 @@ near-verbatim; Fable-specific additions:
   versioned pin would be a tests-first change.
 - **Effort must be re-swept, and today governs nothing.** The 5.1 guide
   states that effort level names do not correspond to the same amount of
-  thinking across models, so the Fable 5 sweep does not carry. No Fable
-  seat file declares an effort at all, so the previous guidance applied
-  to nothing. Sweep with evals, never silently.
+  thinking across models, so Fable 5 effort guidance does not carry. No
+  Fable seat file declares an effort at all, so the previous guidance
+  applied to nothing, and this repo has never run a Fable effort sweep.
+  Sweep with evals, never silently.
 - **A truncated reply corrupts a retained artifact.** At `xhigh` and
   `max`, 5.1 can spend its budget thinking before it writes. The
   whole-branch reviewer's RAW reply is the artifact

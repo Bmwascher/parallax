@@ -1114,21 +1114,31 @@ def test_dispatch_traps_are_documented_in_the_notes():
 
 
 def test_fable_notes_are_51_and_keep_their_measurement_limits():
-    """0.29.0 item 74. Three sentences in the Fable section are the ones
-    a future edit is most likely to turn into a false measurement, so
-    each is pinned. Normalized read: these phrases wrap in the
-    reference and no needle here contains a newline.
+    """Item 74. Four things in the Fable section are the ones a future
+    edit is most likely to turn into a false measurement, so each is
+    pinned. Normalized read: these phrases wrap in the reference and no
+    needle here contains a newline. No version number is named here: the
+    bump happens after the diff debate, so a docstring that presumes one
+    is a claim this file cannot make.
     """
     notes = " ".join(read(REFERENCES / "model-prompting-notes.md").split())
+    # The HEADING itself, because test_seat_reshuffle's "### Fable 5"
+    # assertion is a substring test that stays green for "### Fable 5.1"
+    # AND for a revert to "### Fable 5". Without this line nothing in the
+    # suite would notice the section going back to the older model.
+    assert "### Fable 5.1" in notes
     # The seats carry an unversioned alias; what it resolves to is not
     # measured and may never be written as if it were.
     assert ("the seats declare the unversioned alias `model: fable`, so"
             " which model they run is UNVERIFIED") in notes
-    # Effort: the 5.1 guide says re-run the sweep across models, and no
-    # seat file declares an effort at all.
+    # Effort: the 5.1 guide says effort names do not carry across
+    # models, and no seat file declares an effort at all. The wording is
+    # "guidance", not "sweep": this repo has never run a Fable effort
+    # sweep, and a pin in a section about keeping unmeasured things
+    # unmeasured must not itself imply a measurement.
     assert ("effort level names do not correspond to the same amount of"
-            " thinking across models, so the Fable 5 sweep does not"
-            " carry") in notes
+            " thinking across models, so Fable 5 effort guidance does"
+            " not carry") in notes
     # The conversation-binding item is a FORWARD-LOOKING risk. It cannot
     # explain the three measured failures; saying it can would invent a
     # measurement, which is the one thing these notes may never do.
