@@ -33,8 +33,10 @@ def main():
         return 0
     lint = load_lint()
     tracked = git("diff", "--name-only", head) or ""
-    untracked = git("ls-files", "--others", "--exclude-standard") or ""
-    changed = [p for p in (tracked + untracked).splitlines() if p]
+    already = set(baseline.get("untracked_governed") or [])
+    untracked = [p for p in (git("ls-files", "--others", "--exclude-standard")
+                             or "").splitlines() if p and p not in already]
+    changed = [p for p in tracked.splitlines() if p] + untracked
     governed = sorted({p for p in changed if lint.is_governed(p)})
     backlog_changed = backlog_sha256() != baseline.get("backlog_sha256")
     if governed:

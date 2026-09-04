@@ -98,6 +98,12 @@ def start(repo, baseline_dir, session="s1"):
                                                "hook_event_name": "SessionStart"},
                     baseline_dir)
     assert proc.returncode == 0, proc.stdout + proc.stderr
+    # Without this the whole module passes by ACCIDENT when the host
+    # delivers no stdin: session_start.py then writes unknown.json and
+    # stop.py reads the same unknown.json, so both agree on nothing.
+    assert (Path(baseline_dir) / (session + ".json")).exists(), (
+        "no baseline for session %s; the payload did not reach python: %s"
+        % (session, proc.stdout + proc.stderr))
     return proc
 
 
@@ -116,6 +122,19 @@ class TestSessionStart:
         assert data["head"] == _git(repo, "rev-parse", "HEAD")
         digest = hashlib.sha256((repo / "BACKLOG.md").read_bytes()).hexdigest()
         assert data["backlog_sha256"] == digest
+
+    def test_payload_reaches_python(self, tmp_path):
+        """The stdin JSON must arrive intact. A distinctive cwd proves the
+        payload was PARSED, not that a default fired."""
+        repo = seed_repo(tmp_path)
+        base = tmp_path / "b"
+        marker = str(repo) + "/marker-cwd"
+        proc = run_hook(repo, "session_start.py",
+                        {"session_id": "s1", "cwd": marker,
+                         "hook_event_name": "SessionStart"}, base)
+        assert proc.returncode == 0, proc.stdout + proc.stderr
+        data = json.loads((base / "s1.json").read_text(encoding="utf-8"))
+        assert data["cwd"] == marker
 
     def test_absent_backlog_recorded(self, tmp_path):
         repo = seed_repo(tmp_path)
@@ -200,6 +219,26 @@ class TestStop:
         base = tmp_path / "b"
         start(repo, base)
         (repo / "tools" / "new.txt").write_text("b\n", encoding="utf-8")
+        assert stop(repo, base).returncode == 2
+
+    def test_preexisting_untracked_governed_file_does_not_block(self, tmp_path):
+        """One stale untracked file under a governed path must not block
+        every session forever; only what THIS session added counts."""
+        repo = seed_repo(tmp_path)
+        (repo / "tools" / "stale.txt").write_text("s\n", encoding="utf-8")
+        base = tmp_path / "b"
+        start(repo, base)
+        (repo / "docs" / "superpowers" / "specs" / "2026-09-04-backlog-rewrite-design.md"
+         ).write_text("y\n", encoding="utf-8")
+        proc = stop(repo, base)
+        assert proc.returncode == 0, proc.stdout + proc.stderr
+
+    def test_untracked_governed_file_after_start_still_blocks(self, tmp_path):
+        repo = seed_repo(tmp_path)
+        (repo / "tools" / "stale.txt").write_text("s\n", encoding="utf-8")
+        base = tmp_path / "b"
+        start(repo, base)
+        (repo / "tools" / "fresh.txt").write_text("f\n", encoding="utf-8")
         assert stop(repo, base).returncode == 2
 
     def test_governed_change_with_reattest_passes(self, tmp_path):

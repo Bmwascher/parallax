@@ -28,7 +28,10 @@ def load_lint():
 
 
 def read_payload():
-    raw = sys.stdin.read()
+    """Decode the hook's stdin as UTF-8. The entry point leaves stdin
+    untouched so this process inherits the real bytes; decoding here rather
+    than through the locale keeps a non-ASCII payload intact on Windows."""
+    raw = sys.stdin.buffer.read().decode("utf-8", "replace")
     try:
         return json.loads(raw) if raw.strip() else {}
     except json.JSONDecodeError:
@@ -57,6 +60,15 @@ def git(*args):
     if proc.returncode != 0:
         return None
     return proc.stdout
+
+
+def untracked_governed(lint):
+    """Governed paths that are untracked right now, sorted. Recorded at
+    SessionStart so the Stop check counts only what THIS session added: a
+    pre-existing untracked governed file would otherwise block every
+    session forever."""
+    listing = git("ls-files", "--others", "--exclude-standard") or ""
+    return sorted({p for p in listing.splitlines() if p and lint.is_governed(p)})
 
 
 def backlog_sha256():
