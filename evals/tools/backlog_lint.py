@@ -21,6 +21,11 @@ satisfies 10; the second reader named in the spec judges substance. Rule
 8 is a HEURISTIC that a reworded narrative evades; it exists for the
 migration and claims nothing more.
 
+The governed-range clause (`--range`) counts a CLOSE as a re-attestation:
+an item that was OPEN or PARTIAL before and is DONE or GONE after is named
+as '<id> (closed)'. That is a deliberate widening of the spec's 3b/3c
+wording; see `reattested_items`.
+
 Python 3 stdlib only.
 """
 import argparse
@@ -319,6 +324,8 @@ def rule_11_pointer(pointer_text):
 
 
 def rule_12_headers(doc):
+    """Group headers only. Rule 3 is the sole owner of stray ranking lines,
+    so a single stray line is reported once and not twice."""
     out = []
     for group in doc.groups:
         if group.raw_header == "":
@@ -327,9 +334,6 @@ def rule_12_headers(doc):
         if len(words) > 8:
             out.append("ranking: rule 12 (header shape): %r has %d words, "
                        "at most 8 allowed" % (group.raw_header, len(words)))
-        for line in group.stray_lines:
-            out.append("ranking: rule 12 (header shape): non-header non-id line %r"
-                       % line)
     return out
 
 
@@ -338,8 +342,12 @@ def rule_1_header(item):
     names = [k for k, _ in item.fields]
     status = item.get("Status")
     if names[:1] != ["Status"]:
-        out.append("item %s: rule 1 (header block): fields out of order: "
-                   "first field must be Status" % item.id)
+        if "Status" not in names:
+            out.append("item %s: rule 1 (header block): missing field Status"
+                       % item.id)
+        else:
+            out.append("item %s: rule 1 (header block): fields out of order: "
+                       "first field must be Status" % item.id)
         return out
     if status not in STATUSES:
         out.append("item %s: rule 1 (header block): Status must be one of %s, got %r"
@@ -545,18 +553,39 @@ def _verified_map(text):
 
 
 def reattested_items(old_text, new_text):
+    """Ids re-attested between the two texts, in two forms.
+
+    An item that is OPEN or PARTIAL in the new text counts when its
+    Verified field changed or the item is new. An item that was OPEN or
+    PARTIAL in the old text and is DONE or GONE in the new one also
+    counts, reported as '<id> (closed)': closing an item IS an
+    attestation about the governed work that closed it.
+
+    The second form is a DELIBERATE WIDENING of the spec's 3b and 3c
+    wording, which speaks only of a re-attested OPEN or PARTIAL item.
+    Without it a wave whose only backlog change is a close could never
+    satisfy the Stop hook or the pre-push clause. Everything else is
+    unchanged: a Verified edit on an item that is DONE in BOTH texts does
+    not count, and an unrelated byte does not count.
+    """
     old = _verified_map(old_text)
     new = _verified_map(new_text)
     out = []
     for item_id, (status, verified) in new.items():
-        if status not in OPEN_STATUSES:
-            continue
-        if item_id not in old or old[item_id][1] != verified:
-            out.append(item_id)
+        if status in OPEN_STATUSES:
+            if item_id not in old or old[item_id][1] != verified:
+                out.append(item_id)
+        elif status in ("DONE", "GONE"):
+            if item_id in old and old[item_id][0] in OPEN_STATUSES:
+                out.append("%s (closed)" % item_id)
     return out
 
 
 def range_check(repo_root, range_spec, today):
+    """The governed-range clause: if the range touched a governed path,
+    BACKLOG.md must carry a re-attested item. `reattested_items` decides
+    what counts, and it deliberately widens the spec's 3b/3c wording so a
+    CLOSE (OPEN or PARTIAL becoming DONE or GONE) counts too."""
     if ".." in range_spec:
         base, head = range_spec.split("..", 1)
         if not base or not head:

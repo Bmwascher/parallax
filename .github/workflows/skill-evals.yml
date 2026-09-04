@@ -56,7 +56,10 @@ jobs:
       # On a push this runs AFTER the ref moved (detection); on a pull
       # request it runs before the merge but only prevents it when the
       # job is a required check, which is a repository ruleset outside
-      # this tree (spec 3d).
+      # this tree (spec 3d). A `before` sha missing from history (a
+      # force-push, a rewritten ref) makes the step FAIL with "git could
+      # not list the changed paths"; that is fail-closed and a history
+      # problem, not a tool bug.
       - name: Tier 2d - backlog governed-range check
         if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
         env:

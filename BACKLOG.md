@@ -1660,9 +1660,9 @@ way on its first run.
 
 ## 47b. The implementer lane's opt-out preamble is unmeasured
 Status: OPEN
-Cost: only once something measures whether the opt-out changes what the model does
+Cost: while this half stays open a codex lane may still take instruction from the operator's `~/.codex/AGENTS.md`, and the preamble that would answer that is a mitigation whose effect nothing measures
 Pairs: none
-Verified: 2026-09-04 7463c7b873c8
+Verified: 2026-09-04 0c5188b87ab5
 
 **Raised by the user 2026-08-15** from the same reference-repo commit as
 item 47a. The half filed here is the preamble: a spec opening that declares

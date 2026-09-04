@@ -15,8 +15,6 @@ import pytest
 
 REPO = Path(__file__).resolve().parents[2]
 FIXTURES = REPO / "evals" / "multi-model-verify" / "fixtures" / "backlog"
-POWERSHELL = (os.environ.get("PARALLAX_PS_HOST")
-              or shutil.which("powershell") or shutil.which("pwsh"))
 
 
 def _git(repo, *args, check=True):

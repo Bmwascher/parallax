@@ -320,6 +320,23 @@ def failures_full(text, pointer=None, repo_root=REPO, revision=None):
                       pointer_text=pointer if pointer is not None else pointer_text())
 
 
+class TestRule1Messages:
+    def test_missing_status_says_missing_not_out_of_order(self):
+        text = clean_text().replace("Status: OPEN\n", "", 1)
+        out = failures_full(text)
+        assert any("item 1: rule 1 (header block): missing field Status" in f
+                   for f in out)
+        assert not any("fields out of order" in f and "item 1:" in f for f in out)
+
+    def test_misplaced_status_still_says_out_of_order(self):
+        text = clean_text().replace(
+            "Status: OPEN\nCost: one line of cost\n",
+            "Cost: one line of cost\nStatus: OPEN\n", 1)
+        out = failures_full(text)
+        assert any("item 1: rule 1 (header block): fields out of order: "
+                   "first field must be Status" in f for f in out)
+
+
 class TestRules8To12:
     @pytest.mark.parametrize("phrase", lint.BANNED_NARRATIVE)
     def test_rule_8_banned_phrase_in_open_body(self, phrase):
@@ -403,6 +420,14 @@ class TestRules8To12:
             "### Last - housekeeping and open questions that nobody has ranked")
         out = failures_full(text)
         assert any(f.startswith("ranking: rule 12") for f in out)
+
+    def test_rule_3_owns_stray_ranking_lines_alone(self):
+        """A stray ranking line is rule 3's, and reported ONCE: rule 12
+        keeps only the eight-word header check."""
+        text = clean_text().replace("- 3\n", "- 3\nnot an id\n", 1)
+        out = failures_full(text)
+        stray = [f for f in out if "not an id" in f]
+        assert len(stray) == 1 and stray[0].startswith("ranking: rule 3")
 
     def test_clean_fixture_passes_every_rule(self):
         assert failures_full(clean_text()) == []
@@ -502,6 +527,23 @@ class TestReattested:
         old = clean_text()
         new = _refresh(old, "2", date="2026-09-03")
         assert lint.reattested_items(old, new) == []
+
+    def test_close_counts_as_a_reattestation(self):
+        """A wave whose only backlog change is a CLOSE still attests. The
+        widening is deliberate; the id is named with '(closed)'."""
+        old = clean_text()
+        new = old.replace("## 1. First open item\nStatus: OPEN",
+                          "## 1. First open item\nStatus: DONE", 1)
+        assert lint.reattested_items(old, new) == ["1 (closed)"]
+
+    def test_done_in_both_texts_never_counts(self):
+        """Item 2 is DONE in both texts; neither a Verified edit nor an
+        untouched item may produce a '(closed)' entry."""
+        old = clean_text()
+        assert lint.reattested_items(old, old) == []
+        new = _refresh(old, "2", date="2026-09-03")
+        assert lint.reattested_items(old, new) == []
+        assert not any("(closed)" in i for i in lint.reattested_items(old, new))
 
     def test_absent_old_text_counts_every_open_item(self):
         assert lint.reattested_items(None, clean_text()) == ["1", "3"]
