@@ -78,6 +78,7 @@ The full previous text of every closed item is in git history at
 - 83
 - 84
 - 85
+- 86
 
 ## 1. Replace the pin mechanism
 Status: DONE
@@ -3703,3 +3704,32 @@ requires the fields the binder requires (`kind`, and per kind the
 rollout path, session id, byte count and prefix hash, or the fresh
 inventory), refusing before it reserves the dispatch directory. A test
 per malformed shape.
+
+## 86. A killed drift run leaves no toast, no pending entry and no report line
+Status: OPEN
+Cost: one weekly run can vanish without a trace; item 2 made the AGENT's death loud, this is the SCRIPT's
+Pairs: none
+Verified: 2026-09-04 893cf17fa19c
+
+**Measured 2026-09-04 while triaging the 2026-09-01 drift run.** The
+scheduled task's last result is `-1073741510` (0xC000013A, the process was
+terminated). `tools/check-drift.ps1` had written the report, created the
+worktree and the `drift/2026-09-01_131705-2812` branch, and started the
+auto-triage wrapper; then it was killed. What it left: an empty
+`-autotriage.txt`, an empty `-autotriage-err.txt`, no `-autotriage-exit.txt`,
+no `Auto-triage verdict` line in the report, no toast, and no entry in
+`tools/drift-pending.json`. The next weekly run re-surfaces only the two
+OLDER pending entries, so the killed run is invisible to every reader the
+design has: the toast, the pending file, the doctor and this command.
+
+**Why item 2 did not cover it.** Item 2 made a run that does not FINISH
+toast `AUTO-TRIAGE FAILED` with a cause, but every one of those paths runs
+inside the script after the agent returns. A kill of the script itself
+(scheduler stop, logoff, shutdown, a `Stop-Process` on the host) runs none
+of them, and the pending entry is written last of all.
+
+**Shape of a fix, none decided.** Write the pending entry BEFORE the
+auto-triage starts, as `manual-triage-needed` with `failure = "auto-triage
+did not report"`, and rewrite it at the end with the real outcome; a run
+that dies in between then re-surfaces as a failure, not as silence. The
+state-machine suite gets a scenario that kills the wrapper mid-run.
