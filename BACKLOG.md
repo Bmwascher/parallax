@@ -3419,7 +3419,7 @@ rules on the same contract surface, and this one is the narrowest.
 Status: OPEN
 Cost: low for parallax: it blocks nothing and loses nothing, and the cost is a turn rather than correctness
 Pairs: none
-Verified: 2026-09-04 3d961eb0ffd2
+Verified: 2026-09-04 caa57d54a0ba
 
 **Filed 2026-09-04, measured the same day.** The hook is
 `~/.claude/hooks/git-guard.ps1`, wired as a PreToolUse hook in
@@ -3436,16 +3436,18 @@ so a message that NAMES a flag is read as PASSING that flag. The rule is
 
 **Measured, ten cases, against the hook at sha256
 `b132b448d067a39111fde3f674f4cbcd70873ab455d144d908d68217b86e5e12`.**
-Four were DENIED, including two ordinary parameter names and a message
-quoting a staging command. Three were ALLOWED, including two parameter
-names carrying no `a` and no lowercase `a` in a denied position. The real
-violation was denied correctly, so the rule still does its job.
+DENIED: `-DispatchHost`, `-Prepare`, `--all`, and a message quoting
+`git add -A`. ALLOWED: `-SealedPriorStateSha256`, `-Classify`, `-Recurse`,
+and two messages naming no flag. The real violation, an actual `-a`, was
+denied correctly, so the rule still does its job.
 
 **What the discriminator actually is, and it is not meaning.** A token
 beginning `-`, whose FIRST LETTER is not one of `m C c F t u S`, that
-contains an `a` in either case. The lookahead exists for an unrelated
-reason: it is there so an `-m` cluster's attached argument is not mistaken
-for the flag.
+contains an `a` in either case. `-Prepare` carries an `a` and is denied;
+`-Recurse` carries none and passes. `-Classify` and
+`-SealedPriorStateSha256` pass on their first letter alone, and that
+lookahead exists for an unrelated reason: it is there so an `-m` cluster's
+attached argument is not mistaken for the flag.
 
 **A second instance, in the same session.** The probe command that measured
 this was itself denied, because its ARRAY LITERAL held one of the case
@@ -3460,9 +3462,9 @@ record less precise about exactly the surfaces this repo pins.
 
 **Shape of a fix, none decided.** Strip quoted spans from the segment
 before the flag scan, or scan only the tokens up to the first `-m` or `-F`
-argument. Either must be checked for the CONVERSE defect: a real staging
-flag sitting after a quoted argument must still be denied. That check
-belongs with the hook, in whatever repository maintains it.
+argument. Either must be checked for the CONVERSE defect: a real `-a`
+sitting after a quoted argument must still be denied. That check belongs
+with the hook, in whatever repository maintains it.
 
 It is filed so the next person who hits it finds it measured rather than
 measuring it again.
