@@ -75,7 +75,7 @@ The other four: cleanup was a later step rather than a harness guarantee and the
 
 These are established, in this repo, and are not re-derived. Citations are to the artifact that holds each.
 
-1. **`~/.agents/skills/` holds 27 skill directories on this machine** (`docs/superpowers/plans/2026-07-27-0150-backlog.md:41`, corroborated at `docs/superpowers/plans/rounds/2026-07-31-kimi-code-swap/kimi-live-debate-record.md:39`), and `KIMI_CODE_HOME` does not relocate it (`docs/superpowers/plans/rounds/2026-07-31-kimi-code-swap/probe-record.md:92-96`). Re-enumerated live 2026-08-03: 27. **The count and the non-relocation are two facts from two sources, and revision 5 cited only the second for both** — the probe record does not contain the number anywhere.
+1. **`~/.agents/skills/` holds 27 skill directories on this machine** (`docs/superpowers/plans/2026-07-27-0150-backlog.md@4448291:41`, corroborated at `docs/superpowers/plans/rounds/2026-07-31-kimi-code-swap/kimi-live-debate-record.md:39`), and `KIMI_CODE_HOME` does not relocate it (`docs/superpowers/plans/rounds/2026-07-31-kimi-code-swap/probe-record.md:92-96`). Re-enumerated live 2026-08-03: 27. **The count and the non-relocation are two facts from two sources, and revision 5 cited only the second for both** — the probe record does not contain the number anywhere.
 2. **`Skill` is on the reviewer agent's explicit `disallowedTools` DENY LIST**, at `skills/multi-model-verify/references/kimi-reviewer-agent.md:21`, one of 17 names running `:11-27` — it is not merely absent from the 5-name allowlist. Backlog item 17's own wording is stale on this point, and the fix therefore flips a denied tool rather than adding a missing one.
 3. **The lane already records two surfaces that would show a skill reaching the model.** The session log's `llm config` line carries `systemPromptChars` and `toolCount`; `llm.request` in `agents/main/wire.jsonl` carries `systemPromptHash` and `toolsHash`; `llm.tools_snapshot` carries the exact tool schemas sent (`probe-record.md:170-190`).
 4. **`systemPromptChars` equals the agent file body's LF-normalized length**, and `tools/read-kimi-round-evidence.ps1:877-879` already FAILS a round where it does not. So any skill text merged into the system prompt already reads as a route-attribution failure today.
@@ -155,7 +155,7 @@ Backlog item 10 says CI exercises neither the probe nor the mirror. That has bee
 **Files:**
 - Modify: `evals/multi-model-verify/test_codex_context_probe.py:50-53`
 - Modify: `evals/multi-model-verify/test_review_mirror.py:31-34`
-- Modify: `docs/superpowers/plans/2026-07-27-0150-backlog.md` — item 10's heading at `:577` and its status at `:11-14`
+- Modify: `docs/superpowers/plans/2026-07-27-0150-backlog.md@4448291` — item 10's heading at `:577` and its status at `:11-14`
 - Modify: `evals/multi-model-verify/test_backup_lane.py` — append one test
 
 - [ ] **Step 1: Write the failing test.** Append to `evals/multi-model-verify/test_backup_lane.py`:
@@ -972,7 +972,7 @@ Lane home `~/.parallax-kimi-review`, credential `ok`. The lock was `held` by a D
 | 16 | Rebuilding every cell at one resolved home path, as an alternative to demoting readout 3 | session | refuted, on the record | a reused debate home carries another debate's sessions into this one's evidence (`.claude/state/handoff.md` standing rules) |
 | 17 | E2 should resume rather than run a fresh home | session | confirmed by reviewer at round 3 | a warmed path can only make C/D fail to match, which fails closed |
 | 18 | An unknown tool-result record shape should make the probe unrunnable rather than VOID | session | confirmed by reviewer at round 3 | fail-closed invariant |
-| 19 | Measured fact 1 cited `probe-record.md:92-96` for the 27-directory count, and that file does not contain the number anywhere | Kimi lane | accepted; repointed to `docs/superpowers/plans/2026-07-27-0150-backlog.md:41` | verified: `27` does not occur in the probe record; Task 4 Step 4 hardcodes the value as its restoration gate |
+| 19 | Measured fact 1 cited `probe-record.md:92-96` for the 27-directory count, and that file does not contain the number anywhere | Kimi lane | accepted; repointed to `docs/superpowers/plans/2026-07-27-0150-backlog.md@4448291:41` | verified: `27` does not occur in the probe record; Task 4 Step 4 hardcodes the value as its restoration gate |
 | 20 | Task 5's deletion range `:848-856` over-ranged by three lines, beheading the NEXT pin's comment and orphaning the retired pin's own | Kimi lane | accepted; corrected to `:842-853` | verified: assert at `:848-853`, its comment at `:842-847`, next pin's comment opens at `:854`. The suite passes either way, which is what makes it a trap |
 | 21 | The write-probe leg had no named outcome on failure | Kimi lane | accepted, though the lane rated it weak and did not press it | a driver following the step should not have to derive STOP from the global invariant |
 | 22 | Selector cited `:55-61` (mid-assignment) and `DECLARED_REGIONS` cited `:651-664` (inside the set, not its bounds); fact 10 carried no citation at all | Kimi lane | accepted | `test_codex_context_probe.py:54-61`, `test_contract_coverage.py:624-672` |
