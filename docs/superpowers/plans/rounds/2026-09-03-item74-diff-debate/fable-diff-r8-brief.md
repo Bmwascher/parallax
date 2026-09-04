@@ -4,9 +4,10 @@ The exact text sent to the same-harness lane for round 8, written to disk
 BEFORE it was sent. This is the first round for which this lane's brief
 exists as an artifact; rounds 1 to 7 were agent messages and left none.
 
-The transport prepends one line to the message body ("Round 8. Your round 7
-findings are all applied..."); everything from the continuity check down is
-this file.
+This file is the COMPLETE message as sent, first line included. An earlier
+version of this header said the transport prepended that line and that the
+file began at the continuity check; both were wrong, and the lane that
+received the message caught it in round 9.
 
 ---
 

@@ -4,7 +4,7 @@ Branch `item74-fable-5-1-notes`. Base `5d20eed`. Two lanes, hub-and-spoke.
 
 Two different bindings, because an earlier version of this sentence ran
 them together and was wrong. THE ROUND TABLE below is complete through
-round 8, which is the last. THE INVENTORY and the hash tables describe this directory at the
+round 9, which is the last. THE INVENTORY and the hash tables describe this directory at the
 commit that carries this text, not at any round's subject revision; the
 briefs, for instance, entered the directory during round 6 and were absent
 at round 6's own subject revision. A count about a tree the document sits
@@ -40,11 +40,15 @@ measurement, and it is the only such check either lane performed.
 | 6 | `233a340` | VOID, see incident | FIX |
 | 7 | `08ba01b` | FIX | FIX |
 | 8 | `fa86675` | ATTEST | ATTEST |
+| 9 | `20d557a` | FIX, attestation withdrawn | PASS, attestation carries |
 
-ROUND 8 CLOSED THE DEBATE. Both lanes attested the same revision, each with
+ROUND 8 ATTESTED THE WORK. Both lanes attested the same revision, each with
 its own narrowed claim naming what it excludes. Both exclusion lists are in
 the round 8 replies; they agree on every item and the same-harness lane
 names four more that only it could not check.
+
+ROUND 9 SPLIT ON WHETHER THAT ATTESTATION COULD STAND, AND THE BRANCH IS
+BEING MERGED UNATTESTED AS A RESULT. See the section below.
 
 Round 3 is the split. Both lanes named the same five LOCATORS into
 `model-prompting-notes.md`, and they disagreed about more than ownership.
@@ -70,17 +74,17 @@ lane traced its reach in round 7.
 `whole-branch-review.md` is the required pre-debate whole-branch review,
 cited by SHA-256 in the round 1 brief.
 
-`sol-diff-r1-brief.md` through `sol-diff-r8-brief.md` are the exact texts
+`sol-diff-r1-brief.md` through `sol-diff-r9-brief.md` are the exact texts
 piped to the cross-vendor lane, copied verbatim from the dispatch brief
 files. That lane confirmed in round 7 that all six then retained were what
 it was actually sent (`sol-diff-r7-reply.md`, N2); briefs 7 and 8 were
 retained after that check and carry no such confirmation.
 
-`sol-diff-r1-reply.md` through `sol-diff-r8-reply.md` are that lane's raw
+`sol-diff-r1-reply.md` through `sol-diff-r9-reply.md` are that lane's raw
 replies, copied verbatim from each dispatch directory's `reply` file. There
 is NO round 6 reply: that round is void, see the incident.
 
-`fable-diff-r2-reply.md` through `fable-diff-r8-reply.md` are the
+`fable-diff-r2-reply.md` through `fable-diff-r9-reply.md` are the
 same-harness lane's replies, transcribed from the subagent result. That
 lane writes no reply file, so these are a transcription rather than a copy
 of an artifact, and each file says so rather than let it read as one.
@@ -90,12 +94,14 @@ were sent as agent messages and no artifact was written, so unlike the
 cross-vendor briefs there is nothing to copy. What each lane was asked
 therefore differs in how well it can be checked for those rounds.
 
-FROM ROUND 8 BOTH LANES' BRIEFS ARE RETAINED. `fable-diff-r8-brief.md`
-exists because that round's brief was written to disk BEFORE it was sent,
+FROM ROUND 8 BOTH LANES' BRIEFS ARE RETAINED. `fable-diff-r8-brief.md` and
+`fable-diff-r9-brief.md` exist because those briefs were written to disk
+BEFORE they were sent,
 which is the practice this debate's own finding produced. Do that from the
-first round of the next debate. That file holds the message body from the
-continuity check down; the transport prepends one line, which the file's
-header states.
+first round of the next debate. Each retained brief is the COMPLETE message
+as sent; an earlier version of this paragraph and of
+`fable-diff-r8-brief.md`'s header wrongly said the transport prepended a
+line, and the receiving lane caught it in round 9.
 
 FABLE'S ROUND 1 REPLY IS NOT RETAINED. The session that ran it lost the
 agent to a context break before any artifact was written, and the round 1
@@ -180,6 +186,7 @@ fact about what the lane produced.
 | 5 | `475051dd0be4f788eb78ae78c3bb3a0d08342ad246c1765d1278475a5b9424ac` |
 | 7 | `73c62591d6e9d9135eb4eab6c32be1e1033fc801f45c154869ec57f583be1627` |
 | 8 | `cc7efd90cc8b487432e2585a553d24b683456e5d858acc250e495f763525e41c` |
+| 9 | `db472dec819862b61cd39ae3521b8001dec3d94d4f683dbae5ce226f4c869318` |
 
 The same-harness lane's replies have no such artifact. They are
 transcriptions, and nothing hashes them.
@@ -229,6 +236,61 @@ rebuild with `-Force` and a fresh override path. That is a materially
 different outcome from this incident and is not a second instance of it.
 Nothing in this directory records it; it is the session's own recollection
 and no artifact survives.
+
+## ROUND 9: the attestation was withdrawn, and this branch merges unattested
+
+Round 9 was narrow by design: confirm that the round 8 attestation carried
+to the closing head, and settle the `Verification status` field, which the
+session declined to choose alone because the flattering reading was
+available to it.
+
+The lanes SPLIT, on a gating record, for the second time in this debate.
+
+The same-harness lane confirmed its attestation carried, and answered FULL
+under the reading that a wrapper exiting 1 is not a round at all, so the
+void produced no evidence to be unclean. It proposed recording the void as
+`Degradation: round-voided` on a FULL status, using the shape the format
+already uses for lane substitution. It held the absent application
+checkpoint should be EXCLUDED from the attestation rather than waived.
+
+The cross-vendor lane WITHDREW ITS ATTESTATION. It holds that the missing
+application checkpoint cannot be reduced to an exclusion, and that neither
+FULL nor DEGRADED is truthful here.
+
+THE SESSION READ THE CONTRACT AND SIDED WITH THE CROSS-VENDOR LANE, against
+the lane whose answer was more convenient.
+`skills/multi-model-verify/references/application-checkpoint.md` says the
+checkpoint, not the verdict, is what authorizes touching files; that it
+applies to post-adjudication fixes during a debate, which is exactly what
+every round of this debate produced; that emission is never optional and
+pre-authorization skips only the wait; and that the terminal PASS AND ITS
+ATTESTATION come only after the checkpoint, the application and the
+re-verification. A precondition cannot be excluded by the record that
+depends on it. Treating it as an exclusion would let an unmade
+authorization read as a disclosed gap, which is this repository's worst
+failure class wearing a different suit.
+
+That lane's own remedy was to replay every fix wave from the pre-fix
+revision under a checkpoint emitted before the first edit. THE USER WAS
+TOLD AND CHOSE OTHERWISE: merge unattested with the violation recorded,
+rather than spend the replay or fabricate a retrospective artifact. The
+same choice was put to the user in the 0.28.0 cycle at commit `15f85ec`,
+where the decision went the other way and the gap was attested over; this
+time it is not attested at all, which is the stricter of the two.
+
+SO THERE IS NO ATTESTATION FOR THIS BRANCH. No record was written by
+`tools/write-attestation.ps1`, and none should be looked for. The work was
+attested by both lanes at `fa86675` and that stands as a review outcome, not
+as a repository attestation record.
+
+The `Verification status` question is therefore unresolved rather than
+answered, and it is a real contract gap: the format defines no value for a
+round that was voided and cleanly re-run. The cross-vendor lane asked for
+one before any future emission. Filed as item 78.
+
+Round 9's own record, this section included, was NOT reviewed by either
+lane. It reports a user decision and a contract reading, both made after the
+last round closed.
 
 ## Why the replies are retained at all
 

@@ -135,6 +135,26 @@ with its KIND instead, as in `Gate: pytest 5.1` or `Mirror build`.
 `-Prepare` now PRINTS the name, so the convention has a source; nothing
 enforces its use.
 
+**DO NOT TOUCH THE REVIEWED TREE BETWEEN `-Prepare` AND THE WRAPPER'S
+EXIT.** The wrapper verifies the mirror's identity after the round runs,
+and the source fingerprint is built from what `git status` names, so a new
+UNTRACKED file is enough to fail it. The round then classifies as `1`, its
+reply is not evidence, and the quota is spent for nothing. Measured
+2026-09-04: writing six documentation files into the repo mid-round voided
+a completed cross-vendor round, and the remedy cost a second dispatch, so
+the price was two rounds. The gate is in `tools/dispatch-round.ps1`; NO
+prose rule in `skills/` carries it, which is why it is written here. Queue
+edits until the wrapper exits, however small and however unrelated they
+look.
+
+**WRITE EVERY BRIEF TO DISK BEFORE SENDING IT**, both lanes, outside the
+reviewed tree. The codex lane gets this free, because the dispatch pipes a
+file. The same-harness lane does NOT: a brief sent as an agent message
+leaves no artifact, and it cannot be retained afterwards. Measured in the
+same debate: seven of that lane's briefs are permanently unrecoverable, so
+the record can show what one lane was asked and not the other. A scratchpad
+file costs nothing and the closing commit retains it.
+
 ## Dev loop
 The plugin is installed user-scope from a LOCAL marketplace pointing at
 this working copy, but installs are VERSIONED CACHE COPIES — checkout
