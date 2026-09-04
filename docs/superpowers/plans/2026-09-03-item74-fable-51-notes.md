@@ -21,13 +21,18 @@ the reasons for each, including two corrections to its own earlier drafts.
 
 ## Global Constraints
 
-- **`SKILL.md` NET ADDITIONS MUST BE ZERO OR NEGATIVE.** Measured
+- **`SKILL.md` MUST STAY UNDER ITS HARD CEILING OF 6500 TOKENS.** Measured
   2026-09-03: the body is 413 lines against a warn threshold of 400 and a
-  spec limit of 500, and roughly 6437 tokens against a budget of ~5250 and a
-  **hard ceiling of 6500**. There are about 63 tokens of headroom. Every
-  Task 2 replacement must be the same length or shorter than what it
-  replaces. Re-run `python evals/tools/skill_lint.py skills/multi-model-verify --strict`
-  after every `SKILL.md` edit and record the reported token count.
+  spec limit of 500, and roughly 6437 tokens against a budget of ~5250 and
+  that hard ceiling. About 63 tokens of headroom. Task 2's replacement is
+  MEASURED as 12 characters longer per occurrence and there are two
+  occurrences in `SKILL.md`, so this branch spends headroom rather than
+  saving it; that is accepted, and the ceiling is the gate. Prefer wording
+  that is neutral or shorter where it costs nothing. Re-run
+  `python evals/tools/skill_lint.py skills/multi-model-verify --strict`
+  after every `SKILL.md` edit and record the reported token count. If the
+  lint reports an ERROR rather than a WARN, or the count reaches 6500, STOP
+  and report rather than trimming unrelated text to make room.
 - **`tools/dispatch-round.ps1` is "Windows PowerShell 5.1 compatible, ASCII
   only"** (its own header, `tools/dispatch-round.ps1:128`). No non-ASCII
   character may enter that file.
@@ -279,9 +284,12 @@ Expected: PASS, including the new assertion.
 python evals/tools/skill_lint.py skills/multi-model-verify --strict
 ```
 
-Expected: PASS, with a token count no higher than Step 1's. If it rose,
-shorten the replacement rather than accepting the increase; the ceiling is
-6500 and there are about 63 tokens of headroom.
+Expected: PASS, with the same two size WARNs the run already emits and no
+ERROR. The count is EXPECTED TO RISE, because the replacement is measured as
+longer; what must hold is that it stays below the hard ceiling of 6500.
+Record the new count beside Step 1's in the task report. If it reaches 6500,
+or the lint reports an ERROR, STOP and report rather than trimming unrelated
+text to make room.
 
 - [ ] **Step 7: Commit**
 
