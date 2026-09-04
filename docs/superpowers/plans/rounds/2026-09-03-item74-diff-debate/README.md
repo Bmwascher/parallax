@@ -1,13 +1,15 @@
 # Item 74 mode-diff debate, round record
 
 Branch `item74-fable-5-1-notes`. Base `5d20eed`. Two lanes, hub-and-spoke.
-Counts in this file are bound to `233a340` and this directory's own state
-at that commit; a count about a tree the document sits in goes stale on the
-next edit, which is item 70's convention and was broken once here already.
 
-At `233a340`: six rounds dispatched, five answered by both lanes and
-recorded below. Round 6 was invalidated for the cross-vendor lane; see the
-incident note at the end.
+Two different bindings, because an earlier version of this sentence ran
+them together and was wrong. THE ROUND TABLE below is complete through
+round 7. THE INVENTORY and the hash tables describe this directory at the
+commit that carries this text, not at any round's subject revision; the
+briefs, for instance, entered the directory during round 6 and were absent
+at round 6's own subject revision. A count about a tree the document sits
+in goes stale on the next edit, which is item 70's convention and has been
+broken twice here.
 
 ## Blindness, and where it ended
 
@@ -21,6 +23,11 @@ reply, and both did. That was the price of making the round 4 attribution
 finding checkable, and it is stated here rather than left under a sentence
 claiming blindness throughout. Weigh rounds 5 and later accordingly.
 
+The same-harness lane ran its own contamination check in round 7 and
+reported that no finding of its own in rounds 5 or 6 originated in the
+other lane's text (`fable-diff-r7-reply.md`, N4). That is its word, not a
+measurement, and it is the only such check either lane performed.
+
 ## Subject revision per round
 
 | Round | Subject revision | Sol | Fable |
@@ -30,36 +37,43 @@ claiming blindness throughout. Weigh rounds 5 and later accordingly.
 | 3 | `ee27f27` | FIX | PASS |
 | 4 | `fad9b2b` | PASS | FIX |
 | 5 | `b9c17bc` | FIX | FIX |
-| 6 | `233a340` | VOID, see below | FIX |
+| 6 | `233a340` | VOID, see incident | FIX |
+| 7 | `08ba01b` | FIX | FIX |
 
 Round 3 is the split. Both lanes named the same five LOCATORS into
 `model-prompting-notes.md`, and they disagreed about more than ownership.
 The cross-vendor lane called all five stale and all five merge blockers.
 The same-harness lane called four stale, treated the fifth - item 66's
 `:46-52` - as a historical reference bound to its own cycle by its wording,
-and held all of them outside the branch's scope. An earlier version of this
-file said the disagreement was "ownership, not facts"; that was wrong, and
-the cross-vendor lane caught it in round 5 by reading the retained replies
-this directory exists to hold.
+and held all of them outside the branch's scope.
 
 It was settled by reading the notes at `5d20eed` rather than by preference:
 four were already stale at base, and `:46-52` was CORRECT at base and broken
 by this branch. So neither lane had it right. Recorded under item 69 in the
 backlog.
 
+THAT ERROR TRAVELLED FURTHER THAN THIS FILE. An earlier version here said
+the lanes "disagreed on ownership, not on facts". The retained briefs show
+the same false premise was put to BOTH lanes in their round 4 briefs
+(`sol-diff-r4-brief.md`), so it shaped round 4's adjudication and not only
+this summary. The cross-vendor lane caught it in round 5; the same-harness
+lane traced its reach in round 7.
+
 ## What is retained here, and what is not
 
 `whole-branch-review.md` is the required pre-debate whole-branch review,
 cited by SHA-256 in the round 1 brief.
 
-`sol-diff-r1-brief.md` through `sol-diff-r6-brief.md` are the exact texts
+`sol-diff-r1-brief.md` through `sol-diff-r7-brief.md` are the exact texts
 piped to the cross-vendor lane, copied verbatim from the dispatch brief
-files.
+files. That lane confirmed in round 7 that all six then retained were what
+it was actually sent (`sol-diff-r7-reply.md`, N2).
 
-`sol-diff-r1-reply.md` through `sol-diff-r5-reply.md` are that lane's raw
-replies, copied verbatim from each dispatch directory's `reply` file.
+`sol-diff-r1-reply.md` through `sol-diff-r7-reply.md` are that lane's raw
+replies, copied verbatim from each dispatch directory's `reply` file. There
+is NO round 6 reply: that round is void, see the incident.
 
-`fable-diff-r2-reply.md` through `fable-diff-r5-reply.md` are the
+`fable-diff-r2-reply.md` through `fable-diff-r7-reply.md` are the
 same-harness lane's replies, transcribed from the subagent result. That
 lane writes no reply file, so these are a transcription rather than a copy
 of an artifact, and each file says so rather than let it read as one.
@@ -81,7 +95,7 @@ FRESH dispatch for that reason.
 
 Recorded here because they otherwise live only in briefs.
 
-Gates at every subject revision from `e0dbb89` to `233a340`: all five green,
+Gates at every subject revision from `e0dbb89` to this head: all five green,
 2720 passed and 14 skipped, unchanged across every round.
 
 THE BEHAVIOURAL SUITE HAS THREE FAILURES AND THEY ARE BASELINE. Measured
@@ -89,8 +103,8 @@ once, in round 1, against the checkout with `--head`: `plan-mode-debate-runs`
 2/4, `diff-mode-spec-fidelity` 3/4, `no-manufactured-objections` 1/3. The
 same three fail against the installed 0.28.1 cache, none worse.
 `plan-mode-debate-runs` improved from 0/4 to 2/4 with `--head`, attributed
-to this branch's dispatch fix. It was NOT re-run for any of the five
-amendments, all of which are documentation prose.
+to this branch's dispatch fix. It was NOT re-run for any amendment since,
+all of which are documentation prose.
 
 THERE IS NO SDD LEDGER FOR THIS BRANCH. The plan's header requires
 `superpowers:subagent-driven-development`, which writes a
@@ -116,17 +130,26 @@ The cross-vendor lane WAS ASKED in rounds 2 and 3 and did NOT answer. The
 asking is checkable: `sol-diff-r2-brief.md` and `sol-diff-r3-brief.md` both
 carry the `<continuity-check>` block. The not-answering is checkable too:
 `sol-diff-r2-reply.md` and `sol-diff-r3-reply.md` open straight into the
-claims. It answered in rounds 4 and 5, in the first line of each reply.
+claims. It answered in rounds 4, 5 and 7, in the first line of each reply.
 Nothing noticed at the time and no round was re-run over it. That is the
 gap, in this debate's own record.
 
 ## Source hashes for the copied replies
 
 SHA-256 of each cross-vendor `reply` file as it was read from its dispatch
-directory. The retained file is that content with a header prepended above
-the `---` separator; hashing the retained body below the separator
-reproduces the value. The dispatch directories are temporary and will not
-survive, so these are recorded rather than the artifacts.
+directory.
+
+TO REPRODUCE ONE: take the retained file's bytes after the `---` separator
+line, and REMOVE THE SINGLE TRAILING NEWLINE the retention appended. Hashing
+the retained body as stored does NOT reproduce these values. An earlier
+version of this section said it did; the cross-vendor lane checked and
+reported that none of the five matched, which is the whole reason a hash
+table belongs here.
+
+These hash the SOURCE artifact, not the retained file, deliberately. This
+repository normalizes line endings on checkout, so a byte hash of a
+retained file is not stable across clones, while the source hash is a fixed
+fact about what the lane produced.
 
 | Round | SHA-256 of the source `reply` |
 |---|---|
@@ -135,33 +158,54 @@ survive, so these are recorded rather than the artifacts.
 | 3 | `66b890e18033291994733f7f712ea6c5173a6ed55922ebf183ad3a97c07e95ca` |
 | 4 | `ce07a4649e2673c887f2603a71d53676f0e5456c386ff93637dd8d37f381802a` |
 | 5 | `475051dd0be4f788eb78ae78c3bb3a0d08342ad246c1765d1278475a5b9424ac` |
+| 7 | `73c62591d6e9d9135eb4eab6c32be1e1033fc801f45c154869ec57f583be1627` |
 
 The same-harness lane's replies have no such artifact. They are
 transcriptions, and nothing hashes them.
 
-## INCIDENT: round 6 was invalidated by the session, 2026-09-04
+## INCIDENT: the cross-vendor round 6 was voided by the session, 2026-09-04
 
-The cross-vendor lane's round 6 dispatch ran to completion and then FAILED
-its own post-run check with `the mirror changed while the round ran`. The
-wrapper exited 1, which under the dispatch contract is not `reply-present`,
-so THE ROUND IS NOT EVIDENCE and its output was not read. The wrapper's exit
-code is the classification; the dispatch directory was not re-read to argue
+That lane's round 6 dispatch ran to completion and then FAILED its own
+post-run check with `the mirror changed while the round ran`. The wrapper
+exited 1, which under the dispatch contract is not `reply-present`, so THE
+ROUND IS NOT EVIDENCE and its output was not read. The wrapper's exit code
+is the classification; the dispatch directory was not re-opened to argue
 otherwise.
 
 The cause was the session, not the tool. While the round was running, the
-session wrote the six `sol-diff-r*-brief.md` files into the repository, in
-response to the same-harness lane's round 6 finding that the briefs were not
-retained. Untracked files move `git status`, the source fingerprint is built
-from what status names, and the gate fired exactly as designed.
+session wrote the six `sol-diff-r*-brief.md` files into the repository.
+Untracked files move `git status`, the source fingerprint is built from what
+status names, and the gate at `tools/dispatch-round.ps1` fired as designed.
 
 The cost is real and is recorded rather than smoothed over: the round's
 quota was spent, the lane answered, and the answer is unusable. The session
-rollout grew from 1,510,090 to 1,768,331 bytes, so the work happened. This
-is the second time in this debate that a mid-round edit tripped the identity
-gate; the first was in round 1 and was also the session's doing.
+rollout grew from 1,510,090 to 1,768,331 bytes, so the work happened.
 
-The rule this breaks is simple and already written: do not touch the
-reviewed tree between `-Prepare` and the wrapper's exit.
+WHAT IT MEANT FOR THE VERDICTS, which the first version of this note left
+out and the same-harness lane demanded in round 7: for as long as the void
+stood, the cross-vendor lane's last valid word on this branch was round 5's
+FIX on `b9c17bc`, two revisions back, and its own round 5 findings had been
+applied in `233a340` without that lane ever confirming them. The branch was
+NOT attestable in that state. It was resolved by re-dispatching that lane at
+round 7 against `08ba01b`, with the void disclosed to it in its own brief
+(`sol-diff-r7-brief.md`). Its round 7 reply is retained and its verdict is
+in the table.
+
+THE RULE IS IN THE TOOL, NOT IN THE SKILL TEXT. `tools/dispatch-round.ps1`
+enforces it; no prose rule in `skills/` says "do not touch the reviewed tree
+between `-Prepare` and the wrapper's exit". An earlier version of this note
+called the rule "already written", which implied skill text that does not
+exist.
+
+AN EARLIER INCIDENT IS ASSERTED HERE WITHOUT EVIDENCE, and is kept only
+because dropping it would hide a repeat. During round 1 setup the same
+identity gate fired, twice, because the session had edited the backlog
+between building the mirror and dispatching. It fired at PREPARE and
+refused to proceed, so no round ran and no quota was spent; the fix was a
+rebuild with `-Force` and a fresh override path. That is a materially
+different outcome from this incident and is not a second instance of it.
+Nothing in this directory records it; it is the session's own recollection
+and no artifact survives.
 
 ## Why the replies are retained at all
 
