@@ -18,6 +18,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -45,6 +47,26 @@ jobs:
         run: |
           python -m pip install --quiet pytest
           python -m pytest evals -q
+
+      - name: Tier 2c - backlog lint
+        run: python evals/tools/backlog_lint.py
+
+      # The same governed-range and re-attestation test the pre-push hook
+      # runs, from git objects, because a local hook can be uninstalled.
+      # On a push this runs AFTER the ref moved (detection); on a pull
+      # request it runs before the merge but only prevents it when the
+      # job is a required check, which is a repository ruleset outside
+      # this tree (spec 3d).
+      - name: Tier 2d - backlog governed-range check
+        if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
+        env:
+          BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          if [ -z "$BASE_SHA" ] || [ "$BASE_SHA" = "0000000000000000000000000000000000000000" ]; then
+            python evals/tools/backlog_lint.py --range "$GITHUB_SHA"
+          else
+            python evals/tools/backlog_lint.py --range "$BASE_SHA..$GITHUB_SHA"
+          fi
 
   # The PowerShell scripts under test behave DIFFERENTLY on the two hosts
   # they support, and the difference is not cosmetic: `ConvertFrom-Json`
@@ -80,6 +102,11 @@ jobs:
       # hooks.json invokes the hook as `pwsh`, so another host would not
       # match how it runs.
       #
+      # The backlog hooks in .claude/settings.json are different: their
+      # entry point tools/backlog-hooks/run-hook.ps1 is host-neutral and
+      # the tests drive it under whichever host PARALLAX_PS_HOST names,
+      # so test_backlog_hooks.py and test_backlog_prepush.py ARE listed.
+      #
       # The 0.24.0 tool-surface probe was NOT added when it was written. It
       # was in neither list until the final gate run for that same release
       # went looking, which is the whole reason this comment names it.
@@ -95,6 +122,8 @@ jobs:
           PARALLAX_PS_HOST: powershell.exe
         run: >
           python -m pytest
+          evals/multi-model-verify/test_backlog_hooks.py
+          evals/multi-model-verify/test_backlog_prepush.py
           evals/multi-model-verify/test_attestation.py
           evals/multi-model-verify/test_codex_context_probe.py
           evals/multi-model-verify/test_codex_tool_surface_probe.py
@@ -114,6 +143,8 @@ jobs:
           PARALLAX_PS_HOST: pwsh.exe
         run: >
           python -m pytest
+          evals/multi-model-verify/test_backlog_hooks.py
+          evals/multi-model-verify/test_backlog_prepush.py
           evals/multi-model-verify/test_attestation.py
           evals/multi-model-verify/test_codex_context_probe.py
           evals/multi-model-verify/test_codex_tool_surface_probe.py

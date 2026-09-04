@@ -572,3 +572,19 @@ class TestRangeMode:
     def test_bad_range_is_exit_2(self, tmp_path):
         repo = make_seed_repo(tmp_path, clean_text())
         assert lint.main(["--repo-root", str(repo), "--range", "nope..nope"]) == 2
+
+
+class TestWiring:
+    def test_workflow_runs_lint_and_range(self):
+        text = (REPO / ".github" / "workflows" / "skill-evals.yml").read_text(encoding="utf-8")
+        assert "python evals/tools/backlog_lint.py\n" in text
+        assert "backlog_lint.py --range" in text
+        assert "fetch-depth: 0" in text
+        assert "github.event.pull_request.base.sha" in text
+        assert "github.event.before" in text
+        for module in ("test_backlog_hooks.py", "test_backlog_prepush.py"):
+            assert text.count("evals/multi-model-verify/" + module) == 2, module
+
+    def test_claude_md_names_the_lint(self):
+        text = (REPO / "CLAUDE.md").read_text(encoding="utf-8")
+        assert "- `python evals/tools/backlog_lint.py`" in text
