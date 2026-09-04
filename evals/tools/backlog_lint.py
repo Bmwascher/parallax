@@ -180,9 +180,46 @@ def parse(text):
     return Document(preamble=preamble, groups=groups, items=items)
 
 
+def canonical_bytes(item, doc):
+    """The byte-exact canonical content the spec's 1c defines."""
+    lines = [item.heading]
+    lines += ["%s: %s" % (k, v) for k, v in item.fields if k != "Verified"]
+    lines += item.body
+    lines = [strip_trailing(ln) for ln in lines]
+    while lines and lines[-1] == "":
+        lines.pop()
+    group = doc.group_of(item.id)
+    group_text = "" if group is None else group.raw_header[3:].strip(" \t")
+    text = "\n".join(lines) + "\n" + "group:" + group_text + "\n"
+    return text.encode("utf-8")
+
+
 def canonical_digest(item, doc):
-    """Task 2 fills this in."""
-    raise NotImplementedError
+    return hashlib.sha256(canonical_bytes(item, doc)).hexdigest()[:12]
+
+
+def rule_7_verified(item, doc, today):
+    value = item.get("Verified")
+    if value is None:
+        return []  # rule 1 already reports the missing field
+    match = VERIFIED_RE.match(value)
+    if not match:
+        return ["item %s: rule 7 (verified digest): Verified must be "
+                "'YYYY-MM-DD <12 hex>', got %r" % (item.id, value)]
+    try:
+        stamp = datetime.date.fromisoformat(match.group(1))
+    except ValueError:
+        return ["item %s: rule 7 (verified digest): invalid date %s"
+                % (item.id, match.group(1))]
+    out = []
+    if stamp > today:
+        out.append("item %s: rule 7 (verified digest): date %s is in the future"
+                   % (item.id, match.group(1)))
+    expected = canonical_digest(item, doc)
+    if match.group(2) != expected:
+        out.append("item %s: rule 7 (verified digest): content changed since "
+                   "attestation; expected digest %s" % (item.id, expected))
+    return out
 
 
 def rule_1_header(item):
@@ -296,6 +333,9 @@ def check(text, *, repo_root, revision, today, rules=None):
                     out.append("item %s: rule 6 (pairs symmetric): names %s, "
                                "which does not name %s back"
                                % (item.id, partner_id, item.id))
+    if 7 in active:
+        for item in doc.items:
+            out.extend(rule_7_verified(item, doc, today))
     return out
 
 
@@ -316,6 +356,15 @@ def main(argv=None):
     except (OSError, UnicodeDecodeError) as exc:
         print("file: cannot read %s: %s" % (path, exc))
         return 2
+    if args.digests:
+        try:
+            doc = parse(text)
+        except ParseError as exc:
+            print("file: cannot parse %s: %s" % (path, exc))
+            return 2
+        for item in doc.items:
+            print("%s %s" % (item.id, canonical_digest(item, doc)))
+        return 0
     try:
         failures = check(text, repo_root=repo_root, revision=None, today=today)
     except ParseError as exc:

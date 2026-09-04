@@ -181,3 +181,127 @@ def test_every_failure_is_reported_not_only_the_first():
     out = failures(text, rules=STRUCTURAL)
     assert any(f.startswith("item 3: rule 4") for f in out)
     assert any(f.startswith("item 1: rule 6") for f in out)
+
+
+def _refresh(text, item_id, date="2026-09-04"):
+    """Rewrite one item's Verified field to the digest of its current
+    content, the way a human does after reading the lint's expected value."""
+    doc = lint.parse(text)
+    item = next(i for i in doc.items if i.id == item_id)
+    digest = lint.canonical_digest(item, doc)
+    old = item.get("Verified")
+    heading_at = text.index(item.heading)
+    before, after = text[:heading_at], text[heading_at:]
+    after = after.replace("Verified: " + old, "Verified: %s %s" % (date, digest), 1)
+    return before + after
+
+
+def _refresh_all(text):
+    doc = lint.parse(text)
+    for item in doc.items:
+        text = _refresh(text, item.id)
+    return text
+
+
+class TestRule7Digest:
+    def test_initial_file_is_clean(self):
+        assert failures(clean_text(), rules=(7,)) == []
+
+    def test_edit_without_refresh_fails_and_prints_expected(self):
+        text = clean_text().replace("Body of item one.", "Body of item one, edited.")
+        out = failures(text, rules=(7,))
+        assert len(out) == 1 and out[0].startswith("item 1: rule 7")
+        doc = lint.parse(text)
+        expected = lint.canonical_digest(doc.items[0], doc)
+        assert expected in out[0]
+        assert failures(_refresh(text, "1"), rules=(7,)) == []
+
+    def test_moving_item_to_another_group_fails(self):
+        text = clean_text().replace("- 1\n- 3\n", "- 3\n").replace(
+            "### Last - housekeeping\n", "### Last - housekeeping\n- 1\n")
+        out = failures(text, rules=(7,))
+        assert [f.split(":")[0] for f in out] == ["item 1"]
+
+    def test_renamed_heading_fails(self):
+        text = clean_text().replace("## 1. First open item", "## 1. First item")
+        out = failures(text, rules=(7,))
+        assert [f.split(":")[0] for f in out] == ["item 1"]
+
+    def test_two_edits_one_refresh_fails(self):
+        text = clean_text().replace("Body of item one.", "Body one, edit A.")
+        text = _refresh(text, "1")
+        assert failures(text, rules=(7,)) == []
+        text = text.replace("Body one, edit A.", "Body one, edit B.")
+        out = failures(text, rules=(7,))
+        assert [f.split(":")[0] for f in out] == ["item 1"]
+
+    def test_changing_the_verified_date_alone_stays_clean(self):
+        text = clean_text()
+        doc = lint.parse(text)
+        digest = lint.canonical_digest(doc.items[0], doc)
+        text = text.replace("Verified: 2026-09-04 " + digest,
+                            "Verified: 2026-09-03 " + digest, 1)
+        assert failures(text, rules=(7,)) == []
+
+    def test_header_field_change_other_than_verified_fails(self):
+        text = clean_text().replace("Cost: one line of cost", "Cost: two lines")
+        out = failures(text, rules=(7,))
+        assert [f.split(":")[0] for f in out] == ["item 1"]
+
+    def test_future_date_fails(self):
+        text = clean_text()
+        doc = lint.parse(text)
+        digest = lint.canonical_digest(doc.items[0], doc)
+        text = text.replace("Verified: 2026-09-04 " + digest,
+                            "Verified: 2026-09-05 " + digest, 1)
+        out = failures(text, rules=(7,))
+        assert any(f.startswith("item 1: rule 7") and "future" in f for f in out)
+
+    def test_invalid_date_fails(self):
+        text = clean_text()
+        doc = lint.parse(text)
+        digest = lint.canonical_digest(doc.items[0], doc)
+        text = text.replace("Verified: 2026-09-04 " + digest,
+                            "Verified: 2026-13-40 " + digest, 1)
+        out = failures(text, rules=(7,))
+        assert any(f.startswith("item 1: rule 7") for f in out)
+
+    def test_non_breaking_space_digests_differently(self):
+        text = clean_text()
+        doc = lint.parse(text)
+        base = lint.canonical_digest(doc.items[0], doc)
+        nbsp = text.replace("Body of item one.", "Body of item one. ")
+        doc2 = lint.parse(nbsp)
+        assert lint.canonical_digest(doc2.items[0], doc2) != base
+        spaced = text.replace("Body of item one.", "Body of item one. \t")
+        doc3 = lint.parse(spaced)
+        assert lint.canonical_digest(doc3.items[0], doc3) == base
+
+    def test_padded_group_header_contributes_stripped_bytes(self):
+        text = clean_text().replace("### First - breaks the review process",
+                                    "###   Name  ")
+        doc = lint.parse(text)
+        raw = lint.canonical_bytes(doc.items[0], doc)
+        assert raw.endswith(b"\ngroup:Name\n")
+
+    def test_crlf_and_lf_digest_equal(self):
+        text = clean_text()
+        crlf = text.replace("\n", "\r\n")
+        doc_lf, doc_crlf = lint.parse(text), lint.parse(crlf)
+        for a, b in zip(doc_lf.items, doc_crlf.items):
+            assert lint.canonical_digest(a, doc_lf) == lint.canonical_digest(b, doc_crlf)
+
+    def test_trailing_blank_lines_are_dropped(self):
+        text = clean_text()
+        doc = lint.parse(text)
+        base = lint.canonical_digest(doc.items[3], doc)
+        padded = text.rstrip("\n") + "\n\n\n\n"
+        doc2 = lint.parse(padded)
+        assert lint.canonical_digest(doc2.items[3], doc2) == base
+
+    def test_digests_flag_prints_one_line_per_item(self, capsys):
+        code = lint.main(["--digests", str(FIXTURES / "clean.md")])
+        out = capsys.readouterr().out.splitlines()
+        assert code == 0
+        assert [ln.split(" ")[0] for ln in out] == ["1", "2", "3", "4"]
+        assert all(len(ln.split(" ")[1]) == 12 for ln in out)
