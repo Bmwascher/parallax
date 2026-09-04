@@ -8,6 +8,13 @@ directly. It reached the base by a different route, said so, and stated the
 distance between what it read and what the claim is about. Its J5 finding
 is the one that produced the next amendment.
 
+Continuity answer given by this lane at the start of the round, recovered
+from the subagent transcript because the harness returns only the final
+message:
+
+> Continuity: branch `item74-fable-5-1-notes`, round-3 subject revision
+> `ee27f273df18278fa003c7b2d3852e72d6e0e7f8`, terminal verdict PASS.
+
 Transcribed from the subagent result. This lane writes no reply file, so
 this is a transcription and not a copy of an artifact. Angle brackets
 arrived HTML-escaped through the agent transport and are restored here;

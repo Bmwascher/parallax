@@ -4,10 +4,24 @@ Lane: same-harness, `parallax:fable-panel-reviewer`, read-only tool grant
 (Read, Grep, Glob). Resumed from round 2. Subject revision `ee27f27`.
 
 This is the reply that produced the panel SPLIT: it returned PASS on the
-branch while the cross-vendor lane returned FIX, both having found the same
-five stale cites. The disagreement is about OWNERSHIP, not about facts.
+branch while the cross-vendor lane returned FIX. Both lanes named the same
+five LOCATORS, but they did not agree on their status: this lane called
+four stale and treated item 66's `:46-52` as a historical reference bound
+to its own cycle, while the other lane called all five stale. They also
+disagreed on ownership. An earlier version of this preface said the
+disagreement was "ownership, not facts"; that was wrong, and the
+cross-vendor lane caught it in round 5.
+
 Note that this lane marked its own base arithmetic UNVERIFIED, which is
 what prompted the session to read the base file rather than pick a lane.
+
+Continuity answer given by this lane at the start of the round, recovered
+from the subagent transcript because the harness returns only the final
+message:
+
+> Continuity: branch `item74-fable-5-1-notes`, round-2 subject revision
+> `ced2f535e6223fd69114db68b3feaa0690ac9f96`, terminal verdict FIX (prose
+> only, three sentences, no code).
 
 Transcribed from the subagent result. This lane writes no reply file, so
 this is a transcription and not a copy of an artifact. Angle brackets
