@@ -28,7 +28,10 @@ and nothing checks the file's shape. The repo has measured three times
 ## Goals
 
 1. One source of truth per fact. The status view and the ranking are
-   derived from the items, never written separately.
+   derived from the items, never written separately. The checker proves
+   the ranking cannot omit an open item, list one twice, or carry prose
+   that goes stale; whether an item's POSITION agrees with its Cost line
+   stays a human judgement, reviewed by a person and never by the tool.
 2. A session cannot finish work that changes shipped surfaces without
    touching the backlog, and cannot merge to main without it.
 3. The file's shape is checked mechanically on every edit, in the gate,
@@ -100,8 +103,15 @@ Field contract:
   What it costs NOW, not why it is interesting.
 - `Pairs`: `none`, or a comma-separated list of item ids. Required for
   `OPEN` and `PARTIAL`. Every named item must name this one back.
-- `Verified`: an ISO date. The date a person last read the whole item and
-  its ranking place against the tree. Required on every item.
+- `Verified`: an ISO date, a space, and the first 12 hex characters of
+  the SHA-256 of the item's canonical content: the heading line, the
+  header block with the `Verified` line itself excluded, the body, and
+  the name of the ranking group the item sits in. Required on every
+  item. The tool prints the expected value on a mismatch so the field
+  is refreshed by an explicit act per item rather than by a date that
+  happens to be today. It is an ATTESTATION that someone re-issued the
+  field after the item last changed; it is not proof the item was read,
+  and nothing mechanical can be.
 
 Heading form: `## <id>. <title>`. Ids are integers, except item 47,
 which becomes two items `47a` (empty-diff half) and `47b` (preamble
@@ -125,14 +135,20 @@ resolution text.
 
 ### 1d. Content decisions taken in the rewrite
 
-- 75 stays first, `Pairs: none`. Nothing on the list shares its file or
-  its gate.
+- 75 stays first, `Pairs: none`. The reason is that its fix is undecided
+  and uncosted (its own "Shape of a fix" says none of its candidates is
+  costed), so no partner can be named until it is designed; it is NOT
+  that nothing shares its surface, since item 76 touches the same mirror
+  and sweep machinery and has chosen item 38 as its partner.
 - 49, 59, 67 and 78 are mutually paired and hold entries 2 to 5; 78 is
   costed as Medium per its own text.
-- 35 is re-examined against `tools/dispatch-round.ps1` and SKILL.md's
-  step ordering. If the prior-state file is a required input of the
-  prepare step that precedes the dispatch, 35 closes as `DONE`,
-  `Closed: 0.28.0`, with the resolution saying so.
+- 35 stays `OPEN`, narrowed. `-Prepare` takes `-PriorStateFile` as a
+  plain string parameter and hashes whatever readable bytes it names;
+  it checks neither the file's schema nor when it was captured, and
+  SKILL.md still states the capture rule after the dispatch block (the
+  command at its line 208, the rule at its line 254 at commit
+  `1973843`). So the "no file at all" half is closed by the parameter
+  and the "captured too late" half is not. Its Cost line says so.
 - 68 moves to the missing-measurement group; 69 moves out of the
   workflow group to sit above 77. 43 moves above 31.
 - 73 and 79 are slotted: 73 into the missing-measurement group as its
@@ -141,12 +157,16 @@ resolution text.
 - 27 loses its dead pairing with 19. 54 is repaired to pair with 77 and
   76; 31 and 51 pair unconditionally; 40 pairs with 43 and 41; 55 with
   45; 65 with 64. Every pairing is written on both sides.
-- Three new items are filed from item 74's close, each `OPEN`, each
-  costed and slotted: a retained reviewer reply is not checked to have
-  reached its last section; general classifier refusals have no failure
-  class in `fallbacks.md`; what the `fable` alias resolves to and what
-  effort a seat runs at are unmeasured. A fourth from item 32: resume
-  after a killed round is unmeasured.
+- Item 34 (truncated captures on the reply side) is AMENDED and
+  re-costed to carry the Fable raw-reply case from item 74's close: a
+  retained reviewer reply is not checked to have reached its last
+  section. It is the same failure class on a second lane, and a second
+  item would split one class in two.
+- Two new items are filed from item 74's close, each `OPEN`, each costed
+  and slotted: general classifier refusals have no failure class in
+  `fallbacks.md`; what the `fable` alias resolves to and what effort a
+  seat runs at are unmeasured. A third from item 32: resume after a
+  killed round is unmeasured.
 - All renumbering narrative is deleted. The record of WHY the ranking
   looked as it did lives in git history.
 
@@ -155,7 +175,14 @@ resolution text.
 `docs/superpowers/plans/2026-07-27-0150-backlog.md` becomes a three-line
 file: a pointer to `BACKLOG.md` and the commit at which the full text was
 last present. Handoff files and memories cite the old path, so it must
-resolve.
+resolve. Line citations into the old path exist in 83 retained round
+records under `docs/superpowers/plans/rounds/` (counted at `1973843`).
+Retained records are never edited, so those citations are NOT rewritten;
+each was bound to the tree at the commit its record was written, and the
+pointer file states the last full-text commit so a reader can resolve
+them there. Tracked documents outside the retained records carry no line
+citation into the old path (grep at `1973843`), so nothing else needs
+rewriting.
 
 ## Part 2: the checker
 
@@ -178,30 +205,59 @@ Rules, each a named check with at least one failing fixture:
 5. A `DONE` or `GONE` id never appears in the ranking.
 6. `Pairs` is symmetric: if A names B, B names A. A pairing may not name
    a `DONE` or `GONE` item, or the item itself.
-7. `Verified` is a valid ISO date not in the future, and is not earlier
-   than the date of the last commit that changed that item's span. The
-   span is the heading through the line before the next heading; the
-   commit date comes from `git log` restricted to that line range. When
-   the file is not in a git repository or git is unavailable, this rule
-   reports SKIPPED by name and the exit code stays 1, because an unmade
-   check is not a clean one.
-8. No line in the file matches the banned-narrative list:
-   `renumbered`, `moved up by one`, `moved down by one`, `shifted down`,
-   `formerly entry`, `used to hold entry`, `read the numbers as they
-   stand`. The list lives in the tool and is extendable; the test pins
-   that each phrase fails.
+7. `Verified` carries a valid ISO date not in the future and a 12-hex
+   digest equal to the digest of the item's current canonical content
+   as defined in 1c. A mismatch names the item and prints the expected
+   digest. This rule reads only the file, never git, so it behaves the
+   same on the first commit, in a temporary checkout, and under the
+   pre-push revision mode in Part 3. Required fixtures: the initial
+   file; an item edited without refreshing the field; an item moved to
+   another ranking group; a heading renamed; the same item edited twice
+   in one day with the field refreshed once.
+8. No ranking group header and no `OPEN` or `PARTIAL` body matches the
+   banned-narrative list: `renumbered`, `moved up by one`, `moved down
+   by one`, `shifted down`, `formerly entry`, `used to hold entry`,
+   `read the numbers as they stand`. The list lives in the tool and is
+   extendable; the test pins that each phrase fails. This rule is a
+   HEURISTIC for the migration and is labelled one in the tool: it can
+   be evaded by rewording, and the structural rules 3 and 4 are what
+   make ranking narrative impossible where it used to live.
 9. A `PARTIAL` body contains `**What remains.**`.
 10. A `DONE` or `GONE` body contains a `Record:` line.
 11. The old path's pointer file exists and names `BACKLOG.md`.
 
 The checker does NOT: rewrite the file, judge order, or read item
-bodies beyond rules 8 to 10.
+bodies beyond rules 7 to 10.
+
+It accepts `--revision <sha>`, under which it reads `BACKLOG.md` and the
+old-path pointer from git objects (`git show <sha>:<path>`) instead of the
+working tree, so a hook can lint a pushed commit without touching the
+checkout.
 
 ## Part 3: the hooks
 
 All in a tracked `.claude/settings.json` at the repo root, project scope.
 Hook commands are `pwsh` invocations calling Python, matching the host
-the plugin's own hooks already require.
+the plugin's own hooks already require. `.gitignore` currently ignores
+`.claude/` wholesale (its line 3 at `1973843`), so the branch changes
+that entry to `.claude/*` and adds `!.claude/settings.json`; a test
+asserts the settings file is tracked.
+
+Hook shapes, from the Claude Code hooks documentation read 2026-09-04
+(code.claude.com/docs/en/hooks-guide): a Stop hook blocks by EXIT CODE
+2 with its reason on stdout, not by a JSON decision; its stdin carries
+`stop_hook_active`, which the hook must honour by exiting 0 when true so
+it cannot loop; and a SessionStart hook receives `session_id` and `cwd`
+on stdin. Each shape is proven by a checked-in fixture that feeds the
+documented stdin to the script and asserts the exit code, before any
+hook is wired.
+
+### 3a0. SessionStart
+
+Writes a per-session baseline under the session's scratch area, keyed by
+`session_id`: the current HEAD, and the SHA-256 of `BACKLOG.md`'s bytes
+(or `absent`). The Stop hook compares against this, so the check is
+scoped to what THIS session did and not to the branch's whole history.
 
 ### 3a. PostToolUse on Edit and Write
 
@@ -213,34 +269,48 @@ the same turn.
 
 ### 3b. Stop
 
-On Stop, the hook computes two things against the branch's merge base
-with main: whether any tracked change, staged, unstaged or committed
-since the base, touches `tools/`, `skills/`, `agents/`, `evals/`,
-`commands/`, `hooks/` or `README.md`; and whether `BACKLOG.md` differs
-from the base. If the first is true and the second is false, the hook
-returns a block decision with the reason
-`BACKLOG.md unchanged since branch base while shipped surfaces changed;
-update it or record why no item moved`. On main with a clean tree it
-returns nothing. It never blocks when git is unavailable; it prints a
-note instead, so a broken git cannot wedge a session.
+On Stop, after honouring `stop_hook_active`, the hook reads this
+session's baseline and computes: whether any change since the baseline
+HEAD, staged, unstaged or committed, touches a GOVERNED path; and
+whether `BACKLOG.md`'s current bytes differ from the baseline hash. The
+governed paths are `tools/`, `skills/`, `agents/`, `evals/`, `commands/`,
+`hooks/`, `.claude-plugin/`, `.githooks/`, `.github/`, `README.md` and
+`CLAUDE.md`. If governed paths changed and the backlog did not, it exits
+2 with `BACKLOG.md unchanged this session while governed surfaces
+changed; update it or refresh the Verified field of the item that owns
+the work`. Whenever the backlog DID change, it runs the lint and exits 2
+on failure with the lint's output, so an edit made through a shell
+command that PostToolUse never saw is still checked before the session
+ends. With no baseline file (a session started before the hook existed)
+it prints a note and exits 0. When git is unavailable it prints a note
+and exits 0, so a broken git cannot wedge a session. A detached HEAD is
+handled the same as a branch: the baseline records a commit, not a ref.
 
-The escape is explicit: a one-line `Verified` date bump on the relevant
-item counts as a touch, because rule 7 already forces that bump when the
-item's span changed, and a session that read the item and found nothing
-to change has done the work the hook exists to force.
+The escape is explicit: refreshing the `Verified` field of the item that
+owns the work counts as a touch, because rule 7 already forces that
+refresh when the item's content changed, and a session that read the
+item and found nothing else to change has done the work the hook exists
+to force.
 
 ### 3c. Pre-push
 
 `.githooks/pre-push` gains a second clause before the attestation clause.
-For a push to `refs/heads/main` whose range `remote..local` contains a
-merge commit, it refuses (exit 1) unless both hold: `BACKLOG.md` is in
-the range's changed paths, and `python evals/tools/backlog_lint.py`
-passes on the local sha's tree (checked out to a temporary index, never
-the working tree). The message names which of the two failed.
+For a push to `refs/heads/main`, it lists the paths changed in
+`remote..local` (on a new remote branch, in `local` alone). If any
+governed path from 3b is in that list and `BACKLOG.md` is not, it
+refuses with exit 1. If `BACKLOG.md` is in the list, it runs
+`python evals/tools/backlog_lint.py --revision <local sha>` and refuses
+on failure. Merge topology is not consulted: a squash, a fast-forward
+and a merge commit are all judged by the paths they carry, so a
+docs-only push is never blocked and a governed change never escapes by
+being squashed. Every pushed range stands alone: a backlog edit pushed
+earlier does not cover governed changes pushed later, because later
+work either changes an item (rule 7 forces a refresh) or is a new item.
 
 This is the first BLOCKING clause in that hook. The attestation clause
 stays non-blocking exactly as written; the hook's header comment is
-updated to say which clause blocks and why.
+updated to say which clause blocks and why, and its "docs/chore pushes
+stay friction-free" sentence remains true under the path test.
 
 ### 3d. Gate and CI
 
@@ -258,16 +328,20 @@ hand edit or a merge from another machine is caught in CI.
 
 ## Testing
 
-- `test_backlog_lint.py`: one failing fixture per rule, one clean
-  fixture, and a run against the real `BACKLOG.md` that must pass.
-- Rule 7's git dependency is tested inside a temporary repo the test
-  creates and commits to.
-- The Stop and PostToolUse hook scripts are tested by invoking them with
-  hand-built JSON on stdin inside a temporary repo, under both PowerShell
-  hosts per the dual-host rule.
+- `test_backlog_lint.py`: one failing fixture per rule, the five rule-7
+  fixtures named above, one clean fixture, a `--revision` run against a
+  temporary repo's committed file, and a run against the real
+  `BACKLOG.md` that must pass.
+- The SessionStart, Stop and PostToolUse hook scripts are tested by
+  invoking them with the documented stdin JSON inside a temporary repo,
+  under both PowerShell hosts per the dual-host rule, including
+  `stop_hook_active: true`, a missing baseline, a governed change with
+  and without a backlog touch, and a backlog edit that fails the lint.
 - The pre-push clause is tested by the same method the drift
   state-machine harness uses: a disposable clone with a stub remote,
-  pushed with and without a backlog change in a merge range.
+  pushed as a merge, a squash and a fast-forward, each with and without
+  a backlog change alongside a governed change, plus a docs-only push
+  that must pass.
 - The rewritten `BACKLOG.md` passes the lint before the branch is
   reviewed.
 
