@@ -121,13 +121,13 @@ Field contract:
   line up to the line before the next `## ` heading; strip trailing
   ASCII space (U+0020) and tab (U+0009) from each line and nothing
   else; drop trailing blank lines; join with a single LF; append LF,
-  then `group:`, then the group header text AFTER the `### ` prefix
-  with its own trailing spaces and tabs stripped, then LF; encode as
-  UTF-8 and hash. Fixtures pin each decision: a line ending in a
-  non-breaking space (U+00A0) must digest differently from one that
-  does not, a header written `###   Name  ` must digest as `Name`, and
-  the same item from a CRLF working copy and from `--revision` must
-  digest equal. Required on every
+  then `group:`, then the group header text after the literal `###`
+  with ASCII space and tab stripped from BOTH ends of what remains,
+  then LF; encode as UTF-8 and hash. Fixtures pin each decision: a line
+  ending in a non-breaking space (U+00A0) must digest differently from
+  one that does not, a header written `###   Name  ` must contribute
+  exactly the bytes `group:Name` followed by LF, and the same item from
+  a CRLF working copy and from `--revision` must digest equal. Required on every
   item. The tool prints the expected value on a mismatch so the field
   is refreshed by an explicit act per item rather than by a date that
   happens to be today. It is an ATTESTATION that someone re-issued the
@@ -308,12 +308,13 @@ checkout.
 hook is a REMINDER-class control: it fires once, a second stop attempt
 carries `stop_hook_active` and passes, and it exits 0 when its baseline
 or git is missing, so a session CAN finish without updating the backlog
-by stopping twice or by running where the hook cannot see. The hard
-controls are the pre-push clause and the CI range check in 3d, which
-apply the SAME governed-range and re-attestation test and do not depend
-on the session cooperating or on the local hook being installed. The
-spec does not promise that a session "cannot finish" without the
-backlog. It promises that a hooked push is refused and that any other
+by stopping twice or by running where the hook cannot see. The pre-push
+clause is a hard REFUSAL on a clone where the hook is installed, and
+nothing on a clone without it. The CI range check in 3d applies the
+SAME governed-range and re-attestation test and DETECTS an arrival on
+main without relying on any local installation. Neither depends on the
+session cooperating. The spec does not promise that a session "cannot
+finish" without the backlog. It promises that a hooked push is refused and that any other
 arrival on main is detected by CI; turning detection into prevention is
 a repository setting outside this tree, stated in 3d.
 

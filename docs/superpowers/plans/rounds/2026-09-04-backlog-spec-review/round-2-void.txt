@@ -1,0 +1,1 @@
+Round 2 (dispatch-r2, receipt-r2.json) VOIDED 2026-09-04T17:44:54Z: binding failed, class brief-attribution, cause on this side: prior-state file next-state-r1.json written through a Bash heredoc lost its JSON backslash escapes; reply discarded unread; quota spent. Re-run as round 2b with a fresh boundary.

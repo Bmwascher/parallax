@@ -1,0 +1,1 @@
+Fix-verify budget: NOT declared before round 1, which the protocol requires; declared by the session after round 3 as SIX dispatched exchanges total (R1, R2 void, R2b, R3 = 4 used). Contested cap: 4 consecutive contested exchanges, none contested so far. If round 5 still returns a substantive FIX, the debate pauses for the user.
