@@ -53,7 +53,7 @@ Expected: no output.
 
 **Interfaces:**
 - Produces: module `backlog_lint` with
-  - `parse(text: str) -> Document` where `Document` has `.preamble: list[str]`, `.groups: list[Group]` (`Group.name: str`, `Group.raw_header: str`, `Group.ids: list[str]`, `Group.stray_lines: list[str]`), `.items: list[Item]` (`Item.id: str`, `Item.title: str`, `Item.heading: str`, `Item.fields: list[tuple[str, str]]`, `Item.body: list[str]`, `Item.line: int`), `.errors: list[str]` (parse-level errors that mean exit 2).
+  - `parse(text: str) -> Document` where `Document` has `.preamble: list[str]`, `.groups: list[Group]` (`Group.name: str`, `Group.raw_header: str`, `Group.ids: list[str]`, `Group.stray_lines: list[str]`), `.items: list[Item]` (`Item.id: str`, `Item.title: str`, `Item.heading: str`, `Item.fields: list[tuple[str, str]]`, `Item.body: list[str]`, `Item.line: int`).
   - `ParseError(Exception)` raised by `parse()` when the file has no `## Ranking` section or a `## ` line that is neither `## Ranking` nor a valid item heading.
   - `check(text: str, *, repo_root: Path, revision: str | None, today: datetime.date) -> list[str]` returning every failure line, empty when clean.
   - `main(argv) -> int`.
@@ -163,10 +163,12 @@ STRUCTURAL = (1, 2, 3, 4, 5, 6)
 def test_parse_reads_items_groups_and_fields():
     doc = lint.parse(clean_text())
     assert [i.id for i in doc.items] == ["1", "2", "3", "4"]
-    assert doc.items[0].fields == [("Status", "OPEN"),
-                                   ("Cost", "one line of cost"),
-                                   ("Pairs", "3"),
-                                   ("Verified", "2026-09-04 000000000000")]
+    assert doc.items[0].fields[:3] == [("Status", "OPEN"),
+                                       ("Cost", "one line of cost"),
+                                       ("Pairs", "3")]
+    name, value = doc.items[0].fields[3]
+    assert name == "Verified" and lint.VERIFIED_RE.match(value)
+    assert len(doc.items[0].fields) == 4
     assert [g.name for g in doc.groups] == [
         "First - breaks the review process", "Last - housekeeping"]
     assert doc.groups[0].ids == ["1", "3"]
@@ -503,8 +505,8 @@ def rule_1_header(item):
     names = [k for k, _ in item.fields]
     status = item.get("Status")
     if names[:1] != ["Status"]:
-        out.append("item %s: rule 1 (header block): first field must be Status"
-                   % item.id)
+        out.append("item %s: rule 1 (header block): fields out of order: "
+                   "first field must be Status" % item.id)
         return out
     if status not in STATUSES:
         out.append("item %s: rule 1 (header block): Status must be one of %s, got %r"
@@ -1533,6 +1535,7 @@ git commit -m "add the backlog lint's governed-range mode"
 ### Task 5: The three hook scripts
 
 **Files:**
+- Create: `tools/backlog-hooks/run-hook.ps1`
 - Create: `tools/backlog-hooks/_common.py`
 - Create: `tools/backlog-hooks/session_start.py`
 - Create: `tools/backlog-hooks/post_tool_use.py`
@@ -1541,7 +1544,7 @@ git commit -m "add the backlog lint's governed-range mode"
 
 **Interfaces:**
 - Consumes: `backlog_lint.parse`, `reattested_items`, `lint_text`, `is_governed`, `read_at_revision`, `git_output`, `BACKLOG_PATH`, `OLD_PATH`.
-- Produces: three scripts, each reading the hook's JSON on stdin and writing per the Claude Code hook contract. Baseline directory: `$PARALLAX_BACKLOG_BASELINE_DIR`, else `<tempdir>/parallax-backlog-baselines`; file `<session_id>.json` with keys `head`, `backlog_sha256`, `cwd`.
+- Produces: a PowerShell entry point `run-hook.ps1 -Script <name.py>` that every hook command calls with `-File` (the shape `hooks/hooks.json:10` already uses), which prints `backlog hook: python not found; nothing checked` and exits 0 when no `python` is on PATH, and otherwise pipes its whole stdin to the named script and exits with the script's code; and three scripts, each reading the hook's JSON on stdin and writing per the Claude Code hook contract. The Stop refusal is printed to BOTH stdout and stderr, because the spec records stdout and the harness documentation is not in this tree to settle which stream a Stop hook's exit 2 surfaces. Baseline directory: `$PARALLAX_BACKLOG_BASELINE_DIR`, else `<tempdir>/parallax-backlog-baselines`; file `<session_id>.json` with keys `head`, `backlog_sha256`, `cwd`.
   - `session_start.py`: writes the baseline; exit 0 always (a note on stdout when git is missing, `head` recorded as `unknown`).
   - `post_tool_use.py`: if `tool_input.file_path` basename is `BACKLOG.md`, runs the lint and prints `{"hookSpecificOutput": {"hookEventName": "PostToolUse", "additionalContext": "<lint output>"}}`; exit 0 always.
   - `stop.py`: exit 0 when `stop_hook_active` is true, when the baseline is missing, when git is unavailable, or when the baseline head is unknown or no longer resolves. Otherwise the 3b logic; exit 2 with the reason on stdout.
@@ -1556,9 +1559,10 @@ rewrite plan, spec Part 3).
 
 Each script is fed the documented stdin JSON inside a temporary repo and
 its exit code asserted. Every script is driven THROUGH the same
-PowerShell command shape .claude/settings.json uses, under whichever host
-PARALLAX_PS_HOST names, so the stdin plumbing through the host is what is
-measured and not only the Python. Skips when no host is found.
+PowerShell entry point .claude/settings.json names (run-hook.ps1 with
+-File), under whichever host PARALLAX_PS_HOST names, so the stdin
+plumbing through the host is what is measured and not only the Python.
+Skips when no host is found.
 """
 import hashlib
 import json
@@ -1601,7 +1605,11 @@ def seed_repo(tmp_path):
     (spec / "2026-09-04-backlog-rewrite-design.md").write_text("x\n", encoding="utf-8")
     (repo / "tools").mkdir()
     (repo / "tools" / "a.txt").write_text("a\n", encoding="utf-8")
-    for name in ("_common.py", "session_start.py", "post_tool_use.py", "stop.py"):
+    # Importing the scripts writes __pycache__ under governed paths; the
+    # real repo ignores it at .gitignore:1 and the seed must too.
+    (repo / ".gitignore").write_text("__pycache__/\n", encoding="utf-8")
+    for name in ("run-hook.ps1", "_common.py", "session_start.py",
+                 "post_tool_use.py", "stop.py"):
         (repo / "tools" / "backlog-hooks").mkdir(exist_ok=True)
         shutil.copy(HOOKS / name, repo / "tools" / "backlog-hooks" / name)
     (repo / "evals" / "tools").mkdir(parents=True)
@@ -1612,15 +1620,33 @@ def seed_repo(tmp_path):
     return repo
 
 
-def run_hook(repo, script, payload, baseline_dir):
-    """Drive the script exactly the way settings.json does."""
-    command = '$input | python tools/backlog-hooks/%s' % script
+HOOK_ARGS = ["-NoProfile", "-NonInteractive", "-File", "tools/backlog-hooks/run-hook.ps1",
+             "-Script"]
+
+
+def run_hook(repo, script, payload, baseline_dir, env_extra=None):
+    """Drive the script exactly the way settings.json does: the host, then
+    HOOK_ARGS, then the script name. Task 6 asserts the settings file's
+    command strings are this same shape."""
     env = dict(os.environ, PARALLAX_BACKLOG_BASELINE_DIR=str(baseline_dir),
                PARALLAX_BACKLOG_TODAY="2026-09-04")
-    proc = subprocess.run([POWERSHELL, "-NoProfile", "-NonInteractive", "-Command", command],
+    env.update(env_extra or {})
+    proc = subprocess.run([POWERSHELL, *HOOK_ARGS, script],
                           cwd=repo, input=json.dumps(payload), capture_output=True,
                           text=True, encoding="utf-8", env=env)
     return proc
+
+
+def path_without_python():
+    """A PATH with every directory that holds a python executable removed."""
+    keep = []
+    for entry in os.environ.get("PATH", "").split(os.pathsep):
+        if not entry:
+            continue
+        if any((Path(entry) / name).exists() for name in ("python.exe", "python")):
+            continue
+        keep.append(entry)
+    return os.pathsep.join(keep)
 
 
 def start(repo, baseline_dir, session="s1"):
@@ -1654,6 +1680,21 @@ class TestSessionStart:
         start(repo, base)
         data = json.loads((base / "s1.json").read_text(encoding="utf-8"))
         assert data["backlog_sha256"] == "absent"
+
+
+class TestEntryPoint:
+    def test_missing_python_passes_with_note(self, tmp_path):
+        repo = seed_repo(tmp_path)
+        proc = run_hook(repo, "stop.py", {"session_id": "s1", "cwd": str(repo),
+                                          "stop_hook_active": False},
+                        tmp_path / "b", env_extra={"PATH": path_without_python()})
+        assert proc.returncode == 0, proc.stdout + proc.stderr
+        assert "python not found" in proc.stdout
+
+    def test_unknown_script_name_is_refused(self, tmp_path):
+        repo = seed_repo(tmp_path)
+        proc = run_hook(repo, "nope.py", {}, tmp_path / "b")
+        assert proc.returncode == 0 and "not found" in proc.stdout
 
 
 class TestPostToolUse:
@@ -1697,9 +1738,10 @@ class TestStop:
         (repo / "tools" / "a.txt").write_text("b\n", encoding="utf-8")
         proc = stop(repo, base)
         assert proc.returncode == 2
-        assert ("BACKLOG.md carries no re-attested item this session while governed "
-                "surfaces changed; update the item that owns the work and refresh "
-                "its Verified field") in proc.stdout
+        refusal = ("BACKLOG.md carries no re-attested item this session while governed "
+                   "surfaces changed; update the item that owns the work and refresh "
+                   "its Verified field")
+        assert refusal in proc.stdout and refusal in proc.stderr
 
     def test_governed_change_committed_still_blocks(self, tmp_path):
         repo = seed_repo(tmp_path)
@@ -1766,13 +1808,9 @@ class TestStop:
         base = tmp_path / "b"
         start(repo, base)
         (repo / "tools" / "a.txt").write_text("b\n", encoding="utf-8")
-        command = '$input | python tools/backlog-hooks/stop.py'
-        env = dict(os.environ, PARALLAX_BACKLOG_BASELINE_DIR=str(base),
-                   PARALLAX_BACKLOG_GIT="C:/no/such/git.exe")
-        proc = subprocess.run([POWERSHELL, "-NoProfile", "-NonInteractive", "-Command", command],
-                              cwd=repo, input=json.dumps({"session_id": "s1", "cwd": str(repo),
-                                                          "stop_hook_active": False}),
-                              capture_output=True, text=True, encoding="utf-8", env=env)
+        proc = run_hook(repo, "stop.py", {"session_id": "s1", "cwd": str(repo),
+                                          "stop_hook_active": False}, base,
+                        env_extra={"PARALLAX_BACKLOG_GIT": "C:/no/such/git.exe"})
         assert proc.returncode == 0 and "git" in proc.stdout
 ```
 
@@ -1781,7 +1819,41 @@ class TestStop:
 Run: `python -m pytest evals/multi-model-verify/test_backlog_hooks.py -q`
 Expected: FAIL (scripts missing; `shutil.copy` raises).
 
-- [ ] **Step 3: Write the scripts**
+- [ ] **Step 3: Write the entry point and the scripts**
+
+`tools/backlog-hooks/run-hook.ps1` (the stdin read is the shape the
+shipped `hooks/superpowers-review-companion.ps1:13` already uses under
+`-File`):
+
+```powershell
+# run-hook.ps1 - entry point for the backlog hooks in .claude/settings.json.
+# Passes the hook's stdin JSON to the named Python script and exits with
+# its code. A missing python prints a note and exits 0, because a hook
+# must never wedge a session (spec, Error handling); the pre-push hook is
+# the one place a missing tool refuses, and it is not this file.
+param([Parameter(Mandatory = $true)][string]$Script)
+$ErrorActionPreference = 'Continue'
+$target = Join-Path $PSScriptRoot $Script
+if (-not (Test-Path -LiteralPath $target)) {
+    Write-Output "backlog hook: script $Script not found; nothing checked"
+    exit 0
+}
+$python = Get-Command python -ErrorAction SilentlyContinue
+if (-not $python) {
+    Write-Output "backlog hook: python not found; nothing checked"
+    exit 0
+}
+$payload = [Console]::In.ReadToEnd()
+$prior = $OutputEncoding
+try {
+    $OutputEncoding = New-Object System.Text.UTF8Encoding($false)
+    $payload | & $python.Source $target
+    $code = $LASTEXITCODE
+} finally {
+    $OutputEncoding = $prior
+}
+exit $code
+```
 
 `tools/backlog-hooks/_common.py`:
 
@@ -1965,14 +2037,18 @@ def main():
         new_text = BACKLOG.read_text(encoding="utf-8") if BACKLOG.exists() else None
         ids = lint.reattested_items(old_text, new_text)
         if not ids:
+            detail = "governed paths changed: " + ", ".join(governed)
             print(REFUSAL)
-            print("governed paths changed: " + ", ".join(governed))
+            print(detail)
+            print(REFUSAL, file=sys.stderr)
+            print(detail, file=sys.stderr)
             return 2
         print("backlog stop check: governed paths changed; re-attested: " + ", ".join(ids))
     if backlog_changed:
         code, output = lint_working_tree(lint)
         if code != 0:
             print(output)
+            print(output, file=sys.stderr)
             return 2
     return 0
 
@@ -1987,7 +2063,7 @@ Run: `python -m pytest evals/multi-model-verify/test_backlog_hooks.py -q`
 Expected: all PASS.
 
 Run: `$env:PARALLAX_PS_HOST = "pwsh"; python -m pytest evals/multi-model-verify/test_backlog_hooks.py -q; Remove-Item Env:PARALLAX_PS_HOST`
-Expected: all PASS. Then the same with `powershell` if the first run used pwsh. If `$input | python` does not deliver stdin on one host, the failing host names the defect; do not weaken the test.
+Expected: all PASS. Then the same with `powershell` if the first run used pwsh. If the entry point does not deliver stdin on one host, the failing host names the defect; do not weaken the test.
 
 - [ ] **Step 5: Commit**
 
@@ -2024,15 +2100,18 @@ class TestSettingsWiring:
         assert any("post_tool_use.py" in c for c in commands["PostToolUse"])
         assert any("stop.py" in c for c in commands["Stop"])
         assert hooks["PostToolUse"][0]["matcher"] == "Edit|Write"
+        prefix = "pwsh " + " ".join(HOOK_ARGS) + " "
         for event in commands:
             for command in commands[event]:
-                assert command.startswith('pwsh -NoProfile -NonInteractive -Command "$input | python ')
+                assert command.startswith(prefix), command
 
     def test_settings_command_shape_matches_the_tests(self):
+        """The command string is the host plus HOOK_ARGS plus the script,
+        which is exactly the argv run_hook builds, so the hook tests
+        exercise what ships."""
         data = json.loads((REPO / ".claude" / "settings.json").read_text(encoding="utf-8"))
         command = data["hooks"]["Stop"][0]["hooks"][0]["command"]
-        inner = command[len('pwsh -NoProfile -NonInteractive -Command "'):-1]
-        assert inner == "$input | python tools/backlog-hooks/stop.py"
+        assert command.split(" ") == ["pwsh", *HOOK_ARGS, "stop.py"]
 ```
 
 - [ ] **Step 2: Run the test to verify it fails**
@@ -2059,7 +2138,7 @@ Create `.claude/settings.json`:
         "hooks": [
           {
             "type": "command",
-            "command": "pwsh -NoProfile -NonInteractive -Command \"$input | python tools/backlog-hooks/session_start.py\"",
+            "command": "pwsh -NoProfile -NonInteractive -File tools/backlog-hooks/run-hook.ps1 -Script session_start.py",
             "timeout": 15
           }
         ]
@@ -2071,7 +2150,7 @@ Create `.claude/settings.json`:
         "hooks": [
           {
             "type": "command",
-            "command": "pwsh -NoProfile -NonInteractive -Command \"$input | python tools/backlog-hooks/post_tool_use.py\"",
+            "command": "pwsh -NoProfile -NonInteractive -File tools/backlog-hooks/run-hook.ps1 -Script post_tool_use.py",
             "timeout": 30
           }
         ]
@@ -2082,7 +2161,7 @@ Create `.claude/settings.json`:
         "hooks": [
           {
             "type": "command",
-            "command": "pwsh -NoProfile -NonInteractive -Command \"$input | python tools/backlog-hooks/stop.py\"",
+            "command": "pwsh -NoProfile -NonInteractive -File tools/backlog-hooks/run-hook.ps1 -Script stop.py",
             "timeout": 30
           }
         ]
@@ -2204,11 +2283,14 @@ def clone(tmp_path):
     _git(work, "commit", "-q", "-m", "seed")
     _git(work, "remote", "add", "origin", str(remote))
     _git(work, "config", "core.hooksPath", ".githooks")
-    _git(work, "push", "-q", "origin", "main")
+    seed_push = push(work)
+    assert seed_push.returncode == 0, seed_push.stderr
     return work
 
 
 def push(work):
+    """Every push, the seed included, pins today so the fixture's dates
+    never read as future on a machine whose clock is behind."""
     env = dict(os.environ, PARALLAX_BACKLOG_TODAY="2026-09-04")
     return subprocess.run(["git", "push", "origin", "main"], cwd=work, capture_output=True,
                           text=True, encoding="utf-8", env=env)
@@ -2472,6 +2554,15 @@ In the `powershell-hosts` job, add these two lines to BOTH module lists (before 
           evals/multi-model-verify/test_backlog_prepush.py
 ```
 
+The job's comment says "The hook tests are deliberately absent - hooks.json invokes the hook as `pwsh`, so another host would not match how it runs." That sentence is about the PLUGIN's hooks and stays true of them. Append after it:
+
+```yaml
+      # The backlog hooks in .claude/settings.json are different: their
+      # entry point tools/backlog-hooks/run-hook.ps1 is host-neutral and
+      # the tests drive it under whichever host PARALLAX_PS_HOST names,
+      # so test_backlog_hooks.py and test_backlog_prepush.py ARE listed.
+```
+
 - [ ] **Step 4: Edit CLAUDE.md**
 
 In the `## Verification` list, after the `python -m pytest evals -q` line, add:
@@ -2510,11 +2601,16 @@ git commit -m "run the backlog lint and range check in the gate and in ci"
 
 ```bash
 mkdir -p docs/superpowers/plans/rounds/2026-09-04-backlog-rewrite
-git ls-files | xargs grep -n '2026-07-27-0150-backlog\.md:[0-9]' > docs/superpowers/plans/rounds/2026-09-04-backlog-rewrite/citation-grep.txt
+git ls-files | xargs grep -nH '2026-07-27-0150-backlog\.md' > docs/superpowers/plans/rounds/2026-09-04-backlog-rewrite/citation-grep.txt
 wc -l docs/superpowers/plans/rounds/2026-09-04-backlog-rewrite/citation-grep.txt
 ```
 
-No `head`, no `tail`. Every line is retained. Confirm by reading the file that the only hits outside `docs/superpowers/plans/rounds/` are the two lines of the probe plan; if any other tracked document appears, list it in the inventory and stop to report it, because the spec's inventory would be wrong.
+No `head`, no `tail`, and `-H` so a one-file final xargs batch still prints its name. The pattern is the bare path, not `path:[0-9]`, because the probe plan's line 158 cites lines of the old file in a second shape (`the path — item 10's heading at `:577` and its status at `:11-14``) that a `:[0-9]` pattern never sees; a sweep must report the shapes it searched for. Every line is retained. Read the file and classify every hit outside `docs/superpowers/plans/rounds/`:
+
+- this plan (`docs/superpowers/plans/2026-09-04-backlog-rewrite.md`), the spec, `CLAUDE.md` and memory or handoff files name the path without a line citation and are not citations;
+- `docs/superpowers/plans/2026-08-03-home-skills-root-probe.md` lines 78 and 975 carry `:41`, and line 158 carries `:577` and `:11-14`; lines 288, 856 and 892 name the path with no line and are not citations.
+
+If any OTHER tracked document carries a line citation, in either shape, list it in the inventory and stop to report it, because the spec's inventory (two citations in one frozen plan) would be wrong by more than the third shape already found here.
 
 - [ ] **Step 2: Find the resolving commit for the probe plan's line-41 citation**
 
@@ -2527,23 +2623,36 @@ done
 
 Pick the NEWEST commit whose line 41 states the 27-directory measurement (the text names `~/.agents/skills/` and `27`). Record the sha as `<sha41>`.
 
-- [ ] **Step 3: Rewrite the two frozen-plan citations**
+- [ ] **Step 3: Rewrite the frozen plan's line citations**
 
-In `docs/superpowers/plans/2026-08-03-home-skills-root-probe.md`, replace both occurrences of the exact string `docs/superpowers/plans/2026-07-27-0150-backlog.md:41` with `docs/superpowers/plans/2026-07-27-0150-backlog.md@<sha41>:41`. Nothing else in that file changes.
+In `docs/superpowers/plans/2026-08-03-home-skills-root-probe.md`, replace both occurrences of the exact string `docs/superpowers/plans/2026-07-27-0150-backlog.md:41` with `docs/superpowers/plans/2026-07-27-0150-backlog.md@<sha41>:41`.
+
+Line 158 cites `:577` and `:11-14` of the old file for item 10's heading and its status block. Find its resolving commit the same way as Step 2, checking that line 577 at the candidate is item 10's heading and lines 11 to 14 are the status block:
+
+```bash
+for sha in $(git log --format=%h -- docs/superpowers/plans/2026-07-27-0150-backlog.md); do
+  h="$(git show "$sha:docs/superpowers/plans/2026-07-27-0150-backlog.md" | sed -n 577p)"
+  case "$h" in *"10."*|*"Item 10"*) echo "$sha: $h" ;; esac
+done
+```
+
+Record the newest matching commit as `<sha158>` and rewrite line 158 so the path reads `docs/superpowers/plans/2026-07-27-0150-backlog.md@<sha158>` with the `:577` and `:11-14` citations kept as written after it. If no commit matches, leave line 158 unchanged and record it as unresolved in the inventory. Nothing else in that file changes; lines 288, 856 and 892 name the path without a line and stay as they are.
 
 Run: `grep -n '0150-backlog\.md' docs/superpowers/plans/2026-08-03-home-skills-root-probe.md`
-Expected: exactly two lines, both carrying `@<sha41>:41`.
+Expected: six lines; 78 and 975 carry `@<sha41>:41`, 158 carries `@<sha158>` or is recorded unresolved, and 288, 856 and 892 are unchanged.
 
 - [ ] **Step 4: Build the inventory of raw-record citations**
 
-Write `docs/superpowers/plans/rounds/2026-09-04-backlog-rewrite/citation-inventory.md` with this header and one row per line of `citation-grep.txt` that lies under `docs/superpowers/plans/rounds/`:
+Write `docs/superpowers/plans/rounds/2026-09-04-backlog-rewrite/citation-inventory.md` with this header and one row per line of `citation-grep.txt` that lies under `docs/superpowers/plans/rounds/` AND carries a line citation in either shape (a bare path mention with no line number gets no row), plus a closing paragraph recording the frozen plan's three rewritten citations and their resolving commits from Steps 2 and 3:
 
 ```markdown
 # Citations into the old backlog path, inventoried 2026-09-04
 
 Source: `citation-grep.txt` beside this file, the full untruncated output of
-`git ls-files | xargs grep -n '2026-07-27-0150-backlog\.md:[0-9]'` at the
-commit that adds this file. Raw round records are never edited, so nothing
+`git ls-files | xargs grep -nH '2026-07-27-0150-backlog\.md'` at the
+commit that adds this file. Two citation shapes were searched for: the
+path followed by `:N` or `:N-M`, and the path named on a line that cites
+`:N` later in the same line. A bare mention of the path is not a citation. Raw round records are never edited, so nothing
 here is applied to them. A row records the commit at which the cited line
 carries the text the citation describes, or `unresolved` when no candidate
 does. Nothing is guessed.
@@ -2664,10 +2773,13 @@ in git history at `docs/superpowers/plans/2026-07-27-0150-backlog.md`.
 - 12
 - 60
 - 61
+- 11
 - 71
 - 72
 - 79
 ```
+
+Item 11 (agy lane drift protection, PARTIAL since 0.24.0) was never ranked in the old file and the spec is silent on it; rule 4 requires a position, so it takes the Last group beside 71 and 72 with a Cost line in their form: `uncosted: the remainder was never designed and the agy lane's future depends on what item 45 decides`. That placement is a decision this plan makes, recorded here so the second reader can see it.
 
 Ids 80, 81 and 82 are the three new items from spec 1d: 80 classifier refusals have no failure class in `fallbacks.md`; 81 what the `fable` alias resolves to and what effort a seat runs at are unmeasured; 82 resume after a killed round is unmeasured.
 
@@ -2712,7 +2824,7 @@ Item 27's old pairing with 19 is dropped (19 is DONE). Item 36's dependency on 4
 
 `Cost` lines: one line each, what it costs NOW, taken from the item's ranking entry and its own text. Specific ones the spec fixes:
 - 35: `the "captured too late" half is open: -PriorStateFile is a plain string hashed as given, and SKILL.md states the capture rule after the dispatch block` (the "no file at all" half is closed by the parameter; say so in the body).
-- 71 and 72: `uncosted: <why, from the item's own text>`.
+- 71 and 72: `uncosted: <why, from the item's own text>`; 11 likewise, as stated under Step 2.
 - 78: Medium, per its own text.
 - 34: re-costed to carry the Fable raw-reply case (a retained reviewer reply is not checked to have reached its last section), amended in the body with that case from item 74's close.
 
@@ -2846,7 +2958,8 @@ State in the task report: every gate's exit code, which host each hook module ra
 - Part 1a preamble: Task 10 Step 2. 1b ranking rules: rules 3, 4, 12. 1c field contract and digest: Tasks 1 and 2; fixtures for U+00A0, padded header, CRLF equality in Task 2. 47a/47b: `ID_RE`. Bodies: Task 10 Step 4. 1d decisions: Task 10 Steps 2 to 4 and Task 11 Step 4. 1e pointer, inventory, frozen-plan rewrite, untruncated grep: Tasks 9 and 10 Step 5; rule 11.
 - Part 2 rules 1 to 12, exit codes, every failure printed, `--revision`: Tasks 1 to 3. Rule 7 reads only the file: `rule_7_verified` takes no git input. `--range`: Task 4.
 - Part 3 preamble residuals: stated in the hook docstrings and the pre-push header. 3a0, 3a, 3b: Task 5; the exact refusal text; `stop_hook_active`; missing baseline, missing git, detached HEAD. Tracked settings and `.gitignore`: Task 6. 3c: Task 7, including the header rewrite and the README/CLAUDE statement. 3d: Task 8, including the ruleset paragraph as a workflow comment; the user decision itself is not made here.
-- Error handling: pre-push refuses on missing python (Task 7); hook scripts exit 0 with notes (Task 5).
+- Error handling: pre-push refuses on missing python (Task 7); the hook entry point exits 0 with a note on missing python and the scripts exit 0 with a note on missing git, each with a test per host (Task 5).
+- Fable plan review R1 (2026-09-04, revision e5a59e3) found six defects, all fixed in this revision: the missing-python note and the settings-command shape (entry point with `-File`, tests build argv from the same shape), the rule-1 order message, the Task 1 assertion Task 2's digest refresh would have broken, the seed repo's missing `.gitignore`, item 11 unranked, and Task 9's grep halting on this plan's own line and missing the probe plan's second citation shape at its line 158.
 - Testing section: every bullet has a test in Tasks 2, 4, 5, 7 and 10 Step 7.
 - Process: subagent-driven build, second reader (Task 11), version bump deferred, `BACKLOG.md` written last among the build tasks (Task 10 after Tasks 1 to 9).
 
