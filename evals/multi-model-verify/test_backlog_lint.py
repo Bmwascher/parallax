@@ -588,3 +588,7 @@ class TestWiring:
     def test_claude_md_names_the_lint(self):
         text = (REPO / "CLAUDE.md").read_text(encoding="utf-8")
         assert "- `python evals/tools/backlog_lint.py`" in text
+
+
+def test_real_backlog_passes():
+    assert lint.main([]) == 0
