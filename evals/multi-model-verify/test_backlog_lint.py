@@ -305,3 +305,142 @@ class TestRule7Digest:
         assert code == 0
         assert [ln.split(" ")[0] for ln in out] == ["1", "2", "3", "4"]
         assert all(len(ln.split(" ")[1]) == 12 for ln in out)
+
+
+import os
+import subprocess
+
+
+def pointer_text():
+    return (FIXTURES / "pointer.md").read_text(encoding="utf-8")
+
+
+def failures_full(text, pointer=None, repo_root=REPO, revision=None):
+    return lint.check(text, repo_root=repo_root, revision=revision, today=TODAY,
+                      pointer_text=pointer if pointer is not None else pointer_text())
+
+
+class TestRules8To12:
+    @pytest.mark.parametrize("phrase", lint.BANNED_NARRATIVE)
+    def test_rule_8_banned_phrase_in_open_body(self, phrase):
+        text = clean_text().replace("Body of item one.", "This was %s last week." % phrase)
+        text = _refresh(text, "1")
+        out = failures_full(text)
+        assert any(f.startswith("item 1: rule 8") and phrase in f for f in out)
+
+    def test_rule_8_banned_phrase_in_group_header(self):
+        text = clean_text().replace("### Last - housekeeping", "### Last - renumbered")
+        out = failures_full(text)
+        assert any(f.startswith("ranking: rule 8") for f in out)
+
+    def test_rule_8_ignores_closed_bodies(self):
+        text = clean_text().replace("Shipped in one sentence.", "Shipped; renumbered.")
+        text = _refresh(text, "2")
+        out = failures_full(text)
+        assert not any("rule 8" in f for f in out)
+
+    def test_rule_9_partial_without_remainder(self):
+        text = clean_text().replace("**What remains.**", "**Remaining.**")
+        text = _refresh(text, "3")
+        out = failures_full(text)
+        assert any(f.startswith("item 3: rule 9") for f in out)
+
+    def test_rule_9_partial_with_short_remainder(self):
+        text = clean_text().replace(
+            "**What remains.** The mechanical half was never designed and this\n"
+            "paragraph carries at least twenty words so that the shape rule nine\n"
+            "is satisfied by the fixture itself here.",
+            "**What remains.** Five words are not enough.")
+        text = _refresh(text, "3")
+        out = failures_full(text)
+        assert any(f.startswith("item 3: rule 9") and "20" in f for f in out)
+
+    def test_rule_10_missing_record_line(self):
+        text = clean_text().replace(
+            "Record: docs/superpowers/specs/2026-09-04-backlog-rewrite-design.md\n\n## 3.",
+            "\n## 3.")
+        text = _refresh(text, "2")
+        out = failures_full(text)
+        assert any(f.startswith("item 2: rule 10") for f in out)
+
+    def test_rule_10_record_path_absent(self):
+        text = clean_text().replace(
+            "Record: docs/superpowers/specs/2026-09-04-backlog-rewrite-design.md",
+            "Record: docs/no/such/file.md")
+        text = _refresh_all(text)
+        out = failures_full(text)
+        assert any(f.startswith("item 2: rule 10") for f in out)
+
+    def test_rule_10_record_commit_resolves(self):
+        head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=REPO,
+                              capture_output=True, text=True, check=True).stdout.strip()
+        text = clean_text().replace(
+            "Record: docs/superpowers/specs/2026-09-04-backlog-rewrite-design.md",
+            "Record: " + head, 1)
+        text = _refresh(text, "2")
+        out = failures_full(text)
+        assert not any("item 2: rule 10" in f for f in out)
+
+    def test_rule_10_record_commit_unknown(self):
+        text = clean_text().replace(
+            "Record: docs/superpowers/specs/2026-09-04-backlog-rewrite-design.md",
+            "Record: deadbeefdeadbeefdeadbeefdeadbeefdeadbeef", 1)
+        text = _refresh(text, "2")
+        out = failures_full(text)
+        assert any(f.startswith("item 2: rule 10") for f in out)
+
+    def test_rule_11_pointer_missing(self):
+        out = failures_full(clean_text(), pointer="")
+        assert any(f.startswith("pointer: rule 11") for f in out)
+
+    def test_rule_11_pointer_without_rule_phrase(self):
+        out = failures_full(clean_text(), pointer="See BACKLOG.md.\n")
+        assert any(f.startswith("pointer: rule 11") for f in out)
+
+    def test_rule_12_header_over_eight_words(self):
+        text = clean_text().replace(
+            "### Last - housekeeping",
+            "### Last - housekeeping and open questions that nobody has ranked")
+        out = failures_full(text)
+        assert any(f.startswith("ranking: rule 12") for f in out)
+
+    def test_clean_fixture_passes_every_rule(self):
+        assert failures_full(clean_text()) == []
+
+
+class TestCliAndRevision:
+    def test_exit_2_on_missing_file(self, tmp_path):
+        assert lint.main([str(tmp_path / "nope.md")]) == 2
+
+    def test_exit_2_on_unparseable_file(self, tmp_path):
+        bad = tmp_path / "bad.md"
+        bad.write_text("# nothing here\n", encoding="utf-8")
+        assert lint.main([str(bad)]) == 2
+
+    def test_exit_1_on_rule_failure(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("PARALLAX_BACKLOG_TODAY", "2026-09-04")
+        path = tmp_path / "b.md"
+        path.write_text(clean_text().replace("- 3\n", ""), encoding="utf-8")
+        assert lint.main([str(path), "--pointer", str(FIXTURES / "pointer.md")]) == 1
+
+    def test_revision_reads_git_objects(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("PARALLAX_BACKLOG_TODAY", "2026-09-04")
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        subprocess.run(["git", "init", "-q", "-b", "main"], cwd=repo, check=True)
+        subprocess.run(["git", "config", "user.email", "t@t"], cwd=repo, check=True)
+        subprocess.run(["git", "config", "user.name", "t"], cwd=repo, check=True)
+        (repo / "BACKLOG.md").write_text(clean_text(), encoding="utf-8")
+        old = repo / lint.OLD_PATH
+        old.parent.mkdir(parents=True)
+        old.write_text(pointer_text(), encoding="utf-8")
+        spec = repo / "docs" / "superpowers" / "specs"
+        spec.mkdir(parents=True)
+        (spec / "2026-09-04-backlog-rewrite-design.md").write_text("x\n", encoding="utf-8")
+        subprocess.run(["git", "add", "-A"], cwd=repo, check=True)
+        subprocess.run(["git", "commit", "-q", "-m", "seed"], cwd=repo, check=True)
+        sha = subprocess.run(["git", "rev-parse", "HEAD"], cwd=repo, capture_output=True,
+                             text=True, check=True).stdout.strip()
+        (repo / "BACKLOG.md").write_text("garbage\n", encoding="utf-8")
+        assert lint.main(["--repo-root", str(repo), "--revision", sha]) == 0
+        assert lint.main(["--repo-root", str(repo)]) == 2

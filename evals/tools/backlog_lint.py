@@ -222,6 +222,117 @@ def rule_7_verified(item, doc, today):
     return out
 
 
+def git_output(repo_root, *args):
+    """Return stdout of a git command, or None on a non-zero exit or a
+    missing git binary."""
+    try:
+        proc = subprocess.run(["git", *args], cwd=str(repo_root),
+                              capture_output=True, text=True, encoding="utf-8")
+    except OSError:
+        return None
+    if proc.returncode != 0:
+        return None
+    return proc.stdout
+
+
+def read_at_revision(repo_root, revision, path):
+    return git_output(repo_root, "show", "%s:%s" % (revision, path))
+
+
+def path_exists(repo_root, revision, path):
+    if revision is None:
+        return (Path(repo_root) / path).exists()
+    return git_output(repo_root, "cat-file", "-e", "%s:%s" % (revision, path)) is not None
+
+
+def commit_exists(repo_root, value):
+    if not re.fullmatch(r"[0-9a-f]{7,40}", value):
+        return False
+    return git_output(repo_root, "cat-file", "-e", value + "^{commit}") is not None
+
+
+def rule_8_narrative(doc):
+    out = []
+    for group in doc.groups:
+        low = group.raw_header.lower()
+        for phrase in BANNED_NARRATIVE:
+            if phrase in low:
+                out.append("ranking: rule 8 (narrative heuristic): group header "
+                           "contains %r" % phrase)
+    for item in doc.items:
+        if item.status not in OPEN_STATUSES:
+            continue
+        low = "\n".join(item.body).lower()
+        for phrase in BANNED_NARRATIVE:
+            if phrase in low:
+                out.append("item %s: rule 8 (narrative heuristic): body contains %r"
+                           % (item.id, phrase))
+    return out
+
+
+def rule_9_remainder(item):
+    if item.status != "PARTIAL":
+        return []
+    body = item.body
+    for index, line in enumerate(body):
+        if line.startswith(WHAT_REMAINS):
+            words = line[len(WHAT_REMAINS):].split()
+            for following in body[index + 1:]:
+                if following.strip(" \t") == "":
+                    break
+                words += following.split()
+            if len(words) < 20:
+                return ["item %s: rule 9 (remainder shape): '**What remains.**' "
+                        "paragraph has %d words, needs at least 20"
+                        % (item.id, len(words))]
+            return []
+    return ["item %s: rule 9 (remainder shape): PARTIAL body has no paragraph "
+            "beginning '**What remains.**'" % item.id]
+
+
+def rule_10_record(item, repo_root, revision):
+    if item.status not in ("DONE", "GONE"):
+        return []
+    records = [ln[len("Record: "):].strip() for ln in item.body
+               if ln.startswith("Record: ")]
+    if not records:
+        return ["item %s: rule 10 (record shape): no 'Record:' line" % item.id]
+    out = []
+    for value in records:
+        if path_exists(repo_root, revision, value) or commit_exists(repo_root, value):
+            continue
+        out.append("item %s: rule 10 (record shape): Record %r is neither a path "
+                   "in the tree nor a commit" % (item.id, value))
+    return out
+
+
+def rule_11_pointer(pointer_text):
+    if pointer_text is None or pointer_text.strip() == "":
+        return ["pointer: rule 11 (old path): %s is missing or empty" % OLD_PATH]
+    out = []
+    if BACKLOG_PATH not in pointer_text:
+        out.append("pointer: rule 11 (old path): does not name %s" % BACKLOG_PATH)
+    if POINTER_RULE_PHRASE not in pointer_text:
+        out.append("pointer: rule 11 (old path): does not carry the resolution "
+                   "rule (%r)" % POINTER_RULE_PHRASE)
+    return out
+
+
+def rule_12_headers(doc):
+    out = []
+    for group in doc.groups:
+        if group.raw_header == "":
+            continue
+        words = group.raw_header[3:].split()
+        if len(words) > 8:
+            out.append("ranking: rule 12 (header shape): %r has %d words, "
+                       "at most 8 allowed" % (group.raw_header, len(words)))
+        for line in group.stray_lines:
+            out.append("ranking: rule 12 (header shape): non-header non-id line %r"
+                       % line)
+    return out
+
+
 def rule_1_header(item):
     out = []
     names = [k for k, _ in item.fields]
@@ -273,7 +384,7 @@ def pairs_of(item):
     return [p.strip() for p in value.split(",")]
 
 
-def check(text, *, repo_root, revision, today, rules=None):
+def check(text, *, repo_root, revision, today, rules=None, pointer_text=None):
     """Return every failure. `rules` limits which rules run (tests only)."""
     doc = parse(text)
     active = set(rules) if rules else set(range(1, 13))
@@ -336,47 +447,92 @@ def check(text, *, repo_root, revision, today, rules=None):
     if 7 in active:
         for item in doc.items:
             out.extend(rule_7_verified(item, doc, today))
+    if 8 in active:
+        out.extend(rule_8_narrative(doc))
+    if 9 in active:
+        for item in doc.items:
+            out.extend(rule_9_remainder(item))
+    if 10 in active:
+        for item in doc.items:
+            out.extend(rule_10_record(item, repo_root, revision))
+    if 11 in active:
+        out.extend(rule_11_pointer(pointer_text))
+    if 12 in active:
+        out.extend(rule_12_headers(doc))
     return out
 
 
-def main(argv=None):
-    parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    parser.add_argument("path", nargs="?", default=None)
-    parser.add_argument("--revision", default=None)
-    parser.add_argument("--range", dest="range_spec", default=None)
-    parser.add_argument("--digests", action="store_true")
-    args = parser.parse_args(argv)
-    repo_root = Path(__file__).resolve().parents[2]
-    today_env = os.environ.get("PARALLAX_BACKLOG_TODAY")
-    today = (datetime.date.fromisoformat(today_env) if today_env
-             else datetime.date.today())
-    path = Path(args.path) if args.path else repo_root / BACKLOG_PATH
+def lint_text(text, pointer_text, *, repo_root, revision, today, label):
+    """Run every rule and print the result. Returns the exit code."""
     try:
-        text = path.read_text(encoding="utf-8")
-    except (OSError, UnicodeDecodeError) as exc:
-        print("file: cannot read %s: %s" % (path, exc))
-        return 2
-    if args.digests:
-        try:
-            doc = parse(text)
-        except ParseError as exc:
-            print("file: cannot parse %s: %s" % (path, exc))
-            return 2
-        for item in doc.items:
-            print("%s %s" % (item.id, canonical_digest(item, doc)))
-        return 0
-    try:
-        failures = check(text, repo_root=repo_root, revision=None, today=today)
+        failures = check(text, repo_root=repo_root, revision=revision, today=today,
+                         pointer_text=pointer_text)
     except ParseError as exc:
-        print("file: cannot parse %s: %s" % (path, exc))
+        print("file: cannot parse %s: %s" % (label, exc))
         return 2
     for line in failures:
         print(line)
     if failures:
         print("%d failure(s)" % len(failures))
         return 1
-    print("backlog lint: clean")
+    print("backlog lint: clean (%s)" % label)
     return 0
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    parser.add_argument("path", nargs="?", default=None)
+    parser.add_argument("--pointer", default=None,
+                        help="pointer file path (default: the old backlog path)")
+    parser.add_argument("--repo-root", default=None)
+    parser.add_argument("--revision", default=None)
+    parser.add_argument("--range", dest="range_spec", default=None)
+    parser.add_argument("--digests", action="store_true")
+    args = parser.parse_args(argv)
+    repo_root = (Path(args.repo_root).resolve() if args.repo_root
+                 else Path(__file__).resolve().parents[2])
+    today_env = os.environ.get("PARALLAX_BACKLOG_TODAY")
+    today = (datetime.date.fromisoformat(today_env) if today_env
+             else datetime.date.today())
+    if args.range_spec:
+        return range_check(repo_root, args.range_spec, today)
+    if args.revision:
+        text = read_at_revision(repo_root, args.revision, BACKLOG_PATH)
+        if text is None:
+            print("file: cannot read %s at %s" % (BACKLOG_PATH, args.revision))
+            return 2
+        pointer = read_at_revision(repo_root, args.revision, OLD_PATH)
+        label = "%s@%s" % (BACKLOG_PATH, args.revision)
+    else:
+        path = Path(args.path) if args.path else repo_root / BACKLOG_PATH
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as exc:
+            print("file: cannot read %s: %s" % (path, exc))
+            return 2
+        pointer_path = Path(args.pointer) if args.pointer else repo_root / OLD_PATH
+        try:
+            pointer = pointer_path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            pointer = None
+        label = str(path)
+    if args.digests:
+        try:
+            doc = parse(text)
+        except ParseError as exc:
+            print("file: cannot parse %s: %s" % (label, exc))
+            return 2
+        for item in doc.items:
+            print("%s %s" % (item.id, canonical_digest(item, doc)))
+        return 0
+    return lint_text(text, pointer, repo_root=repo_root, revision=args.revision,
+                     today=today, label=label)
+
+
+def range_check(repo_root, range_spec, today):
+    """Task 4 fills this in."""
+    print("range mode not implemented")
+    return 2
 
 
 if __name__ == "__main__":
