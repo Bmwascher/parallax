@@ -183,8 +183,10 @@ def resolve_changed_base(ref):
 
 
 def changed_paths_vs(base):
-    """Committed + uncommitted (working tree vs base) plus untracked."""
-    return (_git_lines("diff", "--name-only", base)
+    """Committed + uncommitted (working tree vs base) plus untracked.
+    Rename detection is off: with it on, a surface file moved away is
+    listed only at its destination and the case it selects is skipped."""
+    return (_git_lines("diff", "--no-renames", "--name-only", base)
             + _git_lines("ls-files", "--others", "--exclude-standard"))
 
 

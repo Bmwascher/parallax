@@ -165,7 +165,9 @@ def parse(text):
             preamble.append(line)
         elif section == "ranking":
             group = GROUP_RE.match(line)
-            if group:
+            # A header whose text is only spaces or tabs is not "`### `
+            # followed by text" (spec 1b); it falls through as a stray line.
+            if group and group.group(1).strip(" \t") != "":
                 current_group = Group(raw_header=line,
                                       name=group.group(1).strip(" \t"))
                 groups.append(current_group)

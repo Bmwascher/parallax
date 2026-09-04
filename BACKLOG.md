@@ -7,11 +7,10 @@ groups are labels, not tiers, and the order within and across groups is
 the build order. The case for an item's place is its own `Cost` line.
 Closing an item means editing its header and deleting its ranking line;
 nothing else moves. Refresh an item's `Verified` field after reading it,
-with the digest the lint prints. `evals/tools/backlog_lint.py` enforces
-all of it, in the gate, at push, in CI, and from the hooks in
-`.claude/settings.json`. The full previous text of every closed item is
-in git history at `docs/superpowers/plans/2026-07-27-0150-backlog.md`,
-last full at commit `d19a5ca`.
+with the digest the lint prints. `evals/tools/backlog_lint.py` enforces all
+of it, in the gate, at push, in CI, and from the hooks in `.claude/settings.json`.
+The full previous text of every closed item is in git history at
+`docs/superpowers/plans/2026-07-27-0150-backlog.md`, last full at commit `d19a5ca`.
 
 ## Ranking
 
@@ -77,6 +76,8 @@ last full at commit `d19a5ca`.
 - 72
 - 79
 - 83
+- 84
+- 85
 
 ## 1. Replace the pin mechanism
 Status: DONE
@@ -2539,7 +2540,7 @@ design pass can weigh both.
 Status: PARTIAL
 Cost: the prose was the part that had cost three releases; the mechanical check guards against the rule being ignored rather than against it being wrong
 Pairs: 64
-Verified: 2026-09-04 af0c59e70c6c
+Verified: 2026-09-04 56f8e2d012e4
 
 Measured 2026-08-17, immediately after 0.26.0 shipped. This is the THIRD
 firing of the plugin-cache trap, after 0.20.0 and 0.21.1, and the first one
@@ -2551,8 +2552,12 @@ exactly as the rule then required. Then six diff-debate rounds landed, each
 one moving the tree. The version had already been cached, so `plugin update`
 reported "already at the latest version" and copied nothing. What was
 installed was commit `eb089ad`, five commits behind the shipped head. Two
-files were stale, and both were the ones the debate had just rewritten, so
-the installed binder still carried three defects the release had closed.
+files were stale, and both were the ones the debate had just rewritten:
+`tools/read-kimi-round-evidence.ps1` and
+`evals/multi-model-verify/test_kimi_round_evidence.py`. The installed
+binder still hashed an empty value as one `0x00` byte, still accepted an
+empty `turn.prompt.input`, and still parsed the `llm config` line
+unanchored - three defects the release had closed.
 
 **Part B - the bump alone still installs nothing.** After `0.26.1` was
 committed and pushed as `6c24b99`, `claude plugin update parallax@parallax`
@@ -2569,7 +2574,7 @@ the plugin's own report said so. Two checks do: `installed_plugins.json`
 records `gitCommitSha` for the copy, which is exact and free; and hashing
 every cached file against the checkout with CRLF normalized, which is what
 found this. After the marketplace refresh the 0.26.1 cache was verified that
-way: 979 files, zero differences.
+way: 979 files, zero differences, and `gitCommitSha` `6c24b99`.
 
 **What closed prose-side, 2026-08-17, the same day it was filed.** The
 dev-loop section of `CLAUDE.md` now states all three points: the bump rule
@@ -3636,3 +3641,63 @@ baseline to the session AND record the harness pid so a dead one is
 provably dead; or leave it and document the directory as safe to clear
 between sessions. Whatever is chosen must not delete the current
 session's own file.
+
+## 84. The attestation writer and verifier list a range's paths with rename detection on
+Status: OPEN
+Cost: a record defect, not a gate defect: both sides compute the same listing, so verification still agrees with itself
+Pairs: none
+Verified: 2026-09-04 7f6de33b24e3
+
+**Filed 2026-09-04** from the cross-vendor diff debate of the backlog
+rewrite (round 2 class sweep, retained under
+`docs/superpowers/plans/rounds/2026-09-04-backlog-diff-debate/`).
+
+**The instance.** `tools/write-attestation.ps1` records the attested
+range's changed paths with `git diff --name-only base..head`, and
+`tools/verify-attestation.ps1` recomputes the same listing to compare.
+With rename detection on, a file moved from one path to another appears
+ONLY at its destination, so the record under-states what the range
+touched. The backlog gate closed the same class the same day with
+`--no-renames` in `evals/tools/backlog_lint.py` and the Stop hook.
+
+**Why it is not fixed in that commit.** The two scripts agree with each
+other today, and an attestation already written under the old listing
+would fail verification under a new one (the verifier reports a
+mismatch as "re-review"). Switching them is a change to the attestation
+record format, which needs its own decision about old records rather than
+a one-token edit made in passing.
+
+**Shape of a fix.** Add `--no-renames` to both, and either re-attest
+nothing (old attestations keep verifying because the verifier recomputes
+with the flag it finds recorded) or record the flag in the attestation so
+the verifier uses the listing mode the writer used.
+
+## 85. The dispatch tool seals a prior-state file it never parses
+Status: OPEN
+Cost: one round's binding at risk per malformed file; the round itself completes and the reply is on disk, so what is lost is the seal, not the quota
+Pairs: none
+Verified: 2026-09-04 c5679ea8e578
+
+**Measured 2026-09-04, round 2 of the backlog rewrite's diff debate.**
+The session wrote the round's prior-state file through a shell `echo`
+that emitted single backslashes inside a JSON string (`C:\Users`), which
+is not valid JSON. `tools/dispatch-round.ps1` accepted the file, hashed
+it, sealed the hash into the receipt and dispatched; the round completed
+with exit 0. `tools/read-codex-round-evidence.ps1` then refused the file
+(`Bad JSON escape sequence`) and the reply could not be bound against
+the sealed state. The session bound it against a well-formed copy with
+the same five fields and recorded the deviation in the debate record;
+the receipt's seal covers the malformed original.
+
+**The defect.** The prior state is the round's own evidence of what the
+session root held before dispatch. A seal over bytes the binder cannot
+read is a seal over nothing usable, and the failure surfaces only AFTER
+the reviewer's quota is spent. Preparation is the fail-closed transaction
+that exists to catch exactly this class before the dispatch, and it does
+not parse the one file whose content it seals.
+
+**Shape of a fix.** `-Prepare` parses the prior-state file as JSON and
+requires the fields the binder requires (`kind`, and per kind the
+rollout path, session id, byte count and prefix hash, or the fresh
+inventory), refusing before it reserves the dispatch directory. A test
+per malformed shape.

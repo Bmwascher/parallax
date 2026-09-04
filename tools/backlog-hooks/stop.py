@@ -12,8 +12,8 @@ and the approximation is stated here rather than hidden."""
 import json
 import sys
 
-from _common import (BACKLOG, backlog_sha256, baseline_path, git, lint_working_tree,
-                     load_lint, read_payload)
+from _common import (BACKLOG, REPO_ROOT, backlog_sha256, baseline_path, git,
+                     lint_working_tree, load_lint, read_payload)
 
 REFUSAL = ("BACKLOG.md carries no re-attested item this session while governed "
            "surfaces changed; update the item that owns the work and refresh its "
@@ -48,8 +48,10 @@ def main():
     governed = sorted({p for p in changed if lint.is_governed(p)})
     backlog_changed = backlog_sha256() != baseline.get("backlog_sha256")
     if governed:
-        old_text = git("show", "%s:%s" % (head, lint.BACKLOG_PATH))
-        new_text = BACKLOG.read_text(encoding="utf-8") if BACKLOG.exists() else None
+        # Byte reads with strict UTF-8, like the lint's own modes: no
+        # newline translation between the file and the parser.
+        old_text = lint.read_at_revision(REPO_ROOT, head, lint.BACKLOG_PATH)
+        new_text = lint.decode_utf8(BACKLOG.read_bytes()) if BACKLOG.exists() else None
         ids = lint.reattested_items(old_text, new_text)
         if not ids:
             detail = "governed paths changed: " + ", ".join(governed)

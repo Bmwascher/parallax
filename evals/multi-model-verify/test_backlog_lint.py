@@ -431,6 +431,11 @@ class TestRules8To12:
         bare = clean_text().replace("### Last - housekeeping", "###")
         out = failures_full(bare)
         assert any(f.startswith("ranking: rule 3") and "'###'" in f for f in out)
+        for blank in ("###  ", "### \t"):
+            text = clean_text().replace("### Last - housekeeping", blank)
+            out = failures_full(text)
+            assert any(f.startswith("ranking: rule 3") and repr(blank) in f
+                       for f in out), (blank, out)
 
     def test_rule_10_record_parent_escape_rejected(self):
         """`..` exists from inside any repository; it is not a path in the
