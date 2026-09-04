@@ -1,0 +1,33 @@
+Range verdict: **FIX**. The code/content fixes pass, but round 2 was not cleanly bound under the repository’s evidence contract.
+
+## Claim verdicts
+
+1. **PASS.** Whitespace-only group text falls through to Rule 3, and the fixture covers both spaces and tab forms alongside `###Name` and bare `###`. [backlog_lint.py:167](/C:/Users/Brandon/AppData/Local/Temp/kerev416/evals/tools/backlog_lint.py:167), [test_backlog_lint.py:424](/C:/Users/Brandon/AppData/Local/Temp/kerev416/evals/multi-model-verify/test_backlog_lint.py:424)
+
+2. **PASS.** The preamble occupies lines 1–14, `## Ranking` is line 15, and the change only reflows the existing words. [BACKLOG.md:1](/C:/Users/Brandon/AppData/Local/Temp/kerev416/BACKLOG.md:1), [BACKLOG.md:15](/C:/Users/Brandon/AppData/Local/Temp/kerev416/BACKLOG.md:15)
+
+3. **PASS.** Item 65 restores both filenames, all three exact binder defects, and the cache’s `gitCommitSha 6c24b99`; its digest was refreshed. [BACKLOG.md:2539](/C:/Users/Brandon/AppData/Local/Temp/kerev416/BACKLOG.md:2539), [BACKLOG.md:2554](/C:/Users/Brandon/AppData/Local/Temp/kerev416/BACKLOG.md:2554), [BACKLOG.md:2571](/C:/Users/Brandon/AppData/Local/Temp/kerev416/BACKLOG.md:2571)
+
+4. **PASS.** Stop now obtains the old content through `read_at_revision` and the current content through `read_bytes` plus strict `decode_utf8`; no text-mode BACKLOG read remains. [stop.py:50](/C:/Users/Brandon/AppData/Local/Temp/kerev416/tools/backlog-hooks/stop.py:50)
+
+5. **PASS.** Behavioral `--changed` now disables rename detection. I accept deferring the attestation pair: changing only the verifier would invalidate old rename-bearing records, so this is a record-format compatibility decision appropriately filed as item 84 rather than silently imposed here. [run_behavioral_evals.py:185](/C:/Users/Brandon/AppData/Local/Temp/kerev416/evals/tools/run_behavioral_evals.py:185), [write-attestation.ps1:108](/C:/Users/Brandon/AppData/Local/Temp/kerev416/tools/write-attestation.ps1:108), [verify-attestation.ps1:135](/C:/Users/Brandon/AppData/Local/Temp/kerev416/tools/verify-attestation.ps1:135), [BACKLOG.md:3645](/C:/Users/Brandon/AppData/Local/Temp/kerev416/BACKLOG.md:3645)
+
+6. **FIX — the round-2 binding is not sound evidence.** The receipt’s `priorStateSha256` equals the malformed file’s bytes, while the readable copy is byte-different. The binder requires the supplied prior-state file to match that raw-byte seal before parsing it; the lane makes that seal mandatory, and a non-clean result makes the reply discarded evidence. A post-hoc readable reconstruction cannot prove it was captured before dispatch—the exact attack E4 forbids. [receipt-r2.json:1](/C:/Users/Brandon/AppData/Local/Temp/kerev416/docs/superpowers/plans/rounds/2026-09-04-backlog-diff-debate/receipt-r2.json:1), [prior-state-r2.malformed.json:1](/C:/Users/Brandon/AppData/Local/Temp/kerev416/docs/superpowers/plans/rounds/2026-09-04-backlog-diff-debate/prior-state-r2.malformed.json:1), [prior-state-r2.json:1](/C:/Users/Brandon/AppData/Local/Temp/kerev416/docs/superpowers/plans/rounds/2026-09-04-backlog-diff-debate/prior-state-r2.json:1), [read-codex-round-evidence.ps1:563](/C:/Users/Brandon/AppData/Local/Temp/kerev416/tools/read-codex-round-evidence.ps1:563), [SKILL.md:252](/C:/Users/Brandon/AppData/Local/Temp/kerev416/skills/multi-model-verify/SKILL.md:252), [dispatch-invariants.md:244](/C:/Users/Brandon/AppData/Local/Temp/kerev416/docs/superpowers/specs/2026-08-31-dispatch-invariants.md:244)
+
+   Exact fix: change item 85 and the ledger from “bound against a well-formed copy”/“bound clean” to **UNBOUND — binder refused sealed prior state**; retain the reply only as an audit artifact, not debate evidence. Round 3 may independently verify the resulting tree, but cannot retroactively bind round 2. [BACKLOG.md:3681](/C:/Users/Brandon/AppData/Local/Temp/kerev416/BACKLOG.md:3681), [progress.md:89](/C:/Users/Brandon/AppData/Local/Temp/kerev416/.superpowers/sdd/2026-09-04-backlog-rewrite/progress.md:89)
+
+7. **PASS on the recording disposition.** A log committed after testing necessarily describes its parent rather than itself, so retaining `gates-a6c4431.md` in the closing commit is sound. The existing ledger contains the promised round entries. The current-head test counts and checker executions remain **UNVERIFIED** until that file is retained; this is not another request to place it at `a6c4431`. [progress.md:89](/C:/Users/Brandon/AppData/Local/Temp/kerev416/.superpowers/sdd/2026-09-04-backlog-rewrite/progress.md:89)
+
+## Class sweeps
+
+- **Rename-sensitive path listings:** no further instance beyond the explicitly deferred writer/verifier pair recorded by item 84. Backlog, Stop, and behavioral selection use `--no-renames`. [backlog_lint.py:652](/C:/Users/Brandon/AppData/Local/Temp/kerev416/evals/tools/backlog_lint.py:652), [stop.py:41](/C:/Users/Brandon/AppData/Local/Temp/kerev416/tools/backlog-hooks/stop.py:41), [run_behavioral_evals.py:185](/C:/Users/Brandon/AppData/Local/Temp/kerev416/evals/tools/run_behavioral_evals.py:185)
+
+- **Outside-tree existence checks:** no further instance. Rule 10 retains both lexical and resolved containment checks. [backlog_lint.py:280](/C:/Users/Brandon/AppData/Local/Temp/kerev416/evals/tools/backlog_lint.py:280), [backlog_lint.py:290](/C:/Users/Brandon/AppData/Local/Temp/kerev416/evals/tools/backlog_lint.py:290)
+
+- **BACKLOG reads translating newlines:** no further instance. The remaining `read_text` in Stop reads baseline JSON, not backlog content. [stop.py:32](/C:/Users/Brandon/AppData/Local/Temp/kerev416/tools/backlog-hooks/stop.py:32), [stop.py:53](/C:/Users/Brandon/AppData/Local/Temp/kerev416/tools/backlog-hooks/stop.py:53)
+
+- **Hook lint path without git:** no further instance. SessionStart records unknown; PostToolUse and Stop return notes before lint-dependent work. [session_start.py:12](/C:/Users/Brandon/AppData/Local/Temp/kerev416/tools/backlog-hooks/session_start.py:12), [post_tool_use.py:22](/C:/Users/Brandon/AppData/Local/Temp/kerev416/tools/backlog-hooks/post_tool_use.py:22), [stop.py:33](/C:/Users/Brandon/AppData/Local/Temp/kerev416/tools/backlog-hooks/stop.py:33)
+
+- **Recorded deliberate body losses:** no further instance. Item 65 now contains every measurement identified by the second reader. [second-reader.md:202](/C:/Users/Brandon/AppData/Local/Temp/kerev416/docs/superpowers/plans/rounds/2026-09-04-backlog-rewrite/second-reader.md:202), [BACKLOG.md:2554](/C:/Users/Brandon/AppData/Local/Temp/kerev416/BACKLOG.md:2554)
+
+**Range: FIX**, solely because the tracked record currently represents an unsealed reconstruction as a clean round-2 binding.

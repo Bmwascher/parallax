@@ -3676,7 +3676,7 @@ the verifier uses the listing mode the writer used.
 Status: OPEN
 Cost: one round's binding at risk per malformed file; the round itself completes and the reply is on disk, so what is lost is the seal, not the quota
 Pairs: none
-Verified: 2026-09-04 c5679ea8e578
+Verified: 2026-09-04 bc519a9b95e7
 
 **Measured 2026-09-04, round 2 of the backlog rewrite's diff debate.**
 The session wrote the round's prior-state file through a shell `echo`
@@ -3684,10 +3684,12 @@ that emitted single backslashes inside a JSON string (`C:\Users`), which
 is not valid JSON. `tools/dispatch-round.ps1` accepted the file, hashed
 it, sealed the hash into the receipt and dispatched; the round completed
 with exit 0. `tools/read-codex-round-evidence.ps1` then refused the file
-(`Bad JSON escape sequence`) and the reply could not be bound against
-the sealed state. The session bound it against a well-formed copy with
-the same five fields and recorded the deviation in the debate record;
-the receipt's seal covers the malformed original.
+(`Bad JSON escape sequence`), so the round is UNBOUND: the binder never
+ran against the sealed state, and a readable copy the session wrote
+afterwards cannot prove it was captured before dispatch, which is the
+exact substitution the seal exists to refuse. The reply is retained
+beside the debate record as an audit artifact, not as evidence; the
+fixes it prompted were verified by the next round, which bound clean.
 
 **The defect.** The prior state is the round's own evidence of what the
 session root held before dispatch. A seal over bytes the binder cannot
