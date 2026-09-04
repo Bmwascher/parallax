@@ -33,8 +33,10 @@ and nothing checks the file's shape. The repo has measured three times
    the ranking cannot omit an open item, list one twice, or carry prose
    that goes stale; whether an item's POSITION agrees with its Cost line
    stays a human judgement, reviewed by a person and never by the tool.
-2. A session cannot finish work that changes shipped surfaces without
-   touching the backlog, and cannot merge to main without it.
+2. A session that changes governed surfaces is stopped ONCE with a
+   reminder to re-attest the owning backlog item, and nothing reaches
+   main, locally or through CI, without such a re-attestation in the
+   same range.
 3. The file's shape is checked mechanically after every direct edit,
    before the session stops, in the gate, and at push.
 4. Open work is what a reader lands on; closed history is short and
@@ -109,9 +111,15 @@ Field contract:
 - `Pairs`: `none`, or a comma-separated list of item ids. Required for
   `OPEN` and `PARTIAL`. Every named item must name this one back.
 - `Verified`: an ISO date, a space, and the first 12 hex characters of
-  the SHA-256 of the item's canonical content: the heading line, the
-  header block with the `Verified` line itself excluded, the body, and
-  the name of the ranking group the item sits in. Required on every
+  the SHA-256 of the item's canonical content. Canonical content is
+  built byte-exactly as follows, so the working tree and a git object
+  digest the same: decode as UTF-8; fold CRLF to LF; take the heading
+  line, every header line except the `Verified` line, and every body
+  line up to the line before the next `## ` heading; strip trailing
+  whitespace from each line; drop trailing blank lines; join with a
+  single LF; append LF, then `group:`, then the ranking group header
+  text, then LF; encode as UTF-8 and hash. A test digests the same item
+  from a CRLF working copy and from `--revision` and asserts equality. Required on every
   item. The tool prints the expected value on a mismatch so the field
   is refreshed by an explicit act per item rather than by a date that
   happens to be today. It is an ATTESTATION that someone re-issued the
@@ -196,10 +204,24 @@ rewritten. They also cannot be resolved at the last full-text commit:
 the file was edited many times after most of them were written, and a
 line number bound to one layout lands on unrelated text in another (the
 probe plan's cite of line 41 was written for a 27-directory measurement;
-at `0a41110` line 41 says item 16 is gone). So the pointer file does NOT
-name a single resolving commit. It says that a line citation into this
-path resolves only at the revision the citing document was committed at,
-and that `git log -1 --format=%H -- <citing file>` gives that revision.
+at `0a41110` line 41 says item 16 is gone). Nor does the citing document's own commit always recover the layout:
+`rounds/2026-07-28-0160-backlog/fable-review-c6b7c85-efe4fa0.md` cites
+backlog lines 160 to 162, and at the commit that added that artifact
+those lines hold different text from what it quotes, because the
+backlog moved inside the branch between commits and the review read an
+intermediate tree. So the pointer file names NO resolver at all. It
+says that a line citation into this path is bound to the layout the
+citing document read, that the branch inventory below records the
+resolving commit for each citation where one exists, and that a
+citation the inventory marks unresolved has none.
+
+The branch inventories every raw citation into the old path: for each,
+the citing file, the cited line, the subject revision the record names
+(in its filename or text) or its own commit, and whether the cited line
+at that revision carries the text the citation describes. Where it
+does, the resolving commit is recorded; where it does not, the row is
+marked unresolved and nothing is guessed. The inventory is retained
+under the branch's round directory, never applied to the records.
 
 The two citations in the frozen plan are rewritten in that plan to the
 commit-bound form `path@<sha>:41`, where `<sha>` is the commit at which
@@ -245,10 +267,10 @@ Rules, each a named check with at least one failing fixture:
    `read the numbers as they stand`. The list lives in the tool and is
    extendable; the test pins that each phrase fails. This rule is a
    HEURISTIC for the migration and is labelled one in the tool: it can
-   be evaded by rewording anywhere it applies. What makes narrative
-   impossible in the ranking is rules 3, 4 and 12 together, since an
-   eight-word header cannot carry a renumbering story; in item bodies
-   nothing makes it impossible, and the spec claims nothing more.
+   be evaded by rewording anywhere it applies. Rules 3, 4 and 12 LIMIT
+   narrative in the ranking to whatever fits an eight-word header; they
+   do not make it impossible, since a short renumbering story fits. In
+   item bodies nothing limits it, and the spec claims nothing more.
 9. A `PARTIAL` body contains `**What remains.**` followed by at least
    twenty words in the same paragraph.
 10. A `DONE` or `GONE` body contains a `Record:` line whose value is a
@@ -258,6 +280,11 @@ Rules, each a named check with at least one failing fixture:
     the resolution rule from 1e.
 12. Every `### ` header inside `## Ranking` is at most eight words, and
     no non-header, non-id line appears in that section.
+
+Rules 9 and 10 are SHAPE checks and are labelled so in the tool: twenty
+filler words satisfy 9, and any existing path satisfies 10. Whether the
+remainder text is real and the record is the right one is judged by the
+second reader named under Process, never by the lint.
 
 The checker does NOT: rewrite the file, judge order, or read item
 bodies beyond rules 7 to 10.
@@ -274,10 +301,11 @@ hook is a REMINDER-class control: it fires once, a second stop attempt
 carries `stop_hook_active` and passes, and it exits 0 when its baseline
 or git is missing, so a session CAN finish without updating the backlog
 by stopping twice or by running where the hook cannot see. The hard
-controls are the pre-push clause and CI, which do not depend on the
-session cooperating. The spec does not promise that a session "cannot
-finish" without the backlog; it promises that nothing reaches main
-without it.
+controls are the pre-push clause and the CI range check in 3d, which
+apply the SAME governed-range and re-attestation test and do not depend
+on the session cooperating or on the local hook being installed. The
+spec does not promise that a session "cannot finish" without the
+backlog; it promises that nothing reaches main without it.
 
 **What "touched the backlog" means for the hooks.** A changed byte is
 not enough: changing an unrelated item's date, or a preamble character,
@@ -286,9 +314,14 @@ hooks therefore require that the backlog diff (against the baseline for
 Stop, across the range for pre-push) changes the `Verified` line of at
 least one `OPEN` or `PARTIAL` item, and the hook names that item id in
 its output. That is the same explicit per-item act rule 7 already
-forces after a content change. What remains is that a session can
-re-attest the WRONG item; no mechanical rule can tell which item owns a
-piece of work, and the spec says so rather than claiming otherwise.
+forces after a content change. The hooks prove exactly that someone
+changed an eligible item's attestation line in the range, and nothing
+more. Two residuals are irreducible and both are stated: a session can
+re-attest the WRONG item, because no mechanical rule can tell which
+item owns a piece of work; and a session can re-attest the right item
+WITHOUT READING it, because the `Verified` line is outside its own
+digest and a date change alone satisfies the predicate. Rule 7 forces
+a per-item act after content changes; it does not force reading.
 
 All in a tracked `.claude/settings.json` at the repo root, project scope.
 Hook commands are `pwsh` invocations calling Python, matching the host
@@ -379,6 +412,18 @@ path stay friction-free", with the governed list named beside it.
 verification list and to the `skill-evals` job as its own tier, so a
 hand edit or a merge from another machine is caught in CI.
 
+CI also runs the SAME governed-range and re-attestation test as the
+pre-push clause, because a local hook can be uninstalled or bypassed.
+The lint gains `--range <base>..<head>` which performs exactly the 3c
+test from git objects: on a push to main the base is the event's
+`before` sha, on a pull request it is the pull request's base sha, and
+on a new branch with no before sha the range is the head alone. The
+workflow step fails the job when the range carries a governed change
+and no re-attested `OPEN` or `PARTIAL` item. The pre-push clause is
+rewritten to call this same mode, so the two cannot drift apart, and
+the disposable-clone test drives the mode directly as well as through
+the hook.
+
 ## Error handling
 
 - Every hook script exits 0 with a printed note when Python or git is
@@ -414,6 +459,8 @@ Feature branch, written plan, subagent-driven build, whole-branch Fable
 review, then the cross-vendor diff debate before merge, per this repo's
 rules. The rewrite of item bodies is one task of that plan and is
 verified by a second reader comparing each resolution block to the
-item's own resolution text at the old path. The version bump comes after
+item's own resolution text at the old path, each `Record:` value to the
+record that item's own text names, and each `PARTIAL` remainder
+paragraph to what the item's own text says remains. The version bump comes after
 the debate. `BACKLOG.md` itself is updated as the last act of the branch,
 by the hooks this branch installs.
