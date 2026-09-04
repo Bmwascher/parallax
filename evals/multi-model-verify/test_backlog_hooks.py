@@ -256,3 +256,31 @@ class TestStop:
                                           "stop_hook_active": False}, base,
                         env_extra={"PARALLAX_BACKLOG_GIT": "C:/no/such/git.exe"})
         assert proc.returncode == 0 and "git" in proc.stdout
+
+
+class TestSettingsWiring:
+    def test_settings_file_is_tracked(self):
+        tracked = _git(REPO, "ls-files", ".claude/settings.json")
+        assert tracked == ".claude/settings.json"
+
+    def test_settings_wire_the_three_scripts(self):
+        data = json.loads((REPO / ".claude" / "settings.json").read_text(encoding="utf-8"))
+        hooks = data["hooks"]
+        commands = {event: [h["command"] for group in hooks[event] for h in group["hooks"]]
+                    for event in ("SessionStart", "PostToolUse", "Stop")}
+        assert any("session_start.py" in c for c in commands["SessionStart"])
+        assert any("post_tool_use.py" in c for c in commands["PostToolUse"])
+        assert any("stop.py" in c for c in commands["Stop"])
+        assert hooks["PostToolUse"][0]["matcher"] == "Edit|Write"
+        prefix = "pwsh " + " ".join(HOOK_ARGS) + " "
+        for event in commands:
+            for command in commands[event]:
+                assert command.startswith(prefix), command
+
+    def test_settings_command_shape_matches_the_tests(self):
+        """The command string is the host plus HOOK_ARGS plus the script,
+        which is exactly the argv run_hook builds, so the hook tests
+        exercise what ships."""
+        data = json.loads((REPO / ".claude" / "settings.json").read_text(encoding="utf-8"))
+        command = data["hooks"]["Stop"][0]["hooks"][0]["command"]
+        assert command.split(" ") == ["pwsh", *HOOK_ARGS, "stop.py"]
