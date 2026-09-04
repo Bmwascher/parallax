@@ -24,6 +24,7 @@ file.
 | R3 | `d8a481a` | 4 FIX, 2 new risks |
 | R4 | `611fa14` | 3 FIX (two the same finding), 1 PASS |
 | R5 | `70fbdb8` | 3 FIX, all wording or definition, no new risk |
+| R6 | `ceca5f8` | DRY: 3 PASS, UNVERIFIED none (confirming round, user-authorized) |
 
 Session dispositions per round are in the next round's brief under
 `<position-changes>`. Two of the session's claims were refuted on
@@ -37,11 +38,10 @@ to own a finding the session had filed as new.
 **Budget.** No fix-verify budget was declared before round 1, which the
 protocol requires. The session declared six dispatched exchanges after
 round 3; round 5 was the sixth. No exchange was contested. Round 5's
-three fixes are applied in the spec at the commit that retains this
-record, so the state is CONVERGED WITH AMENDMENTS, not terminated: the
-protocol ends a debate only on an adjudicated dry round, and none has
-been run. Whether to spend a seventh exchange on a confirming round or to
-freeze the spec as it stands is the user's decision.
+three fixes were applied at `ceca5f8`. The user authorized a seventh
+exchange as a confirming round; round 6 reviewed that head and was dry,
+so the debate TERMINATED on an adjudicated dry round with the spec at
+`ceca5f8` as the reviewed text.
 
-**Cost.** Seven dispatches for six answered exchanges; the voided round
+**Cost.** Eight dispatches for seven answered exchanges; the voided round
 spent its quota because this side sealed a malformed resume-state file.
