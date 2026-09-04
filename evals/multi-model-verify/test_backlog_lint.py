@@ -421,6 +421,39 @@ class TestRules8To12:
         out = failures_full(text)
         assert any(f.startswith("ranking: rule 12") for f in out)
 
+    def test_group_header_needs_the_literal_hash_space(self):
+        """Spec 1b: a header is `### ` plus text. `###Name` is not a
+        header, so it is a stray line under rule 3, and its ids fall into
+        the previous group rather than a phantom one."""
+        text = clean_text().replace("### Last - housekeeping", "###Last - housekeeping")
+        out = failures_full(text)
+        assert any(f.startswith("ranking: rule 3") and "###Last" in f for f in out)
+        bare = clean_text().replace("### Last - housekeeping", "###")
+        out = failures_full(bare)
+        assert any(f.startswith("ranking: rule 3") and "'###'" in f for f in out)
+
+    def test_rule_10_record_parent_escape_rejected(self):
+        """`..` exists from inside any repository; it is not a path in the
+        tree."""
+        text = clean_text().replace(
+            "Record: docs/superpowers/specs/2026-09-04-backlog-rewrite-design.md",
+            "Record: ..")
+        text = _refresh_all(text)
+        out = failures_full(text)
+        assert any(f.startswith("item 2: rule 10") for f in out)
+        nested = clean_text().replace(
+            "Record: docs/superpowers/specs/2026-09-04-backlog-rewrite-design.md",
+            "Record: docs/../../%s" % REPO.name)
+        out = failures_full(_refresh_all(nested))
+        assert any(f.startswith("item 2: rule 10") for f in out)
+
+    def test_rule_10_record_absolute_path_rejected(self):
+        text = clean_text().replace(
+            "Record: docs/superpowers/specs/2026-09-04-backlog-rewrite-design.md",
+            "Record: " + str(REPO / "README.md"))
+        out = failures_full(_refresh_all(text))
+        assert any(f.startswith("item 2: rule 10") for f in out)
+
     def test_rule_3_owns_stray_ranking_lines_alone(self):
         """A stray ranking line is rule 3's, and reported ONCE: rule 12
         keeps only the eight-word header check."""
@@ -610,6 +643,36 @@ class TestRangeMode:
         repo = make_seed_repo(tmp_path, clean_text())
         head = _git(repo, "rev-parse", "HEAD")
         assert lint.main(["--repo-root", str(repo), "--range", head]) == 0
+
+    def test_governed_file_renamed_out_of_governance_fails(self, tmp_path, monkeypatch,
+                                                           capsys):
+        """`git diff --name-only` with rename detection lists only the
+        ungoverned destination; the governed source must still count."""
+        monkeypatch.setenv("PARALLAX_BACKLOG_TODAY", "2026-09-04")
+        repo = make_seed_repo(tmp_path, clean_text())
+        _git(repo, "config", "diff.renames", "true")
+        base = _git(repo, "rev-parse", "HEAD")
+        _git(repo, "mv", "tools/a.txt", "docs/a.txt")
+        head = commit_all(repo, "move")
+        code = lint.main(["--repo-root", str(repo), "--range", "%s..%s" % (base, head)])
+        out = capsys.readouterr().out
+        assert code == 1 and "tools/a.txt" in out
+        assert lint.main(["--repo-root", str(repo), "--range", head]) == 1
+
+    def test_lone_cr_is_a_digest_byte(self, tmp_path, capsys):
+        """Spec 1c folds CRLF only. A lone CR must reach the digest as a
+        byte, which universal-newline reading would silently turn into LF."""
+        plain = tmp_path / "plain.md"
+        plain.write_bytes(clean_text().encode("utf-8"))
+        assert lint.main(["--digests", str(plain)]) == 0
+        before = capsys.readouterr().out
+        lone = tmp_path / "lone.md"
+        lone.write_bytes(clean_text().replace("Body of item one.",
+                                              "Body of\ritem one.").encode("utf-8"))
+        assert lint.main(["--digests", str(lone)]) == 0
+        after = capsys.readouterr().out
+        assert before.splitlines()[0] != after.splitlines()[0]
+        assert before.splitlines()[1:] == after.splitlines()[1:]
 
     def test_bad_range_is_exit_2(self, tmp_path):
         repo = make_seed_repo(tmp_path, clean_text())

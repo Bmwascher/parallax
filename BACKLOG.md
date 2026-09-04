@@ -10,7 +10,8 @@ nothing else moves. Refresh an item's `Verified` field after reading it,
 with the digest the lint prints. `evals/tools/backlog_lint.py` enforces
 all of it, in the gate, at push, in CI, and from the hooks in
 `.claude/settings.json`. The full previous text of every closed item is
-in git history at `docs/superpowers/plans/2026-07-27-0150-backlog.md`.
+in git history at `docs/superpowers/plans/2026-07-27-0150-backlog.md`,
+last full at commit `d19a5ca`.
 
 ## Ranking
 
@@ -75,6 +76,7 @@ in git history at `docs/superpowers/plans/2026-07-27-0150-backlog.md`.
 - 71
 - 72
 - 79
+- 83
 
 ## 1. Replace the pin mechanism
 Status: DONE
@@ -1050,7 +1052,7 @@ evidence, which is the one thing this repo does not ship.
 Status: OPEN
 Cost: the "captured too late" half is open: -PriorStateFile is a plain string hashed as given, and SKILL.md states the capture rule after the dispatch block
 Pairs: none
-Verified: 2026-09-04 989f537edd03
+Verified: 2026-09-04 5e52ea3aa3e6
 
 **Measured instance, 2026-08-11, 0.24.0 plan debate round 1.** The round
 was dispatched, the reviewer answered, exit 0, a 15768-byte reply landed.
@@ -1061,8 +1063,12 @@ reconstructed after the fact. One reviewer round spent for nothing.
 **Problem.** `skills/multi-model-verify/SKILL.md` prints the round-1
 dispatch command block, and the requirement that makes that dispatch
 bindable appears roughly fifty lines LATER, inside the per-round evidence
-bullet, as a subordinate clause describing a PARAMETER: the prior state is
-an inventory of the session root captured BEFORE round 1 dispatches. There
+bullet, as a subordinate clause describing a PARAMETER. As measured on
+2026-08-11 the block sat at `SKILL.md:178-189` and the clause at
+`SKILL.md:229-232`, reading "`-PriorState` is an inventory of the session
+root captured BEFORE round 1 dispatches"; those numbers are bound to that
+date's file and item 69 records them as stale since, and the parameter is
+now `-PriorStateFile` on the dispatch tool. There
 is no step before the dispatch block that says to capture it. A session
 executing the skill top to bottom therefore dispatches first and learns
 second, at which point the measurement is unmakeable.
@@ -1185,7 +1191,7 @@ natural place, since it is already the last write before attestation.
 Status: OPEN
 Cost: a back-channel the isolation gate does not cover, unprobed in both directions, and nothing has shown it is live
 Pairs: 76
-Verified: 2026-09-04 da574aaabfe5
+Verified: 2026-09-04 cd85cfc390de
 
 Opened by 0.24.0, which reconfirmed the gap and retracted an unsupported
 claim about it.
@@ -1193,9 +1199,10 @@ claim about it.
 **Already known, and stated.**
 `skills/multi-model-verify/references/model-prompting-notes.md` records
 "'.codex/' stays unswept - unprobed; probe before adding". The review
-mirror's sweep does not cover it. The line citation this item used to carry
-for that sentence was already stale at `5d20eed` and is recorded under item
-69; the sentence is named here rather than located by number.
+mirror's sweep does not cover it. This item cited that sentence at
+`model-prompting-notes.md:288-291`, a range that was already stale at
+`5d20eed` and is recorded under item 69; the sentence is named here rather
+than located by number.
 
 **What was RETRACTED.** An earlier draft said codex loads project-local
 skills from `<repo>/.codex` even when the project is untrusted. That was
@@ -1438,7 +1445,7 @@ item's scope does not shrink and it proceeds as originally scoped.
 Status: OPEN
 Cost: the user asked for it, and it rewrites the same seat table item 55 rewrites, so the table moves once
 Pairs: 55
-Verified: 2026-09-04 b745ffb640ea
+Verified: 2026-09-04 197fbae889c0
 
 **Asked for by the user 2026-08-15**, citing the reference repo's own
 repin, `DannyMac180/fable-advisor@3088622`. That commit moves its
@@ -1450,7 +1457,8 @@ drift apart. It applied no version bump.
 
 **What this repo would be changing.** `agents/flash-implementer.md` is a
 ZERO-JUDGMENT lane that delegates all code writing to Gemini Flash
-through the Antigravity CLI, then verifies route and authorship evidence
+through the Antigravity CLI (Gemini 3.6 Flash when this was written on
+2026-08-15; the agent file names the current generation), then verifies route and authorship evidence
 before reporting. Swapping the model swaps the CLI, the route evidence,
 the authorship evidence and the drift contracts with it. This is a new
 lane wearing an old lane's name, not a model string edit.
@@ -1915,7 +1923,7 @@ only one that cannot be forgotten.
 Status: OPEN
 Cost: 8.6 GB of disk and a growing hazard that the OBVIOUS cleanup command is the destructive one
 Pairs: 77, 76
-Verified: 2026-09-04 7640a135954a
+Verified: 2026-09-04 3e1bc4a1cd3e
 
 Reported by the same KitnEssentials session as items 50 to 53 ("review
 mirror left at `C:\Users\Brandon\AppData\Local\Temp\kerev80`; you now have
@@ -1954,8 +1962,9 @@ identical.
 
 **THE TRAP THAT MAKES A NAIVE SWEEP DANGEROUS.** 16 of the 63 directories
 are NOT mirrors. Fifteen are named `kerev<n>-rounds` and one is
-`kerev-debate`, and they hold debate BRIEFS and REPLIES. Those are the
-verbatim retained artifacts a debate record cites. `del kerev*` would delete
+`kerev-debate`, and they hold debate BRIEFS and REPLIES - `brief-sol-r1.md`,
+`brief-kimi-r2.md`, `amend-r3.md` and so on. Those are the verbatim
+retained artifacts a debate record cites. `del kerev*` would delete
 review evidence along with the scratch, and the two are distinguishable only
 by looking inside. This item's own inventory is the first thing that would
 have gone.
@@ -1973,7 +1982,8 @@ third is the one that settles it.
 
 A name is a CLAIM, not a measurement, which is the discipline this whole
 repo runs on. A directory named `-mirror` that is not one, a mirror built
-by hand - which `references/backup-lane.md` explicitly permits - or one
+by hand - which `references/backup-lane.md` explicitly permits, so a
+hand-built mirror is a legal input the tool never named - or one
 left by an older version of the tool all defeat it, and the thing being
 gated is a DELETE.
 
@@ -2147,7 +2157,7 @@ Record: tools/read-codex-round-evidence.ps1
 Status: OPEN
 Cost: a live defect in every repo except this one: it wastes a whole lane and misreads as the very failure class this repo exists to detect
 Pairs: none
-Verified: 2026-09-04 1584b70c6e84
+Verified: 2026-09-04 4f5be9781fb2
 
 Found on 2026-08-16 by the behavioural evals the user asked for before
 merging 0.25.0. Static gates cannot see it, and no earlier review did.
@@ -2168,7 +2178,8 @@ BARE RELATIVE path:
 - `SKILL.md:94` `tools/new-review-mirror.ps1`
 - `SKILL.md:121` `tools/codex-context-probe.ps1`
 - `SKILL.md:228` `tools/read-codex-round-evidence.ps1`
-- `references/model-prompting-notes.md` `tools/codex-tool-surface-probe.ps1`
+- `references/model-prompting-notes.md:150` `tools/codex-tool-surface-probe.ps1`
+  (line as of 2026-08-16; stale at `5d20eed`, recorded under item 69)
 - `references/backup-lane.md:462` `tools/new-review-mirror.ps1`
 
 A relative path resolves against the working directory, which during a
@@ -2177,8 +2188,9 @@ because here the reviewed repo IS the plugin checkout. In any other repo
 it does not, and the agent is left to guess where the plugin lives.
 `SKILL.md:326` at least writes `<plugin-root>/tools/write-attestation.ps1`,
 but `<plugin-root>` is a placeholder the text never tells anyone how to
-resolve. The line citation this item used to carry for the fourth entry was
-already stale at `5d20eed` and is recorded under item 69.
+resolve. The fourth entry's line number above is the one the item
+carried when filed; it was already stale at `5d20eed` and is recorded
+under item 69.
 
 **The mechanism to use already exists in this repo.** `hooks/hooks.json`
 uses `${CLAUDE_PLUGIN_ROOT}` for exactly this, twice, and
@@ -2584,7 +2596,7 @@ does damage.
 Status: OPEN
 Cost: a claim wider than the probe behind it, feeding a consent gate rather than a merge gate, so a wrong tier map costs one confusing gate rather than a false clean
 Pairs: none
-Verified: 2026-09-04 0f16d89829fd
+Verified: 2026-09-04 32b456cb4aeb
 
 **Source: the Fable lane's class sweep during item 50's pre-build design
 review, 2026-08-19.** Reviewer round record and the design it reviewed are
@@ -2594,7 +2606,8 @@ reviewer flagged it rather than asserting it, and this item is filed at
 that width.
 
 **The text.** The lane-diagnostics bullet of
-`skills/multi-model-verify/references/model-prompting-notes.md` reads: a 400
+`skills/multi-model-verify/references/model-prompting-notes.md` (cited
+at `:350-355` when filed, stale at `5d20eed` per item 69) reads: a 400
 "not supported when using Codex with a ChatGPT account" on the canonical id
 while `gpt-5.6-terra` responds confirms subscription tier-gating rather than
 a CLI problem "(free/Go tiers get Terra only; Plus and above get Sol -
@@ -2613,8 +2626,8 @@ it supports. Item 50's instance was the resume bullet of the same file; it
 was fixed in that cycle. This is the second instance the same sweep found,
 in the same file.
 
-That sentence carried a line citation until 2026-09-03. It resolved
-correctly at `5d20eed` and was broken by item 74's own work, which grew the
+That sentence cited `model-prompting-notes.md:46-52` until 2026-09-03. It
+resolved correctly at `5d20eed` and was broken by item 74's own work, which grew the
 Fable section by 45 lines and pushed the bullet below its old range. Item 74
 converted it rather than leave damage it caused. No line number replaces it
 here: one bound to a commit would still read as a locator, and this sentence
@@ -2633,7 +2646,7 @@ false clean.
 2. If no record exists, narrow the sentence to what one account can
    establish - that THIS account's tier gets Terra and not Sol - and mark
    the cross-tier mapping unprobed, the way the same file already does for
-   `.codex/`.
+   `.codex/` (at `:343-345` when filed; stale at `5d20eed` per item 69).
 
 Do not re-probe other tiers to save the sentence; that needs accounts this
 repo does not have.
@@ -2987,7 +3000,7 @@ It is filed so it is not rediscovered, not queued.
 Status: OPEN
 Cost: uncosted: closing it reopens the dispatch design rather than amending it, and nobody has costed a change of that size
 Pairs: none
-Verified: 2026-09-04 8f15de376695
+Verified: 2026-09-04 de830f95315c
 
 **Filed 2026-09-02**, from round 1 of item 32's cross-vendor diff debate,
 which found the second half of it.
@@ -3021,6 +3034,11 @@ through round 7, is that it would knowingly ship this.
 something that verifies both scripts and is not itself editable by the
 same party. That reopens the dispatch design rather than amending it,
 which is why this is an item and not a fix.
+
+**Also owned here, from item 32's close.** An interrupted launch that
+leaves NO RECEIPT, possibly with a live untracked child and no pid on
+disk, was narrowed by the dispatch tool and not eliminated. It is the
+same boundary: nothing outside the wrapper records that a launch began.
 
 ## 73. The harness FAIL and KILL surfaces were measured on one interpreter
 Status: OPEN
@@ -3588,3 +3606,33 @@ any fix that blesses it must measure the rollout state first.
 killed turn left, resume against it, and record whether the binding holds
 or refuses. If it refuses, that is the answer and the recovery is a re-run;
 if it binds, the evidence has to show the binding was not merely permissive.
+
+## 83. The hook baseline directory grows one file per session and nothing prunes it
+Status: OPEN
+Cost: harmless for a long time and unbounded; a prune rule needs a decision about live sessions, so it is an item and not a one-liner
+Pairs: none
+Verified: 2026-09-04 98c8ea2f5574
+
+**Filed 2026-09-04** from the Fable whole-branch review of the backlog
+rewrite (`docs/superpowers/plans/rounds/2026-09-04-backlog-rewrite/fable-review-0ecc7c7..196f3e5.md`,
+Minor 6).
+
+**The gap.** `tools/backlog-hooks/_common.py` writes one JSON baseline per
+`session_id` under `<tempdir>/parallax-backlog-baselines` (or
+`PARALLAX_BACKLOG_BASELINE_DIR`) at SessionStart, and nothing removes
+them. Each file is under a kilobyte, so the cost is slow, but the
+directory is create-only by construction.
+
+**Why not an age rule.** The Stop hook reads the baseline of the session
+that wrote it, and a session can run for days. A prune by age would
+eventually delete a live session's baseline, after which Stop reports
+"no baseline for this session" and checks nothing: a silent off, the
+failure mode this repo treats as the worst one. Item 54 records the same
+reasoning for review mirrors.
+
+**Shape of a fix, none decided.** Prune at SessionStart only files older
+than a generous bound (weeks, not days) and say so in the note; or key the
+baseline to the session AND record the harness pid so a dead one is
+provably dead; or leave it and document the directory as safe to clear
+between sessions. Whatever is chosen must not delete the current
+session's own file.

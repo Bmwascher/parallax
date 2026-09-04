@@ -2,7 +2,13 @@
 backlog item (spec 3b). Blocks by exit 2 with the reason on stdout. Honours
 stop_hook_active so it cannot loop; passes with a note when the baseline,
 git, or the baseline commit is missing so a broken tool cannot wedge a
-session."""
+session.
+
+"What this session changed" is approximated as the diff between the
+baseline HEAD and the working tree. A pull, merge or rebase during the
+session brings other people's governed changes into that diff, and they
+are attributed to this session; the remedy is the same re-attestation,
+and the approximation is stated here rather than hidden."""
 import json
 import sys
 
@@ -32,7 +38,9 @@ def main():
         print("backlog stop check: baseline commit %s not found; nothing checked" % head)
         return 0
     lint = load_lint()
-    tracked = git("diff", "--name-only", head) or ""
+    # --no-renames: a governed file moved to an ungoverned path is otherwise
+    # listed only at its destination, and the governed side goes unseen.
+    tracked = git("diff", "--no-renames", "--name-only", head) or ""
     already = set(baseline.get("untracked_governed") or [])
     untracked = [p for p in (git("ls-files", "--others", "--exclude-standard")
                              or "").splitlines() if p and p not in already]

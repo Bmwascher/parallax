@@ -1,5 +1,8 @@
 Mechanical re-verification of every citation-inventory.md row, run per
-the fix instructions in task-9-report.md. For each of the 446 individual
+the Task 9 fix-round instructions (the implementer's report lived in the
+git-ignored SDD workspace and was not retained; the instructions were:
+resolve every row against the revision the citing text names, else the
+citing record's first commit, else its parent). For each of the 446 individual
 citations found by the corrected extraction (finditer over citation-grep.txt,
 capturing every match per line rather than only the first), candidates are
 tried in order: an explicit @sha named in the citing text, then the citing

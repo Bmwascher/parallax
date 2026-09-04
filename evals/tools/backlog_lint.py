@@ -38,6 +38,13 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
+# The single-line oracle lives beside this file. The hooks load this module
+# by path, so the directory is put on sys.path here rather than assumed.
+_HERE = str(Path(__file__).resolve().parent)
+if _HERE not in sys.path:
+    sys.path.insert(0, _HERE)
+from exact_line import accept_exactly_one_nonempty_line  # noqa: E402
+
 BACKLOG_PATH = "BACKLOG.md"
 OLD_PATH = "docs/superpowers/plans/2026-07-27-0150-backlog.md"
 POINTER_RULE_PHRASE = "bound to the layout the citing document read"
@@ -69,7 +76,9 @@ BANNED_NARRATIVE = (
 ID_RE = r"(?:\d+|47a|47b)"
 HEADING_RE = re.compile(r"^## (" + ID_RE + r")\. (.+)$")
 ANY_H2_RE = re.compile(r"^## ")
-GROUP_RE = re.compile(r"^###(.*)$")
+# Spec 1b: a group header is the literal `### ` followed by text. `###Name`
+# and a bare `###` are therefore stray ranking lines, reported by rule 3.
+GROUP_RE = re.compile(r"^### (.+)$")
 RANK_RE = re.compile(r"^- (" + ID_RE + r")$")
 FIELD_RE = re.compile(r"^([A-Z][a-z]+): (.*)$")
 CLOSED_RE = re.compile(r"^(?:\d+\.\d+\.\d+|record|superseded)$")
@@ -240,13 +249,51 @@ def git_output(repo_root, *args):
     return proc.stdout
 
 
+def git_bytes(repo_root, *args):
+    """Like git_output, but the raw stdout bytes: no newline translation."""
+    try:
+        proc = subprocess.run(["git", *args], cwd=str(repo_root), capture_output=True)
+    except OSError:
+        return None
+    if proc.returncode != 0:
+        return None
+    return proc.stdout
+
+
+def decode_utf8(raw):
+    """Strict UTF-8 decode of file bytes with NO newline translation, so a
+    lone CR reaches the parser and the digest as the byte it is (spec 1c
+    folds CRLF only). Returns None when the bytes are not UTF-8."""
+    try:
+        return raw.decode("utf-8")
+    except UnicodeDecodeError:
+        return None
+
+
 def read_at_revision(repo_root, revision, path):
-    return git_output(repo_root, "show", "%s:%s" % (revision, path))
+    raw = git_bytes(repo_root, "show", "%s:%s" % (revision, path))
+    return None if raw is None else decode_utf8(raw)
+
+
+def in_tree_path(value):
+    """A Record: path must be repository-relative: not absolute, not
+    drive-rooted, and with no `..` segment. `..` alone would otherwise
+    satisfy an existence check from inside any repository."""
+    normalized = value.replace("\\", "/")
+    if normalized == "" or normalized.startswith("/") or re.match(r"^[A-Za-z]:", normalized):
+        return False
+    return ".." not in normalized.split("/")
 
 
 def path_exists(repo_root, revision, path):
+    if not in_tree_path(path):
+        return False
     if revision is None:
-        return (Path(repo_root) / path).exists()
+        root = Path(repo_root).resolve()
+        target = (root / path).resolve()
+        if target != root and root not in target.parents:
+            return False
+        return target.exists()
     return git_output(repo_root, "cat-file", "-e", "%s:%s" % (revision, path)) is not None
 
 
@@ -324,8 +371,11 @@ def rule_11_pointer(pointer_text):
 
 
 def rule_12_headers(doc):
-    """Group headers only. Rule 3 is the sole owner of stray ranking lines,
-    so a single stray line is reported once and not twice."""
+    """Group headers only. Spec rules 3 and 12 BOTH describe a stray line
+    in the ranking (rule 12's second clause repeats rule 3); rule 3 is the
+    single reporter, so one stray line is one failure and not two. That
+    ownership is a recorded ruling of the 2026-09-04 build, not a dropped
+    clause: every line rule 12's clause names is reported, under rule 3."""
     out = []
     for group in doc.groups:
         if group.raw_header == "":
@@ -514,14 +564,17 @@ def main(argv=None):
     else:
         path = Path(args.path) if args.path else repo_root / BACKLOG_PATH
         try:
-            text = path.read_text(encoding="utf-8")
-        except (OSError, UnicodeDecodeError) as exc:
+            text = decode_utf8(path.read_bytes())
+        except OSError as exc:
             print("file: cannot read %s: %s" % (path, exc))
+            return 2
+        if text is None:
+            print("file: cannot read %s: not UTF-8" % path)
             return 2
         pointer_path = Path(args.pointer) if args.pointer else repo_root / OLD_PATH
         try:
-            pointer = pointer_path.read_text(encoding="utf-8")
-        except (OSError, UnicodeDecodeError):
+            pointer = decode_utf8(pointer_path.read_bytes())
+        except OSError:
             pointer = None
         label = str(path)
     if args.digests:
@@ -591,14 +644,20 @@ def range_check(repo_root, range_spec, today):
         if not base or not head:
             print("range %s: malformed" % range_spec)
             return 2
-        changed = git_output(repo_root, "diff", "--name-only", base, head)
+        # --no-renames: with rename detection on, a governed file moved to an
+        # ungoverned path is listed only at its destination and the governed
+        # side of the change disappears from the listing.
+        changed = git_output(repo_root, "diff", "--no-renames", "--name-only",
+                             base, head)
         old_text = read_at_revision(repo_root, base, BACKLOG_PATH)
     else:
         head = range_spec
         changed = git_output(repo_root, "diff-tree", "--no-commit-id", "--root",
-                             "-r", "--name-only", head)
-        parent = git_output(repo_root, "rev-parse", "--verify", "--quiet", head + "^")
-        old_text = (read_at_revision(repo_root, parent.strip(), BACKLOG_PATH)
+                             "--no-renames", "-r", "--name-only", head)
+        parent_out = git_output(repo_root, "rev-parse", "--verify", "--quiet", head + "^")
+        parent = (accept_exactly_one_nonempty_line(parent_out)
+                  if parent_out is not None else None)
+        old_text = (read_at_revision(repo_root, parent, BACKLOG_PATH)
                     if parent else None)
     if changed is None:
         print("range %s: git could not list the changed paths" % range_spec)
@@ -611,7 +670,8 @@ def range_check(repo_root, range_spec, today):
         ids = reattested_items(old_text, new_text)
         if not ids:
             print("range %s: governed paths changed (%s) and no OPEN or PARTIAL "
-                  "item was re-attested" % (range_spec, ", ".join(governed)))
+                  "item was re-attested (a refreshed Verified line, or the item "
+                  "closed to DONE or GONE)" % (range_spec, ", ".join(governed)))
             code = 1
         else:
             print("range %s: governed paths changed (%s); re-attested: %s"

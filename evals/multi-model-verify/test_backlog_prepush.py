@@ -63,8 +63,8 @@ def clone(tmp_path):
     (work / "README.md").write_text("r\n", encoding="utf-8")
     (work / "CLAUDE.md").write_text("c\n", encoding="utf-8")
     (work / "evals" / "tools").mkdir(parents=True)
-    shutil.copy(REPO / "evals" / "tools" / "backlog_lint.py",
-                work / "evals" / "tools" / "backlog_lint.py")
+    for name in ("backlog_lint.py", "exact_line.py"):
+        shutil.copy(REPO / "evals" / "tools" / name, work / "evals" / "tools" / name)
     hooks = work / ".githooks"
     hooks.mkdir()
     shutil.copy(REPO / ".githooks" / "pre-push", hooks / "pre-push")
@@ -113,6 +113,19 @@ def test_governed_change_without_reattest_is_refused(clone, how):
     proc = push(clone)
     assert proc.returncode != 0
     assert "no OPEN or PARTIAL item was re-attested" in proc.stderr + proc.stdout
+
+
+@pytest.mark.parametrize("how", ["merge", "squash", "ff"])
+def test_governed_file_renamed_out_of_governance_is_refused(clone, how):
+    """A rename lists both sides, so the governed source still counts."""
+    _git(clone, "switch", "-q", "-c", "feat")
+    _git(clone, "mv", "tools/a.txt", "docs/a.txt")
+    _git(clone, "commit", "-q", "-m", "move")
+    _git(clone, "switch", "-q", "main")
+    land(clone, how)
+    proc = push(clone)
+    assert proc.returncode != 0
+    assert "tools/a.txt" in proc.stderr + proc.stdout
 
 
 @pytest.mark.parametrize("how", ["merge", "squash", "ff"])

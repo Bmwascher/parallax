@@ -6,9 +6,11 @@
 # (or `--range local` for a new remote branch). That mode refuses when the
 # range changes a governed path - tools/, skills/, agents/, evals/,
 # commands/, hooks/, .claude-plugin/, .githooks/, .github/, README.md,
-# CLAUDE.md - and no OPEN or PARTIAL backlog item's Verified line changed
-# in the same range, and it lints BACKLOG.md at the pushed head whenever
-# the range touches it. README.md and CLAUDE.md ARE governed on purpose:
+# CLAUDE.md - and no OPEN or PARTIAL backlog item was re-attested in the
+# same range (its Verified line refreshed, or the item closed to DONE or
+# GONE), and it lints BACKLOG.md at the pushed head whenever the range
+# touches it. Renames are listed on both sides, so moving a governed file
+# out of a governed directory still counts as touching it. README.md and CLAUDE.md ARE governed on purpose:
 # every session reads them first. Merge topology is not consulted: a
 # squash, a fast-forward and a merge commit are judged by the paths they
 # carry. Pushes touching no governed path stay friction-free. A missing
@@ -44,7 +46,10 @@ while read -r _lref _lsha _rref _rsha; do
         *[!0]*) range="$_rsha..$_lsha" ;;
         *) range="$_lsha" ;;
     esac
-    if range_out="$("$python_bin" "$lint" --range "$range" 2>&1)"; then
+    # No bytecode: the lint imports a sibling module, and a push must not
+    # leave a new file in the working tree (a clone without the repo's
+    # .gitignore would then carry a governed __pycache__ into its next commit).
+    if range_out="$(PYTHONDONTWRITEBYTECODE=1 "$python_bin" "$lint" --range "$range" 2>&1)"; then
         echo "[pre-push] backlog: $range_out"
     else
         echo "[pre-push] REFUSED by the backlog range check:" >&2

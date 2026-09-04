@@ -114,7 +114,10 @@ clause. A deleted ranking-history sentence is not a loss.
 ## Step 4: the header decisions against spec 1d
 
 Every bullet checked against the ranking block and the headers, and
-against the restatement in `task-10-brief.md` Steps 2 to 4.
+against the restatement in the frozen plan's Task 10 Steps 2 to 4
+(`docs/superpowers/plans/2026-09-04-backlog-rewrite.md`; the Task 10
+brief the implementer worked from was an extract of that task, kept in
+the git-ignored SDD workspace and not retained).
 
 - **75 first, no pair.** Yes. Entry 1 of the First group; `Pairs: none`.
 - **49, 59, 67, 78 at entries 2 to 5.** Yes, in that order, each with the

@@ -57,8 +57,8 @@ def seed_repo(tmp_path):
         (repo / "tools" / "backlog-hooks").mkdir(exist_ok=True)
         shutil.copy(HOOKS / name, repo / "tools" / "backlog-hooks" / name)
     (repo / "evals" / "tools").mkdir(parents=True)
-    shutil.copy(REPO / "evals" / "tools" / "backlog_lint.py",
-                repo / "evals" / "tools" / "backlog_lint.py")
+    for name in ("backlog_lint.py", "exact_line.py"):
+        shutil.copy(REPO / "evals" / "tools" / name, repo / "evals" / "tools" / name)
     _git(repo, "add", "-A")
     _git(repo, "commit", "-q", "-m", "seed")
     return repo
@@ -172,6 +172,18 @@ class TestPostToolUse:
         data = json.loads(proc.stdout)
         assert "item 3: rule 4" in data["hookSpecificOutput"]["additionalContext"]
 
+    def test_git_unavailable_reports_note_not_lint(self, tmp_path):
+        """Without git, rule 10 would call every commit-bound Record
+        unresolved; the spec's Error handling asks for a note instead."""
+        repo = seed_repo(tmp_path)
+        proc = run_hook(repo, "post_tool_use.py",
+                        {"tool_name": "Edit",
+                         "tool_input": {"file_path": str(repo / "BACKLOG.md")}},
+                        tmp_path / "b", env_extra={"PARALLAX_BACKLOG_GIT": "C:/no/such/git.exe"})
+        assert proc.returncode == 0, proc.stdout + proc.stderr
+        context = json.loads(proc.stdout)["hookSpecificOutput"]["additionalContext"]
+        assert "git unavailable" in context and "rule 10" not in context
+
     def test_other_file_is_silent(self, tmp_path):
         repo = seed_repo(tmp_path)
         proc = run_hook(repo, "post_tool_use.py",
@@ -213,6 +225,18 @@ class TestStop:
         (repo / "tools" / "a.txt").write_text("b\n", encoding="utf-8")
         _git(repo, "commit", "-q", "-am", "x")
         assert stop(repo, base).returncode == 2
+
+    def test_governed_file_renamed_out_of_governance_blocks(self, tmp_path):
+        """With rename detection on, `git diff --name-only` lists only the
+        ungoverned destination and the governed source vanishes."""
+        repo = seed_repo(tmp_path)
+        base = tmp_path / "b"
+        start(repo, base)
+        _git(repo, "mv", "tools/a.txt", "docs/a.txt")
+        _git(repo, "commit", "-q", "-m", "move")
+        proc = stop(repo, base)
+        assert proc.returncode == 2, proc.stdout + proc.stderr
+        assert "tools/a.txt" in proc.stdout
 
     def test_new_untracked_governed_file_blocks(self, tmp_path):
         repo = seed_repo(tmp_path)
