@@ -4,7 +4,7 @@ Branch `item74-fable-5-1-notes`. Base `5d20eed`. Two lanes, hub-and-spoke.
 
 Two different bindings, because an earlier version of this sentence ran
 them together and was wrong. THE ROUND TABLE below is complete through
-round 7. THE INVENTORY and the hash tables describe this directory at the
+round 8, which is the last. THE INVENTORY and the hash tables describe this directory at the
 commit that carries this text, not at any round's subject revision; the
 briefs, for instance, entered the directory during round 6 and were absent
 at round 6's own subject revision. A count about a tree the document sits
@@ -39,6 +39,12 @@ measurement, and it is the only such check either lane performed.
 | 5 | `b9c17bc` | FIX | FIX |
 | 6 | `233a340` | VOID, see incident | FIX |
 | 7 | `08ba01b` | FIX | FIX |
+| 8 | `fa86675` | ATTEST | ATTEST |
+
+ROUND 8 CLOSED THE DEBATE. Both lanes attested the same revision, each with
+its own narrowed claim naming what it excludes. Both exclusion lists are in
+the round 8 replies; they agree on every item and the same-harness lane
+names four more that only it could not check.
 
 Round 3 is the split. Both lanes named the same five LOCATORS into
 `model-prompting-notes.md`, and they disagreed about more than ownership.
@@ -64,25 +70,32 @@ lane traced its reach in round 7.
 `whole-branch-review.md` is the required pre-debate whole-branch review,
 cited by SHA-256 in the round 1 brief.
 
-`sol-diff-r1-brief.md` through `sol-diff-r7-brief.md` are the exact texts
+`sol-diff-r1-brief.md` through `sol-diff-r8-brief.md` are the exact texts
 piped to the cross-vendor lane, copied verbatim from the dispatch brief
 files. That lane confirmed in round 7 that all six then retained were what
-it was actually sent (`sol-diff-r7-reply.md`, N2).
+it was actually sent (`sol-diff-r7-reply.md`, N2); briefs 7 and 8 were
+retained after that check and carry no such confirmation.
 
-`sol-diff-r1-reply.md` through `sol-diff-r7-reply.md` are that lane's raw
+`sol-diff-r1-reply.md` through `sol-diff-r8-reply.md` are that lane's raw
 replies, copied verbatim from each dispatch directory's `reply` file. There
 is NO round 6 reply: that round is void, see the incident.
 
-`fable-diff-r2-reply.md` through `fable-diff-r7-reply.md` are the
+`fable-diff-r2-reply.md` through `fable-diff-r8-reply.md` are the
 same-harness lane's replies, transcribed from the subagent result. That
 lane writes no reply file, so these are a transcription rather than a copy
 of an artifact, and each file says so rather than let it read as one.
 
-THE SAME-HARNESS LANE'S BRIEFS ARE NOT RETAINED. They were sent as agent
-messages and no artifact was written, so unlike the cross-vendor briefs
-there is nothing to copy. What each lane was asked therefore differs in how
-well it can be checked, and the next debate should write every brief to
-disk before sending it.
+THE SAME-HARNESS LANE'S BRIEFS FOR ROUNDS 1 TO 7 ARE NOT RETAINED. They
+were sent as agent messages and no artifact was written, so unlike the
+cross-vendor briefs there is nothing to copy. What each lane was asked
+therefore differs in how well it can be checked for those rounds.
+
+FROM ROUND 8 BOTH LANES' BRIEFS ARE RETAINED. `fable-diff-r8-brief.md`
+exists because that round's brief was written to disk BEFORE it was sent,
+which is the practice this debate's own finding produced. Do that from the
+first round of the next debate. That file holds the message body from the
+continuity check down; the transport prepends one line, which the file's
+header states.
 
 FABLE'S ROUND 1 REPLY IS NOT RETAINED. The session that ran it lost the
 agent to a context break before any artifact was written, and the round 1
@@ -105,6 +118,13 @@ same three fail against the installed 0.28.1 cache, none worse.
 `plan-mode-debate-runs` improved from 0/4 to 2/4 with `--head`, attributed
 to this branch's dispatch fix. It was NOT re-run for any amendment since,
 all of which are documentation prose.
+
+THERE IS NO APPLICATION CHECKPOINT FOR THIS BRANCH EITHER. Eight rounds of
+fix edits were applied inside the attested range and none was authorized by
+a checkpoint artifact; nothing enforces its emission, which is item 59's
+complaint and the same gap as the ledger. Recorded here because the
+attestation emitter takes a checkpoint argument and this one will be
+written without it.
 
 THERE IS NO SDD LEDGER FOR THIS BRANCH. The plan's header requires
 `superpowers:subagent-driven-development`, which writes a
@@ -159,6 +179,7 @@ fact about what the lane produced.
 | 4 | `ce07a4649e2673c887f2603a71d53676f0e5456c386ff93637dd8d37f381802a` |
 | 5 | `475051dd0be4f788eb78ae78c3bb3a0d08342ad246c1765d1278475a5b9424ac` |
 | 7 | `73c62591d6e9d9135eb4eab6c32be1e1033fc801f45c154869ec57f583be1627` |
+| 8 | `cc7efd90cc8b487432e2585a553d24b683456e5d858acc250e495f763525e41c` |
 
 The same-harness lane's replies have no such artifact. They are
 transcriptions, and nothing hashes them.
@@ -179,7 +200,9 @@ status names, and the gate at `tools/dispatch-round.ps1` fired as designed.
 
 The cost is real and is recorded rather than smoothed over: the round's
 quota was spent, the lane answered, and the answer is unusable. The session
-rollout grew from 1,510,090 to 1,768,331 bytes, so the work happened.
+rollout grew from 1,510,090 to 1,768,331 bytes, so the work happened. AND
+THE REMEDY COST A SECOND DISPATCH: round 7 re-asked that lane at the next
+head, so the void's true price is two rounds of quota, not one.
 
 WHAT IT MEANT FOR THE VERDICTS, which the first version of this note left
 out and the same-harness lane demanded in round 7: for as long as the void
