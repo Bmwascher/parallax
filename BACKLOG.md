@@ -1684,7 +1684,7 @@ established one.
 ## 48. Feasibility of moving EVERYTHING to PowerShell 7
 Status: DONE
 Closed: record
-Verified: 2026-09-04 0d208360275a
+Verified: 2026-09-04 cb75841dc930
 
 DONE 2026-08-22 as an investigation, not a migration. The verdict is
 CONDITIONAL - not yes, and not no. Windows PowerShell 5.1 is NOT dropped
@@ -1694,8 +1694,9 @@ still needs `"powershell.exe"`; proving PowerShell 7 present on the Linux CI
 runner and on plugin users' machines; reproducing a genuine `pwsh`-missing
 refusal, which this investigation's own measurement did not; fixing the
 shape and cost of the final retained 5.1-starting test set; and confirming
-the escaped re-exec form's command-line ceiling does not bind a real
-migration payload. The record carries a drafted migration item, NOT filed,
+the escaped re-exec form's ~32000-character command-line ceiling does not
+bind a real migration payload, or specifying a fallback transport. The
+record carries a drafted migration item, NOT filed,
 because its own preconditions are unmet. The entry-point survey was
 corrected twice - round 7 found three of four entries wrong and round 8
 found the corrections wrong in four more ways - which is why the record
@@ -2026,7 +2027,7 @@ whichever of those opens the file first.
 Status: OPEN
 Cost: nothing is broken and the unused seat costs nothing at runtime; it is a contract-surface simplification that rides item 45's edit to the same table
 Pairs: 45
-Verified: 2026-09-04 267d8cec97b8
+Verified: 2026-09-04 5f5681efc252
 
 Raised by the user on 2026-08-15, from the premise the implementer lanes
 are built on: the frozen plan is HARD DEFINED and the implementer carries
@@ -2040,7 +2041,8 @@ answer, and the weaker one.
 transcript from that same cycle arguing about creating it. The one
 remaining hit, in `rounds/2026-08-03-home-skills-root/execution-deviations.md`,
 is a table of test assertions naming the file, not a task routed to it. No
-frozen plan has ever designated a task to this lane.
+frozen plan has ever designated a task to this lane. It was built
+2026-07-26 and roughly ten versions have shipped since.
 
 **The INPUT GAP rule is the zero-judgment answer to the same problem, and
 it is the stronger one.** When a task references something the brief does
@@ -2219,7 +2221,7 @@ relative paths.
 Status: OPEN
 Cost: three cycles skipped the checkpoint with no gate, hook, test or review noticing, and the third cost item 74 its attestation entirely
 Pairs: 49, 67, 78
-Verified: 2026-09-04 3c97db23d795
+Verified: 2026-09-04 bbdc7d66c0db
 
 Filed 2026-08-16, immediately after 0.25.0 shipped, because that cycle
 skipped the checkpoint entirely and no gate, hook, test or review noticed.
@@ -2260,6 +2262,11 @@ Three things make this the strongest evidence this item has:
   substitute for the control, which is the argument for a gate rather than
   a reminder.
 
+Recorded in that cycle's debate record under "A required control the
+session did not run", and named in the merge commit. The user was told and
+chose to ship with the gap visible rather than emit a retrospective
+artifact.
+
 **It was deliberately NOT repaired retroactively.** A checkpoint written
 after the edits is a record of a transition that did not happen, which is
 the same defect class that cycle spent three debate rounds closing. The
@@ -2278,9 +2285,14 @@ waived. The cross-vendor lane WITHDREW its attestation, holding that a
 precondition cannot be reduced to an exclusion, and its remedy was to
 replay every fix wave from the pre-fix revision under a checkpoint emitted
 before the first edit. The session read this reference and sided with the
-cross-vendor lane. The user was told and chose to merge UNATTESTED with the
-violation recorded, which is stricter than the second instance's choice to
-attest over the gap. So item 74 shipped with no attestation record at all.
+cross-vendor lane: `application-checkpoint.md` says the checkpoint is what
+authorizes touching files, that it covers post-adjudication fixes during a
+debate, that emission is never optional, and that terminal PASS AND ITS
+ATTESTATION come only after it. The user was told and chose to merge
+UNATTESTED with the violation recorded, which is stricter than the second
+instance's choice to attest over the gap. So item 74 shipped with no
+attestation record at all: not a disclosure line, a missing gate record on
+a nine-round debate whose work both lanes had certified.
 
 **Why a gate is the answer rather than more discipline.** The substance
 the checkpoint protects did survive in 0.25.0 by accident of process -
@@ -2442,7 +2454,7 @@ Record: tools/read-codex-round-evidence.ps1
 Status: OPEN
 Cost: an unrun measurement rather than a defect, on the lane that substitutes for the primary; it is not built, it is RUN
 Pairs: none
-Verified: 2026-09-04 93e1ae49f07e
+Verified: 2026-09-04 de95c61797a9
 
 Filed 2026-08-17 at the close of 0.26.0, as the record of a gate this
 release DECIDED not to run rather than one it forgot.
@@ -2458,7 +2470,8 @@ it has not run this cycle even though 0.26.0 rewrote five parts of
 risk it covers for a binder change is a new refusal rejecting REAL traffic,
 and that was measured directly instead: all six of 0.26.0's new Kimi
 refusals were applied to 90 real `wire.jsonl` files, 2857 record lines and
-7 real `kimi-code.log` files already on disk. ZERO real lines would be
+7 real `kimi-code.log` files already on disk under
+`~/.kimi-code/sessions`. ZERO real lines would be
 refused, including 18 real `config.update` records, which is the rule with
 the least fixture support behind it. The case's own five expectations are
 mostly about lane ORCHESTRATION, and 0.26.0 changed one hunk of one of its
@@ -2701,7 +2714,7 @@ rather than the other way round.
 Status: OPEN
 Cost: a red case cannot be told from a harness that cannot run the case, three 0.27.0 regions got zero behavioural coverage, and the gate cannot exercise the dispatch path this repo just rebuilt
 Pairs: none
-Verified: 2026-09-04 d3aefe40a646
+Verified: 2026-09-04 73bae3504790
 
 **Source: measured during the 0.27.0 verification run, 2026-08-19**, plus
 finding M4 of that cycle's whole-branch review. Both parts are measured
@@ -2752,7 +2765,10 @@ the case actually exercise the new text.
 
 **Part C, added 2026-09-01 by the completion-coupled dispatch cycle's
 whole-branch review, and CORRECTED the same day against the run's own
-retained transcript.** The executor does not follow the NEW call path -
+retained transcript**
+(`rounds/2026-08-31-completion-coupled-dispatch/behavioural-diff-mode-branch-run.transcript.txt`,
+with its graded verdicts beside it)**.** The executor does not follow the
+NEW call path -
 but it is NOT refused, and the first draft of this entry said it was.
 What the transcript shows: the executor read the branch's call sites,
 did NOT run `tools/dispatch-round.ps1 -Prepare`, hand-rolled its own
@@ -2765,8 +2781,10 @@ Two things follow and only the first is established. `run_behavioral_evals.py`
 exposes no task-output or wait tool, so an executor that dispatches a
 round correctly still cannot collect its result unattended. Separately,
 and NOT explained: of the SHELL calls, `ALLOWED_TOOLS` pre-approves only
-`codex:*` and three read-only `git` subcommands, and that file's own header
-says anything else falls to a permission prompt a headless run denies - yet
+`codex:*` and three read-only `git` subcommands (it also pre-approves
+`Skill`, `Read(**)`, `Glob` and `Grep`, which are not shell), and that
+file's own header says anything else falls to a permission prompt a
+headless run denies - yet
 the run issued EIGHTEEN shell calls, 13 Bash and 5 PowerShell, and the
 allowlist denied NONE of them. Its only three errors were a shell syntax
 error, a missing path, and the harness's own `sleep` block; not one was a
@@ -2776,8 +2794,10 @@ what every behavioural case proves, not just this one.
 Measured the same day: `diff-mode-spec-fidelity` scored 4/4 against the
 installed 0.27.0 cache and 3/4 against the branch checkout, its sole miss
 being a verdict never issued after the session said it would wait for a
-notification that an unattended run cannot deliver. The SKILL side of
-that was fixed in the branch; the HARNESS side is this item. Until it is
+notification that an unattended run cannot deliver. The SKILL side of that
+was fixed in the branch - a session must never end its turn with a
+dispatched round unfinished, `model-prompting-notes.md`'s
+`round-dispatch-operation`; the HARNESS side is this item. Until it is
 done, a red case here does not separate "the skill is wrong" from "the
 harness cannot run the skill".
 
@@ -3064,7 +3084,7 @@ Record: docs/superpowers/plans/rounds/2026-09-03-item74-diff-debate
 Status: OPEN
 Cost: a mis-transcribed policy certifies the wrong rule and no gate here can detect it, which is the never-look-alike class the skill names as the worst outcome this tooling may produce
 Pairs: none
-Verified: 2026-09-04 f5d9da726f3a
+Verified: 2026-09-04 71eee7a370df
 
 **Raised by the user 2026-09-03** from a gavel report in another project:
 the review mirror could not see `AGENTS.md`, so comment and test policies
@@ -3168,16 +3188,20 @@ remediation cheaper must not make it optional. Nothing may describe the
 brief-quoting approach as isolation.
 
 **Not covered by item 4.** Both lanes confirmed: item 4 is DONE at 0.17.0
-and addresses the FRICTION of hand-building the mirror. Policy blindness
-appears nowhere in it. This is a new gap, not a regression.
+and addresses the FRICTION of hand-building the mirror (its "Problem" and
+"Evidence" paragraphs). Policy blindness appears nowhere in it. This is a
+new gap, not a regression.
 
 **Panel record.** Sol+Fable, round 1 of 4, 2026-09-03. Subject revision
-`6c0f940b89f3b0145d6cbee1dc772d079704b113e6201ab6f8de5551cb25dcb0`. Sol:
-`gpt-5.6-sol`/openai/read-only/high, reply hash-bound clean and sealed.
+`6c0f940b89f3b0145d6cbee1dc772d079704b113e6201ab6f8de5551cb25dcb0` (the
+byte-identical brief both lanes received). Sol:
+`gpt-5.6-sol`/openai/read-only/high, session
+`01a0694b-a839-7e50-85a7-bce268a3b14c`, reply hash-bound clean and sealed.
 Fable: `parallax:fable-panel-reviewer`, model pin `fable`, harness 2.1.257,
 above the 2.1.216 floor. Mirror at source head `5d20eed`, back-channel
 sweep found one entry (root `AGENTS.md`, untracked and ignored),
-re-enumeration empty, context probe clean, tool-surface probe clean.
+re-enumeration empty, context probe clean with advertised skills 31 to 0,
+tool-surface probe clean.
 
 ## 76. `.claude/skills` is materialised into the mirror and never swept, and its reachability is UNPROBED
 Status: OPEN
