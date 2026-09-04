@@ -1,22 +1,58 @@
 #!/usr/bin/env bash
-# parallax pre-push - non-blocking attestation check for main pushes.
+# parallax pre-push - two clauses for pushes to main.
 #
-# A main push should carry a multi-model-verify attestation for the pushed
-# head (SHA-bound review record - tools/verify-attestation.ps1 documents
-# the fast-forward and merge matching rules). v1 warns and never blocks:
-# docs/chore pushes stay friction-free and the warning is the mechanism
-# that proves the lane out before anyone considers making it blocking.
+# CLAUSE 1 (BLOCKING): the backlog governed-range check. For a push to
+# refs/heads/main it runs `evals/tools/backlog_lint.py --range remote..local`
+# (or `--range local` for a new remote branch). That mode refuses when the
+# range changes a governed path - tools/, skills/, agents/, evals/,
+# commands/, hooks/, .claude-plugin/, .githooks/, .github/, README.md,
+# CLAUDE.md - and no OPEN or PARTIAL backlog item's Verified line changed
+# in the same range, and it lints BACKLOG.md at the pushed head whenever
+# the range touches it. README.md and CLAUDE.md ARE governed on purpose:
+# every session reads them first. Merge topology is not consulted: a
+# squash, a fast-forward and a merge commit are judged by the paths they
+# carry. Pushes touching no governed path stay friction-free. A missing
+# python REFUSES, because a push is the one place a missing tool must not
+# read as a pass. CI runs the same mode (skill-evals job), so a clone
+# without this hook is detected on arrival.
+#
+# CLAUSE 2 (non-blocking): the multi-model-verify attestation check for
+# the pushed head (SHA-bound review record - tools/verify-attestation.ps1
+# documents the fast-forward and merge matching rules). It warns and never
+# blocks; the warning is the mechanism that proves the lane out before
+# anyone considers making it blocking.
 #
 # Register once per clone:  git config core.hooksPath .githooks
 set -uo pipefail
 
 repo_root="$(git rev-parse --show-toplevel)"
 verifier="$repo_root/tools/verify-attestation.ps1"
+lint="$repo_root/evals/tools/backlog_lint.py"
+python_bin="${PARALLAX_BACKLOG_PYTHON:-python}"
 
 while read -r _lref _lsha _rref _rsha; do
     [ "$_rref" = "refs/heads/main" ] || continue
     # skip deletions (local sha is all zeros)
     case "$_lsha" in *[!0]*) ;; *) continue ;; esac
+
+    # ---- clause 1: backlog governed-range check (blocking) ----
+    if ! command -v "$python_bin" >/dev/null 2>&1; then
+        echo "[pre-push] REFUSED: python ($python_bin) not found; the backlog range check cannot run" >&2
+        exit 1
+    fi
+    case "$_rsha" in
+        *[!0]*) range="$_rsha..$_lsha" ;;
+        *) range="$_lsha" ;;
+    esac
+    if range_out="$("$python_bin" "$lint" --range "$range" 2>&1)"; then
+        echo "[pre-push] backlog: $range_out"
+    else
+        echo "[pre-push] REFUSED by the backlog range check:" >&2
+        echo "$range_out" >&2
+        exit 1
+    fi
+
+    # ---- clause 2: attestation (non-blocking) ----
     [ -f "$verifier" ] || continue
     # powershell.exe needs Windows paths; cygpath ships with git-bash.
     win_verifier="$(cygpath -w "$verifier" 2>/dev/null || echo "$verifier")"
