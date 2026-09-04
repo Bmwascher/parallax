@@ -13,12 +13,13 @@ forgets the others. Measured on 2026-09-04 by a full read of the file:
 - entry 1 of the ranking says "Ranked second";
 - entries 2 to 4 argue from evidence their own items superseded on
   2026-09-03 and 04;
-- item 35's defect is closed by construction in 0.28.0 and its heading
-  still says OPEN;
+- half of item 35's defect is closed by construction in 0.28.0 and its
+  text does not say which half;
 - five of the eleven stated pairings are written from one side only, one
   names a closed partner (27 with 19), and one pairs items in different
   files (54 with 51);
-- three findings from item 74's close have no owning item;
+- two findings from item 74's close have no owning item, and a third
+  belongs to item 34 without item 34 saying so;
 - about a third of the ranking's prose is history of its own renumbering.
 
 Nothing enforces that a session returns to the file when work completes,
@@ -34,8 +35,8 @@ and nothing checks the file's shape. The repo has measured three times
    stays a human judgement, reviewed by a person and never by the tool.
 2. A session cannot finish work that changes shipped surfaces without
    touching the backlog, and cannot merge to main without it.
-3. The file's shape is checked mechanically on every edit, in the gate,
-   and at push.
+3. The file's shape is checked mechanically after every direct edit,
+   before the session stops, in the gate, and at push.
 4. Open work is what a reader lands on; closed history is short and
    points at the retained records.
 
@@ -61,12 +62,13 @@ no dates about the file itself (item 70's convention).
 
 ### 1b. Ranking
 
+The preamble, not this section, states that the ranking is ordered,
+that groups are labels rather than tiers, that order within and across
+groups is the build order, and that the case for a place is the item's
+Cost line. The section itself holds nothing but group headers and ids:
+
 ```
 ## Ranking
-
-Ordered. Groups are labels, not tiers; order within and across groups
-is the build order. No prose here: the case for a place is the item's
-Cost line.
 
 ### First - breaks the repo's own review process
 - 75
@@ -76,9 +78,10 @@ Cost line.
 - 61
 ```
 
-Rules: one item id per line, no position numbers, no text after the id.
-Group header names are free text. Closing an item deletes its line and
-nothing else moves.
+Rules: one item id per line, no position numbers, no text after the id,
+no text between a header and its ids. A group header is `### ` followed
+by at most eight words. Closing an item deletes its line and nothing
+else moves.
 
 ### 1c. Items
 
@@ -89,8 +92,10 @@ Every item opens with a fixed header block, then its body.
 Status: OPEN
 Cost: the reviewer certifies a transcription of a policy, and no gate can see it
 Pairs: none
-Verified: 2026-09-04
+Verified: 2026-09-04 3f1c9a0b7e2d
 ```
+
+The digest shown is illustrative; the tool prints the real one.
 
 Field contract:
 
@@ -123,10 +128,12 @@ Bodies:
 - `OPEN` and `PARTIAL` items keep their full current text, cleaned of
   ranking-history prose and with the header replacing any prose status.
   A `PARTIAL` item's body must contain a paragraph beginning
-  `**What remains.**`.
+  `**What remains.**` followed by at least twenty words on the same
+  paragraph.
 - `DONE` and `GONE` items keep only a resolution block: what shipped, in
-  one to five sentences, and a `Record:` line naming the retained record
-  path or the merge commit. The full previous text stays in git history
+  one to five sentences, and a `Record:` line naming a retained record
+  path that exists in the tree, or a commit that `git cat-file -e`
+  resolves. The full previous text stays in git history
   at the old path's last revision, which the preamble names by commit.
 
 Items condensed in the rewrite are condensed by reading each one, not by
@@ -176,13 +183,31 @@ resolution text.
 file: a pointer to `BACKLOG.md` and the commit at which the full text was
 last present. Handoff files and memories cite the old path, so it must
 resolve. Line citations into the old path exist in 83 retained round
-records under `docs/superpowers/plans/rounds/` (counted at `1973843`).
-Retained records are never edited, so those citations are NOT rewritten;
-each was bound to the tree at the commit its record was written, and the
-pointer file states the last full-text commit so a reader can resolve
-them there. Tracked documents outside the retained records carry no line
-citation into the old path (grep at `1973843`), so nothing else needs
-rewriting.
+records under `docs/superpowers/plans/rounds/` and in two lines of one
+frozen plan, `docs/superpowers/plans/2026-08-03-home-skills-root-probe.md`
+(its lines 78 and 975 at `0a41110`). An earlier version of this section
+said no tracked document outside the round records carried one; that
+inventory was wrong because the grep behind it was piped through `head`
+and the two tracked hits were cut off, which is the trap CLAUDE.md's
+long-running-commands rule names.
+
+Raw round records are never edited, so their citations are NOT
+rewritten. They also cannot be resolved at the last full-text commit:
+the file was edited many times after most of them were written, and a
+line number bound to one layout lands on unrelated text in another (the
+probe plan's cite of line 41 was written for a 27-directory measurement;
+at `0a41110` line 41 says item 16 is gone). So the pointer file does NOT
+name a single resolving commit. It says that a line citation into this
+path resolves only at the revision the citing document was committed at,
+and that `git log -1 --format=%H -- <citing file>` gives that revision.
+
+The two citations in the frozen plan are rewritten in that plan to the
+commit-bound form `path@<sha>:41`, where `<sha>` is the commit at which
+line 41 carried the measurement. A frozen plan is a synthesized document
+and not a raw round artifact, so correcting it is permitted under the
+same rule that forbids editing the records. The branch grep that proves
+no other tracked document carries such a citation is run WITHOUT any
+output truncation and its full output is retained in the branch record.
 
 ## Part 2: the checker
 
@@ -220,11 +245,19 @@ Rules, each a named check with at least one failing fixture:
    `read the numbers as they stand`. The list lives in the tool and is
    extendable; the test pins that each phrase fails. This rule is a
    HEURISTIC for the migration and is labelled one in the tool: it can
-   be evaded by rewording, and the structural rules 3 and 4 are what
-   make ranking narrative impossible where it used to live.
-9. A `PARTIAL` body contains `**What remains.**`.
-10. A `DONE` or `GONE` body contains a `Record:` line.
-11. The old path's pointer file exists and names `BACKLOG.md`.
+   be evaded by rewording anywhere it applies. What makes narrative
+   impossible in the ranking is rules 3, 4 and 12 together, since an
+   eight-word header cannot carry a renumbering story; in item bodies
+   nothing makes it impossible, and the spec claims nothing more.
+9. A `PARTIAL` body contains `**What remains.**` followed by at least
+   twenty words in the same paragraph.
+10. A `DONE` or `GONE` body contains a `Record:` line whose value is a
+    path that exists in the tree (in `--revision` mode, in that
+    revision's tree) or a commit that `git cat-file -e` resolves.
+11. The old path's pointer file exists, names `BACKLOG.md`, and carries
+    the resolution rule from 1e.
+12. Every `### ` header inside `## Ranking` is at most eight words, and
+    no non-header, non-id line appears in that section.
 
 The checker does NOT: rewrite the file, judge order, or read item
 bodies beyond rules 7 to 10.
@@ -235,6 +268,27 @@ working tree, so a hook can lint a pushed commit without touching the
 checkout.
 
 ## Part 3: the hooks
+
+**What each hook IS, stated before any of them is described.** The Stop
+hook is a REMINDER-class control: it fires once, a second stop attempt
+carries `stop_hook_active` and passes, and it exits 0 when its baseline
+or git is missing, so a session CAN finish without updating the backlog
+by stopping twice or by running where the hook cannot see. The hard
+controls are the pre-push clause and CI, which do not depend on the
+session cooperating. The spec does not promise that a session "cannot
+finish" without the backlog; it promises that nothing reaches main
+without it.
+
+**What "touched the backlog" means for the hooks.** A changed byte is
+not enough: changing an unrelated item's date, or a preamble character,
+would satisfy a bytes test and review nothing. The Stop and pre-push
+hooks therefore require that the backlog diff (against the baseline for
+Stop, across the range for pre-push) changes the `Verified` line of at
+least one `OPEN` or `PARTIAL` item, and the hook names that item id in
+its output. That is the same explicit per-item act rule 7 already
+forces after a content change. What remains is that a session can
+re-attest the WRONG item; no mechanical rule can tell which item owns a
+piece of work, and the spec says so rather than claiming otherwise.
 
 All in a tracked `.claude/settings.json` at the repo root, project scope.
 Hook commands are `pwsh` invocations calling Python, matching the host
@@ -265,7 +319,8 @@ Matcher: tool is Edit or Write. The hook script reads the tool input's
 file path; if its basename is `BACKLOG.md`, it runs the lint and returns
 the lint output as the hook's message. A failing lint is reported, not
 blocked, because the edit has already happened; the session sees it in
-the same turn.
+the same turn. An edit made through a shell command is not seen here;
+it is caught at Stop, in the gate, and at push.
 
 ### 3b. Stop
 
@@ -275,10 +330,10 @@ HEAD, staged, unstaged or committed, touches a GOVERNED path; and
 whether `BACKLOG.md`'s current bytes differ from the baseline hash. The
 governed paths are `tools/`, `skills/`, `agents/`, `evals/`, `commands/`,
 `hooks/`, `.claude-plugin/`, `.githooks/`, `.github/`, `README.md` and
-`CLAUDE.md`. If governed paths changed and the backlog did not, it exits
-2 with `BACKLOG.md unchanged this session while governed surfaces
-changed; update it or refresh the Verified field of the item that owns
-the work`. Whenever the backlog DID change, it runs the lint and exits 2
+`CLAUDE.md`. If governed paths changed and no `OPEN` or `PARTIAL`
+item's `Verified` line changed, it exits 2 with `BACKLOG.md carries no
+re-attested item this session while governed surfaces changed; update
+the item that owns the work and refresh its Verified field`. Whenever the backlog DID change, it runs the lint and exits 2
 on failure with the lint's output, so an edit made through a shell
 command that PostToolUse never saw is still checked before the session
 ends. With no baseline file (a session started before the hook existed)
@@ -297,20 +352,26 @@ to force.
 `.githooks/pre-push` gains a second clause before the attestation clause.
 For a push to `refs/heads/main`, it lists the paths changed in
 `remote..local` (on a new remote branch, in `local` alone). If any
-governed path from 3b is in that list and `BACKLOG.md` is not, it
+governed path from 3b is in that list and the range's diff of
+`BACKLOG.md` changes no `OPEN` or `PARTIAL` item's `Verified` line, it
 refuses with exit 1. If `BACKLOG.md` is in the list, it runs
 `python evals/tools/backlog_lint.py --revision <local sha>` and refuses
 on failure. Merge topology is not consulted: a squash, a fast-forward
-and a merge commit are all judged by the paths they carry, so a
-docs-only push is never blocked and a governed change never escapes by
-being squashed. Every pushed range stands alone: a backlog edit pushed
+and a merge commit are all judged by the paths they carry, so a push
+that touches no governed path is never blocked and a governed change
+never escapes by being squashed. `README.md` and `CLAUDE.md` ARE
+governed, so a push that changes only one of them is blocked without a
+re-attested item; that is deliberate, because both are surfaces every
+session reads first, and it is stated here so the hook's own header
+does not promise otherwise. Every pushed range stands alone: a backlog edit pushed
 earlier does not cover governed changes pushed later, because later
 work either changes an item (rule 7 forces a refresh) or is a new item.
 
 This is the first BLOCKING clause in that hook. The attestation clause
 stays non-blocking exactly as written; the hook's header comment is
-updated to say which clause blocks and why, and its "docs/chore pushes
-stay friction-free" sentence remains true under the path test.
+updated to say which clause blocks and why. Its "docs/chore pushes stay
+friction-free" sentence is rewritten to "pushes touching no governed
+path stay friction-free", with the governed list named beside it.
 
 ### 3d. Gate and CI
 
@@ -340,8 +401,10 @@ hand edit or a merge from another machine is caught in CI.
 - The pre-push clause is tested by the same method the drift
   state-machine harness uses: a disposable clone with a stub remote,
   pushed as a merge, a squash and a fast-forward, each with and without
-  a backlog change alongside a governed change, plus a docs-only push
-  that must pass.
+  a re-attested item alongside a governed change; a push changing only
+  `docs/**` that must pass; pushes changing only `README.md` and only
+  `CLAUDE.md` that must block; and a push whose only backlog change is
+  an unrelated byte, which must block.
 - The rewritten `BACKLOG.md` passes the lint before the branch is
   reviewed.
 
