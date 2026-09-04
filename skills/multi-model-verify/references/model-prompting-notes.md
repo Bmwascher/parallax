@@ -25,24 +25,66 @@ update):
   review (agents/fable-reviewer.md) runs as a fresh subagent even when
   Fable itself drives.
 
-### Fable 5
+### Fable 5.1
 
-From the official Fable 5 guide
-(platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-fable-5,
-fetched 2026-07-26) — the three seat-invariant rules above appear in
-it near-verbatim; Fable-specific additions:
+From the official Fable 5.1 guide
+(platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-fable-5-1,
+fetched 2026-09-03) — the three seat-invariant rules above appear in it
+near-verbatim; Fable-specific additions:
 
 - Bug-finding recall is a documented strength — the basis for the
   fable-reviewer seat.
-- Effort is the primary dial: high default; medium/low viable where
-  quality holds (reviewer dispatches may sweep effort with evals,
-  never silently).
-- Over-prescriptive skill text DEGRADES Fable 5 output — the Fable
-  seat agent files state contracts and invariants, not step-by-step
-  choreography.
+- **Which model the seats run is not established here.** All three of
+  the seats declare the unversioned alias `model: fable`, so which model
+  they run is UNVERIFIED from the tree; that alias is itself pinned by
+  `evals/multi-model-verify/test_seat_reshuffle.py`, so introducing a
+  versioned pin would be a tests-first change.
+- **Effort must be re-swept, and today governs nothing.** The 5.1 guide
+  states that effort level names do not correspond to the same amount of
+  thinking across models, so the Fable 5 sweep does not carry. No Fable
+  seat file declares an effort at all, so the previous guidance applied
+  to nothing. Sweep with evals, never silently.
+- **A truncated reply corrupts a retained artifact.** At `xhigh` and
+  `max`, 5.1 can spend its budget thinking before it writes. The
+  whole-branch reviewer's RAW reply is the artifact
+  (agents/fable-reviewer.md, SKILL.md's mode diff), and nothing checks
+  that a retained reply reached its last section. Leave room for the
+  reply, not just the thinking.
+- **Prefer targeted edits.** 5.1 rewrites whole files for small changes
+  more readily than 5 did. In this repo a rewrite reflows paragraphs, and
+  a reflow turns a raw-text pin red without changing a word.
+  agents/escalation-implementer.md is the only Fable seat with write
+  tools; the other two are read-only by tool grant.
+- **Unmarked quoting, narrowly.** 5.1 more often reproduces source text
+  without marking it as a quotation. The debate protocol already strikes
+  UNCITED claims, so the case that evades detection is repo text carrying
+  a RESOLVING citation and presented as a finding.
+- **Classifier refusals have no class.** 5.1 can return
+  `stop_reason: "refusal"` on benign code work. fallbacks.md carries no
+  refusal class for any lane. The cross-vendor lane has its own recorded
+  refusal shape at
+  docs/superpowers/specs/2026-08-31-dispatch-options-costing.md:54-55,
+  distinct from item 47's decline-and-exit-0.
+- **Scope behaviour CONVERGES with the escalation seat's existing
+  guard**, which already forbids improvements, drive-by refactors and
+  scope adjustments. Check whether that wording covers 5.1's named
+  behaviours, nearby fixes and extra test files, and add only what is
+  missing. That seat has never been used and item 55 proposes retiring
+  it.
 - Never instruct a Fable seat to echo or transcribe its internal
-  reasoning (the reasoning_extraction refusal class): report
-  contracts ask for evidence and decisions, never thinking.
+  reasoning (the reasoning_extraction refusal class): report contracts
+  ask for evidence and decisions, never thinking.
+- **Conversation binding is a FORWARD-LOOKING risk, not an explanation.**
+  5.1 binds thinking blocks to the conversation that produced them, and a
+  changed prefix returns an error or drops the blocks. It cannot explain
+  the three `No transcript found` failures, which were measured on
+  2.1.233 in the 0.25.0 cycle
+  (`.superpowers/sdd/2026-08-15-resume-preamble-refresh/progress.md`);
+  the binding rule applies to accounts created on or after 2026-08-31 and
+  its symptom is an API error, not a transcript lookup failure. The
+  2026-08-19 probe measured nine clean resumes and no failures, and lists
+  three tested hypotheses and three candidates, so nothing here may say a
+  mechanism is unidentified either.
 - The one same-harness Fable seat that RESUMES is the panel lane; the
   whole-branch reviewer and the escalation implementer are
   single-dispatch and never resume. Resume probe, 2026-07-26, Claude
@@ -56,11 +98,9 @@ it near-verbatim; Fable-specific additions:
   2.1.216 floor containment is precisely what failed silently; above it
   no measurement covers every version, so the floor names the release
   that fixed the silent revert rather than a proven range. Conversation
-  state
-  usually persists and is NOT guaranteed to - `No transcript found`
-  was measured three times on
-  2.1.233, above the 2.1.216 floor. Full records with literal payloads
-  at
+  state usually persists and is NOT guaranteed to - `No transcript found`
+  was measured three times on 2.1.233, above the 2.1.216 floor. Full
+  records with literal payloads at
   docs/superpowers/plans/rounds/2026-07-26-seat-reshuffle/subagent-resume-probe.md
   and
   docs/superpowers/plans/rounds/2026-08-19-item50-resume-probe/probe-record.md;

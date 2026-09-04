@@ -1113,6 +1113,29 @@ def test_dispatch_traps_are_documented_in_the_notes():
         "needs, and truncating them costs the whole run again.") in notes
 
 
+def test_fable_notes_are_51_and_keep_their_measurement_limits():
+    """0.29.0 item 74. Three sentences in the Fable section are the ones
+    a future edit is most likely to turn into a false measurement, so
+    each is pinned. Normalized read: these phrases wrap in the
+    reference and no needle here contains a newline.
+    """
+    notes = " ".join(read(REFERENCES / "model-prompting-notes.md").split())
+    # The seats carry an unversioned alias; what it resolves to is not
+    # measured and may never be written as if it were.
+    assert ("the seats declare the unversioned alias `model: fable`, so"
+            " which model they run is UNVERIFIED") in notes
+    # Effort: the 5.1 guide says re-run the sweep across models, and no
+    # seat file declares an effort at all.
+    assert ("effort level names do not correspond to the same amount of"
+            " thinking across models, so the Fable 5 sweep does not"
+            " carry") in notes
+    # The conversation-binding item is a FORWARD-LOOKING risk. It cannot
+    # explain the three measured failures; saying it can would invent a
+    # measurement, which is the one thing these notes may never do.
+    assert ("cannot explain the three `No transcript found` failures,"
+            " which were measured on 2.1.233 in the 0.25.0 cycle") in notes
+
+
 def test_round_dispatch_tool_region_is_pinned():
     """Backlog item 32, Task 8. Renamed from detached-dispatch-tool for
     the completion-coupled design: -Prepare builds the wrapper as one
