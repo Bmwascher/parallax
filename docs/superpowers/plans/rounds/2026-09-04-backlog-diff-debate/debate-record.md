@@ -36,6 +36,7 @@ Minor was accepted and applied except Minor 6, filed as item 83.
 | Sol R1 (fresh) | 196f3e5 | 7b0023f5 | clean, sealed | FIX: 3 Important, 4 Minor |
 | Sol R2 (resume) | 24ab582 | 17a69fe8 | **UNBOUND** (see below) | FIX (audit artifact only) |
 | Sol R3 (resume) | a6c4431 | 547a2aa8 | clean, sealed | FIX on the round-2 record wording only; every claim and sweep otherwise clean |
+| Sol R4 (resume) | 9d24a5b | 5446d103 | clean, sealed | PASS on every claim and on the range |
 
 Per-round files beside this record: `brief-sol-rN.md`, `reply-sol-rN.md`,
 `receipt-rN.json`.
@@ -82,4 +83,14 @@ amended after each round.
 
 ## Close
 
-(To be completed at the terminal round.)
+Round 4 found nothing and the session adjudicated it PASS: the debate is
+closed at round 4 as a dry round, three of the six declared fix-verify
+exchanges used, none contested. Terminal head `9d24a5b`. Gates are in
+`gates-9d24a5b.md` beside this file. The attestation is written by
+`tools/write-attestation.ps1` for base `0ecc7c7` and the head of the
+closing commit that retains this record, checkpoint-bound. Version bump
+and merge are the user's decisions and are not part of this record.
+
+Items opened by the debate: 83 (hook baseline directory unbounded), 84
+(attestation listing rename-sensitive), 85 (dispatch tool seals a
+prior-state file it never parses).
