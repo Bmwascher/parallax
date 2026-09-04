@@ -529,10 +529,76 @@ def main(argv=None):
                      today=today, label=label)
 
 
+def is_governed(path):
+    path = path.replace("\\", "/")
+    return path in GOVERNED_FILES or any(path.startswith(p) for p in GOVERNED_PREFIXES)
+
+
+def _verified_map(text):
+    if text is None:
+        return {}
+    try:
+        doc = parse(text)
+    except ParseError:
+        return {}
+    return {item.id: (item.status, item.get("Verified")) for item in doc.items}
+
+
+def reattested_items(old_text, new_text):
+    old = _verified_map(old_text)
+    new = _verified_map(new_text)
+    out = []
+    for item_id, (status, verified) in new.items():
+        if status not in OPEN_STATUSES:
+            continue
+        if item_id not in old or old[item_id][1] != verified:
+            out.append(item_id)
+    return out
+
+
 def range_check(repo_root, range_spec, today):
-    """Task 4 fills this in."""
-    print("range mode not implemented")
-    return 2
+    if ".." in range_spec:
+        base, head = range_spec.split("..", 1)
+        if not base or not head:
+            print("range %s: malformed" % range_spec)
+            return 2
+        changed = git_output(repo_root, "diff", "--name-only", base, head)
+        old_text = read_at_revision(repo_root, base, BACKLOG_PATH)
+    else:
+        head = range_spec
+        changed = git_output(repo_root, "diff-tree", "--no-commit-id", "--root",
+                             "-r", "--name-only", head)
+        parent = git_output(repo_root, "rev-parse", "--verify", "--quiet", head + "^")
+        old_text = (read_at_revision(repo_root, parent.strip(), BACKLOG_PATH)
+                    if parent else None)
+    if changed is None:
+        print("range %s: git could not list the changed paths" % range_spec)
+        return 2
+    paths = [p for p in changed.splitlines() if p]
+    governed = [p for p in paths if is_governed(p)]
+    new_text = read_at_revision(repo_root, head, BACKLOG_PATH)
+    code = 0
+    if governed:
+        ids = reattested_items(old_text, new_text)
+        if not ids:
+            print("range %s: governed paths changed (%s) and no OPEN or PARTIAL "
+                  "item was re-attested" % (range_spec, ", ".join(governed)))
+            code = 1
+        else:
+            print("range %s: governed paths changed (%s); re-attested: %s"
+                  % (range_spec, ", ".join(governed), ", ".join(ids)))
+    if BACKLOG_PATH in paths:
+        if new_text is None:
+            print("range %s: %s deleted at %s" % (range_spec, BACKLOG_PATH, head))
+            return 1
+        pointer = read_at_revision(repo_root, head, OLD_PATH)
+        lint_code = lint_text(new_text, pointer, repo_root=repo_root, revision=head,
+                              today=today, label="%s@%s" % (BACKLOG_PATH, head))
+        if lint_code != 0:
+            code = 1
+    if code == 0:
+        print("range %s: clean" % range_spec)
+    return code
 
 
 if __name__ == "__main__":

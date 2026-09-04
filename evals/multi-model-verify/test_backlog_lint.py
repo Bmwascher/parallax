@@ -444,3 +444,131 @@ class TestCliAndRevision:
         (repo / "BACKLOG.md").write_text("garbage\n", encoding="utf-8")
         assert lint.main(["--repo-root", str(repo), "--revision", sha]) == 0
         assert lint.main(["--repo-root", str(repo)]) == 2
+
+
+def _git(repo, *args):
+    return subprocess.run(["git", *args], cwd=repo, capture_output=True, text=True,
+                          encoding="utf-8", check=True).stdout.strip()
+
+
+def make_seed_repo(tmp_path, backlog_text):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, "init", "-q", "-b", "main")
+    _git(repo, "config", "user.email", "t@t")
+    _git(repo, "config", "user.name", "t")
+    (repo / "BACKLOG.md").write_text(backlog_text, encoding="utf-8")
+    old = repo / lint.OLD_PATH
+    old.parent.mkdir(parents=True)
+    old.write_text(pointer_text(), encoding="utf-8")
+    spec = repo / "docs" / "superpowers" / "specs"
+    spec.mkdir(parents=True)
+    (spec / "2026-09-04-backlog-rewrite-design.md").write_text("x\n", encoding="utf-8")
+    (repo / "tools").mkdir()
+    (repo / "tools" / "a.txt").write_text("a\n", encoding="utf-8")
+    (repo / "docs" / "note.md").write_text("n\n", encoding="utf-8")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "seed")
+    return repo
+
+
+def commit_all(repo, message="change"):
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", message)
+    return _git(repo, "rev-parse", "HEAD")
+
+
+class TestReattested:
+    def test_governed_paths(self):
+        assert lint.is_governed("tools/x.ps1")
+        assert lint.is_governed(".github/workflows/a.yml")
+        assert lint.is_governed("README.md")
+        assert lint.is_governed("CLAUDE.md")
+        assert not lint.is_governed("docs/x.md")
+        assert not lint.is_governed("BACKLOG.md")
+        assert not lint.is_governed("README.md.bak")
+
+    def test_changed_verified_line_names_the_item(self):
+        old = clean_text()
+        new = _refresh(old, "1", date="2026-09-03")
+        assert lint.reattested_items(old, new) == ["1"]
+
+    def test_unrelated_byte_is_not_a_reattestation(self):
+        old = clean_text()
+        new = old.replace("Body of item one.", "Body of item one!")
+        assert lint.reattested_items(old, new) == []
+
+    def test_closed_item_verified_change_does_not_count(self):
+        old = clean_text()
+        new = _refresh(old, "2", date="2026-09-03")
+        assert lint.reattested_items(old, new) == []
+
+    def test_absent_old_text_counts_every_open_item(self):
+        assert lint.reattested_items(None, clean_text()) == ["1", "3"]
+
+    def test_unparseable_new_text_is_empty(self):
+        assert lint.reattested_items(clean_text(), "garbage") == []
+
+
+class TestRangeMode:
+    def test_governed_change_without_reattest_fails(self, tmp_path, monkeypatch, capsys):
+        monkeypatch.setenv("PARALLAX_BACKLOG_TODAY", "2026-09-04")
+        repo = make_seed_repo(tmp_path, clean_text())
+        base = _git(repo, "rev-parse", "HEAD")
+        (repo / "tools" / "a.txt").write_text("b\n", encoding="utf-8")
+        head = commit_all(repo)
+        code = lint.main(["--repo-root", str(repo), "--range", "%s..%s" % (base, head)])
+        out = capsys.readouterr().out
+        assert code == 1 and "tools/a.txt" in out and "no OPEN or PARTIAL item" in out
+
+    def test_governed_change_with_reattest_passes(self, tmp_path, monkeypatch, capsys):
+        monkeypatch.setenv("PARALLAX_BACKLOG_TODAY", "2026-09-04")
+        repo = make_seed_repo(tmp_path, clean_text())
+        base = _git(repo, "rev-parse", "HEAD")
+        (repo / "tools" / "a.txt").write_text("b\n", encoding="utf-8")
+        (repo / "BACKLOG.md").write_text(_refresh(clean_text(), "1", "2026-09-03"),
+                                         encoding="utf-8")
+        head = commit_all(repo)
+        code = lint.main(["--repo-root", str(repo), "--range", "%s..%s" % (base, head)])
+        out = capsys.readouterr().out
+        assert code == 0 and "re-attested: 1" in out
+
+    def test_docs_only_change_passes(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("PARALLAX_BACKLOG_TODAY", "2026-09-04")
+        repo = make_seed_repo(tmp_path, clean_text())
+        base = _git(repo, "rev-parse", "HEAD")
+        (repo / "docs" / "note.md").write_text("m\n", encoding="utf-8")
+        head = commit_all(repo)
+        assert lint.main(["--repo-root", str(repo), "--range", "%s..%s" % (base, head)]) == 0
+
+    def test_backlog_change_is_linted_at_head(self, tmp_path, monkeypatch, capsys):
+        monkeypatch.setenv("PARALLAX_BACKLOG_TODAY", "2026-09-04")
+        repo = make_seed_repo(tmp_path, clean_text())
+        base = _git(repo, "rev-parse", "HEAD")
+        (repo / "BACKLOG.md").write_text(clean_text().replace("- 3\n", ""), encoding="utf-8")
+        head = commit_all(repo)
+        code = lint.main(["--repo-root", str(repo), "--range", "%s..%s" % (base, head)])
+        out = capsys.readouterr().out
+        assert code == 1 and "item 3: rule 4" in out
+
+    def test_head_alone_uses_its_parent(self, tmp_path, monkeypatch, capsys):
+        monkeypatch.setenv("PARALLAX_BACKLOG_TODAY", "2026-09-04")
+        repo = make_seed_repo(tmp_path, clean_text())
+        (repo / "tools" / "a.txt").write_text("b\n", encoding="utf-8")
+        head = commit_all(repo)
+        assert lint.main(["--repo-root", str(repo), "--range", head]) == 1
+        (repo / "BACKLOG.md").write_text(_refresh(clean_text(), "3", "2026-09-03"),
+                                         encoding="utf-8")
+        (repo / "tools" / "a.txt").write_text("c\n", encoding="utf-8")
+        head2 = commit_all(repo)
+        assert lint.main(["--repo-root", str(repo), "--range", head2]) == 0
+
+    def test_root_commit_alone_treats_backlog_as_new(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("PARALLAX_BACKLOG_TODAY", "2026-09-04")
+        repo = make_seed_repo(tmp_path, clean_text())
+        head = _git(repo, "rev-parse", "HEAD")
+        assert lint.main(["--repo-root", str(repo), "--range", head]) == 0
+
+    def test_bad_range_is_exit_2(self, tmp_path):
+        repo = make_seed_repo(tmp_path, clean_text())
+        assert lint.main(["--repo-root", str(repo), "--range", "nope..nope"]) == 2
