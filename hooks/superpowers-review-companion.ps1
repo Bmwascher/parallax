@@ -1,7 +1,7 @@
 # PostToolUse hook (Task): when the superpowers requesting-code-review skill
 # dispatches its code-reviewer subagent, inject a reminder to run the
 # multi-model-verify skill's diff mode on the same commit range.
-# Fingerprint: the rendered code-reviewer.md template (superpowers 6.2.0)
+# Fingerprint: the rendered code-reviewer.md template (superpowers 6.3.0)
 # always contains the literals "Senior Code Reviewer" and "Git Range to
 # Review"; both must be present. Re-check the template after superpowers
 # updates - if the fingerprint rots, this hook silently stops firing (fails
