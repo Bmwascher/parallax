@@ -3499,6 +3499,11 @@ def test_both_lanes_dispatch_the_printed_command_as_a_named_task(body_skill, bod
     for body in (body_skill, body_backup_lane):
         assert body.count("dispatch it as a harness background command") >= 1
         assert "the `taskName` the tool printed" in body
+        # The printed command carries its own call operator (Task 1), so
+        # "verbatim" is now true rather than aspirational. A body that
+        # tells a caller to strip or retype it reintroduces the
+        # ParserError measured 2026-09-03.
+        assert "exactly as printed" in body
 
 
 def test_both_lanes_read_the_exit_code_not_the_directory(body_skill, body_backup_lane):
