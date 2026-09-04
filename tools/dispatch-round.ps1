@@ -585,7 +585,10 @@ try {
 # ---------------------------------------------------------------------
 # Step 7: print what the caller needs.
 # ---------------------------------------------------------------------
-$command = '"' + $hostPath + '" -NoProfile -NonInteractive -File "' + $wrapperDest + '"'
+# The call operator is not decoration. A command beginning with a quoted
+# path is a STRING EXPRESSION to PowerShell, so a caller told to run this
+# verbatim gets a ParserError and no round (measured 2026-09-03).
+$command = '& "' + $hostPath + '" -NoProfile -NonInteractive -File "' + $wrapperDest + '"'
 $taskName = $Round + " debate round"
 
 if ($Json) {

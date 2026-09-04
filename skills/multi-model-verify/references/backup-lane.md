@@ -140,7 +140,7 @@ Panel participation: a user-invoked panel per references/panels.md is a second s
   & (Get-Process -Id $PID).Path -NoProfile -File <plugin-checkout>/tools/dispatch-round.ps1 -Prepare -DispatchDir <dispatch-dir> -WrapperBody <wrapper-file> -ReceiptPath <receipt-file> -Round <label> -WorkingDirectory <review-mirror> -RepoRoot <repo-root> -SourceHead <source-head> -MirrorHead <mirror-head> -SourceStatusSha256 <source-status-sha256> -MirrorStateSha256 <mirror-state-sha256> -ExpectedMirrorPath <review-mirror> -DispatchHost <dispatch-host> -PriorStateFile <prior-state-file> -NoWorkdirEvidence -Json
   ```
 
-  `-Prepare` prints `command` and `taskName`: dispatch it as a harness background command, using `command` verbatim, under the `taskName` the tool printed, and STOP — but never END THE TURN with the round unfinished (references/model-prompting-notes.md's round-dispatch-operation). On the completion notification for that exact task, read the harness output file: the exit code of that exact task is the result; never re-read the dispatch directory for a verdict.
+  `-Prepare` prints `command` and `taskName`: dispatch it as a harness background command, running `command` exactly as printed, under the `taskName` the tool printed, and STOP — but never END THE TURN with the round unfinished (references/model-prompting-notes.md's round-dispatch-operation). On the completion notification for that exact task, read the harness output file: the exit code of that exact task is the result; never re-read the dispatch directory for a verdict.
 
   Bind the reply with `tools/read-kimi-round-evidence.ps1` in its FRESH
   form, passing `-SealedPriorStateSha256` with this round's receipt
@@ -202,7 +202,7 @@ Panel participation: a user-invoked panel per references/panels.md is a second s
   & (Get-Process -Id $PID).Path -NoProfile -File <plugin-checkout>/tools/dispatch-round.ps1 -Prepare -DispatchDir <dispatch-dir> -WrapperBody <wrapper-file> -ReceiptPath <receipt-file> -Round <label> -WorkingDirectory <review-mirror> -RepoRoot <repo-root> -SourceHead <source-head> -MirrorHead <mirror-head> -SourceStatusSha256 <source-status-sha256> -MirrorStateSha256 <mirror-state-sha256> -ExpectedMirrorPath <review-mirror> -DispatchHost <dispatch-host> -PriorStateFile <prior-state-file> -NoWorkdirEvidence -Json
   ```
 
-  `-Prepare` prints `command` and `taskName`: dispatch it as a harness background command, using `command` verbatim, under the `taskName` the tool printed, and STOP — but never END THE TURN with the round unfinished (references/model-prompting-notes.md's round-dispatch-operation). On the completion notification for that exact task, read the harness output file: the exit code of that exact task is the result; never re-read the dispatch directory for a verdict.
+  `-Prepare` prints `command` and `taskName`: dispatch it as a harness background command, running `command` exactly as printed, under the `taskName` the tool printed, and STOP — but never END THE TURN with the round unfinished (references/model-prompting-notes.md's round-dispatch-operation). On the completion notification for that exact task, read the harness output file: the exit code of that exact task is the result; never re-read the dispatch directory for a verdict.
 
   Bind the reply with `tools/read-kimi-round-evidence.ps1` in its RESUME
   form, passing `-SealedPriorStateSha256` with THIS round's receipt
@@ -555,7 +555,7 @@ log). There is no shared stream and nothing to attribute by position.
   & (Get-Process -Id $PID).Path -NoProfile -File <plugin-checkout>/tools/dispatch-round.ps1 -Prepare -DispatchDir <dispatch-dir> -WrapperBody <wrapper-file> -ReceiptPath <receipt-file> -Round <label> -WorkingDirectory <review-mirror> -RepoRoot <repo-root> -SourceHead <source-head> -MirrorHead <mirror-head> -SourceStatusSha256 <source-status-sha256> -MirrorStateSha256 <mirror-state-sha256> -ExpectedMirrorPath <review-mirror> -DispatchHost <dispatch-host> -PriorStateFile <prior-state-file> -NoWorkdirEvidence -Json
   ```
 
-  `-Prepare` prints `command` and `taskName`: dispatch it as a harness background command, using `command` verbatim, under the `taskName` the tool printed, and STOP — but never END THE TURN with the round unfinished (references/model-prompting-notes.md's round-dispatch-operation). On the completion notification for that exact task, read the harness output file: the exit code of that exact task is the result; never re-read the dispatch directory for a verdict.
+  `-Prepare` prints `command` and `taskName`: dispatch it as a harness background command, running `command` exactly as printed, under the `taskName` the tool printed, and STOP — but never END THE TURN with the round unfinished (references/model-prompting-notes.md's round-dispatch-operation). On the completion notification for that exact task, read the harness output file: the exit code of that exact task is the result; never re-read the dispatch directory for a verdict.
 
   **This call runs no round-evidence binder, deliberately.** Giving the
   probe a binder would change what a probe PASS means, and the probe's
