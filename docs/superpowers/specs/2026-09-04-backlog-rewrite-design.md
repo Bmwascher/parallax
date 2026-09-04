@@ -34,9 +34,12 @@ and nothing checks the file's shape. The repo has measured three times
    that goes stale; whether an item's POSITION agrees with its Cost line
    stays a human judgement, reviewed by a person and never by the tool.
 2. A session that changes governed surfaces is stopped ONCE with a
-   reminder to re-attest the owning backlog item, and nothing reaches
-   main, locally or through CI, without such a re-attestation in the
-   same range.
+   reminder to re-attest the owning backlog item. A push to main from a
+   clone with the hook installed is refused without such a
+   re-attestation in the same range. A push from a clone without the
+   hook, or a merge made in the GitHub interface, is DETECTED by CI on
+   arrival and fails the job; it is not prevented, because prevention
+   needs a repository ruleset that is not in this tree (see 3d).
 3. The file's shape is checked mechanically after every direct edit,
    before the session stops, in the gate, and at push.
 4. Open work is what a reader lands on; closed history is short and
@@ -116,10 +119,15 @@ Field contract:
   digest the same: decode as UTF-8; fold CRLF to LF; take the heading
   line, every header line except the `Verified` line, and every body
   line up to the line before the next `## ` heading; strip trailing
-  whitespace from each line; drop trailing blank lines; join with a
-  single LF; append LF, then `group:`, then the ranking group header
-  text, then LF; encode as UTF-8 and hash. A test digests the same item
-  from a CRLF working copy and from `--revision` and asserts equality. Required on every
+  ASCII space (U+0020) and tab (U+0009) from each line and nothing
+  else; drop trailing blank lines; join with a single LF; append LF,
+  then `group:`, then the group header text AFTER the `### ` prefix
+  with its own trailing spaces and tabs stripped, then LF; encode as
+  UTF-8 and hash. Fixtures pin each decision: a line ending in a
+  non-breaking space (U+00A0) must digest differently from one that
+  does not, a header written `###   Name  ` must digest as `Name`, and
+  the same item from a CRLF working copy and from `--revision` must
+  digest equal. Required on every
   item. The tool prints the expected value on a mismatch so the field
   is refreshed by an explicit act per item rather than by a date that
   happens to be today. It is an ATTESTATION that someone re-issued the
@@ -305,7 +313,9 @@ controls are the pre-push clause and the CI range check in 3d, which
 apply the SAME governed-range and re-attestation test and do not depend
 on the session cooperating or on the local hook being installed. The
 spec does not promise that a session "cannot finish" without the
-backlog; it promises that nothing reaches main without it.
+backlog. It promises that a hooked push is refused and that any other
+arrival on main is detected by CI; turning detection into prevention is
+a repository setting outside this tree, stated in 3d.
 
 **What "touched the backlog" means for the hooks.** A changed byte is
 not enough: changing an unrelated item's date, or a preamble character,
@@ -423,6 +433,18 @@ and no re-attested `OPEN` or `PARTIAL` item. The pre-push clause is
 rewritten to call this same mode, so the two cannot drift apart, and
 the disposable-clone test drives the mode directly as well as through
 the hook.
+
+**What CI can and cannot do here.** A `push` workflow runs AFTER the
+ref has moved, so on a direct push from a hookless clone the job fails
+with main already changed; that is detection. The same job on a
+`pull_request` event runs BEFORE the merge, but GitHub only refuses the
+merge if the job is a required status check, and that is a repository
+ruleset, not a file in this tree. The design therefore records ONE
+decision for the user, not made here: enable a ruleset on `main` that
+forbids direct pushes and requires the `skill-evals` job, which turns
+the CI check into prevention for every path. Until that is enabled,
+every sentence in this spec about CI means detection on arrival, and
+the pre-push hook on each clone is the only refusal.
 
 ## Error handling
 
