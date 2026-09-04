@@ -14,8 +14,10 @@ for real work, lowercase imperative commits, no AI attribution).
 - `python evals/tools/check_exact_line_oracles.py`
 - `python evals/tools/run_trigger_evals.py`
 - `python -m pytest evals -q`
-CI runs all five on every push (.github/workflows/skill-evals.yml), as
-tiers 1, 1b, 1c, 2 and 2b of the `skill-evals` job.
+- `python evals/tools/backlog_lint.py`
+CI runs all six on every push (.github/workflows/skill-evals.yml), as tiers
+1, 1b, 1c, 2, 2b and 2c of the `skill-evals` job; tier 2d runs the same
+governed-range test as the pre-push hook, on main pushes and pull requests.
 
 A SECOND job, `powershell-hosts`, re-runs every PowerShell-facing test
 module under BOTH Windows PowerShell 5.1 and PowerShell 7. A green suite
