@@ -1133,8 +1133,8 @@ def test_fable_notes_are_51_and_keep_their_measurement_limits():
             " which model they run is UNVERIFIED") in notes
     # Effort: the 5.1 guide says effort names do not carry across
     # models, and no seat file declares an effort at all. The wording is
-    # "guidance", not "sweep": this repo has never run a Fable effort
-    # sweep, and a pin in a section about keeping unmeasured things
+    # "guidance", not "sweep": no Fable effort sweep is recorded in
+    # this repo, and a pin in a section about keeping unmeasured things
     # unmeasured must not itself imply a measurement.
     assert ("effort level names do not correspond to the same amount of"
             " thinking across models, so Fable 5 effort guidance does"

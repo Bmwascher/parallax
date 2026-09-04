@@ -29,10 +29,10 @@ update):
 
 From the official Fable 5.1 guide
 (platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-fable-5-1,
-fetched 2026-09-03). Two bullets below are CARRIED FORWARD from the
-Fable 5 guide (fetched 2026-07-26) and are marked; nobody has re-checked
-them against the 5.1 document, and this note says so rather than
-re-attributing them silently.
+fetched 2026-09-03). ONE bullet below carries two claims forward from
+the Fable 5 guide (fetched 2026-07-26) and is marked as such; nobody has
+re-checked either claim against the 5.1 document, and this note says so
+rather than re-attributing them silently.
 
 - CARRIED FROM THE FABLE 5 GUIDE, not re-checked: the three
   seat-invariant rules above appear in that guide near-verbatim, and
@@ -43,14 +43,14 @@ re-attributing them silently.
   they run is UNVERIFIED from the tree; that alias is itself pinned by
   `evals/multi-model-verify/test_seat_reshuffle.py`, so introducing a
   versioned pin would be a tests-first change.
-- **Effort must be re-swept, and today governs nothing.** The 5.1 guide
-  states that effort level names do not correspond to the same amount of
-  thinking across models, so Fable 5 effort guidance does not carry. No
-  Fable seat file declares an effort at all, so the previous guidance
-  applied to nothing, and this repo has never run a Fable effort sweep.
-  Sweep with evals, never silently.
-- **A truncated reply corrupts a retained artifact.** At `xhigh` and
-  `max`, 5.1 can spend its budget thinking before it writes. The
+- **Effort guidance must be re-evaluated, and today governs nothing.**
+  The 5.1 guide states that effort level names do not correspond to the
+  same amount of thinking across models, so Fable 5 effort guidance does
+  not carry. No Fable seat file declares an effort at all, so the previous
+  guidance applied to nothing, and no Fable effort sweep is recorded in
+  this repo. Sweep with evals, never silently.
+- **A truncated reply corrupts a retained artifact.** At the two highest
+  effort levels, 5.1 can spend its budget thinking before it writes. The
   whole-branch reviewer's RAW reply is the artifact
   (agents/fable-reviewer.md, SKILL.md's mode diff), and nothing checks
   that a retained reply reached its last section. Leave room for the
