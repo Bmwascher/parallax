@@ -64,8 +64,8 @@ rather than re-attributing them silently.
   without marking it as a quotation. The debate protocol already strikes
   UNCITED claims, so the case that evades detection is repo text carrying
   a RESOLVING citation and presented as a finding.
-- **Classifier refusals have no class.** 5.1 can return
-  `stop_reason: "refusal"` on benign code work. fallbacks.md carries no
+- **Classifier refusals have no class.** 5.1 can end a turn with a
+  classifier refusal on benign code work. fallbacks.md carries no
   refusal class for any lane. The cross-vendor lane has its own recorded
   refusal shape at
   docs/superpowers/specs/2026-08-31-dispatch-options-costing.md:54-55,
