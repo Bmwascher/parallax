@@ -76,6 +76,13 @@ at both system and repo scope, Windows PowerShell 5.1 and PowerShell 7.
    at each nested link itself. And a cycle behind a link does not hang
    the manifest; it silently narrows it, which is why the walk keeps
    validating links it reaches THROUGH links.
+8. **A dangling junction is still a reparse point.** Measured after
+   cross-vendor round 3 asked: with the junction's target directory
+   deleted, `Test-Path -LiteralPath` on the junction returned true and
+   `GetAttributes` returned the reparse bit on both hosts. The
+   ancestor check reads attributes directly and treats only a
+   file-not-found or directory-not-found exception as a missing level,
+   so it does not depend on `Test-Path` either way.
 
 ## Decision
 
@@ -117,7 +124,12 @@ cannot see that. And a `.git` that is itself a directory link is
 refused by the walk, because git's optional index refresh writes the
 repository's own `.git/index` during every status capture, and that is
 a write into the repository rather than through a link only while
-`.git` is not a link.
+`.git` is not a link. Round 3 added the alias in the other direction: a
+link whose target is itself a link, or sits beneath one, is recorded
+as spelled, so a mirror path at the real directory behind it neither
+passes through a link nor overlaps the recorded text. A followed target
+with a reparse point at itself or among its ancestors is therefore
+refused, because the mirror cannot protect a tree it cannot name.
 
 **Why the manifest expands nested links explicitly.** Measurement 7:
 a recursion from a parent does not pass through a link. The old copy

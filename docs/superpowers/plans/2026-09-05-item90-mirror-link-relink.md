@@ -40,10 +40,10 @@
 The branch `mirror-link-relink` already exists and carries the design, this plan, and the plan debate's fixes. Check it out and confirm it is ahead of `main`:
 
 ```bash
-git checkout mirror-link-relink && git log --oneline main..HEAD
+git checkout mirror-link-relink && git log --oneline --reverse main..HEAD
 ```
 
-Expected: at least two commits listed, the first of them `draft the mirror link re-link design and plan for item 90`. If the branch does not exist, stop and report; do not create a new one.
+Expected: at least two commits listed oldest first, the first of them `draft the mirror link re-link design and plan for item 90`. If the branch does not exist, stop and report; do not create a new one.
 
 - [ ] **Step 2: Retain the Astra poll**
 
@@ -301,7 +301,7 @@ git commit -m "state that the mirror re-links directory links instead of copying
 ### Task 3: The builder re-links, tests first
 
 **Files:**
-- Modify: `evals/multi-model-verify/test_review_mirror.py:1343-1374` (replace `test_a_source_directory_link_is_followed_not_refused`) and append five cases after `test_verify_refuses_a_mirror_at_a_different_path`
+- Modify: `evals/multi-model-verify/test_review_mirror.py:1343-1374` (replace `test_a_source_directory_link_is_followed_not_refused`) and append seventeen cases after `test_verify_refuses_a_mirror_at_a_different_path`
 - Modify: `tools/new-review-mirror.ps1` (the path-budget walk near lines 923-1052, the robocopy call at line 1100, a new re-link block after the final sweep near line 1338, and the record print near line 1408)
 
 **Interfaces:**
@@ -369,7 +369,7 @@ def test_a_source_directory_link_is_recreated_as_a_junction(tmp_path):
 
 - [ ] **Step 2: Append the new cases after `test_verify_refuses_a_mirror_at_a_different_path`**
 
-Fifteen cases follow. Each is listed in Step 3's `-k` selection.
+Seventeen cases follow. Each is listed in Step 3's `-k` selection.
 
 ```python
 def test_verify_detects_an_edit_behind_the_mirror_link(tmp_path):
@@ -590,18 +590,71 @@ def test_verify_refuses_a_cycle_behind_a_link_in_the_manifest(tmp_path):
     """The construction walk does not rerun at verify time, so the
     manifest's own visited set is the only cycle guard there. A junction
     planted inside the target after the build, pointing back at the
-    target, is a repeat of a target the expansion already entered."""
+    target, is a repeat of a target the expansion already entered. The
+    target is a nested checkout so git names ONE subject and the
+    directory-expansion helper, not git, meets the cycle (cross-vendor
+    round 3)."""
     repo = make_repo(tmp_path)
     outside = tmp_path / "outside"
-    outside.mkdir()
-    (outside / "x.txt").write_text("linked\n")
+    _make_checkout(outside)
     make_junction(repo / "linked", outside)
     mirror = tmp_path / "mirror"
-    _, ident = build_and_read(repo, mirror)
+    proc, ident = build_and_read(repo, mirror)
+    baseline = read_block(proc.stdout, "baseline:")
+    assert [b for b in baseline if "linked" in b] == ["?? linked/"], baseline
     make_junction(outside / "self", outside)
     proc = run_verify(repo, mirror, ident)
     assert proc.returncode == 1, proc.stdout + proc.stderr
     assert "repeats or cycles" in proc.stdout, proc.stdout
+
+
+def test_the_manifest_refuses_links_nested_deeper_than_sixteen(tmp_path):
+    """The depth bound is the only guard against a relative-link cycle,
+    which a junction fixture cannot build, so the bound itself gets a
+    junction test (cross-vendor round 3). d0 is a checkout, so the
+    outer subject is one entry; each d<i> holds a junction n onto
+    d<i+1>. Sixteen inner links build and verify; the seventeenth is
+    refused with the specific message. The path through the chain is
+    tmp_path plus 49 characters, so the fixture asserts the root is
+    short enough that a pathname failure cannot stand in for the depth
+    refusal."""
+    assert len(str(tmp_path)) < 211, "temporary root too long for this fixture"
+    repo = make_repo(tmp_path)
+    dirs = [tmp_path / ("d%d" % i) for i in range(18)]
+    _make_checkout(dirs[0])
+    for d in dirs[1:]:
+        d.mkdir()
+    (dirs[17] / "x.txt").write_text("deepest\n")
+    for i in range(16):
+        make_junction(dirs[i] / "n", dirs[i + 1])
+    make_junction(repo / "linked", dirs[0])
+    mirror = tmp_path / "m"
+    proc, ident = build_and_read(repo, mirror)
+    assert [b for b in read_block(proc.stdout, "baseline:") if "linked" in b] == ["?? linked/"]
+    assert run_verify(repo, mirror, ident).returncode == 0
+    make_junction(dirs[16] / "n", dirs[17])
+    proc = run_verify(repo, mirror, ident)
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "more than 16 directory links deep" in proc.stdout, proc.stdout
+
+
+def test_a_link_target_that_is_itself_a_link_is_refused(tmp_path):
+    """Cross-vendor round 3: with repo/linked -> alias and alias -> t,
+    the walk records the target as spelled, `alias`, and a mirror path
+    at `t` neither passes through a link nor overlaps `alias` as text,
+    so the force switch could delete t. A followed target with a
+    reparse point at itself or among its ancestors is refused."""
+    repo = make_repo(tmp_path)
+    t = tmp_path / "t"
+    t.mkdir()
+    (t / "x.txt").write_text("real target\n")
+    alias = tmp_path / "alias"
+    make_junction(alias, t)
+    make_junction(repo / "linked", alias)
+    proc = run_mirror(repo, t, "-Force")
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "is itself a directory link or sits beneath one" in proc.stdout, proc.stdout
+    assert (t / "x.txt").read_text() == "real target\n"
 
 
 def test_an_inner_link_target_is_protected(tmp_path):
@@ -696,10 +749,10 @@ def test_an_override_path_at_a_link_target_is_refused(tmp_path):
 - [ ] **Step 3: Run the new and changed cases to see them fail**
 
 ```bash
-python -m pytest evals/multi-model-verify/test_review_mirror.py -q -k "junction or behind or redirected or forced_rebuild or vanishes or nested or link_target or inner_link or through_a_link or dot_git or cycle"
+python -m pytest evals/multi-model-verify/test_review_mirror.py -q -k "junction or behind or redirected or forced_rebuild or vanishes or nested or link_target or inner_link or through_a_link or dot_git or cycle or sixteen or itself_a_link"
 ```
 
-Expected: the re-link, redirected, back-channel, forced-rebuild, nested-checkout, link-behind-checkout, manifest-cycle, inner-target, through-a-link, dot-git and link-target cases FAIL (no `links:` block, the mirror's `linked` is a plain directory, no overlap or pass-through refusal exists, the manifest has no visited set). The vanishing-target case may already pass because the walk refuses an unresolvable target, and the cycle-behind-a-link construction case already passes because today's walk descends; both stay in the run so Step 8 proves they still pass. Record which cases were red at this step in the commit message of Step 9, because a case that was never red proves nothing about the code it names.
+Expected: the re-link, redirected, back-channel, forced-rebuild, nested-checkout, link-behind-checkout, manifest-cycle, depth-bound, inner-target, through-a-link, target-is-a-link, dot-git and link-target cases FAIL (no `links:` block, the mirror's `linked` is a plain directory, no overlap or pass-through refusal exists, the manifest has no visited set). The vanishing-target case may already pass because the walk refuses an unresolvable target, and the cycle-behind-a-link construction case already passes because today's walk descends; both stay in the run so Step 8 proves they still pass. Record which cases were red at this step in the commit message of Step 9, because a case that was never red proves nothing about the code it names.
 
 - [ ] **Step 4: Record links in the walk, keep descending for validation, stop counting beneath them**
 
@@ -824,29 +877,59 @@ Immediately after the walk's budget refusal (the `if ($deepestLen -ge 0) { ... }
 # matching its spelling, so a mirror or override path with a reparse
 # point among its existing ancestors is refused outright rather than
 # compared. This runs before anything is created or deleted.
-foreach ($pair in @(@("mirror path", $MirrorPath), @("override path", $OverrideOut))) {
-    $label = $pair[0]
-    $probe = $pair[1].TrimEnd("\", "/")
+function Test-PathOrAncestorIsLink($path) {
+    # The path itself, then each existing ancestor up to the drive root:
+    # is any of them a reparse point? Attributes are read directly
+    # rather than after a Test-Path, because a DANGLING junction is a
+    # reparse point Test-Path may report as absent; a missing entry is
+    # the one condition that skips a level, and it is recognised by the
+    # exception type, never by a false from a helper. Returns the
+    # offending path or $null.
+    $probe = ([string]$path).TrimEnd("\", "/")
     while ($probe -and -not [string]::IsNullOrEmpty([System.IO.Path]::GetFileName($probe))) {
-        if (Test-Path -LiteralPath $probe) {
-            $pa = 0
-            try {
-                $pa = [int][System.IO.File]::GetAttributes($probe)
-            } catch {
-                Write-Output ("ERROR: " + $probe + " could not be read while" +
-                    " checking whether the " + $label + " passes through a" +
-                    " link: " + $_.Exception.Message)
-                exit 2
-            }
-            if (($pa -band $reparseAttr) -ne 0) {
-                Write-Output ("ERROR: the " + $label + " passes through a" +
-                    " directory link at " + $probe + " - a path reached" +
-                    " through a link can alias a tree the mirror only links" +
-                    " to, so the mirror refuses it")
-                exit 2
-            }
+        $pa = 0
+        $missing = $false
+        try {
+            $pa = [int][System.IO.File]::GetAttributes($probe)
+        } catch [System.IO.FileNotFoundException] {
+            $missing = $true
+        } catch [System.IO.DirectoryNotFoundException] {
+            $missing = $true
+        } catch {
+            Write-Output ("ERROR: " + $probe + " could not be read while" +
+                " checking for a directory link: " + $_.Exception.Message)
+            exit 2
+        }
+        if (-not $missing -and (($pa -band [int][System.IO.FileAttributes]::ReparsePoint) -ne 0)) {
+            return $probe
         }
         $probe = [System.IO.Path]::GetDirectoryName($probe)
+    }
+    return $null
+}
+
+foreach ($pair in @(@("mirror path", $MirrorPath), @("override path", $OverrideOut))) {
+    $label = $pair[0]
+    $hit = Test-PathOrAncestorIsLink $pair[1]
+    if ($hit) {
+        Write-Output ("ERROR: the " + $label + " passes through a directory" +
+            " link at " + $hit + " - a path reached through a link can alias" +
+            " a tree the mirror only links to, so the mirror refuses it")
+        exit 2
+    }
+}
+# A followed TARGET that is itself a link, or sits beneath one, is the
+# alias in the other direction (cross-vendor round 3): the walk records
+# the target as spelled, so a mirror path at the real directory behind
+# it neither passes through a link nor overlaps the recorded text.
+foreach ($target in @($followedTargets)) {
+    $hit = Test-PathOrAncestorIsLink $target
+    if ($hit) {
+        Write-Output ("ERROR: the source link target " + $target + " is" +
+            " itself a directory link or sits beneath one (" + $hit + ") -" +
+            " the mirror cannot protect a tree it cannot name, so it" +
+            " refuses to build")
+        exit 2
     }
 }
 foreach ($target in @($followedTargets)) {
@@ -1262,8 +1345,10 @@ foreach ($pair in @(@("old", $old), @("new", $new))) {
             # started at the link does not pass through a nested one,
             # so two equal partial listings would prove nothing.
             $ErrorActionPreference = "Stop"
-            $nested = @(Get-ChildItem -LiteralPath $linkPath -Recurse -Directory -Force | Where-Object { ($_.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0 })
-            if ($nested.Count -gt 0) { throw ("link " + $parts[0] + " holds nested links; this comparison cannot cover them: " + ($nested.FullName -join "; ")) }
+            foreach ($side in @($linkPath, $target)) {
+                $nested = @(Get-ChildItem -LiteralPath $side -Recurse -Directory -Force | Where-Object { ($_.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0 })
+                if ($nested.Count -gt 0) { throw ("link " + $parts[0] + ": " + $side + " holds nested links; this comparison cannot cover them: " + ($nested.FullName -join "; ")) }
+            }
             $a = @(Get-ChildItem -LiteralPath $linkPath -Recurse -File -Force | ForEach-Object { $_.FullName.Substring($linkPath.Length) + " " + (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash } | Sort-Object)
             $b = @(Get-ChildItem -LiteralPath $target -Recurse -File -Force | ForEach-Object { $_.FullName.Substring($target.TrimEnd("\").Length) + " " + (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash } | Sort-Object)
             if ($a.Count -eq 0 -or $b.Count -eq 0) { throw ("link " + $parts[0] + ": an empty listing is not a measurement (" + $a.Count + " through the mirror, " + $b.Count + " in the target)") }
