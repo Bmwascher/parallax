@@ -301,7 +301,7 @@ git commit -m "state that the mirror re-links directory links instead of copying
 ### Task 3: The builder re-links, tests first
 
 **Files:**
-- Modify: `evals/multi-model-verify/test_review_mirror.py:1343-1374` (replace `test_a_source_directory_link_is_followed_not_refused`) and append seventeen cases after `test_verify_refuses_a_mirror_at_a_different_path`
+- Modify: `evals/multi-model-verify/test_review_mirror.py:1343-1374` (replace `test_a_source_directory_link_is_followed_not_refused`) and append eighteen cases after `test_verify_refuses_a_mirror_at_a_different_path`
 - Modify: `tools/new-review-mirror.ps1` (the path-budget walk near lines 923-1052, the robocopy call at line 1100, a new re-link block after the final sweep near line 1338, and the record print near line 1408)
 
 **Interfaces:**
@@ -369,7 +369,7 @@ def test_a_source_directory_link_is_recreated_as_a_junction(tmp_path):
 
 - [ ] **Step 2: Append the new cases after `test_verify_refuses_a_mirror_at_a_different_path`**
 
-Seventeen cases follow. Each is listed in Step 3's `-k` selection.
+Eighteen cases follow. Each is listed in Step 3's `-k` selection.
 
 ```python
 def test_verify_detects_an_edit_behind_the_mirror_link(tmp_path):
