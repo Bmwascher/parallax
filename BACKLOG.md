@@ -32,6 +32,7 @@ The full previous text of every closed item is in git history at
 - 77
 - 90
 - 91
+- 93
 
 ### Third - changes to the workflow itself
 - 46
@@ -3920,8 +3921,8 @@ installed and content-verified.
 ## 91. The identity digests hash a linked reference checkout three times per build and six times per round
 Status: OPEN
 Cost: a build hashes every file behind a linked checkout, its `.git` objects included, three times, and each round's three identity verifies hash it on both sides for six more passes; measured 2026-09-05 at 14,884 files per pass, so the reference is hashed more often than the addon under review
-Pairs: 90
-Verified: 2026-09-05 44fb981a942e
+Pairs: 90, 93
+Verified: 2026-09-05 1c599949f0a5
 
 **Filed 2026-09-05 during item 90's design.** Item 90 removes the copy's
 read and the pre-copy budget accounting only. `Get-StatusSha256` runs
@@ -3959,3 +3960,23 @@ read-only enumeration of each nested checkout that BLOCKS the build when
 a back-channel is present, or a documented statement that linked
 checkouts are outside the sweep. Closing this item means one of those
 two is shipped and the `enumeration-depth-asymmetry` region says which.
+
+## 93. The review-mirror test module runs twelve times slower under PowerShell 7 than under 5.1
+Status: OPEN
+Cost: the `powershell-hosts` CI job runs `evals/multi-model-verify/test_review_mirror.py` under both hosts, and measured 2026-09-05 at item 90's Task 3 the module took 18m42s under PowerShell 7 against 94s under Windows PowerShell 5.1, so every CI run and every local both-host gate pays about eighteen minutes it did not pay before the cause is found
+Pairs: 91
+Verified: 2026-09-05 9fc2b6ee9f7d
+
+**Filed 2026-09-05 from item 90's whole-branch review.** The number is
+measured; the cause is not. The task reviewer's candidate is the second
+recursive enumeration `Get-FilesBeneath` adds per directory subject
+(`Get-ChildItem -Recurse -Directory -Force` piped through `Where-Object`
+for the reparse-point attribute), which PowerShell 7's pipeline runs
+slower per item than 5.1's, and the candidate fix is `-Attributes
+ReparsePoint` on the call or one pass that collects files and link
+directories together. Whether the slowdown predates item 90 was not
+measured: no both-host timing of the module at the parent commit exists.
+Closing this item means the module's time under PowerShell 7 measured at
+main before item 90 and after, the cause named from that comparison, and
+either a fix that keeps every one of the nineteen link cases green on
+both hosts or a recorded statement that the cost is accepted.

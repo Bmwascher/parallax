@@ -218,6 +218,13 @@ is reached through the outer junction.
   (measurement 1). An `AGENTS.md` inside the linked reference checkout
   is not enumerated today, with the copy, and is not enumerated after
   this change either. Item 92 records it as pre-existing.
+- **A link whose target lies inside the source repo is re-linked onto
+  the live source.** Named by the whole-branch review before the diff
+  debate. The old copy snapshotted such a target's bytes; the new
+  junction reads the source tree live during a round. The identity gate
+  still refuses the round if anything behind it changes, so nothing
+  reads as clean, but the reviewer's view of that path is the live tree
+  rather than a snapshot. No repo of the user's has this shape today.
 - **Two links onto one target still refuse.** `KitnEssentials` carried a
   second `.wow-api-reference` under `.superpowers/worktrees/...` on
   2026-09-05, which the walk refuses as "links overlap". This change
