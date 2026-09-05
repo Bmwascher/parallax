@@ -516,13 +516,30 @@ function Get-FilesBeneath($start, $visited, $depth) {
                                " target could not be read") }
         }
         $targetFull = ""
-        if ([System.IO.Path]::IsPathRooted($target)) {
-            $targetFull = [System.IO.Path]::GetFullPath($target)
-        } else {
-            $targetFull = [System.IO.Path]::GetFullPath(
-                [System.IO.Path]::Combine(
-                    [System.IO.Path]::GetDirectoryName(
-                        [System.IO.Path]::GetFullPath($start)), $target))
+        # WRAPPED, because this script never sets $ErrorActionPreference
+        # to Stop: a .NET exception here is NON-TERMINATING, so an
+        # unwrapped GetFullPath left $targetFull empty, put the empty
+        # string into the visited set, and returned Paths with no Error -
+        # a failed measurement reading as a clean one. Measured by the
+        # cross-vendor reviewer with a 270-character target
+        # (PathTooLongException), 2026-09-05.
+        try {
+            if ([System.IO.Path]::IsPathRooted($target)) {
+                $targetFull = [System.IO.Path]::GetFullPath($target)
+            } else {
+                $targetFull = [System.IO.Path]::GetFullPath(
+                    [System.IO.Path]::Combine(
+                        [System.IO.Path]::GetDirectoryName(
+                            [System.IO.Path]::GetFullPath($start)), $target))
+            }
+        } catch {
+            return @{ Error = ("'" + $start + "' is a directory link whose" +
+                " target " + $target + " could not be resolved to a full" +
+                " path: " + $_.Exception.Message) }
+        }
+        if ($seamFailLinkTarget) {
+            return @{ Error = ("'" + $start + "' link target resolution" +
+                " failed (test seam)") }
         }
         if (-not $visited.Add($targetFull.TrimEnd("\"))) {
             return @{ Error = ("'" + $start + "' reaches " + $targetFull +
@@ -678,6 +695,14 @@ function Get-StatusSha256($repo) {
 }
 
 $toplevel = $true
+
+# THE THIRD TEST SEAM, declared here rather than beside the other two
+# because it is read inside Get-FilesBeneath, which runs during the
+# FIRST Get-StatusSha256 call - the source status taken before the copy,
+# and the verify mode's captures, both of which precede that block. Same
+# one-way rule: a BOOLEAN that only ADDS a failure inside the link
+# expansion, never supplies a value and never suppresses a measurement.
+$seamFailLinkTarget = [bool]$env:PARALLAX_MIRROR_SEAM_FAIL_LINK_TARGET
 
 if (-not (Test-Path $RepoRoot)) {
     Write-Output "ERROR: $RepoRoot does not exist"
@@ -1314,11 +1339,15 @@ if ($LASTEXITCODE -ge 8) {
     exit 2
 }
 
-# THE TWO TEST SEAMS, and the rule they must satisfy LITERALLY.
+# THE THREE TEST SEAMS, and the rule they must satisfy LITERALLY. Two of
+# them are declared here; the third, $seamFailLinkTarget, is declared at
+# the top of the execution section because Get-FilesBeneath reads it
+# during the source status capture ABOVE, and it only ever ADDS the
+# link-target resolution failure inside that expansion.
 #
 # Each is a BOOLEAN that ORs one extra block condition into a comparison
-# below. Neither can supply a value, so neither can suppress a real
-# measurement, and setting either can only ever ADD a reason to fail.
+# below. None can supply a value, so none can suppress a real
+# measurement, and setting one can only ever ADD a reason to fail.
 # That makes the one-way property structural rather than a property of
 # whatever value someone happens to pass.
 #

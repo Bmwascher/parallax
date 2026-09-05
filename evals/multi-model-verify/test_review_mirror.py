@@ -93,7 +93,7 @@ def make_clean_repo(tmp_path):
 
 
 def run_mirror(repo, mirror, *extra, env=None):
-    """`env` carries the build's two TEST SEAMS.
+    """`env` carries the build's three TEST SEAMS.
 
     They are environment variables, not parameters, for the reason the
     lane-home builder states about its own two: a parameter is public
@@ -1758,6 +1758,11 @@ def test_the_seams_cannot_supply_a_value(tmp_path):
     HEAD and would then hide a genuine mismatch.
     """
     repo = make_repo(tmp_path)
+    # The third seam only has a link expansion to fail inside, so the
+    # repo carries a directory link for it.
+    outside = tmp_path / "outside"
+    _make_checkout(outside)
+    make_junction(repo / "linked", outside)
     real_head = git(repo, "rev-parse", "HEAD").strip()
     # The REASON, not the exit code. -SkipProbe also exits 1, so a bare
     # code assertion passes against a seam that was silently ignored -
@@ -1766,7 +1771,9 @@ def test_the_seams_cannot_supply_a_value(tmp_path):
             ("PARALLAX_MIRROR_SEAM_FAIL_SOURCE_STABLE",
              "moved during construction"),
             ("PARALLAX_MIRROR_SEAM_FAIL_COPIED_HEAD",
-             "was not built from")):
+             "was not built from"),
+            ("PARALLAX_MIRROR_SEAM_FAIL_LINK_TARGET",
+             "link target resolution failed")):
         proc = run_mirror(repo, tmp_path / ("m-" + var[-6:]),
                           env={var: real_head})
         assert proc.returncode == 1, (var, proc.stdout + proc.stderr)
@@ -2225,6 +2232,25 @@ def test_a_dot_git_that_is_a_link_is_refused(tmp_path):
     proc = run_mirror(repo, tmp_path / "mirror")
     assert proc.returncode == 2, proc.stdout + proc.stderr
     assert ".git is a directory link" in proc.stdout, proc.stdout
+
+
+def test_a_link_target_that_cannot_be_resolved_blocks_the_manifest(tmp_path):
+    """Cross-vendor diff round 1: GetFullPath threw outside a catch inside
+    Get-FilesBeneath, the empty target entered the visited set, and the
+    helper returned Paths without Error, so a failed measurement read as
+    a clean one. The seam forces exactly that failure branch; it can
+    never make a failing expansion succeed."""
+    repo = make_repo(tmp_path)
+    outside = tmp_path / "outside"
+    _make_checkout(outside)
+    make_junction(repo / "linked", outside)
+    mirror = tmp_path / "mirror"
+    proc = run_mirror(repo, mirror,
+                      env={"PARALLAX_MIRROR_SEAM_FAIL_LINK_TARGET": "1"})
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "BLOCKED" in proc.stdout and "linked" in proc.stdout, proc.stdout
+    assert "link target resolution failed" in proc.stdout, proc.stdout
+    assert_built(run_mirror(repo, tmp_path / "mirror2"))
 
 
 def test_a_mirror_path_at_a_link_target_is_refused(tmp_path):
