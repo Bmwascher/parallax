@@ -261,6 +261,22 @@ function Get-SkillReport($text) {
         $start = $body.IndexOf("### Available skills")
         if ($start -ge 0) {
             $seg = $body.Substring($start)
+            # codex-cli 0.153 (measured 2026-09-04 on 0.153.4) renders a
+            # `### Skill roots` table above the entries and writes each
+            # entry's file as `<alias>/<relative>`. The table is read from
+            # INSIDE the container body only, before the entries heading,
+            # so a table written anywhere else cannot redirect an entry.
+            # An alias the table does not name is left as written, and
+            # Get-SkillScope then files it as unknown, which blocks. The
+            # disable override needs the absolute path: measured the same
+            # day, skills.config with the expanded path still disables.
+            $roots = @{}
+            $rootRx = [regex]'^- `([A-Za-z0-9_]+)` = `(.+)`[ \t]*$'
+            foreach ($rootLine in ($body.Substring(0, $start) -split "`n")) {
+                $rm = $rootRx.Match($rootLine.TrimEnd("`r"))
+                if ($rm.Success) { $roots[$rm.Groups[1].Value] = $rm.Groups[2].Value }
+            }
+            $aliasRx = [regex]'^([A-Za-z0-9_]+)/(.+)$'
             # The path capture is GREEDY to the LAST `)` on its own line,
             # not up to the first one. `[^)]*` truncated
             # `C:/Program Files (x86)/x/SKILL.md` to `C:/Program Files (x86`,
@@ -303,9 +319,15 @@ function Get-SkillReport($text) {
                     if (-not $firstBad) { $firstBad = $trimmed }
                     continue
                 }
+                $path = $m.Groups[2].Value
+                $am = $aliasRx.Match($path)
+                if ($am.Success -and $roots.ContainsKey($am.Groups[1].Value)) {
+                    $path = ([string]$roots[$am.Groups[1].Value]).TrimEnd("/") +
+                        "/" + $am.Groups[2].Value
+                }
                 [void]$entries.Add(@{
                     Name = $m.Groups[1].Value
-                    Path = $m.Groups[2].Value
+                    Path = $path
                 })
             }
         }
@@ -392,10 +414,15 @@ function Get-FeatureReport($text) {
 # masking needs the full literal. Running an earlier version against the
 # real prompt reported `permissions` as an unknown surface, which would
 # have blocked every real review.
+# `collaboration_mode` and `multi_agent_role` arrived with codex-cli
+# 0.153 (measured 2026-09-04 on 0.153.4): both are client-authored, like
+# `multi_agent_mode`, and the fenced message-format example that used to
+# sit in `multi_agent_mode` now sits in `multi_agent_role`.
 $script:KnownPromptBlocks = @(
     "permissions", "skills_instructions", "plugins_instructions",
     "apps_instructions", "recommended_plugins", "INSTRUCTIONS",
-    "environment_context", "multi_agent_mode"
+    "environment_context", "multi_agent_mode", "collaboration_mode",
+    "multi_agent_role"
 )
 # INSTRUCTIONS IS MASKED FIRST, and the order here is the masking order.
 # It is the one container carrying USER-AUTHORED text: the global and
@@ -409,7 +436,8 @@ $script:KnownPromptBlocks = @(
 $script:KnownContainers = @(
     "INSTRUCTIONS", "permissions instructions", "skills_instructions",
     "plugins_instructions", "apps_instructions", "recommended_plugins",
-    "environment_context", "multi_agent_mode"
+    "environment_context", "multi_agent_mode", "collaboration_mode",
+    "multi_agent_role"
 )
 
 function Hide-KnownContainer($text, $only, $quiet) {
@@ -443,6 +471,22 @@ function Hide-KnownContainer($text, $only, $quiet) {
     $names = $script:KnownContainers
     if ($only) { $names = @($only) }
     $masked = $text
+    # codex-cli 0.153 (measured 2026-09-04 on 0.153.4): the client's own
+    # <collaboration_mode> body QUOTES its own delimiter, as the exact
+    # backtick-wrapped literal below, so the count rule sees two opens
+    # and two closes on every real render and refuses every review. The
+    # literal is masked space-for-character BEFORE the count. It is one
+    # exact, case-sensitive string codex writes, not a shape: the same
+    # words without the backticks, a different inner text, or a third
+    # pair all still refuse as ambiguous, and the tests hold each of
+    # those directions.
+    $selfQuote = '`<collaboration_mode>...</collaboration_mode>`'
+    $at = $masked.IndexOf($selfQuote, [System.StringComparison]::Ordinal)
+    while ($at -ge 0) {
+        $masked = $masked.Substring(0, $at) + (" " * $selfQuote.Length) +
+            $masked.Substring($at + $selfQuote.Length)
+        $at = $masked.IndexOf($selfQuote, [System.StringComparison]::Ordinal)
+    }
     foreach ($name in $names) {
         $open = "<" + $name + ">"
         $close = "</" + $name + ">"
