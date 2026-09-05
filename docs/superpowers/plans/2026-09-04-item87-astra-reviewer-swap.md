@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+**Status: FROZEN at revision 8, 2026-09-04.** One cross-vendor round, GPT-6 Astra at effort `high`, PASS on all twelve claims, converged; debate record at the foot of this file. Tasks 1 and 4 were COMPLETE before the round and are what it reviewed as code; Tasks 2 and 3 are built from this revision. Changes from here require reopening the debate — the implementer never edits the plan. Two voided dispatches preceded the counted round; both were the session's dispatch errors and are recorded in the debate record.
+
 **Goal:** Move the primary cross-vendor reviewer lane from GPT-5.6 Sol to
 GPT-6 Astra at effort `high`, keep Sol reachable as an alternate that runs
 only when the user names it, and rename the lane everywhere its label is a
@@ -1267,12 +1269,14 @@ git commit -m "teach the context probe the collaboration_mode and multi_agent_ro
 
 ## Debate record
 
-**Participants:** Fable 5.1 (session) / no reviewer lane at plan time
-**Rounds used:** 0 of 4
-**Outcome:** not debated
-**Verification status:** DEGRADED
-**Degradation:** plan-not-debated: no cross-vendor round has completed as evidence yet. The change is bounded and the design was approved by the user in chat on 2026-09-04; until a round completes, mode diff must cross-verify the plan's claims before verifying the implementation against it, per the degraded-plan poisoning rule. Outcome and verification status are separate fields (revision 6): when a round completes, this record is rewritten with the actual participants, rounds and outcome, and the status becomes FULL only when the cross-vendor evidence requirements were met, whatever the outcome; an escalated outcome still needs the user's recorded decision before the plan is frozen.
-**Authorized by:** user at design approval, 2026-09-04
+**Participants:** Fable 5.1 (session) / GPT-6 Astra (codex exec, session 01a06fa5-9d39-7cd2-8bc8-123426ebfa44)
+**Rounds used:** 1 of 4
+**Outcome:** converged
+**Verification status:** FULL
+**Degradation:** none
+**Authorized by:** n/a
+**Completion evidence for the counted round (2026-09-04, subject 9289b7b):** transcript header `model: gpt-6-astra`, `provider: openai`, `reasoning effort: high`, `sandbox: read-only`, `workdir: C:\Users\Brandon\AppData\Local\Temp\kerev87`; the wrapper's exit was 0 and its last line `reply-present`; the binder (`read-codex-round-evidence.ps1 -Fresh`) returned `status: clean`, `sealed: sealed`, against the brief's canonical sha `3897b109…6cab` and the receipt's prior-state seal `95453616…9fda`; the reply was 13,459 bytes. Effective route confirmed against the explicit Astra/high pair per the dispatch note above. Client-echo evidence, as the notes define it.
+**Resolved by the round, beyond the claims:** two PRE-EXISTING gaps the reviewer named and the session confirms, neither folded into the verdict: the single-source sweep at `evals/multi-model-verify/test_multi_model_verify.py:804` enumerates globs that omit `agents/`, so a hardcoded reviewer id there would not be caught; and the tool-surface probe measures MCP tools through `app-server`, leaving native delegation under `exec` unmeasured (already bounded by the notes' "proxy, never verified isolation" language). Both are candidates for the backlog, not for this branch.
 **Raw rounds:** docs/superpowers/plans/rounds/2026-09-04-item87-astra-plan-round/ (each round's brief and verbatim reply; the transcript is not retained because it carries the reviewer's file reads)
 **Round dispatch note (revision 7):** this plan's cross-vendor rounds run `gpt-6-astra` at effort `high`, a user-directed override of the INSTALLED plugin's canonical declaration, which at 0.30.1 still names `gpt-5.6-sol` at `high`. The override is the point of the round: it is the first live Astra debate round, run before the swap ships. For these rounds the effective-route check compares the transcript header against that explicit pair (`model: gpt-6-astra`, `provider: openai`, `reasoning effort: high`, `sandbox: read-only`), and every other dispatch and binding check is unchanged: the dispatch tool, the receipt, the prior-state seal, and the brief binding carry no model. Completion evidence for a counted round is written here when it exists: session id, the four header lines, the wrapper's classification, and the binder's verdict.
 **Voided rounds:** two, both my dispatch errors, neither a reviewer fault, and each counted as no round.
@@ -1282,9 +1286,25 @@ git commit -m "teach the context probe the collaboration_mode and multi_agent_ro
 ### Resolved points
 | # | Claim | Raised by | Outcome | Evidence |
 |---|-------|-----------|---------|----------|
-| 1 | Astra is reachable on this account at `low` and `high` | session | measured | probe of 2026-09-04, recorded in item 87 |
-| 2 | Every executable parses the id at runtime | session | verified | `evals/tools/run_behavioral_evals.py:813`, `tools/check-drift.ps1:1010` |
-| 3 | The 5.6 guidance the bullets cite is no longer on the page | session | verified | fetch of 2026-09-04 |
+| 1 | The reviewer id is single-sourced; the one-line swap is complete for every executable | session | PASS, with the qualification that the sweep's globs omit `agents/` (pre-existing) | `evals/tools/run_behavioral_evals.py:813`, `tools/check-drift.ps1:1010`, `commands/doctor.md:58`, `test_multi_model_verify.py:791-804` |
+| 2 | The alternate declarations break no parser | session | PASS | `test_backup_lane.py:71`, `test_route_parser_shapes.py:78`, `test_seat_reshuffle.py:296` |
+| 3 | The `gpt-5.6-sol` literal in the new test is legal after the swap | session | PASS | `test_multi_model_verify.py:791,801` |
+| 4 | The contract-region pin order is sound; the coverage red is outside the red command | session | PASS | `test_contract_coverage.py:945` |
+| 5 | Task 3's rename list is complete for live labels | session | PASS after revisions 6 and 7 added the notes' four contextual bullets and the two fixture cells | class sweep in the reply, shapes: `Sol`, `GPT-5.6`, `5.6`, lowercase `sol`, filenames |
+| 6 | Raw-read pins need single physical lines; the naming pin is normalized | session | PASS | `test_seat_reshuffle.py:16,130`, `test_multi_model_verify.py:1327` |
+| 7 | SKILL.md changes one word under the 6500 ceiling | session | PASS; reviewer reproduced the estimator at 6456 before, 6457 after | `SKILL.md:213`, `skill_lint.py:182,339` |
+| 8 | The rewritten section keeps every claim at its evidence width | session | PASS (wording only; page contents UNVERIFIED by the reviewer) | plan Task 2 step 4 |
+| 9 | The alternate is opt-in and not a fallback class | session | PASS | `fallbacks.md:159,179`, `panels.md:4` |
+| 10 | Task 4 keeps the probe's fail-closed contract | session | PASS; reviewer exercised the parser in memory under both hosts; native delegation under `exec` is a pre-existing measurement gap | `codex-context-probe.ps1:421,436,483`, `test_codex_context_probe.py:400-426,998` |
+| 11 | Dispatch and binding are model-independent; the route check uses the explicit Astra pair | session | PASS | `dispatch-round.ps1:196,530,747`, notes `:253,:665,:684` |
+| 12 | Outcome and verification status are separate fields | session | PASS; the brief's own premise that ESCALATE keeps DEGRADED was refuted and the plan already said the right thing | `frozen-plan-format.md:54,126`, `fallbacks.md:274` |
+
+### Pre-freeze measurements (session, not debated)
+| # | Claim | Raised by | Outcome | Evidence |
+|---|-------|-----------|---------|----------|
+| A | Astra is reachable on this account at `low` and `high` | session | measured | probe of 2026-09-04, recorded in item 87 |
+| B | Every executable parses the id at runtime | session | verified | `evals/tools/run_behavioral_evals.py:813`, `tools/check-drift.ps1:1010` |
+| C | The 5.6 guidance the bullets cite is no longer on the page | session | verified | fetch of 2026-09-04 |
 
 ### Escalated points (user-decided)
 | # | Point | Decision |
