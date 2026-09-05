@@ -131,7 +131,7 @@ lives in five regions in
 `background-task-naming`.
 
 Name every backgrounded call for the person watching it. A reviewer round
-leads with its LANE and ROUND, as in `Sol R1 debate round` or
+leads with its LANE and ROUND, as in `Astra R1 debate round` or
 `Kimi R2 debate round`. A gate or a mirror build has no lane, so it leads
 with its KIND instead, as in `Gate: pytest 5.1` or `Mirror build`.
 `-Prepare` now PRINTS the name, so the convention has a source; nothing

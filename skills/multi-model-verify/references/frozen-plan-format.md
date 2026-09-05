@@ -100,7 +100,7 @@ every lane that produced a terminal verdict, with its transport and
 session or agent id — a completed panel lists every member; a
 consented post-loss continuation lists only the surviving lanes, with
 the lost lane and its loss class in the failure prose; Rounds are
-counted per lane (e.g. `Sol 3 of 4 / Kimi 2 of 4`); convergent blind
+counted per lane (e.g. `Astra 3 of 4 / Kimi 2 of 4`); convergent blind
 findings are marked convergent in the resolved rows and counted once;
 for mode diff the record names the required fable-review artifact
 path.

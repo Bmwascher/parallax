@@ -1146,6 +1146,42 @@ def test_fable_notes_are_51_and_keep_their_measurement_limits():
             " which were measured on 2.1.233 in the 0.25.0 cycle") in notes
 
 
+def test_reviewer_lane_is_astra_with_sol_as_the_explicit_alternate():
+    """0.31.0 item 87. The heading and the four declarations are the
+    lane's identity, so each is pinned. The canonical id is compared by
+    prefix, never spelled out: test_reviewer_id_has_single_source sweeps
+    this file for the literal. Heading and declarations are RAW-read
+    pins on single physical lines; the two sentences are normalized.
+    """
+    raw = read(REFERENCES / "model-prompting-notes.md")
+    notes = " ".join(raw.split())
+    assert "## The reviewer lane (currently GPT-6 Astra via the codex CLI)" in raw
+    canonical = re.search(r"Canonical model id: `([^`\n]+)`", raw)
+    assert canonical and canonical.group(1).startswith("gpt-6-")
+    effort = re.search(r"Canonical reasoning effort: `([^`\n]+)`", raw)
+    assert effort and effort.group(1) == "high"
+    alternate = re.search(r"Alternate codex reviewer model id: `([^`\n]+)`", raw)
+    assert alternate and alternate.group(1) == "gpt-5.6-sol"
+    alt_effort = re.search(r"Alternate codex reviewer effort: `([^`\n]+)`", raw)
+    assert alt_effort and alt_effort.group(1) == "high"
+    # The parsers resolve the FIRST canonical declaration; the alternate
+    # and the backup both sit behind it, alternate first. Each effort line
+    # sits directly under its own id line: the diff debate's Astra R1
+    # (2026-09-05) found the chain below ordered only the three id lines,
+    # so the two effort lines could swap places unnoticed.
+    assert (raw.index("Canonical model id:")
+            < raw.index("Canonical reasoning effort:")
+            < raw.index("Alternate codex reviewer model id:")
+            < raw.index("Alternate codex reviewer effort:")
+            < raw.index("Canonical backup reviewer model id:"))
+    # The alternate is opt-in by name, never a fallback class.
+    assert ("It is never selected automatically: it runs only when the"
+            " user names Sol for a debate or a panel seat") in notes
+    # A codex exec round has no one to answer a question.
+    assert ("Every brief states that the round is non-interactive, that no"
+            " clarification can be answered") in notes
+
+
 def test_round_dispatch_tool_region_is_pinned():
     """Backlog item 32, Task 8. Renamed from detached-dispatch-tool for
     the completion-coupled design: -Prepare builds the wrapper as one
@@ -1327,7 +1363,7 @@ def test_background_task_naming_region_is_pinned():
     notes = " ".join(read(REFERENCES / "model-prompting-notes.md").split())
     assert (
     "Name the backgrounded call for the person watching it. The reviewer "
-    "LANE and the ROUND lead the description, as in `Sol R1 debate round` "
+    "LANE and the ROUND lead the description, as in `Astra R1 debate round` "
     "or `Kimi R2 debate round`; work with no lane leads with its kind, as "
     "in `Gate: pytest 5.1` or `Mirror build`. A cycle runs several lanes "
     "across several rounds at once and a name omitting either cannot be "

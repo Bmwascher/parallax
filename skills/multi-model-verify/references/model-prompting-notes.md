@@ -138,7 +138,7 @@ fetched 2026-07-26), for when Opus 5 takes the driver seat:
 - 1M-token context window with consistent instruction following
   throughout.
 
-## The reviewer lane (currently GPT-5.6 Sol via the codex CLI)
+## The reviewer lane (currently GPT-6 Astra via the codex CLI)
 
 THE single source for the reviewer transport. Swapping the reviewer model
 is a one-line edit HERE and nowhere else: the executable surfaces (the
@@ -148,41 +148,69 @@ instruction surfaces (SKILL.md transport commands, /parallax:doctor's
 probe, /parallax:drift-triage's example) direct the agent to read the
 values from this file rather than type a remembered id. The consistency
 test forbids a hardcoded `-m` model literal anywhere else in the repo.
+The prose around the declarations is NOT one line: it describes the
+model, and item 87 is the record of it describing the wrong one.
 
-Canonical model id: `gpt-5.6-sol`
+Canonical model id: `gpt-6-astra`
 
 Canonical reasoning effort: `high`
 
-- **Outcome-oriented briefs**: tell Sol the outcome to verify, not the steps
-  to take. Its codex harness plans its own file reads. OpenAI's GPT-5.6
-  guidance (developers.openai.com/api/docs/guides/prompt-guidance,
-  fetched 2026-07-16; the review example also appears on
-  /api/docs/guides/latest-model): "state the goal, relevant context, constraints, required
-  evidence, success criteria, and output format." Its own review-task
-  example maps directly onto our debate briefs: "Review this database
-  migration plan for failure modes... For each finding, cite the relevant
-  step, estimate impact and likelihood, and recommend a specific
-  mitigation."
+Alternate codex reviewer model id: `gpt-5.6-sol`
+
+Alternate codex reviewer effort: `high`
+
+The alternate is GPT-5.6 Sol, the model this lane ran until 0.31.0. It is
+never selected automatically: it runs only when the user names Sol for a
+debate or a panel seat, on the same transport, the same flags, and the
+same per-round evidence as the canonical model, with the effective-route
+check made against the alternate declarations instead of the canonical
+ones. The lane is then labelled Sol wherever the label is live: the task
+name, the debate record's Participants line, and the attestation's
+Participants value, so the record shows which model ran. It is not a
+fallbacks.md class and no consent gate offers it. Nothing that parses the
+canonical declarations reads the alternate ones: the behavioural grader,
+the drift watch and the doctor's probe run the canonical model only.
+
+- **Outcome-oriented briefs**: tell Astra the outcome to verify, not the
+  steps to take. Its codex harness plans its own file reads. The
+  six-element shape below came from OpenAI's GPT-5.6 prompt guidance
+  (developers.openai.com/api/docs/guides/prompt-guidance, fetched
+  2026-07-16), whose review-task example mapped directly onto our debate
+  briefs. The same page, re-fetched 2026-09-04 for GPT-6, no longer
+  carries that sentence, the review example, or the lean-prompt advice
+  below. The shape is therefore OUR convention now, kept on this repo's
+  own evidence, which is the behavioural suite grading briefs of this
+  shape, and not on OpenAI's current word.
 - **Six-element shape — goal, context, constraints, required evidence,
-  success criteria, output format** (the 5.6 framing; use only the parts
-  that help). The XML-style tags below map onto it: task=goal,
-  claims=context+evidence, rules=success criteria+output format,
-  boundaries=constraints. The tags themselves are OUR convention, not
-  OpenAI's — 5.6 prescribes no tags for review tasks — kept because the
-  strike rule needs addressable sections to strike against.
-- **Lean briefs, rules stated ONCE** (5.6 guidance; leaner prompts scored
-  10-15% better in OpenAI's own coding-agent evals): state the evidence
-  rules and verdict grammar in full in round 1; later rounds REFERENCE
-  them ("evidence rules and verdict grammar as before"), never restate.
-  Avoid repeated negations ("do not mutate" three ways) — 5.6 reads
-  repetition as noise and it can trigger needless approval requests.
-  Prefer decision rules over ALWAYS/NEVER except for true invariants
-  (read-only sandbox, the strike rule, the verdict grammar).
-- **Final check** (OUR convention, not OpenAI's — the guide's review
-  example asks for impact/likelihood/mitigation per finding, not an
-  unverified-information pass): every brief ends by asking Sol to flag
-  information it could NOT verify — those flags feed the strike rule
-  instead of masquerading as findings.
+  success criteria, output format** (use only the parts that help). The
+  XML-style tags below map onto it: task=goal, claims=context+evidence,
+  rules=success criteria+output format, boundaries=constraints. The tags
+  themselves are OUR convention, not OpenAI's, kept because the strike
+  rule needs addressable sections to strike against.
+- **Lean briefs, rules stated ONCE**: state the evidence rules and verdict
+  grammar in full in round 1; later rounds REFERENCE them ("evidence
+  rules and verdict grammar as before"), never restate. Avoid repeated
+  negations ("do not mutate" three ways). Prefer decision rules over
+  ALWAYS/NEVER except for true invariants (read-only sandbox, the strike
+  rule, the verdict grammar). The 5.6-era figure behind this, that leaner
+  prompts scored 10-15% better in OpenAI's own coding-agent evals, is not
+  on the GPT-6 page and has not been re-measured here.
+- **Non-interactive round, verdict required**: the GPT-6 guidance, fetched
+  2026-09-04, says Astra "is more likely to ask for clarification where
+  earlier models would make assumptions". A `codex exec` round has no one
+  to answer. Every brief states that the round is non-interactive, that no
+  clarification can be answered, and that a claim the reviewer cannot
+  resolve goes under UNVERIFIED in the final check rather than into a
+  question. A reply that ends in a question instead of a verdict is a
+  spent round: its content is input, and the next round re-sends with the
+  ambiguity closed. Whether Astra does this under `codex exec` is
+  UNMEASURED; this is the guide's claim, written down before the first
+  debate rather than after. One more observation, not a measurement: the
+  model cache's Astra entry carries a `persistent_instructions` block
+  Sol's entry lacks, and whether `codex exec` applies it is unknown.
+- **Final check** (OUR convention, not OpenAI's): every brief ends by
+  asking Astra to flag information it could NOT verify — those flags feed
+  the strike rule instead of masquerading as findings.
 - **Structure the brief with XML-style tags**:
 
   ```text
@@ -199,15 +227,18 @@ Canonical reasoning effort: `high`
   ```
 
 - **Effort**: pin `-c model_reasoning_effort=<canonical effort above>` per
-  call. Do not raise it to ultra/xhigh for debate rounds — Sol propagates
-  its effort to every subagent it spawns, which burns tokens without
-  changing verdicts. The same value is set in `~/.codex/config.toml`, but
-  pin it per call anyway so the debate is config-independent. (The doctor's
-  transport probe deliberately uses `low` — it is a reachability check, not
-  a review.) 5.6 migration advice: "preserve your current reasoning effort
-  as the baseline, then compare one level lower" — `medium` is a tuning
-  candidate, but only via a full behavioral-suite pass at both levels;
-  never silently downgrade the review lane.
+  call. Do not raise it to xhigh, max or ultra for debate rounds: on Sol
+  the effort propagated to every subagent it spawned, which burnt tokens
+  without changing verdicts, and the same has NOT been measured on Astra,
+  so the ceiling stands until it is. `~/.codex/config.toml` may carry a
+  DIFFERENT default (it read `xhigh` on 2026-09-04), which is exactly why
+  the value is pinned per call and the debate is config-independent. (The
+  doctor's transport probe deliberately uses `low` — it is a reachability
+  check, not a review.) The GPT-6 migration advice, fetched 2026-09-04, is
+  to preserve the current reasoning effort, and `none` is not supported;
+  `high` is therefore carried over, and `medium` remains a tuning
+  candidate only via a full behavioral-suite pass at both levels. Never
+  silently downgrade the review lane.
 - **Tool surface (every debate, before round 1)**: run
   `tools/codex-tool-surface-probe.ps1 -WorkDir <dispatch cwd> -Json`. It
   speaks JSON-RPC to `codex app-server --stdio` and reads
@@ -294,9 +325,10 @@ Canonical reasoning effort: `high`
   Settles: `CODEX_HOME` is in the env denylist (adopted 0.10.0, debate
   2026-07-24).
 - **Session resume, not context re-send**: capture the `session id:` from
-  round 1 and resume it (flags before the subcommand). OpenAI documents
+  round 1 and resume it (flags before the subcommand). OpenAI documented
   5.6 reasoning reuse across turns as CONDITIONAL (carried through
-  previous_response_id-style continuation); whether `codex exec resume`
+  previous_response_id-style continuation), which is Sol-era evidence
+  not re-checked for Astra; whether `codex exec resume`
   engages it is not documented — the resume rule stands on token cost and
   preserved debate memory either way. NEVER `resume --last` — it grabs
   whatever codex session ran most recently, which may be a concurrent
@@ -479,7 +511,7 @@ Canonical reasoning effort: `high`
   <!-- contract:end -->
   <!-- contract:start id=background-task-naming -->
   Name the backgrounded call for the person watching it. The reviewer
-  LANE and the ROUND lead the description, as in `Sol R1 debate round`
+  LANE and the ROUND lead the description, as in `Astra R1 debate round`
   or `Kimi R2 debate round`; work with no lane leads with its kind, as
   in `Gate: pytest 5.1` or `Mirror build`. A cycle runs several lanes
   across several rounds at once and a name omitting either cannot be
@@ -539,13 +571,17 @@ Canonical reasoning effort: `high`
   AGENTS.md (adopted 0.10.0, debate 2026-07-24). '.codex/' stays unswept
   — unprobed; probe before adding. Claim source: the jinn intake (pinned
   6c46f57; `.agents/skills/<name>` symlink convention at its repo root).
-- **Fabrication counter**: Sol's METR/system-card record means "I verified X"
-  claims from Sol get the same strike rule as everything else — quoted
-  file:line or it did not happen.
+- **Fabrication counter**: Sol's METR/system-card record is why "I verified X"
+  claims from the reviewer lane, whichever model holds it, get the same
+  strike rule as everything else — quoted file:line or it did not happen.
+  The record is Sol's; the rule is the lane's.
 - **Lane diagnostics (tier gating)**: a 400 "not supported when using
-  Codex with a ChatGPT account" on the canonical id while `gpt-5.6-terra`
-  responds confirms subscription tier-gating, not a CLI problem (free/Go
-  tiers get Terra only; Plus and above get Sol — probed 2026-07-12). This
+  Codex with a ChatGPT account" on `gpt-5.6-sol`, the canonical id when
+  this was probed, while `gpt-5.6-terra` responds confirmed subscription
+  tier-gating, not a CLI problem (free/Go tiers get Terra only; Plus and
+  above get Sol — probed 2026-07-12, on Sol). Astra answered at `low` and
+  `high` on 2026-09-04, so the same 400 on Astra would need its own probe
+  (item 66 holds the tier map's width). This
   feeds the consent gate in fallbacks.md; the ids live HERE because
   fallbacks.md never names models.
 - **Structured quota state is locally readable (experimental)**: probed
@@ -565,7 +601,8 @@ Canonical reasoning effort: `high`
 The installed codex plugin ships prompt recipes and antipatterns under its
 `gpt-5-4-prompting` skill (plugin cache, `skills/gpt-5-4-prompting/`). They
 were written for GPT-5.4-era codex: the structural advice (tight task
-framing, no chain-of-thought micromanagement) still applies to Sol, but
+framing, no chain-of-thought micromanagement) still applied to Sol and is
+unmeasured for Astra, but
 verify any model-specific flag or behavior claim against current OpenAI docs
 before relying on it.
 

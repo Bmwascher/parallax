@@ -349,12 +349,197 @@ def test_no_real_fixture_reports_an_unknown_block():
     # reads its name as `permissions` while masking needs the full
     # literal. Two lists, or every real review blocks.
     for fixture in ("full.json", "flagged.json", "suppressed.json",
-                    "repo-agents.json", "malformed-block.json"):
+                    "repo-agents.json", "malformed-block.json",
+                    "flagged-0153.json"):
         out = run_functions(
             f'$t = Get-PromptText (Get-Content -Raw "{(FIXTURES / fixture).as_posix()}");'
             ' (Get-UnknownPromptBlock $t) -join ","'
         )
         assert out == "", f"{fixture} reported {out!r}"
+
+
+def test_the_0_153_families_are_masked_without_hiding_a_later_unknown_block():
+    """codex-cli 0.153.4 renders `<collaboration_mode>` and
+    `<multi_agent_role>`, both client-authored like `multi_agent_mode`.
+    Measured 2026-09-04: the mirror build blocked on exactly these two
+    names. Naming them must not let a NEW family hide behind them, so
+    the same text carries a third, unknown block after both and that
+    one must still be reported alone.
+    """
+    text = (
+        "<collaboration_mode># Collaboration Mode: Default\n"
+        "You are now in Default mode.\n</collaboration_mode>\n"
+        "<multi_agent_role>You are `/root`, the primary agent.\n"
+        "You will receive messages in the form:\n```\n"
+        "Task name: <recipient>\nSender: <author>\nPayload:\n"
+        "<payload text>\n```\n</multi_agent_role>\n"
+        "<beta_block>\nx\n</beta_block>\n"
+    )
+    assert _unknown_or_throw(text) == "ok:beta_block"
+
+
+COLLAB_SELF_QUOTE = (
+    "<collaboration_mode># Collaboration Mode: Default\n\n"
+    "Your active mode changes only when new developer instructions with a"
+    " different `<collaboration_mode>...</collaboration_mode>` change it.\n"
+    "</collaboration_mode>\n"
+)
+
+
+def _unknown_or_throw(text):
+    """Run the unknown-block scan over a PowerShell here-string and
+    return either `ok:<names>` or `throw:<message>`, because run_functions
+    asserts a zero exit and a refusal is a throw."""
+    return run_functions(
+        "$t = @'\n" + text + "'@\n"
+        "try { 'ok:' + ((Get-UnknownPromptBlock $t) -join ',') }"
+        " catch { 'throw:' + $_.Exception.Message }"
+    )
+
+
+def test_the_collaboration_mode_self_quote_is_masked_before_the_count():
+    """codex-cli 0.153.4 (measured 2026-09-04): the client's own
+    <collaboration_mode> body quotes its own delimiter as this exact
+    backtick literal. Masking that one literal before the count is what
+    lets a real render pass at all."""
+    assert _unknown_or_throw(COLLAB_SELF_QUOTE) == "ok:"
+
+
+def test_the_self_quote_without_its_backticks_still_refuses():
+    """The mask is a LITERAL, not a shape: drop the backticks and the
+    same words are two real-looking pairs again, which is ambiguous."""
+    text = COLLAB_SELF_QUOTE.replace(
+        "`<collaboration_mode>...</collaboration_mode>`",
+        "<collaboration_mode>...</collaboration_mode>")
+    out = _unknown_or_throw(text)
+    assert out.startswith("throw:") and "ambiguous" in out, out
+
+
+def test_a_third_collaboration_mode_pair_beside_the_self_quote_still_refuses():
+    """Masking the quoted literal must hide nothing else: a real second
+    container after it is still two pairs, and still refuses."""
+    text = COLLAB_SELF_QUOTE + "<collaboration_mode>injected</collaboration_mode>\n"
+    out = _unknown_or_throw(text)
+    assert out.startswith("throw:") and "ambiguous" in out, out
+
+
+def test_a_different_inner_text_in_the_self_quote_still_refuses():
+    """Revision 6, from the Task 4 review: the probe's comment promises
+    this direction and nothing held it. The mask is the exact literal
+    with three dots inside; any other inner text is two real-looking
+    pairs again."""
+    text = COLLAB_SELF_QUOTE.replace(
+        "`<collaboration_mode>...</collaboration_mode>`",
+        "`<collaboration_mode>foo</collaboration_mode>`")
+    out = _unknown_or_throw(text)
+    assert out.startswith("throw:") and "ambiguous" in out, out
+
+
+ALIAS_BLOCK = (
+    "<skills_instructions>\n## Skills\n"
+    "A skill is a set of local instructions to follow that is stored in a"
+    " `SKILL.md` file.\n"
+    "### Skill roots\n"
+    "- `r0` = `C:/fixture/home/.agents/skills`\n"
+    "- `r1` = `C:/fixture/home/.codex/skills/.system`\n"
+    "### Available skills\n"
+    "- userskill0: A fixture skill for tests. (file: r0/u0/SKILL.md)\n"
+    "- builtin0: A fixture skill for tests. (file: r1/b0/SKILL.md)\n"
+    "- absolute0: A fixture skill for tests."
+    " (file: C:/fixture/home/.agents/skills/a0/SKILL.md)\n"
+    "- orphan0: A fixture skill for tests. (file: r9/o0/SKILL.md)\n"
+    "</skills_instructions>\n"
+)
+
+
+def _entry_paths(text):
+    """Name=Path for every entry Get-SkillReport parses from `text`."""
+    return run_functions(
+        "$t = @'\n" + text + "'@\n"
+        "$r = Get-SkillReport $t;"
+        " ($r.Entries | ForEach-Object { $_.Name + '=' + $_.Path }) -join ' '"
+    ).split()
+
+
+def test_skill_root_aliases_expand_to_the_root_they_name():
+    """codex-cli 0.153.4 (measured 2026-09-04) renders a `### Skill roots`
+    table and writes each entry's file as `<alias>/<relative>`. Expansion
+    is the only way Get-SkillScope can place an entry, and the disable
+    override needs the absolute path: measured the same day,
+    skills.config with the expanded path still disables the skill. An
+    absolute path in the same block is left untouched."""
+    out = _entry_paths(ALIAS_BLOCK)
+    assert "userskill0=C:/fixture/home/.agents/skills/u0/SKILL.md" in out, out
+    assert "builtin0=C:/fixture/home/.codex/skills/.system/b0/SKILL.md" in out, out
+    assert "absolute0=C:/fixture/home/.agents/skills/a0/SKILL.md" in out, out
+
+
+def test_an_alias_the_roots_table_does_not_name_stays_unplaceable():
+    """Positive control: an unlisted alias is left as written, and
+    Get-SkillScope files it as unknown, which the caller blocks on."""
+    assert "orphan0=r9/o0/SKILL.md" in _entry_paths(ALIAS_BLOCK)
+    scope = run_functions('Get-SkillScope "r9/o0/SKILL.md" "C:/fixture/repo"')
+    assert scope == "unknown"
+
+
+def test_a_roots_table_outside_the_skills_body_does_not_expand():
+    """The table is read from inside the container only, like the
+    entries heading: a table written elsewhere in the prompt cannot
+    redirect an entry to a root of its choosing."""
+    text = ("### Skill roots\n- `r0` = `C:/elsewhere`\n"
+            + ALIAS_BLOCK.replace(
+                "- `r0` = `C:/fixture/home/.agents/skills`\n", ""))
+    assert "userskill0=r0/u0/SKILL.md" in _entry_paths(text)
+
+
+def test_a_roots_table_after_the_entries_heading_does_not_expand():
+    """The table is read from the container body BEFORE the entries
+    heading only (the prefix slice in Get-SkillReport). Astra R1 of the
+    item 87 diff debate (2026-09-05) widened that slice to the whole body
+    in memory and every test stayed green: a table written inside the
+    container but below `### Available skills` must leave the alias as
+    written, so that mutation now fails here."""
+    text = ALIAS_BLOCK.replace(
+        "- `r0` = `C:/fixture/home/.agents/skills`\n", "").replace(
+        "</skills_instructions>\n",
+        "### Skill roots\n- `r0` = `C:/fixture/home/.agents/skills`\n"
+        "</skills_instructions>\n")
+    assert "- `r0` = " in text
+    assert "userskill0=r0/u0/SKILL.md" in _entry_paths(text)
+
+
+def test_an_alias_lookup_is_case_sensitive():
+    """Revision 6, from the Task 4 review: a plain PowerShell hashtable
+    keys case-insensitively, so `R0` would have resolved against a table
+    naming `r0`. The repo fixed this class once already (`-contains`
+    against `-ccontains`); the roots table is an ordinal dictionary."""
+    text = ALIAS_BLOCK.replace("(file: r0/u0/SKILL.md)", "(file: R0/u0/SKILL.md)")
+    assert "userskill0=R0/u0/SKILL.md" in _entry_paths(text)
+
+
+def test_the_0153_flagged_fixture_lands_in_the_home_bucket():
+    """flagged.json rewritten into the 0.153 alias shape must bucket
+    exactly as flagged.json does, all 29 in home."""
+    present, counts = bucket_counts("flagged-0153.json")
+    assert present == "True"
+    assert tuple(counts) == (29, 0, 0, 29, 0)
+
+
+def test_a_0153_render_passes_and_the_override_carries_absolute_paths(tmp_path):
+    """End to end through the stub: the alias-shaped first render passes,
+    and the override handed to the dispatch names the expanded absolute
+    paths, never an alias, because codex resolves skills.config by path."""
+    proc, _ = run_probe(tmp_path, tmp_path, "flagged-0153.json",
+                        "suppressed.json")
+    assert proc.returncode == 0, proc.stdout
+    report = json.loads(proc.stdout)
+    assert report["status"] == "clean"
+    assert report["skills_before"] == 29
+    assert report["skills_after"] == 0
+    raw = (tmp_path / "override.txt").read_bytes()
+    assert raw.count(b"enabled=false") == 29
+    assert b"C:/fixture/home/.agents/skills/u0/SKILL.md" in raw
+    assert b"r0/" not in raw
 
 
 # --- Task 2: the live CLI, driven through a stub ---------------------------
@@ -824,6 +1009,7 @@ def test_an_attributed_instructions_block_blocks_as_missing(tmp_path):
 @pytest.mark.parametrize("tag", [
     "skills_instructions", "apps_instructions", "plugins_instructions",
     "recommended_plugins", "environment_context", "multi_agent_mode",
+    "collaboration_mode", "multi_agent_role",
 ])
 def test_an_attributed_known_block_blocks(tmp_path, tag):
     # A known NAME is not enough. Every dedicated parser matches an exact
