@@ -24,11 +24,14 @@ The full previous text of every closed item is in git history at
 - 43
 - 31
 - 58
+- 92
 
 ### Second - taxes every cycle
 - 44
 - 69
 - 77
+- 90
+- 91
 
 ### Third - changes to the workflow itself
 - 46
@@ -3878,3 +3881,79 @@ reason, a fixture workspace with no commit. Closing this item means a behavioura
 it; the retained round above is the first half. A sentence the
 suite shows to change verdicts belongs in the record with its measurement;
 a sentence that changes nothing is a candidate for the lean-brief rule.
+
+## 90. The review mirror copies through directory links and doubles its size
+Status: OPEN
+Cost: every mirror build of a repo that links a reference checkout writes the whole target as ordinary files, measured 2026-09-05 at 14,884 extra files for one 14k-file addon, so each build pays twice the copy it needs
+Pairs: 91
+Verified: 2026-09-05 39ddd4665be4
+
+**Filed 2026-09-05 from the user's report** that the mirror of a WoW addon
+repo doubles in size because `robocopy /E` follows the `.wow-api-reference`
+link onto a shared API reference checkout. Design:
+`docs/superpowers/specs/2026-09-05-mirror-link-relink-design.md`. Plan:
+`docs/superpowers/plans/2026-09-05-item90-mirror-link-relink.md`. Astra was
+polled first and agreed with changes; the poll is retained under
+`docs/superpowers/plans/rounds/2026-09-05-mirror-link-poll/`.
+
+**The change.** The path-budget walk records each directory link, keeps
+descending through it so the cycle and overlap refusals see a link
+behind a link, and counts nothing beneath it against the budget; every
+link target the walk reaches becomes a protected tree that the mirror
+and override paths may not overlap or pass through; the copy runs with
+`/XJD`; the manifest starts a listing at every link beneath a subject;
+after the final back-channel sweep the tool creates a junction per
+recorded link onto the same resolved target and then re-enumerates
+back-channels READ-ONLY, blocking if any sit under a link. No new
+identity fields: measured 2026-09-05, both hosts hash through a link
+when a listing starts at the link, and the mirror's own status names the
+junction as one subject, so the existing digests cover the linked bytes.
+
+**Closing this item** means the branch is merged with the re-link case,
+the drift-behind-the-link case, the redirected-link case, the rebuild
+case and the back-channel-behind-a-link case green on both hosts, the
+timing task's before-and-after numbers recorded here, and 0.32.0
+installed and content-verified.
+
+## 91. The identity digests hash a linked reference checkout three times per build and six times per round
+Status: OPEN
+Cost: a build hashes every file behind a linked checkout, its `.git` objects included, three times, and each round's three identity verifies hash it on both sides for six more passes; measured 2026-09-05 at 14,884 files per pass, so the reference is hashed more often than the addon under review
+Pairs: 90
+Verified: 2026-09-05 44fb981a942e
+
+**Filed 2026-09-05 during item 90's design.** Item 90 removes the copy's
+read and the pre-copy budget accounting only. `Get-StatusSha256` runs
+before and after the copy on the source and once on the mirror, and each
+run expands the link's single status entry through `Get-ChildItem
+-Recurse`, hashing all 14,884 files of the reference checkout and its
+`.git` internals. Every `-VerifyIdentity` call does the same on both
+sides, and a round runs three of them: the dispatch tool's own at
+prepare time, then the wrapper's before and after the client.
+Cross-vendor round 1 of item 90's plan debate corrected the counts this
+item first carried.
+
+**A candidate fix, not decided.** A subject whose directory holds its own
+`.git` could be bound by that checkout's HEAD plus its own status digest
+rather than a byte walk that includes its object store. That changes the
+`mirror-identity-gate` contract and needs a debate of its own; it must
+not narrow coverage of a plain linked folder, which git already walks
+file by file. Closing this item means a measured reduction in build and
+verify time on a repo carrying `.wow-api-reference`, with the coverage
+argument written into the contract region.
+
+## 92. The back-channel sweep does not enumerate inside a nested repository
+Status: OPEN
+Cost: an instruction file inside a linked reference checkout reaches the reviewer unenumerated and undeleted, today with the copy and after item 90 with the junction, because `git ls-files --others` stops at a directory that holds its own `.git`
+Pairs: none
+Verified: 2026-09-05 a5cd1d110361
+
+**Filed 2026-09-05 during item 90's design, as a PRE-EXISTING gap.**
+Measured on a fixture: a junction onto a directory holding `.git` is one
+`ls-files` entry, so `*AGENTS.md` beneath it never matches, and the
+finished-mirror sweep reports clean. The client context probe is the
+only control left for that content. Item 90 deliberately does not delete
+through a link, so the remedy is not "descend and delete": it is either a
+read-only enumeration of each nested checkout that BLOCKS the build when
+a back-channel is present, or a documented statement that linked
+checkouts are outside the sweep. Closing this item means one of those
+two is shipped and the `enumeration-depth-asymmetry` region says which.
