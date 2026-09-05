@@ -106,9 +106,18 @@ compares the mirror path and the override path against the source root
 only. A link target lives outside that root, so a mirror path placed at
 the reference checkout with the force switch would delete the checkout,
 and an override path inside it would write there. Cross-vendor round 1
-named both. After the walk records each link's resolved target, the
-build refuses a mirror path or override path that equals, sits inside,
-or contains any target, before anything is created or deleted.
+named both. After the walk, the build refuses a mirror path or override
+path that equals, sits inside, or contains ANY target the walk followed,
+inner links included, before anything is created or deleted. Round 2
+added two refusals beside it. A mirror or override path with a
+directory link among its existing ancestors is refused outright,
+because a path spelled through some other link can land inside a
+protected target without matching its spelling, and a text comparison
+cannot see that. And a `.git` that is itself a directory link is
+refused by the walk, because git's optional index refresh writes the
+repository's own `.git/index` during every status capture, and that is
+a write into the repository rather than through a link only while
+`.git` is not a link.
 
 **Why the manifest expands nested links explicitly.** Measurement 7:
 a recursion from a parent does not pass through a link. The old copy
@@ -116,9 +125,16 @@ materialised every linked file, so the mirror side hashed them by
 ordinary recursion while the source side never did. After this change
 both sides expand a directory subject by listing its files, then
 listing every directory link beneath it and starting a fresh listing at
-each link, with a visited set of resolved targets so a repeated or
-cyclic target is a refusal rather than an unbounded walk. Coverage on
-the source side widens to match the mirror's.
+each link, with a visited set of resolved targets, seeded with the
+repository root, so a repeated or cyclic target is a refusal rather
+than an unbounded walk. Round 2 showed the visited set alone is not a
+cycle guard: a relative symbolic-link target resolved against the
+link's spelled parent yields a new string at every level of a cycle
+reached through an outer junction. A depth bound of 16 nested links
+closes that, and is stated as the reason rather than as a limit anyone
+measured. Coverage on the source side widens to match the mirror's,
+and the same expansion runs at verify time, where the construction walk
+does not.
 
 **Why re-link AFTER the final back-channel sweep, then check, never
 delete.** Remediation removes instruction files it finds with
