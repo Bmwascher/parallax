@@ -420,6 +420,84 @@ the drift watch and the doctor's probe run the canonical model only.
   silently downgrade the review lane.
 ```
 
+- [ ] **Step 4b: Re-address four Sol references outside the reviewer section (revision 6)**
+
+Found by the cross-vendor sweep of 2026-09-04 (Astra, voided round,
+used as input): four bullets later in the same file state a RULE or a
+CONVENTION addressed to Sol, or let a Sol-era measurement read as a
+statement about "the canonical id". Each keeps its Sol provenance and
+moves its operative subject to the lane. Before each edit, grep
+`evals/` for the phrase being changed; if a pin holds it, keep the
+pinned words on one physical line and restructure around them.
+
+In the **Session resume** bullet, change
+
+```markdown
+  round 1 and resume it (flags before the subcommand). OpenAI documents
+  5.6 reasoning reuse across turns as CONDITIONAL (carried through
+  previous_response_id-style continuation); whether `codex exec resume`
+```
+
+to
+
+```markdown
+  round 1 and resume it (flags before the subcommand). OpenAI documented
+  5.6 reasoning reuse across turns as CONDITIONAL (carried through
+  previous_response_id-style continuation), which is Sol-era evidence
+  not re-checked for Astra; whether `codex exec resume`
+```
+
+In the **Fabrication counter** bullet, change
+
+```markdown
+- **Fabrication counter**: Sol's METR/system-card record means "I verified X"
+  claims from Sol get the same strike rule as everything else — quoted
+  file:line or it did not happen.
+```
+
+to
+
+```markdown
+- **Fabrication counter**: Sol's METR/system-card record is why "I verified X"
+  claims from the reviewer lane, whichever model holds it, get the same
+  strike rule as everything else — quoted file:line or it did not happen.
+  The record is Sol's; the rule is the lane's.
+```
+
+In the **Lane diagnostics (tier gating)** bullet, change
+
+```markdown
+- **Lane diagnostics (tier gating)**: a 400 "not supported when using
+  Codex with a ChatGPT account" on the canonical id while `gpt-5.6-terra`
+  responds confirms subscription tier-gating, not a CLI problem (free/Go
+  tiers get Terra only; Plus and above get Sol — probed 2026-07-12). This
+```
+
+to
+
+```markdown
+- **Lane diagnostics (tier gating)**: a 400 "not supported when using
+  Codex with a ChatGPT account" on `gpt-5.6-sol`, the canonical id when
+  this was probed, while `gpt-5.6-terra` responds confirmed subscription
+  tier-gating, not a CLI problem (free/Go tiers get Terra only; Plus and
+  above get Sol — probed 2026-07-12, on Sol). Astra answered at `low` and
+  `high` on 2026-09-04, so the same 400 on Astra would need its own probe
+  (item 66 holds the tier map's width). This
+```
+
+In the **Reusable recipes** section, change
+
+```markdown
+framing, no chain-of-thought micromanagement) still applies to Sol, but
+```
+
+to
+
+```markdown
+framing, no chain-of-thought micromanagement) still applied to Sol and is
+unmeasured for Astra, but
+```
+
 - [ ] **Step 5: Edit the task-naming region**
 
 In the same file, inside the `<!-- contract:start id=background-task-naming -->`
@@ -560,6 +638,19 @@ In `evals/tools/run_behavioral_evals.py` line 237:
 becomes
 `**Participants:** Fable 5 (session) / GPT-6 Astra (codex exec, session eval-fixture)`.
 
+- [ ] **Step 9b: Edit the behavioural fixture's resolved-points row (revision 6)**
+
+In `evals/tools/run_behavioral_evals.py`, the fixture's resolved-points
+table (near line 248) has the row
+`| 2 | regen-ENABLED registered first | Sol | accepted | References/DemoWidget/Core.lua:25-26 |`.
+Change `| Sol |` to `| Astra |` in that row. It is generated fixture
+content under the Participants header Step 9 changes, not a retained
+historical debate. Then run
+`grep -n "Sol" evals/tools/run_behavioral_evals.py`: every remaining match
+must be a citation carrying a date or a round reference (such as
+`Sol review 2026-07-16` or `Sol diff review round 2`); list them in the
+report.
+
 - [ ] **Step 10: Confirm no live label was missed**
 
 Run: `grep -rnE "\bSol\b" README.md CLAUDE.md skills/multi-model-verify/SKILL.md skills/multi-model-verify/references/panels.md skills/multi-model-verify/references/fallbacks.md skills/multi-model-verify/references/frozen-plan-format.md`
@@ -567,6 +658,19 @@ Run: `grep -rnE "\bSol\b" README.md CLAUDE.md skills/multi-model-verify/SKILL.md
 Expected: the only matches are the alternate's own sentences in
 `panels.md` (the transport bullet) and `README.md` line 27. Every other
 match is a live label that was missed; fix it and re-run.
+
+Then the wider sweep (revision 6), over the surfaces the first grep does
+not cover:
+
+`grep -rnE "\bSol\b" agents/ commands/ hooks/ tools/*.ps1 skills/multi-model-verify/references/model-prompting-notes.md`
+
+Every match must be a HISTORICAL citation: a line carrying a date, a
+round or review reference (`Sol review 2026-07-12`, `Sol round-2`,
+`Sol consult 2026-07-19`, `Sol holistic`), a probe record, or the
+alternate's own declaration paragraph from Task 2. List every match in
+the report with the reason it is historical. A match that states a rule,
+a convention, a composition, or a task-name example is a missed live
+label; fix it and re-run.
 
 - [ ] **Step 11: Run the full gate**
 
@@ -669,23 +773,24 @@ def test_the_0_153_families_are_masked_without_hiding_a_later_unknown_block():
     one must still be reported alone.
     """
     text = (
-        "<collaboration_mode># Collaboration Mode: Default\\n"
-        "You are now in Default mode.\\n</collaboration_mode>\\n"
-        "<multi_agent_role>You are `/root`, the primary agent.\\n"
-        "You will receive messages in the form:\\n```\\n"
-        "Task name: <recipient>\\nSender: <author>\\nPayload:\\n"
-        "<payload text>\\n```\\n</multi_agent_role>\\n"
-        "<beta_block>\\nx\\n</beta_block>\\n"
+        "<collaboration_mode># Collaboration Mode: Default\n"
+        "You are now in Default mode.\n</collaboration_mode>\n"
+        "<multi_agent_role>You are `/root`, the primary agent.\n"
+        "You will receive messages in the form:\n```\n"
+        "Task name: <recipient>\nSender: <author>\nPayload:\n"
+        "<payload text>\n```\n</multi_agent_role>\n"
+        "<beta_block>\nx\n</beta_block>\n"
     )
-    out = run_functions(
-        f'$t = "{text}"; (Get-UnknownPromptBlock $t) -join ","'
-    )
-    assert out == "beta_block", out
+    assert _unknown_or_throw(text) == "ok:beta_block"
 ```
 
-The `\\n` sequences are PowerShell newline escapes inside a double-quoted
-string, exactly as the existing parametrized cases at lines 322-327 write
-them.
+Revision 6: the text goes through `_unknown_or_throw` (defined in Step
+2b), which wraps it in a single-quoted PowerShell here-string, so the
+newlines, the backticks and the fence reach the parser as written. The
+earlier form put `\n` inside a PowerShell double-quoted string, where it
+is a literal backslash and n and the backticks are escape characters, so
+the test exercised one physical line rather than the fenced shape its
+docstring describes. Found by the Task 4 review.
 
 - [ ] **Step 2b: Add the self-quote tests (revision 3)**
 
@@ -743,6 +848,18 @@ def test_a_third_collaboration_mode_pair_beside_the_self_quote_still_refuses():
     """Masking the quoted literal must hide nothing else: a real second
     container after it is still two pairs, and still refuses."""
     text = COLLAB_SELF_QUOTE + "<collaboration_mode>injected</collaboration_mode>\n"
+    out = _unknown_or_throw(text)
+    assert out.startswith("throw:") and "ambiguous" in out, out
+
+
+def test_a_different_inner_text_in_the_self_quote_still_refuses():
+    """Revision 6, from the Task 4 review: the probe's comment promises
+    this direction and nothing held it. The mask is the exact literal
+    with three dots inside; any other inner text is two real-looking
+    pairs again."""
+    text = COLLAB_SELF_QUOTE.replace(
+        "`<collaboration_mode>...</collaboration_mode>`",
+        "`<collaboration_mode>foo</collaboration_mode>`")
     out = _unknown_or_throw(text)
     assert out.startswith("throw:") and "ambiguous" in out, out
 ```
@@ -819,6 +936,15 @@ def test_a_roots_table_outside_the_skills_body_does_not_expand():
             + ALIAS_BLOCK.replace(
                 "- `r0` = `C:/fixture/home/.agents/skills`\n", ""))
     assert "userskill0=r0/u0/SKILL.md" in _entry_paths(text)
+
+
+def test_an_alias_lookup_is_case_sensitive():
+    """Revision 6, from the Task 4 review: a plain PowerShell hashtable
+    keys case-insensitively, so `R0` would have resolved against a table
+    naming `r0`. The repo fixed this class once already (`-contains`
+    against `-ccontains`); the roots table is an ordinal dictionary."""
+    text = ALIAS_BLOCK.replace("(file: r0/u0/SKILL.md)", "(file: R0/u0/SKILL.md)")
+    assert "userskill0=R0/u0/SKILL.md" in _entry_paths(text)
 
 
 def test_the_0153_flagged_fixture_lands_in_the_home_bucket():
@@ -903,7 +1029,17 @@ is kept on purpose).
 
 - [ ] **Step 4: Run the tests to verify they fail**
 
-Run: `python -m pytest evals/multi-model-verify/test_codex_context_probe.py -q -k "unknown_block or attributed_known or 0_153"`
+Revision 6, from the cross-vendor sweep: the red phase is STAGED, because
+the self-quote tests can only fail for the right reason once the family
+names are known (before Step 5 they report an unknown family instead of
+throwing for ambiguous boundaries). Run each stage's tests immediately
+before the step that turns them green: the family tests (Step 1's
+parametrize cases, Step 2's test, the fixture test) before Step 5; the
+Step 2b self-quote tests after Step 5 and before Step 5b; the Step 2c
+alias tests after Step 5b and before Step 5c. Select each stage with
+`-k` on the test names and record each stage's red by name.
+
+Run, for the first stage: `python -m pytest evals/multi-model-verify/test_codex_context_probe.py -q -k "unknown_block or attributed_known or 0_153_families"`
 
 Expected: `test_no_real_fixture_reports_an_unknown_block` FAILS naming
 `collaboration_mode,multi_agent_role` for `full.json`; the new test FAILS
@@ -1023,7 +1159,7 @@ after the line `$seg = $body.Substring($start)` insert:
             # Get-SkillScope then files it as unknown, which blocks. The
             # disable override needs the absolute path: measured the same
             # day, skills.config with the expanded path still disables.
-            $roots = @{}
+            $roots = New-Object 'System.Collections.Generic.Dictionary[string,string]' ([System.StringComparer]::Ordinal)
             $rootRx = [regex]'^- `([A-Za-z0-9_]+)` = `(.+)`[ \t]*$'
             foreach ($rootLine in ($body.Substring(0, $start) -split "`n")) {
                 $rm = $rootRx.Match($rootLine.TrimEnd("`r"))
@@ -1132,9 +1268,10 @@ git commit -m "teach the context probe the collaboration_mode and multi_agent_ro
 **Rounds used:** 0 of 4
 **Outcome:** not debated
 **Verification status:** DEGRADED
-**Degradation:** plan-not-debated: the change is bounded, not a port or an API-sensitive module, and the design was approved by the user in chat on 2026-09-04; mode diff must cross-verify the plan's claims before verifying the implementation against it, per the degraded-plan poisoning rule
+**Degradation:** plan-not-debated: no cross-vendor round has completed as evidence yet. The change is bounded and the design was approved by the user in chat on 2026-09-04; until a round completes, mode diff must cross-verify the plan's claims before verifying the implementation against it, per the degraded-plan poisoning rule. Outcome and verification status are separate fields (revision 6): when a round completes, this record is rewritten with the actual participants, rounds and outcome, and the status becomes FULL only when the cross-vendor evidence requirements were met, whatever the outcome; an escalated outcome still needs the user's recorded decision before the plan is frozen.
 **Authorized by:** user at design approval, 2026-09-04
-**Raw rounds:** not retained
+**Raw rounds:** docs/superpowers/plans/rounds/2026-09-04-item87-astra-plan-round/ (each round's brief and verbatim reply; the transcript is not retained because it carries the reviewer's file reads)
+**Voided rounds:** Astra R1, dispatched 2026-09-04 against subject 041ea2b: the wrapper's post-round identity check found the source status changed while the round ran, so it classified as failed and its reply is NOT evidence. The reply is retained in that directory as `astra-r1-voided-reply.md` and was used as INPUT to revision 6 of this plan (claims 5, 10 and 12 of its brief). It counts as no round.
 
 ### Resolved points
 | # | Claim | Raised by | Outcome | Evidence |
