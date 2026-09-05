@@ -747,6 +747,108 @@ def test_a_third_collaboration_mode_pair_beside_the_self_quote_still_refuses():
     assert out.startswith("throw:") and "ambiguous" in out, out
 ```
 
+- [ ] **Step 2c: Add the skill-root alias tests (revision 4)**
+
+Measured 2026-09-04 on the real 0.153.4 render, once Step 5b let the
+probe past its shape check: the skills block now carries a
+`### Skill roots` table above `### Available skills`, one line per root
+in the form `` - `r0` = `C:/...` ``, and every entry's file is written as
+`<alias>/<relative>` (for example `(file: r1/skill-creator/SKILL.md)`).
+`Get-SkillScope` files an alias-relative path as `unknown`, which blocks
+every review. Measured the same day: `skills.config` with the EXPANDED
+absolute path still disables the skill, and disabling every entry removes
+the skills block entirely, so pass 2 needs nothing new. The ruling:
+`Get-SkillReport` reads the roots table from INSIDE the container body,
+before the entries heading, and expands an entry path whose alias the
+table names; an alias the table does not name is left as written and
+still blocks. Directly after the Step 2b tests add:
+
+```python
+ALIAS_BLOCK = (
+    "<skills_instructions>\n## Skills\n"
+    "A skill is a set of local instructions to follow that is stored in a"
+    " `SKILL.md` file.\n"
+    "### Skill roots\n"
+    "- `r0` = `C:/fixture/home/.agents/skills`\n"
+    "- `r1` = `C:/fixture/home/.codex/skills/.system`\n"
+    "### Available skills\n"
+    "- userskill0: A fixture skill for tests. (file: r0/u0/SKILL.md)\n"
+    "- builtin0: A fixture skill for tests. (file: r1/b0/SKILL.md)\n"
+    "- absolute0: A fixture skill for tests."
+    " (file: C:/fixture/home/.agents/skills/a0/SKILL.md)\n"
+    "- orphan0: A fixture skill for tests. (file: r9/o0/SKILL.md)\n"
+    "</skills_instructions>\n"
+)
+
+
+def _entry_paths(text):
+    """Name=Path for every entry Get-SkillReport parses from `text`."""
+    return run_functions(
+        "$t = @'\n" + text + "'@\n"
+        "$r = Get-SkillReport $t;"
+        " ($r.Entries | ForEach-Object { $_.Name + '=' + $_.Path }) -join ' '"
+    ).split()
+
+
+def test_skill_root_aliases_expand_to_the_root_they_name():
+    """codex-cli 0.153.4 (measured 2026-09-04) renders a `### Skill roots`
+    table and writes each entry's file as `<alias>/<relative>`. Expansion
+    is the only way Get-SkillScope can place an entry, and the disable
+    override needs the absolute path: measured the same day,
+    skills.config with the expanded path still disables the skill. An
+    absolute path in the same block is left untouched."""
+    out = _entry_paths(ALIAS_BLOCK)
+    assert "userskill0=C:/fixture/home/.agents/skills/u0/SKILL.md" in out, out
+    assert "builtin0=C:/fixture/home/.codex/skills/.system/b0/SKILL.md" in out, out
+    assert "absolute0=C:/fixture/home/.agents/skills/a0/SKILL.md" in out, out
+
+
+def test_an_alias_the_roots_table_does_not_name_stays_unplaceable():
+    """Positive control: an unlisted alias is left as written, and
+    Get-SkillScope files it as unknown, which the caller blocks on."""
+    assert "orphan0=r9/o0/SKILL.md" in _entry_paths(ALIAS_BLOCK)
+    scope = run_functions('Get-SkillScope "r9/o0/SKILL.md" "C:/fixture/repo"')
+    assert scope == "unknown"
+
+
+def test_a_roots_table_outside_the_skills_body_does_not_expand():
+    """The table is read from inside the container only, like the
+    entries heading: a table written elsewhere in the prompt cannot
+    redirect an entry to a root of its choosing."""
+    text = ("### Skill roots\n- `r0` = `C:/elsewhere`\n"
+            + ALIAS_BLOCK.replace(
+                "- `r0` = `C:/fixture/home/.agents/skills`\n", ""))
+    assert "userskill0=r0/u0/SKILL.md" in _entry_paths(text)
+
+
+def test_the_0153_flagged_fixture_lands_in_the_home_bucket():
+    """flagged.json rewritten into the 0.153 alias shape must bucket
+    exactly as flagged.json does, all 29 in home."""
+    present, counts = bucket_counts("flagged-0153.json")
+    assert present == "True"
+    assert tuple(counts) == (29, 0, 0, 29, 0)
+
+
+def test_a_0153_render_passes_and_the_override_carries_absolute_paths(tmp_path):
+    """End to end through the stub: the alias-shaped first render passes,
+    and the override handed to the dispatch names the expanded absolute
+    paths, never an alias, because codex resolves skills.config by path."""
+    proc, _ = run_probe(tmp_path, tmp_path, "flagged-0153.json",
+                        "suppressed.json")
+    assert proc.returncode == 0, proc.stdout
+    report = json.loads(proc.stdout)
+    assert report["status"] == "clean"
+    assert report["skills_before"] == 29
+    assert report["skills_after"] == 0
+    raw = (tmp_path / "override.txt").read_bytes()
+    assert raw.count(b"enabled=false") == 29
+    assert b"C:/fixture/home/.agents/skills/u0/SKILL.md" in raw
+    assert b"r0/" not in raw
+```
+
+Also add `"flagged-0153.json"` to the fixture tuple in
+`test_no_real_fixture_reports_an_unknown_block`.
+
 - [ ] **Step 3: Add the two blocks to every fixture**
 
 In each of the six files under
@@ -761,6 +863,40 @@ written):
 ```
 
 Verify each file still parses: `python -c "import json,glob; [json.load(open(p, encoding='utf-8')) for p in glob.glob('evals/multi-model-verify/fixtures/codex-prompt-input/*.json')]; print('ok')"`.
+
+- [ ] **Step 3b: Build the 0.153-shaped fixture (revision 4)**
+
+Run this from the repo root; it derives `flagged-0153.json` from
+`flagged.json` AFTER Step 3 has added the two blocks to `flagged.json`,
+so the new fixture carries them too:
+
+```python
+import json
+from pathlib import Path
+src = Path("evals/multi-model-verify/fixtures/codex-prompt-input/flagged.json")
+dst = src.with_name("flagged-0153.json")
+doc = json.loads(src.read_text(encoding="utf-8"))
+for m in doc:
+    if not isinstance(m.get("content"), list):
+        continue
+    for ch in m["content"]:
+        t = ch.get("text")
+        if not isinstance(t, str):
+            continue
+        t = t.replace(
+            "### Available skills\n",
+            "### Skill roots\n- `r0` = `C:/fixture/home/.agents/skills`\n"
+            "### Available skills\n", 1)
+        t = t.replace("(file: C:/fixture/home/.agents/skills/", "(file: r0/")
+        ch["text"] = t
+dst.write_text(json.dumps(doc), encoding="utf-8")
+print(dst, dst.stat().st_size)
+```
+
+Verify: `grep -c "r0/u" evals/multi-model-verify/fixtures/codex-prompt-input/flagged-0153.json`
+prints `1` (one line, JSON) and
+`python -c "import json;print(json.load(open('evals/multi-model-verify/fixtures/codex-prompt-input/flagged-0153.json',encoding='utf-8'))[0]['content'][0]['text'].count('(file: r0/'))"`
+prints `29`.
 
 - [ ] **Step 4: Run the tests to verify they fail**
 
@@ -777,7 +913,14 @@ already: they are the positive controls that must stay green after Step
 6 were already done once (revision 2), the red phase for Step 2b alone
 is: the first Step 2b test fails, the other two pass, and the fixture
 test from Step 3 fails with `ambiguous` for every fixture because each
-fixture now carries the self-quote.
+fixture now carries the self-quote. Of the Step 2c tests, before Step
+5c: the alias-expansion test FAILS (paths unexpanded), the flagged-0153
+bucket test FAILS with `(29, 0, 0, 0, 29)` (every entry unknown), and
+the end-to-end test FAILS blocked on an unplaceable entry; the orphan
+test and the outside-table test PASS already and are the positive
+controls that must stay green after Step 5c. If Steps 1 to 6 plus 2b and
+5b were already done (revision 3), the red phase for Step 2c alone is
+exactly those three failures and two passes.
 
 - [ ] **Step 5: Name the two families in the probe**
 
@@ -860,6 +1003,57 @@ directly after the line `$masked = $text` and before the
 The single-quoted PowerShell string keeps the backticks literal. The
 file stays ASCII only.
 
+- [ ] **Step 5c: Expand skill-root aliases in the entry parser (revision 4)**
+
+In `tools/codex-context-probe.ps1`, inside `Get-SkillReport`, directly
+after the line `$seg = $body.Substring($start)` insert:
+
+```powershell
+            # codex-cli 0.153 (measured 2026-09-04 on 0.153.4) renders a
+            # `### Skill roots` table above the entries and writes each
+            # entry's file as `<alias>/<relative>`. The table is read from
+            # INSIDE the container body only, before the entries heading,
+            # so a table written anywhere else cannot redirect an entry.
+            # An alias the table does not name is left as written, and
+            # Get-SkillScope then files it as unknown, which blocks. The
+            # disable override needs the absolute path: measured the same
+            # day, skills.config with the expanded path still disables.
+            $roots = @{}
+            $rootRx = [regex]'^- `([A-Za-z0-9_]+)` = `(.+)`[ \t]*$'
+            foreach ($rootLine in ($body.Substring(0, $start) -split "`n")) {
+                $rm = $rootRx.Match($rootLine.TrimEnd("`r"))
+                if ($rm.Success) { $roots[$rm.Groups[1].Value] = $rm.Groups[2].Value }
+            }
+            $aliasRx = [regex]'^([A-Za-z0-9_]+)/(.+)$'
+```
+
+and replace
+
+```powershell
+                [void]$entries.Add(@{
+                    Name = $m.Groups[1].Value
+                    Path = $m.Groups[2].Value
+                })
+```
+
+with
+
+```powershell
+                $path = $m.Groups[2].Value
+                $am = $aliasRx.Match($path)
+                if ($am.Success -and $roots.ContainsKey($am.Groups[1].Value)) {
+                    $path = ([string]$roots[$am.Groups[1].Value]).TrimEnd("/") +
+                        "/" + $am.Groups[2].Value
+                }
+                [void]$entries.Add(@{
+                    Name = $m.Groups[1].Value
+                    Path = $path
+                })
+```
+
+The single-quoted regex strings keep the backticks literal. The file
+stays ASCII only.
+
 - [ ] **Step 6: Run the module under both hosts**
 
 Run, in PowerShell:
@@ -887,7 +1081,7 @@ and is reported with its reason.
 - [ ] **Step 8: Commit**
 
 ```bash
-git add evals/multi-model-verify/test_codex_context_probe.py evals/multi-model-verify/fixtures/codex-prompt-input/full.json evals/multi-model-verify/fixtures/codex-prompt-input/flagged.json evals/multi-model-verify/fixtures/codex-prompt-input/suppressed.json evals/multi-model-verify/fixtures/codex-prompt-input/repo-agents.json evals/multi-model-verify/fixtures/codex-prompt-input/malformed-block.json evals/multi-model-verify/fixtures/codex-prompt-input/missing-block-plugins-off.json tools/codex-context-probe.ps1
+git add evals/multi-model-verify/test_codex_context_probe.py evals/multi-model-verify/fixtures/codex-prompt-input/flagged-0153.json evals/multi-model-verify/fixtures/codex-prompt-input/full.json evals/multi-model-verify/fixtures/codex-prompt-input/flagged.json evals/multi-model-verify/fixtures/codex-prompt-input/suppressed.json evals/multi-model-verify/fixtures/codex-prompt-input/repo-agents.json evals/multi-model-verify/fixtures/codex-prompt-input/malformed-block.json evals/multi-model-verify/fixtures/codex-prompt-input/missing-block-plugins-off.json tools/codex-context-probe.ps1
 git commit -m "teach the context probe the collaboration_mode and multi_agent_role families codex 0.153 renders"
 ```
 
