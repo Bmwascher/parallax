@@ -36,6 +36,7 @@ The full previous text of every closed item is in git history at
 - 45
 - 55
 - 70
+- 87
 
 ### Fourth - measurements missing or made by proxy
 - 73
@@ -3733,3 +3734,41 @@ auto-triage starts, as `manual-triage-needed` with `failure = "auto-triage
 did not report"`, and rewrite it at the end with the real outcome; a run
 that dies in between then re-surfaces as a failure, not as silence. The
 state-machine suite gets a scenario that kills the wrapper mid-run.
+
+## 87. The primary reviewer lane runs GPT-5.6 Sol while GPT-6 Astra is available on the account
+Status: OPEN
+Cost: the reviewer is the gate every cycle runs through, and the pin is one line, so the swap is cheap and the prose around it is the whole cost
+Pairs: none
+Verified: 2026-09-05 46db5011ac54
+
+**Asked for by the user 2026-09-05**, the day GPT-6 Astra appeared in the
+codex model list. The lane's canonical declaration in
+`skills/multi-model-verify/references/model-prompting-notes.md` still
+names `gpt-5.6-sol` at effort `high`.
+
+**Measured 2026-09-05, codex-cli 0.153.4.** A doctor-shaped probe from a
+scratch git fixture, with the dispatch's own isolation flags and
+`--sandbox read-only`, sent `Reply with exactly: TRANSPORT-OK` to
+`gpt-6-astra` at effort `low` and again at `high`. Both returned exit 0
+and the exact reply, and the resolved header read `model: gpt-6-astra`,
+`provider: openai`, `sandbox: read-only` with the pinned effort. So the
+account tier does not gate Astra, and item 66's open question about tier
+width does not block this swap. The first attempt failed with
+`Not inside a trusted directory` because it ran from the temp directory,
+which is a probe-setup fact: run probes from a git repository.
+
+**The swap is not the one line the notes promise.** The pin IS one line
+and every executable parses it, but the section around it describes
+GPT-5.6: its heading, three bullets citing 5.6 prompt guidance, and an
+effort bullet whose reasons were measured on Sol. That is item 74's
+class, for the codex seat. The OpenAI GPT-6 guidance page, fetched
+2026-09-05, no longer carries the six-element sentence, the review-task
+example, or the lean-prompt figure the bullets cite; it does say Astra
+"is more likely to ask for clarification where earlier models would make
+assumptions", which matters for a non-interactive `codex exec` round.
+
+**Decided by the user 2026-09-05:** Astra is the default at effort `high`;
+Sol stays declared as an alternate at `high` that runs only when the user
+names it, on the same transport and evidence rules; and the lane is
+renamed Astra wherever the label is live, while historical citations that
+name Sol stay as they are.
