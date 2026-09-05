@@ -1,0 +1,35 @@
+**A.** The guard now checks every followed target, and the `.git` refusal precedes source status capture (`docs/superpowers/plans/2026-09-05-item90-mirror-link-relink.md:764`, `docs/superpowers/plans/2026-09-05-item90-mirror-link-relink.md:852`). The ancestor loop terminates correctly: running its pathname iteration under both hosts stopped at `C:\`, whose filename component is empty (`docs/superpowers/plans/2026-09-05-item90-mirror-link-relink.md:830`, `docs/superpowers/plans/2026-09-05-item90-mirror-link-relink.md:849`).
+
+One alias direction remains unguarded. For `R\linked -> Alias` and `Alias -> T`, the walk records `Alias`: `GetFullPath` normalizes the target’s spelling without resolving its reparse points (`tools/new-review-mirror.ps1:976`, `tools/new-review-mirror.ps1:1013`). A mirror destination at ordinary directory T has no linked ancestors and does not textually overlap Alias, so `-Force` can still delete T (`docs/superpowers/plans/2026-09-05-item90-mirror-link-relink.md:827`, `docs/superpowers/plans/2026-09-05-item90-mirror-link-relink.md:857`, `tools/new-review-mirror.ps1:1071`).
+
+**FIX — apply the same refusal for reparse points to each followed target path and its existing ancestors, and add a target-alias regression. The dangling-ancestor predicate remains UNVERIFIED below.**
+
+**B.** Terminating errors, empty-list refusal, inequality refusal, missing-header refusal, and the printed-value requirement are present (`docs/superpowers/plans/2026-09-05-item90-mirror-link-relink.md:1264`, `docs/superpowers/plans/2026-09-05-item90-mirror-link-relink.md:1269`, `docs/superpowers/plans/2026-09-05-item90-mirror-link-relink.md:1272`, `docs/superpowers/plans/2026-09-05-item90-mirror-link-relink.md:1280`).
+
+The nested-link check examines only `$linkPath`, although its comment promises refusal beneath either side. If the mirror points at a directory containing matching ordinary files while the recorded target additionally contains a nested link, both file listings omit that target-side link and can compare equal (`docs/superpowers/plans/2026-09-05-item90-mirror-link-relink.md:1261`, `docs/superpowers/plans/2026-09-05-item90-mirror-link-relink.md:1265`, `docs/superpowers/plans/2026-09-05-item90-mirror-link-relink.md:1268`).
+
+**FIX — run the nested-link refusal against both `$linkPath` and `$target` before comparing their files.**
+
+**C.** The helper now has a finite depth bound, increments it during recursive calls, and seeds the visited set with the repository root. The replacement coverage fixture also proves its single-subject precondition (`docs/superpowers/plans/2026-09-05-item90-mirror-link-relink.md:888`, `docs/superpowers/plans/2026-09-05-item90-mirror-link-relink.md:947`, `docs/superpowers/plans/2026-09-05-item90-mirror-link-relink.md:979`, `docs/superpowers/plans/2026-09-05-item90-mirror-link-relink.md:579`).
+
+The depth guard should have a junction-only test. Its current caller starts at depth zero, so seventeen total links would reach only depth sixteen when the outer subject is itself a link. Specify **seventeen inner links beneath the outer subject** to exercise the refusal (`docs/superpowers/plans/2026-09-05-item90-mirror-link-relink.md:980`).
+
+A concrete fixture can use sibling target directories `d0` through `d17`, each containing a junction named `n` to the next directory. Make `d0` a checkout, build and successfully verify at sixteen inner links, then add the seventeenth and require the specific “more than 16 directory links” failure. Removing the bound would then produce a different outcome, making the oracle meaningful (`docs/superpowers/plans/2026-09-05-item90-mirror-link-relink.md:497`, `docs/superpowers/plans/2026-09-05-item90-mirror-link-relink.md:889`).
+
+The chain need not violate the path budget: descendants beneath links are excluded from budget accounting (`docs/superpowers/plans/2026-09-05-item90-mirror-link-relink.md:798`). For filesystem traversal, `tmp_path/m/linked` followed by seventeen `/n` components and `/x.txt` adds 49 characters to `tmp_path`. That path fits below 260 when `len(str(tmp_path)) < 211`; assert the actual length so an unusually long temporary root cannot substitute a pathname failure for the intended depth refusal.
+
+The absolute-cycle test should also use a nested checkout and assert `?? linked/` before injection. Its current plain target allows Git to enumerate through the cycle before the directory-manifest helper receives control (`docs/superpowers/plans/2026-09-05-item90-mirror-link-relink.md:595`, `docs/superpowers/specs/2026-09-05-mirror-link-relink-design.md:39`, `tools/new-review-mirror.ps1:429`).
+
+**FIX — add the explicit depth-bound test and give the verification-cycle test the same proven directory-subject precondition.**
+
+**D.** The selector covers all seventeen proposed tests, red-case recording is required, item 90 describes continued descent, and Task 4 now names its background gates (`docs/superpowers/plans/2026-09-05-item90-mirror-link-relink.md:699`, `docs/superpowers/plans/2026-09-05-item90-mirror-link-relink.md:702`, `docs/superpowers/plans/2026-09-05-item90-mirror-link-relink.md:94`, `docs/superpowers/plans/2026-09-05-item90-mirror-link-relink.md:1182`).
+
+Two instructions remain inconsistent. Task 3’s Files entry still says five appended cases, while Step 2 says fifteen; the block actually appends sixteen (`docs/superpowers/plans/2026-09-05-item90-mirror-link-relink.md:304`, `docs/superpowers/plans/2026-09-05-item90-mirror-link-relink.md:372`). Task 1 expects the draft commit first, but its command uses newest-first ordering (`docs/superpowers/plans/2026-09-05-item90-mirror-link-relink.md:43`, `docs/superpowers/plans/2026-09-05-item90-mirror-link-relink.md:46`). Running `git --no-optional-locks log --oneline main..HEAD` returned `fe47a1e`, `a388905`, then the draft `ea41288`.
+
+**FIX — correct both case counts and add `--reverse` to Task 1’s log command.**
+
+**Whole plan: FIX — close the target-alias gap, check both comparison trees, specify the depth and cycle oracles, and correct the contradictory execution instructions before freezing the plan.** The relevant locations are `docs/superpowers/plans/2026-09-05-item90-mirror-link-relink.md:827`, `:1265`, `:888`, and `:46`.
+
+**UNVERIFIED:** Whether `Test-Path -LiteralPath` returns false for a dangling junction ancestor on either host. The guard depends on that predicate before inspecting attributes; measurement 7 establishes only the live-junction container result (`docs/superpowers/plans/2026-09-05-item90-mirror-link-relink.md:831`, `docs/superpowers/specs/2026-09-05-mirror-link-relink-design.md:65`). That unresolved behavior is not the basis of A’s FIX verdict.
+
+The file requirement affecting A is “must never delete, write, or commit THROUGH a link” (`docs/superpowers/plans/2026-09-05-item90-mirror-link-relink.md:19`). My interpretation is that its protection must cover aliases in target paths as well as destination paths.

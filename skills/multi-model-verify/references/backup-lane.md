@@ -793,15 +793,21 @@ proceed; do not infer either key's value.
   universe and bind equally. The `-OverrideOut` path is written beside
   the mirror by the tool rather than by robocopy, so the copy universe
   never covers it and it carries its own check. A source directory
-  reparse point is FOLLOWED, because the copy follows it: `robocopy /E`
-  with neither /XJ nor /SL writes the target's contents as an ordinary
-  directory at the link's relative path, so refusing to measure across
-  one described a SMALLER universe than the copy produces. What the copy
-  cannot survive is a cycle, so a link onto one of its own ancestors is
-  refused, and so is a tree whose links reach one target twice, which is
-  indistinguishable from a cycle without walking the whole graph. A
-  repo root that is itself a reparse point stays refused. A source
-  path that cannot be enumerated BLOCKS the build and is never skipped,
+  reparse point is NOT copied through: the copy runs with `/XJD`, which
+  excludes directory junctions and directory symbolic links, so the
+  link is one destination and nothing beneath it is. After the last
+  writer into the mirror and the last back-channel sweep, the tool
+  re-creates each recorded link as a JUNCTION at the same relative path
+  onto the same resolved absolute target, whatever kind of link the
+  source had, because a junction needs no privilege and reads
+  identically. It then enumerates back-channels once more, READ-ONLY,
+  and BLOCKS if any entry sits under a re-linked path: the build never
+  deletes through a link. The manifest still walks through every link,
+  so a link onto one of its own ancestors is refused, and so is a tree
+  whose links reach one target twice, which is indistinguishable from a
+  cycle without walking the whole graph. A repo root that is itself a
+  reparse point stays refused. A source path that cannot be enumerated
+  BLOCKS the build and is never skipped,
   the same hole semantics the manifest builder states: a path that
   cannot be measured is not a path known to fit. The refusal names the
   root length, the deepest relative destination length, their sum and

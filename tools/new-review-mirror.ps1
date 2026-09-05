@@ -8,6 +8,14 @@
 # cloned workspace handed the reviewer a tree with nothing to review while
 # every route and containment check stayed green.
 #
+# Directory links are NOT copied through. robocopy runs with /XJD and the
+# tool re-creates each link as a junction after the last sweep, so the
+# reviewer reads the target through the same relative path while the
+# mirror carries none of its bytes. Measured 2026-09-05: one addon's
+# reference link held 14,884 files, doubling every mirror. The identity
+# digests still cover that content, because the manifest expands a
+# directory subject through a link on both hosts.
+#
 # This script never writes to the real tree, never dispatches a review, and
 # never decides to proceed. It stops immediately before the brief is
 # written, because the brief is the first artifact that is not evidence.
@@ -467,10 +475,111 @@ function Get-ManifestSubject($records) {
     return @{ Paths = @($paths) }
 }
 
+function Get-FilesBeneath($start, $visited, $depth) {
+    # Every file beneath $start, INCLUDING files behind every directory
+    # link found under it, as full paths. Measured 2026-09-05 on both
+    # hosts: Get-ChildItem -Recurse enters a link only when the link IS
+    # the start path; from a parent it lists the link and does not pass
+    # through it. So each link beneath a subject gets a listing of its
+    # own, started at the link. $visited holds every resolved link
+    # target this expansion has entered, seeded by the caller with the
+    # repository root; a repeat is a refusal. Cross-vendor round 2
+    # (2026-09-05) showed the visited set alone is not a cycle guard: a
+    # RELATIVE symbolic-link target resolved against the link's spelled
+    # parent yields a new string on every level of a cycle reached
+    # through an outer junction. $depth is the bound that closes that:
+    # a link nested more than 16 links deep is refused. Returns
+    # @{Paths=..} or @{Error=..}.
+    if ($depth -gt 16) {
+        return @{ Error = ("'" + $start + "' sits more than 16 directory" +
+            " links deep; the manifest refuses a link graph that deep" +
+            " because a relative-link cycle presents exactly like it") }
+    }
+    $out = New-Object System.Collections.ArrayList
+    $startAttr = 0
+    try {
+        $startAttr = [int][System.IO.File]::GetAttributes($start)
+    } catch {
+        return @{ Error = ("'" + $start + "' could not be read: " +
+                           $_.Exception.Message) }
+    }
+    if (($startAttr -band [int][System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+        $target = $null
+        try {
+            $target = (Get-Item -LiteralPath $start -Force -ErrorAction Stop).Target
+            if ($null -ne $target -and $target -isnot [string]) {
+                foreach ($candidate in $target) { $target = $candidate; break }
+            }
+        } catch { $target = $null }
+        if ([string]::IsNullOrEmpty($target)) {
+            return @{ Error = ("'" + $start + "' is a directory link whose" +
+                               " target could not be read") }
+        }
+        $targetFull = ""
+        # WRAPPED, because this script never sets $ErrorActionPreference
+        # to Stop: a .NET exception here is NON-TERMINATING, so an
+        # unwrapped GetFullPath left $targetFull empty, put the empty
+        # string into the visited set, and returned Paths with no Error -
+        # a failed measurement reading as a clean one. Measured by the
+        # cross-vendor reviewer with a 270-character target
+        # (PathTooLongException), 2026-09-05.
+        try {
+            if ([System.IO.Path]::IsPathRooted($target)) {
+                $targetFull = [System.IO.Path]::GetFullPath($target)
+            } else {
+                $targetFull = [System.IO.Path]::GetFullPath(
+                    [System.IO.Path]::Combine(
+                        [System.IO.Path]::GetDirectoryName(
+                            [System.IO.Path]::GetFullPath($start)), $target))
+            }
+        } catch {
+            return @{ Error = ("'" + $start + "' is a directory link whose" +
+                " target " + $target + " could not be resolved to a full" +
+                " path: " + $_.Exception.Message) }
+        }
+        if ($seamFailLinkTarget) {
+            return @{ Error = ("'" + $start + "' link target resolution" +
+                " failed (test seam)") }
+        }
+        if (-not $visited.Add($targetFull.TrimEnd("\"))) {
+            return @{ Error = ("'" + $start + "' reaches " + $targetFull +
+                " which this expansion already entered; the manifest refuses" +
+                " a link graph that repeats or cycles") }
+        }
+    }
+    $found = $null
+    try {
+        $found = Get-ChildItem -LiteralPath $start -Recurse -File -Force `
+            -ErrorAction Stop
+    } catch {
+        return @{ Error = ("'" + $start + "' could not be enumerated: " +
+                           $_.Exception.Message) }
+    }
+    foreach ($f in $found) { [void]$out.Add($f.FullName) }
+    $links = $null
+    try {
+        $links = @(Get-ChildItem -LiteralPath $start -Recurse -Directory -Force `
+            -ErrorAction Stop | Where-Object {
+                ($_.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0 })
+    } catch {
+        return @{ Error = ("'" + $start + "' could not be enumerated for" +
+                           " links: " + $_.Exception.Message) }
+    }
+    foreach ($l in $links) {
+        $inner = Get-FilesBeneath $l.FullName $visited ($depth + 1)
+        if ($inner.ContainsKey("Error")) { return $inner }
+        foreach ($p in @($inner.Paths)) { [void]$out.Add($p) }
+    }
+    return @{ Paths = @($out) }
+}
+
 function Get-ContentManifest($repo, $paths) {
     # Directories expand RECURSIVELY to their files: a directory subject
     # such as References/ is never one manifest entry, because a hash over
     # a directory name identifies nothing.
+    # A directory link beneath a subject is expanded by a listing started
+    # at the link (Get-FilesBeneath), because a recursion from the parent
+    # does not pass through it on either host.
     $files = New-Object System.Collections.ArrayList
     foreach ($p in $paths) {
         $full = Join-Path $repo $p
@@ -478,16 +587,17 @@ function Get-ContentManifest($repo, $paths) {
             # -Stop, never the default: a swallowed enumeration error
             # omits every file under an unreadable subdirectory and the
             # manifest then reads as coverage of a tree it never saw.
-            $found = $null
-            try {
-                $found = Get-ChildItem -LiteralPath $full -Recurse -File `
-                    -Force -ErrorAction Stop
-            } catch {
-                return @{ Error = ("'" + $p + "' could not be enumerated: " +
-                                   $_.Exception.Message) }
+            # Seeded with the repository root: a link back onto the root
+            # is a cycle on its first step, not its second.
+            $visited = New-Object "System.Collections.Generic.HashSet[string]" (
+                [System.StringComparer]::OrdinalIgnoreCase)
+            [void]$visited.Add([System.IO.Path]::GetFullPath($repo).TrimEnd("\"))
+            $beneath = Get-FilesBeneath $full $visited 0
+            if ($beneath.ContainsKey("Error")) {
+                return @{ Error = ("'" + $p + "': " + $beneath.Error) }
             }
-            foreach ($f in $found) {
-                $rel = $f.FullName.Substring($repo.Length + 1)
+            foreach ($fullName in @($beneath.Paths)) {
+                $rel = $fullName.Substring($repo.Length + 1)
                 [void]$files.Add($rel.Replace("\", "/"))
             }
         } elseif (Test-Path $full -PathType Leaf) {
@@ -585,6 +695,14 @@ function Get-StatusSha256($repo) {
 }
 
 $toplevel = $true
+
+# THE THIRD TEST SEAM, declared here rather than beside the other two
+# because it is read inside Get-FilesBeneath, which runs during the
+# FIRST Get-StatusSha256 call - the source status taken before the copy,
+# and the verify mode's captures, both of which precede that block. Same
+# one-way rule: a BOOLEAN that only ADDS a failure inside the link
+# expansion, never supplies a value and never suppresses a measurement.
+$seamFailLinkTarget = [bool]$env:PARALLAX_MIRROR_SEAM_FAIL_LINK_TARGET
 
 if (-not (Test-Path $RepoRoot)) {
     Write-Output "ERROR: $RepoRoot does not exist"
@@ -930,10 +1048,24 @@ $reparseAttr = [int][System.IO.FileAttributes]::ReparsePoint
 $followedTargets = New-Object "System.Collections.Generic.HashSet[string]" (
     [System.StringComparer]::OrdinalIgnoreCase)
 
+# Every directory link the walk meets that is NOT itself behind another
+# link: its relative path under the source root and its resolved
+# absolute target. The copy runs with /XJD and creates nothing beneath a
+# link, so a link is ONE destination and the entries beneath it are not
+# measured against the budget. The walk still DESCENDS through it,
+# because the cycle refusal and the overlap refusal apply to every link
+# the manifest can reach, and a link behind a link is reachable; a walk
+# that stopped at the outer link never saw an inner cycle (cross-vendor
+# round 1, 2026-09-05). A link behind a link is not recorded: it exists
+# in the target and is reached through the outer junction.
+$sourceLinks = New-Object System.Collections.ArrayList
+
 $pending = New-Object System.Collections.Stack
-$pending.Push($srcRoot)
+$pending.Push(@{ Path = $srcRoot; UnderLink = $false })
 while ($pending.Count -gt 0) {
-    $dir = $pending.Pop()
+    $item = $pending.Pop()
+    $dir = $item.Path
+    $underLink = $item.UnderLink
     $entries = $null
     try {
         $entries = @([System.IO.Directory]::GetFileSystemEntries($dir))
@@ -954,22 +1086,30 @@ while ($pending.Count -gt 0) {
                 "path budget was never measured: " + $_.Exception.Message)
             exit 2
         }
-        # Source reparse points are FOLLOWED, because the copy follows
-        # them. `robocopy /E` with neither /XJ nor /SL walks into a
-        # directory junction and into a directory symbolic link and writes
-        # the TARGET'S CONTENTS as an ordinary directory at the same
-        # relative path - measured on a junction nested inside the source
-        # tree and on a directory symbolic link, both on this host, the
-        # destination carrying no reparse attribute in either case.
-        # Refusing here therefore measured a SMALLER universe than the copy
-        # produces, and blocked every repo that links a reference clone or
-        # a shared skills directory into its tree.
-        #
-        # What the copy genuinely cannot survive is a cycle: robocopy has no
-        # cycle detection, so a link pointing at one of its own ancestors
-        # makes both this walk and the copy unbounded. That is the case
-        # guarded below, and it still refuses.
+        # A source directory reparse point is NOT copied through: the
+        # copy runs with /XJD, which excludes directory junctions and
+        # directory symbolic links, so the link is one destination and
+        # nothing beneath it is. The re-link step after the final sweep
+        # re-creates it as a junction. The walk still enters it, for the
+        # two refusals below only: measured 2026-09-05, the manifest
+        # expansion starts a listing at every link it finds, so a link
+        # onto one of its own ancestors or a tree whose links reach one
+        # target twice must be refused wherever it sits.
+        $isDirLink = $false
         if (($attr -band $reparseAttr) -ne 0 -and ($attr -band $dirAttr) -ne 0) {
+            $isDirLink = $true
+            # git's optional index refresh writes the repository's own
+            # .git/index during every status capture. That is a write
+            # into the repository and never through a link only while
+            # .git is not itself a link, so one is refused here rather
+            # than assumed away (cross-vendor round 2, 2026-09-05).
+            if ([System.IO.Path]::GetFileName($entry) -ieq ".git") {
+                Write-Output ("ERROR: $entry - .git is a directory link, and" +
+                    " the status captures write the repository's own index," +
+                    " so this tree cannot be measured without writing" +
+                    " through a link")
+                exit 2
+            }
             $target = $null
             try {
                 $item = Get-Item -LiteralPath $entry -Force -ErrorAction Stop
@@ -1040,13 +1180,23 @@ while ($pending.Count -gt 0) {
                     "refuses a tree whose links overlap")
                 exit 2
             }
+            if (-not $underLink) {
+                [void]$sourceLinks.Add(@{ Rel = $entry.Substring($srcPrefix.Length)
+                                          Target = $targetFull })
+            }
         }
-        $rel = $entry.Substring($srcPrefix.Length)
-        if ($rel.Length -gt $deepestLen) {
-            $deepestLen = $rel.Length
-            $deepestRel = $rel
+        # Only a destination counts. The link itself is one; nothing
+        # beneath any link is created by the copy.
+        if (-not $underLink) {
+            $rel = $entry.Substring($srcPrefix.Length)
+            if ($rel.Length -gt $deepestLen) {
+                $deepestLen = $rel.Length
+                $deepestRel = $rel
+            }
         }
-        if (($attr -band $dirAttr) -ne 0) { $pending.Push($entry) }
+        if (($attr -band $dirAttr) -ne 0) {
+            $pending.Push(@{ Path = $entry; UnderLink = ($underLink -or $isDirLink) })
+        }
     }
 }
 
@@ -1059,6 +1209,88 @@ if ($deepestLen -ge 0) {
             "limit is $PathBudget. Build the mirror at a shorter path. " +
             "Deepest: $deepestRel")
         exit 2
+    }
+}
+
+# LINK TARGETS ARE PROTECTED TREES. The overlap guard above compares the
+# mirror and override paths against the source root only, and a link
+# target lives outside it. Cross-vendor round 1 (2026-09-05) named the
+# case: -MirrorPath at a link's target with -Force would delete the
+# user's reference checkout, and -OverrideOut inside it would write
+# there. Round 2 added two more: an INNER link's target is reached by
+# the manifest just the same, so every target the walk followed is
+# protected, not only the recorded outer links; and a path spelled
+# THROUGH some other link can land inside a protected target without
+# matching its spelling, so a mirror or override path with a reparse
+# point among its existing ancestors is refused outright rather than
+# compared. This runs before anything is created or deleted.
+function Test-PathOrAncestorIsLink($path) {
+    # The path itself, then each existing ancestor up to the drive root:
+    # is any of them a reparse point? Attributes are read directly
+    # rather than after a Test-Path, because a DANGLING junction is a
+    # reparse point Test-Path may report as absent; a missing entry is
+    # the one condition that skips a level, and it is recognised by the
+    # exception type, never by a false from a helper. Returns the
+    # offending path or $null.
+    $probe = ([string]$path).TrimEnd("\", "/")
+    while ($probe -and -not [string]::IsNullOrEmpty([System.IO.Path]::GetFileName($probe))) {
+        $pa = 0
+        $missing = $false
+        try {
+            $pa = [int][System.IO.File]::GetAttributes($probe)
+        } catch [System.IO.FileNotFoundException] {
+            $missing = $true
+        } catch [System.IO.DirectoryNotFoundException] {
+            $missing = $true
+        } catch {
+            Write-Output ("ERROR: " + $probe + " could not be read while" +
+                " checking for a directory link: " + $_.Exception.Message)
+            exit 2
+        }
+        if (-not $missing -and (($pa -band [int][System.IO.FileAttributes]::ReparsePoint) -ne 0)) {
+            return $probe
+        }
+        $probe = [System.IO.Path]::GetDirectoryName($probe)
+    }
+    return $null
+}
+
+foreach ($pair in @(@("mirror path", $MirrorPath), @("override path", $OverrideOut))) {
+    $label = $pair[0]
+    $hit = Test-PathOrAncestorIsLink $pair[1]
+    if ($hit) {
+        Write-Output ("ERROR: the " + $label + " passes through a directory" +
+            " link at " + $hit + " - a path reached through a link can alias" +
+            " a tree the mirror only links to, so the mirror refuses it")
+        exit 2
+    }
+}
+# A followed TARGET that is itself a link, or sits beneath one, is the
+# alias in the other direction (cross-vendor round 3): the walk records
+# the target as spelled, so a mirror path at the real directory behind
+# it neither passes through a link nor overlaps the recorded text.
+foreach ($target in @($followedTargets)) {
+    $hit = Test-PathOrAncestorIsLink $target
+    if ($hit) {
+        Write-Output ("ERROR: the source link target " + $target + " is" +
+            " itself a directory link or sits beneath one (" + $hit + ") -" +
+            " the mirror cannot protect a tree it cannot name, so it" +
+            " refuses to build")
+        exit 2
+    }
+}
+foreach ($target in @($followedTargets)) {
+    $tp = ([string]$target).Replace("\", "/").TrimEnd("/") + "/"
+    foreach ($pair in @(@("mirror path", $mp), @("override path", ($op + "/")))) {
+        $label = $pair[0]
+        $cand = $pair[1]
+        if ($cand.Equals($tp, $cmp) -or $cand.StartsWith($tp, $cmp) -or
+            $tp.StartsWith($cand, $cmp)) {
+            Write-Output ("ERROR: the " + $label + " overlaps the target of a" +
+                " source link (" + $target + ") - building there would write" +
+                " into, or delete, a tree the mirror only links to")
+            exit 2
+        }
     }
 }
 
@@ -1097,17 +1329,25 @@ if (-not $statusBefore.Ok) {
     exit 1
 }
 
-& robocopy $RepoRoot $MirrorPath /E /COPY:DAT /R:1 /W:1 /NFL /NDL /NJH /NJS /NP | Out-Null
+# /XJD: directory junctions and directory symbolic links are not copied
+# through. Measured 2026-09-05: the link is absent from the destination
+# and every ordinary file copies. File links are NOT excluded, so a file
+# symbolic link still lands as its target's bytes, exactly as before.
+& robocopy $RepoRoot $MirrorPath /E /XJD /COPY:DAT /R:1 /W:1 /NFL /NDL /NJH /NJS /NP | Out-Null
 if ($LASTEXITCODE -ge 8) {
     Write-Output "ERROR: robocopy failed with $LASTEXITCODE"
     exit 2
 }
 
-# THE TWO TEST SEAMS, and the rule they must satisfy LITERALLY.
+# THE THREE TEST SEAMS, and the rule they must satisfy LITERALLY. Two of
+# them are declared here; the third, $seamFailLinkTarget, is declared at
+# the top of the execution section because Get-FilesBeneath reads it
+# during the source status capture ABOVE, and it only ever ADDS the
+# link-target resolution failure inside that expansion.
 #
 # Each is a BOOLEAN that ORs one extra block condition into a comparison
-# below. Neither can supply a value, so neither can suppress a real
-# measurement, and setting either can only ever ADD a reason to fail.
+# below. None can supply a value, so none can suppress a real
+# measurement, and setting one can only ever ADD a reason to fail.
 # That makes the one-way property structural rather than a property of
 # whatever value someone happens to pass.
 #
@@ -1340,6 +1580,100 @@ if ($final.Entries.Count -gt 0) {
     exit 1
 }
 
+# RE-LINK, after the last writer and the last sweep. Remediation deletes
+# what it finds with Remove-Item, and after this step that path would
+# reach THROUGH a junction into the user's real reference checkout. So
+# the junctions are created here, once nothing above can delete again,
+# and the check that follows is READ-ONLY.
+#
+# Always a JUNCTION, whatever the source had. Measured 2026-09-05: a
+# symbolic link needs a privilege this tool cannot assume and mklink /D
+# refused it; New-Item -ItemType Junction succeeded on both hosts with
+# none. The reviewer reads a junction as a directory.
+foreach ($lnk in @($sourceLinks)) {
+    $dest = Join-Path $MirrorPath $lnk.Rel
+    if (Test-Path -LiteralPath $dest) {
+        Write-Output ("BLOCKED: the copy created '" + $lnk.Rel + "' although" +
+            " /XJD excludes directory links, so the mirror already holds" +
+            " something at a path that must be a junction")
+        exit 1
+    }
+    if (-not (Test-Path -LiteralPath $lnk.Target -PathType Container)) {
+        Write-Output ("ERROR: the link target " + $lnk.Target + " for '" +
+            $lnk.Rel + "' could not be read at re-link time, so the mirror" +
+            " would be missing a review input that reads as complete")
+        exit 2
+    }
+    $parent = Split-Path $dest -Parent
+    if (-not (Test-Path -LiteralPath $parent -PathType Container)) {
+        Write-Output ("BLOCKED: the parent directory of '" + $lnk.Rel + "'" +
+            " is missing from the mirror, so the copy did not produce the" +
+            " tree the walk measured")
+        exit 1
+    }
+    try {
+        New-Item -ItemType Junction -Path $dest -Target $lnk.Target `
+            -ErrorAction Stop | Out-Null
+    } catch {
+        Write-Output ("BLOCKED: could not re-create '" + $lnk.Rel + "' as a" +
+            " junction onto " + $lnk.Target + ": " + $_.Exception.Message)
+        exit 1
+    }
+    # Read the junction back. A link that does not resolve to the
+    # recorded target is a mirror pointing somewhere the record does not
+    # say, which is the case the whole identity gate exists to refuse.
+    $made = $null
+    try {
+        $made = (Get-Item -LiteralPath $dest -Force -ErrorAction Stop).Target
+        if ($null -ne $made -and $made -isnot [string]) {
+            foreach ($candidate in $made) { $made = $candidate; break }
+        }
+    } catch { $made = $null }
+    if ([string]::IsNullOrEmpty($made)) {
+        Write-Output ("BLOCKED: the junction at '" + $lnk.Rel + "' was" +
+            " created but its target could not be read back")
+        exit 1
+    }
+    $madeFull = [System.IO.Path]::GetFullPath($made).TrimEnd("\")
+    if (-not $madeFull.Equals($lnk.Target.TrimEnd("\"), "OrdinalIgnoreCase")) {
+        Write-Output ("BLOCKED: the junction at '" + $lnk.Rel + "' resolves" +
+            " to " + $madeFull + " rather than the recorded " + $lnk.Target)
+        exit 1
+    }
+}
+
+# THE LINK SWEEP, read-only by construction. git walks a junction onto a
+# plain folder file by file, so a back-channel behind a link is now
+# enumerable, and deleting it would delete from the user's real tree.
+# Any such entry is a BLOCK with its path named; nothing here removes
+# anything. A link onto a directory holding its own .git is ONE entry to
+# git and is not descended; that blind spot is backlog item 92, and it
+# is the same blind spot the copy had.
+if (@($sourceLinks).Count -gt 0) {
+    $linkSweep = Get-BackChannelEntry $MirrorPath
+    if (-not $linkSweep.Ok) {
+        Write-Output ("ERROR: could not enumerate back-channels behind the" +
+            " re-linked paths: " + $linkSweep.Reason)
+        exit 2
+    }
+    $behind = New-Object System.Collections.ArrayList
+    foreach ($e in @($linkSweep.Entries)) {
+        $eNorm = ([string]$e).Replace("\", "/")
+        foreach ($lnk in @($sourceLinks)) {
+            $prefix = ([string]$lnk.Rel).Replace("\", "/").TrimEnd("/") + "/"
+            if ($eNorm.StartsWith($prefix, "OrdinalIgnoreCase")) {
+                [void]$behind.Add($eNorm)
+                break
+            }
+        }
+    }
+    if ($behind.Count -gt 0) {
+        Write-Output ("BLOCKED: back-channel(s) under a re-linked path: " +
+            ($behind -join "; ") + ". The build never deletes through a" +
+            " link; remove the file from the link's target and rebuild.")
+        exit 1
+    }
+}
 
 $head = (& git -C $MirrorPath rev-parse HEAD 2>$null | Out-String).Trim()
 if (($LASTEXITCODE -ne 0) -or -not $head) {
@@ -1413,6 +1747,10 @@ Write-Output "baseline:"
 foreach ($b in $baseline) { Write-Output ("  " + $b) }
 Write-Output "manifest:"
 foreach ($m in $manifest) { Write-Output ("  " + $m) }
+Write-Output "links:"
+foreach ($lnk in @($sourceLinks)) {
+    Write-Output ("  " + $lnk.Rel + " -> " + $lnk.Target)
+}
 Write-Output ("probe: " + $probeLine)
 Write-Output ("override: " + $overrideFile)
 # A mirror built without the client probe is NOT cleared for dispatch, and
