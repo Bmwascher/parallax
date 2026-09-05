@@ -30,7 +30,6 @@ The full previous text of every closed item is in git history at
 - 44
 - 69
 - 77
-- 90
 - 91
 - 93
 
@@ -3884,10 +3883,9 @@ suite shows to change verdicts belongs in the record with its measurement;
 a sentence that changes nothing is a candidate for the lean-brief rule.
 
 ## 90. The review mirror copies through directory links and doubles its size
-Status: OPEN
-Cost: every mirror build of a repo that links a reference checkout writes the whole target as ordinary files, measured 2026-09-05 at 14,884 extra files for one 14k-file addon, so each build pays twice the copy it needs
-Pairs: 91
-Verified: 2026-09-05 91c4a15d6ba6
+Status: DONE
+Closed: 0.32.0
+Verified: 2026-09-05 4ff5b130ecf3
 
 **Filed 2026-09-05 from the user's report** that the mirror of a WoW addon
 repo doubles in size because `robocopy /E` follows the `.wow-api-reference`
@@ -3912,17 +3910,26 @@ identity fields: measured 2026-09-05, both hosts hash through a link
 when a listing starts at the link, and the mirror's own status names the
 junction as one subject, so the existing digests cover the linked bytes.
 
-**Closing this item** means the branch is merged with the re-link case,
+**Closed 2026-09-05 in 0.32.0** (merge 4dca0f8, attested PASS/FULL at
+6196c80 after a 5-round plan debate and a 2-round diff debate, both
+Astra; the diff debate's one real finding, a swallowed `GetFullPath`
+exception in the manifest helper, was fixed at 0f872e0). All five named
+cases green on both hosts, the timing numbers recorded above, and the
+0.32.0 cache content-verified at 4dca0f8. Follow-ups: items 91, 92, 93.
+
+The closing condition was: the branch is merged with the re-link case,
 the drift-behind-the-link case, the redirected-link case, the rebuild
 case and the back-channel-behind-a-link case green on both hosts, the
 timing task's before-and-after numbers recorded here, and 0.32.0
 installed and content-verified.
 
+Record: 4dca0f8
+
 ## 91. The identity digests hash a linked reference checkout three times per build and six times per round
 Status: OPEN
 Cost: a build hashes every file behind a linked checkout, its `.git` objects included, three times, and each round's three identity verifies hash it on both sides for six more passes; measured 2026-09-05 at 14,884 files per pass, so the reference is hashed more often than the addon under review
-Pairs: 90, 93
-Verified: 2026-09-05 1c599949f0a5
+Pairs: 93
+Verified: 2026-09-05 1ea263369be2
 
 **Filed 2026-09-05 during item 90's design.** Item 90 removes the copy's
 read and the pre-copy budget accounting only. `Get-StatusSha256` runs
