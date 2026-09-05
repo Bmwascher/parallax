@@ -246,9 +246,7 @@ Date: 2026-09-05. Repo: KitnEssentials. Host: PowerShell 7.
 | old (`main`) | 137 s | true |
 | new (branch) | 87 s | true |
 
-Link check on the new build, per link: `<relative path> -> <target>`,
-<n> files through the mirror, <n> in the target, identical names and
-hashes: true.
+Link check on the new build, per link (every value below is one the script printed):
 
 - `.wow-api-reference -> C:\Users\Brandon\Documents\WoW-Dev\wow-api-reference`, 14884 files through the mirror, 14884 in the target, identical names and hashes: true.
 - `.claude\skills\comment-cleanup -> C:\Users\Brandon\Documents\KitnDev\.claude\skills\comment-cleanup`, 1 files through the mirror, 1 in the target, identical names and hashes: true.
