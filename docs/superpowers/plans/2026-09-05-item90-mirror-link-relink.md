@@ -1532,3 +1532,36 @@ Every round's transcript header read `model: gpt-6-astra`, `provider: openai`, `
 
 ### Final adjudication
 The session verified round 5's single finding against the file: nineteen `def test_` lines in the plan, one replacement plus eighteen appended. Terminal verdict: PASS for commit 9285e95. The plan is frozen at the commit that carries this record.
+
+## Debate record (mode diff)
+
+**Participants:** Claude Fable 5.1 (session) / GPT-6 Astra (codex exec, session 01a07173-e0ae-7b23-abb7-9d9add9e76c5)
+**Rounds used:** 2 of 4 contested cap (no round was contested), 2 of 6 fix-verify budget
+**Outcome:** round 1 FIX, one finding applied at 0f872e0; round 2 PASS for ad27ef8
+**Verification status:** FULL
+**Degradation:** none
+**Authorized by:** n/a
+**Raw rounds:** `docs/superpowers/plans/rounds/2026-09-05-item90-diff-debate/` (the fable whole-branch review, two briefs, two replies, two receipts, two binder results, `timing-output.md`, `gates.md`)
+
+Both transcript headers read `model: gpt-6-astra`, `provider: openai`, `reasoning effort: high`, `sandbox: read-only`; round 2 echoed the round 1 session id. Both brief bindings returned clean with the receipt's prior-state hash sealed. The mirror `kerev90d` was built from 4e4a81b for round 1 and rebuilt with the force switch at the same path from ad27ef8 for round 2; the tool-surface probe and the client context probe reported clean before round 1 (the user's global `~/.codex/AGENTS.md` present by design, no repo-scoped source). An application checkpoint was written before the round 1 fix at `.git/parallax/application-checkpoints/20260905T0715-4e4a81bcc886.md`.
+
+### Resolved points
+| # | Claim | Raised by | Outcome | Evidence |
+|---|-------|-----------|---------|----------|
+| 1 | `Get-FilesBeneath` continues after `GetFullPath` throws and returns Paths without Error | reviewer (reproduced by fault injection on 5.1) | accepted: both normalisation branches sit in a try/catch returning the structured Error; third one-way seam `PARALLAX_MIRROR_SEAM_FAIL_LINK_TARGET`; regression red then green on both hosts | reply r1 claim 4; reply r2 A; commit 0f872e0 |
+| 2 | The deviation list omits the docstring wrap and item 91's `Pairs: 90, 93` | reviewer | accepted, record only: see the deviation list below | reply r1 claim 1; reply r2 B |
+| 3 | The fable review's "sixteen other cases" count is wrong | reviewer | accepted, record only: fifteen cases red before the code change, four green; the retained artifact stays verbatim | reply r1 claim 6; reply r2 C |
+| 4 | Add a post-walk target-disappearance fixture for the re-link-time check | reviewer | refuted: no shipped seam can remove a target between the walk and the re-link, and the seam rule forbids a mutating hook; the reviewer withdrew the request. The re-link-time check is covered by review only and is not described as exercised by the vanished-target fixture | reply r2 D |
+| 5 | Measurement provenance and gate outputs not retained in the repo | reviewer | accepted: `timing-output.md` and `gates.md` retained at ad27ef8 | reply r1 claim 8 and UNVERIFIED; reply r2 E |
+| 6 | Guard ordering, contract-to-pin match, 5.1 compatibility, the timing oracle | session | PASS in round 1 | reply r1 claims 3, 5, 7, 8 |
+
+### Deviations from the plan text (all nonmaterial)
+`import stat` sits in the test module's import block; Task 5's lead-in sentence replaced a placeholder line (fixed at 34de155); item 93 and one design bullet were added at 4e4a81b on the whole-branch review's findings; the `test_backup_lane.py` docstring wraps differently from the plan's snippet; item 91 carries `Pairs: 90, 93` because backlog lint requires symmetric pairs; the round 1 fix's regression fixture uses a nested checkout rather than the plain directory the checkpoint's test text showed, because git descends a junction onto a plain directory and the helper is never reached.
+
+### Escalated points (user-decided)
+| # | Question | Session position | Reviewer position | Owner's call |
+|---|----------|------------------|-------------------|--------------|
+| none | | | | |
+
+### Final adjudication
+Terminal verdict: PASS for commit ad27ef8. The commits after it carry only this record, the round 2 retention, the gate appendix and the version bump.
