@@ -128,10 +128,10 @@ def test_panels_reference_pins():
     p = REFERENCES / "panels.md"
     assert p.is_file()
     body = _read(p)
-    assert ("Valid compositions: Sol+Kimi, Sol+Fable, Kimi+Fable, "
-            "Sol+Kimi+Fable.") in body
+    assert ("Valid compositions: Astra+Kimi, Astra+Fable, Kimi+Fable, "
+            "Astra+Kimi+Fable.") in body
     assert ("Every panel contains at least one cross-vendor lane "
-            "(Sol or Kimi); an all-Claude panel is invalid.") in body
+            "(Astra or Kimi); an all-Claude panel is invalid.") in body
     assert ("A terminal verdict counts only when it cites the FINAL "
             "subject revision; a verdict against a stale revision is "
             "input, never terminal.") in body

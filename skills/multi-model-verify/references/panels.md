@@ -1,7 +1,7 @@
 # Panels (multi-reviewer debates)
 
 A panel convenes MORE than one reviewer lane for a single debate -
-user-invoked only, never automatic. Sol solo stays the default;
+user-invoked only, never automatic. Astra solo stays the default;
 Kimi solo stays the consent-gated backup lane (fallbacks.md). A panel
 is for work the user judges worth multiple independent reviewers:
 complicated plans, high-risk diffs, or a debate the user wants
@@ -9,9 +9,9 @@ cross-examined from more than one vendor culture.
 
 ## Compositions
 
-Valid compositions: Sol+Kimi, Sol+Fable, Kimi+Fable, Sol+Kimi+Fable.
+Valid compositions: Astra+Kimi, Astra+Fable, Kimi+Fable, Astra+Kimi+Fable.
 
-Every panel contains at least one cross-vendor lane (Sol or Kimi); an all-Claude panel is invalid.
+Every panel contains at least one cross-vendor lane (Astra or Kimi); an all-Claude panel is invalid.
 
 The invariant is checked before round 1 and quoted with the user's
 invocation in the debate record. Fable is never a cross-vendor lane:
@@ -46,8 +46,10 @@ A terminal verdict counts only when it cites the FINAL subject revision; a verdi
 
 ## Lane transports (all pre-existing machinery)
 
-- Sol: codex exec sessions per SKILL.md - env hygiene, header route
-  checks, session resume. Unchanged.
+- Astra: codex exec sessions per SKILL.md - env hygiene, header route
+  checks, session resume. Unchanged. Sol, the alternate declared in
+  model-prompting-notes.md, takes this seat on the same transport only
+  when the user names it, and the seat is then labelled Sol.
 - Kimi: the backup-lane transport per references/backup-lane.md -
   contained agent-file dispatch, per-round offset evidence, and the
   pre-round-1 write-probe - all unchanged and all required in panels.

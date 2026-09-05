@@ -210,7 +210,7 @@ toggled on, its stop-time review overlaps mode `diff` — expected, not a bug.
 
    `<receipt-file>` is a FRESH path, alongside the fresh reply and
    transcript paths already required; `-Prepare` refuses one that
-   exists. `<label>` names the lane and the round, as in `Sol R1`.
+   exists. `<label>` names the lane and the round, as in `Astra R1`.
    `-Prepare` prints `command` and `taskName`: dispatch it as a harness background command, running `command` exactly as printed, under the `taskName` the tool printed, and STOP — but never END THE TURN with the round unfinished (references/model-prompting-notes.md's round-dispatch-operation).
 
    On the completion notification for that exact task, read the harness output file: the exit code of that exact task is the result, never re-read the dispatch directory for a verdict — **0 means `reply-present` and nothing else; 2 is a parameter-binding failure or an internal execution error; 1 is every other state, named on the wrapper's last stdout line.** The states -Classify computes are references/model-prompting-notes.md's round-dispatch-states.

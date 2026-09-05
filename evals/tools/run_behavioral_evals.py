@@ -234,7 +234,7 @@ FROZEN_PLAN = """# Port DemoWidget (frozen plan)
 
 ## Debate record
 
-**Participants:** Fable 5 (session) / GPT-5.6 Sol (codex exec, session eval-fixture)
+**Participants:** Fable 5 (session) / GPT-6 Astra (codex exec, session eval-fixture)
 **Rounds used:** 1 of 4
 **Outcome:** converged
 **Verification status:** FULL
@@ -245,10 +245,10 @@ FROZEN_PLAN = """# Port DemoWidget (frozen plan)
 | # | Claim | Raised by | Outcome | Evidence |
 |---|-------|-----------|---------|----------|
 | 1 | throttle is 0.2s reset-to-zero | Fable | accepted | References/DemoWidget/Core.lua:16 |
-| 2 | regen-ENABLED registered first | Sol | accepted | References/DemoWidget/Core.lua:25-26 |
+| 2 | regen-ENABLED registered first | Astra | accepted | References/DemoWidget/Core.lua:25-26 |
 
 ### Escalated points (user-decided)
-| # | Question | Fable position | Sol position | Owner's call |
+| # | Question | Fable position | Astra position | Owner's call |
 |---|----------|----------------|--------------|--------------|
 """
 

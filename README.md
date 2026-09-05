@@ -24,7 +24,7 @@ the agent files:
 | Seat | Model today | Transport |
 |---|---|---|
 | Session driver — debates, adjudicates, merges | Any Claude model (rules attach to the seat) | Claude Code |
-| Cross-vendor reviewer (primary) | GPT-5.6 Sol | OpenAI codex CLI, `exec` read-only |
+| Cross-vendor reviewer (primary) | GPT-6 Astra (GPT-5.6 Sol as a named alternate) | OpenAI codex CLI, `exec` read-only |
 | Cross-vendor reviewer (backup, consent-gated) | Kimi K3 | kimi-code, contained agent-file, read-only |
 | Panel reviewer (Claude lane, panels only) | Fable | `agents/fable-panel-reviewer.md`, read-only subagent |
 | Whole-branch reviewer (required before mode diff) | Fable | `agents/fable-reviewer.md`, read-only subagent |
@@ -45,7 +45,7 @@ flowchart LR
     E -->|PASS| F([merge])
     E -->|FIX| D
     E -->|ESCALATE| U
-    P[/"panel option: user-invoked, any combo of<br/>Sol · Kimi · Fable, ≥1 cross-vendor<br/>(references/panels.md)"/] -.- B
+    P[/"panel option: user-invoked, any combo of<br/>Astra · Kimi · Fable, ≥1 cross-vendor<br/>(references/panels.md)"/] -.- B
     P -.- E
 ```
 
@@ -63,7 +63,7 @@ flowchart LR
   reviews always look at the same range. Verdicts are PASS / FIX / ESCALATE
   from *each* side.
 - **Panels** — either mode can run as a user-invoked multi-reviewer panel:
-  any combination of the Sol, Kimi, and Fable lanes that keeps at least
+  any combination of the Astra, Kimi, and Fable lanes that keeps at least
   one cross-vendor seat. See [Panels](#panels).
 
 The debate rules that keep this honest
@@ -255,7 +255,7 @@ unwritten since before the lane logins.
 
 For work worth more than one reviewer, the user can convene a panel
 (`skills/multi-model-verify/references/panels.md`): any combination of
-the Sol, Kimi, and Fable lanes — Sol+Kimi, Sol+Fable, Kimi+Fable, or
+the Astra, Kimi, and Fable lanes — Astra+Kimi, Astra+Fable, Kimi+Fable, or
 all three — with one invariant: **every panel contains at least one
 cross-vendor lane**; an all-Claude panel is invalid by contract test.
 The driver mediates hub-and-spoke: reviewer lanes never talk to each
@@ -264,7 +264,7 @@ cross-examination — independently convergent findings are the
 strongest signal the system produces), every round brief pins the
 subject revision, and each lane keeps its own transport, evidence
 rules, and round cap unchanged. Panels are user-invoked only — the
-default remains the bilateral Sol debate.
+default remains the bilateral Astra debate.
 
 ## Swapping lanes
 

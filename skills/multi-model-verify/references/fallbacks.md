@@ -214,7 +214,7 @@ choice.
 
 A reviewer lane failing mid-panel (references/panels.md) first
 resolves through its own transport classes above (codex classes for
-Sol, the backup-lane classes for Kimi; for the Fable panel seat, a
+Astra, the backup-lane classes for Kimi; for the Fable panel seat, a
 dead subagent, a resume that cannot reach its transcript, and a
 resume that returns with its conversation state gone are all
 directly this class). If the lane cannot continue:
@@ -233,7 +233,7 @@ re-dispatch a lost Fable seat fresh, with the full brief re-sent each
 round and the loss of continuity recorded per the region above; or
 abort. A single-lane remainder proceeds as a bilateral debate and is
 recorded as such, not as a panel - and its status splits by what
-remains: a surviving cross-vendor lane (Sol or Kimi) clean on
+remains: a surviving cross-vendor lane (Astra or Kimi) clean on
 evidence may still record FULL; a surviving Fable-only remainder is
 single-vendor relative to the Claude driver and records DEGRADED
 under the degraded-mode rules below, with the poisoning rule applying
