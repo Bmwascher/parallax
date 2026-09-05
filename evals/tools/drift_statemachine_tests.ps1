@@ -290,10 +290,10 @@ $env:TMP = $FakeTemp
 # pinned fixture, so the template canary passes offline; .gitconfig gives
 # the script's worktree commits an identity.
 $FakeProfile = Join-Path $Root "profile"
-$SpTemplate = Join-Path $FakeProfile ".claude\plugins\cache\claude-plugins-official\superpowers\6.2.0\skills\requesting-code-review\code-reviewer.md"
-$FakeSp = Join-Path $FakeProfile ".claude\plugins\cache\claude-plugins-official\superpowers\6.2.0"
+$SpTemplate = Join-Path $FakeProfile ".claude\plugins\cache\claude-plugins-official\superpowers\6.3.0\skills\requesting-code-review\code-reviewer.md"
+$FakeSp = Join-Path $FakeProfile ".claude\plugins\cache\claude-plugins-official\superpowers\6.3.0"
 New-Item -ItemType Directory -Force -Path (Split-Path $SpTemplate) | Out-Null
-$PinnedFixture = Join-Path $Clone "evals\multi-model-verify\fixtures\superpowers-code-reviewer-6.2.0.md"
+$PinnedFixture = Join-Path $Clone "evals\multi-model-verify\fixtures\superpowers-code-reviewer-6.3.0.md"
 Copy-Item $PinnedFixture $SpTemplate -Force
 # A fake USERPROFILE needs a real profile's shell-folder skeleton: PS 5.1
 # resolves its job persistence path through USERPROFILE-expanded folders,
@@ -306,7 +306,7 @@ foreach ($dir in @("Documents", "AppData\Roaming", "AppData\Local", "AppData\Loc
 $registry = @{
     plugins = @{
         "superpowers@claude-plugins-official" = @(
-            @{ version = "6.2.0"; installPath = $FakeSp }
+            @{ version = "6.3.0"; installPath = $FakeSp }
         )
     }
 }
@@ -491,7 +491,7 @@ function Reset-State {
     # changelog fetch - every scenario runs fully offline. The superpowers
     # template is restored to the pinned fixture so only the scenario that
     # wants a WARN gets one.
-    Set-Snapshot "1.2.3" "7.7.7" "6.2.0"
+    Set-Snapshot "1.2.3" "7.7.7" "6.3.0"
     Copy-Item $PinnedFixture $SpTemplate -Force
     if (Test-Path $PendingFile) { Remove-Item $PendingFile -Force }
     if (Test-Path $ReportsDir) { Remove-Item -Recurse -Force $ReportsDir }
@@ -598,7 +598,7 @@ function Complete-Scenario($failsBefore) {
 
 $b = $script:failCount
 Reset-State
-Set-Snapshot "9.9.9" "7.7.7" "6.2.0"
+Set-Snapshot "9.9.9" "7.7.7" "6.3.0"
 Invoke-Drift "carry-forward" "version-fail" "" 60000
 Assert-True ($script:LastExit -eq 1) "exit code 1 on findings"
 Assert-True ($script:LastReport -match '\[CRITICAL\] claude --version failed') "claude probe failure is CRITICAL"
@@ -919,7 +919,7 @@ Complete-Scenario $b
 # --- note, and still never clobbers the snapshot) ----------------------------------
 
 $b = $script:failCount
-Set-SnapshotWithKimi "1.2.3" "7.7.7" "6.2.0" "9.9.9"
+Set-SnapshotWithKimi "1.2.3" "7.7.7" "6.3.0" "9.9.9"
 Copy-Item $PinnedFixture $SpTemplate -Force
 if (Test-Path $PendingFile) { Remove-Item $PendingFile -Force }
 if (Test-Path $ReportsDir) { Remove-Item -Recurse -Force $ReportsDir }
@@ -968,7 +968,7 @@ Complete-Scenario $b
 
 $b = $script:failCount
 Reset-State
-Set-SnapshotWithAgy "1.2.3" "7.7.7" "6.2.0" "1.1.9"
+Set-SnapshotWithAgy "1.2.3" "7.7.7" "6.3.0" "1.1.9"
 $env:AGY_STUB_MODE = "unparseable"
 Invoke-Drift "agy-version-unreadable" "noaction" "" 60000
 Assert-True ($script:LastReport -match '\[CRITICAL\] agy is installed at .* but did not report a usable version') "an unreadable agy version is a FINDING, not a note"
@@ -1000,7 +1000,7 @@ Complete-Scenario $b
 
 $b = $script:failCount
 Reset-State
-Set-SnapshotWithAgy "1.2.3" "7.7.7" "6.2.0" "1.1.8"
+Set-SnapshotWithAgy "1.2.3" "7.7.7" "6.3.0" "1.1.8"
 $env:AGY_STUB_MODE = "version-fail-loud"
 Invoke-Drift "agy-version-fail-loud" "noaction" "" 60000
 Assert-True ($script:LastReport -match "'agy --version' exited 1") "a non-zero exit is a finding even when the output parses as a version"
@@ -1024,7 +1024,7 @@ Complete-Scenario $b
 
 $b = $script:failCount
 Reset-State
-Set-SnapshotWithAgyAllow "1.2.3" "7.7.7" "6.2.0" "1.1.12" "True"
+Set-SnapshotWithAgyAllow "1.2.3" "7.7.7" "6.3.0" "1.1.12" "True"
 Set-AgySettings '{"trustedWorkspaces": ["C:\\fake\\repo"]}'
 Invoke-Drift "agy-allow-removed" "noaction" "" 60000
 Assert-True ($script:LastReport -match 'allowNonWorkspaceAccess.*absent') "a REMOVED key is reported, not absorbed by the carry-forward"
@@ -1038,7 +1038,7 @@ Complete-Scenario $b
 
 $b = $script:failCount
 Reset-State
-Set-SnapshotWithAgy "1.2.3" "7.7.7" "6.2.0" "1.1.8"
+Set-SnapshotWithAgy "1.2.3" "7.7.7" "6.3.0" "1.1.8"
 Invoke-Drift "agy-version-changed" "noaction" "" 60000
 Assert-True ($script:LastReport -match 'agy 1\.1\.8 -> 1\.1\.12') "an agy version change is REPORTED, not carried silently"
 Assert-True ($script:LastExit -eq 0) "a readable version change is a note, so the run stays clean"
@@ -1100,7 +1100,7 @@ Complete-Scenario $b
 
 $b = $script:failCount
 Reset-State
-Set-SnapshotWithAgyAllow "1.2.3" "7.7.7" "6.2.0" "1.1.12" "True"
+Set-SnapshotWithAgyAllow "1.2.3" "7.7.7" "6.3.0" "1.1.12" "True"
 Set-AgySettings '{"allowNonWorkspaceAccess": null, "trustedWorkspaces": ["C:\\fake\\repo"]}'
 Invoke-Drift "agy-allow-null" "noaction" "" 60000
 Assert-True (-not ($script:LastReport -match 'allowNonWorkspaceAccess.*absent')) "a key holding null is PRESENT, and is never reported as removed"
@@ -1122,7 +1122,7 @@ Complete-Scenario $b
 
 $b = $script:failCount
 Reset-State
-Set-SnapshotWithAgyAllow "1.2.3" "7.7.7" "6.2.0" "1.1.12" $null
+Set-SnapshotWithAgyAllow "1.2.3" "7.7.7" "6.3.0" "1.1.12" $null
 Set-AgySettings '{"allowNonWorkspaceAccess": "", "trustedWorkspaces": ["C:\\fake\\repo"]}'
 Invoke-Drift "agy-allow-null-to-empty" "noaction" "" 60000
 Assert-True ($script:LastReport -match 'allowNonWorkspaceAccess null -> ""') "a null to empty-string change is REPORTED, not absorbed as equal"
@@ -1179,7 +1179,7 @@ Complete-Scenario $b
 
 $b = $script:failCount
 Reset-State
-Set-SnapshotWithAgyAllow "1.2.3" "7.7.7" "6.2.0" "1.1.12" @{ l1 = @{ l2 = @{ l3 = @{ l4 = @{ leaf = "ONE" } } } } }
+Set-SnapshotWithAgyAllow "1.2.3" "7.7.7" "6.3.0" "1.1.12" @{ l1 = @{ l2 = @{ l3 = @{ l4 = @{ leaf = "ONE" } } } } }
 Set-AgySettings '{"allowNonWorkspaceAccess": {"l1": {"l2": {"l3": {"l4": {"leaf": "TWO"}}}}}, "trustedWorkspaces": ["C:\\fake\\repo"]}'
 Invoke-Drift "agy-allow-nested-change" "noaction" "" 60000
 Assert-True ($script:LastReport -match 'allowNonWorkspaceAccess.*leaf') "a change PAST the truncation boundary is reported, not collapsed into equality"
@@ -1218,7 +1218,7 @@ Complete-Scenario $b
 
 $b = $script:failCount
 Reset-State
-Set-SnapshotWithAgyAllow "1.2.3" "7.7.7" "6.2.0" "1.1.12" @{ rules = @(@{ paths = @(@{ leaf = "ONE" }) }) }
+Set-SnapshotWithAgyAllow "1.2.3" "7.7.7" "6.3.0" "1.1.12" @{ rules = @(@{ paths = @(@{ leaf = "ONE" }) }) }
 Set-AgySettings '{"allowNonWorkspaceAccess": {"rules": [{"paths": [{"leaf": "TWO"}]}]}, "trustedWorkspaces": ["C:\\fake\\repo"]}'
 Invoke-Drift "agy-allow-nested-array-change" "noaction" "" 60000
 Assert-True ($script:LastReport -match 'allowNonWorkspaceAccess.*leaf') "a change inside a nested ARRAY is reported, not collapsed into equality"

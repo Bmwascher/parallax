@@ -2699,7 +2699,7 @@ class TestHook:
         """Layer-2 rot detection (Sol round-2 fix D): a pinned copy of the
         superpowers template, rendered with real SHAs and fed through the
         actual script - hermetic, runs in CI."""
-        fixture = EVALS_DIR / "fixtures" / "superpowers-code-reviewer-6.2.0.md"
+        fixture = EVALS_DIR / "fixtures" / "superpowers-code-reviewer-6.3.0.md"
         assert fixture.is_file(), "pinned superpowers template fixture missing"
         template = fixture.read_text(encoding="utf-8")
         for literal in ("Senior Code Reviewer", "Git Range to Review"):
@@ -2767,7 +2767,7 @@ class TestDriftProtection:
         text = self.drift()
         for literal in ("Senior Code Reviewer", "Git Range to Review"):
             assert literal in text, "canary must check the hook fingerprints"
-        assert "superpowers-code-reviewer-6.2.0.md" in text, (
+        assert "superpowers-code-reviewer-6.3.0.md" in text, (
             "canary must hash against the pinned fixture"
         )
         assert "installed_plugins.json" in text
