@@ -236,3 +236,28 @@ is reached through the outer junction.
 - **Re-create the source's link kind.** A symbolic link needs a
   privilege this session does not hold (measurement 4). A junction is
   read identically and needs none.
+
+## Measured after the change
+
+Date: 2026-09-05. Repo: KitnEssentials. Host: PowerShell 7.
+
+| build | wall time | built (skip line present) |
+|-------|-----------|---------------------------|
+| old (`main`) | 137 s | true |
+| new (branch) | 87 s | true |
+
+Link check on the new build, per link: `<relative path> -> <target>`,
+<n> files through the mirror, <n> in the target, identical names and
+hashes: true.
+
+- `.wow-api-reference -> C:\Users\Brandon\Documents\WoW-Dev\wow-api-reference`, 14884 files through the mirror, 14884 in the target, identical names and hashes: true.
+- `.claude\skills\comment-cleanup -> C:\Users\Brandon\Documents\KitnDev\.claude\skills\comment-cleanup`, 1 files through the mirror, 1 in the target, identical names and hashes: true.
+- `.claude\skills\lua-quality -> C:\Users\Brandon\Documents\KitnDev\.claude\skills\lua-quality`, 1 files through the mirror, 1 in the target, identical names and hashes: true.
+- `.claude\skills\secret-value-diagnose -> C:\Users\Brandon\Documents\KitnDev\.claude\skills\secret-value-diagnose`, 1 files through the mirror, 1 in the target, identical names and hashes: true.
+- `.claude\skills\wow-addon-libraries -> C:\Users\Brandon\Documents\KitnDev\.claude\skills\wow-addon-libraries`, 5 files through the mirror, 5 in the target, identical names and hashes: true.
+- `.claude\skills\wow-lua-patterns -> C:\Users\Brandon\Documents\KitnDev\.claude\skills\wow-lua-patterns`, 1 files through the mirror, 1 in the target, identical names and hashes: true.
+- `.claude\skills\wow-media -> C:\Users\Brandon\Documents\KitnDev\.claude\skills\wow-media`, 4 files through the mirror, 4 in the target, identical names and hashes: true.
+- `.claude\skills\wow-midnight-api -> C:\Users\Brandon\Documents\KitnDev\.claude\skills\wow-midnight-api`, 2 files through the mirror, 2 in the target, identical names and hashes: true.
+
+The old build's run printed no `links:` block. The "links overlap"
+refusal (see above) did not fire on this run.

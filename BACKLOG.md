@@ -3886,7 +3886,7 @@ a sentence that changes nothing is a candidate for the lean-brief rule.
 Status: OPEN
 Cost: every mirror build of a repo that links a reference checkout writes the whole target as ordinary files, measured 2026-09-05 at 14,884 extra files for one 14k-file addon, so each build pays twice the copy it needs
 Pairs: 91
-Verified: 2026-09-05 39ddd4665be4
+Verified: 2026-09-05 91c4a15d6ba6
 
 **Filed 2026-09-05 from the user's report** that the mirror of a WoW addon
 repo doubles in size because `robocopy /E` follows the `.wow-api-reference`
@@ -3894,7 +3894,9 @@ link onto a shared API reference checkout. Design:
 `docs/superpowers/specs/2026-09-05-mirror-link-relink-design.md`. Plan:
 `docs/superpowers/plans/2026-09-05-item90-mirror-link-relink.md`. Astra was
 polled first and agreed with changes; the poll is retained under
-`docs/superpowers/plans/rounds/2026-09-05-mirror-link-poll/`.
+`docs/superpowers/plans/rounds/2026-09-05-mirror-link-poll/`. Timed on
+KitnEssentials on PowerShell 7: the old tool built in 137 s, the new
+tool in 87 s.
 
 **The change.** The path-budget walk records each directory link, keeps
 descending through it so the cycle and overlap refusals see a link
