@@ -4,7 +4,7 @@
 
 **Goal:** Make the review mirror's identity refusal name the paths that moved, and ship the quiet-period rule that the refusal enforces, so a session outside this repo can act on both.
 
-**Architecture:** Three independent changes and no change to the gate. The build writes the source side's content manifest to a sibling of the mirror directory; the source-status refusal reads that sibling, on that path only, to name what appeared, vanished, or changed content; and the skill grows a contract region plus a timing rule stating that nothing may write inside the reviewed repository between the build and the wrapper's exit. The sidecar file is advisory: it is read after the comparison has already decided to block, so no state it can be in changes any exit code.
+**Architecture:** Three independent changes and no change to the gate. The build writes the source side's content manifest to a sibling of the mirror directory, under the same destination guards `-OverrideOut` already carries; the source-status refusal reads that sibling, on that path only, to name what entered coverage, left coverage, or changed content; and the skill grows a contract region plus a timing rule stating that nothing may write inside the reviewed repository between the build and the wrapper's exit. The sidecar file is advisory: it is read after the comparison has already decided to block, so no state it can be in changes any exit code.
 
 **Tech Stack:** Windows PowerShell 5.1 and PowerShell 7 (`tools/new-review-mirror.ps1`), Python 3 with pytest (`evals/multi-model-verify/`), Markdown contract regions under `skills/`.
 
@@ -34,9 +34,13 @@
 - Consumes: nothing from earlier tasks.
 - Produces:
   - `Get-StatusSha256($repo)` returns `@{ Ok = $true; Sha = <hex>; Manifest = <string[]> }` on success, unchanged `@{ Ok = $false; Reason = <string> }` on failure. `Manifest` holds `Get-ContentManifest`'s lines, each `"<relpath> <sha256hex>"`.
-  - `Get-SourceManifestSidecarPath($mirrorPath)` returns `"<mirrorPath>.source-manifest"`.
-  - `Write-SourceManifestSidecar($path, $manifestLines)` returns `$true` or `$false`, never throws.
+  - `Get-SourceManifestSidecarPath($mirrorPath)` returns `"<parent>/<leaf>.source-manifest"`, or `$null` when the mirror path has no leaf name (a root such as `D:\`).
+  - `Write-SourceManifestSidecar($path, $manifestLines)` returns `$true` or `$false`. It opens the file with `CreateNew`, so it can never write through an existing file or link.
   - The build's record block gains one line, `source_manifest: <path>`, printed after `override:`.
+
+**Why this task is mostly guards.** The sidecar path is DERIVED, not supplied, and a derived string written without a guard is a write into whatever happens to sit there. A hard link or symbolic link at that path carries the write through to its target, and a target inside the repository would be corrupted by the very function that exists to explain a corrupted repository. Cross-vendor review of the first draft found that hole, and found that an explicitly supplied `-OverrideOut <MirrorPath>.source-manifest` passes today's checks and would then be silently overwritten, breaking the wrapper's override hash check.
+
+The default override path is a sibling of exactly this shape, `<MirrorPath>.skills-override.txt`, resolved and guarded at `tools/new-review-mirror.ps1:956-973` and length-checked at `:1002-1008`. Copy that guard set. Do not invent a new one.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -70,7 +74,44 @@ def test_the_source_manifest_sidecar_enters_neither_identity(tmp_path):
     proc = run_verify(repo, mirror, ident)
     assert proc.returncode == 0, proc.stdout + proc.stderr
     assert "identity: verified" in proc.stdout, proc.stdout
+
+
+def test_a_pre_existing_sidecar_is_refused_without_force(tmp_path):
+    """A derived destination written without a guard is a write into
+    whatever sits there. This is the override's own rule, applied to the
+    file that shares the override's shape."""
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    (tmp_path / "mirror.source-manifest").write_text("not ours\n")
+    proc = run_mirror(repo, mirror)
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "already exists" in proc.stdout, proc.stdout
+    assert (tmp_path / "mirror.source-manifest").read_text() == "not ours\n"
+
+
+def test_force_replaces_a_pre_existing_sidecar(tmp_path):
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    (tmp_path / "mirror.source-manifest").write_text("not ours\n")
+    build_and_read(repo, mirror, "-Force")
+    text = (tmp_path / "mirror.source-manifest").read_text()
+    assert "not ours" not in text, text
+    assert "ignored/secret.txt " in text, text
+
+
+def test_an_override_at_the_sidecar_path_is_refused(tmp_path):
+    """The probe writes the verified override, the wrapper hashes it, and
+    an unguarded advisory write would replace it between those two acts.
+    Refuse the collision instead."""
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    clash = tmp_path / "mirror.source-manifest"
+    proc = run_mirror(repo, mirror, "-OverrideOut", str(clash))
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "override path" in proc.stdout, proc.stdout
 ```
+
+`run_mirror` already passes `-SkipProbe`, so `build_and_read` asserts the skip block rather than exit 0; the two refusal tests above call `run_mirror` directly because they must see exit 2 from a guard that fires BEFORE any build work.
 
 - [ ] **Step 2: Run the tests and confirm they fail for the stated reason**
 
@@ -99,7 +140,18 @@ function Get-SourceManifestSidecarPath($mirrorPath) {
     # would enter source_status_sha256; this one must enter neither,
     # because it is written after both are measured and read only after
     # a comparison has already decided to refuse.
-    return ($mirrorPath.TrimEnd("\", "/") + ".source-manifest")
+    #
+    # ONE derivation, shared by the build that writes the file and the
+    # verify that reads it, so the two sides cannot drift apart.
+    #
+    # A ROOT has no leaf name, and `Split-Path 'D:\' -Leaf` yields `D:`,
+    # so the naive form derives the DRIVE-RELATIVE `D:.source-manifest`
+    # rather than a sibling. That is not a path this tool can reason
+    # about, so it is refused rather than guessed at.
+    $leaf = Split-Path $mirrorPath -Leaf
+    if ((-not $leaf) -or ($leaf -match '^[A-Za-z]:$')) { return $null }
+    return (Join-Path (Split-Path $mirrorPath -Parent) `
+        ($leaf + ".source-manifest"))
 }
 
 function Write-SourceManifestSidecar($path, $manifestLines) {
@@ -109,9 +161,26 @@ function Write-SourceManifestSidecar($path, $manifestLines) {
     # all: the header's rule about values passed as arguments rather than
     # re-read from a file governs values that PIN something, and this
     # value carries no authority.
+    #
+    # CREATE-NEW, never WriteAllLines. The guards in the next step
+    # resolved this path and refused a pre-existing one, but a file
+    # created between that guard and this write is still possible, and an
+    # overwrite through a hard link or symbolic link at this path would
+    # carry into the link's target - a target that could be inside the
+    # repository, corrupted by the function that exists to explain
+    # corruption. Create-new fails instead, and a failure here costs only
+    # the explanation.
     try {
         $utf8 = New-Object System.Text.UTF8Encoding($false)
-        [System.IO.File]::WriteAllLines($path, [string[]]@($manifestLines), $utf8)
+        $fs = [System.IO.File]::Open($path, 'CreateNew', 'Write', 'None')
+        try {
+            $sw = New-Object System.IO.StreamWriter($fs, $utf8)
+            try {
+                foreach ($line in @($manifestLines)) {
+                    $sw.WriteLine([string]$line)
+                }
+            } finally { $sw.Dispose() }
+        } finally { $fs.Dispose() }
         return $true
     } catch {
         return $false
@@ -119,23 +188,87 @@ function Write-SourceManifestSidecar($path, $manifestLines) {
 }
 ```
 
-- [ ] **Step 5: Write the sidecar and record its path**
+- [ ] **Step 5: Guard the destination beside the override's guards**
+
+Insert immediately AFTER the override's pre-existence refusal, the block ending `"a stale override reads exactly like a fresh one"` at `tools/new-review-mirror.ps1:970-973`, and BEFORE the `PATH BUDGET PRE-FLIGHT` comment. `$rr`, `$mp`, `$op` and `$cmp` are the normalized paths and the comparison mode the override guard above already set up:
+
+```powershell
+# THE ADVISORY SOURCE MANIFEST'S DESTINATION, resolved and guarded HERE,
+# beside the override, for the same stated reason: a destination
+# discovered after the build has copied, remediated and manifested is
+# discovered too late, and -SkipProbe would bypass a check placed later.
+$SourceManifestOut = Get-SourceManifestSidecarPath $MirrorPath
+if (-not $SourceManifestOut) {
+    Write-Output ("ERROR: the mirror path has no leaf name ($MirrorPath)" +
+        " - a root-shaped path derives a drive-relative advisory manifest" +
+        " rather than a sibling")
+    exit 2
+}
+$smp = $SourceManifestOut.Replace("\", "/").TrimEnd("/")
+foreach ($protected in @($rr, $mp)) {
+    if (($smp + "/").Equals($protected, $cmp) -or
+        ($smp + "/").StartsWith($protected, $cmp) -or
+        $protected.StartsWith($smp + "/", $cmp)) {
+        Write-Output ("ERROR: the source manifest path overlaps a protected" +
+            " tree ($SourceManifestOut)")
+        exit 2
+    }
+}
+if ($smp.Equals($op, $cmp)) {
+    Write-Output ("ERROR: the source manifest path is the override path" +
+        " ($SourceManifestOut) - the advisory write would replace the file" +
+        " the probe verified and the wrapper hashes")
+    exit 2
+}
+if (Test-Path -LiteralPath $SourceManifestOut) {
+    if (Test-Path -LiteralPath $SourceManifestOut -PathType Container) {
+        Write-Output ("ERROR: $SourceManifestOut is a directory - this tool" +
+            " replaces a file there and never removes a tree")
+        exit 2
+    }
+    if (-not $Force) {
+        Write-Output ("ERROR: $SourceManifestOut already exists - pass" +
+            " -Force to replace it, the same rule the mirror path follows")
+        exit 2
+    }
+    # REMOVING a link removes the link and never its target's bytes,
+    # which is exactly why the removal is safe where a write through it
+    # was not.
+    Remove-Item -LiteralPath $SourceManifestOut -Force
+}
+```
+
+Then add its length check immediately after the override's, the `if ($OverrideOut.Length -ge $PathBudget)` block at `:1002-1008`:
+
+```powershell
+# Written BESIDE the mirror by this script, not by robocopy, so the copy
+# universe never covers it. Its own check or none - the override's rule.
+if ($SourceManifestOut.Length -ge $PathBudget) {
+    Write-Output ("ERROR: path budget exceeded by the source manifest - " +
+        "$SourceManifestOut is $($SourceManifestOut.Length) characters " +
+        "and the limit is $PathBudget")
+    exit 2
+}
+```
+
+- [ ] **Step 5a: Write the sidecar and record its path**
 
 In the record block, insert immediately BEFORE the existing `Write-Output ("mirror: " + $MirrorPath)` line (currently `:1737`):
 
 ```powershell
 # The advisory source manifest, written before the record so the record
-# can name it. Its failure is reported and never fatal.
-$sidecarPath = Get-SourceManifestSidecarPath $MirrorPath
-if (-not (Write-SourceManifestSidecar $sidecarPath $sourceStatus.Manifest)) {
-    $sidecarPath = "unwritable"
+# can name it. Its destination was guarded above; a failure to write it
+# here is reported and never fatal.
+$sidecarRecord = $SourceManifestOut
+if (-not (Write-SourceManifestSidecar $SourceManifestOut $sourceStatus.Manifest)) {
+    $sidecarRecord = "unwritable"
 }
 ```
 
 Then insert one line immediately AFTER the existing `Write-Output ("override: " + $overrideFile)` line:
 
 ```powershell
-Write-Output ("source_manifest: " + $sidecarPath)
+Write-Output ("source_manifest: " + $sidecarRecord)
 ```
 
 Both insertions sit ABOVE the `-SkipProbe` block at the end of the file, so a `-SkipProbe` build writes the sidecar too. The tests depend on that.
@@ -189,29 +322,29 @@ def test_the_refusal_names_the_ignored_file_that_changed(tmp_path):
     proc = run_verify(repo, mirror, ident)
     assert proc.returncode == 1, proc.stdout + proc.stderr
     assert "source status" in proc.stdout.lower(), proc.stdout
-    assert "changed" in proc.stdout, proc.stdout
+    assert "content changed" in proc.stdout, proc.stdout
     assert "ignored/secret.txt" in proc.stdout, proc.stdout
 
 
-def test_the_refusal_names_a_file_that_appeared(tmp_path):
+def test_the_refusal_names_a_file_that_entered_coverage(tmp_path):
     repo = make_repo(tmp_path)
     mirror = tmp_path / "mirror"
     _, ident = build_and_read(repo, mirror)
     (repo / "brand-new-input.txt").write_text("appeared after the copy\n")
     proc = run_verify(repo, mirror, ident)
     assert proc.returncode == 1, proc.stdout + proc.stderr
-    assert "appeared" in proc.stdout, proc.stdout
+    assert "entered manifest coverage" in proc.stdout, proc.stdout
     assert "brand-new-input.txt" in proc.stdout, proc.stdout
 
 
-def test_the_refusal_names_a_file_that_vanished(tmp_path):
+def test_the_refusal_names_a_file_that_left_coverage(tmp_path):
     repo = make_repo(tmp_path)
     mirror = tmp_path / "mirror"
     _, ident = build_and_read(repo, mirror)
     (repo / "ignored" / "secret.txt").unlink()
     proc = run_verify(repo, mirror, ident)
     assert proc.returncode == 1, proc.stdout + proc.stderr
-    assert "vanished" in proc.stdout, proc.stdout
+    assert "left manifest coverage" in proc.stdout, proc.stdout
     assert "ignored/secret.txt" in proc.stdout, proc.stdout
 
 
@@ -254,6 +387,54 @@ def test_a_clean_tree_verifies_with_no_source_manifest(tmp_path):
     proc = run_verify(repo, mirror, ident)
     assert proc.returncode == 0, proc.stdout + proc.stderr
     assert "identity: verified" in proc.stdout, proc.stdout
+
+
+def test_a_case_only_rename_is_not_lost_by_the_explanation(tmp_path):
+    """A PowerShell hashtable compares keys case-INsensitively, so
+    `File.txt` and `file.txt` would collapse into one entry and this
+    drift would report nothing at all, while the digest, built from the
+    raw strings, changes. The explanation must partition the same
+    strings the digest does."""
+    repo = make_repo(tmp_path)
+    (repo / "ignored" / "Cased.txt").write_text("one\n")
+    mirror = tmp_path / "mirror"
+    _, ident = build_and_read(repo, mirror)
+    (repo / "ignored" / "Cased.txt").rename(repo / "ignored" / "cased.txt")
+    proc = run_verify(repo, mirror, ident)
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "coverage" in proc.stdout, proc.stdout
+    assert "cased.txt" in proc.stdout, proc.stdout
+
+
+def test_a_hostile_but_well_formed_manifest_cannot_manufacture_a_pass(tmp_path):
+    """The corrupted-bytes case exercises the reader's catch. This one
+    reaches the parser and the renderer with VALID records that name
+    innocent files, which is the shape an attacker would actually use."""
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    _, ident = build_and_read(repo, mirror)
+    (repo / "ignored" / "secret.txt").write_text("edited after the copy\n")
+    forged = "\n".join(
+        "decoy/%d.txt %064x" % (i, i) for i in range(5)) + "\n"
+    (tmp_path / "mirror.source-manifest").write_text(forged)
+    proc = run_verify(repo, mirror, ident)
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "source status" in proc.stdout.lower(), proc.stdout
+
+
+def test_a_manifest_record_that_cannot_be_read_is_reported(tmp_path):
+    """A dropped record is a difference the explanation would then fail
+    to mention, which is the defect class this whole change removes."""
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    _, ident = build_and_read(repo, mirror)
+    sidecar = tmp_path / "mirror.source-manifest"
+    sidecar.write_text(sidecar.read_text() + "no-space-here\n")
+    (repo / "ignored" / "secret.txt").write_text("edited after the copy\n")
+    proc = run_verify(repo, mirror, ident)
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "could not be read" in proc.stdout, proc.stdout
+    assert "incomplete" in proc.stdout, proc.stdout
 ```
 
 - [ ] **Step 2: Run the tests and confirm they fail for the stated reason**
@@ -271,39 +452,73 @@ function Get-ManifestDrift($recordedLines, $liveLines) {
     # Both sides are "<relpath> <sha256hex>" lines, so the LAST space is
     # the separator: a pathname may hold spaces and a hex digest may not.
     #
-    # A line this parser cannot read is DROPPED rather than raised. This
-    # function runs only on a path that is already refusing, and a bad
-    # explanation must never replace a correct refusal with an error.
-    $recorded = @{}
-    foreach ($line in @($recordedLines)) {
-        $cut = ([string]$line).LastIndexOf(" ")
-        if ($cut -lt 1) { continue }
-        $recorded[([string]$line).Substring(0, $cut)] = ([string]$line).Substring($cut + 1)
+    # ORDINAL, CASE-SENSITIVE keys. A PowerShell hashtable compares keys
+    # case-INsensitively, so `File.txt` and `file.txt` collapse into one
+    # entry and a case-only rename reports no difference at all - while
+    # the digest, built from the raw strings, changes. The explanation
+    # must partition the same strings the digest does.
+    #
+    # A line this parser cannot read is COUNTED, never silently dropped.
+    # A dropped record is a difference this explanation would then fail
+    # to mention, which is the shape of defect this whole change exists
+    # to remove. The count is reported and the explanation says it is
+    # incomplete.
+    $ord = [System.StringComparer]::Ordinal
+    $recorded = New-Object "System.Collections.Generic.Dictionary[string,string]" $ord
+    $live = New-Object "System.Collections.Generic.Dictionary[string,string]" $ord
+    $malformed = 0
+    foreach ($side in @(@($recordedLines, $recorded), @($liveLines, $live))) {
+        foreach ($line in @($side[0])) {
+            $s = [string]$line
+            if ($s.Trim().Length -eq 0) { continue }
+            $cut = $s.LastIndexOf(" ")
+            if ($cut -lt 1) { $malformed++; continue }
+            $key = $s.Substring(0, $cut)
+            # A DUPLICATE key is malformed input too. Assigning over it
+            # would silently keep the last record and hide the first.
+            if ($side[1].ContainsKey($key)) { $malformed++; continue }
+            $side[1][$key] = $s.Substring($cut + 1)
+        }
     }
-    $live = @{}
-    foreach ($line in @($liveLines)) {
-        $cut = ([string]$line).LastIndexOf(" ")
-        if ($cut -lt 1) { continue }
-        $live[([string]$line).Substring(0, $cut)] = ([string]$line).Substring($cut + 1)
-    }
-    $appeared = New-Object System.Collections.ArrayList
-    $vanished = New-Object System.Collections.ArrayList
+    $entered = New-Object System.Collections.ArrayList
+    $left = New-Object System.Collections.ArrayList
     $changed = New-Object System.Collections.ArrayList
     foreach ($p in @($live.Keys)) {
         if (-not $recorded.ContainsKey($p)) {
-            [void]$appeared.Add($p)
+            [void]$entered.Add($p)
         } elseif ($recorded[$p] -ne $live[$p]) {
             [void]$changed.Add($p)
         }
     }
     foreach ($p in @($recorded.Keys)) {
-        if (-not $live.ContainsKey($p)) { [void]$vanished.Add($p) }
+        if (-not $live.ContainsKey($p)) { [void]$left.Add($p) }
     }
-    return @{ Appeared = @($appeared | Sort-Object)
-              Vanished = @($vanished | Sort-Object)
-              Changed  = @($changed  | Sort-Object) }
+    return @{ Entered   = @($entered | Sort-Object)
+              Left      = @($left    | Sort-Object)
+              Changed   = @($changed | Sort-Object)
+              Malformed = $malformed }
+}
+
+function Format-AdvisoryName($name) {
+    # The advisory manifest is MUTABLE, so a name inside it never passed
+    # Test-SupportedPathname and may hold anything. A control character
+    # reaching a terminal is an escape sequence, so every one is rendered
+    # as \xNN, and the name is bounded.
+    $s = [string]$name
+    if ($s.Length -gt 200) { $s = $s.Substring(0, 200) + "[truncated]" }
+    $sb = New-Object System.Text.StringBuilder
+    foreach ($ch in $s.ToCharArray()) {
+        if (([int]$ch -lt 32) -or ([int]$ch -eq 127)) {
+            [void]$sb.Append("\x" + ([int]$ch).ToString("x2"))
+        } else {
+            [void]$sb.Append($ch)
+        }
+    }
+    return $sb.ToString()
 }
 ```
+
+**Why `Entered` and `Left` rather than `Appeared` and `Vanished`.** Manifest membership is not file existence. `Get-ManifestSubject` omits a deletion-only entry because it has no bytes (`tools/new-review-mirror.ps1:460-463`), and a clean tracked file that becomes dirty ENTERS the manifest without being created. Both files can exist the whole time. The labels name what the comparison actually measures.
 
 - [ ] **Step 4: Add the explanation function**
 
@@ -312,52 +527,78 @@ Insert immediately after `Get-ManifestDrift`:
 ```powershell
 function Write-SourceDriftExplanation($mirrorPath, $liveManifest) {
     # Runs ONLY after the source-status refusal below has been printed.
-    # It prints what moved, or says plainly that it could not tell. It
-    # never throws, never exits, and never returns a value a caller
-    # could branch on, so no state of the sidecar can change a verdict.
-    $sidecar = Get-SourceManifestSidecarPath $mirrorPath
-    $recorded = $null
+    #
+    # THE WHOLE BODY IS WRAPPED. What protects the verdict is not any
+    # property of this function - Write-Output emits into the pipeline
+    # like any other command, and a caller COULD capture it - but the
+    # fact that its one caller ignores the output and reaches `exit 1`
+    # unconditionally. The wrap is here so that a fault in explaining a
+    # refusal cannot replace that refusal with an error.
     try {
-        if (Test-Path -LiteralPath $sidecar -PathType Leaf) {
-            $recorded = [System.IO.File]::ReadAllLines($sidecar,
-                (New-Object System.Text.UTF8Encoding($false, $true)))
+        $sidecar = Get-SourceManifestSidecarPath $mirrorPath
+        if (-not $sidecar) {
+            Write-Output ("  what moved: unknown - the mirror path has no" +
+                " leaf name, so no advisory manifest path exists")
+            return
+        }
+        if (-not (Test-Path -LiteralPath $sidecar -PathType Leaf)) {
+            Write-Output ("  what moved: unknown - no advisory manifest at " +
+                $sidecar)
+            return
+        }
+        # BOUNDED. The file is mutable, so its size is someone else's
+        # choice. 64 MB is far above any real manifest here and far below
+        # a memory problem.
+        $len = (Get-Item -LiteralPath $sidecar).Length
+        if ($len -gt 67108864) {
+            Write-Output ("  what moved: unknown - the advisory manifest at " +
+                $sidecar + " is " + $len + " bytes, past this reader's limit")
+            return
+        }
+        # DECODE THE BYTES EXPLICITLY. A StreamReader detects a byte-order
+        # mark and consumes it, so a first pathname that legitimately
+        # begins with U+FEFF - which Test-SupportedPathname admits - would
+        # lose that character silently and read as a different path.
+        $bytes = [System.IO.File]::ReadAllBytes($sidecar)
+        $text = (New-Object System.Text.UTF8Encoding($false, $true)).GetString($bytes)
+        $recorded = @($text -split "`r`n|`n|`r")
+        $drift = Get-ManifestDrift $recorded $liveManifest
+        if ($drift.Malformed -gt 0) {
+            Write-Output ("  note: " + $drift.Malformed + " advisory record(s)" +
+                " could not be read, so this explanation is incomplete")
+        }
+        $groups = @(@("content changed", $drift.Changed),
+                    @("entered manifest coverage", $drift.Entered),
+                    @("left manifest coverage", $drift.Left))
+        $any = $false
+        foreach ($g in $groups) {
+            $names = @($g[1])
+            if ($names.Count -eq 0) { continue }
+            $any = $true
+            Write-Output ("  " + $g[0] + " (" + $names.Count + "):")
+            $shown = 0
+            foreach ($n in $names) {
+                if ($shown -ge 20) {
+                    Write-Output ("    ... and " + ($names.Count - 20) + " more")
+                    break
+                }
+                Write-Output ("    " + (Format-AdvisoryName $n))
+                $shown++
+            }
+        }
+        if (-not $any) {
+            Write-Output ("  what moved: the advisory manifest did not" +
+                " identify the cause. It records no content difference," +
+                " which is also what a stale or replaced manifest records.")
         }
     } catch {
-        $recorded = $null
-    }
-    if ($null -eq $recorded) {
-        Write-Output ("  what moved: unknown - no readable source manifest" +
-            " at " + $sidecar)
-        return
-    }
-    $drift = Get-ManifestDrift $recorded $liveManifest
-    $groups = @(@("changed", $drift.Changed),
-                @("appeared", $drift.Appeared),
-                @("vanished", $drift.Vanished))
-    $any = $false
-    foreach ($g in $groups) {
-        $names = @($g[1])
-        if ($names.Count -eq 0) { continue }
-        $any = $true
-        Write-Output ("  " + $g[0] + " (" + $names.Count + "):")
-        $shown = 0
-        foreach ($n in $names) {
-            if ($shown -ge 20) {
-                Write-Output ("    ... and " + ($names.Count - 20) + " more")
-                break
-            }
-            Write-Output ("    " + $n)
-            $shown++
-        }
-    }
-    if (-not $any) {
-        Write-Output ("  what moved: no content difference, so the status" +
-            " listing itself changed - a path took a different status" +
-            " code, or a deletion-only entry moved. Those carry no bytes" +
-            " and so appear in no manifest.")
+        Write-Output ("  what moved: unknown - the advisory explanation" +
+            " failed (" + $_.Exception.Message + ")")
     }
 }
 ```
+
+**Why the fallback no longer names a cause.** The first draft concluded that no content difference meant the status listing itself had changed. A replaced or stale sidecar produces the same empty result, so the inference does not hold. A mutable advisory file cannot establish a cause, and this line now says only what it knows.
 
 - [ ] **Step 5: Call it from the refusal**
 
@@ -420,10 +661,13 @@ Insert this block into `skills/multi-model-verify/SKILL.md` immediately after th
    report or one new untracked file is enough. The same recorded digest is
    compared against the live source three times: at preparation, before the
    client runs, and after it finishes. The last of those spans the whole
-   round, so this is a quiet period and not an ordering rule. A round that
-   trips it is refused, its reply is NOT evidence, and the quota is spent
-   for nothing. Queue every edit until the wrapper exits, however small and
-   however unrelated it looks.
+   round, so this is a quiet period and not an ordering rule. Only that
+   last one costs a reviewer round; the two before it refuse before the
+   client is invoked and spend no quota. State the limits with the rule:
+   the comparison samples endpoints, so a change made and reverted inside
+   the round is not detected, and a tracked file git reports CLEAN is
+   covered by neither fingerprint. Queue every edit until the wrapper
+   exits, however small and however unrelated it looks.
    <!-- contract:end -->
 ```
 
@@ -447,10 +691,13 @@ Add to `evals/multi-model-verify/test_multi_model_verify.py`, in `TestSkillStruc
             "   report or one new untracked file is enough. The same recorded digest is\n"
             "   compared against the live source three times: at preparation, before the\n"
             "   client runs, and after it finishes. The last of those spans the whole\n"
-            "   round, so this is a quiet period and not an ordering rule. A round that\n"
-            "   trips it is refused, its reply is NOT evidence, and the quota is spent\n"
-            "   for nothing. Queue every edit until the wrapper exits, however small and\n"
-            "   however unrelated it looks."
+            "   round, so this is a quiet period and not an ordering rule. Only that\n"
+            "   last one costs a reviewer round; the two before it refuse before the\n"
+            "   client is invoked and spend no quota. State the limits with the rule:\n"
+            "   the comparison samples endpoints, so a change made and reverted inside\n"
+            "   the round is not detected, and a tracked file git reports CLEAN is\n"
+            "   covered by neither fingerprint. Queue every edit until the wrapper\n"
+            "   exits, however small and however unrelated it looks."
         ) in text
 ```
 
@@ -535,15 +782,25 @@ pytest cache directory or a ledger append is enough to refuse the
 dispatch.
 
 A build that has gone stale is not repaired and cannot be re-blessed:
-there is deliberately no re-mint or reseal mode. Build again. It is
-cheap next to a spent round, measured at about 92 seconds on a repo
-carrying a linked reference checkout.
+there is deliberately no re-mint or reseal mode. READ THE EXPLANATION
+FIRST, then build again. Rebuilding replaces the evidence of what
+changed, so a rebuild before reading turns a diagnosable refusal into an
+unexplained one. The rebuild itself is cheap next to a spent round,
+measured at about 92 seconds on a repo carrying a linked reference
+checkout.
 
 When a refusal names `the source status changed since construction`, the
-lines beneath it name the paths that changed, appeared or vanished,
-read from the `source_manifest` file the record block points at. That
-explanation is advisory: it can be missing or wrong and the refusal
-stands either way.
+lines beneath it name the paths whose content changed and the paths that
+entered or left manifest coverage, read from the `source_manifest` file
+the record block points at. That explanation is advisory: it can be
+missing, incomplete or wrong, and the refusal stands either way.
+Manifest coverage is not file existence, so a path listed as leaving
+coverage has not necessarily been deleted.
+
+The two refusals raised by the round wrapper itself print no explanation
+to the console. The wrapper redirects both identity checks into
+`mirror.verify` inside its dispatch directory and then throws a short
+message, so that file is where the detail is.
 ```
 
 - [ ] **Step 4: Run the test and confirm it passes**
@@ -596,11 +853,63 @@ narrows the digest without opening that hole, argued in the
 `mirror-identity-gate` contract region and debated on its own.
 ```
 
+- [ ] **Step 5a: File backlog item 95 for the pre-existing findings**
+
+The plan debate's reviewer swept the class it was asked to sweep and found defects that PREDATE this range. The debate protocol's scope rule says to RECORD anything not of the same class on the same verification surface, so they are filed rather than fixed. Append after item 94:
+
+```markdown
+## 95. Three stated properties of the mirror tools that the code does not hold
+Status: OPEN
+Cost: each one is a promise a reader relies on, and one of them can leave an extra input missing from a mirror the digest then certifies
+Pairs: 94
+Verified: <run the digest command in Step 6 and paste the value here>
+
+**Filed 2026-09-05 from the plan debate for item 94's cycle**, whose
+reviewer was asked to sweep for stated properties the code does not hold.
+Record:
+`docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/`.
+All three were confirmed against the code by the session before filing.
+
+1. **The header's absolute promise.** `tools/new-review-mirror.ps1:19`
+   says the script never writes to the real tree. The directory-link
+   guard at `:1101-1112` says git's optional index refresh writes the
+   repository's own `.git/index` during every status capture, and refuses
+   a linked `.git` for exactly that reason. Qualify the promise or
+   suppress the write.
+
+2. **`-ExtraInput` can fail silently.** `tools/new-review-mirror.ps1:1554`
+   copies each extra input with `Copy-Item -Force`, with no success check
+   and no `-ErrorAction Stop`, and the script never sets
+   `$ErrorActionPreference` (its own comment at `:519` says so). A
+   non-terminating copy failure leaves the input absent, and the manifest
+   cannot discover a file that never entered status. The tool then
+   certifies a mirror missing a declared review input.
+
+3. **The verify's same-directory refusal checks spelling.** The
+   comparison at `tools/new-review-mirror.ps1:734-745` normalizes two
+   provider-resolved strings and compares them, with none of the
+   reparse-point resolution the build performs. A junction whose
+   spelling differs can reach the same directory, so the refusal is
+   narrower than the comment claims.
+
+**Reported in the same round and NOT yet verified**, listed so a later
+session checks rather than re-derives them: the generated wrapper is
+written as ASCII so a non-ASCII path component would be lost; the printed
+command places paths in expandable double-quoted strings without escaping
+`$`; `classifying:<nonce>` redemption is a read-then-write with no
+exclusive reservation; a receipt write that fails after creation leaves a
+partial receipt against a documented "no receipt"; an oversized integer
+in `exit` passes the regex and throws in conversion instead of following
+the classification map; and `Test-SupportedPathname` admits U+FEFF, which
+a byte-order-mark-detecting reader would consume. Verify each before
+acting on it.
+```
+
 - [ ] **Step 6: Compute the item's digest and fill it in**
 
 Run: `python evals/tools/backlog_lint.py --digests BACKLOG.md`
 
-Copy the digest printed for item 94 into its `Verified:` line, after the date `2026-09-05`.
+Copy the digest printed for item 94 into its `Verified:` line, after the date `2026-09-05`, and the same for item 95.
 
 - [ ] **Step 7: Run the backlog linter**
 

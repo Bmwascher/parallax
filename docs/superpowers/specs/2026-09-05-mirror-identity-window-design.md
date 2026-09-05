@@ -36,17 +36,24 @@ since construction` refusals and could not tell why.
 ## What the reporting session proposed, and why it is not the fix
 
 The report proposed fusing the mirror build and `-Prepare` into one
-command. That is refused on two grounds:
+command. That fusion is CONSTRUCTIBLE: one script could build, read the
+probe's reported override hash, generate the wrapper body from it, and
+then prepare. An earlier draft of this document called it impossible,
+which was wrong, and cross-vendor review of that draft said so.
 
-- It closes the first of three windows and leaves the largest one open. A
-  round that takes ten minutes still voids if an ignored file moves while
-  the reviewer reads.
-- It is not constructible. The build runs the client context probe, the
-  probe writes the verified override file, and the wrapper body embeds
-  that file's SHA256 (`skills/multi-model-verify/SKILL.md`, the
-  `verified-override-dispatch` region). The build must finish before the
-  wrapper body can exist, and the wrapper body must exist before
-  `-Prepare` can install it.
+It is refused on a different ground. It closes the first of three windows
+and leaves the largest one open. A round that takes ten minutes still
+voids if an ignored file moves while the reviewer reads. Buying the small
+window at the cost of a more complex build, while the round-length window
+stays exactly as it was, is not the trade this defect calls for.
+
+The ordering the fusion would have to respect is real and worth writing
+down, because it constrains any future attempt: the build runs the client
+context probe, the probe writes the verified override file, and the
+wrapper body embeds that file's SHA256
+(`skills/multi-model-verify/SKILL.md`, the `verified-override-dispatch`
+region). So the build must complete before the wrapper body can exist,
+and the body must exist before `-Prepare` can install it.
 
 The real constraint is a QUIET PERIOD over the reviewed repository, from
 the build until the wrapper exits.
@@ -80,8 +87,61 @@ The advisory file is safe by construction and must stay that way:
   from a file the build wrote applies to values that PIN something; this
   one carries no authority.
 
+**D2a. Its DESTINATION carries the same guards `-OverrideOut` already
+carries.** Cross-vendor review of the first draft found that writing to a
+derived path with no guard is itself a write into an unknown file: a hard
+link or symbolic link at that path would carry the write through to its
+target, and a target inside the repository would be corrupted by the very
+function that exists to explain a corrupted repository. The same review
+found that an explicitly supplied `-OverrideOut <MirrorPath>.source-
+manifest` passes today's checks and would then be overwritten, breaking
+the wrapper's override hash.
+
+The default override path is already a sibling of exactly this shape,
+`<MirrorPath>.skills-override.txt` (`tools/new-review-mirror.ps1:956-973`),
+and it is guarded for overlap with the repository and the mirror, for
+pre-existence, and for the path budget. The sidecar takes the identical
+guard set, plus an overlap check against the override path itself, plus a
+refusal of a root-shaped mirror path such as `D:\`, which would otherwise
+derive the drive-relative `D:.source-manifest`. The write itself uses
+create-new semantics so that a file appearing between the guard and the
+write cannot be clobbered either.
+
+**D2b. The explanation states only what the comparison measures.** The
+same review found three overstatements in the first draft, and the
+corrected wording is part of this design rather than a detail of it:
+
+- Manifest membership is not file existence. A deletion-only entry is
+  omitted from the manifest by `Get-ManifestSubject`
+  (`tools/new-review-mirror.ps1:460-463`), and a clean tracked file that
+  becomes dirty ENTERS it. So the groups are named `entered coverage` and
+  `left coverage`, never `appeared` and `vanished`.
+- No content difference does not prove the status listing changed. A
+  replaced sidecar produces the same empty result. The fallback says the
+  advisory manifest did not identify the cause, and stops there.
+- A malformed record is reported, never silently dropped, because a
+  dropped record is a difference the explanation would then fail to
+  mention.
+
 **D3. The quiet period ships in the skill.** A contract region states it,
 covering build through wrapper exit, so it travels with the plugin.
+
+The region states the operational rule AND its measurement limits,
+because a contract region that claims more than its mechanism delivers is
+the defect class this whole cycle is about. Three limits, all found by
+cross-vendor review of the first draft:
+
+- The check samples endpoints. A change made and reverted inside the
+  round is not detected, and no before-and-after check could detect it
+  (`tools/dispatch-round.ps1:305-307` says so already).
+- A tracked file that git reports CLEAN is covered by neither
+  fingerprint, so a raw-byte change surviving the clean filter is not
+  covered (`tools/new-review-mirror.ps1:726-731`).
+- Only the THIRD comparison costs a reviewer round. The preparation check
+  and the wrapper's pre-client check both run before the client is
+  invoked, so tripping either wastes no quota. The first draft said a
+  round that trips the rule always spends its quota for nothing, which is
+  true only of the post-client check.
 
 **D4. The build is ordered last.** `references/preflight-mirror.md` gains
 a timing rule: every act that writes inside the reviewed repository
