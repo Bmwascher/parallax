@@ -1192,6 +1192,12 @@ def test_reviewer_lane_is_astra_with_sol_as_the_explicit_alternate():
             " reads") in notes
     assert ("Every Astra brief states that the reviewer reads the files"
             " itself and delegates nothing.") in notes
+    # The non-interactive rule is lane-invariant, not an Astra-only rule:
+    # the Fable whole-branch review of 2026-09-05 found it had left the
+    # shared set when it moved under the Astra heading.
+    assert ("The non-interactive, verdict-required rule is lane-invariant:"
+            " every brief under every model, including named Sol, the backup"
+            " lane and the degraded skeptic, carries it") in notes
 
 
 def test_round_dispatch_tool_region_is_pinned():

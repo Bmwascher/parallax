@@ -3832,9 +3832,9 @@ changing the route-check contract.
 
 ## 89. The Astra brief-guidance set is the guide's word and no round has run under it
 Status: OPEN
-Cost: every default-lane brief now carries six instruction sentences whose effect under `codex exec` is unmeasured, so a spent round or a changed verdict from them cannot be told apart from the model's own behaviour until the suite runs under them
+Cost: every default-lane brief now carries the Astra set's sentences, whose effect under `codex exec` is unmeasured by the behavioural suite, so a spent round or a changed verdict from them cannot be told apart from the model's own behaviour until the suite runs under them
 Pairs: none
-Verified: 2026-09-05 b3108617e077
+Verified: 2026-09-05 4daa28ffd772
 
 **Filed 2026-09-05 from the user's request to fold OpenAI's GPT-6 Astra
 model guidance into the reviewer notes.** The page
@@ -3862,11 +3862,19 @@ reviewer. The parameter notes (no `none` effort, `minimal` starts at
 `codex exec` surface) sit beside the existing Effort bullet.
 
 **What is open.** Every sentence is marked as the guide's claim, not this
-repo's measurement, exactly as item 87 marked the clarification claim. No
-debate round has yet run under the new set, and the behavioural suite
-(`evals/tools/run_behavioral_evals.py`) has not graded a brief of this
-shape. Closing this item means one measured Astra round under the new
-`<rules>` content with its reply retained, and a behavioural-suite pass
-that either keeps each sentence on evidence or removes it. A sentence the
+repo's measurement, exactly as item 87 marked the clarification claim.
+One round has run under the new set: Astra round 1 of this change's own
+diff debate, 2026-09-05, whose brief carried the non-interactive block,
+the precedence rule, the style exclusions and the no-delegation sentence,
+and whose reply ended in per-claim verdicts with no question; brief and
+reply are retained under
+`docs/superpowers/plans/rounds/2026-09-05-astra-guide-diff-round/`. That
+is one observation, not a measurement of the set's effect. The
+behavioural suite (`evals/tools/run_behavioral_evals.py`) has not graded a
+brief of this shape: its `--head --changed` run on 2026-09-05 selected
+three cases and all three blocked before any round for item 68 Part D's
+reason, a fixture workspace with no commit. Closing this item means a behavioural-suite pass under the new
+`<rules>` content that either keeps each sentence on evidence or removes
+it; the retained round above is the first half. A sentence the
 suite shows to change verdicts belongs in the record with its measurement;
 a sentence that changes nothing is a candidate for the lean-brief rule.

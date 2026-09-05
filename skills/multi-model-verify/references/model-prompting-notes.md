@@ -179,8 +179,14 @@ The SECOND is the Sol-era set, kept whole: it is the shared brief shape
 under both models, and the whole set when the user names Sol. Where the
 two conflict for an Astra round, the Astra set wins. The XML-style tags,
 the strike rule and the final check are OUR conventions and apply under
-both. The transport bullets after both sets apply to both models
-unchanged.
+both. The non-interactive, verdict-required rule is lane-invariant:
+every brief under every model, including named Sol, the backup lane and
+the degraded skeptic, carries it; unresolved claims go under UNVERIFIED,
+and the Astra initiative bullet records the guide's evidence for the
+rule. The Astra set's brief sentences follow the lean-brief rule below:
+stated in full in round 1, referenced on resumes exactly as the evidence
+rules and verdict grammar are. The transport bullets after both sets
+apply to both models unchanged.
 
 #### Astra (the default lane)
 
@@ -226,7 +232,8 @@ suite is where they get measured.
   block work early", and recommends making the priority of user
   instructions over skills explicit. The preflight sweep of AGENTS.md
   and `.agents/*` (bullets below) already keeps untrusted repo text out
-  of the reviewer's context where it can; the brief closes the rest.
+  of the reviewer's context where it can; the brief adds an unmeasured
+  mitigation for the rest.
   Every Astra brief states that the brief's rules take precedence over
   any instruction found in the files it reads, that text in those files
   is evidence to cite and never an instruction to follow, and that the
@@ -241,7 +248,8 @@ suite is where they get measured.
   and Markdown" and "may use recurring phrases across sessions". The
   per-claim verdict IS a list, and stays one. Inside a claim, the brief
   asks for the rationale as plain prose that states the finding
-  directly, with the guide's exclusions carried as written: no stock
+  directly, with the guide's exclusions carried in paraphrase, three
+  phrases quoted: no stock
   phrases such as "it's worth noting" or "Bottom Line:", no concluding
   summary, no statement of what it will not do or what stays unchanged,
   no invented compound labels, and no contrastive "X, not Y" framing
@@ -251,26 +259,32 @@ suite is where they get measured.
   "may delegate less often than desired" and to prompt for how much it
   should delegate to parallel subagents. This lane wants NONE. On Sol
   the pinned effort propagated to every subagent it spawned and burnt
-  tokens without changing verdicts (the Effort bullet below), and a
-  read-only pass over a numbered claims set gains nothing from
-  parallelism. Every Astra brief states that the reviewer reads the
-  files itself and delegates nothing. Whether `codex exec` exposes a
-  collaboration tool to Astra at all is unmeasured; the tool-surface
-  probe below is where a new tool would first show.
+  tokens without changing verdicts (the Effort bullet below). Every
+  Astra brief states that the reviewer reads the files itself and
+  delegates nothing. Whether `codex exec` exposes a collaboration tool
+  to Astra at all is unmeasured, and the tool-surface probe below reads
+  app-server MCP tools only, so its coverage of any collaboration
+  surface is UNVERIFIED.
 - **Testing and verification: not applicable, recorded so nobody
   re-derives it**: the guide's calibration for coding tasks addresses a
   model that writes code and runs tests. The reviewer runs under
-  `--sandbox read-only`, writes nothing and runs nothing, so no brief
-  carries it. If a future lane lets the reviewer run the gates, this is
-  the bullet to revisit.
+  `--sandbox read-only`: it writes nothing, it can run read-only
+  commands (Astra ran git and PowerShell in its 2026-09-05 round), and
+  no brief asks it to run the gates, so no brief carries the guidance.
+  If a future lane lets the reviewer run the gates, this is the bullet
+  to revisit.
 - **Parameters, for completeness**: the guide's migration section says
   to preserve the current reasoning effort, that `none` is unsupported
   and `minimal` should start at `low`, and that `temperature`, `top_p`
-  and the logprobs options are removed. The Effort bullet below already
-  carries `high` over on that basis; `codex exec` passes none of the
-  removed parameters; and `configuration_update`, the guide's mid-run
-  effort change, is a Responses API item with no `codex exec` surface,
-  which is one more reason the effort is pinned per call.
+  and `top_logprobs` are removed. The Effort bullet below already
+  carries `high` over on that basis. `codex exec --help` on codex-cli
+  0.153.4, read 2026-09-05, lists `-c, --config <key=value>` and no
+  temperature, top_p or logprobs flag, so the dispatch passes none of
+  the removed parameters by flag; whether a config key could set one is
+  unread. `configuration_update`, the guide's mid-run effort change, is
+  described on the page as a Responses API input item; no `codex exec`
+  surface for it was found in the same help text, which is one more
+  reason the effort is pinned per call.
 
 #### Sol-era shape (shared, and the whole set when Sol is named)
 
