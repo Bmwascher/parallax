@@ -11,6 +11,7 @@ import json
 import os
 import re
 import shutil
+import stat
 import subprocess
 import tempfile
 from pathlib import Path
@@ -139,6 +140,28 @@ def assert_built(proc):
     """
     assert proc.returncode == 1, proc.stdout + proc.stderr
     assert SKIP_BLOCK in proc.stdout, proc.stdout + proc.stderr
+
+
+def make_junction(link, target):
+    """A junction via mklink /J, or skip. Junctions need no privilege;
+    symbolic links do, and this session cannot make one."""
+    rc = subprocess.run(["cmd", "/c", "mklink", "/J", str(link), str(target)],
+                        capture_output=True, text=True)
+    if rc.returncode != 0:
+        pytest.skip("junction creation unavailable: " + rc.stderr)
+
+
+def unlink_junction(link):
+    """rmdir removes the junction and never its target."""
+    subprocess.run(["cmd", "/c", "rmdir", str(link)],
+                   capture_output=True, text=True, check=True)
+
+
+def is_reparse_point(path):
+    """Python's is_symlink() is False for a junction, so read the
+    attribute bit the filesystem sets for both kinds of link."""
+    return bool(os.lstat(str(path)).st_file_attributes
+                & stat.FILE_ATTRIBUTE_REPARSE_POINT)
 
 
 def read_block(stdout, label):
@@ -1340,37 +1363,30 @@ def test_an_over_budget_override_path_is_refused(tmp_path):
     assert not mirror.exists()
 
 
-def test_a_source_directory_link_is_followed_not_refused(tmp_path):
-    """The enumerator matches the copy, which follows the link.
-
-    `robocopy /E` with neither /XJ nor /SL writes the TARGET'S CONTENTS as
-    an ordinary directory at the link's relative path. Refusing to measure
-    across one described a smaller universe than the copy produces, and
-    blocked every repo that links a reference clone or a shared skills
-    directory into its tree.
-    """
+def test_a_source_directory_link_is_recreated_as_a_junction(tmp_path):
+    """The copy runs with /XJD, so the link's contents are never
+    destinations, and the tool re-creates the link as a junction after
+    the last sweep. The reviewer reads the same bytes at the same
+    relative path, and the manifest expands through it."""
     repo = make_repo(tmp_path)
     outside = tmp_path / "outside"
     outside.mkdir()
     (outside / "x.txt").write_text("linked\n")
-    link = repo / "linked"
-    rc = subprocess.run(["cmd", "/c", "mklink", "/J", str(link), str(outside)],
-                        capture_output=True, text=True)
-    if rc.returncode != 0:
-        pytest.skip("junction creation unavailable: " + rc.stderr)
+    make_junction(repo / "linked", outside)
     mirror = long_mirror(tmp_path)
     proc = run_mirror(repo, mirror)
-    # -SkipProbe builds the mirror and then verifies nothing, so exit 1
-    # with the skip block IS the successful-build outcome here.
     assert proc.returncode == 1, proc.stdout + proc.stderr
     assert SKIP_BLOCK in proc.stdout, proc.stdout
-    copied = mirror / "linked" / "x.txt"
-    assert copied.exists(), proc.stdout
-    assert copied.read_text() == "linked\n"
-    # The copy flattens the link. Asserting this is what proves the walk
-    # and the copy share one universe rather than two that happen to agree
-    # on a file count.
-    assert not (mirror / "linked").is_symlink()
+    relinked = mirror / "linked"
+    assert is_reparse_point(relinked), proc.stdout
+    assert (relinked / "x.txt").read_text() == "linked\n"
+    manifest = [l.split(" ")[0] for l in read_block(proc.stdout, "manifest:")]
+    assert "linked/x.txt" in manifest, proc.stdout
+    links = read_block(proc.stdout, "links:")
+    # Case-insensitive: the filesystem is, and a drive letter's case can
+    # differ between Python's resolve() and .NET's GetFullPath().
+    assert [l.lower() for l in links] == \
+        [("linked -> " + str(outside.resolve())).lower()], proc.stdout
 
 
 def test_a_link_pointing_at_its_own_ancestor_is_refused(tmp_path):
@@ -1869,6 +1885,380 @@ def test_verify_refuses_a_mirror_at_a_different_path(tmp_path):
     shutil.move(str(mirror), str(moved))
     proc = run_verify(repo, moved, ident)
     assert proc.returncode == 1, proc.stdout + proc.stderr
+
+
+def test_verify_detects_an_edit_behind_the_mirror_link(tmp_path):
+    """The junction's target is a review input. Editing it after
+    construction must block the next verify: the source fingerprint
+    sees it through the source link, the mirror fingerprint through the
+    junction, and either message ends the round."""
+    repo = make_repo(tmp_path)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "x.txt").write_text("linked\n")
+    make_junction(repo / "linked", outside)
+    mirror = tmp_path / "mirror"
+    _, ident = build_and_read(repo, mirror)
+    (outside / "x.txt").write_text("edited behind the link\n")
+    proc = run_verify(repo, mirror, ident)
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "changed since construction" in proc.stdout, proc.stdout
+
+
+def test_verify_detects_a_redirected_mirror_link(tmp_path):
+    """A junction re-pointed at different content moves the mirror-state
+    digest, because the manifest hashes what the link resolves to, not
+    the link's name."""
+    repo = make_repo(tmp_path)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "x.txt").write_text("linked\n")
+    make_junction(repo / "linked", outside)
+    mirror = tmp_path / "mirror"
+    _, ident = build_and_read(repo, mirror)
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    (elsewhere / "x.txt").write_text("different bytes\n")
+    unlink_junction(mirror / "linked")
+    make_junction(mirror / "linked", elsewhere)
+    proc = run_verify(repo, mirror, ident)
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "the mirror's contents changed" in proc.stdout, proc.stdout
+
+
+def test_a_forced_rebuild_does_not_reach_through_the_mirror_link(tmp_path):
+    """The force switch deletes the old mirror recursively. Measured
+    2026-09-05 on both hosts that the delete stops at a junction; this
+    case keeps that measured."""
+    repo = make_repo(tmp_path)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "x.txt").write_text("linked\n")
+    make_junction(repo / "linked", outside)
+    mirror = tmp_path / "mirror"
+    assert_built(run_mirror(repo, mirror))
+    assert is_reparse_point(mirror / "linked")
+    assert_built(run_mirror(repo, mirror, "-Force"))
+    assert (outside / "x.txt").read_text() == "linked\n"
+    assert is_reparse_point(mirror / "linked")
+
+
+def test_a_back_channel_behind_a_link_blocks_and_is_not_deleted(tmp_path):
+    """The sweep after re-linking is READ-ONLY. A back-channel reachable
+    through a junction blocks the build with its path named, and the
+    file behind the link is untouched."""
+    repo = make_repo(tmp_path)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "AGENTS.md").write_text("instructions behind the link\n")
+    make_junction(repo / "linked", outside)
+    mirror = tmp_path / "mirror"
+    proc = run_mirror(repo, mirror)
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "under a re-linked path" in proc.stdout, proc.stdout
+    assert "linked/AGENTS.md" in proc.stdout, proc.stdout
+    assert (outside / "AGENTS.md").read_text() == "instructions behind the link\n"
+
+
+def test_a_link_target_that_vanishes_before_relink_blocks(tmp_path):
+    """The walk resolved a target; the copy did not need it; the re-link
+    does. A target gone by then is a block, never a mirror missing a
+    review input that reads as complete."""
+    repo = make_repo(tmp_path)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "x.txt").write_text("linked\n")
+    make_junction(repo / "linked", outside)
+    mirror = tmp_path / "mirror"
+    # -ExtraInput runs between the copy and the re-link, and is the only
+    # shipped seam there, so a missing target is simulated by pointing
+    # the source link at a directory that is removed before the build.
+    unlink_junction(repo / "linked")
+    gone = tmp_path / "gone"
+    gone.mkdir()
+    make_junction(repo / "linked", gone)
+    gone.rmdir()
+    proc = run_mirror(repo, mirror)
+    # Which guard fires first is not the property under test: the source
+    # status capture may already stop on a dangling subject before the
+    # re-link step does. The property is that a vanished target never
+    # yields a mirror that reports itself built.
+    assert proc.returncode != 0, proc.stdout + proc.stderr
+    assert SKIP_BLOCK not in proc.stdout, proc.stdout
+    assert not (mirror / "linked").exists() or is_reparse_point(mirror / "linked")
+
+
+def test_a_cycle_behind_a_link_is_still_refused(tmp_path):
+    """Cross-vendor round 1: a walk that stops at the outer link never
+    sees an inner cycle. The walk keeps descending through links for
+    validation while counting nothing beneath them against the budget.
+    `outside/self` points at `outside`, which `linked` already reached,
+    so the overlap refusal fires; the ancestor refusal would also be a
+    correct answer, so either message passes."""
+    repo = make_repo(tmp_path)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "x.txt").write_text("linked\n")
+    make_junction(outside / "self", outside)
+    make_junction(repo / "linked", outside)
+    mirror = tmp_path / "mirror"
+    proc = run_mirror(repo, mirror)
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    low = proc.stdout.lower()
+    assert "links overlap" in low or "never terminate" in low, proc.stdout
+    assert not mirror.exists()
+
+
+def _make_checkout(path):
+    """A directory that is its own git repository, the shape of the
+    user's reference checkout. git lists a junction onto it as ONE
+    status entry and never descends (measured 2026-09-05)."""
+    path.mkdir()
+    git(path.parent, "init", "-q", str(path))
+    (path / "x.txt").write_text("reference\n")
+    git(path, "add", "x.txt")
+    commit(path, "reference base")
+
+
+def test_a_junction_onto_a_nested_checkout_is_one_subject_and_fully_hashed(tmp_path):
+    """The central case. The status names the junction once, with a
+    trailing slash, and the manifest expands through it to every file,
+    the checkout's own .git included."""
+    repo = make_repo(tmp_path)
+    outside = tmp_path / "outside"
+    _make_checkout(outside)
+    make_junction(repo / "linked", outside)
+    mirror = tmp_path / "mirror"
+    proc = run_mirror(repo, mirror)
+    assert_built(proc)
+    baseline = read_block(proc.stdout, "baseline:")
+    assert [b for b in baseline if "linked" in b] == ["?? linked/"], baseline
+    manifest = [l.split(" ")[0] for l in read_block(proc.stdout, "manifest:")]
+    assert "linked/x.txt" in manifest, proc.stdout
+    assert "linked/.git/HEAD" in manifest, proc.stdout
+    assert is_reparse_point(mirror / "linked")
+
+
+def test_verify_detects_drift_behind_a_nested_checkout_junction(tmp_path):
+    repo = make_repo(tmp_path)
+    outside = tmp_path / "outside"
+    _make_checkout(outside)
+    make_junction(repo / "linked", outside)
+    mirror = tmp_path / "mirror"
+    _, ident = build_and_read(repo, mirror)
+    (outside / "x.txt").write_text("reference edited\n")
+    proc = run_verify(repo, mirror, ident)
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "changed since construction" in proc.stdout, proc.stdout
+
+
+def test_verify_detects_a_redirected_nested_checkout_junction(tmp_path):
+    """Mirror-only change: the source still points at the original
+    checkout, so only the mirror-state digest can see this."""
+    repo = make_repo(tmp_path)
+    outside = tmp_path / "outside"
+    _make_checkout(outside)
+    make_junction(repo / "linked", outside)
+    mirror = tmp_path / "mirror"
+    _, ident = build_and_read(repo, mirror)
+    elsewhere = tmp_path / "elsewhere"
+    _make_checkout(elsewhere)
+    (elsewhere / "x.txt").write_text("a different checkout\n")
+    unlink_junction(mirror / "linked")
+    make_junction(mirror / "linked", elsewhere)
+    proc = run_verify(repo, mirror, ident)
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "the mirror's contents changed" in proc.stdout, proc.stdout
+
+
+def test_a_link_behind_a_nested_checkout_junction_is_hashed(tmp_path):
+    """Measured 2026-09-05 on both hosts: Get-ChildItem -Recurse from a
+    parent lists a junction and does not pass through it. A nested
+    checkout is ONE status subject (cross-vendor round 2 showed an
+    ignored plain directory is not: -uall lists its files one by one),
+    so a link inside the checkout was reached by no recursion at all.
+    The manifest now starts a listing at every link beneath a subject.
+    The baseline assertion is what proves the subject shape."""
+    repo = make_repo(tmp_path)
+    outside = tmp_path / "outside"
+    _make_checkout(outside)
+    deeper = tmp_path / "deeper"
+    deeper.mkdir()
+    (deeper / "deep.txt").write_text("behind a nested link\n")
+    make_junction(outside / "inner", deeper)
+    make_junction(repo / "linked", outside)
+    mirror = tmp_path / "mirror"
+    proc = run_mirror(repo, mirror)
+    assert_built(proc)
+    baseline = read_block(proc.stdout, "baseline:")
+    assert [b for b in baseline if "linked" in b] == ["?? linked/"], baseline
+    manifest = [l.split(" ")[0] for l in read_block(proc.stdout, "manifest:")]
+    assert "linked/inner/deep.txt" in manifest, proc.stdout
+    _, ident = build_and_read(repo, tmp_path / "mirror2")
+    (deeper / "deep.txt").write_text("edited behind a nested link\n")
+    proc = run_verify(repo, tmp_path / "mirror2", ident)
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "changed since construction" in proc.stdout, proc.stdout
+
+
+def test_verify_refuses_a_cycle_behind_a_link_in_the_manifest(tmp_path):
+    """The construction walk does not rerun at verify time, so the
+    manifest's own visited set is the only cycle guard there. A junction
+    planted inside the target after the build, pointing back at the
+    target, is a repeat of a target the expansion already entered. The
+    target is a nested checkout so git names ONE subject and the
+    directory-expansion helper, not git, meets the cycle (cross-vendor
+    round 3)."""
+    repo = make_repo(tmp_path)
+    outside = tmp_path / "outside"
+    _make_checkout(outside)
+    make_junction(repo / "linked", outside)
+    mirror = tmp_path / "mirror"
+    proc, ident = build_and_read(repo, mirror)
+    baseline = read_block(proc.stdout, "baseline:")
+    assert [b for b in baseline if "linked" in b] == ["?? linked/"], baseline
+    make_junction(outside / "self", outside)
+    proc = run_verify(repo, mirror, ident)
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "repeats or cycles" in proc.stdout, proc.stdout
+
+
+def test_the_manifest_refuses_links_nested_deeper_than_sixteen(tmp_path):
+    """The depth bound is the only guard against a relative-link cycle,
+    which a junction fixture cannot build, so the bound itself gets a
+    junction test (cross-vendor round 3). d0 is a checkout, so the
+    outer subject is one entry; each d<i> holds a junction n onto
+    d<i+1>. Sixteen inner links build and verify; the seventeenth is
+    refused with the specific message. The path through the chain is
+    tmp_path plus 49 characters, so the fixture asserts the root is
+    short enough that a pathname failure cannot stand in for the depth
+    refusal."""
+    assert len(str(tmp_path)) < 211, "temporary root too long for this fixture"
+    repo = make_repo(tmp_path)
+    dirs = [tmp_path / ("d%d" % i) for i in range(18)]
+    _make_checkout(dirs[0])
+    for d in dirs[1:]:
+        d.mkdir()
+    (dirs[17] / "x.txt").write_text("deepest\n")
+    for i in range(16):
+        make_junction(dirs[i] / "n", dirs[i + 1])
+    make_junction(repo / "linked", dirs[0])
+    mirror = tmp_path / "m"
+    proc, ident = build_and_read(repo, mirror)
+    assert [b for b in read_block(proc.stdout, "baseline:") if "linked" in b] == ["?? linked/"]
+    assert run_verify(repo, mirror, ident).returncode == 0
+    make_junction(dirs[16] / "n", dirs[17])
+    proc = run_verify(repo, mirror, ident)
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "more than 16 directory links deep" in proc.stdout, proc.stdout
+
+
+def test_a_link_target_that_is_itself_a_link_is_refused(tmp_path):
+    """Cross-vendor round 3: with repo/linked -> alias and alias -> t,
+    the walk records the target as spelled, `alias`, and a mirror path
+    at `t` neither passes through a link nor overlaps `alias` as text,
+    so the force switch could delete t. A followed target with a
+    reparse point at itself or among its ancestors is refused."""
+    repo = make_repo(tmp_path)
+    t = tmp_path / "t"
+    t.mkdir()
+    (t / "x.txt").write_text("real target\n")
+    alias = tmp_path / "alias"
+    make_junction(alias, t)
+    make_junction(repo / "linked", alias)
+    proc = run_mirror(repo, t, "-Force")
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "is itself a directory link or sits beneath one" in proc.stdout, proc.stdout
+    assert (t / "x.txt").read_text() == "real target\n"
+
+
+def test_an_inner_link_target_is_protected(tmp_path):
+    """Cross-vendor round 2: with repo/outer -> A and A/inner -> B, a
+    guard over recorded (outer) links alone protects A and lets a mirror
+    path at B with the force switch delete B. Every target the walk
+    reaches is protected."""
+    repo = make_repo(tmp_path)
+    a = tmp_path / "a"
+    a.mkdir()
+    b = tmp_path / "b"
+    b.mkdir()
+    (b / "keep.txt").write_text("inner target\n")
+    make_junction(a / "inner", b)
+    make_junction(repo / "outer", a)
+    proc = run_mirror(repo, b, "-Force")
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "overlaps the target of a source link" in proc.stdout, proc.stdout
+    assert (b / "keep.txt").read_text() == "inner target\n"
+
+
+def test_a_mirror_path_through_a_link_is_refused(tmp_path):
+    """Cross-vendor round 2: a text comparison cannot see that a mirror
+    path spelled through some other junction lands inside a protected
+    target. Any mirror or override path with a reparse point among its
+    existing ancestors is refused outright."""
+    repo = make_repo(tmp_path)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "x.txt").write_text("linked\n")
+    make_junction(repo / "linked", outside)
+    alias = tmp_path / "alias"
+    make_junction(alias, outside)
+    proc = run_mirror(repo, alias / "mirror")
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "passes through a directory link" in proc.stdout, proc.stdout
+    assert not (alias / "mirror").exists()
+    assert (outside / "x.txt").read_text() == "linked\n"
+    proc = run_mirror(repo, tmp_path / "mirror", "-OverrideOut", str(alias / "o.txt"))
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "passes through a directory link" in proc.stdout, proc.stdout
+    assert not (outside / "o.txt").exists()
+
+
+def test_a_dot_git_that_is_a_link_is_refused(tmp_path):
+    """git's optional index refresh writes the repository's own
+    .git/index. That is not a write through a link only while .git is
+    not a link, so the walk refuses one."""
+    repo = make_repo(tmp_path)
+    real_git = tmp_path / "real-git"
+    shutil.move(str(repo / ".git"), str(real_git))
+    make_junction(repo / ".git", real_git)
+    proc = run_mirror(repo, tmp_path / "mirror")
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert ".git is a directory link" in proc.stdout, proc.stdout
+
+
+def test_a_mirror_path_at_a_link_target_is_refused(tmp_path):
+    """Cross-vendor round 1: the overlap guard compared only against the
+    source root, so a mirror path at the reference checkout with the
+    force switch would have deleted the checkout."""
+    repo = make_repo(tmp_path)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "x.txt").write_text("linked\n")
+    make_junction(repo / "linked", outside)
+    proc = run_mirror(repo, outside, "-Force")
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "overlaps the target of a source link" in proc.stdout, proc.stdout
+    assert (outside / "x.txt").read_text() == "linked\n"
+    inside = outside / "sub"
+    proc = run_mirror(repo, inside)
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "overlaps the target of a source link" in proc.stdout, proc.stdout
+    assert not inside.exists()
+
+
+def test_an_override_path_at_a_link_target_is_refused(tmp_path):
+    repo = make_repo(tmp_path)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "x.txt").write_text("linked\n")
+    make_junction(repo / "linked", outside)
+    mirror = tmp_path / "mirror"
+    proc = run_mirror(repo, mirror, "-OverrideOut", str(outside / "override.txt"))
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "overlaps the target of a source link" in proc.stdout, proc.stdout
+    assert not (outside / "override.txt").exists()
+    assert not mirror.exists()
 
 
 def test_extra_inputs_are_covered_by_the_digest(tmp_path):
