@@ -593,6 +593,211 @@ git commit -m "rename the codex reviewer lane from sol to astra where the label 
 
 ---
 
+### Task 4: teach the context probe the two prompt families codex-cli 0.153 renders
+
+**Added at revision 2, 2026-09-04, before the plan's Astra round could
+run.** The mirror build for that round was BLOCKED by
+`tools/codex-context-probe.ps1` with `unrecognized prompt block(s):
+collaboration_mode, multi_agent_role`. That is the probe's contract
+working: a family it has no rule for stops the round. codex-cli 0.153.4
+(the CLI on this machine since 2026-09-04; the probe's lists were
+measured on 0.144.1) renders two client-authored blocks the lists do not
+name. Measured 2026-09-04 with `codex debug prompt-input --disable plugins
+--disable apps --disable memories -c mcp_servers.node_repl.enabled=false`
+from a scratch git fixture: `<collaboration_mode>` opens inline and
+carries a "Collaboration Mode: Default" header; `<multi_agent_role>` opens
+inline, names the model `/root`, describes `spawn_agent`, `send_message`
+and `followup_task`, and carries the same fenced message-format example
+(`<recipient>`, `<author>`, `<payload text>`) that `<multi_agent_mode>`
+carried on 0.144.1. Both are the same kind as `multi_agent_mode`: text the
+client writes, not text from the reviewed tree or a plugin. Until the
+probe names them, NO codex round can run, in this cycle or any other.
+
+**Files:**
+- Modify: `evals/multi-model-verify/test_codex_context_probe.py` (the
+  parametrize list at lines 824-827; one new test after
+  `test_no_real_fixture_reports_an_unknown_block`)
+- Modify: all six files under `evals/multi-model-verify/fixtures/codex-prompt-input/`
+- Modify: `tools/codex-context-probe.ps1:395-399` and `:410-414` (the two
+  lists)
+
+**Interfaces:**
+- Consumes: nothing from Tasks 1 to 3.
+- Produces: a probe that passes on codex-cli 0.153.4, which the Astra
+  round and the diff debate both need.
+
+**Constraints specific to this task.** `tools/codex-context-probe.ps1`
+is Windows PowerShell 5.1 compatible and ASCII ONLY; no non-ASCII
+character may enter it. The fixtures are SYNTHETIC by design (the repo is
+public; commit `d1c9cfb` explains why): the bodies below are fabricated
+in the real render's shape and must not be replaced with a recording.
+`test_codex_context_probe.py` is dual-host: run it under BOTH hosts by
+setting `PARALLAX_PS_HOST` to `powershell` and then to `pwsh`.
+
+- [ ] **Step 1: Extend the attributed-block parametrize list**
+
+In `evals/multi-model-verify/test_codex_context_probe.py`, change
+
+```python
+@pytest.mark.parametrize("tag", [
+    "skills_instructions", "apps_instructions", "plugins_instructions",
+    "recommended_plugins", "environment_context", "multi_agent_mode",
+])
+```
+
+to
+
+```python
+@pytest.mark.parametrize("tag", [
+    "skills_instructions", "apps_instructions", "plugins_instructions",
+    "recommended_plugins", "environment_context", "multi_agent_mode",
+    "collaboration_mode", "multi_agent_role",
+])
+```
+
+- [ ] **Step 2: Add the positive-control test**
+
+Directly after `test_no_real_fixture_reports_an_unknown_block` add:
+
+```python
+def test_the_0_153_families_are_masked_without_hiding_a_later_unknown_block():
+    """codex-cli 0.153.4 renders `<collaboration_mode>` and
+    `<multi_agent_role>`, both client-authored like `multi_agent_mode`.
+    Measured 2026-09-04: the mirror build blocked on exactly these two
+    names. Naming them must not let a NEW family hide behind them, so
+    the same text carries a third, unknown block after both and that
+    one must still be reported alone.
+    """
+    text = (
+        "<collaboration_mode># Collaboration Mode: Default\\n"
+        "You are now in Default mode.\\n</collaboration_mode>\\n"
+        "<multi_agent_role>You are `/root`, the primary agent.\\n"
+        "You will receive messages in the form:\\n```\\n"
+        "Task name: <recipient>\\nSender: <author>\\nPayload:\\n"
+        "<payload text>\\n```\\n</multi_agent_role>\\n"
+        "<beta_block>\\nx\\n</beta_block>\\n"
+    )
+    out = run_functions(
+        f'$t = "{text}"; (Get-UnknownPromptBlock $t) -join ","'
+    )
+    assert out == "beta_block", out
+```
+
+The `\\n` sequences are PowerShell newline escapes inside a double-quoted
+string, exactly as the existing parametrized cases at lines 322-327 write
+them.
+
+- [ ] **Step 3: Add the two blocks to every fixture**
+
+In each of the six files under
+`evals/multi-model-verify/fixtures/codex-prompt-input/`, find the first
+occurrence of the literal `<multi_agent_mode>` inside the JSON text and
+insert, immediately BEFORE it, this JSON-escaped text (one line in the
+file, `\n` as two characters, exactly as the surrounding text is
+written):
+
+```text
+<collaboration_mode># Collaboration Mode: Default\n\nYou are now in Default mode. Any previous instructions for other modes are no longer active.\n</collaboration_mode>\n<multi_agent_role>You are `/root`, the primary agent in a team of agents collaborating to fulfill the user's goals.\nYou will receive messages in the analysis channel in the form:\n```\nMessage Type: MESSAGE | FINAL_ANSWER\nTask name: <recipient>\nSender: <author>\nPayload:\n<payload text>\n```\nThey may be addressed as to=/root\n</multi_agent_role>\n
+```
+
+Verify each file still parses: `python -c "import json,glob; [json.load(open(p, encoding='utf-8')) for p in glob.glob('evals/multi-model-verify/fixtures/codex-prompt-input/*.json')]; print('ok')"`.
+
+- [ ] **Step 4: Run the tests to verify they fail**
+
+Run: `python -m pytest evals/multi-model-verify/test_codex_context_probe.py -q -k "unknown_block or attributed_known or 0_153"`
+
+Expected: `test_no_real_fixture_reports_an_unknown_block` FAILS naming
+`collaboration_mode,multi_agent_role` for `full.json`; the new test FAILS
+with `collaboration_mode,multi_agent_role,beta_block`; the two new
+attributed cases FAIL because the names are not yet known to the exact
+form rule. Any other failure is not expected and stops the task.
+
+- [ ] **Step 5: Name the two families in the probe**
+
+In `tools/codex-context-probe.ps1`, change
+
+```powershell
+$script:KnownPromptBlocks = @(
+    "permissions", "skills_instructions", "plugins_instructions",
+    "apps_instructions", "recommended_plugins", "INSTRUCTIONS",
+    "environment_context", "multi_agent_mode"
+)
+```
+
+to
+
+```powershell
+$script:KnownPromptBlocks = @(
+    "permissions", "skills_instructions", "plugins_instructions",
+    "apps_instructions", "recommended_plugins", "INSTRUCTIONS",
+    "environment_context", "multi_agent_mode", "collaboration_mode",
+    "multi_agent_role"
+)
+```
+
+and
+
+```powershell
+$script:KnownContainers = @(
+    "INSTRUCTIONS", "permissions instructions", "skills_instructions",
+    "plugins_instructions", "apps_instructions", "recommended_plugins",
+    "environment_context", "multi_agent_mode"
+)
+```
+
+to
+
+```powershell
+$script:KnownContainers = @(
+    "INSTRUCTIONS", "permissions instructions", "skills_instructions",
+    "plugins_instructions", "apps_instructions", "recommended_plugins",
+    "environment_context", "multi_agent_mode", "collaboration_mode",
+    "multi_agent_role"
+)
+```
+
+Directly above the first list, add this comment:
+
+```powershell
+# `collaboration_mode` and `multi_agent_role` arrived with codex-cli
+# 0.153 (measured 2026-09-04 on 0.153.4): both are client-authored, like
+# `multi_agent_mode`, and the fenced message-format example that used to
+# sit in `multi_agent_mode` now sits in `multi_agent_role`.
+```
+
+- [ ] **Step 6: Run the module under both hosts**
+
+Run, in PowerShell:
+
+```powershell
+$env:PARALLAX_PS_HOST = "powershell"; python -m pytest evals/multi-model-verify/test_codex_context_probe.py -q
+$env:PARALLAX_PS_HOST = "pwsh"; python -m pytest evals/multi-model-verify/test_codex_context_probe.py -q
+```
+
+Expected: all pass under each host. Record both counts.
+
+- [ ] **Step 7: Run the live probe against this checkout**
+
+Run, in PowerShell, from the repo root:
+
+```powershell
+$o = "$env:TEMP\parallax-probe-$(Get-Random).toml"
+& (Get-Process -Id $PID).Path -NoProfile -File tools/codex-context-probe.ps1 -WorkDir (Get-Location).Path -SuppressSkills -OverrideOut $o -Json
+```
+
+Expected: JSON with `"status":"clean"` and exit 0. This is the
+measurement the whole task exists for; a blocked result stops the task
+and is reported with its reason.
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add evals/multi-model-verify/test_codex_context_probe.py evals/multi-model-verify/fixtures/codex-prompt-input/full.json evals/multi-model-verify/fixtures/codex-prompt-input/flagged.json evals/multi-model-verify/fixtures/codex-prompt-input/suppressed.json evals/multi-model-verify/fixtures/codex-prompt-input/repo-agents.json evals/multi-model-verify/fixtures/codex-prompt-input/malformed-block.json evals/multi-model-verify/fixtures/codex-prompt-input/missing-block-plugins-off.json tools/codex-context-probe.ps1
+git commit -m "teach the context probe the collaboration_mode and multi_agent_role families codex 0.153 renders"
+```
+
+---
+
 ## After the tasks
 
 1. Run the behavioural evals, local-only and opt-in, required because this
