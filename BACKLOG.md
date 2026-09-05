@@ -36,7 +36,7 @@ The full previous text of every closed item is in git history at
 - 45
 - 55
 - 70
-- 87
+- 88
 
 ### Fourth - measurements missing or made by proxy
 - 73
@@ -2734,7 +2734,7 @@ rather than the other way round.
 Status: OPEN
 Cost: a red case cannot be told from a harness that cannot run the case, three 0.27.0 regions got zero behavioural coverage, and the gate cannot exercise the dispatch path this repo just rebuilt
 Pairs: none
-Verified: 2026-09-04 73bae3504790
+Verified: 2026-09-05 13ff70e3d583
 
 **Source: measured during the 0.27.0 verification run, 2026-08-19**, plus
 finding M4 of that cycle's whole-branch review. Both parts are measured
@@ -2824,6 +2824,19 @@ harness cannot run the skill".
 **What would close Part C.** Add the two tools to the allowlist, expose a
 task-output or wait tool, re-run the two regressed cases, and settle
 whether a non-allowlisted shell call is really denied in a headless run.
+
+**Part D, measured 2026-09-05 by item 87's closing gate.** The
+`with_reference` workspace is `git init` with NO commit
+(`evals/tools/run_behavioral_evals.py:343`; only `diff_state` commits), and
+`tools/new-review-mirror.ps1` refuses a source with no resolvable HEAD. So
+every plan-mode case reaches the mirror step on an unborn branch, and what
+happens next is the executor's judgement: in the same run
+`plan-mode-debate-runs` committed the fixture itself and went on to
+prepare an Astra round, while `no-manufactured-objections` declined to
+commit the user's tree and terminated BLOCKED. That is Part A's shape
+again, a harness gap reading as a substantive block. The fix is one line:
+commit the fixture after `git init`. Same run, same three cases as Part C
+plus this one, each red for a harness reason and none for the skill.
 
 ## 69. Nothing checks the repo's own `path:line` citations into shipped code
 Status: OPEN
@@ -3735,16 +3748,15 @@ did not report"`, and rewrite it at the end with the real outcome; a run
 that dies in between then re-surfaces as a failure, not as silence. The
 state-machine suite gets a scenario that kills the wrapper mid-run.
 
-## 87. The primary reviewer lane runs GPT-5.6 Sol while GPT-6 Astra is available on the account
-Status: OPEN
-Cost: the reviewer is the gate every cycle runs through, and the pin is one line, so the swap is cheap and the prose around it is the whole cost
-Pairs: none
-Verified: 2026-09-05 48c9a1304996
+## 87. The primary reviewer lane ran GPT-5.6 Sol while GPT-6 Astra was available on the account
+Status: DONE
+Closed: 0.31.1
+Verified: 2026-09-05 ecc64ee75a83
 
 **Asked for by the user 2026-09-04**, the day GPT-6 Astra appeared in the
 codex model list. The lane's canonical declaration in
-`skills/multi-model-verify/references/model-prompting-notes.md` still
-names `gpt-5.6-sol` at effort `high`.
+`skills/multi-model-verify/references/model-prompting-notes.md` then
+named `gpt-5.6-sol` at effort `high`.
 
 **Measured 2026-09-04, codex-cli 0.153.4.** A doctor-shaped probe from a
 scratch git fixture, with the dispatch's own isolation flags and
@@ -3772,3 +3784,47 @@ Sol stays declared as an alternate at `high` that runs only when the user
 names it, on the same transport and evidence rules; and the lane is
 renamed Astra wherever the label is live, while historical citations that
 name Sol stay as they are.
+
+**Shipped in 0.31.0 and 0.31.1.** The canonical pair reads `gpt-6-astra`
+at `high`; an alternate pair names `gpt-5.6-sol` at `high` directly under
+it, read by no parser and offered by no fallback class; a pin locks the
+heading, all four declaration lines and their order. The reviewer section
+was rewritten to Astra with every page claim dated and every unmeasured
+Astra behaviour called unmeasured. The live label is Astra in the README,
+CLAUDE.md, SKILL.md, panels, fallbacks, the frozen-plan format, the
+behavioural runner and the pins; dated citations keep Sol. The context
+probe learned codex-cli 0.153.4's two new client-authored prompt families,
+masks the one self-quoting delimiter inside `<collaboration_mode>`, and
+expands the `### Skill roots` alias table from inside the container only.
+The plan was debated by Astra itself (one counted round after two the
+session's own dispatch errors voided) and the diff by Astra in two rounds,
+FULL, attested at `ec804f7`. Two gaps found by the debates are NOT closed
+here: the single-source sweep omits `agents/`, and the alternate has no
+command surface that can run it, which is item 88.
+
+Record: docs/superpowers/plans/rounds/2026-09-04-item87-astra-diff-round
+
+## 88. The Sol alternate is declared but no command surface can run it
+Status: OPEN
+Cost: a user who names Sol gets a round that fails its own route check, the safe direction, so the feature promised by item 87 does not exist yet
+Pairs: none
+Verified: 2026-09-05 4e31cc87ba8d
+
+**Filed 2026-09-05 from item 87's whole-branch review (Fable, Minor 3),
+confirmed by the diff debate.** `model-prompting-notes.md` declares
+`Alternate codex reviewer model id: `gpt-5.6-sol`` and says a Sol run
+makes its effective-route check against the alternate declarations. But
+`SKILL.md`'s route check compares the transcript header against
+`<canonical-model-id>` and `<canonical-effort>` only, and
+`frozen-plan-format.md` ties `-RouteNote` `effective route confirmed` to
+the lane's canonical declarations. A Sol round therefore reads
+`model: gpt-5.6-sol` against canonical `gpt-6-astra` and fails the check.
+That is the safe direction, so nothing false-clean exists; what exists is a
+declared alternate that no text an agent follows can select.
+
+**Shape of a fix.** Give SKILL.md's route check a second accepted pair when
+the user named Sol, or route a named-Sol run through a declared seat the
+way panels declare theirs, and pin whichever form ships. SKILL.md sits at
+roughly 6457 tokens against a 6500 ceiling, so the words must come from
+somewhere. Out of item 87's scope by its Global Constraints, which forbade
+changing the route-check contract.
