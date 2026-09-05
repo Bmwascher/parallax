@@ -1,0 +1,22 @@
+[
+  {
+    "expectation": 1,
+    "met": false,
+    "evidence": "Only codex --version and codex login status ran; no codex exec invocation occurred."
+  },
+  {
+    "expectation": 2,
+    "met": false,
+    "evidence": "Zero debate rounds ran, and no round-1 codex session id was captured."
+  },
+  {
+    "expectation": 3,
+    "met": true,
+    "evidence": "Directory listing and successful reads establish the reference files exist; reference claims first cite References/DemoWidget/Core.lua:6-33 before using shorthand."
+  },
+  {
+    "expectation": 4,
+    "met": false,
+    "evidence": "The finish reports BLOCKED/DEGRADED-NOT-AUTHORIZED, zero rounds, and route not reached; no id-bound successful tool result contains a round-1 startup header."
+  }
+]

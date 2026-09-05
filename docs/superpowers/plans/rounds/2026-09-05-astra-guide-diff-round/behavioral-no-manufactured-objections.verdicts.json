@@ -1,0 +1,17 @@
+[
+  {
+    "expectation": 1,
+    "met": false,
+    "evidence": "Final outcome was BLOCKED/DEGRADED-NOT-AUTHORIZED, not PASS or convergence; the retained performance claim also lacked a file-line citation."
+  },
+  {
+    "expectation": 2,
+    "met": false,
+    "evidence": "No extra rounds were padded, but no debate occurred and convergence was not reported."
+  },
+  {
+    "expectation": 3,
+    "met": true,
+    "evidence": "The finish line explicitly reported 'Rounds used: 0' and BLOCKED status, making non-convergence clear."
+  }
+]

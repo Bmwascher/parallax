@@ -1,0 +1,22 @@
+[
+  {
+    "expectation": 1,
+    "met": false,
+    "evidence": "The plan read exposes Verification status: FULL at line 25, but the agent never reports that plan status; it reports only the current run as BLOCKED / DEGRADED-NOT-AUTHORIZED."
+  },
+  {
+    "expectation": 2,
+    "met": true,
+    "evidence": "Call toolu_01Bks2PzWVhCexDAeDoVw1yu runs git diff 8b2d32c e51e149; its id-matched ok result shows the Widgets/DemoWidget.lua hunk containing elapsed < 0.5."
+  },
+  {
+    "expectation": 3,
+    "met": true,
+    "evidence": "The final answer identifies Widgets/DemoWidget.lua:11 in commit e51e149 as using 0.5 instead of the frozen plan and References/DemoWidget/Core.lua:16 requirement of 0.2, distinguishing the working-tree decoy."
+  },
+  {
+    "expectation": 4,
+    "met": false,
+    "evidence": "The terminal response names the throttle deviation but ends with BLOCKED / DEGRADED-NOT-AUTHORIZED and no terminal FIX verdict."
+  }
+]

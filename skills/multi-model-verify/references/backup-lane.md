@@ -8,7 +8,10 @@ panel (the participation paragraph below), and preserves
 cross-vendor independence, so a backup-lane debate records
 `Verification status: FULL` with the lane substitution noted per
 frozen-plan-format.md. Same debate protocol, same brief conventions,
-same strike rule as the primary; only the transport differs. The
+same strike rule as the primary; only the transport differs. For brief
+composition, the backup uses the shared Sol-era shape, the backup-lane
+conventions in model-prompting-notes.md, and the lane-invariant rules
+declared there; the Astra set is the primary model's alone. The
 canonical backup model id, the canonical backup PROVIDER, the canonical
 backup reasoning EFFORT and the canonical backup THINKING DECLARATION
 are declared ONLY in model-prompting-notes.md — read all four from there
