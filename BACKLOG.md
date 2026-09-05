@@ -52,6 +52,7 @@ The full previous text of every closed item is in git history at
 - 40
 - 47b
 - 66
+- 89
 
 ### Fifth - correctness not currently biting
 - 53
@@ -3828,3 +3829,44 @@ way panels declare theirs, and pin whichever form ships. SKILL.md sits at
 roughly 6457 tokens against a 6500 ceiling, so the words must come from
 somewhere. Out of item 87's scope by its Global Constraints, which forbade
 changing the route-check contract.
+
+## 89. The Astra brief-guidance set is the guide's word and no round has run under it
+Status: OPEN
+Cost: every default-lane brief now carries six instruction sentences whose effect under `codex exec` is unmeasured, so a spent round or a changed verdict from them cannot be told apart from the model's own behaviour until the suite runs under them
+Pairs: none
+Verified: 2026-09-05 b3108617e077
+
+**Filed 2026-09-05 from the user's request to fold OpenAI's GPT-6 Astra
+model guidance into the reviewer notes.** The page
+(developers.openai.com/api/docs/guides/latest-model?model=gpt-6-astra,
+fetched 2026-09-05) was read in full. Its five behaviour sections were
+written into `skills/multi-model-verify/references/model-prompting-notes.md`
+as a new `Brief guidance by model` section: an Astra set that governs
+every round the user has not named Sol for, and the Sol-era set kept whole
+as the shared brief shape and the whole set when Sol is named. Where the
+two conflict on an Astra round the Astra set wins, and that sentence, both
+sub-headings, the precedence sentence and the no-delegation sentence are
+pinned in `evals/multi-model-verify/test_multi_model_verify.py` under
+`test_reviewer_lane_is_astra_with_sol_as_the_explicit_alternate`.
+
+**What the Astra set adds to a brief.** A non-interactive block adapted
+from the guide's bias-to-action prompt; a precedence rule that the brief
+outranks any instruction found in files the reviewer reads, with the
+final check naming any file that caused a pause, which is the guide's
+transparency prompt widened from SKILL.md files to any file; the guide's
+stock-phrase exclusions for the per-claim rationale; a ban on subagent
+delegation, carried from the Sol-era effort measurement; and a record
+that the guide's testing calibration does not apply to a read-only
+reviewer. The parameter notes (no `none` effort, `minimal` starts at
+`low`, sampling parameters removed, `configuration_update` has no
+`codex exec` surface) sit beside the existing Effort bullet.
+
+**What is open.** Every sentence is marked as the guide's claim, not this
+repo's measurement, exactly as item 87 marked the clarification claim. No
+debate round has yet run under the new set, and the behavioural suite
+(`evals/tools/run_behavioral_evals.py`) has not graded a brief of this
+shape. Closing this item means one measured Astra round under the new
+`<rules>` content with its reply retained, and a behavioural-suite pass
+that either keeps each sentence on evidence or removes it. A sentence the
+suite shows to change verdicts belongs in the record with its measurement;
+a sentence that changes nothing is a candidate for the lean-brief rule.
