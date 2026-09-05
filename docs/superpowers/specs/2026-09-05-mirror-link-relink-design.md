@@ -60,6 +60,22 @@ at both system and repo scope, Windows PowerShell 5.1 and PowerShell 7.
    re-creating the junction in the `/XJD` copy, `git status` in the copy
    listed `?? jlink/`, so the manifest expands it exactly as it expands
    the source's link.
+7. **A junction is a container, and recursion enters a link only when
+   the link is the starting path.** Measured after cross-vendor round 1
+   asked: `Test-Path -PathType Container` on a junction is true on both
+   hosts, so the manifest takes the directory branch. `Get-ChildItem
+   -Recurse` started at a PARENT folder listed the junction as an entry
+   and returned zero files beneath it on both hosts; started AT the
+   junction it returned every target file (measurement 2). A junction
+   onto a folder that holds a junction back onto itself returned one
+   file and no error on both hosts: the nested link is not followed. Two
+   consequences. A link nested under a collapsed status subject, such as
+   an ignored directory that holds a link, is NOT hashed by a plain
+   recursion from that subject, on the source side today and on the
+   mirror side after this change, so the manifest must start a listing
+   at each nested link itself. And a cycle behind a link does not hang
+   the manifest; it silently narrows it, which is why the walk keeps
+   validating links it reaches THROUGH links.
 
 ## Decision
 
@@ -73,12 +89,36 @@ measurement 6 shows the mirror's own status names the junction as a
 subject that the manifest expands through. A change to any reference
 file after construction moves the source status hash and the mirror
 state hash, and a junction redirected at different content moves the
-mirror state hash. Astra's poll asked for the link path, target, HEAD and
-a content hash to be bound; the link path is in the status listing, the
-content is in the manifest, and the target's `.git/HEAD` and refs are
-manifest entries too, so all four are already bound by the digest the
-dispatch tool already carries. The receipt schema, the wrapper, and
-`-VerifyIdentity` are untouched.
+mirror state hash. What the digest binds is CONTENT: the status fields,
+each relative file name and its byte hash. It does not carry the link's
+resolved target path, so a junction redirected at a byte-identical
+directory is indistinguishable from the original, and that is
+acceptable because the reviewer then reads the same bytes. The target
+checkout's `.git/HEAD` and refs are bound only as files the expansion
+reaches, which measurement 2 shows it does. Cross-vendor round 1
+corrected an earlier sentence here that claimed the target path was
+bound. The record prints a `links:` block naming each link's target so
+a human can see it; nothing verifies against that block. The receipt
+schema, the wrapper, and `-VerifyIdentity` are untouched.
+
+**Why the link targets become protected trees.** The overlap guard
+compares the mirror path and the override path against the source root
+only. A link target lives outside that root, so a mirror path placed at
+the reference checkout with the force switch would delete the checkout,
+and an override path inside it would write there. Cross-vendor round 1
+named both. After the walk records each link's resolved target, the
+build refuses a mirror path or override path that equals, sits inside,
+or contains any target, before anything is created or deleted.
+
+**Why the manifest expands nested links explicitly.** Measurement 7:
+a recursion from a parent does not pass through a link. The old copy
+materialised every linked file, so the mirror side hashed them by
+ordinary recursion while the source side never did. After this change
+both sides expand a directory subject by listing its files, then
+listing every directory link beneath it and starting a fresh listing at
+each link, with a visited set of resolved targets so a repeated or
+cyclic target is a refusal rather than an unbounded walk. Coverage on
+the source side widens to match the mirror's.
 
 **Why re-link AFTER the final back-channel sweep, then check, never
 delete.** Remediation removes instruction files it finds with
@@ -89,20 +129,28 @@ enumeration then runs once more: any back-channel entry that sits under a
 re-linked path BLOCKS the build with the entry named. The build never
 deletes through a link.
 
-**Why the path-budget walk stops at a link.** The universe is what the
-copy creates. With `/XJD` the copy creates nothing beneath a link, so the
-walk records the link (relative path and resolved absolute target) as a
-single destination and does not descend. The cycle refusal and the
-two-links-one-target refusal stay, because the manifest still walks
-through every link and an unbounded walk there is the same unbounded
-walk.
+**Why the path-budget walk still descends through a link, but stops
+counting.** The universe is what the copy creates. With `/XJD` the copy
+creates nothing beneath a link, so the link is one destination and the
+entries beneath it are not measured against the budget. The walk still
+DESCENDS through the link, because the cycle refusal and the
+two-links-one-target refusal apply to every link the manifest can reach,
+and a link behind a link is reachable (measurement 7). Cross-vendor
+round 1 showed that a walk which stops at the outer link never sees an
+inner cycle. Only links that are not themselves behind another link are
+recorded for re-linking; an inner link already exists in the target and
+is reached through the outer junction.
 
 ## What changes
 
-- `tools/new-review-mirror.ps1`: the path-budget walk collects links
-  instead of descending; `robocopy` gains `/XJD`; a re-link step runs
-  after the final sweep; a read-only link back-channel check follows it;
-  the record prints a `links:` block naming each `<relative path> -> <target>`.
+- `tools/new-review-mirror.ps1`: the path-budget walk records links and
+  stops counting beneath them while still validating links it reaches
+  through links; a guard refuses a mirror or override path that overlaps
+  any link target; `robocopy` gains `/XJD`; the manifest expansion starts
+  a listing at every directory link beneath a subject; a re-link step
+  runs after the final sweep; a read-only link back-channel check follows
+  it; the record prints a `links:` block naming each
+  `<relative path> -> <target>`.
 - `skills/multi-model-verify/references/backup-lane.md`: the
   `mirror-path-budget` contract region's "FOLLOWED" clause becomes the
   re-link clause. Same region id, so `DECLARED_REGIONS` is unchanged.
@@ -127,9 +175,14 @@ walk.
 
 ## What this does NOT fix, filed rather than hidden
 
-- **The read cost stays.** The reference is still hashed four times per
-  build and twice per verify (measurement 2). This change removes the
-  write and the pre-copy descent only. Item 91 holds the follow-up: a
+- **The read cost stays.** A build hashes the reference three times
+  (the source status before the copy, again after it, and the mirror
+  baseline), and the old copy read it a fourth time. Each identity
+  verify hashes both sides, and a round runs three verifies (the
+  dispatch tool's own, then the wrapper's before and after the client),
+  so a round hashes the reference six times. Cross-vendor round 1
+  corrected the counts this paragraph first carried. This change removes
+  the copy's read and the pre-copy budget accounting only. Item 91 holds the follow-up: a
   nested checkout could be bound by its HEAD plus its own status hash
   instead of a byte walk that includes its `.git` objects. That is a
   change to the identity contract and is out of this scope.

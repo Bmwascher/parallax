@@ -4,7 +4,7 @@
 
 **Goal:** Build the review mirror without copying through directory links, re-creating each as a junction so the reviewer reads the same bytes and the identity gate still sees every change behind it.
 
-**Architecture:** `tools/new-review-mirror.ps1` already walks the source before the copy; that walk now records each directory link (relative path, resolved absolute target) instead of descending, `robocopy` runs with `/XJD`, and after the final back-channel sweep the tool creates a junction per recorded link, then re-enumerates back-channels read-only and blocks if any sit under a link. The mirror's own `git status` names each junction as one subject and `Get-ContentManifest` already expands subjects through links on both hosts, so the existing source-status and mirror-state digests cover the linked content with no new record fields and no change to `-VerifyIdentity` or `tools/dispatch-round.ps1`.
+**Architecture:** `tools/new-review-mirror.ps1` already walks the source before the copy; that walk now records each directory link (relative path, resolved absolute target), keeps descending through links so the cycle and overlap refusals still see a link behind a link, and counts nothing beneath a link against the budget. A guard then refuses a mirror or override path that overlaps any link target. `robocopy` runs with `/XJD`, and after the final back-channel sweep the tool creates a junction per recorded link, then re-enumerates back-channels read-only and blocks if any sit under a link. The mirror's own `git status` names each junction as one subject; `Get-ContentManifest` expands a subject by listing its files and then starting a listing at every directory link beneath it, because a recursion from a parent does not pass through a link on either host. The existing source-status and mirror-state digests therefore cover the linked content with no new record fields and no change to `-VerifyIdentity` or `tools/dispatch-round.ps1`.
 
 **Tech Stack:** Windows PowerShell 5.1 and PowerShell 7 (ASCII-only script), robocopy, git, pytest.
 
@@ -102,18 +102,22 @@ case and the back-channel-behind-a-link case green on both hosts, the
 timing task's before-and-after numbers recorded here, and 0.32.0
 installed and content-verified.
 
-## 91. The identity digests read a nested reference checkout four times per build
+## 91. The identity digests hash a linked reference checkout three times per build and six times per round
 Status: OPEN
-Cost: a build hashes every file behind a linked checkout, its `.git` objects included, four times, and each round's two verifies read it twice more; measured 2026-09-05 at 14,884 files per pass, so the reference is read more often than the addon under review
+Cost: a build hashes every file behind a linked checkout, its `.git` objects included, three times, and each round's three identity verifies hash it on both sides for six more passes; measured 2026-09-05 at 14,884 files per pass, so the reference is hashed more often than the addon under review
 Pairs: 90
 Verified: 2026-09-05 PLACEHOLDER
 
-**Filed 2026-09-05 during item 90's design.** Item 90 removes the copy
-and the pre-copy descent only. `Get-StatusSha256` runs before and after
-the copy on the source and once on the mirror, and each run expands the
-link's single status entry through `Get-ChildItem -Recurse`, hashing all
-14,884 files of the reference checkout and its `.git` internals. Every
-`-VerifyIdentity` call does the same on both sides.
+**Filed 2026-09-05 during item 90's design.** Item 90 removes the copy's
+read and the pre-copy budget accounting only. `Get-StatusSha256` runs
+before and after the copy on the source and once on the mirror, and each
+run expands the link's single status entry through `Get-ChildItem
+-Recurse`, hashing all 14,884 files of the reference checkout and its
+`.git` internals. Every `-VerifyIdentity` call does the same on both
+sides, and a round runs three of them: the dispatch tool's own at
+prepare time, then the wrapper's before and after the client.
+Cross-vendor round 1 of item 90's plan debate corrected the counts this
+item first carried.
 
 **A candidate fix, not decided.** A subject whose directory holds its own
 `.git` could be bound by that checkout's HEAD plus its own status digest
@@ -159,9 +163,18 @@ Expected: exit 0, no rule failures.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add BACKLOG.md docs/superpowers/plans/rounds/2026-09-05-mirror-link-poll/brief.md docs/superpowers/plans/rounds/2026-09-05-mirror-link-poll/reply.md docs/superpowers/specs/2026-09-05-mirror-link-relink-design.md docs/superpowers/plans/2026-09-05-item90-mirror-link-relink.md
+git add BACKLOG.md docs/superpowers/plans/rounds/2026-09-05-mirror-link-poll/brief.md docs/superpowers/plans/rounds/2026-09-05-mirror-link-poll/reply.md
 git commit -m "file items 90, 91 and 92 and retain the astra mirror-link poll"
 ```
+
+If Step 2 took the README fallback, stage that file instead of the two it replaces:
+
+```bash
+git add BACKLOG.md docs/superpowers/plans/rounds/2026-09-05-mirror-link-poll/README.md
+git commit -m "file items 90, 91 and 92 and record that the astra poll files were not recoverable"
+```
+
+The design and plan documents are already committed on this branch (commit `ea41288`), so they are not staged here.
 
 ---
 
@@ -448,41 +461,204 @@ def test_a_link_target_that_vanishes_before_relink_blocks(tmp_path):
     assert proc.returncode != 0, proc.stdout + proc.stderr
     assert SKIP_BLOCK not in proc.stdout, proc.stdout
     assert not (mirror / "linked").exists() or is_reparse_point(mirror / "linked")
+
+
+def test_a_cycle_behind_a_link_is_still_refused(tmp_path):
+    """Cross-vendor round 1: a walk that stops at the outer link never
+    sees an inner cycle. The walk keeps descending through links for
+    validation while counting nothing beneath them against the budget.
+    `outside/self` points at `outside`, which `linked` already reached,
+    so the overlap refusal fires; the ancestor refusal would also be a
+    correct answer, so either message passes."""
+    repo = make_repo(tmp_path)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "x.txt").write_text("linked\n")
+    make_junction(outside / "self", outside)
+    make_junction(repo / "linked", outside)
+    mirror = tmp_path / "mirror"
+    proc = run_mirror(repo, mirror)
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    low = proc.stdout.lower()
+    assert "links overlap" in low or "never terminate" in low, proc.stdout
+    assert not mirror.exists()
+
+
+def _make_checkout(path):
+    """A directory that is its own git repository, the shape of the
+    user's reference checkout. git lists a junction onto it as ONE
+    status entry and never descends (measured 2026-09-05)."""
+    path.mkdir()
+    git(path.parent, "init", "-q", str(path))
+    (path / "x.txt").write_text("reference\n")
+    git(path, "add", "x.txt")
+    commit(path, "reference base")
+
+
+def test_a_junction_onto_a_nested_checkout_is_one_subject_and_fully_hashed(tmp_path):
+    """The central case. The status names the junction once, with a
+    trailing slash, and the manifest expands through it to every file,
+    the checkout's own .git included."""
+    repo = make_repo(tmp_path)
+    outside = tmp_path / "outside"
+    _make_checkout(outside)
+    make_junction(repo / "linked", outside)
+    mirror = tmp_path / "mirror"
+    proc = run_mirror(repo, mirror)
+    assert_built(proc)
+    baseline = read_block(proc.stdout, "baseline:")
+    assert [b for b in baseline if "linked" in b] == ["?? linked/"], baseline
+    manifest = [l.split(" ")[0] for l in read_block(proc.stdout, "manifest:")]
+    assert "linked/x.txt" in manifest, proc.stdout
+    assert "linked/.git/HEAD" in manifest, proc.stdout
+    assert is_reparse_point(mirror / "linked")
+
+
+def test_verify_detects_drift_behind_a_nested_checkout_junction(tmp_path):
+    repo = make_repo(tmp_path)
+    outside = tmp_path / "outside"
+    _make_checkout(outside)
+    make_junction(repo / "linked", outside)
+    mirror = tmp_path / "mirror"
+    _, ident = build_and_read(repo, mirror)
+    (outside / "x.txt").write_text("reference edited\n")
+    proc = run_verify(repo, mirror, ident)
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "changed since construction" in proc.stdout, proc.stdout
+
+
+def test_verify_detects_a_redirected_nested_checkout_junction(tmp_path):
+    """Mirror-only change: the source still points at the original
+    checkout, so only the mirror-state digest can see this."""
+    repo = make_repo(tmp_path)
+    outside = tmp_path / "outside"
+    _make_checkout(outside)
+    make_junction(repo / "linked", outside)
+    mirror = tmp_path / "mirror"
+    _, ident = build_and_read(repo, mirror)
+    elsewhere = tmp_path / "elsewhere"
+    _make_checkout(elsewhere)
+    (elsewhere / "x.txt").write_text("a different checkout\n")
+    unlink_junction(mirror / "linked")
+    make_junction(mirror / "linked", elsewhere)
+    proc = run_verify(repo, mirror, ident)
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "the mirror's contents changed" in proc.stdout, proc.stdout
+
+
+def test_a_link_nested_under_a_collapsed_subject_is_hashed(tmp_path):
+    """Measured 2026-09-05 on both hosts: Get-ChildItem -Recurse from a
+    parent lists a junction and does not pass through it. git collapses
+    an ignored directory to one subject, so a link inside it was never
+    hashed on the source side. The manifest now starts a listing at
+    every link beneath a subject."""
+    repo = make_repo(tmp_path)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "deep.txt").write_text("behind a nested link\n")
+    make_junction(repo / "ignored" / "linked", outside)
+    mirror = tmp_path / "mirror"
+    proc = run_mirror(repo, mirror)
+    assert_built(proc)
+    manifest = [l.split(" ")[0] for l in read_block(proc.stdout, "manifest:")]
+    assert "ignored/linked/deep.txt" in manifest, proc.stdout
+    _, ident = build_and_read(repo, tmp_path / "mirror2")
+    (outside / "deep.txt").write_text("edited behind a nested link\n")
+    proc = run_verify(repo, tmp_path / "mirror2", ident)
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "changed since construction" in proc.stdout, proc.stdout
+
+
+def test_a_mirror_path_at_a_link_target_is_refused(tmp_path):
+    """Cross-vendor round 1: the overlap guard compared only against the
+    source root, so a mirror path at the reference checkout with the
+    force switch would have deleted the checkout."""
+    repo = make_repo(tmp_path)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "x.txt").write_text("linked\n")
+    make_junction(repo / "linked", outside)
+    proc = run_mirror(repo, outside, "-Force")
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "overlaps the target of the source link" in proc.stdout, proc.stdout
+    assert (outside / "x.txt").read_text() == "linked\n"
+    inside = outside / "sub"
+    proc = run_mirror(repo, inside)
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "overlaps the target of the source link" in proc.stdout, proc.stdout
+    assert not inside.exists()
+
+
+def test_an_override_path_at_a_link_target_is_refused(tmp_path):
+    repo = make_repo(tmp_path)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "x.txt").write_text("linked\n")
+    make_junction(repo / "linked", outside)
+    mirror = tmp_path / "mirror"
+    proc = run_mirror(repo, mirror, "-OverrideOut", str(outside / "override.txt"))
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "overlaps the target of the source link" in proc.stdout, proc.stdout
+    assert not (outside / "override.txt").exists()
+    assert not mirror.exists()
 ```
 
 - [ ] **Step 3: Run the new and changed cases to see them fail**
 
 ```bash
-python -m pytest evals/multi-model-verify/test_review_mirror.py -q -k "junction or behind or redirected or forced_rebuild or vanishes"
+python -m pytest evals/multi-model-verify/test_review_mirror.py -q -k "junction or behind or redirected or forced_rebuild or vanishes or nested or collapsed or link_target"
 ```
 
-Expected: the re-link, redirected, back-channel and forced-rebuild cases FAIL (no `links:` block, the mirror's `linked` is a plain directory). The vanishing-target case may already pass because the walk refuses an unresolvable target; that is fine.
+Expected: the re-link, redirected, back-channel, forced-rebuild, nested-checkout, collapsed-subject and link-target cases FAIL (no `links:` block, the mirror's `linked` is a plain directory, no overlap refusal exists). The vanishing-target case may already pass because the walk refuses an unresolvable target, and the cycle-behind-a-link case already passes because today's walk descends; both stay in the run so Step 8 proves they still pass.
 
-- [ ] **Step 4: Record links in the walk instead of descending**
+- [ ] **Step 4: Record links in the walk, keep descending for validation, stop counting beneath them**
 
-In `tools/new-review-mirror.ps1`, immediately before `$pending = New-Object System.Collections.Stack` (about line 933), add:
+In `tools/new-review-mirror.ps1`, replace the two lines
 
 ```powershell
-# Every directory link the walk meets, in walk order: its relative path
-# under the source root and its resolved absolute target. The copy runs
-# with /XJD and creates nothing beneath a link, so the walk records the
-# link as ONE destination and does not descend. The re-link step below
-# the final sweep consumes this list.
-$sourceLinks = New-Object System.Collections.ArrayList
+$pending = New-Object System.Collections.Stack
+$pending.Push($srcRoot)
 ```
 
-Inside the `foreach ($entry in $entries)` loop, change the reparse branch. Replace the comment block that begins `# Source reparse points are FOLLOWED, because the copy follows` through `# guarded below, and it still refuses.` with:
+with:
+
+```powershell
+# Every directory link the walk meets that is NOT itself behind another
+# link: its relative path under the source root and its resolved
+# absolute target. The copy runs with /XJD and creates nothing beneath a
+# link, so a link is ONE destination and the entries beneath it are not
+# measured against the budget. The walk still DESCENDS through it,
+# because the cycle refusal and the overlap refusal apply to every link
+# the manifest can reach, and a link behind a link is reachable; a walk
+# that stopped at the outer link never saw an inner cycle (cross-vendor
+# round 1, 2026-09-05). A link behind a link is not recorded: it exists
+# in the target and is reached through the outer junction.
+$sourceLinks = New-Object System.Collections.ArrayList
+
+$pending = New-Object System.Collections.Stack
+$pending.Push(@{ Path = $srcRoot; UnderLink = $false })
+```
+
+Replace `$dir = $pending.Pop()` with:
+
+```powershell
+    $item = $pending.Pop()
+    $dir = $item.Path
+    $underLink = $item.UnderLink
+```
+
+Inside the `foreach ($entry in $entries)` loop, replace the comment block that begins `# Source reparse points are FOLLOWED, because the copy follows` through `# guarded below, and it still refuses.` with:
 
 ```powershell
         # A source directory reparse point is NOT copied through: the
         # copy runs with /XJD, which excludes directory junctions and
         # directory symbolic links, so the link is one destination and
         # nothing beneath it is. The re-link step after the final sweep
-        # re-creates it as a junction. Measured 2026-09-05 on both hosts:
-        # the manifest's Get-ChildItem -Recurse still walks THROUGH a
-        # link, so a link onto one of its own ancestors is still an
-        # unbounded walk and is still refused, and so is a tree whose
-        # links reach one target twice.
+        # re-creates it as a junction. The walk still enters it, for the
+        # two refusals below only: measured 2026-09-05, the manifest
+        # expansion starts a listing at every link it finds, so a link
+        # onto one of its own ancestors or a tree whose links reach one
+        # target twice must be refused wherever it sits.
         $isDirLink = $false
 ```
 
@@ -495,14 +671,184 @@ Set the flag at the top of the existing `if (($attr -band $reparseAttr) -ne 0 -a
 After the existing overlap refusal (`if (-not $followedTargets.Add($targetFull)) { ... exit 2 }`), still inside the reparse block, add:
 
 ```powershell
-            [void]$sourceLinks.Add(@{ Rel = $entry.Substring($srcPrefix.Length)
-                                      Target = $targetFull })
+            if (-not $underLink) {
+                [void]$sourceLinks.Add(@{ Rel = $entry.Substring($srcPrefix.Length)
+                                          Target = $targetFull })
+            }
 ```
 
-Change the final push so a link is never descended:
+Replace the deepest-path accounting and the final push, which currently read
 
 ```powershell
-        if (($attr -band $dirAttr) -ne 0 -and -not $isDirLink) { $pending.Push($entry) }
+        $rel = $entry.Substring($srcPrefix.Length)
+        if ($rel.Length -gt $deepestLen) {
+            $deepestLen = $rel.Length
+            $deepestRel = $rel
+        }
+        if (($attr -band $dirAttr) -ne 0) { $pending.Push($entry) }
+```
+
+with:
+
+```powershell
+        # Only a destination counts. The link itself is one; nothing
+        # beneath any link is created by the copy.
+        if (-not $underLink) {
+            $rel = $entry.Substring($srcPrefix.Length)
+            if ($rel.Length -gt $deepestLen) {
+                $deepestLen = $rel.Length
+                $deepestRel = $rel
+            }
+        }
+        if (($attr -band $dirAttr) -ne 0) {
+            $pending.Push(@{ Path = $entry; UnderLink = ($underLink -or $isDirLink) })
+        }
+```
+
+- [ ] **Step 4b: Refuse a mirror or override path that overlaps a link target**
+
+Immediately after the walk's budget refusal (the `if ($deepestLen -ge 0) { ... }` block) and BEFORE `if (Test-Path $MirrorPath) {`, add. `$mp`, `$op` and `$cmp` are the normalised values the overlap guard above already computed:
+
+```powershell
+# LINK TARGETS ARE PROTECTED TREES. The overlap guard above compares the
+# mirror and override paths against the source root only, and a link
+# target lives outside it. Cross-vendor round 1 (2026-09-05) named the
+# case: -MirrorPath at a link's target with -Force would delete the
+# user's reference checkout, and -OverrideOut inside it would write
+# there. This runs before anything is created or deleted, for the same
+# reason the overlap guard does.
+foreach ($lnk in @($sourceLinks)) {
+    $tp = $lnk.Target.Replace("\", "/").TrimEnd("/") + "/"
+    foreach ($pair in @(@("mirror path", $mp), @("override path", ($op + "/")))) {
+        $label = $pair[0]
+        $cand = $pair[1]
+        if ($cand.Equals($tp, $cmp) -or $cand.StartsWith($tp, $cmp) -or
+            $tp.StartsWith($cand, $cmp)) {
+            Write-Output ("ERROR: the " + $label + " overlaps the target of the" +
+                " source link '" + $lnk.Rel + "' (" + $lnk.Target + ") -" +
+                " building there would write into, or delete, a tree the" +
+                " mirror only links to")
+            exit 2
+        }
+    }
+}
+```
+
+- [ ] **Step 4c: Expand nested links in the manifest**
+
+Add this function immediately BEFORE `function Get-ContentManifest($repo, $paths) {`:
+
+```powershell
+function Get-FilesBeneath($start, $visited) {
+    # Every file beneath $start, INCLUDING files behind every directory
+    # link found under it, as full paths. Measured 2026-09-05 on both
+    # hosts: Get-ChildItem -Recurse enters a link only when the link IS
+    # the start path; from a parent it lists the link and does not pass
+    # through it. So each link beneath a subject gets a listing of its
+    # own, started at the link. $visited holds every resolved link
+    # target this expansion has entered; a repeat is a refusal, because
+    # a cycle would otherwise recurse without bound. Returns
+    # @{Paths=..} or @{Error=..}.
+    $out = New-Object System.Collections.ArrayList
+    $startAttr = 0
+    try {
+        $startAttr = [int][System.IO.File]::GetAttributes($start)
+    } catch {
+        return @{ Error = ("'" + $start + "' could not be read: " +
+                           $_.Exception.Message) }
+    }
+    if (($startAttr -band [int][System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+        $target = $null
+        try {
+            $target = (Get-Item -LiteralPath $start -Force -ErrorAction Stop).Target
+            if ($null -ne $target -and $target -isnot [string]) {
+                foreach ($candidate in $target) { $target = $candidate; break }
+            }
+        } catch { $target = $null }
+        if ([string]::IsNullOrEmpty($target)) {
+            return @{ Error = ("'" + $start + "' is a directory link whose" +
+                               " target could not be read") }
+        }
+        $targetFull = ""
+        if ([System.IO.Path]::IsPathRooted($target)) {
+            $targetFull = [System.IO.Path]::GetFullPath($target)
+        } else {
+            $targetFull = [System.IO.Path]::GetFullPath(
+                [System.IO.Path]::Combine(
+                    [System.IO.Path]::GetDirectoryName(
+                        [System.IO.Path]::GetFullPath($start)), $target))
+        }
+        if (-not $visited.Add($targetFull.TrimEnd("\"))) {
+            return @{ Error = ("'" + $start + "' reaches " + $targetFull +
+                " which this expansion already entered; the manifest refuses" +
+                " a link graph that repeats or cycles") }
+        }
+    }
+    $found = $null
+    try {
+        $found = Get-ChildItem -LiteralPath $start -Recurse -File -Force `
+            -ErrorAction Stop
+    } catch {
+        return @{ Error = ("'" + $start + "' could not be enumerated: " +
+                           $_.Exception.Message) }
+    }
+    foreach ($f in $found) { [void]$out.Add($f.FullName) }
+    $links = $null
+    try {
+        $links = @(Get-ChildItem -LiteralPath $start -Recurse -Directory -Force `
+            -ErrorAction Stop | Where-Object {
+                ($_.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0 })
+    } catch {
+        return @{ Error = ("'" + $start + "' could not be enumerated for" +
+                           " links: " + $_.Exception.Message) }
+    }
+    foreach ($l in $links) {
+        $inner = Get-FilesBeneath $l.FullName $visited
+        if ($inner.ContainsKey("Error")) { return $inner }
+        foreach ($p in @($inner.Paths)) { [void]$out.Add($p) }
+    }
+    return @{ Paths = @($out) }
+}
+```
+
+In `Get-ContentManifest`, replace the directory branch's body, which currently reads
+
+```powershell
+            $found = $null
+            try {
+                $found = Get-ChildItem -LiteralPath $full -Recurse -File `
+                    -Force -ErrorAction Stop
+            } catch {
+                return @{ Error = ("'" + $p + "' could not be enumerated: " +
+                                   $_.Exception.Message) }
+            }
+            foreach ($f in $found) {
+                $rel = $f.FullName.Substring($repo.Length + 1)
+                [void]$files.Add($rel.Replace("\", "/"))
+            }
+```
+
+with:
+
+```powershell
+            $visited = New-Object "System.Collections.Generic.HashSet[string]" (
+                [System.StringComparer]::OrdinalIgnoreCase)
+            $beneath = Get-FilesBeneath $full $visited
+            if ($beneath.ContainsKey("Error")) {
+                return @{ Error = ("'" + $p + "': " + $beneath.Error) }
+            }
+            foreach ($fullName in @($beneath.Paths)) {
+                $rel = $fullName.Substring($repo.Length + 1)
+                [void]$files.Add($rel.Replace("\", "/"))
+            }
+```
+
+Update the function's leading comment to add, after `identifies nothing.`:
+
+```powershell
+    # A directory link beneath a subject is expanded by a listing started
+    # at the link (Get-FilesBeneath), because a recursion from the parent
+    # does not pass through it on either host.
 ```
 
 - [ ] **Step 5: Exclude directory links from the copy**
@@ -738,23 +1084,46 @@ git show main:tools/new-review-mirror.ps1 > "C:/Users/Brandon/Documents/KitnDev/
 
 - [ ] **Step 2: Time both builds, same repo, same host**
 
-Run under PowerShell 7 from a directory OUTSIDE every repo. The mirror paths are short on purpose (the path budget is 260 characters). `-SkipProbe` exits 1 with the skip block; that is the successful-build outcome.
+Run under PowerShell 7 from a directory OUTSIDE every repo. The mirror paths are short on purpose (the path budget is 260 characters). `-SkipProbe` exits 1 with the skip block; that is the successful-build outcome, and the script requires that exact line before it records a row. `GIT_OPTIONAL_LOCKS=0` stops `git status` from refreshing the addon's index during the source captures, so the task writes nothing into the user's repo (cross-vendor round 1). Save the script to the scratchpad and run it by file; do not paste it inline.
 
 ```powershell
+$env:GIT_OPTIONAL_LOCKS = "0"
 $repo = "C:\Users\Brandon\Documents\KitnDev\KitnEssentials"
 $old = "C:\Users\Brandon\Documents\KitnDev\_mirror-timing-old.ps1"
 $new = "C:\Users\Brandon\Documents\parallax\tools\new-review-mirror.ps1"
+$skip = "BLOCKED: no client measurement was made (-SkipProbe)"
 foreach ($pair in @(@("old", $old), @("new", $new))) {
     $label = $pair[0]; $tool = $pair[1]
     $mirror = "C:\Users\Brandon\Documents\KitnDev\_mirror-timing-$label"
     $sw = [System.Diagnostics.Stopwatch]::StartNew()
-    $out = & pwsh -NoProfile -NonInteractive -File $tool -RepoRoot $repo -MirrorPath $mirror -SkipProbe 2>&1
+    $out = @(& pwsh -NoProfile -NonInteractive -File $tool -RepoRoot $repo -MirrorPath $mirror -SkipProbe 2>&1 | ForEach-Object { [string]$_ })
     $sw.Stop()
-    $files = (Get-ChildItem -LiteralPath $mirror -Recurse -File -Force -ErrorAction SilentlyContinue | Measure-Object).Count
-    Write-Output ("$label build: " + [int]$sw.Elapsed.TotalSeconds + " s, exit " + $LASTEXITCODE + ", files enumerated through the mirror: " + $files)
-    Write-Output ($out | Select-String "BLOCKED|ERROR|links:" | ForEach-Object { $_.Line })
+    $built = ($out | Where-Object { $_.StartsWith($skip) }).Count -eq 1
+    Write-Output ("$label build: " + [int]$sw.Elapsed.TotalSeconds + " s, exit " + $LASTEXITCODE + ", built=" + $built)
+    Write-Output ($out | Where-Object { $_ -match "^(BLOCKED|ERROR)" })
+    # The links block, in full, with its indented entries.
+    $i = [Array]::IndexOf($out, "links:")
+    if ($i -ge 0) {
+        $j = $i + 1
+        while ($j -lt $out.Count -and $out[$j].StartsWith("  ")) { Write-Output $out[$j]; $j++ }
+        # The oracle for "the junction resolves to the same files": every
+        # relative name and byte hash beneath the mirror's link equals the
+        # target's. A file count from the mirror root is NOT that oracle:
+        # a recursion from a parent does not pass through a junction.
+        for ($k = $i + 1; $k -lt $j; $k++) {
+            $parts = $out[$k].Trim() -split " -> ", 2
+            $linkPath = Join-Path $mirror $parts[0]
+            $target = $parts[1]
+            $a = @(Get-ChildItem -LiteralPath $linkPath -Recurse -File -Force | ForEach-Object { $_.FullName.Substring($linkPath.Length) + " " + (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash }) | Sort-Object
+            $b = @(Get-ChildItem -LiteralPath $target -Recurse -File -Force | ForEach-Object { $_.FullName.Substring($target.TrimEnd("\").Length) + " " + (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash }) | Sort-Object
+            $same = ($a.Count -eq $b.Count) -and (@(Compare-Object $a $b).Count -eq 0)
+            Write-Output ("$label link " + $parts[0] + ": " + $a.Count + " files through the mirror, " + $b.Count + " in the target, identical names and hashes: " + $same)
+        }
+    }
 }
 ```
+
+The old build prints no `links:` block, so its row records only the time and the built flag. If a row's `built` is false, the build did not complete and its time is not a measurement; record the BLOCKED or ERROR line instead and stop.
 
 If either build is refused with `links overlap`, that is the pre-existing two-links-one-target refusal firing on a second `.wow-api-reference` under `.superpowers/worktrees/`. Do NOT delete anything in the user's repo. Record the refusal verbatim in the design doc, then rerun both builds against `KitnUI` instead, which carries one link.
 
@@ -767,15 +1136,14 @@ Append to the design doc:
 
 Date: <date>. Repo: <repo>. Host: PowerShell 7.
 
-| build | wall time | exit | files enumerated through the mirror |
-|-------|-----------|------|-------------------------------------|
-| old (`main`) | <n> s | 1 (skip block) | <n> |
-| new (branch) | <n> s | 1 (skip block) | <n> |
+| build | wall time | built (skip line present) |
+|-------|-----------|---------------------------|
+| old (`main`) | <n> s | true |
+| new (branch) | <n> s | true |
 
-The "files enumerated" column is the same on both rows by design: the
-new mirror holds fewer bytes but the junction resolves to the same
-files. The `links:` line printed by the new build was:
-`<verbatim links line>`.
+Link check on the new build, per link: `<relative path> -> <target>`,
+<n> files through the mirror, <n> in the target, identical names and
+hashes: true.
 ```
 
 Then remove the two timing mirrors and the extracted old tool:
@@ -821,21 +1189,39 @@ git commit -m "record the measured mirror build times before and after re-linkin
 - Consumes: every commit above.
 - Produces: the attested merge.
 
-- [ ] **Step 1: Run every gate, both hosts**
+- [ ] **Step 1: Run every gate, both hosts, as named background tasks**
+
+CLAUDE.md requires full gates to run in the background, named by kind. Dispatch each of the three commands below as a harness background task under the name shown, and read each task's exit code from its notification.
+
+Task name `Gate: tiers 1 to 2c`:
 
 ```bash
 python evals/tools/skill_lint.py skills/multi-model-verify --strict && python evals/tools/skill_scanner.py skills && python evals/tools/check_exact_line_oracles.py && python evals/tools/run_trigger_evals.py && python evals/tools/backlog_lint.py
 ```
 
+Task name `Gate: pytest 5.1`:
+
 ```powershell
 $env:PARALLAX_PS_HOST = "powershell"; python -m pytest evals -q
 ```
+
+Task name `Gate: pytest 7`:
 
 ```powershell
 $env:PARALLAX_PS_HOST = "pwsh"; python -m pytest evals -q
 ```
 
-Expected: every command exits 0.
+Expected: every task exits 0.
+
+- [ ] **Step 1b: Run the behavioural suite for the changed contract prose**
+
+The branch edits a contract region under `skills/`, which CLAUDE.md names as the trigger for the local-only behavioural suite. Dispatch as a background task named `Gate: behavioural --head --changed`:
+
+```bash
+python evals/tools/run_behavioral_evals.py --head --changed
+```
+
+Expected: exit 0, with every skipped case printed by name. If the run selects zero cases because the changed surface intersects none, record that line in the debate record; it is a measurement of the suite's coverage, not a pass.
 
 - [ ] **Step 2: Whole-branch review and the diff debate**
 
@@ -863,3 +1249,5 @@ claude plugin update parallax@parallax
 ```
 
 Verify the install by content: `gitCommitSha` in `~/.claude/plugins/installed_plugins.json` must equal the merge commit, and hash `tools/new-review-mirror.ps1` in the cache against the checkout with CRLF normalized. Then push `main`.
+
+The branch changed a file under `skills/`, so the installed copy is not live until the session restarts. Tell the user that a restart is required and that the next mirror build will use the new tool only after it.
