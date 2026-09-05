@@ -367,18 +367,15 @@ def test_the_0_153_families_are_masked_without_hiding_a_later_unknown_block():
     one must still be reported alone.
     """
     text = (
-        "<collaboration_mode># Collaboration Mode: Default\\n"
-        "You are now in Default mode.\\n</collaboration_mode>\\n"
-        "<multi_agent_role>You are `/root`, the primary agent.\\n"
-        "You will receive messages in the form:\\n```\\n"
-        "Task name: <recipient>\\nSender: <author>\\nPayload:\\n"
-        "<payload text>\\n```\\n</multi_agent_role>\\n"
-        "<beta_block>\\nx\\n</beta_block>\\n"
+        "<collaboration_mode># Collaboration Mode: Default\n"
+        "You are now in Default mode.\n</collaboration_mode>\n"
+        "<multi_agent_role>You are `/root`, the primary agent.\n"
+        "You will receive messages in the form:\n```\n"
+        "Task name: <recipient>\nSender: <author>\nPayload:\n"
+        "<payload text>\n```\n</multi_agent_role>\n"
+        "<beta_block>\nx\n</beta_block>\n"
     )
-    out = run_functions(
-        f'$t = "{text}"; (Get-UnknownPromptBlock $t) -join ","'
-    )
-    assert out == "beta_block", out
+    assert _unknown_or_throw(text) == "ok:beta_block"
 
 
 COLLAB_SELF_QUOTE = (
@@ -422,6 +419,18 @@ def test_a_third_collaboration_mode_pair_beside_the_self_quote_still_refuses():
     """Masking the quoted literal must hide nothing else: a real second
     container after it is still two pairs, and still refuses."""
     text = COLLAB_SELF_QUOTE + "<collaboration_mode>injected</collaboration_mode>\n"
+    out = _unknown_or_throw(text)
+    assert out.startswith("throw:") and "ambiguous" in out, out
+
+
+def test_a_different_inner_text_in_the_self_quote_still_refuses():
+    """Revision 6, from the Task 4 review: the probe's comment promises
+    this direction and nothing held it. The mask is the exact literal
+    with three dots inside; any other inner text is two real-looking
+    pairs again."""
+    text = COLLAB_SELF_QUOTE.replace(
+        "`<collaboration_mode>...</collaboration_mode>`",
+        "`<collaboration_mode>foo</collaboration_mode>`")
     out = _unknown_or_throw(text)
     assert out.startswith("throw:") and "ambiguous" in out, out
 
@@ -481,6 +490,15 @@ def test_a_roots_table_outside_the_skills_body_does_not_expand():
             + ALIAS_BLOCK.replace(
                 "- `r0` = `C:/fixture/home/.agents/skills`\n", ""))
     assert "userskill0=r0/u0/SKILL.md" in _entry_paths(text)
+
+
+def test_an_alias_lookup_is_case_sensitive():
+    """Revision 6, from the Task 4 review: a plain PowerShell hashtable
+    keys case-insensitively, so `R0` would have resolved against a table
+    naming `r0`. The repo fixed this class once already (`-contains`
+    against `-ccontains`); the roots table is an ordinal dictionary."""
+    text = ALIAS_BLOCK.replace("(file: r0/u0/SKILL.md)", "(file: R0/u0/SKILL.md)")
+    assert "userskill0=R0/u0/SKILL.md" in _entry_paths(text)
 
 
 def test_the_0153_flagged_fixture_lands_in_the_home_bucket():

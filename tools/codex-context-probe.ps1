@@ -270,7 +270,7 @@ function Get-SkillReport($text) {
             # Get-SkillScope then files it as unknown, which blocks. The
             # disable override needs the absolute path: measured the same
             # day, skills.config with the expanded path still disables.
-            $roots = @{}
+            $roots = New-Object 'System.Collections.Generic.Dictionary[string,string]' ([System.StringComparer]::Ordinal)
             $rootRx = [regex]'^- `([A-Za-z0-9_]+)` = `(.+)`[ \t]*$'
             foreach ($rootLine in ($body.Substring(0, $start) -split "`n")) {
                 $rm = $rootRx.Match($rootLine.TrimEnd("`r"))
