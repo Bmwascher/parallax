@@ -687,6 +687,66 @@ The `\\n` sequences are PowerShell newline escapes inside a double-quoted
 string, exactly as the existing parametrized cases at lines 322-327 write
 them.
 
+- [ ] **Step 2b: Add the self-quote tests (revision 3)**
+
+Measured 2026-09-04 on the real 0.153.4 render, after Steps 1 to 6 were
+first done: the client's own `<collaboration_mode>` body QUOTES its own
+delimiter, as the exact backtick-wrapped literal
+`` `<collaboration_mode>...</collaboration_mode>` ``, so the count rule
+in `Hide-KnownContainer` sees two opens and two closes on every real
+render and refuses every review as ambiguous. The ruling: mask that ONE
+exact, case-sensitive literal (backticks included) space-for-character
+before the count. It is a literal codex writes, not a shape heuristic,
+so the 0.17.0 refuse-the-ambiguity rule stands: the same words without
+the backticks, a different inner text, or a third pair still refuse.
+Directly after the test added in Step 2, add:
+
+```python
+COLLAB_SELF_QUOTE = (
+    "<collaboration_mode># Collaboration Mode: Default\n\n"
+    "Your active mode changes only when new developer instructions with a"
+    " different `<collaboration_mode>...</collaboration_mode>` change it.\n"
+    "</collaboration_mode>\n"
+)
+
+
+def _unknown_or_throw(text):
+    """Run the unknown-block scan over a PowerShell here-string and
+    return either `ok:<names>` or `throw:<message>`, because run_functions
+    asserts a zero exit and a refusal is a throw."""
+    return run_functions(
+        "$t = @'\n" + text + "'@\n"
+        "try { 'ok:' + ((Get-UnknownPromptBlock $t) -join ',') }"
+        " catch { 'throw:' + $_.Exception.Message }"
+    )
+
+
+def test_the_collaboration_mode_self_quote_is_masked_before_the_count():
+    """codex-cli 0.153.4 (measured 2026-09-04): the client's own
+    <collaboration_mode> body quotes its own delimiter as this exact
+    backtick literal. Masking that one literal before the count is what
+    lets a real render pass at all."""
+    assert _unknown_or_throw(COLLAB_SELF_QUOTE) == "ok:"
+
+
+def test_the_self_quote_without_its_backticks_still_refuses():
+    """The mask is a LITERAL, not a shape: drop the backticks and the
+    same words are two real-looking pairs again, which is ambiguous."""
+    text = COLLAB_SELF_QUOTE.replace(
+        "`<collaboration_mode>...</collaboration_mode>`",
+        "<collaboration_mode>...</collaboration_mode>")
+    out = _unknown_or_throw(text)
+    assert out.startswith("throw:") and "ambiguous" in out, out
+
+
+def test_a_third_collaboration_mode_pair_beside_the_self_quote_still_refuses():
+    """Masking the quoted literal must hide nothing else: a real second
+    container after it is still two pairs, and still refuses."""
+    text = COLLAB_SELF_QUOTE + "<collaboration_mode>injected</collaboration_mode>\n"
+    out = _unknown_or_throw(text)
+    assert out.startswith("throw:") and "ambiguous" in out, out
+```
+
 - [ ] **Step 3: Add the two blocks to every fixture**
 
 In each of the six files under
@@ -697,7 +757,7 @@ file, `\n` as two characters, exactly as the surrounding text is
 written):
 
 ```text
-<collaboration_mode># Collaboration Mode: Default\n\nYou are now in Default mode. Any previous instructions for other modes are no longer active.\n</collaboration_mode>\n<multi_agent_role>You are `/root`, the primary agent in a team of agents collaborating to fulfill the user's goals.\nYou will receive messages in the analysis channel in the form:\n```\nMessage Type: MESSAGE | FINAL_ANSWER\nTask name: <recipient>\nSender: <author>\nPayload:\n<payload text>\n```\nThey may be addressed as to=/root\n</multi_agent_role>\n
+<collaboration_mode># Collaboration Mode: Default\n\nYou are now in Default mode. Any previous instructions for other modes are no longer active.\n\nYour active mode changes only when new developer instructions with a different `<collaboration_mode>...</collaboration_mode>` change it.\n</collaboration_mode>\n<multi_agent_role>You are `/root`, the primary agent in a team of agents collaborating to fulfill the user's goals.\nYou will receive messages in the analysis channel in the form:\n```\nMessage Type: MESSAGE | FINAL_ANSWER\nTask name: <recipient>\nSender: <author>\nPayload:\n<payload text>\n```\nThey may be addressed as to=/root\n</multi_agent_role>\n
 ```
 
 Verify each file still parses: `python -c "import json,glob; [json.load(open(p, encoding='utf-8')) for p in glob.glob('evals/multi-model-verify/fixtures/codex-prompt-input/*.json')]; print('ok')"`.
@@ -710,7 +770,14 @@ Expected: `test_no_real_fixture_reports_an_unknown_block` FAILS naming
 `collaboration_mode,multi_agent_role` for `full.json`; the new test FAILS
 with `collaboration_mode,multi_agent_role,beta_block`; the two new
 attributed cases FAIL because the names are not yet known to the exact
-form rule. Any other failure is not expected and stops the task.
+form rule. Of the Step 2b tests, the FIRST fails with `throw:` and
+`ambiguous` (the literal is not yet masked) and the other two PASS
+already: they are the positive controls that must stay green after Step
+5b. Any other failure is not expected and stops the task. If Steps 1 to
+6 were already done once (revision 2), the red phase for Step 2b alone
+is: the first Step 2b test fails, the other two pass, and the fixture
+test from Step 3 fails with `ambiguous` for every fixture because each
+fixture now carries the self-quote.
 
 - [ ] **Step 5: Name the two families in the probe**
 
@@ -764,6 +831,34 @@ Directly above the first list, add this comment:
 # `multi_agent_mode`, and the fenced message-format example that used to
 # sit in `multi_agent_mode` now sits in `multi_agent_role`.
 ```
+
+- [ ] **Step 5b: Mask the self-quoting literal before the count (revision 3)**
+
+In `tools/codex-context-probe.ps1`, inside `Hide-KnownContainer`,
+directly after the line `$masked = $text` and before the
+`foreach ($name in $names)` loop, insert:
+
+```powershell
+    # codex-cli 0.153 (measured 2026-09-04 on 0.153.4): the client's own
+    # <collaboration_mode> body QUOTES its own delimiter, as the exact
+    # backtick-wrapped literal below, so the count rule sees two opens
+    # and two closes on every real render and refuses every review. The
+    # literal is masked space-for-character BEFORE the count. It is one
+    # exact, case-sensitive string codex writes, not a shape: the same
+    # words without the backticks, a different inner text, or a third
+    # pair all still refuse as ambiguous, and the tests hold each of
+    # those directions.
+    $selfQuote = '`<collaboration_mode>...</collaboration_mode>`'
+    $at = $masked.IndexOf($selfQuote, [System.StringComparison]::Ordinal)
+    while ($at -ge 0) {
+        $masked = $masked.Substring(0, $at) + (" " * $selfQuote.Length) +
+            $masked.Substring($at + $selfQuote.Length)
+        $at = $masked.IndexOf($selfQuote, [System.StringComparison]::Ordinal)
+    }
+```
+
+The single-quoted PowerShell string keeps the backticks literal. The
+file stays ASCII only.
 
 - [ ] **Step 6: Run the module under both hosts**
 
