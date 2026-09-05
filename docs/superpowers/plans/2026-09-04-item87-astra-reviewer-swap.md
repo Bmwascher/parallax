@@ -18,14 +18,14 @@ per-round evidence, the dispatch tool, or any lane's identity evidence.
 **Tech Stack:** Markdown skill and reference bodies, Python 3.12 with
 pytest, the backlog lint.
 
-**Spec:** The design approved in chat on 2026-09-05 and restated in the
+**Spec:** The design approved in chat on 2026-09-04 and restated in the
 backlog item Task 1 files. The probe evidence is in that item. There is no
 separate spec file: the change is bounded, and the item carries the case.
 
 ## Global Constraints
 
 - **`SKILL.md` MUST STAY UNDER ITS HARD CEILING OF 6500 TOKENS.** Measured
-  2026-09-05 before this branch: 414 lines and roughly 6456 tokens, so the
+  2026-09-04 before this branch: 414 lines and roughly 6456 tokens, so the
   headroom is about 44 tokens. Task 3 changes ONE word in `SKILL.md`, from
   `Sol` to `Astra`, and nothing else. Re-run
   `python evals/tools/skill_lint.py skills/multi-model-verify --strict`
@@ -63,7 +63,7 @@ separate spec file: the change is bounded, and the item carries the case.
   table, panel compositions, the task-name convention, the lane transport
   list, the fallback class prose, and the behavioural fixture header.
 - **Claims no wider than evidence.** The OpenAI GPT-6 guidance page was
-  fetched 2026-09-05 and no longer carries the six-element sentence, the
+  fetched 2026-09-04 and no longer carries the six-element sentence, the
   migration-plan review example, or the lean-prompt advice that the 5.6
   bullets cite. The rewrite says so and keeps those practices as THIS
   repo's convention. Whether Astra asks for clarification under
@@ -86,7 +86,7 @@ separate spec file: the change is bounded, and the item carries the case.
 
 ## Measured facts the plan is built on
 
-1. **Astra is reachable on this account.** 2026-09-05, codex-cli 0.153.4,
+1. **Astra is reachable on this account.** 2026-09-04, codex-cli 0.153.4,
    from a scratch git fixture, with the dispatch's isolation flags
    (`--disable plugins --disable apps --disable memories -c mcp_servers.node_repl.enabled=false`),
    `--sandbox read-only`, and `--output-last-message`: the prompt
@@ -101,11 +101,11 @@ separate spec file: the change is bounded, and the item carries the case.
    tier at "2x speed", and a `persistent_instructions` block Sol's entry
    lacks. Whether `codex exec` applies that block is unmeasured.
 3. **The user's `~/.codex/config.toml` read `model = "gpt-6-astra"` and
-   `model_reasoning_effort = "xhigh"` on 2026-09-05.** The notes currently
+   `model_reasoning_effort = "xhigh"` on 2026-09-04.** The notes currently
    say the canonical effort "is set in `~/.codex/config.toml`" too. That
    sentence is false today, and the per-call pin is the rule that makes
    the difference not matter.
-4. **The GPT-6 guidance page, fetched 2026-09-05,** says Astra "is more
+4. **The GPT-6 guidance page, fetched 2026-09-04,** says Astra "is more
    likely to ask for clarification where earlier models would make
    assumptions", that migrations should "preserve your current effective
    reasoning effort", and that `none` is not a supported effort. It does
@@ -157,14 +157,14 @@ with a PLACEHOLDER digest on purpose; step 3 replaces it.
 Status: OPEN
 Cost: the reviewer is the gate every cycle runs through, and the pin is one line, so the swap is cheap and the prose around it is the whole cost
 Pairs: none
-Verified: 2026-09-05 000000000000
+Verified: 2026-09-04 000000000000
 
-**Asked for by the user 2026-09-05**, the day GPT-6 Astra appeared in the
+**Asked for by the user 2026-09-04**, the day GPT-6 Astra appeared in the
 codex model list. The lane's canonical declaration in
 `skills/multi-model-verify/references/model-prompting-notes.md` still
 names `gpt-5.6-sol` at effort `high`.
 
-**Measured 2026-09-05, codex-cli 0.153.4.** A doctor-shaped probe from a
+**Measured 2026-09-04, codex-cli 0.153.4.** A doctor-shaped probe from a
 scratch git fixture, with the dispatch's own isolation flags and
 `--sandbox read-only`, sent `Reply with exactly: TRANSPORT-OK` to
 `gpt-6-astra` at effort `low` and again at `high`. Both returned exit 0
@@ -180,12 +180,12 @@ and every executable parses it, but the section around it describes
 GPT-5.6: its heading, three bullets citing 5.6 prompt guidance, and an
 effort bullet whose reasons were measured on Sol. That is item 74's
 class, for the codex seat. The OpenAI GPT-6 guidance page, fetched
-2026-09-05, no longer carries the six-element sentence, the review-task
+2026-09-04, no longer carries the six-element sentence, the review-task
 example, or the lean-prompt figure the bullets cite; it does say Astra
 "is more likely to ask for clarification where earlier models would make
 assumptions", which matters for a non-interactive `codex exec` round.
 
-**Decided by the user 2026-09-05:** Astra is the default at effort `high`;
+**Decided by the user 2026-09-04:** Astra is the default at effort `high`;
 Sol stays declared as an alternate at `high` that runs only when the user
 names it, on the same transport and evidence rules; and the lane is
 renamed Astra wherever the label is live, while historical citations that
@@ -355,7 +355,7 @@ the drift watch and the doctor's probe run the canonical model only.
   six-element shape below came from OpenAI's GPT-5.6 prompt guidance
   (developers.openai.com/api/docs/guides/prompt-guidance, fetched
   2026-07-16), whose review-task example mapped directly onto our debate
-  briefs. The same page, re-fetched 2026-09-05 for GPT-6, no longer
+  briefs. The same page, re-fetched 2026-09-04 for GPT-6, no longer
   carries that sentence, the review example, or the lean-prompt advice
   below. The shape is therefore OUR convention now, kept on this repo's
   own evidence, which is the behavioural suite grading briefs of this
@@ -375,7 +375,7 @@ the drift watch and the doctor's probe run the canonical model only.
   prompts scored 10-15% better in OpenAI's own coding-agent evals, is not
   on the GPT-6 page and has not been re-measured here.
 - **Non-interactive round, verdict required**: the GPT-6 guidance, fetched
-  2026-09-05, says Astra "is more likely to ask for clarification where
+  2026-09-04, says Astra "is more likely to ask for clarification where
   earlier models would make assumptions". A `codex exec` round has no one
   to answer. Every brief states that the round is non-interactive, that no
   clarification can be answered, and that a claim the reviewer cannot
@@ -410,10 +410,10 @@ the drift watch and the doctor's probe run the canonical model only.
   the effort propagated to every subagent it spawned, which burnt tokens
   without changing verdicts, and the same has NOT been measured on Astra,
   so the ceiling stands until it is. `~/.codex/config.toml` may carry a
-  DIFFERENT default (it read `xhigh` on 2026-09-05), which is exactly why
+  DIFFERENT default (it read `xhigh` on 2026-09-04), which is exactly why
   the value is pinned per call and the debate is config-independent. (The
   doctor's transport probe deliberately uses `low` — it is a reachability
-  check, not a review.) The GPT-6 migration advice, fetched 2026-09-05, is
+  check, not a review.) The GPT-6 migration advice, fetched 2026-09-04, is
   to preserve the current reasoning effort, and `none` is not supported;
   `high` is therefore carried over, and `medium` remains a tuning
   candidate only via a full behavioral-suite pass at both levels. Never
@@ -625,16 +625,16 @@ git commit -m "rename the codex reviewer lane from sol to astra where the label 
 **Rounds used:** 0 of 4
 **Outcome:** not debated
 **Verification status:** DEGRADED
-**Degradation:** plan-not-debated: the change is bounded, not a port or an API-sensitive module, and the design was approved by the user in chat on 2026-09-05; mode diff must cross-verify the plan's claims before verifying the implementation against it, per the degraded-plan poisoning rule
-**Authorized by:** user at design approval, 2026-09-05
+**Degradation:** plan-not-debated: the change is bounded, not a port or an API-sensitive module, and the design was approved by the user in chat on 2026-09-04; mode diff must cross-verify the plan's claims before verifying the implementation against it, per the degraded-plan poisoning rule
+**Authorized by:** user at design approval, 2026-09-04
 **Raw rounds:** not retained
 
 ### Resolved points
 | # | Claim | Raised by | Outcome | Evidence |
 |---|-------|-----------|---------|----------|
-| 1 | Astra is reachable on this account at `low` and `high` | session | measured | probe of 2026-09-05, recorded in item 87 |
+| 1 | Astra is reachable on this account at `low` and `high` | session | measured | probe of 2026-09-04, recorded in item 87 |
 | 2 | Every executable parses the id at runtime | session | verified | `evals/tools/run_behavioral_evals.py:813`, `tools/check-drift.ps1:1010` |
-| 3 | The 5.6 guidance the bullets cite is no longer on the page | session | verified | fetch of 2026-09-05 |
+| 3 | The 5.6 guidance the bullets cite is no longer on the page | session | verified | fetch of 2026-09-04 |
 
 ### Escalated points (user-decided)
 | # | Point | Decision |
