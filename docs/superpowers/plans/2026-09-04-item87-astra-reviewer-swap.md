@@ -643,9 +643,12 @@ becomes
 In `evals/tools/run_behavioral_evals.py`, the fixture's resolved-points
 table (near line 248) has the row
 `| 2 | regen-ENABLED registered first | Sol | accepted | References/DemoWidget/Core.lua:25-26 |`.
-Change `| Sol |` to `| Astra |` in that row. It is generated fixture
-content under the Participants header Step 9 changes, not a retained
-historical debate. Then run
+Change `| Sol |` to `| Astra |` in that row. In the escalated-points
+table three lines below it (near line 251), change the header cell
+`| Sol position |` to `| Astra position |` (revision 7, found by the
+second voided Astra round). Both are generated fixture content under the
+Participants header Step 9 changes, not a retained historical debate.
+Then run
 `grep -n "Sol" evals/tools/run_behavioral_evals.py`: every remaining match
 must be a citation carrying a date or a round reference (such as
 `Sol review 2026-07-16` or `Sol diff review round 2`); list them in the
@@ -1271,7 +1274,10 @@ git commit -m "teach the context probe the collaboration_mode and multi_agent_ro
 **Degradation:** plan-not-debated: no cross-vendor round has completed as evidence yet. The change is bounded and the design was approved by the user in chat on 2026-09-04; until a round completes, mode diff must cross-verify the plan's claims before verifying the implementation against it, per the degraded-plan poisoning rule. Outcome and verification status are separate fields (revision 6): when a round completes, this record is rewritten with the actual participants, rounds and outcome, and the status becomes FULL only when the cross-vendor evidence requirements were met, whatever the outcome; an escalated outcome still needs the user's recorded decision before the plan is frozen.
 **Authorized by:** user at design approval, 2026-09-04
 **Raw rounds:** docs/superpowers/plans/rounds/2026-09-04-item87-astra-plan-round/ (each round's brief and verbatim reply; the transcript is not retained because it carries the reviewer's file reads)
-**Voided rounds:** Astra R1, dispatched 2026-09-04 against subject 041ea2b: the wrapper's post-round identity check found the source status changed while the round ran, so it classified as failed and its reply is NOT evidence. The reply is retained in that directory as `astra-r1-voided-reply.md` and was used as INPUT to revision 6 of this plan (claims 5, 10 and 12 of its brief). It counts as no round.
+**Round dispatch note (revision 7):** this plan's cross-vendor rounds run `gpt-6-astra` at effort `high`, a user-directed override of the INSTALLED plugin's canonical declaration, which at 0.30.1 still names `gpt-5.6-sol` at `high`. The override is the point of the round: it is the first live Astra debate round, run before the swap ships. For these rounds the effective-route check compares the transcript header against that explicit pair (`model: gpt-6-astra`, `provider: openai`, `reasoning effort: high`, `sandbox: read-only`), and every other dispatch and binding check is unchanged: the dispatch tool, the receipt, the prior-state seal, and the brief binding carry no model. Completion evidence for a counted round is written here when it exists: session id, the four header lines, the wrapper's classification, and the binder's verdict.
+**Voided rounds:** two, both my dispatch errors, neither a reviewer fault, and each counted as no round.
+- Astra R1, dispatched 2026-09-04 against subject 041ea2b: the wrapper's post-round identity check found the source status changed while the round ran (an SDD ledger append inside the repo; the source fingerprint hashes ignored-file content), so it classified as failed and its reply is NOT evidence. The reply is retained as `astra-r1-voided-reply.md` and was used as INPUT to revision 6 (claims 5, 10 and 12 of its brief).
+- Astra R1 again, dispatched 2026-09-04 against subject e1cb7eb: both identity checks passed and the reply was written, but the wrapper classified `workdir-mismatch` because the `-WorkdirEvidence` value was passed with forward slashes while codex prints the header with backslashes; the tool compares the literal. Its reply is NOT evidence. It is retained as `astra-r1c-voided-reply.md` and was used as INPUT to revision 7 (the `| Sol position |` fixture header and this dispatch note). Its header read `model: gpt-6-astra`, `provider: openai`, `sandbox: read-only`, `reasoning effort: high`, session `01a06f9d-9190-74a3-ae3a-30f1ba6f1da4`, which is recorded as an observation, not as a counted round's evidence.
 
 ### Resolved points
 | # | Claim | Raised by | Outcome | Evidence |
