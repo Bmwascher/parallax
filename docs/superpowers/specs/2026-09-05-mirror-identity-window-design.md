@@ -70,8 +70,8 @@ the check. It is recorded as an open backlog item, not built.
 **D2. The refusal explains itself, advisorily.** The build writes the
 SOURCE side's content manifest to a SIBLING of the mirror directory,
 `<MirrorPath>.source-manifest`. On the source-status refusal path only,
-`-VerifyIdentity` reads that file and names the paths that appeared,
-vanished, or changed content.
+`-VerifyIdentity` reads that file and names the paths whose content
+changed and the paths that entered or left manifest coverage.
 
 The advisory file is safe by construction and must stay that way:
 
@@ -87,8 +87,8 @@ The advisory file is safe by construction and must stay that way:
   from a file the build wrote applies to values that PIN something; this
   one carries no authority.
 
-**D2a. Its DESTINATION carries the same guards `-OverrideOut` already
-carries.** Cross-vendor review of the first draft found that writing to a
+**D2a. Its DESTINATION joins BOTH of the guard blocks `-OverrideOut`
+already sits in, and nothing is removed until they all pass.** Cross-vendor review of the first draft found that writing to a
 derived path with no guard is itself a write into an unknown file: a hard
 link or symbolic link at that path would carry the write through to its
 target, and a target inside the repository would be corrupted by the very
@@ -98,30 +98,78 @@ manifest` passes today's checks and would then be overwritten, breaking
 the wrapper's override hash.
 
 The default override path is already a sibling of exactly this shape,
-`<MirrorPath>.skills-override.txt` (`tools/new-review-mirror.ps1:956-973`),
-and it is guarded for overlap with the repository and the mirror, for
-pre-existence, and for the path budget. The sidecar takes the identical
-guard set, plus an overlap check against the override path itself, plus a
-refusal of a root-shaped mirror path such as `D:\`, which would otherwise
-derive the drive-relative `D:.source-manifest`. The write itself uses
-create-new semantics so that a file appearing between the guard and the
-write cannot be clobbered either.
+`<MirrorPath>.skills-override.txt`. Its protection sits in TWO places,
+and round 1 of this plan's debate found that a draft claiming to copy
+"the override's whole guard set" had copied only the first:
 
-**D2b. The explanation states only what the comparison measures.** The
-same review found three overstatements in the first draft, and the
-corrected wording is part of this design rather than a detail of it:
+- the LEXICAL block (`tools/new-review-mirror.ps1:951-1008`): overlap
+  with the repository and the mirror, pre-existence, path budget;
+- the ALIAS block (`:1258-1290`): walk the path's ancestors for a
+  reparse point, and check it against every followed link target.
+
+The sidecar joins both, plus an overlap check against the override path
+and against every declared `-ExtraInput`.
+
+**Validation completes before anything is removed.** The same round found
+that a draft deleting a pre-existing sidecar under `-Force` inside the
+lexical block would delete it BEFORE the alias block refuses an aliased
+mirror path, so a build that was going to be rejected had already
+destroyed a file. The removal moves after every check.
+
+**A root is detected through the framework, not through the leaf.**
+Measured 2026-09-05: `Split-Path 'C:\' -Leaf` returns `C:\`, not `C:`, so
+a regex on the leaf never fires for a drive root; and
+`Split-Path '\\server\share\' -Leaf` returns `share` with parent
+`\\server`, which rejoined would name a DIFFERENT SHARE. The two hosts
+disagree on the UNC case. So `GetPathRoot` decides, and the suffix is
+appended to the full path rather than rejoined to a parent.
+
+**Create-new bounds the final component only.** It stops an overwrite and
+a link substituted at that name. It cannot defend a DIRECTORY component:
+an ancestor replaced by a junction before the open redirects creation
+into that junction's target, and no open flag prevents it. The alias
+block is what covers ancestors. The design states that division rather
+than letting create-new appear to cover both.
+
+**D2b. The explanation states only what the comparison measures, and the
+reader enforces every bound it advertises.** Two rounds of review found
+overstatements here, each one an instance of the very class this cycle
+exists to remove. The corrected behaviour is part of this design rather
+than a detail of it:
 
 - Manifest membership is not file existence. A deletion-only entry is
   omitted from the manifest by `Get-ManifestSubject`
   (`tools/new-review-mirror.ps1:460-463`), and a clean tracked file that
-  becomes dirty ENTERS it. So the groups are named `entered coverage` and
-  `left coverage`, never `appeared` and `vanished`.
+  becomes dirty ENTERS it. So the groups are named `entered manifest
+  coverage` and `left manifest coverage`, never `appeared` and
+  `vanished`.
 - No content difference does not prove the status listing changed. A
   replaced sidecar produces the same empty result. The fallback says the
   advisory manifest did not identify the cause, and stops there.
-- A malformed record is reported, never silently dropped, because a
-  dropped record is a difference the explanation would then fail to
-  mention.
+- A malformed record is reported, never silently dropped. That requires
+  CHECKING THE GRAMMAR: a draft that only rejected a missing separator
+  accepted `bad.txt not-a-hash` as an ordinary record, so a truncated
+  digest became a reported difference instead of an admission of
+  incompleteness. The hash field is validated, duplicates and over-long
+  records are counted, and an empty line is recognized as the trailing
+  split artifact rather than counted forever.
+- The size limit bounds THE READ. A draft measured the file with
+  `Get-Item` and then read it with a separate `ReadAllBytes`, which
+  bounds nothing, and `Get-Item`'s failure is non-terminating in a script
+  that never sets `$ErrorActionPreference`, so an unreadable file left
+  the test unmade and carried on. One handle now measures and reads. The
+  record count and record length are bounded too, because a byte limit
+  alone does not bound the working set a split produces.
+- Untrusted text is rendered by UNICODE CATEGORY, not by a numeric
+  range. `[int]$ch -lt 32` passes the C1 controls U+0085 and U+009B,
+  which are terminal escape introducers, and passes U+2028 and the
+  bidirectional override U+202E. Control, Format, LineSeparator,
+  ParagraphSeparator and Surrogate cover them by name, and the sidecar
+  path and any exception message go through the same renderer.
+- The reader does not resolve links, and the design says so rather than
+  implying otherwise. Worst case it prints misleading names from an
+  unrelated file, which is why every emitted comparison is introduced as
+  unauthenticated and advisory, and why the refusal never depends on it.
 
 **D3. The quiet period ships in the skill.** A contract region states it,
 covering build through wrapper exit, so it travels with the plugin.
@@ -160,6 +208,16 @@ finishes before the mirror is built.
 - An ignored-file edit between build and verify produces a refusal that
   NAMES the file, on both PowerShell hosts.
 - Deleting or corrupting the advisory manifest changes no exit code in
-  any case, proven by test.
+  any case, proven by test in both directions.
+- A case-only rename is reported rather than collapsed.
+- A record with a non-hash digest field is counted as unreadable, and a
+  trailing newline is not.
+- A C1 control and a bidirectional override in an advisory name reach the
+  operator rendered, never raw.
+- A file past the reader's limit is refused by the read itself.
+- A destination collision with the override, with a declared extra input,
+  or with a link ancestor is refused BEFORE anything is removed, proven
+  by a test asserting the pre-existing file survives a refused build.
+- A drive root and a UNC root both yield no sidecar, on both hosts.
 - `test_contract_coverage.py` reports the new region locked.
 - All six CI tiers and both PowerShell hosts pass.

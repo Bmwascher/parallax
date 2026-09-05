@@ -75,3 +75,55 @@ Accepted and applied to the plan and the design:
 
 Pre-existing findings outside this plan's range are recorded as backlog
 follow-ups rather than fixed here, per the debate protocol's scope rule.
+
+## Astra R1 - COUNTED, verdict FIX
+
+Dispatched 2026-09-05 against subject `0361a67`, mirror `C:\Temp\pxr2`.
+Wrapper exit 0, classification `reply-present`.
+
+Route confirmed: `model: gpt-6-astra`, `provider: openai`,
+`sandbox: read-only`, `reasoning effort: high`, session id
+`01a073e9-9f4f-78e2-8fa4-2dc33bb36c63`. Round evidence bound with
+`read-codex-round-evidence.ps1 -Fresh`: `status: clean`,
+`sealed: sealed`, prior state `3645f50e...` matching the receipt.
+
+Artifacts: `brief-r1.md`, `astra-r1-reply.md`, `astra-r1-transcript.txt`.
+
+**Reviewer verdict: FIX.** PASS on claims 1, 5, 7, 8, 9, 11 and 12. FIX
+on 2, 3, 4, 6, 10 and 13, plus seven class-sweep items and seven
+other-form items. Nothing was contested; the session accepted every
+finding after verifying the two empirical ones itself.
+
+### Session verification of the two empirical claims
+
+- **Root detection.** Ran the proposed helper's condition on PowerShell 7:
+  `Split-Path 'C:\' -Leaf` returns `C:\`, which does not match
+  `^[A-Za-z]:$`, so the guard never fired; and
+  `Split-Path '\server\share\' -Leaf` returns `share` with parent
+  `\server`. Confirmed. The helper now uses
+  `[System.IO.Path]::GetPathRoot` and appends rather than rejoins.
+- **The alias guards.** Read `tools/new-review-mirror.ps1:1258-1290`.
+  There is a second guard block that walks each path's ancestors for a
+  reparse point and checks every followed link target, covering the
+  mirror path and the override path and NOT the sidecar. The draft's
+  claim to carry "the override's whole guard set" was false, and its
+  `-Force` removal sat above this block, so a build headed for refusal
+  would already have deleted a file. Confirmed. Removal moved after all
+  validation, and the sidecar added to both loops.
+
+### Accepted and applied
+
+Claims 2, 3, 4, 6, 10 and 13 in full. The class sweep's stale interface
+block, the Global Constraints contradiction with the new exit 2 refusals,
+the backlog quota overstatement, the "content of every path" wording, and
+the test selectors. The other-form list's extra-input collision, dangling
+reparse point detection by attributes rather than `Test-Path`, the
+unbounded split, the non-terminating `Get-Item`, the C1 and bidirectional
+rendering gap, and the host-dependent root cases.
+
+Two were accepted as WORDING rather than mechanism, and the plan says so
+where it matters: create-new bounds the final path component only, and
+the advisory reader does not resolve a file link. Both are now stated
+limits instead of implied guarantees.
+
+Budget after this round: 2 of 4 dispatched exchanges used.
