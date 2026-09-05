@@ -3830,11 +3830,11 @@ roughly 6457 tokens against a 6500 ceiling, so the words must come from
 somewhere. Out of item 87's scope by its Global Constraints, which forbade
 changing the route-check contract.
 
-## 89. The Astra brief-guidance set is the guide's word and no round has run under it
+## 89. The Astra brief-guidance set awaits behavioural-suite measurement
 Status: OPEN
 Cost: every default-lane brief now carries the Astra set's sentences, whose effect under `codex exec` is unmeasured by the behavioural suite, so a spent round or a changed verdict from them cannot be told apart from the model's own behaviour until the suite runs under them
 Pairs: none
-Verified: 2026-09-05 4daa28ffd772
+Verified: 2026-09-05 761ae7573f04
 
 **Filed 2026-09-05 from the user's request to fold OpenAI's GPT-6 Astra
 model guidance into the reviewer notes.** The page
