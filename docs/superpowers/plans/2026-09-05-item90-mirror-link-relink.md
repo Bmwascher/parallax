@@ -1490,3 +1490,45 @@ claude plugin update parallax@parallax
 Verify the install by content: `gitCommitSha` in `~/.claude/plugins/installed_plugins.json` must equal the merge commit, and hash `tools/new-review-mirror.ps1` in the cache against the checkout with CRLF normalized. Then push `main`.
 
 The branch changed a file under `skills/`, so the installed copy is not live until the session restarts. Tell the user that a restart is required and that the next mirror build will use the new tool only after it.
+
+---
+
+## Debate record
+
+**Participants:** Claude Fable 5.1 (session) / GPT-6 Astra (codex exec, session 01a070df-c528-7203-bac7-1b302f5cdef0)
+**Rounds used:** 5 of 4 contested cap (no round was contested; every finding was accepted or refuted with evidence), 5 of 6 fix-verify budget
+**Outcome:** converged with amendments, all applied; round 5 was the adjudicated dry round
+**Verification status:** FULL
+**Degradation:** none
+**Authorized by:** n/a
+**Raw rounds:** `docs/superpowers/plans/rounds/2026-09-05-item90-plan-debate/` (five briefs, five replies, five receipts, five binder results); the earlier second-opinion poll is at `docs/superpowers/plans/rounds/2026-09-05-mirror-link-poll/`
+
+Every round's transcript header read `model: gpt-6-astra`, `provider: openai`, `reasoning effort: high`, `sandbox: read-only`, and rounds 2 to 5 echoed the round 1 session id. Every round's brief binding returned clean with the receipt's prior-state hash sealed. The mirror was rebuilt with the force switch at the same path before rounds 2, 3, 4 and 5 (heads a388905, fe47a1e, 4be31f6, 9285e95); the round 1 mirror was built from ea41288. The tool-surface probe before round 1 reported clean with an empty allowlist and `node_repl` silent. The client context probe reported the user's global `~/.codex/AGENTS.md` present, which is the user's own by design, and no repo-scoped instruction source.
+
+### Resolved points
+| # | Claim | Raised by | Outcome | Evidence |
+|---|-------|-----------|---------|----------|
+| 1 | The digest binds the link's resolved target path | session (spec draft) | refuted by reviewer, accepted; spec now says content only | `tools/new-review-mirror.ps1:490-545`; reply r1 claim 2 |
+| 2 | `Test-Path -PathType Container` is true for a junction on both hosts | reviewer (UNVERIFIED) | measured, spec measurement 7 | `scratchpad/linkprobe2/measure2.ps1` run 2026-09-05 |
+| 3 | A mirror path at a link target with the force switch deletes the target; an override path inside it writes there | reviewer | accepted, Task 3 Step 4b | `tools/new-review-mirror.ps1:814-843,1071`; reply r1 claim 4 |
+| 4 | git's index refresh is a write through a link | reviewer | refuted: it writes the repository's own `.git/index`; the walk now refuses a `.git` that is a link so the refutation rests on an enforced check | reply r1 claim 4, reply r2 B; Task 3 Step 4 |
+| 5 | A walk that stops at the outer link misses an inner cycle | reviewer | accepted: the walk keeps descending, counts nothing beneath a link | reply r1 claim 5; Task 3 Step 4 |
+| 6 | Recursion from a parent does not pass through a junction; a link under a collapsed subject is never hashed | session (measured) | accepted into Task 3 Step 4c (`Get-FilesBeneath`) | spec measurement 7; reply r2 F |
+| 7 | The visited set alone is not a cycle guard for a relative link through an outer junction | reviewer | accepted: depth bound of 16, visited set seeded with the repo root | reply r2 F; Task 3 Step 4c |
+| 8 | An ignored plain directory is not one status subject under `-uall` | reviewer (measured `.pytest_cache`) | accepted: the coverage fixture is a nested checkout asserting `?? linked/` | reply r2 F |
+| 9 | Inner link targets were unguarded; a path spelled through another link aliases a target | reviewer | accepted: guard over every followed target; refuse any mirror or override path with a reparse point among its ancestors | reply r2 B; Task 3 Step 4b |
+| 10 | A link whose target is itself a link is recorded as spelled and its real directory is unprotected | reviewer | accepted: refuse a followed target with a reparse point at itself or an ancestor | reply r3 A; Task 3 Step 4b |
+| 11 | The timing comparison reports true on two empty lists and ignores nested links on the target side | reviewer | accepted: terminating errors, empty-list refusal, both sides checked | reply r2 E, r3 B; Task 5 Step 2 |
+| 12 | Item 91's "four times per build, twice per verify" contradicts the code | reviewer | accepted: three per build, six per round | reply r1 claim 11 |
+| 13 | The plan omits the behavioural suite, background gate naming, and the session restart | reviewer | accepted, Task 4 Step 3 and Task 6 | reply r1 claim 12, r2 additional |
+| 14 | The depth bound needs its own oracle; the manifest cycle test needs the single-subject precondition | reviewer | accepted: two tests added or amended | reply r3 C |
+| 15 | A dangling junction ancestor might be skipped by `Test-Path` | reviewer (UNVERIFIED) | measured: reparse bit present on both hosts; helper reads attributes directly | spec measurement 8 |
+| 16 | Test counts and branch-creation, log order, README staging inconsistencies | reviewer | accepted across rounds 1 to 4 | replies r1 additional, r2 additional, r3 D, r4 D |
+
+### Escalated points (user-decided)
+| # | Question | Session position | Reviewer position | Owner's call |
+|---|----------|------------------|-------------------|--------------|
+| none | | | | |
+
+### Final adjudication
+The session verified round 5's single finding against the file: nineteen `def test_` lines in the plan, one replacement plus eighteen appended. Terminal verdict: PASS for commit 9285e95. The plan is frozen at the commit that carries this record.
