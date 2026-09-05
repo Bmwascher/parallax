@@ -896,7 +896,10 @@ print(dst, dst.stat().st_size)
 Verify: `grep -c "r0/u" evals/multi-model-verify/fixtures/codex-prompt-input/flagged-0153.json`
 prints `1` (one line, JSON) and
 `python -c "import json;print(json.load(open('evals/multi-model-verify/fixtures/codex-prompt-input/flagged-0153.json',encoding='utf-8'))[0]['content'][0]['text'].count('(file: r0/'))"`
-prints `29`.
+prints `24` (revision 5: `flagged.json` holds 24 entries under
+`.agents/skills` and 5 under `.codex/skills/.system`, and only the first
+prefix is aliased, which is a real mix of alias and absolute entries and
+is kept on purpose).
 
 - [ ] **Step 4: Run the tests to verify they fail**
 
@@ -915,7 +918,9 @@ is: the first Step 2b test fails, the other two pass, and the fixture
 test from Step 3 fails with `ambiguous` for every fixture because each
 fixture now carries the self-quote. Of the Step 2c tests, before Step
 5c: the alias-expansion test FAILS (paths unexpanded), the flagged-0153
-bucket test FAILS with `(29, 0, 0, 0, 29)` (every entry unknown), and
+bucket test FAILS with `(29, 0, 0, 5, 24)` (the 24 aliased entries
+unknown, the 5 absolute ones still home; revision 5 corrected this
+count), and
 the end-to-end test FAILS blocked on an unplaceable entry; the orphan
 test and the outside-table test PASS already and are the positive
 controls that must stay green after Step 5c. If Steps 1 to 6 plus 2b and
@@ -1067,14 +1072,22 @@ Expected: all pass under each host. Record both counts.
 
 - [ ] **Step 7: Run the live probe against this checkout**
 
-Run, in PowerShell, from the repo root:
+Run, in PowerShell, from the repo root. The work directory is NOT the
+checkout (revision 5): this repo carries its own `AGENTS.md`, which the
+probe correctly reports as ingested, and reviews run against a mirror
+for exactly that reason. The scratch git fixture below has no AGENTS.md
+and is the directory the 2026-09-04 measurements were taken from; the
+probe refuses a work directory that does not exist, so create it first
+if it is gone (`git init` in an empty directory with one committed file).
 
 ```powershell
+$w = "C:/Users/Brandon/AppData/Local/Temp/claude/C--Users-Brandon-Documents-parallax/9abd01ff-5e64-4acf-bf86-40f4a9209c22/scratchpad/astra-probe/fixture"
 $o = "$env:TEMP\parallax-probe-$(Get-Random).toml"
-& (Get-Process -Id $PID).Path -NoProfile -File tools/codex-context-probe.ps1 -WorkDir (Get-Location).Path -SuppressSkills -OverrideOut $o -Json
+& (Get-Process -Id $PID).Path -NoProfile -File tools/codex-context-probe.ps1 -WorkDir $w -SuppressSkills -OverrideOut $o -Json
 ```
 
-Expected: JSON with `"status":"clean"` and exit 0. This is the
+Expected: JSON with `"status":"clean"` and exit 0, with `skills_before`
+above zero and `skills_after` equal to 0. This is the
 measurement the whole task exists for; a blocked result stops the task
 and is reported with its reason.
 
