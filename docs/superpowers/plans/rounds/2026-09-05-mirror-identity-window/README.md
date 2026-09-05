@@ -99,8 +99,8 @@ finding after verifying the two empirical ones itself.
 - **Root detection.** Ran the proposed helper's condition on PowerShell 7:
   `Split-Path 'C:\' -Leaf` returns `C:\`, which does not match
   `^[A-Za-z]:$`, so the guard never fired; and
-  `Split-Path '\server\share\' -Leaf` returns `share` with parent
-  `\server`. Confirmed. The helper now uses
+  `Split-Path '\\server\share\' -Leaf` returns `share` with parent
+  `\\server`. Confirmed. The helper now uses
   `[System.IO.Path]::GetPathRoot` and appends rather than rejoins.
 - **The alias guards.** Read `tools/new-review-mirror.ps1:1258-1290`.
   There is a second guard block that walks each path's ancestors for a
