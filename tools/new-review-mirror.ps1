@@ -8,6 +8,14 @@
 # cloned workspace handed the reviewer a tree with nothing to review while
 # every route and containment check stayed green.
 #
+# Directory links are NOT copied through. robocopy runs with /XJD and the
+# tool re-creates each link as a junction after the last sweep, so the
+# reviewer reads the target through the same relative path while the
+# mirror carries none of its bytes. Measured 2026-09-05: one addon's
+# reference link held 14,884 files, doubling every mirror. The identity
+# digests still cover that content, because the manifest expands a
+# directory subject through a link on both hosts.
+#
 # This script never writes to the real tree, never dispatches a review, and
 # never decides to proceed. It stops immediately before the brief is
 # written, because the brief is the first artifact that is not evidence.
