@@ -1165,9 +1165,14 @@ def test_reviewer_lane_is_astra_with_sol_as_the_explicit_alternate():
     alt_effort = re.search(r"Alternate codex reviewer effort: `([^`\n]+)`", raw)
     assert alt_effort and alt_effort.group(1) == "high"
     # The parsers resolve the FIRST canonical declaration; the alternate
-    # and the backup both sit behind it, alternate first.
+    # and the backup both sit behind it, alternate first. Each effort line
+    # sits directly under its own id line: the diff debate's Astra R1
+    # (2026-09-05) found the chain below ordered only the three id lines,
+    # so the two effort lines could swap places unnoticed.
     assert (raw.index("Canonical model id:")
+            < raw.index("Canonical reasoning effort:")
             < raw.index("Alternate codex reviewer model id:")
+            < raw.index("Alternate codex reviewer effort:")
             < raw.index("Canonical backup reviewer model id:"))
     # The alternate is opt-in by name, never a fallback class.
     assert ("It is never selected automatically: it runs only when the"

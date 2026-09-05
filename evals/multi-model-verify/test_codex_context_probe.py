@@ -492,6 +492,22 @@ def test_a_roots_table_outside_the_skills_body_does_not_expand():
     assert "userskill0=r0/u0/SKILL.md" in _entry_paths(text)
 
 
+def test_a_roots_table_after_the_entries_heading_does_not_expand():
+    """The table is read from the container body BEFORE the entries
+    heading only (the prefix slice in Get-SkillReport). Astra R1 of the
+    item 87 diff debate (2026-09-05) widened that slice to the whole body
+    in memory and every test stayed green: a table written inside the
+    container but below `### Available skills` must leave the alias as
+    written, so that mutation now fails here."""
+    text = ALIAS_BLOCK.replace(
+        "- `r0` = `C:/fixture/home/.agents/skills`\n", "").replace(
+        "</skills_instructions>\n",
+        "### Skill roots\n- `r0` = `C:/fixture/home/.agents/skills`\n"
+        "</skills_instructions>\n")
+    assert "- `r0` = " in text
+    assert "userskill0=r0/u0/SKILL.md" in _entry_paths(text)
+
+
 def test_an_alias_lookup_is_case_sensitive():
     """Revision 6, from the Task 4 review: a plain PowerShell hashtable
     keys case-insensitively, so `R0` would have resolved against a table

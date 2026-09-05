@@ -3739,7 +3739,7 @@ state-machine suite gets a scenario that kills the wrapper mid-run.
 Status: OPEN
 Cost: the reviewer is the gate every cycle runs through, and the pin is one line, so the swap is cheap and the prose around it is the whole cost
 Pairs: none
-Verified: 2026-09-04 48c9a1304996
+Verified: 2026-09-05 48c9a1304996
 
 **Asked for by the user 2026-09-04**, the day GPT-6 Astra appeared in the
 codex model list. The lane's canonical declaration in
