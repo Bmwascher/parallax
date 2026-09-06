@@ -3987,3 +3987,59 @@ Closing this item means the module's time under PowerShell 7 measured at
 main before item 90 and after, the cause named from that comparison, and
 either a fix that keeps every one of the nineteen link cases green on
 both hosts or a recorded statement that the cost is accepted.
+## 96. The skill did not say which host can run the controller
+Status: DONE
+Closed: 0.33.0
+Verified: 2026-09-05 6fe6d1763d94
+
+**Numbers 94 and 95 are RESERVED**, not missing: the committed plan at
+`docs/superpowers/plans/2026-09-05-mirror-identity-window.md` files them
+when it executes, and this item was folded in ahead of that execution.
+
+**Filed and closed 2026-09-05**, folding in work another session left
+uncommitted in the working tree. That session finished without
+committing; this session read the diff, verified it against the gates,
+and took ownership rather than discard it. The debate record for the
+cycle it landed in is
+`docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/`.
+
+**The change.** `SKILL.md` gains a `Controller host gate` section: the
+controller requires Claude Code, because plugin-root substitution,
+background notifications, hooks and reviewer agents are host contracts;
+and Codex-to-Codex is same-vendor and cannot satisfy the cross-vendor
+gate, so no Codex controller adapter is shipped. In Codex the procedure
+is to prepare the brief or inspect the protocol, report the gate
+unavailable in that host, name the Claude controller handoff, and never
+invent tools, emit a FULL attestation, or silently downgrade. The
+overview is compressed to pay for it, and `CLAUDE.md` drops a claim that
+this repo sits under KitnDev and inherits conventions from
+`../AGENTS.md`, a path that does not exist.
+
+**What was verified before folding it in.** `skill_lint.py --strict`,
+`skill_scanner.py` and `run_trigger_evals.py` all pass, and
+`test_multi_model_verify.py` with `test_contract_coverage.py` pass at
+236 tests: no pin lost a phrase and no contract region lost its lock.
+The removed sentences - the METR fabrication-risk note, the
+`/codex:adversarial-review` overlap note, and the review-companion hook
+clause in the description - are cited by no test and by no other
+document. `debate-protocol.md` carries the METR rationale itself and
+points at `model-prompting-notes.md`, not at `SKILL.md`.
+
+**The measurement this left behind, and it is the load-bearing one.**
+`SKILL.md` now sits at roughly 6485 tokens against `skill_lint.py`'s
+HARD CEILING of 6500, about 15 tokens of headroom. That is not a
+property of this change so much as a property of the file, and it
+governs every future edit to it: the mirror-quiet-period contract region
+planned in the same cycle is about 301 tokens and had to go into
+`references/preflight-mirror.md` instead. A prior cycle stashed a Task 3
+at 6609 tokens for the same reason. The next edit that needs room in
+`SKILL.md` has to remove something, and what to remove is a decision for
+the user rather than for whoever happens to need the space.
+
+**Not verified.** The gate's own claim, that a Codex controller cannot
+satisfy the cross-vendor requirement, is an argument from the lane's
+identity rather than a measurement, and no probe was run against a Codex
+controller. Nothing in this cycle tested the new section's behaviour on
+a real Codex host.
+
+Record: docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window

@@ -1051,37 +1051,42 @@ git commit -m "name the paths that moved when the source status refusal fires"
 ### Task 3: The skill states the quiet period
 
 **Files:**
-- Modify: `skills/multi-model-verify/SKILL.md` (a new contract region in the mirror build step of preflight item 3, immediately after the `back-channel-auto-mirror` region's `contract:end`)
+- Modify: `skills/multi-model-verify/references/preflight-mirror.md` (a new contract region at the end of the file)
+- Modify: `skills/multi-model-verify/SKILL.md` (ONE reworded sentence, no net growth beyond a few tokens)
 - Modify: `evals/multi-model-verify/test_multi_model_verify.py` (a new pin in `TestSkillStructure`, beside `test_client_context_probe_failure_rule_is_pinned`)
 - Modify: `evals/multi-model-verify/test_contract_coverage.py` (`DECLARED_REGIONS`)
 
 **Interfaces:**
 - Consumes: nothing from earlier tasks.
-- Produces: contract region id `mirror-quiet-period` in `SKILL.md`.
+- Produces: contract region id `mirror-quiet-period` in `references/preflight-mirror.md`.
 
-- [ ] **Step 1: Write the region into SKILL.md**
+**WHY THE REGION IS NOT IN SKILL.md.** Measured 2026-09-05 against the tree at that date: `skill_lint.py` reported `SKILL.md` at roughly 6485 tokens against a HARD CEILING of 6500, so the headroom was about 15 tokens. The region is about 301. Putting it in `SKILL.md` breaches the ceiling by an order of magnitude more than the space available, and a prior cycle already stashed a Task 3 at 6609 tokens for exactly this reason.
 
-Insert this block into `skills/multi-model-verify/SKILL.md` immediately after the `<!-- contract:end -->` that closes the `back-channel-auto-mirror` region, at the same three-space indent as the text around it:
+`test_contract_coverage.py` scans all Markdown under `skills/`, so a region in a reference file is locked by the same machinery and counts the same way. `references/preflight-mirror.md` is where the mirror build already lives, is the file Task 4 also edits, and carries no token pressure. Re-measure the ceiling before implementing: if `SKILL.md` has been trimmed since, moving the region back is a judgement call for the implementer to raise, not to take.
+
+- [ ] **Step 1: Write the region into the reference**
+
+Append this block to `skills/multi-model-verify/references/preflight-mirror.md`, at column zero, under a new `## The quiet period` heading placed before Task 4's `## Timing` section:
 
 ```markdown
-   <!-- contract:start id=mirror-quiet-period -->
-   NOTHING MAY WRITE INSIDE THE REVIEWED REPOSITORY from the moment the
-   mirror is built until the wrapper exits. The identity digest covers the
-   fields of `git status --porcelain --ignored` PLUS the content of the
-   paths that listing names, ignored ones included, with a directory
-   expanded to its files and a deletion-only entry contributing no bytes.
-   So a test-cache write, a plan-ledger append, a drift report or one new
-   untracked file is enough. The same recorded digest is compared against
-   the live source three times: at preparation, before the client runs,
-   and after it finishes. The last of those spans the whole round, so this
-   is a quiet period and not an ordering rule. Only that last one costs a
-   reviewer round; the two before it refuse before the client is invoked
-   and spend no quota. State the limits with the rule: the comparison
-   samples endpoints, so a change made and reverted inside the round is
-   not detected, and a tracked file git reports CLEAN is covered by
-   neither fingerprint. Queue every edit until the wrapper exits, however
-   small and however unrelated it looks.
-   <!-- contract:end -->
+<!-- contract:start id=mirror-quiet-period -->
+NOTHING MAY WRITE INSIDE THE REVIEWED REPOSITORY from the moment the
+mirror is built until the wrapper exits. The identity digest covers the
+fields of `git status --porcelain --ignored` PLUS the content of the
+paths that listing names, ignored ones included, with a directory
+expanded to its files and a deletion-only entry contributing no bytes.
+So a test-cache write, a plan-ledger append, a drift report or one new
+untracked file is enough. The same recorded digest is compared against
+the live source three times: at preparation, before the client runs,
+and after it finishes. The last of those spans the whole round, so this
+is a quiet period and not an ordering rule. Only that last one costs a
+reviewer round; the two before it refuse before the client is invoked
+and spend no quota. State the limits with the rule: the comparison
+samples endpoints, so a change made and reverted inside the round is
+not detected, and a tracked file git reports CLEAN is covered by
+neither fingerprint. Queue every edit until the wrapper exits, however
+small and however unrelated it looks.
+<!-- contract:end -->
 ```
 
 - [ ] **Step 2: Write the failing pin**
@@ -1095,28 +1100,46 @@ Add to `evals/multi-model-verify/test_multi_model_verify.py`, in `TestSkillStruc
         # exit, so the plugin did not carry it to the repos it is
         # installed into and a session there hit the refusal repeatedly
         # with nothing to read.
-        text = read(SKILL_MD)
+        text = read(REFERENCES / "preflight-mirror.md")
         assert (
-            "   NOTHING MAY WRITE INSIDE THE REVIEWED REPOSITORY from the moment the\n"
-            "   mirror is built until the wrapper exits. The identity digest covers the\n"
-            "   fields of `git status --porcelain --ignored` PLUS the content of the\n"
-            "   paths that listing names, ignored ones included, with a directory\n"
-            "   expanded to its files and a deletion-only entry contributing no bytes.\n"
-            "   So a test-cache write, a plan-ledger append, a drift report or one new\n"
-            "   untracked file is enough. The same recorded digest is compared against\n"
-            "   the live source three times: at preparation, before the client runs,\n"
-            "   and after it finishes. The last of those spans the whole round, so this\n"
-            "   is a quiet period and not an ordering rule. Only that last one costs a\n"
-            "   reviewer round; the two before it refuse before the client is invoked\n"
-            "   and spend no quota. State the limits with the rule: the comparison\n"
-            "   samples endpoints, so a change made and reverted inside the round is\n"
-            "   not detected, and a tracked file git reports CLEAN is covered by\n"
-            "   neither fingerprint. Queue every edit until the wrapper exits, however\n"
-            "   small and however unrelated it looks."
+            "NOTHING MAY WRITE INSIDE THE REVIEWED REPOSITORY from the moment the\n"
+            "mirror is built until the wrapper exits. The identity digest covers the\n"
+            "fields of `git status --porcelain --ignored` PLUS the content of the\n"
+            "paths that listing names, ignored ones included, with a directory\n"
+            "expanded to its files and a deletion-only entry contributing no bytes.\n"
+            "So a test-cache write, a plan-ledger append, a drift report or one new\n"
+            "untracked file is enough. The same recorded digest is compared against\n"
+            "the live source three times: at preparation, before the client runs,\n"
+            "and after it finishes. The last of those spans the whole round, so this\n"
+            "is a quiet period and not an ordering rule. Only that last one costs a\n"
+            "reviewer round; the two before it refuse before the client is invoked\n"
+            "and spend no quota. State the limits with the rule: the comparison\n"
+            "samples endpoints, so a change made and reverted inside the round is\n"
+            "not detected, and a tracked file git reports CLEAN is covered by\n"
+            "neither fingerprint. Queue every edit until the wrapper exits, however\n"
+            "small and however unrelated it looks."
         ) in text
 ```
 
-If Step 1's block was reflowed on the way in, this pin fails on the wrap and not on the words. Copy the lines out of `SKILL.md` rather than out of this plan if they differ.
+If Step 1's block was reflowed on the way in, this pin fails on the wrap and not on the words. Copy the lines out of `preflight-mirror.md` rather than out of this plan if they differ.
+
+- [ ] **Step 2a: Point at it from SKILL.md, without growing the file**
+
+`SKILL.md` already ends its mirror-build paragraph with a pointer. REWORD that one sentence rather than adding a new one, and re-run `skill_lint.py` afterwards to confirm the body is still under 6500 tokens:
+
+```markdown
+   Full construction detail, the mirror's identity fields, and the QUIET
+   PERIOD its construction starts are in references/preflight-mirror.md.
+```
+
+replacing:
+
+```markdown
+   Full construction detail and the mirror's identity fields are in
+   references/preflight-mirror.md.
+```
+
+If that push breaches the ceiling, do NOT trim unrelated prose to make room. Stop and report it: the ceiling is a real constraint and what to remove is a decision for the user.
 
 - [ ] **Step 3: Declare the region**
 
@@ -1125,13 +1148,17 @@ In `evals/multi-model-verify/test_contract_coverage.py`, add to `DECLARED_REGION
 ```python
     # 0.33.0: the quiet period the mirror identity digest enforces. It
     # lived only in this repo's CLAUDE.md, so the plugin did not carry it
-    # anywhere it was installed.
+    # anywhere it was installed. It sits in references/preflight-mirror.md
+    # rather than SKILL.md, which had about 15 tokens of headroom under
+    # its hard ceiling when this was written.
     "mirror-quiet-period",
 ```
 
 - [ ] **Step 4: Run the pin and the coverage checker**
 
 Run: `python -m pytest evals/multi-model-verify/test_multi_model_verify.py::TestSkillStructure::test_mirror_quiet_period_is_pinned evals/multi-model-verify/test_contract_coverage.py -v`
+
+Then confirm the ceiling: `python evals/tools/skill_lint.py skills/multi-model-verify --strict`. A token count at or above 6500 is an ERROR, not the warning the file already carries.
 
 Expected: both PASS. A `region(s) found but not declared` failure means Step 3 was skipped. A `not locked by any pin` failure means the pin text and the Markdown text differ.
 
@@ -1144,7 +1171,7 @@ Expected: both clean.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add skills/multi-model-verify/SKILL.md evals/multi-model-verify/test_multi_model_verify.py evals/multi-model-verify/test_contract_coverage.py
+git add skills/multi-model-verify/references/preflight-mirror.md skills/multi-model-verify/SKILL.md evals/multi-model-verify/test_multi_model_verify.py evals/multi-model-verify/test_contract_coverage.py
 git commit -m "state the mirror quiet period in the skill and lock it"
 ```
 

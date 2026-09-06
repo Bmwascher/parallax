@@ -2,10 +2,8 @@
 
 This repo is developer tooling: a Claude Code plugin providing cross-model
 verification (session ⇄ cross-vendor reviewer debates; the reviewer lane is
-declared in the skill's model-prompting-notes.md) plus its eval harness. It lives
-under KitnDev for convenience, but the WoW addon family conventions in
-`../AGENTS.md` (dev loop, /reload, luacheck/busted, 12.0 API rules,
-References/) do NOT apply here — only the git basics do (feature branches
+declared in the skill's model-prompting-notes.md) plus its eval harness. The WoW addon family conventions (dev loop, /reload, luacheck/busted,
+12.0 API rules, References/) do NOT apply here — only the git basics do (feature branches
 for real work, lowercase imperative commits, no AI attribution).
 
 ## Verification
