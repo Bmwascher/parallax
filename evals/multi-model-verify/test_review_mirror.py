@@ -1881,6 +1881,66 @@ def test_a_mirror_path_with_a_trailing_dot_is_refused(tmp_path):
     assert (repo / "kept.txt").exists(), "the source must survive a refusal"
 
 
+def test_a_short_name_component_is_refused(tmp_path):
+    """8.3 SHORT NAMES alias a long directory under a different spelling,
+    and every comparison in this tool is a string comparison. The round-2
+    reviewer reached the recursive delete on BOTH hosts with a source of
+    `<repo>\\skills\\multi-model-verify` and a mirror of
+    `<repo>\\skills\\MULTI-~1`, and confirmed with `Remove-Item -WhatIf`
+    that the short form names the long directory.
+
+    This tool cannot resolve an alias to filesystem identity without
+    opening a handle, so it REFUSES the spelling it cannot decide - the
+    same stance it already takes for directory links and for trailing
+    dots.
+    """
+    repo = make_repo(tmp_path)
+    proc = run_mirror(repo, tmp_path / "MIRROR~1")
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "cannot resolve" in proc.stdout, proc.stdout
+    assert (repo / "kept.txt").exists(), "the source must survive a refusal"
+
+
+def test_a_stream_form_path_is_refused(tmp_path):
+    """`<repo>::$INDEX_ALLOCATION` names the directory itself through NTFS
+    stream syntax and compares unequal to it. Reached the recursive delete
+    on PowerShell 7 in the round-2 probe."""
+    repo = make_repo(tmp_path)
+    proc = run_mirror(pathlib.Path(str(repo) + "::$INDEX_ALLOCATION"),
+                      tmp_path / "mirror")
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "cannot resolve" in proc.stdout, proc.stdout
+
+
+def test_a_device_prefixed_path_is_refused(tmp_path):
+    """`\\\\?\\C:\\...` is the same directory under a spelling the
+    comparison cannot match. Reached the recursive delete on Windows
+    PowerShell 5.1 in the round-2 probe."""
+    repo = make_repo(tmp_path)
+    proc = run_mirror(repo, pathlib.Path("\\\\?\\" + str(tmp_path / "mirror")))
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "cannot resolve" in proc.stdout, proc.stdout
+
+
+def test_an_override_inside_the_source_through_a_dotted_ancestor_is_refused(tmp_path):
+    """The spelling guard shipped covering two operands and the override
+    was not one of them, so `<repo>.\\override.txt` named a location
+    inside the tree under review and passed every check. The build then
+    hands that value to the probe, whose writer calls WriteAllBytes.
+
+    Found by the round-2 reviewer, on both hosts, and it is the same
+    defect as finding 1 on a third operand - which is what makes it worth
+    a test rather than a one-line addition: guarding operands one at a
+    time is how this class survived in the first place.
+    """
+    repo = make_repo(tmp_path)
+    proc = run_mirror(repo, tmp_path / "mirror", "-OverrideOut",
+                      str(repo) + ".\\override.txt")
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "dot or a space" in proc.stdout, proc.stdout
+    assert (repo / "kept.txt").exists(), "the source must survive a refusal"
+
+
 def test_a_repo_root_with_a_trailing_space_is_refused(tmp_path):
     """The same defect on the other side of the comparison. Both
     operands are user-supplied, so guarding one of them leaves the class
@@ -2910,11 +2970,22 @@ def test_there_is_no_reseal_or_remint_mode(tmp_path):
 
 
 def test_an_unmeasurable_expected_digest_is_refused(tmp_path):
+    """`returncode != 0` was the whole oracle here, and exit 2 with empty
+    stdout satisfied it. This script's exit contract separates 1, blocked
+    with a reason on stdout, from 2, a script or environment error, so an
+    oracle that accepts either cannot tell a working refusal from a crash
+    in the code that was supposed to refuse.
+
+    Found by the round-2 diff reviewer as a third instance of the
+    negative-only oracle class.
+    """
     repo = make_repo(tmp_path)
     mirror = tmp_path / "mirror"
     _, ident = build_and_read(repo, mirror)
     proc = run_verify(repo, mirror, ident, mirror_state_sha256="")
-    assert proc.returncode != 0, proc.stdout + proc.stderr
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "recorded mirror state hash is missing or malformed" in proc.stdout, (
+        proc.stdout)
 
 
 def test_a_mirror_whose_current_state_cannot_be_measured_is_refused(tmp_path):

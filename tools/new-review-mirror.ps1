@@ -1283,14 +1283,54 @@ while ($ri -lt $remaining.Count) {
 # the spelling rather than reason about what each downstream call does
 # with it - the same decision, for the same reason, as the -ExtraInput
 # guard further down.
-foreach ($pair in @(@("the repo root", $RepoRoot), @("the mirror path", $MirrorPath))) {
-    foreach ($seg in ([string]$pair[1]).Replace("\", "/").Split("/")) {
+$spellingSubjects = @(@("the repo root", $RepoRoot),
+                      @("the mirror path", $MirrorPath))
+if ($OverrideOut) {
+    # THE OVERRIDE IS AN OPERAND TOO. The first version of this guard
+    # covered the repo root and the mirror path and stopped there, and the
+    # round-2 reviewer walked straight through the gap: an -OverrideOut of
+    # `<repo>.\override.txt` passed every check and named a location
+    # inside the tree under review, which the build then hands to the
+    # probe's writer. Guarding operands one at a time is how this class
+    # survived being fixed once already.
+    $spellingSubjects += , @("the override path", $OverrideOut)
+}
+foreach ($pair in $spellingSubjects) {
+    $raw = [string]$pair[1]
+    # DEVICE AND STREAM FORMS, checked on the whole string rather than per
+    # component. `\\?\C:\x` and `\\.\C:\x` name the same directory as
+    # `C:\x` under a spelling no comparison here can match, and
+    # `C:\x::$INDEX_ALLOCATION` names the directory itself through NTFS
+    # stream syntax. The round-2 reviewer reached the recursive delete
+    # call with each of these: the stream form on PowerShell 7, the device
+    # form on Windows PowerShell 5.1.
+    if ($raw.StartsWith("\\?\") -or $raw.StartsWith("\\.\") -or $raw.Contains("::")) {
+        Write-Output ("ERROR: " + $pair[0] + " (" + $raw + ") uses a device" +
+            " or stream path form that this tool cannot resolve to the same" +
+            " spelling its comparisons use; pass an ordinary drive path")
+        exit 2
+    }
+    foreach ($seg in $raw.Replace("\", "/").Split("/")) {
         if ($seg -match '[. ]$' -and $seg -ne "." -and $seg -ne "..") {
-            Write-Output ("ERROR: " + $pair[0] + " (" + $pair[1] + ") has a" +
+            Write-Output ("ERROR: " + $pair[0] + " (" + $raw + ") has a" +
                 " path component ending in a dot or a space, which Windows" +
                 " strips when it opens the path but PowerShell keeps in the" +
                 " string, so this tool cannot tell which directory it names;" +
                 " pass the exact name")
+            exit 2
+        }
+        # 8.3 SHORT NAMES. `MULTI-~1` is a real alias for a long directory
+        # name, and every guard below this point is a STRING comparison, so
+        # the alias and its target compare unequal while naming one
+        # directory. Resolving an alias to filesystem identity needs an
+        # open handle, which this tool will not take on a destination it is
+        # about to delete, so it refuses the spelling it cannot decide -
+        # the same stance it takes for directory links.
+        if ($seg -match '~[0-9]+$' -or $seg -match '~[0-9]+\.[^.]{1,3}$') {
+            Write-Output ("ERROR: " + $pair[0] + " (" + $raw + ") has a" +
+                " component that looks like an 8.3 short name, which this" +
+                " tool cannot resolve to the long name its comparisons use;" +
+                " pass the full name")
             exit 2
         }
     }

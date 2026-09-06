@@ -118,3 +118,73 @@ is one this tool constructed and validated, not one read back from a
 mutable file.
 
 Verdict: **FIX**.
+
+## Round 2 (`Astra D2`)
+
+Resumed session `01a074f2`, so the reviewer argued against its own round
+1 with that context intact. Wrapper exit 0, route verified, binder
+`clean` and `sealed`. Mirror rebuilt at the SAME path with `-Force` from
+head `b58bf25` and its identity re-recorded, because a resumed round
+whose mirror moved is refused on `cwd` and lost.
+
+**The rebuttal was accepted and the claim withdrawn.** "I did not
+establish successful deletion and withdraw that implication." The
+reviewer reproduced `PSArgumentException` on both hosts with
+`Remove-Item -WhatIf`, corroborating this side's measurement, and stated
+plainly that it could not supply a real deletion because its session is
+read-only. That is the debate working in the direction it is supposed to
+work in, and it cost one round to establish that a destructive claim was
+overstated.
+
+All five round-1 fixes verified present against the code rather than
+against the summary.
+
+Three residual findings, all CONFIRMED, all applied.
+
+**1. The new guard still admitted three aliases.** The deeper point, and
+the reviewer put it exactly right: rejecting trailing punctuation does
+not establish filesystem identity, and every comparison in this tool is a
+string comparison. Reachability demonstrated on both hosts, deletion
+intercepted:
+
+| source | mirror | reached delete on |
+| --- | --- | --- |
+| `<repo>\skills\multi-model-verify` | `<repo>\skills\MULTI-~1` | both hosts |
+| `<repo>::$INDEX_ALLOCATION` | `<repo>` | PowerShell 7 |
+| `<repo>` | `\\?\<repo>` | Windows PowerShell 5.1 |
+
+It also confirmed with `Remove-Item -WhatIf` that the 8.3 short form
+names the long directory on both hosts.
+
+The fix keeps this tool's existing stance rather than inventing a new
+one: it REFUSES the spellings it cannot resolve. Device forms `\\?\`
+and `\\.\`, NTFS stream syntax `::`, and 8.3 short-name components are
+each refused with their own message. Resolving an alias to filesystem
+identity needs an open handle, and this tool will not take one on a
+destination it is about to delete.
+
+**2. The guard shipped with the override operand missing.** An
+`-OverrideOut` of `<repo>.\override.txt` passed every check and named a
+location inside the tree under review, which the build then hands to the
+probe's writer. This is finding 1 of round 1 on a third operand: the
+first version of the guard covered two operands and stopped. Guarding
+operands one at a time is how the class survived being fixed once
+already, so the fix builds a subject list and the test says why.
+
+**3. A third negative-only oracle.**
+`test_an_unmeasurable_expected_digest_is_refused` asserted only
+`returncode != 0`, which exit 2 with empty stdout satisfies. This
+script's contract separates 1, blocked with a reason, from 2, a script or
+environment error, so that oracle could not tell a working refusal from a
+crash in the code meant to refuse. Now requires exit 1 and the named
+diagnostic.
+
+**What the sweep covered and what it could not.** Path aliases, omitted
+guard operands, negative-only assertions and their helpers, amended
+measurement conclusions, adjacent comments. It found no further
+measurement overclaim and no self-count defect. Two stated limits, both
+the reviewer's own: live UNC access was unavailable, so the guard's
+component split is unverified end to end for UNC, and it did not re-run
+the full pytest suite.
+
+Verdict: **FIX**.
