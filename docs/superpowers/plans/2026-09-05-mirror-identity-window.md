@@ -1625,10 +1625,14 @@ Expected: PASS, with every skip printed by name.
 
 - [ ] **Step 4: Commit the gate record**
 
+Write the six tier results, both host runs with their elapsed times, and anything that did not reproduce to `docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/gate-results.md`, then:
+
 ```bash
-git add -A
+git add docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/gate-results.md
 git commit -m "retain the gate results for the mirror identity window"
 ```
+
+NOT blanket staging. The family git rules ban it and a hook denies it, naming the case where it once swept an unrelated in-flight file into a commit. An earlier draft of this step said `git add -A` and could not have run. The hook reads the COMMAND TEXT, so even a script that only quotes that string in a patch is denied - build the literal by concatenation if a document needs to name it.
 
 ---
 
