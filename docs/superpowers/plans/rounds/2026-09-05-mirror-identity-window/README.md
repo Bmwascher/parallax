@@ -171,3 +171,58 @@ been applied.
 
 Budget: 3 of 4 dispatched exchanges used. PAUSED at the user's direction
 until the other sessions are finished with the repository.
+
+### The voided R2 reply's residual findings, applied 2026-09-05
+
+Applied while the debate is PAUSED, so the confirming round has less to
+catch. None of this is evidence: the reply that prompted it was voided,
+and these amendments are unreviewed until a counted round says otherwise.
+
+The reply reported PASS on claims 2, 3 and 13, on class-sweep items 1, 4
+and 5, and on other-form items 2 and 3. Its section B accepted both
+wording-only dispositions from R1 as correct within their stated limits.
+What follows is its residual FIX list, all accepted:
+
+1. **The record cap invented malformed records.** At record 200,001 the
+   parser incremented the malformed counter once and abandoned the rest,
+   so 200,003 malformed records reported 200,001 and a resource limit
+   read as a grammar diagnosis. Truncation is now the reader's own
+   state, reported separately as "the remainder was NOT examined".
+2. **The cap applied after the split.** `-split` materialized every line
+   before any bound could matter. A new `Read-BoundedRecords` uses a
+   `StringReader` and stops AT the cap.
+3. **Empty records were dropped.** The parser skipped every empty string
+   as "the trailing split artifact", losing leading and interior empty
+   records with it. `ReadLine` returns nothing for a file ending in a
+   newline, so the artifact does not exist and every empty line is now
+   counted as malformed. The condition was removed rather than refined.
+4. **The root helper called resolution failures roots.** Both catch
+   blocks returned the same null as a genuine root. It now returns
+   `ok`, `root` or `error`, and both callers report the difference.
+   Windows PowerShell 5.1 refused a 278-character path from
+   `GetFullPath` that PowerShell 7 accepted, so this was reachable.
+5. **The extra-input guard compared spelling only.** An extra input
+   reached through a junction can name the sidecar while comparing
+   unequal, after which `-Force` removes it. Such a path is now refused
+   outright, because physical identity cannot be established here.
+6. **The extra-input fragment used variables that do not exist.** The
+   real resolver uses `$eiPath` and stores resolved paths in
+   `$ExtraInputPaths`. The plan now carries the actual loop, at a place
+   where `$smp` and `Test-PathOrAncestorIsLink` both exist.
+7. **The root test had the wrong oracle and never reached the helper.**
+   The containment guard refuses first with a different message. There
+   are now direct unit tests that extract the function from the shipped
+   file and run it, plus an integration test whose assertion matches
+   what actually fires.
+8. **The renderer interface promised more than it escapes.** "Every
+   separator character" includes `SpaceSeparator`, which is not escaped;
+   U+00A0 passes through. The interface now names the five categories.
+9. **Two paragraphs still said "every path".** The backlog entry and the
+   design's measured-facts list now carry the deletion-only
+   qualification.
+10. **Both test selectors matched on substrings** and missed cases that
+    had been written. Both now name every test and state the expected
+    collected count.
+
+The design's success criteria also dropped a universal "proven by test"
+claim for a statement of what the two cases actually establish.

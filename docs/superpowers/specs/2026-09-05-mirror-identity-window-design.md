@@ -7,8 +7,10 @@ since construction` refusals and could not tell why.
 ## The measured facts
 
 1. `Get-StatusSha256` (`tools/new-review-mirror.ps1:662`) fingerprints a
-   repo as `git status --porcelain --ignored -uall -z` PLUS the content
-   manifest of every path that listing names.
+   repo as the fields of `git status --porcelain --ignored -uall -z`
+   PLUS the content manifest of the paths that listing names. Not every
+   path: `Get-ManifestSubject` omits a deletion-only entry, which has no
+   bytes to hash.
    `Get-ContentManifest` (`:576`) expands a directory subject
    recursively, so a single `!! .claude/` status entry pulls the bytes of
    every file beneath it into the digest.
@@ -110,11 +112,30 @@ and round 1 of this plan's debate found that a draft claiming to copy
 The sidecar joins both, plus an overlap check against the override path
 and against every declared `-ExtraInput`.
 
+**The extra-input check refuses what it cannot decide.** Spelling
+equality is not filesystem identity. With `C:\alias` a junction to
+`C:\out`, a mirror at `C:\out\mirror` and an extra input at
+`C:\alias\mirror.source-manifest`, both output paths have ordinary
+ancestors and pass their own alias checks, while the extra input keeps
+the alias spelling and compares unequal. `-Force` would then remove the
+file that extra input names. This tool cannot establish physical identity
+there, so an extra input reached through a directory link is REFUSED
+rather than compared.
+
 **Validation completes before anything is removed.** The same round found
 that a draft deleting a pre-existing sidecar under `-Force` inside the
 lexical block would delete it BEFORE the alias block refuses an aliased
 mirror path, so a build that was going to be rejected had already
 destroyed a file. The removal moves after every check.
+
+**A root and a resolution failure are different answers.** The helper
+returns one of three kinds, `ok`, `root` or `error`. A draft returned the
+same null for both, so both callers announced "filesystem root".
+Measured 2026-09-05: Windows PowerShell 5.1's provider accepted a
+278-character absolute path that `GetFullPath` refused with
+`PathTooLongException`, while PowerShell 7 accepted it, so on 5.1 a
+long-path build would have reported a filesystem root and never reached
+the path-budget refusal that names the real problem.
 
 **A root is detected through the framework, not through the leaf.**
 Measured 2026-09-05: `Split-Path 'C:\' -Leaf` returns `C:\`, not `C:`, so
@@ -150,9 +171,23 @@ than a detail of it:
   CHECKING THE GRAMMAR: a draft that only rejected a missing separator
   accepted `bad.txt not-a-hash` as an ordinary record, so a truncated
   digest became a reported difference instead of an admission of
-  incompleteness. The hash field is validated, duplicates and over-long
-  records are counted, and an empty line is recognized as the trailing
-  split artifact rather than counted forever.
+  incompleteness. The hash field is validated, and duplicates and
+  over-long records are counted.
+- An EMPTY line is a malformed record, with no special case. A draft
+  skipped every empty string as "the trailing split artifact", which
+  silently dropped leading and interior empty records too. Records are
+  read with a `StringReader`, which returns nothing at all for a file
+  ending in a newline, so the artifact does not exist to special-case.
+  The fix removes the condition rather than refining it.
+- TRUNCATION IS ITS OWN STATE, never a malformed count. A draft capped
+  the record loop by incrementing the malformed counter once and
+  abandoning the remainder, so 200,003 malformed records reported
+  200,001 and a resource limit was reported as a grammar diagnosis. The
+  reader reports truncation, and says the remainder was not examined.
+- The cap applies DURING extraction. A `-split` materializes every line
+  of a file whose size is someone else's choice before any later cap can
+  matter, so the bound has to live in the reader that produces the
+  records.
 - The size limit bounds THE READ. A draft measured the file with
   `Get-Item` and then read it with a separate `ReadAllBytes`, which
   bounds nothing, and `Get-Item`'s failure is non-terminating in a script
@@ -207,8 +242,11 @@ finishes before the mirror is built.
 
 - An ignored-file edit between build and verify produces a refusal that
   NAMES the file, on both PowerShell hosts.
-- Deleting or corrupting the advisory manifest changes no exit code in
-  any case, proven by test in both directions.
+- Deleting the advisory manifest, and replacing it with invalid bytes,
+  each leave the exit code unchanged. Two cases, not a universal proof:
+  they establish those two states and the general property rests on the
+  call site, where the explanation runs after the refusal is decided and
+  its output is never read.
 - A case-only rename is reported rather than collapsed.
 - A record with a non-hash digest field is counted as unreadable, and a
   trailing newline is not.

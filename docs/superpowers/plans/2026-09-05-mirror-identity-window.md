@@ -159,25 +159,100 @@ def test_no_sidecar_is_removed_before_validation_completes(tmp_path):
     assert victim.read_text() == "must survive\n", "deleted before refusing"
 
 
-@pytest.mark.parametrize("root", ["C:\\", "\\\\server\\share\\"])
-def test_a_filesystem_root_has_no_sidecar(tmp_path, root):
-    """Measured 2026-09-05: `Split-Path 'C:\\' -Leaf` returns `C:\\`, not
-    `C:`, so a regex on the leaf detects no drive root; and
-    `Split-Path '\\\\server\\share\\' -Leaf` returns `share` with parent
-    `\\\\server`, which would name a DIFFERENT SHARE. The two hosts do not
-    agree on the UNC case, so the root test cannot be built on the leaf.
+def extract_ps_function(name):
+    """Pull one function's text out of the SHIPPED script so a unit test
+    exercises the same source the build runs. Copying the body into the
+    test would create a second definition that drifts, which is the
+    failure this repo keeps finding in its own records."""
+    text = MIRROR.read_text(encoding="utf-8")
+    start = text.index("function " + name + "(")
+    k = text.index("{", start)
+    depth = 0
+    while True:
+        if text[k] == "{":
+            depth += 1
+        elif text[k] == "}":
+            depth -= 1
+            if depth == 0:
+                break
+        k += 1
+    return text[start:k + 1]
+
+
+@pytest.mark.parametrize("path,kind", [
+    ("C:\\", "root"),
+    ("\\\\server\\share\\", "root"),
+    ("\\\\server\\share\\dir", "ok"),
+    ("C:\\Temp\\mirror", "ok"),
+])
+def test_the_sidecar_helper_classifies_roots_directly(tmp_path, path, kind):
+    """The helper's own contract, exercised directly.
+
+    The integration path CANNOT establish this: the mirror-path guards
+    refuse a root long before the sidecar is derived, so a build-level
+    assertion never reaches the helper. Measured 2026-09-05 on
+    PowerShell 7, a root mirror path on a repo living on C: is refused
+    by the containment guard with "the mirror path contains the repo",
+    which says nothing about roots at all.
     """
+    src = extract_ps_function("Get-SourceManifestSidecarPath")
+    driver = tmp_path / "probe.ps1"
+    driver.write_text(
+        src + "\n$r = Get-SourceManifestSidecarPath $args[0]\n"
+        "Write-Output $r.Kind\n", encoding="utf-8")
+    proc = subprocess.run(
+        [ps_host(), "-NoProfile", "-NonInteractive", "-File", str(driver),
+         path],
+        capture_output=True, text=True)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert proc.stdout.strip() == kind, (path, proc.stdout)
+
+
+def test_a_resolution_failure_is_not_reported_as_a_root(tmp_path):
+    """Two outcomes that must not share a message. Windows PowerShell
+    5.1 refused a 278-character absolute path from GetFullPath with
+    PathTooLongException while PowerShell 7 accepted it, so on 5.1 a
+    long-path build would announce a filesystem root and never reach the
+    path-budget refusal that names the real problem."""
+    src = extract_ps_function("Get-SourceManifestSidecarPath")
+    driver = tmp_path / "probe.ps1"
+    driver.write_text(
+        src + "\n$r = Get-SourceManifestSidecarPath $args[0]\n"
+        "Write-Output $r.Kind\n", encoding="utf-8")
+    long_path = "C:\\" + ("d" * 200 + "\\") * 2 + "leaf"
+    proc = subprocess.run(
+        [ps_host(), "-NoProfile", "-NonInteractive", "-File", str(driver),
+         long_path],
+        capture_output=True, text=True)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert proc.stdout.strip() in ("ok", "error"), proc.stdout
+    assert proc.stdout.strip() != "root", "a resolution failure read as a root"
+
+
+def test_a_root_mirror_path_is_refused_by_the_build(tmp_path):
+    """The integration half, with an oracle that matches what actually
+    fires. Which guard refuses depends on where the repo lives, so this
+    asserts only that the build refuses; the helper's root contract is
+    the unit test above."""
     repo = make_repo(tmp_path)
-    proc = run_mirror(repo, pathlib.Path(root))
+    proc = run_mirror(repo, pathlib.Path("C:\\"))
     assert proc.returncode == 2, proc.stdout + proc.stderr
-    assert "root" in proc.stdout.lower(), proc.stdout
+    assert "ERROR:" in proc.stdout, proc.stdout
 ```
 
-Add `import pathlib` to the module's imports if it is not already there. The root case never reaches a build: the mirror-path guards refuse a root long before the sidecar is derived, so assert on whichever refusal fires and say in a comment which one it was. What this test locks is that a root NEVER yields a derived sibling.
+Add `import pathlib` to the module's imports if it is not already there. `subprocess` and `pytest` are already imported.
+
+**Why a unit test and not just an integration one.** The mirror-path guards refuse a root long before the sidecar is derived, so no build-level assertion can reach the helper, and an earlier draft's integration assertion on the word `root` failed against the containment guard's actual message. `extract_ps_function` reads the function out of the shipped file, so the unit test and the build share one definition.
 
 - [ ] **Step 2: Run the tests and confirm they fail for the stated reason**
 
-Run: `python -m pytest evals/multi-model-verify/test_review_mirror.py -k "sidecar or source_manifest or filesystem_root" -v`
+Run, naming every test rather than matching on substrings, because a selector that quietly matches fewer tests than were written is how a suite reports green on cases it never ran:
+
+```
+python -m pytest evals/multi-model-verify/test_review_mirror.py -v -k "test_the_build_writes_the_source_manifest_beside_the_mirror or test_the_source_manifest_sidecar_enters_neither_identity or test_a_pre_existing_sidecar_is_refused_without_force or test_force_replaces_a_pre_existing_sidecar or test_an_override_at_the_sidecar_path_is_refused or test_an_extra_input_at_the_sidecar_path_is_refused or test_a_sidecar_reached_through_a_directory_link_is_refused or test_no_sidecar_is_removed_before_validation_completes or test_the_sidecar_helper_classifies_roots_directly or test_a_resolution_failure_is_not_reported_as_a_root or test_a_root_mirror_path_is_refused_by_the_build"
+```
+
+Check the collected count is 14 (the four parametrized helper cases plus ten) before trusting the result.
 
 Expected: the build, collision, alias and root tests FAIL. `test_the_source_manifest_sidecar_enters_neither_identity` PASSES already, because nothing writes a sidecar yet; it is a regression guard for Step 6.
 
@@ -214,22 +289,34 @@ function Get-SourceManifestSidecarPath($mirrorPath) {
     # hosts do not agree on the UNC case. So the framework's own root is
     # the test, and the suffix is APPENDED to the full path rather than
     # rejoined to a parent, which removes the UNC rejoin entirely.
+    # THREE OUTCOMES, not two. An earlier draft returned $null for a root
+    # AND for a resolution failure, so both callers announced "filesystem
+    # root" for either. Measured 2026-09-05: Windows PowerShell 5.1's
+    # provider accepted a 278-character absolute path that GetFullPath
+    # refused with PathTooLongException, while PowerShell 7 accepted it,
+    # so a long-path build on 5.1 would have reported a filesystem root
+    # and never reached the path-budget refusal that names the real
+    # problem.
     $full = $null
     try {
         $full = [System.IO.Path]::GetFullPath($mirrorPath)
     } catch {
-        return $null
+        return @{ Kind = "error"; Reason = $_.Exception.Message }
     }
     $full = $full.TrimEnd("\")
     $root = $null
     try {
         $root = [System.IO.Path]::GetPathRoot($full)
     } catch {
-        return $null
+        return @{ Kind = "error"; Reason = $_.Exception.Message }
     }
-    if (-not $root) { return $null }
-    if ($full.Length -le ([string]$root).TrimEnd("\").Length) { return $null }
-    return ($full + ".source-manifest")
+    if (-not $root) {
+        return @{ Kind = "error"; Reason = "the path has no root" }
+    }
+    if ($full.Length -le ([string]$root).TrimEnd("\").Length) {
+        return @{ Kind = "root" }
+    }
+    return @{ Kind = "ok"; Path = ($full + ".source-manifest") }
 }
 
 function Write-SourceManifestSidecar($path, $manifestLines) {
@@ -280,13 +367,20 @@ NOTHING HERE MUTATES ANYTHING. The removal is Step 5c, after every check has pas
 # placed later. Its ALIAS guards are further down with the override's,
 # and its removal is after both, because a build that is going to be
 # refused must not have deleted anything first.
-$SourceManifestOut = Get-SourceManifestSidecarPath $MirrorPath
-if (-not $SourceManifestOut) {
+$smResult = Get-SourceManifestSidecarPath $MirrorPath
+if ($smResult.Kind -eq "root") {
     Write-Output ("ERROR: the mirror path is a filesystem root" +
         " ($MirrorPath), which has no sibling, so no advisory source" +
         " manifest can be placed beside it")
     exit 2
 }
+if ($smResult.Kind -ne "ok") {
+    Write-Output ("ERROR: the mirror path could not be resolved in order to" +
+        " place an advisory source manifest beside it ($MirrorPath): " +
+        $smResult.Reason)
+    exit 2
+}
+$SourceManifestOut = $smResult.Path
 $smp = $SourceManifestOut.Replace("\", "/").TrimEnd("/")
 foreach ($protected in @($rr, $mp)) {
     if (($smp + "/").Equals($protected, $cmp) -or
@@ -371,18 +465,42 @@ if ($null -ne $smAttr) {
 }
 ```
 
-Then, in the `-ExtraInput` resolution above (the loop that resolves each declared extra input, `:919` onward), refuse a declared input at the sidecar path:
+- [ ] **Step 5b2: Refuse an extra input that collides with the sidecar**
+
+The `-ExtraInput` parser at `tools/new-review-mirror.ps1:908-925` runs BEFORE `$smp` exists, and it stores paths already resolved by `Resolve-Path` into `$ExtraInputPaths`. So the check belongs here, after Step 5b, where both `$smp` and `Test-PathOrAncestorIsLink` are available and nothing has been removed yet. Insert it immediately after Step 5b's second loop:
 
 ```powershell
-    if ($eiFull.Replace("\", "/").TrimEnd("/").Equals($smp, $cmp)) {
-        Write-Output ("ERROR: -ExtraInput '" + $ei + "' is the source" +
-            " manifest path, which this build replaces - a declared review" +
-            " input must not be a file this tool overwrites")
+# EXTRA INPUTS versus the sidecar. $ExtraInputPaths holds paths already
+# resolved by the -ExtraInput parser above; that parser runs before $smp
+# exists, which is why this check lives here rather than beside it.
+foreach ($eiResolved in @($ExtraInputPaths)) {
+    $eiNorm = ([string]$eiResolved).Replace("\", "/").TrimEnd("/")
+    if ($eiNorm.Equals($smp, $cmp)) {
+        Write-Output ("ERROR: -ExtraInput '" + $eiResolved + "' is the" +
+            " source manifest path, which this build replaces - a declared" +
+            " review input must not be a file this tool overwrites")
         exit 2
     }
+    # SPELLING EQUALITY IS NOT IDENTITY, and the comparison above is only
+    # spelling. With C:\alias a junction to C:\out, a mirror at
+    # C:\out\mirror and an extra input at
+    # C:\alias\mirror.source-manifest, BOTH output paths have ordinary
+    # ancestors and pass their own alias checks, while the extra input
+    # keeps the alias spelling and compares unequal - and -Force would
+    # then remove the very file that extra input names, after which the
+    # unchecked Copy-Item can leave it out of the mirror entirely. This
+    # tool cannot establish physical identity here, so it REFUSES the
+    # case it cannot decide rather than guessing.
+    $eiHit = Test-PathOrAncestorIsLink $eiResolved
+    if ($eiHit) {
+        Write-Output ("ERROR: -ExtraInput '" + $eiResolved + "' is reached" +
+            " through a directory link at " + $eiHit + ", so this tool" +
+            " cannot tell whether it names the same file as the source" +
+            " manifest it replaces; pass the path behind the link")
+        exit 2
+    }
+}
 ```
-
-If `-ExtraInput` is resolved BEFORE `$smp` exists, move this check to sit just after Step 5a instead, iterating the resolved extra inputs there. The ordering requirement is only that it precedes Step 5c's removal.
 
 - [ ] **Step 6: Write the sidecar and record its path**
 
@@ -408,7 +526,13 @@ Both insertions sit ABOVE the `-SkipProbe` block at the end of the file, so a `-
 
 - [ ] **Step 7: Run the tests and confirm they pass**
 
-Run: `python -m pytest evals/multi-model-verify/test_review_mirror.py -k "sidecar or source_manifest or filesystem_root" -v`
+Run, naming every test rather than matching on substrings, because a selector that quietly matches fewer tests than were written is how a suite reports green on cases it never ran:
+
+```
+python -m pytest evals/multi-model-verify/test_review_mirror.py -v -k "test_the_build_writes_the_source_manifest_beside_the_mirror or test_the_source_manifest_sidecar_enters_neither_identity or test_a_pre_existing_sidecar_is_refused_without_force or test_force_replaces_a_pre_existing_sidecar or test_an_override_at_the_sidecar_path_is_refused or test_an_extra_input_at_the_sidecar_path_is_refused or test_a_sidecar_reached_through_a_directory_link_is_refused or test_no_sidecar_is_removed_before_validation_completes or test_the_sidecar_helper_classifies_roots_directly or test_a_resolution_failure_is_not_reported_as_a_root or test_a_root_mirror_path_is_refused_by_the_build"
+```
+
+Check the collected count is 14 (the four parametrized helper cases plus ten) before trusting the result.
 
 Expected: all PASS.
 
@@ -442,8 +566,9 @@ git commit -m "write the source content manifest beside the review mirror"
 **Interfaces:**
 - Consumes: `Get-SourceManifestSidecarPath($mirrorPath)` and `Get-StatusSha256`'s `Manifest` field from Task 1.
 - Produces:
+  - `Read-BoundedRecords($text, $maxRecords)` returns `@{ Records = <string[]>; Truncated = <bool> }`, reading with a `StringReader` so the cap applies during extraction rather than after it.
   - `Get-ManifestDrift($recordedLines, $liveLines)` returns `@{ Entered = <string[]>; Left = <string[]>; Changed = <string[]>; Malformed = <int> }`. The three lists are sorted by path. `Malformed` counts every record the parser rejected.
-  - `Format-AdvisoryName($name)` returns a bounded string with every control, format and separator character rendered as `\xNN` or `\uNNNN`.
+  - `Format-AdvisoryName($name)` returns a string bounded at 200 characters, with every character in the Unicode categories `Control`, `Format`, `LineSeparator`, `ParagraphSeparator` and `Surrogate` rendered as `\uNNNN`. Those five and no others: `SpaceSeparator` is NOT escaped, so U+00A0 passes through, and an earlier draft's "every separator character" claimed otherwise.
   - `Write-SourceDriftExplanation($mirrorPath, $liveManifest)` writes lines to the pipeline. It is called for its output; its return value is not read.
 
 **What the previous draft claimed and did not deliver.** Cross-vendor review confirmed four gaps in the second draft, each an instance of the class this whole cycle exists to remove: the parser accepted `bad.txt not-a-hash` as a valid record while the plan said malformed records were counted; `Get-Item` measured the file and a separate `ReadAllBytes` read it, so the size limit bounded nothing; `Format-AdvisoryName` tested `[int]$ch -lt 32` and so passed C1 controls such as U+0085 and U+009B straight through, along with U+2028 and U+202E; and the sidecar path and exception text bypassed the formatter entirely.
@@ -628,9 +753,13 @@ def test_an_oversized_source_manifest_is_refused_by_the_reader(tmp_path):
 
 - [ ] **Step 2: Run the tests and confirm they fail for the stated reason**
 
-Run: `python -m pytest evals/multi-model-verify/test_review_mirror.py -k "refusal or advisory or manifest or coverage or reader" -v`
+Run, naming every test explicitly:
 
-Check the collected count against the list above before trusting the result: a `-k` selector that silently matches fewer tests than were written is how a suite reports green on cases it never ran.
+```
+python -m pytest evals/multi-model-verify/test_review_mirror.py -v -k "test_the_refusal_names_the_ignored_file_that_changed or test_the_refusal_names_a_file_that_entered_coverage or test_the_refusal_names_a_file_that_left_coverage or test_a_missing_source_manifest_still_refuses or test_a_corrupted_source_manifest_still_refuses or test_a_clean_tree_verifies_with_no_source_manifest or test_a_case_only_rename_is_not_lost_by_the_explanation or test_a_hostile_but_well_formed_manifest_cannot_manufacture_a_pass or test_a_record_whose_hash_field_is_not_a_hash_is_counted or test_a_trailing_newline_is_not_counted_as_a_malformed_record or test_display_controls_in_an_advisory_name_are_rendered or test_an_oversized_source_manifest_is_refused_by_the_reader"
+```
+
+Check the collected count is 12 before trusting the result. An earlier draft's substring selector silently missed three of these.
 
 Expected: the naming, malformed, rendering and reader-limit tests FAIL. The two advisory-direction tests and the trailing-newline test PASS already; they are regression guards.
 
@@ -663,16 +792,22 @@ function Get-ManifestDrift($recordedLines, $liveLines) {
     $malformed = 0
     $hexRx = '^[0-9a-f]{64}$'
     foreach ($side in @(@($recordedLines, $recorded), @($liveLines, $live))) {
-        $seen = 0
         foreach ($line in @($side[0])) {
             $s = [string]$line
-            if ($s.Length -eq 0) { continue }
-            # BOUNDED. Both the record count and each record's length are
-            # someone else's choice in the advisory file, and a byte
-            # limit alone does not bound the working set a split of that
-            # file produces.
-            $seen++
-            if ($seen -gt 200000) { $malformed++; break }
+            # AN EMPTY LINE IS A MALFORMED RECORD, with no special case
+            # for a trailing one: the caller reads records with a
+            # StringReader, which returns nothing at all for a file
+            # ending in a newline, so every empty string that reaches
+            # here is a real empty record. The draft that skipped every
+            # empty string silently dropped leading and interior ones.
+            #
+            # THERE IS NO RECORD CAP HERE. Capping mid-loop turned
+            # resource exhaustion into a grammar diagnosis: at record
+            # 200,001 the draft incremented Malformed once and abandoned
+            # the rest, so 200,003 malformed records reported 200,001.
+            # The cap belongs to the reader, which reports it as its own
+            # state.
+            if ($s.Length -eq 0) { $malformed++; continue }
             if ($s.Length -gt 4096) { $malformed++; continue }
             $cut = $s.LastIndexOf(" ")
             if ($cut -lt 1) { $malformed++; continue }
@@ -700,6 +835,38 @@ function Get-ManifestDrift($recordedLines, $liveLines) {
               Left      = @($left    | Sort-Object)
               Changed   = @($changed | Sort-Object)
               Malformed = $malformed }
+}
+
+function Read-BoundedRecords($text, $maxRecords) {
+    # Returns @{ Records = <string[]>; Truncated = <bool> }.
+    #
+    # A StringReader, never `-split`. The split materializes every line of
+    # a file whose size is someone else's choice BEFORE any cap can apply,
+    # so a cap placed after it bounds nothing that matters. Reading line
+    # by line stops AT the cap, having built only that many strings.
+    #
+    # It also removes the trailing-newline special case rather than
+    # handling it: ReadLine returns $null at end of input, so a file
+    # ending in a newline yields no final empty string. Every empty line
+    # this returns is therefore a real empty record, which is what lets
+    # the parser count one as malformed instead of guessing which empties
+    # were artifacts.
+    #
+    # Truncation is its OWN state. It is not a malformed record and must
+    # never be reported as one: the remainder was not examined, which is
+    # a different fact about a different set of records.
+    $out = New-Object System.Collections.ArrayList
+    $truncated = $false
+    $reader = New-Object System.IO.StringReader($text)
+    try {
+        while ($true) {
+            $line = $reader.ReadLine()
+            if ($null -eq $line) { break }
+            if ($out.Count -ge $maxRecords) { $truncated = $true; break }
+            [void]$out.Add($line)
+        }
+    } finally { $reader.Dispose() }
+    return @{ Records = @($out); Truncated = $truncated }
 }
 
 function Format-AdvisoryName($name) {
@@ -749,12 +916,18 @@ function Write-SourceDriftExplanation($mirrorPath, $liveManifest) {
     # unconditionally. The wrap is here so that a fault in explaining a
     # refusal cannot replace that refusal with an error.
     try {
-        $sidecar = Get-SourceManifestSidecarPath $mirrorPath
-        if (-not $sidecar) {
+        $smResult = Get-SourceManifestSidecarPath $mirrorPath
+        if ($smResult.Kind -eq "root") {
             Write-Output ("  what moved: unknown - the mirror path is a" +
                 " filesystem root, so no advisory manifest can sit beside it")
             return
         }
+        if ($smResult.Kind -ne "ok") {
+            Write-Output ("  what moved: unknown - the mirror path could not" +
+                " be resolved (" + (Format-AdvisoryName $smResult.Reason) + ")")
+            return
+        }
+        $sidecar = $smResult.Path
         $shown = Format-AdvisoryName $sidecar
         # ONE HANDLE measures and reads. A separate Get-Item followed by
         # a separate ReadAllBytes bounds nothing: the file can grow or be
@@ -784,10 +957,15 @@ function Write-SourceDriftExplanation($mirrorPath, $liveManifest) {
         # begins with U+FEFF would lose that character silently and read
         # as a different path.
         $text = (New-Object System.Text.UTF8Encoding($false, $true)).GetString($bytes)
-        $recorded = @($text -split "`r`n|`n|`r")
-        $drift = Get-ManifestDrift $recorded $liveManifest
+        $read = Read-BoundedRecords $text 200000
+        $drift = Get-ManifestDrift $read.Records $liveManifest
         Write-Output ("  the lines below come from an UNAUTHENTICATED file" +
             " beside the mirror (" + $shown + ") and are advisory only")
+        if ($read.Truncated) {
+            Write-Output ("  note: the advisory manifest holds more than" +
+                " 200000 records; the remainder was NOT examined, so this" +
+                " explanation is incomplete")
+        }
         if ($drift.Malformed -gt 0) {
             Write-Output ("  note: " + $drift.Malformed + " advisory record(s)" +
                 " could not be read, so this explanation is incomplete")
@@ -839,7 +1017,13 @@ The refusal's own wording does not change, so the existing `"source status" in p
 
 - [ ] **Step 6: Run the tests and confirm they pass**
 
-Run: `python -m pytest evals/multi-model-verify/test_review_mirror.py -k "refusal or advisory or manifest or coverage or reader" -v`
+Run, naming every test explicitly:
+
+```
+python -m pytest evals/multi-model-verify/test_review_mirror.py -v -k "test_the_refusal_names_the_ignored_file_that_changed or test_the_refusal_names_a_file_that_entered_coverage or test_the_refusal_names_a_file_that_left_coverage or test_a_missing_source_manifest_still_refuses or test_a_corrupted_source_manifest_still_refuses or test_a_clean_tree_verifies_with_no_source_manifest or test_a_case_only_rename_is_not_lost_by_the_explanation or test_a_hostile_but_well_formed_manifest_cannot_manufacture_a_pass or test_a_record_whose_hash_field_is_not_a_hash_is_counted or test_a_trailing_newline_is_not_counted_as_a_malformed_record or test_display_controls_in_an_advisory_name_are_rendered or test_an_oversized_source_manifest_is_refused_by_the_reader"
+```
+
+Check the collected count is 12 before trusting the result. An earlier draft's substring selector silently missed three of these.
 
 Expected: all PASS, at the collected count checked in Step 2.
 
@@ -1057,10 +1241,11 @@ another repository**, which hit repeated
 could not tell why. Design:
 `docs/superpowers/specs/2026-09-05-mirror-identity-window-design.md`.
 
-`Get-StatusSha256` fingerprints the content of every path
-`git status --porcelain --ignored` names, and `Get-ContentManifest`
-expands a directory subject recursively, so one `!! .claude/` entry
-pulls in every file beneath it. The content half is deliberate and
+`Get-StatusSha256` fingerprints that status listing's own fields plus
+the content of the paths it names, with `Get-ContentManifest` expanding
+a directory subject recursively, so one `!! .claude/` entry pulls in
+every file beneath it. A deletion-only entry has no bytes and
+contributes none. The content half is deliberate and
 load-bearing: editing an already-ignored file leaves the status listing
 byte-identical, so a list-only digest would pass through exactly the
 tampering the check exists to catch.
