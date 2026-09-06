@@ -337,13 +337,36 @@ joined the escape set so the two agree for that class, and the interface
 now states that identical rendering is claimed only for the listed
 categories rather than for every input.
 
-**ESCALATED, unresolved.** Whether
+**ESCALATED, then MEASURED 2026-09-05 and closed.** Whether
 `[System.IO.File]::GetAttributes` behaves the same on both hosts for a
 DANGLING reparse point. Task 1 Step 5c reads attributes rather than
 calling `Test-Path` precisely because the link walker documents
 `Test-Path` as unreliable there, so the replacement's own cross-host
 behaviour matters and neither side measured it. It is the one place where
 a wrong "it is not there" becomes a write.
+
+The probe created a junction, deleted its target, and read four cases
+under each host: an intact junction, the dangling junction, a plainly
+missing path, and an ordinary file. Windows PowerShell 5.1 and
+PowerShell 7 returned identical results on all four:
+
+| case | `Test-Path` | `GetAttributes` |
+| --- | --- | --- |
+| intact junction | True | `Directory, ReparsePoint` |
+| DANGLING junction | True | `Directory, ReparsePoint` |
+| plain missing path | False | throws |
+| ordinary file | True | `Archive` |
+
+So the cross-host risk does not exist for a junction, and Step 5c's
+`FileNotFoundException` / `DirectoryNotFoundException` handling is the
+only branch a dangling junction never takes. Two limits, stated rather
+than papered over. The link walker's premise - that `Test-Path` "may
+report as absent" for a dangling reparse point - was NOT reproduced here;
+it returned True on both hosts, so that comment's justification is
+unmeasured even though its choice is still right. And a dangling FILE
+SYMLINK was not measured, so nothing above claims anything about one.
+The shipped walker's comment is left as it stands; correcting it is not
+in this plan's scope.
 
 Budget: 5 dispatched exchanges. Two counted rounds, both FIX, both fully
 applied.

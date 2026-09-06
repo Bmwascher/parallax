@@ -507,10 +507,23 @@ Insert immediately AFTER the followed-target overlap loop from Step 5b, so every
 
 ```powershell
 # LAST, because a build that is going to be refused must not have deleted
-# anything first. Read the ATTRIBUTES rather than calling Test-Path: a
-# dangling reparse point is not reliably reported as existing, which the
-# link walker above documents, and this is the one place where a wrong
-# "it is not there" turns into a write.
+# anything first. Read the ATTRIBUTES rather than calling Test-Path,
+# because the Directory bit and the not-there case have to be told apart
+# in one read, and this is the one place where a wrong "it is not there"
+# turns into a write.
+#
+# MEASURED 2026-09-05 under BOTH hosts, because the link walker above
+# justifies the same choice with a claim nobody had measured. Windows
+# PowerShell 5.1 and PowerShell 7 agree, character for character, on all
+# four cases: an intact junction, a DANGLING junction, a plainly missing
+# path, and an ordinary file. The dangling junction returns
+# `Directory, ReparsePoint` from GetAttributes and `True` from Test-Path
+# on both, and only the missing path throws. So the cross-host risk this
+# step was escalated for does not exist for a junction. Two limits are
+# stated rather than papered over: the walker's premise that Test-Path
+# "may report as absent" was NOT reproduced for a dangling junction, and
+# a dangling FILE SYMLINK was not measured at all, so nothing here claims
+# anything about one.
 $smAttr = $null
 try {
     $smAttr = [System.IO.File]::GetAttributes($SourceManifestOut)
