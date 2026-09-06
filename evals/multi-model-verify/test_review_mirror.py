@@ -1965,17 +1965,34 @@ def test_a_repo_root_beneath_a_directory_link_is_refused(tmp_path):
 def test_names_that_8_3_cannot_produce_are_accepted(tmp_path):
     """THE FALSE-REFUSAL REGRESSION, third attempt at this shape.
 
-    An 8.3 basename is at most eight characters and cannot contain a
-    space, so none of these can be a generated short name. The round-4
-    reviewer measured all three being refused by the previous pattern on
-    both hosts. Each is checked as a real build rather than a unit call,
+    An 8.3 basename is at most eight characters, cannot contain a space,
+    and is restricted to a documented character set. The round-4 reviewer
+    measured the first three being refused by the length-only pattern;
+    the round-5 reviewer called Windows' own `CheckNameLegalDOS8Dot3W` on
+    both hosts and produced the other five, none of which is a legal DOS
+    name. Each is checked as a real build rather than a unit call,
     because the refusal it guards against is a build refusal.
     """
     repo = make_repo(tmp_path)
-    for name in ("backup~2026", "ABCDEF~123456", "a b~1"):
+    # THE DESTINATION EXISTING IS NOT THE BUILD SUCCEEDING. The script
+    # creates that directory before the source-identity and copy checks
+    # run, so a failure after creation satisfied both of the assertions
+    # this test used to make while the docstring claimed a completed
+    # build. assert_built requires the completion diagnostic and the exit
+    # code. Round-5 finding.
+    for name in ("backup~2026", "ABCDEF~123456", "a b~1",
+                 "a+b~1", "a,b~1", "a=b~1", "ABC~1.+"):
         proc = run_mirror(repo, tmp_path / name)
         assert "8.3 short name" not in proc.stdout, (name, proc.stdout)
-        assert (tmp_path / name).is_dir(), (name, proc.stdout)
+        assert_built(proc)
+    # `a[b]~1` PASSES THE GUARD AND STILL CANNOT BE BUILT, measured
+    # 2026-09-06: robocopy exits 16 on a destination containing square
+    # brackets, and the script reports that failure. That is a separate
+    # limitation of the copy step, not this guard refusing a legal name,
+    # so it is asserted at the guard only. Asserting a completed build
+    # here would fail for a reason this test is not about.
+    proc = run_mirror(repo, tmp_path / "a[b]~1")
+    assert "8.3 short name" not in proc.stdout, proc.stdout
 
 
 def test_real_short_name_shapes_are_still_refused(tmp_path):
@@ -2329,8 +2346,7 @@ def test_display_controls_in_an_advisory_name_are_rendered(tmp_path):
     assert "\u202e" not in proc.stdout, "a bidi override reached the terminal"
     # THE WHOLE RENDERED NAME, not one escape unit. The substring form
     # accepted a doubled prefix, which is how the shipped renderer
-    # emitted two backslashes for four rounds without a test noticing,
-    # and it is also satisfied while the rest of the name is mangled.
+    # emitted two backslashes for four rounds without a test noticing.
     assert ("ev\\u009bil\\u202e.txt" in proc.stdout
             or "ev\\u009Bil\\u202E.txt" in proc.stdout), proc.stdout
     assert "unknown" not in proc.stdout, proc.stdout

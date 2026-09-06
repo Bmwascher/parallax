@@ -28,6 +28,7 @@ The full previous text of every closed item is in git history at
 - 94
 - 95
 - 98
+- 99
 
 ### Second - taxes every cycle
 - 44
@@ -4262,8 +4263,8 @@ Record: docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window
 ## 98. The mirror's own removal is unchecked, so a failed one builds over a stale tree
 Status: OPEN
 Cost: a build that fails to empty its destination copies over whatever survived, and the fingerprint then measures the resulting directory rather than proving it was freshly emptied, so a stale mirror can be certified as a fresh one
-Pairs: 95
-Verified: 2026-09-06 6b48a4a18278
+Pairs: 95, 99
+Verified: 2026-09-06 b01bcd59e8ca
 
 **Filed 2026-09-06 from the mode-diff debate for the identity window
 branch**, round 3, which asked whether refusing alias spellings was
@@ -4289,8 +4290,9 @@ filesystem denial, so the end state is inferred from the control flow
 rather than observed, and that limit is stated rather than hidden.
 
 **Why the spelling guard is not the remedy.** The same round added
-refusals for device forms, stream syntax and 8.3 short names, and those
-close the ALIAS class. This is a different class: an ordinary path, an
+refusals for device forms, stream syntax and 8.3 short names, which
+narrow the ALIAS class without closing it - item 99 holds the part that
+stays open. This is a different class: an ordinary path, an
 ordinary removal, and an ordinary failure. Refusing spellings does
 nothing for it, which is why it is filed rather than folded into that
 work.
@@ -4301,3 +4303,39 @@ real removal failure rather than a simulated one. The fingerprint's
 inability to distinguish a fresh directory from a merged one is the
 second half and may deserve its own treatment: it measures the result,
 which is exactly what a stale mirror also produces.
+
+## 99. A short name alias does not have to contain a tilde, so no spelling rule can find one
+Status: OPEN
+Cost: every overlap and containment check in the mirror tool compares spellings, and an assigned short alias is an ordinary-looking name that names another directory, so the destination guards can be walked past by a spelling no pattern can recognise
+Pairs: 98
+Verified: 2026-09-06 403b219b4301
+
+**Filed 2026-09-06 on the round-5 reviewer's own adjudication**, which
+was to defer the implementation but file it rather than leave it in a
+source comment. Record:
+`docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/diff-debate.md`.
+
+`Test-UnresolvableSpelling` in `tools/new-review-mirror.ps1` refuses
+device forms, NTFS stream syntax, trailing dots and spaces, and the
+generated 8.3 tilde shape. The tilde shape is the only alias rule it has,
+and short names do not have to contain a tilde: `fsutil file setshortname`
+assigns an arbitrary legal 8.3 name, and Microsoft documents assigning
+`LONGFILE.TXT` as the alias of `longfilename.txt`. The helper accepts
+`LONGFILE.TXT`, correctly, because nothing about that spelling
+distinguishes it from an ordinary name.
+
+**The experiment nobody has run.** Assign an alias to a disposable
+directory with `fsutil`, then drive an overlapping construction on both
+hosts and see whether the destination guards are walked past. The three
+reviewers who raised and refined this were all in read-only sessions and
+none could do the filesystem setup, so the gap is reasoned from
+documentation rather than measured. That is the first thing closing this
+item requires.
+
+**What closing it means.** Either resolving spellings to filesystem
+identity before the identity-sensitive comparisons - which needs an open
+handle, and the tool deliberately will not take one on a destination it
+is about to delete, so this is a design change rather than a patch - or
+an enforceable restriction that makes the alias case unreachable, or a
+recorded decision that the residual risk is accepted with the reasoning
+written down.

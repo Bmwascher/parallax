@@ -251,9 +251,20 @@ is the regression against tightening it back.
 
 **The helper shipped with a doubled backslash.** Generated as
 `.Replace("\\", "/")`, which PowerShell reads as a literal
-two-character string, so the split never fired and EVERY component check
-in the new helper was dead code. The short-name test caught it; nothing
-else would have. Seventh backslash-doubling incident on this branch.
+two-character string, so a path spelled with backslashes was never split
+into components. Seventh backslash-doubling incident on this branch.
+
+CORRECTED IN PLACE, 2026-09-06. This paragraph first said the split
+"never fired" and that "EVERY component check was dead", and that "the
+short-name test caught it; nothing else would have". The round-4
+reviewer built a mutant restoring the doubled form and measured what
+survived on both hosts: an unsplit string is still ONE component, so a
+trailing dot on the whole path was still caught, and forward-slash paths
+still split. What was lost was interior backslash-separated component
+checking, and the dotted-ancestor override regression exercises exactly
+that. The round-5 reviewer then pointed out that appending a correction
+lower down while leaving the wrong sentences here is not a correction,
+which is why this paragraph is edited rather than annotated.
 
 **A test asserted the wrong conclusion and did not survive execution.** A
 draft of `test_a_stream_form_repo_root_is_refused_too` claimed the stream
@@ -299,9 +310,12 @@ Resumed, route verified, binder `clean` and `sealed`, mirror rebuilt at
 the same path from head `9064753`.
 
 Seven findings. The notable thing about them is the split: ONE was a code
-defect, TWO were the guard refusing legitimate input, and FOUR were
-claims in this record and in test comments that overstated what had been
-measured. A sweep round aimed at a fix found more wrong with the account
+defect, ONE was the guard refusing legitimate input, ONE was a SUSPECTED
+alias the guard accepts, and FOUR were claims in this record and in test
+comments that overstated what had been measured. (An earlier version of
+this sentence counted two legitimate-input refusals; the retained round-4
+reply shows the second was an accepted alias, which is the opposite
+direction.) A sweep round aimed at a fix found more wrong with the account
 of the fix than with the fix.
 
 **1. The source root's ANCESTORS were never walked.** The only new code
@@ -382,3 +396,94 @@ experiments, create junction or short-alias fixtures, or exhaustively
 test network shares and drive mappings. The filesystem was unchanged.
 
 Verdict: **FIX**. One exchange remains of the five the user authorized.
+
+## Round 5 (`Astra D5`), the confirming round
+
+Resumed, route verified, binder `clean` and `sealed`, mirror rebuilt at
+the same path from head `7cc9e6f`.
+
+NOT DRY, but the reviewer separated merge blockers from follow-up as
+asked, and both blockers were in this side's most recent work rather than
+in the branch's original subject.
+
+**Blocker 1: the 8.3 rule was wrong a FOURTH time, in the same direction
+each time.** Lengths were bounded but the character set excluded only
+spaces and periods. The reviewer called Windows' own
+`CheckNameLegalDOS8Dot3W` in memory on both hosts: `a+b~1`, `a,b~1`,
+`a=b~1`, `a[b]~1` and `ABC~1.+` are all NOT legal DOS names, and short
+name generation replaces that punctuation with underscores, so a name
+containing it cannot be a generated alias. The rule now uses the
+documented legal set and all five are in the acceptance test.
+
+Four attempts at one regex is the honest headline of this branch. Each
+attempt refused legitimate names, each was caught by a reviewer measuring
+rather than reading, and each time the narrowing was justified by
+reasoning that sounded complete.
+
+**Blocker 2: the acceptance test could pass after a failed build.** It
+asserted the destination directory existed, and the script creates that
+directory BEFORE the source-identity and copy checks, so a failure after
+creation satisfied every assertion while the docstring claimed a
+completed build. It calls `assert_built` now.
+
+**A measurement that changed the test.** Adding `a[b]~1` to the built set
+fails: robocopy exits 16 on a destination containing square brackets,
+measured 2026-09-06. That is a limitation of the copy step, not this
+guard refusing a legal name, so the bracket case is asserted at the guard
+only and the reason is written next to it.
+
+**The editorial finding, and it is the sharpest of the round.** This
+document had been APPENDING corrections while leaving the wrong sentences
+in place: the doubled-backslash paragraph still said "every component
+check was dead" and "nothing else would have caught it", with the
+correction added a section lower. That is not a correction. Amended in
+place. The same shape was in the category test's comment and is gone.
+
+**Two record claims narrowed.** Item 98 said the guards "close the ALIAS
+class", which contradicts the tilde-free limit documented in the same
+commit; it now says they narrow it and points at item 99. And this
+document's round-4 summary counted two legitimate-input refusals when the
+retained reply shows one, the other being a SUSPECTED accepted alias -
+the opposite direction.
+
+**Item 99 filed**, on the reviewer's own adjudication: defer the
+implementation, but file it rather than leave it in a source comment. It
+records the experiment nobody has run, because all three reviewers who
+raised and refined the tilde-free alias gap were in read-only sessions
+and none could do the `fsutil` setup.
+
+**Confirmed holding.** The source-root ancestor fix precedes both
+destructive statements and refuses the junction spelling on both hosts.
+The reviewer's own note on it: on this machine the refusal comes from
+denied attribute access to `My Documents`, so its probe proves refusal
+rather than the specific junction diagnostic - the fixture asserts that
+diagnostic separately.
+
+**The usability question, adjudicated.** Yes, the source-root walk
+deliberately rejects a legitimate junction SPELLING; the direct target
+path is the route past it. The reviewer considers the restriction
+defensible under this tool's stated refusal policy, and automatic
+canonicalization a usability follow-up rather than a blocker.
+
+**What the reviewer did not check:** it did not rerun pytest or the
+behavioural evals, perform real removal, create junction or alias
+fixtures, or exhaustively test network shares and drive aliases.
+
+Final gate: 167 passed and 1 skipped under BOTH hosts; all six CI tiers
+clean, with `pytest evals` at 2930 passed and 14 skipped; skill lint PASS
+with the two known `SKILL.md` size warnings; scanner clean; backlog lint
+clean; script pure ASCII.
+
+## Where the debate stands
+
+Five exchanges used of five authorized. Round 5 was not dry, so the
+protocol's termination condition is NOT met, and this record does not
+claim it is. What the last round changed is the SHAPE of what remains:
+its two blockers are fixed, and everything it left open it classified
+itself as follow-up, with item 99 filed for the one open gap in the
+subject matter.
+
+A sixth round would be a new authorization. The trend across five rounds
+is that each one found something real, and the last two found more in
+this side's record and its newest guard than in the change the branch
+exists to make.

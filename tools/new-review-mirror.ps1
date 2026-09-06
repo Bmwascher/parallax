@@ -1373,9 +1373,20 @@ function Test-UnresolvableSpelling($label, $raw) {
             $segBase = $seg.Substring(0, $segDot)
             $segExt = $seg.Substring($segDot + 1)
         }
+        # THE CHARACTER SET, not just the lengths. The previous attempt
+        # excluded only spaces and periods, and the round-5 reviewer called
+        # Windows' own `CheckNameLegalDOS8Dot3W` in memory on both hosts to
+        # show `a+b~1`, `a,b~1`, `a=b~1`, `a[b]~1` and `ABC~1.+` are NOT
+        # legal DOS names while all four of the refused examples are. Short
+        # name GENERATION replaces this punctuation with underscores, so a
+        # name containing it cannot be a generated alias.
+        #
+        # The class is the documented legal 8.3 set: letters, digits, and
+        # $ % ' - _ @ ~ ` ! ( ) { } ^ # & - and nothing else.
         if ($segBase.Length -le 8 -and $segExt.Length -le 3 -and
-            $segBase -cmatch '^[^ .]{1,6}~[0-9]{1,6}$' -and
-            $segExt -notmatch ' ') {
+            $segBase -cmatch '^[A-Za-z0-9$%''\-_@`!(){}\^#&]{1,6}~[0-9]{1,6}$' -and
+            ($segExt.Length -eq 0 -or
+             $segExt -cmatch '^[A-Za-z0-9$%''\-_@`!(){}\^#&]{1,3}$')) {
             return ($label + " (" + $s + ") has a component shaped like an" +
                 " 8.3 short name, which this tool cannot resolve to the" +
                 " long name its comparisons use. If that is the real name" +
