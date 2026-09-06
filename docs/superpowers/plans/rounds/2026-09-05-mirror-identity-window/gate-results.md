@@ -56,12 +56,16 @@ observation. This paragraph is the pointer to that work.
 
 ## Not run
 
-`run_behavioral_evals.py --changed` is Task 5 Step 3 and has NOT been
-run. It makes real headless model runs graded by the cross-vendor
-reviewer, spending from the same quota the diff debate that follows this
-plan needs. The decision is the user's and is pending. Nothing above
-depends on it; skill and prompt text did change, so it does apply, and
-this line is here so a reader cannot mistake its absence for a pass.
+`run_behavioral_evals.py --changed` is Task 5 Step 3 and was NOT run.
+It makes real headless model runs graded by the cross-vendor reviewer,
+spending from the same quota the diff debate that follows this plan
+needs, and the user decided 2026-09-05 to keep that quota for the debate.
+
+This is a DELIBERATE GAP, not a pass. The suite applies: skill and prompt
+text changed in Task 3. Nothing else in this record depends on it, and
+nothing here may be read as evidence about the behaviour it would have
+measured. If it is run before merge, its result belongs in this file
+beside the tiers above.
 
 ## A plan defect in this task
 
