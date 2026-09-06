@@ -27,6 +27,7 @@ The full previous text of every closed item is in git history at
 - 92
 - 94
 - 95
+- 98
 
 ### Second - taxes every cycle
 - 44
@@ -4065,8 +4066,8 @@ narrows the digest without opening that hole, argued in the
 ## 95. Stated properties of the mirror tools that the code does not hold
 Status: OPEN
 Cost: each one is a promise a reader relies on, and one of them can leave an extra input missing from a mirror the digest then certifies
-Pairs: 94
-Verified: 2026-09-05 f1bf98605067
+Pairs: 94, 98
+Verified: 2026-09-05 90e593a1c0e4
 
 **Filed 2026-09-05 from the plan debate for item 94's cycle**, whose
 reviewer was asked to sweep for stated properties the code does not hold.
@@ -4257,3 +4258,42 @@ proves the text has not drifted since it was written, never that the
 work it describes happened.
 
 Record: docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window
+
+## 98. The mirror's own removal is unchecked, so a failed one builds over a stale tree
+Status: OPEN
+Cost: a build that fails to empty its destination copies over whatever survived, and the fingerprint then measures the resulting directory rather than proving it was freshly emptied, so a stale mirror can be certified as a fresh one
+Pairs: 95
+Verified: 2026-09-06 4b33bef11abd
+
+**Filed 2026-09-06 from the mode-diff debate for the identity window
+branch**, round 3, which asked whether refusing alias spellings was
+sufficient and was told plainly that it is not. Record:
+`docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/diff-debate.md`.
+
+`tools/new-review-mirror.ps1` removes an existing mirror with
+`Remove-Item -LiteralPath $MirrorPath -Recurse -Force` and checks
+nothing afterwards. The script never sets `$ErrorActionPreference`, so a
+non-terminating failure - a locked file, a denied ACE, a handle held by
+another process - leaves the directory partly or wholly intact and
+execution continues to `New-Item` and then to the copy. The copy uses
+robocopy `/E`, which merges rather than replaces, so surviving files stay.
+
+The reviewer simulated a non-terminating error from that statement on
+both hosts and execution reached `New-Item`. It did NOT reproduce a
+complete contaminated build under real filesystem denial, so the end
+state is inferred from the control flow rather than observed, and that
+limit is stated rather than hidden.
+
+**Why the spelling guard is not the remedy.** The same round added
+refusals for device forms, stream syntax and 8.3 short names, and those
+close the ALIAS class. This is a different class: an ordinary path, an
+ordinary removal, and an ordinary failure. Refusing spellings does
+nothing for it, which is why it is filed rather than folded into that
+work.
+
+**What closing it means.** The removal terminates construction with a
+named error before anything is created or copied, and a test drives a
+real removal failure rather than a simulated one. The fingerprint's
+inability to distinguish a fresh directory from a merged one is the
+second half and may deserve its own treatment: it measures the result,
+which is exactly what a stale mirror also produces.

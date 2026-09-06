@@ -1283,56 +1283,89 @@ while ($ri -lt $remaining.Count) {
 # the spelling rather than reason about what each downstream call does
 # with it - the same decision, for the same reason, as the -ExtraInput
 # guard further down.
+# ONE HELPER, called by every operand, because the OPERAND LIST is what
+# keeps going wrong. This guard was written twice and each version named
+# its subjects inline: the first covered the repo root and the mirror
+# path and missed -OverrideOut, the second added the override and missed
+# the extra inputs and the followed link targets. Both gaps were walked
+# through by the diff reviewer on both hosts. A caller that has to
+# remember to add itself to a list is the defect; a function every path
+# calls is not.
+#
+# It returns $null when the spelling is one this tool can compare, and
+# the refusal message when it is not.
+function Test-UnresolvableSpelling($label, $raw) {
+    $s = [string]$raw
+    # DEVICE PREFIXES name the same directory under a spelling no
+    # comparison here can match.
+    if ($s.StartsWith("\\?\") -or $s.StartsWith("\\.\")) {
+        return ($label + " (" + $s + ") uses a device path form that this" +
+            " tool cannot resolve to the same spelling its comparisons" +
+            " use; pass an ordinary drive path")
+    }
+    # NTFS STREAM SYNTAX. The first version tested Contains("::") and the
+    # round-3 reviewer walked through it with
+    # `C:\path:$I30:$INDEX_ALLOCATION`, whose colons are SEPARATED, which
+    # reported Directory on PowerShell 7 and reached the recursive delete.
+    # So the rule is positional instead: exactly one colon is legitimate,
+    # the drive separator at index 1, and any other colon is a stream.
+    $rest = $s
+    if ($rest.Length -ge 2 -and $rest[1] -eq ":" -and
+        [char]::IsLetter($rest[0])) {
+        $rest = $rest.Substring(2)
+    }
+    if ($rest.Contains(":")) {
+        return ($label + " (" + $s + ") contains a colon outside the drive" +
+            " separator, which names an NTFS stream rather than the file or" +
+            " directory this tool would compare; pass an ordinary path")
+    }
+    # ONE backslash. The generated form of this helper carried TWO,
+    # which PowerShell reads as a literal two-character string, so the
+    # split never fired and every component check below was dead. The
+    # short-name test caught it; nothing else would have.
+    foreach ($seg in $s.Replace("\", "/").Split("/")) {
+        if ($seg -match '[. ]$' -and $seg -ne "." -and $seg -ne "..") {
+            return ($label + " (" + $s + ") has a path component ending in" +
+                " a dot or a space, which Windows strips when it opens the" +
+                " path but PowerShell keeps in the string, so this tool" +
+                " cannot tell which directory it names; pass the exact name")
+        }
+        # 8.3 SHORT NAMES alias a long directory, and every comparison
+        # below is a string comparison, so an alias and its target compare
+        # unequal while naming one directory. Resolving one needs an open
+        # handle, which this tool will not take on a destination it is
+        # about to delete.
+        #
+        # THE SHAPE IS NARROW ON PURPOSE. The first version matched
+        # `~[0-9]+$` anywhere in a component and the round-3 reviewer
+        # showed it rejecting `release~2026`, an ordinary directory name,
+        # on both hosts - with a message telling the user to pass the full
+        # name when that already was the full name. A generated short name
+        # has at most six characters before the tilde and at most three of
+        # extension, so requiring that shape admits `release~2026` and
+        # still refuses `MULTI-~1` and `PXD1~1.SOU`.
+        if ($seg -match '^[^.]{1,6}~[0-9]{1,6}$' -or
+            $seg -match '^[^.]{1,6}~[0-9]{1,6}\.[^.]{1,3}$') {
+            return ($label + " (" + $s + ") has a component shaped like an" +
+                " 8.3 short name, which this tool cannot resolve to the" +
+                " long name its comparisons use. If that is the real name" +
+                " on disk, this tool does not support it: rename it or" +
+                " pass a path that does not go through it")
+        }
+    }
+    return $null
+}
+
 $spellingSubjects = @(@("the repo root", $RepoRoot),
                       @("the mirror path", $MirrorPath))
 if ($OverrideOut) {
-    # THE OVERRIDE IS AN OPERAND TOO. The first version of this guard
-    # covered the repo root and the mirror path and stopped there, and the
-    # round-2 reviewer walked straight through the gap: an -OverrideOut of
-    # `<repo>.\override.txt` passed every check and named a location
-    # inside the tree under review, which the build then hands to the
-    # probe's writer. Guarding operands one at a time is how this class
-    # survived being fixed once already.
     $spellingSubjects += , @("the override path", $OverrideOut)
 }
 foreach ($pair in $spellingSubjects) {
-    $raw = [string]$pair[1]
-    # DEVICE AND STREAM FORMS, checked on the whole string rather than per
-    # component. `\\?\C:\x` and `\\.\C:\x` name the same directory as
-    # `C:\x` under a spelling no comparison here can match, and
-    # `C:\x::$INDEX_ALLOCATION` names the directory itself through NTFS
-    # stream syntax. The round-2 reviewer reached the recursive delete
-    # call with each of these: the stream form on PowerShell 7, the device
-    # form on Windows PowerShell 5.1.
-    if ($raw.StartsWith("\\?\") -or $raw.StartsWith("\\.\") -or $raw.Contains("::")) {
-        Write-Output ("ERROR: " + $pair[0] + " (" + $raw + ") uses a device" +
-            " or stream path form that this tool cannot resolve to the same" +
-            " spelling its comparisons use; pass an ordinary drive path")
+    $bad = Test-UnresolvableSpelling $pair[0] $pair[1]
+    if ($bad) {
+        Write-Output ("ERROR: " + $bad)
         exit 2
-    }
-    foreach ($seg in $raw.Replace("\", "/").Split("/")) {
-        if ($seg -match '[. ]$' -and $seg -ne "." -and $seg -ne "..") {
-            Write-Output ("ERROR: " + $pair[0] + " (" + $raw + ") has a" +
-                " path component ending in a dot or a space, which Windows" +
-                " strips when it opens the path but PowerShell keeps in the" +
-                " string, so this tool cannot tell which directory it names;" +
-                " pass the exact name")
-            exit 2
-        }
-        # 8.3 SHORT NAMES. `MULTI-~1` is a real alias for a long directory
-        # name, and every guard below this point is a STRING comparison, so
-        # the alias and its target compare unequal while naming one
-        # directory. Resolving an alias to filesystem identity needs an
-        # open handle, which this tool will not take on a destination it is
-        # about to delete, so it refuses the spelling it cannot decide -
-        # the same stance it takes for directory links.
-        if ($seg -match '~[0-9]+$' -or $seg -match '~[0-9]+\.[^.]{1,3}$') {
-            Write-Output ("ERROR: " + $pair[0] + " (" + $raw + ") has a" +
-                " component that looks like an 8.3 short name, which this" +
-                " tool cannot resolve to the long name its comparisons use;" +
-                " pass the full name")
-            exit 2
-        }
     }
 }
 
@@ -1727,6 +1760,19 @@ foreach ($pair in @(@("mirror path", $MirrorPath), @("override path", $OverrideO
 # alias in the other direction (cross-vendor round 3): the walk records
 # the target as spelled, so a mirror path at the real directory behind
 # it neither passes through a link nor overlaps the recorded text.
+# THE HELPER, on discovered targets, before any comparison uses them.
+# The round-3 reviewer executed the protected-target checks with the real
+# alias `<mirror>/skills/MULTI-~1` and they accepted the corresponding
+# long directory as the destination. A target this tool discovered is
+# still a spelling it has to compare, so it gets the same validation as
+# one the caller passed.
+foreach ($target in @($followedTargets)) {
+    $bad = Test-UnresolvableSpelling "a followed link target" $target
+    if ($bad) {
+        Write-Output ("ERROR: " + $bad)
+        exit 2
+    }
+}
 foreach ($target in @($followedTargets)) {
     $hit = Test-PathOrAncestorIsLink $target
     if ($hit) {
@@ -1756,6 +1802,21 @@ foreach ($target in @($followedTargets)) {
 # EXTRA INPUTS versus the sidecar. $ExtraInputPaths holds paths already
 # resolved by the -ExtraInput parser above; that parser runs before $smp
 # exists, which is why this check lives here rather than beside it.
+# THE HELPER, on extra inputs, before the collision checks below. The
+# round-3 reviewer supplied this mirror's own sidecar under its real
+# short alias `C:\Temp\PXD1~1.SOU`, which passed every check and reached
+# the removal of `C:\Temp\pxd1.source-manifest`; the copy that follows is
+# unchecked, so the input would then be absent from a mirror the digest
+# certifies. The loop below keeps its own dot and space test; the helper
+# now covers the same ground for every operand, and the duplicate is left
+# rather than removed because its message is what two existing tests pin.
+foreach ($eiResolved in @($ExtraInputPaths)) {
+    $bad = Test-UnresolvableSpelling "-ExtraInput" $eiResolved
+    if ($bad) {
+        Write-Output ("ERROR: " + $bad)
+        exit 2
+    }
+}
 foreach ($eiResolved in @($ExtraInputPaths)) {
     $eiNorm = ([string]$eiResolved).Replace("\", "/").TrimEnd("/")
     if ($eiNorm.Equals($smp, $cmp)) {

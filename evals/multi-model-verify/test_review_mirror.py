@@ -1909,7 +1909,7 @@ def test_a_stream_form_path_is_refused(tmp_path):
     proc = run_mirror(pathlib.Path(str(repo) + "::$INDEX_ALLOCATION"),
                       tmp_path / "mirror")
     assert proc.returncode == 2, proc.stdout + proc.stderr
-    assert "cannot resolve" in proc.stdout, proc.stdout
+    assert "colon outside the drive separator" in proc.stdout, proc.stdout
 
 
 def test_a_device_prefixed_path_is_refused(tmp_path):
@@ -1920,6 +1920,83 @@ def test_a_device_prefixed_path_is_refused(tmp_path):
     proc = run_mirror(repo, pathlib.Path("\\\\?\\" + str(tmp_path / "mirror")))
     assert proc.returncode == 2, proc.stdout + proc.stderr
     assert "cannot resolve" in proc.stdout, proc.stdout
+
+
+def test_a_named_index_stream_path_is_refused(tmp_path):
+    """`<repo>:$I30:$INDEX_ALLOCATION` names the directory itself, and its
+    colons are SEPARATED, so the first version of this guard - which
+    tested for a literal `::` - let it through. The round-3 reviewer
+    reached the recursive delete with it on PowerShell 7, where the path
+    reports `Directory`.
+
+    The rule is positional now: one colon is legitimate, the drive
+    separator, and any other colon names a stream.
+    """
+    repo = make_repo(tmp_path)
+    proc = run_mirror(repo,
+                      pathlib.Path(str(tmp_path / "mirror") + ":$I30:$INDEX_ALLOCATION"))
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "colon outside the drive separator" in proc.stdout, proc.stdout
+    assert (repo / "kept.txt").exists(), "the source must survive a refusal"
+
+
+def test_a_stream_form_repo_root_is_refused_too(tmp_path):
+    """The round-3 reviewer demonstrated `<repo>:$I30:$INDEX_ALLOCATION`
+    as RepoRoot reaching the recursive delete through a validation
+    prefix. Through the SHIPPED script it is refused, and this test
+    records which mechanism does it.
+
+    A draft of this test asserted the opposite - that resolution
+    canonicalized the stream away and the build proceeded normally - on
+    the strength of one earlier run that predated the guard working at
+    all. It did not survive being run. Two mechanisms refuse this input
+    now: `Test-Path` on a stream spelling raises
+    `ItemExistsNotSupportedError`, and the colon rule refuses it by
+    spelling. Either is enough; the assertion names the one this tool
+    chose to write.
+    """
+    repo = make_repo(tmp_path)
+    proc = run_mirror(pathlib.Path(str(repo) + ":$I30:$INDEX_ALLOCATION"),
+                      tmp_path / "mirror")
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "colon outside the drive separator" in proc.stdout, proc.stdout
+
+
+def test_an_extra_input_with_a_short_name_component_is_refused(tmp_path):
+    """Extra inputs were outside the spelling guard, which named its
+    operands inline and reached three of them. The round-3 reviewer
+    supplied the mirror's OWN sidecar under its real 8.3 alias and reached
+    the removal of the long-named file, after which the unchecked copy
+    would leave a declared review input out of a mirror the digest
+    certifies."""
+    repo = make_repo(tmp_path)
+    # The parser refuses a nonexistent input before spelling is reached,
+    # so the file has to be real for this to test what it names.
+    (tmp_path / "INPUT~1.TXT").write_text("a declared review input\n")
+    proc = run_mirror(repo, tmp_path / "mirror", "-ExtraInput",
+                      str(tmp_path / "INPUT~1.TXT"))
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "8.3 short name" in proc.stdout, proc.stdout
+    assert (tmp_path / "INPUT~1.TXT").exists(), "the input must survive"
+
+
+def test_an_ordinary_name_holding_a_tilde_and_digits_is_accepted(tmp_path):
+    """THE OTHER DIRECTION, which the first regex got wrong. It matched
+    `~[0-9]+$` anywhere in a component, so it refused `release~2026` - an
+    ordinary directory name - and told the user to pass the full name when
+    that already was the full name. Measured by the round-3 reviewer on
+    both hosts.
+
+    A generated short name has at most six characters before the tilde,
+    so the shape is anchored now. This test is the guard against
+    tightening it back into a false positive.
+    """
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "release~2026"
+    proc = run_mirror(repo, mirror)
+    assert_built(proc)
+    assert "8.3 short name" not in proc.stdout, proc.stdout
+    assert mirror.is_dir(), proc.stdout
 
 
 def test_an_override_inside_the_source_through_a_dotted_ancestor_is_refused(tmp_path):
@@ -3006,8 +3083,15 @@ def test_a_mirror_whose_current_state_cannot_be_measured_is_refused(tmp_path):
         pytest.skip("icacls deny unavailable: " + deny.stdout + deny.stderr)
     try:
         proc = run_verify(repo, mirror, ident)
-        assert proc.returncode != 0, proc.stdout + proc.stderr
-        assert "could not be" in proc.stdout, proc.stdout
+        # EXIT 1 AND THE NAMED DIAGNOSTIC. `!= 0` plus the generic
+        # substring "could not be" left this green if the branch were
+        # changed to exit 2, which is this script's code for an error in
+        # the tool rather than a block it decided on. Third instance of
+        # the negative-only oracle class, found by the round-3 reviewer
+        # next door to the second.
+        assert proc.returncode == 1, proc.stdout + proc.stderr
+        assert "the mirror's current state could not be measured" in proc.stdout, (
+            proc.stdout)
     finally:
         undo = subprocess.run(["icacls", str(denied), "/remove:d", user],
                               capture_output=True, text=True)

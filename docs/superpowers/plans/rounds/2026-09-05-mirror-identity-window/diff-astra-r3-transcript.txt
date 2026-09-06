@@ -1,0 +1,1594 @@
+OpenAI Codex v0.153.4
+--------
+workdir: C:\Temp\pxd1
+model: gpt-6-astra
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: none
+session id: 01a074f2-6e8b-7d71-b8bc-073773764249
+--------
+user
+# Mode-diff debate, round 3: the confirming round
+
+Third and last of the declared budget of three. Same rules.
+
+The tree has moved again. New head is the commit `apply diff debate round
+2: refuse alias spellings on all three operands and fix the third
+negative oracle`, and the mirror was rebuilt at the same path from it.
+
+Thank you for the round 2 withdrawal. Getting a destructive claim
+narrowed to what the evidence supported is worth the round it cost, and
+you did it without being pushed twice.
+
+## What I changed from round 2
+
+**Finding 1, the alias spellings.** The guard now refuses three more
+forms, each with its own message, on every operand:
+
+- device prefixes, refused on the whole string: a path beginning `\\?\`
+  or `\\.\`
+- NTFS stream syntax: any path containing `::`
+- 8.3 short names, refused per component: a component matching `~[0-9]+$`
+  or `~[0-9]+\.[^.]{1,3}$`
+
+I took your framing rather than trying to establish identity: this tool
+will not open a handle on a destination it is about to delete, so it
+refuses what it cannot resolve, the same stance it already takes for
+directory links.
+
+Three tests, one per form: `test_a_short_name_component_is_refused`,
+`test_a_stream_form_path_is_refused`,
+`test_a_device_prefixed_path_is_refused`. The short-name test also
+asserts the source survives.
+
+**Finding 2, the missing operand.** The guard now builds a SUBJECT LIST
+and appends the override when one is supplied, rather than naming two
+operands inline. The test is
+`test_an_override_inside_the_source_through_a_dotted_ancestor_is_refused`
+and its docstring says why it exists as a test rather than a one-line
+addition: guarding operands one at a time is how this class survived
+being fixed once already. You caught me repeating inside my own fix the
+exact mistake you had just found in the original code.
+
+**Finding 3, the third negative oracle.**
+`test_an_unmeasurable_expected_digest_is_refused` now requires exit 1 and
+the string `recorded mirror state hash is missing or malformed`, so exit
+2 with empty stdout no longer passes.
+
+Gate: 160 passed and 1 skipped under BOTH hosts, full `pytest evals` 2923
+passed and 14 skipped, backlog lint clean, script still pure ASCII.
+
+## What I want from round 3
+
+This is the confirming round, so the bar is different: I am looking for a
+DRY round, and if the work is done I would rather have PASS than a
+finding manufactured to justify the dispatch.
+
+1. **Verify the six fixes against the code.** Particularly the guard, and
+   particularly whether my three new refusal patterns are right in BOTH
+   directions - do they refuse everything they should, and do they refuse
+   anything legitimate? The 8.3 regex is the one I trust least. A real
+   directory can legitimately contain a tilde and digits.
+2. **Is the subject-list shape actually complete?** I added the override.
+   Are there other destination or protected operands this tool writes to,
+   deletes, or compares, that are still outside the guard? That is the
+   question that has now caught me twice, so I would rather you answer it
+   than me.
+3. **One thing I did NOT do,** and I want your read on whether it matters:
+   the guard refuses spellings, but the reachability you demonstrated
+   depended on the removal failure being non-terminating. I did not add
+   an error check after `Remove-Item`, because it is outside this
+   branch's scope and I did not want to widen it silently. Is leaving
+   that unchecked a defect worth filing, or is refusing the spellings
+   sufficient?
+4. **Final class sweep.** Negative-only oracles, guard operand omissions,
+   spelling-versus-identity comparisons, measurement overclaims. Instances
+   or an explicit none, plus the shapes you searched.
+
+## Output
+
+Same format. If you reach PASS, say what the verdict rests on and what
+you did NOT check, so the record shows the shape of the remaining
+uncertainty rather than implying there is none.
+
+
+hook: UserPromptSubmit
+hook: UserPromptSubmit Completed
+codex
+I’ll check the refusal patterns, trace the subject list against every protected path and destination, and verify the oracle change. I’ll also assess unchecked removal separately, with any consequence limited to what I can demonstrate read-only.
+
+hook: PreToolUse
+hook: PreToolUse Completed
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command 'git log -2 --oneline; git status --short; git diff HEAD''^ HEAD -- tools/new-review-mirror.ps1 evals/multi-model-verify/test_review_mirror.py' in C:\Temp\pxd1
+ succeeded in 90ms:
+d80f0bc apply diff debate round 2: refuse alias spellings on all three operands and fix the third negative oracle
+b58bf25 apply diff debate round 1: refuse trailing dot destinations, harden two oracles, narrow three record claims
+diff --git a/evals/multi-model-verify/test_review_mirror.py b/evals/multi-model-verify/test_review_mirror.py
+index fd573ba..f6b54a4 100644
+--- a/evals/multi-model-verify/test_review_mirror.py
++++ b/evals/multi-model-verify/test_review_mirror.py
+@@ -1881,6 +1881,66 @@ def test_a_mirror_path_with_a_trailing_dot_is_refused(tmp_path):
+     assert (repo / "kept.txt").exists(), "the source must survive a refusal"
+ 
+ 
++def test_a_short_name_component_is_refused(tmp_path):
++    """8.3 SHORT NAMES alias a long directory under a different spelling,
++    and every comparison in this tool is a string comparison. The round-2
++    reviewer reached the recursive delete on BOTH hosts with a source of
++    `<repo>\\skills\\multi-model-verify` and a mirror of
++    `<repo>\\skills\\MULTI-~1`, and confirmed with `Remove-Item -WhatIf`
++    that the short form names the long directory.
++
++    This tool cannot resolve an alias to filesystem identity without
++    opening a handle, so it REFUSES the spelling it cannot decide - the
++    same stance it already takes for directory links and for trailing
++    dots.
++    """
++    repo = make_repo(tmp_path)
++    proc = run_mirror(repo, tmp_path / "MIRROR~1")
++    assert proc.returncode == 2, proc.stdout + proc.stderr
++    assert "cannot resolve" in proc.stdout, proc.stdout
++    assert (repo / "kept.txt").exists(), "the source must survive a refusal"
++
++
++def test_a_stream_form_path_is_refused(tmp_path):
++    """`<repo>::$INDEX_ALLOCATION` names the directory itself through NTFS
++    stream syntax and compares unequal to it. Reached the recursive delete
++    on PowerShell 7 in the round-2 probe."""
++    repo = make_repo(tmp_path)
++    proc = run_mirror(pathlib.Path(str(repo) + "::$INDEX_ALLOCATION"),
++                      tmp_path / "mirror")
++    assert proc.returncode == 2, proc.stdout + proc.stderr
++    assert "cannot resolve" in proc.stdout, proc.stdout
++
++
++def test_a_device_prefixed_path_is_refused(tmp_path):
++    """`\\\\?\\C:\\...` is the same directory under a spelling the
++    comparison cannot match. Reached the recursive delete on Windows
++    PowerShell 5.1 in the round-2 probe."""
++    repo = make_repo(tmp_path)
++    proc = run_mirror(repo, pathlib.Path("\\\\?\\" + str(tmp_path / "mirror")))
++    assert proc.returncode == 2, proc.stdout + proc.stderr
++    assert "cannot resolve" in proc.stdout, proc.stdout
++
++
++def test_an_override_inside_the_source_through_a_dotted_ancestor_is_refused(tmp_path):
++    """The spelling guard shipped covering two operands and the override
++    was not one of them, so `<repo>.\\override.txt` named a location
++    inside the tree under review and passed every check. The build then
++    hands that value to the probe, whose writer calls WriteAllBytes.
++
++    Found by the round-2 reviewer, on both hosts, and it is the same
++    defect as finding 1 on a third operand - which is what makes it worth
++    a test rather than a one-line addition: guarding operands one at a
++    time is how this class survived in the first place.
++    """
++    repo = make_repo(tmp_path)
++    proc = run_mirror(repo, tmp_path / "mirror", "-OverrideOut",
++                      str(repo) + ".\\override.txt")
++    assert proc.returncode == 2, proc.stdout + proc.stderr
++    assert "dot or a space" in proc.stdout, proc.stdout
++    assert (repo / "kept.txt").exists(), "the source must survive a refusal"
++
++
+ def test_a_repo_root_with_a_trailing_space_is_refused(tmp_path):
+     """The same defect on the other side of the comparison. Both
+     operands are user-supplied, so guarding one of them leaves the class
+@@ -2910,11 +2970,22 @@ def test_there_is_no_reseal_or_remint_mode(tmp_path):
+ 
+ 
+ def test_an_unmeasurable_expected_digest_is_refused(tmp_path):
++    """`returncode != 0` was the whole oracle here, and exit 2 with empty
++    stdout satisfied it. This script's exit contract separates 1, blocked
++    with a reason on stdout, from 2, a script or environment error, so an
++    oracle that accepts either cannot tell a working refusal from a crash
++    in the code that was supposed to refuse.
++
++    Found by the round-2 diff reviewer as a third instance of the
++    negative-only oracle class.
++    """
+     repo = make_repo(tmp_path)
+     mirror = tmp_path / "mirror"
+     _, ident = build_and_read(repo, mirror)
+     proc = run_verify(repo, mirror, ident, mirror_state_sha256="")
+-    assert proc.returncode != 0, proc.stdout + proc.stderr
++    assert proc.returncode == 1, proc.stdout + proc.stderr
++    assert "recorded mirror state hash is missing or malformed" in proc.stdout, (
++        proc.stdout)
+ 
+ 
+ def test_a_mirror_whose_current_state_cannot_be_measured_is_refused(tmp_path):
+diff --git a/tools/new-review-mirror.ps1 b/tools/new-review-mirror.ps1
+index b0fa483..5fa0e1d 100644
+--- a/tools/new-review-mirror.ps1
++++ b/tools/new-review-mirror.ps1
+@@ -1283,16 +1283,56 @@ while ($ri -lt $remaining.Count) {
+ # the spelling rather than reason about what each downstream call does
+ # with it - the same decision, for the same reason, as the -ExtraInput
+ # guard further down.
+-foreach ($pair in @(@("the repo root", $RepoRoot), @("the mirror path", $MirrorPath))) {
+-    foreach ($seg in ([string]$pair[1]).Replace("\", "/").Split("/")) {
++$spellingSubjects = @(@("the repo root", $RepoRoot),
++                      @("the mirror path", $MirrorPath))
++if ($OverrideOut) {
++    # THE OVERRIDE IS AN OPERAND TOO. The first version of this guard
++    # covered the repo root and the mirror path and stopped there, and the
++    # round-2 reviewer walked straight through the gap: an -OverrideOut of
++    # `<repo>.\override.txt` passed every check and named a location
++    # inside the tree under review, which the build then hands to the
++    # probe's writer. Guarding operands one at a time is how this class
++    # survived being fixed once already.
++    $spellingSubjects += , @("the override path", $OverrideOut)
++}
++foreach ($pair in $spellingSubjects) {
++    $raw = [string]$pair[1]
++    # DEVICE AND STREAM FORMS, checked on the whole string rather than per
++    # component. `\\?\C:\x` and `\\.\C:\x` name the same directory as
++    # `C:\x` under a spelling no comparison here can match, and
++    # `C:\x::$INDEX_ALLOCATION` names the directory itself through NTFS
++    # stream syntax. The round-2 reviewer reached the recursive delete
++    # call with each of these: the stream form on PowerShell 7, the device
++    # form on Windows PowerShell 5.1.
++    if ($raw.StartsWith("\\?\") -or $raw.StartsWith("\\.\") -or $raw.Contains("::")) {
++        Write-Output ("ERROR: " + $pair[0] + " (" + $raw + ") uses a device" +
++            " or stream path form that this tool cannot resolve to the same" +
++            " spelling its comparisons use; pass an ordinary drive path")
++        exit 2
++    }
++    foreach ($seg in $raw.Replace("\", "/").Split("/")) {
+         if ($seg -match '[. ]$' -and $seg -ne "." -and $seg -ne "..") {
+-            Write-Output ("ERROR: " + $pair[0] + " (" + $pair[1] + ") has a" +
++            Write-Output ("ERROR: " + $pair[0] + " (" + $raw + ") has a" +
+                 " path component ending in a dot or a space, which Windows" +
+                 " strips when it opens the path but PowerShell keeps in the" +
+                 " string, so this tool cannot tell which directory it names;" +
+                 " pass the exact name")
+             exit 2
+         }
++        # 8.3 SHORT NAMES. `MULTI-~1` is a real alias for a long directory
++        # name, and every guard below this point is a STRING comparison, so
++        # the alias and its target compare unequal while naming one
++        # directory. Resolving an alias to filesystem identity needs an
++        # open handle, which this tool will not take on a destination it is
++        # about to delete, so it refuses the spelling it cannot decide -
++        # the same stance it takes for directory links.
++        if ($seg -match '~[0-9]+$' -or $seg -match '~[0-9]+\.[^.]{1,3}$') {
++            Write-Output ("ERROR: " + $pair[0] + " (" + $raw + ") has a" +
++                " component that looks like an 8.3 short name, which this" +
++                " tool cannot resolve to the long name its comparisons use;" +
++                " pass the full name")
++            exit 2
++        }
+     }
+ }
+ 
+
+hook: PostToolUse
+hook: PostToolUse Completed
+hook: PreToolUse
+hook: PreToolUse
+hook: PreToolUse Completed
+hook: PreToolUse Completed
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command '$s=Get-Content tools/new-review-mirror.ps1; foreach($r in @(@(1283,1385),@(1725,1899),@(2070,2138))){for($i=$r[0];$i -le $r[1];$i++){'"'{0}: {1}' -f "'$i,$s[$i-1]}}' in C:\Temp\pxd1
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command '$p='"'tools/new-review-mirror.ps1'; Select-String -LiteralPath "'$p -Pattern '"'spellingSubjects|ExtraInputPaths|foreach \\(\\"'$target|Remove-Item|Copy-Item|SourceManifestOut|function Test-PathOrAncestor|New-Item|WriteAll|CreateNew'"' | ForEach-Object {'{0}: {1}' -f "'$_.LineNumber,$_.Line}; $fs=New-Object -ComObject Scripting.FileSystemObject; foreach($p in @('"'C:\\Temp\\pxd1.source-manifest','C:\\Temp\\pxd1\\BACKLOG.md')) { try {"'$f=$fs.GetFile($p); $p+'"' => '+"'$f.ShortPath} catch {$_.Exception.Message} }; Get-Item -LiteralPath C:'"\\Users\\Brandon\\Documents\\parallax | Select-Object FullName,Attributes" in C:\Temp\pxd1
+ succeeded in 194ms:
+1283: # the spelling rather than reason about what each downstream call does
+1284: # with it - the same decision, for the same reason, as the -ExtraInput
+1285: # guard further down.
+1286: $spellingSubjects = @(@("the repo root", $RepoRoot),
+1287:                       @("the mirror path", $MirrorPath))
+1288: if ($OverrideOut) {
+1289:     # THE OVERRIDE IS AN OPERAND TOO. The first version of this guard
+1290:     # covered the repo root and the mirror path and stopped there, and the
+1291:     # round-2 reviewer walked straight through the gap: an -OverrideOut of
+1292:     # `<repo>.\override.txt` passed every check and named a location
+1293:     # inside the tree under review, which the build then hands to the
+1294:     # probe's writer. Guarding operands one at a time is how this class
+1295:     # survived being fixed once already.
+1296:     $spellingSubjects += , @("the override path", $OverrideOut)
+1297: }
+1298: foreach ($pair in $spellingSubjects) {
+1299:     $raw = [string]$pair[1]
+1300:     # DEVICE AND STREAM FORMS, checked on the whole string rather than per
+1301:     # component. `\\?\C:\x` and `\\.\C:\x` name the same directory as
+1302:     # `C:\x` under a spelling no comparison here can match, and
+1303:     # `C:\x::$INDEX_ALLOCATION` names the directory itself through NTFS
+1304:     # stream syntax. The round-2 reviewer reached the recursive delete
+1305:     # call with each of these: the stream form on PowerShell 7, the device
+1306:     # form on Windows PowerShell 5.1.
+1307:     if ($raw.StartsWith("\\?\") -or $raw.StartsWith("\\.\") -or $raw.Contains("::")) {
+1308:         Write-Output ("ERROR: " + $pair[0] + " (" + $raw + ") uses a device" +
+1309:             " or stream path form that this tool cannot resolve to the same" +
+1310:             " spelling its comparisons use; pass an ordinary drive path")
+1311:         exit 2
+1312:     }
+1313:     foreach ($seg in $raw.Replace("\", "/").Split("/")) {
+1314:         if ($seg -match '[. ]$' -and $seg -ne "." -and $seg -ne "..") {
+1315:             Write-Output ("ERROR: " + $pair[0] + " (" + $raw + ") has a" +
+1316:                 " path component ending in a dot or a space, which Windows" +
+1317:                 " strips when it opens the path but PowerShell keeps in the" +
+1318:                 " string, so this tool cannot tell which directory it names;" +
+1319:                 " pass the exact name")
+1320:             exit 2
+1321:         }
+1322:         # 8.3 SHORT NAMES. `MULTI-~1` is a real alias for a long directory
+1323:         # name, and every guard below this point is a STRING comparison, so
+1324:         # the alias and its target compare unequal while naming one
+1325:         # directory. Resolving an alias to filesystem identity needs an
+1326:         # open handle, which this tool will not take on a destination it is
+1327:         # about to delete, so it refuses the spelling it cannot decide -
+1328:         # the same stance it takes for directory links.
+1329:         if ($seg -match '~[0-9]+$' -or $seg -match '~[0-9]+\.[^.]{1,3}$') {
+1330:             Write-Output ("ERROR: " + $pair[0] + " (" + $raw + ") has a" +
+1331:                 " component that looks like an 8.3 short name, which this" +
+1332:                 " tool cannot resolve to the long name its comparisons use;" +
+1333:                 " pass the full name")
+1334:             exit 2
+1335:         }
+1336:     }
+1337: }
+1338: 
+1339: # OVERLAP GUARD, before anything is created or deleted. -Force recursively
+1340: # deletes MirrorPath, so a MirrorPath equal to, inside, or containing
+1341: # RepoRoot would destroy the user's working tree. robocopy over an
+1342: # overlapping pair is equally unsafe. This runs FIRST among the
+1343: # comparisons, because by the time Remove-Item runs it is too late to
+1344: # check.
+1345: $rr = $RepoRoot.Replace("\", "/").TrimEnd("/") + "/"
+1346: $mp = $MirrorPath.Replace("\", "/").TrimEnd("/") + "/"
+1347: $cmp = [System.StringComparison]::OrdinalIgnoreCase
+1348: if ($mp.Equals($rr, $cmp)) {
+1349:     Write-Output "ERROR: the mirror path is the repo root itself"
+1350:     exit 2
+1351: }
+1352: if ($mp.StartsWith($rr, $cmp)) {
+1353:     Write-Output ("ERROR: the mirror path is inside the repo ($MirrorPath)" +
+1354:         " - building or forcing there would write into, or delete, the" +
+1355:         " tree under review")
+1356:     exit 2
+1357: }
+1358: if ($rr.StartsWith($mp, $cmp)) {
+1359:     Write-Output ("ERROR: the mirror path contains the repo ($MirrorPath)" +
+1360:         " - -Force would delete the repo with it")
+1361:     exit 2
+1362: }
+1363: 
+1364: # Resolve the EFFECTIVE override path here, default included, and guard it
+1365: # beside the mirror guard. Deferring the default until after the mirror is
+1366: # built, copied, remediated and manifested would mean discovering a stale
+1367: # or overlapping artifact only after all that work had already happened,
+1368: # and -SkipProbe would bypass the check entirely.
+1369: if (-not $OverrideOut) {
+1370:     $OverrideOut = Join-Path (Split-Path $MirrorPath -Parent) `
+1371:         ((Split-Path $MirrorPath -Leaf) + ".skills-override.txt")
+1372: }
+1373: $op = $OverrideOut.Replace("\", "/").TrimEnd("/")
+1374: foreach ($protected in @($rr, $mp)) {
+1375:     if (($op + "/").Equals($protected, $cmp) -or
+1376:         ($op + "/").StartsWith($protected, $cmp) -or
+1377:         $protected.StartsWith($op + "/", $cmp)) {
+1378:         Write-Output ("ERROR: the override path overlaps a protected tree" +
+1379:             " ($OverrideOut)")
+1380:         exit 2
+1381:     }
+1382: }
+1383: if (Test-Path $OverrideOut) {
+1384:     Write-Output ("ERROR: $OverrideOut already exists - a stale override" +
+1385:         " reads exactly like a fresh one")
+1725: }
+1726: # A followed TARGET that is itself a link, or sits beneath one, is the
+1727: # alias in the other direction (cross-vendor round 3): the walk records
+1728: # the target as spelled, so a mirror path at the real directory behind
+1729: # it neither passes through a link nor overlaps the recorded text.
+1730: foreach ($target in @($followedTargets)) {
+1731:     $hit = Test-PathOrAncestorIsLink $target
+1732:     if ($hit) {
+1733:         Write-Output ("ERROR: the source link target " + $target + " is" +
+1734:             " itself a directory link or sits beneath one (" + $hit + ") -" +
+1735:             " the mirror cannot protect a tree it cannot name, so it" +
+1736:             " refuses to build")
+1737:         exit 2
+1738:     }
+1739: }
+1740: foreach ($target in @($followedTargets)) {
+1741:     $tp = ([string]$target).Replace("\", "/").TrimEnd("/") + "/"
+1742:     foreach ($pair in @(@("mirror path", $mp), @("override path", ($op + "/")),
+1743:                         @("source manifest path", ($smp + "/")))) {
+1744:         $label = $pair[0]
+1745:         $cand = $pair[1]
+1746:         if ($cand.Equals($tp, $cmp) -or $cand.StartsWith($tp, $cmp) -or
+1747:             $tp.StartsWith($cand, $cmp)) {
+1748:             Write-Output ("ERROR: the " + $label + " overlaps the target of a" +
+1749:                 " source link (" + $target + ") - building there would write" +
+1750:                 " into, or delete, a tree the mirror only links to")
+1751:             exit 2
+1752:         }
+1753:     }
+1754: }
+1755: 
+1756: # EXTRA INPUTS versus the sidecar. $ExtraInputPaths holds paths already
+1757: # resolved by the -ExtraInput parser above; that parser runs before $smp
+1758: # exists, which is why this check lives here rather than beside it.
+1759: foreach ($eiResolved in @($ExtraInputPaths)) {
+1760:     $eiNorm = ([string]$eiResolved).Replace("\", "/").TrimEnd("/")
+1761:     if ($eiNorm.Equals($smp, $cmp)) {
+1762:         Write-Output ("ERROR: -ExtraInput '" + $eiResolved + "' is the" +
+1763:             " source manifest path, which this build replaces - a declared" +
+1764:             " review input must not be a file this tool overwrites")
+1765:         exit 2
+1766:     }
+1767:     # SPELLING EQUALITY IS NOT IDENTITY, and the comparison above is only
+1768:     # spelling. With C:\alias a junction to C:\out, a mirror at
+1769:     # C:\out\mirror and an extra input at
+1770:     # C:\alias\mirror.source-manifest, BOTH output paths have ordinary
+1771:     # ancestors and pass their own alias checks, while the extra input
+1772:     # keeps the alias spelling and compares unequal - and -Force would
+1773:     # then remove the very file that extra input names, after which the
+1774:     # unchecked Copy-Item can leave it out of the mirror entirely. This
+1775:     # tool cannot establish physical identity here, so it REFUSES the
+1776:     # case it cannot decide rather than guessing.
+1777:     # A TRAILING DOT OR SPACE ON ANY COMPONENT defeats the comparison
+1778:     # above. Windows strips it when it OPENS the file; PowerShell keeps
+1779:     # it in the path. Measured 2026-09-05: `BACKLOG.md.` passes
+1780:     # Test-Path, resolves WITH the dot, hashes identical to
+1781:     # `BACKLOG.md`, and compares unequal - so an extra input spelled
+1782:     # `<mirror>.source-manifest.` passes this guard and still names the
+1783:     # file -Force is about to remove. Refuse the spelling.
+1784:     foreach ($seg in $eiNorm.Split('/')) {
+1785:         if ($seg -match '[. ]$') {
+1786:             Write-Output ("ERROR: -ExtraInput '" + $eiResolved + "' has" +
+1787:                 " a path component ending in a dot or a space, which" +
+1788:                 " Windows strips when it opens the file but PowerShell" +
+1789:                 " keeps in the path, so this tool cannot tell which file" +
+1790:                 " it names; pass the exact name")
+1791:             exit 2
+1792:         }
+1793:     }
+1794:     $eiHit = Test-PathOrAncestorIsLink $eiResolved
+1795:     if ($eiHit) {
+1796:         Write-Output ("ERROR: -ExtraInput '" + $eiResolved + "' is reached" +
+1797:             " through a directory link at " + $eiHit + ", so this tool" +
+1798:             " cannot tell whether it names the same file as the source" +
+1799:             " manifest it replaces; pass the path behind the link")
+1800:         exit 2
+1801:     }
+1802: }
+1803: 
+1804: # LAST, because a build that is going to be refused must not have deleted
+1805: # anything first. Read the ATTRIBUTES rather than calling Test-Path,
+1806: # because the Directory bit and the not-there case have to be told apart
+1807: # in one read, and this is the one place where a wrong "it is not there"
+1808: # turns into a write.
+1809: #
+1810: # MEASURED 2026-09-05 under BOTH hosts, because the link walker above
+1811: # justifies the same choice with a claim nobody had measured. Windows
+1812: # PowerShell 5.1 and PowerShell 7 agree, character for character, on all
+1813: # four cases: an intact junction, a DANGLING junction, a plainly missing
+1814: # path, and an ordinary file. The dangling junction returns
+1815: # `Directory, ReparsePoint` from GetAttributes and `True` from Test-Path
+1816: # on both, and only the missing path throws. So the cross-host risk this
+1817: # step was escalated for does not exist for a junction. Two limits are
+1818: # stated rather than papered over: the walker's premise that Test-Path
+1819: # "may report as absent" was NOT reproduced for a dangling junction, and
+1820: # a dangling FILE SYMLINK was not measured at all, so nothing here claims
+1821: # anything about one.
+1822: $smAttr = $null
+1823: try {
+1824:     $smAttr = [System.IO.File]::GetAttributes($SourceManifestOut)
+1825: } catch [System.IO.FileNotFoundException] {
+1826:     $smAttr = $null
+1827: } catch [System.IO.DirectoryNotFoundException] {
+1828:     $smAttr = $null
+1829: } catch {
+1830:     Write-Output ("ERROR: the source manifest path could not be examined" +
+1831:         " ($SourceManifestOut): " + $_.Exception.Message)
+1832:     exit 2
+1833: }
+1834: if ($null -ne $smAttr) {
+1835:     if (([int]$smAttr -band [int][System.IO.FileAttributes]::Directory) -ne 0) {
+1836:         Write-Output ("ERROR: $SourceManifestOut is a directory - this tool" +
+1837:             " replaces a file there and never removes a tree")
+1838:         exit 2
+1839:     }
+1840:     if (-not $Force) {
+1841:         Write-Output ("ERROR: $SourceManifestOut already exists - pass" +
+1842:             " -Force to replace it, the same rule the mirror path follows")
+1843:         exit 2
+1844:     }
+1845:     # REMOVING a link removes the link and never its target's bytes,
+1846:     # which is exactly why the removal is safe where a write through it
+1847:     # was not.
+1848:     Remove-Item -LiteralPath $SourceManifestOut -Force
+1849: }
+1850: 
+1851: if (Test-Path $MirrorPath) {
+1852:     if (-not $Force) {
+1853:         Write-Output ("ERROR: $MirrorPath already exists - a stale mirror" +
+1854:             " reads exactly like a fresh one. Pass -Force to replace it.")
+1855:         exit 2
+1856:     }
+1857:     Remove-Item -LiteralPath $MirrorPath -Recurse -Force
+1858: }
+1859: New-Item -ItemType Directory -Force -Path $MirrorPath | Out-Null
+1860: $MirrorPath = (Resolve-Path $MirrorPath).Path
+1861: 
+1862: # CONSTRUCTION BRIDGE, step 1: capture the source identity BEFORE the
+1863: # copy. Everything after this compares against this value, not against a
+1864: # fresh read, because a fresh read cannot tell a stable source from one
+1865: # that moved and moved back.
+1866: $sourceBefore = Get-HeadSha $RepoRoot
+1867: if (-not $sourceBefore.Ok) {
+1868:     Write-Output ("BLOCKED: " + $sourceBefore.Reason + " - the mirror's" +
+1869:         " identity in the debate record would be blank on the source side")
+1870:     exit 1
+1871: }
+1872: 
+1873: # The source status, captured BEFORE the copy. Taken here and again
+1874: # after, and required equal, for the same reason as the head: a
+1875: # fingerprint taken only afterwards bakes in any edit that landed during
+1876: # the copy, and every later verify then passes over a mirror carrying
+1877: # older bytes. That direction is fail-OPEN, which this gate may not be.
+1878: $statusBefore = Get-StatusSha256 $RepoRoot
+1879: if (-not $statusBefore.Ok) {
+1880:     Write-Output ("BLOCKED: the source status capture failed (" +
+1881:         $statusBefore.Reason + "), so post-construction drift in an" +
+1882:         " untracked or ignored review input would be undetectable")
+1883:     exit 1
+1884: }
+1885: 
+1886: # /XJD: directory junctions and directory symbolic links are not copied
+1887: # through. Measured 2026-09-05: the link is absent from the destination
+1888: # and every ordinary file copies. File links are NOT excluded, so a file
+1889: # symbolic link still lands as its target's bytes, exactly as before.
+1890: & robocopy $RepoRoot $MirrorPath /E /XJD /COPY:DAT /R:1 /W:1 /NFL /NDL /NJH /NJS /NP | Out-Null
+1891: if ($LASTEXITCODE -ge 8) {
+1892:     Write-Output "ERROR: robocopy failed with $LASTEXITCODE"
+1893:     exit 2
+1894: }
+1895: 
+1896: # THE THREE TEST SEAMS, and the rule they must satisfy LITERALLY. Two of
+1897: # them are declared here; the third, $seamFailLinkTarget, is declared at
+1898: # the top of the execution section because Get-FilesBeneath reads it
+1899: # during the source status capture ABOVE, and it only ever ADDS the
+2070: }
+2071: 
+2072: # COPY EACH -ExtraInput IN NOW, as part of construction and BEFORE the
+2073: # baseline and the manifest are taken below, so the identity record
+2074: # covers it and the printed record enumerates it - it lands as an
+2075: # ordinary untracked mirror file, the same as any other review input the
+2076: # mirror cannot inherit on its own.
+2077: # Two refusals BEFORE any of them is copied, so a rejected build never
+2078: # leaves half the inputs in place. Every input is flattened to its leaf
+2079: # name, because the mirror re-roots every path; that makes two different
+2080: # files with one leaf name indistinguishable at the destination, and it
+2081: # lets an outside file land on a name the copied tree already carries.
+2082: # Cross-vendor round 2 found both: the loop wrote with -Force, so the
+2083: # second of a colliding pair silently won and a tracked file could be
+2084: # replaced by unreviewed content that the digest then certified. The
+2085: # plan promises to copy in EACH named file, and there is no second
+2086: # location it ever froze, so the honest answer is to refuse.
+2087: $eiSeen = @{}
+2088: foreach ($ei in @($ExtraInputPaths)) {
+2089:     $leaf = Split-Path $ei -Leaf
+2090:     $key = $leaf.ToLowerInvariant()
+2091:     if ($eiSeen.ContainsKey($key)) {
+2092:         Write-Output ("BLOCKED: two -ExtraInput files share the destination" +
+2093:             " name '" + $leaf + "' (" + $eiSeen[$key] + " and " + $ei +
+2094:             "); the mirror flattens every input to its leaf name, so one" +
+2095:             " would silently replace the other")
+2096:         exit 1
+2097:     }
+2098:     $eiSeen[$key] = $ei
+2099:     $dest = Join-Path $MirrorPath $leaf
+2100:     if (Test-Path -LiteralPath $dest) {
+2101:         Write-Output ("BLOCKED: -ExtraInput '" + $leaf + "' would overwrite" +
+2102:             " a file the mirror already has (" + $dest + "); reviewed" +
+2103:             " content must not be replaced by unreviewed content the" +
+2104:             " digest would then certify")
+2105:         exit 1
+2106:     }
+2107: }
+2108: foreach ($ei in @($ExtraInputPaths)) {
+2109:     $dest = Join-Path $MirrorPath (Split-Path $ei -Leaf)
+2110:     Copy-Item -LiteralPath $ei -Destination $dest -Force
+2111: }
+2112: # THE LAST SWEEP, after every writer into the mirror. The enumeration
+2113: # above proves REMEDIATION worked. This one proves nothing put a
+2114: # back-channel back afterwards. SKILL.md calls the enumeration the
+2115: # PRIMARY control for the reviewed tree's skills and agents, "not
+2116: # defence in depth", and a control that runs before the last writer
+2117: # into the tree it clears is not that control. -ExtraInput is the only
+2118: # shipped writer below the sweep above; this sweep sits after ALL of
+2119: # them so the next writer added inherits it rather than slipping under
+2120: # it. Measured 2026-08-31: without this, an AGENTS.md named as an
+2121: # -ExtraInput reached the finished mirror and only the client probe
+2122: # refused it.
+2123: $final = Get-BackChannelEntry $MirrorPath
+2124: if (-not $final.Ok) {
+2125:     Write-Output ("ERROR: could not re-enumerate back-channels in the" +
+2126:         " finished mirror: " + $final.Reason)
+2127:     exit 2
+2128: }
+2129: if ($final.Entries.Count -gt 0) {
+2130:     Write-Output ("BLOCKED: back-channel(s) present in the finished" +
+2131:         " mirror: " + ($final.Entries -join "; ") + ". Remediation" +
+2132:         " cleared the mirror, so this was carried back in afterwards -" +
+2133:         " an -ExtraInput may not name an instruction channel.")
+2134:     exit 1
+2135: }
+2136: 
+2137: # RE-LINK, after the last writer and the last sweep. Remediation deletes
+2138: # what it finds with Remove-Item, and after this step that path would
+
+hook: PostToolUse
+ succeeded in 249ms:
+754:     # CREATE-NEW, never WriteAllLines. State the guarantee exactly: it
+764:         $fs = [System.IO.File]::Open($path, 'CreateNew', 'Write', 'None')
+1220: # and `Remove-Item -Recurse -Force` further down resolve the same parameter
+1241: $ExtraInputPaths = New-Object System.Collections.ArrayList
+1265:     [void]$ExtraInputPaths.Add((Resolve-Path -LiteralPath $eiPath).Path)
+1278: # what happens: the dotted path passes `Test-Path`, and `Remove-Item`
+1286: $spellingSubjects = @(@("the repo root", $RepoRoot),
+1296:     $spellingSubjects += , @("the override path", $OverrideOut)
+1298: foreach ($pair in $spellingSubjects) {
+1343: # comparisons, because by the time Remove-Item runs it is too late to
+1409: $SourceManifestOut = $smResult.Path
+1410: $smp = $SourceManifestOut.Replace("\", "/").TrimEnd("/")
+1416:             " tree ($SourceManifestOut)")
+1422:         " ($SourceManifestOut) - the advisory write would replace the file" +
+1426: if ($SourceManifestOut.Length -ge 260) {
+1428:         "$SourceManifestOut is $($SourceManifestOut.Length) characters " +
+1684: function Test-PathOrAncestorIsLink($path) {
+1716:                     @("source manifest path", $SourceManifestOut))) {
+1730: foreach ($target in @($followedTargets)) {
+1740: foreach ($target in @($followedTargets)) {
+1756: # EXTRA INPUTS versus the sidecar. $ExtraInputPaths holds paths already
+1759: foreach ($eiResolved in @($ExtraInputPaths)) {
+1774:     # unchecked Copy-Item can leave it out of the mirror entirely. This
+1824:     $smAttr = [System.IO.File]::GetAttributes($SourceManifestOut)
+1831:         " ($SourceManifestOut): " + $_.Exception.Message)
+1836:         Write-Output ("ERROR: $SourceManifestOut is a directory - this tool" +
+1841:         Write-Output ("ERROR: $SourceManifestOut already exists - pass" +
+1848:     Remove-Item -LiteralPath $SourceManifestOut -Force
+1857:     Remove-Item -LiteralPath $MirrorPath -Recurse -Force
+1859: New-Item -ItemType Directory -Force -Path $MirrorPath | Out-Null
+1988:     if (Test-Path $full) { Remove-Item -LiteralPath $full -Recurse -Force }
+1997:         Remove-Item -LiteralPath $dir -Force
+2016:         New-Item -ItemType Directory -Path $hooksDir -Force -ErrorAction Stop | Out-Null
+2088: foreach ($ei in @($ExtraInputPaths)) {
+2108: foreach ($ei in @($ExtraInputPaths)) {
+2110:     Copy-Item -LiteralPath $ei -Destination $dest -Force
+2138: # what it finds with Remove-Item, and after this step that path would
+2145: # refused it; New-Item -ItemType Junction succeeded on both hosts with
+2169:         New-Item -ItemType Junction -Path $dest -Target $lnk.Target `
+2294: $sidecarRecord = $SourceManifestOut
+2295: if (-not (Write-SourceManifestSidecar $SourceManifestOut $sourceStatus.Manifest)) {
+C:\Temp\pxd1.source-manifest => C:\Temp\PXD1~1.SOU
+C:\Temp\pxd1\BACKLOG.md => C:\Temp\pxd1\BACKLOG.md
+
+FullName                            Attributes
+--------                            ----------
+C:\Users\Brandon\Documents\parallax  Directory
+
+
+hook: PostToolUse
+hook: PostToolUse Completed
+hook: PostToolUse Completed
+hook: PreToolUse
+hook: PreToolUse Completed
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command '$src=Get-Content -LiteralPath tools/new-review-mirror.ps1; $prefix=$src[0..1857] -join "`n"; function Remove-Item {param([string]$LiteralPath,[switch]$Force,[switch]$Recurse) throw ('"'INTERCEPTED DELETE: '+"'$LiteralPath+'"'; recursive='+"'$Recurse)}; try { & ([scriptblock]::Create($prefix)) -RepoRoot C:'"\\Users\\Brandon\\Documents\\parallax -MirrorPath C:\\Temp\\pxd1 -OverrideOut C:\\Temp\\round3-probe-override.txt -Force -SkipProbe -ExtraInput C:\\Temp\\PXD1~1.SOU } catch {"'$_.Exception.Message}' in C:\Temp\pxd1
+ exited 2 in 522ms:
+ERROR: C:\Users\Brandon\Documents\parallax\.pytest_cache could not be enumerated, so the path budget was never measured: Exception calling "GetFileSystemEntries" with "1" argument(s): "Access to the path 'C:\Users\Brandon\Documents\parallax\.pytest_cache' is denied."
+
+hook: PostToolUse
+hook: PostToolUse Completed
+hook: PreToolUse
+hook: PreToolUse Completed
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command '$p='"'tools/new-review-mirror.ps1'; "'$s=Get-Content $p; for($i=1535;$i -le 1655;$i++){'"'{0}: {1}' -f "'$i,$s[$i-1]}; $s=Get-Content evals/multi-model-verify/test_review_mirror.py; foreach($r in @(@(1884,1956),@(2972,2997))){for($i=$r[0];$i -le $r[1];$i++){'"'{0}: {1}' -f "'$i,$s[$i-1]}}' in C:\Temp\pxd1
+ succeeded in 188ms:
+1535:         exit 2
+1536:     }
+1537:     foreach ($entry in $entries) {
+1538:         $attr = 0
+1539:         try {
+1540:             $attr = [int][System.IO.File]::GetAttributes($entry)
+1541:         } catch {
+1542:             Write-Output ("ERROR: $entry could not be enumerated, so the " +
+1543:                 "path budget was never measured: " + $_.Exception.Message)
+1544:             exit 2
+1545:         }
+1546:         # A source directory reparse point is NOT copied through: the
+1547:         # copy runs with /XJD, which excludes directory junctions and
+1548:         # directory symbolic links, so the link is one destination and
+1549:         # nothing beneath it is. The re-link step after the final sweep
+1550:         # re-creates it as a junction. The walk still enters it, for the
+1551:         # two refusals below only: measured 2026-09-05, the manifest
+1552:         # expansion starts a listing at every link it finds, so a link
+1553:         # onto one of its own ancestors or a tree whose links reach one
+1554:         # target twice must be refused wherever it sits.
+1555:         $isDirLink = $false
+1556:         if (($attr -band $reparseAttr) -ne 0 -and ($attr -band $dirAttr) -ne 0) {
+1557:             $isDirLink = $true
+1558:             # git's optional index refresh writes the repository's own
+1559:             # .git/index during every status capture. That is a write
+1560:             # into the repository and never through a link only while
+1561:             # .git is not itself a link, so one is refused here rather
+1562:             # than assumed away (cross-vendor round 2, 2026-09-05).
+1563:             if ([System.IO.Path]::GetFileName($entry) -ieq ".git") {
+1564:                 Write-Output ("ERROR: $entry - .git is a directory link, and" +
+1565:                     " the status captures write the repository's own index," +
+1566:                     " so this tree cannot be measured without writing" +
+1567:                     " through a link")
+1568:                 exit 2
+1569:             }
+1570:             $target = $null
+1571:             try {
+1572:                 $item = Get-Item -LiteralPath $entry -Force -ErrorAction Stop
+1573:                 $target = $item.Target
+1574:                 # Windows PowerShell 5.1 hands back a string COLLECTION here
+1575:                 # and PowerShell 7 hands back a plain string, so take the
+1576:                 # first element of anything that is not already a string
+1577:                 # rather than testing for one collection type.
+1578:                 if ($null -ne $target -and $target -isnot [string]) {
+1579:                     foreach ($candidate in $target) { $target = $candidate; break }
+1580:                 }
+1581:             } catch {
+1582:                 $target = $null
+1583:             }
+1584:             if ([string]::IsNullOrEmpty($target)) {
+1585:                 # An unresolvable link is the same class as an unreadable
+1586:                 # directory: a path that cannot be measured is not a path
+1587:                 # known to fit.
+1588:                 Write-Output ("ERROR: $entry is a directory reparse point " +
+1589:                     "whose target could not be read, so the path budget was " +
+1590:                     "never measured")
+1591:                 exit 2
+1592:             }
+1593: 
+1594:             $entryFull = ""
+1595:             $targetFull = ""
+1596:             try {
+1597:                 $entryFull = [System.IO.Path]::GetFullPath($entry)
+1598:                 # A RELATIVE TARGET IS RELATIVE TO THE LINK, NOT TO US.
+1599:                 # `GetFullPath` with one argument resolves against the
+1600:                 # PROCESS working directory, so a relative symbolic link
+1601:                 # target resolved to wherever this script happened to be
+1602:                 # invoked from: two distinct targets could compare equal
+1603:                 # and read as a repeat, and a genuine self-cycle could
+1604:                 # compare against the wrong absolute path and be missed.
+1605:                 # Junctions always store an absolute target, which is why
+1606:                 # the junction tests did not show it; symbolic links do
+1607:                 # not. Combine-then-normalize rather than the two-argument
+1608:                 # overload, which .NET Framework 4.8 does not carry.
+1609:                 if ([System.IO.Path]::IsPathRooted($target)) {
+1610:                     $targetFull = [System.IO.Path]::GetFullPath($target)
+1611:                 } else {
+1612:                     $linkParent = [System.IO.Path]::GetDirectoryName($entryFull)
+1613:                     $targetFull = [System.IO.Path]::GetFullPath(
+1614:                         [System.IO.Path]::Combine($linkParent, $target))
+1615:                 }
+1616:             } catch {
+1617:                 Write-Output ("ERROR: $entry is a directory reparse point " +
+1618:                     "whose target " + $target + " is not a usable path, so " +
+1619:                     "the path budget was never measured")
+1620:                 exit 2
+1621:             }
+1622:             $targetPrefix = $targetFull.TrimEnd("\") + "\"
+1623:             if ($entryFull.Equals($targetFull, "OrdinalIgnoreCase") -or
+1624:                 $entryFull.StartsWith($targetPrefix, "OrdinalIgnoreCase")) {
+1625:                 Write-Output ("ERROR: $entry points at $targetFull, which " +
+1626:                     "contains it - following that link would never " +
+1627:                     "terminate, so the mirror refuses it")
+1628:                 exit 2
+1629:             }
+1630:             if (-not $followedTargets.Add($targetFull)) {
+1631:                 # Two links onto one target is not itself a cycle, but it is
+1632:                 # indistinguishable from one here without walking the whole
+1633:                 # graph, and refusing is the direction that cannot
+1634:                 # mismeasure.
+1635:                 Write-Output ("ERROR: $entry points at $targetFull, which " +
+1636:                     "another link in this tree already reaches - the mirror " +
+1637:                     "refuses a tree whose links overlap")
+1638:                 exit 2
+1639:             }
+1640:             if (-not $underLink) {
+1641:                 [void]$sourceLinks.Add(@{ Rel = $entry.Substring($srcPrefix.Length)
+1642:                                           Target = $targetFull })
+1643:             }
+1644:         }
+1645:         # Only a destination counts. The link itself is one; nothing
+1646:         # beneath any link is created by the copy.
+1647:         if (-not $underLink) {
+1648:             $rel = $entry.Substring($srcPrefix.Length)
+1649:             if ($rel.Length -gt $deepestLen) {
+1650:                 $deepestLen = $rel.Length
+1651:                 $deepestRel = $rel
+1652:             }
+1653:         }
+1654:         if (($attr -band $dirAttr) -ne 0) {
+1655:             $pending.Push(@{ Path = $entry; UnderLink = ($underLink -or $isDirLink) })
+1884: def test_a_short_name_component_is_refused(tmp_path):
+1885:     """8.3 SHORT NAMES alias a long directory under a different spelling,
+1886:     and every comparison in this tool is a string comparison. The round-2
+1887:     reviewer reached the recursive delete on BOTH hosts with a source of
+1888:     `<repo>\\skills\\multi-model-verify` and a mirror of
+1889:     `<repo>\\skills\\MULTI-~1`, and confirmed with `Remove-Item -WhatIf`
+1890:     that the short form names the long directory.
+1891: 
+1892:     This tool cannot resolve an alias to filesystem identity without
+1893:     opening a handle, so it REFUSES the spelling it cannot decide - the
+1894:     same stance it already takes for directory links and for trailing
+1895:     dots.
+1896:     """
+1897:     repo = make_repo(tmp_path)
+1898:     proc = run_mirror(repo, tmp_path / "MIRROR~1")
+1899:     assert proc.returncode == 2, proc.stdout + proc.stderr
+1900:     assert "cannot resolve" in proc.stdout, proc.stdout
+1901:     assert (repo / "kept.txt").exists(), "the source must survive a refusal"
+1902: 
+1903: 
+1904: def test_a_stream_form_path_is_refused(tmp_path):
+1905:     """`<repo>::$INDEX_ALLOCATION` names the directory itself through NTFS
+1906:     stream syntax and compares unequal to it. Reached the recursive delete
+1907:     on PowerShell 7 in the round-2 probe."""
+1908:     repo = make_repo(tmp_path)
+1909:     proc = run_mirror(pathlib.Path(str(repo) + "::$INDEX_ALLOCATION"),
+1910:                       tmp_path / "mirror")
+1911:     assert proc.returncode == 2, proc.stdout + proc.stderr
+1912:     assert "cannot resolve" in proc.stdout, proc.stdout
+1913: 
+1914: 
+1915: def test_a_device_prefixed_path_is_refused(tmp_path):
+1916:     """`\\\\?\\C:\\...` is the same directory under a spelling the
+1917:     comparison cannot match. Reached the recursive delete on Windows
+1918:     PowerShell 5.1 in the round-2 probe."""
+1919:     repo = make_repo(tmp_path)
+1920:     proc = run_mirror(repo, pathlib.Path("\\\\?\\" + str(tmp_path / "mirror")))
+1921:     assert proc.returncode == 2, proc.stdout + proc.stderr
+1922:     assert "cannot resolve" in proc.stdout, proc.stdout
+1923: 
+1924: 
+1925: def test_an_override_inside_the_source_through_a_dotted_ancestor_is_refused(tmp_path):
+1926:     """The spelling guard shipped covering two operands and the override
+1927:     was not one of them, so `<repo>.\\override.txt` named a location
+1928:     inside the tree under review and passed every check. The build then
+1929:     hands that value to the probe, whose writer calls WriteAllBytes.
+1930: 
+1931:     Found by the round-2 reviewer, on both hosts, and it is the same
+1932:     defect as finding 1 on a third operand - which is what makes it worth
+1933:     a test rather than a one-line addition: guarding operands one at a
+1934:     time is how this class survived in the first place.
+1935:     """
+1936:     repo = make_repo(tmp_path)
+1937:     proc = run_mirror(repo, tmp_path / "mirror", "-OverrideOut",
+1938:                       str(repo) + ".\\override.txt")
+1939:     assert proc.returncode == 2, proc.stdout + proc.stderr
+1940:     assert "dot or a space" in proc.stdout, proc.stdout
+1941:     assert (repo / "kept.txt").exists(), "the source must survive a refusal"
+1942: 
+1943: 
+1944: def test_a_repo_root_with_a_trailing_space_is_refused(tmp_path):
+1945:     """The same defect on the other side of the comparison. Both
+1946:     operands are user-supplied, so guarding one of them leaves the class
+1947:     open."""
+1948:     repo = make_repo(tmp_path)
+1949:     proc = run_mirror(pathlib.Path(str(repo) + " "), tmp_path / "mirror")
+1950:     assert proc.returncode == 2, proc.stdout + proc.stderr
+1951:     assert "dot or a space" in proc.stdout, proc.stdout
+1952: 
+1953: 
+1954: def test_remediation_moves_mirror_head_away_from_source_head(tmp_path):
+1955:     repo = make_repo(tmp_path)
+1956:     (repo / "AGENTS.md").write_text("# planted\n")
+2972: def test_an_unmeasurable_expected_digest_is_refused(tmp_path):
+2973:     """`returncode != 0` was the whole oracle here, and exit 2 with empty
+2974:     stdout satisfied it. This script's exit contract separates 1, blocked
+2975:     with a reason on stdout, from 2, a script or environment error, so an
+2976:     oracle that accepts either cannot tell a working refusal from a crash
+2977:     in the code that was supposed to refuse.
+2978: 
+2979:     Found by the round-2 diff reviewer as a third instance of the
+2980:     negative-only oracle class.
+2981:     """
+2982:     repo = make_repo(tmp_path)
+2983:     mirror = tmp_path / "mirror"
+2984:     _, ident = build_and_read(repo, mirror)
+2985:     proc = run_verify(repo, mirror, ident, mirror_state_sha256="")
+2986:     assert proc.returncode == 1, proc.stdout + proc.stderr
+2987:     assert "recorded mirror state hash is missing or malformed" in proc.stdout, (
+2988:         proc.stdout)
+2989: 
+2990: 
+2991: def test_a_mirror_whose_current_state_cannot_be_measured_is_refused(tmp_path):
+2992:     # Not the same case as the one above: that one supplies a bad
+2993:     # EXPECTED value, and this one makes the LIVE measurement itself
+2994:     # fail - the direction that could otherwise read as clean. Mirrors
+2995:     # the source-side version of this case (icacls deny, same shape).
+2996:     repo = make_repo(tmp_path)
+2997:     mirror = tmp_path / "mirror"
+
+hook: PostToolUse
+hook: PostToolUse Completed
+hook: PreToolUse
+hook: PreToolUse Completed
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command "Get-ChildItem -LiteralPath C:\\Temp -Filter 'px*.source-manifest' -File | Select-Object -ExpandProperty FullName; "'$fs=New-Object -ComObject Scripting.FileSystemObject; $f=$fs.GetFile('"'C:\\Temp\\pxd1.source-manifest'); 'Short path resolves: '+(Resolve-Path -LiteralPath "'$f.ShortPath).Path; $s=Get-Content tools/new-review-mirror.ps1; $prefix=$s[0..1857] -join "`n"; function Remove-Item {param([string]$LiteralPath,[switch]$Force,[switch]$Recurse) throw ('"'INTERCEPTED DELETE: '+"'$LiteralPath+'"'; recursive='+"'$Recurse)}; try { & ([scriptblock]::Create($prefix)) -RepoRoot C:'"\\Users\\Brandon\\Documents\\parallax\\skills -MirrorPath C:\\Temp\\pxd1 -OverrideOut C:\\Temp\\round3-probe-override.txt -Force -SkipProbe -ExtraInput C:\\Temp\\PXD1~1.SOU } catch {"'$_.Exception.Message}' in C:\Temp\pxd1
+ succeeded in 355ms:
+C:\Temp\pxd1.source-manifest
+Short path resolves: C:\Temp\PXD1~1.SOU
+INTERCEPTED DELETE: C:\Temp\pxd1.source-manifest; recursive=False
+
+hook: PostToolUse
+hook: PostToolUse Completed
+codex
+The subject list still omits `ExtraInputPaths`. Its later checks reject dotted components and links, but do not apply the new short-name rule. I resolved this mirror’s sidecar to `C:\Temp\PXD1~1.SOU`; the validation prefix accepted that spelling as an extra input and reached deletion of the same sidecar. The deletion was intercepted. ([subject list](C:/Temp/pxd1/tools/new-review-mirror.ps1:1286), [extra-input checks](C:/Temp/pxd1/tools/new-review-mirror.ps1:1759), [deletion](C:/Temp/pxd1/tools/new-review-mirror.ps1:1848))
+
+hook: PreToolUse
+hook: PreToolUse Completed
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command '$base=@'"'
+"'$ProgressPreference='"'SilentlyContinue'
+"'$paths=@('"'C:\\Temp\\pxd1:"'$I30:$INDEX_ALLOCATION'"','C:\\Temp\\pxd1:"'$INDEX_ALLOCATION'"','C:\\Temp\\pxd1::"'$INDEX_ALLOCATION'"')
+'Host '+"'$PSVersionTable.PSVersion
+foreach($p in $paths) { try { $attr=[IO.File]::GetAttributes($p); $resolved=$ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($p); '"'Path='+"'$p+'"'; attributes='+"'$attr+'"'; provider='+"'$resolved; } catch { '"'Path='+"'$p+'"'; '+"'$_.Exception.Message } }
+'"'@
+& ([scriptblock]::Create("'$base))
+$encoded=[Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($base))
+& powershell -NoProfile -NonInteractive -EncodedCommand $encoded' in C:\Temp\pxd1
+ succeeded in 580ms:
+Host 7.6.5
+Path=C:\Temp\pxd1:$I30:$INDEX_ALLOCATION; attributes=Directory; provider=C:\Temp\pxd1:$I30:$INDEX_ALLOCATION
+Path=C:\Temp\pxd1:$INDEX_ALLOCATION; Exception calling "GetAttributes" with "1" argument(s): "Could not find file 'C:\Temp\pxd1:$INDEX_ALLOCATION'."
+Path=C:\Temp\pxd1::$INDEX_ALLOCATION; attributes=Directory; provider=C:\Temp\pxd1::$INDEX_ALLOCATION
+Host 5.1.26100.9168
+Path=C:\Temp\pxd1:$I30:$INDEX_ALLOCATION; Exception calling "GetAttributes" with "1" argument(s): "The given path's format is not supported."
+Path=C:\Temp\pxd1:$INDEX_ALLOCATION; Exception calling "GetAttributes" with "1" argument(s): "The given path's format is not supported."
+Path=C:\Temp\pxd1::$INDEX_ALLOCATION; Exception calling "GetAttributes" with "1" argument(s): "The given path's format is not supported."
+
+hook: PostToolUse
+hook: PostToolUse Completed
+hook: PreToolUse
+hook: PreToolUse Completed
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command '$probe=@'"'
+"'$ProgressPreference='"'SilentlyContinue'
+"'$s=Get-Content -LiteralPath C:'"\\Temp\\pxd1\\tools\\new-review-mirror.ps1
+"'$guard=($s[1285..1336] -join "`n").Replace('"'exit 2','throw \"guard refusal\"')
+'Host '+"'$PSVersionTable.PSVersion
+foreach($case in @(@('"'ordinary','C:\\Temp\\mirror'),@('short','C:\\Temp\\MIRROR~1'),@('short extension','C:\\Temp\\MIRROR~1.TXT'),@('long full name','C:\\Temp\\release~2026'),@('long full name extension','C:\\Temp\\release~2026.txt'),@('UNC','\\\\server\\share\\mirror'),@('device','\\\\?\\C:\\Temp\\mirror'),@('stream','C:\\Temp\\mirror::"'$INDEX_ALLOCATION'"'))) {
+"'$RepoRoot='"'C:\\Temp\\pxd1'; "'$MirrorPath=$case[1]; $OverrideOut=$null
+try { $null=& ([scriptblock]::Create($guard)); $case[0]+'"': ADMITTED' } catch {"'$case[0]+'"': REFUSED'}
+}
+"'$prefix=$s[0..1857] -join "`n"
+function Remove-Item {param([string]$LiteralPath,[switch]$Force,[switch]$Recurse) throw ('"'INTERCEPTED DELETE: '+"'$LiteralPath+'"'; recursive='+"'$Recurse)}
+try { & ([scriptblock]::Create($prefix)) -RepoRoot C:'"\\Users\\Brandon\\Documents\\parallax\\skills -MirrorPath C:\\Temp\\pxd1 -OverrideOut C:\\Temp\\round3-probe-override.txt -Force -SkipProbe -ExtraInput C:\\Temp\\PXD1~1.SOU } catch {"'$_.Exception.Message}
+'"'@
+& ([scriptblock]::Create("'$probe))
+$encoded=[Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($probe))
+& powershell -NoProfile -NonInteractive -EncodedCommand $encoded' in C:\Temp\pxd1
+ succeeded in 929ms:
+Host 7.6.5
+ordinary: ADMITTED
+short: REFUSED
+short extension: REFUSED
+long full name: REFUSED
+long full name extension: REFUSED
+UNC: ADMITTED
+device: REFUSED
+stream: REFUSED
+INTERCEPTED DELETE: C:\Temp\pxd1.source-manifest; recursive=False
+Host 5.1.26100.9168
+ordinary: ADMITTED
+short: REFUSED
+short extension: REFUSED
+long full name: REFUSED
+long full name extension: REFUSED
+UNC: ADMITTED
+device: REFUSED
+stream: REFUSED
+INTERCEPTED DELETE: C:\Temp\pxd1.source-manifest; recursive=False
+
+hook: PostToolUse
+hook: PostToolUse Completed
+hook: PreToolUse
+hook: PreToolUse Completed
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command '$s=Get-Content -LiteralPath tools/new-review-mirror.ps1; $prefix=$s[0..1857] -join "`n"; function Remove-Item {param([string]$LiteralPath,[switch]$Force,[switch]$Recurse) if($Recurse){throw ('"'INTERCEPTED RECURSIVE DELETE: '+"'$LiteralPath)}; '"'INTERCEPTED FILE DELETE: '+"'$LiteralPath}; try { & ([scriptblock]::Create($prefix)) -RepoRoot '"'C:\\Temp\\pxd1:"'$I30:$INDEX_ALLOCATION'"' -MirrorPath C:\\Temp\\pxd1 -OverrideOut C:\\Temp\\round3-probe-override.txt -Force -SkipProbe } catch {"'$_.Exception.Message}' in C:\Temp\pxd1
+ succeeded in 397ms:
+INTERCEPTED FILE DELETE: C:\Temp\pxd1.source-manifest
+INTERCEPTED RECURSIVE DELETE: C:\Temp\pxd1
+
+hook: PostToolUse
+hook: PostToolUse Completed
+hook: PreToolUse
+hook: PreToolUse
+hook: PreToolUse Completed
+hook: PreToolUse Completed
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command '$s=Get-Content tools/new-review-mirror.ps1; foreach($r in @(@(1900,2008),@(2180,2281))){for($i=$r[0];$i -le $r[1];$i++){'"'{0}: {1}' -f "'$i,$s[$i-1]}}' in C:\Temp\pxd1
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command 'git diff b58bf25 HEAD --check; $s=Get-Content evals/multi-model-verify/test_review_mirror.py; for($i=2991;$i -le 3016;$i++){'"'{0}: {1}' -f "'$i,$s[$i-1]}; $s=Get-Content tools/new-review-mirror.ps1; foreach($r in @(@(1186,1214),@(1684,1714))){for($i=$r[0];$i -le $r[1];$i++){'"'{0}: {1}' -f "'$i,$s[$i-1]}}; git status --short' in C:\Temp\pxd1
+ succeeded in 174ms:
+1900: # link-target resolution failure inside that expansion.
+1901: #
+1902: # Each is a BOOLEAN that ORs one extra block condition into a comparison
+1903: # below. None can supply a value, so none can suppress a real
+1904: # measurement, and setting one can only ever ADD a reason to fail.
+1905: # That makes the one-way property structural rather than a property of
+1906: # whatever value someone happens to pass.
+1907: #
+1908: # TWO earlier shapes failed that bar, and both were caught by review
+1909: # rather than by reasoning, which is why the property is now asserted by
+1910: # a test instead of argued in a comment:
+1911: #
+1912: #   1. A copy-source override aimed at a same-HEAD tree with different
+1913: #      ignored content would have BUILT, carrying the wrong non-HEAD
+1914: #      content under a record attesting the real source. Its partner
+1915: #      committed into $RepoRoot, contradicting this tool's promise three
+1916: #      lines from the top that it never writes to the real tree.
+1917: #   2. The replacement INJECTED a value. A parent that set it to the
+1918: #      repo's own current HEAD - trivially readable in advance -
+1919: #      suppressed the genuine post-copy measurement and turned a build
+1920: #      that should have failed into one that passed. That is the exact
+1921: #      inverse of the claim the comment was making.
+1922: #
+1923: # Any parent process can set these variables, so the shape has to be
+1924: # safe on its own, not safe because no shipped caller sets it.
+1925: $seamFailSourceStable = [bool]$env:PARALLAX_MIRROR_SEAM_FAIL_SOURCE_STABLE
+1926: $seamFailCopiedHead = [bool]$env:PARALLAX_MIRROR_SEAM_FAIL_COPIED_HEAD
+1927: 
+1928: $sourceAfter = Get-HeadSha $RepoRoot
+1929: 
+1930: # BRIDGE STEP 3: the source must not have moved while we copied it. A
+1931: # source that moved mid-copy produces a tree that matches no commit.
+1932: if (-not $sourceAfter.Ok) {
+1933:     Write-Output ("BLOCKED: " + $sourceAfter.Reason + " after the copy")
+1934:     exit 1
+1935: }
+1936: if ($seamFailSourceStable -or ($sourceAfter.Sha -ne $sourceBefore.Sha)) {
+1937:     Write-Output ("BLOCKED: the source head moved during construction (" +
+1938:         $sourceBefore.Sha + " to " + $sourceAfter.Sha + ") - the copied tree" +
+1939:         " matches neither commit")
+1940:     exit 1
+1941: }
+1942: 
+1943: # BRIDGE STEP 4: the COPIED tree must carry the source's head. Without
+1944: # this the record can hold two individually valid SHAs while nothing
+1945: # proves the mirror was built from the recorded source commit - two true
+1946: # facts arranged to look like one.
+1947: $copiedHead = Get-HeadSha $MirrorPath
+1948: if (-not $copiedHead.Ok) {
+1949:     Write-Output ("BLOCKED: " + $copiedHead.Reason + " - the copied tree's" +
+1950:         " identity could not be measured")
+1951:     exit 1
+1952: }
+1953: if ($seamFailCopiedHead -or ($copiedHead.Sha -ne $sourceBefore.Sha)) {
+1954:     Write-Output ("BLOCKED: the mirror was not built from this source (source" +
+1955:         " head " + $sourceBefore.Sha + ", copied head " + $copiedHead.Sha + ")")
+1956:     exit 1
+1957: }
+1958: 
+1959: # The second half of the status bridge: re-capture and require equal, so
+1960: # an edit that landed during the copy fails the build instead of being
+1961: # baked into the record. Never re-derived from the mirror, which is about
+1962: # to be remediated and would then disagree by design.
+1963: $sourceStatus = Get-StatusSha256 $RepoRoot
+1964: if (-not $sourceStatus.Ok) {
+1965:     Write-Output ("BLOCKED: the source status capture failed (" +
+1966:         $sourceStatus.Reason + "), so post-construction drift in an" +
+1967:         " untracked or ignored review input would be undetectable")
+1968:     exit 1
+1969: }
+1970: if ($sourceStatus.Sha -ne $statusBefore.Sha) {
+1971:     Write-Output ("BLOCKED: a source review input changed during" +
+1972:         " construction, so the mirror carries neither the before nor the" +
+1973:         " after state of the tree")
+1974:     exit 1
+1975: }
+1976: 
+1977: $found = Get-BackChannelEntry $MirrorPath
+1978: if (-not $found.Ok) {
+1979:     Write-Output ("ERROR: could not enumerate back-channels in the" +
+1980:         " mirror: " + $found.Reason)
+1981:     exit 2
+1982: }
+1983: $entries = $found.Entries
+1984: $tracked = New-Object System.Collections.ArrayList
+1985: foreach ($entry in $entries) {
+1986:     if (Test-Tracked $MirrorPath $entry) { [void]$tracked.Add($entry) }
+1987:     $full = Join-Path $MirrorPath $entry
+1988:     if (Test-Path $full) { Remove-Item -LiteralPath $full -Recurse -Force }
+1989:     # Prune the directories the entry lived in, up to but never including
+1990:     # the mirror root. `git ls-files` names FILES, so deleting one leaves
+1991:     # `.agents/skills/<name>/` standing - an empty shell of the very
+1992:     # surface this step exists to remove.
+1993:     $dir = Split-Path (Join-Path $MirrorPath $entry) -Parent
+1994:     while ($dir -and ($dir.Length -gt $MirrorPath.Length) -and
+1995:            (Test-Path $dir) -and
+1996:            -not (Get-ChildItem -LiteralPath $dir -Force)) {
+1997:         Remove-Item -LiteralPath $dir -Force
+1998:         $dir = Split-Path $dir -Parent
+1999:     }
+2000: }
+2001: if ($tracked.Count -gt 0) {
+2002:     # Suppress repository hooks for the remediation commit BELOW. The
+2003:     # mirror carries the real repo's .git, hooks included (see the
+2004:     # BLOCKED text on the commit call), so committing here without
+2005:     # redirecting core.hooksPath would run whatever hook the reviewed
+2006:     # repo ships. The directory lives inside the MIRROR's own .git,
+2007:     # where a plain filesystem copy carries it along for free but
+2008:     # `git status`/`ls-files` never see it, so it cannot register as a
+2180:     try {
+2181:         $made = (Get-Item -LiteralPath $dest -Force -ErrorAction Stop).Target
+2182:         if ($null -ne $made -and $made -isnot [string]) {
+2183:             foreach ($candidate in $made) { $made = $candidate; break }
+2184:         }
+2185:     } catch { $made = $null }
+2186:     if ([string]::IsNullOrEmpty($made)) {
+2187:         Write-Output ("BLOCKED: the junction at '" + $lnk.Rel + "' was" +
+2188:             " created but its target could not be read back")
+2189:         exit 1
+2190:     }
+2191:     $madeFull = [System.IO.Path]::GetFullPath($made).TrimEnd("\")
+2192:     if (-not $madeFull.Equals($lnk.Target.TrimEnd("\"), "OrdinalIgnoreCase")) {
+2193:         Write-Output ("BLOCKED: the junction at '" + $lnk.Rel + "' resolves" +
+2194:             " to " + $madeFull + " rather than the recorded " + $lnk.Target)
+2195:         exit 1
+2196:     }
+2197: }
+2198: 
+2199: # THE LINK SWEEP, read-only by construction. git walks a junction onto a
+2200: # plain folder file by file, so a back-channel behind a link is now
+2201: # enumerable, and deleting it would delete from the user's real tree.
+2202: # Any such entry is a BLOCK with its path named; nothing here removes
+2203: # anything. A link onto a directory holding its own .git is ONE entry to
+2204: # git and is not descended; that blind spot is backlog item 92, and it
+2205: # is the same blind spot the copy had.
+2206: if (@($sourceLinks).Count -gt 0) {
+2207:     $linkSweep = Get-BackChannelEntry $MirrorPath
+2208:     if (-not $linkSweep.Ok) {
+2209:         Write-Output ("ERROR: could not enumerate back-channels behind the" +
+2210:             " re-linked paths: " + $linkSweep.Reason)
+2211:         exit 2
+2212:     }
+2213:     $behind = New-Object System.Collections.ArrayList
+2214:     foreach ($e in @($linkSweep.Entries)) {
+2215:         $eNorm = ([string]$e).Replace("\", "/")
+2216:         foreach ($lnk in @($sourceLinks)) {
+2217:             $prefix = ([string]$lnk.Rel).Replace("\", "/").TrimEnd("/") + "/"
+2218:             if ($eNorm.StartsWith($prefix, "OrdinalIgnoreCase")) {
+2219:                 [void]$behind.Add($eNorm)
+2220:                 break
+2221:             }
+2222:         }
+2223:     }
+2224:     if ($behind.Count -gt 0) {
+2225:         Write-Output ("BLOCKED: back-channel(s) under a re-linked path: " +
+2226:             ($behind -join "; ") + ". The build never deletes through a" +
+2227:             " link; remove the file from the link's target and rebuild.")
+2228:         exit 1
+2229:     }
+2230: }
+2231: 
+2232: $head = (& git -C $MirrorPath rev-parse HEAD 2>$null | Out-String).Trim()
+2233: if (($LASTEXITCODE -ne 0) -or -not $head) {
+2234:     Write-Output ("BLOCKED: could not resolve the mirror's HEAD - the" +
+2235:         " mirror's identity in the debate record would be blank")
+2236:     exit 1
+2237: }
+2238: $captured = Get-BaselineRaw $MirrorPath
+2239: if (-not $captured.Ok) {
+2240:     Write-Output ("BLOCKED: the baseline capture failed (" +
+2241:         $captured.Reason + "). A failed capture printed as success would" +
+2242:         " quarantine every round of the review that follows, or absorb" +
+2243:         " changes it should have caught.")
+2244:     exit 1
+2245: }
+2246: $parsed = ConvertTo-StatusRecord $captured.Fields
+2247: if ($parsed.ContainsKey("Error")) {
+2248:     Write-Output ("BLOCKED: " + $parsed.Error)
+2249:     exit 1
+2250: }
+2251: $baseline = @(@($parsed.Records) |
+2252:     ForEach-Object { Format-StatusRecord $_ })
+2253: $subjects = Get-ManifestSubject $parsed.Records
+2254: if ($subjects.ContainsKey("Error")) {
+2255:     Write-Output ("BLOCKED: " + $subjects.Error)
+2256:     exit 1
+2257: }
+2258: $manifestResult = Get-ContentManifest $MirrorPath $subjects.Paths
+2259: if ($manifestResult.ContainsKey("Error")) {
+2260:     Write-Output ("BLOCKED: " + $manifestResult.Error)
+2261:     exit 1
+2262: }
+2263: $manifest = $manifestResult.Paths
+2264: 
+2265: # ONE digest over the baseline just captured and the manifest just
+2266: # built, so it describes exactly the tree those two printed sections
+2267: # describe - not a second, separately-timed measurement of the mirror
+2268: # that could disagree with what was printed above it.
+2269: $mirrorStateSha256 = Get-CombinedSha256 $captured.Fields $manifest
+2270: 
+2271: $probeLine = "skipped"
+2272: $overrideFile = ""
+2273: if (-not $SkipProbe) {
+2274:     # $OverrideOut was resolved and guarded at the top. The probe's
+2275:     # verified value IS the dispatch's input, so a mirror built without it
+2276:     # leaves the transport with a file that does not exist.
+2277:     $probeScript = Join-Path (Split-Path $PSCommandPath -Parent) "codex-context-probe.ps1"
+2278:     $hostExe = (Get-Process -Id $PID).Path
+2279:     $probeOut = & $hostExe -NoProfile -NonInteractive -File $probeScript `
+2280:         -WorkDir $MirrorPath -SuppressSkills -OverrideOut $OverrideOut `
+2281:         -Json -CodexCommand $CodexCommand
+
+hook: PostToolUse
+hook: PostToolUse
+ succeeded in 235ms:
+docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/diff-astra-r2-transcript.txt:138: trailing whitespace.
++ 
+docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/diff-astra-r2-transcript.txt:144: trailing whitespace.
++ 
+docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/diff-astra-r2-transcript.txt:155: trailing whitespace.
++ 
+docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/diff-astra-r2-transcript.txt:170: trailing whitespace.
++ 
+docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/diff-astra-r2-transcript.txt:178: trailing whitespace.
++ 
+docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/diff-astra-r2-transcript.txt:191: trailing whitespace.
++ 
+docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/diff-astra-r2-transcript.txt:201: trailing whitespace.
++ 
+docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/diff-astra-r2-transcript.txt:214: trailing whitespace.
++ 
+docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/diff-astra-r2-transcript.txt:220: trailing whitespace.
++ 
+docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/diff-astra-r2-transcript.txt:222: trailing whitespace.
++ 
+docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/diff-astra-r2-transcript.txt:229: trailing whitespace.
++ 
+docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/diff-astra-r2-transcript.txt:230: trailing whitespace.
++ 
+docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/diff-astra-r2-transcript.txt:280: trailing whitespace.
++ 
+docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/diff-astra-r2-transcript.txt:281: trailing whitespace.
++ 
+docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/diff-astra-r2-transcript.txt:295: trailing whitespace.
++ 
+docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/diff-astra-r2-transcript.txt:296: trailing whitespace.
++ 
+docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/diff-astra-r2-transcript.txt:306: trailing whitespace.
++ 
+docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/diff-astra-r2-transcript.txt:307: trailing whitespace.
++ 
+docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/diff-astra-r2-transcript.txt:329: trailing whitespace.
++ 
+docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/diff-astra-r2-transcript.txt:400: trailing whitespace.
++1039: 
+docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/diff-astra-r2-transcript.txt:408: trailing whitespace.
++1047: 
+docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/diff-astra-r2-transcript.txt:414: trailing whitespace.
++1053: 
+docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/diff-astra-r2-transcript.txt:432: trailing whitespace.
++1232: 
+docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/diff-astra-r2-transcript.txt:468: trailing whitespace.
++1268: 
+docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/diff-astra-r2-transcript.txt:498: trailing whitespace.
++1298: 
+docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/diff-astra-r2-transcript.txt:523: trailing whitespace.
++1323: 
+docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/diff-astra-r2-transcript.txt:548: trailing whitespace.
++1348: 
+docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/diff-astra-r2-transcript.txt:592: trailing whitespace.
++1392: 
+docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/diff-astra-r2-transcript.txt:641: trailing whitespace.
++1810: 
+docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/diff-astra-r2-transcript.txt:652: trailing whitespace.
++1821: 
+docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/diff-astra-r2-transcript.txt:984: trailing whitespace.
++C:\Users\Brandon\Documents\parallax => 
+docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/diff-astra-r2-transcript.txt:999: trailing whitespace.
++1417: 
+docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/diff-astra-r2-transcript.txt:1008: trailing whitespace.
++1426: 
+docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/diff-astra-r2-transcript.txt:1014: trailing whitespace.
++1432: 
+docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/diff-astra-r2-transcript.txt:1023: trailing whitespace.
++1441: 
+docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/diff-astra-r2-transcript.txt:1039: trailing whitespace.
++1457: 
+docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/diff-astra-r2-transcript.txt:1044: trailing whitespace.
++1462: 
+docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/diff-astra-r2-transcript.txt:1049: trailing whitespace.
++1467: 
+docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/diff-astra-r2-transcript.txt:1061: trailing whitespace.
++1479: 
+docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/diff-astra-r2-transcript.txt:1090: trailing whitespace.
++94: 
+docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/diff-astra-r2-transcript.txt:1091: trailing whitespace.
++95: 
+docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/diff-astra-r2-transcript.txt:1094: trailing whitespace.
++98: 
+docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/diff-astra-r2-transcript.txt:1098: trailing whitespace.
++102: 
+docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/diff-astra-r2-transcript.txt:1104: trailing whitespace.
++108: 
+docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/diff-astra-r2-transcript.txt:1121: trailing whitespace.
++125: 
+docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/diff-astra-r2-transcript.txt:1122: trailing whitespace.
++126: 
+docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/diff-astra-r2-transcript.txt:1124: trailing whitespace.
++128: 
+docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/diff-astra-r2-transcript.txt:1125: trailing whitespace.
++129: 
+docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/diff-astra-r2-transcript.txt:1128: trailing whitespace.
++132: 
+docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/diff-astra-r2-transcript.txt:1133: trailing whitespace.
++137: 
+docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/diff-astra-r2-transcript.txt:1140: trailing whitespace.
++144: 
+docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/diff-astra-r2-transcript.txt:1141: trailing whitespace.
++145: 
+docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/diff-astra-r2-transcript.txt:1149: trailing whitespace.
++153: 
+docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/diff-astra-r2-transcript.txt:1150: trailing whitespace.
++154: 
+docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/diff-astra-r2-transcript.txt:1155: trailing whitespace.
++159: 
+docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/diff-astra-r2-transcript.txt:1156: trailing whitespace.
++160: 
+docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/diff-astra-r2-transcript.txt:1162: trailing whitespace.
++166: 
+docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/diff-astra-r2-transcript.txt:1163: trailing whitespace.
++167: 
+docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/diff-astra-r2-transcript.txt:1175: trailing whitespace.
++179: 
+docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/diff-astra-r2-transcript.txt:1176: trailing whitespace.
++180: 
+docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/diff-astra-r2-transcript.txt:1183: trailing whitespace.
++294: 
+docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/diff-astra-r2-transcript.txt:1184: trailing whitespace.
++295: 
+docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/diff-astra-r2-transcript.txt:1194: trailing whitespace.
++305: 
+docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/diff-astra-r2-transcript.txt:1195: trailing whitespace.
++306: 
+docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/diff-astra-r2-transcript.txt:1204: trailing whitespace.
++315: 
+docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/diff-astra-r2-transcript.txt:1205: trailing whitespace.
++316: 
+docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/diff-astra-r2-transcript.txt:1221: trailing whitespace.
++2061: 
+docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/diff-astra-r2-transcript.txt:1222: trailing whitespace.
++2062: 
+docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/diff-astra-r2-transcript.txt:1249: trailing whitespace.
++2510: 
+docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/diff-astra-r2-transcript.txt:1250: trailing whitespace.
++2511: 
+docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/diff-astra-r2-transcript.txt:1256: trailing whitespace.
++2863: 
+docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/diff-astra-r2-transcript.txt:1257: trailing whitespace.
++2864: 
+docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/diff-astra-r2-transcript.txt:1261: trailing whitespace.
++2868: 
+docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/diff-astra-r2-transcript.txt:1271: trailing whitespace.
++2878: 
+docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/diff-astra-r2-transcript.txt:1288: trailing whitespace.
++2895: 
+docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/diff-astra-r2-transcript.txt:1289: trailing whitespace.
++2896: 
+docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/diff-astra-r2-transcript.txt:1320: trailing whitespace.
++Test-Path: 
+docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/diff-astra-r2-transcript.txt:1387: trailing whitespace.
++    + CategoryInfo          : InvalidOperation: (C:\Temp\pxd1::$INDEX_ALLOCATION:String) [Test-Path], NotSupportedExce 
+docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/diff-astra-r2-transcript.txt:1393: trailing whitespace.
++ 
+docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/diff-astra-r2-transcript.txt:1403: trailing whitespace.
++    + CategoryInfo          : PermissionDenied: (\\localhost\C$\Temp\pxd1:String) [Test-Path], UnauthorizedAccessExcep 
+docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/diff-astra-r2-transcript.txt:1409: trailing whitespace.
++ 
+docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/diff-astra-r2-transcript.txt:3583: trailing whitespace.
++    + CategoryInfo          : InvalidOperation: (C:\Temp\pxd1::$INDEX_ALLOCATION:String) [Test-Path], NotSupportedExce 
+docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/diff-astra-r2-transcript.txt:3589: trailing whitespace.
++ 
+docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/diff-astra-r2-transcript.txt:3795: trailing whitespace.
++    + CategoryInfo          : InvalidOperation: (C:\Temp\pxd1::$INDEX_ALLOCATION:String) [Test-Path], NotSupportedExce 
+docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/diff-astra-r2-transcript.txt:3801: trailing whitespace.
++ 
+2991: def test_a_mirror_whose_current_state_cannot_be_measured_is_refused(tmp_path):1214:     exit 0
+1684: function Test-PathOrAncestorIsLink($path) {
+1685:     # The path itself, then each existing ancestor up to the drive root:
+1686:     # is any of them a reparse point? Attributes are read directly
+1687:     # rather than after a Test-Path, because a DANGLING junction is a
+1688:     # reparse point Test-Path may report as absent; a missing entry is
+1689:     # the one condition that skips a level, and it is recognised by the
+1690:     # exception type, never by a false from a helper. Returns the
+1691:     # offending path or $null.
+1692:     $probe = ([string]$path).TrimEnd("\", "/")
+1693:     while ($probe -and -not [string]::IsNullOrEmpty([System.IO.Path]::GetFileName($probe))) {
+1694:         $pa = 0
+1695:         $missing = $false
+1696:         try {
+1697:             $pa = [int][System.IO.File]::GetAttributes($probe)
+1698:         } catch [System.IO.FileNotFoundException] {
+1699:             $missing = $true
+1700:         } catch [System.IO.DirectoryNotFoundException] {
+1701:             $missing = $true
+1702:         } catch {
+1703:             Write-Output ("ERROR: " + $probe + " could not be read while" +
+1704:                 " checking for a directory link: " + $_.Exception.Message)
+1705:             exit 2
+1706:         }
+1707:         if (-not $missing -and (($pa -band [int][System.IO.FileAttributes]::ReparsePoint) -ne 0)) {
+1708:             return $probe
+1709:         }
+1710:         $probe = [System.IO.Path]::GetDirectoryName($probe)
+1711:     }
+1712:     return $null
+1713: }
+1714: 
+
+hook: PostToolUse Completed
+hook: PostToolUse Completed
+hook: PreToolUse
+hook: PreToolUse Completed
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command '$s=Get-Content evals/multi-model-verify/test_review_mirror.py; for($i=2991;$i -le 3016;$i++){'"'{0}: {1}' -f "'$i,$s[$i-1]}; $s=Get-Content tools/new-review-mirror.ps1; $probe=$s[1850..1858] -join "`n"; $MirrorPath='"'C:\\Temp\\pxd1'; "'$Force=$true; function Remove-Item {param([string]$LiteralPath,[switch]$Recurse,[switch]$Force) Write-Error '"'SIMULATED removal failure' -ErrorAction Continue}; function New-Item {param([string]"'$ItemType,[switch]$Force,[string]$Path) throw ('"'CONTINUATION REACHED: '+"'$Path)}; try { & ([scriptblock]::Create($probe)) } catch {$_.Exception.Message}; $bytes=[IO.File]::ReadAllBytes('"'C:\\Temp\\pxd1\\tools\\new-review-mirror.ps1'); 'Non-ASCII byte count: '+@("'$bytes | Where-Object {$_ -gt 127}).Count' in C:\Temp\pxd1
+ succeeded in 911ms:
+2991: def test_a_mirror_whose_current_state_cannot_be_measured_is_refused(tmp_path):
+2992:     # Not the same case as the one above: that one supplies a bad
+2993:     # EXPECTED value, and this one makes the LIVE measurement itself
+2994:     # fail - the direction that could otherwise read as clean. Mirrors
+2995:     # the source-side version of this case (icacls deny, same shape).
+2996:     repo = make_repo(tmp_path)
+2997:     mirror = tmp_path / "mirror"
+2998:     _, ident = build_and_read(repo, mirror)
+2999:     denied = mirror / "untracked.txt"
+3000:     user = os.environ.get("USERNAME") or ""
+3001:     if not user:
+3002:         pytest.skip("USERNAME not set; cannot build a deny ACE")
+3003:     deny = subprocess.run(["icacls", str(denied), "/deny", user + ":(RD)"],
+3004:                           capture_output=True, text=True)
+3005:     if deny.returncode != 0:
+3006:         pytest.skip("icacls deny unavailable: " + deny.stdout + deny.stderr)
+3007:     try:
+3008:         proc = run_verify(repo, mirror, ident)
+3009:         assert proc.returncode != 0, proc.stdout + proc.stderr
+3010:         assert "could not be" in proc.stdout, proc.stdout
+3011:     finally:
+3012:         undo = subprocess.run(["icacls", str(denied), "/remove:d", user],
+3013:                               capture_output=True, text=True)
+3014:         assert undo.returncode == 0, undo.stdout + undo.stderr
+3015:         assert denied.read_text(), "the deny ACE is still in force"
+3016: 
+Remove-Item: 
+Line |
+   7 |      Remove-Item -LiteralPath $MirrorPath -Recurse -Force
+     |      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | SIMULATED removal failure
+CONTINUATION REACHED: C:\Temp\pxd1
+Non-ASCII byte count: 0
+
+hook: PostToolUse
+hook: PostToolUse Completed
+codex
+The `::` check misses another directory-stream spelling. On PowerShell 7, `C:\Temp\pxd1:$I30:$INDEX_ALLOCATION` reports as a directory, survives validation, and reaches the intercepted recursive-delete call with the ordinary `C:\Temp\pxd1` as the mirror. ([stream check](C:/Temp/pxd1/tools/new-review-mirror.ps1:1307), [delete](C:/Temp/pxd1/tools/new-review-mirror.ps1:1857))
+
+Unchecked removal is a separate issue worth filing: a simulated non-terminating removal error still reached `New-Item`. Refusing alias spellings does not add an error check at that boundary. ([continuation](C:/Temp/pxd1/tools/new-review-mirror.ps1:1857))
+
+hook: PreToolUse
+hook: PreToolUse Completed
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command '$probe=@'"'
+"'$ProgressPreference='"'SilentlyContinue'
+"'$s=Get-Content -LiteralPath C:'"\\Temp\\pxd1\\tools\\new-review-mirror.ps1
+Invoke-Expression ("'$s[1683..1712] -join "`n")
+$followedTargets=@('"'C:\\Temp\\pxd1\\skills\\MULTI-~1')
+"'$mp='"'C:/Temp/pxd1/skills/multi-model-verify/'
+"'$op='"'C:/Temp/round3-probe-override.txt'
+"'$smp='"'C:/Temp/pxd1/skills/multi-model-verify.source-manifest'
+"'$cmp=[StringComparison]::OrdinalIgnoreCase
+& ([scriptblock]::Create($s[1729..1753] -join "`n"))
+'"'Host '+"'$PSVersionTable.PSVersion+'"': protected-target checks accepted long mirror path against its actual short alias'
+'@
+& ([scriptblock]::Create("'$probe))
+$encoded=[Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($probe))
+& powershell -NoProfile -NonInteractive -EncodedCommand $encoded
+ git diff HEAD''^ HEAD --check -- tools/new-review-mirror.ps1 evals/multi-model-verify/test_review_mirror.py' in C:\Temp\pxd1
+ succeeded in 823ms:
+Host 7.6.5: protected-target checks accepted long mirror path against its actual short alias
+Host 5.1.26100.9168: protected-target checks accepted long mirror path against its actual short alias
+
+hook: PostToolUse
+hook: PostToolUse Completed
+codex
+The specified edits are present: device/stream checks, short-name checks, override inclusion, the dotted-override regression, and the strengthened digest oracle. Their implementation still leaves substantive gaps. ([guard](C:/Temp/pxd1/tools/new-review-mirror.ps1:1286), [regressions](C:/Temp/pxd1/evals/multi-model-verify/test_review_mirror.py:1884), [oracle](C:/Temp/pxd1/evals/multi-model-verify/test_review_mirror.py:2986))
+
+1. **CONFIRMED — the stream refusal misses a working directory alias.**
+
+   Checking `Contains("::")` catches an unnamed stream spelling but misses `C:\Temp\pxd1:$I30:$INDEX_ALLOCATION`, whose colons are separated. ([condition](C:/Temp/pxd1/tools/new-review-mirror.ps1:1307))
+
+   On PowerShell 7, that path reports `Directory`. Using it as `RepoRoot` with ordinary `C:\Temp\pxd1` as `MirrorPath` passed the complete validation prefix and reached the intercepted recursive-delete call targeting `C:\Temp\pxd1`. This establishes reachability, not completed deletion. ([comparison](C:/Temp/pxd1/tools/new-review-mirror.ps1:1345), [delete](C:/Temp/pxd1/tools/new-review-mirror.ps1:1857))
+
+   **Change:** reject stream delimiters beyond the permitted drive-prefix colon, rather than only consecutive colons. Add this named-index-stream case on both hosts.
+
+2. **CONFIRMED — the subject list still omits protected operands.**
+
+   `ExtraInputPaths` and discovered `followedTargets` remain outside the shared spelling guard. Extra inputs receive separate equality, trailing-punctuation, and reparse checks; followed targets receive reparse and string-overlap checks. ([subject list](C:/Temp/pxd1/tools/new-review-mirror.ps1:1286), [extra inputs](C:/Temp/pxd1/tools/new-review-mirror.ps1:1759), [targets](C:/Temp/pxd1/tools/new-review-mirror.ps1:1730))
+
+   Two read-only probes demonstrated the gaps on both hosts:
+
+   - This mirror’s actual sidecar has short alias `C:\Temp\PXD1~1.SOU`. Supplying that as an extra input passed validation and reached deletion of `C:\Temp\pxd1.source-manifest`. The later copy is unchecked. ([deletion](C:/Temp/pxd1/tools/new-review-mirror.ps1:1848), [copy](C:/Temp/pxd1/tools/new-review-mirror.ps1:2110))
+   - Executing the protected-target checks with actual alias `C:\Temp\pxd1\skills\MULTI-~1` accepted the corresponding long directory as the mirror destination. This was a direct guard probe; I did not create a junction to exercise discovery end-to-end. ([target comparison](C:/Temp/pxd1/tools/new-review-mirror.ps1:1740))
+
+   **Change:** extract one validation helper. Apply it to extra inputs before collision checks and to discovered targets before cycle/overlap comparisons.
+
+   The default override and sidecar are different: their parent spelling derives from the guarded mirror path, so their absence from the initial list is not another demonstrated omission. ([default override](C:/Temp/pxd1/tools/new-review-mirror.ps1:1369), [sidecar derivation](C:/Temp/pxd1/tools/new-review-mirror.ps1:698))
+
+3. **CONFIRMED — unchecked removal is worth filing independently.**
+
+   Refusing aliases does not handle ordinary removal failures. A simulated non-terminating error from the existing removal statement still reached `New-Item`. The subsequent copy uses `/E`, and later fingerprinting measures the resulting mirror rather than proving its directory was freshly emptied. ([removal boundary](C:/Temp/pxd1/tools/new-review-mirror.ps1:1857), [copy](C:/Temp/pxd1/tools/new-review-mirror.ps1:1890), [fingerprint](C:/Temp/pxd1/tools/new-review-mirror.ps1:2238))
+
+   **Change:** make removal failure terminate construction with a named error before creation or copying. File this as a separate pre-existing defect if fixing it separately; the spelling changes are not its remedy. I did not reproduce a complete contaminated build under filesystem denial.
+
+4. **CONFIRMED — the neighboring live-measurement oracle still accepts the wrong exit class.**
+
+   `test_a_mirror_whose_current_state_cannot_be_measured_is_refused` accepts any nonzero exit and the generic substring `could not be`. Changing the intended refusal branch from exit 1 to exit 2 would leave those assertions green. ([assertions](C:/Temp/pxd1/evals/multi-model-verify/test_review_mirror.py:3009), [intended branch](C:/Temp/pxd1/tools/new-review-mirror.ps1:1200))
+
+   **Change:** require exit 1 and the specific mirror-current-state measurement diagnostic, as the preceding test now does.
+
+On the regex’s opposite direction: **yes, it rejects legitimate full-name spellings**, including `release~2026` and `release~2026.txt`; both-host guard probes confirmed this. It has no eight-character stem constraint. Its message honestly says “looks like,” so this is a conservative compatibility restriction rather than evidence of an alias. Narrow the candidate shape or explicitly document that literal matching names are unsupported; “pass the full name” cannot help when that already is the full name. ([regex and message](C:/Temp/pxd1/tools/new-review-mirror.ps1:1329))
+
+The final sweep covered guard operands, alias spellings, removal continuation, and refusal assertions with their intended branches. Findings 1, 2, and 4 are additional class instances. I found no further confirmed measurement-overclaim in the record passages revisited. I did not rerun pytest, perform real deletion, create junction fixtures, or validate every possible short-name assignment.
+
+**FIX — the named-stream alias and omitted protected operands still bypass destination protection; this is not a dry round.**
+hook: Stop
+hook: Stop Completed
+tokens used
+58,099
+The specified edits are present: device/stream checks, short-name checks, override inclusion, the dotted-override regression, and the strengthened digest oracle. Their implementation still leaves substantive gaps. ([guard](C:/Temp/pxd1/tools/new-review-mirror.ps1:1286), [regressions](C:/Temp/pxd1/evals/multi-model-verify/test_review_mirror.py:1884), [oracle](C:/Temp/pxd1/evals/multi-model-verify/test_review_mirror.py:2986))
+
+1. **CONFIRMED — the stream refusal misses a working directory alias.**
+
+   Checking `Contains("::")` catches an unnamed stream spelling but misses `C:\Temp\pxd1:$I30:$INDEX_ALLOCATION`, whose colons are separated. ([condition](C:/Temp/pxd1/tools/new-review-mirror.ps1:1307))
+
+   On PowerShell 7, that path reports `Directory`. Using it as `RepoRoot` with ordinary `C:\Temp\pxd1` as `MirrorPath` passed the complete validation prefix and reached the intercepted recursive-delete call targeting `C:\Temp\pxd1`. This establishes reachability, not completed deletion. ([comparison](C:/Temp/pxd1/tools/new-review-mirror.ps1:1345), [delete](C:/Temp/pxd1/tools/new-review-mirror.ps1:1857))
+
+   **Change:** reject stream delimiters beyond the permitted drive-prefix colon, rather than only consecutive colons. Add this named-index-stream case on both hosts.
+
+2. **CONFIRMED — the subject list still omits protected operands.**
+
+   `ExtraInputPaths` and discovered `followedTargets` remain outside the shared spelling guard. Extra inputs receive separate equality, trailing-punctuation, and reparse checks; followed targets receive reparse and string-overlap checks. ([subject list](C:/Temp/pxd1/tools/new-review-mirror.ps1:1286), [extra inputs](C:/Temp/pxd1/tools/new-review-mirror.ps1:1759), [targets](C:/Temp/pxd1/tools/new-review-mirror.ps1:1730))
+
+   Two read-only probes demonstrated the gaps on both hosts:
+
+   - This mirror’s actual sidecar has short alias `C:\Temp\PXD1~1.SOU`. Supplying that as an extra input passed validation and reached deletion of `C:\Temp\pxd1.source-manifest`. The later copy is unchecked. ([deletion](C:/Temp/pxd1/tools/new-review-mirror.ps1:1848), [copy](C:/Temp/pxd1/tools/new-review-mirror.ps1:2110))
+   - Executing the protected-target checks with actual alias `C:\Temp\pxd1\skills\MULTI-~1` accepted the corresponding long directory as the mirror destination. This was a direct guard probe; I did not create a junction to exercise discovery end-to-end. ([target comparison](C:/Temp/pxd1/tools/new-review-mirror.ps1:1740))
+
+   **Change:** extract one validation helper. Apply it to extra inputs before collision checks and to discovered targets before cycle/overlap comparisons.
+
+   The default override and sidecar are different: their parent spelling derives from the guarded mirror path, so their absence from the initial list is not another demonstrated omission. ([default override](C:/Temp/pxd1/tools/new-review-mirror.ps1:1369), [sidecar derivation](C:/Temp/pxd1/tools/new-review-mirror.ps1:698))
+
+3. **CONFIRMED — unchecked removal is worth filing independently.**
+
+   Refusing aliases does not handle ordinary removal failures. A simulated non-terminating error from the existing removal statement still reached `New-Item`. The subsequent copy uses `/E`, and later fingerprinting measures the resulting mirror rather than proving its directory was freshly emptied. ([removal boundary](C:/Temp/pxd1/tools/new-review-mirror.ps1:1857), [copy](C:/Temp/pxd1/tools/new-review-mirror.ps1:1890), [fingerprint](C:/Temp/pxd1/tools/new-review-mirror.ps1:2238))
+
+   **Change:** make removal failure terminate construction with a named error before creation or copying. File this as a separate pre-existing defect if fixing it separately; the spelling changes are not its remedy. I did not reproduce a complete contaminated build under filesystem denial.
+
+4. **CONFIRMED — the neighboring live-measurement oracle still accepts the wrong exit class.**
+
+   `test_a_mirror_whose_current_state_cannot_be_measured_is_refused` accepts any nonzero exit and the generic substring `could not be`. Changing the intended refusal branch from exit 1 to exit 2 would leave those assertions green. ([assertions](C:/Temp/pxd1/evals/multi-model-verify/test_review_mirror.py:3009), [intended branch](C:/Temp/pxd1/tools/new-review-mirror.ps1:1200))
+
+   **Change:** require exit 1 and the specific mirror-current-state measurement diagnostic, as the preceding test now does.
+
+On the regex’s opposite direction: **yes, it rejects legitimate full-name spellings**, including `release~2026` and `release~2026.txt`; both-host guard probes confirmed this. It has no eight-character stem constraint. Its message honestly says “looks like,” so this is a conservative compatibility restriction rather than evidence of an alias. Narrow the candidate shape or explicitly document that literal matching names are unsupported; “pass the full name” cannot help when that already is the full name. ([regex and message](C:/Temp/pxd1/tools/new-review-mirror.ps1:1329))
+
+The final sweep covered guard operands, alias spellings, removal continuation, and refusal assertions with their intended branches. Findings 1, 2, and 4 are additional class instances. I found no further confirmed measurement-overclaim in the record passages revisited. I did not rerun pytest, perform real deletion, create junction fixtures, or validate every possible short-name assignment.
+
+**FIX — the named-stream alias and omitted protected operands still bypass destination protection; this is not a dry round.**

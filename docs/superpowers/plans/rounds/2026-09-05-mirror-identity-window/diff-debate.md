@@ -188,3 +188,84 @@ component split is unverified end to end for UNC, and it did not re-run
 the full pytest suite.
 
 Verdict: **FIX**.
+
+## Round 3 (`Astra D3`), and the budget is spent
+
+Resumed, route verified, binder `clean` and `sealed`. Mirror rebuilt at
+the same path from head `d80f0bc`.
+
+**NOT A DRY ROUND.** Four more confirmed findings, all applied. Round 3
+was dispatched as the confirming round of a declared budget of three, and
+the debate therefore CANNOT terminate here on its own terms:
+`debate-protocol.md` allows termination only on an adjudicated dry round.
+
+**1. The colon rule was wrong.** `Contains("::")` catches an unnamed
+stream and misses `<path>:$I30:$INDEX_ALLOCATION`, whose colons are
+SEPARATED. On PowerShell 7 that path reports `Directory` and reached the
+intercepted delete. The rule is positional now: one colon is legitimate,
+the drive separator at index 1, and any other colon names a stream.
+
+**2. The guard was still missing two operand sets**, and this is the
+third time the same shape has been found. `ExtraInputPaths` and the
+discovered `followedTargets` were both outside it. The reviewer supplied
+THIS MIRROR'S OWN SIDECAR under its real short alias
+`C:\Temp\PXD1~1.SOU` as an extra input; it passed
+every check and reached the removal of
+`C:\Temp\pxd1.source-manifest`, after which the
+unchecked copy would leave a declared review input out of a mirror the
+digest certifies.
+
+The fix is not another operand. It is ONE HELPER,
+`Test-UnresolvableSpelling`, that every operand calls. Naming subjects
+inline is what failed twice; a caller that has to remember to add itself
+to a list is the defect.
+
+**3. The unchecked removal is filed as item 98**, on the reviewer's own
+recommendation that the spelling work is not its remedy. Different class:
+an ordinary path, an ordinary removal, an ordinary failure. It simulated
+a non-terminating error on both hosts and reached `New-Item`; it did NOT
+reproduce a contaminated build under real denial, and item 98 says so.
+
+**4. A fourth negative-only oracle**,
+`test_a_mirror_whose_current_state_cannot_be_measured_is_refused`,
+directly beside the third. Accepted any nonzero exit and the generic
+substring `could not be`, so changing the branch to exit 2 would have
+left it green.
+
+**The reviewer also refuted the guard in the other direction, which is
+what it was asked to do.** The first 8.3 pattern matched `~[0-9]+$`
+anywhere in a component, so it rejected `release~2026` - an ordinary
+directory name - on both hosts, with a message telling the user to pass
+the full name when that already was the full name. The shape is anchored
+now, and `test_an_ordinary_name_holding_a_tilde_and_digits_is_accepted`
+is the regression against tightening it back.
+
+## Two errors of this side's own, both found by running things
+
+**The helper shipped with a doubled backslash.** Generated as
+`.Replace("\\", "/")`, which PowerShell reads as a literal
+two-character string, so the split never fired and EVERY component check
+in the new helper was dead code. The short-name test caught it; nothing
+else would have. Seventh backslash-doubling incident on this branch.
+
+**A test asserted the wrong conclusion and did not survive execution.** A
+draft of `test_a_stream_form_repo_root_is_refused_too` claimed the stream
+spelling was neutralized by `Resolve-Path` and the build proceeded
+normally, inferred from one earlier run that predated the guard working
+at all. It is refused. The test now records which mechanism refuses it.
+
+Gate after the fixes: 164 passed and 1 skipped under BOTH hosts, full
+`pytest evals` 2927 passed and 14 skipped, backlog lint clean, script
+still pure ASCII.
+
+## Budget
+
+3 of 3 dispatched exchanges used. Round 3 found four real defects, so the
+trend does not support declaring the work done: every round so far has
+found something, and the last one found the guard broken in both
+directions at once. Extending the budget is the USER'S decision and not
+this session's to grant - the whole-branch review caught exactly that
+omission in the plan debate's record, where a fifth exchange was
+dispatched with no authorization line.
+
+Verdict: **FIX**, budget exhausted, awaiting authorization.
