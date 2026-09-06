@@ -94,6 +94,14 @@ class TestSkillStructure:
                 " relative paths only"
             )
 
+    def test_preflight_mirror_orders_the_build_last(self):
+        # The reference stated no timing constraint at all, so a session
+        # could build the mirror, run its gates, append its ledger, and
+        # then dispatch into a refusal it had itself caused.
+        text = read(REFERENCES / "preflight-mirror.md")
+        assert "BUILD THE MIRROR LAST" in text
+        assert "mirror-quiet-period" in text
+
 
 class TestTransportContract:
     """The codex invocation shapes were live-verified 2026-07-12 on 0.144.1.

@@ -53,3 +53,34 @@ not detected, and a tracked file git reports CLEAN is covered by
 neither fingerprint. Queue every edit until the wrapper exits, however
 small and however unrelated it looks.
 <!-- contract:end -->
+
+## Timing
+
+BUILD THE MIRROR LAST. Every act that writes inside the reviewed
+repository finishes first: the gates, the plan ledger, the scratch notes,
+the formatter. From the build until the round's wrapper exits, the
+repository is quiet, and preflight-mirror.md's mirror-quiet-period states
+why. The identity digest covers the content of ignored paths, so a
+pytest cache directory or a ledger append is enough to refuse the
+dispatch.
+
+A build that has gone stale is not repaired and cannot be re-blessed:
+there is deliberately no re-mint or reseal mode. READ THE EXPLANATION
+FIRST, then build again. Rebuilding replaces the evidence of what
+changed, so a rebuild before reading turns a diagnosable refusal into an
+unexplained one. The rebuild itself is cheap next to a spent round,
+measured at about 92 seconds on a repo carrying a linked reference
+checkout.
+
+When a refusal names `the source status changed since construction`, the
+lines beneath it name the paths whose content changed and the paths that
+entered or left manifest coverage, read from the `source_manifest` file
+the record block points at. That explanation is advisory: it can be
+missing, incomplete or wrong, and the refusal stands either way.
+Manifest coverage is not file existence, so a path listed as leaving
+coverage has not necessarily been deleted.
+
+The two refusals raised by the round wrapper itself print no explanation
+to the console. The wrapper redirects both identity checks into
+`mirror.verify` inside its dispatch directory and then throws a short
+message, so that file is where the detail is.

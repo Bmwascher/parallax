@@ -25,6 +25,8 @@ The full previous text of every closed item is in git history at
 - 31
 - 58
 - 92
+- 94
+- 95
 
 ### Second - taxes every cycle
 - 44
@@ -3248,8 +3250,8 @@ tool-surface probe clean.
 ## 76. `.claude/skills` is materialised into the mirror and never swept, and its reachability is UNPROBED
 Status: OPEN
 Cost: readable content sits inside the mirror unswept, and whether a pathspec edit closes it at all depends on a probe nobody has run
-Pairs: 38, 54
-Verified: 2026-09-04 5e7d6c96b486
+Pairs: 38, 54, 94
+Verified: 2026-09-04 9b1fb55dfeb4
 
 **Raised by the user 2026-09-03**, from a report by another session working
 in a WoW addon repo, and reviewed the same day by the Sol+Fable panel,
@@ -3928,8 +3930,8 @@ Record: 4dca0f8
 ## 91. The identity digests hash a linked reference checkout three times per build and six times per round
 Status: OPEN
 Cost: a build hashes every file behind a linked checkout, its `.git` objects included, three times, and each round's three identity verifies hash it on both sides for six more passes; measured 2026-09-05 at 14,884 files per pass, so the reference is hashed more often than the addon under review
-Pairs: 93
-Verified: 2026-09-05 1ea263369be2
+Pairs: 93, 94
+Verified: 2026-09-05 dc2a1d68beee
 
 **Filed 2026-09-05 during item 90's design.** Item 90 removes the copy's
 read and the pre-copy budget accounting only. `Get-StatusSha256` runs
@@ -3987,6 +3989,111 @@ Closing this item means the module's time under PowerShell 7 measured at
 main before item 90 and after, the cause named from that comparison, and
 either a fix that keeps every one of the nineteen link cases green on
 both hosts or a recorded statement that the cost is accepted.
+
+## 94. The identity digest covers working state that moves on its own
+Status: OPEN
+Cost: every round is exposed for its whole duration to a write into an ignored working directory it does not control, and a write that persists past the post-client check costs one round of quota
+Pairs: 76, 91, 95
+Verified: 2026-09-05 f0d3c7a3ccfb
+
+**Filed 2026-09-05 from a report by a session running the plugin against
+another repository**, which hit repeated
+`BLOCKED: the source status changed since construction` refusals and
+could not tell why. Design:
+`docs/superpowers/specs/2026-09-05-mirror-identity-window-design.md`.
+
+`Get-StatusSha256` fingerprints that status listing's own fields plus
+the content of the paths it names, with `Get-ContentManifest` expanding
+a directory subject recursively, so one `!! .claude/` entry pulls in
+every file beneath it. A deletion-only entry has no bytes and
+contributes none. The content half is deliberate and
+load-bearing: editing an already-ignored file leaves the status listing
+byte-identical, so a list-only digest would pass through exactly the
+tampering the check exists to catch.
+
+The exposure is the WHOLE ROUND, not the preparation gap. The recorded
+digest is compared three times, and the third comparison runs after the
+client finishes. In a repository whose ignored directories move on their
+own, no ordering discipline closes that.
+
+**What this cycle did and did not do.** The refusal now names the paths
+that moved, the skill states the quiet period, and the reference orders
+the build last. None of that narrows the digest, so the underlying
+exposure is unchanged and this item stays OPEN.
+
+**A candidate fix, rejected for now.** A declared allowlist of volatile
+ignored paths held outside the content digest. Rejected because the
+directories that move on their own, `.claude/` and `.codex/`, are
+instruction surfaces, and excluding an instruction surface from the
+tamper net defeats the check. Closing this item means a design that
+narrows the digest without opening that hole, argued in the
+`mirror-identity-gate` contract region and debated on its own.
+
+## 95. Three stated properties of the mirror tools that the code does not hold
+Status: OPEN
+Cost: each one is a promise a reader relies on, and one of them can leave an extra input missing from a mirror the digest then certifies
+Pairs: 94
+Verified: 2026-09-05 edaa88c5859c
+
+**Filed 2026-09-05 from the plan debate for item 94's cycle**, whose
+reviewer was asked to sweep for stated properties the code does not hold.
+Record:
+`docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/`.
+All three were confirmed against the code by the session before filing.
+
+1. **The header's absolute promise.** `tools/new-review-mirror.ps1:19`
+   says the script never writes to the real tree. The directory-link
+   guard at `:1101-1112` says git's optional index refresh writes the
+   repository's own `.git/index` during every status capture, and refuses
+   a linked `.git` for exactly that reason. Qualify the promise or
+   suppress the write.
+
+2. **`-ExtraInput` can fail silently.** `tools/new-review-mirror.ps1:1554`
+   copies each extra input with `Copy-Item -Force`, with no success check
+   and no `-ErrorAction Stop`, and the script never sets
+   `$ErrorActionPreference` (its own comment at `:519` says so). A
+   non-terminating copy failure leaves the input absent, and the manifest
+   cannot discover a file that never entered status. The tool then
+   certifies a mirror missing a declared review input.
+
+3. **The verify's same-directory refusal checks spelling.** The
+   comparison at `tools/new-review-mirror.ps1:734-745` normalizes two
+   provider-resolved strings and compares them, with none of the
+   reparse-point resolution the build performs. A junction whose
+   spelling differs can reach the same directory, so the refusal is
+   narrower than the comment claims.
+
+4. **Construction claims an endpoint comparison cannot support.** The
+   comment at `tools/new-review-mirror.ps1:1308` says the retained value
+   distinguishes a source that moved and moved back. Two equal endpoint
+   measurements cannot establish that. The identity contract already
+   admits that intermediate bytes can reach the copy despite matching
+   endpoints; this comment has not been aligned with it.
+
+5. **A wrapper verification failure cannot report the classification it
+   promises.** Both identity checks in the generated wrapper `throw`
+   (`tools/dispatch-round.ps1:287` and `:311`), which exits before
+   `-Classify` runs, so the documented exit map does not describe that
+   path.
+
+**Corroborated by the plan debate's reviewer with citations, NOT
+independently re-checked by the session.** Confirm each before acting on
+it: the generated wrapper is written as ASCII so a non-ASCII path
+component is lost (`tools/dispatch-round.ps1:570`); the printed command
+places paths in expandable double-quoted strings without escaping `$`
+(`:591`); `classifying:<nonce>` redemption is a read-then-write with no
+exclusive reservation (`:663`); a receipt write that fails after creation
+leaves a partial receipt against a documented "no receipt" (`:572`); and
+an oversized integer in `exit` passes the regex and throws during
+conversion instead of following the classification map (`:794`).
+
+**One earlier report is NOT filed here, deliberately.** The voided round
+raised `Test-SupportedPathname` admitting U+FEFF as a defect. It is not
+one on its own: it mattered only because the first draft's advisory
+reader detected and consumed a byte-order mark, and Task 2 replaces that
+reader with explicit byte decoding. Admitting U+FEFF in a pathname is
+correct behaviour.
+
 ## 96. The skill did not say which host can run the controller
 Status: DONE
 Closed: 0.33.0
