@@ -611,27 +611,48 @@ def reattested_items(old_text, new_text):
     """Ids re-attested between the two texts, in two forms.
 
     An item that is OPEN or PARTIAL in the new text counts when its
-    Verified field changed or the item is new. An item that was OPEN or
-    PARTIAL in the old text and is DONE or GONE in the new one also
-    counts, reported as '<id> (closed)': closing an item IS an
-    attestation about the governed work that closed it.
+    Verified field changed or the item is new. An item that is DONE or
+    GONE in the new text counts when it was OPEN or PARTIAL in the old
+    one, OR when it is new AND the old text was readable, reported either
+    way as '<id> (closed)':
+    closing an item IS an attestation about the governed work that closed
+    it, and being born closed is that same attestation made in one step
+    instead of two.
 
     The second form is a DELIBERATE WIDENING of the spec's 3b and 3c
     wording, which speaks only of a re-attested OPEN or PARTIAL item.
     Without it a wave whose only backlog change is a close could never
-    satisfy the Stop hook or the pre-push clause. Everything else is
-    unchanged: a Verified edit on an item that is DONE in BOTH texts does
-    not count, and an unrelated byte does not count.
+    satisfy the Stop hook or the pre-push clause.
+
+    The NEW-and-closed half of it was added 2026-09-05, after a session
+    did governed work, filed the item that owned it as DONE, and was
+    still refused: the old condition asked whether the id had been OPEN
+    BEFORE, which an item that did not exist can never satisfy. Work
+    filed and closed in one session was unattestable, and the remedies
+    the refusal left were to mis-state the item as OPEN or to refresh
+    some other item that does not own the work.
+
+    Everything else is unchanged: a Verified edit on an item that is DONE
+    in BOTH texts does not count, and an unrelated byte does not count.
     """
     old = _verified_map(old_text)
     new = _verified_map(new_text)
+    # "NEW" only means anything against an old text that EXISTS. With no
+    # readable old text every item is trivially new, and counting the
+    # closed ones would make the gate satisfiable by a backlog nobody
+    # touched. The first version of the born-closed widening missed this
+    # and turned test_absent_old_text_counts_every_open_item red, which
+    # is the guard working.
+    have_old = bool(old)
     out = []
     for item_id, (status, verified) in new.items():
         if status in OPEN_STATUSES:
             if item_id not in old or old[item_id][1] != verified:
                 out.append(item_id)
         elif status in ("DONE", "GONE"):
-            if item_id in old and old[item_id][0] in OPEN_STATUSES:
+            was_open = item_id in old and old[item_id][0] in OPEN_STATUSES
+            born_closed = have_old and item_id not in old
+            if was_open or born_closed:
                 out.append("%s (closed)" % item_id)
     return out
 

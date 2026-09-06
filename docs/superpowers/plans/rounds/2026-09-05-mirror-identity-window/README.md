@@ -78,7 +78,7 @@ follow-ups rather than fixed here, per the debate protocol's scope rule.
 
 ## Astra R1 - COUNTED, verdict FIX
 
-Dispatched 2026-09-05 against subject `0361a67`, mirror `C:\Temp\pxr2`.
+Dispatched 2026-09-05 against subject `0361a67`, mirror `C:\\Temp\\pxr2`.
 Wrapper exit 0, classification `reply-present`.
 
 Route confirmed: `model: gpt-6-astra`, `provider: openai`,
@@ -130,7 +130,7 @@ Budget after this round: 2 of 4 dispatched exchanges used.
 
 ## Astra R2 - VOIDED by a concurrent writer
 
-Dispatched 2026-09-05 against subject `557e1e1`, mirror `C:\Temp\pxr2`,
+Dispatched 2026-09-05 against subject `557e1e1`, mirror `C:\\Temp\\pxr2`,
 resuming session `01a073e9`. The wrapper's FIRST identity check passed
 (`identity: verified`) and its SECOND, after the client finished, refused
 with `the source status changed since construction`. Wrapper exit 1.
@@ -226,3 +226,57 @@ What follows is its residual FIX list, all accepted:
 
 The design's success criteria also dropped a universal "proven by test"
 claim for a statement of what the two cases actually establish.
+
+## Astra R3 - DISCARDED UNREAD (brief-attribution)
+
+Dispatched 2026-09-05 against subject `374571c`, mirror `C:\\Temp\\pxr3`,
+resuming session `01a073e9`. The wrapper classified `reply-present` and
+exited 0, and BOTH identity checks passed (`mirror.verify` holds
+`identity: verified` twice).
+
+The ROUND-EVIDENCE BINDER refused:
+
+    a resumed slice carries a user record in front of the brief that
+    neither repeats the client's own preamble from this session nor
+    reads as a refreshed one: it is not a recognised client environment
+    preamble
+
+Cause: the mirror was rebuilt at a NEW path. Rounds 1 and 2 ran against
+`C:\\Temp\\pxr2`; this round resumed the same session against
+`C:\\Temp\\pxr3`. SKILL.md:290-293 states the rule exactly - a resumed
+round needs the mirror at the path its identity was recorded at, a mirror
+at a new path makes the binder refuse the resumed slice, and the remedy
+is to rebuild at the SAME path with `-Force` or to dispatch FRESH rather
+than resume. The driver did neither. Session error, documented in the
+very skill under review.
+
+**THE REPLY IS DISCARDED UNREAD, and this is not the same as a void.**
+A binder verdict other than clean is class `brief-attribution`
+(fallbacks.md), and that class discards the reply unread. The earlier
+voided rounds still PROVED the brief-to-reply binding, so their content
+was usable as input and was used. Here the binding is exactly what could
+not be proved, so the content is worth nothing. `astra-r3-discarded-reply`
+is deliberately NOT retained in this directory; the brief and the
+transcript are, because they are evidence about the dispatch rather than
+about the review.
+
+**A prediction this session got wrong, recorded because the reasoning
+matters.** Before the round finished, the session predicted it would void
+because two pytest runs wrote `.pytest_cache` inside the repo while the
+reviewer read. Both identity checks passed instead. The prediction
+reasoned from MODIFICATION TIME; the digest hashes CONTENT. Both suites
+rewrote the cache with byte-identical content, so the digest never moved.
+The quiet-period rule is still correct as written - a content change
+there would have voided the round - but "a file was touched" and "the
+digest moved" are different claims and this session conflated them.
+
+**The quiet-period rule has a gap this exposed, in the other direction.**
+The session read "nothing may write inside the reviewed repository" as
+"do not edit files" and then started a 21-minute background gate that
+writes. Backgrounded work in the repo is exactly what the rule must
+forbid, and no draft sent to the reviewer contained the gap in that form,
+so no round could have caught it.
+
+Budget: 4 of 4 dispatched exchanges used. ONE counted round (R1, FIX,
+fully applied). Two voided with usable input, both applied. One discarded
+unread.

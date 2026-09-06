@@ -4043,3 +4043,48 @@ controller. Nothing in this cycle tested the new section's behaviour on
 a real Codex host.
 
 Record: docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window
+
+## 97. Work filed and closed in one session could not be attested
+Status: DONE
+Closed: 0.33.0
+Verified: 2026-09-05 ee474bc0afc6
+
+**Found 2026-09-05 by the Stop hook refusing a tree whose attestation was
+sitting in it.** Item 96 was filed DONE for a governed change made in the
+same session. `reattested_items` counted a close only when the id had
+been OPEN or PARTIAL in the OLD text, which an item that did not exist
+can never satisfy, so the hook refused and kept refusing.
+
+The two remedies the refusal left were both dishonest: mis-state the item
+as OPEN when its work is finished, or refresh the `Verified` field of
+some other item that does not own the work. The function's own reasoning
+already argued the other way - its docstring says closing an item IS an
+attestation about the governed work that closed it - and an item born
+closed is that same attestation made in one step instead of two.
+
+**The change.** In `evals/tools/backlog_lint.py`, a DONE or GONE item in
+the new text now counts when it was OPEN or PARTIAL before OR when it is
+new, and the docstring records why.
+
+**The bound that the first attempt missed.** "New" only means anything
+against an old text that EXISTS. Written without that condition, a run
+with no readable old text counted every closed item, which would let a
+backlog nobody touched satisfy the gate. `have_old` gates the new half,
+and `test_absent_old_text_counts_every_open_item` is the guard that
+caught it - it went red on the first attempt and is what forced the
+narrowing.
+
+**Verification.** Two cases written RED first,
+`test_a_new_item_born_closed_counts` and
+`test_a_new_gone_item_counts_the_same_way`, both failing with
+`[] == ['5 (closed)']` before the change. All 129 tests across
+`test_backlog_lint.py`, `test_backlog_hooks.py` and
+`test_backlog_prepush.py` pass after it.
+
+**What this does NOT do.** It does not make the gate easier to satisfy
+with fabricated work. A new closed item still has to pass every shape
+rule the linter enforces, including its `Record:` line and its `Verified`
+digest over its own text. It widens what counts as an attestation, not
+what counts as an item.
+
+Record: docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window
