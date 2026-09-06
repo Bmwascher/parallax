@@ -103,8 +103,9 @@ requesting-code-review. Explicit project review gates remain applicable.
    below against it, and print the record block; empty enumeration
    output is the evidence. Whether the removal needs a commit branches on
    tracked-ness; references/backup-lane.md states that branch and the
-   hook behaviour that comes with it. Full construction detail and the
-   mirror's identity fields are in references/preflight-mirror.md.
+   hook behaviour that comes with it. Full construction detail, the
+   mirror's identity fields, and the QUIET PERIOD its construction starts
+   are in references/preflight-mirror.md.
 
    **The reviewer's own machine is the second half of this check, and the
    enumeration above cannot see it.** Run

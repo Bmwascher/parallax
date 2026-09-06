@@ -869,6 +869,32 @@ class TestTransportContract:
             "   result: an unmade measurement and a clean one must never look alike."
         ) in text
 
+    def test_mirror_quiet_period_is_pinned(self):
+        # The whole-body pin for the contract region. The rule existed
+        # only in this repo's CLAUDE.md, covering preparation to wrapper
+        # exit, so the plugin did not carry it to the repos it is
+        # installed into and a session there hit the refusal repeatedly
+        # with nothing to read.
+        text = read(REFERENCES / "preflight-mirror.md")
+        assert (
+            "NOTHING MAY WRITE INSIDE THE REVIEWED REPOSITORY from the moment the\n"
+            "mirror is built until the wrapper exits. The identity digest covers the\n"
+            "fields of `git status --porcelain --ignored` PLUS the content of the\n"
+            "paths that listing names, ignored ones included, with a directory\n"
+            "expanded to its files and a deletion-only entry contributing no bytes.\n"
+            "So a test-cache write, a plan-ledger append, a drift report or one new\n"
+            "untracked file is enough. The same recorded digest is compared against\n"
+            "the live source three times: at preparation, before the client runs,\n"
+            "and after it finishes. The last of those spans the whole round, so this\n"
+            "is a quiet period and not an ordering rule. Only that last one costs a\n"
+            "reviewer round; the two before it refuse before the client is invoked\n"
+            "and spend no quota. State the limits with the rule: the comparison\n"
+            "samples endpoints, so a change made and reverted inside the round is\n"
+            "not detected, and a tracked file git reports CLEAN is covered by\n"
+            "neither fingerprint. Queue every edit until the wrapper exits, however\n"
+            "small and however unrelated it looks."
+        ) in text
+
     def test_plugin_cache_reclassification_is_pinned(self):
         text = read(SKILL_MD)
         assert (

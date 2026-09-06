@@ -32,3 +32,24 @@ Files above the repo's git root are NOT ingested (same probe), and
 `~/.codex/AGENTS.md` is the user's own
 global instruction file — note it in the debate record if it exists,
 but it is not a stop.
+
+## The quiet period
+
+<!-- contract:start id=mirror-quiet-period -->
+NOTHING MAY WRITE INSIDE THE REVIEWED REPOSITORY from the moment the
+mirror is built until the wrapper exits. The identity digest covers the
+fields of `git status --porcelain --ignored` PLUS the content of the
+paths that listing names, ignored ones included, with a directory
+expanded to its files and a deletion-only entry contributing no bytes.
+So a test-cache write, a plan-ledger append, a drift report or one new
+untracked file is enough. The same recorded digest is compared against
+the live source three times: at preparation, before the client runs,
+and after it finishes. The last of those spans the whole round, so this
+is a quiet period and not an ordering rule. Only that last one costs a
+reviewer round; the two before it refuse before the client is invoked
+and spend no quota. State the limits with the rule: the comparison
+samples endpoints, so a change made and reverted inside the round is
+not detected, and a tracked file git reports CLEAN is covered by
+neither fingerprint. Queue every edit until the wrapper exits, however
+small and however unrelated it looks.
+<!-- contract:end -->
