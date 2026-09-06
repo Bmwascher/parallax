@@ -122,7 +122,13 @@ def test_an_extra_input_at_the_sidecar_path_is_refused(tmp_path):
     clash.write_text("a declared review input\n")
     proc = run_mirror(repo, mirror, "-Force", "-ExtraInput", str(clash))
     assert proc.returncode == 2, proc.stdout + proc.stderr
-    assert "extra input" in proc.stdout.lower(), proc.stdout
+    # The FLAG NAME, which is how the message actually names the
+    # input. An earlier draft asserted the two-word phrase "extra
+    # input", which Step 5b2's message never contains: it says
+    # `-ExtraInput`, closed up, and then "review input". The oracle
+    # was unsatisfiable by the code the same plan specifies, and four
+    # review rounds read past it because no round ran the tests.
+    assert "-extrainput" in proc.stdout.lower(), proc.stdout
     assert clash.read_text() == "a declared review input\n"
 
 
@@ -503,7 +509,7 @@ This is the half the previous draft claimed to have and did not. Without it the 
 
 - [ ] **Step 5c: Refuse or remove a pre-existing sidecar, AFTER all validation**
 
-Insert immediately AFTER the followed-target overlap loop from Step 5b, so every lexical and alias check has already passed:
+APPLY STEP 5b2 BELOW FIRST, then insert this immediately after it. Both steps were written claiming the same anchor - "immediately after Step 5b's second loop" - which only one of them can have, and the reading order of this document is the wrong one. 5c is the only step here that REMOVES anything, and its own comment says LAST; 5b2's says "nothing has been removed yet". Placed in reading order, `-Force` deletes the clashing file before 5b2 can refuse it, and `test_an_extra_input_at_the_sidecar_path_is_refused` goes red on its surviving-file assertion. So the order is: every lexical check, then every alias check, then 5b2's extra-input refusals, then this.
 
 ```powershell
 # LAST, because a build that is going to be refused must not have deleted
