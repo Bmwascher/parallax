@@ -84,7 +84,11 @@ beside the tiers above.
 
 ## A plan defect in this task
 
-Step 4 as written says `git add -A`. Blanket staging is banned by the
-family git rules and a hook denies it. Staged by explicit path instead.
-This is the fifth defect found by executing this plan rather than reading
-it; the other four are in `README.md`.
+Step 4 as written stages with the blanket flag. The family git rules ban
+it and a hook denies it, so that step could not have run as written.
+Staged by explicit path instead.
+
+This is one of several defects found by executing this plan rather than
+reading it. The others are recorded at the steps they were fixed in,
+and in `README.md`. No total is given here on purpose: a count written
+inside one of the documents being counted goes stale on the next edit.

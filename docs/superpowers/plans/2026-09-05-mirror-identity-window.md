@@ -1056,7 +1056,7 @@ function Format-AdvisoryName($name) {
     foreach ($ch in $s.ToCharArray()) {
         $cat = [System.Globalization.CharUnicodeInfo]::GetUnicodeCategory($ch)
         if ($escaped -contains $cat) {
-            $unit = "\\u" + ([int]$ch).ToString("x4")
+            $unit = "\u" + ([int]$ch).ToString("x4")
         } else {
             $unit = [string]$ch
         }

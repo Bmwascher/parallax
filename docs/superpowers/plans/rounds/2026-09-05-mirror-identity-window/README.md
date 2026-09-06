@@ -149,8 +149,17 @@ exactly as found: not staged, not reverted, not committed here.
 **This is the defect the plan documents, reproducing during the debate
 about it.** Finding the cause took a manual mtime sweep across the
 ignored and dirty set, which is precisely the work Task 2 exists to
-remove. Had the sidecar shipped, the refusal would have printed
-`content changed (2): CLAUDE.md, skills/multi-model-verify/SKILL.md`.
+remove. Had the sidecar shipped, the refusal would have printed `entered
+manifest coverage (2): CLAUDE.md, skills/multi-model-verify/SKILL.md`.
+NOT `content changed`, which is what an earlier draft of this paragraph
+said and what the whole-branch review caught. Both files were TRACKED
+AND CLEAN when the mirror was built, so neither appeared in the status
+listing and neither entered the recorded manifest. Modifying them put
+them into `git status` for the first time, and a key present live and
+absent from the record is classified `entered`, not `changed`. The
+distinction is the one `references/preflight-mirror.md` states as
+"manifest coverage is not file existence", and getting it wrong here
+would have taught a reader the wrong reading of the tool's own output.
 
 It is also a case the quiet-period rule as drafted does NOT cover. That
 rule addresses one session's own writes. It says nothing about a SECOND
@@ -368,10 +377,16 @@ SYMLINK was not measured, so nothing above claims anything about one.
 The shipped walker's comment is left as it stands; correcting it is not
 in this plan's scope.
 
-Budget: 5 dispatched exchanges. Two counted rounds, both FIX, both fully
-applied.
+Budget: 4 declared, 5 dispatched. THE FIFTH WAS AUTHORIZED BY THE USER,
+who was asked what to do at exhaustion, was given a recommendation of
+one more fresh round, and answered "Run it". That sentence was missing
+from this record until the whole-branch review asked who granted it,
+and the question is the right one: debate-protocol.md makes the budget
+a bound the session cannot grant itself, so an unattributed overrun
+reads exactly like a session extending its own leash. Two counted
+rounds, both FIX, both fully applied.
 
-## Two plan defects found by RUNNING it, not by reading it
+## Plan defects found by RUNNING it, not by reading it
 
 Both surfaced during implementation, after the debate closed, and both
 are the same shape: a test asserting something the code the same plan
@@ -412,3 +427,12 @@ it. Two consequences: fixes applied after a debate closes are unreviewed
 text in a document everything else in it was reviewed, and backslash
 escaping through a generator has now cost this repo three separate
 incidents. Both corrections are in the plan with the reasoning inline.
+
+**More were found after this section was written**, in Tasks 3, 4 and 5,
+and they are recorded where they were fixed rather than copied here: the
+pin-class correction and the ranking and pairing omissions are in the
+plan at the steps that carry them, and the blanket-staging defect is in
+`gate-results.md`. This section deliberately states no total. A count of
+defects found in a document, written inside that same document, is stale
+the next time anyone adds to it, and this record has already had one
+count go wrong that way.

@@ -4060,11 +4060,11 @@ tamper net defeats the check. Closing this item means a design that
 narrows the digest without opening that hole, argued in the
 `mirror-identity-gate` contract region and debated on its own.
 
-## 95. Three stated properties of the mirror tools that the code does not hold
+## 95. Stated properties of the mirror tools that the code does not hold
 Status: OPEN
 Cost: each one is a promise a reader relies on, and one of them can leave an extra input missing from a mirror the digest then certifies
 Pairs: 94
-Verified: 2026-09-05 edaa88c5859c
+Verified: 2026-09-05 f1bf98605067
 
 **Filed 2026-09-05 from the plan debate for item 94's cycle**, whose
 reviewer was asked to sweep for stated properties the code does not hold.
@@ -4118,6 +4118,18 @@ leaves a partial receipt against a documented "no receipt" (`:572`); and
 an oversized integer in `exit` passes the regex and throws during
 conversion instead of following the classification map (`:794`).
 
+6. **The link walker's premise is unmeasured.** `Test-PathOrAncestorIsLink`
+   reads attributes rather than calling `Test-Path`, and its comment
+   justifies that by saying a DANGLING junction is a reparse point
+   `Test-Path` may report as absent. Measured 2026-09-05 under both
+   hosts, `Test-Path` returned True for a dangling junction on each, so
+   the premise did not reproduce. The CHOICE is still right, because the
+   attributes read answers the Directory question and the not-there
+   question in one call; only the stated reason is unsupported. A
+   dangling file SYMLINK was never measured, and that is the case where
+   a wrong "it is not there" becomes a write. Qualify the comment or
+   measure the symlink.
+
 **One earlier report is NOT filed here, deliberately.** The voided round
 raised `Test-SupportedPathname` admitting U+FEFF as a defect. It is not
 one on its own: it mattered only because the first draft's advisory
@@ -4128,11 +4140,14 @@ correct behaviour.
 ## 96. The skill did not say which host can run the controller
 Status: DONE
 Closed: 0.33.0
-Verified: 2026-09-05 6fe6d1763d94
+Verified: 2026-09-05 dcbd2aa6d28a
 
-**Numbers 94 and 95 are RESERVED**, not missing: the committed plan at
-`docs/superpowers/plans/2026-09-05-mirror-identity-window.md` files them
-when it executes, and this item was folded in ahead of that execution.
+**Numbers 94 and 95 were RESERVED when this item was filed**, because
+this item was folded in ahead of the plan that owned those numbers. That
+plan has since executed and both are filed above, so the reservation is
+spent rather than outstanding. The sentence is kept in the past tense
+instead of deleted: it explains why item 96 carries a higher number than
+work that was planned before it.
 
 **Filed and closed 2026-09-05**, folding in work another session left
 uncommitted in the working tree. That session finished without

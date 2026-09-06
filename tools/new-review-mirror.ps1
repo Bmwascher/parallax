@@ -918,11 +918,17 @@ function Format-AdvisoryName($name) {
                  [System.Globalization.UnicodeCategory]::Surrogate,
                  [System.Globalization.UnicodeCategory]::PrivateUse,
                  [System.Globalization.UnicodeCategory]::OtherNotAssigned)
+    # NON-BMP CHARACTERS ARE ALL ESCAPED, which the category list above
+    # does not make obvious. This walks UTF-16 code UNITS, so a
+    # supplementary character arrives as two units both classified
+    # Surrogate, and the escape set therefore covers every codepoint in
+    # planes 1 through 16. An emoji or a CJK Extension B name renders
+    # escaped. That is intended, not an oversight to be repaired.
     $sb = New-Object System.Text.StringBuilder
     foreach ($ch in $s.ToCharArray()) {
         $cat = [System.Globalization.CharUnicodeInfo]::GetUnicodeCategory($ch)
         if ($escaped -contains $cat) {
-            $unit = "\\u" + ([int]$ch).ToString("x4")
+            $unit = "\u" + ([int]$ch).ToString("x4")
         } else {
             $unit = [string]$ch
         }
