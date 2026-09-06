@@ -607,14 +607,33 @@ def _verified_map(text):
     return {item.id: (item.status, item.get("Verified")) for item in doc.items}
 
 
+def _is_readable(text):
+    """Whether `text` PARSED, which is not the same question as whether
+    it held any items.
+
+    `_verified_map` returns {} for absent text, for unparseable text, and
+    for a clean backlog with no items yet. A caller that needs to know
+    whether there was anything to compare against has to ask separately,
+    or it treats an empty valid backlog as an unreadable one - which is
+    what the first version of the born-closed widening did, so the first
+    item ever filed could not attest the work that produced it."""
+    if text is None:
+        return False
+    try:
+        parse(text)
+    except ParseError:
+        return False
+    return True
+
+
 def reattested_items(old_text, new_text):
     """Ids re-attested between the two texts, in two forms.
 
     An item that is OPEN or PARTIAL in the new text counts when its
     Verified field changed or the item is new. An item that is DONE or
     GONE in the new text counts when it was OPEN or PARTIAL in the old
-    one, OR when it is new AND the old text was readable, reported either
-    way as '<id> (closed)':
+    one, OR when it is new AND the old text PARSED, reported either way
+    as '<id> (closed)':
     closing an item IS an attestation about the governed work that closed
     it, and being born closed is that same attestation made in one step
     instead of two.
@@ -637,13 +656,19 @@ def reattested_items(old_text, new_text):
     """
     old = _verified_map(old_text)
     new = _verified_map(new_text)
-    # "NEW" only means anything against an old text that EXISTS. With no
-    # readable old text every item is trivially new, and counting the
-    # closed ones would make the gate satisfiable by a backlog nobody
-    # touched. The first version of the born-closed widening missed this
-    # and turned test_absent_old_text_counts_every_open_item red, which
-    # is the guard working.
-    have_old = bool(old)
+    # "NEW" only means anything against an old text that was READABLE.
+    # With no readable old text every item is trivially new, and counting
+    # the closed ones would make the gate satisfiable by a backlog nobody
+    # touched. The first version of the born-closed widening missed that
+    # and turned test_absent_old_text_counts_every_open_item red.
+    #
+    # READABLE, not NON-EMPTY. The second version asked `bool(old)`, which
+    # is a question about ITEMS, so a backlog that parsed cleanly and held
+    # none of them was treated as unreadable and the first item ever filed
+    # could not attest its own work. Cross-vendor review found that; the
+    # tests before it all started from a populated fixture and could not
+    # see the difference.
+    have_old = _is_readable(old_text)
     out = []
     for item_id, (status, verified) in new.items():
         if status in OPEN_STATUSES:

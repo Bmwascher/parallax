@@ -621,6 +621,36 @@ class TestReattested:
             "Record: docs/superpowers/specs/2026-09-04-backlog-rewrite-design.md\n")
         assert lint.reattested_items(old, new) == ["5 (closed)"]
 
+    def test_an_empty_but_valid_old_backlog_still_allows_a_close(self):
+        """`bool(old)` asked whether the old text had ITEMS, while the
+        rule it was written for is whether the old text was READABLE.
+
+        A backlog that parses cleanly and holds no items is readable, so
+        the first item ever filed - as DONE, for governed work done in
+        that same session - must still attest. The earlier tests all
+        start from a populated fixture and cannot see this distinction.
+        Found 2026-09-05 by the cross-vendor round that reviewed the
+        first version of this widening.
+        """
+        old = "# BACKLOG\n\n## Ranking\n"
+        new = old + (
+            "\n## 1. Filed and closed against an empty backlog\n"
+            "Status: DONE\n"
+            "Closed: 0.33.0\n"
+            "Verified: 2026-09-04 4bf273440723\n"
+            "\n"
+            "Shipped in one sentence.\n"
+            "Record: docs/superpowers/specs/2026-09-04-backlog-rewrite-design.md\n")
+        assert lint.reattested_items(old, new) == ["1 (closed)"]
+
+    def test_unparseable_old_text_still_blocks_a_close(self):
+        """The guard the empty case must not weaken. Unreadable old text
+        is not the same as readable-and-empty, and a close measured
+        against nothing still counts for nothing."""
+        new = clean_text()
+        assert not any("(closed)" in i
+                       for i in lint.reattested_items("garbage", new))
+
     def test_absent_old_text_counts_every_open_item(self):
         assert lint.reattested_items(None, clean_text()) == ["1", "3"]
 

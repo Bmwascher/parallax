@@ -4047,7 +4047,7 @@ Record: docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window
 ## 97. Work filed and closed in one session could not be attested
 Status: DONE
 Closed: 0.33.0
-Verified: 2026-09-05 ee474bc0afc6
+Verified: 2026-09-05 c9fbc19749c8
 
 **Found 2026-09-05 by the Stop hook refusing a tree whose attestation was
 sitting in it.** Item 96 was filed DONE for a governed change made in the
@@ -4066,25 +4066,39 @@ closed is that same attestation made in one step instead of two.
 the new text now counts when it was OPEN or PARTIAL before OR when it is
 new, and the docstring records why.
 
-**The bound that the first attempt missed.** "New" only means anything
-against an old text that EXISTS. Written without that condition, a run
-with no readable old text counted every closed item, which would let a
-backlog nobody touched satisfy the gate. `have_old` gates the new half,
-and `test_absent_old_text_counts_every_open_item` is the guard that
-caught it - it went red on the first attempt and is what forced the
-narrowing.
+**Two bounds, each found by a different check.** "New" only means
+anything against an old text that PARSED. Written without that condition,
+a run with no readable old text counted every closed item, which would
+let a backlog nobody touched satisfy the gate;
+`test_absent_old_text_counts_every_open_item` went red and forced the
+narrowing. The narrowing was then written as `bool(old)`, which asks
+whether the old text had ITEMS rather than whether it was READABLE, so a
+backlog that parsed cleanly and held none of them was treated as
+unreadable and the first item ever filed could not attest its own work.
+Cross-vendor review found that second one; every test to that point
+started from a populated fixture and could not see the difference.
+`_is_readable` now answers the parse question separately.
 
-**Verification.** Two cases written RED first,
+**Verification.** Cases written RED first,
 `test_a_new_item_born_closed_counts` and
 `test_a_new_gone_item_counts_the_same_way`, both failing with
-`[] == ['5 (closed)']` before the change. All 129 tests across
-`test_backlog_lint.py`, `test_backlog_hooks.py` and
-`test_backlog_prepush.py` pass after it.
+`[] == ['5 (closed)']`; then
+`test_an_empty_but_valid_old_backlog_still_allows_a_close`, failing with
+`[] == ['1 (closed)']` against the `bool(old)` narrowing. All 131 tests
+across `test_backlog_lint.py`, `test_backlog_hooks.py` and
+`test_backlog_prepush.py` pass after both changes.
 
-**What this does NOT do.** It does not make the gate easier to satisfy
-with fabricated work. A new closed item still has to pass every shape
+**What this does NOT do.** It widens what counts as an attestation, not
+what counts as an item: a new closed item still has to pass every shape
 rule the linter enforces, including its `Record:` line and its `Verified`
-digest over its own text. It widens what counts as an attestation, not
-what counts as an item.
+digest over its own text.
+
+It does NOT make the gate resistant to fabricated work, and an earlier
+draft of this entry claimed it did. The linter says so itself: rules 9
+and 10 are SHAPE checks, twenty filler words satisfy rule 9 and any
+existing path satisfies rule 10, and the second reader named in the spec
+is what judges substance. A digest computed over an item's own text
+proves the text has not drifted since it was written, never that the
+work it describes happened.
 
 Record: docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window

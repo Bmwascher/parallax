@@ -280,3 +280,70 @@ so no round could have caught it.
 Budget: 4 of 4 dispatched exchanges used. ONE counted round (R1, FIX,
 fully applied). Two voided with usable input, both applied. One discarded
 unread.
+
+## Astra R4 - COUNTED, verdict FIX with one ESCALATE
+
+Dispatched 2026-09-05 against subject `048c0c1`, mirror `C:\Temp\pxr4`,
+FRESH rather than resumed. Wrapper exit 0, classification
+`reply-present`. Route confirmed: `gpt-6-astra`, `openai`, `read-only`,
+`high`, session `01a0746f`. Binder `-Fresh`: `status: clean`,
+`sealed: sealed`.
+
+Fresh was chosen deliberately after R3 died on preamble continuity: a
+fresh session needs no preamble to match, so a new mirror path is
+harmless. The cost is the reviewer's accumulated context, which the brief
+carried instead by pointing at this record.
+
+Artifacts: `brief-r4.md`, `astra-r4-reply.md`, `astra-r4-transcript.txt`.
+
+**PASS on claims 2, 5, 6 and 8**, and on the `StringReader`, `GetPathRoot`,
+dictionary and `Split-Path` halves of the host sweep. The reviewer ran
+extracted-function probes on BOTH hosts rather than reading only.
+
+**FIX on claims 1, 3, 4 and 7 plus six class-sweep items.** All applied.
+Three were verified by this session first:
+
+- `BACKLOG.md.` passes `Test-Path`, resolves WITH the trailing dot,
+  hashes identical to `BACKLOG.md`, and compares unequal by spelling.
+  Confirmed here. An extra input spelled `<mirror>.source-manifest.`
+  would have passed the collision guard and still named the file `-Force`
+  removes.
+- `skill_lint.py:340` reads `est_tokens > BODY_TOKEN_CEILING`, so 6500
+  exactly is a warning and not an error. The plan said "at or above".
+- Task 4 still cited `SKILL.md's mirror-quiet-period` after Task 3 moved
+  the region to `preflight-mirror.md`, and wrote the id in backticks,
+  which the citation checker's required `<file>.md's <id>` spelling
+  rejects.
+
+The rest, applied on the reviewer's evidence: the bounded reader
+allocated one record PAST its cap because `ReadLine` ran before the count
+check, measured with a million-character line that was built and
+discarded; `Format-AdvisoryName` bounded its INPUT at 200 and then
+expanded escapes, returning 1,211 characters for a control-heavy name;
+item 97's guard asked `bool(old)`, a question about ITEMS, so a backlog
+that parsed cleanly and held none could not attest its first item; the
+two junction tests placed the MIRROR under the junction, where the
+existing mirror-path guard refuses first, so neither could detect the
+sidecar guard's omission; the resolution-failure test's oracle accepted
+`ok` and passed without exercising the error branch; and item 97 claimed
+resistance to fabricated work that its own linter documents it does not
+have.
+
+**A measured host difference, now closed.** Windows PowerShell 5.1
+classifies U+08E2, U+0890 and U+0891 as `OtherNotAssigned`; PowerShell 7
+classifies them as `Format`. A renderer keyed on `Format` alone escapes
+them on one host and not the other. `OtherNotAssigned` and `PrivateUse`
+joined the escape set so the two agree for that class, and the interface
+now states that identical rendering is claimed only for the listed
+categories rather than for every input.
+
+**ESCALATED, unresolved.** Whether
+`[System.IO.File]::GetAttributes` behaves the same on both hosts for a
+DANGLING reparse point. Task 1 Step 5c reads attributes rather than
+calling `Test-Path` precisely because the link walker documents
+`Test-Path` as unreliable there, so the replacement's own cross-host
+behaviour matters and neither side measured it. It is the one place where
+a wrong "it is not there" becomes a write.
+
+Budget: 5 dispatched exchanges. Two counted rounds, both FIX, both fully
+applied.

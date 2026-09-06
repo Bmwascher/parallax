@@ -34,7 +34,7 @@
 - Consumes: nothing from earlier tasks.
 - Produces:
   - `Get-StatusSha256($repo)` returns `@{ Ok = $true; Sha = <hex>; Manifest = <string[]> }` on success, unchanged `@{ Ok = $false; Reason = <string> }` on failure. `Manifest` holds `Get-ContentManifest`'s lines, each `"<relpath> <sha256hex>"`.
-  - `Get-SourceManifestSidecarPath($mirrorPath)` returns `"<full mirror path>.source-manifest"`, or `$null` when the mirror path is a filesystem root and therefore has no sibling.
+  - `Get-SourceManifestSidecarPath($mirrorPath)` returns `@{ Kind = "ok"; Path = <string> }`, `@{ Kind = "root" }`, or `@{ Kind = "error"; Reason = <string> }`. The path is the full mirror path with `.source-manifest` APPENDED, never a leaf rejoined to a parent.
   - `Write-SourceManifestSidecar($path, $manifestLines)` returns `$true` or `$false`. It opens the file with `CreateNew`, which makes the FINAL PATH COMPONENT safe against an overwrite and against a link substituted there. It does not and cannot defend a DIRECTORY component; that is the alias guards' job, in Step 5b.
   - The build's record block gains one line, `source_manifest: <path>`, printed after `override:`.
 
@@ -227,6 +227,82 @@ def test_a_resolution_failure_is_not_reported_as_a_root(tmp_path):
     assert proc.returncode == 0, proc.stdout + proc.stderr
     assert proc.stdout.strip() in ("ok", "error"), proc.stdout
     assert proc.stdout.strip() != "root", "a resolution failure read as a root"
+
+
+def test_a_junction_at_the_sidecar_path_is_refused(tmp_path):
+    """The ONLY case that isolates the sidecar's alias guard.
+
+    The sidecar shares the mirror's parent by construction, so any
+    junction ABOVE it is also above the mirror and the mirror-path
+    guard refuses first - which is why the junction tests that place
+    the mirror under a junction prove nothing about the sidecar. What
+    is reachable and distinct is the sidecar path ITSELF being a
+    reparse point while the mirror path is ordinary.
+    """
+    target = tmp_path / "elsewhere"
+    target.mkdir()
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    make_junction(tmp_path / "mirror.source-manifest", target)
+    proc = run_mirror(repo, mirror)
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "source manifest path" in proc.stdout, proc.stdout
+
+
+def test_an_extra_input_reached_through_a_junction_is_refused(tmp_path):
+    """Spelling equality cannot see an alias, so the guard refuses
+    what it cannot decide. The victim must survive the refusal: the
+    whole point of ordering removal last is that a build heading for
+    a refusal deletes nothing."""
+    real = tmp_path / "inputs"
+    real.mkdir()
+    victim = real / "declared.txt"
+    victim.write_text("a declared review input" + chr(10))
+    make_junction(tmp_path / "alias", real)
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    proc = run_mirror(repo, mirror, "-ExtraInput",
+                      str(tmp_path / "alias" / "declared.txt"))
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "directory link" in proc.stdout, proc.stdout
+    assert victim.read_text() == "a declared review input" + chr(10)
+
+
+def test_an_extra_input_with_a_trailing_dot_is_refused(tmp_path):
+    """Measured 2026-09-05 on both hosts: `BACKLOG.md.` passes
+    Test-Path, resolves WITH the dot, and hashes identical to
+    `BACKLOG.md`, while comparing unequal by spelling. Windows strips
+    the dot when it OPENS the file and PowerShell keeps it in the
+    path, so an extra input spelled `<mirror>.source-manifest.` would
+    pass an equality check and still name the file -Force removes."""
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    victim = tmp_path / "mirror.source-manifest"
+    victim.write_text("must survive" + chr(10))
+    proc = run_mirror(repo, mirror, "-Force", "-ExtraInput",
+                      str(victim) + ".")
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "dot or a space" in proc.stdout, proc.stdout
+    assert victim.read_text() == "must survive" + chr(10)
+
+
+def test_an_unresolvable_path_is_reported_as_error_not_root(tmp_path):
+    """A DETERMINISTIC resolution failure on both hosts.
+
+    The long-path case below is host-dependent - PowerShell 7 accepted
+    the 278-character path that Windows PowerShell 5.1 refused - so its
+    oracle has to accept `ok`, which means it can pass without ever
+    exercising the error branch. `GetFullPath("")` throws on both."""
+    src = extract_ps_function("Get-SourceManifestSidecarPath")
+    driver = tmp_path / "probe.ps1"
+    driver.write_text(
+        src + "\n$r = Get-SourceManifestSidecarPath ''\n"
+        "Write-Output $r.Kind\n", encoding="utf-8")
+    proc = subprocess.run(
+        [ps_host(), "-NoProfile", "-NonInteractive", "-File", str(driver)],
+        capture_output=True, text=True)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert proc.stdout.strip() == "error", proc.stdout
 
 
 def test_a_root_mirror_path_is_refused_by_the_build(tmp_path):
@@ -491,6 +567,23 @@ foreach ($eiResolved in @($ExtraInputPaths)) {
     # unchecked Copy-Item can leave it out of the mirror entirely. This
     # tool cannot establish physical identity here, so it REFUSES the
     # case it cannot decide rather than guessing.
+    # A TRAILING DOT OR SPACE ON ANY COMPONENT defeats the comparison
+    # above. Windows strips it when it OPENS the file; PowerShell keeps
+    # it in the path. Measured 2026-09-05: `BACKLOG.md.` passes
+    # Test-Path, resolves WITH the dot, hashes identical to
+    # `BACKLOG.md`, and compares unequal - so an extra input spelled
+    # `<mirror>.source-manifest.` passes this guard and still names the
+    # file -Force is about to remove. Refuse the spelling.
+    foreach ($seg in $eiNorm.Split('/')) {
+        if ($seg -match '[. ]$') {
+            Write-Output ("ERROR: -ExtraInput '" + $eiResolved + "' has" +
+                " a path component ending in a dot or a space, which" +
+                " Windows strips when it opens the file but PowerShell" +
+                " keeps in the path, so this tool cannot tell which file" +
+                " it names; pass the exact name")
+            exit 2
+        }
+    }
     $eiHit = Test-PathOrAncestorIsLink $eiResolved
     if ($eiHit) {
         Write-Output ("ERROR: -ExtraInput '" + $eiResolved + "' is reached" +
@@ -568,7 +661,7 @@ git commit -m "write the source content manifest beside the review mirror"
 - Produces:
   - `Read-BoundedRecords($text, $maxRecords)` returns `@{ Records = <string[]>; Truncated = <bool> }`, reading with a `StringReader` so the cap applies during extraction rather than after it.
   - `Get-ManifestDrift($recordedLines, $liveLines)` returns `@{ Entered = <string[]>; Left = <string[]>; Changed = <string[]>; Malformed = <int> }`. The three lists are sorted by path. `Malformed` counts every record the parser rejected.
-  - `Format-AdvisoryName($name)` returns a string bounded at 200 characters, with every character in the Unicode categories `Control`, `Format`, `LineSeparator`, `ParagraphSeparator` and `Surrogate` rendered as `\uNNNN`. Those five and no others: `SpaceSeparator` is NOT escaped, so U+00A0 passes through, and an earlier draft's "every separator character" claimed otherwise.
+  - `Format-AdvisoryName($name)` returns a string whose OUTPUT is bounded at 200 characters including the truncation marker, with every character in the Unicode categories `Control`, `Format`, `LineSeparator`, `ParagraphSeparator`, `Surrogate`, `PrivateUse` and `OtherNotAssigned` rendered as `\uNNNN`. `SpaceSeparator` is NOT among them, so U+00A0 passes through. The two hosts' category tables differ for some codepoints, so identical rendering across hosts is claimed only for the categories listed, not for every input.
   - `Write-SourceDriftExplanation($mirrorPath, $liveManifest)` writes lines to the pipeline. It is called for its output; its return value is not read.
 
 **What the previous draft claimed and did not deliver.** Cross-vendor review confirmed four gaps in the second draft, each an instance of the class this whole cycle exists to remove: the parser accepted `bad.txt not-a-hash` as a valid record while the plan said malformed records were counted; `Get-Item` measured the file and a separate `ReadAllBytes` read it, so the size limit bounded nothing; `Format-AdvisoryName` tested `[int]$ch -lt 32` and so passed C1 controls such as U+0085 and U+009B straight through, along with U+2028 and U+202E; and the sidecar path and exception text bypassed the formatter entirely.
@@ -736,6 +829,26 @@ def test_display_controls_in_an_advisory_name_are_rendered(tmp_path):
     assert "\\u009b" in proc.stdout or "\\u009B" in proc.stdout, proc.stdout
 
 
+def test_a_runtime_category_difference_is_escaped_on_both_hosts(tmp_path):
+    """Measured 2026-09-05: Windows PowerShell 5.1 classifies U+0890
+    as OtherNotAssigned and PowerShell 7 classifies it as Format, so a
+    renderer keyed on Format alone escapes it on one host and not the
+    other. OtherNotAssigned is in the set to make the two agree for
+    this class. Run this under BOTH hosts; one green host proves one
+    interpreter."""
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    _, ident = build_and_read(repo, mirror)
+    sidecar = tmp_path / "mirror.source-manifest"
+    sidecar.write_text("odd\\u0890name.txt " + "0" * 64 + chr(10),
+                       encoding="utf-8")
+    (repo / "ignored" / "secret.txt").write_text("edited after the copy" + chr(10))
+    proc = run_verify(repo, mirror, ident)
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "\\u0890" not in proc.stdout.replace("\\\\u0890", ""), (
+        "the raw codepoint reached the terminal")
+
+
 def test_an_oversized_source_manifest_is_refused_by_the_reader(tmp_path):
     """The size limit must bound the READ, not a separate earlier
     measurement. Written just past the limit so the test stays cheap."""
@@ -785,7 +898,7 @@ function Get-ManifestDrift($recordedLines, $liveLines) {
     # this explanation would then fail to mention, which is the shape of
     # defect this whole change exists to remove. An EMPTY line is the
     # split artifact of a trailing newline and is not a record at all, so
-    # it is skipped without counting.
+    # it is counted like any other unreadable record.
     $ord = [System.StringComparer]::Ordinal
     $recorded = New-Object "System.Collections.Generic.Dictionary[string,string]" $ord
     $live = New-Object "System.Collections.Generic.Dictionary[string,string]" $ord
@@ -860,9 +973,16 @@ function Read-BoundedRecords($text, $maxRecords) {
     $reader = New-Object System.IO.StringReader($text)
     try {
         while ($true) {
+            # PEEK, then cap, then read. ReadLine allocates the whole
+            # record before any count is consulted, so a cap tested
+            # after it still materializes one record past the limit -
+            # measured 2026-09-05 with a cap of 2 and a million-character
+            # third line, which was built and then discarded. Peek costs
+            # one character and answers the only question needed here.
+            if ($reader.Peek() -lt 0) { break }
+            if ($out.Count -ge $maxRecords) { $truncated = $true; break }
             $line = $reader.ReadLine()
             if ($null -eq $line) { break }
-            if ($out.Count -ge $maxRecords) { $truncated = $true; break }
             [void]$out.Add($line)
         }
     } finally { $reader.Dispose() }
@@ -877,23 +997,45 @@ function Format-AdvisoryName($name) {
     # The test is the UNICODE CATEGORY, never a numeric range. Measured
     # 2026-09-05: `[int]$ch -lt 32` passes the C1 controls U+0085 and
     # U+009B, which are terminal escape introducers, and it passes
-    # U+2028 and the bidirectional override U+202E, which manipulate how
-    # the rest of the line displays. Control, Format, LineSeparator and
-    # ParagraphSeparator cover all of them by name.
+    # U+2028 and the bidirectional override U+202E.
+    #
+    # OtherNotAssigned AND PrivateUse are in the set for a HOST reason,
+    # not a threat one. The category table is runtime data: measured
+    # 2026-09-05, Windows PowerShell 5.1 calls U+08E2, U+0890 and U+0891
+    # OtherNotAssigned while PowerShell 7 calls them Format, so a set
+    # without OtherNotAssigned escapes them on one host and not the
+    # other. Including it makes the two hosts agree for that class. It
+    # does NOT make them agree in general: any codepoint the two tables
+    # classify differently across these categories still renders
+    # differently, and that limit is stated rather than papered over.
+    #
+    # THE BOUND IS ON THE OUTPUT. Truncating the INPUT to 200 and then
+    # expanding escapes produced 1,211 characters for a control-heavy
+    # name, so the advertised bound has to be enforced while appending.
     $s = [string]$name
-    if ($s.Length -gt 200) { $s = $s.Substring(0, 200) + "[truncated]" }
+    $limit = 200
+    $marker = "[truncated]"
+    $room = $limit - $marker.Length
+    $escaped = @([System.Globalization.UnicodeCategory]::Control,
+                 [System.Globalization.UnicodeCategory]::Format,
+                 [System.Globalization.UnicodeCategory]::LineSeparator,
+                 [System.Globalization.UnicodeCategory]::ParagraphSeparator,
+                 [System.Globalization.UnicodeCategory]::Surrogate,
+                 [System.Globalization.UnicodeCategory]::PrivateUse,
+                 [System.Globalization.UnicodeCategory]::OtherNotAssigned)
     $sb = New-Object System.Text.StringBuilder
     foreach ($ch in $s.ToCharArray()) {
         $cat = [System.Globalization.CharUnicodeInfo]::GetUnicodeCategory($ch)
-        if (($cat -eq [System.Globalization.UnicodeCategory]::Control) -or
-            ($cat -eq [System.Globalization.UnicodeCategory]::Format) -or
-            ($cat -eq [System.Globalization.UnicodeCategory]::LineSeparator) -or
-            ($cat -eq [System.Globalization.UnicodeCategory]::ParagraphSeparator) -or
-            ($cat -eq [System.Globalization.UnicodeCategory]::Surrogate)) {
-            [void]$sb.Append("\u" + ([int]$ch).ToString("x4"))
+        if ($escaped -contains $cat) {
+            $unit = "\\u" + ([int]$ch).ToString("x4")
         } else {
-            [void]$sb.Append($ch)
+            $unit = [string]$ch
         }
+        if (($sb.Length + $unit.Length) -gt $room) {
+            [void]$sb.Append($marker)
+            break
+        }
+        [void]$sb.Append($unit)
     }
     return $sb.ToString()
 }
@@ -1158,7 +1300,7 @@ In `evals/multi-model-verify/test_contract_coverage.py`, add to `DECLARED_REGION
 
 Run: `python -m pytest evals/multi-model-verify/test_multi_model_verify.py::TestSkillStructure::test_mirror_quiet_period_is_pinned evals/multi-model-verify/test_contract_coverage.py -v`
 
-Then confirm the ceiling: `python evals/tools/skill_lint.py skills/multi-model-verify --strict`. A token count at or above 6500 is an ERROR, not the warning the file already carries.
+Then confirm the ceiling: `python evals/tools/skill_lint.py skills/multi-model-verify --strict`. The linter errors only ABOVE 6500 (`skill_lint.py:340` reads `est_tokens > BODY_TOKEN_CEILING`), so 6500 exactly is still only the warning the file already carries.
 
 Expected: both PASS. A `region(s) found but not declared` failure means Step 3 was skipped. A `not locked by any pin` failure means the pin text and the Markdown text differ.
 
@@ -1218,7 +1360,7 @@ Append to `skills/multi-model-verify/references/preflight-mirror.md`, as a new f
 BUILD THE MIRROR LAST. Every act that writes inside the reviewed
 repository finishes first: the gates, the plan ledger, the scratch notes,
 the formatter. From the build until the round's wrapper exits, the
-repository is quiet, and SKILL.md's `mirror-quiet-period` region states
+repository is quiet, and preflight-mirror.md's mirror-quiet-period states
 why. The identity digest covers the content of ignored paths, so a
 pytest cache directory or a ledger append is enough to refuse the
 dispatch.
@@ -1447,7 +1589,7 @@ git commit -m "retain the gate results for the mirror identity window"
 
 **Placeholders.** Two values are deliberately left to be computed rather than guessed: the `Verified:` digests for items 94 and 95, in Task 4 Step 6, because each is a hash of its own item's final text and cannot exist before that text does. The command that produces them is given.
 
-**Type consistency.** `Get-StatusSha256` gains `Manifest` in Task 1 and Task 2 reads `$liveStatus.Manifest`. `Get-SourceManifestSidecarPath` is defined in Task 1 and called by Task 1's guard block and by Task 2's `Write-SourceDriftExplanation`; it returns `$null` for a root and both callers handle that. `Get-ManifestDrift` returns `Entered`, `Left`, `Changed` and `Malformed`, and `Write-SourceDriftExplanation` reads exactly those four. `Format-AdvisoryName` is defined in Task 2 Step 3 and called in Step 4 for names, for the sidecar path and for exception text. The sidecar path `"<full mirror path>.source-manifest"` is derived in Task 1 Step 4 and asserted as `tmp_path / "mirror.source-manifest"` in both tasks' tests.
+**Type consistency.** `Get-StatusSha256` gains `Manifest` in Task 1 and Task 2 reads `$liveStatus.Manifest`. `Get-SourceManifestSidecarPath` is defined in Task 1 and called by Task 1's guard block and by Task 2's `Write-SourceDriftExplanation`; it returns `@{ Kind = ... }` with `ok`, `root` or `error`, and both callers branch on all three. `Get-ManifestDrift` returns `Entered`, `Left`, `Changed` and `Malformed`, and `Write-SourceDriftExplanation` reads exactly those four. `Format-AdvisoryName` is defined in Task 2 Step 3 and called in Step 4 for names, for the sidecar path and for exception text. The sidecar path `"<full mirror path>.source-manifest"` is derived in Task 1 Step 4 and asserted as `tmp_path / "mirror.source-manifest"` in both tasks' tests.
 
 ## After the plan
 
