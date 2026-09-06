@@ -390,9 +390,13 @@ rounds, both FIX, both fully applied.
 
 Both surfaced during implementation, after the debate closed, and both
 are the same shape: a test asserting something the code the same plan
-specifies cannot produce. Neither was catchable by any round, because no
-round ran the tests - a reviewer reads a test oracle exactly as it reads
-a claim, and an unsatisfiable one looks like a satisfiable one.
+specifies cannot produce. THE REVIEWS MISSED THEM; IMPLEMENTATION EXPOSED
+THEM. An earlier draft of this paragraph said neither was catchable by
+any round because no round ran the tests, and the round-1 diff reviewer
+struck that: the very next paragraph explains a mismatch between an
+asserted phrase and a specified message, which is plain to read without
+executing anything. Discovery history is not proof that earlier discovery
+was impossible.
 
 **Task 1.** `test_an_extra_input_at_the_sidecar_path_is_refused` asserted
 the message contains the two-word phrase `extra input`. Step 5b2's

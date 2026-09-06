@@ -59,15 +59,17 @@ as it stood at its own commit, host forced through `PARALLAX_PS_HOST`:
 | after item 90 (`4dca0f8`) | 79.81s | 90.30s | 1.13 |
 | this branch (`8ecb177`) | 98.73s | 113.87s | 1.15 |
 
-There was no gap on either side of item 90's merge, so item 90 did not
-close one. The hypothesis this record floated above - that item 90's
-re-linking fixed it - is REFUTED, and it is left standing above rather
-than deleted so the record shows what was guessed and what measurement
-did to it.
+The slowdown did not reproduce on either side of item 90's merge. That is
+weaker than "item 90 closed nothing", and the difference matters: three
+fresh runs that do not hit whatever conditions produced 18m42s exclude
+nothing about the code. The hypothesis this record floated above - that
+item 90's re-linking fixed it - is UNSUPPORTED rather than refuted, and it
+is left standing so the record shows what was guessed and what measurement
+did and did not do to it.
 
 Item 93 is amended rather than closed: the 18m42s is not withdrawn, the
-inference that the module carries it as a standing cost is. Whatever
-produced it is not a property of the tracked tree at either commit.
+inference that the module carries it as a standing cost on every run is.
+The cause remains unknown.
 
 ## Not run
 

@@ -791,9 +791,9 @@ function Get-ManifestDrift($recordedLines, $liveLines) {
     # key, an over-long line, and a line with no separator. Every one is
     # COUNTED, never silently dropped: a dropped record is a difference
     # this explanation would then fail to mention, which is the shape of
-    # defect this whole change exists to remove. An EMPTY line is the
-    # split artifact of a trailing newline and is not a record at all, so
-    # it is counted like any other unreadable record.
+    # defect this whole change exists to remove. An EMPTY line is a
+    # malformed record and is counted as one; the loop below says why
+    # there is no trailing-newline special case to make.
     $ord = [System.StringComparer]::Ordinal
     $recorded = New-Object "System.Collections.Generic.Dictionary[string,string]" $ord
     $live = New-Object "System.Collections.Generic.Dictionary[string,string]" $ord
@@ -1266,11 +1266,42 @@ while ($ri -lt $remaining.Count) {
     $ri += 2
 }
 
+# SPELLING GUARD, and it runs before the overlap guard because the
+# overlap guard is a STRING COMPARISON and this is the input that defeats
+# one. Windows strips a trailing dot or space when it OPENS a path;
+# PowerShell keeps it in the string. So `<repo>.` names the repository and
+# compares unequal to it, passing the equal, inside and contains tests
+# below.
+#
+# Measured 2026-09-05 on BOTH hosts, because the round-1 reviewer reported
+# this as reaching recursive deletion of the source and that part is not
+# what happens: the dotted path passes `Test-Path`, and `Remove-Item`
+# throws `PSArgumentException` and removes NOTHING, on `-LiteralPath` and
+# `-Path` alike. The removal failure is NON-TERMINATING though, and this
+# script does not set `$ErrorActionPreference`, so the build would carry
+# on and construct a mirror at a path naming the tree under review. Refuse
+# the spelling rather than reason about what each downstream call does
+# with it - the same decision, for the same reason, as the -ExtraInput
+# guard further down.
+foreach ($pair in @(@("the repo root", $RepoRoot), @("the mirror path", $MirrorPath))) {
+    foreach ($seg in ([string]$pair[1]).Replace("\", "/").Split("/")) {
+        if ($seg -match '[. ]$' -and $seg -ne "." -and $seg -ne "..") {
+            Write-Output ("ERROR: " + $pair[0] + " (" + $pair[1] + ") has a" +
+                " path component ending in a dot or a space, which Windows" +
+                " strips when it opens the path but PowerShell keeps in the" +
+                " string, so this tool cannot tell which directory it names;" +
+                " pass the exact name")
+            exit 2
+        }
+    }
+}
+
 # OVERLAP GUARD, before anything is created or deleted. -Force recursively
 # deletes MirrorPath, so a MirrorPath equal to, inside, or containing
 # RepoRoot would destroy the user's working tree. robocopy over an
-# overlapping pair is equally unsafe. This runs FIRST, because by the time
-# Remove-Item runs it is too late to check.
+# overlapping pair is equally unsafe. This runs FIRST among the
+# comparisons, because by the time Remove-Item runs it is too late to
+# check.
 $rr = $RepoRoot.Replace("\", "/").TrimEnd("/") + "/"
 $mp = $MirrorPath.Replace("\", "/").TrimEnd("/") + "/"
 $cmp = [System.StringComparison]::OrdinalIgnoreCase

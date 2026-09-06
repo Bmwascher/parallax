@@ -3974,7 +3974,7 @@ two is shipped and the `enumeration-depth-asymmetry` region says which.
 Status: OPEN
 Cost: NOT ESTABLISHED, and the figure this item was filed on did not reproduce - the 18m42s under PowerShell 7 against 94s under 5.1 measured 2026-09-05 at item 90's Task 3 was sought again the same day in three separate runs and the largest ratio seen was 1.15, so what the `powershell-hosts` CI job actually pays for this module is unknown and the eighteen minutes are not confirmed to exist
 Pairs: 91
-Verified: 2026-09-05 2e34180a6cad
+Verified: 2026-09-05 7a88d2d29cbe
 
 **Filed 2026-09-05 from item 90's whole-branch review.** The number is
 measured; the cause is not. The task reviewer's candidate is the second
@@ -4001,19 +4001,21 @@ differs between them.
 | after item 90 (`4dca0f8`) | 79.81s, 124 passed | 90.30s, 124 passed | 1.13 |
 | this branch (`8ecb177`) | 98.73s, 154 passed | 113.87s, 154 passed | 1.15 |
 
-So item 90 did not close a gap, because there was no gap at either side
-of it. Three measurements on one machine on one day put PowerShell 7
-between 8 and 15 percent slower, never twelve times.
+What that shows, stated no wider than the runs support: the slowdown did
+not reproduce in any of these three trees, on one machine, on one day,
+with PowerShell 7 between 8 and 15 percent slower each time. It does NOT
+establish that item 90 closed nothing, and it does not establish that the
+cause lies outside the tracked tree. Code can be slow only on particular
+inputs or under particular conditions, and three fresh runs that miss
+those conditions exclude nothing.
 
 What that leaves. The 18m42s was recorded and is not withdrawn here; what
 is withdrawn is the inference that the module carries it as a standing
-cost. Whatever produced it is not a property of the tracked tree at
-either commit, which points at working state or machine conditions rather
-than code - item 91's linked reference checkout, hashed 14,884 files per
-pass, is the nearest candidate this repo already knows about, and it is a
-candidate with no measurement behind it. The reviewer's
-`Get-FilesBeneath` hypothesis above is equally unmeasured and equally
-unsupported by these numbers.
+cost on every run. The cause remains UNKNOWN, and these runs name no
+candidate over any other. Item 91's linked reference checkout, hashed
+14,884 files per pass, and the reviewer's `Get-FilesBeneath` hypothesis
+above are both still open, and neither is supported or excluded by these
+numbers.
 
 Closing this item now means one of two things: reproducing 18m42s
 deliberately and naming what the working tree held when it happened, or

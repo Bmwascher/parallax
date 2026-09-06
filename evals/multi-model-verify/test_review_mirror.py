@@ -1856,6 +1856,41 @@ def test_a_root_mirror_path_is_refused_by_the_build(tmp_path):
     assert "ERROR:" in proc.stdout, proc.stdout
 
 
+def test_a_mirror_path_with_a_trailing_dot_is_refused(tmp_path):
+    """The overlap guard compares SPELLING, and Windows strips a trailing
+    dot when it OPENS a path, so `<repo>.` is a different string naming
+    the same directory. It passes the equal, inside and contains tests
+    and reaches the build.
+
+    Measured 2026-09-05 under BOTH hosts before this guard existed: the
+    dotted path passes `Test-Path`, and `Remove-Item` on it throws
+    `PSArgumentException` and deletes NOTHING, on `-LiteralPath` and on
+    `-Path` alike. So the consequence is NOT the recursive deletion the
+    round-1 reviewer reported reaching; the deletion cannot run. What
+    survives the bypass is worse-shaped than it looks anyway: the failed
+    removal is non-terminating, the build continues, and it proceeds to
+    construct a mirror whose path names the repository under review.
+
+    Refuse the spelling this tool cannot resolve, exactly as the extra
+    input guard already does for the same reason.
+    """
+    repo = make_repo(tmp_path)
+    proc = run_mirror(repo, pathlib.Path(str(repo) + "."), "-Force")
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "dot or a space" in proc.stdout, proc.stdout
+    assert (repo / "kept.txt").exists(), "the source must survive a refusal"
+
+
+def test_a_repo_root_with_a_trailing_space_is_refused(tmp_path):
+    """The same defect on the other side of the comparison. Both
+    operands are user-supplied, so guarding one of them leaves the class
+    open."""
+    repo = make_repo(tmp_path)
+    proc = run_mirror(pathlib.Path(str(repo) + " "), tmp_path / "mirror")
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "dot or a space" in proc.stdout, proc.stdout
+
+
 def test_remediation_moves_mirror_head_away_from_source_head(tmp_path):
     repo = make_repo(tmp_path)
     (repo / "AGENTS.md").write_text("# planted\n")
@@ -2068,6 +2103,13 @@ def test_a_trailing_newline_is_not_counted_as_a_malformed_record(tmp_path):
     proc = run_verify(repo, mirror, ident)
     assert proc.returncode == 1, proc.stdout + proc.stderr
     assert "could not be read" not in proc.stdout, proc.stdout
+    # POSITIVE, because the assertion above is satisfied by the
+    # reader's own failure fallback, which prints "what moved:
+    # unknown" and never the phrase being excluded. A negative-only
+    # oracle goes green when the behaviour it names was never
+    # exercised. Name the file that actually moved.
+    assert "secret.txt" in proc.stdout, proc.stdout
+    assert "unknown" not in proc.stdout, proc.stdout
 
 
 def test_display_controls_in_an_advisory_name_are_rendered(tmp_path):
@@ -2086,7 +2128,13 @@ def test_display_controls_in_an_advisory_name_are_rendered(tmp_path):
     assert proc.returncode == 1, proc.stdout + proc.stderr
     assert "\u009b" not in proc.stdout, "a C1 control reached the terminal"
     assert "\u202e" not in proc.stdout, "a bidi override reached the terminal"
-    assert "\\u009b" in proc.stdout or "\\u009B" in proc.stdout, proc.stdout
+    # THE WHOLE RENDERED NAME, not one escape unit. The substring form
+    # accepted a doubled prefix, which is how the shipped renderer
+    # emitted two backslashes for four rounds without a test noticing,
+    # and it is also satisfied while the rest of the name is mangled.
+    assert ("ev\\u009bil\\u202e.txt" in proc.stdout
+            or "ev\\u009Bil\\u202E.txt" in proc.stdout), proc.stdout
+    assert "unknown" not in proc.stdout, proc.stdout
 
 
 def test_a_runtime_category_difference_is_escaped_on_both_hosts(tmp_path):
@@ -2117,6 +2165,10 @@ def test_a_runtime_category_difference_is_escaped_on_both_hosts(tmp_path):
     # source) never reached the terminal.
     assert "\u0890" not in proc.stdout.replace("\\u0890", ""), (
         "the raw codepoint reached the terminal")
+    # POSITIVE. Without this the reader's failure fallback satisfies
+    # the exclusion above and the escape is never measured at all.
+    assert "odd\\u0890name.txt" in proc.stdout, proc.stdout
+    assert "unknown" not in proc.stdout, proc.stdout
 
 
 def test_an_oversized_source_manifest_is_refused_by_the_reader(tmp_path):
