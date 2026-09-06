@@ -776,6 +776,259 @@ function Write-SourceManifestSidecar($path, $manifestLines) {
     }
 }
 
+function Get-ManifestDrift($recordedLines, $liveLines) {
+    # Both sides are "<relpath> <sha256hex>" lines, so the LAST space is
+    # the separator: a pathname may hold spaces and a hex digest may not.
+    #
+    # ORDINAL, CASE-SENSITIVE keys. A PowerShell hashtable compares keys
+    # case-INsensitively, so `File.txt` and `file.txt` collapse into one
+    # entry and a case-only rename reports no difference at all - while
+    # the digest, built from the raw strings, changes. The explanation
+    # must partition the same strings the digest does.
+    #
+    # THE GRAMMAR IS CHECKED, not assumed. A record whose hash field is
+    # not 64 lowercase hex characters is malformed, and so is a duplicate
+    # key, an over-long line, and a line with no separator. Every one is
+    # COUNTED, never silently dropped: a dropped record is a difference
+    # this explanation would then fail to mention, which is the shape of
+    # defect this whole change exists to remove. An EMPTY line is the
+    # split artifact of a trailing newline and is not a record at all, so
+    # it is counted like any other unreadable record.
+    $ord = [System.StringComparer]::Ordinal
+    $recorded = New-Object "System.Collections.Generic.Dictionary[string,string]" $ord
+    $live = New-Object "System.Collections.Generic.Dictionary[string,string]" $ord
+    $malformed = 0
+    $hexRx = '^[0-9a-f]{64}$'
+    foreach ($side in @(@($recordedLines, $recorded), @($liveLines, $live))) {
+        foreach ($line in @($side[0])) {
+            $s = [string]$line
+            # AN EMPTY LINE IS A MALFORMED RECORD, with no special case
+            # for a trailing one: the caller reads records with a
+            # StringReader, which returns nothing at all for a file
+            # ending in a newline, so every empty string that reaches
+            # here is a real empty record. The draft that skipped every
+            # empty string silently dropped leading and interior ones.
+            #
+            # THERE IS NO RECORD CAP HERE. Capping mid-loop turned
+            # resource exhaustion into a grammar diagnosis: at record
+            # 200,001 the draft incremented Malformed once and abandoned
+            # the rest, so 200,003 malformed records reported 200,001.
+            # The cap belongs to the reader, which reports it as its own
+            # state.
+            if ($s.Length -eq 0) { $malformed++; continue }
+            if ($s.Length -gt 4096) { $malformed++; continue }
+            $cut = $s.LastIndexOf(" ")
+            if ($cut -lt 1) { $malformed++; continue }
+            $hex = $s.Substring($cut + 1)
+            if ($hex -cnotmatch $hexRx) { $malformed++; continue }
+            $key = $s.Substring(0, $cut)
+            if ($side[1].ContainsKey($key)) { $malformed++; continue }
+            $side[1][$key] = $hex
+        }
+    }
+    $entered = New-Object System.Collections.ArrayList
+    $left = New-Object System.Collections.ArrayList
+    $changed = New-Object System.Collections.ArrayList
+    foreach ($p in @($live.Keys)) {
+        if (-not $recorded.ContainsKey($p)) {
+            [void]$entered.Add($p)
+        } elseif ($recorded[$p] -ne $live[$p]) {
+            [void]$changed.Add($p)
+        }
+    }
+    foreach ($p in @($recorded.Keys)) {
+        if (-not $live.ContainsKey($p)) { [void]$left.Add($p) }
+    }
+    return @{ Entered   = @($entered | Sort-Object)
+              Left      = @($left    | Sort-Object)
+              Changed   = @($changed | Sort-Object)
+              Malformed = $malformed }
+}
+
+function Read-BoundedRecords($text, $maxRecords) {
+    # Returns @{ Records = <string[]>; Truncated = <bool> }.
+    #
+    # A StringReader, never `-split`. The split materializes every line of
+    # a file whose size is someone else's choice BEFORE any cap can apply,
+    # so a cap placed after it bounds nothing that matters. Reading line
+    # by line stops AT the cap, having built only that many strings.
+    #
+    # It also removes the trailing-newline special case rather than
+    # handling it: ReadLine returns $null at end of input, so a file
+    # ending in a newline yields no final empty string. Every empty line
+    # this returns is therefore a real empty record, which is what lets
+    # the parser count one as malformed instead of guessing which empties
+    # were artifacts.
+    #
+    # Truncation is its OWN state. It is not a malformed record and must
+    # never be reported as one: the remainder was not examined, which is
+    # a different fact about a different set of records.
+    $out = New-Object System.Collections.ArrayList
+    $truncated = $false
+    $reader = New-Object System.IO.StringReader($text)
+    try {
+        while ($true) {
+            # PEEK, then cap, then read. ReadLine allocates the whole
+            # record before any count is consulted, so a cap tested
+            # after it still materializes one record past the limit -
+            # measured 2026-09-05 with a cap of 2 and a million-character
+            # third line, which was built and then discarded. Peek costs
+            # one character and answers the only question needed here.
+            if ($reader.Peek() -lt 0) { break }
+            if ($out.Count -ge $maxRecords) { $truncated = $true; break }
+            $line = $reader.ReadLine()
+            if ($null -eq $line) { break }
+            [void]$out.Add($line)
+        }
+    } finally { $reader.Dispose() }
+    return @{ Records = @($out); Truncated = $truncated }
+}
+
+function Format-AdvisoryName($name) {
+    # EVERY untrusted string printed by the explanation goes through
+    # here, pathnames and exception text alike. The advisory manifest is
+    # MUTABLE, so nothing in it passed Test-SupportedPathname.
+    #
+    # The test is the UNICODE CATEGORY, never a numeric range. Measured
+    # 2026-09-05: `[int]$ch -lt 32` passes the C1 controls U+0085 and
+    # U+009B, which are terminal escape introducers, and it passes
+    # U+2028 and the bidirectional override U+202E.
+    #
+    # OtherNotAssigned AND PrivateUse are in the set for a HOST reason,
+    # not a threat one. The category table is runtime data: measured
+    # 2026-09-05, Windows PowerShell 5.1 calls U+08E2, U+0890 and U+0891
+    # OtherNotAssigned while PowerShell 7 calls them Format, so a set
+    # without OtherNotAssigned escapes them on one host and not the
+    # other. Including it makes the two hosts agree for that class. It
+    # does NOT make them agree in general: any codepoint the two tables
+    # classify differently across these categories still renders
+    # differently, and that limit is stated rather than papered over.
+    #
+    # THE BOUND IS ON THE OUTPUT. Truncating the INPUT to 200 and then
+    # expanding escapes produced 1,211 characters for a control-heavy
+    # name, so the advertised bound has to be enforced while appending.
+    $s = [string]$name
+    $limit = 200
+    $marker = "[truncated]"
+    $room = $limit - $marker.Length
+    $escaped = @([System.Globalization.UnicodeCategory]::Control,
+                 [System.Globalization.UnicodeCategory]::Format,
+                 [System.Globalization.UnicodeCategory]::LineSeparator,
+                 [System.Globalization.UnicodeCategory]::ParagraphSeparator,
+                 [System.Globalization.UnicodeCategory]::Surrogate,
+                 [System.Globalization.UnicodeCategory]::PrivateUse,
+                 [System.Globalization.UnicodeCategory]::OtherNotAssigned)
+    $sb = New-Object System.Text.StringBuilder
+    foreach ($ch in $s.ToCharArray()) {
+        $cat = [System.Globalization.CharUnicodeInfo]::GetUnicodeCategory($ch)
+        if ($escaped -contains $cat) {
+            $unit = "\\u" + ([int]$ch).ToString("x4")
+        } else {
+            $unit = [string]$ch
+        }
+        if (($sb.Length + $unit.Length) -gt $room) {
+            [void]$sb.Append($marker)
+            break
+        }
+        [void]$sb.Append($unit)
+    }
+    return $sb.ToString()
+}
+
+function Write-SourceDriftExplanation($mirrorPath, $liveManifest) {
+    # Runs ONLY after the source-status refusal below has been printed.
+    #
+    # THE WHOLE BODY IS WRAPPED. What protects the verdict is not any
+    # property of this function - Write-Output emits into the pipeline
+    # like any other command, and a caller COULD capture it - but the
+    # fact that its one caller ignores the output and reaches `exit 1`
+    # unconditionally. The wrap is here so that a fault in explaining a
+    # refusal cannot replace that refusal with an error.
+    try {
+        $smResult = Get-SourceManifestSidecarPath $mirrorPath
+        if ($smResult.Kind -eq "root") {
+            Write-Output ("  what moved: unknown - the mirror path is a" +
+                " filesystem root, so no advisory manifest can sit beside it")
+            return
+        }
+        if ($smResult.Kind -ne "ok") {
+            Write-Output ("  what moved: unknown - the mirror path could not" +
+                " be resolved (" + (Format-AdvisoryName $smResult.Reason) + ")")
+            return
+        }
+        $sidecar = $smResult.Path
+        $shown = Format-AdvisoryName $sidecar
+        # ONE HANDLE measures and reads. A separate Get-Item followed by
+        # a separate ReadAllBytes bounds nothing: the file can grow or be
+        # replaced between them, and Get-Item's failure is NON-TERMINATING
+        # in this script, which never sets $ErrorActionPreference, so an
+        # unreadable file left the size test unmade and carried on.
+        $limit = 67108864
+        $bytes = $null
+        $fs = [System.IO.File]::Open($sidecar, 'Open', 'Read', 'Read')
+        try {
+            if ($fs.Length -gt $limit) {
+                Write-Output ("  what moved: unknown - the advisory manifest" +
+                    " at " + $shown + " is " + $fs.Length + " bytes, past" +
+                    " this reader's limit")
+                return
+            }
+            $bytes = New-Object byte[] ([int]$fs.Length)
+            $off = 0
+            while ($off -lt $bytes.Length) {
+                $n = $fs.Read($bytes, $off, $bytes.Length - $off)
+                if ($n -le 0) { break }
+                $off += $n
+            }
+        } finally { $fs.Dispose() }
+        # DECODE THE BYTES EXPLICITLY. A StreamReader detects a byte-order
+        # mark and consumes it, so a first pathname that legitimately
+        # begins with U+FEFF would lose that character silently and read
+        # as a different path.
+        $text = (New-Object System.Text.UTF8Encoding($false, $true)).GetString($bytes)
+        $read = Read-BoundedRecords $text 200000
+        $drift = Get-ManifestDrift $read.Records $liveManifest
+        Write-Output ("  the lines below come from an UNAUTHENTICATED file" +
+            " beside the mirror (" + $shown + ") and are advisory only")
+        if ($read.Truncated) {
+            Write-Output ("  note: the advisory manifest holds more than" +
+                " 200000 records; the remainder was NOT examined, so this" +
+                " explanation is incomplete")
+        }
+        if ($drift.Malformed -gt 0) {
+            Write-Output ("  note: " + $drift.Malformed + " advisory record(s)" +
+                " could not be read, so this explanation is incomplete")
+        }
+        $groups = @(@("content changed", $drift.Changed),
+                    @("entered manifest coverage", $drift.Entered),
+                    @("left manifest coverage", $drift.Left))
+        $any = $false
+        foreach ($g in $groups) {
+            $names = @($g[1])
+            if ($names.Count -eq 0) { continue }
+            $any = $true
+            Write-Output ("  " + $g[0] + " (" + $names.Count + "):")
+            $printed = 0
+            foreach ($n in $names) {
+                if ($printed -ge 20) {
+                    Write-Output ("    ... and " + ($names.Count - 20) + " more")
+                    break
+                }
+                Write-Output ("    " + (Format-AdvisoryName $n))
+                $printed++
+            }
+        }
+        if (-not $any) {
+            Write-Output ("  what moved: the advisory manifest did not" +
+                " identify the cause. It records no content difference," +
+                " which is also what a stale or replaced manifest records.")
+        }
+    } catch {
+        Write-Output ("  what moved: unknown - the advisory explanation" +
+            " failed (" + (Format-AdvisoryName $_.Exception.Message) + ")")
+    }
+}
+
 $toplevel = $true
 
 # THE THIRD TEST SEAM, declared here rather than beside the other two
@@ -929,6 +1182,7 @@ if ($VerifyIdentity) {
             " - a tracked, untracked or ignored review input moved without" +
             " moving either head, so the mirror no longer carries what the" +
             " source holds. Rebuild the mirror.")
+        Write-SourceDriftExplanation $MirrorPath $liveStatus.Manifest
         exit 1
     }
 

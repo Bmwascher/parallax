@@ -1931,14 +1931,10 @@ def test_a_tampered_mirror_head_blocks_the_dispatch(tmp_path):
     assert "mirror head" in proc.stdout.lower(), proc.stdout
 
 
-def test_source_drift_in_an_ignored_file_blocks_the_dispatch(tmp_path):
-    """The case the two-HEAD gate CANNOT see, and the reason the source
-    status is captured at all.
-
-    An edit to an ignored review input moves neither HEAD. Ignored
-    content is precisely what the mirror exists to carry, so leaving
-    this undetected would be a hole in the middle of the feature.
-    """
+def test_the_refusal_names_the_ignored_file_that_changed(tmp_path):
+    """The whole reason this task exists. The refusal used to name the
+    CLASS of change and stop, so a session hitting it repeatedly could
+    not tell a cache write from a planted file."""
     repo = make_repo(tmp_path)
     mirror = tmp_path / "mirror"
     _, ident = build_and_read(repo, mirror)
@@ -1946,6 +1942,196 @@ def test_source_drift_in_an_ignored_file_blocks_the_dispatch(tmp_path):
     proc = run_verify(repo, mirror, ident)
     assert proc.returncode == 1, proc.stdout + proc.stderr
     assert "source status" in proc.stdout.lower(), proc.stdout
+    assert "content changed" in proc.stdout, proc.stdout
+    assert "ignored/secret.txt" in proc.stdout, proc.stdout
+
+
+def test_the_refusal_names_a_file_that_entered_coverage(tmp_path):
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    _, ident = build_and_read(repo, mirror)
+    (repo / "brand-new-input.txt").write_text("appeared after the copy\n")
+    proc = run_verify(repo, mirror, ident)
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "entered manifest coverage" in proc.stdout, proc.stdout
+    assert "brand-new-input.txt" in proc.stdout, proc.stdout
+
+
+def test_the_refusal_names_a_file_that_left_coverage(tmp_path):
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    _, ident = build_and_read(repo, mirror)
+    (repo / "ignored" / "secret.txt").unlink()
+    proc = run_verify(repo, mirror, ident)
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "left manifest coverage" in proc.stdout, proc.stdout
+    assert "ignored/secret.txt" in proc.stdout, proc.stdout
+
+
+def test_a_missing_source_manifest_still_refuses(tmp_path):
+    """The explanation is ADVISORY. Its absence costs the reason and
+    never the refusal."""
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    _, ident = build_and_read(repo, mirror)
+    (tmp_path / "mirror.source-manifest").unlink()
+    (repo / "ignored" / "secret.txt").write_text("edited after the copy\n")
+    proc = run_verify(repo, mirror, ident)
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "source status" in proc.stdout.lower(), proc.stdout
+    assert "unknown" in proc.stdout, proc.stdout
+
+
+def test_a_corrupted_source_manifest_still_refuses(tmp_path):
+    """The direction that matters. A sidecar an attacker can write must
+    never turn a refusal into a pass, and it structurally cannot: it is
+    read only after the comparison has already decided to block."""
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    _, ident = build_and_read(repo, mirror)
+    (tmp_path / "mirror.source-manifest").write_bytes(b"\x00garbage\xff\nno")
+    (repo / "ignored" / "secret.txt").write_text("edited after the copy\n")
+    proc = run_verify(repo, mirror, ident)
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "source status" in proc.stdout.lower(), proc.stdout
+
+
+def test_a_clean_tree_verifies_with_no_source_manifest(tmp_path):
+    """The other advisory direction. A tree that did not move verifies
+    whether or not the sidecar survives, because the sidecar is not an
+    input to the comparison."""
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    _, ident = build_and_read(repo, mirror)
+    (tmp_path / "mirror.source-manifest").unlink()
+    proc = run_verify(repo, mirror, ident)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "identity: verified" in proc.stdout, proc.stdout
+
+
+def test_a_case_only_rename_is_not_lost_by_the_explanation(tmp_path):
+    """A PowerShell hashtable compares keys case-INsensitively, so
+    `File.txt` and `file.txt` would collapse into one entry and this
+    drift would report nothing at all, while the digest, built from the
+    raw strings, changes."""
+    repo = make_repo(tmp_path)
+    (repo / "ignored" / "Cased.txt").write_text("one\n")
+    mirror = tmp_path / "mirror"
+    _, ident = build_and_read(repo, mirror)
+    (repo / "ignored" / "Cased.txt").rename(repo / "ignored" / "cased.txt")
+    proc = run_verify(repo, mirror, ident)
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "coverage" in proc.stdout, proc.stdout
+    assert "cased.txt" in proc.stdout, proc.stdout
+
+
+def test_a_hostile_but_well_formed_manifest_cannot_manufacture_a_pass(tmp_path):
+    """The corrupted-bytes case exercises the reader's catch. This one
+    reaches the parser and the renderer with VALID records naming
+    innocent files, which is the shape an attacker would use."""
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    _, ident = build_and_read(repo, mirror)
+    (repo / "ignored" / "secret.txt").write_text("edited after the copy\n")
+    forged = "\n".join("decoy/%d.txt %064x" % (i, i) for i in range(5)) + "\n"
+    (tmp_path / "mirror.source-manifest").write_text(forged)
+    proc = run_verify(repo, mirror, ident)
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "source status" in proc.stdout.lower(), proc.stdout
+
+
+def test_a_record_whose_hash_field_is_not_a_hash_is_counted(tmp_path):
+    """`bad.txt not-a-hash` used to parse as an ordinary record, so a
+    truncated digest became a reported difference rather than an
+    admission that the explanation is incomplete."""
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    _, ident = build_and_read(repo, mirror)
+    sidecar = tmp_path / "mirror.source-manifest"
+    sidecar.write_text(sidecar.read_text() + "bad.txt not-a-hash\n"
+                       + "empty.txt \n" + "no-space-here\n")
+    (repo / "ignored" / "secret.txt").write_text("edited after the copy\n")
+    proc = run_verify(repo, mirror, ident)
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "3 advisory record(s) could not be read" in proc.stdout, proc.stdout
+    assert "incomplete" in proc.stdout, proc.stdout
+
+
+def test_a_trailing_newline_is_not_counted_as_a_malformed_record(tmp_path):
+    """The split artifact is not a record. Counting it would put a
+    permanent, meaningless `1 record could not be read` on every
+    explanation and teach the operator to ignore the line."""
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    _, ident = build_and_read(repo, mirror)
+    (repo / "ignored" / "secret.txt").write_text("edited after the copy\n")
+    proc = run_verify(repo, mirror, ident)
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "could not be read" not in proc.stdout, proc.stdout
+
+
+def test_display_controls_in_an_advisory_name_are_rendered(tmp_path):
+    """The sidecar is mutable, so a name in it never passed
+    Test-SupportedPathname. C1 controls such as U+009B and the
+    bidirectional override U+202E are terminal escapes and line-display
+    manipulation; `[int]$ch -lt 32` catches neither."""
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    _, ident = build_and_read(repo, mirror)
+    sidecar = tmp_path / "mirror.source-manifest"
+    sidecar.write_text("ev\u009bil\u202e.txt " + "0" * 64 + "\n",
+                       encoding="utf-8")
+    (repo / "ignored" / "secret.txt").write_text("edited after the copy\n")
+    proc = run_verify(repo, mirror, ident)
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "\u009b" not in proc.stdout, "a C1 control reached the terminal"
+    assert "\u202e" not in proc.stdout, "a bidi override reached the terminal"
+    assert "\\u009b" in proc.stdout or "\\u009B" in proc.stdout, proc.stdout
+
+
+def test_a_runtime_category_difference_is_escaped_on_both_hosts(tmp_path):
+    """Measured 2026-09-05: Windows PowerShell 5.1 classifies U+0890
+    as OtherNotAssigned and PowerShell 7 classifies it as Format, so a
+    renderer keyed on Format alone escapes it on one host and not the
+    other. OtherNotAssigned is in the set to make the two agree for
+    this class. Run this under BOTH hosts; one green host proves one
+    interpreter."""
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    _, ident = build_and_read(repo, mirror)
+    sidecar = tmp_path / "mirror.source-manifest"
+    # ONE backslash, so Python builds the real codepoint. Two would
+    # write the seven ASCII characters `odd\u0890` into the
+    # manifest, which is ordinary punctuation and text that
+    # Format-AdvisoryName passes through by design - the test would
+    # then assert the absence of a string the output must contain,
+    # and could never pass. The sibling test above uses the same
+    # single-backslash form for U+009B and U+202E.
+    sidecar.write_text("odd\u0890name.txt " + "0" * 64 + chr(10),
+                       encoding="utf-8")
+    (repo / "ignored" / "secret.txt").write_text("edited after the copy" + chr(10))
+    proc = run_verify(repo, mirror, ident)
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    # Strip the ESCAPED rendering (a literal backslash, hence two in
+    # source), then assert the RAW codepoint (one backslash in
+    # source) never reached the terminal.
+    assert "\u0890" not in proc.stdout.replace("\\u0890", ""), (
+        "the raw codepoint reached the terminal")
+
+
+def test_an_oversized_source_manifest_is_refused_by_the_reader(tmp_path):
+    """The size limit must bound the READ, not a separate earlier
+    measurement. Written just past the limit so the test stays cheap."""
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    _, ident = build_and_read(repo, mirror)
+    sidecar = tmp_path / "mirror.source-manifest"
+    with sidecar.open("wb") as fh:
+        fh.write(b"x" * (67108864 + 1))
+    (repo / "ignored" / "secret.txt").write_text("edited after the copy\n")
+    proc = run_verify(repo, mirror, ident)
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "past this reader's limit" in proc.stdout, proc.stdout
 
 
 def test_source_drift_in_an_untracked_file_blocks_the_dispatch(tmp_path):
