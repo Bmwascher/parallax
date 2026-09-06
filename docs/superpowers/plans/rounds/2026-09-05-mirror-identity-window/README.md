@@ -127,3 +127,47 @@ the advisory reader does not resolve a file link. Both are now stated
 limits instead of implied guarantees.
 
 Budget after this round: 2 of 4 dispatched exchanges used.
+
+## Astra R2 - VOIDED by a concurrent writer
+
+Dispatched 2026-09-05 against subject `557e1e1`, mirror `C:\Temp\pxr2`,
+resuming session `01a073e9`. The wrapper's FIRST identity check passed
+(`identity: verified`) and its SECOND, after the client finished, refused
+with `the source status changed since construction`. Wrapper exit 1.
+
+**Cause, found by hand.** Two TRACKED files were modified while the round
+ran: `CLAUDE.md` and `skills/multi-model-verify/SKILL.md`. The session
+driving this debate did not touch either. Two other parallax sessions
+were live at the time (`parallax-6a` and `parallax-1b`), and one of them
+is rewriting the skill: the working-tree diff adds a "Controller host
+gate" section about Codex-to-Codex being same-vendor, and trims the
+description and overview.
+
+Those changes are ANOTHER SESSION'S IN-FLIGHT WORK. They were left
+exactly as found: not staged, not reverted, not committed here.
+
+**This is the defect the plan documents, reproducing during the debate
+about it.** Finding the cause took a manual mtime sweep across the
+ignored and dirty set, which is precisely the work Task 2 exists to
+remove. Had the sidecar shipped, the refusal would have printed
+`content changed (2): CLAUDE.md, skills/multi-model-verify/SKILL.md`.
+
+It is also a case the quiet-period rule as drafted does NOT cover. That
+rule addresses one session's own writes. It says nothing about a SECOND
+session writing to the same repository, which no ordering discipline
+available to this session can prevent. Recorded here rather than fixed;
+it belongs to backlog item 94's open question.
+
+Artifacts: `brief-r2-voided.md`, `astra-r2-voided-reply.md`,
+`astra-r2-voided-mirror-verify.txt`.
+
+**The reply is retained as INPUT.** It reports PASS on claims 2, 3 and
+13, on class-sweep items 1, 4 and 5, and on other-form items 2 and 3,
+with a residual FIX list covering the unrestricted split, empty-record
+handling, the extra-input collision binding, root failure reporting, the
+renderer's category naming, two paragraphs still saying "every path",
+and the Task 2 test selector. None of it is evidence and none of it has
+been applied.
+
+Budget: 3 of 4 dispatched exchanges used. PAUSED at the user's direction
+until the other sessions are finished with the repository.
