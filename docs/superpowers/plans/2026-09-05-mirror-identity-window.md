@@ -1224,7 +1224,7 @@ git commit -m "name the paths that moved when the source status refusal fires"
 **Files:**
 - Modify: `skills/multi-model-verify/references/preflight-mirror.md` (a new contract region at the end of the file)
 - Modify: `skills/multi-model-verify/SKILL.md` (ONE reworded sentence, no net growth beyond a few tokens)
-- Modify: `evals/multi-model-verify/test_multi_model_verify.py` (a new pin in `TestSkillStructure`, beside `test_client_context_probe_failure_rule_is_pinned`)
+- Modify: `evals/multi-model-verify/test_multi_model_verify.py` (a new pin in `TestTransportContract`, beside `test_client_context_probe_failure_rule_is_pinned`)
 - Modify: `evals/multi-model-verify/test_contract_coverage.py` (`DECLARED_REGIONS`)
 
 **Interfaces:**
@@ -1262,7 +1262,7 @@ small and however unrelated it looks.
 
 - [ ] **Step 2: Write the failing pin**
 
-Add to `evals/multi-model-verify/test_multi_model_verify.py`, in `TestSkillStructure` directly after `test_client_context_probe_failure_rule_is_pinned`:
+Add to `evals/multi-model-verify/test_multi_model_verify.py`, in `TestTransportContract` directly after `test_client_context_probe_failure_rule_is_pinned`. The ANCHOR METHOD is the authority here, not the class name: an earlier draft of this plan said `TestSkillStructure`, and that method has never lived there. It sits in `TestTransportContract` among a run of contract-region pins, which is where this one belongs too.
 
 ```python
     def test_mirror_quiet_period_is_pinned(self):
@@ -1327,7 +1327,7 @@ In `evals/multi-model-verify/test_contract_coverage.py`, add to `DECLARED_REGION
 
 - [ ] **Step 4: Run the pin and the coverage checker**
 
-Run: `python -m pytest evals/multi-model-verify/test_multi_model_verify.py::TestSkillStructure::test_mirror_quiet_period_is_pinned evals/multi-model-verify/test_contract_coverage.py -v`
+Run: `python -m pytest evals/multi-model-verify/test_multi_model_verify.py::TestTransportContract::test_mirror_quiet_period_is_pinned evals/multi-model-verify/test_contract_coverage.py -v`
 
 Then confirm the ceiling: `python evals/tools/skill_lint.py skills/multi-model-verify --strict`. The linter errors only ABOVE 6500 (`skill_lint.py:340` reads `est_tokens > BODY_TOKEN_CEILING`), so 6500 exactly is still only the warning the file already carries.
 
