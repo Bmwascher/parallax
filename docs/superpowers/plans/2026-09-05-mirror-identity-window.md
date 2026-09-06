@@ -1538,11 +1538,31 @@ reader with explicit byte decoding. Admitting U+FEFF in a pathname is
 correct behaviour.
 ```
 
+- [ ] **Step 5b: Rank both new items**
+
+Every OPEN item must appear exactly once in the `## Ranking` section, which the linter enforces as rule 4 and which Steps 5 and 5a did not mention. Both items belong in **`### First - breaks the repo's own review process`**, because both of them do exactly that: 94 is the window that voids a round mid-flight, and one of 95's three findings can leave a declared review input out of a mirror the digest then certifies. Append them at the END of that group, which is where item 92 was appended when it was filed:
+
+```markdown
+- 92
+- 94
+- 95
+```
+
+- [ ] **Step 5c: Make the pairings reciprocal**
+
+Rule 6 requires both sides of a pairing to name each other unless the partner is closed, and Steps 5 and 5a declare pairings whose other halves do not name back. Three edits, all in `BACKLOG.md`:
+
+- Item 94's own `Pairs:` line becomes `Pairs: 76, 91, 95`, because item 95 names 94.
+- Item 76's `Pairs:` line becomes `Pairs: 38, 54, 94`.
+- Item 91's `Pairs:` line becomes `Pairs: 93, 94`.
+
+Editing 76 and 91 changes their text, so rule 7 will report their `Verified` digests as stale. Refresh BOTH with the same `--digests` command Step 6 uses, keeping each item's ORIGINAL attestation date and replacing only the digest. That is deliberate: the digest records what the text now says, and the date records when the item's substance was last established. Nothing about 76 or 91 was re-examined here, only their pairing line edited, so moving their dates forward would claim work that did not happen.
+
 - [ ] **Step 6: Compute the item's digest and fill it in**
 
 Run: `python evals/tools/backlog_lint.py --digests BACKLOG.md`
 
-Copy the digest printed for item 94 into its `Verified:` line, after the date `2026-09-05`, and the same for item 95.
+Copy the digest printed for item 94 into its `Verified:` line, after the date `2026-09-05`, and the same for item 95. Do this AFTER Steps 5b and 5c, not before: the digest is computed over the item's own text, and 5c edits item 94's `Pairs:` line, so a digest taken first is stale by the time the linter reads it.
 
 - [ ] **Step 7: Run the backlog linter**
 
