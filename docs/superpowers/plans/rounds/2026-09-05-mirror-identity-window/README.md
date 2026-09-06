@@ -370,3 +370,45 @@ in this plan's scope.
 
 Budget: 5 dispatched exchanges. Two counted rounds, both FIX, both fully
 applied.
+
+## Two plan defects found by RUNNING it, not by reading it
+
+Both surfaced during implementation, after the debate closed, and both
+are the same shape: a test asserting something the code the same plan
+specifies cannot produce. Neither was catchable by any round, because no
+round ran the tests - a reviewer reads a test oracle exactly as it reads
+a claim, and an unsatisfiable one looks like a satisfiable one.
+
+**Task 1.** `test_an_extra_input_at_the_sidecar_path_is_refused` asserted
+the message contains the two-word phrase `extra input`. Step 5b2's
+message says `-ExtraInput`, closed up, and then `review input`. The
+oracle names a phrase the message never contains. Corrected to assert the
+flag name.
+
+**Task 1, second.** Steps 5b2 and 5c both claimed the same insertion
+point, "immediately after Step 5b's second loop", which only one can
+have. In the document's reading order `-Force` removes the clashing file
+before the extra-input guard can refuse and preserve it. The implementer
+resolved it correctly from the steps' own comments - 5c says LAST, 5b2
+says "nothing has been removed yet" - and the plan now states the order
+outright instead of leaving it to inference.
+
+**Task 2, and this one is the session's own.**
+`test_a_runtime_category_difference_is_escaped_on_both_hosts` wrote
+`"odd\u0890name.txt"` with TWO backslashes, so Python built the seven
+ordinary ASCII characters `odd` + backslash + `u0890` rather than the
+codepoint U+0890 the docstring is about. `Format-AdvisoryName` escapes by
+UNICODE CATEGORY and never by textual pattern, so a literal backslash
+(category Po) and plain digits pass through by design, and the test then
+asserted the absence of a string the output is guaranteed to contain.
+The sibling test three functions above it uses the correct
+single-backslash form for U+009B and U+202E.
+
+The cause is worth naming, because it is a repeat. The test was written
+by a generator script in THIS session while applying round 4's findings,
+and doubled the backslashes exactly the way a shell heredoc doubles them.
+It therefore landed AFTER the last review round and no reviewer ever saw
+it. Two consequences: fixes applied after a debate closes are unreviewed
+text in a document everything else in it was reviewed, and backslash
+escaping through a generator has now cost this repo three separate
+incidents. Both corrections are in the plan with the reasoning inline.

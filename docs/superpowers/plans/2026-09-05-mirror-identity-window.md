@@ -687,7 +687,7 @@ git commit -m "write the source content manifest beside the review mirror"
 
 - [ ] **Step 1: Write the failing tests**
 
-Replace `test_source_drift_in_an_ignored_file_blocks_the_dispatch`'s assertions and add the following, all directly after it:
+The first function below IS the replacement for `test_source_drift_in_an_ignored_file_blocks_the_dispatch`: same scenario, stronger assertions. DELETE that test and put this whole block at its position, directly before `test_source_drift_in_an_untracked_file_blocks_the_dispatch`. Keeping both would leave two near-identical tests differing only in assertion strength.
 
 ```python
 def test_the_refusal_names_the_ignored_file_that_changed(tmp_path):
@@ -859,12 +859,22 @@ def test_a_runtime_category_difference_is_escaped_on_both_hosts(tmp_path):
     mirror = tmp_path / "mirror"
     _, ident = build_and_read(repo, mirror)
     sidecar = tmp_path / "mirror.source-manifest"
-    sidecar.write_text("odd\\u0890name.txt " + "0" * 64 + chr(10),
+    # ONE backslash, so Python builds the real codepoint. Two would
+    # write the seven ASCII characters `odd\u0890` into the
+    # manifest, which is ordinary punctuation and text that
+    # Format-AdvisoryName passes through by design - the test would
+    # then assert the absence of a string the output must contain,
+    # and could never pass. The sibling test above uses the same
+    # single-backslash form for U+009B and U+202E.
+    sidecar.write_text("odd\u0890name.txt " + "0" * 64 + chr(10),
                        encoding="utf-8")
     (repo / "ignored" / "secret.txt").write_text("edited after the copy" + chr(10))
     proc = run_verify(repo, mirror, ident)
     assert proc.returncode == 1, proc.stdout + proc.stderr
-    assert "\\u0890" not in proc.stdout.replace("\\\\u0890", ""), (
+    # Strip the ESCAPED rendering (a literal backslash, hence two in
+    # source), then assert the RAW codepoint (one backslash in
+    # source) never reached the terminal.
+    assert "\u0890" not in proc.stdout.replace("\\u0890", ""), (
         "the raw codepoint reached the terminal")
 
 
