@@ -269,3 +269,19 @@ omission in the plan debate's record, where a fifth exchange was
 dispatched with no authorization line.
 
 Verdict: **FIX**, budget exhausted, awaiting authorization.
+
+## Budget extended to 5 by the user, 2026-09-06
+
+**AUTHORIZED BY THE USER**, who was asked at exhaustion and chose two
+more exchanges over stopping at three or taking one: round 4 aimed
+squarely at the spelling helper and its operand coverage, then round 5 as
+the confirming round. The reasoning offered with the choice was that a
+sweep-then-confirm pair is the shape most likely to reach a genuine dry
+round, and that the alternative - merging on a budget-exhausted debate
+whose last round found four defects - would leave nothing establishing
+the head is clean.
+
+Recorded here as its own section, with the date and the decision, because
+the whole-branch review found the plan debate's record silently over its
+declared budget with no authorization line. That is the omission this
+paragraph exists to not repeat.
