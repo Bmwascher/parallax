@@ -3972,9 +3972,9 @@ two is shipped and the `enumeration-depth-asymmetry` region says which.
 
 ## 93. The review-mirror test module runs twelve times slower under PowerShell 7 than under 5.1
 Status: OPEN
-Cost: the `powershell-hosts` CI job runs `evals/multi-model-verify/test_review_mirror.py` under both hosts, and measured 2026-09-05 at item 90's Task 3 the module took 18m42s under PowerShell 7 against 94s under Windows PowerShell 5.1, so every CI run and every local both-host gate pays about eighteen minutes it did not pay before the cause is found
+Cost: NOT ESTABLISHED, and the figure this item was filed on did not reproduce - the 18m42s under PowerShell 7 against 94s under 5.1 measured 2026-09-05 at item 90's Task 3 was sought again the same day in three separate runs and the largest ratio seen was 1.15, so what the `powershell-hosts` CI job actually pays for this module is unknown and the eighteen minutes are not confirmed to exist
 Pairs: 91
-Verified: 2026-09-05 9fc2b6ee9f7d
+Verified: 2026-09-05 2e34180a6cad
 
 **Filed 2026-09-05 from item 90's whole-branch review.** The number is
 measured; the cause is not. The task reviewer's candidate is the second
@@ -3984,11 +3984,42 @@ for the reparse-point attribute), which PowerShell 7's pipeline runs
 slower per item than 5.1's, and the candidate fix is `-Attributes
 ReparsePoint` on the call or one pass that collects files and link
 directories together. Whether the slowdown predates item 90 was not
-measured: no both-host timing of the module at the parent commit exists.
-Closing this item means the module's time under PowerShell 7 measured at
-main before item 90 and after, the cause named from that comparison, and
-either a fix that keeps every one of the nineteen link cases green on
-both hosts or a recorded statement that the cost is accepted.
+measured at filing: no both-host timing of the module at the parent
+commit existed.
+
+**Re-measured 2026-09-05, and the slowdown was not there.** That
+comparison has now been made, in two disposable worktrees at
+`4dca0f8^1` and `4dca0f8` - the commit before item 90's merge and the
+merge itself - with the host forced explicitly through
+`PARALLAX_PS_HOST` rather than left to the suite's own choice. Each
+worktree ran the module as it stood at its own commit, so the test count
+differs between them.
+
+| tree | Windows PowerShell 5.1 | PowerShell 7 | ratio |
+| --- | --- | --- | --- |
+| before item 90 (`eddacb6`) | 63.18s, 105 passed | 67.96s, 105 passed | 1.08 |
+| after item 90 (`4dca0f8`) | 79.81s, 124 passed | 90.30s, 124 passed | 1.13 |
+| this branch (`8ecb177`) | 98.73s, 154 passed | 113.87s, 154 passed | 1.15 |
+
+So item 90 did not close a gap, because there was no gap at either side
+of it. Three measurements on one machine on one day put PowerShell 7
+between 8 and 15 percent slower, never twelve times.
+
+What that leaves. The 18m42s was recorded and is not withdrawn here; what
+is withdrawn is the inference that the module carries it as a standing
+cost. Whatever produced it is not a property of the tracked tree at
+either commit, which points at working state or machine conditions rather
+than code - item 91's linked reference checkout, hashed 14,884 files per
+pass, is the nearest candidate this repo already knows about, and it is a
+candidate with no measurement behind it. The reviewer's
+`Get-FilesBeneath` hypothesis above is equally unmeasured and equally
+unsupported by these numbers.
+
+Closing this item now means one of two things: reproducing 18m42s
+deliberately and naming what the working tree held when it happened, or
+recording that it cannot be reproduced and that the original figure
+stands as an unexplained one-off. It no longer means finding a fix, and
+it never meant accepting a cost nobody can now demonstrate.
 
 ## 94. The identity digest covers working state that moves on its own
 Status: OPEN

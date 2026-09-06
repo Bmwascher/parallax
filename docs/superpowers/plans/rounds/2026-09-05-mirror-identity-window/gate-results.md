@@ -49,10 +49,25 @@ re-link directory links as junctions rather than copy through them; item
 that work rather than after it. That is a hypothesis with a plausible
 mechanism and NO measurement behind it here.
 
-Item 93 is left OPEN and untouched. Correcting it means re-measuring
-deliberately, on a stated commit, ideally on both sides of item 90's
-merge - not editing a cost line on the strength of one incidental
-observation. This paragraph is the pointer to that work.
+**Re-measured deliberately, same day, at the user's direction.** Two
+disposable worktrees at `4dca0f8^1` and `4dca0f8`, each running the module
+as it stood at its own commit, host forced through `PARALLAX_PS_HOST`:
+
+| tree | 5.1 | PowerShell 7 | ratio |
+| --- | --- | --- | --- |
+| before item 90 (`eddacb6`) | 63.18s | 67.96s | 1.08 |
+| after item 90 (`4dca0f8`) | 79.81s | 90.30s | 1.13 |
+| this branch (`8ecb177`) | 98.73s | 113.87s | 1.15 |
+
+There was no gap on either side of item 90's merge, so item 90 did not
+close one. The hypothesis this record floated above - that item 90's
+re-linking fixed it - is REFUTED, and it is left standing above rather
+than deleted so the record shows what was guessed and what measurement
+did to it.
+
+Item 93 is amended rather than closed: the 18m42s is not withdrawn, the
+inference that the module carries it as a standing cost is. Whatever
+produced it is not a property of the tracked tree at either commit.
 
 ## Not run
 
