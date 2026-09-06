@@ -9,6 +9,7 @@ check stayed green.
 import hashlib
 import json
 import os
+import pathlib
 import re
 import shutil
 import stat
@@ -1578,6 +1579,281 @@ def test_the_record_carries_both_heads_and_the_source_status_hash(tmp_path):
     assert ident["mirror_head"], proc.stdout
     assert len(ident["source_status_sha256"]) == 64, proc.stdout
     assert ident["source_head"] == git(repo, "rev-parse", "HEAD").strip()
+
+
+def test_the_build_writes_the_source_manifest_beside_the_mirror(tmp_path):
+    """The advisory sidecar the refusal reads to say what moved.
+
+    A SIBLING of the mirror, never a child and never inside the repo:
+    a child would enter mirror_state_sha256 and a file in the repo would
+    enter source_status_sha256, and this one must enter neither.
+    """
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    proc, _ = build_and_read(repo, mirror)
+    sidecar = tmp_path / "mirror.source-manifest"
+    assert sidecar.is_file(), proc.stdout + proc.stderr
+    lines = sidecar.read_text(encoding="utf-8").splitlines()
+    assert any(line.startswith("ignored/secret.txt ") for line in lines), lines
+    assert record_field(proc.stdout, "source_manifest") == str(sidecar)
+
+
+def test_the_source_manifest_sidecar_enters_neither_identity(tmp_path):
+    """The positive control for the sidecar's placement. If it landed
+    inside the mirror or inside the repo, writing it would void the very
+    identity it exists to explain, and this verify would refuse."""
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    _, ident = build_and_read(repo, mirror)
+    proc = run_verify(repo, mirror, ident)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "identity: verified" in proc.stdout, proc.stdout
+
+
+def test_a_pre_existing_sidecar_is_refused_without_force(tmp_path):
+    """A derived destination written without a guard is a write into
+    whatever sits there. This is the override's own rule, applied to the
+    file that shares the override's shape."""
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    (tmp_path / "mirror.source-manifest").write_text("not ours\n")
+    proc = run_mirror(repo, mirror)
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "already exists" in proc.stdout, proc.stdout
+    assert (tmp_path / "mirror.source-manifest").read_text() == "not ours\n"
+
+
+def test_force_replaces_a_pre_existing_sidecar(tmp_path):
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    (tmp_path / "mirror.source-manifest").write_text("not ours\n")
+    build_and_read(repo, mirror, "-Force")
+    text = (tmp_path / "mirror.source-manifest").read_text()
+    assert "not ours" not in text, text
+    assert "ignored/secret.txt " in text, text
+
+
+def test_an_override_at_the_sidecar_path_is_refused(tmp_path):
+    """The probe writes the verified override, the wrapper hashes it, and
+    an unguarded advisory write would replace it between those two acts.
+    Refuse the collision instead."""
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    clash = tmp_path / "mirror.source-manifest"
+    proc = run_mirror(repo, mirror, "-OverrideOut", str(clash))
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "override path" in proc.stdout, proc.stdout
+
+
+def test_an_extra_input_at_the_sidecar_path_is_refused(tmp_path):
+    """-ExtraInput is resolved before the sidecar guard, so a -Force
+    build could delete the declared input and then copy nothing, and the
+    unchecked Copy-Item at :1554 would not say so. Refuse the collision
+    instead of racing it."""
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    clash = tmp_path / "mirror.source-manifest"
+    clash.write_text("a declared review input\n")
+    proc = run_mirror(repo, mirror, "-Force", "-ExtraInput", str(clash))
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    # The FLAG NAME, which is how the message actually names the
+    # input. An earlier draft asserted the two-word phrase "extra
+    # input", which Step 5b2's message never contains: it says
+    # `-ExtraInput`, closed up, and then "review input". The oracle
+    # was unsatisfiable by the code the same plan specifies, and four
+    # review rounds read past it because no round ran the tests.
+    assert "-extrainput" in proc.stdout.lower(), proc.stdout
+    assert clash.read_text() == "a declared review input\n"
+
+
+def test_a_sidecar_reached_through_a_directory_link_is_refused(tmp_path):
+    """The alias guard the second draft missed entirely. The mirror path
+    and the override path are both walked for a reparse-point ancestor
+    at :1258; the sidecar must be walked with them, or a junction above
+    it aliases a tree the build then writes into."""
+    real = tmp_path / "real"
+    real.mkdir()
+    repo = make_repo(tmp_path)
+    link = tmp_path / "alias"
+    make_junction(link, real)
+    proc = run_mirror(repo, link / "mirror", "-Force")
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "directory link" in proc.stdout, proc.stdout
+
+
+def test_no_sidecar_is_removed_before_validation_completes(tmp_path):
+    """DELETION AFTER VALIDATION, never during it. The second draft
+    removed a pre-existing sidecar under -Force at the lexical guard,
+    which runs BEFORE the alias guard that would have refused the build
+    outright. The file must survive a build that is going to be
+    refused."""
+    real = tmp_path / "real"
+    real.mkdir()
+    repo = make_repo(tmp_path)
+    link = tmp_path / "alias"
+    make_junction(link, real)
+    victim = tmp_path / "alias" / "mirror.source-manifest"
+    victim.write_text("must survive\n")
+    proc = run_mirror(repo, link / "mirror", "-Force")
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert victim.read_text() == "must survive\n", "deleted before refusing"
+
+
+def extract_ps_function(name):
+    """Pull one function's text out of the SHIPPED script so a unit test
+    exercises the same source the build runs. Copying the body into the
+    test would create a second definition that drifts, which is the
+    failure this repo keeps finding in its own records."""
+    text = MIRROR.read_text(encoding="utf-8")
+    start = text.index("function " + name + "(")
+    k = text.index("{", start)
+    depth = 0
+    while True:
+        if text[k] == "{":
+            depth += 1
+        elif text[k] == "}":
+            depth -= 1
+            if depth == 0:
+                break
+        k += 1
+    return text[start:k + 1]
+
+
+@pytest.mark.parametrize("path,kind", [
+    ("C:\\", "root"),
+    ("\\\\server\\share\\", "root"),
+    ("\\\\server\\share\\dir", "ok"),
+    ("C:\\Temp\\mirror", "ok"),
+])
+def test_the_sidecar_helper_classifies_roots_directly(tmp_path, path, kind):
+    """The helper's own contract, exercised directly.
+
+    The integration path CANNOT establish this: the mirror-path guards
+    refuse a root long before the sidecar is derived, so a build-level
+    assertion never reaches the helper. Measured 2026-09-05 on
+    PowerShell 7, a root mirror path on a repo living on C: is refused
+    by the containment guard with "the mirror path contains the repo",
+    which says nothing about roots at all.
+    """
+    src = extract_ps_function("Get-SourceManifestSidecarPath")
+    driver = tmp_path / "probe.ps1"
+    driver.write_text(
+        src + "\n$r = Get-SourceManifestSidecarPath $args[0]\n"
+        "Write-Output $r.Kind\n", encoding="utf-8")
+    proc = subprocess.run(
+        [ps_host(), "-NoProfile", "-NonInteractive", "-File", str(driver),
+         path],
+        capture_output=True, text=True)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert proc.stdout.strip() == kind, (path, proc.stdout)
+
+
+def test_a_resolution_failure_is_not_reported_as_a_root(tmp_path):
+    """Two outcomes that must not share a message. Windows PowerShell
+    5.1 refused a 278-character absolute path from GetFullPath with
+    PathTooLongException while PowerShell 7 accepted it, so on 5.1 a
+    long-path build would announce a filesystem root and never reach the
+    path-budget refusal that names the real problem."""
+    src = extract_ps_function("Get-SourceManifestSidecarPath")
+    driver = tmp_path / "probe.ps1"
+    driver.write_text(
+        src + "\n$r = Get-SourceManifestSidecarPath $args[0]\n"
+        "Write-Output $r.Kind\n", encoding="utf-8")
+    long_path = "C:\\" + ("d" * 200 + "\\") * 2 + "leaf"
+    proc = subprocess.run(
+        [ps_host(), "-NoProfile", "-NonInteractive", "-File", str(driver),
+         long_path],
+        capture_output=True, text=True)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert proc.stdout.strip() in ("ok", "error"), proc.stdout
+    assert proc.stdout.strip() != "root", "a resolution failure read as a root"
+
+
+def test_a_junction_at_the_sidecar_path_is_refused(tmp_path):
+    """The ONLY case that isolates the sidecar's alias guard.
+
+    The sidecar shares the mirror's parent by construction, so any
+    junction ABOVE it is also above the mirror and the mirror-path
+    guard refuses first - which is why the junction tests that place
+    the mirror under a junction prove nothing about the sidecar. What
+    is reachable and distinct is the sidecar path ITSELF being a
+    reparse point while the mirror path is ordinary.
+    """
+    target = tmp_path / "elsewhere"
+    target.mkdir()
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    make_junction(tmp_path / "mirror.source-manifest", target)
+    proc = run_mirror(repo, mirror)
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "source manifest path" in proc.stdout, proc.stdout
+
+
+def test_an_extra_input_reached_through_a_junction_is_refused(tmp_path):
+    """Spelling equality cannot see an alias, so the guard refuses
+    what it cannot decide. The victim must survive the refusal: the
+    whole point of ordering removal last is that a build heading for
+    a refusal deletes nothing."""
+    real = tmp_path / "inputs"
+    real.mkdir()
+    victim = real / "declared.txt"
+    victim.write_text("a declared review input" + chr(10))
+    make_junction(tmp_path / "alias", real)
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    proc = run_mirror(repo, mirror, "-ExtraInput",
+                      str(tmp_path / "alias" / "declared.txt"))
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "directory link" in proc.stdout, proc.stdout
+    assert victim.read_text() == "a declared review input" + chr(10)
+
+
+def test_an_extra_input_with_a_trailing_dot_is_refused(tmp_path):
+    """Measured 2026-09-05 on both hosts: `BACKLOG.md.` passes
+    Test-Path, resolves WITH the dot, and hashes identical to
+    `BACKLOG.md`, while comparing unequal by spelling. Windows strips
+    the dot when it OPENS the file and PowerShell keeps it in the
+    path, so an extra input spelled `<mirror>.source-manifest.` would
+    pass an equality check and still name the file -Force removes."""
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    victim = tmp_path / "mirror.source-manifest"
+    victim.write_text("must survive" + chr(10))
+    proc = run_mirror(repo, mirror, "-Force", "-ExtraInput",
+                      str(victim) + ".")
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "dot or a space" in proc.stdout, proc.stdout
+    assert victim.read_text() == "must survive" + chr(10)
+
+
+def test_an_unresolvable_path_is_reported_as_error_not_root(tmp_path):
+    """A DETERMINISTIC resolution failure on both hosts.
+
+    The long-path case below is host-dependent - PowerShell 7 accepted
+    the 278-character path that Windows PowerShell 5.1 refused - so its
+    oracle has to accept `ok`, which means it can pass without ever
+    exercising the error branch. `GetFullPath("")` throws on both."""
+    src = extract_ps_function("Get-SourceManifestSidecarPath")
+    driver = tmp_path / "probe.ps1"
+    driver.write_text(
+        src + "\n$r = Get-SourceManifestSidecarPath ''\n"
+        "Write-Output $r.Kind\n", encoding="utf-8")
+    proc = subprocess.run(
+        [ps_host(), "-NoProfile", "-NonInteractive", "-File", str(driver)],
+        capture_output=True, text=True)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert proc.stdout.strip() == "error", proc.stdout
+
+
+def test_a_root_mirror_path_is_refused_by_the_build(tmp_path):
+    """The integration half, with an oracle that matches what actually
+    fires. Which guard refuses depends on where the repo lives, so this
+    asserts only that the build refuses; the helper's root contract is
+    the unit test above."""
+    repo = make_repo(tmp_path)
+    proc = run_mirror(repo, pathlib.Path("C:\\"))
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "ERROR:" in proc.stdout, proc.stdout
 
 
 def test_remediation_moves_mirror_head_away_from_source_head(tmp_path):

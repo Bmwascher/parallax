@@ -691,7 +691,89 @@ function Get-StatusSha256($repo) {
         return @{ Ok = $false; Reason = $content.Error }
     }
     return @{ Ok = $true
+              Manifest = @($content.Paths)
               Sha = (Get-CombinedSha256 $captured.Fields $content.Paths) }
+}
+
+function Get-SourceManifestSidecarPath($mirrorPath) {
+    # A SIBLING of the mirror, never a child. A file inside the mirror
+    # would enter mirror_state_sha256 and a file inside the repository
+    # would enter source_status_sha256; this one must enter neither,
+    # because it is written after both are measured and read only after
+    # a comparison has already decided to refuse.
+    #
+    # ONE derivation, shared by the build that writes the file and the
+    # verify that reads it, so the two sides cannot drift apart.
+    #
+    # A ROOT HAS NO SIBLING, and the leaf is NOT how you detect one.
+    # Measured 2026-09-05: `Split-Path 'C:\' -Leaf` returns `C:\` rather
+    # than `C:`, so a regex on the leaf never fires for a drive root; and
+    # `Split-Path '\\server\share\' -Leaf` returns `share` with parent
+    # `\\server`, which appended would name a DIFFERENT SHARE. The two
+    # hosts do not agree on the UNC case. So the framework's own root is
+    # the test, and the suffix is APPENDED to the full path rather than
+    # rejoined to a parent, which removes the UNC rejoin entirely.
+    # THREE OUTCOMES, not two. An earlier draft returned $null for a root
+    # AND for a resolution failure, so both callers announced "filesystem
+    # root" for either. Measured 2026-09-05: Windows PowerShell 5.1's
+    # provider accepted a 278-character absolute path that GetFullPath
+    # refused with PathTooLongException, while PowerShell 7 accepted it,
+    # so a long-path build on 5.1 would have reported a filesystem root
+    # and never reached the path-budget refusal that names the real
+    # problem.
+    $full = $null
+    try {
+        $full = [System.IO.Path]::GetFullPath($mirrorPath)
+    } catch {
+        return @{ Kind = "error"; Reason = $_.Exception.Message }
+    }
+    $full = $full.TrimEnd("\")
+    $root = $null
+    try {
+        $root = [System.IO.Path]::GetPathRoot($full)
+    } catch {
+        return @{ Kind = "error"; Reason = $_.Exception.Message }
+    }
+    if (-not $root) {
+        return @{ Kind = "error"; Reason = "the path has no root" }
+    }
+    if ($full.Length -le ([string]$root).TrimEnd("\").Length) {
+        return @{ Kind = "root" }
+    }
+    return @{ Kind = "ok"; Path = ($full + ".source-manifest") }
+}
+
+function Write-SourceManifestSidecar($path, $manifestLines) {
+    # ADVISORY ONLY. It pins nothing and gates nothing, so a failure to
+    # write it is not a build failure - it costs a later refusal its
+    # explanation and nothing else. That is also why it may be a file at
+    # all: the header's rule about values passed as arguments rather than
+    # re-read from a file governs values that PIN something, and this
+    # value carries no authority.
+    #
+    # CREATE-NEW, never WriteAllLines. State the guarantee exactly: it
+    # makes the FINAL PATH COMPONENT safe, so a file created between the
+    # guards and this write is not overwritten and a link substituted at
+    # that name is not written through. It does NOT defend a DIRECTORY
+    # component - an ancestor replaced by a junction before this open
+    # redirects creation into that junction's target, and no open flag
+    # prevents that. The alias guards above are what cover ancestors, and
+    # they run before any of this.
+    try {
+        $utf8 = New-Object System.Text.UTF8Encoding($false)
+        $fs = [System.IO.File]::Open($path, 'CreateNew', 'Write', 'None')
+        try {
+            $sw = New-Object System.IO.StreamWriter($fs, $utf8)
+            try {
+                foreach ($line in @($manifestLines)) {
+                    $sw.WriteLine([string]$line)
+                }
+            } finally { $sw.Dispose() }
+        } finally { $fs.Dispose() }
+        return $true
+    } catch {
+        return $false
+    }
 }
 
 $toplevel = $true
@@ -970,6 +1052,50 @@ foreach ($protected in @($rr, $mp)) {
 if (Test-Path $OverrideOut) {
     Write-Output ("ERROR: $OverrideOut already exists - a stale override" +
         " reads exactly like a fresh one")
+    exit 2
+}
+
+# THE ADVISORY SOURCE MANIFEST'S DESTINATION, resolved and LEXICALLY
+# guarded here, beside the override, for the same stated reason: a
+# destination discovered after the build has copied, remediated and
+# manifested is discovered too late, and -SkipProbe would bypass a check
+# placed later. Its ALIAS guards are further down with the override's,
+# and its removal is after both, because a build that is going to be
+# refused must not have deleted anything first.
+$smResult = Get-SourceManifestSidecarPath $MirrorPath
+if ($smResult.Kind -eq "root") {
+    Write-Output ("ERROR: the mirror path is a filesystem root" +
+        " ($MirrorPath), which has no sibling, so no advisory source" +
+        " manifest can be placed beside it")
+    exit 2
+}
+if ($smResult.Kind -ne "ok") {
+    Write-Output ("ERROR: the mirror path could not be resolved in order to" +
+        " place an advisory source manifest beside it ($MirrorPath): " +
+        $smResult.Reason)
+    exit 2
+}
+$SourceManifestOut = $smResult.Path
+$smp = $SourceManifestOut.Replace("\", "/").TrimEnd("/")
+foreach ($protected in @($rr, $mp)) {
+    if (($smp + "/").Equals($protected, $cmp) -or
+        ($smp + "/").StartsWith($protected, $cmp) -or
+        $protected.StartsWith($smp + "/", $cmp)) {
+        Write-Output ("ERROR: the source manifest path overlaps a protected" +
+            " tree ($SourceManifestOut)")
+        exit 2
+    }
+}
+if ($smp.Equals($op, $cmp)) {
+    Write-Output ("ERROR: the source manifest path is the override path" +
+        " ($SourceManifestOut) - the advisory write would replace the file" +
+        " the probe verified and the wrapper hashes")
+    exit 2
+}
+if ($SourceManifestOut.Length -ge 260) {
+    Write-Output ("ERROR: path budget exceeded by the source manifest - " +
+        "$SourceManifestOut is $($SourceManifestOut.Length) characters " +
+        "and the limit is 260")
     exit 2
 }
 
@@ -1255,7 +1381,8 @@ function Test-PathOrAncestorIsLink($path) {
     return $null
 }
 
-foreach ($pair in @(@("mirror path", $MirrorPath), @("override path", $OverrideOut))) {
+foreach ($pair in @(@("mirror path", $MirrorPath), @("override path", $OverrideOut),
+                    @("source manifest path", $SourceManifestOut))) {
     $label = $pair[0]
     $hit = Test-PathOrAncestorIsLink $pair[1]
     if ($hit) {
@@ -1281,7 +1408,8 @@ foreach ($target in @($followedTargets)) {
 }
 foreach ($target in @($followedTargets)) {
     $tp = ([string]$target).Replace("\", "/").TrimEnd("/") + "/"
-    foreach ($pair in @(@("mirror path", $mp), @("override path", ($op + "/")))) {
+    foreach ($pair in @(@("mirror path", $mp), @("override path", ($op + "/")),
+                        @("source manifest path", ($smp + "/")))) {
         $label = $pair[0]
         $cand = $pair[1]
         if ($cand.Equals($tp, $cmp) -or $cand.StartsWith($tp, $cmp) -or
@@ -1292,6 +1420,101 @@ foreach ($target in @($followedTargets)) {
             exit 2
         }
     }
+}
+
+# EXTRA INPUTS versus the sidecar. $ExtraInputPaths holds paths already
+# resolved by the -ExtraInput parser above; that parser runs before $smp
+# exists, which is why this check lives here rather than beside it.
+foreach ($eiResolved in @($ExtraInputPaths)) {
+    $eiNorm = ([string]$eiResolved).Replace("\", "/").TrimEnd("/")
+    if ($eiNorm.Equals($smp, $cmp)) {
+        Write-Output ("ERROR: -ExtraInput '" + $eiResolved + "' is the" +
+            " source manifest path, which this build replaces - a declared" +
+            " review input must not be a file this tool overwrites")
+        exit 2
+    }
+    # SPELLING EQUALITY IS NOT IDENTITY, and the comparison above is only
+    # spelling. With C:\alias a junction to C:\out, a mirror at
+    # C:\out\mirror and an extra input at
+    # C:\alias\mirror.source-manifest, BOTH output paths have ordinary
+    # ancestors and pass their own alias checks, while the extra input
+    # keeps the alias spelling and compares unequal - and -Force would
+    # then remove the very file that extra input names, after which the
+    # unchecked Copy-Item can leave it out of the mirror entirely. This
+    # tool cannot establish physical identity here, so it REFUSES the
+    # case it cannot decide rather than guessing.
+    # A TRAILING DOT OR SPACE ON ANY COMPONENT defeats the comparison
+    # above. Windows strips it when it OPENS the file; PowerShell keeps
+    # it in the path. Measured 2026-09-05: `BACKLOG.md.` passes
+    # Test-Path, resolves WITH the dot, hashes identical to
+    # `BACKLOG.md`, and compares unequal - so an extra input spelled
+    # `<mirror>.source-manifest.` passes this guard and still names the
+    # file -Force is about to remove. Refuse the spelling.
+    foreach ($seg in $eiNorm.Split('/')) {
+        if ($seg -match '[. ]$') {
+            Write-Output ("ERROR: -ExtraInput '" + $eiResolved + "' has" +
+                " a path component ending in a dot or a space, which" +
+                " Windows strips when it opens the file but PowerShell" +
+                " keeps in the path, so this tool cannot tell which file" +
+                " it names; pass the exact name")
+            exit 2
+        }
+    }
+    $eiHit = Test-PathOrAncestorIsLink $eiResolved
+    if ($eiHit) {
+        Write-Output ("ERROR: -ExtraInput '" + $eiResolved + "' is reached" +
+            " through a directory link at " + $eiHit + ", so this tool" +
+            " cannot tell whether it names the same file as the source" +
+            " manifest it replaces; pass the path behind the link")
+        exit 2
+    }
+}
+
+# LAST, because a build that is going to be refused must not have deleted
+# anything first. Read the ATTRIBUTES rather than calling Test-Path,
+# because the Directory bit and the not-there case have to be told apart
+# in one read, and this is the one place where a wrong "it is not there"
+# turns into a write.
+#
+# MEASURED 2026-09-05 under BOTH hosts, because the link walker above
+# justifies the same choice with a claim nobody had measured. Windows
+# PowerShell 5.1 and PowerShell 7 agree, character for character, on all
+# four cases: an intact junction, a DANGLING junction, a plainly missing
+# path, and an ordinary file. The dangling junction returns
+# `Directory, ReparsePoint` from GetAttributes and `True` from Test-Path
+# on both, and only the missing path throws. So the cross-host risk this
+# step was escalated for does not exist for a junction. Two limits are
+# stated rather than papered over: the walker's premise that Test-Path
+# "may report as absent" was NOT reproduced for a dangling junction, and
+# a dangling FILE SYMLINK was not measured at all, so nothing here claims
+# anything about one.
+$smAttr = $null
+try {
+    $smAttr = [System.IO.File]::GetAttributes($SourceManifestOut)
+} catch [System.IO.FileNotFoundException] {
+    $smAttr = $null
+} catch [System.IO.DirectoryNotFoundException] {
+    $smAttr = $null
+} catch {
+    Write-Output ("ERROR: the source manifest path could not be examined" +
+        " ($SourceManifestOut): " + $_.Exception.Message)
+    exit 2
+}
+if ($null -ne $smAttr) {
+    if (([int]$smAttr -band [int][System.IO.FileAttributes]::Directory) -ne 0) {
+        Write-Output ("ERROR: $SourceManifestOut is a directory - this tool" +
+            " replaces a file there and never removes a tree")
+        exit 2
+    }
+    if (-not $Force) {
+        Write-Output ("ERROR: $SourceManifestOut already exists - pass" +
+            " -Force to replace it, the same rule the mirror path follows")
+        exit 2
+    }
+    # REMOVING a link removes the link and never its target's bytes,
+    # which is exactly why the removal is safe where a write through it
+    # was not.
+    Remove-Item -LiteralPath $SourceManifestOut -Force
 }
 
 if (Test-Path $MirrorPath) {
@@ -1734,6 +1957,14 @@ if (-not $SkipProbe) {
     $overrideFile = $OverrideOut
 }
 
+# The advisory source manifest, written before the record so the record
+# can name it. Its destination was fully guarded above; a failure to
+# write it here is reported and never fatal.
+$sidecarRecord = $SourceManifestOut
+if (-not (Write-SourceManifestSidecar $SourceManifestOut $sourceStatus.Manifest)) {
+    $sidecarRecord = "unwritable"
+}
+
 Write-Output ("mirror: " + $MirrorPath)
 # TWO identities, not one. They differ whenever remediation committed,
 # which is the ordinary case for a repo carrying a tracked back-channel,
@@ -1753,6 +1984,7 @@ foreach ($lnk in @($sourceLinks)) {
 }
 Write-Output ("probe: " + $probeLine)
 Write-Output ("override: " + $overrideFile)
+Write-Output ("source_manifest: " + $sidecarRecord)
 # A mirror built without the client probe is NOT cleared for dispatch, and
 # must not share its exit code with one that is. -SkipProbe exists for
 # offline construction and for the tests; it is not a way to reach a clean
