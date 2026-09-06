@@ -1940,6 +1940,55 @@ def test_a_named_index_stream_path_is_refused(tmp_path):
     assert (repo / "kept.txt").exists(), "the source must survive a refusal"
 
 
+def test_a_repo_root_beneath_a_directory_link_is_refused(tmp_path):
+    """The source root's ANCESTORS were never walked. The root itself was
+    checked for a reparse point, and the mirror, override, sidecar, extra
+    inputs and followed targets all had their ancestors walked, but the
+    directories above the source root were not.
+
+    The round-4 reviewer reached the recursive removal on both hosts
+    through an ordinary `My Documents` junction: a source spelled through
+    the junction and a mirror spelled directly, two spellings of one
+    directory that the lexical overlap comparison accepts.
+    """
+    real = tmp_path / "real"
+    real.mkdir()
+    repo = make_repo(real)
+    make_junction(tmp_path / "alias", real)
+    proc = run_mirror(pathlib.Path(str(tmp_path / "alias" / "src")),
+                      tmp_path / "mirror")
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "sits beneath a directory link" in proc.stdout, proc.stdout
+    assert (repo / "kept.txt").exists(), "the source must survive a refusal"
+
+
+def test_names_that_8_3_cannot_produce_are_accepted(tmp_path):
+    """THE FALSE-REFUSAL REGRESSION, third attempt at this shape.
+
+    An 8.3 basename is at most eight characters and cannot contain a
+    space, so none of these can be a generated short name. The round-4
+    reviewer measured all three being refused by the previous pattern on
+    both hosts. Each is checked as a real build rather than a unit call,
+    because the refusal it guards against is a build refusal.
+    """
+    repo = make_repo(tmp_path)
+    for name in ("backup~2026", "ABCDEF~123456", "a b~1"):
+        proc = run_mirror(repo, tmp_path / name)
+        assert "8.3 short name" not in proc.stdout, (name, proc.stdout)
+        assert (tmp_path / name).is_dir(), (name, proc.stdout)
+
+
+def test_real_short_name_shapes_are_still_refused(tmp_path):
+    """The other side of the same boundary. All four ARE expressible as
+    8.3 short names, and the round-4 reviewer confirmed the last two match
+    the shape."""
+    repo = make_repo(tmp_path)
+    for name in ("MULTI-~1", "ABCDE~10", "ABCD~100", "PXD1~1.SOU"):
+        proc = run_mirror(repo, tmp_path / name)
+        assert proc.returncode == 2, (name, proc.stdout + proc.stderr)
+        assert "8.3 short name" in proc.stdout, (name, proc.stdout)
+
+
 def test_a_stream_form_repo_root_is_refused_too(tmp_path):
     """The round-3 reviewer demonstrated `<repo>:$I30:$INDEX_ALLOCATION`
     as RepoRoot reaching the recursive delete through a validation
@@ -1949,11 +1998,16 @@ def test_a_stream_form_repo_root_is_refused_too(tmp_path):
     A draft of this test asserted the opposite - that resolution
     canonicalized the stream away and the build proceeded normally - on
     the strength of one earlier run that predated the guard working at
-    all. It did not survive being run. Two mechanisms refuse this input
-    now: `Test-Path` on a stream spelling raises
-    `ItemExistsNotSupportedError`, and the colon rule refuses it by
-    spelling. Either is enough; the assertion names the one this tool
-    chose to write.
+    all. It did not survive being run.
+
+    A SECOND draft then claimed two independent mechanisms refuse it, the
+    colon rule and `Test-Path` raising `ItemExistsNotSupportedError`, and
+    that either would be enough. The round-4 reviewer measured
+    `Test-Path` on this spelling directly: it returns TRUE on both hosts.
+    Windows PowerShell 5.1 also prints that error and CONTINUES;
+    PowerShell 7 prints nothing. So the existence conditional does not
+    refuse this input at all, and the colon rule is the only demonstrated
+    mechanism. That is what the assertion names.
     """
     repo = make_repo(tmp_path)
     proc = run_mirror(pathlib.Path(str(repo) + ":$I30:$INDEX_ALLOCATION"),
@@ -2260,6 +2314,14 @@ def test_display_controls_in_an_advisory_name_are_rendered(tmp_path):
     sidecar = tmp_path / "mirror.source-manifest"
     sidecar.write_text("ev\u009bil\u202e.txt " + "0" * 64 + "\n",
                        encoding="utf-8")
+    # Same fixture check as the runtime-category test below, for the
+    # same reason: the rendering assertions cannot tell a real control
+    # character from its literal escape text.
+    seeded = sidecar.read_text(encoding="utf-8")
+    assert chr(0x009B) in seeded and chr(0x202E) in seeded, (
+        "the fixture lost its control characters")
+    assert "\\u009b" not in seeded, (
+        "the fixture holds a literal escape, not the codepoint")
     (repo / "ignored" / "secret.txt").write_text("edited after the copy\n")
     proc = run_verify(repo, mirror, ident)
     assert proc.returncode == 1, proc.stdout + proc.stderr
@@ -2294,6 +2356,17 @@ def test_a_runtime_category_difference_is_escaped_on_both_hosts(tmp_path):
     # single-backslash form for U+009B and U+202E.
     sidecar.write_text("odd\u0890name.txt " + "0" * 64 + chr(10),
                        encoding="utf-8")
+    # THE FIXTURE IS CHECKED, not assumed. The comment above used to
+    # claim a doubled escape here "could never pass"; the round-4
+    # reviewer measured the formatter producing IDENTICAL output for
+    # the literal ASCII text and for the real codepoint, so the
+    # rendering assertions below accept both and the classification
+    # would silently stop being exercised. Read the file back and
+    # require the codepoint to be in it and the literal escape not.
+    seeded = sidecar.read_text(encoding="utf-8")
+    assert chr(0x0890) in seeded, "the fixture lost its codepoint"
+    assert "\\u0890" not in seeded, (
+        "the fixture holds a literal escape, not the codepoint")
     (repo / "ignored" / "secret.txt").write_text("edited after the copy" + chr(10))
     proc = run_verify(repo, mirror, ident)
     assert proc.returncode == 1, proc.stdout + proc.stderr
@@ -3086,9 +3159,11 @@ def test_a_mirror_whose_current_state_cannot_be_measured_is_refused(tmp_path):
         # EXIT 1 AND THE NAMED DIAGNOSTIC. `!= 0` plus the generic
         # substring "could not be" left this green if the branch were
         # changed to exit 2, which is this script's code for an error in
-        # the tool rather than a block it decided on. Third instance of
-        # the negative-only oracle class, found by the round-3 reviewer
-        # next door to the second.
+        # the tool rather than a block it decided on. Found by the round-3
+        # reviewer, next door to the one above. No ordinal is given: an
+        # earlier draft called this the third while its neighbour also
+        # called itself the third, which is what counting instances inside
+        # the instances produces.
         assert proc.returncode == 1, proc.stdout + proc.stderr
         assert "the mirror's current state could not be measured" in proc.stdout, (
             proc.stdout)

@@ -1319,10 +1319,18 @@ function Test-UnresolvableSpelling($label, $raw) {
             " separator, which names an NTFS stream rather than the file or" +
             " directory this tool would compare; pass an ordinary path")
     }
-    # ONE backslash. The generated form of this helper carried TWO,
-    # which PowerShell reads as a literal two-character string, so the
-    # split never fired and every component check below was dead. The
-    # short-name test caught it; nothing else would have.
+    # ONE backslash. The generated form of this helper carried TWO, which
+    # PowerShell reads as a literal two-character string, so a path spelled
+    # with backslashes was never split into components.
+    #
+    # NOT "every check was dead", which an earlier draft of this comment
+    # said. The round-4 reviewer built a mutant restoring the doubled form
+    # and measured what survived on both hosts: an unsplit string is still
+    # ONE component, so a trailing dot on the whole path was still caught,
+    # and a path spelled with forward slashes still split normally. What
+    # was lost was interior backslash-separated component checking. The
+    # dotted-ancestor override regression exercises exactly that, so the
+    # short-name test was not the only thing that would have caught it.
     foreach ($seg in $s.Replace("\", "/").Split("/")) {
         if ($seg -match '[. ]$' -and $seg -ne "." -and $seg -ne "..") {
             return ($label + " (" + $s + ") has a path component ending in" +
@@ -1336,16 +1344,38 @@ function Test-UnresolvableSpelling($label, $raw) {
         # handle, which this tool will not take on a destination it is
         # about to delete.
         #
-        # THE SHAPE IS NARROW ON PURPOSE. The first version matched
-        # `~[0-9]+$` anywhere in a component and the round-3 reviewer
-        # showed it rejecting `release~2026`, an ordinary directory name,
-        # on both hosts - with a message telling the user to pass the full
-        # name when that already was the full name. A generated short name
-        # has at most six characters before the tilde and at most three of
-        # extension, so requiring that shape admits `release~2026` and
-        # still refuses `MULTI-~1` and `PXD1~1.SOU`.
-        if ($seg -match '^[^.]{1,6}~[0-9]{1,6}$' -or
-            $seg -match '^[^.]{1,6}~[0-9]{1,6}\.[^.]{1,3}$') {
+        # THE SHAPE IS BOUNDED BY WHAT 8.3 CAN ACTUALLY PRODUCE, which
+        # took three attempts. The first matched `~[0-9]+$` anywhere and
+        # refused `release~2026`. The second anchored the tilde position
+        # but still allowed six characters before it AND six digits after,
+        # so it refused `backup~2026`, `ABCDEF~123456` and `a b~1` - all
+        # measured on both hosts by the round-4 reviewer, and none of them
+        # expressible as a short name, because the BASENAME of an 8.3 name
+        # is at most eight characters and cannot contain a space.
+        #
+        # So the rule is the real constraint: basename at most eight
+        # characters, no space, tilde then digits, optional extension of
+        # at most three. That admits `backup~2026` and `a b~1` and still
+        # refuses `MULTI-~1`, `ABCDE~10`, `ABCD~100` and `PXD1~1.SOU`.
+        #
+        # WHAT IT STILL CANNOT DO, stated because the next reader will
+        # otherwise assume otherwise: a short name does NOT have to
+        # contain a tilde. `fsutil file setshortname` can assign
+        # `LONGFILE.TXT` as the alias of `longfilename.txt`, and no
+        # pattern over the spelling can distinguish that from an ordinary
+        # name. Refusing tilde forms narrows the class; it does not close
+        # it. The round-4 reviewer raised this as SUSPECTED and could not
+        # complete the setup from a read-only session.
+        $segBase = $seg
+        $segExt = ""
+        $segDot = $seg.LastIndexOf(".")
+        if ($segDot -gt 0) {
+            $segBase = $seg.Substring(0, $segDot)
+            $segExt = $seg.Substring($segDot + 1)
+        }
+        if ($segBase.Length -le 8 -and $segExt.Length -le 3 -and
+            $segBase -cmatch '^[^ .]{1,6}~[0-9]{1,6}$' -and
+            $segExt -notmatch ' ') {
             return ($label + " (" + $s + ") has a component shaped like an" +
                 " 8.3 short name, which this tool cannot resolve to the" +
                 " long name its comparisons use. If that is the real name" +
@@ -1760,12 +1790,34 @@ foreach ($pair in @(@("mirror path", $MirrorPath), @("override path", $OverrideO
 # alias in the other direction (cross-vendor round 3): the walk records
 # the target as spelled, so a mirror path at the real directory behind
 # it neither passes through a link nor overlaps the recorded text.
-# THE HELPER, on discovered targets, before any comparison uses them.
+# THE HELPER, on discovered targets, before the DESTINATION-OVERLAP
+# comparisons. Not before "any comparison": target equality, containment
+# and duplicate-target checks all run earlier, during discovery, and an
+# earlier draft of this comment claimed otherwise.
 # The round-3 reviewer executed the protected-target checks with the real
 # alias `<mirror>/skills/MULTI-~1` and they accepted the corresponding
 # long directory as the destination. A target this tool discovered is
 # still a spelling it has to compare, so it gets the same validation as
 # one the caller passed.
+# THE SOURCE ROOT'S ANCESTORS. The block far above checks whether the
+# root ITSELF is a reparse point; nothing walked the directories above
+# it, while the mirror, the override, the sidecar, the extra inputs and
+# the followed targets all had their ancestors walked. The round-4
+# reviewer reached the recursive removal on BOTH hosts through the
+# ordinary `My Documents` junction that exists on this machine, with a
+# source of `C:\Users\<user>\My Documents\parallax\skills` against a
+# mirror of `C:\Users\<user>\Documents\parallax\skills`: two spellings
+# of one directory, which the lexical overlap comparison accepts. That
+# probe proves REACHABILITY with removal intercepted, not deletion.
+$rootHit = Test-PathOrAncestorIsLink $RepoRoot
+if ($rootHit) {
+    Write-Output ("ERROR: the repo root " + $RepoRoot + " sits beneath a" +
+        " directory link (" + $rootHit + "), so this tool cannot tell" +
+        " whether it and the mirror name the same directory; pass the" +
+        " path that does not go through the link")
+    exit 2
+}
+
 foreach ($target in @($followedTargets)) {
     $bad = Test-UnresolvableSpelling "a followed link target" $target
     if ($bad) {

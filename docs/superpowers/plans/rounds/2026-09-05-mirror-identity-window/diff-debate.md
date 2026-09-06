@@ -75,8 +75,11 @@ branch already closed for `-ExtraInput`, left open on the destructive
 path - a fix that did not sweep its own class.
 
 **2. Two oracles go green without measuring anything.** The
-control-character test and the trailing-newline test assert only an exit
-code and the ABSENCE of a string. The reader's own failure fallback
+runtime-category test and the trailing-newline test assert only an exit
+code and the ABSENCE of a string. (An earlier draft of this line named
+the CONTROL-CHARACTER test instead; the retained round-1 reply
+distinguishes that pair from the separate substring weakness, and the
+round-4 reviewer caught the substitution.) The reader's own failure fallback
 prints `what moved: unknown` and satisfies both, so each passes when the
 behaviour it names was never exercised. Both now assert the whole
 rendered name positively and that `unknown` is absent. The substring form
@@ -223,8 +226,12 @@ to a list is the defect.
 **3. The unchecked removal is filed as item 98**, on the reviewer's own
 recommendation that the spelling work is not its remedy. Different class:
 an ordinary path, an ordinary removal, an ordinary failure. It simulated
-a non-terminating error on both hosts and reached `New-Item`; it did NOT
-reproduce a contaminated build under real denial, and item 98 says so.
+a non-terminating error and reached `New-Item`. ON WHICH HOSTS: this
+line said "both" and round 3's retained transcript substantiates
+PowerShell 7 only; round 4 completed the same simulation on both and
+observed the same continuation, so the both-host evidence is round 4's.
+It did NOT reproduce a contaminated build under real denial, and item 98
+says so.
 
 **4. A fourth negative-only oracle**,
 `test_a_mirror_whose_current_state_cannot_be_measured_is_refused`,
@@ -285,3 +292,93 @@ Recorded here as its own section, with the date and the decision, because
 the whole-branch review found the plan debate's record silently over its
 declared budget with no authorization line. That is the omission this
 paragraph exists to not repeat.
+
+## Round 4 (`Astra D4`), the sweep round
+
+Resumed, route verified, binder `clean` and `sealed`, mirror rebuilt at
+the same path from head `9064753`.
+
+Seven findings. The notable thing about them is the split: ONE was a code
+defect, TWO were the guard refusing legitimate input, and FOUR were
+claims in this record and in test comments that overstated what had been
+measured. A sweep round aimed at a fix found more wrong with the account
+of the fix than with the fix.
+
+**1. The source root's ANCESTORS were never walked.** The only new code
+defect of the round, and a real one. The root itself was checked for a
+reparse point, and the mirror, the override, the sidecar, the extra
+inputs and the followed targets all had their ancestors walked. The
+directories ABOVE the source root were not. The reviewer reached the
+recursive removal on both hosts through the ordinary `My Documents`
+junction on this machine: a source spelled through the junction against a
+mirror spelled directly, two spellings of one directory that the lexical
+overlap comparison accepts. Reachability with removal intercepted, again,
+and stated as such. Now refused, with a junction fixture as the
+regression.
+
+**2. The 8.3 pattern was wrong for the THIRD time, and in the same
+direction both previous times were wrong.** It anchored the tilde but
+allowed six characters before it AND six digits after, which no 8.3
+basename can be: the basename is at most eight characters total and
+cannot contain a space. Measured on both hosts refusing `backup~2026`,
+`ABCDEF~123456` and `a b~1`. Bounded to the real constraint now, with
+tests on BOTH sides - names 8.3 cannot produce are accepted, real short
+name shapes are still refused.
+
+**3. A limit that no pattern can close, now written down instead of
+implied away.** A short name does not have to contain a tilde:
+`fsutil file setshortname` can assign `LONGFILE.TXT` as the alias of
+`longfilename.txt`. The reviewer raised this SUSPECTED and could not
+complete the setup from a read-only session. Recorded in the helper's own
+comment. Refusing tilde forms narrows the class; it does not close it,
+and any future reader tightening the regex should know that first.
+
+**4 through 7: four claims of this side's that did not hold.**
+
+The doubled-backslash incident account said "every component check was
+dead" and "nothing else would have caught it". The reviewer built an
+in-memory mutant restoring the doubled form and measured what survived on
+both hosts: an unsplit string is still ONE component, so a trailing dot
+on the whole path was still caught, and forward-slash paths still split.
+What was lost was interior backslash-separated component checking. And
+the dotted-ancestor override regression exercises precisely that, so the
+short-name test was not the only thing that would have caught it. Both
+sentences narrowed.
+
+The followed-target comment claimed validation runs "before any
+comparison". Target equality, containment and duplicate-target checks all
+run earlier, during discovery. Reworded to name the destination-overlap
+comparisons.
+
+The stream-root test's docstring claimed two independent refusal
+mechanisms and that either would suffice, one of them `Test-Path` raising
+`ItemExistsNotSupportedError`. Measured: `Test-Path` returns TRUE on both
+hosts for that spelling; 5.1 prints the error and CONTINUES, 7 prints
+nothing. The colon rule is the only demonstrated mechanism.
+
+The category test's comment claimed a doubled fixture escape "could never
+pass". The formatter produces identical output for the literal ASCII text
+and for the real codepoint, so a doubled fixture would satisfy every
+assertion while silently ceasing to exercise Unicode classification. Both
+that test and its control-character neighbour now read the fixture back
+and require the codepoint present and the literal escape absent.
+
+Three smaller record corrections: item 98 and this document attributed
+the non-terminating-removal simulation to both hosts in round 3, and the
+retained transcript substantiates PowerShell 7 only - round 4 completed
+it on both, so the evidence exists but is dated to round 4. A test
+comment called itself the third oracle instance while its neighbour also
+called itself the third; ordinals removed rather than renumbered. And the
+round-1 account named the control-character test where the retained reply
+names the runtime-category test.
+
+Gate after the fixes: 167 passed and 1 skipped under BOTH hosts, full
+`pytest evals` 2930 passed and 14 skipped, backlog lint clean, script
+pure ASCII.
+
+**What the reviewer did not check**, in its own words: it did not rerun
+pytest or the behavioural evals, perform real deletion or denial
+experiments, create junction or short-alias fixtures, or exhaustively
+test network shares and drive mappings. The filesystem was unchanged.
+
+Verdict: **FIX**. One exchange remains of the five the user authorized.

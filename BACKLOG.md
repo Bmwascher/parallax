@@ -4263,7 +4263,7 @@ Record: docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window
 Status: OPEN
 Cost: a build that fails to empty its destination copies over whatever survived, and the fingerprint then measures the resulting directory rather than proving it was freshly emptied, so a stale mirror can be certified as a fresh one
 Pairs: 95
-Verified: 2026-09-06 4b33bef11abd
+Verified: 2026-09-06 6b48a4a18278
 
 **Filed 2026-09-06 from the mode-diff debate for the identity window
 branch**, round 3, which asked whether refusing alias spellings was
@@ -4278,11 +4278,15 @@ another process - leaves the directory partly or wholly intact and
 execution continues to `New-Item` and then to the copy. The copy uses
 robocopy `/E`, which merges rather than replaces, so surviving files stay.
 
-The reviewer simulated a non-terminating error from that statement on
-both hosts and execution reached `New-Item`. It did NOT reproduce a
-complete contaminated build under real filesystem denial, so the end
-state is inferred from the control flow rather than observed, and that
-limit is stated rather than hidden.
+The reviewer simulated a non-terminating error from that statement and
+execution reached `New-Item`. THE HOSTS, precisely, because a first
+version of this paragraph said "both hosts" and the retained round-3
+transcript substantiates PowerShell 7 only: the round-4 reviewer then
+completed the simulation on both hosts and observed the same
+continuation, so both-host evidence exists, dated to round 4 rather than
+round 3. It did NOT reproduce a complete contaminated build under real
+filesystem denial, so the end state is inferred from the control flow
+rather than observed, and that limit is stated rather than hidden.
 
 **Why the spelling guard is not the remedy.** The same round added
 refusals for device forms, stream syntax and 8.3 short names, and those
