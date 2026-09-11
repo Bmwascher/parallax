@@ -487,3 +487,17 @@ A sixth round would be a new authorization. The trend across five rounds
 is that each one found something real, and the last two found more in
 this side's record and its newest guard than in the change the branch
 exists to make.
+
+## Budget extended to 6 by the user, 2026-09-11
+
+**AUTHORIZED BY THE USER** for one more exchange, five days after round
+5, having read the summary above that the termination condition was not
+met. The user also flagged that other parallax work had been started in
+the meantime and might be in the way. Checked before building: the
+working tree is clean on `mirror-identity-window` at `739d813`, `main`
+is still at `0f485cc`, no branch has moved since 2026-09-06, and the only
+stashes are the two pre-existing `item32-detached-dispatch` entries. So
+the other work has not touched this checkout. If it writes here during
+the round, the wrapper's post-round identity check voids the round and
+this record will say which paths moved - which is, after all, the feature
+this branch ships.
