@@ -1647,3 +1647,43 @@ NOT blanket staging. The family git rules ban it and a hook denies it, naming th
 ## After the plan
 
 This plan does NOT bump `.claude-plugin/plugin.json`. Per `CLAUDE.md`, the bump comes after the diff debate, because the debate is what moves the tree last. The sequence after Task 5 is: whole-branch review, mode-diff debate, version bump, merge, marketplace refresh, plugin update, and an install verified by content rather than by the cache directory's name.
+
+## Debate record (mode plan)
+
+**Participants:** Claude Opus 5 (session) / GPT-6 Astra (codex exec, session ids per round in the raw record)
+**Rounds used:** 5 dispatched of 4 declared; the fifth authorized by the user ("Run it") after a recommendation of one more fresh round
+**Outcome:** two counted rounds (R1 FIX, R4 FIX), both fully applied; two voided with usable input, both applied; one discarded unread on `brief-attribution`
+**Verification status:** FULL
+**Degradation:** none
+**Authorized by:** the user, for the fifth exchange; recorded in the raw record after the whole-branch review found the attribution missing
+**Raw rounds:** `docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/` (`README.md` is the record; `brief-r*.md`, `astra-r*-reply.md`, `astra-r*-transcript.txt` per round, the voided and discarded rounds retained under those names)
+
+### Resolved points
+The design's original claim that fusing build and prepare was impossible was wrong and is corrected: it is constructible and is refused because it leaves the round-length window open. The sidecar path is derived by appending to the full mirror path, never by rejoining a leaf. `Get-SourceManifestSidecarPath` returns three outcomes, not two. The bounded reader peeks before it reads. `Format-AdvisoryName` bounds its OUTPUT. The extra-input guard refuses trailing dots and spaces. Item 97's readability bound uses `_is_readable`, not `bool(old)`.
+
+### Escalated points (user-decided)
+The `skill_lint.py` token ceiling stays at 6500 (the user chose to leave it after being given the reasons; the region moved to `references/preflight-mirror.md` instead). The concurrent session's uncommitted work was folded in under item 96 at the user's direction.
+
+### Final adjudication
+The plan was frozen at `c6f0eab` after round 4. The dangling-reparse-point question round 4 escalated was measured by the session on both hosts and closed at `34d0ce1`. **Six defects in the frozen plan were then found by executing it** and are corrected at the steps that carry them: two unsatisfiable test oracles, one ambiguous step anchor, one wrong test class, the missing ranking and pairings, and a blanket-staging commit step. None was catchable by reading; every one was found by an implementer running the plan's own tests or the repo's own linter.
+
+## Debate record (mode diff)
+
+**Participants:** Claude Opus 5 (session) / GPT-6 Astra (codex exec, session 01a074f2-6e8b-7d71-b8bc-073773764249, resumed every round)
+**Rounds used:** 6 of 6 authorized (3 declared, +2 authorized 2026-09-06, +1 authorized 2026-09-11)
+**Outcome:** FIX in every round; **no dry round; closed by budget** on the fable seat's adjudication and the user's decision
+**Verification status:** FULL for what was reviewed; the round-6 fix commits are unreviewed and the record says so
+**Degradation:** none
+**Authorized by:** the user, both extensions, each recorded as its own dated section in the raw record
+**Raw rounds:** `docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/` (`diff-debate.md` is the record; `fable-whole-branch-review.md`; `diff-brief-r1..6.md`, `diff-astra-r1..6-reply.md`, `diff-astra-r1..6-transcript.txt`, `diff-receipt-r1..6.json`, `diff-binder-r1..6.json`; `diff-r1-mirror-build.txt`; `gate-results.md`; `fable-closing-adjudication.md`)
+
+Every transcript header read `model: gpt-6-astra`, `provider: openai`, `reasoning effort: high`, `sandbox: read-only`, `workdir: C:\Temp\pxd1`; rounds 2 through 6 echoed the round-1 session id. Every binding returned `clean` with the receipt's prior-state hash `sealed`. The mirror `pxd1` was built from `79ab77f` for round 1 and rebuilt with the force switch at the same path for each later round; the client context probe reported `clean`, 31 home-scoped skills before and 0 after, 0 repo-scoped, every time. The preflight sweep found an untracked `AGENTS.md` in the repository root and the mirror removed it.
+
+### Resolved points
+Round 1: the trailing-dot bypass of the overlap guard (the reviewer's deletion claim was measured and withdrawn in round 2; the bypass was real). Two oracles that passed on the reader's fallback. Item 93's amendment and the record's "not catchable" claim narrowed. Round 2: 8.3, stream and device aliases; the override operand; a third negative oracle. Round 3: named-stream syntax; extra inputs and followed targets as operands; the removal filed as item 98; a fourth oracle; the regex refusing `release~2026`. Round 4: the source root's ancestors; the regex refusing `backup~2026`; four overstated claims of the session's. Round 5: the 8.3 character set; the acceptance test's oracle; corrections made in place rather than appended. Round 6: wildcard `Resolve-Path` substituting the source for the destination, fixed by literal path calls throughout; the tilde inside short names.
+
+### Escalated points (user-decided)
+Behavioural suite skipped to keep quota for the debate. Budget extended twice. Merge on a budget-closed debate rather than a seventh round, on the fable seat's recommendation that a read-only round is the wrong instrument for what remains.
+
+### Final adjudication
+**No terminal PASS was issued and no attestation was written**, because there is no verdict to attest. The subject of this branch drew no finding after round 1; the destination guards absorbed rounds 2 through 6 and diverged in scope rather than converging. Merged at `e2d351d` as 0.33.0 with the record stating that. What remains on the guards is filed as items 98 and 99, each naming an experiment the session should run before any further round.

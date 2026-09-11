@@ -1,0 +1,12 @@
+{
+  "status": "clean",
+  "nextState": {
+    "kind": "resume",
+    "rolloutFile": "C:\\Users\\Brandon\\.codex\\sessions\\2026\\09\\05\\rollout-2026-09-05T23-20-40-01a074f2-6e8b-7d71-b8bc-073773764249.jsonl",
+    "sessionId": "01a074f2-6e8b-7d71-b8bc-073773764249",
+    "bytes": 6099859,
+    "prefixSha256": "52cf0e83e392fd2fe48676d1e6c863831b4377b22887bd1ce3f4cc865bbfc0f8"
+  },
+  "sealed": "sealed",
+  "_note": "transcribed from the binder's -Json stdout as recorded in the session; the binder was run once per round immediately after the wrapper exited"
+}
