@@ -1299,14 +1299,24 @@ while ($ri -lt $remaining.Count) {
 # the spelling rather than reason about what each downstream call does
 # with it - the same decision, for the same reason, as the -ExtraInput
 # guard further down.
-# ONE HELPER, called by every operand, because the OPERAND LIST is what
-# keeps going wrong. This guard was written twice and each version named
-# its subjects inline: the first covered the repo root and the mirror
-# path and missed -OverrideOut, the second added the override and missed
-# the extra inputs and the followed link targets. Both gaps were walked
-# through by the diff reviewer on both hosts. A caller that has to
-# remember to add itself to a list is the defect; a function every path
-# calls is not.
+# ONE HELPER, so the RULES live in one place. This guard was written
+# twice with its rules inline and each version missed an operand: the
+# first covered the repo root and the mirror path and missed
+# -OverrideOut, the second added the override and missed the extra
+# inputs and the followed link targets. Both gaps were walked through by
+# the diff reviewer on both hosts.
+#
+# WHAT THIS DOES AND DOES NOT FIX, stated because an earlier draft of
+# this comment claimed more. The helper centralizes the RULES: a new
+# alias form is refused everywhere by editing one function. It does NOT
+# centralize the OPERANDS: what ships is a subject list below plus three
+# separate call sites - the subject list, the followed targets, and the
+# extra inputs - and a new operand added to this tool still has to
+# remember to call it. The fable seat caught the draft claiming the
+# call-site problem was solved when the code has exactly that shape.
+# The list of operands that must call this helper, as of this writing:
+# the repo root, the mirror path, the override path, every followed
+# link target, every extra input.
 #
 # It returns $null when the spelling is one this tool can compare, and
 # the refusal message when it is not.

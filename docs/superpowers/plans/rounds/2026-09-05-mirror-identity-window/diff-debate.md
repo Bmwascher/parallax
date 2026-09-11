@@ -588,3 +588,51 @@ the shipped tool that predates this branch by months, found because the
 debate kept pressing on path spellings.
 
 A seventh round would be a new authorization.
+
+## Closed by budget, 2026-09-11
+
+**Merged on the user's authorization after six exchanges, and this
+debate did NOT end on a dry round.** The protocol's termination condition
+was never met and this section does not claim it was. Round 6 found
+three merge blockers, all fixed, and the fixes from round 6 are the one
+part of the branch NO reviewer has read - the history above says this
+side's fixes have usually been wrong somewhere, so that gap is stated
+rather than assumed away.
+
+**What the six rounds established, with the split the fable seat drew.**
+On the branch's subject - the sidecar manifest, the refusal that names
+what moved, the quiet period - the debate converged in round 1: claim 1
+survived a full trace and every later round re-verified the fixes as
+holding. On the destination guards it did not converge; it diverged in
+scope. The 8.3 rule was wrong in rounds 3, 4, 5 and 6, and round 6
+opened a class nobody was looking for. The guard is a spelling-comparison
+design being fuzzed one alias at a time, and item 99 already states that
+no spelling rule closes that class. A seventh read-only round would have
+spent quota re-proving a written-down theorem.
+
+**Why merging is not unsafe.** Every guard change on this branch
+tightens, plus `-LiteralPath` throughout. `main` still holds the
+trailing-dot bypass and the wildcard substitution. Every regex error on
+this branch failed in the REFUSING direction - a usability wall, never an
+accepted alias.
+
+**What the fable seat found in this closing check.** The helper's
+comment said "ONE HELPER, called by every operand" and framed the operand
+list as the defect; what ships is a subject list plus three separate
+call sites, the same shape the comment condemned. Corrected in the
+comment to say what the helper does and does not centralize. A record
+overclaim of exactly the class rounds 4 through 6 kept finding, found
+one more time at the door.
+
+**What the guard's next spend should be, and it is not a round.** Three
+reviewers could not run the decisive experiments from read-only sessions.
+Items 98 and 99 each name a measurement nobody has made: a real removal
+denial, and an `fsutil setshortname` alias driven through an overlapping
+construction. The next step on the guards is the session running those
+two experiments, then a design decision - resolve to filesystem identity
+or restrict - then a debate on THAT. Filed against 98 and 99, which are
+where any future round on this subject belongs.
+
+**Not run, carried forward as a gap:** `run_behavioral_evals.py
+--changed`, by the user's decision to keep quota for this debate, as
+`gate-results.md` records.
