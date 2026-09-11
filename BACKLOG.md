@@ -25,6 +25,10 @@ The full previous text of every closed item is in git history at
 - 31
 - 58
 - 92
+- 94
+- 95
+- 98
+- 99
 
 ### Second - taxes every cycle
 - 44
@@ -3248,8 +3252,8 @@ tool-surface probe clean.
 ## 76. `.claude/skills` is materialised into the mirror and never swept, and its reachability is UNPROBED
 Status: OPEN
 Cost: readable content sits inside the mirror unswept, and whether a pathspec edit closes it at all depends on a probe nobody has run
-Pairs: 38, 54
-Verified: 2026-09-04 5e7d6c96b486
+Pairs: 38, 54, 94
+Verified: 2026-09-04 9b1fb55dfeb4
 
 **Raised by the user 2026-09-03**, from a report by another session working
 in a WoW addon repo, and reviewed the same day by the Sol+Fable panel,
@@ -3928,8 +3932,8 @@ Record: 4dca0f8
 ## 91. The identity digests hash a linked reference checkout three times per build and six times per round
 Status: OPEN
 Cost: a build hashes every file behind a linked checkout, its `.git` objects included, three times, and each round's three identity verifies hash it on both sides for six more passes; measured 2026-09-05 at 14,884 files per pass, so the reference is hashed more often than the addon under review
-Pairs: 93
-Verified: 2026-09-05 1ea263369be2
+Pairs: 93, 94
+Verified: 2026-09-05 dc2a1d68beee
 
 **Filed 2026-09-05 during item 90's design.** Item 90 removes the copy's
 read and the pre-copy budget accounting only. `Get-StatusSha256` runs
@@ -3970,9 +3974,9 @@ two is shipped and the `enumeration-depth-asymmetry` region says which.
 
 ## 93. The review-mirror test module runs twelve times slower under PowerShell 7 than under 5.1
 Status: OPEN
-Cost: the `powershell-hosts` CI job runs `evals/multi-model-verify/test_review_mirror.py` under both hosts, and measured 2026-09-05 at item 90's Task 3 the module took 18m42s under PowerShell 7 against 94s under Windows PowerShell 5.1, so every CI run and every local both-host gate pays about eighteen minutes it did not pay before the cause is found
+Cost: NOT ESTABLISHED, and the figure this item was filed on did not reproduce - the 18m42s under PowerShell 7 against 94s under 5.1 measured 2026-09-05 at item 90's Task 3 was sought again the same day in three separate runs and the largest ratio seen was 1.15, so what the `powershell-hosts` CI job actually pays for this module is unknown and the eighteen minutes are not confirmed to exist
 Pairs: 91
-Verified: 2026-09-05 9fc2b6ee9f7d
+Verified: 2026-09-05 7a88d2d29cbe
 
 **Filed 2026-09-05 from item 90's whole-branch review.** The number is
 measured; the cause is not. The task reviewer's candidate is the second
@@ -3982,8 +3986,356 @@ for the reparse-point attribute), which PowerShell 7's pipeline runs
 slower per item than 5.1's, and the candidate fix is `-Attributes
 ReparsePoint` on the call or one pass that collects files and link
 directories together. Whether the slowdown predates item 90 was not
-measured: no both-host timing of the module at the parent commit exists.
-Closing this item means the module's time under PowerShell 7 measured at
-main before item 90 and after, the cause named from that comparison, and
-either a fix that keeps every one of the nineteen link cases green on
-both hosts or a recorded statement that the cost is accepted.
+measured at filing: no both-host timing of the module at the parent
+commit existed.
+
+**Re-measured 2026-09-05, and the slowdown was not there.** That
+comparison has now been made, in two disposable worktrees at
+`4dca0f8^1` and `4dca0f8` - the commit before item 90's merge and the
+merge itself - with the host forced explicitly through
+`PARALLAX_PS_HOST` rather than left to the suite's own choice. Each
+worktree ran the module as it stood at its own commit, so the test count
+differs between them.
+
+| tree | Windows PowerShell 5.1 | PowerShell 7 | ratio |
+| --- | --- | --- | --- |
+| before item 90 (`eddacb6`) | 63.18s, 105 passed | 67.96s, 105 passed | 1.08 |
+| after item 90 (`4dca0f8`) | 79.81s, 124 passed | 90.30s, 124 passed | 1.13 |
+| this branch (`8ecb177`) | 98.73s, 154 passed | 113.87s, 154 passed | 1.15 |
+
+What that shows, stated no wider than the runs support: the slowdown did
+not reproduce in any of these three trees, on one machine, on one day,
+with PowerShell 7 between 8 and 15 percent slower each time. It does NOT
+establish that item 90 closed nothing, and it does not establish that the
+cause lies outside the tracked tree. Code can be slow only on particular
+inputs or under particular conditions, and three fresh runs that miss
+those conditions exclude nothing.
+
+What that leaves. The 18m42s was recorded and is not withdrawn here; what
+is withdrawn is the inference that the module carries it as a standing
+cost on every run. The cause remains UNKNOWN, and these runs name no
+candidate over any other. Item 91's linked reference checkout, hashed
+14,884 files per pass, and the reviewer's `Get-FilesBeneath` hypothesis
+above are both still open, and neither is supported or excluded by these
+numbers.
+
+Closing this item now means one of two things: reproducing 18m42s
+deliberately and naming what the working tree held when it happened, or
+recording that it cannot be reproduced and that the original figure
+stands as an unexplained one-off. It no longer means finding a fix, and
+it never meant accepting a cost nobody can now demonstrate.
+
+## 94. The identity digest covers working state that moves on its own
+Status: OPEN
+Cost: every round is exposed for its whole duration to a write into an ignored working directory it does not control, and a write that persists past the post-client check costs one round of quota
+Pairs: 76, 91, 95
+Verified: 2026-09-05 f0d3c7a3ccfb
+
+**Filed 2026-09-05 from a report by a session running the plugin against
+another repository**, which hit repeated
+`BLOCKED: the source status changed since construction` refusals and
+could not tell why. Design:
+`docs/superpowers/specs/2026-09-05-mirror-identity-window-design.md`.
+
+`Get-StatusSha256` fingerprints that status listing's own fields plus
+the content of the paths it names, with `Get-ContentManifest` expanding
+a directory subject recursively, so one `!! .claude/` entry pulls in
+every file beneath it. A deletion-only entry has no bytes and
+contributes none. The content half is deliberate and
+load-bearing: editing an already-ignored file leaves the status listing
+byte-identical, so a list-only digest would pass through exactly the
+tampering the check exists to catch.
+
+The exposure is the WHOLE ROUND, not the preparation gap. The recorded
+digest is compared three times, and the third comparison runs after the
+client finishes. In a repository whose ignored directories move on their
+own, no ordering discipline closes that.
+
+**What this cycle did and did not do.** The refusal now names the paths
+that moved, the skill states the quiet period, and the reference orders
+the build last. None of that narrows the digest, so the underlying
+exposure is unchanged and this item stays OPEN.
+
+**A candidate fix, rejected for now.** A declared allowlist of volatile
+ignored paths held outside the content digest. Rejected because the
+directories that move on their own, `.claude/` and `.codex/`, are
+instruction surfaces, and excluding an instruction surface from the
+tamper net defeats the check. Closing this item means a design that
+narrows the digest without opening that hole, argued in the
+`mirror-identity-gate` contract region and debated on its own.
+
+## 95. Stated properties of the mirror tools that the code does not hold
+Status: OPEN
+Cost: each one is a promise a reader relies on, and one of them can leave an extra input missing from a mirror the digest then certifies
+Pairs: 94, 98
+Verified: 2026-09-05 90e593a1c0e4
+
+**Filed 2026-09-05 from the plan debate for item 94's cycle**, whose
+reviewer was asked to sweep for stated properties the code does not hold.
+Record:
+`docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/`.
+All three were confirmed against the code by the session before filing.
+
+1. **The header's absolute promise.** `tools/new-review-mirror.ps1:19`
+   says the script never writes to the real tree. The directory-link
+   guard at `:1101-1112` says git's optional index refresh writes the
+   repository's own `.git/index` during every status capture, and refuses
+   a linked `.git` for exactly that reason. Qualify the promise or
+   suppress the write.
+
+2. **`-ExtraInput` can fail silently.** `tools/new-review-mirror.ps1:1554`
+   copies each extra input with `Copy-Item -Force`, with no success check
+   and no `-ErrorAction Stop`, and the script never sets
+   `$ErrorActionPreference` (its own comment at `:519` says so). A
+   non-terminating copy failure leaves the input absent, and the manifest
+   cannot discover a file that never entered status. The tool then
+   certifies a mirror missing a declared review input.
+
+3. **The verify's same-directory refusal checks spelling.** The
+   comparison at `tools/new-review-mirror.ps1:734-745` normalizes two
+   provider-resolved strings and compares them, with none of the
+   reparse-point resolution the build performs. A junction whose
+   spelling differs can reach the same directory, so the refusal is
+   narrower than the comment claims.
+
+4. **Construction claims an endpoint comparison cannot support.** The
+   comment at `tools/new-review-mirror.ps1:1308` says the retained value
+   distinguishes a source that moved and moved back. Two equal endpoint
+   measurements cannot establish that. The identity contract already
+   admits that intermediate bytes can reach the copy despite matching
+   endpoints; this comment has not been aligned with it.
+
+5. **A wrapper verification failure cannot report the classification it
+   promises.** Both identity checks in the generated wrapper `throw`
+   (`tools/dispatch-round.ps1:287` and `:311`), which exits before
+   `-Classify` runs, so the documented exit map does not describe that
+   path.
+
+**Corroborated by the plan debate's reviewer with citations, NOT
+independently re-checked by the session.** Confirm each before acting on
+it: the generated wrapper is written as ASCII so a non-ASCII path
+component is lost (`tools/dispatch-round.ps1:570`); the printed command
+places paths in expandable double-quoted strings without escaping `$`
+(`:591`); `classifying:<nonce>` redemption is a read-then-write with no
+exclusive reservation (`:663`); a receipt write that fails after creation
+leaves a partial receipt against a documented "no receipt" (`:572`); and
+an oversized integer in `exit` passes the regex and throws during
+conversion instead of following the classification map (`:794`).
+
+6. **The link walker's premise is unmeasured.** `Test-PathOrAncestorIsLink`
+   reads attributes rather than calling `Test-Path`, and its comment
+   justifies that by saying a DANGLING junction is a reparse point
+   `Test-Path` may report as absent. Measured 2026-09-05 under both
+   hosts, `Test-Path` returned True for a dangling junction on each, so
+   the premise did not reproduce. The CHOICE is still right, because the
+   attributes read answers the Directory question and the not-there
+   question in one call; only the stated reason is unsupported. A
+   dangling file SYMLINK was never measured, and that is the case where
+   a wrong "it is not there" becomes a write. Qualify the comment or
+   measure the symlink.
+
+**One earlier report is NOT filed here, deliberately.** The voided round
+raised `Test-SupportedPathname` admitting U+FEFF as a defect. It is not
+one on its own: it mattered only because the first draft's advisory
+reader detected and consumed a byte-order mark, and Task 2 replaces that
+reader with explicit byte decoding. Admitting U+FEFF in a pathname is
+correct behaviour.
+
+## 96. The skill did not say which host can run the controller
+Status: DONE
+Closed: 0.33.0
+Verified: 2026-09-05 dcbd2aa6d28a
+
+**Numbers 94 and 95 were RESERVED when this item was filed**, because
+this item was folded in ahead of the plan that owned those numbers. That
+plan has since executed and both are filed above, so the reservation is
+spent rather than outstanding. The sentence is kept in the past tense
+instead of deleted: it explains why item 96 carries a higher number than
+work that was planned before it.
+
+**Filed and closed 2026-09-05**, folding in work another session left
+uncommitted in the working tree. That session finished without
+committing; this session read the diff, verified it against the gates,
+and took ownership rather than discard it. The debate record for the
+cycle it landed in is
+`docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/`.
+
+**The change.** `SKILL.md` gains a `Controller host gate` section: the
+controller requires Claude Code, because plugin-root substitution,
+background notifications, hooks and reviewer agents are host contracts;
+and Codex-to-Codex is same-vendor and cannot satisfy the cross-vendor
+gate, so no Codex controller adapter is shipped. In Codex the procedure
+is to prepare the brief or inspect the protocol, report the gate
+unavailable in that host, name the Claude controller handoff, and never
+invent tools, emit a FULL attestation, or silently downgrade. The
+overview is compressed to pay for it, and `CLAUDE.md` drops a claim that
+this repo sits under KitnDev and inherits conventions from
+`../AGENTS.md`, a path that does not exist.
+
+**What was verified before folding it in.** `skill_lint.py --strict`,
+`skill_scanner.py` and `run_trigger_evals.py` all pass, and
+`test_multi_model_verify.py` with `test_contract_coverage.py` pass at
+236 tests: no pin lost a phrase and no contract region lost its lock.
+The removed sentences - the METR fabrication-risk note, the
+`/codex:adversarial-review` overlap note, and the review-companion hook
+clause in the description - are cited by no test and by no other
+document. `debate-protocol.md` carries the METR rationale itself and
+points at `model-prompting-notes.md`, not at `SKILL.md`.
+
+**The measurement this left behind, and it is the load-bearing one.**
+`SKILL.md` now sits at roughly 6485 tokens against `skill_lint.py`'s
+HARD CEILING of 6500, about 15 tokens of headroom. That is not a
+property of this change so much as a property of the file, and it
+governs every future edit to it: the mirror-quiet-period contract region
+planned in the same cycle is about 301 tokens and had to go into
+`references/preflight-mirror.md` instead. A prior cycle stashed a Task 3
+at 6609 tokens for the same reason. The next edit that needs room in
+`SKILL.md` has to remove something, and what to remove is a decision for
+the user rather than for whoever happens to need the space.
+
+**Not verified.** The gate's own claim, that a Codex controller cannot
+satisfy the cross-vendor requirement, is an argument from the lane's
+identity rather than a measurement, and no probe was run against a Codex
+controller. Nothing in this cycle tested the new section's behaviour on
+a real Codex host.
+
+Record: docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window
+
+## 97. Work filed and closed in one session could not be attested
+Status: DONE
+Closed: 0.33.0
+Verified: 2026-09-05 c9fbc19749c8
+
+**Found 2026-09-05 by the Stop hook refusing a tree whose attestation was
+sitting in it.** Item 96 was filed DONE for a governed change made in the
+same session. `reattested_items` counted a close only when the id had
+been OPEN or PARTIAL in the OLD text, which an item that did not exist
+can never satisfy, so the hook refused and kept refusing.
+
+The two remedies the refusal left were both dishonest: mis-state the item
+as OPEN when its work is finished, or refresh the `Verified` field of
+some other item that does not own the work. The function's own reasoning
+already argued the other way - its docstring says closing an item IS an
+attestation about the governed work that closed it - and an item born
+closed is that same attestation made in one step instead of two.
+
+**The change.** In `evals/tools/backlog_lint.py`, a DONE or GONE item in
+the new text now counts when it was OPEN or PARTIAL before OR when it is
+new, and the docstring records why.
+
+**Two bounds, each found by a different check.** "New" only means
+anything against an old text that PARSED. Written without that condition,
+a run with no readable old text counted every closed item, which would
+let a backlog nobody touched satisfy the gate;
+`test_absent_old_text_counts_every_open_item` went red and forced the
+narrowing. The narrowing was then written as `bool(old)`, which asks
+whether the old text had ITEMS rather than whether it was READABLE, so a
+backlog that parsed cleanly and held none of them was treated as
+unreadable and the first item ever filed could not attest its own work.
+Cross-vendor review found that second one; every test to that point
+started from a populated fixture and could not see the difference.
+`_is_readable` now answers the parse question separately.
+
+**Verification.** Cases written RED first,
+`test_a_new_item_born_closed_counts` and
+`test_a_new_gone_item_counts_the_same_way`, both failing with
+`[] == ['5 (closed)']`; then
+`test_an_empty_but_valid_old_backlog_still_allows_a_close`, failing with
+`[] == ['1 (closed)']` against the `bool(old)` narrowing. All 131 tests
+across `test_backlog_lint.py`, `test_backlog_hooks.py` and
+`test_backlog_prepush.py` pass after both changes.
+
+**What this does NOT do.** It widens what counts as an attestation, not
+what counts as an item: a new closed item still has to pass every shape
+rule the linter enforces, including its `Record:` line and its `Verified`
+digest over its own text.
+
+It does NOT make the gate resistant to fabricated work, and an earlier
+draft of this entry claimed it did. The linter says so itself: rules 9
+and 10 are SHAPE checks, twenty filler words satisfy rule 9 and any
+existing path satisfies rule 10, and the second reader named in the spec
+is what judges substance. A digest computed over an item's own text
+proves the text has not drifted since it was written, never that the
+work it describes happened.
+
+Record: docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window
+
+## 98. The mirror's own removal is unchecked, so a failed one builds over a stale tree
+Status: OPEN
+Cost: a build that fails to empty its destination copies over whatever survived, and the fingerprint then measures the resulting directory rather than proving it was freshly emptied, so a stale mirror can be certified as a fresh one
+Pairs: 95, 99
+Verified: 2026-09-06 b01bcd59e8ca
+
+**Filed 2026-09-06 from the mode-diff debate for the identity window
+branch**, round 3, which asked whether refusing alias spellings was
+sufficient and was told plainly that it is not. Record:
+`docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/diff-debate.md`.
+
+`tools/new-review-mirror.ps1` removes an existing mirror with
+`Remove-Item -LiteralPath $MirrorPath -Recurse -Force` and checks
+nothing afterwards. The script never sets `$ErrorActionPreference`, so a
+non-terminating failure - a locked file, a denied ACE, a handle held by
+another process - leaves the directory partly or wholly intact and
+execution continues to `New-Item` and then to the copy. The copy uses
+robocopy `/E`, which merges rather than replaces, so surviving files stay.
+
+The reviewer simulated a non-terminating error from that statement and
+execution reached `New-Item`. THE HOSTS, precisely, because a first
+version of this paragraph said "both hosts" and the retained round-3
+transcript substantiates PowerShell 7 only: the round-4 reviewer then
+completed the simulation on both hosts and observed the same
+continuation, so both-host evidence exists, dated to round 4 rather than
+round 3. It did NOT reproduce a complete contaminated build under real
+filesystem denial, so the end state is inferred from the control flow
+rather than observed, and that limit is stated rather than hidden.
+
+**Why the spelling guard is not the remedy.** The same round added
+refusals for device forms, stream syntax and 8.3 short names, which
+narrow the ALIAS class without closing it - item 99 holds the part that
+stays open. This is a different class: an ordinary path, an
+ordinary removal, and an ordinary failure. Refusing spellings does
+nothing for it, which is why it is filed rather than folded into that
+work.
+
+**What closing it means.** The removal terminates construction with a
+named error before anything is created or copied, and a test drives a
+real removal failure rather than a simulated one. The fingerprint's
+inability to distinguish a fresh directory from a merged one is the
+second half and may deserve its own treatment: it measures the result,
+which is exactly what a stale mirror also produces.
+
+## 99. A short name alias does not have to contain a tilde, so no spelling rule can find one
+Status: OPEN
+Cost: every overlap and containment check in the mirror tool compares spellings, and an assigned short alias is an ordinary-looking name that names another directory, so the destination guards can be walked past by a spelling no pattern can recognise
+Pairs: 98
+Verified: 2026-09-06 403b219b4301
+
+**Filed 2026-09-06 on the round-5 reviewer's own adjudication**, which
+was to defer the implementation but file it rather than leave it in a
+source comment. Record:
+`docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window/diff-debate.md`.
+
+`Test-UnresolvableSpelling` in `tools/new-review-mirror.ps1` refuses
+device forms, NTFS stream syntax, trailing dots and spaces, and the
+generated 8.3 tilde shape. The tilde shape is the only alias rule it has,
+and short names do not have to contain a tilde: `fsutil file setshortname`
+assigns an arbitrary legal 8.3 name, and Microsoft documents assigning
+`LONGFILE.TXT` as the alias of `longfilename.txt`. The helper accepts
+`LONGFILE.TXT`, correctly, because nothing about that spelling
+distinguishes it from an ordinary name.
+
+**The experiment nobody has run.** Assign an alias to a disposable
+directory with `fsutil`, then drive an overlapping construction on both
+hosts and see whether the destination guards are walked past. The three
+reviewers who raised and refined this were all in read-only sessions and
+none could do the filesystem setup, so the gap is reasoned from
+documentation rather than measured. That is the first thing closing this
+item requires.
+
+**What closing it means.** Either resolving spellings to filesystem
+identity before the identity-sensitive comparisons - which needs an open
+handle, and the tool deliberately will not take one on a destination it
+is about to delete, so this is a design change rather than a patch - or
+an enforceable restriction that makes the alias case unreachable, or a
+recorded decision that the residual risk is accepted with the reasoning
+written down.

@@ -1,35 +1,32 @@
 ---
 name: multi-model-verify
-description: Use when planning a reference port, an API-sensitive module, or any change risky enough to need cross-model verification before implementation, or when an implemented diff must be checked against its plan and reference before merge. Fires automatically alongside superpowers requesting-code-review via the review-companion hook.
+description: Use when planning a reference port, an API-sensitive module, or any change risky enough to need cross-model verification before implementation, or when an implemented diff must be checked against its plan and reference before merge.
 ---
 
 # Multi-Model Verify
 
+## Controller host gate
+
+This controller requires **Claude Code**: plugin-root substitution, background notifications, hooks, and reviewer agents are host contracts. Verify the available tools before preflight.
+
+**Codex-to-Codex is same-vendor** and cannot satisfy this cross-vendor gate. No Codex controller adapter is shipped. In Codex, prepare the brief or inspect the protocol, report the review gate unavailable in this host, and identify the Claude controller handoff. Continue independent authorized work. Never invent tools, emit a FULL attestation, or silently downgrade; `references/fallbacks.md` governs consent. The remaining procedure is Claude-specific.
+
 ## Overview
 
-Two equal-weight advisors — this session and a cross-vendor reviewer driven
-through the codex CLI (canonical reviewer model:
-references/model-prompting-notes.md) — verify and refute each other's
-claims before the cheap implementer touches code. The reviewer lane's
-documented fabrication risk (METR; see model-prompting-notes.md) is
-mitigated by the debate structure — evidence grounding plus mutual
-refutation — not by down-weighting either side. The PRIMARY reviewer
-lane (codex) is the default; a second cross-vendor BACKUP reviewer lane
-(references/backup-lane.md — REQUIRED READING before any backup round)
-substitutes ONLY through the fallbacks.md consent gate — auto-qualified
-by the classes named there, manual on user request — with the same
-protocol, a different transport, and `Verification status: FULL`
-preserved.
+The session and cross-vendor reviewer are equal-weight advisors: verify and
+refute claims with source evidence. The primary codex CLI lane's model and
+evidence contracts are in references/model-prompting-notes.md. A backup lane
+substitutes only through references/fallbacks.md's consent gate, preserving
+`Verification status: FULL` when its cross-vendor checks pass. Read
+references/backup-lane.md before any backup round.
 Mode diff's debate is preceded by a REQUIRED whole-branch review from
 the fable-reviewer seat (agents/fable-reviewer.md), and the user may
 convene multi-reviewer PANELS (references/panels.md) in either mode.
 
 **REQUIRED READING before the first round:** references/debate-protocol.md.
 
-Companion to superpowers, not a replacement: it fills the cross-model review
-gap superpowers rules out of scope. `/codex:adversarial-review` remains the
-human-invoked pre-merge gate; if the codex plugin's stop-review-gate is
-toggled on, its stop-time review overlaps mode `diff` — expected, not a bug.
+Claude's review-companion hook can invoke mode `diff` alongside superpowers
+requesting-code-review. Explicit project review gates remain applicable.
 
 ## When to use
 
@@ -106,8 +103,9 @@ toggled on, its stop-time review overlaps mode `diff` — expected, not a bug.
    below against it, and print the record block; empty enumeration
    output is the evidence. Whether the removal needs a commit branches on
    tracked-ness; references/backup-lane.md states that branch and the
-   hook behaviour that comes with it. Full construction detail and the
-   mirror's identity fields are in references/preflight-mirror.md.
+   hook behaviour that comes with it. Full construction detail, the
+   mirror's identity fields, and the QUIET PERIOD its construction starts
+   are in references/preflight-mirror.md.
 
    **The reviewer's own machine is the second half of this check, and the
    enumeration above cannot see it.** Run

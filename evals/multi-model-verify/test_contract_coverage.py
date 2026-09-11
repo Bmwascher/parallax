@@ -680,6 +680,12 @@ DECLARED_REGIONS = {
     "enumeration-depth-asymmetry",
     "brief-scope-guard",
     "client-probe-scope-limit",
+    # 0.33.0: the quiet period the mirror identity digest enforces. It
+    # lived only in this repo's CLAUDE.md, so the plugin did not carry it
+    # anywhere it was installed. It sits in references/preflight-mirror.md
+    # rather than SKILL.md, which had about 15 tokens of headroom under
+    # its hard ceiling when this was written.
+    "mirror-quiet-period",
     # 0.24.0, backlog item 7: the reviewer's TOOL surface. Two regions
     # rather than one because a region must fit a single pin, and because
     # they say different kinds of thing. The PROBE region holds the

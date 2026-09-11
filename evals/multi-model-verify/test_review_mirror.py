@@ -9,6 +9,7 @@ check stayed green.
 import hashlib
 import json
 import os
+import pathlib
 import re
 import shutil
 import stat
@@ -1580,6 +1581,562 @@ def test_the_record_carries_both_heads_and_the_source_status_hash(tmp_path):
     assert ident["source_head"] == git(repo, "rev-parse", "HEAD").strip()
 
 
+def test_the_build_writes_the_source_manifest_beside_the_mirror(tmp_path):
+    """The advisory sidecar the refusal reads to say what moved.
+
+    A SIBLING of the mirror, never a child and never inside the repo:
+    a child would enter mirror_state_sha256 and a file in the repo would
+    enter source_status_sha256, and this one must enter neither.
+    """
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    proc, _ = build_and_read(repo, mirror)
+    sidecar = tmp_path / "mirror.source-manifest"
+    assert sidecar.is_file(), proc.stdout + proc.stderr
+    lines = sidecar.read_text(encoding="utf-8").splitlines()
+    assert any(line.startswith("ignored/secret.txt ") for line in lines), lines
+    assert record_field(proc.stdout, "source_manifest") == str(sidecar)
+
+
+def test_the_source_manifest_sidecar_enters_neither_identity(tmp_path):
+    """The positive control for the sidecar's placement. If it landed
+    inside the mirror or inside the repo, writing it would void the very
+    identity it exists to explain, and this verify would refuse."""
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    _, ident = build_and_read(repo, mirror)
+    proc = run_verify(repo, mirror, ident)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "identity: verified" in proc.stdout, proc.stdout
+
+
+def test_a_pre_existing_sidecar_is_refused_without_force(tmp_path):
+    """A derived destination written without a guard is a write into
+    whatever sits there. This is the override's own rule, applied to the
+    file that shares the override's shape."""
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    (tmp_path / "mirror.source-manifest").write_text("not ours\n")
+    proc = run_mirror(repo, mirror)
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "already exists" in proc.stdout, proc.stdout
+    assert (tmp_path / "mirror.source-manifest").read_text() == "not ours\n"
+
+
+def test_force_replaces_a_pre_existing_sidecar(tmp_path):
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    (tmp_path / "mirror.source-manifest").write_text("not ours\n")
+    build_and_read(repo, mirror, "-Force")
+    text = (tmp_path / "mirror.source-manifest").read_text()
+    assert "not ours" not in text, text
+    assert "ignored/secret.txt " in text, text
+
+
+def test_an_override_at_the_sidecar_path_is_refused(tmp_path):
+    """The probe writes the verified override, the wrapper hashes it, and
+    an unguarded advisory write would replace it between those two acts.
+    Refuse the collision instead."""
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    clash = tmp_path / "mirror.source-manifest"
+    proc = run_mirror(repo, mirror, "-OverrideOut", str(clash))
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "override path" in proc.stdout, proc.stdout
+
+
+def test_an_extra_input_at_the_sidecar_path_is_refused(tmp_path):
+    """-ExtraInput is resolved before the sidecar guard, so a -Force
+    build could delete the declared input and then copy nothing, and the
+    unchecked Copy-Item at :1554 would not say so. Refuse the collision
+    instead of racing it."""
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    clash = tmp_path / "mirror.source-manifest"
+    clash.write_text("a declared review input\n")
+    proc = run_mirror(repo, mirror, "-Force", "-ExtraInput", str(clash))
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    # The FLAG NAME, which is how the message actually names the
+    # input. An earlier draft asserted the two-word phrase "extra
+    # input", which Step 5b2's message never contains: it says
+    # `-ExtraInput`, closed up, and then "review input". The oracle
+    # was unsatisfiable by the code the same plan specifies, and four
+    # review rounds read past it because no round ran the tests.
+    assert "-extrainput" in proc.stdout.lower(), proc.stdout
+    assert clash.read_text() == "a declared review input\n"
+
+
+def test_a_sidecar_reached_through_a_directory_link_is_refused(tmp_path):
+    """The alias guard the second draft missed entirely. The mirror path
+    and the override path are both walked for a reparse-point ancestor
+    at :1258; the sidecar must be walked with them, or a junction above
+    it aliases a tree the build then writes into."""
+    real = tmp_path / "real"
+    real.mkdir()
+    repo = make_repo(tmp_path)
+    link = tmp_path / "alias"
+    make_junction(link, real)
+    proc = run_mirror(repo, link / "mirror", "-Force")
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "directory link" in proc.stdout, proc.stdout
+
+
+def test_no_sidecar_is_removed_before_validation_completes(tmp_path):
+    """DELETION AFTER VALIDATION, never during it. The second draft
+    removed a pre-existing sidecar under -Force at the lexical guard,
+    which runs BEFORE the alias guard that would have refused the build
+    outright. The file must survive a build that is going to be
+    refused."""
+    real = tmp_path / "real"
+    real.mkdir()
+    repo = make_repo(tmp_path)
+    link = tmp_path / "alias"
+    make_junction(link, real)
+    victim = tmp_path / "alias" / "mirror.source-manifest"
+    victim.write_text("must survive\n")
+    proc = run_mirror(repo, link / "mirror", "-Force")
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert victim.read_text() == "must survive\n", "deleted before refusing"
+
+
+def extract_ps_function(name):
+    """Pull one function's text out of the SHIPPED script so a unit test
+    exercises the same source the build runs. Copying the body into the
+    test would create a second definition that drifts, which is the
+    failure this repo keeps finding in its own records."""
+    text = MIRROR.read_text(encoding="utf-8")
+    start = text.index("function " + name + "(")
+    k = text.index("{", start)
+    depth = 0
+    while True:
+        if text[k] == "{":
+            depth += 1
+        elif text[k] == "}":
+            depth -= 1
+            if depth == 0:
+                break
+        k += 1
+    return text[start:k + 1]
+
+
+@pytest.mark.parametrize("path,kind", [
+    ("C:\\", "root"),
+    ("\\\\server\\share\\", "root"),
+    ("\\\\server\\share\\dir", "ok"),
+    ("C:\\Temp\\mirror", "ok"),
+])
+def test_the_sidecar_helper_classifies_roots_directly(tmp_path, path, kind):
+    """The helper's own contract, exercised directly.
+
+    The integration path CANNOT establish this: the mirror-path guards
+    refuse a root long before the sidecar is derived, so a build-level
+    assertion never reaches the helper. Measured 2026-09-05 on
+    PowerShell 7, a root mirror path on a repo living on C: is refused
+    by the containment guard with "the mirror path contains the repo",
+    which says nothing about roots at all.
+    """
+    src = extract_ps_function("Get-SourceManifestSidecarPath")
+    driver = tmp_path / "probe.ps1"
+    driver.write_text(
+        src + "\n$r = Get-SourceManifestSidecarPath $args[0]\n"
+        "Write-Output $r.Kind\n", encoding="utf-8")
+    proc = subprocess.run(
+        [ps_host(), "-NoProfile", "-NonInteractive", "-File", str(driver),
+         path],
+        capture_output=True, text=True)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert proc.stdout.strip() == kind, (path, proc.stdout)
+
+
+def test_a_resolution_failure_is_not_reported_as_a_root(tmp_path):
+    """Two outcomes that must not share a message. Windows PowerShell
+    5.1 refused a 278-character absolute path from GetFullPath with
+    PathTooLongException while PowerShell 7 accepted it, so on 5.1 a
+    long-path build would announce a filesystem root and never reach the
+    path-budget refusal that names the real problem."""
+    src = extract_ps_function("Get-SourceManifestSidecarPath")
+    driver = tmp_path / "probe.ps1"
+    driver.write_text(
+        src + "\n$r = Get-SourceManifestSidecarPath $args[0]\n"
+        "Write-Output $r.Kind\n", encoding="utf-8")
+    long_path = "C:\\" + ("d" * 200 + "\\") * 2 + "leaf"
+    proc = subprocess.run(
+        [ps_host(), "-NoProfile", "-NonInteractive", "-File", str(driver),
+         long_path],
+        capture_output=True, text=True)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert proc.stdout.strip() in ("ok", "error"), proc.stdout
+    assert proc.stdout.strip() != "root", "a resolution failure read as a root"
+
+
+def test_a_junction_at_the_sidecar_path_is_refused(tmp_path):
+    """The ONLY case that isolates the sidecar's alias guard.
+
+    The sidecar shares the mirror's parent by construction, so any
+    junction ABOVE it is also above the mirror and the mirror-path
+    guard refuses first - which is why the junction tests that place
+    the mirror under a junction prove nothing about the sidecar. What
+    is reachable and distinct is the sidecar path ITSELF being a
+    reparse point while the mirror path is ordinary.
+    """
+    target = tmp_path / "elsewhere"
+    target.mkdir()
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    make_junction(tmp_path / "mirror.source-manifest", target)
+    proc = run_mirror(repo, mirror)
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "source manifest path" in proc.stdout, proc.stdout
+
+
+def test_an_extra_input_reached_through_a_junction_is_refused(tmp_path):
+    """Spelling equality cannot see an alias, so the guard refuses
+    what it cannot decide. The victim must survive the refusal: the
+    whole point of ordering removal last is that a build heading for
+    a refusal deletes nothing."""
+    real = tmp_path / "inputs"
+    real.mkdir()
+    victim = real / "declared.txt"
+    victim.write_text("a declared review input" + chr(10))
+    make_junction(tmp_path / "alias", real)
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    proc = run_mirror(repo, mirror, "-ExtraInput",
+                      str(tmp_path / "alias" / "declared.txt"))
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "directory link" in proc.stdout, proc.stdout
+    assert victim.read_text() == "a declared review input" + chr(10)
+
+
+def test_an_extra_input_with_a_trailing_dot_is_refused(tmp_path):
+    """Measured 2026-09-05 on both hosts: `BACKLOG.md.` passes
+    Test-Path, resolves WITH the dot, and hashes identical to
+    `BACKLOG.md`, while comparing unequal by spelling. Windows strips
+    the dot when it OPENS the file and PowerShell keeps it in the
+    path, so an extra input spelled `<mirror>.source-manifest.` would
+    pass an equality check and still name the file -Force removes."""
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    victim = tmp_path / "mirror.source-manifest"
+    victim.write_text("must survive" + chr(10))
+    proc = run_mirror(repo, mirror, "-Force", "-ExtraInput",
+                      str(victim) + ".")
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "dot or a space" in proc.stdout, proc.stdout
+    assert victim.read_text() == "must survive" + chr(10)
+
+
+def test_an_unresolvable_path_is_reported_as_error_not_root(tmp_path):
+    """A DETERMINISTIC resolution failure on both hosts.
+
+    The long-path case below is host-dependent - PowerShell 7 accepted
+    the 278-character path that Windows PowerShell 5.1 refused - so its
+    oracle has to accept `ok`, which means it can pass without ever
+    exercising the error branch. `GetFullPath("")` throws on both."""
+    src = extract_ps_function("Get-SourceManifestSidecarPath")
+    driver = tmp_path / "probe.ps1"
+    driver.write_text(
+        src + "\n$r = Get-SourceManifestSidecarPath ''\n"
+        "Write-Output $r.Kind\n", encoding="utf-8")
+    proc = subprocess.run(
+        [ps_host(), "-NoProfile", "-NonInteractive", "-File", str(driver)],
+        capture_output=True, text=True)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert proc.stdout.strip() == "error", proc.stdout
+
+
+def test_a_root_mirror_path_is_refused_by_the_build(tmp_path):
+    """The integration half, with an oracle that matches what actually
+    fires. Which guard refuses depends on where the repo lives, so this
+    asserts only that the build refuses; the helper's root contract is
+    the unit test above."""
+    repo = make_repo(tmp_path)
+    proc = run_mirror(repo, pathlib.Path("C:\\"))
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "ERROR:" in proc.stdout, proc.stdout
+
+
+def test_a_mirror_path_with_a_trailing_dot_is_refused(tmp_path):
+    """The overlap guard compares SPELLING, and Windows strips a trailing
+    dot when it OPENS a path, so `<repo>.` is a different string naming
+    the same directory. It passes the equal, inside and contains tests
+    and reaches the build.
+
+    Measured 2026-09-05 under BOTH hosts before this guard existed: the
+    dotted path passes `Test-Path`, and `Remove-Item` on it throws
+    `PSArgumentException` and deletes NOTHING, on `-LiteralPath` and on
+    `-Path` alike. So the consequence is NOT the recursive deletion the
+    round-1 reviewer reported reaching; the deletion cannot run. What
+    survives the bypass is worse-shaped than it looks anyway: the failed
+    removal is non-terminating, the build continues, and it proceeds to
+    construct a mirror whose path names the repository under review.
+
+    Refuse the spelling this tool cannot resolve, exactly as the extra
+    input guard already does for the same reason.
+    """
+    repo = make_repo(tmp_path)
+    proc = run_mirror(repo, pathlib.Path(str(repo) + "."), "-Force")
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "dot or a space" in proc.stdout, proc.stdout
+    assert (repo / "kept.txt").exists(), "the source must survive a refusal"
+
+
+def test_a_short_name_component_is_refused(tmp_path):
+    """8.3 SHORT NAMES alias a long directory under a different spelling,
+    and every comparison in this tool is a string comparison. The round-2
+    reviewer reached the recursive delete on BOTH hosts with a source of
+    `<repo>\\skills\\multi-model-verify` and a mirror of
+    `<repo>\\skills\\MULTI-~1`, and confirmed with `Remove-Item -WhatIf`
+    that the short form names the long directory.
+
+    This tool cannot resolve an alias to filesystem identity without
+    opening a handle, so it REFUSES the spelling it cannot decide - the
+    same stance it already takes for directory links and for trailing
+    dots.
+    """
+    repo = make_repo(tmp_path)
+    proc = run_mirror(repo, tmp_path / "MIRROR~1")
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "cannot resolve" in proc.stdout, proc.stdout
+    assert (repo / "kept.txt").exists(), "the source must survive a refusal"
+
+
+def test_a_stream_form_path_is_refused(tmp_path):
+    """`<repo>::$INDEX_ALLOCATION` names the directory itself through NTFS
+    stream syntax and compares unequal to it. Reached the recursive delete
+    on PowerShell 7 in the round-2 probe."""
+    repo = make_repo(tmp_path)
+    proc = run_mirror(pathlib.Path(str(repo) + "::$INDEX_ALLOCATION"),
+                      tmp_path / "mirror")
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "colon outside the drive separator" in proc.stdout, proc.stdout
+
+
+def test_a_device_prefixed_path_is_refused(tmp_path):
+    """`\\\\?\\C:\\...` is the same directory under a spelling the
+    comparison cannot match. Reached the recursive delete on Windows
+    PowerShell 5.1 in the round-2 probe."""
+    repo = make_repo(tmp_path)
+    proc = run_mirror(repo, pathlib.Path("\\\\?\\" + str(tmp_path / "mirror")))
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "cannot resolve" in proc.stdout, proc.stdout
+
+
+def test_a_named_index_stream_path_is_refused(tmp_path):
+    """`<repo>:$I30:$INDEX_ALLOCATION` names the directory itself, and its
+    colons are SEPARATED, so the first version of this guard - which
+    tested for a literal `::` - let it through. The round-3 reviewer
+    reached the recursive delete with it on PowerShell 7, where the path
+    reports `Directory`.
+
+    The rule is positional now: one colon is legitimate, the drive
+    separator, and any other colon names a stream.
+    """
+    repo = make_repo(tmp_path)
+    proc = run_mirror(repo,
+                      pathlib.Path(str(tmp_path / "mirror") + ":$I30:$INDEX_ALLOCATION"))
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "colon outside the drive separator" in proc.stdout, proc.stdout
+    assert (repo / "kept.txt").exists(), "the source must survive a refusal"
+
+
+def test_a_repo_root_beneath_a_directory_link_is_refused(tmp_path):
+    """The source root's ANCESTORS were never walked. The root itself was
+    checked for a reparse point, and the mirror, override, sidecar, extra
+    inputs and followed targets all had their ancestors walked, but the
+    directories above the source root were not.
+
+    The round-4 reviewer reached the recursive removal on both hosts
+    through an ordinary `My Documents` junction: a source spelled through
+    the junction and a mirror spelled directly, two spellings of one
+    directory that the lexical overlap comparison accepts.
+    """
+    real = tmp_path / "real"
+    real.mkdir()
+    repo = make_repo(real)
+    make_junction(tmp_path / "alias", real)
+    proc = run_mirror(pathlib.Path(str(tmp_path / "alias" / "src")),
+                      tmp_path / "mirror")
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "sits beneath a directory link" in proc.stdout, proc.stdout
+    assert (repo / "kept.txt").exists(), "the source must survive a refusal"
+
+
+def test_names_that_8_3_cannot_produce_are_accepted(tmp_path):
+    """THE FALSE-REFUSAL REGRESSION, third attempt at this shape.
+
+    An 8.3 basename is at most eight characters, cannot contain a space,
+    and is restricted to a documented character set. The round-4 reviewer
+    measured the first three being refused by the length-only pattern;
+    the round-5 reviewer called Windows' own `CheckNameLegalDOS8Dot3W` on
+    both hosts and produced the other five, none of which is a legal DOS
+    name. Each is checked as a real build rather than a unit call,
+    because the refusal it guards against is a build refusal.
+    """
+    repo = make_repo(tmp_path)
+    # THE DESTINATION EXISTING IS NOT THE BUILD SUCCEEDING. The script
+    # creates that directory before the source-identity and copy checks
+    # run, so a failure after creation satisfied both of the assertions
+    # this test used to make while the docstring claimed a completed
+    # build. assert_built requires the completion diagnostic and the exit
+    # code. Round-5 finding.
+    for name in ("backup~2026", "ABCDEF~123456", "a b~1",
+                 "a+b~1", "a,b~1", "a=b~1", "a[b]~1", "ABC~1.+"):
+        proc = run_mirror(repo, tmp_path / name)
+        assert "8.3 short name" not in proc.stdout, (name, proc.stdout)
+        assert_built(proc)
+    # `a[b]~1` is in the loop and BUILDS. An earlier version of this test
+    # carved it out with a comment blaming robocopy for exiting 16 on a
+    # bracketed destination, and asserted only that the guard had not
+    # fired - which the round-6 reviewer identified as a negative-only
+    # oracle resting on an unestablished cause. The cause was the
+    # script's own non-literal path calls treating `[b]` as a wildcard.
+    # With those literal, the build completes and the special case is
+    # gone.
+
+
+def test_a_wildcard_destination_cannot_be_substituted_for_the_source(tmp_path):
+    """THE ROUND-6 BLOCKER. `Resolve-Path` without `-LiteralPath` expands
+    `[1]` as a wildcard, so a mirror path of `<dir>\\pxd[1]` resolved to
+    the sibling `<dir>\\pxd1` AFTER the overlap guard had approved the
+    bracketed spelling. The reviewer executed the construction prefix on
+    both hosts with the source at `pxd1` and reached the copy boundary
+    with both operands equal to the source. Removal, creation and copy
+    were intercepted, so what was established is destination
+    substitution, not a completed copy onto the source.
+
+    Here the source is `src` and the wildcard sibling is a decoy, so the
+    test can assert the decoy is untouched and the mirror was built at
+    its own spelling.
+    """
+    repo = make_repo(tmp_path)
+    decoy = tmp_path / "pxd1"
+    decoy.mkdir()
+    proc = run_mirror(repo, tmp_path / "pxd[1]")
+    assert_built(proc)
+    mirror_line = [l for l in proc.stdout.splitlines() if l.startswith("mirror: ")]
+    assert mirror_line and mirror_line[0].endswith("pxd[1]"), proc.stdout
+    assert (tmp_path / "pxd[1]" / "kept.txt").exists(), "built at its own spelling"
+    assert not any(decoy.iterdir()), "the wildcard sibling must be untouched"
+
+
+def test_generated_short_names_with_an_interior_tilde_are_refused(tmp_path):
+    """The tilde is legal INSIDE a short name, not only as the separator.
+    `AB~CDE~1` and `LONGFI~1.A~B` were produced by Windows' own
+    generator from `AB~CDELongName` and `LongFilename.a~b`, measured by
+    the round-6 reviewer on both hosts, and the character classes -
+    whose comment listed the tilde - did not contain it."""
+    repo = make_repo(tmp_path)
+    for name in ("AB~CDE~1", "LONGFI~1.A~B"):
+        proc = run_mirror(repo, tmp_path / name)
+        assert proc.returncode == 2, (name, proc.stdout + proc.stderr)
+        assert "8.3 short name" in proc.stdout, (name, proc.stdout)
+
+
+def test_real_short_name_shapes_are_still_refused(tmp_path):
+    """The other side of the same boundary. All four ARE expressible as
+    8.3 short names, and the round-4 reviewer confirmed the last two match
+    the shape."""
+    repo = make_repo(tmp_path)
+    for name in ("MULTI-~1", "ABCDE~10", "ABCD~100", "PXD1~1.SOU"):
+        proc = run_mirror(repo, tmp_path / name)
+        assert proc.returncode == 2, (name, proc.stdout + proc.stderr)
+        assert "8.3 short name" in proc.stdout, (name, proc.stdout)
+
+
+def test_a_stream_form_repo_root_is_refused_too(tmp_path):
+    """The round-3 reviewer demonstrated `<repo>:$I30:$INDEX_ALLOCATION`
+    as RepoRoot reaching the recursive delete through a validation
+    prefix. Through the SHIPPED script it is refused, and this test
+    records which mechanism does it.
+
+    A draft of this test asserted the opposite - that resolution
+    canonicalized the stream away and the build proceeded normally - on
+    the strength of one earlier run that predated the guard working at
+    all. It did not survive being run.
+
+    A SECOND draft then claimed two independent mechanisms refuse it, the
+    colon rule and `Test-Path` raising `ItemExistsNotSupportedError`, and
+    that either would be enough. The round-4 reviewer measured
+    `Test-Path` on this spelling directly: it returns TRUE on both hosts.
+    Windows PowerShell 5.1 also prints that error and CONTINUES;
+    PowerShell 7 prints nothing. So the existence conditional does not
+    refuse this input at all, and the colon rule is the only demonstrated
+    mechanism. That is what the assertion names.
+    """
+    repo = make_repo(tmp_path)
+    proc = run_mirror(pathlib.Path(str(repo) + ":$I30:$INDEX_ALLOCATION"),
+                      tmp_path / "mirror")
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "colon outside the drive separator" in proc.stdout, proc.stdout
+
+
+def test_an_extra_input_with_a_short_name_component_is_refused(tmp_path):
+    """Extra inputs were outside the spelling guard, which named its
+    operands inline and reached three of them. The round-3 reviewer
+    supplied the mirror's OWN sidecar under its real 8.3 alias and reached
+    the removal of the long-named file, after which the unchecked copy
+    would leave a declared review input out of a mirror the digest
+    certifies."""
+    repo = make_repo(tmp_path)
+    # The parser refuses a nonexistent input before spelling is reached,
+    # so the file has to be real for this to test what it names.
+    (tmp_path / "INPUT~1.TXT").write_text("a declared review input\n")
+    proc = run_mirror(repo, tmp_path / "mirror", "-ExtraInput",
+                      str(tmp_path / "INPUT~1.TXT"))
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "8.3 short name" in proc.stdout, proc.stdout
+    assert (tmp_path / "INPUT~1.TXT").exists(), "the input must survive"
+
+
+def test_an_ordinary_name_holding_a_tilde_and_digits_is_accepted(tmp_path):
+    """THE OTHER DIRECTION, which the first regex got wrong. It matched
+    `~[0-9]+$` anywhere in a component, so it refused `release~2026` - an
+    ordinary directory name - and told the user to pass the full name when
+    that already was the full name. Measured by the round-3 reviewer on
+    both hosts.
+
+    A generated short name has at most six characters before the tilde,
+    so the shape is anchored now. This test is the guard against
+    tightening it back into a false positive.
+    """
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "release~2026"
+    proc = run_mirror(repo, mirror)
+    assert_built(proc)
+    assert "8.3 short name" not in proc.stdout, proc.stdout
+    assert mirror.is_dir(), proc.stdout
+
+
+def test_an_override_inside_the_source_through_a_dotted_ancestor_is_refused(tmp_path):
+    """The spelling guard shipped covering two operands and the override
+    was not one of them, so `<repo>.\\override.txt` named a location
+    inside the tree under review and passed every check. The build then
+    hands that value to the probe, whose writer calls WriteAllBytes.
+
+    Found by the round-2 reviewer, on both hosts, and it is the same
+    defect as finding 1 on a third operand - which is what makes it worth
+    a test rather than a one-line addition: guarding operands one at a
+    time is how this class survived in the first place.
+    """
+    repo = make_repo(tmp_path)
+    proc = run_mirror(repo, tmp_path / "mirror", "-OverrideOut",
+                      str(repo) + ".\\override.txt")
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "dot or a space" in proc.stdout, proc.stdout
+    assert (repo / "kept.txt").exists(), "the source must survive a refusal"
+
+
+def test_a_repo_root_with_a_trailing_space_is_refused(tmp_path):
+    """The same defect on the other side of the comparison. Both
+    operands are user-supplied, so guarding one of them leaves the class
+    open."""
+    repo = make_repo(tmp_path)
+    proc = run_mirror(pathlib.Path(str(repo) + " "), tmp_path / "mirror")
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "dot or a space" in proc.stdout, proc.stdout
+
+
 def test_remediation_moves_mirror_head_away_from_source_head(tmp_path):
     repo = make_repo(tmp_path)
     (repo / "AGENTS.md").write_text("# planted\n")
@@ -1655,14 +2212,10 @@ def test_a_tampered_mirror_head_blocks_the_dispatch(tmp_path):
     assert "mirror head" in proc.stdout.lower(), proc.stdout
 
 
-def test_source_drift_in_an_ignored_file_blocks_the_dispatch(tmp_path):
-    """The case the two-HEAD gate CANNOT see, and the reason the source
-    status is captured at all.
-
-    An edit to an ignored review input moves neither HEAD. Ignored
-    content is precisely what the mirror exists to carry, so leaving
-    this undetected would be a hole in the middle of the feature.
-    """
+def test_the_refusal_names_the_ignored_file_that_changed(tmp_path):
+    """The whole reason this task exists. The refusal used to name the
+    CLASS of change and stop, so a session hitting it repeatedly could
+    not tell a cache write from a planted file."""
     repo = make_repo(tmp_path)
     mirror = tmp_path / "mirror"
     _, ident = build_and_read(repo, mirror)
@@ -1670,6 +2223,228 @@ def test_source_drift_in_an_ignored_file_blocks_the_dispatch(tmp_path):
     proc = run_verify(repo, mirror, ident)
     assert proc.returncode == 1, proc.stdout + proc.stderr
     assert "source status" in proc.stdout.lower(), proc.stdout
+    assert "content changed" in proc.stdout, proc.stdout
+    assert "ignored/secret.txt" in proc.stdout, proc.stdout
+
+
+def test_the_refusal_names_a_file_that_entered_coverage(tmp_path):
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    _, ident = build_and_read(repo, mirror)
+    (repo / "brand-new-input.txt").write_text("appeared after the copy\n")
+    proc = run_verify(repo, mirror, ident)
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "entered manifest coverage" in proc.stdout, proc.stdout
+    assert "brand-new-input.txt" in proc.stdout, proc.stdout
+
+
+def test_the_refusal_names_a_file_that_left_coverage(tmp_path):
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    _, ident = build_and_read(repo, mirror)
+    (repo / "ignored" / "secret.txt").unlink()
+    proc = run_verify(repo, mirror, ident)
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "left manifest coverage" in proc.stdout, proc.stdout
+    assert "ignored/secret.txt" in proc.stdout, proc.stdout
+
+
+def test_a_missing_source_manifest_still_refuses(tmp_path):
+    """The explanation is ADVISORY. Its absence costs the reason and
+    never the refusal."""
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    _, ident = build_and_read(repo, mirror)
+    (tmp_path / "mirror.source-manifest").unlink()
+    (repo / "ignored" / "secret.txt").write_text("edited after the copy\n")
+    proc = run_verify(repo, mirror, ident)
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "source status" in proc.stdout.lower(), proc.stdout
+    assert "unknown" in proc.stdout, proc.stdout
+
+
+def test_a_corrupted_source_manifest_still_refuses(tmp_path):
+    """The direction that matters. A sidecar an attacker can write must
+    never turn a refusal into a pass, and it structurally cannot: it is
+    read only after the comparison has already decided to block."""
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    _, ident = build_and_read(repo, mirror)
+    (tmp_path / "mirror.source-manifest").write_bytes(b"\x00garbage\xff\nno")
+    (repo / "ignored" / "secret.txt").write_text("edited after the copy\n")
+    proc = run_verify(repo, mirror, ident)
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "source status" in proc.stdout.lower(), proc.stdout
+
+
+def test_a_clean_tree_verifies_with_no_source_manifest(tmp_path):
+    """The other advisory direction. A tree that did not move verifies
+    whether or not the sidecar survives, because the sidecar is not an
+    input to the comparison."""
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    _, ident = build_and_read(repo, mirror)
+    (tmp_path / "mirror.source-manifest").unlink()
+    proc = run_verify(repo, mirror, ident)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "identity: verified" in proc.stdout, proc.stdout
+
+
+def test_a_case_only_rename_is_not_lost_by_the_explanation(tmp_path):
+    """A PowerShell hashtable compares keys case-INsensitively, so
+    `File.txt` and `file.txt` would collapse into one entry and this
+    drift would report nothing at all, while the digest, built from the
+    raw strings, changes."""
+    repo = make_repo(tmp_path)
+    (repo / "ignored" / "Cased.txt").write_text("one\n")
+    mirror = tmp_path / "mirror"
+    _, ident = build_and_read(repo, mirror)
+    (repo / "ignored" / "Cased.txt").rename(repo / "ignored" / "cased.txt")
+    proc = run_verify(repo, mirror, ident)
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "coverage" in proc.stdout, proc.stdout
+    assert "cased.txt" in proc.stdout, proc.stdout
+
+
+def test_a_hostile_but_well_formed_manifest_cannot_manufacture_a_pass(tmp_path):
+    """The corrupted-bytes case exercises the reader's catch. This one
+    reaches the parser and the renderer with VALID records naming
+    innocent files, which is the shape an attacker would use."""
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    _, ident = build_and_read(repo, mirror)
+    (repo / "ignored" / "secret.txt").write_text("edited after the copy\n")
+    forged = "\n".join("decoy/%d.txt %064x" % (i, i) for i in range(5)) + "\n"
+    (tmp_path / "mirror.source-manifest").write_text(forged)
+    proc = run_verify(repo, mirror, ident)
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "source status" in proc.stdout.lower(), proc.stdout
+
+
+def test_a_record_whose_hash_field_is_not_a_hash_is_counted(tmp_path):
+    """`bad.txt not-a-hash` used to parse as an ordinary record, so a
+    truncated digest became a reported difference rather than an
+    admission that the explanation is incomplete."""
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    _, ident = build_and_read(repo, mirror)
+    sidecar = tmp_path / "mirror.source-manifest"
+    sidecar.write_text(sidecar.read_text() + "bad.txt not-a-hash\n"
+                       + "empty.txt \n" + "no-space-here\n")
+    (repo / "ignored" / "secret.txt").write_text("edited after the copy\n")
+    proc = run_verify(repo, mirror, ident)
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "3 advisory record(s) could not be read" in proc.stdout, proc.stdout
+    assert "incomplete" in proc.stdout, proc.stdout
+
+
+def test_a_trailing_newline_is_not_counted_as_a_malformed_record(tmp_path):
+    """The split artifact is not a record. Counting it would put a
+    permanent, meaningless `1 record could not be read` on every
+    explanation and teach the operator to ignore the line."""
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    _, ident = build_and_read(repo, mirror)
+    (repo / "ignored" / "secret.txt").write_text("edited after the copy\n")
+    proc = run_verify(repo, mirror, ident)
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "could not be read" not in proc.stdout, proc.stdout
+    # POSITIVE, because the assertion above is satisfied by the
+    # reader's own failure fallback, which prints "what moved:
+    # unknown" and never the phrase being excluded. A negative-only
+    # oracle goes green when the behaviour it names was never
+    # exercised. Name the file that actually moved.
+    assert "secret.txt" in proc.stdout, proc.stdout
+    assert "unknown" not in proc.stdout, proc.stdout
+
+
+def test_display_controls_in_an_advisory_name_are_rendered(tmp_path):
+    """The sidecar is mutable, so a name in it never passed
+    Test-SupportedPathname. C1 controls such as U+009B and the
+    bidirectional override U+202E are terminal escapes and line-display
+    manipulation; `[int]$ch -lt 32` catches neither."""
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    _, ident = build_and_read(repo, mirror)
+    sidecar = tmp_path / "mirror.source-manifest"
+    sidecar.write_text("ev\u009bil\u202e.txt " + "0" * 64 + "\n",
+                       encoding="utf-8")
+    # Same fixture check as the runtime-category test below, for the
+    # same reason: the rendering assertions cannot tell a real control
+    # character from its literal escape text.
+    seeded = sidecar.read_text(encoding="utf-8")
+    assert chr(0x009B) in seeded and chr(0x202E) in seeded, (
+        "the fixture lost its control characters")
+    assert "\\u009b" not in seeded, (
+        "the fixture holds a literal escape, not the codepoint")
+    (repo / "ignored" / "secret.txt").write_text("edited after the copy\n")
+    proc = run_verify(repo, mirror, ident)
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "\u009b" not in proc.stdout, "a C1 control reached the terminal"
+    assert "\u202e" not in proc.stdout, "a bidi override reached the terminal"
+    # THE WHOLE RENDERED NAME, not one escape unit. The substring form
+    # accepted a doubled prefix, which is how the shipped renderer
+    # emitted two backslashes for four rounds without a test noticing.
+    assert ("ev\\u009bil\\u202e.txt" in proc.stdout
+            or "ev\\u009Bil\\u202E.txt" in proc.stdout), proc.stdout
+    assert "unknown" not in proc.stdout, proc.stdout
+
+
+def test_a_runtime_category_difference_is_escaped_on_both_hosts(tmp_path):
+    """Measured 2026-09-05: Windows PowerShell 5.1 classifies U+0890
+    as OtherNotAssigned and PowerShell 7 classifies it as Format, so a
+    renderer keyed on Format alone escapes it on one host and not the
+    other. OtherNotAssigned is in the set to make the two agree for
+    this class. Run this under BOTH hosts; one green host proves one
+    interpreter."""
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    _, ident = build_and_read(repo, mirror)
+    sidecar = tmp_path / "mirror.source-manifest"
+    # ONE backslash in Python source, so the real codepoint is written.
+    # The read-back assertions below are what actually establish that;
+    # an explanation that used to sit here claimed the rendering
+    # assertions would catch a doubled escape, and they would not.
+    sidecar.write_text("odd\u0890name.txt " + "0" * 64 + chr(10),
+                       encoding="utf-8")
+    # THE FIXTURE IS CHECKED, not assumed. The comment above used to
+    # claim a doubled escape here "could never pass"; the round-4
+    # reviewer measured the formatter producing IDENTICAL output for
+    # the literal ASCII text and for the real codepoint, so the
+    # rendering assertions below accept both and the classification
+    # would silently stop being exercised. Read the file back and
+    # require the codepoint to be in it and the literal escape not.
+    seeded = sidecar.read_text(encoding="utf-8")
+    assert chr(0x0890) in seeded, "the fixture lost its codepoint"
+    assert "\\u0890" not in seeded, (
+        "the fixture holds a literal escape, not the codepoint")
+    (repo / "ignored" / "secret.txt").write_text("edited after the copy" + chr(10))
+    proc = run_verify(repo, mirror, ident)
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    # Strip the ESCAPED rendering (a literal backslash, hence two in
+    # source), then assert the RAW codepoint (one backslash in
+    # source) never reached the terminal.
+    assert "\u0890" not in proc.stdout.replace("\\u0890", ""), (
+        "the raw codepoint reached the terminal")
+    # POSITIVE. Without this the reader's failure fallback satisfies
+    # the exclusion above and the escape is never measured at all.
+    assert "odd\\u0890name.txt" in proc.stdout, proc.stdout
+    assert "unknown" not in proc.stdout, proc.stdout
+
+
+def test_an_oversized_source_manifest_is_refused_by_the_reader(tmp_path):
+    """The size limit must bound the READ, not a separate earlier
+    measurement. Written just past the limit so the test stays cheap."""
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    _, ident = build_and_read(repo, mirror)
+    sidecar = tmp_path / "mirror.source-manifest"
+    with sidecar.open("wb") as fh:
+        fh.write(b"x" * (67108864 + 1))
+    (repo / "ignored" / "secret.txt").write_text("edited after the copy\n")
+    proc = run_verify(repo, mirror, ident)
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "past this reader's limit" in proc.stdout, proc.stdout
 
 
 def test_source_drift_in_an_untracked_file_blocks_the_dispatch(tmp_path):
@@ -2396,11 +3171,22 @@ def test_there_is_no_reseal_or_remint_mode(tmp_path):
 
 
 def test_an_unmeasurable_expected_digest_is_refused(tmp_path):
+    """`returncode != 0` was the whole oracle here, and exit 2 with empty
+    stdout satisfied it. This script's exit contract separates 1, blocked
+    with a reason on stdout, from 2, a script or environment error, so an
+    oracle that accepts either cannot tell a working refusal from a crash
+    in the code that was supposed to refuse.
+
+    Found by the round-2 diff reviewer as a third instance of the
+    negative-only oracle class.
+    """
     repo = make_repo(tmp_path)
     mirror = tmp_path / "mirror"
     _, ident = build_and_read(repo, mirror)
     proc = run_verify(repo, mirror, ident, mirror_state_sha256="")
-    assert proc.returncode != 0, proc.stdout + proc.stderr
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "recorded mirror state hash is missing or malformed" in proc.stdout, (
+        proc.stdout)
 
 
 def test_a_mirror_whose_current_state_cannot_be_measured_is_refused(tmp_path):
@@ -2421,8 +3207,17 @@ def test_a_mirror_whose_current_state_cannot_be_measured_is_refused(tmp_path):
         pytest.skip("icacls deny unavailable: " + deny.stdout + deny.stderr)
     try:
         proc = run_verify(repo, mirror, ident)
-        assert proc.returncode != 0, proc.stdout + proc.stderr
-        assert "could not be" in proc.stdout, proc.stdout
+        # EXIT 1 AND THE NAMED DIAGNOSTIC. `!= 0` plus the generic
+        # substring "could not be" left this green if the branch were
+        # changed to exit 2, which is this script's code for an error in
+        # the tool rather than a block it decided on. Found by the round-3
+        # reviewer, next door to the one above. No ordinal is given: an
+        # earlier draft called this the third while its neighbour also
+        # called itself the third, which is what counting instances inside
+        # the instances produces.
+        assert proc.returncode == 1, proc.stdout + proc.stderr
+        assert "the mirror's current state could not be measured" in proc.stdout, (
+            proc.stdout)
     finally:
         undo = subprocess.run(["icacls", str(denied), "/remove:d", user],
                               capture_output=True, text=True)

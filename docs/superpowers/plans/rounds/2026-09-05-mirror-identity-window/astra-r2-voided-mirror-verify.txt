@@ -1,0 +1,2 @@
+identity: verified
+BLOCKED: the source status changed since construction - a tracked, untracked or ignored review input moved without moving either head, so the mirror no longer carries what the source holds. Rebuild the mirror.

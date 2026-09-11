@@ -32,3 +32,55 @@ Files above the repo's git root are NOT ingested (same probe), and
 `~/.codex/AGENTS.md` is the user's own
 global instruction file — note it in the debate record if it exists,
 but it is not a stop.
+
+## The quiet period
+
+<!-- contract:start id=mirror-quiet-period -->
+NOTHING MAY WRITE INSIDE THE REVIEWED REPOSITORY from the moment the
+mirror is built until the wrapper exits. The identity digest covers the
+fields of `git status --porcelain --ignored` PLUS the content of the
+paths that listing names, ignored ones included, with a directory
+expanded to its files and a deletion-only entry contributing no bytes.
+So a test-cache write, a plan-ledger append, a drift report or one new
+untracked file is enough. The same recorded digest is compared against
+the live source three times: at preparation, before the client runs,
+and after it finishes. The last of those spans the whole round, so this
+is a quiet period and not an ordering rule. Only that last one costs a
+reviewer round; the two before it refuse before the client is invoked
+and spend no quota. State the limits with the rule: the comparison
+samples endpoints, so a change made and reverted inside the round is
+not detected, and a tracked file git reports CLEAN is covered by
+neither fingerprint. Queue every edit until the wrapper exits, however
+small and however unrelated it looks.
+<!-- contract:end -->
+
+## Timing
+
+BUILD THE MIRROR LAST. Every act that writes inside the reviewed
+repository finishes first: the gates, the plan ledger, the scratch notes,
+the formatter. From the build until the round's wrapper exits, the
+repository is quiet, and preflight-mirror.md's mirror-quiet-period states
+why. The identity digest covers the content of ignored paths, so a
+pytest cache directory or a ledger append is enough to refuse the
+dispatch.
+
+A build that has gone stale is not repaired and cannot be re-blessed:
+there is deliberately no re-mint or reseal mode. READ THE EXPLANATION
+FIRST, then build again. Rebuilding replaces the evidence of what
+changed, so a rebuild before reading turns a diagnosable refusal into an
+unexplained one. The rebuild itself is cheap next to a spent round,
+measured at about 92 seconds on a repo carrying a linked reference
+checkout.
+
+When a refusal names `the source status changed since construction`, the
+lines beneath it name the paths whose content changed and the paths that
+entered or left manifest coverage, read from the `source_manifest` file
+the record block points at. That explanation is advisory: it can be
+missing, incomplete or wrong, and the refusal stands either way.
+Manifest coverage is not file existence, so a path listed as leaving
+coverage has not necessarily been deleted.
+
+The two refusals raised by the round wrapper itself print no explanation
+to the console. The wrapper redirects both identity checks into
+`mirror.verify` inside its dispatch directory and then throws a short
+message, so that file is where the detail is.

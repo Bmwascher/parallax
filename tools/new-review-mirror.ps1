@@ -583,7 +583,7 @@ function Get-ContentManifest($repo, $paths) {
     $files = New-Object System.Collections.ArrayList
     foreach ($p in $paths) {
         $full = Join-Path $repo $p
-        if (Test-Path $full -PathType Container) {
+        if (Test-Path -LiteralPath $full -PathType Container) {
             # -Stop, never the default: a swallowed enumeration error
             # omits every file under an unreadable subdirectory and the
             # manifest then reads as coverage of a tree it never saw.
@@ -600,7 +600,7 @@ function Get-ContentManifest($repo, $paths) {
                 $rel = $fullName.Substring($repo.Length + 1)
                 [void]$files.Add($rel.Replace("\", "/"))
             }
-        } elseif (Test-Path $full -PathType Leaf) {
+        } elseif (Test-Path -LiteralPath $full -PathType Leaf) {
             [void]$files.Add($p.TrimEnd("/").Replace("\", "/"))
         } else {
             # A baseline path with nothing behind it is a stop. Skipping it
@@ -691,7 +691,348 @@ function Get-StatusSha256($repo) {
         return @{ Ok = $false; Reason = $content.Error }
     }
     return @{ Ok = $true
+              Manifest = @($content.Paths)
               Sha = (Get-CombinedSha256 $captured.Fields $content.Paths) }
+}
+
+function Get-SourceManifestSidecarPath($mirrorPath) {
+    # A SIBLING of the mirror, never a child. A file inside the mirror
+    # would enter mirror_state_sha256 and a file inside the repository
+    # would enter source_status_sha256; this one must enter neither,
+    # because it is written after both are measured and read only after
+    # a comparison has already decided to refuse.
+    #
+    # ONE derivation, shared by the build that writes the file and the
+    # verify that reads it, so the two sides cannot drift apart.
+    #
+    # A ROOT HAS NO SIBLING, and the leaf is NOT how you detect one.
+    # Measured 2026-09-05: `Split-Path 'C:\' -Leaf` returns `C:\` rather
+    # than `C:`, so a regex on the leaf never fires for a drive root; and
+    # `Split-Path '\\server\share\' -Leaf` returns `share` with parent
+    # `\\server`, which appended would name a DIFFERENT SHARE. The two
+    # hosts do not agree on the UNC case. So the framework's own root is
+    # the test, and the suffix is APPENDED to the full path rather than
+    # rejoined to a parent, which removes the UNC rejoin entirely.
+    # THREE OUTCOMES, not two. An earlier draft returned $null for a root
+    # AND for a resolution failure, so both callers announced "filesystem
+    # root" for either. Measured 2026-09-05: Windows PowerShell 5.1's
+    # provider accepted a 278-character absolute path that GetFullPath
+    # refused with PathTooLongException, while PowerShell 7 accepted it,
+    # so a long-path build on 5.1 would have reported a filesystem root
+    # and never reached the path-budget refusal that names the real
+    # problem.
+    $full = $null
+    try {
+        $full = [System.IO.Path]::GetFullPath($mirrorPath)
+    } catch {
+        return @{ Kind = "error"; Reason = $_.Exception.Message }
+    }
+    $full = $full.TrimEnd("\")
+    $root = $null
+    try {
+        $root = [System.IO.Path]::GetPathRoot($full)
+    } catch {
+        return @{ Kind = "error"; Reason = $_.Exception.Message }
+    }
+    if (-not $root) {
+        return @{ Kind = "error"; Reason = "the path has no root" }
+    }
+    if ($full.Length -le ([string]$root).TrimEnd("\").Length) {
+        return @{ Kind = "root" }
+    }
+    return @{ Kind = "ok"; Path = ($full + ".source-manifest") }
+}
+
+function Write-SourceManifestSidecar($path, $manifestLines) {
+    # ADVISORY ONLY. It pins nothing and gates nothing, so a failure to
+    # write it is not a build failure - it costs a later refusal its
+    # explanation and nothing else. That is also why it may be a file at
+    # all: the header's rule about values passed as arguments rather than
+    # re-read from a file governs values that PIN something, and this
+    # value carries no authority.
+    #
+    # CREATE-NEW, never WriteAllLines. State the guarantee exactly: it
+    # makes the FINAL PATH COMPONENT safe, so a file created between the
+    # guards and this write is not overwritten and a link substituted at
+    # that name is not written through. It does NOT defend a DIRECTORY
+    # component - an ancestor replaced by a junction before this open
+    # redirects creation into that junction's target, and no open flag
+    # prevents that. The alias guards above are what cover ancestors, and
+    # they run before any of this.
+    try {
+        $utf8 = New-Object System.Text.UTF8Encoding($false)
+        $fs = [System.IO.File]::Open($path, 'CreateNew', 'Write', 'None')
+        try {
+            $sw = New-Object System.IO.StreamWriter($fs, $utf8)
+            try {
+                foreach ($line in @($manifestLines)) {
+                    $sw.WriteLine([string]$line)
+                }
+            } finally { $sw.Dispose() }
+        } finally { $fs.Dispose() }
+        return $true
+    } catch {
+        return $false
+    }
+}
+
+function Get-ManifestDrift($recordedLines, $liveLines) {
+    # Both sides are "<relpath> <sha256hex>" lines, so the LAST space is
+    # the separator: a pathname may hold spaces and a hex digest may not.
+    #
+    # ORDINAL, CASE-SENSITIVE keys. A PowerShell hashtable compares keys
+    # case-INsensitively, so `File.txt` and `file.txt` collapse into one
+    # entry and a case-only rename reports no difference at all - while
+    # the digest, built from the raw strings, changes. The explanation
+    # must partition the same strings the digest does.
+    #
+    # THE GRAMMAR IS CHECKED, not assumed. A record whose hash field is
+    # not 64 lowercase hex characters is malformed, and so is a duplicate
+    # key, an over-long line, and a line with no separator. Every one is
+    # COUNTED, never silently dropped: a dropped record is a difference
+    # this explanation would then fail to mention, which is the shape of
+    # defect this whole change exists to remove. An EMPTY line is a
+    # malformed record and is counted as one; the loop below says why
+    # there is no trailing-newline special case to make.
+    $ord = [System.StringComparer]::Ordinal
+    $recorded = New-Object "System.Collections.Generic.Dictionary[string,string]" $ord
+    $live = New-Object "System.Collections.Generic.Dictionary[string,string]" $ord
+    $malformed = 0
+    $hexRx = '^[0-9a-f]{64}$'
+    foreach ($side in @(@($recordedLines, $recorded), @($liveLines, $live))) {
+        foreach ($line in @($side[0])) {
+            $s = [string]$line
+            # AN EMPTY LINE IS A MALFORMED RECORD, with no special case
+            # for a trailing one: the caller reads records with a
+            # StringReader, which returns nothing at all for a file
+            # ending in a newline, so every empty string that reaches
+            # here is a real empty record. The draft that skipped every
+            # empty string silently dropped leading and interior ones.
+            #
+            # THERE IS NO RECORD CAP HERE. Capping mid-loop turned
+            # resource exhaustion into a grammar diagnosis: at record
+            # 200,001 the draft incremented Malformed once and abandoned
+            # the rest, so 200,003 malformed records reported 200,001.
+            # The cap belongs to the reader, which reports it as its own
+            # state.
+            if ($s.Length -eq 0) { $malformed++; continue }
+            if ($s.Length -gt 4096) { $malformed++; continue }
+            $cut = $s.LastIndexOf(" ")
+            if ($cut -lt 1) { $malformed++; continue }
+            $hex = $s.Substring($cut + 1)
+            if ($hex -cnotmatch $hexRx) { $malformed++; continue }
+            $key = $s.Substring(0, $cut)
+            if ($side[1].ContainsKey($key)) { $malformed++; continue }
+            $side[1][$key] = $hex
+        }
+    }
+    $entered = New-Object System.Collections.ArrayList
+    $left = New-Object System.Collections.ArrayList
+    $changed = New-Object System.Collections.ArrayList
+    foreach ($p in @($live.Keys)) {
+        if (-not $recorded.ContainsKey($p)) {
+            [void]$entered.Add($p)
+        } elseif ($recorded[$p] -ne $live[$p]) {
+            [void]$changed.Add($p)
+        }
+    }
+    foreach ($p in @($recorded.Keys)) {
+        if (-not $live.ContainsKey($p)) { [void]$left.Add($p) }
+    }
+    return @{ Entered   = @($entered | Sort-Object)
+              Left      = @($left    | Sort-Object)
+              Changed   = @($changed | Sort-Object)
+              Malformed = $malformed }
+}
+
+function Read-BoundedRecords($text, $maxRecords) {
+    # Returns @{ Records = <string[]>; Truncated = <bool> }.
+    #
+    # A StringReader, never `-split`. The split materializes every line of
+    # a file whose size is someone else's choice BEFORE any cap can apply,
+    # so a cap placed after it bounds nothing that matters. Reading line
+    # by line stops AT the cap, having built only that many strings.
+    #
+    # It also removes the trailing-newline special case rather than
+    # handling it: ReadLine returns $null at end of input, so a file
+    # ending in a newline yields no final empty string. Every empty line
+    # this returns is therefore a real empty record, which is what lets
+    # the parser count one as malformed instead of guessing which empties
+    # were artifacts.
+    #
+    # Truncation is its OWN state. It is not a malformed record and must
+    # never be reported as one: the remainder was not examined, which is
+    # a different fact about a different set of records.
+    $out = New-Object System.Collections.ArrayList
+    $truncated = $false
+    $reader = New-Object System.IO.StringReader($text)
+    try {
+        while ($true) {
+            # PEEK, then cap, then read. ReadLine allocates the whole
+            # record before any count is consulted, so a cap tested
+            # after it still materializes one record past the limit -
+            # measured 2026-09-05 with a cap of 2 and a million-character
+            # third line, which was built and then discarded. Peek costs
+            # one character and answers the only question needed here.
+            if ($reader.Peek() -lt 0) { break }
+            if ($out.Count -ge $maxRecords) { $truncated = $true; break }
+            $line = $reader.ReadLine()
+            if ($null -eq $line) { break }
+            [void]$out.Add($line)
+        }
+    } finally { $reader.Dispose() }
+    return @{ Records = @($out); Truncated = $truncated }
+}
+
+function Format-AdvisoryName($name) {
+    # EVERY untrusted string printed by the explanation goes through
+    # here, pathnames and exception text alike. The advisory manifest is
+    # MUTABLE, so nothing in it passed Test-SupportedPathname.
+    #
+    # The test is the UNICODE CATEGORY, never a numeric range. Measured
+    # 2026-09-05: `[int]$ch -lt 32` passes the C1 controls U+0085 and
+    # U+009B, which are terminal escape introducers, and it passes
+    # U+2028 and the bidirectional override U+202E.
+    #
+    # OtherNotAssigned AND PrivateUse are in the set for a HOST reason,
+    # not a threat one. The category table is runtime data: measured
+    # 2026-09-05, Windows PowerShell 5.1 calls U+08E2, U+0890 and U+0891
+    # OtherNotAssigned while PowerShell 7 calls them Format, so a set
+    # without OtherNotAssigned escapes them on one host and not the
+    # other. Including it makes the two hosts agree for that class. It
+    # does NOT make them agree in general: any codepoint the two tables
+    # classify differently across these categories still renders
+    # differently, and that limit is stated rather than papered over.
+    #
+    # THE BOUND IS ON THE OUTPUT. Truncating the INPUT to 200 and then
+    # expanding escapes produced 1,211 characters for a control-heavy
+    # name, so the advertised bound has to be enforced while appending.
+    $s = [string]$name
+    $limit = 200
+    $marker = "[truncated]"
+    $room = $limit - $marker.Length
+    $escaped = @([System.Globalization.UnicodeCategory]::Control,
+                 [System.Globalization.UnicodeCategory]::Format,
+                 [System.Globalization.UnicodeCategory]::LineSeparator,
+                 [System.Globalization.UnicodeCategory]::ParagraphSeparator,
+                 [System.Globalization.UnicodeCategory]::Surrogate,
+                 [System.Globalization.UnicodeCategory]::PrivateUse,
+                 [System.Globalization.UnicodeCategory]::OtherNotAssigned)
+    # NON-BMP CHARACTERS ARE ALL ESCAPED, which the category list above
+    # does not make obvious. This walks UTF-16 code UNITS, so a
+    # supplementary character arrives as two units both classified
+    # Surrogate, and the escape set therefore covers every codepoint in
+    # planes 1 through 16. An emoji or a CJK Extension B name renders
+    # escaped. That is intended, not an oversight to be repaired.
+    $sb = New-Object System.Text.StringBuilder
+    foreach ($ch in $s.ToCharArray()) {
+        $cat = [System.Globalization.CharUnicodeInfo]::GetUnicodeCategory($ch)
+        if ($escaped -contains $cat) {
+            $unit = "\u" + ([int]$ch).ToString("x4")
+        } else {
+            $unit = [string]$ch
+        }
+        if (($sb.Length + $unit.Length) -gt $room) {
+            [void]$sb.Append($marker)
+            break
+        }
+        [void]$sb.Append($unit)
+    }
+    return $sb.ToString()
+}
+
+function Write-SourceDriftExplanation($mirrorPath, $liveManifest) {
+    # Runs ONLY after the source-status refusal below has been printed.
+    #
+    # THE WHOLE BODY IS WRAPPED. What protects the verdict is not any
+    # property of this function - Write-Output emits into the pipeline
+    # like any other command, and a caller COULD capture it - but the
+    # fact that its one caller ignores the output and reaches `exit 1`
+    # unconditionally. The wrap is here so that a fault in explaining a
+    # refusal cannot replace that refusal with an error.
+    try {
+        $smResult = Get-SourceManifestSidecarPath $mirrorPath
+        if ($smResult.Kind -eq "root") {
+            Write-Output ("  what moved: unknown - the mirror path is a" +
+                " filesystem root, so no advisory manifest can sit beside it")
+            return
+        }
+        if ($smResult.Kind -ne "ok") {
+            Write-Output ("  what moved: unknown - the mirror path could not" +
+                " be resolved (" + (Format-AdvisoryName $smResult.Reason) + ")")
+            return
+        }
+        $sidecar = $smResult.Path
+        $shown = Format-AdvisoryName $sidecar
+        # ONE HANDLE measures and reads. A separate Get-Item followed by
+        # a separate ReadAllBytes bounds nothing: the file can grow or be
+        # replaced between them, and Get-Item's failure is NON-TERMINATING
+        # in this script, which never sets $ErrorActionPreference, so an
+        # unreadable file left the size test unmade and carried on.
+        $limit = 67108864
+        $bytes = $null
+        $fs = [System.IO.File]::Open($sidecar, 'Open', 'Read', 'Read')
+        try {
+            if ($fs.Length -gt $limit) {
+                Write-Output ("  what moved: unknown - the advisory manifest" +
+                    " at " + $shown + " is " + $fs.Length + " bytes, past" +
+                    " this reader's limit")
+                return
+            }
+            $bytes = New-Object byte[] ([int]$fs.Length)
+            $off = 0
+            while ($off -lt $bytes.Length) {
+                $n = $fs.Read($bytes, $off, $bytes.Length - $off)
+                if ($n -le 0) { break }
+                $off += $n
+            }
+        } finally { $fs.Dispose() }
+        # DECODE THE BYTES EXPLICITLY. A StreamReader detects a byte-order
+        # mark and consumes it, so a first pathname that legitimately
+        # begins with U+FEFF would lose that character silently and read
+        # as a different path.
+        $text = (New-Object System.Text.UTF8Encoding($false, $true)).GetString($bytes)
+        $read = Read-BoundedRecords $text 200000
+        $drift = Get-ManifestDrift $read.Records $liveManifest
+        Write-Output ("  the lines below come from an UNAUTHENTICATED file" +
+            " beside the mirror (" + $shown + ") and are advisory only")
+        if ($read.Truncated) {
+            Write-Output ("  note: the advisory manifest holds more than" +
+                " 200000 records; the remainder was NOT examined, so this" +
+                " explanation is incomplete")
+        }
+        if ($drift.Malformed -gt 0) {
+            Write-Output ("  note: " + $drift.Malformed + " advisory record(s)" +
+                " could not be read, so this explanation is incomplete")
+        }
+        $groups = @(@("content changed", $drift.Changed),
+                    @("entered manifest coverage", $drift.Entered),
+                    @("left manifest coverage", $drift.Left))
+        $any = $false
+        foreach ($g in $groups) {
+            $names = @($g[1])
+            if ($names.Count -eq 0) { continue }
+            $any = $true
+            Write-Output ("  " + $g[0] + " (" + $names.Count + "):")
+            $printed = 0
+            foreach ($n in $names) {
+                if ($printed -ge 20) {
+                    Write-Output ("    ... and " + ($names.Count - 20) + " more")
+                    break
+                }
+                Write-Output ("    " + (Format-AdvisoryName $n))
+                $printed++
+            }
+        }
+        if (-not $any) {
+            Write-Output ("  what moved: the advisory manifest did not" +
+                " identify the cause. It records no content difference," +
+                " which is also what a stale or replaced manifest records.")
+        }
+    } catch {
+        Write-Output ("  what moved: unknown - the advisory explanation" +
+            " failed (" + (Format-AdvisoryName $_.Exception.Message) + ")")
+    }
 }
 
 $toplevel = $true
@@ -704,11 +1045,27 @@ $toplevel = $true
 # expansion, never supplies a value and never suppresses a measurement.
 $seamFailLinkTarget = [bool]$env:PARALLAX_MIRROR_SEAM_FAIL_LINK_TARGET
 
-if (-not (Test-Path $RepoRoot)) {
+# LITERAL, on both the existence test and the resolution. Non-literal
+# `Resolve-Path` treats `[` and `]` as WILDCARDS, so `C:\Temp\pxd[1]`
+# resolves to `C:\Temp\pxd1`. The round-6 reviewer executed the
+# construction prefix on both hosts with exactly that pair - repo root
+# `C:\Temp\pxd1`, mirror `C:\Temp\pxd[1]` - and reached the copy
+# boundary with BOTH operands equal to the source: the overlap guard had
+# validated the bracketed spelling, and the reassignment below then
+# substituted the source as the destination after every check had passed.
+# Removal, creation and copy were intercepted; destination substitution
+# is what the probe established.
+if (-not (Test-Path -LiteralPath $RepoRoot)) {
     Write-Output "ERROR: $RepoRoot does not exist"
     exit 2
 }
-$RepoRoot = (Resolve-Path $RepoRoot).Path
+try {
+    $RepoRoot = (Resolve-Path -LiteralPath $RepoRoot -ErrorAction Stop).Path
+} catch {
+    Write-Output ("ERROR: the repo root could not be resolved (" +
+        $RepoRoot + "): " + $_.Exception.Message)
+    exit 2
+}
 
 # ---------------------------------------------------------------------
 # VERIFY MODE - step 6 of the construction bridge, run immediately before
@@ -847,6 +1204,7 @@ if ($VerifyIdentity) {
             " - a tracked, untracked or ignored review input moved without" +
             " moving either head, so the mirror no longer carries what the" +
             " source holds. Rebuild the mirror.")
+        Write-SourceDriftExplanation $MirrorPath $liveStatus.Manifest
         exit 1
     }
 
@@ -924,11 +1282,173 @@ while ($ri -lt $remaining.Count) {
     $ri += 2
 }
 
+# SPELLING GUARD, and it runs before the overlap guard because the
+# overlap guard is a STRING COMPARISON and this is the input that defeats
+# one. Windows strips a trailing dot or space when it OPENS a path;
+# PowerShell keeps it in the string. So `<repo>.` names the repository and
+# compares unequal to it, passing the equal, inside and contains tests
+# below.
+#
+# Measured 2026-09-05 on BOTH hosts, because the round-1 reviewer reported
+# this as reaching recursive deletion of the source and that part is not
+# what happens: the dotted path passes `Test-Path`, and `Remove-Item`
+# throws `PSArgumentException` and removes NOTHING, on `-LiteralPath` and
+# `-Path` alike. The removal failure is NON-TERMINATING though, and this
+# script does not set `$ErrorActionPreference`, so the build would carry
+# on and construct a mirror at a path naming the tree under review. Refuse
+# the spelling rather than reason about what each downstream call does
+# with it - the same decision, for the same reason, as the -ExtraInput
+# guard further down.
+# ONE HELPER, so the RULES live in one place. This guard was written
+# twice with its rules inline and each version missed an operand: the
+# first covered the repo root and the mirror path and missed
+# -OverrideOut, the second added the override and missed the extra
+# inputs and the followed link targets. Both gaps were walked through by
+# the diff reviewer on both hosts.
+#
+# WHAT THIS DOES AND DOES NOT FIX, stated because an earlier draft of
+# this comment claimed more. The helper centralizes the RULES: a new
+# alias form is refused everywhere by editing one function. It does NOT
+# centralize the OPERANDS: what ships is a subject list below plus three
+# separate call sites - the subject list, the followed targets, and the
+# extra inputs - and a new operand added to this tool still has to
+# remember to call it. The fable seat caught the draft claiming the
+# call-site problem was solved when the code has exactly that shape.
+# The list of operands that must call this helper, as of this writing:
+# the repo root, the mirror path, the override path, every followed
+# link target, every extra input.
+#
+# It returns $null when the spelling is one this tool can compare, and
+# the refusal message when it is not.
+function Test-UnresolvableSpelling($label, $raw) {
+    $s = [string]$raw
+    # DEVICE PREFIXES name the same directory under a spelling no
+    # comparison here can match.
+    if ($s.StartsWith("\\?\") -or $s.StartsWith("\\.\")) {
+        return ($label + " (" + $s + ") uses a device path form that this" +
+            " tool cannot resolve to the same spelling its comparisons" +
+            " use; pass an ordinary drive path")
+    }
+    # NTFS STREAM SYNTAX. The first version tested Contains("::") and the
+    # round-3 reviewer walked through it with
+    # `C:\path:$I30:$INDEX_ALLOCATION`, whose colons are SEPARATED, which
+    # reported Directory on PowerShell 7 and reached the recursive delete.
+    # So the rule is positional instead: exactly one colon is legitimate,
+    # the drive separator at index 1, and any other colon is a stream.
+    $rest = $s
+    if ($rest.Length -ge 2 -and $rest[1] -eq ":" -and
+        [char]::IsLetter($rest[0])) {
+        $rest = $rest.Substring(2)
+    }
+    if ($rest.Contains(":")) {
+        return ($label + " (" + $s + ") contains a colon outside the drive" +
+            " separator, which names an NTFS stream rather than the file or" +
+            " directory this tool would compare; pass an ordinary path")
+    }
+    # ONE backslash. The generated form of this helper carried TWO, which
+    # PowerShell reads as a literal two-character string, so a path spelled
+    # with backslashes was never split into components.
+    #
+    # NOT "every check was dead", which an earlier draft of this comment
+    # said. The round-4 reviewer built a mutant restoring the doubled form
+    # and measured what survived on both hosts: an unsplit string is still
+    # ONE component, so a trailing dot on the whole path was still caught,
+    # and a path spelled with forward slashes still split normally. What
+    # was lost was interior backslash-separated component checking. The
+    # dotted-ancestor override regression exercises exactly that, so the
+    # short-name test was not the only thing that would have caught it.
+    foreach ($seg in $s.Replace("\", "/").Split("/")) {
+        if ($seg -match '[. ]$' -and $seg -ne "." -and $seg -ne "..") {
+            return ($label + " (" + $s + ") has a path component ending in" +
+                " a dot or a space, which Windows strips when it opens the" +
+                " path but PowerShell keeps in the string, so this tool" +
+                " cannot tell which directory it names; pass the exact name")
+        }
+        # 8.3 SHORT NAMES alias a long directory, and every comparison
+        # below is a string comparison, so an alias and its target compare
+        # unequal while naming one directory. Resolving one needs an open
+        # handle, which this tool will not take on a destination it is
+        # about to delete.
+        #
+        # THE SHAPE IS BOUNDED BY WHAT 8.3 CAN ACTUALLY PRODUCE, which
+        # took three attempts. The first matched `~[0-9]+$` anywhere and
+        # refused `release~2026`. The second anchored the tilde position
+        # but still allowed six characters before it AND six digits after,
+        # so it refused `backup~2026`, `ABCDEF~123456` and `a b~1` - all
+        # measured on both hosts by the round-4 reviewer, and none of them
+        # expressible as a short name, because the BASENAME of an 8.3 name
+        # is at most eight characters and cannot contain a space.
+        #
+        # So the rule is the real constraint: basename at most eight
+        # characters, no space, tilde then digits, optional extension of
+        # at most three. That admits `backup~2026` and `a b~1` and still
+        # refuses `MULTI-~1`, `ABCDE~10`, `ABCD~100` and `PXD1~1.SOU`.
+        #
+        # WHAT IT STILL CANNOT DO, stated because the next reader will
+        # otherwise assume otherwise: a short name does NOT have to
+        # contain a tilde. `fsutil file setshortname` can assign
+        # `LONGFILE.TXT` as the alias of `longfilename.txt`, and no
+        # pattern over the spelling can distinguish that from an ordinary
+        # name. Refusing tilde forms narrows the class; it does not close
+        # it. The round-4 reviewer raised this as SUSPECTED and could not
+        # complete the setup from a read-only session.
+        $segBase = $seg
+        $segExt = ""
+        $segDot = $seg.LastIndexOf(".")
+        if ($segDot -gt 0) {
+            $segBase = $seg.Substring(0, $segDot)
+            $segExt = $seg.Substring($segDot + 1)
+        }
+        # THE CHARACTER SET, not just the lengths. The previous attempt
+        # excluded only spaces and periods, and the round-5 reviewer called
+        # Windows' own `CheckNameLegalDOS8Dot3W` in memory on both hosts to
+        # show `a+b~1`, `a,b~1`, `a=b~1`, `a[b]~1` and `ABC~1.+` are NOT
+        # legal DOS names while all four of the refused examples are. Short
+        # name GENERATION replaces this punctuation with underscores, so a
+        # name containing it cannot be a generated alias.
+        #
+        # The class is the documented legal 8.3 set: letters, digits, and
+        # $ % ' - _ @ ~ ` ! ( ) { } ^ # & - and nothing else.
+        # THE TILDE IS IN THE CLASS TOO. The comment above listed it and
+        # the classes omitted it, so `AB~CDE~1` and `LONGFI~1.A~B` - both
+        # GENERATED by Windows' own short-name routine from `AB~CDELongName`
+        # and `LongFilename.a~b`, measured by the round-6 reviewer on both
+        # hosts - were accepted. Those are not the assigned aliases item 99
+        # defers; they are ordinary generated ones. The separator tilde
+        # outside the class does not cover a second tilde inside the name.
+        if ($segBase.Length -le 8 -and $segExt.Length -le 3 -and
+            $segBase -cmatch '^[A-Za-z0-9$%''\-_@~`!(){}\^#&]{1,6}~[0-9]{1,6}$' -and
+            ($segExt.Length -eq 0 -or
+             $segExt -cmatch '^[A-Za-z0-9$%''\-_@~`!(){}\^#&]{1,3}$')) {
+            return ($label + " (" + $s + ") has a component shaped like an" +
+                " 8.3 short name, which this tool cannot resolve to the" +
+                " long name its comparisons use. If that is the real name" +
+                " on disk, this tool does not support it: rename it or" +
+                " pass a path that does not go through it")
+        }
+    }
+    return $null
+}
+
+$spellingSubjects = @(@("the repo root", $RepoRoot),
+                      @("the mirror path", $MirrorPath))
+if ($OverrideOut) {
+    $spellingSubjects += , @("the override path", $OverrideOut)
+}
+foreach ($pair in $spellingSubjects) {
+    $bad = Test-UnresolvableSpelling $pair[0] $pair[1]
+    if ($bad) {
+        Write-Output ("ERROR: " + $bad)
+        exit 2
+    }
+}
+
 # OVERLAP GUARD, before anything is created or deleted. -Force recursively
 # deletes MirrorPath, so a MirrorPath equal to, inside, or containing
 # RepoRoot would destroy the user's working tree. robocopy over an
-# overlapping pair is equally unsafe. This runs FIRST, because by the time
-# Remove-Item runs it is too late to check.
+# overlapping pair is equally unsafe. This runs FIRST among the
+# comparisons, because by the time Remove-Item runs it is too late to
+# check.
 $rr = $RepoRoot.Replace("\", "/").TrimEnd("/") + "/"
 $mp = $MirrorPath.Replace("\", "/").TrimEnd("/") + "/"
 $cmp = [System.StringComparison]::OrdinalIgnoreCase
@@ -967,9 +1487,53 @@ foreach ($protected in @($rr, $mp)) {
         exit 2
     }
 }
-if (Test-Path $OverrideOut) {
+if (Test-Path -LiteralPath $OverrideOut) {
     Write-Output ("ERROR: $OverrideOut already exists - a stale override" +
         " reads exactly like a fresh one")
+    exit 2
+}
+
+# THE ADVISORY SOURCE MANIFEST'S DESTINATION, resolved and LEXICALLY
+# guarded here, beside the override, for the same stated reason: a
+# destination discovered after the build has copied, remediated and
+# manifested is discovered too late, and -SkipProbe would bypass a check
+# placed later. Its ALIAS guards are further down with the override's,
+# and its removal is after both, because a build that is going to be
+# refused must not have deleted anything first.
+$smResult = Get-SourceManifestSidecarPath $MirrorPath
+if ($smResult.Kind -eq "root") {
+    Write-Output ("ERROR: the mirror path is a filesystem root" +
+        " ($MirrorPath), which has no sibling, so no advisory source" +
+        " manifest can be placed beside it")
+    exit 2
+}
+if ($smResult.Kind -ne "ok") {
+    Write-Output ("ERROR: the mirror path could not be resolved in order to" +
+        " place an advisory source manifest beside it ($MirrorPath): " +
+        $smResult.Reason)
+    exit 2
+}
+$SourceManifestOut = $smResult.Path
+$smp = $SourceManifestOut.Replace("\", "/").TrimEnd("/")
+foreach ($protected in @($rr, $mp)) {
+    if (($smp + "/").Equals($protected, $cmp) -or
+        ($smp + "/").StartsWith($protected, $cmp) -or
+        $protected.StartsWith($smp + "/", $cmp)) {
+        Write-Output ("ERROR: the source manifest path overlaps a protected" +
+            " tree ($SourceManifestOut)")
+        exit 2
+    }
+}
+if ($smp.Equals($op, $cmp)) {
+    Write-Output ("ERROR: the source manifest path is the override path" +
+        " ($SourceManifestOut) - the advisory write would replace the file" +
+        " the probe verified and the wrapper hashes")
+    exit 2
+}
+if ($SourceManifestOut.Length -ge 260) {
+    Write-Output ("ERROR: path budget exceeded by the source manifest - " +
+        "$SourceManifestOut is $($SourceManifestOut.Length) characters " +
+        "and the limit is 260")
     exit 2
 }
 
@@ -1255,7 +1819,8 @@ function Test-PathOrAncestorIsLink($path) {
     return $null
 }
 
-foreach ($pair in @(@("mirror path", $MirrorPath), @("override path", $OverrideOut))) {
+foreach ($pair in @(@("mirror path", $MirrorPath), @("override path", $OverrideOut),
+                    @("source manifest path", $SourceManifestOut))) {
     $label = $pair[0]
     $hit = Test-PathOrAncestorIsLink $pair[1]
     if ($hit) {
@@ -1269,6 +1834,41 @@ foreach ($pair in @(@("mirror path", $MirrorPath), @("override path", $OverrideO
 # alias in the other direction (cross-vendor round 3): the walk records
 # the target as spelled, so a mirror path at the real directory behind
 # it neither passes through a link nor overlaps the recorded text.
+# THE HELPER, on discovered targets, before the DESTINATION-OVERLAP
+# comparisons. Not before "any comparison": target equality, containment
+# and duplicate-target checks all run earlier, during discovery, and an
+# earlier draft of this comment claimed otherwise.
+# The round-3 reviewer executed the protected-target checks with the real
+# alias `<mirror>/skills/MULTI-~1` and they accepted the corresponding
+# long directory as the destination. A target this tool discovered is
+# still a spelling it has to compare, so it gets the same validation as
+# one the caller passed.
+# THE SOURCE ROOT'S ANCESTORS. The block far above checks whether the
+# root ITSELF is a reparse point; nothing walked the directories above
+# it, while the mirror, the override, the sidecar, the extra inputs and
+# the followed targets all had their ancestors walked. The round-4
+# reviewer reached the recursive removal on BOTH hosts through the
+# ordinary `My Documents` junction that exists on this machine, with a
+# source of `C:\Users\<user>\My Documents\parallax\skills` against a
+# mirror of `C:\Users\<user>\Documents\parallax\skills`: two spellings
+# of one directory, which the lexical overlap comparison accepts. That
+# probe proves REACHABILITY with removal intercepted, not deletion.
+$rootHit = Test-PathOrAncestorIsLink $RepoRoot
+if ($rootHit) {
+    Write-Output ("ERROR: the repo root " + $RepoRoot + " sits beneath a" +
+        " directory link (" + $rootHit + "), so this tool cannot tell" +
+        " whether it and the mirror name the same directory; pass the" +
+        " path that does not go through the link")
+    exit 2
+}
+
+foreach ($target in @($followedTargets)) {
+    $bad = Test-UnresolvableSpelling "a followed link target" $target
+    if ($bad) {
+        Write-Output ("ERROR: " + $bad)
+        exit 2
+    }
+}
 foreach ($target in @($followedTargets)) {
     $hit = Test-PathOrAncestorIsLink $target
     if ($hit) {
@@ -1281,7 +1881,8 @@ foreach ($target in @($followedTargets)) {
 }
 foreach ($target in @($followedTargets)) {
     $tp = ([string]$target).Replace("\", "/").TrimEnd("/") + "/"
-    foreach ($pair in @(@("mirror path", $mp), @("override path", ($op + "/")))) {
+    foreach ($pair in @(@("mirror path", $mp), @("override path", ($op + "/")),
+                        @("source manifest path", ($smp + "/")))) {
         $label = $pair[0]
         $cand = $pair[1]
         if ($cand.Equals($tp, $cmp) -or $cand.StartsWith($tp, $cmp) -or
@@ -1294,7 +1895,123 @@ foreach ($target in @($followedTargets)) {
     }
 }
 
-if (Test-Path $MirrorPath) {
+# EXTRA INPUTS versus the sidecar. $ExtraInputPaths holds paths already
+# resolved by the -ExtraInput parser above; that parser runs before $smp
+# exists, which is why this check lives here rather than beside it.
+# THE HELPER, on extra inputs, before the collision checks below. The
+# round-3 reviewer supplied this mirror's own sidecar under its real
+# short alias `C:\Temp\PXD1~1.SOU`, which passed every check and reached
+# the removal of `C:\Temp\pxd1.source-manifest`; the copy that follows is
+# unchecked, so the input would then be absent from a mirror the digest
+# certifies. The loop below keeps its own dot and space test; the helper
+# now covers the same ground for every operand, and the duplicate is left
+# rather than removed because its message is what two existing tests pin.
+foreach ($eiResolved in @($ExtraInputPaths)) {
+    $bad = Test-UnresolvableSpelling "-ExtraInput" $eiResolved
+    if ($bad) {
+        Write-Output ("ERROR: " + $bad)
+        exit 2
+    }
+}
+foreach ($eiResolved in @($ExtraInputPaths)) {
+    $eiNorm = ([string]$eiResolved).Replace("\", "/").TrimEnd("/")
+    if ($eiNorm.Equals($smp, $cmp)) {
+        Write-Output ("ERROR: -ExtraInput '" + $eiResolved + "' is the" +
+            " source manifest path, which this build replaces - a declared" +
+            " review input must not be a file this tool overwrites")
+        exit 2
+    }
+    # SPELLING EQUALITY IS NOT IDENTITY, and the comparison above is only
+    # spelling. With C:\alias a junction to C:\out, a mirror at
+    # C:\out\mirror and an extra input at
+    # C:\alias\mirror.source-manifest, BOTH output paths have ordinary
+    # ancestors and pass their own alias checks, while the extra input
+    # keeps the alias spelling and compares unequal - and -Force would
+    # then remove the very file that extra input names, after which the
+    # unchecked Copy-Item can leave it out of the mirror entirely. This
+    # tool cannot establish physical identity here, so it REFUSES the
+    # case it cannot decide rather than guessing.
+    # A TRAILING DOT OR SPACE ON ANY COMPONENT defeats the comparison
+    # above. Windows strips it when it OPENS the file; PowerShell keeps
+    # it in the path. Measured 2026-09-05: `BACKLOG.md.` passes
+    # Test-Path, resolves WITH the dot, hashes identical to
+    # `BACKLOG.md`, and compares unequal - so an extra input spelled
+    # `<mirror>.source-manifest.` passes this guard and still names the
+    # file -Force is about to remove. Refuse the spelling.
+    foreach ($seg in $eiNorm.Split('/')) {
+        if ($seg -match '[. ]$') {
+            Write-Output ("ERROR: -ExtraInput '" + $eiResolved + "' has" +
+                " a path component ending in a dot or a space, which" +
+                " Windows strips when it opens the file but PowerShell" +
+                " keeps in the path, so this tool cannot tell which file" +
+                " it names; pass the exact name")
+            exit 2
+        }
+    }
+    $eiHit = Test-PathOrAncestorIsLink $eiResolved
+    if ($eiHit) {
+        Write-Output ("ERROR: -ExtraInput '" + $eiResolved + "' is reached" +
+            " through a directory link at " + $eiHit + ", so this tool" +
+            " cannot tell whether it names the same file as the source" +
+            " manifest it replaces; pass the path behind the link")
+        exit 2
+    }
+}
+
+# LAST, because a build that is going to be refused must not have deleted
+# anything first. Read the ATTRIBUTES rather than calling Test-Path,
+# because the Directory bit and the not-there case have to be told apart
+# in one read, and this is the one place where a wrong "it is not there"
+# turns into a write.
+#
+# MEASURED 2026-09-05 under BOTH hosts, because the link walker above
+# justifies the same choice with a claim nobody had measured. Windows
+# PowerShell 5.1 and PowerShell 7 agree, character for character, on all
+# four cases: an intact junction, a DANGLING junction, a plainly missing
+# path, and an ordinary file. The dangling junction returns
+# `Directory, ReparsePoint` from GetAttributes and `True` from Test-Path
+# on both, and only the missing path throws. So the cross-host risk this
+# step was escalated for does not exist for a junction. Two limits are
+# stated rather than papered over: the walker's premise that Test-Path
+# "may report as absent" was NOT reproduced for a dangling junction, and
+# a dangling FILE SYMLINK was not measured at all, so nothing here claims
+# anything about one.
+$smAttr = $null
+try {
+    $smAttr = [System.IO.File]::GetAttributes($SourceManifestOut)
+} catch [System.IO.FileNotFoundException] {
+    $smAttr = $null
+} catch [System.IO.DirectoryNotFoundException] {
+    $smAttr = $null
+} catch {
+    Write-Output ("ERROR: the source manifest path could not be examined" +
+        " ($SourceManifestOut): " + $_.Exception.Message)
+    exit 2
+}
+if ($null -ne $smAttr) {
+    if (([int]$smAttr -band [int][System.IO.FileAttributes]::Directory) -ne 0) {
+        Write-Output ("ERROR: $SourceManifestOut is a directory - this tool" +
+            " replaces a file there and never removes a tree")
+        exit 2
+    }
+    if (-not $Force) {
+        Write-Output ("ERROR: $SourceManifestOut already exists - pass" +
+            " -Force to replace it, the same rule the mirror path follows")
+        exit 2
+    }
+    # REMOVING a link removes the link and never its target's bytes,
+    # which is exactly why the removal is safe where a write through it
+    # was not.
+    Remove-Item -LiteralPath $SourceManifestOut -Force
+}
+
+# LITERAL, everywhere a path this tool did not construct itself is
+# tested. The round-6 reviewer's bracketed mirror path `pxd[1]` made the
+# non-literal form here report the mirror as ALREADY EXISTING because
+# the wildcard matched a sibling `pxd1`, and made the content manifest's
+# per-path tests misclassify any repository file with brackets in its
+# name. Five call sites were converted in one pass; none remain.
+if (Test-Path -LiteralPath $MirrorPath) {
     if (-not $Force) {
         Write-Output ("ERROR: $MirrorPath already exists - a stale mirror" +
             " reads exactly like a fresh one. Pass -Force to replace it.")
@@ -1303,7 +2020,18 @@ if (Test-Path $MirrorPath) {
     Remove-Item -LiteralPath $MirrorPath -Recurse -Force
 }
 New-Item -ItemType Directory -Force -Path $MirrorPath | Out-Null
-$MirrorPath = (Resolve-Path $MirrorPath).Path
+# LITERAL. This is the reassignment the round-6 reviewer reached with a
+# bracketed mirror path: the non-literal form expanded the brackets as a
+# wildcard and handed the SOURCE back as the destination, after the
+# overlap guard had already approved the bracketed spelling. A resolution
+# failure here is fatal, never a silent fall-through into the copy.
+try {
+    $MirrorPath = (Resolve-Path -LiteralPath $MirrorPath -ErrorAction Stop).Path
+} catch {
+    Write-Output ("ERROR: the mirror path could not be resolved after" +
+        " creation (" + $MirrorPath + "): " + $_.Exception.Message)
+    exit 2
+}
 
 # CONSTRUCTION BRIDGE, step 1: capture the source identity BEFORE the
 # copy. Everything after this compares against this value, not against a
@@ -1438,7 +2166,7 @@ foreach ($entry in $entries) {
     # surface this step exists to remove.
     $dir = Split-Path (Join-Path $MirrorPath $entry) -Parent
     while ($dir -and ($dir.Length -gt $MirrorPath.Length) -and
-           (Test-Path $dir) -and
+           (Test-Path -LiteralPath $dir) -and
            -not (Get-ChildItem -LiteralPath $dir -Force)) {
         Remove-Item -LiteralPath $dir -Force
         $dir = Split-Path $dir -Parent
@@ -1734,6 +2462,14 @@ if (-not $SkipProbe) {
     $overrideFile = $OverrideOut
 }
 
+# The advisory source manifest, written before the record so the record
+# can name it. Its destination was fully guarded above; a failure to
+# write it here is reported and never fatal.
+$sidecarRecord = $SourceManifestOut
+if (-not (Write-SourceManifestSidecar $SourceManifestOut $sourceStatus.Manifest)) {
+    $sidecarRecord = "unwritable"
+}
+
 Write-Output ("mirror: " + $MirrorPath)
 # TWO identities, not one. They differ whenever remediation committed,
 # which is the ordinary case for a repo carrying a tracked back-channel,
@@ -1753,6 +2489,7 @@ foreach ($lnk in @($sourceLinks)) {
 }
 Write-Output ("probe: " + $probeLine)
 Write-Output ("override: " + $overrideFile)
+Write-Output ("source_manifest: " + $sidecarRecord)
 # A mirror built without the client probe is NOT cleared for dispatch, and
 # must not share its exit code with one that is. -SkipProbe exists for
 # offline construction and for the tests; it is not a way to reach a clean

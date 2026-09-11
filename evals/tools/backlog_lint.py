@@ -607,31 +607,77 @@ def _verified_map(text):
     return {item.id: (item.status, item.get("Verified")) for item in doc.items}
 
 
+def _is_readable(text):
+    """Whether `text` PARSED, which is not the same question as whether
+    it held any items.
+
+    `_verified_map` returns {} for absent text, for unparseable text, and
+    for a clean backlog with no items yet. A caller that needs to know
+    whether there was anything to compare against has to ask separately,
+    or it treats an empty valid backlog as an unreadable one - which is
+    what the first version of the born-closed widening did, so the first
+    item ever filed could not attest the work that produced it."""
+    if text is None:
+        return False
+    try:
+        parse(text)
+    except ParseError:
+        return False
+    return True
+
+
 def reattested_items(old_text, new_text):
     """Ids re-attested between the two texts, in two forms.
 
     An item that is OPEN or PARTIAL in the new text counts when its
-    Verified field changed or the item is new. An item that was OPEN or
-    PARTIAL in the old text and is DONE or GONE in the new one also
-    counts, reported as '<id> (closed)': closing an item IS an
-    attestation about the governed work that closed it.
+    Verified field changed or the item is new. An item that is DONE or
+    GONE in the new text counts when it was OPEN or PARTIAL in the old
+    one, OR when it is new AND the old text PARSED, reported either way
+    as '<id> (closed)':
+    closing an item IS an attestation about the governed work that closed
+    it, and being born closed is that same attestation made in one step
+    instead of two.
 
     The second form is a DELIBERATE WIDENING of the spec's 3b and 3c
     wording, which speaks only of a re-attested OPEN or PARTIAL item.
     Without it a wave whose only backlog change is a close could never
-    satisfy the Stop hook or the pre-push clause. Everything else is
-    unchanged: a Verified edit on an item that is DONE in BOTH texts does
-    not count, and an unrelated byte does not count.
+    satisfy the Stop hook or the pre-push clause.
+
+    The NEW-and-closed half of it was added 2026-09-05, after a session
+    did governed work, filed the item that owned it as DONE, and was
+    still refused: the old condition asked whether the id had been OPEN
+    BEFORE, which an item that did not exist can never satisfy. Work
+    filed and closed in one session was unattestable, and the remedies
+    the refusal left were to mis-state the item as OPEN or to refresh
+    some other item that does not own the work.
+
+    Everything else is unchanged: a Verified edit on an item that is DONE
+    in BOTH texts does not count, and an unrelated byte does not count.
     """
     old = _verified_map(old_text)
     new = _verified_map(new_text)
+    # "NEW" only means anything against an old text that was READABLE.
+    # With no readable old text every item is trivially new, and counting
+    # the closed ones would make the gate satisfiable by a backlog nobody
+    # touched. The first version of the born-closed widening missed that
+    # and turned test_absent_old_text_counts_every_open_item red.
+    #
+    # READABLE, not NON-EMPTY. The second version asked `bool(old)`, which
+    # is a question about ITEMS, so a backlog that parsed cleanly and held
+    # none of them was treated as unreadable and the first item ever filed
+    # could not attest its own work. Cross-vendor review found that; the
+    # tests before it all started from a populated fixture and could not
+    # see the difference.
+    have_old = _is_readable(old_text)
     out = []
     for item_id, (status, verified) in new.items():
         if status in OPEN_STATUSES:
             if item_id not in old or old[item_id][1] != verified:
                 out.append(item_id)
         elif status in ("DONE", "GONE"):
-            if item_id in old and old[item_id][0] in OPEN_STATUSES:
+            was_open = item_id in old and old[item_id][0] in OPEN_STATUSES
+            born_closed = have_old and item_id not in old
+            if was_open or born_closed:
                 out.append("%s (closed)" % item_id)
     return out
 

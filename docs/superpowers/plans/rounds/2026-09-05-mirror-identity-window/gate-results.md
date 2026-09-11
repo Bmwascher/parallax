@@ -1,0 +1,96 @@
+# Gate results, mirror identity window
+
+Run at `8ecb177`, the head of `mirror-identity-window` after Tasks 1
+through 4. Task 5 changes no source and produces this record only.
+
+## The six CI tiers
+
+| tier | command | result |
+| --- | --- | --- |
+| 1 | `skill_lint.py skills/multi-model-verify --strict` | PASS, 0 errors, 2 warnings, exit 0 |
+| 1b | `skill_scanner.py skills` | clean, 0 CRITICAL / 0 WARN / 0 INFO, exit 0 |
+| 1c | `check_exact_line_oracles.py` | clean, exit 0 |
+| 2 | `run_trigger_evals.py` | PASS, 5 positives clear 5 near-misses (weakest 0.32 vs strongest 0.00), exit 0 |
+| 2b | `python -m pytest evals -q` | **2917 passed, 14 skipped** in 1323.65s (22m03s), exit 0 |
+| 2c | `backlog_lint.py` | clean, exit 0 |
+
+Both tier-1 warnings are pre-existing size warnings on `SKILL.md`: 412
+lines against a 400 warn threshold, and roughly 6496 tokens against a
+6500 hard ceiling. The linter errors only ABOVE 6500, so these are
+warnings and the tier passes. The headroom is worth naming anyway: Task 3
+spent about eleven of the fifteen tokens that were free before it, and
+the next addition to `SKILL.md`'s body breaks this tier.
+
+## Both PowerShell hosts
+
+`evals/multi-model-verify/test_review_mirror.py`, the module Tasks 1 and 2
+changed, run under each host explicitly rather than letting the suite pick.
+
+| host | result | elapsed |
+| --- | --- | --- |
+| `powershell` (Windows PowerShell 5.1) | 154 passed, 1 skipped | 98.73s |
+| `pwsh` (PowerShell 7) | 154 passed, 1 skipped | 113.87s |
+
+## A measurement that did NOT reproduce, and it is the backlog's
+
+Backlog item 93 says this exact module takes **18m42s under PowerShell 7
+against 94s under Windows PowerShell 5.1**, a factor of twelve, and that
+every CI run and every both-host gate pays about eighteen minutes for it.
+Measured here on the same module: **113.87s against 98.73s, a factor of
+1.15.** The eighteen minutes are not present.
+
+What this does and does not establish. It establishes that the gap is
+absent at this commit, on this machine, for this module - the run above
+is the whole evidence. It does NOT establish what closed it, and this
+record does not guess. The obvious candidate is item 90, which shipped in
+0.32.0 on the same day item 93 was measured and changed the mirror to
+re-link directory links as junctions rather than copy through them; item
+93's own text says it was measured "at item 90's Task 3", which is during
+that work rather than after it. That is a hypothesis with a plausible
+mechanism and NO measurement behind it here.
+
+**Re-measured deliberately, same day, at the user's direction.** Two
+disposable worktrees at `4dca0f8^1` and `4dca0f8`, each running the module
+as it stood at its own commit, host forced through `PARALLAX_PS_HOST`:
+
+| tree | 5.1 | PowerShell 7 | ratio |
+| --- | --- | --- | --- |
+| before item 90 (`eddacb6`) | 63.18s | 67.96s | 1.08 |
+| after item 90 (`4dca0f8`) | 79.81s | 90.30s | 1.13 |
+| this branch (`8ecb177`) | 98.73s | 113.87s | 1.15 |
+
+The slowdown did not reproduce on either side of item 90's merge. That is
+weaker than "item 90 closed nothing", and the difference matters: three
+fresh runs that do not hit whatever conditions produced 18m42s exclude
+nothing about the code. The hypothesis this record floated above - that
+item 90's re-linking fixed it - is UNSUPPORTED rather than refuted, and it
+is left standing so the record shows what was guessed and what measurement
+did and did not do to it.
+
+Item 93 is amended rather than closed: the 18m42s is not withdrawn, the
+inference that the module carries it as a standing cost on every run is.
+The cause remains unknown.
+
+## Not run
+
+`run_behavioral_evals.py --changed` is Task 5 Step 3 and was NOT run.
+It makes real headless model runs graded by the cross-vendor reviewer,
+spending from the same quota the diff debate that follows this plan
+needs, and the user decided 2026-09-05 to keep that quota for the debate.
+
+This is a DELIBERATE GAP, not a pass. The suite applies: skill and prompt
+text changed in Task 3. Nothing else in this record depends on it, and
+nothing here may be read as evidence about the behaviour it would have
+measured. If it is run before merge, its result belongs in this file
+beside the tiers above.
+
+## A plan defect in this task
+
+Step 4 as written stages with the blanket flag. The family git rules ban
+it and a hook denies it, so that step could not have run as written.
+Staged by explicit path instead.
+
+This is one of several defects found by executing this plan rather than
+reading it. The others are recorded at the steps they were fixed in,
+and in `README.md`. No total is given here on purpose: a count written
+inside one of the documents being counted goes stale on the next edit.
