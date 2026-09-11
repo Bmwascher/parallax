@@ -1981,18 +1981,56 @@ def test_names_that_8_3_cannot_produce_are_accepted(tmp_path):
     # build. assert_built requires the completion diagnostic and the exit
     # code. Round-5 finding.
     for name in ("backup~2026", "ABCDEF~123456", "a b~1",
-                 "a+b~1", "a,b~1", "a=b~1", "ABC~1.+"):
+                 "a+b~1", "a,b~1", "a=b~1", "a[b]~1", "ABC~1.+"):
         proc = run_mirror(repo, tmp_path / name)
         assert "8.3 short name" not in proc.stdout, (name, proc.stdout)
         assert_built(proc)
-    # `a[b]~1` PASSES THE GUARD AND STILL CANNOT BE BUILT, measured
-    # 2026-09-06: robocopy exits 16 on a destination containing square
-    # brackets, and the script reports that failure. That is a separate
-    # limitation of the copy step, not this guard refusing a legal name,
-    # so it is asserted at the guard only. Asserting a completed build
-    # here would fail for a reason this test is not about.
-    proc = run_mirror(repo, tmp_path / "a[b]~1")
-    assert "8.3 short name" not in proc.stdout, proc.stdout
+    # `a[b]~1` is in the loop and BUILDS. An earlier version of this test
+    # carved it out with a comment blaming robocopy for exiting 16 on a
+    # bracketed destination, and asserted only that the guard had not
+    # fired - which the round-6 reviewer identified as a negative-only
+    # oracle resting on an unestablished cause. The cause was the
+    # script's own non-literal path calls treating `[b]` as a wildcard.
+    # With those literal, the build completes and the special case is
+    # gone.
+
+
+def test_a_wildcard_destination_cannot_be_substituted_for_the_source(tmp_path):
+    """THE ROUND-6 BLOCKER. `Resolve-Path` without `-LiteralPath` expands
+    `[1]` as a wildcard, so a mirror path of `<dir>\\pxd[1]` resolved to
+    the sibling `<dir>\\pxd1` AFTER the overlap guard had approved the
+    bracketed spelling. The reviewer executed the construction prefix on
+    both hosts with the source at `pxd1` and reached the copy boundary
+    with both operands equal to the source. Removal, creation and copy
+    were intercepted, so what was established is destination
+    substitution, not a completed copy onto the source.
+
+    Here the source is `src` and the wildcard sibling is a decoy, so the
+    test can assert the decoy is untouched and the mirror was built at
+    its own spelling.
+    """
+    repo = make_repo(tmp_path)
+    decoy = tmp_path / "pxd1"
+    decoy.mkdir()
+    proc = run_mirror(repo, tmp_path / "pxd[1]")
+    assert_built(proc)
+    mirror_line = [l for l in proc.stdout.splitlines() if l.startswith("mirror: ")]
+    assert mirror_line and mirror_line[0].endswith("pxd[1]"), proc.stdout
+    assert (tmp_path / "pxd[1]" / "kept.txt").exists(), "built at its own spelling"
+    assert not any(decoy.iterdir()), "the wildcard sibling must be untouched"
+
+
+def test_generated_short_names_with_an_interior_tilde_are_refused(tmp_path):
+    """The tilde is legal INSIDE a short name, not only as the separator.
+    `AB~CDE~1` and `LONGFI~1.A~B` were produced by Windows' own
+    generator from `AB~CDELongName` and `LongFilename.a~b`, measured by
+    the round-6 reviewer on both hosts, and the character classes -
+    whose comment listed the tilde - did not contain it."""
+    repo = make_repo(tmp_path)
+    for name in ("AB~CDE~1", "LONGFI~1.A~B"):
+        proc = run_mirror(repo, tmp_path / name)
+        assert proc.returncode == 2, (name, proc.stdout + proc.stderr)
+        assert "8.3 short name" in proc.stdout, (name, proc.stdout)
 
 
 def test_real_short_name_shapes_are_still_refused(tmp_path):
@@ -2363,13 +2401,10 @@ def test_a_runtime_category_difference_is_escaped_on_both_hosts(tmp_path):
     mirror = tmp_path / "mirror"
     _, ident = build_and_read(repo, mirror)
     sidecar = tmp_path / "mirror.source-manifest"
-    # ONE backslash, so Python builds the real codepoint. Two would
-    # write the seven ASCII characters `odd\u0890` into the
-    # manifest, which is ordinary punctuation and text that
-    # Format-AdvisoryName passes through by design - the test would
-    # then assert the absence of a string the output must contain,
-    # and could never pass. The sibling test above uses the same
-    # single-backslash form for U+009B and U+202E.
+    # ONE backslash in Python source, so the real codepoint is written.
+    # The read-back assertions below are what actually establish that;
+    # an explanation that used to sit here claimed the rendering
+    # assertions would catch a doubled escape, and they would not.
     sidecar.write_text("odd\u0890name.txt " + "0" * 64 + chr(10),
                        encoding="utf-8")
     # THE FIXTURE IS CHECKED, not assumed. The comment above used to

@@ -426,11 +426,16 @@ directory BEFORE the source-identity and copy checks, so a failure after
 creation satisfied every assertion while the docstring claimed a
 completed build. It calls `assert_built` now.
 
-**A measurement that changed the test.** Adding `a[b]~1` to the built set
-fails: robocopy exits 16 on a destination containing square brackets,
-measured 2026-09-06. That is a limitation of the copy step, not this
-guard refusing a legal name, so the bracket case is asserted at the guard
-only and the reason is written next to it.
+**A measurement that changed the test, and a WRONG attribution,
+corrected in place 2026-09-11.** Adding `a[b]~1` to the built set failed
+with `robocopy failed with 16`, and this paragraph originally blamed a
+robocopy limitation on bracketed destinations and carved the case out to
+a guard-only assertion. Round 6 refuted both halves: the cause was the
+script's OWN non-literal `Resolve-Path` and `Test-Path` calls treating
+`[b]` as a wildcard, and the guard-only assertion was another
+negative-only oracle. With every path call literal the bracketed name
+builds normally and is back in the loop. The lesson is the one item 93
+already taught this branch: an observed exit code is not a cause.
 
 **The editorial finding, and it is the sharpest of the round.** This
 document had been APPENDING corrections while leaving the wrong sentences
@@ -501,3 +506,85 @@ the other work has not touched this checkout. If it writes here during
 the round, the wrapper's post-round identity check voids the round and
 this record will say which paths moved - which is, after all, the feature
 this branch ships.
+
+## Round 6 (`Astra D6`), the confirming round, second attempt
+
+Resumed, route verified, binder `clean` and `sealed`, mirror rebuilt at
+the same path from head `150886b`. PowerShell versions the reviewer
+tested: 7.6.6 and 5.1.26100.9168.
+
+NOT DRY. Three merge blockers and one editorial. The first blocker is
+the most consequential finding since round 1, and it was hiding behind
+this side's own wrong explanation of a test failure.
+
+**1. Wildcard resolution substituted the destination for the source.**
+`Resolve-Path` without `-LiteralPath` expands `[` and `]` as wildcards,
+so a mirror path of `C:\Temp\pxd[1]` resolved to `C:\Temp\pxd1` - the
+source - AFTER the overlap guard had approved the bracketed spelling. The
+reviewer executed the construction prefix on both hosts and reached the
+copy boundary with both operands equal to the source. Removal, creation
+and copy were intercepted; destination substitution after validation is
+what the probe established.
+
+This is the cause of the `robocopy failed with 16` that round 5's record
+attributed to a robocopy limitation on bracketed names. That attribution
+was never established; it was an exit code with a cause named next to
+it, which is the exact mistake item 93 taught this branch a week
+earlier, repeated inside the same debate. Corrected in place in the
+round-5 section.
+
+The fix: `-LiteralPath` on both `Resolve-Path` sites with a fatal
+error on resolution failure, AND on the five non-literal `Test-Path`
+calls that remained - one of which had reported the bracketed mirror as
+already existing because the wildcard matched its sibling. The tool is
+literal throughout now. With that done `a[b]~1` simply builds, so the
+carve-out written for it is gone, and
+`test_a_wildcard_destination_cannot_be_substituted_for_the_source`
+builds against a decoy sibling and asserts the decoy is untouched.
+
+**2. Both character classes omitted the tilde** that the comment beside
+them listed. The reviewer ran Windows' own short-name generator on
+`AB~CDELongName` and `LongFilename.a~b`, got `AB~CDE~1` and
+`LONGFI~1.A~B`, and the helper accepted both. Generated aliases, not the
+assigned ones item 99 defers. The reviewer ran 156 probes per host across
+the declared characters in both positions and found only these two
+omissions; apostrophe, backtick, caret and hyphen behaved correctly.
+Fixed, with the two measured names as the regression.
+
+**3. The bracket carve-out was a negative-only oracle** - asserting only
+that the short-name diagnostic was absent, which exit 2 with empty
+stdout satisfies. Moot now that the case builds and calls
+`assert_built` with the rest.
+
+**4. The obsolete category-test explanation had NOT been deleted**, and
+the round-5 section of this record said it had. Deleted this time, and
+this sentence is the correction of the record's false claim about it.
+
+Confirmed holding: the doubled-backslash account corrected in place, the
+round-4 split, item 98's narrowed claim, item 99's outstanding
+experiment.
+
+What the reviewer did not check: it did not rerun pytest or CI, perform
+real filesystem mutations, reproduce the exact bracketed build failure,
+or exhaustively test OEM and non-ASCII aliases or network paths.
+
+Gate after the fixes: 169 passed and 1 skipped under BOTH hosts; full
+`pytest evals` 2932 passed and 14 skipped; backlog lint clean; script
+pure ASCII.
+
+## Where the debate stands after six
+
+Six exchanges used of six authorized, and the termination condition is
+STILL not met: round 6 was not dry. This record does not claim
+otherwise.
+
+What six rounds show, stated as plainly as possible. The change this
+branch exists to make - the sidecar, the refusal explanation, the quiet
+period - has not drawn a finding since round 1. Every finding from round
+2 onward has been in one of two places: the destination guards that
+round 1 exposed as spelling comparisons, and this side's own record of
+the work. Round 6's first blocker is a pre-existing wildcard defect in
+the shipped tool that predates this branch by months, found because the
+debate kept pressing on path spellings.
+
+A seventh round would be a new authorization.
