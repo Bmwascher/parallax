@@ -9,7 +9,7 @@ update, not for the person who maintains it. Each section starts with
 Open each section with a lead paragraph in plain words that says what
 changed for the user and what they must do. The lead paragraph has no
 code, no file name and no link; the checker refuses those. After the
-lead, one line names the backlog items that the version closes. Put the
+lead, one bold line names the backlog items that the version closes. Put the
 maintainer detail, the file names and the records under a later title.
 
 Write each section in ASD-STE100 Simplified Technical English.
@@ -45,7 +45,7 @@ different folders, and it was hard to find a review or to clean up. You
 do not have to change anything when you update. New reviews go to the
 one folder, and old files stay where they are.
 
-This version closes backlog item 100.
+**Backlog: this version closes item 100.**
 
 ### What changed for you
 
