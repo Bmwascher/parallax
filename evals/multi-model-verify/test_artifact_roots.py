@@ -83,3 +83,248 @@ def test_fixed_rows_state_their_reason_outside_the_region():
     assert "Superpowers owns it" in tail
     assert "never inside the reviewed repository" in tail
     assert "git rev-parse --git-common-dir" in tail
+
+
+# ---------------------------------------------------------------------
+# Group 3a: the resolver
+# ---------------------------------------------------------------------
+def run_resolver(*args, tool=None):
+    return subprocess.run(
+        [POWERSHELL, "-NoProfile", "-NonInteractive", "-File",
+         str(tool or TOOL), *args],
+        capture_output=True, text=True, timeout=60)
+
+
+def git(repo, *args):
+    return subprocess.run(["git", "-C", str(repo), *args],
+                          capture_output=True, text=True, check=True).stdout
+
+
+def make_repo(tmp_path, name="repo", commits=1):
+    repo = tmp_path / name
+    repo.mkdir()
+    git(tmp_path, "init", "-q", str(repo))
+    for i in range(commits):
+        (repo / f"file{i}.txt").write_text(f"content {i}\n")
+        git(repo, "add", f"file{i}.txt")
+        git(repo, "-c", "user.email=t@t", "-c", "user.name=t",
+            "commit", "-q", "-m", f"commit {i}")
+    return repo
+
+
+def norm(p):
+    """Forward slashes, no trailing separator, case-folded: Windows
+    paths compare case-insensitively and the tool prints forward
+    slashes."""
+    return str(p).replace("\\", "/").rstrip("/").lower()
+
+
+def resolved(repo, *extra):
+    proc = run_resolver("-RepoRoot", str(repo), *extra, "-Json")
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    return json.loads(proc.stdout)
+
+
+@needs_host
+def test_resolver_prints_the_default_set(tmp_path):
+    repo = make_repo(tmp_path)
+    got = resolved(repo)
+    assert got["source"] == "default"
+    assert norm(got["repo"]) == norm(repo)
+    assert norm(got["docsRoot"]) == norm(repo / "docs/superpowers")
+    assert norm(got["frozenPlan"]) == norm(
+        repo / "docs/superpowers/plans/<date>-<topic>.md")
+    assert norm(got["rounds"]) == norm(
+        repo / "docs/superpowers/plans/rounds/<date>-<topic>")
+    assert norm(got["sddLedger"]) == norm(
+        repo / ".superpowers/sdd/<plan-basename>")
+    assert norm(got["attestation"]) == norm(
+        repo / ".git/parallax/attestations")
+    assert norm(got["checkpoint"]) == norm(
+        repo / ".git/parallax/application-checkpoints")
+    # The mirror row resolves OUTSIDE the repo, under the host temp dir.
+    assert norm(got["reviewMirror"]).endswith("/<short-name>")
+    assert not norm(got["reviewMirror"]).startswith(norm(repo) + "/")
+
+
+@needs_host
+def test_resolver_text_output_names_each_root_then_the_source(tmp_path):
+    repo = make_repo(tmp_path)
+    proc = run_resolver("-RepoRoot", str(repo))
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    keys = [ln.split(": ", 1)[0] for ln in proc.stdout.splitlines()
+            if ": " in ln]
+    assert keys == ["repo", "docs-root", "docs-root source", "frozen-plan",
+                    "rounds", "sdd-ledger", "review-mirror", "attestation",
+                    "checkpoint"]
+
+
+@needs_host
+def test_override_directory_selects_the_override_root(tmp_path):
+    repo = make_repo(tmp_path)
+    (repo / "dev" / "docs" / "superpowers").mkdir(parents=True)
+    got = resolved(repo)
+    assert got["source"] == "override directory exists"
+    assert norm(got["rounds"]) == norm(
+        repo / "dev/docs/superpowers/plans/rounds/<date>-<topic>")
+    assert norm(got["frozenPlan"]) == norm(
+        repo / "dev/docs/superpowers/plans/<date>-<topic>.md")
+    # Fixed rows do not move with the docs root.
+    assert norm(got["sddLedger"]) == norm(
+        repo / ".superpowers/sdd/<plan-basename>")
+    assert norm(got["attestation"]) == norm(
+        repo / ".git/parallax/attestations")
+
+
+@needs_host
+def test_docsroot_argument_wins_over_both_rules(tmp_path):
+    repo = make_repo(tmp_path)
+    (repo / "dev" / "docs" / "superpowers").mkdir(parents=True)
+    got = resolved(repo, "-DocsRoot", "other/root")
+    assert got["source"] == "-DocsRoot"
+    assert norm(got["frozenPlan"]) == norm(
+        repo / "other/root/plans/<date>-<topic>.md")
+
+
+@needs_host
+def test_docsroot_with_a_dot_segment_prints_the_canonical_spelling(tmp_path):
+    repo = make_repo(tmp_path)
+    got = resolved(repo, "-DocsRoot", "./other/root")
+    assert norm(got["docsRoot"]) == norm(repo / "other/root")
+    proc = run_resolver("-RepoRoot", str(repo), "-DocsRoot", "./other/root",
+                        "-Assert", str(repo / "other/root/plans/rounds/2026-09-12-x/r1.md"))
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+
+
+@needs_host
+def test_reporoot_may_be_a_subdirectory_of_the_working_tree(tmp_path):
+    # `git rev-parse --git-common-dir` prints a path relative to the
+    # directory git ran in (`../.git` from a subdirectory); the resolver
+    # must join it there, as the attestation emitter does.
+    repo = make_repo(tmp_path)
+    sub = repo / "skills"
+    sub.mkdir()
+    got = resolved(sub)
+    assert norm(got["repo"]) == norm(repo)
+    assert norm(got["attestation"]) == norm(repo / ".git/parallax/attestations")
+    assert norm(got["rounds"]) == norm(
+        repo / "docs/superpowers/plans/rounds/<date>-<topic>")
+
+
+@needs_host
+def test_relative_reporoot_resolves_against_powershells_location(tmp_path):
+    # The process cwd is tmp_path; PowerShell's location is the repo.
+    # PowerShell starts git in its own location, so git answers for the
+    # repo; the RELATIVE common-dir answer then reaches .NET GetFullPath,
+    # which resolves against the process cwd, so an unresolved `.` prints
+    # tmp_path/.git/... Same shape as test_review_mirror.py's
+    # provider-path case.
+    repo = make_repo(tmp_path)
+    script = (
+        f"Set-Location -LiteralPath '{repo.as_posix()}'; "
+        f"& '{TOOL.as_posix()}' -RepoRoot . -Json; "
+        "exit $LASTEXITCODE"
+    )
+    proc = subprocess.run(
+        [POWERSHELL, "-NoProfile", "-NonInteractive", "-Command", script],
+        capture_output=True, text=True, cwd=str(tmp_path), timeout=60)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    got = json.loads(proc.stdout)
+    assert norm(got["repo"]) == norm(repo)
+    assert norm(got["attestation"]) == norm(repo / ".git/parallax/attestations")
+
+
+@needs_host
+@pytest.mark.parametrize("bad", ["../x", "a/../b", "C:/abs/root", "/rooted"])
+def test_docsroot_refuses_escapes_and_rooted_values(tmp_path, bad):
+    repo = make_repo(tmp_path)
+    proc = run_resolver("-RepoRoot", str(repo), "-DocsRoot", bad)
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert proc.stdout.startswith("ERROR:"), proc.stdout
+
+
+@needs_host
+@pytest.mark.parametrize("args", [
+    ("-RepoRoot", "NoSuchArtifactDrive:/repo"),
+    ("-RepoRoot", "{repo}", "-Assert", "NoSuchArtifactDrive:/x"),
+    ("-RepoRoot", "{repo}", "-DocsRoot", "bad|root"),
+    ("-RepoRoot", "{repo}", "-DocsRoot", "bad<root"),
+])
+def test_unresolvable_paths_are_parameter_faults_not_throws(tmp_path, args):
+    # The exit contract: 2 for a parameter fault, with an ERROR: line.
+    # An unknown drive makes the provider throw; a forbidden character
+    # makes IsPathRooted throw on 5.1 and print garbage on 7. Both are
+    # routed through Fail (measured 2026-09-12 by the R3 reviewer).
+    repo = make_repo(tmp_path)
+    proc = run_resolver(*[a.replace("{repo}", str(repo)) for a in args])
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert proc.stdout.startswith("ERROR:"), proc.stdout
+
+
+@needs_host
+def test_reporoot_must_be_a_git_working_tree(tmp_path):
+    plain = tmp_path / "plain"
+    plain.mkdir()
+    proc = run_resolver("-RepoRoot", str(plain))
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "not a git" in proc.stdout
+
+
+@needs_host
+def test_missing_declaration_line_is_an_error_not_a_default(tmp_path):
+    # The tool finds the notes relative to its own location, so a copy
+    # of the tool beside a doctored copy of the notes exercises the
+    # parse failure without touching the real declaration.
+    fake = tmp_path / "plugin"
+    (fake / "tools").mkdir(parents=True)
+    notes_dir = fake / "skills" / "multi-model-verify" / "references"
+    notes_dir.mkdir(parents=True)
+    shutil.copy(TOOL, fake / "tools" / "artifact-roots.ps1")
+    doctored = read(NOTES).replace(
+        "Canonical rounds root: `<docs-root>/plans/rounds/<date>-<topic>/`\n", "")
+    assert doctored != read(NOTES)
+    (notes_dir / "model-prompting-notes.md").write_text(doctored, encoding="utf-8")
+    repo = make_repo(tmp_path)
+    proc = run_resolver("-RepoRoot", str(repo),
+                        tool=fake / "tools" / "artifact-roots.ps1")
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "Canonical rounds root" in proc.stdout
+
+
+@needs_host
+@pytest.mark.parametrize("rel, expect", [
+    ("docs/superpowers/plans/rounds/2026-09-12-x/brief.md", 0),
+    ("docs/superpowers/plans/2026-09-12-x.md", 0),
+    (".git/parallax/attestations/abc.json", 0),
+    (".git/parallax/application-checkpoints/abc.md", 0),
+    ("rounds/x", 1),
+    (".superpowers/review-sources/x", 1),
+    (".superpowers/sdd/plan/progress.md", 1),
+    ("docs/superpowers/rounds/x", 1),
+])
+def test_assert_answers_membership_in_the_retained_set(tmp_path, rel, expect):
+    repo = make_repo(tmp_path)
+    proc = run_resolver("-RepoRoot", str(repo), "-Assert", str(repo / rel))
+    assert proc.returncode == expect, proc.stdout + proc.stderr
+    assert "assert: " in proc.stdout
+
+
+@needs_host
+def test_assert_rejects_a_path_outside_the_repo(tmp_path):
+    repo = make_repo(tmp_path)
+    proc = run_resolver("-RepoRoot", str(repo), "-Assert",
+                        str(tmp_path / "elsewhere" / "x"))
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "outside every retained root" in proc.stdout
+
+
+@needs_host
+def test_assert_follows_the_override(tmp_path):
+    repo = make_repo(tmp_path)
+    (repo / "dev" / "docs" / "superpowers").mkdir(parents=True)
+    inside = run_resolver("-RepoRoot", str(repo), "-Assert",
+                          str(repo / "dev/docs/superpowers/plans/rounds/2026-09-12-x/r1.md"))
+    assert inside.returncode == 0, inside.stdout
+    stale = run_resolver("-RepoRoot", str(repo), "-Assert",
+                         str(repo / "docs/superpowers/plans/rounds/2026-09-12-x/r1.md"))
+    assert stale.returncode == 1, stale.stdout
