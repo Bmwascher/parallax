@@ -1,0 +1,16 @@
+# Project allowlist for evals/tools/ste_lint.py, one entry per line:
+#   ing: <word>    an "-ing" word that is a technical name or a noun here
+#   state: <word>  a past participle that describes a STATE after "be"
+#   word: <word>   a denylisted word or modal the project uses as a name
+# Matching is case-insensitive. Keep this list short; every entry is a
+# word the checker will no longer question.
+ing: binding
+ing: setting
+ing: settings
+ing: warning
+ing: warnings
+ing: encoding
+ing: staging
+state: closed
+state: open
+ing: meaning

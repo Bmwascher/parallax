@@ -4449,3 +4449,30 @@ the release page, so a version with no section fails the release rather
 than shipping blank. `test_check_changelog.py` proves every refusal can
 fire and runs the repository check under pytest. The dev-loop rule in
 `CLAUDE.md` names the entry as part of the bump commit.
+
+## 103. A changelog entry had no style rule a gate could hold
+Status: DONE
+Closed: record
+Verified: 2026-09-13 937983ae2505
+
+**Filed and closed 2026-09-13, after items 101 and 102.** The first
+changelog entry was written in ordinary prose: passive sentences,
+sentences over 40 words, "-ing" verb forms, and nothing in the gate to
+say which of those the next entry could repeat. The user asked for
+ASD-STE100 Simplified Technical English, which is a controlled language
+with two halves, the writing rules and a licensed dictionary that this
+repository cannot carry.
+
+Record: evals/tools/ste_lint.py
+
+`evals/tools/ste_lint.py` enforces the rule half a program can decide:
+sentence length (25 words), paragraph length (6 sentences), active
+voice, no "-ing" verb form, no contraction, no unapproved modal, and a
+denylist of unapproved words with their STE alternative. A project
+allowlist, `evals/tools/ste_allow.txt`, names the technical names and
+state adjectives the checker must not question. `check_changelog.py`
+runs it over the whole file, so CI tier 1d and the release workflow both
+refuse an entry the checker refuses. The 0.34.0 entry was rewritten to
+pass, which is the proof the rules are usable; the checker found 15
+defects in the first draft. Noun clusters and one-meaning-per-word stay
+with the writer, and the checker's docstring says so.
