@@ -337,7 +337,8 @@ checkout edits are NOT live until re-synced:
 ```
 claude plugin marketplace add <path-to-this-checkout>
 claude plugin install parallax@parallax
-# after edits: bump .claude-plugin/plugin.json version, then
+# after edits: bump .claude-plugin/plugin.json version and add the
+# matching CHANGELOG.md section (CI refuses a bump without one), then
 claude plugin update parallax@parallax   # qualified name required
 # restart the Claude Code session to re-register hooks/skills
 ```

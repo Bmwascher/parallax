@@ -183,6 +183,16 @@ moves the tree after the final build task, so "last" means after it; a
 bump consumed before the branch is finished recovers only by another bump
 (that is what 0.26.1 is).
 
+WRITE THE CHANGELOG ENTRY IN THE SAME COMMIT AS THE BUMP. `CHANGELOG.md`
+has one `## vX.Y.Z (YYYY-MM-DD)` section per version, newest first, and
+`evals/tools/check_changelog.py` (CI tier 1d, and
+`test_check_changelog.py` locally) fails when the newest section does not
+name the `plugin.json` version. The release workflow
+(`.github/workflows/release.yml`) tags the main head that carries a new
+version and publishes that section as the release body; a version with no
+section fails the release rather than shipping a blank page. Items 101
+and 102 hold the record.
+
 VERIFY THE INSTALL BY CONTENT, never by the cache directory's name: a
 directory named `0.26.0` held code from five commits before the shipped
 head. The cheap check is `gitCommitSha` in

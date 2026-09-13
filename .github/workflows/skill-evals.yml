@@ -40,6 +40,12 @@ jobs:
       - name: Tier 1c - exact-line oracle gate
         run: python evals/tools/check_exact_line_oracles.py
 
+      # The newest CHANGELOG.md section must name the plugin.json version,
+      # so a version bump without release notes fails HERE, on the branch,
+      # and never reaches the release workflow with nothing to publish.
+      - name: Tier 1d - changelog names the plugin version
+        run: python evals/tools/check_changelog.py
+
       - name: Tier 2 - trigger and routing evals
         run: python evals/tools/run_trigger_evals.py
 
