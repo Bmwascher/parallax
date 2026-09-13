@@ -214,7 +214,13 @@ Behaviour:
    root, each with its placeholder tail removed. Exit 0 on membership,
    1 otherwise, printing which root matched or `outside every retained
    root`. The mirror and ledger roots are NOT in the `-Assert` set: the
-   session never copies into them.
+   session never copies into them. An optional `-Expect` names which of
+   the four the caller means (`rounds`, `frozenPlan`, `attestation`,
+   `checkpoint`): a path inside a DIFFERENT retained root then exits 1
+   naming both, because the frozen-plan parent contains every dated
+   directory beside `plans/rounds/`, which is the shape item 100 exists
+   to refuse (added 2026-09-13 from the final whole-branch review; any
+   other value, or `-Expect` without `-Assert`, is a parameter fault).
 
 Exit map: 0 resolved (or asserted inside), 1 asserted outside, 2 for a
 parameter fault, an unreadable declaration, or a `-RepoRoot` that is not
