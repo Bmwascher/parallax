@@ -1,0 +1,33 @@
+# Astra diff R1 fix brief, 2026-09-13
+
+Branch `mirror-reaper`, worktree `C:\Users\Brandon\Documents\_worktrees\parallax-mirror-reaper`, HEAD e9d2713. The cross-vendor reviewer's round-1 reply is at `C:\Temp\parallax-scratch\2026-09-13-mirror-reaper\astra-diff-r1-reply.md` (read its claims 3 and 8). The session accepted all three findings; the governing checkpoint is `C:\Users\Brandon\Documents\parallax\.git\parallax\application-checkpoints\20260913-0700-e9d2713bc606.md` (read it: its Planned changes rows are the postconditions you must meet, and its scope line binds — no other files). Apply everything in ONE commit. Tools stay ASCII-only and identical under Windows PowerShell 5.1 and PowerShell 7. Never touch `C:\kv-*` or `C:\kvs-*`, and never touch `C:\Users\Brandon\AppData\Local\Temp\pxmr` or `C:\Users\Brandon\AppData\Local\Temp\kvs-pxmr` (the live review mirror and its bridge).
+
+## F1 (R1-3a). The record write is literal and verified by content — `tools/write-attestation.ps1`, the write block (currently lines 285-296)
+
+Replace the try/catch + existence check with: serialize ONCE to a string, write it with `Set-Content -LiteralPath $outFile -Value $json -Encoding ASCII -NoNewline -ErrorAction Stop` inside try/catch (a failure exits 2 with the existing `... - nothing was reaped` message), then read the file back with `[System.IO.File]::ReadAllText($outFile)` inside its own try/catch and require it to equal `$json` exactly; absence, an unreadable file or unequal content exits 2 with `ERROR: the attestation on disk does not match what was written (<path>) - nothing was reaped`. Keep `$outFile` derived as today. Note: `-NoNewline` changes the file's trailing byte from today's; `tools/verify-attestation.ps1` parses it with ConvertFrom-Json, which tolerates that, and `test_attestation.py` must still pass on both hosts (run it). If `-NoNewline` breaks anything, drop it and instead compare the read-back to `$json` plus the host's newline — but say which you did in the report.
+
+Test `test_the_record_lands_in_the_bracketed_repo_and_the_sibling_is_untouched` (append to `evals/multi-model-verify/test_mirror_reaper.py`): `repo, base, head = make_repo(tmp_path, name="repo[1]")` and `sib = make_mirror(repo, tmp_path / "repo1")` (a plain-named sibling with the same `.git`); pre-create `sib/.git/parallax/attestations/<head>.json` with the content `{"decoy": true}`; `mirror = make_mirror(repo, tmp_path / "kv-t")`; `attest(repo, base, head, mirror=mirror)`; assert exit 0, `att_file(repo, head)` exists and its JSON has `head_sha == head` and no `decoy` key, the sibling's file still reads `{"decoy": true}`, and `not mirror.exists()`. (If `git init` refuses a bracketed directory name, report it; do not rename the case away.)
+
+## F2 (R1-3b). Sidecar inspection failure is named, never swallowed — same file, the sidecar block
+
+Replace the bare `catch { $sa = $null }` with typed catches: `[System.IO.FileNotFoundException]` and `[System.IO.DirectoryNotFoundException]` set `$sa = $null` (absence); any other exception prints `ERROR: reap failed for <sidecar>: the sidecar could not be examined: <message> - the attestation stands; remove the sidecar by hand<bridgeNote>` and exits 3.
+
+Test: try to produce a real attribute-read failure on both hosts with `icacls <sidecar> /deny <user>:(RA)` (read-attributes denied; `<user>` from `os.environ["USERNAME"]`) and check in a quick PowerShell probe whether `[System.IO.File]::GetAttributes` then throws on each host. If it throws on both, add `test_an_unexaminable_sidecar_exits_three_and_keeps_the_bridge` (grant the ACE back in a `finally` with `/remove:d`, and `/grant` if needed, so tmp cleanup works). If it does not throw, add NO test for this branch and write in the report exactly what you measured on each host; the session records the branch as covered by reading only.
+
+## F3 (R1-8). Sidecar deletion has an absence read-back — same block
+
+After `[System.IO.File]::Delete($sidecar)`, read the attributes back exactly as `Remove-ReviewTree` does for its root (`tools/review-tree-removal.ps1:167-179`): `FileNotFoundException`/`DirectoryNotFoundException` mean gone; any other exception, or a successful read, prints `ERROR: reap failed for <sidecar>: the sidecar still exists after removal - the attestation stands; remove the sidecar by hand<bridgeNote>` (or `could not be re-examined: <message>`) and exits 3. Only then print `reaped sidecar: <path>`.
+
+Test: extend the existing held-sidecar case (`test_a_sidecar_failure_names_the_unattempted_bridge`) with nothing (a held handle fails at Delete, before the read-back). Add `test_sidecar_success_is_read_back`: normal mirror + sidecar reap; assert `"reaped sidecar: " + str(sidecar) in proc.stdout` and `not sidecar.exists()` — this pins that the success line comes after the read-back by placing the read-back before the print (assert by reading the tool: `body.index("still exists after removal") < body.index('"reaped sidecar: "')`).
+
+## F4 (record). Plan block superseded — `docs/superpowers/plans/2026-09-13-mirror-reaper.md`
+
+Directly ABOVE the line `(f) Replace the final two lines` in Task 3 Step 3, insert one paragraph: `Superseded 2026-09-13 by the diff debate's round 1 (Astra): the sidecar block below catches every inspection exception as absence and announces the reap without reading the sidecar back; the shipped emitter names an inspection failure and reads the sidecar back after the delete (both exit 3 with the record standing), and writes the record with -LiteralPath and a content read-back. The block is kept as the plan's history, not as the contract.`
+
+## Verification, then commit
+
+In PowerShell, foreground: `$env:PARALLAX_PS_HOST = "powershell.exe"; python -m pytest evals/multi-model-verify/test_mirror_reaper.py evals/multi-model-verify/test_attestation.py -q` then with `"pwsh.exe"`; then `python evals/tools/skill_lint.py skills/multi-model-verify --strict`, `python evals/tools/skill_scanner.py skills`, `python evals/tools/backlog_lint.py`.
+
+Stage by explicit path (`git add tools/write-attestation.ps1 evals/multi-model-verify/test_mirror_reaper.py docs/superpowers/plans/2026-09-13-mirror-reaper.md`). Commit message: `apply diff debate round 1: write the record to the literal path and read it back by content, name a sidecar inspection failure, and read the sidecar back after its removal`.
+
+Report to `C:\Temp\parallax-scratch\2026-09-13-mirror-reaper\r1-fix-report.md`: per finding the change and covering test; the F2 measurement on both hosts; both hosts' pytest counts; the lint lines. Reply with the short status contract only.

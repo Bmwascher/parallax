@@ -1234,3 +1234,36 @@ git commit -m "state the reap point in the skill and the reference, and inventor
 - The version bump and the closing edits to items 98 and 106 in `BACKLOG.md`: they follow the diff debate, per `CLAUDE.md`'s dev loop.
 - The KitnEssentials memory edit that tells the bridge builder to pass `-ReapBridge`.
 - Deleting the ten `C:\kv*` directories that exist today.
+
+## Debate record (mode diff)
+
+**Participants:** Opus 5 (session) / GPT-6 Astra (codex exec, session 01a09a87-7417-7040-8d98-ce77917ec971, resumed across all rounds)
+**Range:** a8a168f..dcad556 at close (branch mirror-reaper; R1 reviewed 6038c37..e9d2713, main was merged in at 549c136); fable-reviewer whole-branch review on 6038c37..6c38ec9, retained
+**Rounds used:** 4 of 4 (declared 4; all counted, all bound clean and sealed; none void)
+**Outcome:** converged
+**Verification status:** FULL
+**Degradation:** none
+**Authorized by:** user, 2026-09-13 ("Good to do the mode-diff debates just to ensure nothing was missed"; "After the debates and pushing, we will do the small separate branch followup for the C:/ location change")
+**Attestation:** PASS at dcad556, bound to application checkpoint 20260913-0700-e9d2713bc606.md; the attestation reaped this debate's mirror and bridge through -ReapMirror and -ReapBridge
+**Raw rounds:** docs/superpowers/plans/rounds/2026-09-13-mirror-reaper/ (fable-diff-r1-*, brief/reply/transcript/receipt/binder/mirror-build for astra-diff-r1 to r4, the two fix briefs and reports, README.md)
+
+### Resolved points
+| # | Claim | Raised by | Outcome | Evidence |
+|---|-------|-----------|---------|----------|
+| 1 | `Set-Content -Path` expands `[`/`]`, so the record could land in a sibling while the literal existence check accepted an old record and the reap proceeded | reviewer R1 | accepted; `-LiteralPath`, serialize once, content read-back exits 2 | tools/write-attestation.ps1 write block; test_mirror_reaper.py bracketed-repo case |
+| 2 | Sidecar inspection swallowed every exception as absence, so an I/O error could exit 0 | reviewer R1 | accepted; typed catches, other exceptions exit 3 naming the sidecar and the unattempted bridge; no driving test (RA deny does not fault `GetAttributes` on either host) | tools/write-attestation.ps1 sidecar block; checkpoint section 7 |
+| 3 | `reaped sidecar` announced with no absence read-back | reviewer R1 | accepted; post-delete read-back, survival or re-examination failure exits 3 | tools/write-attestation.ps1; `test_sidecar_success_is_read_back` |
+| 4 | The plan's Task 3 (f) block is the origin of points 2 and 3 | reviewer R1 | accepted, record; dated superseding paragraph above the block | this plan, Task 3 Step 3 |
+| 5 | `$writtenText -ne $json` is case-insensitive | reviewer R2 | accepted; ordinal `[string]::Equals`, source pin | tools/write-attestation.ps1:301; `test_the_record_comparison_is_ordinal` |
+| 6 | The bracketed case planted no prior record at the literal path and compared the decoy by parsed JSON | reviewer R2 | accepted; stale record planted, bytes compared | test_mirror_reaper.py bracketed-repo case |
+| 7 | The ordering pin on the sidecar read-back is a string-position assertion | reviewer R2 | accepted as a named follow-up; no non-administrator mechanism drives the branch | BACKLOG.md item 107, follow-up 3 |
+| 8 | main shipped items 101 to 104 mid-debate; the branch's numbers collided | session (after R2) | merged main, renumbered to 106 and 107, declared to the reviewer | commit 549c136; README R3 section |
+| 9 | One reaper reference hidden by a line wrap survived the renumber | reviewer R3 | accepted; fixed | spec line 54; commit dcad556 |
+
+### Escalated points (user-decided)
+| # | Question | Session position | Reviewer position | Owner's call |
+|---|----------|------------------|-------------------|--------------|
+| - | none | | | |
+
+### Degraded-mode note
+n/a
