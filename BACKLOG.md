@@ -28,6 +28,7 @@ The full previous text of every closed item is in git history at
 - 94
 - 95
 - 98
+- 101
 - 99
 
 ### Second - taxes every cycle
@@ -88,6 +89,57 @@ The full previous text of every closed item is in git history at
 - 84
 - 85
 - 86
+
+## 101. Review mirrors are never reaped, so a review day costs about 3 GB of drive root
+Status: OPEN
+Cost: 78 mirror and bridge directories totalling 13.4 GB accumulated at the drive root in four review days, and the only removal is a hand sweep that has to guess which of them a live debate can still resume
+Pairs: 98
+Verified: 2026-09-13 5ffef5dc6ae7
+
+**Filed 2026-09-13 from the KitnEssentials handoff**
+`dev/docs/handoffs/parallax-mirror-reaper-handoff.md` (outside this
+repo). Measured there on that date: the drive root held 78 `kv-*` and
+`kvs-*` directories totalling 13.4 GB, every one created between
+2026-09-09 and 2026-09-13 by multi-model-verify rounds. `kv-<tag>` is
+the review mirror `tools/new-review-mirror.ps1` builds; `kvs-<tag>` is
+the drive-root clone bridge a session builds first when the reviewed
+tree is a linked worktree, so the mirror never copies a `.git` pointer
+file. The 68 older than that day were deleted by hand; the day's 10
+were kept because a live chat could still `resume` a round bound to
+them, and nothing but the person's memory said which ones those were.
+
+**What is wrong.** Nothing in the plugin deletes a mirror.
+references/preflight-mirror.md covers construction, the quiet period
+and the stale-source refusal; item 98 covers the unchecked removal on a
+REBUILD of the same path; neither covers a mirror whose debate is over.
+The count also grew because the existing-path refusal in the mirror
+tool suggests `-Force`, and a session that did not want to rebuild in
+place built `kv-<tag>-2` beside the first.
+
+**The decision on the bridge, made at filing rather than assumed.** The
+plugin never created `kvs-*` and cannot recognise one by shape, so the
+emitter takes it as an EXPLICIT argument, `-ReapBridge <path>`, beside
+`-ReapMirror <path>`, and applies the same identity guard to both. A
+`-SourceBridge` on the mirror tool was rejected because the tool's own
+header forbids clones for a measured reason, and a prose rule alone was
+rejected because a prose rule is what produced the measurement above.
+The session-side rule "pass the bridge to the emitter" belongs in the
+KitnEssentials memory that describes the bridge; that edit is the
+consumer's, not this repo's.
+
+**What closing it means.** The reap point is a TERMINAL event, never an
+age: `tools/write-attestation.ps1` validates every reap path before it
+writes the record, writes it, then removes the trees through one shared
+removal function that never recurses through a link, terminates with a
+named error on the first failure, and re-examines the root afterwards.
+A reap path is accepted only when its `.git` is a directory and its
+`HEAD` is the attested head (the mirror may instead sit one
+`parallax@local` remediation commit above it), so another chat's mirror
+at another head is refused by name. The mirror tool's existing-path
+refusal names that route instead of `-Force`. `/parallax:doctor` reports
+the `kv*` inventory as a note and never deletes. Item 98 closes with it,
+because the mirror tool's `-Force` removal goes through the same
+function. Design: `docs/superpowers/specs/2026-09-13-mirror-reaper-design.md`.
 
 ## 100. Round artifacts land in three roots per consumer repo
 Status: DONE
@@ -4326,8 +4378,8 @@ Record: docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window
 ## 98. The mirror's own removal is unchecked, so a failed one builds over a stale tree
 Status: OPEN
 Cost: a build that fails to empty its destination copies over whatever survived, and the fingerprint then measures the resulting directory rather than proving it was freshly emptied, so a stale mirror can be certified as a fresh one
-Pairs: 95, 99
-Verified: 2026-09-06 b01bcd59e8ca
+Pairs: 95, 99, 101
+Verified: 2026-09-13 02ee31a946e0
 
 **Filed 2026-09-06 from the mode-diff debate for the identity window
 branch**, round 3, which asked whether refusing alias spellings was
