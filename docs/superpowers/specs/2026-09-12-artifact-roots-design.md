@@ -37,13 +37,16 @@ design makes the plugin stop adding to the spread.
    history at any version (`git log -S'superpowers/rounds' --all` finds
    only the backlog filing). The 54 MB
    `.superpowers/review-sources/dt-diag-2766cd59/` was written on
-   2026-09-07 by a Codex controller session that invented a "preparation
-   copy" of a worktree; its rollout log says so in its own words, at
+   2026-09-08 by a Codex controller session, started 2026-09-07, that
+   invented a "preparation copy" of a worktree; its rollout log says so
+   in its own words, at
    `~/.codex/sessions/2026/09/07/rollout-2026-09-07T20-53-38-01a07eb8-8a4c-7941-ba19-a542a5642dc9.jsonl`
-   (an `exec_command` call copying `.superpowers/worktrees/dt-diag` to
-   that path, read by the session on 2026-09-12; both reviewers marked
-   the attribution UNVERIFIED because neither can read outside the
-   mirror, and it carries no weight in either verdict). The
+   (record 3682 is the `exec_command` copying
+   `.superpowers/worktrees/dt-diag` to that path; record 3684 is its
+   successful execution, dated 2026-09-08). The session read it on
+   2026-09-12 and the Astra R2 review verified the attribution and
+   corrected the date; the 54 MB size is the KitnEssentials cleanup's
+   own figure and is UNVERIFIED here. None of it bears on the verdict. The
    plugin binds its own tools and the prose the Claude controller
    follows. It cannot bind a foreign controller, and this design does
    not claim to.
@@ -136,7 +139,8 @@ And two rules that are prose because no tool can enforce them:
   declared, because a round cites it. (Found by the Astra R1 class
   sweep.)
 - A controller other than Claude Code is outside this contract. Fact 4
-  is the record of what one wrote.
+  is the record of what one wrote. The prose beside the declaration
+  dates that record 2026-09-08.
 
 The two overridable rows are exactly the ones containing `<docs-root>`.
 The resolver finds them by that placeholder, so adding an overridable
@@ -175,7 +179,11 @@ Behaviour:
    checkpoint rows from `git rev-parse --git-common-dir` run in
    `-RepoRoot` (a relative answer is joined to `-RepoRoot`, the
    directory git ran in, exactly as `tools/write-attestation.ps1:61`
-   does; from a subdirectory git prints `../.git`). Leave
+   does; from a subdirectory git prints `../.git`). `-RepoRoot` itself
+   is resolved through PowerShell's provider location before git sees
+   it: a native child inherits the process cwd, so an unresolved `.`
+   would name the launch directory (found by the Astra R2 review on
+   both hosts). Leave
    `<date>-<topic>`, `<plan-basename>` and `<short-name>` as printed
    placeholders: they are named per debate. The placeholder tail is
    split off BEFORE any path API sees the string: on Windows PowerShell
@@ -309,9 +317,12 @@ Three groups:
      `build_real_mirror` and `prepare_default` with the dispatch
      directory and receipt outside the repo, and run
      `tools/new-review-mirror.ps1` to a temp path with `-SkipProbe`;
-     diff the sets; assert every path that APPEARED inside the repo
-     satisfies `-Assert`, and that the set is exactly the attestation
-     file plus the two directories the emitter creates for it.
+     diff the sets; assert the set is exactly the attestation file
+     plus the two directories the emitter creates for it, that the
+     attestation directory and the file satisfy `-Assert`, and that the
+     shared parent `parallax/` (created on the way down, not itself a
+     declared root) is refused by `-Assert`; the exact-set assertion is
+     what bounds that parent.
    - negative controls, so the diff logic is shown able to fail: a stub
      writer creates `<repo>/rounds/x`, and the same diff-and-assert
      reports it; a second stub only creates an empty

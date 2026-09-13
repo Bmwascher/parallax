@@ -231,7 +231,7 @@ The operating rule, which SKILL.md's preflight step 4 points at:
   evidence check; the SDD ledger is the one implementation artifact
   named here, because a round cites it.
 - A controller other than Claude Code is outside this contract. The
-  2026-09-07 record in item 100 is of one that wrote a 54 MB copy of a
+  2026-09-08 record in item 100 is of one that wrote a 54 MB copy of a
   worktree under a root of its own naming; the plugin binds its own
   tools and the prose the Claude controller follows, not a foreign one.
 
@@ -397,6 +397,28 @@ def test_reporoot_may_be_a_subdirectory_of_the_working_tree(tmp_path):
     assert norm(got["attestation"]) == norm(repo / ".git/parallax/attestations")
     assert norm(got["rounds"]) == norm(
         repo / "docs/superpowers/plans/rounds/<date>-<topic>")
+
+
+@needs_host
+def test_relative_reporoot_resolves_against_powershells_location(tmp_path):
+    # The process cwd is tmp_path; PowerShell's location is the repo. A
+    # native git child inherits the PROCESS cwd, so a tool that hands `.`
+    # to git unresolved names tmp_path, which is not a repository, or a
+    # different one. Same shape as test_review_mirror.py's provider-path
+    # case.
+    repo = make_repo(tmp_path)
+    script = (
+        f"Set-Location -LiteralPath '{repo.as_posix()}'; "
+        f"& '{TOOL.as_posix()}' -RepoRoot . -Json; "
+        "exit $LASTEXITCODE"
+    )
+    proc = subprocess.run(
+        [POWERSHELL, "-NoProfile", "-NonInteractive", "-Command", script],
+        capture_output=True, text=True, cwd=str(tmp_path), timeout=60)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    got = json.loads(proc.stdout)
+    assert norm(got["repo"]) == norm(repo)
+    assert norm(got["attestation"]) == norm(repo / ".git/parallax/attestations")
 
 
 @needs_host
@@ -566,6 +588,12 @@ foreach ($l in $labels) {
 }
 
 # ---- the repository ----------------------------------------------------
+# Provider-relative FIRST: a native git child inherits the PROCESS working
+# directory, which is not PowerShell's location, so `-RepoRoot .` would
+# otherwise name whatever directory the host was launched from (measured
+# 2026-09-12 by the R2 reviewer on both hosts; same trap
+# new-review-mirror.ps1 guards with the same helper).
+$RepoRoot = Resolve-Absolute $RepoRoot
 if (-not (Test-Path -LiteralPath $RepoRoot -PathType Container)) {
     Fail ("-RepoRoot is not a directory: " + $RepoRoot)
 }
@@ -1121,10 +1149,18 @@ def test_the_real_writers_create_nothing_in_repo_but_the_attestation(tmp_path):
         ".git/parallax/attestations",
         f".git/parallax/attestations/{head}.json",
     }, sorted(appeared)
-    for rel in appeared:
+    # The attestation root and the file under it are inside the retained
+    # set. `.git/parallax` is the parent SHARED by the attestation and
+    # checkpoint rows, created by the emitter on the way down; it is not
+    # itself a declared root, so -Assert refuses it, and the exact-set
+    # assertion above is what bounds it.
+    for rel in (".git/parallax/attestations",
+                f".git/parallax/attestations/{head}.json"):
         proc = run_resolver("-RepoRoot", str(repo), "-Assert", str(repo / rel))
         assert proc.returncode == 0, proc.stdout + proc.stderr
         assert "assert: inside attestation root" in proc.stdout
+    proc = run_resolver("-RepoRoot", str(repo), "-Assert", str(repo / ".git" / "parallax"))
+    assert proc.returncode == 1, proc.stdout + proc.stderr
 
 
 @needs_host
@@ -1138,7 +1174,7 @@ def test_a_writer_that_strays_is_reported(tmp_path):
     stray.parent.mkdir()
     stray.write_text("a round record in the wrong root\n")
     appeared = new_paths(repo, before)
-    assert appeared == {"rounds/x"}, sorted(appeared)
+    assert appeared == {"rounds", "rounds/x"}, sorted(appeared)
     proc = run_resolver("-RepoRoot", str(repo), "-Assert", str(stray))
     assert proc.returncode == 1, proc.stdout + proc.stderr
     assert "outside every retained root" in proc.stdout
@@ -1264,7 +1300,7 @@ the mirror tool already refuses to violate. The same date's survey also
 found that two of the four KitnEssentials roots were not parallax
 writers: the bare rounds directory has no source in this repo's
 history, and the 54 MB copy was written by a Codex controller session
-on 2026-09-07. The plugin binds its own tools and the Claude
+on 2026-09-08. The plugin binds its own tools and the Claude
 controller's prose; a foreign controller is outside the contract.
 Migration of existing repos is the consumer's job (KitnEssentials
 archives by hand); the plugin only has to stop adding to the spread.

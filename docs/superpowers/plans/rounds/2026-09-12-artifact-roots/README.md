@@ -107,3 +107,50 @@ source before accepting it.
 
 Every finding above, to the plan (`docs/superpowers/plans/2026-09-12-artifact-roots.md`)
 and the spec, in the commit that carries this record.
+
+## Astra R2 - COUNTED, verdict FIX
+
+Dispatched 2026-09-12 against plan blob `29cc87d` (HEAD `5d3b251`), the
+mirror rebuilt at the same path `C:\Temp\pxar1` with `-Force` (probe
+clean again, override `override-r2.toml`, same sha256), resumed session
+`01a0985e-1d0d-7940-b544-11e0ffeba5d9`, background task
+`Astra R2 debate round`. Wrapper exit 0, `reply-present`. Route
+confirmed: same model, provider, effort, `sandbox: read-only`, same
+session id echoed, `workdir: C:\Temp\pxar1`. Bound with `-Resume`,
+`status: clean`, `sealed: sealed` (`binder-r2.json`).
+
+Artifacts: `brief-astra-r2.md`, `astra-r2-reply.md`,
+`astra-r2-transcript.txt`, `receipt-r2.json`, `binder-r2.json`.
+
+**Reviewer verdict: FIX.** A FIX, B FIX, C PASS, D PASS, E PASS. All
+eight round-1 applications confirmed present. Nothing contested.
+
+### Session verification
+
+- A, the writer test: `.git/parallax` is in the expected set and the
+  loop asserted `-Assert` exit 0 on every member; that parent is not
+  under a declared root, so the tool answers 1 and a correct tool would
+  fail the test. Confirmed by reading the plan's own loop against its
+  own `-Assert` membership rule. The negative control's `mkdir` creates
+  `rounds` as well as `rounds/x`. Confirmed. Both fixed: membership is
+  asserted for the attestation directory and file, refusal for the
+  shared parent, and the exact-set assertion bounds it; the control
+  expects both paths.
+- B, relative `-RepoRoot`: a native `git` child inherits the PROCESS
+  cwd, not PowerShell's location, so `-RepoRoot .` is resolved wherever
+  the host was launched. The same trap is guarded in
+  `tools/new-review-mirror.ps1:1234-1244` with the provider-path helper
+  the plan's tool already defines as `Resolve-Absolute`. Confirmed.
+  `-RepoRoot` is now resolved through it before git runs, and a
+  regression with differing PowerShell location and process cwd was
+  added, in the shape of `test_review_mirror.py:537-565`.
+- Date: the reviewer read the rollout the spec names and found the
+  copy's execution record dated 2026-09-08 in a session started
+  2026-09-07; the KitnEssentials directory's mtime is Sep 8. Confirmed.
+  Corrected in the spec, the plan's declaration prose and its backlog
+  paragraph. The 54 MB figure is the cleanup's own and stays
+  UNVERIFIED; nothing rests on it.
+
+### Applied
+
+All three, in the commit that carries this section.
