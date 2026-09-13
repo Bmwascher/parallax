@@ -302,3 +302,23 @@ findings, and the session's both-host runs are the execution evidence.
 Applied under the application checkpoint
 `20260913-0110-aabab8133365.md` (pre-authorized by the user's answer
 "Apply fixes, then finish the pipeline").
+
+## Astra diff R2 - COUNTED, VOID (wrapper exit 1, `workdir-mismatch`)
+
+Dispatched 2026-09-13 against head `cf7109b` (the R1 fix commit), mirror
+rebuilt at the same path with `-Force` (mirror head = source head, probe
+clean, same override sha256), resumed session
+`01a09943-2bbd-7442-bfb6-0692f161fe36`, background task
+`Astra R2 debate round`. The wrapper exited 1 and named
+`workdir-mismatch` on its last line: the session passed `-WorkdirEvidence`
+spelled with forward slashes from a Bash shell, and the transcript header
+spells the working directory with backslashes. The wrapper's exit code is
+the classification, so the reply is not evidence and was not bound or
+read for a verdict; the exchange counts against the budget (2 of 4).
+Retained for the record only: `brief-astra-diff-r2.md`,
+`receipt-diff-r2.json`, `mirror-build-diff-r2.txt`.
+
+Before re-dispatching, the session probed the binder residual its own
+brief had called "ONE": a parameter given twice is a second binding fault
+(exit 1 on both hosts, no `ERROR:` line), so the header and the spec now
+name two. Checkpoint amendment 2 records the edit.

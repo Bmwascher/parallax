@@ -18,11 +18,12 @@
 # retained root or inside a retained root other than the one -Expect
 # names, 2 parameter fault (a missing -RepoRoot, an unknown parameter, a
 # forbidden character in -DocsRoot, -Assert or the TEMP variable),
-# unreadable declaration, or -RepoRoot not a git working tree. ONE
-# residual binding fault stays outside the script's reach on both hosts:
+# unreadable declaration, or -RepoRoot not a git working tree. TWO
+# residual binding faults stay outside the script's reach, exit 1 from
+# PowerShell's -File binding on both hosts before any line here runs:
 # a named parameter whose VALUE is missing (`-DocsRoot` as the last
-# token) exits 1 from PowerShell's -File binding before any line here
-# runs. Everything else that can go wrong is seen by this script and
+# token), and a parameter given twice (measured 2026-09-13 on both
+# hosts). Everything else that can go wrong is seen by this script and
 # exits 2 with an ERROR: line. The map mirrors dispatch-round.ps1.
 # Named-only binding: without it a bare token binds POSITIONALLY to
 # -DocsRoot and answers with a docs root nobody asked for.

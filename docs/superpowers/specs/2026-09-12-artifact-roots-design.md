@@ -231,9 +231,11 @@ caller reads one convention. Parameter faults the script itself sees
 `-RepoRoot`, an unknown or bare token (binding is named-only), a
 forbidden character in `-DocsRoot`, `-Assert` or the `TEMP` variable,
 which is screened with the same set before any path API because it is
-the one input that is neither a parameter nor git's answer. ONE
-residual stays with PowerShell's `-File` binding on both hosts and exits
-1 without an `ERROR:` line: a named parameter whose value is missing.
+the one input that is neither a parameter nor git's answer. TWO
+residuals stay with PowerShell's `-File` binding on both hosts and exit
+1 without an `ERROR:` line: a named parameter whose value is missing,
+and a parameter given twice (both measured on both hosts 2026-09-13;
+this sentence said "one" until the session's own probe found the second).
 
 ## Skill and agent edits
 
