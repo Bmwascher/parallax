@@ -4424,3 +4424,28 @@ already-tagged version is a no-op, so a re-run cannot move a tag, and a
 `workflow_dispatch` trigger cuts the first release by hand. History was
 NOT backfilled by decision: the first tag is 0.34.0 at the head this item
 merged onto, and the 31 earlier bumps stay in git history only.
+
+## 102. A release page had nothing to say about the version
+Status: DONE
+Closed: record
+Verified: 2026-09-13 7f744ade776f
+
+**Filed and closed 2026-09-13, the same day as item 101.** The first
+release that workflow cut carried GitHub's generated notes, and with no
+pull requests and no earlier tag those were one "Full Changelog" link:
+a page that named the version and said nothing about what changed. The
+repository had no changelog at all; every version's record was its merge
+commit subject and the round directory under `docs/superpowers/plans/`.
+
+Record: CHANGELOG.md
+
+`CHANGELOG.md` holds one `## vX.Y.Z (YYYY-MM-DD)` section per version,
+newest first, starting at 0.34.0. `evals/tools/check_changelog.py` is the
+one reader: bare, it fails when the newest section does not name the
+`plugin.json` version, and CI runs it on every push as tier 1d, so a bump
+without notes fails on the branch. With `--version X --print` it emits
+that section's body, and the release workflow publishes exactly that as
+the release page, so a version with no section fails the release rather
+than shipping blank. `test_check_changelog.py` proves every refusal can
+fire and runs the repository check under pytest. The dev-loop rule in
+`CLAUDE.md` names the entry as part of the bump commit.
