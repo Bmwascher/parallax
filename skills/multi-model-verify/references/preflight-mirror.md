@@ -12,7 +12,10 @@ Run
 Build at a SHORT `<scratch>` directly under the temp directory, such
 as a `kerev<n>` folder, never inside the session scratchpad: the
 mirror re-roots every path, and the tool refuses before creating
-anything when the budget is blown.
+anything when the budget is blown. That location is the
+`Canonical review mirror root` row of references/model-prompting-notes.md's
+round-artifact-roots declaration, fixed there because the tool refuses a
+mirror inside the reviewed repository.
 It builds the **review mirror** (references/backup-lane.md owns its
 construction, its baseline, and its identity fields — a file copy
 preserving `.git`, NOT a clone), deletes the offending entries THERE,

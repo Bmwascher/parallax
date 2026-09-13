@@ -330,3 +330,73 @@ def test_assert_follows_the_override(tmp_path):
     stale = run_resolver("-RepoRoot", str(repo), "-Assert",
                          str(repo / "docs/superpowers/plans/rounds/2026-09-12-x/r1.md"))
     assert stale.returncode == 1, stale.stdout
+
+
+# ---------------------------------------------------------------------
+# Group 2: the static sweep
+# ---------------------------------------------------------------------
+PLUGIN_SURFACE = ("skills/**/*.md", "agents/*.md", "commands/*.md",
+                  "hooks/*", "tools/*.ps1")
+
+# A declaration line in the notes is the one place a root may be spelled.
+DECLARATION_LINE = re.compile(r"^Canonical [a-zA-Z ]+: `[^`]+`\s*$")
+
+# The shapes are ENUMERATED so the failure names what was searched for.
+# A dated citation under the declared rounds root
+# (docs/superpowers/plans/rounds/<date>-...) matches none of them; a
+# dated ledger citation (.superpowers/sdd/<date>-...) is exempted by the
+# lookahead, because one exists in the notes today.
+FORBIDDEN_SHAPES = [
+    ("a rounds root beside plans/ instead of under it",
+     re.compile(r"(?<!plans/)superpowers/rounds/")),
+    ("the foreign controller's mirror root",
+     re.compile(r"review-sources")),
+    ("the override docs root named by hand",
+     re.compile(r"dev/docs/superpowers")),
+    ("a ledger root that is neither the declaration nor a dated citation",
+     re.compile(r"\.superpowers/sdd/(?!\d{4}-\d{2}-\d{2}-)")),
+    ("an attestation or checkpoint root spelled under .git/ instead of the git common dir",
+     re.compile(r"\.git/parallax/")),
+]
+
+
+def test_no_round_root_is_named_outside_the_declaration():
+    offenders = []
+    for pattern in PLUGIN_SURFACE:
+        for f in sorted(REPO.glob(pattern)):
+            if not f.is_file():
+                continue
+            for lineno, line in enumerate(read(f).splitlines(), 1):
+                if f == NOTES and DECLARATION_LINE.match(line):
+                    continue
+                for label, rx in FORBIDDEN_SHAPES:
+                    if rx.search(line):
+                        offenders.append(
+                            f"{f.relative_to(REPO).as_posix()}:{lineno}: {label}")
+    searched = "; ".join(label for label, _ in FORBIDDEN_SHAPES)
+    assert not offenders, (
+        "a round root is named outside the declaration (searched for: "
+        + searched + "):\n" + "\n".join(offenders))
+
+
+def test_sweep_can_fail(tmp_path):
+    # The negative control: the same shapes against a line each of the
+    # two KitnEssentials roots would produce.
+    hits = [label for label, rx in FORBIDDEN_SHAPES
+            if rx.search("see dev/docs/superpowers/rounds/2026-09-02-x/")]
+    assert "a rounds root beside plans/ instead of under it" in hits
+    assert "the override docs root named by hand" in hits
+    hits = [label for label, rx in FORBIDDEN_SHAPES
+            if rx.search(".superpowers/review-sources/dt-diag-2766cd59/")]
+    assert hits == ["the foreign controller's mirror root"]
+    assert not [label for label, rx in FORBIDDEN_SHAPES
+                if rx.search("docs/superpowers/plans/rounds/2026-08-03-x/")]
+    assert not [label for label, rx in FORBIDDEN_SHAPES
+                if rx.search(".superpowers/sdd/2026-08-15-x/progress.md")]
+    hits = [label for label, rx in FORBIDDEN_SHAPES
+            if rx.search("the ledger at .superpowers/sdd/plan/progress.md")]
+    assert hits == ["a ledger root that is neither the declaration nor a dated citation"]
+    hits = [label for label, rx in FORBIDDEN_SHAPES
+            if rx.search("It writes `.git/parallax/attestations/<head-sha>.json`")]
+    assert hits == ["an attestation or checkpoint root spelled under .git/ instead of the git common dir"]
+

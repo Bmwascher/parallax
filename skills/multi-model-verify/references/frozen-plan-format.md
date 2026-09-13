@@ -23,9 +23,10 @@ to FAIL: the debate checks each one for oracle adequacy — a proof that
 would pass while the feature is broken (a compile check standing in for a
 behavior check, a test that never exercises the changed path) is a plan
 defect, found in the debate, not in production. Save location: the
-superpowers default
-`docs/superpowers/plans/YYYY-MM-DD-<feature-name>.md`, unless the project
-overrides it (example: KitnEssentials uses `dev/docs/superpowers/plans/`).
+frozen-plan path that `tools/artifact-roots.ps1` printed in preflight,
+resolved from references/model-prompting-notes.md's round-artifact-roots
+declaration (its `Canonical frozen plan path` row, with the repo-side
+docs-root override applied by that one tool rather than by hand).
 
 Port-specific Global Constraints to copy in verbatim when the work is a
 port (KitnDev-family example — adapt the specifics per project):
@@ -81,10 +82,12 @@ verbatim reviewer replies live (scratchpad transcripts are temporary — if
 they were not copied somewhere durable, say `not retained`): the summary
 tables above are the adjudication, not the provenance, and a later dispute
 about what the reviewer actually said needs the raw text or an honest
-"gone". The canonical retained location is
-`docs/superpowers/plans/rounds/<YYYY-MM-DD>-<topic>/` next to the frozen
-plans (established by the 2026-07-24 jinn intake) — prefer it over ad-hoc
-paths so retention survives scratchpad cleanup by default.
+"gone". The canonical retained location is the rounds root that
+`tools/artifact-roots.ps1` printed in preflight (references/model-prompting-notes.md's
+round-artifact-roots declaration, `Canonical rounds root` row, next to the
+frozen plans; established by the 2026-07-24 jinn intake) — run the tool
+with `-Assert` on the destination before copying, so retention survives
+scratchpad cleanup by default and never lands beside the root.
 
 Lane substitution (backup reviewer): `Verification status: FULL` MAY
 carry a `Degradation:` class plus `Authorized by: user at round N` when
