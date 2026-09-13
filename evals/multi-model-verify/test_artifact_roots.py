@@ -283,18 +283,48 @@ def test_a_forbidden_character_in_temp_is_a_parameter_fault(tmp_path):
     (),
     ("-RepoRoot", "{repo}", "-Bogus", "x"),
     ("-RepoRoot", "{repo}", "stray"),
+    # The forms PowerShell's own binding used to own, each exit 1 with
+    # host-specific text and no ERROR: line under a typed param block:
+    # a missing value, a duplicate, a value on the switch that 5.1
+    # rejected and 7 accepted (measured 2026-09-13 by the diff-debate
+    # reviewer), a common parameter, and an abbreviated name.
+    ("-RepoRoot",),
+    ("-RepoRoot", "{repo}", "-Assert"),
+    ("-RepoRoot", "{repo}", "-RepoRoot", "{repo}"),
+    ("-RepoRoot", "{repo}", "-Json:invalid"),
+    ("-RepoRoot", "{repo}", "-ErrorAction", "invalid"),
+    ("-Repo", "{repo}"),
 ])
-def test_faults_the_binder_used_to_own_are_script_faults(tmp_path, args):
-    # A missing -RepoRoot and an unbound token used to exit 1 from
-    # PowerShell's own -File binding, with host-specific text and no
-    # ERROR: line. The parameter is optional-with-check and remaining
-    # arguments are captured, so both are script-seen faults. The one
-    # residual is a named parameter whose VALUE is missing, which the
-    # header states.
+def test_every_command_line_fault_is_a_script_fault(tmp_path, args):
+    # The script has no param block: every token reaches its own parser
+    # as a string on both hosts, so there is no binding residual. Each
+    # case exits 2 with an ERROR: line.
     repo = make_repo(tmp_path)
     proc = run_resolver(*[a.replace("{repo}", str(repo)) for a in args])
     assert proc.returncode == 2, proc.stdout + proc.stderr
     assert proc.stdout.startswith("ERROR:"), proc.stdout
+
+
+@needs_host
+@pytest.mark.parametrize("flag,is_json", [
+    ("-Json", True),
+    ("-Json:$true", True),
+    ("-Json:$false", False),
+    ("-Json:true", True),
+    ("-Json:false", False),
+])
+def test_json_switch_forms_select_the_format_on_both_hosts(tmp_path, flag, is_json):
+    # -File splits `-Json:$true` into two tokens and PowerShell 7
+    # evaluates the second to `True` while 5.1 leaves `$true`; the parser
+    # accepts both spellings, so the same command line selects the same
+    # format on both hosts.
+    repo = make_repo(tmp_path)
+    proc = run_resolver("-RepoRoot", str(repo), flag)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    if is_json:
+        assert json.loads(proc.stdout)["source"] == "default"
+    else:
+        assert proc.stdout.startswith("repo: "), proc.stdout
 
 
 @needs_host

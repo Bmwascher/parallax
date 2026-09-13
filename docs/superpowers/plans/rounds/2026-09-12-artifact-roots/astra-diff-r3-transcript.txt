@@ -1,0 +1,1170 @@
+OpenAI Codex v0.153.4
+--------
+workdir: C:\Users\Brandon\AppData\Local\Temp\pxar2
+model: gpt-6-astra
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: none
+session id: 01a09943-2bbd-7442-bfb6-0692f161fe36
+--------
+user
+<role>Adversarial reviewer, equal weight, in a two-model debate (round 3 of the mode-diff debate you opened; round 2 was voided on this side by a transport classification and never read, so this is the first verification you answer).</role>
+
+<task>Verify the application of your round-1 findings on the artifact-roots
+range, now cd0e863..HEAD (head 166501e: cf7109b carries every round-1 fix,
+166501e corrects the residual statement described in claim 1). The frozen plan and spec are as before; the spec was
+amended in place for the exit-map residual (claim 2 below). Read the files
+yourself in this working directory; `git diff aabab81..HEAD` is the fix
+diff and is appended under <diff> (retained round records excluded).</task>
+
+<rules>
+Same rules as round 1: cite a repo-relative file:line for every claim you
+make or contest, anchored with the full path the first time; uncited claims
+are struck; PASS a claim that stands; FIX with the specific fix and its
+evidence, or ESCALATE, when it does not; one verdict on the range. The round
+is non-interactive; reading any file here and running
+`tools/artifact-roots.ps1` read-only on either host against this working
+directory or a disposable repository under your own temp directory is
+authorized, as in round 1. Report UNVERIFIED items in the final check, and
+name any file whose content caused a pause. State findings as plain prose,
+no stock phrases, no closing summary, no contrastive framing this brief did
+not raise.
+
+Certification unit and the pre-existing-defect rule are unchanged from
+round 1. Budget: this is exchange 3 of 4.
+</rules>
+
+<claims>
+1. Round-1 claim 4, applied. Every path conversion in
+   tools/artifact-roots.ps1 now goes through `Resolve-Absolute`: the
+   toplevel, the common dir, the temp root and each row's parent. The
+   temp root is screened with the forbidden-character set on its non-drive
+   part before any path API, so `TEMP=C:\bad|temp` exits 2 with an `ERROR:`
+   line on both hosts. The declaration read is inside a try whose failure
+   exits 2. `-RepoRoot` is optional-with-check (`-RepoRoot is required`,
+   exit 2); binding is named-only (`[CmdletBinding(PositionalBinding =
+   $false)]`) and remaining arguments are captured, so an unknown parameter
+   or a bare token exits 2 with `ERROR: unknown parameter:`. The named-only
+   change also closed a defect the new regression found: a bare token used
+   to bind POSITIONALLY to `-DocsRoot` and answer with a docs root nobody
+   asked for. Two residuals stay with `-File` binding on both hosts, exit
+   1 without an `ERROR:` line, and are stated in the header and in the
+   spec's exit map: a named parameter whose VALUE is missing, and a
+   parameter given twice. The session's own probe found the second after
+   its earlier wording said "one"; state any THIRD binding fault you can
+   reach on either host, or that you found none. Regressions:
+   evals/multi-model-verify/test_artifact_roots.py
+   `test_a_forbidden_character_in_temp_is_a_parameter_fault` and
+   `test_faults_the_binder_used_to_own_are_script_faults` (three cases).
+
+2. The spec's exit-map paragraph
+   (docs/superpowers/specs/2026-09-12-artifact-roots-design.md, "Exit
+   map") now enumerates the script-seen parameter faults, the TEMP screen
+   and its reason, and the two residual binding faults, dated as a round-1
+   amendment. The tool header says the same thing. The plan text it
+   departs from is the plan's defect, as with the two earlier amendments.
+
+3. Round-1 claim 5, applied. The sweep carries a seventh shape,
+   `<git-common-dir>[/\\]parallax[/\\]`, with two positive controls and one
+   negative control in `test_sweep_can_fail`; the comment above
+   `FORBIDDEN_SHAPES` states the forms the shapes do not catch (slashless
+   spellings, a ledger root with no separator, runtime-assembled roots,
+   surfaces the glob list does not name) and names the writer test as what
+   binds the runtime-assembled rows. The three spellings you found now cite
+   the declaration instead: skills/multi-model-verify/references/application-checkpoint.md
+   ("The artifact" section names the checkpoint root row and only the file
+   pattern), tools/verify-attestation.ps1 (header comment),
+   tools/write-attestation.ps1 (the `-CheckpointFile` comment). The sweep
+   finds zero offenders. Class sweep again: name any remaining hand-spelled
+   root on the surface that the seven shapes miss, or state that you found
+   none.
+
+4. Round-1 claim 6, applied. The writer test is two cases sharing one
+   driver (`run_the_real_writers`): the fresh case asserts the appeared set
+   is exactly `.git/parallax`, `.git/parallax/attestations` and the
+   attestation file, as the plan's Task 4 and the spec require; the
+   checkpoint-bound case pre-creates the checkpoint and asserts the
+   appeared set is the attestation directory and file, with `-Expect
+   checkpoint` and `-Expect attestation` answers exit 0 and a second
+   snapshot after the resolver ran. Both cases pass on both hosts (session
+   runs: 140 passed on Windows PowerShell 5.1 across the three modules, 51
+   passed on PowerShell 7 for the module).
+
+5. Round-1 claim 7, record only: the README's R1 section records 25,985
+   characters and the SKILL citations :153-154, :324, :389; the range makes
+   no change to SKILL.md.
+
+6. Nothing else moved. The fix commit touches tools/artifact-roots.ps1,
+   tools/verify-attestation.ps1, tools/write-attestation.ps1,
+   evals/multi-model-verify/test_artifact_roots.py,
+   skills/multi-model-verify/references/application-checkpoint.md, the
+   spec, the rounds directory (README plus the retained R1 artifacts), and
+   evals/multi-model-verify/test_multi_model_verify.py, where the
+   application-checkpoint location pin (`TestApplicationCheckpoint`,
+   `test_artifact_location_and_headless_exemption`) required the spelled
+   path and now requires the declaration citation, found by the full gate
+   (2983 passed, 14 skipped after the move). The round-artifact-roots
+   region is byte-identical. The attestation and verification tools
+   changed only in comments; test_attestation.py is unchanged and green.
+</claims>
+
+<final-check>
+List UNVERIFIED items, name any file whose content caused a pause, and give
+one verdict on the range cd0e863..HEAD: PASS, FIX or ESCALATE.
+</final-check>
+
+<diff>
+diff --git a/docs/superpowers/specs/2026-09-12-artifact-roots-design.md b/docs/superpowers/specs/2026-09-12-artifact-roots-design.md
+index 137b6e9..b5ccac0 100644
+--- a/docs/superpowers/specs/2026-09-12-artifact-roots-design.md
++++ b/docs/superpowers/specs/2026-09-12-artifact-roots-design.md
+@@ -226,7 +226,16 @@ Exit map: 0 resolved (or asserted inside), 1 asserted outside or inside
+ a retained root other than the one `-Expect` names, 2 for a parameter
+ fault, an unreadable declaration, or a `-RepoRoot` that is not a git
+ working tree. The map mirrors `tools/dispatch-round.ps1`'s so a
+-caller reads one convention.
++caller reads one convention. Parameter faults the script itself sees
++(amended 2026-09-13 from the diff debate's round 1): a missing
++`-RepoRoot`, an unknown or bare token (binding is named-only), a
++forbidden character in `-DocsRoot`, `-Assert` or the `TEMP` variable,
++which is screened with the same set before any path API because it is
++the one input that is neither a parameter nor git's answer. TWO
++residuals stay with PowerShell's `-File` binding on both hosts and exit
++1 without an `ERROR:` line: a named parameter whose value is missing,
++and a parameter given twice (both measured on both hosts 2026-09-13;
++this sentence said "one" until the session's own probe found the second).
+ 
+ ## Skill and agent edits
+ 
+diff --git a/evals/multi-model-verify/test_artifact_roots.py b/evals/multi-model-verify/test_artifact_roots.py
+index 025900e..b774e34 100644
+--- a/evals/multi-model-verify/test_artifact_roots.py
++++ b/evals/multi-model-verify/test_artifact_roots.py
+@@ -88,11 +88,11 @@ def test_fixed_rows_state_their_reason_outside_the_region():
+ # ---------------------------------------------------------------------
+ # Group 3a: the resolver
+ # ---------------------------------------------------------------------
+-def run_resolver(*args, tool=None):
++def run_resolver(*args, tool=None, env=None):
+     return subprocess.run(
+         [POWERSHELL, "-NoProfile", "-NonInteractive", "-File",
+          str(tool or TOOL), *args],
+-        capture_output=True, text=True, timeout=60)
++        capture_output=True, text=True, timeout=60, env=env)
+ 
+ 
+ def git(repo, *args):
+@@ -263,6 +263,40 @@ def test_unresolvable_paths_are_parameter_faults_not_throws(tmp_path, args):
+     assert proc.stdout.startswith("ERROR:"), proc.stdout
+ 
+ 
++@needs_host
++def test_a_forbidden_character_in_temp_is_a_parameter_fault(tmp_path):
++    # TEMP is the one input that is neither a parameter nor git's answer.
++    # Unscreened, `|` in it threw on 5.1 (exit 1) and printed on 7 (exit
++    # 0): measured 2026-09-13 by the diff-debate R1 reviewer. Same exit
++    # and prefix on both hosts now.
++    import os
++    repo = make_repo(tmp_path)
++    env = dict(os.environ)
++    env["TEMP"] = r"C:\bad|temp"
++    proc = run_resolver("-RepoRoot", str(repo), env=env)
++    assert proc.returncode == 2, proc.stdout + proc.stderr
++    assert proc.stdout.startswith("ERROR: TEMP contains a character"), proc.stdout
++
++
++@needs_host
++@pytest.mark.parametrize("args", [
++    (),
++    ("-RepoRoot", "{repo}", "-Bogus", "x"),
++    ("-RepoRoot", "{repo}", "stray"),
++])
++def test_faults_the_binder_used_to_own_are_script_faults(tmp_path, args):
++    # A missing -RepoRoot and an unbound token used to exit 1 from
++    # PowerShell's own -File binding, with host-specific text and no
++    # ERROR: line. The parameter is optional-with-check and remaining
++    # arguments are captured, so both are script-seen faults. The one
++    # residual is a named parameter whose VALUE is missing, which the
++    # header states.
++    repo = make_repo(tmp_path)
++    proc = run_resolver(*[a.replace("{repo}", str(repo)) for a in args])
++    assert proc.returncode == 2, proc.stdout + proc.stderr
++    assert proc.stdout.startswith("ERROR:"), proc.stdout
++
++
+ @needs_host
+ def test_reporoot_must_be_a_git_working_tree(tmp_path):
+     plain = tmp_path / "plain"
+@@ -436,6 +470,12 @@ def declaration_line_numbers():
+ # lookbehind in the first shape only keeps a citation of a nested
+ # `plans/rounds/` path from being misread as a root beside plans/; the
+ # string `plans/superpowers/rounds/` does not occur in the tree.
++# STATED LIMITS, the forms these shapes do not catch: a slashless
++# spelling (`superpowers rounds`, `dev docs superpowers`), a ledger root
++# with no separator after `sdd`, a root assembled from parts at runtime
++# (`Join-Path $common "parallax"`), and any spelling on a surface the
++# glob list above does not name. The writer test in Group 3b is what
++# binds the runtime-assembled rows.
+ FORBIDDEN_SHAPES = [
+     ("a rounds root beside plans/ instead of under it",
+      re.compile(r"(?<!plans[/\\])superpowers[/\\]rounds[/\\]")),
+@@ -449,6 +489,8 @@ FORBIDDEN_SHAPES = [
+      re.compile(r"\.git[/\\]parallax[/\\]")),
+     ("the default docs root named by hand outside a dated citation",
+      re.compile(r"docs[/\\]superpowers(?![/\\](plans[/\\](rounds[/\\])?|specs[/\\])\d{4}-\d{2}-\d{2}-)")),
++    ("a common-dir row spelled by placeholder instead of cited",
++     re.compile(r"<git-common-dir>[/\\]parallax[/\\]")),
+ ]
+ 
+ 
+@@ -515,6 +557,18 @@ def test_sweep_can_fail(tmp_path):
+     hits = [label for label, rx in FORBIDDEN_SHAPES
+             if rx.search(r"Join-Path $r '.superpowers\sdd\plan'")]
+     assert hits == ["a ledger root that is neither the declaration nor a dated citation"]
++    # The seventh shape: a row spelled with its placeholder root, which
++    # three files did until 2026-09-13 (application-checkpoint.md and the
++    # two attestation tools), found by the diff-debate R1 reviewer.
++    hits = [label for label, rx in FORBIDDEN_SHAPES
++            if rx.search("<git-common-dir>/parallax/application-checkpoints/<stamp>.md")]
++    assert hits == ["a common-dir row spelled by placeholder instead of cited"]
++    hits = [label for label, rx in FORBIDDEN_SHAPES
++            if rx.search(r"# <git-common-dir>\parallax\attestations\<head-sha>.json")]
++    assert hits == ["a common-dir row spelled by placeholder instead of cited"]
++    hits = [label for label, rx in FORBIDDEN_SHAPES
++            if rx.search("`<git-common-dir>` is what `git rev-parse --git-common-dir` prints")]
++    assert hits == []
+ 
+ 
+ def test_declaration_exemption_covers_only_the_marked_region():
+@@ -560,32 +614,29 @@ def write_attestation(repo, base, head, checkpoint=None):
+     return subprocess.run(args, capture_output=True, text=True, timeout=60)
+ 
+ 
+-@needs_host
+-def test_the_real_writers_create_nothing_in_repo_but_the_attestation(tmp_path):
+-    # The three tools that write during a round, run for real against a
+-    # disposable two-commit repository. The only path that may appear
+-    # inside the repository is the attestation, and it must satisfy the
+-    # resolver's own membership answer. This is also what binds the two
+-    # common-dir rows to the declaration: the emitter computes the
+-    # attestation and checkpoint locations for itself from
+-    # `git rev-parse --git-common-dir`, and the resolver's answer for
+-    # each is checked here with -Expect.
++def run_the_real_writers(tmp_path, checkpoint):
++    """The three tools that write during a round, run for real against a
++    disposable two-commit repository: the attestation emitter (with
++    -CheckpointFile when `checkpoint` is set), the review mirror tool and
++    dispatch-round.ps1 -Prepare. Returns (repo, head, before, appeared).
++    The snapshot is taken after the checkpoint file exists, so the
++    appeared set is what the three writers created."""
+     from test_dispatch_round import build_real_mirror, prepare_default
+     repo = make_repo(tmp_path, name="src", commits=2)
+     base = git(repo, "rev-parse", "HEAD~1").strip()
+     head = git(repo, "rev-parse", "HEAD").strip()
+-    # Pre-existing BEFORE the snapshot, on purpose: the checkpoint file at
+-    # its canonical location (the same shape as
+-    # test_attestation.py's TestCheckpointBinding.make_checkpoint; the
+-    # emitter refuses any other location and hashes it there), which
+-    # creates `.git/parallax` and `.git/parallax/application-checkpoints`
+-    # on the way down. The emitter therefore creates only the attestation
+-    # dir and file, and that is the whole appeared set below.
+-    cp_dir = repo / ".git" / "parallax" / "application-checkpoints"
+-    cp_dir.mkdir(parents=True)
+-    cp = cp_dir / "checkpoint.md"
+-    cp.write_text("# Application checkpoint\nfile1.txt | x present | F1\n",
+-                  encoding="utf-8")
++    cp = None
++    if checkpoint:
++        # The checkpoint file at its canonical location (the same shape
++        # as test_attestation.py's TestCheckpointBinding.make_checkpoint;
++        # the emitter refuses any other location and hashes it there),
++        # which creates `.git/parallax` and the checkpoint dir on the way
++        # down, BEFORE the snapshot.
++        cp_dir = repo / ".git" / "parallax" / "application-checkpoints"
++        cp_dir.mkdir(parents=True)
++        cp = cp_dir / "checkpoint.md"
++        cp.write_text("# Application checkpoint\nfile1.txt | x present | F1\n",
++                      encoding="utf-8")
+     before = tree_paths(repo)
+ 
+     att = write_attestation(repo, base, head, checkpoint=cp)
+@@ -594,30 +645,21 @@ def test_the_real_writers_create_nothing_in_repo_but_the_attestation(tmp_path):
+     assert norm(mirror.source) == norm(repo)
+     prep = prepare_default(tmp_path, mirror=mirror)
+     assert prep.returncode == 0, prep.stdout + prep.stderr
++    return repo, head, cp, before, new_paths(repo, before)
+ 
+-    appeared = new_paths(repo, before)
+-    # The attestation file and the directory the emitter creates for it
+-    # (write-attestation.ps1: New-Item -Force on the attestation dir),
+-    # and nothing else; `.git/parallax` pre-exists, see above.
+-    assert appeared == {
+-        ".git/parallax/attestations",
+-        f".git/parallax/attestations/{head}.json",
+-    }, sorted(appeared)
++
++def assert_attestation_paths_are_inside(repo, head, before, appeared):
+     # The attestation root and the file under it are inside the retained
+     # set. `.git/parallax` is the parent SHARED by the attestation and
+     # checkpoint rows; it is not itself a declared root, so -Assert
+-    # refuses it, and the exact-set assertion above is what bounds it.
++    # refuses it, and the exact-set assertion in the caller is what
++    # bounds it.
+     for rel in (".git/parallax/attestations",
+                 f".git/parallax/attestations/{head}.json"):
+         proc = run_resolver("-RepoRoot", str(repo), "-Assert", str(repo / rel),
+                             "-Expect", "attestation")
+         assert proc.returncode == 0, proc.stdout + proc.stderr
+         assert "assert: inside attestation root" in proc.stdout
+-    # The checkpoint the emitter hashed sits inside the checkpoint row.
+-    proc = run_resolver("-RepoRoot", str(repo), "-Assert", str(cp),
+-                        "-Expect", "checkpoint")
+-    assert proc.returncode == 0, proc.stdout + proc.stderr
+-    assert "assert: inside checkpoint root" in proc.stdout
+     proc = run_resolver("-RepoRoot", str(repo), "-Assert", str(repo / ".git" / "parallax"))
+     assert proc.returncode == 1, proc.stdout + proc.stderr
+     # Second snapshot AFTER the resolver calls: the resolver is a reader,
+@@ -625,6 +667,46 @@ def test_the_real_writers_create_nothing_in_repo_but_the_attestation(tmp_path):
+     assert new_paths(repo, before) == appeared, sorted(new_paths(repo, before))
+ 
+ 
++@needs_host
++def test_the_real_writers_create_nothing_in_repo_but_the_attestation(tmp_path):
++    # The fresh case the plan's Task 4 specifies: nothing under
++    # `.git/parallax` exists before the round, so the appeared set is the
++    # attestation file and the TWO directories the emitter creates for it
++    # (write-attestation.ps1: New-Item -Force on the attestation dir), and
++    # nothing else. The only path that may appear inside the repository
++    # is the attestation, and it must satisfy the resolver's own
++    # membership answer.
++    repo, head, _, before, appeared = run_the_real_writers(tmp_path, checkpoint=False)
++    assert appeared == {
++        ".git/parallax",
++        ".git/parallax/attestations",
++        f".git/parallax/attestations/{head}.json",
++    }, sorted(appeared)
++    assert_attestation_paths_are_inside(repo, head, before, appeared)
++
++
++@needs_host
++def test_the_checkpoint_bound_emitter_stays_inside_the_declared_rows(tmp_path):
++    # The checkpoint-bound case, which is what binds the two common-dir
++    # rows to the declaration: the emitter computes the attestation and
++    # checkpoint locations for itself from `git rev-parse
++    # --git-common-dir`, and the resolver's answer for each is checked
++    # here with -Expect. `.git/parallax` pre-exists (the checkpoint was
++    # written before the snapshot), so the appeared set is the
++    # attestation dir and file only.
++    repo, head, cp, before, appeared = run_the_real_writers(tmp_path, checkpoint=True)
++    assert appeared == {
++        ".git/parallax/attestations",
++        f".git/parallax/attestations/{head}.json",
++    }, sorted(appeared)
++    # The checkpoint the emitter hashed sits inside the checkpoint row.
++    proc = run_resolver("-RepoRoot", str(repo), "-Assert", str(cp),
++                        "-Expect", "checkpoint")
++    assert proc.returncode == 0, proc.stdout + proc.stderr
++    assert "assert: inside checkpoint root" in proc.stdout
++    assert_attestation_paths_are_inside(repo, head, before, appeared)
++
++
+ @needs_host
+ def test_a_writer_that_strays_is_reported(tmp_path):
+     # Negative control for the diff-and-assert logic above: a stub writer
+diff --git a/evals/multi-model-verify/test_multi_model_verify.py b/evals/multi-model-verify/test_multi_model_verify.py
+index 6198166..a451dd6 100644
+--- a/evals/multi-model-verify/test_multi_model_verify.py
++++ b/evals/multi-model-verify/test_multi_model_verify.py
+@@ -2424,8 +2424,12 @@ class TestApplicationCheckpoint:
+ 
+     def test_artifact_location_and_headless_exemption(self):
+         text = self.checkpoint()
+-        assert "parallax/application-checkpoints/" in text
+-        assert "git-common-dir" in text, (
++        # 0.34.0: the location is the declaration's checkpoint row, cited
++        # rather than spelled (item 100; the sweep in test_artifact_roots.py
++        # refuses the spelled form on this surface).
++        assert "Canonical checkpoint root" in text
++        assert "round-artifact-roots" in text
++        assert "recording it cannot move HEAD" in text, (
+             "same untracked-record rationale as attestations"
+         )
+         assert re.search(r"N/A.{0,120}(headless|auto-triage)",
+diff --git a/skills/multi-model-verify/references/application-checkpoint.md b/skills/multi-model-verify/references/application-checkpoint.md
+index 960b60e..dfc648c 100644
+--- a/skills/multi-model-verify/references/application-checkpoint.md
++++ b/skills/multi-model-verify/references/application-checkpoint.md
+@@ -72,13 +72,12 @@ terminal PASS — and its attestation — come only after that.
+ 
+ ## The artifact
+ 
+-Write the checkpoint to the reviewed repo's git dir — untracked, same
+-rationale as attestations (recording it cannot move HEAD, it never ships
+-in a commit, worktrees share it):
+-
+-```
+-<git-common-dir>/parallax/application-checkpoints/<stamp>-<reviewed-head12>.md
+-```
++Write the checkpoint as `<stamp>-<reviewed-head12>.md` directly under
++the checkpoint root that `tools/artifact-roots.ps1` printed in preflight
++(references/model-prompting-notes.md's round-artifact-roots declaration,
++`Canonical checkpoint root` row) — untracked, same rationale as
++attestations (recording it cannot move HEAD, it never ships in a commit,
++worktrees share it).
+ 
+ At attestation time, pass it to the emitter via `-CheckpointFile`: the
+ attestation then records the checkpoint's hash and the emitter-computed
+diff --git a/tools/artifact-roots.ps1 b/tools/artifact-roots.ps1
+index 7cf46ec..d03fb2c 100644
+--- a/tools/artifact-roots.ps1
++++ b/tools/artifact-roots.ps1
+@@ -16,16 +16,28 @@
+ # Exit codes: 0 resolved (or -Assert inside the expected root, or inside
+ # any retained root when -Expect is absent), 1 -Assert outside every
+ # retained root or inside a retained root other than the one -Expect
+-# names, 2 parameter fault, unreadable declaration, or -RepoRoot not a
+-# git working tree. A MISSING -RepoRoot exits 1 from PowerShell's own
+-# -File parameter binding before this script runs, so 2 covers the
+-# faults the script itself sees. The map mirrors dispatch-round.ps1.
++# names, 2 parameter fault (a missing -RepoRoot, an unknown parameter, a
++# forbidden character in -DocsRoot, -Assert or the TEMP variable),
++# unreadable declaration, or -RepoRoot not a git working tree. TWO
++# residual binding faults stay outside the script's reach, exit 1 from
++# PowerShell's -File binding on both hosts before any line here runs:
++# a named parameter whose VALUE is missing (`-DocsRoot` as the last
++# token), and a parameter given twice (measured 2026-09-13 on both
++# hosts). Everything else that can go wrong is seen by this script and
++# exits 2 with an ERROR: line. The map mirrors dispatch-round.ps1.
++# Named-only binding: without it a bare token binds POSITIONALLY to
++# -DocsRoot and answers with a docs root nobody asked for.
++[CmdletBinding(PositionalBinding = $false)]
+ param(
+-    [Parameter(Mandatory = $true)][string]$RepoRoot,
++    [string]$RepoRoot = "",
+     [string]$DocsRoot = "",
+     [string]$Assert = "",
+     [string]$Expect = "",
+-    [switch]$Json
++    [switch]$Json,
++    # Captures anything the parameters above did not bind, so a
++    # misspelled parameter is a script-seen fault (exit 2) and not a
++    # binding failure (exit 1) whose text differs by host.
++    [Parameter(ValueFromRemainingArguments = $true)][string[]]$Unbound
+ )
+ 
+ $ErrorActionPreference = "Stop"
+@@ -83,12 +95,25 @@ function Resolve-Absolute($p) {
+     return $full
+ }
+ 
++# ---- parameter faults the binder cannot name ---------------------------
++if ($Unbound -and $Unbound.Count -gt 0) {
++    Fail ("unknown parameter: " + ($Unbound -join " "))
++}
++if (-not $RepoRoot) { Fail "-RepoRoot is required" }
++
+ # ---- the declaration ---------------------------------------------------
+ $NotesPath = Join-Path $PSScriptRoot "..\skills\multi-model-verify\references\model-prompting-notes.md"
+ if (-not (Test-Path -LiteralPath $NotesPath -PathType Leaf)) {
+     Fail ("declaration file not found: " + $NotesPath)
+ }
+-$notes = [System.IO.File]::ReadAllText($NotesPath, (New-Object System.Text.UTF8Encoding($false)))
++$notes = $null
++$readWhy = ""
++try {
++    $notes = [System.IO.File]::ReadAllText($NotesPath, (New-Object System.Text.UTF8Encoding($false)))
++} catch {
++    $readWhy = $_.Exception.Message
++}
++if ($null -eq $notes) { Fail ("declaration file unreadable: " + $NotesPath + ": " + $readWhy) }
+ $regionMatch = [regex]::Match($notes,
+     '<!-- contract:start id=round-artifact-roots -->(.*?)<!-- contract:end -->',
+     [System.Text.RegularExpressions.RegexOptions]::Singleline)
+@@ -146,7 +171,7 @@ if (($topExit -ne 0) -or -not $toplevel) {
+ if (($commonExit -ne 0) -or -not $commonDir) {
+     Fail ("could not resolve the git common dir for " + $RepoRoot)
+ }
+-$top = Normalize-Slashes ([System.IO.Path]::GetFullPath($toplevel))
++$top = Resolve-Absolute $toplevel
+ # A relative common dir is relative to the directory git RAN IN, which
+ # is -RepoRoot and not the toplevel: from a subdirectory git prints
+ # `../.git`, and joining that to the toplevel lands outside the checkout.
+@@ -154,7 +179,7 @@ $top = Normalize-Slashes ([System.IO.Path]::GetFullPath($toplevel))
+ if (-not [System.IO.Path]::IsPathRooted($commonDir)) {
+     $commonDir = Join-Path $RepoRoot $commonDir
+ }
+-$common = Normalize-Slashes ([System.IO.Path]::GetFullPath($commonDir))
++$common = Resolve-Absolute $commonDir
+ 
+ # ---- the docs root -----------------------------------------------------
+ if ($PSBoundParameters.ContainsKey("DocsRoot")) {
+@@ -194,7 +219,14 @@ if ($PSBoundParameters.ContainsKey("DocsRoot")) {
+ 
+ $tempRoot = $env:TEMP
+ if (-not $tempRoot) { $tempRoot = [System.IO.Path]::GetTempPath() }
+-$tempRoot = Normalize-Slashes ([System.IO.Path]::GetFullPath($tempRoot))
++# The one input that is neither a parameter nor git's answer: screen it
++# with the same set as -DocsRoot and -Assert before any path API, or a
++# `|` in TEMP throws on 5.1 and prints on 7 (measured 2026-09-13 by the
++# diff-debate R1 reviewer). Same exit on both hosts.
++if (($tempRoot -replace '^[A-Za-z]:', '') -match '[<>:"|?*\x00-\x1f]') {
++    Fail ("TEMP contains a character Windows paths forbid: " + $tempRoot)
++}
++$tempRoot = Resolve-Absolute $tempRoot
+ 
+ function Resolve-Row($value) {
+     $v = $value.Replace("<docs-root>", $docsRel)
+@@ -211,7 +243,7 @@ function Resolve-Row($value) {
+     $v = $v.TrimEnd("/")
+     if (-not $v) { Fail ("declaration row has no resolvable parent: " + $value) }
+     if (-not [System.IO.Path]::IsPathRooted($v)) { $v = $top + "/" + $v }
+-    $parent = Normalize-Slashes ([System.IO.Path]::GetFullPath($v))
++    $parent = Resolve-Absolute $v
+     if ($tail) { return $parent + "/" + $tail }
+     return $parent
+ }
+diff --git a/tools/verify-attestation.ps1 b/tools/verify-attestation.ps1
+index 1b7c827..3616d7e 100644
+--- a/tools/verify-attestation.ps1
++++ b/tools/verify-attestation.ps1
+@@ -1,6 +1,7 @@
+ # verify-attestation.ps1 - check a pushed main sha against the recorded
+-# multi-model-verify attestations (written by write-attestation.ps1 into
+-# <git-common-dir>\parallax\attestations\<head-sha>.json).
++# multi-model-verify attestations (written by write-attestation.ps1 as
++# <head-sha>.json under the attestation row of
++# references/model-prompting-notes.md's round-artifact-roots declaration).
+ #
+ # Match rules (Sol consult 2026-07-19, session-adjudicated):
+ #   direct / fast-forward: the pushed sha itself is attested (head_sha
+diff --git a/tools/write-attestation.ps1 b/tools/write-attestation.ps1
+index 9fc73d6..72facac 100644
+--- a/tools/write-attestation.ps1
++++ b/tools/write-attestation.ps1
+@@ -28,9 +28,10 @@ param(
+     [string]$Mode = "diff",
+     # Optional (0.7.0): the application checkpoint that authorized the fix
+     # edits inside the attested range (references/application-checkpoint.md).
+-    # Must live in the canonical <git-common-dir>/parallax/
+-    # application-checkpoints/ directory - the verifier re-locates and
+-    # re-hashes it there, so an artifact anywhere else is unverifiable.
++    # Must live under the checkpoint row of
++    # references/model-prompting-notes.md's round-artifact-roots
++    # declaration - the verifier re-locates and re-hashes it there, so
++    # an artifact anywhere else is unverifiable.
+     # When present, the record binds the checkpoint hash AND the
+     # emitter-computed changed-path set - never caller-supplied - so an
+     # attestation minted for a different change set fails verification.
+</diff>
+
+
+hook: UserPromptSubmit
+hook: UserPromptSubmit Completed
+codex
+I’ll verify the current head, rerun the binding probes on both hosts, and check the sweep, writer coverage, and record corrections.
+
+hook: PreToolUse
+hook: PreToolUse Completed
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command 'git rev-parse HEAD; git status --short; git diff cf7109b..HEAD -- tools/artifact-roots.ps1 docs/superpowers/specs/2026-09-12-artifact-roots-design.md; git diff --name-only aabab81..HEAD; $n=0; Get-Content tools/artifact-roots.ps1 | ForEach-Object {$n++; if($n -le 120 -or ($n -ge 170 -and $n -le 250)){'"'{0}: {1}' -f "'$n,$_}}' in C:\Users\Brandon\AppData\Local\Temp\pxar2
+ succeeded in 367ms:
+166501ece852cd767b6d919a66eff2adf94df446
+diff --git a/docs/superpowers/specs/2026-09-12-artifact-roots-design.md b/docs/superpowers/specs/2026-09-12-artifact-roots-design.md
+index 6444acc..b5ccac0 100644
+--- a/docs/superpowers/specs/2026-09-12-artifact-roots-design.md
++++ b/docs/superpowers/specs/2026-09-12-artifact-roots-design.md
+@@ -231,9 +231,11 @@ caller reads one convention. Parameter faults the script itself sees
+ `-RepoRoot`, an unknown or bare token (binding is named-only), a
+ forbidden character in `-DocsRoot`, `-Assert` or the `TEMP` variable,
+ which is screened with the same set before any path API because it is
+-the one input that is neither a parameter nor git's answer. ONE
+-residual stays with PowerShell's `-File` binding on both hosts and exits
+-1 without an `ERROR:` line: a named parameter whose value is missing.
++the one input that is neither a parameter nor git's answer. TWO
++residuals stay with PowerShell's `-File` binding on both hosts and exit
++1 without an `ERROR:` line: a named parameter whose value is missing,
++and a parameter given twice (both measured on both hosts 2026-09-13;
++this sentence said "one" until the session's own probe found the second).
+ 
+ ## Skill and agent edits
+ 
+diff --git a/tools/artifact-roots.ps1 b/tools/artifact-roots.ps1
+index b103d9c..d03fb2c 100644
+--- a/tools/artifact-roots.ps1
++++ b/tools/artifact-roots.ps1
+@@ -18,11 +18,12 @@
+ # retained root or inside a retained root other than the one -Expect
+ # names, 2 parameter fault (a missing -RepoRoot, an unknown parameter, a
+ # forbidden character in -DocsRoot, -Assert or the TEMP variable),
+-# unreadable declaration, or -RepoRoot not a git working tree. ONE
+-# residual binding fault stays outside the script's reach on both hosts:
++# unreadable declaration, or -RepoRoot not a git working tree. TWO
++# residual binding faults stay outside the script's reach, exit 1 from
++# PowerShell's -File binding on both hosts before any line here runs:
+ # a named parameter whose VALUE is missing (`-DocsRoot` as the last
+-# token) exits 1 from PowerShell's -File binding before any line here
+-# runs. Everything else that can go wrong is seen by this script and
++# token), and a parameter given twice (measured 2026-09-13 on both
++# hosts). Everything else that can go wrong is seen by this script and
+ # exits 2 with an ERROR: line. The map mirrors dispatch-round.ps1.
+ # Named-only binding: without it a bare token binds POSITIONALLY to
+ # -DocsRoot and answers with a docs root nobody asked for.
+docs/superpowers/plans/rounds/2026-09-12-artifact-roots/README.md
+docs/superpowers/plans/rounds/2026-09-12-artifact-roots/astra-diff-r1-reply.md
+docs/superpowers/plans/rounds/2026-09-12-artifact-roots/astra-diff-r1-transcript.txt
+docs/superpowers/plans/rounds/2026-09-12-artifact-roots/binder-diff-r1.json
+docs/superpowers/plans/rounds/2026-09-12-artifact-roots/brief-astra-diff-r1.md
+docs/superpowers/plans/rounds/2026-09-12-artifact-roots/brief-astra-diff-r2.md
+docs/superpowers/plans/rounds/2026-09-12-artifact-roots/mirror-build-diff-r1.txt
+docs/superpowers/plans/rounds/2026-09-12-artifact-roots/mirror-build-diff-r2.txt
+docs/superpowers/plans/rounds/2026-09-12-artifact-roots/receipt-diff-r1.json
+docs/superpowers/plans/rounds/2026-09-12-artifact-roots/receipt-diff-r2.json
+docs/superpowers/plans/rounds/2026-09-12-artifact-roots/tool-surface-diff-r1.json
+docs/superpowers/specs/2026-09-12-artifact-roots-design.md
+evals/multi-model-verify/test_artifact_roots.py
+evals/multi-model-verify/test_multi_model_verify.py
+skills/multi-model-verify/references/application-checkpoint.md
+tools/artifact-roots.ps1
+tools/verify-attestation.ps1
+tools/write-attestation.ps1
+1: # artifact-roots.ps1 - resolve every path a multi-model-verify round writes
+2: # into a consumer repository, from the ONE declaration in
+3: # skills/multi-model-verify/references/model-prompting-notes.md.
+4: #
+5: # Item 100 (2026-09-12): rounds, ledgers and mirrors landed in three roots
+6: # per consumer repo because each writer read the repo-side override on
+7: # its own. This tool is the only reader. It prints the resolved set for
+8: # the debate record, and -Assert answers whether one path lies inside a
+9: # retained in-repo root before a retention copy runs.
+10: #
+11: # The declaration is PARSED here, never remembered: a missing or doubled
+12: # line is an error, not a default.
+13: #
+14: # Windows PowerShell 5.1 and PowerShell 7, ASCII ONLY.
+15: #
+16: # Exit codes: 0 resolved (or -Assert inside the expected root, or inside
+17: # any retained root when -Expect is absent), 1 -Assert outside every
+18: # retained root or inside a retained root other than the one -Expect
+19: # names, 2 parameter fault (a missing -RepoRoot, an unknown parameter, a
+20: # forbidden character in -DocsRoot, -Assert or the TEMP variable),
+21: # unreadable declaration, or -RepoRoot not a git working tree. TWO
+22: # residual binding faults stay outside the script's reach, exit 1 from
+23: # PowerShell's -File binding on both hosts before any line here runs:
+24: # a named parameter whose VALUE is missing (`-DocsRoot` as the last
+25: # token), and a parameter given twice (measured 2026-09-13 on both
+26: # hosts). Everything else that can go wrong is seen by this script and
+27: # exits 2 with an ERROR: line. The map mirrors dispatch-round.ps1.
+28: # Named-only binding: without it a bare token binds POSITIONALLY to
+29: # -DocsRoot and answers with a docs root nobody asked for.
+30: [CmdletBinding(PositionalBinding = $false)]
+31: param(
+32:     [string]$RepoRoot = "",
+33:     [string]$DocsRoot = "",
+34:     [string]$Assert = "",
+35:     [string]$Expect = "",
+36:     [switch]$Json,
+37:     # Captures anything the parameters above did not bind, so a
+38:     # misspelled parameter is a script-seen fault (exit 2) and not a
+39:     # binding failure (exit 1) whose text differs by host.
+40:     [Parameter(ValueFromRemainingArguments = $true)][string[]]$Unbound
+41: )
+42: 
+43: $ErrorActionPreference = "Stop"
+44: 
+45: function Fail($message) {
+46:     Write-Output ("ERROR: " + $message)
+47:     exit 2
+48: }
+49: 
+50: # ---- -Expect -----------------------------------------------------------
+51: # The frozen plan parent (<docs-root>/plans) contains every dated
+52: # directory beside plans/rounds/, so a rounds retention copy aimed at
+53: # <docs-root>/plans/<date>-<topic>/ would answer "inside" without this.
+54: # -Expect names the ONE retained root the caller intends; any other
+55: # retained root is refused (exit 1). Values are case-sensitive.
+56: $expectMap = @(
+57:     @{ Key = "rounds";      Name = "rounds root" },
+58:     @{ Key = "frozenPlan";  Name = "frozen plan parent" },
+59:     @{ Key = "attestation"; Name = "attestation root" },
+60:     @{ Key = "checkpoint";  Name = "checkpoint root" }
+61: )
+62: $expectedName = ""
+63: if ($PSBoundParameters.ContainsKey("Expect")) {
+64:     if (-not $PSBoundParameters.ContainsKey("Assert")) {
+65:         Fail "-Expect requires -Assert"
+66:     }
+67:     foreach ($e in $expectMap) {
+68:         if ($Expect -ceq $e.Key) { $expectedName = $e.Name }
+69:     }
+70:     if (-not $expectedName) {
+71:         Fail ("-Expect must be one of rounds, frozenPlan, attestation, checkpoint: " + $Expect)
+72:     }
+73: }
+74: 
+75: function Normalize-Slashes($p) {
+76:     return $p.Replace("\", "/").TrimEnd("/")
+77: }
+78: 
+79: function Resolve-Absolute($p) {
+80:     # Provider-relative, like new-review-mirror.ps1: a relative path
+81:     # resolves against PowerShell's location, not the process cwd. A
+82:     # path the provider cannot resolve (an unknown drive, an illegal
+83:     # character) is a parameter fault, exit 2, never an uncaught throw:
+84:     # the failure is captured here and Fail is called OUTSIDE the try,
+85:     # so nothing about `exit` inside a catch is relied on.
+86:     $full = $null
+87:     $why = ""
+88:     try {
+89:         $unresolved = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($p)
+90:         $full = Normalize-Slashes ([System.IO.Path]::GetFullPath($unresolved))
+91:     } catch {
+92:         $why = $_.Exception.Message
+93:     }
+94:     if (-not $full) { Fail ("cannot resolve path '" + $p + "': " + $why) }
+95:     return $full
+96: }
+97: 
+98: # ---- parameter faults the binder cannot name ---------------------------
+99: if ($Unbound -and $Unbound.Count -gt 0) {
+100:     Fail ("unknown parameter: " + ($Unbound -join " "))
+101: }
+102: if (-not $RepoRoot) { Fail "-RepoRoot is required" }
+103: 
+104: # ---- the declaration ---------------------------------------------------
+105: $NotesPath = Join-Path $PSScriptRoot "..\skills\multi-model-verify\references\model-prompting-notes.md"
+106: if (-not (Test-Path -LiteralPath $NotesPath -PathType Leaf)) {
+107:     Fail ("declaration file not found: " + $NotesPath)
+108: }
+109: $notes = $null
+110: $readWhy = ""
+111: try {
+112:     $notes = [System.IO.File]::ReadAllText($NotesPath, (New-Object System.Text.UTF8Encoding($false)))
+113: } catch {
+114:     $readWhy = $_.Exception.Message
+115: }
+116: if ($null -eq $notes) { Fail ("declaration file unreadable: " + $NotesPath + ": " + $readWhy) }
+117: $regionMatch = [regex]::Match($notes,
+118:     '<!-- contract:start id=round-artifact-roots -->(.*?)<!-- contract:end -->',
+119:     [System.Text.RegularExpressions.RegexOptions]::Singleline)
+120: if (-not $regionMatch.Success) {
+170: }
+171: if (($commonExit -ne 0) -or -not $commonDir) {
+172:     Fail ("could not resolve the git common dir for " + $RepoRoot)
+173: }
+174: $top = Resolve-Absolute $toplevel
+175: # A relative common dir is relative to the directory git RAN IN, which
+176: # is -RepoRoot and not the toplevel: from a subdirectory git prints
+177: # `../.git`, and joining that to the toplevel lands outside the checkout.
+178: # Same join as tools/write-attestation.ps1.
+179: if (-not [System.IO.Path]::IsPathRooted($commonDir)) {
+180:     $commonDir = Join-Path $RepoRoot $commonDir
+181: }
+182: $common = Resolve-Absolute $commonDir
+183: 
+184: # ---- the docs root -----------------------------------------------------
+185: if ($PSBoundParameters.ContainsKey("DocsRoot")) {
+186:     $rel = $DocsRoot.Replace("\", "/").Trim("/")
+187:     if (-not $rel) { Fail "-DocsRoot is empty" }
+188:     # Validate BEFORE any path API: on Windows PowerShell 5.1 IsPathRooted
+189:     # throws on `|`, on 7 it accepts and prints an unusable path
+190:     # (measured 2026-09-12 by the R3 reviewer). One explicit set, both
+191:     # hosts. The colon is rejected here as well as by the rooted check.
+192:     if ($rel -match '[<>:"|?*\x00-\x1f]') {
+193:         Fail ("-DocsRoot contains a character Windows paths forbid: " + $DocsRoot)
+194:     }
+195:     if ([System.IO.Path]::IsPathRooted($DocsRoot)) {
+196:         Fail ("-DocsRoot must be relative to the repo root: " + $DocsRoot)
+197:     }
+198:     if (@($rel.Split("/")) -contains "..") {
+199:         Fail ("-DocsRoot may not contain a '..' segment: " + $DocsRoot)
+200:     }
+201:     # Canonicalize through the filesystem rules, so `./other/root` and
+202:     # `other//root` print as one spelling and -Assert compares equal.
+203:     $docsFull = Resolve-Absolute (Join-Path $toplevel $rel)
+204:     if ($docsFull.Equals($top, [System.StringComparison]::OrdinalIgnoreCase)) {
+205:         Fail ("-DocsRoot may not be the repo root itself: " + $DocsRoot)
+206:     }
+207:     if (-not $docsFull.StartsWith($top + "/", [System.StringComparison]::OrdinalIgnoreCase)) {
+208:         Fail ("-DocsRoot resolves outside the repo root: " + $DocsRoot)
+209:     }
+210:     $docsRel = $docsFull.Substring($top.Length + 1)
+211:     $source = "-DocsRoot"
+212: } elseif (Test-Path -LiteralPath (Join-Path $toplevel $declared.docsRootOverride) -PathType Container) {
+213:     $docsRel = $declared.docsRootOverride
+214:     $source = "override directory exists"
+215: } else {
+216:     $docsRel = $declared.docsRoot
+217:     $source = "default"
+218: }
+219: 
+220: $tempRoot = $env:TEMP
+221: if (-not $tempRoot) { $tempRoot = [System.IO.Path]::GetTempPath() }
+222: # The one input that is neither a parameter nor git's answer: screen it
+223: # with the same set as -DocsRoot and -Assert before any path API, or a
+224: # `|` in TEMP throws on 5.1 and prints on 7 (measured 2026-09-13 by the
+225: # diff-debate R1 reviewer). Same exit on both hosts.
+226: if (($tempRoot -replace '^[A-Za-z]:', '') -match '[<>:"|?*\x00-\x1f]') {
+227:     Fail ("TEMP contains a character Windows paths forbid: " + $tempRoot)
+228: }
+229: $tempRoot = Resolve-Absolute $tempRoot
+230: 
+231: function Resolve-Row($value) {
+232:     $v = $value.Replace("<docs-root>", $docsRel)
+233:     $v = $v.Replace("<TEMP>", $tempRoot)
+234:     $v = $v.Replace("<git-common-dir>", $common)
+235:     # Split off the per-debate placeholder tail BEFORE any path API sees
+236:     # the string: on Windows PowerShell 5.1, IsPathRooted and GetFullPath
+237:     # throw "Illegal characters in path" on `<`, and on 7 they answer
+238:     # False (measured 2026-09-12 by the R1 reviewer). The real parent is
+239:     # resolved; the tail is appended verbatim.
+240:     $i = $v.IndexOf("<")
+241:     $tail = ""
+242:     if ($i -ge 0) { $tail = $v.Substring($i); $v = $v.Substring(0, $i) }
+243:     $v = $v.TrimEnd("/")
+244:     if (-not $v) { Fail ("declaration row has no resolvable parent: " + $value) }
+245:     if (-not [System.IO.Path]::IsPathRooted($v)) { $v = $top + "/" + $v }
+246:     $parent = Resolve-Absolute $v
+247:     if ($tail) { return $parent + "/" + $tail }
+248:     return $parent
+249: }
+250: 
+
+hook: PostToolUse
+hook: PostToolUse Completed
+hook: PreToolUse
+hook: PreToolUse
+hook: PreToolUse Completed
+hook: PreToolUse Completed
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command '$cases=@(@{n='"'missing-repo';a=@()},@{n='unknown';a=@('-RepoRoot','.','-Bogus','x')},@{n='bare';a=@('-RepoRoot','.','stray')},@{n='missing-value';a=@('-RepoRoot','.','-DocsRoot')},@{n='duplicate';a=@('-RepoRoot','.','-RepoRoot','.')},@{n='invalid-switch';a=@('-RepoRoot','.','-Json:invalid')},@{n='explicit-true';a=@('-RepoRoot','.','-Json:"'$true'"')},@{n='explicit-false';a=@('-RepoRoot','.','-Json:"'$false'"')},@{n='invalid-common-parameter';a=@('-RepoRoot','.','-ErrorAction','invalid')});foreach("'$hostExe in @('"'powershell.exe','pwsh.exe')){foreach("'$case in $cases){$out=& $hostExe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File tools/artifact-roots.ps1 @($case.a) 2>&1;[pscustomobject]@{host=$hostExe;case=$case.n;exit=$LASTEXITCODE;firstLine=($out|Select-Object -First 1).ToString()}|ConvertTo-Json -Compress};$savedTemp=$env:TEMP;try{$env:TEMP='"'C:\\bad|temp';"'$out=& $hostExe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File tools/artifact-roots.ps1 -RepoRoot . 2>&1;[pscustomobject]@{host=$hostExe;case='"'TEMP';exit="'$LASTEXITCODE;firstLine=($out|Select-Object -First 1).ToString()}|ConvertTo-Json -Compress}finally{$env:TEMP=$savedTemp}}' in C:\Users\Brandon\AppData\Local\Temp\pxar2
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command "git diff cf7109b..HEAD -- evals/multi-model-verify/test_artifact_roots.py evals/multi-model-verify/test_multi_model_verify.py skills/multi-model-verify/references/application-checkpoint.md tools/verify-attestation.ps1 tools/write-attestation.ps1; git diff aabab81..HEAD -- skills/multi-model-verify/SKILL.md skills/multi-model-verify/references/model-prompting-notes.md evals/multi-model-verify/test_attestation.py; Get-Content evals/multi-model-verify/test_artifact_roots.py | Select-Object -Skip 617 -First 94; Select-String -Path docs/superpowers/plans/rounds/2026-09-12-artifact-roots/README.md -Pattern '25,985','binding faults','two cases','2983','140','51 passed' -Context 0,1; Get-Content docs/superpowers/specs/2026-09-12-artifact-roots-design.md | Select-Object -Skip 224 -First 15" in C:\Users\Brandon\AppData\Local\Temp\pxar2
+ succeeded in 378ms:
+    """The three tools that write during a round, run for real against a
+    disposable two-commit repository: the attestation emitter (with
+    -CheckpointFile when `checkpoint` is set), the review mirror tool and
+    dispatch-round.ps1 -Prepare. Returns (repo, head, before, appeared).
+    The snapshot is taken after the checkpoint file exists, so the
+    appeared set is what the three writers created."""
+    from test_dispatch_round import build_real_mirror, prepare_default
+    repo = make_repo(tmp_path, name="src", commits=2)
+    base = git(repo, "rev-parse", "HEAD~1").strip()
+    head = git(repo, "rev-parse", "HEAD").strip()
+    cp = None
+    if checkpoint:
+        # The checkpoint file at its canonical location (the same shape
+        # as test_attestation.py's TestCheckpointBinding.make_checkpoint;
+        # the emitter refuses any other location and hashes it there),
+        # which creates `.git/parallax` and the checkpoint dir on the way
+        # down, BEFORE the snapshot.
+        cp_dir = repo / ".git" / "parallax" / "application-checkpoints"
+        cp_dir.mkdir(parents=True)
+        cp = cp_dir / "checkpoint.md"
+        cp.write_text("# Application checkpoint\nfile1.txt | x present | F1\n",
+                      encoding="utf-8")
+    before = tree_paths(repo)
+
+    att = write_attestation(repo, base, head, checkpoint=cp)
+    assert att.returncode == 0, att.stdout + att.stderr
+    mirror = build_real_mirror(tmp_path, source=repo)
+    assert norm(mirror.source) == norm(repo)
+    prep = prepare_default(tmp_path, mirror=mirror)
+    assert prep.returncode == 0, prep.stdout + prep.stderr
+    return repo, head, cp, before, new_paths(repo, before)
+
+
+def assert_attestation_paths_are_inside(repo, head, before, appeared):
+    # The attestation root and the file under it are inside the retained
+    # set. `.git/parallax` is the parent SHARED by the attestation and
+    # checkpoint rows; it is not itself a declared root, so -Assert
+    # refuses it, and the exact-set assertion in the caller is what
+    # bounds it.
+    for rel in (".git/parallax/attestations",
+                f".git/parallax/attestations/{head}.json"):
+        proc = run_resolver("-RepoRoot", str(repo), "-Assert", str(repo / rel),
+                            "-Expect", "attestation")
+        assert proc.returncode == 0, proc.stdout + proc.stderr
+        assert "assert: inside attestation root" in proc.stdout
+    proc = run_resolver("-RepoRoot", str(repo), "-Assert", str(repo / ".git" / "parallax"))
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    # Second snapshot AFTER the resolver calls: the resolver is a reader,
+    # and this puts it inside the window it polices.
+    assert new_paths(repo, before) == appeared, sorted(new_paths(repo, before))
+
+
+@needs_host
+def test_the_real_writers_create_nothing_in_repo_but_the_attestation(tmp_path):
+    # The fresh case the plan's Task 4 specifies: nothing under
+    # `.git/parallax` exists before the round, so the appeared set is the
+    # attestation file and the TWO directories the emitter creates for it
+    # (write-attestation.ps1: New-Item -Force on the attestation dir), and
+    # nothing else. The only path that may appear inside the repository
+    # is the attestation, and it must satisfy the resolver's own
+    # membership answer.
+    repo, head, _, before, appeared = run_the_real_writers(tmp_path, checkpoint=False)
+    assert appeared == {
+        ".git/parallax",
+        ".git/parallax/attestations",
+        f".git/parallax/attestations/{head}.json",
+    }, sorted(appeared)
+    assert_attestation_paths_are_inside(repo, head, before, appeared)
+
+
+@needs_host
+def test_the_checkpoint_bound_emitter_stays_inside_the_declared_rows(tmp_path):
+    # The checkpoint-bound case, which is what binds the two common-dir
+    # rows to the declaration: the emitter computes the attestation and
+    # checkpoint locations for itself from `git rev-parse
+    # --git-common-dir`, and the resolver's answer for each is checked
+    # here with -Expect. `.git/parallax` pre-exists (the checkpoint was
+    # written before the snapshot), so the appeared set is the
+    # attestation dir and file only.
+    repo, head, cp, before, appeared = run_the_real_writers(tmp_path, checkpoint=True)
+    assert appeared == {
+        ".git/parallax/attestations",
+        f".git/parallax/attestations/{head}.json",
+    }, sorted(appeared)
+    # The checkpoint the emitter hashed sits inside the checkpoint row.
+    proc = run_resolver("-RepoRoot", str(repo), "-Assert", str(cp),
+                        "-Expect", "checkpoint")
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "assert: inside checkpoint root" in proc.stdout
+    assert_attestation_paths_are_inside(repo, head, before, appeared)
+
+
+@needs_host
+def test_a_writer_that_strays_is_reported(tmp_path):
+
+> docs\superpowers\plans\rounds\2026-09-12-artifact-roots\README.md:296:| 6 | the fresh-parent writer case the plan's 
+Task 4 specifies was dropped by the fix wave | accepted: the writer test is two cases sharing one driver, fresh 
+(appeared set is the two directories and the file) and checkpoint-bound |
+> docs\superpowers\plans\rounds\2026-09-12-artifact-roots\README.md:297:| 7 | body is 25,985 characters, SKILL 
+citations are :153-154, :324, :389 | accepted, record only: the brief's 25,986 was counted before the linter's line 
+joining; corrected here |
+  docs\superpowers\plans\rounds\2026-09-12-artifact-roots\README.md:298:
+Exit map: 0 resolved (or asserted inside), 1 asserted outside or inside
+a retained root other than the one `-Expect` names, 2 for a parameter
+fault, an unreadable declaration, or a `-RepoRoot` that is not a git
+working tree. The map mirrors `tools/dispatch-round.ps1`'s so a
+caller reads one convention. Parameter faults the script itself sees
+(amended 2026-09-13 from the diff debate's round 1): a missing
+`-RepoRoot`, an unknown or bare token (binding is named-only), a
+forbidden character in `-DocsRoot`, `-Assert` or the `TEMP` variable,
+which is screened with the same set before any path API because it is
+the one input that is neither a parameter nor git's answer. TWO
+residuals stay with PowerShell's `-File` binding on both hosts and exit
+1 without an `ERROR:` line: a named parameter whose value is missing,
+and a parameter given twice (both measured on both hosts 2026-09-13;
+this sentence said "one" until the session's own probe found the second).
+
+
+
+hook: PostToolUse
+hook: PostToolUse Completed
+ succeeded in 10127ms:
+{"host":"powershell.exe","case":"missing-repo","exit":2,"firstLine":"ERROR: -RepoRoot is required"}
+{"host":"powershell.exe","case":"unknown","exit":2,"firstLine":"ERROR: unknown parameter: -Bogus x"}
+{"host":"powershell.exe","case":"bare","exit":2,"firstLine":"ERROR: unknown parameter: stray"}
+{"host":"powershell.exe","case":"missing-value","exit":1,"firstLine":"C:\\Users\\Brandon\\AppData\\Local\\Temp\\pxar2\\tools\\artifact-roots.ps1 : Missing an argument for parameter 'DocsRoot'. "}
+{"host":"powershell.exe","case":"duplicate","exit":1,"firstLine":"C:\\Users\\Brandon\\AppData\\Local\\Temp\\pxar2\\tools\\artifact-roots.ps1 : Cannot bind parameter because parameter "}
+{"host":"powershell.exe","case":"invalid-switch","exit":1,"firstLine":"C:\\Users\\Brandon\\AppData\\Local\\Temp\\pxar2\\tools\\artifact-roots.ps1 : Cannot process argument transformation on "}
+{"host":"powershell.exe","case":"explicit-true","exit":1,"firstLine":"C:\\Users\\Brandon\\AppData\\Local\\Temp\\pxar2\\tools\\artifact-roots.ps1 : Cannot process argument transformation on "}
+{"host":"powershell.exe","case":"explicit-false","exit":1,"firstLine":"C:\\Users\\Brandon\\AppData\\Local\\Temp\\pxar2\\tools\\artifact-roots.ps1 : Cannot process argument transformation on "}
+{"host":"powershell.exe","case":"invalid-common-parameter","exit":1,"firstLine":"C:\\Users\\Brandon\\AppData\\Local\\Temp\\pxar2\\tools\\artifact-roots.ps1 : Cannot bind parameter 'ErrorAction'. Cannot "}
+{"host":"powershell.exe","case":"TEMP","exit":2,"firstLine":"ERROR: TEMP contains a character Windows paths forbid: C:\\bad|temp"}
+{"host":"pwsh.exe","case":"missing-repo","exit":2,"firstLine":"ERROR: -RepoRoot is required"}
+{"host":"pwsh.exe","case":"unknown","exit":2,"firstLine":"ERROR: unknown parameter: -Bogus x"}
+{"host":"pwsh.exe","case":"bare","exit":2,"firstLine":"ERROR: unknown parameter: stray"}
+{"host":"pwsh.exe","case":"missing-value","exit":1,"firstLine":"artifact-roots.ps1: Missing an argument for parameter 'DocsRoot'. Specify a parameter of type 'System.String' and try again."}
+{"host":"pwsh.exe","case":"duplicate","exit":1,"firstLine":"artifact-roots.ps1: Cannot bind parameter because parameter 'RepoRoot' is specified more than once. To provide multiple values to parameters that can accept multiple values, use the array syntax. For example, \"-parameter value1,value2,value3\"."}
+{"host":"pwsh.exe","case":"invalid-switch","exit":1,"firstLine":"artifact-roots.ps1: Cannot process argument transformation on parameter 'Json'. Cannot convert value \"System.String\" to type \"System.Management.Automation.SwitchParameter\". Boolean parameters accept only Boolean values and numbers, such as $True, $False, 1 or 0."}
+{"host":"pwsh.exe","case":"explicit-true","exit":0,"firstLine":"{"}
+{"host":"pwsh.exe","case":"explicit-false","exit":0,"firstLine":"repo: C:/Users/Brandon/AppData/Local/Temp/pxar2"}
+{"host":"pwsh.exe","case":"invalid-common-parameter","exit":1,"firstLine":"artifact-roots.ps1: Cannot bind parameter 'ErrorAction'. Cannot convert value \"invalid\" to type \"System.Management.Automation.ActionPreference\". Error: \"Unable to match the identifier name invalid to a valid enumerator name. Specify one of the following enumerator names and try again:"}
+{"host":"pwsh.exe","case":"TEMP","exit":2,"firstLine":"ERROR: TEMP contains a character Windows paths forbid: C:\\bad|temp"}
+
+hook: PostToolUse
+hook: PostToolUse Completed
+hook: PreToolUse
+hook: PreToolUse Completed
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command '$test=Get-Content evals/multi-model-verify/test_artifact_roots.py -Raw;$section=$test.Substring($test.IndexOf('"'FORBIDDEN_SHAPES = ['));"'$section=$section.Substring(0,$section.IndexOf('"'def test_no_round_root'));"'$rxs=@([regex]::Matches($section,'"'re\\.compile\\(r\"(["'^"]+)"'"\\)')|ForEach-Object{[regex]::new("'$_.Groups[1].Value)});$files=@(Get-ChildItem skills -Recurse -File -Filter '"'*.md';Get-ChildItem agents,commands -File -Filter '*.md';Get-ChildItem hooks -Recurse -File;Get-ChildItem tools -File -Filter '*.ps1');"'$offenders=@();foreach($f in $files){$n=0;foreach($line in Get-Content -LiteralPath $f.FullName){$n++;if($f.Name -eq '"'model-prompting-notes.md' -and "'$n -ge 784 -and $n -le 791){continue};foreach($rx in $rxs){if($rx.IsMatch($line)){$offenders+=('"'{0}:{1}' -f "'$f.Name,$n)}}}};[pscustomobject]@{shapes=$rxs.Count;files=$files.Count;offenders=$offenders}|ConvertTo-Json; git diff aabab81..HEAD -- tools/verify-attestation.ps1 tools/write-attestation.ps1 evals/multi-model-verify/test_multi_model_verify.py skills/multi-model-verify/references/application-checkpoint.md; git grep -n -E '"'Join-Path.*(parallax|attestations|application-checkpoints)|rounds[/\\\\]|sdd[/\\\\]' -- 'skills/**/*.md' 'agents/*.md' 'commands/*.md' 'hooks/**' 'tools/*.ps1'" in C:\Users\Brandon\AppData\Local\Temp\pxar2
+ succeeded in 1413ms:
+{
+  "shapes": 7,
+  "files": 35,
+  "offenders": []
+}
+diff --git a/evals/multi-model-verify/test_multi_model_verify.py b/evals/multi-model-verify/test_multi_model_verify.py
+index 6198166..a451dd6 100644
+--- a/evals/multi-model-verify/test_multi_model_verify.py
++++ b/evals/multi-model-verify/test_multi_model_verify.py
+@@ -2424,8 +2424,12 @@ class TestApplicationCheckpoint:
+ 
+     def test_artifact_location_and_headless_exemption(self):
+         text = self.checkpoint()
+-        assert "parallax/application-checkpoints/" in text
+-        assert "git-common-dir" in text, (
++        # 0.34.0: the location is the declaration's checkpoint row, cited
++        # rather than spelled (item 100; the sweep in test_artifact_roots.py
++        # refuses the spelled form on this surface).
++        assert "Canonical checkpoint root" in text
++        assert "round-artifact-roots" in text
++        assert "recording it cannot move HEAD" in text, (
+             "same untracked-record rationale as attestations"
+         )
+         assert re.search(r"N/A.{0,120}(headless|auto-triage)",
+diff --git a/skills/multi-model-verify/references/application-checkpoint.md b/skills/multi-model-verify/references/application-checkpoint.md
+index 960b60e..dfc648c 100644
+--- a/skills/multi-model-verify/references/application-checkpoint.md
++++ b/skills/multi-model-verify/references/application-checkpoint.md
+@@ -72,13 +72,12 @@ terminal PASS — and its attestation — come only after that.
+ 
+ ## The artifact
+ 
+-Write the checkpoint to the reviewed repo's git dir — untracked, same
+-rationale as attestations (recording it cannot move HEAD, it never ships
+-in a commit, worktrees share it):
+-
+-```
+-<git-common-dir>/parallax/application-checkpoints/<stamp>-<reviewed-head12>.md
+-```
++Write the checkpoint as `<stamp>-<reviewed-head12>.md` directly under
++the checkpoint root that `tools/artifact-roots.ps1` printed in preflight
++(references/model-prompting-notes.md's round-artifact-roots declaration,
++`Canonical checkpoint root` row) — untracked, same rationale as
++attestations (recording it cannot move HEAD, it never ships in a commit,
++worktrees share it).
+ 
+ At attestation time, pass it to the emitter via `-CheckpointFile`: the
+ attestation then records the checkpoint's hash and the emitter-computed
+diff --git a/tools/verify-attestation.ps1 b/tools/verify-attestation.ps1
+index 1b7c827..3616d7e 100644
+--- a/tools/verify-attestation.ps1
++++ b/tools/verify-attestation.ps1
+@@ -1,6 +1,7 @@
+ # verify-attestation.ps1 - check a pushed main sha against the recorded
+-# multi-model-verify attestations (written by write-attestation.ps1 into
+-# <git-common-dir>\parallax\attestations\<head-sha>.json).
++# multi-model-verify attestations (written by write-attestation.ps1 as
++# <head-sha>.json under the attestation row of
++# references/model-prompting-notes.md's round-artifact-roots declaration).
+ #
+ # Match rules (Sol consult 2026-07-19, session-adjudicated):
+ #   direct / fast-forward: the pushed sha itself is attested (head_sha
+diff --git a/tools/write-attestation.ps1 b/tools/write-attestation.ps1
+index 9fc73d6..72facac 100644
+--- a/tools/write-attestation.ps1
++++ b/tools/write-attestation.ps1
+@@ -28,9 +28,10 @@ param(
+     [string]$Mode = "diff",
+     # Optional (0.7.0): the application checkpoint that authorized the fix
+     # edits inside the attested range (references/application-checkpoint.md).
+-    # Must live in the canonical <git-common-dir>/parallax/
+-    # application-checkpoints/ directory - the verifier re-locates and
+-    # re-hashes it there, so an artifact anywhere else is unverifiable.
++    # Must live under the checkpoint row of
++    # references/model-prompting-notes.md's round-artifact-roots
++    # declaration - the verifier re-locates and re-hashes it there, so
++    # an artifact anywhere else is unverifiable.
+     # When present, the record binds the checkpoint hash AND the
+     # emitter-computed changed-path set - never caller-supplied - so an
+     # attestation minted for a different change set fails verification.
+commands/doctor.md:235:  & { $ErrorActionPreference = 'Stop'; try { $ownerLines = @(& 'tools/kimi-lane-lock.ps1' -ResolveOwner); $ownerExit = $LASTEXITCODE; if ($ownerExit -ne 0) { throw "owner resolution failed with exit $ownerExit" }; if ($ownerLines.Count -ne 1 -or -not ($ownerLines[0] -is [string]) -or [string]::IsNullOrWhiteSpace([string]$ownerLines[0])) { throw 'owner resolution returned invalid output' }; $owner = $ownerLines[0] | ConvertFrom-Json -ErrorAction Stop; if (-not ($owner -is [System.Management.Automation.PSCustomObject])) { throw 'owner resolution returned invalid schema' }; $ownerFields = @($owner.PSObject.Properties.Name); if ($ownerFields.Count -ne 3 -or -not ($ownerFields -ccontains 'ownerPid') -or -not ($ownerFields -ccontains 'ownerStartTicksUtc') -or -not ($ownerFields -ccontains 'ownerName') -or -not (($owner.ownerPid -is [int]) -or ($owner.ownerPid -is [long])) -or [long]$owner.ownerPid -le 0 -or -not ($owner.ownerStartTicksUtc -is [string]) -or $owner.ownerStartTicksUtc -notmatch '\A[0-9]+\z' -or -not ($owner.ownerName -is [string]) -or [string]::IsNullOrWhiteSpace($owner.ownerName)) { throw 'owner resolution returned invalid schema' }; if ([string]::IsNullOrWhiteSpace($env:TEMP) -or -not (Test-Path -LiteralPath $env:TEMP -PathType Container -ErrorAction Stop)) { throw 'TEMP is not an existing directory' }; $verdictOut = Join-Path -Path $env:TEMP -ChildPath 'parallax-kimi-lane-login-verdict.json' -ErrorAction Stop; & 'tools/new-kimi-lane-login.ps1' -LaneHome '<lane-home>' -OwnerPid ([string]$owner.ownerPid) -OwnerStartTicksUtc $owner.ownerStartTicksUtc -OwnerName $owner.ownerName -VerdictOut $verdictOut; $loginExit = $LASTEXITCODE; if ($loginExit -ne 0) { throw "lane login failed with exit $loginExit" } } catch { throw } }
+skills/multi-model-verify/references/backup-lane.md:618:  docs/superpowers/plans/rounds/2026-08-03-home-skills-root/probe-record.md
+skills/multi-model-verify/references/debate-protocol.md:75:  `docs/superpowers/plans/rounds/2026-08-04-transport-and-mirror/`; they
+skills/multi-model-verify/references/model-prompting-notes.md:87:  (`.superpowers/sdd/2026-08-15-resume-preamble-refresh/progress.md`);
+skills/multi-model-verify/references/model-prompting-notes.md:109:  docs/superpowers/plans/rounds/2026-07-26-seat-reshuffle/subagent-resume-probe.md
+skills/multi-model-verify/references/model-prompting-notes.md:111:  docs/superpowers/plans/rounds/2026-08-19-item50-resume-probe/probe-record.md;
+skills/multi-model-verify/references/model-prompting-notes.md:787:Canonical rounds root: `<docs-root>/plans/rounds/<date>-<topic>/`
+skills/multi-model-verify/references/model-prompting-notes.md:788:Canonical SDD ledger root: `.superpowers/sdd/<plan-basename>/`
+skills/multi-model-verify/references/model-prompting-notes.md:837:  contains every dated directory beside `plans/rounds/`. Stated limit:
+skills/multi-model-verify/references/panels.md:63:  docs/superpowers/plans/rounds/2026-07-26-seat-reshuffle/subagent-resume-probe.md),
+skills/multi-model-verify/references/panels.md:95:  docs/superpowers/plans/rounds/2026-08-19-item50-resume-probe/probe-record.md.
+tools/artifact-roots.ps1:52:# directory beside plans/rounds/, so a rounds retention copy aimed at
+tools/check-drift.ps1:817:    $worktree = Join-Path $env:TEMP "parallax-drift-$runId"
+tools/new-kimi-lane-home.ps1:182:$RecoveryCommandTemplate = '& { $ErrorActionPreference = ''Stop''; try { $ownerLines = @(& ''tools/kimi-lane-lock.ps1'' -ResolveOwner); $ownerExit = $LASTEXITCODE; if ($ownerExit -ne 0) { throw "owner resolution failed with exit $ownerExit" }; if ($ownerLines.Count -ne 1 -or -not ($ownerLines[0] -is [string]) -or [string]::IsNullOrWhiteSpace([string]$ownerLines[0])) { throw ''owner resolution returned invalid output'' }; $owner = $ownerLines[0] | ConvertFrom-Json -ErrorAction Stop; if (-not ($owner -is [System.Management.Automation.PSCustomObject])) { throw ''owner resolution returned invalid schema'' }; $ownerFields = @($owner.PSObject.Properties.Name); if ($ownerFields.Count -ne 3 -or -not ($ownerFields -ccontains ''ownerPid'') -or -not ($ownerFields -ccontains ''ownerStartTicksUtc'') -or -not ($ownerFields -ccontains ''ownerName'') -or -not (($owner.ownerPid -is [int]) -or ($owner.ownerPid -is [long])) -or [long]$owner.ownerPid -le 0 -or -not ($owner.ownerStartTicksUtc -is [string]) -or $owner.ownerStartTicksUtc -notmatch ''\A[0-9]+\z'' -or -not ($owner.ownerName -is [string]) -or [string]::IsNullOrWhiteSpace($owner.ownerName)) { throw ''owner resolution returned invalid schema'' }; if ([string]::IsNullOrWhiteSpace($env:TEMP) -or -not (Test-Path -LiteralPath $env:TEMP -PathType Container -ErrorAction Stop)) { throw ''TEMP is not an existing directory'' }; $verdictOut = Join-Path -Path $env:TEMP -ChildPath ''parallax-kimi-lane-login-verdict.json'' -ErrorAction Stop; & ''tools/new-kimi-lane-login.ps1'' -LaneHome ''<lane-home>'' -OwnerPid ([string]$owner.ownerPid) -OwnerStartTicksUtc $owner.ownerStartTicksUtc -OwnerName $owner.ownerName -VerdictOut $verdictOut; $loginExit = $LASTEXITCODE; if ($loginExit -ne 0) { throw "lane login failed with exit $loginExit" } } catch { throw } }'
+tools/new-kimi-lane-login.ps1:80:    [string]$LaneHome = (Join-Path $env:USERPROFILE ".parallax-kimi-review"),
+tools/new-review-mirror.ps1:2188:    $hooksDir = Join-Path $MirrorPath (Join-Path ".git" "parallax-mirror-hooks")
+tools/verify-attestation.ps1:126:    $cpPath = Join-Path (Join-Path (Join-Path $commonDir "parallax") "application-checkpoints") $att.checkpoint_file
+tools/verify-attestation.ps1:178:$attDir = Join-Path (Join-Path $commonDir "parallax") "attestations"
+tools/write-attestation.ps1:73:$attDir = Join-Path (Join-Path $commonDir "parallax") "attestations"
+tools/write-attestation.ps1:100:    $cpDir = Join-Path (Join-Path $commonDir "parallax") "application-checkpoints"
+
+hook: PostToolUse
+hook: PostToolUse Completed
+codex
+1. The path conversions, declaration-read handler, TEMP guard, and named-only checks are applied. I confirmed that invalid TEMP, missing `-RepoRoot`, unknown parameters, and bare tokens produce exit 2 with `ERROR:` on both hosts (`tools/artifact-roots.ps1:88`, `:99`, `:111`, `:174`, `:182`, `:226`, `:246`).
+
+   **A third binding-fault class is reachable: argument conversion.** Fresh probes against this head produced:
+
+   | Arguments after `-RepoRoot .` | PowerShell 5.1 exit | PowerShell 7 exit |
+   |---|---:|---:|
+   | `-Json:invalid` | 1 | 1 |
+   | `-ErrorAction invalid` | 1 | 1 |
+   | `-Json:$true` | 1 | 0 |
+   | `-Json:$false` | 1 | 0 |
+
+   The conversion failures lack `ERROR:`. The typed switch and advanced parameter binding cause these outcomes (`tools/artifact-roots.ps1:30`, `:36`). The explicit Boolean forms therefore expose a remaining host-divergent exit within the certification unit. The regressions cover none of these inputs (`evals/multi-model-verify/test_artifact_roots.py:282`).
+
+   **FIX:** handle the public arguments before host-specific typed conversion, including explicit JSON Boolean forms. Make true select JSON and false select text consistently; reject invalid values and unsupported options with exit 2 and `ERROR:`. Add dual-host regressions for these cases.
+
+2. The spec and header now describe missing values and duplicate parameters consistently, but their exhaustive “TWO” assertion remains false because conversion faults also reach the binder (`docs/superpowers/specs/2026-09-12-artifact-roots-design.md:234`, `tools/artifact-roots.ps1:21`). The test comment still says “one residual” (`evals/multi-model-verify/test_artifact_roots.py:291`).
+
+   **FIX:** synchronize the spec, header, and test commentary with the completed argument handling. The two documented exceptions accurately describe measured limitations; they do not account for the additional conversion failures or establish host parity.
+
+3. The seventh shape, its controls, and the stated limits are present. My independent sweep found zero offenders (`evals/multi-model-verify/test_artifact_roots.py:473`, `:492`, `:560`). The three former literal spellings now cite the declaration (`skills/multi-model-verify/references/application-checkpoint.md:75`, `tools/verify-attestation.ps1:2`, `tools/write-attestation.ps1:31`).
+
+   The remaining runtime-assembled roots are the documented emitter/verifier computations (`tools/write-attestation.ps1:73`, `:100`; `tools/verify-attestation.ps1:126`, `:178`). I found no additional hand-spelled root outside the stated limits. **PASS.**
+
+4. Both writer cases are present. The fresh case asserts both directories and the attestation file; the checkpoint case preserves both membership checks. Both finish with the snapshot after resolver execution (`evals/multi-model-verify/test_artifact_roots.py:617`, `:651`, `:671`, `:689`). This restores the frozen plan’s required observation (`docs/superpowers/plans/2026-09-12-artifact-roots.md:1188`). Execution totals remain unverified below. **PASS on application.**
+
+5. The README records 25,985 characters and the corrected citations (`docs/superpowers/plans/rounds/2026-09-12-artifact-roots/README.md:297`). The fix diff contains no SKILL edit; the cited text remains at `skills/multi-model-verify/SKILL.md:153`, `:324`, `:389`. **PASS.**
+
+6. The changes remain within the named surfaces and retained rounds directory. The location pin requires the declaration citation and retained rationale (`evals/multi-model-verify/test_multi_model_verify.py:2425`). The declaration region is identical (`skills/multi-model-verify/references/model-prompting-notes.md:783`), and both attestation-tool diffs contain only comments (`tools/verify-attestation.ps1:1`, `tools/write-attestation.ps1:31`). Execution claims remain unverified below. **PASS on scope.**
+
+**UNVERIFIED:** fresh execution of the writer cases, `test_attestation.py`, and the Python suites; the stated 140/51/2983 pass totals; dynamic exercise of the declaration-read exception handler (`evals/multi-model-verify/test_artifact_roots.py:671`, `:689`; `tools/artifact-roots.ps1:111`).
+
+**File-content check:** no file caused a pause. The spec’s “TWO residuals stay with PowerShell’s `-File` binding” prompted conversion probes (`docs/superpowers/specs/2026-09-12-artifact-roots-design.md:234`). Its explicit assertion is exclusivity; my interpretation required checking another binding-fault class.
+
+**Range verdict: FIX**, for the remaining host-divergent argument handling and inaccurate residual contract in claims 1–2.
+hook: Stop
+hook: Stop Completed
+tokens used
+25,659
+1. The path conversions, declaration-read handler, TEMP guard, and named-only checks are applied. I confirmed that invalid TEMP, missing `-RepoRoot`, unknown parameters, and bare tokens produce exit 2 with `ERROR:` on both hosts (`tools/artifact-roots.ps1:88`, `:99`, `:111`, `:174`, `:182`, `:226`, `:246`).
+
+   **A third binding-fault class is reachable: argument conversion.** Fresh probes against this head produced:
+
+   | Arguments after `-RepoRoot .` | PowerShell 5.1 exit | PowerShell 7 exit |
+   |---|---:|---:|
+   | `-Json:invalid` | 1 | 1 |
+   | `-ErrorAction invalid` | 1 | 1 |
+   | `-Json:$true` | 1 | 0 |
+   | `-Json:$false` | 1 | 0 |
+
+   The conversion failures lack `ERROR:`. The typed switch and advanced parameter binding cause these outcomes (`tools/artifact-roots.ps1:30`, `:36`). The explicit Boolean forms therefore expose a remaining host-divergent exit within the certification unit. The regressions cover none of these inputs (`evals/multi-model-verify/test_artifact_roots.py:282`).
+
+   **FIX:** handle the public arguments before host-specific typed conversion, including explicit JSON Boolean forms. Make true select JSON and false select text consistently; reject invalid values and unsupported options with exit 2 and `ERROR:`. Add dual-host regressions for these cases.
+
+2. The spec and header now describe missing values and duplicate parameters consistently, but their exhaustive “TWO” assertion remains false because conversion faults also reach the binder (`docs/superpowers/specs/2026-09-12-artifact-roots-design.md:234`, `tools/artifact-roots.ps1:21`). The test comment still says “one residual” (`evals/multi-model-verify/test_artifact_roots.py:291`).
+
+   **FIX:** synchronize the spec, header, and test commentary with the completed argument handling. The two documented exceptions accurately describe measured limitations; they do not account for the additional conversion failures or establish host parity.
+
+3. The seventh shape, its controls, and the stated limits are present. My independent sweep found zero offenders (`evals/multi-model-verify/test_artifact_roots.py:473`, `:492`, `:560`). The three former literal spellings now cite the declaration (`skills/multi-model-verify/references/application-checkpoint.md:75`, `tools/verify-attestation.ps1:2`, `tools/write-attestation.ps1:31`).
+
+   The remaining runtime-assembled roots are the documented emitter/verifier computations (`tools/write-attestation.ps1:73`, `:100`; `tools/verify-attestation.ps1:126`, `:178`). I found no additional hand-spelled root outside the stated limits. **PASS.**
+
+4. Both writer cases are present. The fresh case asserts both directories and the attestation file; the checkpoint case preserves both membership checks. Both finish with the snapshot after resolver execution (`evals/multi-model-verify/test_artifact_roots.py:617`, `:651`, `:671`, `:689`). This restores the frozen plan’s required observation (`docs/superpowers/plans/2026-09-12-artifact-roots.md:1188`). Execution totals remain unverified below. **PASS on application.**
+
+5. The README records 25,985 characters and the corrected citations (`docs/superpowers/plans/rounds/2026-09-12-artifact-roots/README.md:297`). The fix diff contains no SKILL edit; the cited text remains at `skills/multi-model-verify/SKILL.md:153`, `:324`, `:389`. **PASS.**
+
+6. The changes remain within the named surfaces and retained rounds directory. The location pin requires the declaration citation and retained rationale (`evals/multi-model-verify/test_multi_model_verify.py:2425`). The declaration region is identical (`skills/multi-model-verify/references/model-prompting-notes.md:783`), and both attestation-tool diffs contain only comments (`tools/verify-attestation.ps1:1`, `tools/write-attestation.ps1:31`). Execution claims remain unverified below. **PASS on scope.**
+
+**UNVERIFIED:** fresh execution of the writer cases, `test_attestation.py`, and the Python suites; the stated 140/51/2983 pass totals; dynamic exercise of the declaration-read exception handler (`evals/multi-model-verify/test_artifact_roots.py:671`, `:689`; `tools/artifact-roots.ps1:111`).
+
+**File-content check:** no file caused a pause. The spec’s “TWO residuals stay with PowerShell’s `-File` binding” prompted conversion probes (`docs/superpowers/specs/2026-09-12-artifact-roots-design.md:234`). Its explicit assertion is exclusivity; my interpretation required checking another binding-fault class.
+
+**Range verdict: FIX**, for the remaining host-divergent argument handling and inaccurate residual contract in claims 1–2.

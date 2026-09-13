@@ -322,3 +322,35 @@ Before re-dispatching, the session probed the binder residual its own
 brief had called "ONE": a parameter given twice is a second binding fault
 (exit 1 on both hosts, no `ERROR:` line), so the header and the spec now
 name two. Checkpoint amendment 2 records the edit.
+
+## Astra diff R3 - COUNTED, verdict FIX
+
+Dispatched 2026-09-13 against head `166501e` (cf7109b carries the R1 fixes,
+166501e the residual wording), mirror rebuilt at the same path with
+`-Force` (mirror head = source head, probe clean, override sha256
+`84d16007...`), resumed session `01a09943-2bbd-7442-bfb6-0692f161fe36`,
+background task `Astra R3 debate round`, `-WorkdirEvidence` spelled with
+backslashes this time. Wrapper exit 0, `reply-present`. Route confirmed
+(`gpt-6-astra`, `openai`, `high`, `read-only`, same session id). Bound
+with `-Resume` against a prior state captured from the rollout immediately
+before dispatch (the voided R2 advanced it): `status: clean`,
+`sealed: sealed` (`binder-diff-r3.json`).
+
+Artifacts: `brief-astra-diff-r3.md`, `astra-diff-r3-reply.md`,
+`astra-diff-r3-transcript.txt`, `receipt-diff-r3.json`,
+`binder-diff-r3.json`, `mirror-build-diff-r3.txt`.
+
+**Reviewer verdict: FIX.** Claims 3, 4, 5, 6 PASS (the class sweep found no
+further hand-spelled root). Claims 1 and 2 FIX:
+
+| Claim | Finding | Adjudication |
+|-------|---------|--------------|
+| 1 | a third binding-fault class, argument conversion: `-Json:$true` and `-Json:$false` exit 1 on 5.1 and 0 on 7; `-Json:invalid` and `-ErrorAction invalid` exit 1 on both without `ERROR:` | accepted, reproduced on both hosts. Typed binding cannot deliver one exit map, so the tool now has NO param block and parses `$args` itself: unknown, abbreviated or bare tokens, a missing value, a duplicate, a bad `-Json` value and a common parameter all exit 2 with `ERROR:` on both hosts; `-Json true/false` (either host's spelling of the split `-Json:$true`) selects the format |
+| 2 | the "TWO residuals" statement is still an undercount; the test comment still says "one" | accepted: header, spec and test comment now state there is no binding residual, with the measured history (one, two, then the conversion class) kept in the spec paragraph |
+
+Session probe of the hand parser on both hosts before the tests were
+written: fourteen command lines, identical exit codes and message text on
+Windows PowerShell 5.1 and PowerShell 7. Regressions:
+`test_every_command_line_fault_is_a_script_fault` (nine cases) and
+`test_json_switch_forms_select_the_format_on_both_hosts` (five forms).
+Applied under checkpoint amendment 3.

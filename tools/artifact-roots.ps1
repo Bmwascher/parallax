@@ -16,29 +16,23 @@
 # Exit codes: 0 resolved (or -Assert inside the expected root, or inside
 # any retained root when -Expect is absent), 1 -Assert outside every
 # retained root or inside a retained root other than the one -Expect
-# names, 2 parameter fault (a missing -RepoRoot, an unknown parameter, a
+# names, 2 parameter fault (anything wrong on the command line, a
 # forbidden character in -DocsRoot, -Assert or the TEMP variable),
-# unreadable declaration, or -RepoRoot not a git working tree. TWO
-# residual binding faults stay outside the script's reach, exit 1 from
-# PowerShell's -File binding on both hosts before any line here runs:
-# a named parameter whose VALUE is missing (`-DocsRoot` as the last
-# token), and a parameter given twice (measured 2026-09-13 on both
-# hosts). Everything else that can go wrong is seen by this script and
-# exits 2 with an ERROR: line. The map mirrors dispatch-round.ps1.
-# Named-only binding: without it a bare token binds POSITIONALLY to
-# -DocsRoot and answers with a docs root nobody asked for.
-[CmdletBinding(PositionalBinding = $false)]
-param(
-    [string]$RepoRoot = "",
-    [string]$DocsRoot = "",
-    [string]$Assert = "",
-    [string]$Expect = "",
-    [switch]$Json,
-    # Captures anything the parameters above did not bind, so a
-    # misspelled parameter is a script-seen fault (exit 2) and not a
-    # binding failure (exit 1) whose text differs by host.
-    [Parameter(ValueFromRemainingArguments = $true)][string[]]$Unbound
-)
+# unreadable declaration, or -RepoRoot not a git working tree. There is
+# NO binding residual: this script has no param block, so PowerShell
+# binds nothing, and every token reaches the parser below as a string
+# on both hosts. The typed forms were measured 2026-09-13 by the diff
+# debate: a missing value and a duplicate exited 1 from -File binding
+# on both hosts, and `-Json:$true` exited 1 on 5.1 and 0 on 7 (switch
+# conversion), so typed binding could not deliver one exit map. The map
+# mirrors dispatch-round.ps1.
+#
+# Arguments (names are exact and case-insensitive, never abbreviated):
+#   -RepoRoot <path>   required
+#   -DocsRoot <rel>    optional
+#   -Assert <path>     optional
+#   -Expect <row>      optional, requires -Assert
+#   -Json              optional; -Json:true / -Json:false also accepted
 
 $ErrorActionPreference = "Stop"
 
@@ -46,6 +40,63 @@ function Fail($message) {
     Write-Output ("ERROR: " + $message)
     exit 2
 }
+
+# ---- the command line --------------------------------------------------
+# Hand-parsed from $args: every fault is script-seen and exits 2 with an
+# ERROR: line, identically on both hosts.
+$RepoRoot = ""
+$DocsRoot = ""
+$Assert = ""
+$Expect = ""
+$Json = $false
+$bound = @{}
+$valueNames = @("RepoRoot", "DocsRoot", "Assert", "Expect")
+$argv = @($args)
+$ai = 0
+while ($ai -lt $argv.Count) {
+    $tok = [string]$argv[$ai]
+    $m = [regex]::Match($tok, '^-([A-Za-z]+)(:(.*))?$')
+    if (-not $m.Success) { Fail ("unknown parameter: " + $tok) }
+    $given = $m.Groups[1].Value
+    $name = ""
+    foreach ($n in ($valueNames + @("Json"))) {
+        if ($given -ieq $n) { $name = $n }
+    }
+    if (-not $name) { Fail ("unknown parameter: " + $tok) }
+    if ($bound.ContainsKey($name)) { Fail ("-" + $name + " given more than once") }
+    $bound[$name] = $true
+    if ($name -eq "Json") {
+        if ($m.Groups[2].Success) {
+            $flag = $m.Groups[3].Value
+            if ($flag -match '^\$?true$') { $Json = $true }
+            elseif ($flag -match '^\$?false$') { $Json = $false }
+            else { Fail ("-Json takes true or false, not: " + $flag) }
+        } else {
+            # -File splits `-Json:$true` into `-Json` and a second token,
+            # which PowerShell 7 evaluates to `True` and 5.1 leaves as
+            # `$true`; both spellings select the format here.
+            $Json = $true
+            if (($ai + 1) -lt $argv.Count) {
+                $peek = [string]$argv[$ai + 1]
+                if ($peek -match '^\$?true$') { $Json = $true; $ai++ }
+                elseif ($peek -match '^\$?false$') { $Json = $false; $ai++ }
+            }
+        }
+        $ai++
+        continue
+    }
+    if ($m.Groups[2].Success) {
+        $value = $m.Groups[3].Value
+    } else {
+        $ai++
+        if ($ai -ge $argv.Count) { Fail ("-" + $name + " is missing its value") }
+        $value = [string]$argv[$ai]
+        if ($value -match '^-[A-Za-z]') { Fail ("-" + $name + " is missing its value") }
+    }
+    Set-Variable -Name $name -Value $value
+    $ai++
+}
+if (-not $bound.ContainsKey("RepoRoot") -or -not $RepoRoot) { Fail "-RepoRoot is required" }
 
 # ---- -Expect -----------------------------------------------------------
 # The frozen plan parent (<docs-root>/plans) contains every dated
@@ -60,8 +111,8 @@ $expectMap = @(
     @{ Key = "checkpoint";  Name = "checkpoint root" }
 )
 $expectedName = ""
-if ($PSBoundParameters.ContainsKey("Expect")) {
-    if (-not $PSBoundParameters.ContainsKey("Assert")) {
+if ($bound.ContainsKey("Expect")) {
+    if (-not $bound.ContainsKey("Assert")) {
         Fail "-Expect requires -Assert"
     }
     foreach ($e in $expectMap) {
@@ -94,12 +145,6 @@ function Resolve-Absolute($p) {
     if (-not $full) { Fail ("cannot resolve path '" + $p + "': " + $why) }
     return $full
 }
-
-# ---- parameter faults the binder cannot name ---------------------------
-if ($Unbound -and $Unbound.Count -gt 0) {
-    Fail ("unknown parameter: " + ($Unbound -join " "))
-}
-if (-not $RepoRoot) { Fail "-RepoRoot is required" }
 
 # ---- the declaration ---------------------------------------------------
 $NotesPath = Join-Path $PSScriptRoot "..\skills\multi-model-verify\references\model-prompting-notes.md"
@@ -182,7 +227,7 @@ if (-not [System.IO.Path]::IsPathRooted($commonDir)) {
 $common = Resolve-Absolute $commonDir
 
 # ---- the docs root -----------------------------------------------------
-if ($PSBoundParameters.ContainsKey("DocsRoot")) {
+if ($bound.ContainsKey("DocsRoot")) {
     $rel = $DocsRoot.Replace("\", "/").Trim("/")
     if (-not $rel) { Fail "-DocsRoot is empty" }
     # Validate BEFORE any path API: on Windows PowerShell 5.1 IsPathRooted
@@ -271,7 +316,7 @@ function Strip-Placeholder($p) {
 
 $assertResult = $null
 $exitCode = 0
-if ($PSBoundParameters.ContainsKey("Assert")) {
+if ($bound.ContainsKey("Assert")) {
     if (-not $Assert) { Fail "-Assert is empty" }
     # Same forbidden-character rule as -DocsRoot, minus the drive colon:
     # .NET Core's GetFullPath accepts `<`, `>` and `|`, so on PowerShell 7

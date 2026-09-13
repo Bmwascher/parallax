@@ -226,16 +226,19 @@ Exit map: 0 resolved (or asserted inside), 1 asserted outside or inside
 a retained root other than the one `-Expect` names, 2 for a parameter
 fault, an unreadable declaration, or a `-RepoRoot` that is not a git
 working tree. The map mirrors `tools/dispatch-round.ps1`'s so a
-caller reads one convention. Parameter faults the script itself sees
-(amended 2026-09-13 from the diff debate's round 1): a missing
-`-RepoRoot`, an unknown or bare token (binding is named-only), a
-forbidden character in `-DocsRoot`, `-Assert` or the `TEMP` variable,
-which is screened with the same set before any path API because it is
-the one input that is neither a parameter nor git's answer. TWO
-residuals stay with PowerShell's `-File` binding on both hosts and exit
-1 without an `ERROR:` line: a named parameter whose value is missing,
-and a parameter given twice (both measured on both hosts 2026-09-13;
-this sentence said "one" until the session's own probe found the second).
+caller reads one convention. The tool has NO `param` block (amended
+2026-09-13 from the diff debate's rounds 1 and 3): it parses `$args`
+itself, so every command-line fault is script-seen and exits 2 with an
+`ERROR:` line on both hosts: a missing `-RepoRoot`, an unknown,
+abbreviated or bare token, a missing value, a duplicate, a bad `-Json`
+value, a common parameter, and a forbidden character in `-DocsRoot`,
+`-Assert` or the `TEMP` variable, which is screened with the same set
+before any path API because it is the one input that is neither a
+parameter nor git's answer. Typed binding was tried first and could not
+deliver one exit map: a missing value and a duplicate exited 1 from
+`-File` binding on both hosts, and `-Json:$true` exited 1 on 5.1 and 0
+on 7; earlier drafts of this paragraph named "one" and then "two"
+residuals before the third class was measured.
 
 ## Skill and agent edits
 
