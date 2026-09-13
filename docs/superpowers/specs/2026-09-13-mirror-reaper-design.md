@@ -51,7 +51,7 @@ Stated limit: a PLAN-mode debate builds the same mirror through preflight
 step 3 and ends with a frozen plan, not an attestation, so its mirror has
 no mechanical reap point. Its removal is the hand route the doctor names
 until a plan-mode terminal event is recorded mechanically; backlog item
-102 carries that residual beside the same-head one.
+107 carries that residual beside the same-head one.
 
 ## The identity guard
 
