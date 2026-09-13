@@ -318,7 +318,13 @@ lineup is one configuration:
   [Lane credential ownership](#lane-credential-ownership)
 - Optional — Flash implementer lane: the Antigravity CLI (`agy`)
   authenticated (Gemini 3.8 Flash; model literal pinned in
-  `agents/flash-implementer.md`)
+  `agents/flash-implementer.md`), at a version whose print mode honours
+  `--mode accept-edits` (measured on 1.2.2; on 1.1.7 the flag was inert
+  and the lane could not write), and the workspace or a parent directory
+  of it approved once in an interactive `agy` session. That trust list is
+  the LANE's allow-list of where Flash may write, enforced by the
+  wrapper's preflight: measured 2026-09-13, agy itself did not consult it
+  for the lane's edit (backlog item 105)
 - The Fable seats need no extra transport — they are Claude Code
   subagents
 

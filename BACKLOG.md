@@ -53,7 +53,6 @@ The full previous text of every closed item is in git history at
 - 68
 - 81
 - 82
-- 36
 - 105
 - 38
 - 76
@@ -1187,10 +1186,9 @@ fix may add a path where a late or reconstructed inventory reads as a
 timely one.
 
 ## 36. agy `allowNonWorkspaceAccess` is watched but UNMEASURED
-Status: OPEN
-Cost: none remaining for the lane; the item closes with the version that ships the measurement into the agent file, because `Closed:` names a shipped version
-Pairs: 105
-Verified: 2026-09-13 db021425e994
+Status: DONE
+Closed: 0.35.0
+Verified: 2026-09-13 4e10adefacde
 
 Opened by 0.24.0, which deliberately did not answer it. Item 11's security
 contract stays partially open on this point while the rest of item 11
@@ -1244,6 +1242,8 @@ the carry-forward fires only when the file could not be read
 (`tools/check-drift.ps1:654-656`, `:705-712`). The next weekly run will
 therefore report `true -> absent` once, with the 2026-09-13 measurement
 in the note's text; the snapshot row can go when item 105 is built.
+
+Record: docs/superpowers/plans/rounds/2026-09-13-flash-accept-edits/README.md
 
 ## 37. No documented step REQUIRES promoting an adjudicated rule
 Status: OPEN
@@ -4526,8 +4526,8 @@ refusals fire and that the rule stops at the first blank line.
 ## 105. agy 1.2.2 does not consult `trustedWorkspaces` for a print-mode write under `--mode accept-edits`
 Status: OPEN
 Cost: the only thing keeping Flash inside a directory the user trusted is a preflight the Haiku wrapper follows as prose; nothing mechanical refuses an `--add-dir` outside the list
-Pairs: 36
-Verified: 2026-09-13 75f4e6934884
+Pairs: none
+Verified: 2026-09-13 f526a8ecf1f1
 
 **Filed 2026-09-13 on the Fable review of branch `flash-accept-edits`**,
 finding 2, which asked for the control run; the run answered in the
