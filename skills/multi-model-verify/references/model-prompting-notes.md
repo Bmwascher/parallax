@@ -786,7 +786,7 @@ Canonical docs root override: `dev/docs/superpowers`
 Canonical frozen plan path: `<docs-root>/plans/<date>-<topic>.md`
 Canonical rounds root: `<docs-root>/plans/rounds/<date>-<topic>/`
 Canonical SDD ledger root: `.superpowers/sdd/<plan-basename>/`
-Canonical review mirror root: `<TEMP>/<short-name>/`
+Canonical review mirror root: `C:/pxm/<short-name>/`
 Canonical attestation root: `<git-common-dir>/parallax/attestations/`
 Canonical checkpoint root: `<git-common-dir>/parallax/application-checkpoints/`
 <!-- contract:end -->
@@ -805,11 +805,24 @@ The other rows are FIXED, each for a reason the row cannot carry:
   `scripts/sdd-workspace` creates the directory and its self-ignoring
   `.gitignore`, and its ledger check reads `<workspace>/progress.md`
   back, so the plugin cites the path and never relocates it.
-- Review mirror: never inside the reviewed repository.
-  `tools/new-review-mirror.ps1` refuses a path equal to, inside, or
-  containing the repo; `<TEMP>` is the controller host's temp
-  directory, and references/preflight-mirror.md owns the short-name
-  and path-budget rules.
+- Review mirror: never inside the reviewed repository, and since
+  2026-09-13 never under the controller host's temp directory either.
+  `C:/pxm` is a FIXED parent, seven characters with its separator: the
+  KitnEssentials review packets put their deepest file 243 characters
+  below the repo root, so a mirror root has 15 characters at most, and
+  the 36-character temp directory this row named before could never
+  hold one, which is how 78 mirror directories came to sit at the
+  drive root (backlog item 107). The row is a declaration, not a
+  derivation: a machine whose system drive is not `C:` edits it. The
+  guard accepts any depth below the parent and never the parent
+  itself; the declared SHAPE is one segment, so build `C:\pxm\<tag>`.
+  `tools/new-review-mirror.ps1` still refuses a path equal to, inside,
+  or containing the repo and does not read this row; run
+  `tools/artifact-roots.ps1 -Assert <mirror-path> -Expect reviewMirror`
+  before the build, and `tools/write-attestation.ps1` refuses to reap a
+  tree that is not under the parent (references/preflight-mirror.md,
+  End of life). references/preflight-mirror.md owns the short-name and
+  path-budget rules.
 - Attestation and checkpoint: under the git COMMON dir, so recording a
   verdict cannot move `HEAD` out from under its own SHA and every
   worktree sees one record; `tools/verify-attestation.ps1` re-hashes the
@@ -838,8 +851,9 @@ The operating rule, which SKILL.md's preflight step 4 points at:
   `-Expect frozenPlan` accepts a dated DIRECTORY in that parent, since
   the plan row names a file beside them; the rounds copy is the act that
   spread the KitnEssentials record, and `-Expect rounds` refuses it. The
-  ledger and mirror rows are not in the assert set, because the session
-  never copies into them.
+  ledger row is not in the assert set, because the session never copies
+  into it; the mirror row is, so `-Expect reviewMirror` answers for a
+  mirror path before the build and a copy aimed at the parent is refused.
 - Dispatch directories, receipts, briefs, prior-state files and the
   probe's override file are session scratch outside the repository for
   the whole round; only their retained copies enter the rounds root.
