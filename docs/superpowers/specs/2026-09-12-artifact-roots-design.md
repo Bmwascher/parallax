@@ -13,19 +13,21 @@ design makes the plugin stop adding to the spread.
    frozen plan and the rounds root are named in
    `skills/multi-model-verify/references/frozen-plan-format.md:27` and
    `:85`, with the KitnEssentials override written as an inline example
-   in both places and again at `skills/multi-model-verify/SKILL.md:322`.
-   The attestation root is named once, in `SKILL.md:389`, and the
-   checkpoint root only inside `tools/write-attestation.ps1:99`. The
-   mirror root is prose in `references/preflight-mirror.md` ("a SHORT
-   `<scratch>` directly under the temp directory"). The SDD ledger root
-   is not named by the plugin at all; `agents/fable-reviewer.md:18` takes
-   it as an argument.
+   at `:28` and again at `skills/multi-model-verify/SKILL.md:323`.
+   The attestation root is named in `SKILL.md:389` and computed in
+   `tools/write-attestation.ps1:72` and `tools/verify-attestation.ps1:177`;
+   the checkpoint root is computed in `tools/write-attestation.ps1:99`
+   and `tools/verify-attestation.ps1:125` and named in
+   `references/application-checkpoint.md:80`. The mirror root is prose in
+   `references/preflight-mirror.md:12` ("a SHORT `<scratch>` directly
+   under the temp directory"). The SDD ledger root is not named by the
+   plugin at all; `agents/fable-reviewer.md:18` takes it as an argument.
 2. The SDD ledger root is not the plugin's to place. Superpowers
-   `subagent-driven-development/scripts/sdd-workspace` hard-codes
+   `subagent-driven-development/scripts/sdd-workspace:35-39` hard-codes
    `<repo-root>/.superpowers/sdd/<plan-basename>/` and writes a
-   self-ignoring `.gitignore` beside it. Its own ledger check reads that
-   path back, so a plugin that moved the ledger would break the skill it
-   is built on.
+   self-ignoring `.gitignore` beside it, and that skill's `SKILL.md:141`
+   reads the ledger back from `<workspace>/progress.md`, so a plugin that
+   moved the ledger would break the skill it is built on.
 3. The review mirror must sit outside the reviewed repository.
    `tools/new-review-mirror.ps1:1460` already refuses a `-MirrorPath`
    equal to, inside, or containing the repo, and
@@ -69,7 +71,13 @@ must stay first, because two runtime parsers match the first
 `Canonical model id:` occurrence). It is wrapped in
 `<!-- contract:start id=artifact-roots -->` / `contract:end` so the
 coverage checker in `test_contract_coverage.py` requires a pin, and it
-is registered in that file's `DECLARED_REGIONS`.
+is registered in that file's `DECLARED_REGIONS`. The region holds
+EXACTLY the eight declaration lines below and nothing else, and ONE pin
+in `test_artifact_roots.py` holds the whole region text: the checker
+folds a region into one body and a pin that stops mid-region or two
+pins that jointly span it leave it unlocked
+(`test_contract_coverage.py:537-553`). The explanatory prose sits
+outside the markers.
 
 The machine-read lines, in the same one-value-per-line style as the
 model declarations:
@@ -81,9 +89,16 @@ Canonical frozen plan path: `<docs-root>/plans/<date>-<topic>.md`
 Canonical rounds root: `<docs-root>/plans/rounds/<date>-<topic>/`
 Canonical SDD ledger root: `.superpowers/sdd/<plan-basename>/`
 Canonical review mirror root: `<TEMP>/<short-name>/`
-Canonical attestation root: `.git/parallax/attestations/`
-Canonical checkpoint root: `.git/parallax/application-checkpoints/`
+Canonical attestation root: `<git-common-dir>/parallax/attestations/`
+Canonical checkpoint root: `<git-common-dir>/parallax/application-checkpoints/`
 ```
+
+`<git-common-dir>` is what `git rev-parse --git-common-dir` returns for
+the repo, which is what `tools/write-attestation.ps1:54-63` and
+`tools/verify-attestation.ps1:125` already resolve, and what
+`references/application-checkpoint.md:80` already writes. In a linked
+worktree `.git` is a file and the common dir is elsewhere, so a row
+spelled `.git/parallax/...` would name a path the emitter never writes.
 
 The prose around them states, for each fixed row, why it is fixed:
 
@@ -139,8 +154,10 @@ Behaviour:
    if `<RepoRoot>/<override>` exists as a directory; else the default.
    Record the source as one of `-DocsRoot`, `override directory
    exists`, `default`.
-3. Substitute `<docs-root>` in the two overridable rows and `<TEMP>` in
-   the mirror row. Leave `<date>-<topic>`, `<plan-basename>` and
+3. Substitute `<docs-root>` in the two overridable rows, `<TEMP>` in
+   the mirror row, and `<git-common-dir>` in the attestation and
+   checkpoint rows from `git rev-parse --git-common-dir` run in
+   `-RepoRoot`. Leave `<date>-<topic>`, `<plan-basename>` and
    `<short-name>` as printed placeholders: they are named per debate.
 4. Print one line per row, `name: <absolute path>`, then
    `docs-root source: <source>`. With `-Json`, emit one object with the
@@ -162,14 +179,28 @@ caller reads one convention.
 
 ## Skill and agent edits
 
-- `SKILL.md` preflight gains step 4, both modes: run the resolver
-  against the reviewed repo, retain its output as `artifact-roots.txt`
-  in the rounds folder, and use the printed paths for every later act
-  that names one: the frozen plan save, the rounds retention, the ledger
-  citation in the fable-reviewer dispatch, the attestation emitter's
-  expected output. Before the retention copy, `-Assert` the destination.
-- `SKILL.md:322-324` (mode plan step 5) and
-  `frozen-plan-format.md:27-28` and `:85` stop naming the KitnEssentials
+- `SKILL.md` preflight gains step 4, both modes, as ONE line: run
+  `tools/artifact-roots.ps1 -RepoRoot <repo>` and follow the operating
+  rule in `references/model-prompting-notes.md`. That rule, written in
+  prose beside the declaration, is: the resolver's output goes to
+  session scratch OUTSIDE the repo (it is then a retained artifact like
+  a brief, and enters the rounds root as `artifact-roots.txt` only after
+  the wrapper exits, so the quiet period is untouched and no ordering
+  rule against the mirror build is needed); every later act that names
+  a path uses the printed one, the frozen plan save, the rounds
+  retention, the ledger citation in the fable-reviewer dispatch, the
+  attestation emitter's expected output; and the retention copy runs
+  `-Assert` on its destination first.
+- `SKILL.md` is at 6496 of `skill_lint.py`'s 6500-token hard ceiling
+  (measured 2026-09-12 with `--strict`; `BACKLOG.md:4219-4227` records
+  the same). The one-line step is paid for by mode plan step 5
+  (`SKILL.md:321-324`), whose parenthetical naming the KitnEssentials
+  and default plans directories is removed and replaced by "at the
+  frozen-plan path the preflight printed". The plan's task runs the
+  linter after the edit; if the file is still over the ceiling the task
+  STOPS and asks the user what to remove, because that choice is the
+  user's (the backlog entry says so), not the implementer's.
+- `frozen-plan-format.md:27-28` and `:85` stop naming the KitnEssentials
   path by hand and cite the declaration's frozen-plan and rounds rows.
 - `references/preflight-mirror.md` and `references/backup-lane.md` cite
   the mirror row where they describe the scratch location; the
@@ -186,27 +217,45 @@ pins in `test_multi_model_verify.py` before the wording is settled.
 ## The eval
 
 `evals/multi-model-verify/test_artifact_roots.py`, new, added to BOTH
-host steps of the `powershell-hosts` job (the workflow-path checker in
-`evals/tools/check_workflow_paths.py` covers the listing).
+host steps of the `powershell-hosts` job AND to
+`REQUIRED_DUAL_HOST_MODULES` in `evals/tools/check_workflow_paths.py:61`
+in the same act: that list is what locks a module into both steps, and
+a module named in the workflow but absent from the list is not locked
+(the comment at `:64-67` says so, and `test_dispatch_round.py` is an
+existing example of the gap).
 
 Three groups:
 
-1. **Declaration.** The region exists, carries all eight lines, and the
-   primary `Canonical model id:` still precedes it. A pin per line, in
-   the `"literal" in body` form the coverage checker recognizes.
+1. **Declaration.** The region exists, the primary `Canonical model id:`
+   still precedes it, and one pin in the `"literal" in body` form holds
+   the region's whole text, all eight lines as one folded literal.
 2. **Static consistency sweep**, the same shape as the no-hardcoded-`-m`
    test. Every path literal in `skills/`, `agents/`, `commands/`,
    `hooks/` and `tools/` that names a round-artifact root must be one
    the declaration states. The forbidden shapes are enumerated so the
    sweep reports what it searched for: `superpowers/rounds/` not preceded
-   by `plans/`, `review-sources`, `dev/docs/superpowers` outside the
-   declaration line and outside a dated historical citation, a bare
-   `.superpowers/sdd/` that is not the declared row or a dated
-   citation. A historical citation is a path under `docs/superpowers/
-   plans/rounds/<date>-` naming a retained record; those resolve under
-   the declared rounds root and pass.
-3. **Behavioural, real tools, both hosts.** In a disposable repository
-   with two commits:
+   by `plans/`, `review-sources`, `dev/docs/superpowers` anywhere but
+   the declaration's override line, and `.superpowers/sdd/` anywhere but
+   the declaration's ledger line or a dated citation. A dated citation
+   is a path under `docs/superpowers/plans/rounds/<date>-` or
+   `.superpowers/sdd/<date>-` naming a retained record (the plugin
+   surface carries one of the latter today, at
+   `references/model-prompting-notes.md:87`). Measured 2026-09-12 by the
+   Fable pre-read: the first two shapes have zero hits in the plugin
+   surface, all seven `superpowers/plans/rounds/` hits are preceded by
+   `plans/`, and the two `dev/docs/superpowers` hits are the ones this
+   design removes. A bare `rounds/` literal has no static shape, because
+   the word is too common to sweep; `-Assert` is what covers it.
+3. **Behavioural, real tools, both hosts.** The module carries its own
+   module-level skip when no PowerShell host is on PATH; the mark in
+   `test_dispatch_round.py:32-35` does not travel with an import. The
+   test builds a disposable source repository with TWO commits, because
+   `write-attestation.ps1:67-70` refuses base and head that resolve to
+   one commit, and `build_real_mirror` in `test_dispatch_round.py:173`
+   creates its own one-commit source with no way to pass one in. So the
+   plan extends that fixture with an optional `source` argument whose
+   default keeps today's behaviour, and every existing caller is
+   unchanged.
    - the resolver prints the default set; after `mkdir
      dev/docs/superpowers`, it prints the override set with source
      `override directory exists`; with `-DocsRoot other/root` it prints
@@ -215,24 +264,35 @@ Three groups:
    - `-Assert` exits 0 for a path under the resolved rounds root and the
      attestation root, 1 for `<repo>/rounds/x`, `<repo>/.superpowers/
      review-sources/x`, and a path outside the repo.
-   - the writers: snapshot the repo tree (every path, ignored ones
-     included), run `tools/write-attestation.ps1` for the two commits,
-     run `tools/dispatch-round.ps1 -Prepare` through the
-     `build_real_mirror` and `prepare_default` fixtures already in
-     `test_dispatch_round.py` with the dispatch directory and receipt
-     outside the repo, and run `tools/new-review-mirror.ps1` to a temp
-     path; diff the tree; assert every path that APPEARED inside the
-     repo satisfies `-Assert`, and that the set is exactly the
-     attestation file. A tool that writes anywhere else inside the repo
-     turns this red.
+   - the writers: snapshot the repo tree as a SET OF PATHS (every path,
+     ignored ones included; `.git/index` is rewritten by the status
+     capture in `new-review-mirror.ps1:1665-1669`, so a content diff
+     would fire on a correct tool and a path-set diff does not), run
+     `tools/write-attestation.ps1` for the two commits, run
+     `tools/dispatch-round.ps1 -Prepare` through the extended
+     `build_real_mirror` and `prepare_default` with the dispatch
+     directory and receipt outside the repo, and run
+     `tools/new-review-mirror.ps1` to a temp path with `-SkipProbe`;
+     diff the sets; assert every path that APPEARED inside the repo
+     satisfies `-Assert`, and that the set is exactly the attestation
+     file.
+   - negative control, so the diff logic is shown able to fail: a stub
+     writer creates `<repo>/rounds/x`, and the same diff-and-assert
+     reports it.
    - the mirror tool still refuses an in-repo `-MirrorPath` (the
      existing pin stays; this test cites the declaration row in its
      name).
 
-The behavioural group depends on the fixtures in `test_dispatch_round.py`
-being importable from a sibling module; pytest's default import mode
-puts the test directory on `sys.path`, which is how the existing
-`test_lane_credential_live.py` reaches its support module.
+What group 3 proves is bounded: only a tool that CREATES a path is
+caught, only the three tools are run, and only in the modes the test
+exercises (`-SkipProbe`, and whatever `prepare_default` passes). A tool
+that rewrites an existing in-repo file is outside it.
+
+The behavioural group imports the fixtures from `test_dispatch_round.py`
+as a sibling module; pytest's default import mode puts the test
+directory on `sys.path`, which is how `test_contract_coverage.py:12`
+reaches `contract_coverage.py` with no `conftest.py` or package marker
+under `evals/`.
 
 ## What the eval does not prove
 
