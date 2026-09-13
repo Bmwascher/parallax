@@ -218,3 +218,158 @@ def test_module_is_listed_in_both_host_steps():
         assert marker in workflow
         step = workflow.split(marker, 1)[1].split("\n      - name:", 1)[0]
         assert step.count(rel) == 1, rel + " must appear once in the " + host + " step"
+
+
+# ---------------------------------------------------------------------
+# Group 2: the emitter's reap
+# ---------------------------------------------------------------------
+def attest(repo, base, head, mirror=None, bridge=None):
+    args = [WRITE, "-RepoRoot", str(repo), "-BaseSha", base, "-HeadSha", head,
+            "-Verdict", "PASS", "-VerificationStatus", "FULL",
+            "-RouteNote", "effective route confirmed", "-Rounds", "1",
+            "-Participants", "session/reviewer"]
+    if mirror is not None:
+        args += ["-ReapMirror", str(mirror)]
+    if bridge is not None:
+        args += ["-ReapBridge", str(bridge)]
+    return run_ps(*args)
+
+
+def att_file(repo, head):
+    return repo / ".git" / "parallax" / "attestations" / (head + ".json")
+
+
+def test_reaps_mirror_bridge_and_sidecar_after_writing(tmp_path):
+    repo, base, head = make_repo(tmp_path)
+    bridge = make_bridge(repo, tmp_path / "kvs-t")
+    mirror = make_mirror(bridge, tmp_path / "kv-t")
+    sidecar = tmp_path / "kv-t.source-manifest"
+    sidecar.write_text("advisory\n", encoding="utf-8")
+    target = tmp_path / "reference"
+    target.mkdir()
+    (target / "keep.txt").write_text("kept\n", encoding="utf-8")
+    junction(mirror / ".wow-api-reference", target)
+    proc = attest(repo, base, head, mirror=mirror, bridge=bridge)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert att_file(repo, head).is_file()
+    lines = proc.stdout.splitlines()
+    assert lines[0].startswith("attestation written: "), proc.stdout
+    assert "reaped mirror: " + str(mirror) in proc.stdout
+    assert "reaped sidecar: " + str(sidecar) in proc.stdout
+    assert "reaped bridge: " + str(bridge) in proc.stdout
+    assert not mirror.exists() and not bridge.exists() and not sidecar.exists()
+    assert (target / "keep.txt").is_file(), "the junction target survives"
+    assert (repo / "b.txt").is_file(), "the reviewed repo is untouched"
+
+
+def test_a_remediation_commit_above_the_head_is_still_the_mirror(tmp_path):
+    # The mirror tool commits its back-channel removal as parallax@local
+    # with the source head as the single parent, so a mirror of a repo
+    # with a TRACKED back-channel sits one commit above the attested head.
+    repo, base, head = make_repo(tmp_path)
+    mirror = make_mirror(repo, tmp_path / "kv-t")
+    (mirror / "AGENTS.md").write_text("planted\n", encoding="utf-8")
+    git(mirror, "add", "AGENTS.md")
+    git(mirror, "commit", "-q", "-m", "planted")
+    git(mirror, "rm", "-q", "AGENTS.md")
+    subprocess.run(["git", "-C", str(mirror), "-c", "user.email=parallax@local",
+                    "-c", "user.name=parallax", "commit", "-q", "-m",
+                    "remove instruction back-channels for review"],
+                   check=True, capture_output=True)
+    # Two commits above head is NOT the remediation shape: refused.
+    proc = attest(repo, base, head, mirror=mirror)
+    assert proc.returncode == 2 and "not the attested head" in proc.stdout, proc.stdout
+    assert not att_file(repo, head).exists(), "a refused argument writes nothing"
+    assert mirror.exists()
+    # Exactly one parallax@local commit whose parent is the head: accepted.
+    mirror2 = make_mirror(repo, tmp_path / "kv-u")
+    (mirror2 / "AGENTS.md").write_text("planted\n", encoding="utf-8")
+    git(mirror2, "add", "AGENTS.md")
+    subprocess.run(["git", "-C", str(mirror2), "-c", "user.email=parallax@local",
+                    "-c", "user.name=parallax", "commit", "-q", "-m",
+                    "remove instruction back-channels for review"],
+                   check=True, capture_output=True)
+    proc = attest(repo, base, head, mirror=mirror2)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert not mirror2.exists()
+
+
+def test_a_bridge_at_a_stale_head_is_refused_by_name(tmp_path):
+    repo, base, head = make_repo(tmp_path)
+    bridge = make_bridge(repo, tmp_path / "kvs-t")
+    (repo / "c.txt").write_text("c\n", encoding="utf-8")
+    git(repo, "add", "c.txt")
+    git(repo, "commit", "-q", "-m", "fix")
+    head2 = git(repo, "rev-parse", "HEAD")
+    proc = attest(repo, base, head2, bridge=bridge)
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "not the attested head" in proc.stdout and head2 in proc.stdout
+    assert bridge.exists() and not att_file(repo, head2).exists()
+
+
+@pytest.mark.parametrize("shape", ["missing", "file", "inside-repo", "repo-itself",
+                                   "contains-repo", "worktree", "no-git", "link"])
+def test_every_wrong_tree_is_refused_before_the_record_is_written(tmp_path, shape):
+    repo, base, head = make_repo(tmp_path)
+    keep = None
+    if shape == "missing":
+        path = tmp_path / "absent"
+    elif shape == "file":
+        path = tmp_path / "plain.txt"
+        path.write_text("x\n", encoding="utf-8")
+    elif shape == "inside-repo":
+        path = repo / "nested"
+        make_mirror(repo / ".git", path / ".git")
+    elif shape == "repo-itself":
+        path = repo
+    elif shape == "contains-repo":
+        path = tmp_path
+    elif shape == "worktree":
+        path = tmp_path / "wt"
+        git(repo, "worktree", "add", "-q", str(path), "main")
+        assert (path / ".git").is_file()
+    elif shape == "no-git":
+        path = tmp_path / "bare"
+        path.mkdir()
+    else:
+        keep = make_mirror(repo, tmp_path / "real")
+        path = tmp_path / "link"
+        junction(path, keep)
+    proc = attest(repo, base, head, mirror=path)
+    assert proc.returncode == 2, shape + ": " + proc.stdout + proc.stderr
+    assert proc.stdout.startswith("ERROR:"), proc.stdout
+    assert not att_file(repo, head).exists(), (
+        shape + ": a refused reap path must be refused BEFORE the record is written")
+    assert (repo / "b.txt").is_file()
+    if shape not in ("missing",):
+        assert path.exists(), shape + ": nothing was removed"
+    if keep is not None:
+        assert (keep / "b.txt").is_file(), "the link's target survives"
+
+
+def test_a_held_handle_leaves_the_attestation_and_exits_three(tmp_path):
+    repo, base, head = make_repo(tmp_path)
+    mirror = make_mirror(repo, tmp_path / "kv-t")
+    held = mirror / "held.txt"
+    held.write_text("open\n", encoding="utf-8")
+    with open(held, "r", encoding="utf-8"):
+        proc = attest(repo, base, head, mirror=mirror)
+    assert proc.returncode == 3, proc.stdout + proc.stderr
+    assert att_file(repo, head).is_file(), "the verdict is recorded even when the reap fails"
+    assert "ERROR: reap failed for " + str(mirror) in proc.stdout, proc.stdout
+    assert str(held) in proc.stdout and "the attestation stands" in proc.stdout
+    assert held.exists()
+
+
+def test_without_the_parameters_the_emitter_removes_nothing(tmp_path):
+    repo, base, head = make_repo(tmp_path)
+    mirror = make_mirror(repo, tmp_path / "kv-t")
+    proc = attest(repo, base, head)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "reaped" not in proc.stdout
+    assert mirror.exists()
+
+
+def test_emitter_header_declares_exit_three():
+    body = read(WRITE)
+    assert "Exit codes: 0 written, 2 argument/repo error, 3 written but a reap failed" in body

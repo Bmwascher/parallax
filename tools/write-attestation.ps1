@@ -12,7 +12,17 @@
 # Windows PowerShell 5.1 compatible, ASCII ONLY (see check-drift.ps1
 # header for why).
 #
-# Exit codes: 0 written, 2 argument/repo error.
+# Exit codes: 0 written, 2 argument/repo error, 3 written but a reap failed.
+#
+# REAP (0.35.0, backlog item 101): -ReapMirror and -ReapBridge name the
+# review mirror and the clone bridge the debate ran on. The attestation
+# is the one TERMINAL event the plugin records mechanically, so it is
+# the reap point - never an age. Both paths are validated against the
+# reviewed repository and the attested head BEFORE the record is
+# written, so a refused argument costs nothing (exit 2); they are
+# removed AFTER it, so a removal failure leaves the verdict standing
+# and says so (exit 3). The removal itself is
+# tools/review-tree-removal.ps1, shared with the mirror tool.
 param(
     [Parameter(Mandatory = $true)][string]$RepoRoot,
     [Parameter(Mandatory = $true)][string]$BaseSha,
@@ -35,8 +45,14 @@ param(
     # When present, the record binds the checkpoint hash AND the
     # emitter-computed changed-path set - never caller-supplied - so an
     # attestation minted for a different change set fails verification.
-    [string]$CheckpointFile = ""
+    [string]$CheckpointFile = "",
+    # Optional (0.35.0): the review mirror and the clone bridge to remove
+    # once the record is written. See the REAP note in the header.
+    [string]$ReapMirror = "",
+    [string]$ReapBridge = ""
 )
+
+. (Join-Path $PSScriptRoot "review-tree-removal.ps1")
 
 function Resolve-FullSha($repo, $sha, $label) {
     $full = (& git -C $repo rev-parse --verify --quiet ($sha + "^{commit}") 2>$null | Out-String).Trim()
@@ -45,6 +61,127 @@ function Resolve-FullSha($repo, $sha, $label) {
         exit 2
     }
     return $full
+}
+
+function Resolve-ReapPath($label, $raw, $repoTop, $commonFull, $headFull, $allowRemediation) {
+    # Returns the resolved full path of a tree this attestation may
+    # remove, or prints ERROR and exits 2. Every refusal here runs before
+    # the record is written. The rules are the spec's identity guard:
+    # rooted and resolvable, not a filesystem root, an existing
+    # directory, not through a link, not overlapping the reviewed repo
+    # or its common dir, a .git DIRECTORY (a .git FILE is a linked
+    # worktree, never a mirror or a bridge), and a HEAD equal to the
+    # attested head - or, for the mirror only, one parallax@local
+    # remediation commit whose single parent is that head, which is the
+    # commit the mirror tool makes over a tracked back-channel.
+    if ([string]::IsNullOrWhiteSpace($raw)) {
+        Write-Output "ERROR: $label is empty"
+        exit 2
+    }
+    if (-not [System.IO.Path]::IsPathRooted($raw)) {
+        Write-Output "ERROR: $label must be an absolute path ($raw)"
+        exit 2
+    }
+    $full = $null
+    try {
+        $full = [System.IO.Path]::GetFullPath($raw).TrimEnd("\")
+    } catch {
+        Write-Output ("ERROR: $label could not be resolved ($raw): " + $_.Exception.Message)
+        exit 2
+    }
+    $pathRoot = [System.IO.Path]::GetPathRoot($full)
+    if ((-not $pathRoot) -or ($full.Length -le ([string]$pathRoot).TrimEnd("\").Length)) {
+        Write-Output "ERROR: $label is a filesystem root ($full)"
+        exit 2
+    }
+    $attr = 0
+    try {
+        $attr = [int][System.IO.File]::GetAttributes($full)
+    } catch [System.IO.FileNotFoundException] {
+        Write-Output "ERROR: $label does not exist ($full)"
+        exit 2
+    } catch [System.IO.DirectoryNotFoundException] {
+        Write-Output "ERROR: $label does not exist ($full)"
+        exit 2
+    } catch {
+        Write-Output ("ERROR: $label could not be examined ($full): " + $_.Exception.Message)
+        exit 2
+    }
+    if (($attr -band [int][System.IO.FileAttributes]::Directory) -eq 0) {
+        Write-Output "ERROR: $label is a file, not a tree ($full)"
+        exit 2
+    }
+    $hit = Test-PathOrAncestorIsLink $full
+    if ($hit) {
+        Write-Output ("ERROR: $label passes through a directory link at $hit" +
+            " - a tree is never removed through a link")
+        exit 2
+    }
+    # The mirror tool's own overlap comparison, against the reviewed
+    # repository and against its git common dir (a linked worktree's
+    # common dir sits outside its top level).
+    $cmp = [System.StringComparison]::OrdinalIgnoreCase
+    $p = $full.Replace("\", "/").TrimEnd("/") + "/"
+    foreach ($pair in @(@("the reviewed repository", $repoTop), @("the git common dir", $commonFull))) {
+        $g = ([string]$pair[1]).Replace("\", "/").TrimEnd("/") + "/"
+        if ($p.Equals($g, $cmp)) {
+            Write-Output ("ERROR: $label is " + $pair[0] + " itself ($full)")
+            exit 2
+        }
+        if ($p.StartsWith($g, $cmp)) {
+            Write-Output ("ERROR: $label is inside " + $pair[0] + " ($full)")
+            exit 2
+        }
+        if ($g.StartsWith($p, $cmp)) {
+            Write-Output ("ERROR: $label contains " + $pair[0] + " ($full)")
+            exit 2
+        }
+    }
+    $dotGit = Join-Path $full ".git"
+    $ga = 0
+    try {
+        $ga = [int][System.IO.File]::GetAttributes($dotGit)
+    } catch {
+        Write-Output "ERROR: $label carries no .git entry, so it is not a review tree ($full)"
+        exit 2
+    }
+    if (($ga -band [int][System.IO.FileAttributes]::Directory) -eq 0) {
+        Write-Output ("ERROR: $label has a .git FILE, which marks a linked worktree" +
+            " - never a mirror or a bridge ($full)")
+        exit 2
+    }
+    $treeHead = (& git -C $full rev-parse --verify --quiet "HEAD^{commit}" 2>$null | Out-String).Trim()
+    if (($LASTEXITCODE -ne 0) -or -not $treeHead) {
+        Write-Output "ERROR: $label has no readable HEAD ($full)"
+        exit 2
+    }
+    if ($treeHead -eq $headFull) {
+        return $full
+    }
+    if ($allowRemediation) {
+        $author = (& git -C $full log -1 --format=%ae HEAD 2>$null | Out-String).Trim()
+        $authorExit = $LASTEXITCODE
+        $parents = @(((& git -C $full rev-list --parents -n 1 HEAD 2>$null | Out-String).Trim()) -split "\s+")
+        if (($authorExit -eq 0) -and ($LASTEXITCODE -eq 0) -and ($author -eq "parallax@local") -and
+            ($parents.Count -eq 2) -and ($parents[1] -eq $headFull)) {
+            return $full
+        }
+    }
+    Write-Output ("ERROR: $label is at $treeHead, not the attested head $headFull" +
+        " - it is not the tree this verdict was issued on ($full)")
+    exit 2
+}
+
+function Invoke-Reap($label, $full) {
+    # Runs after the record is written: a failure here is exit 3, with
+    # the attestation left standing and the reason named.
+    $r = Remove-ReviewTree $full
+    if (-not $r.Ok) {
+        Write-Output ("ERROR: reap failed for " + $full + ": " + $r.Reason +
+            " - the attestation stands; remove the " + $label + " by hand")
+        exit 3
+    }
+    Write-Output ("reaped " + $label + ": " + $full)
 }
 
 $toplevel = (& git -C $RepoRoot rev-parse --show-toplevel 2>$null | Out-String).Trim()
@@ -67,6 +204,24 @@ $baseFull = Resolve-FullSha $RepoRoot $BaseSha "BaseSha"
 $headFull = Resolve-FullSha $RepoRoot $HeadSha "HeadSha"
 if ($baseFull -eq $headFull) {
     Write-Output "ERROR: BaseSha and HeadSha resolve to the same commit - nothing was reviewed"
+    exit 2
+}
+
+# REAP VALIDATION, before anything is written. Both trees are resolved
+# and checked here so a wrong argument is refused at exit 2 with the
+# record unwritten, and the removal below runs only against paths this
+# block accepted.
+$commonFull = [System.IO.Path]::GetFullPath($commonDir).TrimEnd("\")
+$reapMirrorFull = $null
+$reapBridgeFull = $null
+if ($ReapMirror) {
+    $reapMirrorFull = Resolve-ReapPath "the reap mirror" $ReapMirror $toplevel $commonFull $headFull $true
+}
+if ($ReapBridge) {
+    $reapBridgeFull = Resolve-ReapPath "the reap bridge" $ReapBridge $toplevel $commonFull $headFull $false
+}
+if ($reapMirrorFull -and $reapBridgeFull -and ($reapMirrorFull -ieq $reapBridgeFull)) {
+    Write-Output "ERROR: the reap mirror and the reap bridge are the same tree ($reapMirrorFull)"
     exit 2
 }
 
@@ -119,4 +274,36 @@ if ($CheckpointFile) {
 $outFile = Join-Path $attDir ($headFull + ".json")
 $att | ConvertTo-Json -Depth 3 | Set-Content -Path $outFile -Encoding ASCII
 Write-Output "attestation written: $outFile ($Verdict, $baseFull..$headFull)"
+# THE REAP, after the record and in this order: mirror, its advisory
+# sidecar, then the bridge. A failure stops at the first tree that
+# could not be removed (exit 3) and leaves the record standing.
+if ($reapMirrorFull) {
+    Invoke-Reap "mirror" $reapMirrorFull
+    # The mirror tool's advisory sibling, `<mirror>.source-manifest`,
+    # removed only when it is an ordinary file: a directory or a link
+    # there is not the sidecar and is left alone.
+    $sidecar = $reapMirrorFull + ".source-manifest"
+    $sa = $null
+    try {
+        $sa = [int][System.IO.File]::GetAttributes($sidecar)
+    } catch {
+        $sa = $null
+    }
+    if (($null -ne $sa) -and
+        (($sa -band [int][System.IO.FileAttributes]::Directory) -eq 0) -and
+        (($sa -band [int][System.IO.FileAttributes]::ReparsePoint) -eq 0)) {
+        try {
+            [System.IO.File]::SetAttributes($sidecar, [System.IO.FileAttributes]::Normal)
+            [System.IO.File]::Delete($sidecar)
+        } catch {
+            Write-Output ("ERROR: reap failed for " + $sidecar + ": " +
+                $_.Exception.Message + " - the attestation stands; remove the sidecar by hand")
+            exit 3
+        }
+        Write-Output ("reaped sidecar: " + $sidecar)
+    }
+}
+if ($reapBridgeFull) {
+    Invoke-Reap "bridge" $reapBridgeFull
+}
 exit 0
