@@ -95,7 +95,7 @@ The full previous text of every closed item is in git history at
 Status: OPEN
 Cost: a session that names the wrong tree at the right head has it removed, and every mirror a KitnEssentials session builds lands directly under the drive root because the canonical temp root blows the path budget, so the doctor has to find them by a name pattern rather than a declared parent
 Pairs: 101
-Verified: 2026-09-13 47bb1667d8a3
+Verified: 2026-09-13 2c2c5eeaeebc
 
 **Filed 2026-09-13 from the whole-branch review of the mirror reaper
 (item 101).** The emitter's identity guard refuses a tree that is not
@@ -106,7 +106,9 @@ is distinguish this debate's mirror or bridge from any other clone of
 the same repository sitting at the same head: a second plain clone
 with unpushed branches passes every rule if the session names it. The
 prose in references/preflight-mirror.md states the residual instead of
-hiding it.
+hiding it. A plan-mode debate ends with a frozen plan and no attestation,
+so its mirror has no mechanical reap point either; a plan-mode terminal
+event recorded mechanically is the third follow-up.
 
 **Two follow-ups, one decision each.**
 
@@ -141,7 +143,7 @@ root.
 Status: OPEN
 Cost: 78 mirror and bridge directories totalling 13.4 GB accumulated at the drive root in four review days, and the only removal is a hand sweep that has to guess which of them a live debate can still resume
 Pairs: 98, 102
-Verified: 2026-09-13 816bd463faf8
+Verified: 2026-09-13 e0cdbd57d4f3
 
 **Filed 2026-09-13 from the KitnEssentials handoff**
 `dev/docs/handoffs/parallax-mirror-reaper-handoff.md` (outside this
@@ -184,7 +186,9 @@ A reap path is accepted only when its `.git` is a directory and its
 `parallax@local` remediation commit above it), so another chat's mirror
 at another head is refused by name. The mirror tool's existing-path
 refusal names that route instead of `-Force`. `/parallax:doctor` reports
-the `kv*` inventory as a note and never deletes. Item 98 closes with it,
+the `kv*` inventory as a note and never deletes. A plan-mode debate has
+no attestation, so its mirror keeps the hand route; that residual is
+item 102's. Item 98 closes with it,
 because the mirror tool's `-Force` removal goes through the same
 function. Design: `docs/superpowers/specs/2026-09-13-mirror-reaper-design.md`.
 

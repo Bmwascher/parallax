@@ -47,6 +47,12 @@ validates every reap path BEFORE writing the record, writes the record,
 then removes the trees. No time-based sweep exists anywhere, and the
 doctor only reports.
 
+Stated limit: a PLAN-mode debate builds the same mirror through preflight
+step 3 and ends with a frozen plan, not an attestation, so its mirror has
+no mechanical reap point. Its removal is the hand route the doctor names
+until a plan-mode terminal event is recorded mechanically; backlog item
+102 carries that residual beside the same-head one.
+
 ## The identity guard
 
 A reap path is accepted only when ALL of these hold, checked before the

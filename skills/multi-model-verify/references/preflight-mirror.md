@@ -130,3 +130,10 @@ identity was recorded at.
 The bridge is the session's. The plugin never created it and cannot
 recognise one by shape, so the session that built it names it; the rule
 "pass the bridge to the emitter" belongs beside the rule that builds it.
+
+Two limits, stated. A plan-mode debate ends with a frozen plan and no
+attestation, so its mirror has no mechanical reap point and keeps the
+hand route until one exists (backlog item 102). And an ESCALATE the user
+may still extend is not yet terminal: emit the attestation, and with it
+the reap, only once the user has declined to extend, because a reaped
+mirror turns the extension's `resume` into a transport failure.

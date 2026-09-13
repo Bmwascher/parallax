@@ -488,3 +488,75 @@ def test_overlapping_mirror_and_bridge_are_refused(tmp_path, shape):
     assert "overlap" in proc.stdout, proc.stdout
     assert not att_file(repo, head).exists()
     assert mirror.exists() and bridge.exists()
+
+
+# ---------------------------------------------------------------------
+# Group 5: pre-round-1 fable fix wave (2026-09-13)
+# ---------------------------------------------------------------------
+def test_a_sidecar_failure_names_the_unattempted_bridge(tmp_path):
+    repo, base, head = make_repo(tmp_path)
+    mirror = make_mirror(repo, tmp_path / "kv-t")
+    bridge = make_bridge(repo, tmp_path / "kvs-t")
+    sidecar = tmp_path / "kv-t.source-manifest"
+    sidecar.write_text("advisory\n", encoding="utf-8")
+    with open(sidecar, "r", encoding="utf-8"):
+        proc = attest(repo, base, head, mirror=mirror, bridge=bridge)
+    assert proc.returncode == 3, proc.stdout + proc.stderr
+    assert "reap failed for " + str(sidecar) in proc.stdout, proc.stdout
+    assert "the bridge was not attempted: " + str(bridge) in proc.stdout, proc.stdout
+    assert att_file(repo, head).is_file()
+    assert not mirror.exists()
+    assert bridge.exists()
+    assert sidecar.exists()
+
+
+def test_a_git_directory_that_is_a_junction_is_refused(tmp_path):
+    repo, base, head = make_repo(tmp_path)
+    real = make_mirror(repo, tmp_path / "real")
+    fake = tmp_path / "fake"
+    fake.mkdir()
+    (fake / "b.txt").write_text("b\n", encoding="utf-8")
+    junction(fake / ".git", real / ".git")
+    proc = attest(repo, base, head, mirror=fake)
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "directory link" in proc.stdout, proc.stdout
+    assert not att_file(repo, head).exists()
+    assert fake.exists()
+    assert (real / ".git" / "HEAD").is_file()
+
+
+def test_a_bridge_with_a_remediation_commit_is_refused(tmp_path):
+    # The remediation shape (a single parallax@local commit over the
+    # attested head) is accepted for the mirror only; a bridge in that
+    # same shape is not the attested head and is refused like any other.
+    repo, base, head = make_repo(tmp_path)
+    bridge = make_bridge(repo, tmp_path / "kvs-t")
+    (bridge / "AGENTS.md").write_text("planted\n", encoding="utf-8")
+    git(bridge, "add", "AGENTS.md")
+    subprocess.run(["git", "-C", str(bridge), "-c", "user.email=parallax@local",
+                    "-c", "user.name=parallax", "commit", "-q", "-m",
+                    "remove instruction back-channels for review"],
+                   check=True, capture_output=True)
+    proc = attest(repo, base, head, bridge=bridge)
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "not the attested head" in proc.stdout, proc.stdout
+    assert not att_file(repo, head).exists()
+    assert bridge.exists()
+
+
+def test_a_read_only_root_is_removed(tmp_path):
+    tree = tmp_path / "tree"
+    (tree / "sub").mkdir(parents=True)
+    (tree / "sub" / "f.txt").write_text("x\n", encoding="utf-8")
+    subprocess.run(["attrib", "+R", str(tree)], check=True)
+    proc = run_ps(harness(tmp_path), "-Target", str(tree))
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert not tree.exists()
+
+
+def test_a_relative_reap_path_is_refused(tmp_path):
+    repo, base, head = make_repo(tmp_path)
+    proc = attest(repo, base, head, mirror="kv-relative")
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "absolute path" in proc.stdout, proc.stdout
+    assert not att_file(repo, head).exists()

@@ -150,6 +150,11 @@ function Resolve-ReapPath($label, $raw, $repoTop, $commonFull, $headFull, $allow
             " - never a mirror or a bridge ($full)")
         exit 2
     }
+    if (($ga -band [int][System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+        Write-Output ("ERROR: $label has a .git that is a directory link, so its" +
+            " identity would be read through the link ($full)")
+        exit 2
+    }
     $treeHead = (& git --git-dir "$dotGit" rev-parse --verify --quiet "HEAD^{commit}" 2>$null | Out-String).Trim()
     if (($LASTEXITCODE -ne 0) -or -not $treeHead) {
         Write-Output "ERROR: $label has no readable HEAD ($full)"
@@ -294,7 +299,9 @@ Write-Output "attestation written: $outFile ($Verdict, $baseFull..$headFull)"
 # sidecar, then the bridge. A failure stops at the first tree that
 # could not be removed (exit 3) and leaves the record standing.
 if ($reapMirrorFull) {
-    Invoke-Reap "mirror" $reapMirrorFull $(if ($reapBridgeFull) { "; the bridge was not attempted: " + $reapBridgeFull } else { "" })
+    $bridgeNote = ""
+    if ($reapBridgeFull) { $bridgeNote = "; the bridge was not attempted: " + $reapBridgeFull }
+    Invoke-Reap "mirror" $reapMirrorFull $bridgeNote
     # The mirror tool's advisory sibling, `<mirror>.source-manifest`,
     # removed only when it is an ordinary file: a directory or a link
     # there is not the sidecar and is left alone.
@@ -312,8 +319,8 @@ if ($reapMirrorFull) {
             [System.IO.File]::SetAttributes($sidecar, [System.IO.FileAttributes]::Normal)
             [System.IO.File]::Delete($sidecar)
         } catch {
-            Write-Output ("ERROR: reap failed for " + $sidecar + ": " +
-                $_.Exception.Message + " - the attestation stands; remove the sidecar by hand")
+            Write-Output ("ERROR: reap failed for " + $sidecar + ": " + $_.Exception.Message +
+                " - the attestation stands; remove the sidecar by hand" + $bridgeNote)
             exit 3
         }
         Write-Output ("reaped sidecar: " + $sidecar)
