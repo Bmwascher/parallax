@@ -76,6 +76,10 @@ REQUIRED_DUAL_HOST_MODULES = [
     "evals/multi-model-verify/test_kimi_lane_login.py",
     "evals/multi-model-verify/test_kimi_lane_home.py",
     "evals/multi-model-verify/test_lane_credential_live_support.py",
+    # 0.34.0, backlog item 100. The resolver and the writer sweep are
+    # PowerShell tools driven by path; a module in the workflow but not
+    # in this list is not locked into both hosts.
+    "evals/multi-model-verify/test_artifact_roots.py",
 ]
 
 # The dual-host pair this workflow runs, and the ONLY set that counts as

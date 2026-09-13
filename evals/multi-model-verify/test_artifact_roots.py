@@ -400,3 +400,121 @@ def test_sweep_can_fail(tmp_path):
             if rx.search("It writes `.git/parallax/attestations/<head-sha>.json`")]
     assert hits == ["an attestation or checkpoint root spelled under .git/ instead of the git common dir"]
 
+
+# ---------------------------------------------------------------------
+# Group 3b: the real writers
+# ---------------------------------------------------------------------
+def tree_paths(root):
+    """Every file AND directory under root as a repo-relative normalized
+    path, .git included. A SET OF PATHS, not contents: the mirror tool's
+    status capture rewrites .git/index in place (new-review-mirror.ps1,
+    the status capture), so a content diff would fire on a correct tool
+    and a path-set diff does not. Directories are included so an empty
+    directory a writer creates is observed. Stated limit: a path created
+    and deleted again between the two snapshots is not observed, and the
+    Flash implementer's transient brief (agents/flash-implementer.md) is
+    a real example of that shape; this test samples endpoints."""
+    return {norm(p.relative_to(root)) for p in root.rglob("*")}
+
+
+def new_paths(root, before):
+    return tree_paths(root) - before
+
+
+def write_attestation(repo, base, head):
+    return subprocess.run(
+        [POWERSHELL, "-NoProfile", "-NonInteractive", "-File", str(ATTEST),
+         "-RepoRoot", str(repo), "-BaseSha", base, "-HeadSha", head,
+         "-Verdict", "PASS", "-VerificationStatus", "FULL",
+         "-RouteNote", "effective route confirmed", "-Rounds", "1",
+         "-Participants", "t (session) / t (reviewer)"],
+        capture_output=True, text=True, timeout=60)
+
+
+@needs_host
+def test_the_real_writers_create_nothing_in_repo_but_the_attestation(tmp_path):
+    # The three tools that write during a round, run for real against a
+    # disposable two-commit repository. The only path that may appear
+    # inside the repository is the attestation, and it must satisfy the
+    # resolver's own membership answer.
+    from test_dispatch_round import build_real_mirror, prepare_default
+    repo = make_repo(tmp_path, name="src", commits=2)
+    base = git(repo, "rev-parse", "HEAD~1").strip()
+    head = git(repo, "rev-parse", "HEAD").strip()
+    before = tree_paths(repo)
+
+    att = write_attestation(repo, base, head)
+    assert att.returncode == 0, att.stdout + att.stderr
+    mirror = build_real_mirror(tmp_path, source=repo)
+    assert norm(mirror.source) == norm(repo)
+    prep = prepare_default(tmp_path, mirror=mirror)
+    assert prep.returncode == 0, prep.stdout + prep.stderr
+
+    appeared = new_paths(repo, before)
+    # The attestation file and the two directories the emitter creates
+    # for it (write-attestation.ps1: New-Item -Force on the attestation
+    # dir), and nothing else.
+    assert appeared == {
+        ".git/parallax",
+        ".git/parallax/attestations",
+        f".git/parallax/attestations/{head}.json",
+    }, sorted(appeared)
+    # The attestation root and the file under it are inside the retained
+    # set. `.git/parallax` is the parent SHARED by the attestation and
+    # checkpoint rows, created by the emitter on the way down; it is not
+    # itself a declared root, so -Assert refuses it, and the exact-set
+    # assertion above is what bounds it.
+    for rel in (".git/parallax/attestations",
+                f".git/parallax/attestations/{head}.json"):
+        proc = run_resolver("-RepoRoot", str(repo), "-Assert", str(repo / rel))
+        assert proc.returncode == 0, proc.stdout + proc.stderr
+        assert "assert: inside attestation root" in proc.stdout
+    proc = run_resolver("-RepoRoot", str(repo), "-Assert", str(repo / ".git" / "parallax"))
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+
+
+@needs_host
+def test_a_writer_that_strays_is_reported(tmp_path):
+    # Negative control for the diff-and-assert logic above: a stub writer
+    # that lands a round record beside the plans root is caught by the
+    # same path-set diff and refused by the same membership answer.
+    repo = make_repo(tmp_path)
+    before = tree_paths(repo)
+    stray = repo / "rounds" / "x"
+    stray.parent.mkdir()
+    stray.write_text("a round record in the wrong root\n")
+    appeared = new_paths(repo, before)
+    assert appeared == {"rounds", "rounds/x"}, sorted(appeared)
+    proc = run_resolver("-RepoRoot", str(repo), "-Assert", str(stray))
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "outside every retained root" in proc.stdout
+
+
+@needs_host
+def test_an_empty_directory_a_writer_creates_is_reported(tmp_path):
+    # A writer that only mkdirs an undeclared root leaves no file for a
+    # file-only snapshot to see; the snapshot includes directories so
+    # this is observed too.
+    repo = make_repo(tmp_path)
+    before = tree_paths(repo)
+    (repo / ".superpowers" / "review-sources").mkdir(parents=True)
+    appeared = new_paths(repo, before)
+    assert appeared == {".superpowers", ".superpowers/review-sources"}, sorted(appeared)
+    proc = run_resolver("-RepoRoot", str(repo), "-Assert",
+                        str(repo / ".superpowers" / "review-sources"))
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+
+
+@needs_host
+def test_the_mirror_row_is_enforced_by_the_mirror_tool(tmp_path):
+    # The declaration's `Canonical review mirror root` is fixed outside
+    # the repository because the tool refuses anything else. The refusal
+    # is pinned in test_review_mirror.py; this one cites the row.
+    repo = make_repo(tmp_path)
+    proc = subprocess.run(
+        [POWERSHELL, "-NoProfile", "-NonInteractive", "-File", str(MIRROR_TOOL),
+         "-RepoRoot", str(repo), "-MirrorPath", str(repo / "inside" / "mirror"),
+         "-SkipProbe"],
+        capture_output=True, text=True, timeout=120)
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "inside the repo" in proc.stdout
