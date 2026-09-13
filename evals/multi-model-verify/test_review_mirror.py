@@ -3223,3 +3223,44 @@ def test_a_mirror_whose_current_state_cannot_be_measured_is_refused(tmp_path):
                               capture_output=True, text=True)
         assert undo.returncode == 0, undo.stdout + undo.stderr
         assert denied.read_text(), "the deny ACE is still in force"
+
+
+def test_an_existing_mirror_refusal_names_the_reap_route_not_force_first(tmp_path):
+    # Backlog item 101: the count grew because this refusal suggested
+    # -Force and a session that did not want an in-place rebuild built
+    # kv-<tag>-2 beside the first. The reap route comes first now, and
+    # -Force is named as the mid-debate rebuild it is.
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    mirror.mkdir()
+    (mirror / "stale.txt").write_text("from a previous debate\n")
+    proc = run_mirror(repo, mirror)
+    assert proc.returncode == 2
+    assert "already exists" in proc.stdout
+    assert ("A finished debate reaps it through write-attestation.ps1"
+            " -ReapMirror") in proc.stdout, proc.stdout
+    assert proc.stdout.index("-ReapMirror") < proc.stdout.index("-Force"), (
+        "the reap route is named before the rebuild flag")
+    assert (mirror / "stale.txt").exists()
+
+
+def test_a_force_rebuild_whose_removal_fails_terminates_by_name_before_creating_anything(tmp_path):
+    # Backlog item 98. The old removal was `Remove-Item -Recurse -Force`
+    # with nothing checked after it, so a held handle left the stale
+    # tree in place and the copy merged over it. This drives a REAL
+    # removal failure - a handle this process holds open - not a
+    # simulated one.
+    repo = make_repo(tmp_path)
+    mirror = tmp_path / "mirror"
+    mirror.mkdir()
+    held = mirror / "held.txt"
+    held.write_text("open\n")
+    with open(held, "r"):
+        proc = run_mirror(repo, mirror, "-Force")
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "ERROR: the existing mirror could not be removed:" in proc.stdout, proc.stdout
+    assert str(held) in proc.stdout, "the failure names the entry that stopped it"
+    assert held.exists()
+    assert not (mirror / "kept.txt").exists(), (
+        "construction must terminate before the copy, so nothing from the"
+        " source may have landed over the stale tree")

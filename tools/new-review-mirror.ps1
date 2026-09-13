@@ -96,6 +96,12 @@ param(
 # as an order-dependent test rather than a constant one.
 [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
 
+# The directory-link guard and the tree removal are shared with the
+# attestation emitter's reap (backlog item 101) and live in one file so
+# the two tools cannot drift apart on either. Functions only; nothing
+# runs at dot-source time.
+. (Join-Path $PSScriptRoot "review-tree-removal.ps1")
+
 function Invoke-GitProcess($repo, $gitArgs) {
     # Run git and hand back its stdout as RAW BYTES.
     #
@@ -1788,36 +1794,7 @@ if ($deepestLen -ge 0) {
 # matching its spelling, so a mirror or override path with a reparse
 # point among its existing ancestors is refused outright rather than
 # compared. This runs before anything is created or deleted.
-function Test-PathOrAncestorIsLink($path) {
-    # The path itself, then each existing ancestor up to the drive root:
-    # is any of them a reparse point? Attributes are read directly
-    # rather than after a Test-Path, because a DANGLING junction is a
-    # reparse point Test-Path may report as absent; a missing entry is
-    # the one condition that skips a level, and it is recognised by the
-    # exception type, never by a false from a helper. Returns the
-    # offending path or $null.
-    $probe = ([string]$path).TrimEnd("\", "/")
-    while ($probe -and -not [string]::IsNullOrEmpty([System.IO.Path]::GetFileName($probe))) {
-        $pa = 0
-        $missing = $false
-        try {
-            $pa = [int][System.IO.File]::GetAttributes($probe)
-        } catch [System.IO.FileNotFoundException] {
-            $missing = $true
-        } catch [System.IO.DirectoryNotFoundException] {
-            $missing = $true
-        } catch {
-            Write-Output ("ERROR: " + $probe + " could not be read while" +
-                " checking for a directory link: " + $_.Exception.Message)
-            exit 2
-        }
-        if (-not $missing -and (($pa -band [int][System.IO.FileAttributes]::ReparsePoint) -ne 0)) {
-            return $probe
-        }
-        $probe = [System.IO.Path]::GetDirectoryName($probe)
-    }
-    return $null
-}
+# The helper itself is Test-PathOrAncestorIsLink in review-tree-removal.ps1.
 
 foreach ($pair in @(@("mirror path", $MirrorPath), @("override path", $OverrideOut),
                     @("source manifest path", $SourceManifestOut))) {
@@ -2014,10 +1991,26 @@ if ($null -ne $smAttr) {
 if (Test-Path -LiteralPath $MirrorPath) {
     if (-not $Force) {
         Write-Output ("ERROR: $MirrorPath already exists - a stale mirror" +
-            " reads exactly like a fresh one. Pass -Force to replace it.")
+            " reads exactly like a fresh one. A finished debate reaps it" +
+            " through write-attestation.ps1 -ReapMirror; pass -Force only" +
+            " to rebuild it in place for a debate that is still running.")
         exit 2
     }
-    Remove-Item -LiteralPath $MirrorPath -Recurse -Force
+    # ITEM 98. The removal used to be `Remove-Item -Recurse -Force` with
+    # nothing checked after it: a locked file, a denied ACE or a handle
+    # held by another process left the tree partly intact, execution
+    # reached New-Item, and robocopy /E merged the source over what
+    # survived. Now the shared removal walks the tree itself, stops on
+    # the first failure with the entry named, and re-examines the root;
+    # a failure terminates construction here, before anything is created
+    # or copied.
+    $removed = Remove-ReviewTree $MirrorPath
+    if (-not $removed.Ok) {
+        Write-Output ("ERROR: the existing mirror could not be removed: " +
+            $removed.Reason + " - construction stopped before anything" +
+            " was created or copied")
+        exit 2
+    }
 }
 New-Item -ItemType Directory -Force -Path $MirrorPath | Out-Null
 # LITERAL. This is the reassignment the round-6 reviewer reached with a
