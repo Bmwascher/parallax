@@ -363,3 +363,32 @@ every normally configured repo teaches the user to ignore BROKEN.
 
 The probe spends no tokens: `codex debug prompt-input` renders the prompt
 and calls no model.
+
+## 10. Review mirror inventory
+
+Observation only: this check reports and never deletes, whatever it
+finds. List every DIRECTORY whose name matches `kv*` sitting directly
+under `$env:SystemDrive\` and directly under `$env:TEMP` - the two
+places a review mirror or its clone bridge is built (the canonical
+review mirror root is the temp directory; a session whose packets blow
+the path budget builds at the drive root instead, and both are outside
+every checkout). Measure the count, the total size in GB (sum of file
+lengths, reparse points NOT followed), and the oldest `LastWriteTime`
+among them. A directory that cannot be measured is named as unmeasured
+and counted; it never reads as empty.
+
+- Nothing found: OK, `no review mirrors present`.
+- Found, total under 5 GB AND oldest under 3 days: OK, reported as a
+  NOTE with the three numbers.
+- Total 5 GB or more, OR oldest 3 days or more: STALE, with the three
+  numbers and this fix: a finished debate's mirror is removed by the
+  attestation emitter, `write-attestation.ps1 -ReapMirror <mirror>
+  [-ReapBridge <bridge>]`, and one whose debate is over without an
+  attestation is removed by hand; the rule and its measurement are
+  backlog item 101. Never name a directory as safe to delete: the
+  doctor cannot tell which of them a live chat can still resume, and a
+  `resume` against a deleted mirror is a transport failure.
+
+The thresholds are the ones the 2026-09-13 measurement would have
+tripped on day two: 13.4 GB across 78 directories accumulated in four
+review days, about 3 GB per active day.

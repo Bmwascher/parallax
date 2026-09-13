@@ -374,3 +374,57 @@ def test_without_the_parameters_the_emitter_removes_nothing(tmp_path):
 def test_emitter_header_declares_exit_three():
     body = read(WRITE)
     assert "Exit codes: 0 written, 2 argument/repo error, 3 written but a reap failed" in body
+
+
+# ---------------------------------------------------------------------
+# Group 3: the prose carries the rule
+# ---------------------------------------------------------------------
+def test_skill_finish_line_passes_the_reap_paths():
+    body = read(SKILL)
+    assert "[-ReapMirror <mirror>] [-ReapBridge <bridge>]" in body
+    assert "the End of life section of references/preflight-mirror.md" in body
+    assert body.count("write-attestation.ps1") >= 1
+
+
+def test_preflight_mirror_reference_states_the_end_of_life_rule():
+    body = read(PREFLIGHT)
+    assert "## End of life" in body
+    for anchor in (
+        "The attestation is the reap point",
+        "-ReapMirror",
+        "-ReapBridge",
+        "never an age",
+        "HEAD is the attested head",
+        "a `.git` FILE",
+        "kv-<tag>-2",
+    ):
+        assert anchor in body, "end-of-life anchor missing: " + anchor
+
+
+def test_doctor_inventories_the_mirrors_and_never_deletes():
+    body = read(DOCTOR)
+    assert "## 10. Review mirror inventory" in body
+    for anchor in (
+        "kv*",
+        "$env:TEMP",
+        "$env:SystemDrive",
+        "5 GB",
+        "3 days",
+        "LastWriteTime",
+        "-ReapMirror",
+        "backlog item 101",
+    ):
+        assert anchor in body, "doctor inventory anchor missing: " + anchor
+    section = body.split("## 10. Review mirror inventory", 1)[1]
+    assert re.search(r"never delete", section, re.IGNORECASE), (
+        "the inventory is observation, not action")
+    assert "Remove-Item" not in section
+
+
+def test_mirror_tool_refusal_and_emitter_agree_on_the_parameter_name():
+    # One spelling in the tool that names the route and the tool that
+    # implements it; a rename that misses one leaves a refusal pointing
+    # at a parameter that does not exist.
+    assert "write-attestation.ps1 -ReapMirror" in read(MIRROR_TOOL)
+    assert "[string]$ReapMirror" in read(WRITE)
+    assert "[string]$ReapBridge" in read(WRITE)
