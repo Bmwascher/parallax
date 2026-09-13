@@ -1387,3 +1387,49 @@ git commit -m "restate what closes item 100 after the artifact roots survey"
 **Placeholders.** None. Every code step carries the code; the two "if it fails" notes in Tasks 3 and 4 direct the implementer to stop and report, which is the spec's rule for those two outcomes.
 
 **Type consistency.** `run_resolver(*args, tool=None)`, `make_repo(tmp_path, name, commits)`, `norm`, `git`, `tree_paths`, `new_paths` are defined once in `test_artifact_roots.py` and used with those names in Tasks 2 and 4. `build_real_mirror(tmp_path, source=None)` matches its call `build_real_mirror(tmp_path, source=repo)`. The JSON keys the tool emits (`repo`, `docsRoot`, `source`, `frozenPlan`, `rounds`, `sddLedger`, `reviewMirror`, `attestation`, `checkpoint`, `assert`) match the keys the tests read. The text-line names match the `keys ==` list in `test_resolver_text_output_names_each_root_then_the_source`.
+
+---
+
+## Debate record
+
+**Participants:** Opus 5 (session) / GPT-6 Astra (codex exec, session 01a0985e-1d0d-7940-b544-11e0ffeba5d9)
+**Rounds used:** 4 of 4 (fix-verify budget, declared before round 1; contested-round cap 4, never reached)
+**Outcome:** converged
+**Verification status:** FULL
+**Degradation:** none
+**Authorized by:** n/a
+**Raw rounds:** docs/superpowers/plans/rounds/2026-09-12-artifact-roots/ (briefs, replies, transcripts, receipts and binder results for all four rounds, plus the Fable spec pre-read; README.md is the round-by-round record)
+
+Every round's transcript header read `model: gpt-6-astra`, `provider: openai`,
+`reasoning effort: high`, `sandbox: read-only`, `workdir: C:/Temp/pxar1`; rounds
+2 to 4 echoed the resumed session id. Every round was bound to its brief by
+`tools/read-codex-round-evidence.ps1` with the receipt's sealed prior-state hash:
+`status: clean`, `sealed: sealed`. Preflight: mirror enumeration empty, client
+context probe clean (31 home-scoped skills before the override, 0 after; the
+user's global `~/.codex/AGENTS.md` recorded), tool-surface probe clean (0 tools
+under the dispatch flags; a mitigation, never proof of removal).
+
+### Resolved points
+| # | Claim | Raised by | Outcome | Evidence |
+|---|-------|-----------|---------|----------|
+| 1 | Region id `artifact-roots` makes `tools/artifact-roots.ps1` an unresolvable citation | reviewer R1 | accepted; id is `round-artifact-roots` | evals/multi-model-verify/test_contract_coverage.py:794-850 |
+| 2 | `IsPathRooted` throws on `<` under 5.1; relative common dir joined to the wrong base; `./` kept in `-DocsRoot` | reviewer R1 | accepted into Task 2 | tools/write-attestation.ps1:61; reviewer probe on both hosts |
+| 3 | Ceiling arithmetic off by one (linter strips frontmatter) | reviewer R1 | accepted; 25987 -> 25985 | evals/tools/skill_lint.py:163-182, :339 |
+| 4 | Sweep negative control never exercised the ledger shape positively | reviewer R1 | accepted into Task 3 | plan Task 3 Step 1 |
+| 5 | File-only snapshot misses an empty directory | reviewer R1 | accepted into Task 4 | plan Task 4 Step 3 |
+| 6 | Flash implementer writes a transient brief into the checkout | reviewer R1 (class sweep) | accepted as a stated exclusion and limit | agents/flash-implementer.md:67, :79 |
+| 7 | SKILL.md:389 spells the attestation root under `.git/`, wrong in a linked worktree | reviewer R1 (class sweep) | accepted; user authorized Edit C | tools/write-attestation.ps1:54-63 |
+| 8 | Writer test asserts membership on the shared parent `.git/parallax`, which `-Assert` refuses; stray control omits `rounds/` | reviewer R2 | accepted into Task 4 | plan Task 4 Step 3 |
+| 9 | `-RepoRoot .` resolved against the process cwd | reviewer R2 | accepted into Task 2 (mechanism corrected in R3) | tools/new-review-mirror.ps1:1234-1244 |
+| 10 | Copy date is 2026-09-08, not 09-07 | reviewer R2 | accepted into the spec and backlog text | rollout records 3682 and 3684 |
+| 11 | Unresolvable paths exit 1 (uncaught throw) instead of the contract's 2; `bad|root` differs by host | reviewer R3 | accepted into Task 2 with four regressions | plan Task 2 Step 3 |
+| 12 | The R2 explanation mis-stated the mechanism (git runs in PowerShell's location; `GetFullPath` uses the process cwd) | reviewer R3 | accepted; comments and spec corrected | tools/new-review-mirror.ps1:1234 |
+| 13 | Codex-controller attribution of the 54 MB copy | session | UNVERIFIED by both reviewers (outside the mirror); the spec names the rollout file; carries no weight | spec fact 4 |
+
+### Escalated points (user-decided)
+| # | Question | Session position | Reviewer position | Owner's call |
+|---|----------|------------------|-------------------|--------------|
+| - | none | | | |
+
+### Degraded-mode note
+n/a

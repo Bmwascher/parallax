@@ -198,3 +198,32 @@ repairs are confirmed present; B is a defect inside one of them.
 All of B, in the commit that carries this section. Three of four
 budgeted exchanges are spent; R4 is the last before the user's word is
 needed to continue.
+
+## Astra R4 - COUNTED, verdict PASS (terminal)
+
+Dispatched 2026-09-12 against plan blob `257f656` (HEAD `cd7aea4`),
+mirror rebuilt at `C:/Temp/pxar1` (probe clean, `override-r4.toml`, same
+sha256), resumed session `01a0985e-1d0d-7940-b544-11e0ffeba5d9`,
+background task `Astra R4 debate round`. Wrapper exit 0, `reply-present`.
+Route confirmed as before, same session id echoed. Bound with `-Resume`,
+`status: clean`, `sealed: sealed` (`binder-r4.json`).
+
+Artifacts: `brief-astra-r4.md`, `astra-r4-reply.md`,
+`astra-r4-transcript.txt`, `receipt-r4.json`, `binder-r4.json`.
+
+**Reviewer verdict: PASS.** A PASS, B PASS, C PASS. The reviewer ran 22
+read-only probe cases of the extracted resolver on each host and found no
+remaining functional defect. No new finding, no contested point.
+
+### Final adjudication (session)
+
+An adjudicated dry round: no new substantive finding and no outstanding
+contested point. The plan at blob `257f656` is HEAD's copy; every finding
+from rounds 1 to 3 was verified against source and applied in its own
+round, and R4 confirmed each application. Terminal verdict: **PASS**.
+Budget: 4 of 4 declared exchanges used; the user's offered extension was
+not needed. The plan is frozen at the commit that carries this section.
+
+Status line: GPT-6 Astra (codex exec, session 01a0985e) with Opus 5
+(session); 4 rounds; converged, 0 escalated; Verification status FULL;
+effective route confirmed.
