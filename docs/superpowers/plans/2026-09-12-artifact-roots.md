@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - Tools under `tools/` are ASCII ONLY and run under BOTH Windows PowerShell 5.1 and PowerShell 7. Never run a native `git` call under `$ErrorActionPreference = 'Stop'`; drop to `Continue` around it and read `$LASTEXITCODE`.
-- `SKILL.md` is at 6497 of `skill_lint.py`'s 6500-token ceiling (`len(body) // 4`, so 26000 characters). Task 3 makes EXACTLY the two edits it quotes and nothing else in that file. If `python evals/tools/skill_lint.py skills/multi-model-verify --strict` reports an ERROR afterwards, STOP and report to the user; do not trim other text.
+- `SKILL.md` is at 6496 of `skill_lint.py`'s 6500-token ceiling (`len(body) // 4` over the frontmatter-stripped body, so 26000 characters; 25987 measured 2026-09-12). Task 3 makes EXACTLY the three edits it quotes and nothing else in that file. If `python evals/tools/skill_lint.py skills/multi-model-verify --strict` reports an ERROR afterwards, STOP and report to the user; do not trim other text.
 - A contract region must sit WHOLE inside ONE pin in `evals/multi-model-verify/`, the pin being a plain string literal in `"literal" in body` form (adjacent literals fold; a variable does not count). Do not reflow any existing paragraph in `skills/`: raw-text pins break on a rewrap.
 - No path literal in `skills/`, `agents/`, `commands/`, `hooks/` or `tools/` may name a round root except the declaration lines themselves. Cite the declaration instead. In prose, do not write the strings `review-sources`, `dev/docs/superpowers` or `superpowers/rounds/`; Task 3's sweep forbids them.
 - Stage by explicit path (`git add <file> <file>`); `git add -A` is refused by the family git guard. Commit messages are lowercase imperative with no AI attribution, and must not contain a token that looks like a PowerShell flag (`-Prepare`, `-Assert`): the commit-msg guard reads it as an option.
@@ -25,12 +25,12 @@
 ### Task 1: The declaration region, its registration, and its pin
 
 **Files:**
-- Modify: `skills/multi-model-verify/references/model-prompting-notes.md` (insert before the line `## The scope guard (every brief, every lane)`, currently line 768)
+- Modify: `skills/multi-model-verify/references/model-prompting-notes.md` (insert before the line `## The scope guard (every brief, every lane)`, currently line 768). The region id is `round-artifact-roots`, never bare `artifact-roots`: `test_contract_coverage.py:795` requires every occurrence of a declared id in `skills/`, `agents/` and `commands/` to be written `<file>.md's <id>`, and the tool's file name `tools/artifact-roots.ps1` would be an unresolvable citation of a region named `artifact-roots`.
 - Modify: `evals/multi-model-verify/test_contract_coverage.py:769-773` (the `DECLARED_REGIONS` set, after `"back-channel-auto-mirror",`)
 - Create: `evals/multi-model-verify/test_artifact_roots.py`
 
 **Interfaces:**
-- Produces: the contract region `artifact-roots` holding exactly eight lines with these labels, which Task 2's tool parses by label: `Canonical docs root`, `Canonical docs root override`, `Canonical frozen plan path`, `Canonical rounds root`, `Canonical SDD ledger root`, `Canonical review mirror root`, `Canonical attestation root`, `Canonical checkpoint root`.
+- Produces: the contract region `round-artifact-roots` holding exactly eight lines with these labels, which Task 2's tool parses by label: `Canonical docs root`, `Canonical docs root override`, `Canonical frozen plan path`, `Canonical rounds root`, `Canonical SDD ledger root`, `Canonical review mirror root`, `Canonical attestation root`, `Canonical checkpoint root`.
 - Produces: the module `test_artifact_roots.py` with helpers `read(path)`, `REPO`, `NOTES`, `TOOL`, `POWERSHELL`, `needs_host` that Tasks 2 and 4 extend.
 
 - [ ] **Step 1: Register the region so the coverage suite goes red**
@@ -43,21 +43,24 @@ In `evals/multi-model-verify/test_contract_coverage.py`, inside `DECLARED_REGION
     # repo-side override on its own. The region holds EXACTLY the eight
     # declaration lines tools/artifact-roots.ps1 parses; the prose that
     # says why two rows are overridable and four are fixed sits outside
-    # the markers, because a region must fit one pin.
-    "artifact-roots",
+    # the markers, because a region must fit one pin. The id carries the
+    # `round-` prefix because the citation rule below reads every bare
+    # occurrence of a declared id, and the tool's own file name would
+    # otherwise be an unresolvable citation.
+    "round-artifact-roots",
 ```
 
 - [ ] **Step 2: Run the coverage suite and confirm the red names the region**
 
 Run: `python -m pytest evals/multi-model-verify/test_contract_coverage.py -q -k declared_regions_match`
-Expected: FAIL with `declared region(s) not found in any document: ['artifact-roots']`
+Expected: FAIL with `declared region(s) not found in any document: ['round-artifact-roots']`
 
 - [ ] **Step 3: Write the declaration pin test**
 
 Create `evals/multi-model-verify/test_artifact_roots.py`:
 
 ```python
-"""Contract pins and behavioural checks for the artifact-roots declaration
+"""Contract pins and behavioural checks for the round-artifact-roots declaration
 (BACKLOG item 100; spec docs/superpowers/specs/2026-09-12-artifact-roots-design.md).
 
 Three groups. DECLARATION: the eight canonical lines sit in one contract
@@ -114,7 +117,7 @@ def test_declaration_region_is_pinned_whole():
     # physical line in the notes, because this is a raw-text pin.
     notes = read(NOTES)
     assert (
-        "<!-- contract:start id=artifact-roots -->\n"
+        "<!-- contract:start id=round-artifact-roots -->\n"
         "Canonical docs root: `docs/superpowers`\n"
         "Canonical docs root override: `dev/docs/superpowers`\n"
         "Canonical frozen plan path: `<docs-root>/plans/<date>-<topic>.md`\n"
@@ -133,12 +136,12 @@ def test_primary_model_declaration_precedes_the_artifact_roots():
     # region may sit ahead of it.
     notes = read(NOTES)
     assert notes.index("Canonical model id:") < notes.index(
-        "contract:start id=artifact-roots")
+        "contract:start id=round-artifact-roots")
 
 
 def test_fixed_rows_state_their_reason_outside_the_region():
     notes = read(NOTES)
-    tail = notes[notes.index("contract:start id=artifact-roots"):]
+    tail = notes[notes.index("contract:start id=round-artifact-roots"):]
     assert "Superpowers owns it" in tail
     assert "never inside the reviewed repository" in tail
     assert "git rev-parse --git-common-dir" in tail
@@ -166,7 +169,7 @@ the record of why: one consumer repository held rounds, ledgers and a
 mirror under four roots, because each writer read the repo-side
 override on its own.
 
-<!-- contract:start id=artifact-roots -->
+<!-- contract:start id=round-artifact-roots -->
 Canonical docs root: `docs/superpowers`
 Canonical docs root override: `dev/docs/superpowers`
 Canonical frozen plan path: `<docs-root>/plans/<date>-<topic>.md`
@@ -222,6 +225,11 @@ The operating rule, which SKILL.md's preflight step 4 points at:
 - Dispatch directories, receipts, briefs, prior-state files and the
   probe's override file are session scratch outside the repository for
   the whole round; only their retained copies enter the rounds root.
+- Implementation-time scratch is outside this contract: the rows name
+  what a REVIEW ROUND writes. agents/flash-implementer.md writes a
+  transient task brief into the checkout and deletes it before any
+  evidence check; the SDD ledger is the one implementation artifact
+  named here, because a round cites it.
 - A controller other than Claude Code is outside this contract. The
   2026-09-07 record in item 100 is of one that wrote a 54 MB copy of a
   worktree under a root of its own naming; the plugin binds its own
@@ -257,7 +265,7 @@ git commit -m "declare every artifact root a round writes in one contract region
 - Modify: `evals/multi-model-verify/test_artifact_roots.py` (append the resolver group)
 
 **Interfaces:**
-- Consumes: the `artifact-roots` region and its eight labels from Task 1.
+- Consumes: the `round-artifact-roots` region and its eight labels from Task 1.
 - Produces: `tools/artifact-roots.ps1 -RepoRoot <path> [-DocsRoot <rel>] [-Assert <path>] [-Json]`. Text output is nine `name: value` lines in this order: `repo`, `docs-root`, `docs-root source`, `frozen-plan`, `rounds`, `sdd-ledger`, `review-mirror`, `attestation`, `checkpoint`, then with `-Assert` one line `assert: inside <root name>: <path>` or `assert: outside every retained root: <path>`. JSON output is one object with keys `repo`, `docsRoot`, `source`, `frozenPlan`, `rounds`, `sddLedger`, `reviewMirror`, `attestation`, `checkpoint`, and with `-Assert` an `assert` object `{path, inside, root}`. Exit 0 resolved or asserted inside; 1 asserted outside; 2 parameter fault, unreadable declaration, or not a git tree. Task 4 calls `-Assert`.
 
 - [ ] **Step 1: Append the resolver tests**
@@ -364,6 +372,31 @@ def test_docsroot_argument_wins_over_both_rules(tmp_path):
     assert got["source"] == "-DocsRoot"
     assert norm(got["frozenPlan"]) == norm(
         repo / "other/root/plans/<date>-<topic>.md")
+
+
+@needs_host
+def test_docsroot_with_a_dot_segment_prints_the_canonical_spelling(tmp_path):
+    repo = make_repo(tmp_path)
+    got = resolved(repo, "-DocsRoot", "./other/root")
+    assert norm(got["docsRoot"]) == norm(repo / "other/root")
+    proc = run_resolver("-RepoRoot", str(repo), "-DocsRoot", "./other/root",
+                        "-Assert", str(repo / "other/root/plans/rounds/2026-09-12-x/r1.md"))
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+
+
+@needs_host
+def test_reporoot_may_be_a_subdirectory_of_the_working_tree(tmp_path):
+    # `git rev-parse --git-common-dir` prints a path relative to the
+    # directory git ran in (`../.git` from a subdirectory); the resolver
+    # must join it there, as the attestation emitter does.
+    repo = make_repo(tmp_path)
+    sub = repo / "skills"
+    sub.mkdir()
+    got = resolved(sub)
+    assert norm(got["repo"]) == norm(repo)
+    assert norm(got["attestation"]) == norm(repo / ".git/parallax/attestations")
+    assert norm(got["rounds"]) == norm(
+        repo / "docs/superpowers/plans/rounds/<date>-<topic>")
 
 
 @needs_host
@@ -504,10 +537,10 @@ if (-not (Test-Path -LiteralPath $NotesPath -PathType Leaf)) {
 }
 $notes = [System.IO.File]::ReadAllText($NotesPath, (New-Object System.Text.UTF8Encoding($false)))
 $regionMatch = [regex]::Match($notes,
-    '<!-- contract:start id=artifact-roots -->(.*?)<!-- contract:end -->',
+    '<!-- contract:start id=round-artifact-roots -->(.*?)<!-- contract:end -->',
     [System.Text.RegularExpressions.RegexOptions]::Singleline)
 if (-not $regionMatch.Success) {
-    Fail ("artifact-roots region not found in " + $NotesPath)
+    Fail ("round-artifact-roots region not found in " + $NotesPath)
 }
 $region = $regionMatch.Groups[1].Value
 
@@ -527,7 +560,7 @@ foreach ($l in $labels) {
     $hits = [regex]::Matches($region, $pattern)
     if ($hits.Count -ne 1) {
         Fail ("declaration line '" + $l.Label + "' found " + $hits.Count +
-            " times in the artifact-roots region; expected exactly 1")
+            " times in the round-artifact-roots region; expected exactly 1")
     }
     $declared[$l.Key] = $hits[0].Groups[1].Value
 }
@@ -552,8 +585,12 @@ if (($commonExit -ne 0) -or -not $commonDir) {
     Fail ("could not resolve the git common dir for " + $RepoRoot)
 }
 $top = Normalize-Slashes ([System.IO.Path]::GetFullPath($toplevel))
+# A relative common dir is relative to the directory git RAN IN, which
+# is -RepoRoot and not the toplevel: from a subdirectory git prints
+# `../.git`, and joining that to the toplevel lands outside the checkout.
+# Same join as tools/write-attestation.ps1.
 if (-not [System.IO.Path]::IsPathRooted($commonDir)) {
-    $commonDir = Join-Path $toplevel $commonDir
+    $commonDir = Join-Path $RepoRoot $commonDir
 }
 $common = Normalize-Slashes ([System.IO.Path]::GetFullPath($commonDir))
 
@@ -567,7 +604,13 @@ if ($PSBoundParameters.ContainsKey("DocsRoot")) {
     if (@($rel.Split("/")) -contains "..") {
         Fail ("-DocsRoot may not contain a '..' segment: " + $DocsRoot)
     }
-    $docsRel = $rel
+    # Canonicalize through the filesystem rules, so `./other/root` and
+    # `other//root` print as one spelling and -Assert compares equal.
+    $docsFull = Normalize-Slashes ([System.IO.Path]::GetFullPath((Join-Path $toplevel $rel)))
+    if (-not $docsFull.StartsWith($top + "/", [System.StringComparison]::OrdinalIgnoreCase)) {
+        Fail ("-DocsRoot resolves outside the repo root: " + $DocsRoot)
+    }
+    $docsRel = $docsFull.Substring($top.Length + 1)
     $source = "-DocsRoot"
 } elseif (Test-Path -LiteralPath (Join-Path $toplevel $declared.docsRootOverride) -PathType Container) {
     $docsRel = $declared.docsRootOverride
@@ -585,8 +628,20 @@ function Resolve-Row($value) {
     $v = $value.Replace("<docs-root>", $docsRel)
     $v = $v.Replace("<TEMP>", $tempRoot)
     $v = $v.Replace("<git-common-dir>", $common)
-    if ([System.IO.Path]::IsPathRooted($v)) { return Normalize-Slashes $v }
-    return ($top + "/" + (Normalize-Slashes $v))
+    # Split off the per-debate placeholder tail BEFORE any path API sees
+    # the string: on Windows PowerShell 5.1, IsPathRooted and GetFullPath
+    # throw "Illegal characters in path" on `<`, and on 7 they answer
+    # False (measured 2026-09-12 by the R1 reviewer). The real parent is
+    # resolved; the tail is appended verbatim.
+    $i = $v.IndexOf("<")
+    $tail = ""
+    if ($i -ge 0) { $tail = $v.Substring($i); $v = $v.Substring(0, $i) }
+    $v = $v.TrimEnd("/")
+    if (-not $v) { Fail ("declaration row has no resolvable parent: " + $value) }
+    if (-not [System.IO.Path]::IsPathRooted($v)) { $v = $top + "/" + $v }
+    $parent = Normalize-Slashes ([System.IO.Path]::GetFullPath($v))
+    if ($tail) { return $parent + "/" + $tail }
+    return $parent
 }
 
 $resolved = [ordered]@{
@@ -700,7 +755,7 @@ git commit -m "add the artifact roots resolver and its host tests"
 
 **Interfaces:**
 - Consumes: the declaration labels from Task 1 and `tools/artifact-roots.ps1` from Task 2.
-- Produces: SKILL.md preflight step 4 and the citation form `references/model-prompting-notes.md's artifact-roots declaration` used by every edited reference.
+- Produces: SKILL.md preflight step 4 and the citation form `references/model-prompting-notes.md's round-artifact-roots declaration` used by every edited reference.
 
 - [ ] **Step 1: Append the sweep test**
 
@@ -730,6 +785,8 @@ FORBIDDEN_SHAPES = [
      re.compile(r"dev/docs/superpowers")),
     ("a ledger root that is neither the declaration nor a dated citation",
      re.compile(r"\.superpowers/sdd/(?!\d{4}-\d{2}-\d{2}-)")),
+    ("an attestation or checkpoint root spelled under .git/ instead of the git common dir",
+     re.compile(r"\.git/parallax/")),
 ]
 
 
@@ -766,20 +823,26 @@ def test_sweep_can_fail(tmp_path):
                 if rx.search("docs/superpowers/plans/rounds/2026-08-03-x/")]
     assert not [label for label, rx in FORBIDDEN_SHAPES
                 if rx.search(".superpowers/sdd/2026-08-15-x/progress.md")]
+    hits = [label for label, rx in FORBIDDEN_SHAPES
+            if rx.search("the ledger at .superpowers/sdd/plan/progress.md")]
+    assert hits == ["a ledger root that is neither the declaration nor a dated citation"]
+    hits = [label for label, rx in FORBIDDEN_SHAPES
+            if rx.search("It writes `.git/parallax/attestations/<head-sha>.json`")]
+    assert hits == ["an attestation or checkpoint root spelled under .git/ instead of the git common dir"]
 ```
 
 - [ ] **Step 2: Run the sweep and confirm it is red on exactly the two hand-named roots**
 
 Run: `python -m pytest evals/multi-model-verify/test_artifact_roots.py -q -k "sweep or named"`
-Expected: `test_no_round_root_is_named_outside_the_declaration` FAILS naming exactly `skills/multi-model-verify/SKILL.md:323` and `skills/multi-model-verify/references/frozen-plan-format.md:28`, both `the override docs root named by hand`; `test_sweep_can_fail` PASSES.
+Expected: `test_no_round_root_is_named_outside_the_declaration` FAILS naming exactly three lines: `skills/multi-model-verify/SKILL.md:323` and `skills/multi-model-verify/references/frozen-plan-format.md:28`, both `the override docs root named by hand`, and `skills/multi-model-verify/SKILL.md:389`, `an attestation or checkpoint root spelled under .git/ instead of the git common dir`; `test_sweep_can_fail` PASSES.
 
-- [ ] **Step 3: Edit SKILL.md, exactly these two edits**
+- [ ] **Step 3: Edit SKILL.md, exactly these three edits**
 
 Edit A. In `skills/multi-model-verify/SKILL.md`, the preflight list's item 3 ends with the `client-probe-scope-limit` region's `<!-- contract:end -->` line, followed by a blank line and `## Mode plan`. Insert this item between that `<!-- contract:end -->` line and the blank line:
 
 ```markdown
-4. Run `tools/artifact-roots.ps1 -RepoRoot <repo>`; its artifact-roots
-   rule is in references/model-prompting-notes.md.
+4. Run `tools/artifact-roots.ps1 -RepoRoot <repo>` per
+   references/model-prompting-notes.md's round-artifact-roots rule.
 ```
 
 Edit B. Replace these four lines (mode plan step 5):
@@ -798,10 +861,30 @@ with these two:
    frozen-plan path preflight step 4 printed.
 ```
 
+Edit C (authorized by the user on 2026-09-12 after the R1 review). In the
+finish-line section, replace these three lines:
+
+```markdown
+It writes `.git/parallax/attestations/<head-sha>.json` inside the reviewed
+repo — untracked by design, so recording the verdict cannot move HEAD out
+from under its own SHA.
+```
+
+with:
+
+```markdown
+It writes the attestation row's path, which preflight step 4 printed —
+untracked by design, so recording the verdict cannot move HEAD out from
+under its own SHA.
+```
+
+The old sentence named `.git/…`, which is wrong in a linked worktree: the
+emitter resolves the git common dir (`tools/write-attestation.ps1:54-63`).
+
 - [ ] **Step 4: Measure SKILL.md against the ceiling**
 
 Run: `python evals/tools/skill_lint.py skills/multi-model-verify --strict`
-Expected: `PASS - 0 error(s)`, with the token warning reading roughly 6499 (measured 2026-09-12 on the pre-edit body: 25988 characters; the two edits remove 114 characters and add 122, leaving 25996, four characters under the 26000 ceiling). If it reports an ERROR, STOP: do not trim other text; report the measured count to the user.
+Expected: `PASS - 0 error(s)`, with the token warning reading roughly 6496 (measured 2026-09-12 the linter's way, frontmatter stripped and lines joined with LF, on the pre-edit body: 25987 characters; Edit B removes 232 and adds 118, Edit A adds 123, Edit C removes 11, leaving 25985, fifteen characters under the 26000 ceiling). If it reports an ERROR, STOP: do not trim other text; report the measured count to the user.
 
 - [ ] **Step 5: Edit frozen-plan-format.md**
 
@@ -819,7 +902,7 @@ with:
 ```markdown
 defect, found in the debate, not in production. Save location: the
 frozen-plan path that `tools/artifact-roots.ps1` printed in preflight,
-resolved from references/model-prompting-notes.md's artifact-roots
+resolved from references/model-prompting-notes.md's round-artifact-roots
 declaration (its `Canonical frozen plan path` row, with the repo-side
 docs-root override applied by that one tool rather than by hand).
 ```
@@ -838,7 +921,7 @@ with:
 ```markdown
 "gone". The canonical retained location is the rounds root that
 `tools/artifact-roots.ps1` printed in preflight (references/model-prompting-notes.md's
-artifact-roots declaration, `Canonical rounds root` row, next to the
+round-artifact-roots declaration, `Canonical rounds root` row, next to the
 frozen plans; established by the 2026-07-24 jinn intake) — run the tool
 with `-Assert` on the destination before copying, so retention survives
 scratchpad cleanup by default and never lands beside the root.
@@ -863,7 +946,7 @@ as a `kerev<n>` folder, never inside the session scratchpad: the
 mirror re-roots every path, and the tool refuses before creating
 anything when the budget is blown. That location is the
 `Canonical review mirror root` row of references/model-prompting-notes.md's
-artifact-roots declaration, fixed there because the tool refuses a
+round-artifact-roots declaration, fixed there because the tool refuses a
 mirror inside the reviewed repository.
 ```
 
@@ -881,7 +964,7 @@ with:
 - Reviews run in a THROWAWAY REVIEW MIRROR — never the real tree. Build
   it at a SHORT path directly under the temp directory (the
   `Canonical review mirror root` row of model-prompting-notes.md's
-  artifact-roots declaration), such as a
+  round-artifact-roots declaration), such as a
   `kerev<n>` folder, and never inside the session scratchpad, whose own
 ```
 
@@ -895,7 +978,7 @@ with:
 
 ```markdown
 - The SDD ledger path (the `Canonical SDD ledger root` row of
-  references/model-prompting-notes.md's artifact-roots declaration,
+  references/model-prompting-notes.md's round-artifact-roots declaration,
   which the dispatcher resolved) - its deferred minors are yours to
   triage.
 ```
@@ -984,12 +1067,16 @@ Append to `evals/multi-model-verify/test_artifact_roots.py`:
 # Group 3b: the real writers
 # ---------------------------------------------------------------------
 def tree_paths(root):
-    """Every FILE under root as a repo-relative normalized path, .git
-    included. A SET OF PATHS, not contents: the mirror tool's status
-    capture rewrites .git/index in place (new-review-mirror.ps1, the
-    status capture), so a content diff would fire on a correct tool and
-    a path-set diff does not."""
-    return {norm(p.relative_to(root)) for p in root.rglob("*") if p.is_file()}
+    """Every file AND directory under root as a repo-relative normalized
+    path, .git included. A SET OF PATHS, not contents: the mirror tool's
+    status capture rewrites .git/index in place (new-review-mirror.ps1,
+    the status capture), so a content diff would fire on a correct tool
+    and a path-set diff does not. Directories are included so an empty
+    directory a writer creates is observed. Stated limit: a path created
+    and deleted again between the two snapshots is not observed, and the
+    Flash implementer's transient brief (agents/flash-implementer.md) is
+    a real example of that shape; this test samples endpoints."""
+    return {norm(p.relative_to(root)) for p in root.rglob("*")}
 
 
 def new_paths(root, before):
@@ -1026,7 +1113,14 @@ def test_the_real_writers_create_nothing_in_repo_but_the_attestation(tmp_path):
     assert prep.returncode == 0, prep.stdout + prep.stderr
 
     appeared = new_paths(repo, before)
-    assert appeared == {f".git/parallax/attestations/{head}.json"}, sorted(appeared)
+    # The attestation file and the two directories the emitter creates
+    # for it (write-attestation.ps1: New-Item -Force on the attestation
+    # dir), and nothing else.
+    assert appeared == {
+        ".git/parallax",
+        ".git/parallax/attestations",
+        f".git/parallax/attestations/{head}.json",
+    }, sorted(appeared)
     for rel in appeared:
         proc = run_resolver("-RepoRoot", str(repo), "-Assert", str(repo / rel))
         assert proc.returncode == 0, proc.stdout + proc.stderr
@@ -1048,6 +1142,21 @@ def test_a_writer_that_strays_is_reported(tmp_path):
     proc = run_resolver("-RepoRoot", str(repo), "-Assert", str(stray))
     assert proc.returncode == 1, proc.stdout + proc.stderr
     assert "outside every retained root" in proc.stdout
+
+
+@needs_host
+def test_an_empty_directory_a_writer_creates_is_reported(tmp_path):
+    # A writer that only mkdirs an undeclared root leaves no file for a
+    # file-only snapshot to see; the snapshot includes directories so
+    # this is observed too.
+    repo = make_repo(tmp_path)
+    before = tree_paths(repo)
+    (repo / ".superpowers" / "review-sources").mkdir(parents=True)
+    appeared = new_paths(repo, before)
+    assert appeared == {".superpowers", ".superpowers/review-sources"}, sorted(appeared)
+    proc = run_resolver("-RepoRoot", str(repo), "-Assert",
+                        str(repo / ".superpowers" / "review-sources"))
+    assert proc.returncode == 1, proc.stdout + proc.stderr
 
 
 @needs_host

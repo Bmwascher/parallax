@@ -38,7 +38,12 @@ design makes the plugin stop adding to the spread.
    only the backlog filing). The 54 MB
    `.superpowers/review-sources/dt-diag-2766cd59/` was written on
    2026-09-07 by a Codex controller session that invented a "preparation
-   copy" of a worktree; its rollout log says so in its own words. The
+   copy" of a worktree; its rollout log says so in its own words, at
+   `~/.codex/sessions/2026/09/07/rollout-2026-09-07T20-53-38-01a07eb8-8a4c-7941-ba19-a542a5642dc9.jsonl`
+   (an `exec_command` call copying `.superpowers/worktrees/dt-diag` to
+   that path, read by the session on 2026-09-12; both reviewers marked
+   the attribution UNVERIFIED because neither can read outside the
+   mirror, and it carries no weight in either verdict). The
    plugin binds its own tools and the prose the Claude controller
    follows. It cannot bind a foreign controller, and this design does
    not claim to.
@@ -69,9 +74,14 @@ A new section in
 AFTER the backup reviewer lane block (the primary model declarations
 must stay first, because two runtime parsers match the first
 `Canonical model id:` occurrence). It is wrapped in
-`<!-- contract:start id=artifact-roots -->` / `contract:end` so the
-coverage checker in `test_contract_coverage.py` requires a pin, and it
-is registered in that file's `DECLARED_REGIONS`. The region holds
+`<!-- contract:start id=round-artifact-roots -->` / `contract:end` so
+the coverage checker in `test_contract_coverage.py` requires a pin, and
+it is registered in that file's `DECLARED_REGIONS`. The id carries the
+`round-` prefix because `test_contract_coverage.py:795` reads every bare
+occurrence of a declared id in `skills/`, `agents/` and `commands/` and
+requires the `<file>.md's <id>` spelling; a region named `artifact-roots`
+would make the tool's own file name an unresolvable citation (found by
+the Astra R1 review). The region holds
 EXACTLY the eight declaration lines below and nothing else, and ONE pin
 in `test_artifact_roots.py` holds the whole region text: the checker
 folds a region into one body and a pin that stops mid-region or two
@@ -119,6 +129,12 @@ And two rules that are prose because no tool can enforce them:
   `references/preflight-mirror.md` forbids in-repo writes anyway). Only
   their retained COPIES enter the rounds root, and only after the
   wrapper exits.
+- Implementation-time scratch is outside this contract: the rows name
+  what a REVIEW ROUND writes. `agents/flash-implementer.md:67` writes a
+  transient task brief into the checkout and `:79` deletes it before any
+  evidence check; the SDD ledger is the one implementation artifact
+  declared, because a round cites it. (Found by the Astra R1 class
+  sweep.)
 - A controller other than Claude Code is outside this contract. Fact 4
   is the record of what one wrote.
 
@@ -157,8 +173,16 @@ Behaviour:
 3. Substitute `<docs-root>` in the two overridable rows, `<TEMP>` in
    the mirror row, and `<git-common-dir>` in the attestation and
    checkpoint rows from `git rev-parse --git-common-dir` run in
-   `-RepoRoot`. Leave `<date>-<topic>`, `<plan-basename>` and
-   `<short-name>` as printed placeholders: they are named per debate.
+   `-RepoRoot` (a relative answer is joined to `-RepoRoot`, the
+   directory git ran in, exactly as `tools/write-attestation.ps1:61`
+   does; from a subdirectory git prints `../.git`). Leave
+   `<date>-<topic>`, `<plan-basename>` and `<short-name>` as printed
+   placeholders: they are named per debate. The placeholder tail is
+   split off BEFORE any path API sees the string: on Windows PowerShell
+   5.1 `IsPathRooted` and `GetFullPath` throw on `<` (measured by the
+   Astra R1 review), so the real parent is resolved and the tail is
+   appended verbatim. An explicit `-DocsRoot` is canonicalized the same
+   way, so `./other/root` prints and asserts as `other/root`.
 4. Print one line per row, `name: <absolute path>`, then
    `docs-root source: <source>`. With `-Json`, emit one object with the
    same keys plus `source`. The absolute path for a placeholder-bearing
@@ -191,15 +215,21 @@ caller reads one convention.
   retention, the ledger citation in the fable-reviewer dispatch, the
   attestation emitter's expected output; and the retention copy runs
   `-Assert` on its destination first.
-- `SKILL.md` is at 6496 of `skill_lint.py`'s 6500-token hard ceiling
-  (measured 2026-09-12 with `--strict`; `BACKLOG.md:4219-4227` records
-  the same). The one-line step is paid for by mode plan step 5
-  (`SKILL.md:321-324`), whose parenthetical naming the KitnEssentials
-  and default plans directories is removed and replaced by "at the
-  frozen-plan path the preflight printed". The plan's task runs the
-  linter after the edit; if the file is still over the ceiling the task
-  STOPS and asks the user what to remove, because that choice is the
-  user's (the backlog entry says so), not the implementer's.
+- `SKILL.md` is at 6496 of `skill_lint.py`'s 6500-token ceiling
+  (25987 body characters measured 2026-09-12 the linter's way;
+  `BACKLOG.md:4219-4227` records the same). The one-line step is paid
+  for by mode plan step 5 (`SKILL.md:321-324`), whose parenthetical
+  naming the KitnEssentials and default plans directories is removed and
+  replaced by "at the frozen-plan path preflight step 4 printed". A
+  third edit, authorized by the user on 2026-09-12 after the Astra R1
+  review, replaces the finish-line sentence at `SKILL.md:389` that names
+  `.git/parallax/attestations/…` "inside the reviewed repo": that
+  spelling is wrong in a linked worktree, where the emitter writes under
+  the git common dir. The three edits together leave the body at 25985
+  characters. The plan's task runs the linter after the edits; if the
+  file is over the ceiling the task STOPS and asks the user what to
+  remove, because that choice is the user's (the backlog entry says
+  so), not the implementer's.
 - `frozen-plan-format.md:27-28` and `:85` stop naming the KitnEssentials
   path by hand and cite the declaration's frozen-plan and rounds rows.
 - `references/preflight-mirror.md` and `references/backup-lane.md` cite
@@ -236,11 +266,15 @@ Three groups:
    sweep reports what it searched for: `superpowers/rounds/` not preceded
    by `plans/`, `review-sources`, `dev/docs/superpowers` anywhere but
    the declaration's override line, and `.superpowers/sdd/` anywhere but
-   the declaration's ledger line or a dated citation. A dated citation
-   is a path under `docs/superpowers/plans/rounds/<date>-` or
-   `.superpowers/sdd/<date>-` naming a retained record (the plugin
-   surface carries one of the latter today, at
-   `references/model-prompting-notes.md:87`). Measured 2026-09-12 by the
+   the declaration's ledger line or a dated citation, and
+   `.git/parallax/` anywhere (the rows spell it
+   `<git-common-dir>/parallax/`, and `SKILL.md:389` is the one stale
+   spelling today). A dated citation is a path under
+   `docs/superpowers/plans/rounds/<date>-` or `.superpowers/sdd/<date>-`
+   naming a retained record (the plugin surface carries one of the
+   latter today, at `references/model-prompting-notes.md:87`). The
+   negative control asserts each shape fires on a KitnEssentials-form
+   line and that each exemption holds. Measured 2026-09-12 by the
    Fable pre-read: the first two shapes have zero hits in the plugin
    surface, all seven `superpowers/plans/rounds/` hits are preceded by
    `plans/`, and the two `dev/docs/superpowers` hits are the ones this
@@ -264,10 +298,12 @@ Three groups:
    - `-Assert` exits 0 for a path under the resolved rounds root and the
      attestation root, 1 for `<repo>/rounds/x`, `<repo>/.superpowers/
      review-sources/x`, and a path outside the repo.
-   - the writers: snapshot the repo tree as a SET OF PATHS (every path,
-     ignored ones included; `.git/index` is rewritten by the status
-     capture in `new-review-mirror.ps1:1665-1669`, so a content diff
-     would fire on a correct tool and a path-set diff does not), run
+   - the writers: snapshot the repo tree as a SET OF PATHS, files AND
+     directories (every path, ignored ones included; `.git/index` is
+     rewritten by the status capture in `new-review-mirror.ps1:1665-1669`,
+     so a content diff would fire on a correct tool and a path-set diff
+     does not; directories are included so a writer that only creates
+     an empty directory is observed), run
      `tools/write-attestation.ps1` for the two commits, run
      `tools/dispatch-round.ps1 -Prepare` through the extended
      `build_real_mirror` and `prepare_default` with the dispatch
@@ -275,10 +311,11 @@ Three groups:
      `tools/new-review-mirror.ps1` to a temp path with `-SkipProbe`;
      diff the sets; assert every path that APPEARED inside the repo
      satisfies `-Assert`, and that the set is exactly the attestation
-     file.
-   - negative control, so the diff logic is shown able to fail: a stub
+     file plus the two directories the emitter creates for it.
+   - negative controls, so the diff logic is shown able to fail: a stub
      writer creates `<repo>/rounds/x`, and the same diff-and-assert
-     reports it.
+     reports it; a second stub only creates an empty
+     `.superpowers/review-sources/` directory, and that is reported too.
    - the mirror tool still refuses an in-repo `-MirrorPath` (the
      existing pin stays; this test cites the declaration row in its
      name).
@@ -286,7 +323,12 @@ Three groups:
 What group 3 proves is bounded: only a tool that CREATES a path is
 caught, only the three tools are run, and only in the modes the test
 exercises (`-SkipProbe`, and whatever `prepare_default` passes). A tool
-that rewrites an existing in-repo file is outside it.
+that rewrites an existing in-repo file is outside it, and so is a path
+created and deleted again between the two snapshots: the test samples
+endpoints, and the Flash implementer's transient brief is a real example
+of that shape (Astra R1 class sweep). The static sweep is bounded the
+same way: it reads five literal shapes, and a destination assembled at
+run time from pieces matches none of them.
 
 The behavioural group imports the fixtures from `test_dispatch_round.py`
 as a sibling module; pytest's default import mode puts the test
@@ -313,6 +355,9 @@ until the diff debate closes it.
 ## Out of scope
 
 - Migrating any consumer tree. KitnEssentials archives by hand.
+- Implementation-time artifacts (the Flash implementer's transient
+  brief, SDD task briefs and reports); the declaration names what a
+  review round writes and cites the ledger because a round reads it.
 - The plugin's own `tools/drift-reports/` and `drift-snapshot.json`.
   They are plugin-side state in the plugin checkout, not consumer-repo
   artifacts.
