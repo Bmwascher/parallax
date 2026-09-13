@@ -401,11 +401,12 @@ def test_reporoot_may_be_a_subdirectory_of_the_working_tree(tmp_path):
 
 @needs_host
 def test_relative_reporoot_resolves_against_powershells_location(tmp_path):
-    # The process cwd is tmp_path; PowerShell's location is the repo. A
-    # native git child inherits the PROCESS cwd, so a tool that hands `.`
-    # to git unresolved names tmp_path, which is not a repository, or a
-    # different one. Same shape as test_review_mirror.py's provider-path
-    # case.
+    # The process cwd is tmp_path; PowerShell's location is the repo.
+    # PowerShell starts git in its own location, so git answers for the
+    # repo; the RELATIVE common-dir answer then reaches .NET GetFullPath,
+    # which resolves against the process cwd, so an unresolved `.` prints
+    # tmp_path/.git/... Same shape as test_review_mirror.py's
+    # provider-path case.
     repo = make_repo(tmp_path)
     script = (
         f"Set-Location -LiteralPath '{repo.as_posix()}'; "
@@ -426,6 +427,24 @@ def test_relative_reporoot_resolves_against_powershells_location(tmp_path):
 def test_docsroot_refuses_escapes_and_rooted_values(tmp_path, bad):
     repo = make_repo(tmp_path)
     proc = run_resolver("-RepoRoot", str(repo), "-DocsRoot", bad)
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert proc.stdout.startswith("ERROR:"), proc.stdout
+
+
+@needs_host
+@pytest.mark.parametrize("args", [
+    ("-RepoRoot", "NoSuchArtifactDrive:/repo"),
+    ("-RepoRoot", "{repo}", "-Assert", "NoSuchArtifactDrive:/x"),
+    ("-RepoRoot", "{repo}", "-DocsRoot", "bad|root"),
+    ("-RepoRoot", "{repo}", "-DocsRoot", "bad<root"),
+])
+def test_unresolvable_paths_are_parameter_faults_not_throws(tmp_path, args):
+    # The exit contract: 2 for a parameter fault, with an ERROR: line.
+    # An unknown drive makes the provider throw; a forbidden character
+    # makes IsPathRooted throw on 5.1 and print garbage on 7. Both are
+    # routed through Fail (measured 2026-09-12 by the R3 reviewer).
+    repo = make_repo(tmp_path)
+    proc = run_resolver(*[a.replace("{repo}", str(repo)) for a in args])
     assert proc.returncode == 2, proc.stdout + proc.stderr
     assert proc.stdout.startswith("ERROR:"), proc.stdout
 
@@ -547,9 +566,21 @@ function Normalize-Slashes($p) {
 
 function Resolve-Absolute($p) {
     # Provider-relative, like new-review-mirror.ps1: a relative path
-    # resolves against PowerShell's location, not the process cwd.
-    $full = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($p)
-    return Normalize-Slashes ([System.IO.Path]::GetFullPath($full))
+    # resolves against PowerShell's location, not the process cwd. A
+    # path the provider cannot resolve (an unknown drive, an illegal
+    # character) is a parameter fault, exit 2, never an uncaught throw:
+    # the failure is captured here and Fail is called OUTSIDE the try,
+    # so nothing about `exit` inside a catch is relied on.
+    $full = $null
+    $why = ""
+    try {
+        $unresolved = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($p)
+        $full = Normalize-Slashes ([System.IO.Path]::GetFullPath($unresolved))
+    } catch {
+        $why = $_.Exception.Message
+    }
+    if (-not $full) { Fail ("cannot resolve path '" + $p + "': " + $why) }
+    return $full
 }
 
 # ---- the declaration ---------------------------------------------------
@@ -588,11 +619,14 @@ foreach ($l in $labels) {
 }
 
 # ---- the repository ----------------------------------------------------
-# Provider-relative FIRST: a native git child inherits the PROCESS working
-# directory, which is not PowerShell's location, so `-RepoRoot .` would
-# otherwise name whatever directory the host was launched from (measured
-# 2026-09-12 by the R2 reviewer on both hosts; same trap
-# new-review-mirror.ps1 guards with the same helper).
+# Provider-relative FIRST. PowerShell starts a native child in its OWN
+# current location, so `git -C .` itself runs in the right place; what
+# breaks is the RELATIVE answer git prints (`.git`, `../.git`) reaching
+# .NET GetFullPath, which resolves against the PROCESS working directory
+# ([Environment]::CurrentDirectory) and not PowerShell's location.
+# Resolving -RepoRoot here makes every later join absolute before any
+# .NET path API sees it (measured 2026-09-12 by the R2 and R3 reviewers
+# on both hosts; the same distinction new-review-mirror.ps1:1234 draws).
 $RepoRoot = Resolve-Absolute $RepoRoot
 if (-not (Test-Path -LiteralPath $RepoRoot -PathType Container)) {
     Fail ("-RepoRoot is not a directory: " + $RepoRoot)
@@ -626,6 +660,13 @@ $common = Normalize-Slashes ([System.IO.Path]::GetFullPath($commonDir))
 if ($PSBoundParameters.ContainsKey("DocsRoot")) {
     $rel = $DocsRoot.Replace("\", "/").Trim("/")
     if (-not $rel) { Fail "-DocsRoot is empty" }
+    # Validate BEFORE any path API: on Windows PowerShell 5.1 IsPathRooted
+    # throws on `|`, on 7 it accepts and prints an unusable path
+    # (measured 2026-09-12 by the R3 reviewer). One explicit set, both
+    # hosts. The colon is rejected here as well as by the rooted check.
+    if ($rel -match '[<>:"|?*\x00-\x1f]') {
+        Fail ("-DocsRoot contains a character Windows paths forbid: " + $DocsRoot)
+    }
     if ([System.IO.Path]::IsPathRooted($DocsRoot)) {
         Fail ("-DocsRoot must be relative to the repo root: " + $DocsRoot)
     }
@@ -634,7 +675,7 @@ if ($PSBoundParameters.ContainsKey("DocsRoot")) {
     }
     # Canonicalize through the filesystem rules, so `./other/root` and
     # `other//root` print as one spelling and -Assert compares equal.
-    $docsFull = Normalize-Slashes ([System.IO.Path]::GetFullPath((Join-Path $toplevel $rel)))
+    $docsFull = Resolve-Absolute (Join-Path $toplevel $rel)
     if (-not $docsFull.StartsWith($top + "/", [System.StringComparison]::OrdinalIgnoreCase)) {
         Fail ("-DocsRoot resolves outside the repo root: " + $DocsRoot)
     }

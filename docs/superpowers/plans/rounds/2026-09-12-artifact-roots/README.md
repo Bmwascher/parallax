@@ -154,3 +154,47 @@ eight round-1 applications confirmed present. Nothing contested.
 ### Applied
 
 All three, in the commit that carries this section.
+
+## Astra R3 - COUNTED, verdict FIX
+
+Dispatched 2026-09-12 against plan blob `ed25107` (HEAD `3459603`),
+mirror rebuilt at `C:\Temp\pxar1` (probe clean, `override-r3.toml`,
+same sha256), resumed session `01a0985e-1d0d-7940-b544-11e0ffeba5d9`,
+background task `Astra R3 debate round`. Wrapper exit 0, `reply-present`.
+Route confirmed as before, same session id echoed. Bound with `-Resume`,
+`status: clean`, `sealed: sealed` (`binder-r3.json`).
+
+Artifacts: `brief-astra-r3.md`, `astra-r3-reply.md`,
+`astra-r3-transcript.txt`, `receipt-r3.json`, `binder-r3.json`.
+
+**Reviewer verdict: FIX.** A PASS, B FIX, C PASS, D FIX. The round-2
+repairs are confirmed present; B is a defect inside one of them.
+
+### Session verification
+
+- B, exit contract: `GetUnresolvedProviderPathFromPSPath` on an unknown
+  drive throws, and under the script's `Stop` preference that is an
+  uncaught terminating error, exit 1, where the header promises 2 for a
+  parameter fault. Confirmed by reading the plan's helper: no catch.
+  `IsPathRooted` on `bad|root` throwing on 5.1 and not on 7 is the same
+  host asymmetry claim 5 of round 1 established for `<`. Confirmed on
+  that basis. Fixed: the helper captures the failure and calls `Fail`
+  outside its `try`; `-DocsRoot` is checked against one explicit
+  forbidden-character set before any path API; the docs-root join goes
+  through the same helper; four regression cases assert exit 2 with an
+  `ERROR:` line.
+- B, the explanation: the reviewer's two probes show PowerShell starting
+  git in its own current location, so git answered for the right
+  directory in round 2; the fault was the RELATIVE `.git` answer
+  reaching .NET `GetFullPath`, which resolves against the process cwd.
+  Confirmed against `tools/new-review-mirror.ps1:1234-1244`, which draws
+  exactly that distinction. The round-2 fix was right for the wrong
+  stated reason; the comment in the tool, the regression test's comment
+  and the spec now state the mechanism correctly.
+- D follows from B.
+
+### Applied
+
+All of B, in the commit that carries this section. Three of four
+budgeted exchanges are spent; R4 is the last before the user's word is
+needed to continue.

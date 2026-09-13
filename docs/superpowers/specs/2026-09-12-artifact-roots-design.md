@@ -181,9 +181,18 @@ Behaviour:
    directory git ran in, exactly as `tools/write-attestation.ps1:61`
    does; from a subdirectory git prints `../.git`). `-RepoRoot` itself
    is resolved through PowerShell's provider location before git sees
-   it: a native child inherits the process cwd, so an unresolved `.`
-   would name the launch directory (found by the Astra R2 review on
-   both hosts). Leave
+   it. PowerShell starts a native child in its own location, so git
+   itself answers for the right directory; the fault is the RELATIVE
+   answer git prints reaching .NET `GetFullPath`, which resolves against
+   the process working directory and not PowerShell's location, so an
+   unresolved `.` printed the launch directory's `.git` (found by the
+   Astra R2 review on both hosts, mechanism corrected by R3; the same
+   distinction `tools/new-review-mirror.ps1:1234` draws). Every path
+   the tool resolves goes through one helper that turns a provider or
+   .NET path failure (an unknown drive, a forbidden character) into
+   exit 2 with an `ERROR:` line, and `-DocsRoot` is checked against one
+   explicit forbidden-character set before any path API sees it,
+   because 5.1 throws on `|` where 7 prints an unusable path (R3). Leave
    `<date>-<topic>`, `<plan-basename>` and `<short-name>` as printed
    placeholders: they are named per debate. The placeholder tail is
    split off BEFORE any path API sees the string: on Windows PowerShell
