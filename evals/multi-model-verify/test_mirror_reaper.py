@@ -439,7 +439,7 @@ def test_preflight_mirror_reference_states_the_end_of_life_rule():
     ):
         assert anchor in body, "end-of-life anchor missing: " + anchor
     assert "directly under the temp directory" not in body
-    assert r"C:\pxm\kv-<tag>" in body
+    assert "C:/pxm/kv-<tag>" in body
 
 
 def test_doctor_inventories_the_mirrors_and_never_deletes():
@@ -614,6 +614,25 @@ def test_a_relative_reap_path_is_refused(tmp_path):
     assert not att_file(repo, head).exists()
 
 
+def doctored_plugin(tmp_path, replacement):
+    """A copy of the three attestation-side tools beside a doctored notes
+    file, so a parent-read failure can be driven without touching the real
+    declaration. `replacement` is what the review mirror row becomes; an
+    empty string removes the row."""
+    fake = tmp_path / "plugin"
+    (fake / "tools").mkdir(parents=True)
+    notes_dir = fake / "skills" / "multi-model-verify" / "references"
+    notes_dir.mkdir(parents=True)
+    for name in ("write-attestation.ps1", "artifact-roots.ps1", "review-tree-removal.ps1"):
+        shutil.copy(REPO / "tools" / name, fake / "tools" / name)
+    notes = REPO / "skills" / "multi-model-verify" / "references" / "model-prompting-notes.md"
+    row = "Canonical review mirror root: `C:/pxm/<short-name>/`\n"
+    assert row in read(notes)
+    (notes_dir / "model-prompting-notes.md").write_text(
+        read(notes).replace(row, replacement), encoding="utf-8")
+    return fake / "tools" / "write-attestation.ps1"
+
+
 # ---------------------------------------------------------------------
 # Group 7: the declared mirror parent (item 107, follow-up 2)
 # ---------------------------------------------------------------------
@@ -653,21 +672,10 @@ def test_an_unreadable_parent_refuses_every_reap(tmp_path, pxm):
     # resolve a parent, and a parent that cannot be read accepts
     # NOTHING: exit 2, record unwritten, tree untouched - even for a tree
     # that sits under the real parent.
-    fake = tmp_path / "plugin"
-    (fake / "tools").mkdir(parents=True)
-    notes_dir = fake / "skills" / "multi-model-verify" / "references"
-    notes_dir.mkdir(parents=True)
-    for name in ("write-attestation.ps1", "artifact-roots.ps1", "review-tree-removal.ps1"):
-        shutil.copy(REPO / "tools" / name, fake / "tools" / name)
-    notes = REPO / "skills" / "multi-model-verify" / "references" / "model-prompting-notes.md"
-    doctored = read(notes).replace(
-        "Canonical review mirror root: `C:/pxm/<short-name>/`\n",
-        "Canonical review mirror root: `C:/pxm/`\n")
-    assert doctored != read(notes)
-    (notes_dir / "model-prompting-notes.md").write_text(doctored, encoding="utf-8")
+    emitter = doctored_plugin(tmp_path, "Canonical review mirror root: `C:/pxm/`\n")
     repo, base, head = make_repo(tmp_path)
     mirror = make_mirror(repo, pxm / "kv-t")
-    proc = run_ps(fake / "tools" / "write-attestation.ps1",
+    proc = run_ps(emitter,
                   "-RepoRoot", str(repo), "-BaseSha", base, "-HeadSha", head,
                   "-Verdict", "PASS", "-VerificationStatus", "FULL",
                   "-RouteNote", "effective route confirmed", "-Rounds", "1",
@@ -678,7 +686,7 @@ def test_an_unreadable_parent_refuses_every_reap(tmp_path, pxm):
     assert mirror.exists()
     # Without a reap parameter the same doctored copy never reads the
     # parent and writes the record as before.
-    proc = run_ps(fake / "tools" / "write-attestation.ps1",
+    proc = run_ps(emitter,
                   "-RepoRoot", str(repo), "-BaseSha", base, "-HeadSha", head,
                   "-Verdict", "PASS", "-VerificationStatus", "FULL",
                   "-RouteNote", "effective route confirmed", "-Rounds", "1",
@@ -692,20 +700,10 @@ def test_a_roots_tool_that_exits_nonzero_refuses_every_reap(tmp_path, pxm):
     # have NO review mirror row, so artifact-roots.ps1 itself exits 2, and
     # the emitter reports that exit rather than treating an empty answer
     # as a parent. Record unwritten, tree untouched.
-    fake = tmp_path / "plugin"
-    (fake / "tools").mkdir(parents=True)
-    notes_dir = fake / "skills" / "multi-model-verify" / "references"
-    notes_dir.mkdir(parents=True)
-    for name in ("write-attestation.ps1", "artifact-roots.ps1", "review-tree-removal.ps1"):
-        shutil.copy(REPO / "tools" / name, fake / "tools" / name)
-    notes = REPO / "skills" / "multi-model-verify" / "references" / "model-prompting-notes.md"
-    doctored = read(notes).replace(
-        "Canonical review mirror root: `C:/pxm/<short-name>/`\n", "")
-    assert doctored != read(notes)
-    (notes_dir / "model-prompting-notes.md").write_text(doctored, encoding="utf-8")
+    emitter = doctored_plugin(tmp_path, "")
     repo, base, head = make_repo(tmp_path)
     mirror = make_mirror(repo, pxm / "kv-t")
-    proc = run_ps(fake / "tools" / "write-attestation.ps1",
+    proc = run_ps(emitter,
                   "-RepoRoot", str(repo), "-BaseSha", base, "-HeadSha", head,
                   "-Verdict", "PASS", "-VerificationStatus", "FULL",
                   "-RouteNote", "effective route confirmed", "-Rounds", "1",

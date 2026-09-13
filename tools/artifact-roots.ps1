@@ -363,7 +363,12 @@ if ($bound.ContainsKey("Assert")) {
     )
     $inside = $null
     foreach ($r in $retained) {
-        if ($target.Equals($r.Root, $cmp) -or $target.StartsWith($r.Root + "/", $cmp)) {
+        # The review mirror parent is the one root a path may never EQUAL:
+        # a mirror is a tree under it, and the parent itself is never a
+        # tree (the emitter refuses it too), so the answer for the
+        # parent is outside, and the two readers agree.
+        $mayEqual = ($r.Name -ne "review mirror root")
+        if (($mayEqual -and $target.Equals($r.Root, $cmp)) -or $target.StartsWith($r.Root + "/", $cmp)) {
             $inside = $r.Name
             break
         }

@@ -83,7 +83,7 @@ def test_fixed_rows_state_their_reason_outside_the_region():
     assert "Superpowers owns it" in tail
     assert "never inside the reviewed repository" in tail
     assert "never under the controller host's temp directory" in tail
-    assert "-Expect reviewMirror" in tail
+    assert "-RepoRoot <repo> -Assert <mirror-path> -Expect reviewMirror" in tail
     assert "git rev-parse --git-common-dir" in tail
 
 
@@ -496,6 +496,14 @@ def test_expect_review_mirror_answers_for_the_declared_parent(tmp_path):
         proc = run_resolver("-RepoRoot", str(repo), "-Assert", outside,
                             "-Expect", "reviewMirror")
         assert proc.returncode == 1, outside + ": " + proc.stdout + proc.stderr
+        assert "outside every retained root" in proc.stdout, proc.stdout
+    # The parent itself is never a tree: outside for the mirror row, the
+    # same answer the emitter's reap guard gives, so the pre-build check
+    # and the reap agree.
+    for parent in (r"C:\pxm", "C:/pxm/"):
+        proc = run_resolver("-RepoRoot", str(repo), "-Assert", parent,
+                            "-Expect", "reviewMirror")
+        assert proc.returncode == 1, parent + ": " + proc.stdout + proc.stderr
         assert "outside every retained root" in proc.stdout, proc.stdout
     got = json.loads(run_resolver("-RepoRoot", str(repo), "-Assert", r"C:\pxm\kv-t",
                                   "-Expect", "reviewMirror", "-Json").stdout)

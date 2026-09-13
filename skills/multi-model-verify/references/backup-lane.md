@@ -665,7 +665,7 @@ proceed; do not infer either key's value.
   it at a SHORT path directly under the declared review mirror parent (the
   `Canonical review mirror root` row of model-prompting-notes.md's
   round-artifact-roots declaration), such as
-  `C:\pxm\kv-<tag>`, never under the temp directory and never inside
+  `C:/pxm/kv-<tag>`, never under the temp directory and never inside
   the session scratchpad, whose own
   path is long enough to consume most of the budget before the copy
   starts. This sentence used to say "in the session scratchpad" and

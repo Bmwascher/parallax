@@ -91,9 +91,9 @@ The full previous text of every closed item is in git history at
 
 ## 107. The reap guard cannot tell a debate's trees from any clone at the attested head, and the mirror parent is the drive root
 Status: PARTIAL
-Cost: a session that names the wrong tree at the right head has it removed, and every mirror a KitnEssentials session builds lands directly under the drive root because the canonical temp root blows the path budget, so the doctor has to find them by a name pattern rather than a declared parent
+Cost: a session that names the wrong tree at the right head has it removed, and the two post-delete sidecar read-back branches are locked only by a source-position pin a refactor could satisfy without a runtime read-back
 Pairs: none
-Verified: 2026-09-13 005c3dbecf19
+Verified: 2026-09-13 fb0b98b97df3
 
 **Filed 2026-09-13 from the whole-branch review of the mirror reaper
 (item 106).** The emitter's identity guard refuses a tree that is not

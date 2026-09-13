@@ -816,11 +816,12 @@ The other rows are FIXED, each for a reason the row cannot carry:
   derivation: a machine whose system drive is not `C:` edits it. The
   attestation emitter's reap guard accepts any depth below the parent
   and never the parent itself; the declared SHAPE is one segment, so
-  build `C:\pxm\<tag>`.
+  build `C:/pxm/<tag>`.
   `tools/new-review-mirror.ps1` still refuses a path equal to, inside,
   or containing the repo and does not read this row; run
-  `tools/artifact-roots.ps1 -Assert <mirror-path> -Expect reviewMirror`
-  before the build, and `tools/write-attestation.ps1` refuses to reap a
+  `tools/artifact-roots.ps1 -RepoRoot <repo> -Assert <mirror-path> -Expect reviewMirror`
+  before the build (the parent itself answers outside: it is never a
+  tree), and `tools/write-attestation.ps1` refuses to reap a
   tree that is not under the parent (references/preflight-mirror.md,
   End of life). references/preflight-mirror.md owns the short-name and
   path-budget rules.

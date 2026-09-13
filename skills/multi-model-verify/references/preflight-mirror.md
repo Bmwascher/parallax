@@ -10,7 +10,7 @@ how, not the whether.
 Run
 `tools/new-review-mirror.ps1 -RepoRoot <repo> -MirrorPath <scratch>`.
 Build at a SHORT `<scratch>` directly under the declared review mirror parent,
-such as `C:\pxm\kv-<tag>`, never under the temp directory and never
+such as `C:/pxm/kv-<tag>`, never under the temp directory and never
 inside the session scratchpad: the mirror re-roots every path, and the
 tool refuses before creating anything when the budget is blown. That
 location is the `Canonical review mirror root` row of
@@ -20,8 +20,9 @@ repository and because the KitnEssentials packets leave a mirror root
 15 characters at most, which the temp directory could never hold. The
 mirror tool does not read the row, so run
 `tools/artifact-roots.ps1 -RepoRoot <repo> -Assert <scratch> -Expect reviewMirror`
-first; exit 0 is the only clean answer, and a mirror built anywhere
-else is refused at the reap and removed by hand.
+first; exit 0 is the only clean answer, the parent itself answers
+outside because it is never a tree, and a mirror built anywhere else
+is refused at the reap and removed by hand.
 It builds the **review mirror** (references/backup-lane.md owns its
 construction, its baseline, and its identity fields — a file copy
 preserving `.git`, NOT a clone), deletes the offending entries THERE,
@@ -129,7 +130,7 @@ mirror tool's `-Force` rebuild uses the same function, which is what
 closed backlog item 98.
 
 An existing `-MirrorPath` without `-Force` is refused with the reap
-route named. Build `C:\pxm\kv-<tag>-2` beside a finished debate's mirror and
+route named. Build `C:/pxm/kv-<tag>-2` beside a finished debate's mirror and
 the count grows by one for every debate; reap the finished one instead,
 and rebuild in place with `-Force` only for a debate that is still
 running, because a resumed round needs the mirror at the path its
