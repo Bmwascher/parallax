@@ -41,6 +41,18 @@ def test_flash_dispatch_contract():
     assert "--model " + CANONICAL_ID in body
     assert "--add-dir" in body
     assert "--log-file" in body
+    # agy's own scoped mode opens file edits in print mode and leaves
+    # command execution denied (measured 2026-09-13 on agy 1.2.2: without
+    # it every write is soft-denied, with it a run_command call still
+    # is). It is the ONE switch between a lane that blocks on every
+    # dispatch and one that lands edits, and it is on the dispatch line
+    # where every reader sees it, unlike a persisted allow rule.
+    assert "--mode accept-edits" in body
+    assert body.count("--mode accept-edits") >= 2
+    assert "command execution stays denied" in body
+    # a Git-Bash /c/... log path produced NO log file (measured
+    # 2026-09-13); the log is where the route evidence lives
+    assert "Windows spelling" in body
     # unique-suffix brief name + full lifecycle, pinned by exact sentence
     # fragments so a regression cannot pass on loose keywords
     # (Sol check-off round 2, finding 3)
@@ -63,13 +75,22 @@ def test_flash_route_check_strings():
     assert 'Print mode: starting' in body
     assert 'model="' + CANONICAL_ID + '"' in body
     assert "Propagating selected model override" in body
+    # the mode the dispatch line asks for, echoed by the client
+    # (measured 2026-09-13 on agy 1.2.2, P2 log line 98)
+    assert "Print mode: applying agent mode accept-edits" in body
     assert "requested and propagated" in body
     assert "used and confirmed" not in body.replace(
         'never "used and confirmed"', "")
     # transcript/tree corroboration (Sol check-off F1: the log carries no
     # file actions; evidence lives in the brain transcript)
     assert "transcript_full.jsonl" in body
-    assert "conversationID" in body
+    # the id is on the session.go "Print mode: conversation=<uuid>, sending
+    # message" line; the starting line's conversationID field is EMPTY on
+    # agy 1.2.0 and 1.2.2 (both logs measured 2026-09-13), so a wrapper
+    # parsing the starting line gets no id and blocks a good run
+    assert "Print mode: conversation=<uuid>" in body
+    assert 'conversationID=""' in body
+    assert "parse `conversationID=" not in body
     assert ("every path git status reports changed must appear in the "
             "brain transcript as a successful file-changing action"
             ) in body.lower()
@@ -87,8 +108,19 @@ def test_flash_preflight_pins():
     assert "allow rule" in body
     assert "git status --porcelain" in body
     assert "No file matching `AGY-TASK-BRIEF-*`" in body
-    # main-checkout scope with its one declared carve-out (Sol round 3)
-    assert "sole live-verification exception" in body
+    # scope is the trust list itself, not a named checkout: preflight 2
+    # is the mechanical gate and a worktree needs its own entry (measured
+    # 2026-09-12: preflight passed in a trusted worktree on agy 1.2.0).
+    # The 0.12.0 "main checkout only" carve-out named a plan task that no
+    # longer exists.
+    assert "any directory listed in `trustedWorkspaces`" in body
+    # a parent entry covers a child worktree (measured 2026-09-13 on agy
+    # 1.2.2: one entry for the worktrees parent, an edit landed in a
+    # worktree under it that was not listed itself); preflight 2 must
+    # accept an ancestor or it blocks the configuration that works
+    assert "the workspace directory or an ancestor of it" in body
+    assert "a worktree needs its own entry" not in body
+    assert "Task 6" not in body
 
 
 def test_flash_route_report_carries_transcript():
@@ -103,6 +135,10 @@ def test_flash_forbidden_bypass_class():
     window = body[max(0, idx - 200):idx + 200].lower()
     assert "never" in window or "forbidden" in window
     assert "persisted" in body and "settings" in body
+    # the scoped mode is named as NOT a member of the banned class, in
+    # the same section, so a reader of the ban cannot mistake the
+    # dispatch line for a violation of it
+    assert "`--mode accept-edits` is not a member of that class" in body
 
 
 def test_flash_report_headings():

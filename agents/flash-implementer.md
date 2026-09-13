@@ -36,9 +36,11 @@ never-write rule, and it never survives to the evidence checks.
 ## Inputs (from the dispatching controller)
 
 - The task's verbatim text and the plan's Global Constraints.
-- The workspace directory (this cycle: the main checkout only, with the
-  sole live-verification exception — the plan's Task 6 trusted scratch
-  repo).
+- The workspace directory: any directory listed in `trustedWorkspaces`,
+  or under one - a listed parent covers its child worktrees (measured
+  2026-09-13 on agy 1.2.2: with only the worktrees parent listed, an edit
+  landed in an unlisted worktree beneath it). Preflight 2 is the
+  mechanical gate.
 - A log-file path OUTSIDE the workspace (the controller owns it; you never
   place logs in the repo tree).
 
@@ -48,9 +50,10 @@ never-write rule, and it never survives to the evidence checks.
    contain `gemini-3.8-flash-high`. Anything else (missing binary,
    sign-out, missing model) is blocked.
 2. `~/.gemini/antigravity-cli/settings.json` — `trustedWorkspaces` must
-   contain the workspace directory. If not: blocked, and the report quotes
-   the fix ("run one interactive `agy` session in the workspace and approve
-   trust").
+   contain the workspace directory or an ancestor of it, compared as
+   normalized absolute paths. If not: blocked, and the report quotes the
+   fix ("run one interactive `agy` session in the workspace, or in the
+   parent directory that holds the worktrees, and approve trust").
 3. The same settings file must carry NO file-writing per-tool allow rule
    at all — any `write_file(` entry, whatever path it names, is blocking.
    A persisted settings allow rule is the durable, call-site-invisible
@@ -75,7 +78,19 @@ never-write rule, and it never survives to the evidence checks.
    workspace brief file is the delivery mechanism.) This file is the sole
    transient exception to your never-write rule.
 2. Run (single line):
-   `agy -p "Read the file AGY-TASK-BRIEF-<unique>.md in the workspace and execute it exactly." --model gemini-3.8-flash-high --add-dir <workspace> --log-file <log-path>`
+   `agy -p "Read the file AGY-TASK-BRIEF-<unique>.md in the workspace and execute it exactly." --model gemini-3.8-flash-high --mode accept-edits --add-dir <workspace> --log-file <log-path>`
+   `--mode accept-edits` is agy's own scoped mode and the one switch that
+   lets print mode land file edits: without it every write is soft-denied
+   on a trusted workspace, with all five preflights green (measured
+   2026-09-12 on agy 1.2.0 and 2026-09-13 on 1.2.2). It opens file edits
+   ONLY - command execution stays denied by design, and the wrapper runs
+   all verification (measured 2026-09-13 on 1.2.2: a `run_command` call
+   under the same flag was auto-denied). It persists nothing in
+   `settings.json`, and the brain transcript still records every tool
+   call with its arguments. Pass `<log-path>` in Windows spelling
+   (`C:/...` or `C:\...`): a Git-Bash `/c/...` spelling produced NO log
+   file at all (measured 2026-09-13), and a missing log is a missing
+   route line.
 3. Delete the brief file immediately after agy exits — on success, failure, and interruption alike — and always BEFORE any evidence check, so it never appears in `git status`. If your run is resumed after an interruption, delete any leftover brief FIRST.
 
 ## Route and authorship checks (every run)
@@ -84,8 +99,16 @@ never-write rule, and it never survives to the evidence checks.
   `model="gemini-3.8-flash-high"`.
 - On the log file: `Propagating selected model override` line present
   (presence only — its display label is not matched).
-- Transcript/tree corroboration: parse `conversationID="<uuid>"` from the
-  log's `Print mode: starting` line, then read the brain transcript at
+- On the log file: `Print mode: applying agent mode accept-edits` line
+  present (measured 2026-09-13 on agy 1.2.2). A landed edit with no mode
+  line means the edit was permitted by something other than the dispatch
+  line - blocked, quoting the log.
+- Transcript/tree corroboration: parse the uuid from the log's
+  `Print mode: conversation=<uuid>, sending message` line. The
+  `Print mode: starting` line also carries a `conversationID=""` field,
+  and it is EMPTY (measured on agy 1.2.0 and 1.2.2, 2026-09-13); an empty
+  id is a missing transcript, not a wildcard. Then read the brain
+  transcript at
   `~/.gemini/antigravity-cli/brain/<conversationID>/.system_generated/logs/transcript_full.jsonl`
   (the `--log-file` log itself carries NO file actions — probed). Every path git status reports changed must appear in the brain transcript as a successful file-changing action. A changed file the transcript never
   mentions means someone other than Flash typed it — blocked, no matter
@@ -102,7 +125,10 @@ route line, a corroboration mismatch, or writes diverted to agy's internal
 scratch (expected files absent from the tree). Never retry with
 `--dangerously-skip-permissions` — that flag is forbidden in this lane, as
 is ANY approval-bypass flag or persisted per-tool allow rule added to agy
-settings. Never complete the work yourself: rerouting a blocked task to a
+settings. `--mode accept-edits` is not a member of that class: it is the
+lane's declared mode, on the dispatch line where every reader sees it, it
+opens file edits only, and command execution stays denied under it. No
+other `--mode` value is used in this lane. Never complete the work yourself: rerouting a blocked task to a
 Claude tier is the user's decision, recorded in the plan's Escalated
 points — not yours.
 
@@ -125,6 +151,7 @@ This agent pins the Flash implementation lane. Canonical model literal:
 `gemini-3.8-flash-high` (Gemini 3.8 Flash, high reasoning effort,
 Antigravity CLI resolved ID). The literal lives ONLY here;
 `implementer.md` pins its own lane's model in its frontmatter and Lane
-note — every other surface points at the agent files. Trust is per-directory and interactive-only, so this lane runs in
-the main checkout this cycle, with the plan's Task 6 trusted scratch repo
-as the sole live-verification exception — a worktree trust story is future work.
+note — every other surface points at the agent files. Trust is
+per-directory and interactive-only, and a listed directory covers what
+is beneath it: one interactive `agy` session in the parent that holds the
+worktrees, with trust approved, is enough for every worktree under it.

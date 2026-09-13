@@ -1189,7 +1189,7 @@ timely one.
 Status: OPEN
 Cost: the basis for a setting the lane has carried for four releases is missing, and whether the question survives depends on what item 45 decides about the agy lane
 Pairs: none
-Verified: 2026-09-04 29053f8f5802
+Verified: 2026-09-13 ac70b76d5fee
 
 Opened by 0.24.0, which deliberately did not answer it. Item 11's security
 contract stays partially open on this point while the rest of item 11
@@ -1200,16 +1200,34 @@ closes.
 restored `true`, and recorded "allowNonWorkspaceAccess=true required for
 print-mode writes as of agy 1.1.7"
 (`docs/superpowers/plans/2026-07-25-flash-implementer.md:590-603`). That is
-a real measurement, and it is BOUND TO AGY 1.1.7. The lane now runs 1.1.12.
+a real measurement, and it is BOUND TO AGY 1.1.7. The lane now runs 1.2.2.
+
+**Measured 2026-09-13 on agy 1.2.2, and it moves the ground under
+question 1.** With `true` set, unchanged, print mode soft-denied a
+trusted-workspace edit (`ReplaceFileContent`) until the dispatch line
+carried `--mode accept-edits`, and under that flag the edit landed while
+a `run_command` call was still auto-denied. So on 1.2.2 `true` is NOT
+SUFFICIENT for the lane's writes; the flag is. Whether `true` is still
+NECESSARY alongside the flag is the open half of question 1, and one
+run with `false` plus `--mode accept-edits` settles it. Record:
+`C:/Users/Brandon/Documents/KitnDev/KitnEssentials/dev/docs/handoffs/agy-accept-edits-probe-2026-09-13.md`
+(outside this repo). The flag itself shipped into
+`agents/flash-implementer.md` on the same day; that is a lane contract
+change and does not close this item.
 
 **The residual is TWO questions, not one.** An earlier draft of this item
 named only the second, and in naming only it quietly promoted a
 version-bounded measurement into a present-tense requirement:
 
 1. Does `false` STILL soft-deny the lane's intended trusted-workspace
-   writes on 1.1.12? The 1.1.7 result does not answer it. If it no longer
-   denies, `true` is not required and the setting can simply go.
-2. What does `true` permit OUTSIDE the workspace, on 1.1.12?
+   writes when the dispatch line carries `--mode accept-edits`? The 1.1.7
+   result does not answer it, and the 1.2.2 measurement ran with `true`
+   only. If it no longer denies, `true` is not required and the setting
+   can simply go.
+2. What does `true` permit OUTSIDE the workspace, on the current version?
+   Also unmeasured under `--mode accept-edits`: whether the flag permits
+   NEW files and deletes, not only in-place edits (the 1.2.2 run was one
+   in-place edit).
 
 **What 0.24.0 did instead.** `tools/check-drift.ps1` now RECORDS the value
 in the snapshot and reports a change to it as a drift note that names this
@@ -1217,10 +1235,10 @@ item. Recording a value answers neither question and must never be
 presented as closing them: a watched setting is not an understood one.
 
 **Shape of a fix, not decided.** Re-run the 1.1.7 experiment on the
-current version for question 1. Question 2 needs a positive probe - a
-write attempt at a path outside every trusted workspace - and its result
-is a security finding either way, so the probe design belongs in a plan
-rather than in an ad-hoc run.
+current version with the flag on the dispatch line, for question 1.
+Question 2 needs a positive probe - a write attempt at a path outside
+every trusted workspace - and its result is a security finding either
+way, so the probe design belongs in a plan rather than in an ad-hoc run.
 
 Nothing is known to be broken; what is missing is the basis for a setting
 the lane has carried for four releases. Whether this survives at all depends

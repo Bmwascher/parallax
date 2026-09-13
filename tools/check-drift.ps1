@@ -132,7 +132,7 @@ if (-not $codexVersion) {
 # without a word in any report.
 #
 # The lane's KNOWN OPERATIONAL CHECKS are enforced -
-# `agents/flash-implementer.md:45-59` runs three of them as a per-dispatch
+# `agents/flash-implementer.md` (its Preflight section) runs three of them as a per-dispatch
 # preflight and blocks a missing transcript after the run. That is not the
 # same as the lane's contracts being enforced: the security property in
 # backlog item 11 is UNMEASURED and stays open. What was missing is any

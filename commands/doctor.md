@@ -172,7 +172,11 @@ substate observed is still named in the detail text.
   is not a shorter list. Report `allowNonWorkspaceAccess` in the detail
   when the key is present, as an informational VALUE and never as a
   verdict, and say plainly that what it permits outside the workspace is
-  UNMEASURED (backlog item 36).
+  UNMEASURED (backlog item 36). Do not read `true` as what lets the lane
+  write: on agy 1.2.2 with `true` set, print mode denied every write
+  until the dispatch line carried `--mode accept-edits` (measured
+  2026-09-13); the agent file owns that flag, and this check does not
+  assert it.
 
 - **Authorship evidence root.** Verify
   `$env:USERPROFILE\.gemini\antigravity-cli\brain` exists. Missing is
