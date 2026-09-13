@@ -407,7 +407,7 @@ def test_assert_follows_the_override(tmp_path):
 # Group 2: the static sweep
 # ---------------------------------------------------------------------
 PLUGIN_SURFACE = ("skills/**/*.md", "agents/*.md", "commands/*.md",
-                  "hooks/*", "tools/*.ps1")
+                  "hooks/**/*", "tools/*.ps1")
 
 # A declaration line in the notes is the one place a root may be spelled,
 # and only BETWEEN the round-artifact-roots contract markers: a line

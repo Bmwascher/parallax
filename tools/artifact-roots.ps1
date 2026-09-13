@@ -245,7 +245,10 @@ if ($PSBoundParameters.ContainsKey("Assert")) {
     # .NET Core's GetFullPath accepts `<`, `>` and `|`, so on PowerShell 7
     # an unsubstituted `<date>-<topic>` placeholder would resolve and could
     # answer inside (measured 2026-09-12 by the Task 2 review), while 5.1
-    # throws. One explicit set, both hosts.
+    # throws. One explicit set, both hosts. Only a single drive-letter
+    # prefix is exempted, so a provider-qualified form (FileSystem::C:\x)
+    # that Resolve-Absolute could take is refused here; no caller passes
+    # one, and the guard is deliberately stricter than the resolver.
     $assertBody = $Assert -replace '^[A-Za-z]:', ''
     if ($assertBody -match '[<>:"|?*\x00-\x1f]') {
         Fail ("-Assert contains a character Windows paths forbid: " + $Assert)

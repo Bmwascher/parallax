@@ -26,7 +26,8 @@ defect, found in the debate, not in production. Save location: the
 frozen-plan path that `tools/artifact-roots.ps1` printed in preflight,
 resolved from references/model-prompting-notes.md's round-artifact-roots
 declaration (its `Canonical frozen plan path` row, with the repo-side
-docs-root override applied by that one tool rather than by hand).
+docs-root override applied by that one tool rather than by hand); run
+it with `-Assert <plan path> -Expect frozenPlan` before the save.
 
 Port-specific Global Constraints to copy in verbatim when the work is a
 port (KitnDev-family example — adapt the specifics per project):

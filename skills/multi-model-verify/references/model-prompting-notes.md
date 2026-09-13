@@ -830,14 +830,16 @@ The operating rule, which SKILL.md's preflight step 4 points at:
   the frozen plan save, the rounds retention, the ledger path handed to
   agents/fable-reviewer.md, the attestation the emitter is expected to
   write.
-- Before the retention copy, run the tool with
-  `-Assert <destination> -Expect rounds` before the rounds retention
-  copy and `-Expect frozenPlan` before the frozen plan save; exit 0 is
-  the only clean answer, and a path that answers inside a different
-  retained root is refused, because the frozen plan parent contains
-  every dated directory beside `plans/rounds/`. The ledger and mirror
-  rows are not in the assert set, because the session never copies
-  into them.
+- Run the tool with `-Assert <destination> -Expect rounds` before the
+  rounds retention copy and `-Expect frozenPlan` before the frozen plan
+  save; exit 0 is the only clean answer, and a path that answers inside
+  a different retained root is refused, because the frozen plan parent
+  contains every dated directory beside `plans/rounds/`. Stated limit:
+  `-Expect frozenPlan` accepts a dated DIRECTORY in that parent, since
+  the plan row names a file beside them; the rounds copy is the act that
+  spread the KitnEssentials record, and `-Expect rounds` refuses it. The
+  ledger and mirror rows are not in the assert set, because the session
+  never copies into them.
 - Dispatch directories, receipts, briefs, prior-state files and the
   probe's override file are session scratch outside the repository for
   the whole round; only their retained copies enter the rounds root.

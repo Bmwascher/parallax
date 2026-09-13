@@ -227,3 +227,40 @@ not needed. The plan is frozen at the commit that carries this section.
 Status line: GPT-6 Astra (codex exec, session 01a0985e) with Opus 5
 (session); 4 rounds; converged, 0 escalated; Verification status FULL;
 effective route confirmed.
+
+---
+
+# Mode diff: range cd0e863..<head> (branch artifact-roots)
+
+## Preflight (2026-09-13)
+
+`tools/artifact-roots.ps1 -RepoRoot <repo>` (SKILL.md preflight step 4)
+ran against the real repository before the mirror build; its output is
+retained here as `artifact-roots.txt` (`docs-root source: default`). It
+resolves the mirror row's `<TEMP>` to the user's temp directory, so this
+debate's mirror is built there; the plan debate's mirror at `C:/Temp/pxar1`
+predates the declaration.
+
+## Fable whole-branch review (required before round 1)
+
+Dispatched 2026-09-13 via agents/fable-reviewer.md on the exact range
+cd0e863..f12b703 with the frozen plan, its Global Constraints, the SDD
+ledger and a controller-built diff package (retained round records in the
+stat only). Brief: `brief-fable-diff-r1.md`. Raw reply:
+`fable-diff-r1-reply.md`. Verdict: **Ready to merge: Yes**, no Critical,
+no Important, seven Minor; every ledger minor triaged as ride or closed.
+
+Session adjudication, each finding read against the live file:
+
+| # | Finding | Adjudication |
+|---|---------|--------------|
+| 1 | notes operating rule doubles "before" | accepted; sentence rewritten |
+| 2 | frozen-plan-format.md plan-save citation lacks `-Expect frozenPlan` | accepted; clause added at the plan-save sentence |
+| 3 | `-Expect frozenPlan` still accepts a dated directory in the plan parent, unstated | accepted as a stated limit; sentence added to the operating rule (the plan row names a file beside those directories; the rounds copy is the act that spread the record and `-Expect rounds` refuses it) |
+| 4 | spec exit map reads code 1 as outside only | accepted; exit map now names the expect mismatch |
+| 5 | assert guard refuses a provider-qualified path the resolver could take | accepted as a documented limit; header comment added, behaviour unchanged (no caller passes the form) |
+| 6 | sweep glob `hooks/*` is non-recursive | accepted; `hooks/**/*` |
+| 7 | writer test no longer observes the emitter creating `.git/parallax` | no change; the trade is stated in the test and test_attestation.py owns the emitter |
+
+All six applications land in one commit ahead of round 1, so the
+reviewed head carries them.

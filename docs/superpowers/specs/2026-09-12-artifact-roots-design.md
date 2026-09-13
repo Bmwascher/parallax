@@ -222,9 +222,10 @@ Behaviour:
    to refuse (added 2026-09-13 from the final whole-branch review; any
    other value, or `-Expect` without `-Assert`, is a parameter fault).
 
-Exit map: 0 resolved (or asserted inside), 1 asserted outside, 2 for a
-parameter fault, an unreadable declaration, or a `-RepoRoot` that is not
-a git working tree. The map mirrors `tools/dispatch-round.ps1`'s so a
+Exit map: 0 resolved (or asserted inside), 1 asserted outside or inside
+a retained root other than the one `-Expect` names, 2 for a parameter
+fault, an unreadable declaration, or a `-RepoRoot` that is not a git
+working tree. The map mirrors `tools/dispatch-round.ps1`'s so a
 caller reads one convention.
 
 ## Skill and agent edits
