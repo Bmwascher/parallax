@@ -21,6 +21,12 @@ twice, a heading without a date, or a body with nothing in it is a
 failure, not a warning - every one of those has produced an empty or
 wrong release page somewhere.
 
+Each section must OPEN with a lead paragraph in plain words: the first
+non-blank line after the heading must be prose, not a `###` heading or a
+list item, and that paragraph may hold no code span, no path and no URL.
+That is the mechanical proxy for "say what changed for the user before
+the maintainer detail"; the detail goes under a later heading.
+
 The whole file is also passed through `ste_lint.py` beside this one,
 the mechanically checkable part of ASD-STE100; its findings fail the
 check the same way, so an entry that a release would publish is one
@@ -71,6 +77,41 @@ def parse_sections(text):
     return sections, errors
 
 
+LEAD_CODE_RE = re.compile(r"`")
+LEAD_URL_RE = re.compile(r"https?://")
+LEAD_PATH_RE = re.compile(r"(?<![\w.])(?:[\w.-]+/)+[\w.-]*|\b[\w-]+\.(?:md|py|ps1|json|yml|yaml|txt)\b")
+
+
+def lead_paragraph_errors(version, body):
+    """The rules on a section's opening paragraph, as error strings."""
+    lines = list(body)
+    while lines and not lines[0].strip():
+        lines.pop(0)
+    if not lines:
+        return []  # the empty-body rule reports this
+    first = lines[0].lstrip()
+    if first.startswith("#") or re.match(r"^(?:[-*+]|\d+\.)\s", first):
+        return ["version %s: the section must open with a plain-language "
+                "paragraph, not a heading or a list item" % version]
+    lead = []
+    for line in lines:
+        if not line.strip():
+            break
+        lead.append(line)
+    text = " ".join(lead)
+    errors = []
+    if LEAD_CODE_RE.search(text):
+        errors.append("version %s: the lead paragraph has a code span; keep "
+                      "names and paths for a later heading" % version)
+    if LEAD_URL_RE.search(text):
+        errors.append("version %s: the lead paragraph has a URL; keep links "
+                      "for a later heading" % version)
+    if LEAD_PATH_RE.search(text):
+        errors.append("version %s: the lead paragraph names a file or path; "
+                      "keep it for a later heading" % version)
+    return errors
+
+
 def section_body(sections, version):
     for found, _date, body in sections:
         if found == version:
@@ -118,6 +159,8 @@ def main(argv=None):
     sections, errors = parse_sections(text)
     if not sections and not errors:
         errors.append("no '## vX.Y.Z (YYYY-MM-DD)' section at all")
+    for version, _date, body in sections:
+        errors.extend(lead_paragraph_errors(version, body))
 
     if args.version is not None:
         wanted = args.version
