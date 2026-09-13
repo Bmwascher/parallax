@@ -15,7 +15,6 @@ The full previous text of every closed item is in git history at
 ## Ranking
 
 ### First - breaks the repo's own review process
-- 100
 - 75
 - 49
 - 59
@@ -91,10 +90,9 @@ The full previous text of every closed item is in git history at
 - 86
 
 ## 100. Round artifacts land in three roots per consumer repo
-Status: OPEN
-Cost: every debate writes its rounds, SDD ledger and mirror to whichever root the calling skill inherited from Superpowers, so one repo accumulates `plans/rounds/`, `rounds/` and `.superpowers/sdd/` side by side; a retention check cannot state one rule, a later session cannot find the record for a gate without searching all three, and a repo-side path override (KitnEssentials maps `docs/superpowers` to `dev/docs/superpowers`) is honoured by some writers and not others
-Pairs: none
-Verified: 2026-09-12 b57a16c64aba
+Status: DONE
+Closed: 0.34.0
+Verified: 2026-09-13 f9d6591f0151
 
 **Filed 2026-09-12 from the KitnEssentials artifact cleanup.** Measured
 there on that date: 76 gate folders under `dev/docs/superpowers/plans/rounds/`,
@@ -113,14 +111,46 @@ Nothing in the plugin states the full set of paths a debate creates, so
 nothing can check them.
 
 **What closing it means.** One declaration of every path a round writes
-(rounds, SDD ledger, review mirror, attestation), resolved through one
-repo-override rule, with the mirror and ledger roots gitignored by the
-same entry as the rounds. A preflight step that prints the resolved set,
-and an eval that fails when a round writes outside it. The declaration
-belongs next to the canonical model declarations in
-references/model-prompting-notes.md so a swap edits one file. Migration
-of existing repos is the consumer's job (KitnEssentials archives by hand);
-the plugin only has to stop adding to the spread.
+(frozen plan, rounds, SDD ledger, review mirror, attestation,
+checkpoint), resolved through one repo-override rule by one tool, a
+preflight step that prints the resolved set, and an eval that fails
+when a writer or a skill sentence names a root outside it. The
+declaration sits next to the canonical model declarations in
+references/model-prompting-notes.md so a swap edits one file.
+Amended 2026-09-12, at brainstorming: the ledger and mirror roots are
+declared FIXED rather than gitignored beside the rounds. The ledger
+root belongs to Superpowers, whose sdd-workspace script hard-codes it
+and reads it back; the mirror must sit outside the repository, which
+the mirror tool already refuses to violate. The same date's survey also
+found that two of the four KitnEssentials roots were not parallax
+writers: the bare rounds directory has no source in this repo's
+history, and the 54 MB copy was written by a Codex controller session
+on 2026-09-08. The plugin binds its own tools and the Claude
+controller's prose; a foreign controller is outside the contract.
+Migration of existing repos is the consumer's job (KitnEssentials
+archives by hand); the plugin only has to stop adding to the spread.
+
+**Closed 2026-09-13 by 0.34.0.** The declaration is the
+`round-artifact-roots` region of references/model-prompting-notes.md
+(eight rows; the ledger, mirror, attestation and checkpoint rows fixed
+for the reasons stated beside it). `tools/artifact-roots.ps1` is the one
+reader: it resolves the set, applies the existence-based docs-root
+override with an explicit escape, prints the set as SKILL.md preflight
+step 4, and answers `-Assert <path> -Expect <row>` before a retention
+copy so a rounds directory beside `plans/rounds/` is refused. It parses
+the raw process command line, because five debate rounds showed that
+typed binding, positional binding, switch conversion and `-File`'s own
+preprocessing each gave the two hosts different answers.
+`evals/multi-model-verify/test_artifact_roots.py` pins the region whole,
+sweeps the plugin surface for seven hand-spelled root shapes (zero
+offenders), drives the resolver on both hosts, and runs the three real
+writers of a round against a disposable repository to assert that
+nothing but the attestation appears inside it. Plan debated 4 rounds
+(PASS), branch reviewed by the fable seat, diff debated 5 rounds
+(R2 void, R5 PASS), attested PASS/FULL at 5186b9e. Records under
+docs/superpowers/plans/rounds/2026-09-12-artifact-roots/.
+
+Record: docs/superpowers/plans/rounds/2026-09-12-artifact-roots/README.md
 
 ## 1. Replace the pin mechanism
 Status: DONE

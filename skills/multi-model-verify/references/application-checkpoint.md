@@ -72,13 +72,12 @@ terminal PASS — and its attestation — come only after that.
 
 ## The artifact
 
-Write the checkpoint to the reviewed repo's git dir — untracked, same
-rationale as attestations (recording it cannot move HEAD, it never ships
-in a commit, worktrees share it):
-
-```
-<git-common-dir>/parallax/application-checkpoints/<stamp>-<reviewed-head12>.md
-```
+Write the checkpoint as `<stamp>-<reviewed-head12>.md` directly under
+the checkpoint root that `tools/artifact-roots.ps1` printed in preflight
+(references/model-prompting-notes.md's round-artifact-roots declaration,
+`Canonical checkpoint root` row) — untracked, same rationale as
+attestations (recording it cannot move HEAD, it never ships in a commit,
+worktrees share it).
 
 At attestation time, pass it to the emitter via `-CheckpointFile`: the
 attestation then records the checkpoint's hash and the emitter-computed

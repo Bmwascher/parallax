@@ -765,6 +765,94 @@ already design facts — the minimal five-tool allowlist and reasoning
 effort fixed before the session (the config.toml pin; mid-session
 changes would also break prefix caching per the guide).
 
+## Artifact roots (every path a round writes)
+
+THE single source for where a debate lands in the reviewed repository,
+in the same swap-by-one-edit shape as the model declarations above.
+`tools/artifact-roots.ps1` parses the eight lines below at runtime and
+fails loud when one is missing. The two common-dir rows are computed
+independently by their emitter, `tools/write-attestation.ps1`, and their
+verifier, `tools/verify-attestation.ps1`; the writer test in
+`evals/multi-model-verify/test_artifact_roots.py` is what binds those
+computations to the declaration, and its sweep covers the rest of the
+plugin surface for a root named by hand. Item 100 (2026-09-12) is
+the record of why: one consumer repository held rounds, ledgers and a
+mirror under four roots, because each writer read the repo-side
+override on its own.
+
+<!-- contract:start id=round-artifact-roots -->
+Canonical docs root: `docs/superpowers`
+Canonical docs root override: `dev/docs/superpowers`
+Canonical frozen plan path: `<docs-root>/plans/<date>-<topic>.md`
+Canonical rounds root: `<docs-root>/plans/rounds/<date>-<topic>/`
+Canonical SDD ledger root: `.superpowers/sdd/<plan-basename>/`
+Canonical review mirror root: `<TEMP>/<short-name>/`
+Canonical attestation root: `<git-common-dir>/parallax/attestations/`
+Canonical checkpoint root: `<git-common-dir>/parallax/application-checkpoints/`
+<!-- contract:end -->
+
+The override rule, applied to exactly the rows that carry
+`<docs-root>`: the docs root is the override value when that directory
+exists under the repo root, else the default; `-DocsRoot` names it
+explicitly and wins over both, and the tool prints which of the three
+fired as `docs-root source`. A repository carrying both directories
+resolves to the override silently, which is what the printed source
+line is for.
+
+The other rows are FIXED, each for a reason the row cannot carry:
+
+- SDD ledger: Superpowers owns it. Its subagent-driven-development
+  `scripts/sdd-workspace` creates the directory and its self-ignoring
+  `.gitignore`, and its ledger check reads `<workspace>/progress.md`
+  back, so the plugin cites the path and never relocates it.
+- Review mirror: never inside the reviewed repository.
+  `tools/new-review-mirror.ps1` refuses a path equal to, inside, or
+  containing the repo; `<TEMP>` is the controller host's temp
+  directory, and references/preflight-mirror.md owns the short-name
+  and path-budget rules.
+- Attestation and checkpoint: under the git COMMON dir, so recording a
+  verdict cannot move `HEAD` out from under its own SHA and every
+  worktree sees one record; `tools/verify-attestation.ps1` re-hashes the
+  checkpoint there. `<git-common-dir>` is what
+  `git rev-parse --git-common-dir` prints, which in a linked worktree is
+  not `.git`.
+
+The operating rule, which SKILL.md's preflight step 4 points at:
+
+- Run the tool once per debate, before round 1, against the reviewed
+  repository (the REAL repo, not the mirror: the mirror is where the
+  reviewer reads, the repo is where the record lands). Write its output
+  to session scratch OUTSIDE the repository, beside the briefs. It is a
+  retained artifact: it enters the rounds root as `artifact-roots.txt`
+  when the other round files do, after the last wrapper exits, so the
+  quiet period in references/preflight-mirror.md is never touched.
+- Every later act that names one of these paths uses the printed value:
+  the frozen plan save, the rounds retention, the ledger path handed to
+  agents/fable-reviewer.md, the attestation the emitter is expected to
+  write.
+- Run the tool with `-Assert <destination> -Expect rounds` before the
+  rounds retention copy and `-Expect frozenPlan` before the frozen plan
+  save; exit 0 is the only clean answer, and a path that answers inside
+  a different retained root is refused, because the frozen plan parent
+  contains every dated directory beside `plans/rounds/`. Stated limit:
+  `-Expect frozenPlan` accepts a dated DIRECTORY in that parent, since
+  the plan row names a file beside them; the rounds copy is the act that
+  spread the KitnEssentials record, and `-Expect rounds` refuses it. The
+  ledger and mirror rows are not in the assert set, because the session
+  never copies into them.
+- Dispatch directories, receipts, briefs, prior-state files and the
+  probe's override file are session scratch outside the repository for
+  the whole round; only their retained copies enter the rounds root.
+- Implementation-time scratch is outside this contract: the rows name
+  what a REVIEW ROUND writes. agents/flash-implementer.md writes a
+  transient task brief into the checkout and deletes it before any
+  evidence check; the SDD ledger is the one implementation artifact
+  named here, because a round cites it.
+- A controller other than Claude Code is outside this contract. The
+  2026-09-08 record in item 100 is of one that wrote a 54 MB copy of a
+  worktree under a root of its own naming; the plugin binds its own
+  tools and the prose the Claude controller follows, not a foreign one.
+
 ## The scope guard (every brief, every lane)
 
 <!-- contract:start id=brief-scope-guard -->

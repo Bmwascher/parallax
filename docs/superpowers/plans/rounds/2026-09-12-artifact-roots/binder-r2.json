@@ -1,0 +1,13 @@
+{
+ "status": "clean",
+ "sealed": "sealed",
+ "expectedBriefSha256": "2da89e273f9601ecacc313f5e7bc2760357b624887c8503d353ccfc3ea75d506",
+ "sealedPriorStateSha256": "5788f126e0f543e0bdf074d6e9f35f21b0cfd6cec66de06ddd14aebf7ce19fcd",
+ "nextState": {
+  "kind": "resume",
+  "rolloutFile": "C:/Users/Brandon/.codex/sessions/2026/09/12/rollout-2026-09-12T20-24-59-01a0985e-1d0d-7940-b544-11e0ffeba5d9.jsonl",
+  "sessionId": "01a0985e-1d0d-7940-b544-11e0ffeba5d9",
+  "bytes": 2522639,
+  "prefixSha256": "5977da7ab20de5973f13b4417537349c8a956993a640524e4748e77af7add070"
+ }
+}

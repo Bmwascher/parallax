@@ -1,6 +1,7 @@
 # verify-attestation.ps1 - check a pushed main sha against the recorded
-# multi-model-verify attestations (written by write-attestation.ps1 into
-# <git-common-dir>\parallax\attestations\<head-sha>.json).
+# multi-model-verify attestations (written by write-attestation.ps1 as
+# <head-sha>.json under the attestation row of
+# references/model-prompting-notes.md's round-artifact-roots declaration).
 #
 # Match rules (Sol consult 2026-07-19, session-adjudicated):
 #   direct / fast-forward: the pushed sha itself is attested (head_sha

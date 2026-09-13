@@ -2424,8 +2424,12 @@ class TestApplicationCheckpoint:
 
     def test_artifact_location_and_headless_exemption(self):
         text = self.checkpoint()
-        assert "parallax/application-checkpoints/" in text
-        assert "git-common-dir" in text, (
+        # 0.34.0: the location is the declaration's checkpoint row, cited
+        # rather than spelled (item 100; the sweep in test_artifact_roots.py
+        # refuses the spelled form on this surface).
+        assert "Canonical checkpoint root" in text
+        assert "round-artifact-roots" in text
+        assert "recording it cannot move HEAD" in text, (
             "same untracked-record rationale as attestations"
         )
         assert re.search(r"N/A.{0,120}(headless|auto-triage)",

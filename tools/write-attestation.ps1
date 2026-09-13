@@ -28,9 +28,10 @@ param(
     [string]$Mode = "diff",
     # Optional (0.7.0): the application checkpoint that authorized the fix
     # edits inside the attested range (references/application-checkpoint.md).
-    # Must live in the canonical <git-common-dir>/parallax/
-    # application-checkpoints/ directory - the verifier re-locates and
-    # re-hashes it there, so an artifact anywhere else is unverifiable.
+    # Must live under the checkpoint row of
+    # references/model-prompting-notes.md's round-artifact-roots
+    # declaration - the verifier re-locates and re-hashes it there, so
+    # an artifact anywhere else is unverifiable.
     # When present, the record binds the checkpoint hash AND the
     # emitter-computed changed-path set - never caller-supplied - so an
     # attestation minted for a different change set fails verification.

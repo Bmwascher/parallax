@@ -662,7 +662,9 @@ proceed; do not infer either key's value.
 ## Workspace isolation and the brief
 
 - Reviews run in a THROWAWAY REVIEW MIRROR — never the real tree. Build
-  it at a SHORT path directly under the temp directory, such as a
+  it at a SHORT path directly under the temp directory (the
+  `Canonical review mirror root` row of model-prompting-notes.md's
+  round-artifact-roots declaration), such as a
   `kerev<n>` folder, and never inside the session scratchpad, whose own
   path is long enough to consume most of the budget before the copy
   starts. This sentence used to say "in the session scratchpad" and

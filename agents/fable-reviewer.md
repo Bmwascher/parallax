@@ -15,7 +15,10 @@ replaces the cross-vendor gate.
 ## Inputs (from the dispatching session)
 
 - The frozen plan path and its Global Constraints.
-- The SDD ledger path - its deferred minors are yours to triage.
+- The SDD ledger path (the `Canonical SDD ledger root` row of
+  references/model-prompting-notes.md's round-artifact-roots declaration,
+  which the dispatcher resolved) - its deferred minors are yours to
+  triage.
 - A controller-built diff package for the exact base..head range (commit
   list, stat, full diff with context). The package is your view of the
   change: its context lines ARE the changed files. Read a repo file

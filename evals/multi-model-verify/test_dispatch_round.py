@@ -170,17 +170,21 @@ class RealMirror(object):
         self.mirror_state_sha256 = mirror_state_sha256
 
 
-def build_real_mirror(tmp_path):
+def build_real_mirror(tmp_path, source=None):
     """Build a real mirror with the real tool and return its path, its
     source, and its five identity values, read out of the printed
-    record."""
-    source = tmp_path / "mirror-src"
-    source.mkdir()
-    git(tmp_path, "init", "-q", str(source))
-    (source / "only.txt").write_text("tracked\n")
-    git(source, "add", "only.txt")
-    git(source, "-c", "user.email=t@t", "-c", "user.name=t",
-        "commit", "-q", "-m", "base")
+    record. Pass `source` to mirror a repository the caller prepared
+    (test_artifact_roots.py needs two commits for the attestation
+    emitter); by default a one-commit source is created here, so every
+    existing caller is unchanged."""
+    if source is None:
+        source = tmp_path / "mirror-src"
+        source.mkdir()
+        git(tmp_path, "init", "-q", str(source))
+        (source / "only.txt").write_text("tracked\n")
+        git(source, "add", "only.txt")
+        git(source, "-c", "user.email=t@t", "-c", "user.name=t",
+            "commit", "-q", "-m", "base")
 
     mirror_path = tmp_path / "real-mirror"
     proc = subprocess.run(

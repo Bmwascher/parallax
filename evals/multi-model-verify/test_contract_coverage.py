@@ -770,6 +770,16 @@ DECLARED_REGIONS = {
     # the evidence duty, the empty re-enumeration, the hook suppression,
     # and BLOCKED - rather than the removal itself.
     "back-channel-auto-mirror",
+    # 0.34.0, backlog item 100. One consumer repository held rounds,
+    # ledgers and a mirror under four roots because every writer read the
+    # repo-side override on its own. The region holds EXACTLY the eight
+    # declaration lines tools/artifact-roots.ps1 parses; the prose that
+    # says why two rows are overridable and four are fixed sits outside
+    # the markers, because a region must fit one pin. The id carries the
+    # `round-` prefix because the citation rule below reads every bare
+    # occurrence of a declared id, and the tool's own file name would
+    # otherwise be an unresolvable citation.
+    "round-artifact-roots",
 }
 
 

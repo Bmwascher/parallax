@@ -150,6 +150,8 @@ requesting-code-review. Explicit project review gates remain applicable.
    `-m`, so whether either changes rendered content is UNVERIFIED. Do not
    call a passing probe full reviewer isolation.
    <!-- contract:end -->
+4. Run `tools/artifact-roots.ps1 -RepoRoot <repo>` per
+   references/model-prompting-notes.md's round-artifact-roots rule.
 
 ## Mode plan
 
@@ -318,10 +320,8 @@ requesting-code-review. Explicit project review gates remain applicable.
 
 4. Iterate per debate-protocol.md until convergence or the round cap, then
    escalate any unresolved points to the user with both positions stated.
-5. Freeze the converged plan per references/frozen-plan-format.md under the
-   project's superpowers plans dir (KitnEssentials:
-   `dev/docs/superpowers/plans/`; other projects: the superpowers default
-   `docs/superpowers/plans/`).
+5. Freeze the converged plan per references/frozen-plan-format.md at the
+   frozen-plan path preflight step 4 printed.
 
 ## Mode diff
 
@@ -386,9 +386,9 @@ When an application checkpoint governed fix application, pass it via
 `-CheckpointFile`; references/application-checkpoint.md states what that
 binds and which head it is bound to.
 
-It writes `.git/parallax/attestations/<head-sha>.json` inside the reviewed
-repo — untracked by design, so recording the verdict cannot move HEAD out
-from under its own SHA. The pre-push lane (`tools/verify-attestation.ps1`)
+It writes the attestation row's path, which preflight step 4 printed —
+untracked by design, so recording the verdict cannot move HEAD out from
+under its own SHA. The pre-push lane (`tools/verify-attestation.ps1`)
 later warns when a `main` push has no matching attestation for the pushed
 head (fast-forward: pushed sha == attested head; merge commit: parent1 ==
 attested base, parent2 == attested head — a squash changes the sha and
