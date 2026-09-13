@@ -29,6 +29,7 @@ The full previous text of every closed item is in git history at
 - 95
 - 98
 - 101
+- 102
 - 99
 
 ### Second - taxes every cycle
@@ -90,11 +91,57 @@ The full previous text of every closed item is in git history at
 - 85
 - 86
 
+## 102. The reap guard cannot tell a debate's trees from any clone at the attested head, and the mirror parent is the drive root
+Status: OPEN
+Cost: a session that names the wrong tree at the right head has it removed, and every mirror a KitnEssentials session builds lands directly under the drive root because the canonical temp root blows the path budget, so the doctor has to find them by a name pattern rather than a declared parent
+Pairs: 101
+Verified: 2026-09-13 47bb1667d8a3
+
+**Filed 2026-09-13 from the whole-branch review of the mirror reaper
+(item 101).** The emitter's identity guard refuses a tree that is not
+at the attested head, that overlaps the reviewed repository or its
+common dir, that is reached through a link, or whose `.git` is a file,
+and it pins each git read to the tree's own git dir. What it cannot do
+is distinguish this debate's mirror or bridge from any other clone of
+the same repository sitting at the same head: a second plain clone
+with unpushed branches passes every rule if the session names it. The
+prose in references/preflight-mirror.md states the residual instead of
+hiding it.
+
+**Two follow-ups, one decision each.**
+
+1. The bridge has a marker the mirror does not: a session clones it
+   from the reviewed repository, so its `origin` resolves to that
+   repository's top level or common dir, while a user's own clone points
+   at the remote. Requiring that for `-ReapBridge` closes half the gap
+   at one git call. The mirror carries whatever remotes its source had,
+   so the same rule does not apply to it without a marker the mirror
+   tool would have to write, and the tool writes nothing identifying
+   inside the mirror by design (the fingerprint covers every byte).
+2. The location. The canonical review mirror root is `<TEMP>/<short-name>/`,
+   but the DT review packets put the deepest file 243 characters below
+   the repo root, so the mirror root must be 15 characters or fewer and
+   the 36-character temp directory cannot hold one; the sessions build
+   at `C:\kv-<tag>` instead, which is why the 2026-09-13 measurement
+   found 78 directories at the drive root. A declared short parent such
+   as `C:\pxm\<tag>` would satisfy the budget, keep the drive root clear,
+   turn the doctor's `kv*` name pattern into a fixed directory, and give
+   the reap guard one more cheap rule: a reap path must sit under the
+   declared parent. That edits the round-artifact-roots region and its
+   pin, `tools/artifact-roots.ps1`, doctor check 10 and the KitnEssentials
+   memory that names `C:\kv-<tag>`; the user picks the name.
+
+**What closing it means.** The bridge origin rule shipped with a test
+that drives a foreign clone at the attested head and sees it refused,
+and a decision recorded on the mirror parent, either a new declared
+root with the four edits above or a stated reason to keep the drive
+root.
+
 ## 101. Review mirrors are never reaped, so a review day costs about 3 GB of drive root
 Status: OPEN
 Cost: 78 mirror and bridge directories totalling 13.4 GB accumulated at the drive root in four review days, and the only removal is a hand sweep that has to guess which of them a live debate can still resume
-Pairs: 98
-Verified: 2026-09-13 5ffef5dc6ae7
+Pairs: 98, 102
+Verified: 2026-09-13 816bd463faf8
 
 **Filed 2026-09-13 from the KitnEssentials handoff**
 `dev/docs/handoffs/parallax-mirror-reaper-handoff.md` (outside this
