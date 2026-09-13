@@ -1,0 +1,7 @@
+{
+  "allowNonWorkspaceAccess": true,
+  "trustedWorkspaces": [
+    "C:\\Users\\Brandon\\Documents\\parallax",
+    "C:\\Users\\Brandon\\Documents\\KitnDev\\_worktrees"
+  ]
+}
