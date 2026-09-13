@@ -1424,7 +1424,7 @@ under the dispatch flags; a mitigation, never proof of removal).
 | 10 | Copy date is 2026-09-08, not 09-07 | reviewer R2 | accepted into the spec and backlog text | rollout records 3682 and 3684 |
 | 11 | Unresolvable paths exit 1 (uncaught throw) instead of the contract's 2; `bad|root` differs by host | reviewer R3 | accepted into Task 2 with four regressions | plan Task 2 Step 3 |
 | 12 | The R2 explanation mis-stated the mechanism (git runs in PowerShell's location; `GetFullPath` uses the process cwd) | reviewer R3 | accepted; comments and spec corrected | tools/new-review-mirror.ps1:1234 |
-| 13 | Codex-controller attribution of the 54 MB copy | session | UNVERIFIED by both reviewers (outside the mirror); the spec names the rollout file; carries no weight | spec fact 4 |
+| 13 | Codex-controller attribution of the 54 MB copy | session | UNVERIFIED by the R1 reviewer (outside the mirror); the R2 reviewer read the rollout the spec names and confirmed the copy's execution record (row 10; corrected 2026-09-12, this row said "both reviewers"); the 54 MB figure stays UNVERIFIED; carries no weight | spec fact 4; rounds README, Astra R2 |
 
 ### Escalated points (user-decided)
 | # | Question | Session position | Reviewer position | Owner's call |

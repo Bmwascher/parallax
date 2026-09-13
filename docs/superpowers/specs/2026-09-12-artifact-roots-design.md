@@ -200,8 +200,11 @@ Behaviour:
    Astra R1 review), so the real parent is resolved and the tail is
    appended verbatim. An explicit `-DocsRoot` is canonicalized the same
    way, so `./other/root` prints and asserts as `other/root`.
-4. Print one line per row, `name: <absolute path>`, then
-   `docs-root source: <source>`. With `-Json`, emit one object with the
+4. Print one line per row, `name: <absolute path>`, with
+   `docs-root source: <source>` as the THIRD line, directly after
+   `repo:` and `docs-root:` and before the six declared rows (corrected
+   2026-09-12 to match the tool; this sentence said "last" and the tool
+   never printed it there). With `-Json`, emit one object with the
    same keys plus `source`. The absolute path for a placeholder-bearing
    row is the row's PARENT resolved plus the placeholder tail, e.g.
    `C:/repo/dev/docs/superpowers/plans/rounds/<date>-<topic>/`.

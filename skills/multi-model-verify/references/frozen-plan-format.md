@@ -86,8 +86,8 @@ about what the reviewer actually said needs the raw text or an honest
 `tools/artifact-roots.ps1` printed in preflight (references/model-prompting-notes.md's
 round-artifact-roots declaration, `Canonical rounds root` row, next to the
 frozen plans; established by the 2026-07-24 jinn intake) — run the tool
-with `-Assert` on the destination before copying, so retention survives
-scratchpad cleanup by default and never lands beside the root.
+with `-Assert` on the destination and `-Expect rounds` before copying, so
+retention survives scratchpad cleanup by default and never lands beside the root.
 
 Lane substitution (backup reviewer): `Verification status: FULL` MAY
 carry a `Degradation:` class plus `Authorized by: user at round N` when

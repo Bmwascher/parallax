@@ -321,6 +321,77 @@ def test_assert_rejects_a_path_outside_the_repo(tmp_path):
 
 
 @needs_host
+def test_expect_refuses_a_rounds_copy_aimed_beside_the_rounds_root(tmp_path):
+    # The KitnEssentials shape item 100 exists to refuse: a dated
+    # directory beside plans/rounds/. The frozen plan parent contains
+    # it, so a bare -Assert answers "inside" (see the next test); -Expect
+    # names the root the copy is meant for and refuses any other.
+    repo = make_repo(tmp_path)
+    beside = repo / "docs/superpowers/plans/2026-09-12-x/r1.md"
+    proc = run_resolver("-RepoRoot", str(repo), "-Assert", str(beside),
+                        "-Expect", "rounds")
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "assert: inside frozen plan parent, expected rounds root" in proc.stdout
+    got = json.loads(run_resolver("-RepoRoot", str(repo), "-Assert", str(beside),
+                                  "-Expect", "rounds", "-Json").stdout)
+    assert got["assert"]["inside"] is False
+    assert got["assert"]["root"] == "frozen plan parent"
+    assert got["assert"]["expected"] == "rounds root"
+
+
+@needs_host
+def test_assert_without_expect_accepts_the_same_path(tmp_path):
+    # Unchanged behaviour, and the reason -Expect exists: without it the
+    # frozen plan parent (<docs-root>/plans) accepts every dated
+    # directory beside plans/rounds/, so exit 0 here is NOT a clean
+    # answer for a rounds retention copy.
+    repo = make_repo(tmp_path)
+    beside = repo / "docs/superpowers/plans/2026-09-12-x/r1.md"
+    proc = run_resolver("-RepoRoot", str(repo), "-Assert", str(beside))
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "assert: inside frozen plan parent:" in proc.stdout
+
+
+@needs_host
+def test_expect_accepts_the_expected_root_and_reports_it(tmp_path):
+    repo = make_repo(tmp_path)
+    under = repo / "docs/superpowers/plans/rounds/2026-09-12-x/r1.md"
+    proc = run_resolver("-RepoRoot", str(repo), "-Assert", str(under),
+                        "-Expect", "rounds")
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "assert: inside rounds root:" in proc.stdout
+    got = json.loads(run_resolver("-RepoRoot", str(repo), "-Assert", str(under),
+                                  "-Expect", "rounds", "-Json").stdout)
+    assert got["assert"]["inside"] is True
+    assert got["assert"]["root"] == "rounds root"
+    assert got["assert"]["expected"] == "rounds root"
+
+
+@needs_host
+@pytest.mark.parametrize("args", [
+    # An unknown value, and a case variant: the values are exact.
+    ("-RepoRoot", "{repo}", "-Assert", "{repo}/x", "-Expect", "ledger"),
+    ("-RepoRoot", "{repo}", "-Assert", "{repo}/x", "-Expect", "Rounds"),
+    # -Expect without -Assert has nothing to check against.
+    ("-RepoRoot", "{repo}", "-Expect", "rounds"),
+])
+def test_expect_parameter_faults_exit_2(tmp_path, args):
+    repo = make_repo(tmp_path)
+    proc = run_resolver(*[a.replace("{repo}", str(repo)) for a in args])
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert proc.stdout.startswith("ERROR:"), proc.stdout
+
+
+@needs_host
+def test_docsroot_may_not_be_the_repo_root_itself(tmp_path):
+    repo = make_repo(tmp_path)
+    proc = run_resolver("-RepoRoot", str(repo), "-DocsRoot", ".")
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert proc.stdout.startswith("ERROR:"), proc.stdout
+    assert "may not be the repo root itself" in proc.stdout
+
+
+@needs_host
 def test_assert_follows_the_override(tmp_path):
     repo = make_repo(tmp_path)
     (repo / "dev" / "docs" / "superpowers").mkdir(parents=True)
@@ -338,36 +409,59 @@ def test_assert_follows_the_override(tmp_path):
 PLUGIN_SURFACE = ("skills/**/*.md", "agents/*.md", "commands/*.md",
                   "hooks/*", "tools/*.ps1")
 
-# A declaration line in the notes is the one place a root may be spelled.
+# A declaration line in the notes is the one place a root may be spelled,
+# and only BETWEEN the round-artifact-roots contract markers: a line
+# elsewhere in the file that merely looks like a declaration is swept.
 DECLARATION_LINE = re.compile(r"^Canonical [a-zA-Z ]+: `[^`]+`\s*$")
+REGION_START = "<!-- contract:start id=round-artifact-roots -->"
+REGION_END = "<!-- contract:end -->"
+
+
+def declaration_line_numbers():
+    """1-based line numbers of the declaration lines inside the marked
+    region of the notes, read once."""
+    lines = read(NOTES).splitlines()
+    start = lines.index(REGION_START)
+    end = lines.index(REGION_END, start)
+    return {n for n in range(start + 2, end + 1)
+            if DECLARATION_LINE.match(lines[n - 1])}
+
 
 # The shapes are ENUMERATED so the failure names what was searched for.
 # A dated citation under the declared rounds root
 # (docs/superpowers/plans/rounds/<date>-...) matches none of them; a
 # dated ledger citation (.superpowers/sdd/<date>-...) is exempted by the
-# lookahead, because one exists in the notes today.
+# lookahead, because one exists in the notes today. Every separator is
+# `[/\\]` because tools/*.ps1 spell paths with backslashes. The
+# lookbehind in the first shape only keeps a citation of a nested
+# `plans/rounds/` path from being misread as a root beside plans/; the
+# string `plans/superpowers/rounds/` does not occur in the tree.
 FORBIDDEN_SHAPES = [
     ("a rounds root beside plans/ instead of under it",
-     re.compile(r"(?<!plans/)superpowers/rounds/")),
+     re.compile(r"(?<!plans[/\\])superpowers[/\\]rounds[/\\]")),
     ("the foreign controller's mirror root",
      re.compile(r"review-sources")),
     ("the override docs root named by hand",
-     re.compile(r"dev/docs/superpowers")),
+     re.compile(r"dev[/\\]docs[/\\]superpowers")),
     ("a ledger root that is neither the declaration nor a dated citation",
-     re.compile(r"\.superpowers/sdd/(?!\d{4}-\d{2}-\d{2}-)")),
+     re.compile(r"\.superpowers[/\\]sdd[/\\](?!\d{4}-\d{2}-\d{2}-)")),
     ("an attestation or checkpoint root spelled under .git/ instead of the git common dir",
-     re.compile(r"\.git/parallax/")),
+     re.compile(r"\.git[/\\]parallax[/\\]")),
+    ("the default docs root named by hand outside a dated citation",
+     re.compile(r"docs[/\\]superpowers(?![/\\](plans[/\\](rounds[/\\])?|specs[/\\])\d{4}-\d{2}-\d{2}-)")),
 ]
 
 
 def test_no_round_root_is_named_outside_the_declaration():
     offenders = []
+    exempt = declaration_line_numbers()
+    assert exempt, "no declaration lines found between the region markers"
     for pattern in PLUGIN_SURFACE:
         for f in sorted(REPO.glob(pattern)):
             if not f.is_file():
                 continue
             for lineno, line in enumerate(read(f).splitlines(), 1):
-                if f == NOTES and DECLARATION_LINE.match(line):
+                if f == NOTES and lineno in exempt:
                     continue
                 for label, rx in FORBIDDEN_SHAPES:
                     if rx.search(line):
@@ -399,6 +493,40 @@ def test_sweep_can_fail(tmp_path):
     hits = [label for label, rx in FORBIDDEN_SHAPES
             if rx.search("It writes `.git/parallax/attestations/<head-sha>.json`")]
     assert hits == ["an attestation or checkpoint root spelled under .git/ instead of the git common dir"]
+    # The sixth shape: the default docs root spelled by hand. A bare
+    # rounds directory beside plans/ hits it AND the first shape; a
+    # PowerShell backslash spelling hits it; a dated plan or spec
+    # citation does not.
+    hits = [label for label, rx in FORBIDDEN_SHAPES
+            if rx.search("see docs/superpowers/rounds/")]
+    assert "the default docs root named by hand outside a dated citation" in hits
+    assert "a rounds root beside plans/ instead of under it" in hits
+    hits = [label for label, rx in FORBIDDEN_SHAPES
+            if rx.search(r"docs\superpowers\plans\x")]
+    assert hits == ["the default docs root named by hand outside a dated citation"]
+    assert not [label for label, rx in FORBIDDEN_SHAPES
+                if rx.search("docs/superpowers/plans/2026-09-12-x.md")]
+    assert not [label for label, rx in FORBIDDEN_SHAPES
+                if rx.search("docs/superpowers/specs/2026-08-31-x.md")]
+    # Backslash spellings of the other shapes, as tools/*.ps1 write them.
+    hits = [label for label, rx in FORBIDDEN_SHAPES
+            if rx.search(r"$x = '.git\parallax\attestations'")]
+    assert hits == ["an attestation or checkpoint root spelled under .git/ instead of the git common dir"]
+    hits = [label for label, rx in FORBIDDEN_SHAPES
+            if rx.search(r"Join-Path $r '.superpowers\sdd\plan'")]
+    assert hits == ["a ledger root that is neither the declaration nor a dated citation"]
+
+
+def test_declaration_exemption_covers_only_the_marked_region():
+    # The exemption is by line number inside the marker pair, so a
+    # declaration-shaped line elsewhere in the notes is swept.
+    lines = read(NOTES).splitlines()
+    exempt = declaration_line_numbers()
+    assert len(exempt) == 8, sorted(exempt)
+    start = lines.index(REGION_START) + 1
+    end = lines.index(REGION_END, start) + 1
+    assert all(start < n < end for n in exempt), sorted(exempt)
+    assert all(DECLARATION_LINE.match(lines[n - 1]) for n in exempt)
 
 
 # ---------------------------------------------------------------------
@@ -421,14 +549,15 @@ def new_paths(root, before):
     return tree_paths(root) - before
 
 
-def write_attestation(repo, base, head):
-    return subprocess.run(
-        [POWERSHELL, "-NoProfile", "-NonInteractive", "-File", str(ATTEST),
-         "-RepoRoot", str(repo), "-BaseSha", base, "-HeadSha", head,
-         "-Verdict", "PASS", "-VerificationStatus", "FULL",
-         "-RouteNote", "effective route confirmed", "-Rounds", "1",
-         "-Participants", "t (session) / t (reviewer)"],
-        capture_output=True, text=True, timeout=60)
+def write_attestation(repo, base, head, checkpoint=None):
+    args = [POWERSHELL, "-NoProfile", "-NonInteractive", "-File", str(ATTEST),
+            "-RepoRoot", str(repo), "-BaseSha", base, "-HeadSha", head,
+            "-Verdict", "PASS", "-VerificationStatus", "FULL",
+            "-RouteNote", "effective route confirmed", "-Rounds", "1",
+            "-Participants", "t (session) / t (reviewer)"]
+    if checkpoint is not None:
+        args += ["-CheckpointFile", str(checkpoint)]
+    return subprocess.run(args, capture_output=True, text=True, timeout=60)
 
 
 @needs_host
@@ -436,14 +565,30 @@ def test_the_real_writers_create_nothing_in_repo_but_the_attestation(tmp_path):
     # The three tools that write during a round, run for real against a
     # disposable two-commit repository. The only path that may appear
     # inside the repository is the attestation, and it must satisfy the
-    # resolver's own membership answer.
+    # resolver's own membership answer. This is also what binds the two
+    # common-dir rows to the declaration: the emitter computes the
+    # attestation and checkpoint locations for itself from
+    # `git rev-parse --git-common-dir`, and the resolver's answer for
+    # each is checked here with -Expect.
     from test_dispatch_round import build_real_mirror, prepare_default
     repo = make_repo(tmp_path, name="src", commits=2)
     base = git(repo, "rev-parse", "HEAD~1").strip()
     head = git(repo, "rev-parse", "HEAD").strip()
+    # Pre-existing BEFORE the snapshot, on purpose: the checkpoint file at
+    # its canonical location (the same shape as
+    # test_attestation.py's TestCheckpointBinding.make_checkpoint; the
+    # emitter refuses any other location and hashes it there), which
+    # creates `.git/parallax` and `.git/parallax/application-checkpoints`
+    # on the way down. The emitter therefore creates only the attestation
+    # dir and file, and that is the whole appeared set below.
+    cp_dir = repo / ".git" / "parallax" / "application-checkpoints"
+    cp_dir.mkdir(parents=True)
+    cp = cp_dir / "checkpoint.md"
+    cp.write_text("# Application checkpoint\nfile1.txt | x present | F1\n",
+                  encoding="utf-8")
     before = tree_paths(repo)
 
-    att = write_attestation(repo, base, head)
+    att = write_attestation(repo, base, head, checkpoint=cp)
     assert att.returncode == 0, att.stdout + att.stderr
     mirror = build_real_mirror(tmp_path, source=repo)
     assert norm(mirror.source) == norm(repo)
@@ -451,26 +596,33 @@ def test_the_real_writers_create_nothing_in_repo_but_the_attestation(tmp_path):
     assert prep.returncode == 0, prep.stdout + prep.stderr
 
     appeared = new_paths(repo, before)
-    # The attestation file and the two directories the emitter creates
-    # for it (write-attestation.ps1: New-Item -Force on the attestation
-    # dir), and nothing else.
+    # The attestation file and the directory the emitter creates for it
+    # (write-attestation.ps1: New-Item -Force on the attestation dir),
+    # and nothing else; `.git/parallax` pre-exists, see above.
     assert appeared == {
-        ".git/parallax",
         ".git/parallax/attestations",
         f".git/parallax/attestations/{head}.json",
     }, sorted(appeared)
     # The attestation root and the file under it are inside the retained
     # set. `.git/parallax` is the parent SHARED by the attestation and
-    # checkpoint rows, created by the emitter on the way down; it is not
-    # itself a declared root, so -Assert refuses it, and the exact-set
-    # assertion above is what bounds it.
+    # checkpoint rows; it is not itself a declared root, so -Assert
+    # refuses it, and the exact-set assertion above is what bounds it.
     for rel in (".git/parallax/attestations",
                 f".git/parallax/attestations/{head}.json"):
-        proc = run_resolver("-RepoRoot", str(repo), "-Assert", str(repo / rel))
+        proc = run_resolver("-RepoRoot", str(repo), "-Assert", str(repo / rel),
+                            "-Expect", "attestation")
         assert proc.returncode == 0, proc.stdout + proc.stderr
         assert "assert: inside attestation root" in proc.stdout
+    # The checkpoint the emitter hashed sits inside the checkpoint row.
+    proc = run_resolver("-RepoRoot", str(repo), "-Assert", str(cp),
+                        "-Expect", "checkpoint")
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "assert: inside checkpoint root" in proc.stdout
     proc = run_resolver("-RepoRoot", str(repo), "-Assert", str(repo / ".git" / "parallax"))
     assert proc.returncode == 1, proc.stdout + proc.stderr
+    # Second snapshot AFTER the resolver calls: the resolver is a reader,
+    # and this puts it inside the window it polices.
+    assert new_paths(repo, before) == appeared, sorted(new_paths(repo, before))
 
 
 @needs_host

@@ -13,13 +13,18 @@
 #
 # Windows PowerShell 5.1 and PowerShell 7, ASCII ONLY.
 #
-# Exit codes: 0 resolved (or -Assert inside), 1 -Assert outside,
-# 2 parameter fault, unreadable declaration, or -RepoRoot not a git
-# working tree. The map mirrors dispatch-round.ps1.
+# Exit codes: 0 resolved (or -Assert inside the expected root, or inside
+# any retained root when -Expect is absent), 1 -Assert outside every
+# retained root or inside a retained root other than the one -Expect
+# names, 2 parameter fault, unreadable declaration, or -RepoRoot not a
+# git working tree. A MISSING -RepoRoot exits 1 from PowerShell's own
+# -File parameter binding before this script runs, so 2 covers the
+# faults the script itself sees. The map mirrors dispatch-round.ps1.
 param(
     [Parameter(Mandatory = $true)][string]$RepoRoot,
     [string]$DocsRoot = "",
     [string]$Assert = "",
+    [string]$Expect = "",
     [switch]$Json
 )
 
@@ -28,6 +33,31 @@ $ErrorActionPreference = "Stop"
 function Fail($message) {
     Write-Output ("ERROR: " + $message)
     exit 2
+}
+
+# ---- -Expect -----------------------------------------------------------
+# The frozen plan parent (<docs-root>/plans) contains every dated
+# directory beside plans/rounds/, so a rounds retention copy aimed at
+# <docs-root>/plans/<date>-<topic>/ would answer "inside" without this.
+# -Expect names the ONE retained root the caller intends; any other
+# retained root is refused (exit 1). Values are case-sensitive.
+$expectMap = @(
+    @{ Key = "rounds";      Name = "rounds root" },
+    @{ Key = "frozenPlan";  Name = "frozen plan parent" },
+    @{ Key = "attestation"; Name = "attestation root" },
+    @{ Key = "checkpoint";  Name = "checkpoint root" }
+)
+$expectedName = ""
+if ($PSBoundParameters.ContainsKey("Expect")) {
+    if (-not $PSBoundParameters.ContainsKey("Assert")) {
+        Fail "-Expect requires -Assert"
+    }
+    foreach ($e in $expectMap) {
+        if ($Expect -ceq $e.Key) { $expectedName = $e.Name }
+    }
+    if (-not $expectedName) {
+        Fail ("-Expect must be one of rounds, frozenPlan, attestation, checkpoint: " + $Expect)
+    }
 }
 
 function Normalize-Slashes($p) {
@@ -146,6 +176,9 @@ if ($PSBoundParameters.ContainsKey("DocsRoot")) {
     # Canonicalize through the filesystem rules, so `./other/root` and
     # `other//root` print as one spelling and -Assert compares equal.
     $docsFull = Resolve-Absolute (Join-Path $toplevel $rel)
+    if ($docsFull.Equals($top, [System.StringComparison]::OrdinalIgnoreCase)) {
+        Fail ("-DocsRoot may not be the repo root itself: " + $DocsRoot)
+    }
     if (-not $docsFull.StartsWith($top + "/", [System.StringComparison]::OrdinalIgnoreCase)) {
         Fail ("-DocsRoot resolves outside the repo root: " + $DocsRoot)
     }
@@ -234,11 +267,18 @@ if ($PSBoundParameters.ContainsKey("Assert")) {
             break
         }
     }
-    if ($inside) {
+    if ($inside -and $expectedName -and ($inside -ne $expectedName)) {
+        # Inside a retained root, but not the one the caller intends:
+        # refused, and the answer names both roots.
+        $assertResult = [ordered]@{ path = $target; inside = $false; root = $inside; expected = $expectedName }
+        $exitCode = 1
+    } elseif ($inside) {
         $assertResult = [ordered]@{ path = $target; inside = $true; root = $inside }
+        if ($expectedName) { $assertResult["expected"] = $expectedName }
         $exitCode = 0
     } else {
         $assertResult = [ordered]@{ path = $target; inside = $false; root = "" }
+        if ($expectedName) { $assertResult["expected"] = $expectedName }
         $exitCode = 1
     }
 }
@@ -262,6 +302,9 @@ if ($Json) {
     if ($assertResult) {
         if ($assertResult.inside) {
             Write-Output ("assert: inside " + $assertResult.root + ": " + $assertResult.path)
+        } elseif ($assertResult.root) {
+            Write-Output ("assert: inside " + $assertResult.root + ", expected " +
+                $assertResult.expected + ": " + $assertResult.path)
         } else {
             Write-Output ("assert: outside every retained root: " + $assertResult.path)
         }

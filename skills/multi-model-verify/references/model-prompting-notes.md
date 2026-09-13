@@ -770,9 +770,12 @@ changes would also break prefix caching per the guide).
 THE single source for where a debate lands in the reviewed repository,
 in the same swap-by-one-edit shape as the model declarations above.
 `tools/artifact-roots.ps1` parses the eight lines below at runtime and
-fails loud when one is missing; nothing else in the plugin names a
-round root by hand, and `evals/multi-model-verify/test_artifact_roots.py`
-sweeps the plugin surface for one that does. Item 100 (2026-09-12) is
+fails loud when one is missing. The two common-dir rows are computed
+independently by their emitter, `tools/write-attestation.ps1`, and their
+verifier, `tools/verify-attestation.ps1`; the writer test in
+`evals/multi-model-verify/test_artifact_roots.py` is what binds those
+computations to the declaration, and its sweep covers the rest of the
+plugin surface for a root named by hand. Item 100 (2026-09-12) is
 the record of why: one consumer repository held rounds, ledgers and a
 mirror under four roots, because each writer read the repo-side
 override on its own.
@@ -827,9 +830,14 @@ The operating rule, which SKILL.md's preflight step 4 points at:
   the frozen plan save, the rounds retention, the ledger path handed to
   agents/fable-reviewer.md, the attestation the emitter is expected to
   write.
-- Before the retention copy, run the tool with `-Assert <destination>`;
-  exit 0 is the only clean answer. The ledger and mirror rows are not
-  in the assert set, because the session never copies into them.
+- Before the retention copy, run the tool with
+  `-Assert <destination> -Expect rounds` before the rounds retention
+  copy and `-Expect frozenPlan` before the frozen plan save; exit 0 is
+  the only clean answer, and a path that answers inside a different
+  retained root is refused, because the frozen plan parent contains
+  every dated directory beside `plans/rounds/`. The ledger and mirror
+  rows are not in the assert set, because the session never copies
+  into them.
 - Dispatch directories, receipts, briefs, prior-state files and the
   probe's override file are session scratch outside the repository for
   the whole round; only their retained copies enter the rounds root.
