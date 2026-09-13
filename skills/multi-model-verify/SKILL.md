@@ -379,12 +379,15 @@ leave them for a follow-up branch, or run one confirming round.
 verdict, run the attestation emitter from this plugin's checkout:
 
 ```powershell
-powershell -NoProfile -File <plugin-root>/tools/write-attestation.ps1 -RepoRoot <reviewed-repo> -BaseSha <base> -HeadSha <head> -Verdict <PASS|FIX|ESCALATE> -VerificationStatus <FULL|DEGRADED> -RouteNote "<effective route confirmed | the transport-failure class>" -Rounds <n> -Participants "<session-model> (session) / <reviewer-model> (reviewer)" [-CheckpointFile <application-checkpoint-artifact>]
+powershell -NoProfile -File <plugin-root>/tools/write-attestation.ps1 -RepoRoot <reviewed-repo> -BaseSha <base> -HeadSha <head> -Verdict <PASS|FIX|ESCALATE> -VerificationStatus <FULL|DEGRADED> -RouteNote "<effective route confirmed | the transport-failure class>" -Rounds <n> -Participants "<session-model> (session) / <reviewer-model> (reviewer)" [-CheckpointFile <application-checkpoint-artifact>] [-ReapMirror <mirror>] [-ReapBridge <bridge>]
 ```
 
 When an application checkpoint governed fix application, pass it via
 `-CheckpointFile`; references/application-checkpoint.md states what that
 binds and which head it is bound to.
+
+Pass the mirror and the clone bridge as `-ReapMirror`/`-ReapBridge`;
+the End of life section of references/preflight-mirror.md states the guard.
 
 It writes the attestation row's path, which preflight step 4 printed —
 untracked by design, so recording the verdict cannot move HEAD out from
@@ -409,8 +412,4 @@ to a subagent.
 
 - Accepting the reviewer's claims about reference code without the cited lines —
   strike the claim per protocol; do not argue against it.
-- Re-sending the full debate context each round instead of resuming the
-  codex session.
 - Running mode `diff` against different SHAs than the code review used.
-- Treating convergence as failure — a sound plan converging in one round is
-  the system working, not a skipped debate.

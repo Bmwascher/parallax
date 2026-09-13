@@ -38,6 +38,66 @@ debate. Cite backlog items and round records, not commits, because a
 reader can follow a record. Versions before 0.34.0 have no section and
 no release; their records are the merge commits on main.
 
+## v0.36.0 (2026-09-13)
+
+The plugin now removes a review mirror when the review that used it
+ends. Before this version, the plugin never removed a mirror, and one
+review week left more than ten gigabytes of copies on the drive. You do
+not have to change anything when you update. When you write the
+attestation for a finished review, you can name the mirror and its clone
+bridge, and the plugin removes both. The doctor now lists the mirrors
+that are on the drive and tells you when they are old or large.
+
+### What changed for you
+
+- **A finished review removes its own mirror.** `tools/write-attestation.ps1`
+  accepts `-ReapMirror` and `-ReapBridge`. It writes the attestation
+  first, reads the record back, and then removes the two trees. If the
+  record is not on disk, the tool removes nothing.
+- **The tool refuses the wrong tree.** A tree must be at the attested
+  head and must have a real `.git` directory. It must not be the
+  reviewed repository, and its path must not go through a link. A tree
+  that fails one of these rules stays, and the message names the rule.
+- **A failed removal is loud.** The tool exits 3, names the tree, and
+  tells you that it did not touch the bridge. The attestation stays.
+- **The doctor shows the mirror inventory.** Check 10 of
+  `/parallax:doctor` counts the `kv*` directories on the drive root and
+  in the temp folder. It shows their size and age, and it marks them
+  STALE at 5 GB or 3 days. It never deletes.
+- **A mirror build no longer copies over a stale tree.** The build
+  removes the old mirror with the same checked function and stops if
+  the removal fails.
+
+### Details for maintainers
+
+- `tools/review-tree-removal.ps1` is the one removal function. It walks
+  the tree in post-order and deletes a link as a link, never through it.
+  It clears the read-only attribute on files and directories, and it
+  reads the root back after the delete. `tools/new-review-mirror.ps1` and the
+  emitter dot-source it.
+- The emitter writes the record with `-LiteralPath`, then compares the
+  bytes on disk with the serialized text with an ordinal comparison. A
+  wildcard in a repository name and a case difference in the read-back
+  both exit 2 with nothing removed.
+- The emitter removes the sidecar `<mirror>.source-manifest` only when
+  it is an ordinary file. An inspection error and a sidecar that survives the
+  delete both exit 3.
+- `test_mirror_reaper.py` drives real junctions, held handles, read-only
+  trees, a bracketed repository name and a foreign clone at the attested
+  head, on both PowerShell hosts.
+- The record is `docs/superpowers/plans/rounds/2026-09-13-mirror-reaper/`,
+  which retains four diff-debate rounds and the Fable review of the full
+  branch. Round 1 found the wildcard write, round 2 found the
+  case-insensitive comparison, and round 3 found one stale item number.
+- Item 107 records the residuals. The guard cannot tell two trees at
+  the same head apart. A plan-mode debate has no mechanical reap point.
+  No test drives the post-delete sidecar read-back. The mirror parent is
+  still the drive root.
+
+### Backlog
+
+**This version closes items 98 and 106.**
+
 ## v0.35.0 (2026-09-13)
 
 The Flash implementer lane can write files again. Since Antigravity CLI

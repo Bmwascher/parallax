@@ -27,7 +27,7 @@ The full previous text of every closed item is in git history at
 - 92
 - 94
 - 95
-- 98
+- 107
 - 99
 
 ### Second - taxes every cycle
@@ -88,6 +88,119 @@ The full previous text of every closed item is in git history at
 - 84
 - 85
 - 86
+
+## 107. The reap guard cannot tell a debate's trees from any clone at the attested head, and the mirror parent is the drive root
+Status: OPEN
+Cost: a session that names the wrong tree at the right head has it removed, and every mirror a KitnEssentials session builds lands directly under the drive root because the canonical temp root blows the path budget, so the doctor has to find them by a name pattern rather than a declared parent
+Pairs: none
+Verified: 2026-09-13 cfa01c8b8229
+
+**Filed 2026-09-13 from the whole-branch review of the mirror reaper
+(item 106).** The emitter's identity guard refuses a tree that is not
+at the attested head, that overlaps the reviewed repository or its
+common dir, that is reached through a link, or whose `.git` is a file,
+and it pins each git read to the tree's own git dir. What it cannot do
+is distinguish this debate's mirror or bridge from any other clone of
+the same repository sitting at the same head: a second plain clone
+with unpushed branches passes every rule if the session names it. The
+prose in references/preflight-mirror.md states the residual instead of
+hiding it. A plan-mode debate ends with a frozen plan and no attestation,
+so its mirror has no mechanical reap point either; a plan-mode terminal
+event recorded mechanically is a further follow-up, not numbered below.
+
+**Three follow-ups, decisions for the first two, a test gap for the third.**
+
+1. The bridge has a marker the mirror does not: a session clones it
+   from the reviewed repository, so its `origin` resolves to that
+   repository's top level or common dir, while a user's own clone points
+   at the remote. Requiring that for `-ReapBridge` closes half the gap
+   at one git call. The mirror carries whatever remotes its source had,
+   so the same rule does not apply to it without a marker the mirror
+   tool would have to write, and the tool writes nothing identifying
+   inside the mirror by design (the fingerprint covers every byte).
+2. The location. The canonical review mirror root is `<TEMP>/<short-name>/`,
+   but the DT review packets put the deepest file 243 characters below
+   the repo root, so the mirror root must be 15 characters or fewer and
+   the 36-character temp directory cannot hold one; the sessions build
+   at `C:\kv-<tag>` instead, which is why the 2026-09-13 measurement
+   found 78 directories at the drive root. A declared short parent such
+   as `C:\pxm\<tag>` would satisfy the budget, keep the drive root clear,
+   turn the doctor's `kv*` name pattern into a fixed directory, and give
+   the reap guard one more cheap rule: a reap path must sit under the
+   declared parent. That edits the round-artifact-roots region and its
+   pin, `tools/artifact-roots.ps1`, doctor check 10 and the KitnEssentials
+   memory that names `C:\kv-<tag>`; the user picks the name.
+3. The post-delete sidecar read-back has no driving test. The failure
+   branches `tools/write-attestation.ps1` takes after
+   `[System.IO.File]::Delete` on the sidecar - "the sidecar still exists
+   after removal" and "the sidecar could not be re-examined after
+   removal" - have no test that reaches them, because the session has no
+   non-administrator mechanism that makes a file survive `Delete` without
+   throwing, or that makes the following `GetAttributes` throw for a
+   reason other than absence. The ordering is locked only by a
+   source-position pin, `test_sidecar_success_is_read_back`, which a
+   refactor could satisfy without a runtime read-back. Named by the diff
+   debate's round 2.
+
+**What closing it means.** The bridge origin rule shipped with a test
+that drives a foreign clone at the attested head and sees it refused,
+and a decision recorded on the mirror parent, either a new declared
+root with the four edits above or a stated reason to keep the drive
+root.
+
+## 106. Review mirrors are never reaped, so a review day costs about 3 GB of drive root
+Status: DONE
+Closed: 0.36.0
+Verified: 2026-09-13 bc2580f1e611
+
+**Filed 2026-09-13 from the KitnEssentials handoff**
+`dev/docs/handoffs/parallax-mirror-reaper-handoff.md` (outside this
+repo). Measured there on that date: the drive root held 78 `kv-*` and
+`kvs-*` directories totalling 13.4 GB, every one created between
+2026-09-09 and 2026-09-13 by multi-model-verify rounds. `kv-<tag>` is
+the review mirror `tools/new-review-mirror.ps1` builds; `kvs-<tag>` is
+the drive-root clone bridge a session builds first when the reviewed
+tree is a linked worktree, so the mirror never copies a `.git` pointer
+file. The 68 older than that day were deleted by hand; the day's 10
+were kept because a live chat could still `resume` a round bound to
+them, and nothing but the person's memory said which ones those were.
+
+**What is wrong.** Nothing in the plugin deletes a mirror.
+references/preflight-mirror.md covers construction, the quiet period
+and the stale-source refusal; item 98 covers the unchecked removal on a
+REBUILD of the same path; neither covers a mirror whose debate is over.
+The count also grew because the existing-path refusal in the mirror
+tool suggests `-Force`, and a session that did not want to rebuild in
+place built `kv-<tag>-2` beside the first.
+
+**The decision on the bridge, made at filing rather than assumed.** The
+plugin never created `kvs-*` and cannot recognise one by shape, so the
+emitter takes it as an EXPLICIT argument, `-ReapBridge <path>`, beside
+`-ReapMirror <path>`, and applies the same identity guard to both. A
+`-SourceBridge` on the mirror tool was rejected because the tool's own
+header forbids clones for a measured reason, and a prose rule alone was
+rejected because a prose rule is what produced the measurement above.
+The session-side rule "pass the bridge to the emitter" belongs in the
+KitnEssentials memory that describes the bridge; that edit is the
+consumer's, not this repo's.
+
+**What closing it means.** The reap point is a TERMINAL event, never an
+age: `tools/write-attestation.ps1` validates every reap path before it
+writes the record, writes it, then removes the trees through one shared
+removal function that never recurses through a link, terminates with a
+named error on the first failure, and re-examines the root afterwards.
+A reap path is accepted only when its `.git` is a directory and its
+`HEAD` is the attested head (the mirror may instead sit one
+`parallax@local` remediation commit above it), so another chat's mirror
+at another head is refused by name. The mirror tool's existing-path
+refusal names that route instead of `-Force`. `/parallax:doctor` reports
+the `kv*` inventory as a note and never deletes. A plan-mode debate has
+no attestation, so its mirror keeps the hand route; that residual is
+item 107's. Item 98 closes with it,
+because the mirror tool's `-Force` removal goes through the same
+function. Design: `docs/superpowers/specs/2026-09-13-mirror-reaper-design.md`.
+
+Record: docs/superpowers/plans/rounds/2026-09-13-mirror-reaper/README.md
 
 ## 100. Round artifacts land in three roots per consumer repo
 Status: DONE
@@ -4148,8 +4261,8 @@ narrows the digest without opening that hole, argued in the
 ## 95. Stated properties of the mirror tools that the code does not hold
 Status: OPEN
 Cost: each one is a promise a reader relies on, and one of them can leave an extra input missing from a mirror the digest then certifies
-Pairs: 94, 98
-Verified: 2026-09-05 90e593a1c0e4
+Pairs: 94
+Verified: 2026-09-13 f1bf98605067
 
 **Filed 2026-09-05 from the plan debate for item 94's cycle**, whose
 reviewer was asked to sweep for stated properties the code does not hold.
@@ -4342,10 +4455,9 @@ work it describes happened.
 Record: docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window
 
 ## 98. The mirror's own removal is unchecked, so a failed one builds over a stale tree
-Status: OPEN
-Cost: a build that fails to empty its destination copies over whatever survived, and the fingerprint then measures the resulting directory rather than proving it was freshly emptied, so a stale mirror can be certified as a fresh one
-Pairs: 95, 99
-Verified: 2026-09-06 b01bcd59e8ca
+Status: DONE
+Closed: 0.36.0
+Verified: 2026-09-13 2dfe5484924f
 
 **Filed 2026-09-06 from the mode-diff debate for the identity window
 branch**, round 3, which asked whether refusing alias spellings was
@@ -4385,11 +4497,13 @@ inability to distinguish a fresh directory from a merged one is the
 second half and may deserve its own treatment: it measures the result,
 which is exactly what a stale mirror also produces.
 
+Record: docs/superpowers/plans/rounds/2026-09-13-mirror-reaper/README.md
+
 ## 99. A short name alias does not have to contain a tilde, so no spelling rule can find one
 Status: OPEN
 Cost: every overlap and containment check in the mirror tool compares spellings, and an assigned short alias is an ordinary-looking name that names another directory, so the destination guards can be walked past by a spelling no pattern can recognise
-Pairs: 98
-Verified: 2026-09-06 403b219b4301
+Pairs: none
+Verified: 2026-09-13 649c4ada3a37
 
 **Filed 2026-09-06 on the round-5 reviewer's own adjudication**, which
 was to defer the implementation but file it rather than leave it in a

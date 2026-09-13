@@ -1,0 +1,2084 @@
+OpenAI Codex v0.153.4
+--------
+workdir: C:\Users\Brandon\AppData\Local\Temp\pxmr
+model: gpt-6-astra
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: none
+session id: 01a09a87-7417-7040-8d98-ce77917ec971
+--------
+user
+<role>Adversarial reviewer, equal weight, in a two-model debate. Round 3 of the same debate, resumed.</role>
+
+<task>Verify the application of your round-2 finding, then adjudicate two
+declared record amendments, on the same rules as rounds 1 and 2. The
+working directory is the review mirror, rebuilt in place at head 549c136.
+Two commits sit above fafc4ce: c77d0df (the round-2 fix, diff appended
+first under <diff>) and 549c136 (a merge of main plus a renumbering of two
+backlog items, the branch-side hunks appended second and third; main's own
+content, which the merge also brings in, is not under review and not
+appended). The range under review is now main..549c136 where main is
+a8a168f; the certification unit is unchanged apart from the item numbers.
+
+Budget: 4 dispatched exchanges declared; this is the third.</task>
+
+<claims>
+1. R2 claim 1 (ordinal comparison). tools/write-attestation.ps1:301 reads
+   `if (-not [string]::Equals($writtenText, $json, [System.StringComparison]::Ordinal)) {`
+   with the one-line reason above it at :300; the block is otherwise as it
+   was. `$writtenText` can be $null there (the read-back catch leaves it
+   so); measured on both hosts, `[string]::Equals($null, "x", Ordinal)` is
+   False, so absence still exits 2. Locked by
+   evals/multi-model-verify/test_mirror_reaper.py:614
+   `test_the_record_comparison_is_ordinal`, a source pin: the ordinal form
+   occurs exactly once and neither `$writtenText -ne $json` nor
+   `$writtenText -eq $json` occurs. It is a source pin because the harness
+   cannot make the bytes on disk differ from the serialized text by case
+   alone. Judge whether the pin is adequate for what it locks and whether
+   any other comparison on that surface has the same case defect (the two
+   `OrdinalIgnoreCase` comparisons at :123 and :231 are path comparisons
+   and are meant to be case-insensitive on Windows; say if you disagree).
+
+2. R2 claim 1, the test. `test_the_record_lands_in_the_bracketed_repo_and_the_sibling_is_untouched`
+   (:569) now also pre-plants `{"stale": true}` at the bracketed
+   repository's literal record path before the run (:582-586) and asserts
+   the final record carries neither `stale` nor `decoy` (:593-594), so the
+   case rejects e9d2713's false-success branch (old record at the literal
+   path accepted unread) and not only its write-elsewhere branch; the
+   sibling decoy is compared by bytes (`decoy_file.read_bytes() ==
+   decoy_bytes`). Judge whether the stale record is placed where e9d2713's
+   `File.Exists` would have found it.
+
+3. R2 claim 3, recorded as a follow-up. BACKLOG.md item 107 (the reaper
+   follow-up item, previously 102) carries a third numbered follow-up at
+   :135: the post-delete sidecar read-back branches have no driving test,
+   with the reason (no non-administrator mechanism makes a file survive
+   `File.Delete` without throwing or makes the following `GetAttributes`
+   throw for a reason other than absence), the source-position pin named
+   as the only lock, and your round as the origin. No code change.
+
+4. Declared amendment A: renumbering. main shipped its own items 101 to
+   104 while this debate ran, so the branch's items 101 and 102 collided by
+   number. Commit 549c136 renumbers them to 106 and 107 (105 belongs to
+   another open branch) in BACKLOG.md (headings, the ranking list, the
+   three `Pairs:` lines including item 98's, in-text references, and the
+   three `Verified:` digests re-attested by `evals/tools/backlog_lint.py
+   --digests`) and in every branch file that cites them: the spec (:5),
+   the plan, tools/review-tree-removal.ps1:8, tools/new-review-mirror.ps1:100,
+   tools/write-attestation.ps1:17, evals/multi-model-verify/test_mirror_reaper.py:1
+   and :419, evals/multi-model-verify/test_review_mirror.py:3229,
+   commands/doctor.md:388, and
+   skills/multi-model-verify/references/preflight-mirror.md:115 and :136.
+   Item 107's intro sentence about the plan-mode terminal event no longer
+   calls it "the third follow-up". Run `git grep -n -E "\b(item|items)
+   (101|102)\b" -- tools evals commands skills docs/superpowers/specs/2026-09-13-mirror-reaper-design.md
+   docs/superpowers/plans/2026-09-13-mirror-reaper.md` and report every
+   survivor that refers to the reaper items rather than to main's release
+   items; the session expects none. Also report any reference to the
+   reaper items in a form the sweep would miss (a bare number in a
+   sentence, `#101`, `item101`), naming the files you searched.
+
+5. Declared amendment B: the merge itself. 549c136 merges main a8a168f
+   into the branch with no conflict. main's additions (a release workflow,
+   CHANGELOG.md, `evals/tools/check_changelog.py`, `evals/tools/ste_lint.py`,
+   their tests, CI tier 1d, README and CLAUDE.md text) are not under review,
+   but one of them binds the branch's close: the version-bump commit that
+   follows this debate must now carry a CHANGELOG.md section in the
+   checker's shape. The session will write that section with the bump,
+   after the debate, per CLAUDE.md's dev loop; it is out of this range by
+   design, as the bump itself is. Confirm from the merge that nothing on
+   the certification unit changed other than the renumber (compare
+   `git diff c77d0df 549c136 --stat` against the file list in claim 4;
+   `.github/workflows/skill-evals.yml` auto-merged and still lists
+   test_mirror_reaper.py once in each host step).
+
+6. Class sweep on c77d0df's diff and 549c136's branch-side hunks: report
+   every further instance of either named class (a removal or a write
+   whose outcome is not checked afterwards; a git read that can discover
+   upward) or an explicit `none` per class naming what you read.
+</claims>
+
+<boundaries>
+Unchanged from rounds 1 and 2. main's own commits between 6038c37 and
+a8a168f are outside this debate.
+</boundaries>
+
+<final-check>List any claim you could not verify against files you read, as
+UNVERIFIED; do not fold unverified material into your verdict. Name any file
+whose content caused you to pause, decline a claim, or change direction,
+quoting the instruction and separating the file's explicit requirement from
+your own interpretation.</final-check>
+
+<diff>
+# --- commit c77d0df, the round-2 fix ---
+diff --git a/BACKLOG.md b/BACKLOG.md
+index 67cc4ec..03565a0 100644
+--- a/BACKLOG.md
++++ b/BACKLOG.md
+@@ -95,7 +95,7 @@ The full previous text of every closed item is in git history at
+ Status: OPEN
+ Cost: a session that names the wrong tree at the right head has it removed, and every mirror a KitnEssentials session builds lands directly under the drive root because the canonical temp root blows the path budget, so the doctor has to find them by a name pattern rather than a declared parent
+ Pairs: 101
+-Verified: 2026-09-13 2c2c5eeaeebc
++Verified: 2026-09-13 1524f48584c9
+ 
+ **Filed 2026-09-13 from the whole-branch review of the mirror reaper
+ (item 101).** The emitter's identity guard refuses a tree that is not
+@@ -110,7 +110,7 @@ hiding it. A plan-mode debate ends with a frozen plan and no attestation,
+ so its mirror has no mechanical reap point either; a plan-mode terminal
+ event recorded mechanically is the third follow-up.
+ 
+-**Two follow-ups, one decision each.**
++**Three follow-ups, decisions for the first two, a test gap for the third.**
+ 
+ 1. The bridge has a marker the mirror does not: a session clones it
+    from the reviewed repository, so its `origin` resolves to that
+@@ -132,6 +132,17 @@ event recorded mechanically is the third follow-up.
+    declared parent. That edits the round-artifact-roots region and its
+    pin, `tools/artifact-roots.ps1`, doctor check 10 and the KitnEssentials
+    memory that names `C:\kv-<tag>`; the user picks the name.
++3. The post-delete sidecar read-back has no driving test. The failure
++   branches `tools/write-attestation.ps1` takes after
++   `[System.IO.File]::Delete` on the sidecar - "the sidecar still exists
++   after removal" and "the sidecar could not be re-examined after
++   removal" - have no test that reaches them, because the session has no
++   non-administrator mechanism that makes a file survive `Delete` without
++   throwing, or that makes the following `GetAttributes` throw for a
++   reason other than absence. The ordering is locked only by a
++   source-position pin, `test_sidecar_success_is_read_back`, which a
++   refactor could satisfy without a runtime read-back. Named by the diff
++   debate's round 2.
+ 
+ **What closing it means.** The bridge origin rule shipped with a test
+ that drives a foreign clone at the attested head and sees it refused,
+diff --git a/evals/multi-model-verify/test_mirror_reaper.py b/evals/multi-model-verify/test_mirror_reaper.py
+index 7a15e86..3d641d4 100644
+--- a/evals/multi-model-verify/test_mirror_reaper.py
++++ b/evals/multi-model-verify/test_mirror_reaper.py
+@@ -577,7 +577,13 @@ def test_the_record_lands_in_the_bracketed_repo_and_the_sibling_is_untouched(tmp
+     decoy_dir = sib / ".git" / "parallax" / "attestations"
+     decoy_dir.mkdir(parents=True)
+     decoy_file = decoy_dir / (head + ".json")
+-    decoy_file.write_text(json.dumps({"decoy": True}), encoding="utf-8")
++    decoy_bytes = json.dumps({"decoy": True}).encode("utf-8")
++    decoy_file.write_bytes(decoy_bytes)
++    # A stale record at the literal bracketed path: this is what e9d2713's
++    # false-success branch would have accepted unread, since its File.Exists
++    # check passed whatever record already sat there.
++    att_file(repo, head).parent.mkdir(parents=True, exist_ok=True)
++    att_file(repo, head).write_text(json.dumps({"stale": True}), encoding="utf-8")
+     mirror = make_mirror(repo, tmp_path / "kv-t")
+     proc = attest(repo, base, head, mirror=mirror)
+     assert proc.returncode == 0, proc.stdout + proc.stderr
+@@ -585,7 +591,8 @@ def test_the_record_lands_in_the_bracketed_repo_and_the_sibling_is_untouched(tmp
+     record = json.loads(att_file(repo, head).read_text(encoding="utf-8"))
+     assert record["head_sha"] == head
+     assert "decoy" not in record
+-    assert json.loads(decoy_file.read_text(encoding="utf-8")) == {"decoy": True}
++    assert "stale" not in record
++    assert decoy_file.read_bytes() == decoy_bytes
+     assert not mirror.exists()
+ 
+ 
+@@ -602,3 +609,15 @@ def test_sidecar_success_is_read_back(tmp_path):
+     # failure text must appear earlier in the source than the print.
+     body = read(WRITE)
+     assert body.index("still exists after removal") < body.index('"reaped sidecar: "')
++
++
++def test_the_record_comparison_is_ordinal():
++    # A source pin, not a runtime case: the harness cannot make the file on
++    # disk differ from the serialized text by case alone (Set-Content writes
++    # exactly $json), so the comparison form itself is what has to be locked.
++    body = read(WRITE)
++    assert body.count(
++        "[string]::Equals($writtenText, $json, [System.StringComparison]::Ordinal)"
++    ) == 1
++    assert "$writtenText -ne $json" not in body
++    assert "$writtenText -eq $json" not in body
+diff --git a/tools/write-attestation.ps1 b/tools/write-attestation.ps1
+index f981043..9b8c467 100644
+--- a/tools/write-attestation.ps1
++++ b/tools/write-attestation.ps1
+@@ -297,7 +297,8 @@ try {
+ } catch {
+     $writtenText = $null
+ }
+-if ($writtenText -ne $json) {
++# Ordinal: -ne is case-insensitive on strings, so it would accept a read-back that differs only in letter case.
++if (-not [string]::Equals($writtenText, $json, [System.StringComparison]::Ordinal)) {
+     Write-Output ("ERROR: the attestation on disk does not match what was written (" + $outFile + ") - nothing was reaped")
+     exit 2
+ }
+# --- commit 549c136, branch-side renumber hunks outside BACKLOG.md ---
+diff --git a/commands/doctor.md b/commands/doctor.md
+index d854591..5bc0876 100644
+--- a/commands/doctor.md
++++ b/commands/doctor.md
+@@ -385,7 +385,7 @@ and counted; it never reads as empty.
+   attestation emitter, `write-attestation.ps1 -ReapMirror <mirror>
+   [-ReapBridge <bridge>]`, and one whose debate is over without an
+   attestation is removed by hand; the rule and its measurement are
+-  backlog item 101. Never name a directory as safe to delete: the
++  backlog item 106. Never name a directory as safe to delete: the
+   doctor cannot tell which of them a live chat can still resume, and a
+   `resume` against a deleted mirror is a transport failure.
+ 
+diff --git a/docs/superpowers/specs/2026-09-13-mirror-reaper-design.md b/docs/superpowers/specs/2026-09-13-mirror-reaper-design.md
+index add80b6..a49c74f 100644
+--- a/docs/superpowers/specs/2026-09-13-mirror-reaper-design.md
++++ b/docs/superpowers/specs/2026-09-13-mirror-reaper-design.md
+@@ -2,7 +2,7 @@
+ 
+ Written 2026-09-13 from the KitnEssentials handoff
+ `dev/docs/handoffs/parallax-mirror-reaper-handoff.md` (outside this
+-repo). Backlog item 101 holds the measurement; item 98 is the paired
++repo). Backlog item 106 holds the measurement; item 98 is the paired
+ defect this design closes alongside.
+ 
+ ## The problem
+diff --git a/evals/multi-model-verify/test_mirror_reaper.py b/evals/multi-model-verify/test_mirror_reaper.py
+index 3d641d4..a5173cf 100644
+--- a/evals/multi-model-verify/test_mirror_reaper.py
++++ b/evals/multi-model-verify/test_mirror_reaper.py
+@@ -1,4 +1,4 @@
+-"""The review mirror reaper (BACKLOG items 101 and 98; spec
++"""The review mirror reaper (BACKLOG items 106 and 98; spec
+ docs/superpowers/specs/2026-09-13-mirror-reaper-design.md).
+ 
+ Four groups. REMOVAL: tools/review-tree-removal.ps1's Remove-ReviewTree,
+@@ -416,7 +416,7 @@ def test_doctor_inventories_the_mirrors_and_never_deletes():
+         "3 days",
+         "LastWriteTime",
+         "-ReapMirror",
+-        "backlog item 101",
++        "backlog item 106",
+     ):
+         assert anchor in body, "doctor inventory anchor missing: " + anchor
+     section = body.split("## 10. Review mirror inventory", 1)[1]
+diff --git a/evals/multi-model-verify/test_review_mirror.py b/evals/multi-model-verify/test_review_mirror.py
+index db90e17..e1384f0 100644
+--- a/evals/multi-model-verify/test_review_mirror.py
++++ b/evals/multi-model-verify/test_review_mirror.py
+@@ -3226,7 +3226,7 @@ def test_a_mirror_whose_current_state_cannot_be_measured_is_refused(tmp_path):
+ 
+ 
+ def test_an_existing_mirror_refusal_names_the_reap_route_not_force_first(tmp_path):
+-    # Backlog item 101: the count grew because this refusal suggested
++    # Backlog item 106: the count grew because this refusal suggested
+     # -Force and a session that did not want an in-place rebuild built
+     # kv-<tag>-2 beside the first. The reap route comes first now, and
+     # -Force is named as the mid-debate rebuild it is.
+diff --git a/skills/multi-model-verify/references/preflight-mirror.md b/skills/multi-model-verify/references/preflight-mirror.md
+index 8a74689..5b0dd21 100644
+--- a/skills/multi-model-verify/references/preflight-mirror.md
++++ b/skills/multi-model-verify/references/preflight-mirror.md
+@@ -112,7 +112,7 @@ commit construction makes over a tracked back-channel; the bridge must
+ match exactly, so a bridge left unfetched after a fix commit is refused
+ rather than deleted under a stale head. Measured 2026-09-13: 78 mirror
+ and bridge directories, 13.4 GB, in four review days, with nothing but
+-memory saying which of them a live chat could still resume. Another chat's mirror at another head is refused by name; the guard cannot tell two trees at the SAME head apart, so the session names only the trees it built, and the residual is backlog item 102.
++memory saying which of them a live chat could still resume. Another chat's mirror at another head is refused by name; the guard cannot tell two trees at the SAME head apart, so the session names only the trees it built, and the residual is backlog item 107.
+ 
+ The removal never recurses through a link: `tools/review-tree-removal.ps1`
+ walks the tree itself, removes each link as a link, clears the read-only
+@@ -133,7 +133,7 @@ recognise one by shape, so the session that built it names it; the rule
+ 
+ Two limits, stated. A plan-mode debate ends with a frozen plan and no
+ attestation, so its mirror has no mechanical reap point and keeps the
+-hand route until one exists (backlog item 102). And an ESCALATE the user
++hand route until one exists (backlog item 107). And an ESCALATE the user
+ may still extend is not yet terminal: emit the attestation, and with it
+ the reap, only once the user has declined to extend, because a reaped
+ mirror turns the extension's `resume` into a transport failure.
+diff --git a/tools/new-review-mirror.ps1 b/tools/new-review-mirror.ps1
+index 095c122..74708ae 100644
+--- a/tools/new-review-mirror.ps1
++++ b/tools/new-review-mirror.ps1
+@@ -97,7 +97,7 @@ param(
+ [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
+ 
+ # The directory-link guard and the tree removal are shared with the
+-# attestation emitter's reap (backlog item 101) and live in one file so
++# attestation emitter's reap (backlog item 106) and live in one file so
+ # the two tools cannot drift apart on either. Functions only; nothing
+ # runs at dot-source time.
+ . (Join-Path $PSScriptRoot "review-tree-removal.ps1")
+diff --git a/tools/review-tree-removal.ps1 b/tools/review-tree-removal.ps1
+index 0061882..04cb2b3 100644
+--- a/tools/review-tree-removal.ps1
++++ b/tools/review-tree-removal.ps1
+@@ -5,7 +5,7 @@
+ #   . (Join-Path $PSScriptRoot "review-tree-removal.ps1")
+ # from tools/new-review-mirror.ps1 (the -Force rebuild, backlog item 98)
+ # and tools/write-attestation.ps1 (the reap after a terminal verdict,
+-# backlog item 101). It defines functions and executes nothing else, so
++# backlog item 106). It defines functions and executes nothing else, so
+ # dot-sourcing it has no effect until a caller calls one.
+ #
+ # Windows PowerShell 5.1 compatible, ASCII ONLY.
+diff --git a/tools/write-attestation.ps1 b/tools/write-attestation.ps1
+index 9b8c467..a77fd78 100644
+--- a/tools/write-attestation.ps1
++++ b/tools/write-attestation.ps1
+@@ -14,7 +14,7 @@
+ #
+ # Exit codes: 0 written, 2 argument/repo error, 3 written but a reap failed.
+ #
+-# REAP (0.35.0, backlog item 101): -ReapMirror and -ReapBridge name the
++# REAP (0.35.0, backlog item 106): -ReapMirror and -ReapBridge name the
+ # review mirror and the clone bridge the debate ran on. The attestation
+ # is the one TERMINAL event the plugin records mechanically, so it is
+ # the reap point - never an age. Both paths are validated against the
+# --- commit 549c136, BACKLOG.md renumber hunks (main's merged items omitted) ---
+diff --git a/BACKLOG.md b/BACKLOG.md
+index 03565a0..6eb4360 100644
+--- a/BACKLOG.md
++++ b/BACKLOG.md
+@@ -28,8 +28,8 @@ The full previous text of every closed item is in git history at
+ - 94
+ - 95
+ - 98
+-- 101
+-- 102
++- 106
++- 107
+ - 99
+ 
+ ### Second - taxes every cycle
+@@ -91,14 +91,14 @@ The full previous text of every closed item is in git history at
+ - 85
+ - 86
+ 
+-## 102. The reap guard cannot tell a debate's trees from any clone at the attested head, and the mirror parent is the drive root
++## 107. The reap guard cannot tell a debate's trees from any clone at the attested head, and the mirror parent is the drive root
+ Status: OPEN
+ Cost: a session that names the wrong tree at the right head has it removed, and every mirror a KitnEssentials session builds lands directly under the drive root because the canonical temp root blows the path budget, so the doctor has to find them by a name pattern rather than a declared parent
+-Pairs: 101
+-Verified: 2026-09-13 1524f48584c9
++Pairs: 106
++Verified: 2026-09-13 8e1e6d54c939
+ 
+ **Filed 2026-09-13 from the whole-branch review of the mirror reaper
+-(item 101).** The emitter's identity guard refuses a tree that is not
++(item 106).** The emitter's identity guard refuses a tree that is not
+ at the attested head, that overlaps the reviewed repository or its
+ common dir, that is reached through a link, or whose `.git` is a file,
+ and it pins each git read to the tree's own git dir. What it cannot do
+@@ -108,7 +108,7 @@ with unpushed branches passes every rule if the session names it. The
+ prose in references/preflight-mirror.md states the residual instead of
+ hiding it. A plan-mode debate ends with a frozen plan and no attestation,
+ so its mirror has no mechanical reap point either; a plan-mode terminal
+-event recorded mechanically is the third follow-up.
++event recorded mechanically is a further follow-up, not numbered below.
+ 
+ **Three follow-ups, decisions for the first two, a test gap for the third.**
+ 
+@@ -150,11 +150,11 @@ and a decision recorded on the mirror parent, either a new declared
+ root with the four edits above or a stated reason to keep the drive
+ root.
+ 
+-## 101. Review mirrors are never reaped, so a review day costs about 3 GB of drive root
++## 106. Review mirrors are never reaped, so a review day costs about 3 GB of drive root
+ Status: OPEN
+ Cost: 78 mirror and bridge directories totalling 13.4 GB accumulated at the drive root in four review days, and the only removal is a hand sweep that has to guess which of them a live debate can still resume
+-Pairs: 98, 102
+-Verified: 2026-09-13 e0cdbd57d4f3
++Pairs: 98, 107
++Verified: 2026-09-13 56bcc3bca1ea
+ 
+ **Filed 2026-09-13 from the KitnEssentials handoff**
+ `dev/docs/handoffs/parallax-mirror-reaper-handoff.md` (outside this
+@@ -199,7 +199,7 @@ at another head is refused by name. The mirror tool's existing-path
+ refusal names that route instead of `-Force`. `/parallax:doctor` reports
+ the `kv*` inventory as a note and never deletes. A plan-mode debate has
+ no attestation, so its mirror keeps the hand route; that residual is
+-item 102's. Item 98 closes with it,
++item 107's. Item 98 closes with it,
+ because the mirror tool's `-Force` removal goes through the same
+ function. Design: `docs/superpowers/specs/2026-09-13-mirror-reaper-design.md`.
+ 
+@@ -4440,8 +4440,8 @@ Record: docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window
+ ## 98. The mirror's own removal is unchecked, so a failed one builds over a stale tree
+ Status: OPEN
+ Cost: a build that fails to empty its destination copies over whatever survived, and the fingerprint then measures the resulting directory rather than proving it was freshly emptied, so a stale mirror can be certified as a fresh one
+-Pairs: 95, 99, 101
+-Verified: 2026-09-13 02ee31a946e0
++Pairs: 95, 99, 106
++Verified: 2026-09-13 6147ccd5fb41
+ 
+ **Filed 2026-09-06 from the mode-diff debate for the identity window
+ branch**, round 3, which asked whether refusing alias spellings was
+</diff>
+
+
+hook: UserPromptSubmit
+hook: UserPromptSubmit Completed
+codex
+I’ll verify the ordinal comparison and revised fixture, then check the backlog references and merge changes against the certification unit.
+
+hook: PreToolUse
+hook: PreToolUse
+hook: PreToolUse Completed
+hook: PreToolUse Completed
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command '$n=0; Get-Content tools/write-attestation.ps1 | ForEach-Object { $n++; if (($n -ge 285 -and $n -le 310) -or ($_ -match '"'Ordinal| -[ci]?(eq|ne) ')) { '{0,4}: {1}' -f "'$n,$_ } }; $n=0; Get-Content evals/multi-model-verify/test_mirror_reaper.py | ForEach-Object { $n++; if ($n -ge 569) { '"'{0,4}: {1}' -f "'$n,$_ } }; $n=0; Get-Content BACKLOG.md | ForEach-Object { $n++; if ($n -ge 94 -and $n -le 165) { '"'{0,4}: {1}' -f "'$n,$_ } }' in C:\Users\Brandon\AppData\Local\Temp\pxmr
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command "git status --short; git log -3 --format='%h %p %s'; git diff --stat c77d0df 549c136; git diff fafc4ce c77d0df -- tools/write-attestation.ps1 evals/multi-model-verify/test_mirror_reaper.py BACKLOG.md; git grep -n -E '\\b(item|items) (101|102)\\b' -- tools evals commands skills docs/superpowers/specs/2026-09-13-mirror-reaper-design.md docs/superpowers/plans/2026-09-13-mirror-reaper.md" in C:\Users\Brandon\AppData\Local\Temp\pxmr
+ succeeded in 343ms:
+  59:     if (($LASTEXITCODE -ne 0) -or -not $full) {
+ 110:     if (($attr -band [int][System.IO.FileAttributes]::Directory) -eq 0) {
+ 123:     $cmp = [System.StringComparison]::OrdinalIgnoreCase
+ 148:     if (($ga -band [int][System.IO.FileAttributes]::Directory) -eq 0) {
+ 153:     if (($ga -band [int][System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+ 159:     if (($LASTEXITCODE -ne 0) -or -not $treeHead) {
+ 163:     if ($treeHead -eq $headFull) {
+ 170:         if (($authorExit -eq 0) -and ($LASTEXITCODE -eq 0) -and ($author -eq "parallax@local") -and
+ 171:             ($parents.Count -eq 2) -and ($parents[1] -eq $headFull)) {
+ 195: if (($LASTEXITCODE -ne 0) -or -not $toplevel) {
+ 212: if ($baseFull -eq $headFull) {
+ 231:     $cmp = [System.StringComparison]::OrdinalIgnoreCase
+ 269:     if ((-not $cpDirFull) -or ((Split-Path $cpFull -Parent) -ne $cpDirFull)) {
+ 277:     if ($LASTEXITCODE -ne 0) {
+ 285: }
+ 286: $outFile = Join-Path $attDir ($headFull + ".json")
+ 287: $json = $att | ConvertTo-Json -Depth 3
+ 288: try {
+ 289:     Set-Content -LiteralPath $outFile -Value $json -Encoding ASCII -NoNewline -ErrorAction Stop
+ 290: } catch {
+ 291:     Write-Output ("ERROR: the attestation could not be written to " + $outFile + ": " + $_.Exception.Message + " - nothing was reaped")
+ 292:     exit 2
+ 293: }
+ 294: $writtenText = $null
+ 295: try {
+ 296:     $writtenText = [System.IO.File]::ReadAllText($outFile)
+ 297: } catch {
+ 298:     $writtenText = $null
+ 299: }
+ 300: # Ordinal: -ne is case-insensitive on strings, so it would accept a read-back that differs only in letter case.
+ 301: if (-not [string]::Equals($writtenText, $json, [System.StringComparison]::Ordinal)) {
+ 302:     Write-Output ("ERROR: the attestation on disk does not match what was written (" + $outFile + ") - nothing was reaped")
+ 303:     exit 2
+ 304: }
+ 305: Write-Output "attestation written: $outFile ($Verdict, $baseFull..$headFull)"
+ 306: # THE REAP, after the record and in this order: mirror, its advisory
+ 307: # sidecar, then the bridge. A failure stops at the first tree that
+ 308: # could not be removed (exit 3) and leaves the record standing.
+ 309: if ($reapMirrorFull) {
+ 310:     $bridgeNote = ""
+ 329:     if (($null -ne $sa) -and
+ 330:         (($sa -band [int][System.IO.FileAttributes]::Directory) -eq 0) -and
+ 331:         (($sa -band [int][System.IO.FileAttributes]::ReparsePoint) -eq 0)) {
+ 569: def test_the_record_lands_in_the_bracketed_repo_and_the_sibling_is_untouched(tmp_path):
+ 570:     # Set-Content -Path expands wildcard characters, so a repo named
+ 571:     # `repo[1]` with a matching plain-named sibling `repo1` could have its
+ 572:     # record land in the sibling while the literal File.Exists read-back
+ 573:     # accepted whatever old record already sat there. -LiteralPath plus a
+ 574:     # content read-back closes that.
+ 575:     repo, base, head = make_repo(tmp_path, name="repo[1]")
+ 576:     sib = make_mirror(repo, tmp_path / "repo1")
+ 577:     decoy_dir = sib / ".git" / "parallax" / "attestations"
+ 578:     decoy_dir.mkdir(parents=True)
+ 579:     decoy_file = decoy_dir / (head + ".json")
+ 580:     decoy_bytes = json.dumps({"decoy": True}).encode("utf-8")
+ 581:     decoy_file.write_bytes(decoy_bytes)
+ 582:     # A stale record at the literal bracketed path: this is what e9d2713's
+ 583:     # false-success branch would have accepted unread, since its File.Exists
+ 584:     # check passed whatever record already sat there.
+ 585:     att_file(repo, head).parent.mkdir(parents=True, exist_ok=True)
+ 586:     att_file(repo, head).write_text(json.dumps({"stale": True}), encoding="utf-8")
+ 587:     mirror = make_mirror(repo, tmp_path / "kv-t")
+ 588:     proc = attest(repo, base, head, mirror=mirror)
+ 589:     assert proc.returncode == 0, proc.stdout + proc.stderr
+ 590:     assert att_file(repo, head).is_file()
+ 591:     record = json.loads(att_file(repo, head).read_text(encoding="utf-8"))
+ 592:     assert record["head_sha"] == head
+ 593:     assert "decoy" not in record
+ 594:     assert "stale" not in record
+ 595:     assert decoy_file.read_bytes() == decoy_bytes
+ 596:     assert not mirror.exists()
+ 597: 
+ 598: 
+ 599: def test_sidecar_success_is_read_back(tmp_path):
+ 600:     repo, base, head = make_repo(tmp_path)
+ 601:     mirror = make_mirror(repo, tmp_path / "kv-t")
+ 602:     sidecar = tmp_path / "kv-t.source-manifest"
+ 603:     sidecar.write_text("advisory\n", encoding="utf-8")
+ 604:     proc = attest(repo, base, head, mirror=mirror)
+ 605:     assert proc.returncode == 0, proc.stdout + proc.stderr
+ 606:     assert "reaped sidecar: " + str(sidecar) in proc.stdout
+ 607:     assert not sidecar.exists()
+ 608:     # Pins that the success line comes AFTER the read-back: the read-back
+ 609:     # failure text must appear earlier in the source than the print.
+ 610:     body = read(WRITE)
+ 611:     assert body.index("still exists after removal") < body.index('"reaped sidecar: "')
+ 612: 
+ 613: 
+ 614: def test_the_record_comparison_is_ordinal():
+ 615:     # A source pin, not a runtime case: the harness cannot make the file on
+ 616:     # disk differ from the serialized text by case alone (Set-Content writes
+ 617:     # exactly $json), so the comparison form itself is what has to be locked.
+ 618:     body = read(WRITE)
+ 619:     assert body.count(
+ 620:         "[string]::Equals($writtenText, $json, [System.StringComparison]::Ordinal)"
+ 621:     ) == 1
+ 622:     assert "$writtenText -ne $json" not in body
+ 623:     assert "$writtenText -eq $json" not in body
+  94: ## 107. The reap guard cannot tell a debate's trees from any clone at the attested head, and the mirror parent is the drive root
+  95: Status: OPEN
+  96: Cost: a session that names the wrong tree at the right head has it removed, and every mirror a KitnEssentials session builds lands directly under the drive root because the canonical temp root blows the path budget, so the doctor has to find them by a name pattern rather than a declared parent
+  97: Pairs: 106
+  98: Verified: 2026-09-13 8e1e6d54c939
+  99: 
+ 100: **Filed 2026-09-13 from the whole-branch review of the mirror reaper
+ 101: (item 106).** The emitter's identity guard refuses a tree that is not
+ 102: at the attested head, that overlaps the reviewed repository or its
+ 103: common dir, that is reached through a link, or whose `.git` is a file,
+ 104: and it pins each git read to the tree's own git dir. What it cannot do
+ 105: is distinguish this debate's mirror or bridge from any other clone of
+ 106: the same repository sitting at the same head: a second plain clone
+ 107: with unpushed branches passes every rule if the session names it. The
+ 108: prose in references/preflight-mirror.md states the residual instead of
+ 109: hiding it. A plan-mode debate ends with a frozen plan and no attestation,
+ 110: so its mirror has no mechanical reap point either; a plan-mode terminal
+ 111: event recorded mechanically is a further follow-up, not numbered below.
+ 112: 
+ 113: **Three follow-ups, decisions for the first two, a test gap for the third.**
+ 114: 
+ 115: 1. The bridge has a marker the mirror does not: a session clones it
+ 116:    from the reviewed repository, so its `origin` resolves to that
+ 117:    repository's top level or common dir, while a user's own clone points
+ 118:    at the remote. Requiring that for `-ReapBridge` closes half the gap
+ 119:    at one git call. The mirror carries whatever remotes its source had,
+ 120:    so the same rule does not apply to it without a marker the mirror
+ 121:    tool would have to write, and the tool writes nothing identifying
+ 122:    inside the mirror by design (the fingerprint covers every byte).
+ 123: 2. The location. The canonical review mirror root is `<TEMP>/<short-name>/`,
+ 124:    but the DT review packets put the deepest file 243 characters below
+ 125:    the repo root, so the mirror root must be 15 characters or fewer and
+ 126:    the 36-character temp directory cannot hold one; the sessions build
+ 127:    at `C:\kv-<tag>` instead, which is why the 2026-09-13 measurement
+ 128:    found 78 directories at the drive root. A declared short parent such
+ 129:    as `C:\pxm\<tag>` would satisfy the budget, keep the drive root clear,
+ 130:    turn the doctor's `kv*` name pattern into a fixed directory, and give
+ 131:    the reap guard one more cheap rule: a reap path must sit under the
+ 132:    declared parent. That edits the round-artifact-roots region and its
+ 133:    pin, `tools/artifact-roots.ps1`, doctor check 10 and the KitnEssentials
+ 134:    memory that names `C:\kv-<tag>`; the user picks the name.
+ 135: 3. The post-delete sidecar read-back has no driving test. The failure
+ 136:    branches `tools/write-attestation.ps1` takes after
+ 137:    `[System.IO.File]::Delete` on the sidecar - "the sidecar still exists
+ 138:    after removal" and "the sidecar could not be re-examined after
+ 139:    removal" - have no test that reaches them, because the session has no
+ 140:    non-administrator mechanism that makes a file survive `Delete` without
+ 141:    throwing, or that makes the following `GetAttributes` throw for a
+ 142:    reason other than absence. The ordering is locked only by a
+ 143:    source-position pin, `test_sidecar_success_is_read_back`, which a
+ 144:    refactor could satisfy without a runtime read-back. Named by the diff
+ 145:    debate's round 2.
+ 146: 
+ 147: **What closing it means.** The bridge origin rule shipped with a test
+ 148: that drives a foreign clone at the attested head and sees it refused,
+ 149: and a decision recorded on the mirror parent, either a new declared
+ 150: root with the four edits above or a stated reason to keep the drive
+ 151: root.
+ 152: 
+ 153: ## 106. Review mirrors are never reaped, so a review day costs about 3 GB of drive root
+ 154: Status: OPEN
+ 155: Cost: 78 mirror and bridge directories totalling 13.4 GB accumulated at the drive root in four review days, and the only removal is a hand sweep that has to guess which of them a live debate can still resume
+ 156: Pairs: 98, 107
+ 157: Verified: 2026-09-13 56bcc3bca1ea
+ 158: 
+ 159: **Filed 2026-09-13 from the KitnEssentials handoff**
+ 160: `dev/docs/handoffs/parallax-mirror-reaper-handoff.md` (outside this
+ 161: repo). Measured there on that date: the drive root held 78 `kv-*` and
+ 162: `kvs-*` directories totalling 13.4 GB, every one created between
+ 163: 2026-09-09 and 2026-09-13 by multi-model-verify rounds. `kv-<tag>` is
+ 164: the review mirror `tools/new-review-mirror.ps1` builds; `kvs-<tag>` is
+ 165: the drive-root clone bridge a session builds first when the reviewed
+
+hook: PostToolUse
+ succeeded in 292ms:
+549c136 c77d0df a8a168f merge main into mirror-reaper and renumber the reaper items to 106 and 107
+c77d0df fafc4ce apply diff debate round 2: compare the attestation read-back ordinally, plant a stale record in the bracketed case, and record the untaken read-back failure test
+fafc4ce e9d2713 apply diff debate round 1: write the record to the literal path and read it back by content, name a sidecar inspection failure, and read the sidecar back after its removal
+ .github/workflows/release.yml                      | 119 ++++++++
+ .github/workflows/skill-evals.yml                  |   6 +
+ BACKLOG.md                                         | 128 ++++++++-
+ CHANGELOG.md                                       |  85 ++++++
+ CLAUDE.md                                          |  22 ++
+ README.md                                          |   4 +-
+ commands/doctor.md                                 |   2 +-
+ docs/superpowers/plans/2026-09-13-mirror-reaper.md |  18 +-
+ .../specs/2026-09-13-mirror-reaper-design.md       |   2 +-
+ evals/multi-model-verify/test_check_changelog.py   | 175 ++++++++++++
+ evals/multi-model-verify/test_mirror_reaper.py     |   4 +-
+ evals/multi-model-verify/test_review_mirror.py     |   2 +-
+ evals/multi-model-verify/test_ste_lint.py          | 175 ++++++++++++
+ evals/tools/check_changelog.py                     | 196 +++++++++++++
+ evals/tools/ste_allow.txt                          |  16 ++
+ evals/tools/ste_lint.py                            | 310 +++++++++++++++++++++
+ .../references/preflight-mirror.md                 |   4 +-
+ tools/new-review-mirror.ps1                        |   2 +-
+ tools/review-tree-removal.ps1                      |   2 +-
+ tools/write-attestation.ps1                        |   2 +-
+ 20 files changed, 1241 insertions(+), 33 deletions(-)
+diff --git a/BACKLOG.md b/BACKLOG.md
+index 67cc4ec..03565a0 100644
+--- a/BACKLOG.md
++++ b/BACKLOG.md
+@@ -95,7 +95,7 @@ The full previous text of every closed item is in git history at
+ Status: OPEN
+ Cost: a session that names the wrong tree at the right head has it removed, and every mirror a KitnEssentials session builds lands directly under the drive root because the canonical temp root blows the path budget, so the doctor has to find them by a name pattern rather than a declared parent
+ Pairs: 101
+-Verified: 2026-09-13 2c2c5eeaeebc
++Verified: 2026-09-13 1524f48584c9
+ 
+ **Filed 2026-09-13 from the whole-branch review of the mirror reaper
+ (item 101).** The emitter's identity guard refuses a tree that is not
+@@ -110,7 +110,7 @@ hiding it. A plan-mode debate ends with a frozen plan and no attestation,
+ so its mirror has no mechanical reap point either; a plan-mode terminal
+ event recorded mechanically is the third follow-up.
+ 
+-**Two follow-ups, one decision each.**
++**Three follow-ups, decisions for the first two, a test gap for the third.**
+ 
+ 1. The bridge has a marker the mirror does not: a session clones it
+    from the reviewed repository, so its `origin` resolves to that
+@@ -132,6 +132,17 @@ event recorded mechanically is the third follow-up.
+    declared parent. That edits the round-artifact-roots region and its
+    pin, `tools/artifact-roots.ps1`, doctor check 10 and the KitnEssentials
+    memory that names `C:\kv-<tag>`; the user picks the name.
++3. The post-delete sidecar read-back has no driving test. The failure
++   branches `tools/write-attestation.ps1` takes after
++   `[System.IO.File]::Delete` on the sidecar - "the sidecar still exists
++   after removal" and "the sidecar could not be re-examined after
++   removal" - have no test that reaches them, because the session has no
++   non-administrator mechanism that makes a file survive `Delete` without
++   throwing, or that makes the following `GetAttributes` throw for a
++   reason other than absence. The ordering is locked only by a
++   source-position pin, `test_sidecar_success_is_read_back`, which a
++   refactor could satisfy without a runtime read-back. Named by the diff
++   debate's round 2.
+ 
+ **What closing it means.** The bridge origin rule shipped with a test
+ that drives a foreign clone at the attested head and sees it refused,
+diff --git a/evals/multi-model-verify/test_mirror_reaper.py b/evals/multi-model-verify/test_mirror_reaper.py
+index 7a15e86..3d641d4 100644
+--- a/evals/multi-model-verify/test_mirror_reaper.py
++++ b/evals/multi-model-verify/test_mirror_reaper.py
+@@ -577,7 +577,13 @@ def test_the_record_lands_in_the_bracketed_repo_and_the_sibling_is_untouched(tmp
+     decoy_dir = sib / ".git" / "parallax" / "attestations"
+     decoy_dir.mkdir(parents=True)
+     decoy_file = decoy_dir / (head + ".json")
+-    decoy_file.write_text(json.dumps({"decoy": True}), encoding="utf-8")
++    decoy_bytes = json.dumps({"decoy": True}).encode("utf-8")
++    decoy_file.write_bytes(decoy_bytes)
++    # A stale record at the literal bracketed path: this is what e9d2713's
++    # false-success branch would have accepted unread, since its File.Exists
++    # check passed whatever record already sat there.
++    att_file(repo, head).parent.mkdir(parents=True, exist_ok=True)
++    att_file(repo, head).write_text(json.dumps({"stale": True}), encoding="utf-8")
+     mirror = make_mirror(repo, tmp_path / "kv-t")
+     proc = attest(repo, base, head, mirror=mirror)
+     assert proc.returncode == 0, proc.stdout + proc.stderr
+@@ -585,7 +591,8 @@ def test_the_record_lands_in_the_bracketed_repo_and_the_sibling_is_untouched(tmp
+     record = json.loads(att_file(repo, head).read_text(encoding="utf-8"))
+     assert record["head_sha"] == head
+     assert "decoy" not in record
+-    assert json.loads(decoy_file.read_text(encoding="utf-8")) == {"decoy": True}
++    assert "stale" not in record
++    assert decoy_file.read_bytes() == decoy_bytes
+     assert not mirror.exists()
+ 
+ 
+@@ -602,3 +609,15 @@ def test_sidecar_success_is_read_back(tmp_path):
+     # failure text must appear earlier in the source than the print.
+     body = read(WRITE)
+     assert body.index("still exists after removal") < body.index('"reaped sidecar: "')
++
++
++def test_the_record_comparison_is_ordinal():
++    # A source pin, not a runtime case: the harness cannot make the file on
++    # disk differ from the serialized text by case alone (Set-Content writes
++    # exactly $json), so the comparison form itself is what has to be locked.
++    body = read(WRITE)
++    assert body.count(
++        "[string]::Equals($writtenText, $json, [System.StringComparison]::Ordinal)"
++    ) == 1
++    assert "$writtenText -ne $json" not in body
++    assert "$writtenText -eq $json" not in body
+diff --git a/tools/write-attestation.ps1 b/tools/write-attestation.ps1
+index f981043..9b8c467 100644
+--- a/tools/write-attestation.ps1
++++ b/tools/write-attestation.ps1
+@@ -297,7 +297,8 @@ try {
+ } catch {
+     $writtenText = $null
+ }
+-if ($writtenText -ne $json) {
++# Ordinal: -ne is case-insensitive on strings, so it would accept a read-back that differs only in letter case.
++if (-not [string]::Equals($writtenText, $json, [System.StringComparison]::Ordinal)) {
+     Write-Output ("ERROR: the attestation on disk does not match what was written (" + $outFile + ") - nothing was reaped")
+     exit 2
+ }
+evals/multi-model-verify/test_check_changelog.py:1:"""Tests for evals/tools/check_changelog.py (items 102 and 103).
+
+hook: PostToolUse
+hook: PostToolUse Completed
+hook: PostToolUse Completed
+hook: PreToolUse
+hook: PreToolUse
+hook: PreToolUse Completed
+hook: PreToolUse Completed
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command "git grep -n -E '101|102' -- tools evals commands skills docs/superpowers/specs/2026-09-13-mirror-reaper-design.md docs/superpowers/plans/2026-09-13-mirror-reaper.md; git diff c77d0df 549c136 -- .github/workflows/skill-evals.yml tools/review-tree-removal.ps1 tools/write-attestation.ps1 tools/new-review-mirror.ps1 evals/multi-model-verify/test_mirror_reaper.py evals/multi-model-verify/test_review_mirror.py skills/multi-model-verify/SKILL.md skills/multi-model-verify/references/preflight-mirror.md commands/doctor.md docs/superpowers/specs/2026-09-13-mirror-reaper-design.md docs/superpowers/plans/2026-09-13-mirror-reaper.md; git diff c77d0df 549c136 -- BACKLOG.md" in C:\Users\Brandon\AppData\Local\Temp\pxmr
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command "Select-String -Path CLAUDE.md,evals/tools/check_changelog.py,evals/tools/backlog_lint.py -Pattern 'CHANGELOG|Changelog|changelog|bump|digest|sha256|def item|normalize|def compute' | ForEach-Object { '{0}:{1}: {2}' -f "'$_.Path,$_.LineNumber,$_.Line }; $n=0; Get-Content docs/superpowers/specs/2026-09-13-mirror-reaper-design.md | ForEach-Object { $n++; if ($n -ge 45 -and $n -le 56) { '"'{0,4}: {1}' -f "'$n,$_ } }; git diff --stat a8a168f..HEAD; git show --format=fuller --no-patch a8a168f' in C:\Users\Brandon\AppData\Local\Temp\pxmr
+ succeeded in 210ms:
+docs/superpowers/specs/2026-09-13-mirror-reaper-design.md:54:102 carries that residual beside the same-head one.
+evals/multi-model-verify/fixtures/skill_lint_pre_change.py:38:  * description: present, 1-1024 chars, plus triggering heuristics
+evals/multi-model-verify/fixtures/skill_lint_pre_change.py:61:MAX_DESC = 1024
+evals/multi-model-verify/test_check_changelog.py:1:"""Tests for evals/tools/check_changelog.py (items 102 and 103).
+evals/multi-model-verify/test_codex_tool_surface_probe.py:337:        # Diff debate round 1, claim 1. `{"id":101,"result":{}}` is
+evals/multi-model-verify/test_codex_tool_surface_probe.py:842:    101 polls the 101st status id is 201 - inside the FEATURE window - so a
+evals/multi-model-verify/test_codex_tool_surface_probe.py:851:        # 101 is the first count that collided. The interval is dropped to
+evals/multi-model-verify/test_codex_tool_surface_probe.py:855:                         extra=["-PollCount", "101", "-PollIntervalMs", "1"])
+evals/multi-model-verify/test_multi_model_verify.py:77:        assert len(text) <= 1024
+evals/multi-model-verify/test_review_mirror.py:727:        '$b = [byte[]]@(99, 97, 102, 195, 169, 0)\n'
+evals/multi-model-verify/test_review_mirror.py:730:    assert out == "99,97,102,233", out
+evals/multi-model-verify/test_review_mirror.py:889:    # codes are 63,63,32 for "?? " then 99,97,102,233 for "caf" and the
+evals/multi-model-verify/test_review_mirror.py:896:    assert out == "63,63,32,99,97,102,233,46,116,120,116", out
+evals/tools/drift_statemachine_tests.ps1:1234:# this host can even present. It measures 101 and serialises intact, so it
+evals/tools/skill_lint.py:41:  * description: present, 1-1024 chars, plus triggering heuristics
+evals/tools/skill_lint.py:68:MAX_DESC = 1024
+evals/tools/skill_scanner.py:243:        elif len(desc) > 1024:
+evals/tools/skill_scanner.py:244:            add("META05", "INFO", skill_md, 1, "Description exceeds 1024 chars (spec limit).", desc[:60])
+tools/check-drift.ps1:380:                # -Depth 100 measures 101. The first version fired on it.
+tools/check-drift.ps1:382:                # here: at 99 nested objects the value parses, measures 101,
+tools/check-drift.ps1:390:                # 100 nested levels; 99 parses, measures 101, and
+tools/codex-tool-surface-probe.ps1:329:        # -PollCount took any integer: at 101 polls the 101st status id is
+tools/codex-tool-surface-probe.ps1:410:         `{"id":101,"result":{}}` reached the clean report. A response
+tools/kimi-lane-lock.ps1:217:# evals/multi-model-verify/test_kimi_lane_home.py:102-106.
+diff --git a/.github/workflows/skill-evals.yml b/.github/workflows/skill-evals.yml
+index 3e471e9..ab7618c 100644
+--- a/.github/workflows/skill-evals.yml
++++ b/.github/workflows/skill-evals.yml
+@@ -40,6 +40,12 @@ jobs:
+       - name: Tier 1c - exact-line oracle gate
+         run: python evals/tools/check_exact_line_oracles.py
+ 
++      # The newest CHANGELOG.md section must name the plugin.json version,
++      # so a version bump without release notes fails HERE, on the branch,
++      # and never reaches the release workflow with nothing to publish.
++      - name: Tier 1d - changelog names the plugin version
++        run: python evals/tools/check_changelog.py
++
+       - name: Tier 2 - trigger and routing evals
+         run: python evals/tools/run_trigger_evals.py
+ 
+diff --git a/commands/doctor.md b/commands/doctor.md
+index d854591..5bc0876 100644
+--- a/commands/doctor.md
++++ b/commands/doctor.md
+@@ -385,7 +385,7 @@ and counted; it never reads as empty.
+   attestation emitter, `write-attestation.ps1 -ReapMirror <mirror>
+   [-ReapBridge <bridge>]`, and one whose debate is over without an
+   attestation is removed by hand; the rule and its measurement are
+-  backlog item 101. Never name a directory as safe to delete: the
++  backlog item 106. Never name a directory as safe to delete: the
+   doctor cannot tell which of them a live chat can still resume, and a
+   `resume` against a deleted mirror is a transport failure.
+ 
+diff --git a/docs/superpowers/plans/2026-09-13-mirror-reaper.md b/docs/superpowers/plans/2026-09-13-mirror-reaper.md
+index f9c5fad..8fa8194 100644
+--- a/docs/superpowers/plans/2026-09-13-mirror-reaper.md
++++ b/docs/superpowers/plans/2026-09-13-mirror-reaper.md
+@@ -8,7 +8,7 @@
+ 
+ **Tech Stack:** PowerShell 5.1 and 7 (ASCII-only tools), Python 3 pytest evals, GitHub Actions `powershell-hosts` job.
+ 
+-**Spec:** `docs/superpowers/specs/2026-09-13-mirror-reaper-design.md`. Backlog items 101 (filed) and 98 (paired).
++**Spec:** `docs/superpowers/specs/2026-09-13-mirror-reaper-design.md`. Backlog items 106 (filed) and 98 (paired).
+ 
+ ## Global Constraints
+ 
+@@ -39,7 +39,7 @@
+ Create `evals/multi-model-verify/test_mirror_reaper.py`:
+ 
+ ```python
+-"""The review mirror reaper (BACKLOG items 101 and 98; spec
++"""The review mirror reaper (BACKLOG items 106 and 98; spec
+ docs/superpowers/specs/2026-09-13-mirror-reaper-design.md).
+ 
+ Four groups. REMOVAL: tools/review-tree-removal.ps1's Remove-ReviewTree,
+@@ -278,7 +278,7 @@ Create `tools/review-tree-removal.ps1` with exactly this content. The `Test-Path
+ #   . (Join-Path $PSScriptRoot "review-tree-removal.ps1")
+ # from tools/new-review-mirror.ps1 (the -Force rebuild, backlog item 98)
+ # and tools/write-attestation.ps1 (the reap after a terminal verdict,
+-# backlog item 101). It defines functions and executes nothing else, so
++# backlog item 106). It defines functions and executes nothing else, so
+ # dot-sourcing it has no effect until a caller calls one.
+ #
+ # Windows PowerShell 5.1 compatible, ASCII ONLY.
+@@ -479,7 +479,7 @@ Append to `evals/multi-model-verify/test_review_mirror.py`:
+ 
+ ```python
+ def test_an_existing_mirror_refusal_names_the_reap_route_not_force_first(tmp_path):
+-    # Backlog item 101: the count grew because this refusal suggested
++    # Backlog item 106: the count grew because this refusal suggested
+     # -Force and a session that did not want an in-place rebuild built
+     # kv-<tag>-2 beside the first. The reap route comes first now, and
+     # -Force is named as the mid-debate rebuild it is.
+@@ -533,7 +533,7 @@ insert:
+ ```powershell
+ 
+ # The directory-link guard and the tree removal are shared with the
+-# attestation emitter's reap (backlog item 101) and live in one file so
++# attestation emitter's reap (backlog item 106) and live in one file so
+ # the two tools cannot drift apart on either. Functions only; nothing
+ # runs at dot-source time.
+ . (Join-Path $PSScriptRoot "review-tree-removal.ps1")
+@@ -789,7 +789,7 @@ In `tools/write-attestation.ps1`:
+ ```powershell
+ # Exit codes: 0 written, 2 argument/repo error, 3 written but a reap failed.
+ #
+-# REAP (0.35.0, backlog item 101): -ReapMirror and -ReapBridge name the
++# REAP (0.35.0, backlog item 106): -ReapMirror and -ReapBridge name the
+ # review mirror and the clone bridge the debate ran on. The attestation
+ # is the one TERMINAL event the plugin records mechanically, so it is
+ # the reap point - never an age. Both paths are validated against the
+@@ -1079,7 +1079,7 @@ def test_doctor_inventories_the_mirrors_and_never_deletes():
+         "3 days",
+         "LastWriteTime",
+         "-ReapMirror",
+-        "backlog item 101",
++        "backlog item 106",
+     ):
+         assert anchor in body, "doctor inventory anchor missing: " + anchor
+     section = body.split("## 10. Review mirror inventory", 1)[1]
+@@ -1205,7 +1205,7 @@ and counted; it never reads as empty.
+   attestation emitter, `write-attestation.ps1 -ReapMirror <mirror>
+   [-ReapBridge <bridge>]`, and one whose debate is over without an
+   attestation is removed by hand; the rule and its measurement are
+-  backlog item 101. Never name a directory as safe to delete: the
++  backlog item 106. Never name a directory as safe to delete: the
+   doctor cannot tell which of them a live chat can still resume, and a
+   `resume` against a deleted mirror is a transport failure.
+ 
+@@ -1231,6 +1231,6 @@ git commit -m "state the reap point in the skill and the reference, and inventor
+ 
+ ## Not in this plan
+ 
+-- The version bump and the closing edits to items 98 and 101 in `BACKLOG.md`: they follow the diff debate, per `CLAUDE.md`'s dev loop.
++- The version bump and the closing edits to items 98 and 106 in `BACKLOG.md`: they follow the diff debate, per `CLAUDE.md`'s dev loop.
+ - The KitnEssentials memory edit that tells the bridge builder to pass `-ReapBridge`.
+ - Deleting the ten `C:\kv*` directories that exist today.
+diff --git a/docs/superpowers/specs/2026-09-13-mirror-reaper-design.md b/docs/superpowers/specs/2026-09-13-mirror-reaper-design.md
+index add80b6..a49c74f 100644
+--- a/docs/superpowers/specs/2026-09-13-mirror-reaper-design.md
++++ b/docs/superpowers/specs/2026-09-13-mirror-reaper-design.md
+@@ -2,7 +2,7 @@
+ 
+ Written 2026-09-13 from the KitnEssentials handoff
+ `dev/docs/handoffs/parallax-mirror-reaper-handoff.md` (outside this
+-repo). Backlog item 101 holds the measurement; item 98 is the paired
++repo). Backlog item 106 holds the measurement; item 98 is the paired
+ defect this design closes alongside.
+ 
+ ## The problem
+diff --git a/evals/multi-model-verify/test_mirror_reaper.py b/evals/multi-model-verify/test_mirror_reaper.py
+index 3d641d4..a5173cf 100644
+--- a/evals/multi-model-verify/test_mirror_reaper.py
++++ b/evals/multi-model-verify/test_mirror_reaper.py
+@@ -1,4 +1,4 @@
+-"""The review mirror reaper (BACKLOG items 101 and 98; spec
++"""The review mirror reaper (BACKLOG items 106 and 98; spec
+ docs/superpowers/specs/2026-09-13-mirror-reaper-design.md).
+ 
+ Four groups. REMOVAL: tools/review-tree-removal.ps1's Remove-ReviewTree,
+@@ -416,7 +416,7 @@ def test_doctor_inventories_the_mirrors_and_never_deletes():
+         "3 days",
+         "LastWriteTime",
+         "-ReapMirror",
+-        "backlog item 101",
++        "backlog item 106",
+     ):
+         assert anchor in body, "doctor inventory anchor missing: " + anchor
+     section = body.split("## 10. Review mirror inventory", 1)[1]
+diff --git a/evals/multi-model-verify/test_review_mirror.py b/evals/multi-model-verify/test_review_mirror.py
+index db90e17..e1384f0 100644
+--- a/evals/multi-model-verify/test_review_mirror.py
++++ b/evals/multi-model-verify/test_review_mirror.py
+@@ -3226,7 +3226,7 @@ def test_a_mirror_whose_current_state_cannot_be_measured_is_refused(tmp_path):
+ 
+ 
+ def test_an_existing_mirror_refusal_names_the_reap_route_not_force_first(tmp_path):
+-    # Backlog item 101: the count grew because this refusal suggested
++    # Backlog item 106: the count grew because this refusal suggested
+     # -Force and a session that did not want an in-place rebuild built
+     # kv-<tag>-2 beside the first. The reap route comes first now, and
+     # -Force is named as the mid-debate rebuild it is.
+diff --git a/skills/multi-model-verify/references/preflight-mirror.md b/skills/multi-model-verify/references/preflight-mirror.md
+index 8a74689..5b0dd21 100644
+--- a/skills/multi-model-verify/references/preflight-mirror.md
++++ b/skills/multi-model-verify/references/preflight-mirror.md
+@@ -112,7 +112,7 @@ commit construction makes over a tracked back-channel; the bridge must
+ match exactly, so a bridge left unfetched after a fix commit is refused
+ rather than deleted under a stale head. Measured 2026-09-13: 78 mirror
+ and bridge directories, 13.4 GB, in four review days, with nothing but
+-memory saying which of them a live chat could still resume. Another chat's mirror at another head is refused by name; the guard cannot tell two trees at the SAME head apart, so the session names only the trees it built, and the residual is backlog item 102.
++memory saying which of them a live chat could still resume. Another chat's mirror at another head is refused by name; the guard cannot tell two trees at the SAME head apart, so the session names only the trees it built, and the residual is backlog item 107.
+ 
+ The removal never recurses through a link: `tools/review-tree-removal.ps1`
+ walks the tree itself, removes each link as a link, clears the read-only
+@@ -133,7 +133,7 @@ recognise one by shape, so the session that built it names it; the rule
+ 
+ Two limits, stated. A plan-mode debate ends with a frozen plan and no
+ attestation, so its mirror has no mechanical reap point and keeps the
+-hand route until one exists (backlog item 102). And an ESCALATE the user
++hand route until one exists (backlog item 107). And an ESCALATE the user
+ may still extend is not yet terminal: emit the attestation, and with it
+ the reap, only once the user has declined to extend, because a reaped
+ mirror turns the extension's `resume` into a transport failure.
+diff --git a/tools/new-review-mirror.ps1 b/tools/new-review-mirror.ps1
+index 095c122..74708ae 100644
+--- a/tools/new-review-mirror.ps1
++++ b/tools/new-review-mirror.ps1
+@@ -97,7 +97,7 @@ param(
+ [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
+ 
+ # The directory-link guard and the tree removal are shared with the
+-# attestation emitter's reap (backlog item 101) and live in one file so
++# attestation emitter's reap (backlog item 106) and live in one file so
+ # the two tools cannot drift apart on either. Functions only; nothing
+ # runs at dot-source time.
+ . (Join-Path $PSScriptRoot "review-tree-removal.ps1")
+diff --git a/tools/review-tree-removal.ps1 b/tools/review-tree-removal.ps1
+index 0061882..04cb2b3 100644
+--- a/tools/review-tree-removal.ps1
++++ b/tools/review-tree-removal.ps1
+@@ -5,7 +5,7 @@
+ #   . (Join-Path $PSScriptRoot "review-tree-removal.ps1")
+ # from tools/new-review-mirror.ps1 (the -Force rebuild, backlog item 98)
+ # and tools/write-attestation.ps1 (the reap after a terminal verdict,
+-# backlog item 101). It defines functions and executes nothing else, so
++# backlog item 106). It defines functions and executes nothing else, so
+ # dot-sourcing it has no effect until a caller calls one.
+ #
+ # Windows PowerShell 5.1 compatible, ASCII ONLY.
+diff --git a/tools/write-attestation.ps1 b/tools/write-attestation.ps1
+index 9b8c467..a77fd78 100644
+--- a/tools/write-attestation.ps1
++++ b/tools/write-attestation.ps1
+@@ -14,7 +14,7 @@
+ #
+ # Exit codes: 0 written, 2 argument/repo error, 3 written but a reap failed.
+ #
+-# REAP (0.35.0, backlog item 101): -ReapMirror and -ReapBridge name the
++# REAP (0.35.0, backlog item 106): -ReapMirror and -ReapBridge name the
+ # review mirror and the clone bridge the debate ran on. The attestation
+ # is the one TERMINAL event the plugin records mechanically, so it is
+ # the reap point - never an age. Both paths are validated against the
+diff --git a/BACKLOG.md b/BACKLOG.md
+index 03565a0..6eb4360 100644
+--- a/BACKLOG.md
++++ b/BACKLOG.md
+@@ -28,8 +28,8 @@ The full previous text of every closed item is in git history at
+ - 94
+ - 95
+ - 98
+-- 101
+-- 102
++- 106
++- 107
+ - 99
+ 
+ ### Second - taxes every cycle
+@@ -91,14 +91,14 @@ The full previous text of every closed item is in git history at
+ - 85
+ - 86
+ 
+-## 102. The reap guard cannot tell a debate's trees from any clone at the attested head, and the mirror parent is the drive root
++## 107. The reap guard cannot tell a debate's trees from any clone at the attested head, and the mirror parent is the drive root
+ Status: OPEN
+ Cost: a session that names the wrong tree at the right head has it removed, and every mirror a KitnEssentials session builds lands directly under the drive root because the canonical temp root blows the path budget, so the doctor has to find them by a name pattern rather than a declared parent
+-Pairs: 101
+-Verified: 2026-09-13 1524f48584c9
++Pairs: 106
++Verified: 2026-09-13 8e1e6d54c939
+ 
+ **Filed 2026-09-13 from the whole-branch review of the mirror reaper
+-(item 101).** The emitter's identity guard refuses a tree that is not
++(item 106).** The emitter's identity guard refuses a tree that is not
+ at the attested head, that overlaps the reviewed repository or its
+ common dir, that is reached through a link, or whose `.git` is a file,
+ and it pins each git read to the tree's own git dir. What it cannot do
+@@ -108,7 +108,7 @@ with unpushed branches passes every rule if the session names it. The
+ prose in references/preflight-mirror.md states the residual instead of
+ hiding it. A plan-mode debate ends with a frozen plan and no attestation,
+ so its mirror has no mechanical reap point either; a plan-mode terminal
+-event recorded mechanically is the third follow-up.
++event recorded mechanically is a further follow-up, not numbered below.
+ 
+ **Three follow-ups, decisions for the first two, a test gap for the third.**
+ 
+@@ -150,11 +150,11 @@ and a decision recorded on the mirror parent, either a new declared
+ root with the four edits above or a stated reason to keep the drive
+ root.
+ 
+-## 101. Review mirrors are never reaped, so a review day costs about 3 GB of drive root
++## 106. Review mirrors are never reaped, so a review day costs about 3 GB of drive root
+ Status: OPEN
+ Cost: 78 mirror and bridge directories totalling 13.4 GB accumulated at the drive root in four review days, and the only removal is a hand sweep that has to guess which of them a live debate can still resume
+-Pairs: 98, 102
+-Verified: 2026-09-13 e0cdbd57d4f3
++Pairs: 98, 107
++Verified: 2026-09-13 56bcc3bca1ea
+ 
+ **Filed 2026-09-13 from the KitnEssentials handoff**
+ `dev/docs/handoffs/parallax-mirror-reaper-handoff.md` (outside this
+@@ -199,7 +199,7 @@ at another head is refused by name. The mirror tool's existing-path
+ refusal names that route instead of `-Force`. `/parallax:doctor` reports
+ the `kv*` inventory as a note and never deletes. A plan-mode debate has
+ no attestation, so its mirror keeps the hand route; that residual is
+-item 102's. Item 98 closes with it,
++item 107's. Item 98 closes with it,
+ because the mirror tool's `-Force` removal goes through the same
+ function. Design: `docs/superpowers/specs/2026-09-13-mirror-reaper-design.md`.
+ 
+@@ -4440,8 +4440,8 @@ Record: docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window
+ ## 98. The mirror's own removal is unchecked, so a failed one builds over a stale tree
+ Status: OPEN
+ Cost: a build that fails to empty its destination copies over whatever survived, and the fingerprint then measures the resulting directory rather than proving it was freshly emptied, so a stale mirror can be certified as a fresh one
+-Pairs: 95, 99, 101
+-Verified: 2026-09-13 02ee31a946e0
++Pairs: 95, 99, 106
++Verified: 2026-09-13 6147ccd5fb41
+ 
+ **Filed 2026-09-06 from the mode-diff debate for the identity window
+ branch**, round 3, which asked whether refusing alias spellings was
+@@ -4516,3 +4516,105 @@ is about to delete, so this is a design change rather than a patch - or
+ an enforceable restriction that makes the alias case unreachable, or a
+ recorded decision that the residual risk is accepted with the reasoning
+ written down.
++
++## 101. The public repository shows no releases, so a version has no page
++Status: DONE
++Closed: record
++Verified: 2026-09-13 9559b4db34b1
++
++**Filed and closed 2026-09-13.** The repository had no git tags at all,
++so GitHub's Releases box read "No releases published" after 32 version
++bumps, while the version in `.claude-plugin/plugin.json` was the only
++thing `claude plugin update` ever keyed on. A version therefore had no
++page to point at: no tag, no notes, no download.
++
++Record: .github/workflows/release.yml
++
++The record is the workflow itself. On a push to main that touches
++`.claude-plugin/plugin.json`, it reads the version and, when no
++`v<version>` tag exists, tags the pushed main head and publishes a release
++there with notes generated from the range since the previous tag. An
++already-tagged version is a no-op, so a re-run cannot move a tag, and a
++`workflow_dispatch` trigger cuts the first release by hand. History was
++NOT backfilled by decision: the first tag is 0.34.0 at the head this item
++merged onto, and the 31 earlier bumps stay in git history only.
++
++## 102. A release page had nothing to say about the version
++Status: DONE
++Closed: record
++Verified: 2026-09-13 7f744ade776f
++
++**Filed and closed 2026-09-13, the same day as item 101.** The first
++release that workflow cut carried GitHub's generated notes, and with no
++pull requests and no earlier tag those were one "Full Changelog" link:
++a page that named the version and said nothing about what changed. The
++repository had no changelog at all; every version's record was its merge
++commit subject and the round directory under `docs/superpowers/plans/`.
++
++Record: CHANGELOG.md
++
++`CHANGELOG.md` holds one `## vX.Y.Z (YYYY-MM-DD)` section per version,
++newest first, starting at 0.34.0. `evals/tools/check_changelog.py` is the
++one reader: bare, it fails when the newest section does not name the
++`plugin.json` version, and CI runs it on every push as tier 1d, so a bump
++without notes fails on the branch. With `--version X --print` it emits
++that section's body, and the release workflow publishes exactly that as
++the release page, so a version with no section fails the release rather
++than shipping blank. `test_check_changelog.py` proves every refusal can
++fire and runs the repository check under pytest. The dev-loop rule in
++`CLAUDE.md` names the entry as part of the bump commit.
++
++## 103. A changelog entry had no style rule a gate could hold
++Status: DONE
++Closed: record
++Verified: 2026-09-13 937983ae2505
++
++**Filed and closed 2026-09-13, after items 101 and 102.** The first
++changelog entry was written in ordinary prose: passive sentences,
++sentences over 40 words, "-ing" verb forms, and nothing in the gate to
++say which of those the next entry could repeat. The user asked for
++ASD-STE100 Simplified Technical English, which is a controlled language
++with two halves, the writing rules and a licensed dictionary that this
++repository cannot carry.
++
++Record: evals/tools/ste_lint.py
++
++`evals/tools/ste_lint.py` enforces the rule half a program can decide:
++sentence length (25 words), paragraph length (6 sentences), active
++voice, no "-ing" verb form, no contraction, no unapproved modal, and a
++denylist of unapproved words with their STE alternative. A project
++allowlist, `evals/tools/ste_allow.txt`, names the technical names and
++state adjectives the checker must not question. `check_changelog.py`
++runs it over the whole file, so CI tier 1d and the release workflow both
++refuse an entry the checker refuses. The 0.34.0 entry was rewritten to
++pass, which is the proof the rules are usable; the checker found 15
++defects in the first draft. Noun clusters and one-meaning-per-word stay
++with the writer, and the checker's docstring says so.
++
++## 104. The changelog entry passed the style rules and still read as maintainer text
++Status: DONE
++Closed: record
++Verified: 2026-09-13 d1288beb31d9
++
++**Filed and closed 2026-09-13, after item 103.** The 0.34.0 entry passed
++every mechanical STE rule and still opened with "resolver", "retention
++copy", "typed binding" and "exit map". The rules bound the sentence
++shape and not the reader: STE exists so that a non-native speaker can
++follow a maintenance manual, and the user's stated aim for the
++changelog is the same, a page the average user can read, not a page
++for the maintainer. Nothing in the gate said what a section must open
++with.
++
++Record: evals/tools/check_changelog.py
++
++`check_changelog.py` now holds a structure rule beside the version tie:
++each version section must open with a plain-language paragraph, not a
++heading or a list item, and that paragraph may carry no code span, no
++file name or path, and no URL. That is the mechanical proxy for "say
++what changed for the user first"; the maintainer detail goes under a
++later heading, where names and paths are fine. The 0.34.0 entry was
++rewritten in that shape: a lead that says what the user gets and that
++they need not change anything, a "What changed for you" list, and a
++"Details for maintainers" list with the records. `CHANGELOG.md`'s own
++preamble names the reader. `test_check_changelog.py` proves the three
++refusals fire and that the rule stops at the first blank line.
+
+hook: PostToolUse
+ succeeded in 367ms:
+C:\Users\Brandon\AppData\Local\Temp\pxmr\CLAUDE.md:161: edits are NOT live until you: bump `.claude-plugin/plugin.json`, run
+C:\Users\Brandon\AppData\Local\Temp\pxmr\CLAUDE.md:172: BUMP THE VERSION AFTER THE DIFF DEBATE, not when the branch's first task
+C:\Users\Brandon\AppData\Local\Temp\pxmr\CLAUDE.md:177: was bumped mid-branch, cached at 14:13, and then five diff-debate rounds
+C:\Users\Brandon\AppData\Local\Temp\pxmr\CLAUDE.md:178: rewrote `skills/`. Measured again 2026-08-16: 0.26.0 bumped LAST in the
+C:\Users\Brandon\AppData\Local\Temp\pxmr\CLAUDE.md:180: the tree after the bump was cached — the installed copy was five commits
+C:\Users\Brandon\AppData\Local\Temp\pxmr\CLAUDE.md:183: bump consumed before the branch is finished recovers only by another bump
+C:\Users\Brandon\AppData\Local\Temp\pxmr\CLAUDE.md:186: WRITE THE CHANGELOG ENTRY IN THE SAME COMMIT AS THE BUMP, IN SIMPLIFIED
+C:\Users\Brandon\AppData\Local\Temp\pxmr\CLAUDE.md:187: TECHNICAL ENGLISH. `CHANGELOG.md` has one `## vX.Y.Z (YYYY-MM-DD)`
+C:\Users\Brandon\AppData\Local\Temp\pxmr\CLAUDE.md:188: section per version, newest first, and `evals/tools/check_changelog.py`
+C:\Users\Brandon\AppData\Local\Temp\pxmr\CLAUDE.md:189: (CI tier 1d, and `test_check_changelog.py` locally) fails when the newest
+C:\Users\Brandon\AppData\Local\Temp\pxmr\CLAUDE.md:213: the checkout with CRLF normalized. Backlog item 65 holds the full record
+C:\Users\Brandon\AppData\Local\Temp\pxmr\CLAUDE.md:250: PHYSICAL LINE; a pin built on the whitespace-normalized read does not.
+C:\Users\Brandon\AppData\Local\Temp\pxmr\evals\tools\check_changelog.py:2: """check_changelog.py - tie CHANGELOG.md to the plugin version, and to
+C:\Users\Brandon\AppData\Local\Temp\pxmr\evals\tools\check_changelog.py:6: the newest changelog section is not the version in
+C:\Users\Brandon\AppData\Local\Temp\pxmr\evals\tools\check_changelog.py:7: `.claude-plugin/plugin.json`, so a bump without notes is caught on the
+C:\Users\Brandon\AppData\Local\Temp\pxmr\evals\tools\check_changelog.py:47: CHANGELOG_PATH = "CHANGELOG.md"
+C:\Users\Brandon\AppData\Local\Temp\pxmr\evals\tools\check_changelog.py:131:     """Every STE finding for the changelog text, as strings."""
+C:\Users\Brandon\AppData\Local\Temp\pxmr\evals\tools\check_changelog.py:155:         text = (repo_root / CHANGELOG_PATH).read_text(encoding="utf-8")
+C:\Users\Brandon\AppData\Local\Temp\pxmr\evals\tools\check_changelog.py:157:         print("changelog: cannot read %s: %s" % (CHANGELOG_PATH, exc), file=sys.stderr)
+C:\Users\Brandon\AppData\Local\Temp\pxmr\evals\tools\check_changelog.py:171:             print("changelog: cannot read the version from %s: %s"
+C:\Users\Brandon\AppData\Local\Temp\pxmr\evals\tools\check_changelog.py:186:             print("changelog: %s" % error, file=sys.stderr)
+C:\Users\Brandon\AppData\Local\Temp\pxmr\evals\tools\check_changelog.py:191:         print("changelog: v%s section present (%s)" % (wanted, CHANGELOG_PATH))
+C:\Users\Brandon\AppData\Local\Temp\pxmr\evals\tools\backlog_lint.py:9:     python evals/tools/backlog_lint.py --digests [PATH]
+C:\Users\Brandon\AppData\Local\Temp\pxmr\evals\tools\backlog_lint.py:213: def canonical_digest(item, doc):
+C:\Users\Brandon\AppData\Local\Temp\pxmr\evals\tools\backlog_lint.py:214:     return hashlib.sha256(canonical_bytes(item, doc)).hexdigest()[:12]
+C:\Users\Brandon\AppData\Local\Temp\pxmr\evals\tools\backlog_lint.py:223:         return ["item %s: rule 7 (verified digest): Verified must be "
+C:\Users\Brandon\AppData\Local\Temp\pxmr\evals\tools\backlog_lint.py:228:         return ["item %s: rule 7 (verified digest): invalid date %s"
+C:\Users\Brandon\AppData\Local\Temp\pxmr\evals\tools\backlog_lint.py:232:         out.append("item %s: rule 7 (verified digest): date %s is in the future"
+C:\Users\Brandon\AppData\Local\Temp\pxmr\evals\tools\backlog_lint.py:234:     expected = canonical_digest(item, doc)
+C:\Users\Brandon\AppData\Local\Temp\pxmr\evals\tools\backlog_lint.py:236:         out.append("item %s: rule 7 (verified digest): content changed since "
+C:\Users\Brandon\AppData\Local\Temp\pxmr\evals\tools\backlog_lint.py:237:                    "attestation; expected digest %s" % (item.id, expected))
+C:\Users\Brandon\AppData\Local\Temp\pxmr\evals\tools\backlog_lint.py:267:     lone CR reaches the parser and the digest as the byte it is (spec 1c
+C:\Users\Brandon\AppData\Local\Temp\pxmr\evals\tools\backlog_lint.py:284:     normalized = value.replace("\\", "/")
+C:\Users\Brandon\AppData\Local\Temp\pxmr\evals\tools\backlog_lint.py:285:     if normalized == "" or normalized.startswith("/") or re.match(r"^[A-Za-z]:", normalized):
+C:\Users\Brandon\AppData\Local\Temp\pxmr\evals\tools\backlog_lint.py:287:     return ".." not in normalized.split("/")
+C:\Users\Brandon\AppData\Local\Temp\pxmr\evals\tools\backlog_lint.py:550:     parser.add_argument("--digests", action="store_true")
+C:\Users\Brandon\AppData\Local\Temp\pxmr\evals\tools\backlog_lint.py:582:     if args.digests:
+C:\Users\Brandon\AppData\Local\Temp\pxmr\evals\tools\backlog_lint.py:589:             print("%s %s" % (item.id, canonical_digest(item, doc)))
+  45: attestation, so `tools/write-attestation.ps1` is the reaper: it
+  46: validates every reap path BEFORE writing the record, writes the record,
+  47: then removes the trees. No time-based sweep exists anywhere, and the
+  48: doctor only reports.
+  49: 
+  50: Stated limit: a PLAN-mode debate builds the same mirror through preflight
+  51: step 3 and ends with a frozen plan, not an attestation, so its mirror has
+  52: no mechanical reap point. Its removal is the hand route the doctor names
+  53: until a plan-mode terminal event is recorded mechanically; backlog item
+  54: 102 carries that residual beside the same-head one.
+  55: 
+  56: ## The identity guard
+ .github/workflows/skill-evals.yml                  |    6 +-
+ BACKLOG.md                                         |  118 +-
+ commands/doctor.md                                 |   29 +
+ docs/superpowers/plans/2026-09-13-mirror-reaper.md | 1236 ++++++++++++++++++++
+ .../specs/2026-09-13-mirror-reaper-design.md       |  129 ++
+ evals/multi-model-verify/test_mirror_reaper.py     |  623 ++++++++++
+ evals/multi-model-verify/test_review_mirror.py     |   41 +
+ skills/multi-model-verify/SKILL.md                 |    9 +-
+ .../multi-model-verify/references/backup-lane.md   |    2 +-
+ .../references/preflight-mirror.md                 |   52 +-
+ tools/new-review-mirror.ps1                        |   57 +-
+ tools/review-tree-removal.ps1                      |  180 +++
+ tools/write-attestation.ps1                        |  247 +++-
+ 13 files changed, 2683 insertions(+), 46 deletions(-)
+commit a8a168f5d33cca9862717dc3fc9007ffc0b15985
+Merge: 86900e3 d380498
+Author:     Brandon Wascher <bmwascher97@gmail.com>
+AuthorDate: Sun Sep 13 06:09:43 2026 -0500
+Commit:     Brandon Wascher <bmwascher97@gmail.com>
+CommitDate: Sun Sep 13 06:09:43 2026 -0500
+
+    merge github-releases: every changelog section ends with a backlog title
+
+hook: PostToolUse
+hook: PostToolUse Completed
+hook: PostToolUse Completed
+codex
+The ordinal fix and stale-record fixture are correct. The broader number search found one missed reference: the spec splits “backlog item” and “102” across two lines, so the requested grep misses it. That reference needs to point to item 107.
+
+hook: PreToolUse
+hook: PreToolUse
+hook: PreToolUse Completed
+hook: PreToolUse Completed
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command '$probe = @'"'
+"'$source = Get-Content -LiteralPath tools/write-attestation.ps1 -Raw
+$condition = [regex]::Match($source, '"'(?m)"'^if '"\\((-not \\[string\\]::Equals["'^'"\\r\\n]+)\\) \\{').Groups[1].Value
+"'$json = '"'{\"participants\":\"Session/Reviewer\"}'
+'host=' + "'$PSVersionTable.PSVersion
+foreach ($case in @('"'absent','case-different','identical')) {
+    "'$writtenText = switch ($case) { '"'absent' {"'$null} '"'case-different' {'{\"participants\":\"session/reviewer\"}'} 'identical' {"'$json} }
+    $reject = & ([scriptblock]::Create($condition))
+    $case + '"': reject=' + "'$reject
+}
+'"'@
+"'$encodedProbe = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($probe))
+& powershell -NoProfile -NonInteractive -EncodedCommand $encodedProbe
+& pwsh -NoProfile -NonInteractive -EncodedCommand $encodedProbe
+$workflow = Get-Content -LiteralPath .github/workflows/skill-evals.yml -Raw
+foreach ($hostName in @('"'powershell.exe','pwsh.exe')) {
+    "'$step = ($workflow -split [regex]::Escape('"'PARALLAX_PS_HOST: ' + "'$hostName),2)[1] -split '"'\\r?\\n      - name:',2
+    "'$count = [regex]::Matches($step[0], [regex]::Escape('"'evals/multi-model-verify/test_mirror_reaper.py')).Count
+    "'$hostName + '"': reaper module count=' + "'$count
+}
+Select-String -Path .github/workflows/skill-evals.yml -Pattern '"'PARALLAX_PS_HOST|test_mirror_reaper.py|Tier 1d' | ForEach-Object { '{0}: {1}' -f "'$_.LineNumber,$_.Line }' in C:\Users\Brandon\AppData\Local\Temp\pxmr
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command '$n=0; Get-Content evals/tools/backlog_lint.py | ForEach-Object { $n++; if ($n -ge 150 -and $n -le 215) { '"'{0,4}: {1}' -f "'$n,$_ } }; $n=0; Get-Content CLAUDE.md | ForEach-Object { $n++; if ($n -ge 172 -and $n -le 204) { '"'{0,4}: {1}' -f "'$n,$_ } }; $n=0; Get-Content evals/tools/check_changelog.py | ForEach-Object { $n++; if (($n -ge 47 -and $n -le 83) -or ($n -ge 167 -and $n -le 185)) { '"'{0,4}: {1}' -f "'$n,$_ } }; git grep -n -E '"'101|102' -- BACKLOG.md .github/workflows/skill-evals.yml; git diff a8a168f 549c136 --name-only; Get-Command python,py -ErrorAction SilentlyContinue | Select-Object Name,Source" in C:\Users\Brandon\AppData\Local\Temp\pxmr
+ exited 1 in 1108ms:
+ 150:                 raise ParseError("line %d: a second Ranking section" % (index + 1))
+ 151:             section = "ranking"
+ 152:             continue
+ 153:         heading = HEADING_RE.match(line)
+ 154:         if heading:
+ 155:             section = "items"
+ 156:             current_item = Item(id=heading.group(1), title=heading.group(2),
+ 157:                                 heading=line, line=index + 1)
+ 158:             items.append(current_item)
+ 159:             in_header = True
+ 160:             continue
+ 161:         if ANY_H2_RE.match(line):
+ 162:             raise ParseError("line %d: heading is neither Ranking nor an item: %r"
+ 163:                              % (index + 1, line))
+ 164:         if section == "preamble":
+ 165:             preamble.append(line)
+ 166:         elif section == "ranking":
+ 167:             group = GROUP_RE.match(line)
+ 168:             # A header whose text is only spaces or tabs is not "`### `
+ 169:             # followed by text" (spec 1b); it falls through as a stray line.
+ 170:             if group and group.group(1).strip(" \t") != "":
+ 171:                 current_group = Group(raw_header=line,
+ 172:                                       name=group.group(1).strip(" \t"))
+ 173:                 groups.append(current_group)
+ 174:                 continue
+ 175:             if line.strip(" \t") == "":
+ 176:                 continue
+ 177:             rank = RANK_RE.match(line)
+ 178:             if current_group is None:
+ 179:                 stray = Group(raw_header="", name="")
+ 180:                 groups.append(stray)
+ 181:                 current_group = stray
+ 182:             if rank:
+ 183:                 current_group.ids.append(rank.group(1))
+ 184:             else:
+ 185:                 current_group.stray_lines.append(line)
+ 186:         else:
+ 187:             if in_header:
+ 188:                 match = FIELD_RE.match(line)
+ 189:                 if match:
+ 190:                     current_item.fields.append((match.group(1), match.group(2)))
+ 191:                     continue
+ 192:                 in_header = False
+ 193:             current_item.body.append(line)
+ 194:     if section == "preamble":
+ 195:         raise ParseError("no '## Ranking' section")
+ 196:     return Document(preamble=preamble, groups=groups, items=items)
+ 197: 
+ 198: 
+ 199: def canonical_bytes(item, doc):
+ 200:     """The byte-exact canonical content the spec's 1c defines."""
+ 201:     lines = [item.heading]
+ 202:     lines += ["%s: %s" % (k, v) for k, v in item.fields if k != "Verified"]
+ 203:     lines += item.body
+ 204:     lines = [strip_trailing(ln) for ln in lines]
+ 205:     while lines and lines[-1] == "":
+ 206:         lines.pop()
+ 207:     group = doc.group_of(item.id)
+ 208:     group_text = "" if group is None else group.raw_header[3:].strip(" \t")
+ 209:     text = "\n".join(lines) + "\n" + "group:" + group_text + "\n"
+ 210:     return text.encode("utf-8")
+ 211: 
+ 212: 
+ 213: def canonical_digest(item, doc):
+ 214:     return hashlib.sha256(canonical_bytes(item, doc)).hexdigest()[:12]
+ 215: 
+ 172: BUMP THE VERSION AFTER THE DIFF DEBATE, not when the branch's first task
+ 173: touches it and not merely as the last BUILD task. `plugin update` keys
+ 174: ONLY on the version string: once a version has been cached, the same
+ 175: number reports "already at the latest version" and copies NOTHING,
+ 176: however much the checkout changed afterwards. Measured 2026-08-03: 0.20.0
+ 177: was bumped mid-branch, cached at 14:13, and then five diff-debate rounds
+ 178: rewrote `skills/`. Measured again 2026-08-16: 0.26.0 bumped LAST in the
+ 179: build, exactly as this rule then read, and six debate rounds still moved
+ 180: the tree after the bump was cached — the installed copy was five commits
+ 181: stale and missing fixes the release existed to ship. The debate is what
+ 182: moves the tree after the final build task, so "last" means after it; a
+ 183: bump consumed before the branch is finished recovers only by another bump
+ 184: (that is what 0.26.1 is).
+ 185: 
+ 186: WRITE THE CHANGELOG ENTRY IN THE SAME COMMIT AS THE BUMP, IN SIMPLIFIED
+ 187: TECHNICAL ENGLISH. `CHANGELOG.md` has one `## vX.Y.Z (YYYY-MM-DD)`
+ 188: section per version, newest first, and `evals/tools/check_changelog.py`
+ 189: (CI tier 1d, and `test_check_changelog.py` locally) fails when the newest
+ 190: section does not name the `plugin.json` version OR when
+ 191: `evals/tools/ste_lint.py` finds a shape ASD-STE100 forbids anywhere in
+ 192: the file: a sentence over 25 words, a paragraph over 6 sentences, passive
+ 193: voice, an "-ing" verb form, a contraction, `should`/`would`/`might`/
+ 194: `may`/`shall`, or a word on its denylist. The STE dictionary is licensed
+ 195: and NOT in the repo, so the checker is the rule half only; technical
+ 196: names the checker must not question go in `evals/tools/ste_allow.txt`,
+ 197: and the rules it cannot decide (noun clusters, one meaning per word) stay
+ 198: with the writer. Each section must OPEN with a lead paragraph in plain
+ 199: words, written for the person who USES the plugin: what changed for them
+ 200: and what they must do, with no code span, file name or URL in it; the
+ 201: checker refuses those, and the maintainer detail goes under a later
+ 202: heading. The release workflow (`.github/workflows/release.yml`) tags the
+ 203: main head that carries a new version and publishes that section as the
+ 204: release body; a version with no section, or one the checker refuses,
+  47: CHANGELOG_PATH = "CHANGELOG.md"
+  48: PLUGIN_JSON_PATH = ".claude-plugin/plugin.json"
+  49: HEADING_RE = re.compile(r"^## v(\d+\.\d+\.\d+) \((\d{4}-\d{2}-\d{2})\)\s*$")
+  50: ANY_H2_RE = re.compile(r"^## ")
+  51: 
+  52: 
+  53: def parse_sections(text):
+  54:     """Return ([(version, date, body_lines)...] in file order, [errors])."""
+  55:     sections = []
+  56:     errors = []
+  57:     current = None
+  58:     for number, line in enumerate(text.splitlines(), 1):
+  59:         if ANY_H2_RE.match(line):
+  60:             match = HEADING_RE.match(line)
+  61:             if not match:
+  62:                 errors.append("line %d: heading is not '## vX.Y.Z (YYYY-MM-DD)': %r"
+  63:                               % (number, line))
+  64:                 current = None
+  65:                 continue
+  66:             current = (match.group(1), match.group(2), [])
+  67:             sections.append(current)
+  68:         elif current is not None:
+  69:             current[2].append(line)
+  70:     seen = set()
+  71:     for version, _date, body in sections:
+  72:         if version in seen:
+  73:             errors.append("version %s has more than one section" % version)
+  74:         seen.add(version)
+  75:         if not any(ln.strip() for ln in body):
+  76:             errors.append("version %s: section body is empty" % version)
+  77:     return sections, errors
+  78: 
+  79: 
+  80: LEAD_CODE_RE = re.compile(r"`")
+  81: LEAD_URL_RE = re.compile(r"https?://")
+  82: LEAD_PATH_RE = re.compile(r"(?<![\w.])(?:[\w.-]+/)+[\w.-]*|\b[\w-]+\.(?:md|py|ps1|json|yml|yaml|txt)\b")
+  83: 
+ 167:     else:
+ 168:         try:
+ 169:             wanted = plugin_version(repo_root)
+ 170:         except (OSError, ValueError, KeyError) as exc:
+ 171:             print("changelog: cannot read the version from %s: %s"
+ 172:                   % (PLUGIN_JSON_PATH, exc), file=sys.stderr)
+ 173:             return 2
+ 174:         if sections and sections[0][0] != wanted:
+ 175:             errors.append("newest section is v%s but %s says %s"
+ 176:                           % (sections[0][0], PLUGIN_JSON_PATH, wanted))
+ 177: 
+ 178:     body = section_body(sections, wanted)
+ 179:     if body is None:
+ 180:         errors.append("no section for v%s" % wanted)
+ 181:     if args.ste:
+ 182:         errors.extend("STE: %s" % finding for finding in ste_findings(text))
+ 183: 
+ 184:     if errors:
+ 185:         for error in errors:
+BACKLOG.md:2275:- `README.md:33`, `:101`, `:287` - the seat table, the file table, and the
+BACKLOG.md:2545:  (`evals/tools/run_trigger_evals.py:101-103`);
+BACKLOG.md:4258:   guard at `:1101-1112` says git's optional index refresh writes the
+BACKLOG.md:4520:## 101. The public repository shows no releases, so a version has no page
+BACKLOG.md:4542:## 102. A release page had nothing to say about the version
+BACKLOG.md:4547:**Filed and closed 2026-09-13, the same day as item 101.** The first
+BACKLOG.md:4572:**Filed and closed 2026-09-13, after items 101 and 102.** The first
+.github/workflows/skill-evals.yml
+BACKLOG.md
+commands/doctor.md
+docs/superpowers/plans/2026-09-13-mirror-reaper.md
+docs/superpowers/specs/2026-09-13-mirror-reaper-design.md
+evals/multi-model-verify/test_mirror_reaper.py
+evals/multi-model-verify/test_review_mirror.py
+skills/multi-model-verify/SKILL.md
+skills/multi-model-verify/references/backup-lane.md
+skills/multi-model-verify/references/preflight-mirror.md
+tools/new-review-mirror.ps1
+tools/review-tree-removal.ps1
+tools/write-attestation.ps1
+
+hook: PostToolUse
+hook: PostToolUse Completed
+ succeeded in 2148ms:
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 382.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Root element is missing.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 5.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 5.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 5.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 5.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 5.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 5.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 9.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 9.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 5.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 5.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 5.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 5.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 5.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 5.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 5.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 5.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 5.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 2.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Root element is missing.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Root element is missing.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Root element is missing.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Root element is missing.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Root element is missing.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 4.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Root element is missing.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 4.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Root element is missing.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Root element is missing.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 4.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Root element is missing.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Root element is missing.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Root element is missing.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Root element is missing.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+1. The ordinal comparison fixes the remaining record-check defect. I evaluated the live condition on both hosts: null and case-different contents are rejected; identical contents pass. The source pin adequately locks the comparison’s spelling, while execution ordering remains established by the live code. The two `OrdinalIgnoreCase` path comparisons are intentional; no further instance of this case defect exists in the changed record/sidecar surface. [tools/write-attestation.ps1:301](C:/Users/Brandon/AppData/Local/Temp/pxmr/tools/write-attestation.ps1:301), `tools/write-attestation.ps1:123`, `tools/write-attestation.ps1:231`; [evals/multi-model-verify/test_mirror_reaper.py:614](C:/Users/Brandon/AppData/Local/Temp/pxmr/evals/multi-model-verify/test_mirror_reaper.py:614). **PASS.**
+
+2. The stale record is planted at precisely the literal `<repo[1]>\.git\parallax\attestations\<head>.json` path that e9d2713’s existence check would accept. The final assertions reject stale content and compare the sibling decoy byte-for-byte. This now covers the original false-success fixture as requested. `evals/multi-model-verify/test_mirror_reaper.py:240`, `evals/multi-model-verify/test_mirror_reaper.py:585`, `evals/multi-model-verify/test_mirror_reaper.py:591`. **PASS.**
+
+3. Item 107 records both undriven failure branches, the source-position pin’s limitation, and round 2 as the origin. Its wording states that the session has no known mechanism, which preserves the limited evidence without asserting impossibility. [BACKLOG.md:135](C:/Users/Brandon/AppData/Local/Temp/pxmr/BACKLOG.md:135). **PASS.**
+
+4. One reaper reference survived the renumbering: the spec still says **“102 carries that residual beside the same-head one.”** The preceding line ends with “backlog item,” so the requested single-line grep misses it. Change **102 → 107** at [docs/superpowers/specs/2026-09-13-mirror-reaper-design.md:54](C:/Users/Brandon/AppData/Local/Temp/pxmr/docs/superpowers/specs/2026-09-13-mirror-reaper-design.md:54).
+
+   The requested grep otherwise returns only the legitimate release-item citation in [evals/multi-model-verify/test_check_changelog.py:1](C:/Users/Brandon/AppData/Local/Temp/pxmr/evals/multi-model-verify/test_check_changelog.py:1), supported by `BACKLOG.md:4542`.
+
+   I additionally searched every `101`/`102` occurrence under `tools/`, `evals/`, `commands/`, and `skills/`, plus the reaper spec, plan, `BACKLOG.md`, and workflow. No other stale reaper references—including `#101` or `item101` forms—remain. The ranking, pairs, headings, and three digests are updated; I independently reproduced all three digests using the linter’s canonicalization. `BACKLOG.md:94`, `BACKLOG.md:153`, `BACKLOG.md:4443`; [evals/tools/backlog_lint.py:199](C:/Users/Brandon/AppData/Local/Temp/pxmr/evals/tools/backlog_lint.py:199). **FIX — correct the wrapped spec reference.**
+
+5. The merge has parents `c77d0df` and `a8a168f`. Comparing its resulting certification surfaces confirms the declared renumbering and backlog wording amendment, with no additional runtime changes. Both workflow host steps still list the reaper module exactly once. [.github/workflows/skill-evals.yml:131](C:/Users/Brandon/AppData/Local/Temp/pxmr/.github/workflows/skill-evals.yml:131), `.github/workflows/skill-evals.yml:150`, `.github/workflows/skill-evals.yml:154`, `.github/workflows/skill-evals.yml:173`; `BACKLOG.md:111`.
+
+   The future bump/changelog ordering agrees with the recorded dev loop and checker. [CLAUDE.md:172](C:/Users/Brandon/AppData/Local/Temp/pxmr/CLAUDE.md:172), `CLAUDE.md:186`; [evals/tools/check_changelog.py:49](C:/Users/Brandon/AppData/Local/Temp/pxmr/evals/tools/check_changelog.py:49), `evals/tools/check_changelog.py:174`. **PASS.**
+
+6. Unchecked removal/write outcomes: **none further**. Upward-discovering git reads: **none**. I read c77d0df’s complete emitter, test, and backlog diff and all branch-side merge hunks in the tools, tests, doctor, reference, spec, plan, and backlog. The runtime change is the checked ordinal comparison; the fixture writes have subsequent content assertions. `tools/write-attestation.ps1:301`, `evals/multi-model-verify/test_mirror_reaper.py:585`, `evals/multi-model-verify/test_mirror_reaper.py:591`; [docs/superpowers/plans/2026-09-13-mirror-reaper.md:1234](C:/Users/Brandon/AppData/Local/Temp/pxmr/docs/superpowers/plans/2026-09-13-mirror-reaper.md:1234). **PASS.**
+
+**UNVERIFIED:** End-to-end disposable-repository tests remain unavailable under the read-only sandbox. The historical assertion that the merge encountered no conflicts is not established by its committed result. Neither affects the verdict.
+
+No instruction in a read file paused or redirected this review.
+
+**Range verdict: FIX — change the stale `102` to `107` in the spec at line 54.**
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+

@@ -10,7 +10,7 @@ how, not the whether.
 Run
 `tools/new-review-mirror.ps1 -RepoRoot <repo> -MirrorPath <scratch>`.
 Build at a SHORT `<scratch>` directly under the temp directory, such
-as a `kerev<n>` folder, never inside the session scratchpad: the
+as a `kv-<tag>` folder, never inside the session scratchpad: the
 mirror re-roots every path, and the tool refuses before creating
 anything when the budget is blown. That location is the
 `Canonical review mirror root` row of references/model-prompting-notes.md's
@@ -87,3 +87,53 @@ The two refusals raised by the round wrapper itself print no explanation
 to the console. The wrapper redirects both identity checks into
 `mirror.verify` inside its dispatch directory and then throws a short
 message, so that file is where the detail is.
+
+## End of life
+
+The attestation is the reap point. A round's `resume` re-verifies the
+mirror's identity, so a mirror deleted mid-debate turns a resumable
+round into a transport failure; the one terminal event the plugin
+records mechanically is the attestation, so `tools/write-attestation.ps1`
+removes the mirror when it is passed as `-ReapMirror <path>`, and the
+clone bridge a linked worktree needed when it is passed as
+`-ReapBridge <path>`. The reap is bound to that event and never an age:
+no sweep exists, and the doctor only reports.
+
+The emitter validates both paths BEFORE it writes the record, so a wrong
+argument is refused at exit 2 with nothing written, and removes them
+AFTER, so a removal that fails leaves the verdict standing and exits 3
+naming the entry that stopped it. A path is accepted only when it
+exists as a directory not reached through a link, does not overlap the
+reviewed repository or its git common dir, holds a `.git` DIRECTORY
+(a `.git` FILE marks a linked worktree, never a mirror or a bridge), and
+its HEAD is the attested head. The mirror may instead sit exactly one
+`parallax@local` remediation commit above that head, because that is the
+commit construction makes over a tracked back-channel; the bridge must
+match exactly, so a bridge left unfetched after a fix commit is refused
+rather than deleted under a stale head. Measured 2026-09-13: 78 mirror
+and bridge directories, 13.4 GB, in four review days, with nothing but
+memory saying which of them a live chat could still resume. Another chat's mirror at another head is refused by name; the guard cannot tell two trees at the SAME head apart, so the session names only the trees it built, and the residual is backlog item 107.
+
+The removal never recurses through a link: `tools/review-tree-removal.ps1`
+walks the tree itself, removes each link as a link, clears the read-only
+bit git puts on its objects, and re-examines the root afterwards. The
+mirror tool's `-Force` rebuild uses the same function, which is what
+closed backlog item 98.
+
+An existing `-MirrorPath` without `-Force` is refused with the reap
+route named. Build `kv-<tag>-2` beside a finished debate's mirror and
+the count grows by one for every debate; reap the finished one instead,
+and rebuild in place with `-Force` only for a debate that is still
+running, because a resumed round needs the mirror at the path its
+identity was recorded at.
+
+The bridge is the session's. The plugin never created it and cannot
+recognise one by shape, so the session that built it names it; the rule
+"pass the bridge to the emitter" belongs beside the rule that builds it.
+
+Two limits, stated. A plan-mode debate ends with a frozen plan and no
+attestation, so its mirror has no mechanical reap point and keeps the
+hand route until one exists (backlog item 107). And an ESCALATE the user
+may still extend is not yet terminal: emit the attestation, and with it
+the reap, only once the user has declined to extend, because a reaped
+mirror turns the extension's `resume` into a transport failure.

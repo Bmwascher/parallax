@@ -1,0 +1,11 @@
+mirror: C:\Users\Brandon\AppData\Local\Temp\pxmr
+source_head: fafc4ce4ba9fc3061133f4ab722ea688faeaaed7
+mirror_head: fafc4ce4ba9fc3061133f4ab722ea688faeaaed7
+source_status_sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+mirror_state_sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+baseline:
+manifest:
+links:
+probe: {"override_file":"C:\\Temp\\parallax-scratch\\2026-09-13-mirror-reaper\\override-r2.toml","reason":"","project_agents_md":false,"global_agents_md":true,"skills_after":0,"repo_scoped":0,"override_sha256":"84d160071238a9f8a0ec350f9f2b938d8ba3bf0b3e7cfd20eb17cde827579bb1","plugin_cache_scoped":0,"status":"clean","skills_before":31,"global_agents_md_path":"C:\\Users\\Brandon\\.codex\\AGENTS.md","unknown_scoped":0,"home_scoped":31}
+override: C:\Temp\parallax-scratch\2026-09-13-mirror-reaper\override-r2.toml
+source_manifest: C:\Users\Brandon\AppData\Local\Temp\pxmr.source-manifest

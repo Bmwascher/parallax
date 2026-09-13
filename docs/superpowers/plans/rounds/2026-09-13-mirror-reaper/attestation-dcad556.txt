@@ -1,0 +1,4 @@
+attestation written: C:\Users\Brandon\Documents\parallax\.git\parallax\attestations\dcad556e6cd8689eecf87ecf37614795a6af0eb1.json (PASS, a8a168f5d33cca9862717dc3fc9007ffc0b15985..dcad556e6cd8689eecf87ecf37614795a6af0eb1)
+reaped mirror: C:\Users\Brandon\AppData\Local\Temp\pxmr
+reaped sidecar: C:\Users\Brandon\AppData\Local\Temp\pxmr.source-manifest
+reaped bridge: C:\Users\Brandon\AppData\Local\Temp\kvs-pxmr

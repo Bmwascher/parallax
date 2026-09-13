@@ -665,7 +665,7 @@ proceed; do not infer either key's value.
   it at a SHORT path directly under the temp directory (the
   `Canonical review mirror root` row of model-prompting-notes.md's
   round-artifact-roots declaration), such as a
-  `kerev<n>` folder, and never inside the session scratchpad, whose own
+  `kv-<tag>` folder, and never inside the session scratchpad, whose own
   path is long enough to consume most of the budget before the copy
   starts. This sentence used to say "in the session scratchpad" and
   SKILL.md said the opposite, a contradiction 0.21.0 introduced and the
