@@ -94,7 +94,7 @@ The full previous text of every closed item is in git history at
 Status: OPEN
 Cost: every debate writes its rounds, SDD ledger and mirror to whichever root the calling skill inherited from Superpowers, so one repo accumulates `plans/rounds/`, `rounds/` and `.superpowers/sdd/` side by side; a retention check cannot state one rule, a later session cannot find the record for a gate without searching all three, and a repo-side path override (KitnEssentials maps `docs/superpowers` to `dev/docs/superpowers`) is honoured by some writers and not others
 Pairs: none
-Verified: 2026-09-12 03039f073fcb
+Verified: 2026-09-13 03039f073fcb
 
 **Filed 2026-09-12 from the KitnEssentials artifact cleanup.** Measured
 there on that date: 76 gate folders under `dev/docs/superpowers/plans/rounds/`,
