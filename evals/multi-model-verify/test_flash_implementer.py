@@ -56,8 +56,12 @@ def test_flash_dispatch_contract():
             ) in body
     assert "command execution stays denied" in body
     # a Git-Bash /c/... log path produced NO log file (measured
-    # 2026-09-13); the log is where the route evidence lives
+    # 2026-09-13); the log is where the route evidence lives. Astra R1
+    # claim 6: "Windows spelling" alone is also satisfied by preflight 2's
+    # path rule, so the trap sentence itself is pinned
     assert "Windows spelling" in body
+    assert "a Git-Bash `/c/...` spelling produced NO log" in body
+    assert "one run with `false` ended with the key removed" in body
     # unique-suffix brief name + full lifecycle, pinned by exact sentence
     # fragments so a regression cannot pass on loose keywords
     # (Sol check-off round 2, finding 3)
@@ -96,6 +100,13 @@ def test_flash_route_check_strings():
     assert "Print mode: conversation=<uuid>" in body
     assert 'conversationID=""' in body
     assert "parse `conversationID=" not in body
+    # Astra R1 claims 5 and 6: the two log tokens alone survive dropping
+    # the empty-id rule or the one-uuid rule, so both are pinned; and the
+    # missing-mode-line outcome names what the log fails to show, never a
+    # cause the log cannot establish
+    assert "an empty id is a missing transcript, not a wildcard" in body
+    assert "exactly one distinct uuid" in body
+    assert "the requested mode is not corroborated by the log" in body
     assert ("every path git status reports changed must appear in the "
             "brain transcript as a successful file-changing action"
             ) in body.lower()
@@ -134,6 +145,10 @@ def test_flash_preflight_pins():
     assert "agy itself does not consult it" in body
     assert "case-insensitive" in body
     assert "plus a separator" in body
+    # Astra R1 claim 6: normalization and equality survive the two pins
+    # above, so the rule's other clauses are pinned too
+    assert "no trailing separator" in body
+    assert "must equal the workspace path or" in body
     assert "Task 6" not in body
 
 

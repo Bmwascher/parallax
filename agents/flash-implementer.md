@@ -60,7 +60,8 @@ never-write rule, and it never survives to the evidence checks.
    report quotes the fix ("run one interactive `agy` session in the
    workspace, or in the parent directory that holds the worktrees, and
    approve trust"). This check is the lane's allow-list, not agy's: the
-   client writes wherever `--add-dir` points under the mode below.
+   client landed the measured edit wherever `--add-dir` pointed under the
+   mode below.
 3. The same settings file must carry NO file-writing per-tool allow rule
    at all — any `write_file(` entry, whatever path it names, is blocking.
    A persisted settings allow rule is the durable, call-site-invisible
@@ -92,14 +93,18 @@ never-write rule, and it never survives to the evidence checks.
    (measured 2026-09-12 on agy 1.2.0 through this preflight, and
    2026-09-13 on 1.2.2 as a control run). The behaviour is version-bound:
    on 1.1.7 the same flag did not apply in print mode at all (the
-   2026-07-25 design spec), so a drift in either direction shows as the
-   mode line below going missing or the edit being denied. It opens file
-   edits ONLY - command execution stays denied by design, and the wrapper
-   runs all verification (measured 2026-09-13 on 1.2.2: a `run_command`
-   call under the same flag was auto-denied). New-file writes and deletes
-   under it are unmeasured. It persists nothing in `settings.json`, and
-   the brain transcript still records every tool call with its
-   arguments. Pass `<log-path>` in Windows spelling
+   2026-07-25 design spec). A drift that stops applying the mode shows
+   as the mode line below going missing, and one that denies the edit
+   shows as the soft-deny line; a drift that widens what the mode
+   permits would show as neither. It opens file edits ONLY -
+   command execution stays denied under it, and the wrapper runs all
+   verification (measured 2026-09-13 on 1.2.2: a `run_command` call
+   under the same flag was auto-denied). New-file writes and deletes
+   under it are unmeasured. It adds no rule to `settings.json`, but agy
+   rewrites that file on a run: one run with `false` ended with the key removed
+   (2026-09-13), so compare the file before and after rather than assume
+   it untouched. In every measured run the brain transcript recorded the
+   file actions the edit needed. Pass `<log-path>` in Windows spelling
    (`C:/...` or `C:\...`): a Git-Bash `/c/...` spelling produced NO log
    file at all (measured 2026-09-13), and a missing log is a missing
    route line.
@@ -113,16 +118,17 @@ never-write rule, and it never survives to the evidence checks.
   (presence only — its display label is not matched).
 - On the log file: `Print mode: applying agent mode accept-edits` line
   present (measured 2026-09-13 on agy 1.2.2). A landed edit with no mode
-  line means the edit was permitted by something other than the dispatch
-  line - blocked, quoting the log.
+  line means the requested mode is not corroborated by the log - blocked,
+  quoting the log.
 - Transcript/tree corroboration: parse the uuid from the log's
-  `Print mode: conversation=<uuid>, sending message` line. The
-  `Print mode: starting` line also carries a `conversationID=""` field,
-  and it is EMPTY (measured on agy 1.2.0 and 1.2.2, 2026-09-13); an empty
-  id is a missing transcript, not a wildcard. Then read the brain
-  transcript at
+  `Print mode: conversation=<uuid>, sending message` line. The log must
+  carry exactly one distinct uuid on lines of that form; none or more
+  than one is blocked. The `Print mode: starting` line also carries a
+  `conversationID=""` field, and it is EMPTY (read on agy 1.2.0 and 1.2.2
+  logs, 2026-09-13); an empty id is a missing transcript, not a wildcard.
+  Then read the brain transcript at
   `~/.gemini/antigravity-cli/brain/<conversationID>/.system_generated/logs/transcript_full.jsonl`
-  (the `--log-file` log itself carries NO file actions — probed). Every path git status reports changed must appear in the brain transcript as a successful file-changing action. A changed file the transcript never
+  (the `--log-file` log itself carries NO file actions — probed 2026-07-25 on agy 1.1.7, and the 1.2.2 logs read 2026-09-13 carried none either). Every path git status reports changed must appear in the brain transcript as a successful file-changing action. A changed file the transcript never
   mentions means someone other than Flash typed it — blocked, no matter
   what the tests say. A missing transcript is blocked.
 - This evidence is client-side: report the route as **requested and
@@ -164,8 +170,10 @@ This agent pins the Flash implementation lane. Canonical model literal:
 Antigravity CLI resolved ID). The literal lives ONLY here;
 `implementer.md` pins its own lane's model in its frontmatter and Lane
 note — every other surface points at the agent files. Trust is
-per-directory and interactive-only, and the lane reads the list as its
-own allow-list, a listed directory covering what is beneath it: one
+per-directory and interactive-only (measured 2026-07-25 on agy 1.1.7;
+on 2026-09-13 the `_worktrees` entry was still written only by an
+interactive session on 1.2.2), and the lane reads the list as its own
+allow-list, a listed directory covering what is beneath it: one
 interactive `agy` session in the parent that holds the worktrees, with
 trust approved, is enough for every worktree under it. agy does not
 consult the list for the write itself under the lane's mode (measured

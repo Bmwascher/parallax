@@ -173,13 +173,14 @@ substate observed is still named in the detail text.
   is not a shorter list. Report `allowNonWorkspaceAccess` in the detail
   when the key is present, as an informational VALUE and never as a
   verdict. Measured 2026-09-13 on agy 1.2.2 (backlog item 36): the
-  lane's in-place edit under `--mode accept-edits` landed with the key
-  `true`, `false` and absent, in a listed directory and in one with no
-  listed ancestor, so the key controls nothing the lane does and the
-  trust list is enforced by the lane's own preflight, not by agy; agy
-  drops a `false` key on its next run. Without the flag the same edit
-  was denied whatever the key held. The agent file owns the flag, and
-  this check does not assert it.
+  lane's in-place edit under `--mode accept-edits` landed in a listed
+  directory with the key `true`, and in a directory with no listed
+  ancestor with the key `true` and again with it `false`; the `false`
+  run ended with the key removed from the file by agy. So the key did
+  not gate that edit, and the trust list did not either: the lane's own
+  preflight is what enforces the list. Without the flag the same edit
+  was denied on a listed directory with the key `true`. The agent file
+  owns the flag, and this check does not assert it.
 
 - **Authorship evidence root.** Verify
   `$env:USERPROFILE\.gemini\antigravity-cli\brain` exists. Missing is

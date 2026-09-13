@@ -356,7 +356,7 @@ if (-not $agyExe) {
                 $tw = $agyCfg.trustedWorkspaces
             }
             if ($null -eq $tw) {
-                $findings += "[CRITICAL] agy settings.json has no trustedWorkspaces key - the Flash lane cannot write in any workspace"
+                $findings += "[CRITICAL] agy settings.json has no trustedWorkspaces key - the Flash lane's preflight reads it as its allow-list and blocks without it"
             } elseif (-not ($tw -is [System.Array])) {
                 $findings += "[CRITICAL] agy settings.json trustedWorkspaces is not an array (got $($tw.GetType().Name)) - the file's shape changed and the lane's preflight reads it positionally"
             }
@@ -642,7 +642,7 @@ if ($snapshot -and $agyVersion -and $snapshot.agy -and ($snapshot.agy -ne $agyVe
 if ($agyAllowPresent -and $snapshot -and
     ($snapshot.PSObject.Properties.Name -contains "agyAllowNonWorkspaceAccess") -and
     ((Get-ValueToken $snapshot.agyAllowNonWorkspaceAccess) -ne (Get-ValueToken $agyAllowNonWorkspace))) {
-    $notes += "agy allowNonWorkspaceAccess $(Get-ValueToken $snapshot.agyAllowNonWorkspaceAccess) -> $(Get-ValueToken $agyAllowNonWorkspace) (what this permits outside the workspace is UNMEASURED - backlog item 36)"
+    $notes += "agy allowNonWorkspaceAccess $(Get-ValueToken $snapshot.agyAllowNonWorkspaceAccess) -> $(Get-ValueToken $agyAllowNonWorkspace) (measured 2026-09-13 on agy 1.2.2: the lane's in-place edit under accept-edits mode landed with this key true and with it false, so it did not gate that edit - backlog item 36)"
 }
 # REMOVAL IS A CHANGE. The carry-forward below restored last week's value
 # whenever this run's read was empty, which silently included the key
@@ -653,7 +653,7 @@ if ($agyAllowPresent -and $snapshot -and
 # settings file that could not be read has measured nothing either way.
 if ($agySettingsParsed -and -not $agyAllowPresent -and $snapshot -and
     ($snapshot.PSObject.Properties.Name -contains "agyAllowNonWorkspaceAccess")) {
-    $notes += "agy allowNonWorkspaceAccess $(Get-ValueToken $snapshot.agyAllowNonWorkspaceAccess) -> absent (the key was REMOVED from settings.json; what that changes for the lane is UNMEASURED - backlog item 36)"
+    $notes += "agy allowNonWorkspaceAccess $(Get-ValueToken $snapshot.agyAllowNonWorkspaceAccess) -> absent (the key was REMOVED from settings.json; agy itself removed a false key on 2026-09-13, and the lane's in-place edit did not depend on it - backlog item 36)"
 }
 
 # --- report, toast, snapshot ---------------------------------------------------

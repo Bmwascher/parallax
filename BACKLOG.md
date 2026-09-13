@@ -1190,7 +1190,7 @@ timely one.
 Status: OPEN
 Cost: none remaining for the lane; the item closes with the version that ships the measurement into the agent file, because `Closed:` names a shipped version
 Pairs: 102
-Verified: 2026-09-13 246807fcdd4b
+Verified: 2026-09-13 69b6f0c7e7a9
 
 Opened by 0.24.0, which deliberately did not answer it. Item 11's security
 contract stays partially open on this point while the rest of item 11
@@ -1203,19 +1203,21 @@ print-mode writes as of agy 1.1.7"
 (`docs/superpowers/plans/2026-07-25-flash-implementer.md:590-603`). That is
 a real measurement, and it is BOUND TO AGY 1.1.7. The lane now runs 1.2.2.
 
-**Measured 2026-09-13 on agy 1.2.2, and it answers both questions.** Four
-headless runs, each `--mode accept-edits --add-dir <dir>` with an
-in-place edit as the task, all landed: (a) a listed directory
-(`trustedWorkspaces` entry for the worktrees parent, unlisted worktree
-beneath it, key `true`); (b) `C:\Temp\agy-untrusted-probe`, which has NO
-listed ancestor, key `true`; (c) the same directory with the key set to
-`false` by the user; and on that run agy rewrote `settings.json` and
-DROPPED the `false` key, so a fourth state, absent, is what the file
-holds now. Without the flag, the same edit was soft-denied on a listed
-directory with the key `true` (the 2026-09-12 block on 1.2.0, and a
-2026-09-13 control on 1.2.2). So on 1.2.2 the key is neither necessary
-nor a restriction: the flag is the one switch, and the trust list is not
-consulted for the write either, which is item 102. Record:
+**Measured 2026-09-13 on agy 1.2.2, and it answers both questions for
+the lane's in-place edit.** Four headless runs, each
+`--mode accept-edits --add-dir <dir>` with an in-place edit as the task,
+all landed: (a) a listed directory, key `true` (the handoff record's
+P1); (b) an unlisted worktree under a listed `trustedWorkspaces` parent,
+key `true`; (c) `C:\Temp\agy-untrusted-probe`, which has NO
+listed ancestor, key `true`; (d) the same directory, the run begun with
+the key set to `false` by the user, and ended with agy having rewritten
+`settings.json` without the key, so absent is what the file holds now
+and no run was dispatched in that state. Without the flag, the same edit
+was soft-denied on a listed directory with the key `true` (the
+2026-09-12 block on 1.2.0, and a 2026-09-13 control on 1.2.2). So on
+1.2.2 the key neither enabled nor blocked that edit: the flag is the one
+switch, and the trust list did not gate that edit either, which is item
+102. Record:
 `C:/Users/Brandon/Documents/KitnDev/KitnEssentials/dev/docs/handoffs/agy-accept-edits-probe-2026-09-13.md`
 for the first control, and the session's retained probe logs under
 `docs/superpowers/plans/rounds/2026-09-13-flash-accept-edits/` for the
@@ -1223,24 +1225,25 @@ other three.
 
 **The two questions, answered.**
 
-1. Does `false` still soft-deny the lane's writes? No: with the flag on
-   the dispatch line the edit landed under `false`, and agy then removed
-   the key. `true` is not required and the setting is gone from the
-   user's file by agy's own hand.
-2. What does `true` permit outside the workspace? Nothing that `false`
-   does not: the unlisted-directory edit landed under both. The key is
-   not a control of anything the lane does.
+1. Does `false` still soft-deny the lane's in-place edit? No: with the
+   flag on the dispatch line the edit landed on a run begun with `false`,
+   and that run ended with the key removed. `true` is not required for
+   that edit, and the setting is gone from the user's file by agy's own
+   hand.
+2. What does `true` permit outside the workspace, for that edit? Nothing
+   that `false` did not: the unlisted-directory edit landed under both.
+   For the in-place edit the key gated nothing.
 
 Still unmeasured under the flag, by choice rather than omission: new-file
 writes and deletes (every run above was one in-place edit).
 
 **What 0.24.0 did instead.** `tools/check-drift.ps1` RECORDS the value in
 the snapshot and reports a change to it as a drift note that names this
-item; a removal is carried forward from last week's value rather than
-reported (Fable review of 0.24.0, finding 6). With the key now absent
-that carry-forward will report `true` indefinitely, which is a recorded
-value and not a measured one; the snapshot row can go when item 102 is
-built.
+item; a REMOVAL from a settings file that parsed is reported too, and
+the carry-forward fires only when the file could not be read
+(`tools/check-drift.ps1:654-656`, `:705-712`). The next weekly run will
+therefore report `true -> absent` once, with the 2026-09-13 measurement
+in the note's text; the snapshot row can go when item 102 is built.
 
 ## 37. No documented step REQUIRES promoting an adjudicated rule
 Status: OPEN
@@ -4524,7 +4527,7 @@ refusals fire and that the rule stops at the first blank line.
 Status: OPEN
 Cost: the only thing keeping Flash inside a directory the user trusted is a preflight the Haiku wrapper follows as prose; nothing mechanical refuses an `--add-dir` outside the list
 Pairs: 36
-Verified: 2026-09-13 8ebba8f76bba
+Verified: 2026-09-13 f120eaee62fe
 
 **Filed 2026-09-13 on the Fable review of branch `flash-accept-edits`**,
 finding 2, which asked for the control run; the run answered in the
@@ -4537,11 +4540,14 @@ C:/Temp/agy-untrusted-probe` landed an in-place edit, with
 `allowNonWorkspaceAccess` at `true` and again at `false` (item 36). The
 log carries `Print mode: applying agent mode accept-edits` and no trust
 line at all; the client's `--help` names no trust flag. So under the
-lane's mode the client writes wherever `--add-dir` points, and the
+lane's mode the client landed that edit wherever `--add-dir` pointed, and the
 0.12.0 design's reading of the trust list as a permission control
 (`docs/superpowers/specs/2026-07-25-flash-implementer-design.md:57-61`)
-does not hold on this version. Whether it held on 1.1.7 is not
-re-measured.
+does not hold for that edit on this version. Whether it held on 1.1.7
+is not re-measured. The two-entry list, the absence of any trust line in
+the run's log, and the absence of a trust flag from `agy --help` are the
+session's own readings, retained with the probe log under the rounds
+root named in item 36.
 
 **What holds the line now.** `agents/flash-implementer.md` preflight 2:
 the wrapper reads the list, accepts the workspace or an ancestor of it,
@@ -4549,11 +4555,10 @@ and blocks otherwise. That is a prose rule followed by a Haiku agent,
 and every other control in that file (the write_file rule-class ban, the
 clean-tree check, the brain-transcript corroboration) is the same kind.
 The doctor's workspace-trust row and `tools/check-drift.ps1`'s
-`trustedWorkspaces` checks still describe the list as what lets the lane
-write ("the Flash lane cannot write in any workspace",
-`tools/check-drift.ps1:359`); the doctor text was corrected on the same
-branch, the drift string was not, so the two instruments disagree until
-this is built.
+`trustedWorkspaces` finding both described the list as what lets the
+lane write; both were corrected on the branch that filed this item, so
+the two instruments agree on the fact, and what remains is the control
+gap below.
 
 **Shape of a fix, not decided.** Either a mechanical guard the dispatch
 line goes through (a script that refuses to invoke agy when `--add-dir`
