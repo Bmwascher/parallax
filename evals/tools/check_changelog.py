@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""check_changelog.py - tie CHANGELOG.md to the plugin version.
+"""check_changelog.py - tie CHANGELOG.md to the plugin version, and to
+Simplified Technical English.
 
 Two readers, one rule. CI (Tier 1d) runs it bare and fails the push when
 the newest changelog section is not the version in
@@ -20,11 +21,18 @@ twice, a heading without a date, or a body with nothing in it is a
 failure, not a warning - every one of those has produced an empty or
 wrong release page somewhere.
 
+The whole file is also passed through `ste_lint.py` beside this one,
+the mechanically checkable part of ASD-STE100; its findings fail the
+check the same way, so an entry that a release would publish is one
+that the STE checker has passed. `--no-ste` skips that pass, for a
+caller that only wants the version tie.
+
 Exit codes: 0 the checked section exists and is non-empty (and, bare, the
 newest one names the plugin version); 1 any rule failure; 2 a file that
 cannot be read or parsed at all. Python 3 stdlib only.
 """
 import argparse
+import importlib.util
 import json
 import re
 import sys
@@ -70,6 +78,20 @@ def section_body(sections, version):
     return None
 
 
+def _load_ste_lint():
+    path = Path(__file__).resolve().parent / "ste_lint.py"
+    spec = importlib.util.spec_from_file_location("ste_lint", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def ste_findings(text):
+    """Every STE finding for the changelog text, as strings."""
+    ste = _load_ste_lint()
+    return [str(f) for f in ste.lint_text(text, ste.load_allowlist())]
+
+
 def plugin_version(repo_root):
     with open(repo_root / PLUGIN_JSON_PATH, encoding="utf-8") as handle:
         return json.load(handle)["version"]
@@ -83,6 +105,8 @@ def main(argv=None):
                              "with --print, print its body")
     parser.add_argument("--print", dest="print_body", action="store_true",
                         help="print the checked section's body to stdout")
+    parser.add_argument("--no-ste", dest="ste", action="store_false",
+                        help="skip the Simplified Technical English pass")
     args = parser.parse_args(argv)
     repo_root = Path(args.repo_root)
 
@@ -111,6 +135,8 @@ def main(argv=None):
     body = section_body(sections, wanted)
     if body is None:
         errors.append("no section for v%s" % wanted)
+    if args.ste:
+        errors.extend("STE: %s" % finding for finding in ste_findings(text))
 
     if errors:
         for error in errors:
