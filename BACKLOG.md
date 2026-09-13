@@ -95,7 +95,7 @@ The full previous text of every closed item is in git history at
 Status: OPEN
 Cost: a session that names the wrong tree at the right head has it removed, and every mirror a KitnEssentials session builds lands directly under the drive root because the canonical temp root blows the path budget, so the doctor has to find them by a name pattern rather than a declared parent
 Pairs: 101
-Verified: 2026-09-13 2c2c5eeaeebc
+Verified: 2026-09-13 1524f48584c9
 
 **Filed 2026-09-13 from the whole-branch review of the mirror reaper
 (item 101).** The emitter's identity guard refuses a tree that is not
@@ -110,7 +110,7 @@ hiding it. A plan-mode debate ends with a frozen plan and no attestation,
 so its mirror has no mechanical reap point either; a plan-mode terminal
 event recorded mechanically is the third follow-up.
 
-**Two follow-ups, one decision each.**
+**Three follow-ups, decisions for the first two, a test gap for the third.**
 
 1. The bridge has a marker the mirror does not: a session clones it
    from the reviewed repository, so its `origin` resolves to that
@@ -132,6 +132,17 @@ event recorded mechanically is the third follow-up.
    declared parent. That edits the round-artifact-roots region and its
    pin, `tools/artifact-roots.ps1`, doctor check 10 and the KitnEssentials
    memory that names `C:\kv-<tag>`; the user picks the name.
+3. The post-delete sidecar read-back has no driving test. The failure
+   branches `tools/write-attestation.ps1` takes after
+   `[System.IO.File]::Delete` on the sidecar - "the sidecar still exists
+   after removal" and "the sidecar could not be re-examined after
+   removal" - have no test that reaches them, because the session has no
+   non-administrator mechanism that makes a file survive `Delete` without
+   throwing, or that makes the following `GetAttributes` throw for a
+   reason other than absence. The ordering is locked only by a
+   source-position pin, `test_sidecar_success_is_read_back`, which a
+   refactor could satisfy without a runtime read-back. Named by the diff
+   debate's round 2.
 
 **What closing it means.** The bridge origin rule shipped with a test
 that drives a foreign clone at the attested head and sees it refused,

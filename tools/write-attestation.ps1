@@ -297,7 +297,8 @@ try {
 } catch {
     $writtenText = $null
 }
-if ($writtenText -ne $json) {
+# Ordinal: -ne is case-insensitive on strings, so it would accept a read-back that differs only in letter case.
+if (-not [string]::Equals($writtenText, $json, [System.StringComparison]::Ordinal)) {
     Write-Output ("ERROR: the attestation on disk does not match what was written (" + $outFile + ") - nothing was reaped")
     exit 2
 }

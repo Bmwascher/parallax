@@ -577,7 +577,13 @@ def test_the_record_lands_in_the_bracketed_repo_and_the_sibling_is_untouched(tmp
     decoy_dir = sib / ".git" / "parallax" / "attestations"
     decoy_dir.mkdir(parents=True)
     decoy_file = decoy_dir / (head + ".json")
-    decoy_file.write_text(json.dumps({"decoy": True}), encoding="utf-8")
+    decoy_bytes = json.dumps({"decoy": True}).encode("utf-8")
+    decoy_file.write_bytes(decoy_bytes)
+    # A stale record at the literal bracketed path: this is what e9d2713's
+    # false-success branch would have accepted unread, since its File.Exists
+    # check passed whatever record already sat there.
+    att_file(repo, head).parent.mkdir(parents=True, exist_ok=True)
+    att_file(repo, head).write_text(json.dumps({"stale": True}), encoding="utf-8")
     mirror = make_mirror(repo, tmp_path / "kv-t")
     proc = attest(repo, base, head, mirror=mirror)
     assert proc.returncode == 0, proc.stdout + proc.stderr
@@ -585,7 +591,8 @@ def test_the_record_lands_in_the_bracketed_repo_and_the_sibling_is_untouched(tmp
     record = json.loads(att_file(repo, head).read_text(encoding="utf-8"))
     assert record["head_sha"] == head
     assert "decoy" not in record
-    assert json.loads(decoy_file.read_text(encoding="utf-8")) == {"decoy": True}
+    assert "stale" not in record
+    assert decoy_file.read_bytes() == decoy_bytes
     assert not mirror.exists()
 
 
@@ -602,3 +609,15 @@ def test_sidecar_success_is_read_back(tmp_path):
     # failure text must appear earlier in the source than the print.
     body = read(WRITE)
     assert body.index("still exists after removal") < body.index('"reaped sidecar: "')
+
+
+def test_the_record_comparison_is_ordinal():
+    # A source pin, not a runtime case: the harness cannot make the file on
+    # disk differ from the serialized text by case alone (Set-Content writes
+    # exactly $json), so the comparison form itself is what has to be locked.
+    body = read(WRITE)
+    assert body.count(
+        "[string]::Equals($writtenText, $json, [System.StringComparison]::Ordinal)"
+    ) == 1
+    assert "$writtenText -ne $json" not in body
+    assert "$writtenText -eq $json" not in body
