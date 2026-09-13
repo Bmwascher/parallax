@@ -82,10 +82,11 @@ def make_mirror(repo, path):
 
 
 def make_bridge(repo, path, branch="feat"):
-    """A clone bridge the way a KitnEssentials session makes one."""
+    """A clone bridge the way a KitnEssentials session makes one, checked
+    out after a --no-checkout clone."""
     subprocess.run(["git", "clone", "-q", "--no-checkout", str(repo), str(path)],
                    check=True, capture_output=True)
-    git(path, "checkout", "-q", "-b", branch, "origin/" + branch)
+    git(path, "checkout", "-q", branch)
     return path
 
 
