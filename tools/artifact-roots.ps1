@@ -16,16 +16,27 @@
 # Exit codes: 0 resolved (or -Assert inside the expected root, or inside
 # any retained root when -Expect is absent), 1 -Assert outside every
 # retained root or inside a retained root other than the one -Expect
-# names, 2 parameter fault, unreadable declaration, or -RepoRoot not a
-# git working tree. A MISSING -RepoRoot exits 1 from PowerShell's own
-# -File parameter binding before this script runs, so 2 covers the
-# faults the script itself sees. The map mirrors dispatch-round.ps1.
+# names, 2 parameter fault (a missing -RepoRoot, an unknown parameter, a
+# forbidden character in -DocsRoot, -Assert or the TEMP variable),
+# unreadable declaration, or -RepoRoot not a git working tree. ONE
+# residual binding fault stays outside the script's reach on both hosts:
+# a named parameter whose VALUE is missing (`-DocsRoot` as the last
+# token) exits 1 from PowerShell's -File binding before any line here
+# runs. Everything else that can go wrong is seen by this script and
+# exits 2 with an ERROR: line. The map mirrors dispatch-round.ps1.
+# Named-only binding: without it a bare token binds POSITIONALLY to
+# -DocsRoot and answers with a docs root nobody asked for.
+[CmdletBinding(PositionalBinding = $false)]
 param(
-    [Parameter(Mandatory = $true)][string]$RepoRoot,
+    [string]$RepoRoot = "",
     [string]$DocsRoot = "",
     [string]$Assert = "",
     [string]$Expect = "",
-    [switch]$Json
+    [switch]$Json,
+    # Captures anything the parameters above did not bind, so a
+    # misspelled parameter is a script-seen fault (exit 2) and not a
+    # binding failure (exit 1) whose text differs by host.
+    [Parameter(ValueFromRemainingArguments = $true)][string[]]$Unbound
 )
 
 $ErrorActionPreference = "Stop"
@@ -83,12 +94,25 @@ function Resolve-Absolute($p) {
     return $full
 }
 
+# ---- parameter faults the binder cannot name ---------------------------
+if ($Unbound -and $Unbound.Count -gt 0) {
+    Fail ("unknown parameter: " + ($Unbound -join " "))
+}
+if (-not $RepoRoot) { Fail "-RepoRoot is required" }
+
 # ---- the declaration ---------------------------------------------------
 $NotesPath = Join-Path $PSScriptRoot "..\skills\multi-model-verify\references\model-prompting-notes.md"
 if (-not (Test-Path -LiteralPath $NotesPath -PathType Leaf)) {
     Fail ("declaration file not found: " + $NotesPath)
 }
-$notes = [System.IO.File]::ReadAllText($NotesPath, (New-Object System.Text.UTF8Encoding($false)))
+$notes = $null
+$readWhy = ""
+try {
+    $notes = [System.IO.File]::ReadAllText($NotesPath, (New-Object System.Text.UTF8Encoding($false)))
+} catch {
+    $readWhy = $_.Exception.Message
+}
+if ($null -eq $notes) { Fail ("declaration file unreadable: " + $NotesPath + ": " + $readWhy) }
 $regionMatch = [regex]::Match($notes,
     '<!-- contract:start id=round-artifact-roots -->(.*?)<!-- contract:end -->',
     [System.Text.RegularExpressions.RegexOptions]::Singleline)
@@ -146,7 +170,7 @@ if (($topExit -ne 0) -or -not $toplevel) {
 if (($commonExit -ne 0) -or -not $commonDir) {
     Fail ("could not resolve the git common dir for " + $RepoRoot)
 }
-$top = Normalize-Slashes ([System.IO.Path]::GetFullPath($toplevel))
+$top = Resolve-Absolute $toplevel
 # A relative common dir is relative to the directory git RAN IN, which
 # is -RepoRoot and not the toplevel: from a subdirectory git prints
 # `../.git`, and joining that to the toplevel lands outside the checkout.
@@ -154,7 +178,7 @@ $top = Normalize-Slashes ([System.IO.Path]::GetFullPath($toplevel))
 if (-not [System.IO.Path]::IsPathRooted($commonDir)) {
     $commonDir = Join-Path $RepoRoot $commonDir
 }
-$common = Normalize-Slashes ([System.IO.Path]::GetFullPath($commonDir))
+$common = Resolve-Absolute $commonDir
 
 # ---- the docs root -----------------------------------------------------
 if ($PSBoundParameters.ContainsKey("DocsRoot")) {
@@ -194,7 +218,14 @@ if ($PSBoundParameters.ContainsKey("DocsRoot")) {
 
 $tempRoot = $env:TEMP
 if (-not $tempRoot) { $tempRoot = [System.IO.Path]::GetTempPath() }
-$tempRoot = Normalize-Slashes ([System.IO.Path]::GetFullPath($tempRoot))
+# The one input that is neither a parameter nor git's answer: screen it
+# with the same set as -DocsRoot and -Assert before any path API, or a
+# `|` in TEMP throws on 5.1 and prints on 7 (measured 2026-09-13 by the
+# diff-debate R1 reviewer). Same exit on both hosts.
+if (($tempRoot -replace '^[A-Za-z]:', '') -match '[<>:"|?*\x00-\x1f]') {
+    Fail ("TEMP contains a character Windows paths forbid: " + $tempRoot)
+}
+$tempRoot = Resolve-Absolute $tempRoot
 
 function Resolve-Row($value) {
     $v = $value.Replace("<docs-root>", $docsRel)
@@ -211,7 +242,7 @@ function Resolve-Row($value) {
     $v = $v.TrimEnd("/")
     if (-not $v) { Fail ("declaration row has no resolvable parent: " + $value) }
     if (-not [System.IO.Path]::IsPathRooted($v)) { $v = $top + "/" + $v }
-    $parent = Normalize-Slashes ([System.IO.Path]::GetFullPath($v))
+    $parent = Resolve-Absolute $v
     if ($tail) { return $parent + "/" + $tail }
     return $parent
 }

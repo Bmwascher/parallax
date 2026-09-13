@@ -226,7 +226,14 @@ Exit map: 0 resolved (or asserted inside), 1 asserted outside or inside
 a retained root other than the one `-Expect` names, 2 for a parameter
 fault, an unreadable declaration, or a `-RepoRoot` that is not a git
 working tree. The map mirrors `tools/dispatch-round.ps1`'s so a
-caller reads one convention.
+caller reads one convention. Parameter faults the script itself sees
+(amended 2026-09-13 from the diff debate's round 1): a missing
+`-RepoRoot`, an unknown or bare token (binding is named-only), a
+forbidden character in `-DocsRoot`, `-Assert` or the `TEMP` variable,
+which is screened with the same set before any path API because it is
+the one input that is neither a parameter nor git's answer. ONE
+residual stays with PowerShell's `-File` binding on both hosts and exits
+1 without an `ERROR:` line: a named parameter whose value is missing.
 
 ## Skill and agent edits
 

@@ -230,7 +230,7 @@ effective route confirmed.
 
 ---
 
-# Mode diff: range cd0e863..<head> (branch artifact-roots)
+# Mode diff: range cd0e863..HEAD (branch artifact-roots; each round names its head)
 
 ## Preflight (2026-09-13)
 
@@ -264,3 +264,41 @@ Session adjudication, each finding read against the live file:
 
 All six applications land in one commit ahead of round 1, so the
 reviewed head carries them.
+
+## Astra diff R1 - COUNTED, verdict FIX
+
+Dispatched 2026-09-13 against head `aabab81` (range cd0e863..aabab81),
+mirror built at the declared temp root (`C:/Users/Brandon/AppData/Local/Temp/pxar2`,
+mirror head = source head, enumeration empty in the mirror, client probe
+clean: 31 home-scoped skills before the override, 0 after, override sha256
+`84d16007...`; tool-surface probe clean: 147 calibration tools, 0 under
+the dispatch flags, `node_repl` silent), fresh session
+`01a09943-2bbd-7442-bfb6-0692f161fe36`, background task
+`Astra R1 debate round`. Wrapper exit 0, `reply-present`. Transcript
+header: `model: gpt-6-astra`, `provider: openai`, `reasoning effort: high`,
+`sandbox: read-only`, `workdir: C:\Users\Brandon\AppData\Local\Temp\pxar2`.
+Bound with `-Fresh` against the sealed prior state: `status: clean`,
+`sealed: sealed` (`binder-diff-r1.json`).
+
+Artifacts: `brief-astra-diff-r1.md` (claims plus the code-surface diff),
+`astra-diff-r1-reply.md`, `astra-diff-r1-transcript.txt`,
+`receipt-diff-r1.json`, `binder-diff-r1.json`, `tool-surface-diff-r1.json`,
+`mirror-build-diff-r1.txt`.
+
+**Reviewer verdict: FIX.** Claims 1, 2, 3, 8 PASS. Findings, each read
+against the live file before application:
+
+| Claim | Finding | Adjudication |
+|-------|---------|--------------|
+| 4 | `TEMP=C:\bad\|temp` exits 1 on 5.1 and 0 on 7; conversions at :149, :157, :214 bypass `Resolve-Absolute`; the declaration read at :91 is unhandled | accepted: every conversion now goes through the helper, TEMP is screened with the forbidden set first, the read failure exits 2 |
+| 4 | a missing `-RepoRoot`, a bare `-DocsRoot` and an unknown parameter exit 1 with no `ERROR:` line | accepted in part: `-RepoRoot` is optional-with-check and unbound tokens are captured, both exit 2; a named parameter with a missing VALUE stays a binding fault on both hosts, stated in the header and the spec. The new regression also caught a bare token binding POSITIONALLY to `-DocsRoot` (predates the round); binding is now named-only |
+| 5 | the slashless-limit comment the brief claimed does not exist; `<git-common-dir>/parallax/...` spellings escape every shape, one of them a writing instruction at application-checkpoint.md:80 | accepted as FIX under the brief's own rule (same named class, on the swept surface): seventh shape added with controls, stated limits written into the sweep comment, the three spellings (application-checkpoint.md, verify-attestation.ps1, write-attestation.ps1) now cite the declaration |
+| 6 | the fresh-parent writer case the plan's Task 4 specifies was dropped by the fix wave | accepted: the writer test is two cases sharing one driver, fresh (appeared set is the two directories and the file) and checkpoint-bound |
+| 7 | body is 25,985 characters, SKILL citations are :153-154, :324, :389 | accepted, record only: the brief's 25,986 was counted before the linter's line joining; corrected here |
+
+UNVERIFIED by the reviewer: fresh execution of Group 3b and the Python
+suites (its Python could not launch); its writer conclusions were source
+findings, and the session's both-host runs are the execution evidence.
+Applied under the application checkpoint
+`20260913-0110-aabab8133365.md` (pre-authorized by the user's answer
+"Apply fixes, then finish the pipeline").

@@ -88,11 +88,11 @@ def test_fixed_rows_state_their_reason_outside_the_region():
 # ---------------------------------------------------------------------
 # Group 3a: the resolver
 # ---------------------------------------------------------------------
-def run_resolver(*args, tool=None):
+def run_resolver(*args, tool=None, env=None):
     return subprocess.run(
         [POWERSHELL, "-NoProfile", "-NonInteractive", "-File",
          str(tool or TOOL), *args],
-        capture_output=True, text=True, timeout=60)
+        capture_output=True, text=True, timeout=60, env=env)
 
 
 def git(repo, *args):
@@ -257,6 +257,40 @@ def test_unresolvable_paths_are_parameter_faults_not_throws(tmp_path, args):
     # An unknown drive makes the provider throw; a forbidden character
     # makes IsPathRooted throw on 5.1 and print garbage on 7. Both are
     # routed through Fail (measured 2026-09-12 by the R3 reviewer).
+    repo = make_repo(tmp_path)
+    proc = run_resolver(*[a.replace("{repo}", str(repo)) for a in args])
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert proc.stdout.startswith("ERROR:"), proc.stdout
+
+
+@needs_host
+def test_a_forbidden_character_in_temp_is_a_parameter_fault(tmp_path):
+    # TEMP is the one input that is neither a parameter nor git's answer.
+    # Unscreened, `|` in it threw on 5.1 (exit 1) and printed on 7 (exit
+    # 0): measured 2026-09-13 by the diff-debate R1 reviewer. Same exit
+    # and prefix on both hosts now.
+    import os
+    repo = make_repo(tmp_path)
+    env = dict(os.environ)
+    env["TEMP"] = r"C:\bad|temp"
+    proc = run_resolver("-RepoRoot", str(repo), env=env)
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert proc.stdout.startswith("ERROR: TEMP contains a character"), proc.stdout
+
+
+@needs_host
+@pytest.mark.parametrize("args", [
+    (),
+    ("-RepoRoot", "{repo}", "-Bogus", "x"),
+    ("-RepoRoot", "{repo}", "stray"),
+])
+def test_faults_the_binder_used_to_own_are_script_faults(tmp_path, args):
+    # A missing -RepoRoot and an unbound token used to exit 1 from
+    # PowerShell's own -File binding, with host-specific text and no
+    # ERROR: line. The parameter is optional-with-check and remaining
+    # arguments are captured, so both are script-seen faults. The one
+    # residual is a named parameter whose VALUE is missing, which the
+    # header states.
     repo = make_repo(tmp_path)
     proc = run_resolver(*[a.replace("{repo}", str(repo)) for a in args])
     assert proc.returncode == 2, proc.stdout + proc.stderr
@@ -436,6 +470,12 @@ def declaration_line_numbers():
 # lookbehind in the first shape only keeps a citation of a nested
 # `plans/rounds/` path from being misread as a root beside plans/; the
 # string `plans/superpowers/rounds/` does not occur in the tree.
+# STATED LIMITS, the forms these shapes do not catch: a slashless
+# spelling (`superpowers rounds`, `dev docs superpowers`), a ledger root
+# with no separator after `sdd`, a root assembled from parts at runtime
+# (`Join-Path $common "parallax"`), and any spelling on a surface the
+# glob list above does not name. The writer test in Group 3b is what
+# binds the runtime-assembled rows.
 FORBIDDEN_SHAPES = [
     ("a rounds root beside plans/ instead of under it",
      re.compile(r"(?<!plans[/\\])superpowers[/\\]rounds[/\\]")),
@@ -449,6 +489,8 @@ FORBIDDEN_SHAPES = [
      re.compile(r"\.git[/\\]parallax[/\\]")),
     ("the default docs root named by hand outside a dated citation",
      re.compile(r"docs[/\\]superpowers(?![/\\](plans[/\\](rounds[/\\])?|specs[/\\])\d{4}-\d{2}-\d{2}-)")),
+    ("a common-dir row spelled by placeholder instead of cited",
+     re.compile(r"<git-common-dir>[/\\]parallax[/\\]")),
 ]
 
 
@@ -515,6 +557,18 @@ def test_sweep_can_fail(tmp_path):
     hits = [label for label, rx in FORBIDDEN_SHAPES
             if rx.search(r"Join-Path $r '.superpowers\sdd\plan'")]
     assert hits == ["a ledger root that is neither the declaration nor a dated citation"]
+    # The seventh shape: a row spelled with its placeholder root, which
+    # three files did until 2026-09-13 (application-checkpoint.md and the
+    # two attestation tools), found by the diff-debate R1 reviewer.
+    hits = [label for label, rx in FORBIDDEN_SHAPES
+            if rx.search("<git-common-dir>/parallax/application-checkpoints/<stamp>.md")]
+    assert hits == ["a common-dir row spelled by placeholder instead of cited"]
+    hits = [label for label, rx in FORBIDDEN_SHAPES
+            if rx.search(r"# <git-common-dir>\parallax\attestations\<head-sha>.json")]
+    assert hits == ["a common-dir row spelled by placeholder instead of cited"]
+    hits = [label for label, rx in FORBIDDEN_SHAPES
+            if rx.search("`<git-common-dir>` is what `git rev-parse --git-common-dir` prints")]
+    assert hits == []
 
 
 def test_declaration_exemption_covers_only_the_marked_region():
@@ -560,32 +614,29 @@ def write_attestation(repo, base, head, checkpoint=None):
     return subprocess.run(args, capture_output=True, text=True, timeout=60)
 
 
-@needs_host
-def test_the_real_writers_create_nothing_in_repo_but_the_attestation(tmp_path):
-    # The three tools that write during a round, run for real against a
-    # disposable two-commit repository. The only path that may appear
-    # inside the repository is the attestation, and it must satisfy the
-    # resolver's own membership answer. This is also what binds the two
-    # common-dir rows to the declaration: the emitter computes the
-    # attestation and checkpoint locations for itself from
-    # `git rev-parse --git-common-dir`, and the resolver's answer for
-    # each is checked here with -Expect.
+def run_the_real_writers(tmp_path, checkpoint):
+    """The three tools that write during a round, run for real against a
+    disposable two-commit repository: the attestation emitter (with
+    -CheckpointFile when `checkpoint` is set), the review mirror tool and
+    dispatch-round.ps1 -Prepare. Returns (repo, head, before, appeared).
+    The snapshot is taken after the checkpoint file exists, so the
+    appeared set is what the three writers created."""
     from test_dispatch_round import build_real_mirror, prepare_default
     repo = make_repo(tmp_path, name="src", commits=2)
     base = git(repo, "rev-parse", "HEAD~1").strip()
     head = git(repo, "rev-parse", "HEAD").strip()
-    # Pre-existing BEFORE the snapshot, on purpose: the checkpoint file at
-    # its canonical location (the same shape as
-    # test_attestation.py's TestCheckpointBinding.make_checkpoint; the
-    # emitter refuses any other location and hashes it there), which
-    # creates `.git/parallax` and `.git/parallax/application-checkpoints`
-    # on the way down. The emitter therefore creates only the attestation
-    # dir and file, and that is the whole appeared set below.
-    cp_dir = repo / ".git" / "parallax" / "application-checkpoints"
-    cp_dir.mkdir(parents=True)
-    cp = cp_dir / "checkpoint.md"
-    cp.write_text("# Application checkpoint\nfile1.txt | x present | F1\n",
-                  encoding="utf-8")
+    cp = None
+    if checkpoint:
+        # The checkpoint file at its canonical location (the same shape
+        # as test_attestation.py's TestCheckpointBinding.make_checkpoint;
+        # the emitter refuses any other location and hashes it there),
+        # which creates `.git/parallax` and the checkpoint dir on the way
+        # down, BEFORE the snapshot.
+        cp_dir = repo / ".git" / "parallax" / "application-checkpoints"
+        cp_dir.mkdir(parents=True)
+        cp = cp_dir / "checkpoint.md"
+        cp.write_text("# Application checkpoint\nfile1.txt | x present | F1\n",
+                      encoding="utf-8")
     before = tree_paths(repo)
 
     att = write_attestation(repo, base, head, checkpoint=cp)
@@ -594,35 +645,66 @@ def test_the_real_writers_create_nothing_in_repo_but_the_attestation(tmp_path):
     assert norm(mirror.source) == norm(repo)
     prep = prepare_default(tmp_path, mirror=mirror)
     assert prep.returncode == 0, prep.stdout + prep.stderr
+    return repo, head, cp, before, new_paths(repo, before)
 
-    appeared = new_paths(repo, before)
-    # The attestation file and the directory the emitter creates for it
-    # (write-attestation.ps1: New-Item -Force on the attestation dir),
-    # and nothing else; `.git/parallax` pre-exists, see above.
-    assert appeared == {
-        ".git/parallax/attestations",
-        f".git/parallax/attestations/{head}.json",
-    }, sorted(appeared)
+
+def assert_attestation_paths_are_inside(repo, head, before, appeared):
     # The attestation root and the file under it are inside the retained
     # set. `.git/parallax` is the parent SHARED by the attestation and
     # checkpoint rows; it is not itself a declared root, so -Assert
-    # refuses it, and the exact-set assertion above is what bounds it.
+    # refuses it, and the exact-set assertion in the caller is what
+    # bounds it.
     for rel in (".git/parallax/attestations",
                 f".git/parallax/attestations/{head}.json"):
         proc = run_resolver("-RepoRoot", str(repo), "-Assert", str(repo / rel),
                             "-Expect", "attestation")
         assert proc.returncode == 0, proc.stdout + proc.stderr
         assert "assert: inside attestation root" in proc.stdout
-    # The checkpoint the emitter hashed sits inside the checkpoint row.
-    proc = run_resolver("-RepoRoot", str(repo), "-Assert", str(cp),
-                        "-Expect", "checkpoint")
-    assert proc.returncode == 0, proc.stdout + proc.stderr
-    assert "assert: inside checkpoint root" in proc.stdout
     proc = run_resolver("-RepoRoot", str(repo), "-Assert", str(repo / ".git" / "parallax"))
     assert proc.returncode == 1, proc.stdout + proc.stderr
     # Second snapshot AFTER the resolver calls: the resolver is a reader,
     # and this puts it inside the window it polices.
     assert new_paths(repo, before) == appeared, sorted(new_paths(repo, before))
+
+
+@needs_host
+def test_the_real_writers_create_nothing_in_repo_but_the_attestation(tmp_path):
+    # The fresh case the plan's Task 4 specifies: nothing under
+    # `.git/parallax` exists before the round, so the appeared set is the
+    # attestation file and the TWO directories the emitter creates for it
+    # (write-attestation.ps1: New-Item -Force on the attestation dir), and
+    # nothing else. The only path that may appear inside the repository
+    # is the attestation, and it must satisfy the resolver's own
+    # membership answer.
+    repo, head, _, before, appeared = run_the_real_writers(tmp_path, checkpoint=False)
+    assert appeared == {
+        ".git/parallax",
+        ".git/parallax/attestations",
+        f".git/parallax/attestations/{head}.json",
+    }, sorted(appeared)
+    assert_attestation_paths_are_inside(repo, head, before, appeared)
+
+
+@needs_host
+def test_the_checkpoint_bound_emitter_stays_inside_the_declared_rows(tmp_path):
+    # The checkpoint-bound case, which is what binds the two common-dir
+    # rows to the declaration: the emitter computes the attestation and
+    # checkpoint locations for itself from `git rev-parse
+    # --git-common-dir`, and the resolver's answer for each is checked
+    # here with -Expect. `.git/parallax` pre-exists (the checkpoint was
+    # written before the snapshot), so the appeared set is the
+    # attestation dir and file only.
+    repo, head, cp, before, appeared = run_the_real_writers(tmp_path, checkpoint=True)
+    assert appeared == {
+        ".git/parallax/attestations",
+        f".git/parallax/attestations/{head}.json",
+    }, sorted(appeared)
+    # The checkpoint the emitter hashed sits inside the checkpoint row.
+    proc = run_resolver("-RepoRoot", str(repo), "-Assert", str(cp),
+                        "-Expect", "checkpoint")
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "assert: inside checkpoint root" in proc.stdout
+    assert_attestation_paths_are_inside(repo, head, before, appeared)
 
 
 @needs_host
