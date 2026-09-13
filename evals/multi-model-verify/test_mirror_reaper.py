@@ -351,15 +351,18 @@ def test_every_wrong_tree_is_refused_before_the_record_is_written(tmp_path, shap
 def test_a_held_handle_leaves_the_attestation_and_exits_three(tmp_path):
     repo, base, head = make_repo(tmp_path)
     mirror = make_mirror(repo, tmp_path / "kv-t")
+    bridge = make_bridge(repo, tmp_path / "kvs-t")
     held = mirror / "held.txt"
     held.write_text("open\n", encoding="utf-8")
     with open(held, "r", encoding="utf-8"):
-        proc = attest(repo, base, head, mirror=mirror)
+        proc = attest(repo, base, head, mirror=mirror, bridge=bridge)
     assert proc.returncode == 3, proc.stdout + proc.stderr
     assert att_file(repo, head).is_file(), "the verdict is recorded even when the reap fails"
     assert "ERROR: reap failed for " + str(mirror) in proc.stdout, proc.stdout
     assert str(held) in proc.stdout and "the attestation stands" in proc.stdout
+    assert "the bridge was not attempted: " + str(bridge) in proc.stdout, proc.stdout
     assert held.exists()
+    assert bridge.exists()
 
 
 def test_without_the_parameters_the_emitter_removes_nothing(tmp_path):
@@ -428,3 +431,60 @@ def test_mirror_tool_refusal_and_emitter_agree_on_the_parameter_name():
     assert "write-attestation.ps1 -ReapMirror" in read(MIRROR_TOOL)
     assert "[string]$ReapMirror" in read(WRITE)
     assert "[string]$ReapBridge" in read(WRITE)
+
+
+# ---------------------------------------------------------------------
+# Group 4: the final-review fix wave (I1, I2, M1, M2)
+# ---------------------------------------------------------------------
+def test_a_failed_record_write_reaps_nothing(tmp_path):
+    repo, base, head = make_repo(tmp_path)
+    mirror = make_mirror(repo, tmp_path / "kv-t")
+    # A DIRECTORY at the record's path: Set-Content cannot write there,
+    # so the write must be refused before anything is reaped.
+    att_file(repo, head).mkdir(parents=True)
+    proc = attest(repo, base, head, mirror=mirror)
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert proc.stdout.startswith("ERROR:"), proc.stdout
+    assert "nothing was reaped" in proc.stdout, proc.stdout
+    assert mirror.exists()
+    assert "attestation written" not in proc.stdout
+
+
+def test_an_empty_git_directory_does_not_borrow_a_parent_repos_head(tmp_path):
+    repo, base, head = make_repo(tmp_path)
+    path = tmp_path / "outer"
+    make_mirror(repo, path)
+    inner = path / "inner"
+    (inner / ".git").mkdir(parents=True)
+    proc = attest(repo, base, head, mirror=inner)
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "no readable HEAD" in proc.stdout, proc.stdout
+    assert not att_file(repo, head).exists()
+    assert inner.exists() and (path / "b.txt").is_file()
+
+
+def test_a_read_only_directory_is_removed(tmp_path):
+    tree = tmp_path / "tree"
+    (tree / "sub").mkdir(parents=True)
+    (tree / "sub" / "file.txt").write_text("x\n", encoding="utf-8")
+    subprocess.run(["attrib", "+R", str(tree / "sub")], check=True)
+    proc = run_ps(harness(tmp_path), "-Target", str(tree))
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert not tree.exists()
+
+
+@pytest.mark.parametrize("shape", ["same", "nested"])
+def test_overlapping_mirror_and_bridge_are_refused(tmp_path, shape):
+    repo, base, head = make_repo(tmp_path)
+    if shape == "same":
+        one = make_bridge(repo, tmp_path / "kvs-t")
+        mirror = one
+        bridge = one
+    else:
+        mirror = make_mirror(repo, tmp_path / "kv-t")
+        bridge = make_bridge(repo, mirror / "kvs-inner")
+    proc = attest(repo, base, head, mirror=mirror, bridge=bridge)
+    assert proc.returncode == 2, shape + ": " + proc.stdout + proc.stderr
+    assert "overlap" in proc.stdout, proc.stdout
+    assert not att_file(repo, head).exists()
+    assert mirror.exists() and bridge.exists()

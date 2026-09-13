@@ -150,7 +150,7 @@ function Resolve-ReapPath($label, $raw, $repoTop, $commonFull, $headFull, $allow
             " - never a mirror or a bridge ($full)")
         exit 2
     }
-    $treeHead = (& git -C $full rev-parse --verify --quiet "HEAD^{commit}" 2>$null | Out-String).Trim()
+    $treeHead = (& git --git-dir "$dotGit" rev-parse --verify --quiet "HEAD^{commit}" 2>$null | Out-String).Trim()
     if (($LASTEXITCODE -ne 0) -or -not $treeHead) {
         Write-Output "ERROR: $label has no readable HEAD ($full)"
         exit 2
@@ -159,9 +159,9 @@ function Resolve-ReapPath($label, $raw, $repoTop, $commonFull, $headFull, $allow
         return $full
     }
     if ($allowRemediation) {
-        $author = (& git -C $full log -1 --format=%ae HEAD 2>$null | Out-String).Trim()
+        $author = (& git --git-dir "$dotGit" log -1 --format=%ae HEAD 2>$null | Out-String).Trim()
         $authorExit = $LASTEXITCODE
-        $parents = @(((& git -C $full rev-list --parents -n 1 HEAD 2>$null | Out-String).Trim()) -split "\s+")
+        $parents = @(((& git --git-dir "$dotGit" rev-list --parents -n 1 HEAD 2>$null | Out-String).Trim()) -split "\s+")
         if (($authorExit -eq 0) -and ($LASTEXITCODE -eq 0) -and ($author -eq "parallax@local") -and
             ($parents.Count -eq 2) -and ($parents[1] -eq $headFull)) {
             return $full
@@ -172,13 +172,15 @@ function Resolve-ReapPath($label, $raw, $repoTop, $commonFull, $headFull, $allow
     exit 2
 }
 
-function Invoke-Reap($label, $full) {
+function Invoke-Reap($label, $full, $notAttempted) {
     # Runs after the record is written: a failure here is exit 3, with
-    # the attestation left standing and the reason named.
+    # the attestation left standing and the reason named. $notAttempted
+    # names any other reap tree that was skipped as a result, so the
+    # failure message tells the caller everything left to remove by hand.
     $r = Remove-ReviewTree $full
     if (-not $r.Ok) {
         Write-Output ("ERROR: reap failed for " + $full + ": " + $r.Reason +
-            " - the attestation stands; remove the " + $label + " by hand")
+            " - the attestation stands; remove the " + $label + " by hand" + $notAttempted)
         exit 3
     }
     Write-Output ("reaped " + $label + ": " + $full)
@@ -220,9 +222,14 @@ if ($ReapMirror) {
 if ($ReapBridge) {
     $reapBridgeFull = Resolve-ReapPath "the reap bridge" $ReapBridge $toplevel $commonFull $headFull $false
 }
-if ($reapMirrorFull -and $reapBridgeFull -and ($reapMirrorFull -ieq $reapBridgeFull)) {
-    Write-Output "ERROR: the reap mirror and the reap bridge are the same tree ($reapMirrorFull)"
-    exit 2
+if ($reapMirrorFull -and $reapBridgeFull) {
+    $cmp = [System.StringComparison]::OrdinalIgnoreCase
+    $m = $reapMirrorFull.Replace("\", "/").TrimEnd("/") + "/"
+    $b = $reapBridgeFull.Replace("\", "/").TrimEnd("/") + "/"
+    if ($m.Equals($b, $cmp) -or $m.StartsWith($b, $cmp) -or $b.StartsWith($m, $cmp)) {
+        Write-Output ("ERROR: the reap mirror and the reap bridge overlap (" + $reapMirrorFull + ", " + $reapBridgeFull + ") - name two separate trees")
+        exit 2
+    }
 }
 
 $attDir = Join-Path (Join-Path $commonDir "parallax") "attestations"
@@ -272,13 +279,22 @@ if ($CheckpointFile) {
     $att["changed_paths"] = $changed
 }
 $outFile = Join-Path $attDir ($headFull + ".json")
-$att | ConvertTo-Json -Depth 3 | Set-Content -Path $outFile -Encoding ASCII
+try {
+    $att | ConvertTo-Json -Depth 3 | Set-Content -Path $outFile -Encoding ASCII -ErrorAction Stop
+} catch {
+    Write-Output ("ERROR: the attestation could not be written to " + $outFile + ": " + $_.Exception.Message + " - nothing was reaped")
+    exit 2
+}
+if (-not [System.IO.File]::Exists($outFile)) {
+    Write-Output ("ERROR: the attestation is not on disk after the write (" + $outFile + ") - nothing was reaped")
+    exit 2
+}
 Write-Output "attestation written: $outFile ($Verdict, $baseFull..$headFull)"
 # THE REAP, after the record and in this order: mirror, its advisory
 # sidecar, then the bridge. A failure stops at the first tree that
 # could not be removed (exit 3) and leaves the record standing.
 if ($reapMirrorFull) {
-    Invoke-Reap "mirror" $reapMirrorFull
+    Invoke-Reap "mirror" $reapMirrorFull $(if ($reapBridgeFull) { "; the bridge was not attempted: " + $reapBridgeFull } else { "" })
     # The mirror tool's advisory sibling, `<mirror>.source-manifest`,
     # removed only when it is an ordinary file: a directory or a link
     # there is not the sidecar and is left alone.
@@ -304,6 +320,6 @@ if ($reapMirrorFull) {
     }
 }
 if ($reapBridgeFull) {
-    Invoke-Reap "bridge" $reapBridgeFull
+    Invoke-Reap "bridge" $reapBridgeFull ""
 }
 exit 0

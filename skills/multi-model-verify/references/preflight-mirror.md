@@ -10,7 +10,7 @@ how, not the whether.
 Run
 `tools/new-review-mirror.ps1 -RepoRoot <repo> -MirrorPath <scratch>`.
 Build at a SHORT `<scratch>` directly under the temp directory, such
-as a `kerev<n>` folder, never inside the session scratchpad: the
+as a `kv-<tag>` folder, never inside the session scratchpad: the
 mirror re-roots every path, and the tool refuses before creating
 anything when the budget is blown. That location is the
 `Canonical review mirror root` row of references/model-prompting-notes.md's
@@ -112,8 +112,7 @@ commit construction makes over a tracked back-channel; the bridge must
 match exactly, so a bridge left unfetched after a fix commit is refused
 rather than deleted under a stale head. Measured 2026-09-13: 78 mirror
 and bridge directories, 13.4 GB, in four review days, with nothing but
-memory saying which of them a live chat could still resume. Another
-chat's mirror is at another head and is refused by name.
+memory saying which of them a live chat could still resume. Another chat's mirror at another head is refused by name; the guard cannot tell two trees at the SAME head apart, so the session names only the trees it built, and the residual is backlog item 102.
 
 The removal never recurses through a link: `tools/review-tree-removal.ps1`
 walks the tree itself, removes each link as a link, clears the read-only

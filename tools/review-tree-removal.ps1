@@ -84,6 +84,10 @@ function Remove-ReviewTreeEntries($dir, $depth) {
             } elseif ($isDir) {
                 $inner = Remove-ReviewTreeEntries $entry ($depth + 1)
                 if ($null -ne $inner) { return $inner }
+                # robocopy /DCOPY:DA carries a read-only directory into the mirror; Directory.Delete refuses it as it is (measured 2026-09-13, both hosts).
+                if (($ea -band [int][System.IO.FileAttributes]::ReadOnly) -ne 0) {
+                    [System.IO.File]::SetAttributes($entry, [System.IO.FileAttributes]::Directory)
+                }
                 [System.IO.Directory]::Delete($entry)
             } else {
                 if (($ea -band [int][System.IO.FileAttributes]::ReadOnly) -ne 0) {
@@ -151,6 +155,10 @@ function Remove-ReviewTree($root) {
         return @{ Ok = $false; Reason = $failure }
     }
     try {
+        # robocopy /DCOPY:DA carries a read-only directory into the mirror; Directory.Delete refuses it as it is (measured 2026-09-13, both hosts).
+        if (($attr -band [int][System.IO.FileAttributes]::ReadOnly) -ne 0) {
+            [System.IO.File]::SetAttributes($full, [System.IO.FileAttributes]::Directory)
+        }
         [System.IO.Directory]::Delete($full)
     } catch {
         return @{ Ok = $false; Reason = ($full + " could not be removed: " +

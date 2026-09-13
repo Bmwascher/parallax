@@ -1111,7 +1111,7 @@ Pass the mirror and the clone bridge as `-ReapMirror`/`-ReapBridge`;
 references/preflight-mirror.md's end-of-life section states the guard.
 ```
 
-Edit 3. In Common mistakes, delete the TWO bullets that read exactly (both rules live in references/debate-protocol.md, which is required reading, and the body sits 13 characters under the ceiling):
+Edit 3. In Common mistakes, delete the TWO bullets that read exactly (the convergence rule lives in references/debate-protocol.md, which is required reading, and the resume rule is SKILL.md's own step 3; the body sits 13 characters under the ceiling):
 
 ```
 - Re-sending the full debate context each round instead of resuming the
