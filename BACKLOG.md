@@ -62,6 +62,7 @@ The full previous text of every closed item is in git history at
 - 89
 
 ### Fifth - correctness not currently biting
+- 108
 - 53
 - 80
 - 29
@@ -88,6 +89,35 @@ The full previous text of every closed item is in git history at
 - 84
 - 85
 - 86
+
+## 108. An explicitly empty checkpoint argument silently omits the binding
+Status: OPEN
+Cost: a caller who names the checkpoint and passes an empty value gets an attestation with `checkpoint_binding` of `none` and no message, and the verifier accepts that record, so a fix wave the checkpoint governed can be attested as if no checkpoint governed it
+Pairs: none
+Verified: 2026-09-13 fd5d5a189d29
+
+**Filed 2026-09-13 from the mirror-parent diff debate (round 2, Astra).**
+`tools/write-attestation.ps1` tests `if ($CheckpointFile)` before it
+binds a checkpoint, so `-CheckpointFile ""` is read as no checkpoint: the
+record carries `checkpoint_binding = "none"`, the emitter prints no
+message, and `tools/verify-attestation.ps1` accepts an unbound record
+without checkpoint fields. references/application-checkpoint.md requires
+the binding whenever a checkpoint governed the fixes, so a caller whose
+argument came through empty (an unset variable in a wrapper, a
+substitution that produced nothing) mints a record that says the
+opposite of what happened. The same shape on `-ReapMirror` and
+`-ReapBridge` shipped in 0.36.0 and was fixed in 0.37.0 by testing
+`$PSBoundParameters.ContainsKey(...)`: a parameter that was supplied,
+empty or not, reaches the validation, where an empty value is refused
+with exit 2 and nothing written. The checkpoint parameter sits outside
+that debate's certification unit, which is why it is filed rather than
+fixed.
+
+**What closing it means.** The emitter distinguishes an omitted
+`-CheckpointFile` from a supplied empty one, refuses the empty one before
+the record is written, and a test on both hosts drives the refusal; a
+sweep of the emitter's other optional parameters states the shapes it
+searched for and names any further instance or an explicit none.
 
 ## 107. The reap guard cannot tell a debate's trees from any clone at the attested head, and the mirror parent is the drive root
 Status: PARTIAL

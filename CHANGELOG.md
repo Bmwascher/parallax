@@ -38,6 +38,75 @@ debate. Cite backlog items and round records, not commits, because a
 reader can follow a record. Versions before 0.34.0 have no section and
 no release; their records are the merge commits on main.
 
+## v0.37.0 (2026-09-13)
+
+The plugin now builds every review mirror under one short, fixed folder
+on the drive. It refuses to remove a mirror from any other place.
+Before this version, the canonical place was the temp folder. That long
+path did not fit the review packets of a large project, so sessions
+built mirrors on the drive root instead. Build each new mirror and each
+clone bridge under the new folder.
+
+A mirror that you built in the old places stays where it is, and the
+attestation tool does not remove it; remove it by hand. The doctor now
+counts the mirrors in the new folder and keeps a note about the old
+places until they are empty.
+
+### What changed for you
+
+- **One declared parent for review mirrors.** The `Canonical review
+  mirror root` row now reads `C:/pxm/<short-name>/`. Build a mirror at
+  `C:/pxm/<tag>` and a clone bridge at `C:/pxm/kvs-<tag>`. The row is a
+  declaration and not a computed value; a machine with a different
+  system drive edits the row.
+- **A check before the build.** `tools/artifact-roots.ps1 -RepoRoot <repo>
+  -Assert <mirror-path> -Expect reviewMirror` answers 0 for a path under
+  the parent and 1 for a path outside it. The parent itself answers 1,
+  because the parent is never a mirror.
+- **The attestation tool refuses a tree outside the parent.** The rule
+  is the last rule of its identity guard, and it applies to the mirror
+  and to the bridge. A refusal exits 2 and writes nothing.
+- **The tool refuses an empty reap argument.** Before this version, an
+  explicitly empty `-ReapMirror ""` or `-ReapBridge ""` wrote the
+  attestation and removed nothing, with no message. The tool now refuses
+  an empty value before it writes the record.
+- **The doctor inventories the parent.** Check 10 of `/parallax:doctor`
+  counts the directories under `C:/pxm`, with their size and age, and
+  marks them STALE at 5 GB or 3 days. A second line still counts the
+  `kv*` directories on the drive root and in the temp folder as a note,
+  until that line finds nothing. The doctor never deletes.
+
+### Details for maintainers
+
+- `tools/artifact-roots.ps1` no longer substitutes the temp folder, and
+  the sweep in `test_artifact_roots.py` refuses the old `<TEMP>` form
+  anywhere on the plugin surface. A second test binds every `pxm`
+  example in the prose and the doctor to the declared row.
+- `tools/write-attestation.ps1` reads the parent through
+  `tools/artifact-roots.ps1` in the same process, never from a literal
+  of its own. Each failure to read the parent exits 2 with nothing
+  written. The tool tests each reap parameter for presence, not for a
+  non-empty value.
+- `test_mirror_reaper.py` builds each successful reap under a fresh
+  `C:/pxm/t-<8 hex>` directory and removes it afterwards. Each refusal
+  keeps its tree in the pytest temp directory, which proves that the
+  parent rule runs last.
+- The skill reference files spell the parent with forward slashes, because
+  those files must not contain a backslash. The doctor spells it
+  `C:\pxm`.
+- The record is `docs/superpowers/plans/rounds/2026-09-13-mirror-parent/`,
+  which retains the Fable review of the full branch and the Astra diff
+  rounds. The Fable review found the notes' own command without its
+  repository argument. The session's gate found backslashes in the skill
+  references. Astra round 1 found the empty reap argument.
+- Item 107 records follow-up 2 as decided and keeps follow-ups 1 and 3
+  open. Item 108 records the same empty-argument shape on
+  `-CheckpointFile`, which is outside this version's certification unit.
+
+### Backlog
+
+**This version closes follow-up 2 of item 107 and opens item 108.**
+
 ## v0.36.0 (2026-09-13)
 
 The plugin now removes a review mirror when the review that used it
