@@ -37,10 +37,12 @@ never-write rule, and it never survives to the evidence checks.
 
 - The task's verbatim text and the plan's Global Constraints.
 - The workspace directory: any directory listed in `trustedWorkspaces`,
-  or under one - a listed parent covers its child worktrees (measured
-  2026-09-13 on agy 1.2.2: with only the worktrees parent listed, an edit
-  landed in an unlisted worktree beneath it). Preflight 2 is the
-  mechanical gate.
+  or under one. The list is the LANE's allow-list of where Flash may
+  write, enforced by preflight 2 alone: agy itself does not consult it
+  for a print-mode write under the mode below (measured 2026-09-13 on
+  agy 1.2.2: an edit landed in a directory with no listed ancestor, with
+  `allowNonWorkspaceAccess` at `true` and again at `false`, and in an
+  unlisted worktree under a listed parent).
 - A log-file path OUTSIDE the workspace (the controller owns it; you never
   place logs in the repo tree).
 
@@ -51,9 +53,14 @@ never-write rule, and it never survives to the evidence checks.
    sign-out, missing model) is blocked.
 2. `~/.gemini/antigravity-cli/settings.json` — `trustedWorkspaces` must
    contain the workspace directory or an ancestor of it, compared as
-   normalized absolute paths. If not: blocked, and the report quotes the
-   fix ("run one interactive `agy` session in the workspace, or in the
-   parent directory that holds the worktrees, and approve trust").
+   normalized absolute paths: Windows spelling (`cygpath -m` from Git
+   Bash), case-insensitive, no trailing separator, and the listed path
+   must equal the workspace path or, plus a separator, prefix it, so a
+   sibling with a longer name never matches. If not: blocked, and the
+   report quotes the fix ("run one interactive `agy` session in the
+   workspace, or in the parent directory that holds the worktrees, and
+   approve trust"). This check is the lane's allow-list, not agy's: the
+   client writes wherever `--add-dir` points under the mode below.
 3. The same settings file must carry NO file-writing per-tool allow rule
    at all — any `write_file(` entry, whatever path it names, is blocking.
    A persisted settings allow rule is the durable, call-site-invisible
@@ -80,14 +87,19 @@ never-write rule, and it never survives to the evidence checks.
 2. Run (single line):
    `agy -p "Read the file AGY-TASK-BRIEF-<unique>.md in the workspace and execute it exactly." --model gemini-3.8-flash-high --mode accept-edits --add-dir <workspace> --log-file <log-path>`
    `--mode accept-edits` is agy's own scoped mode and the one switch that
-   lets print mode land file edits: without it every write is soft-denied
-   on a trusted workspace, with all five preflights green (measured
-   2026-09-12 on agy 1.2.0 and 2026-09-13 on 1.2.2). It opens file edits
-   ONLY - command execution stays denied by design, and the wrapper runs
-   all verification (measured 2026-09-13 on 1.2.2: a `run_command` call
-   under the same flag was auto-denied). It persists nothing in
-   `settings.json`, and the brain transcript still records every tool
-   call with its arguments. Pass `<log-path>` in Windows spelling
+   lets print mode land file edits: without it the lane's in-place edit
+   is soft-denied on a listed workspace, with all five preflights green
+   (measured 2026-09-12 on agy 1.2.0 through this preflight, and
+   2026-09-13 on 1.2.2 as a control run). The behaviour is version-bound:
+   on 1.1.7 the same flag did not apply in print mode at all (the
+   2026-07-25 design spec), so a drift in either direction shows as the
+   mode line below going missing or the edit being denied. It opens file
+   edits ONLY - command execution stays denied by design, and the wrapper
+   runs all verification (measured 2026-09-13 on 1.2.2: a `run_command`
+   call under the same flag was auto-denied). New-file writes and deletes
+   under it are unmeasured. It persists nothing in `settings.json`, and
+   the brain transcript still records every tool call with its
+   arguments. Pass `<log-path>` in Windows spelling
    (`C:/...` or `C:\...`): a Git-Bash `/c/...` spelling produced NO log
    file at all (measured 2026-09-13), and a missing log is a missing
    route line.
@@ -127,8 +139,8 @@ scratch (expected files absent from the tree). Never retry with
 is ANY approval-bypass flag or persisted per-tool allow rule added to agy
 settings. `--mode accept-edits` is not a member of that class: it is the
 lane's declared mode, on the dispatch line where every reader sees it, it
-opens file edits only, and command execution stays denied under it. No
-other `--mode` value is used in this lane. Never complete the work yourself: rerouting a blocked task to a
+opens file edits only, and command execution stays denied under it.
+No other `--mode` value is used in this lane. Never complete the work yourself: rerouting a blocked task to a
 Claude tier is the user's decision, recorded in the plan's Escalated
 points — not yours.
 
@@ -152,6 +164,9 @@ This agent pins the Flash implementation lane. Canonical model literal:
 Antigravity CLI resolved ID). The literal lives ONLY here;
 `implementer.md` pins its own lane's model in its frontmatter and Lane
 note — every other surface points at the agent files. Trust is
-per-directory and interactive-only, and a listed directory covers what
-is beneath it: one interactive `agy` session in the parent that holds the
-worktrees, with trust approved, is enough for every worktree under it.
+per-directory and interactive-only, and the lane reads the list as its
+own allow-list, a listed directory covering what is beneath it: one
+interactive `agy` session in the parent that holds the worktrees, with
+trust approved, is enough for every worktree under it. agy does not
+consult the list for the write itself under the lane's mode (measured
+2026-09-13 on 1.2.2), which is why preflight 2 exists.

@@ -166,17 +166,20 @@ substate observed is still named in the detail text.
   file is BROKEN, because the lane blocks on it at dispatch. A file that
   does not parse as JSON is BROKEN, and an unreadable settings file is
   never reported as an empty one. A parsed file with no
-  `trustedWorkspaces` key is BROKEN, because the lane cannot write in any
-  workspace. A `trustedWorkspaces` that is present but NOT an array is
+  `trustedWorkspaces` key is BROKEN, because the lane's preflight reads
+  it as its allow-list and blocks without it. A `trustedWorkspaces` that
+  is present but NOT an array is
   BROKEN: the lane's preflight reads it positionally, so a changed shape
   is not a shorter list. Report `allowNonWorkspaceAccess` in the detail
   when the key is present, as an informational VALUE and never as a
-  verdict, and say plainly that what it permits outside the workspace is
-  UNMEASURED (backlog item 36). Do not read `true` as what lets the lane
-  write: on agy 1.2.2 with `true` set, print mode denied every write
-  until the dispatch line carried `--mode accept-edits` (measured
-  2026-09-13); the agent file owns that flag, and this check does not
-  assert it.
+  verdict. Measured 2026-09-13 on agy 1.2.2 (backlog item 36): the
+  lane's in-place edit under `--mode accept-edits` landed with the key
+  `true`, `false` and absent, in a listed directory and in one with no
+  listed ancestor, so the key controls nothing the lane does and the
+  trust list is enforced by the lane's own preflight, not by agy; agy
+  drops a `false` key on its next run. Without the flag the same edit
+  was denied whatever the key held. The agent file owns the flag, and
+  this check does not assert it.
 
 - **Authorship evidence root.** Verify
   `$env:USERPROFILE\.gemini\antigravity-cli\brain` exists. Missing is

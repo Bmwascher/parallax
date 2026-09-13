@@ -51,7 +51,10 @@ session scratchpad (`agy-probe/probe*.log`).
   ("invalid model selection ... not recognized"), available models listed.
 - Write path: print mode cannot prompt, so unapproved tools soft-deny loudly
   ("jetski: ... auto-denied", tool confirmation "Edit"/CodeAction).
-  `--mode accept-edits` does NOT apply in print mode. Without `--add-dir`,
+  `--mode accept-edits` did NOT apply in print mode on 1.1.7 (corrected
+  2026-09-13: on 1.2.0 and 1.2.2 it is the one switch that lands
+  print-mode edits, and the lane's dispatch line carries it; see
+  `agents/flash-implementer.md`). Without `--add-dir`,
   writes divert to the CLI's internal scratch workspace
   (`~/.gemini/antigravity-cli/scratch/`) — files never reach the real tree.
 - Working combination (WRITE4-OK): one-time interactive trust of the target
@@ -68,7 +71,8 @@ session scratchpad (`agy-probe/probe*.log`).
   (the WRITE4 file appears there in successful file-changing actions).
 - `agy --help` (v1.1.7) lists `--dangerously-skip-permissions` ("Auto-approve
   all tool permission requests without prompting"). Whether it takes effect
-  in print mode is UNPROBED (accept-edits provably does not).
+  in print mode is UNPROBED (accept-edits provably did not on 1.1.7;
+  corrected 2026-09-13: it does on 1.2.0 and 1.2.2).
 - Environment note: an "Orca" app has pre-planted hooks in BOTH
   `~/.gemini/settings.json` (gemini-cli hook events) and agy's stop hooks
   (`jsonhook__orca-status_Stop_0_0` failed non-fatally in probe logs). Inert
@@ -238,7 +242,8 @@ declared lane-specific and excluded from parity.
      preconditions; the probe's answer is written into this section as the
      final route-check contract text;
   3. does `--dangerously-skip-permissions` take effect in print mode at all
-     (accept-edits provably does not) — if inert, the settings assertion is
+     (accept-edits provably did not on 1.1.7; corrected 2026-09-13: it
+     does on 1.2.0 and 1.2.2) — if inert, the settings assertion is
      the whole live defense, and §4's flag ban is belt-and-suspenders.
 
 ### 3. One-time setup (documented in the agent file)

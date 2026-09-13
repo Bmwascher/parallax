@@ -54,6 +54,7 @@ The full previous text of every closed item is in git history at
 - 81
 - 82
 - 36
+- 102
 - 38
 - 76
 - 40
@@ -1187,9 +1188,9 @@ timely one.
 
 ## 36. agy `allowNonWorkspaceAccess` is watched but UNMEASURED
 Status: OPEN
-Cost: the basis for a setting the lane has carried for four releases is missing, and whether the question survives depends on what item 45 decides about the agy lane
-Pairs: none
-Verified: 2026-09-13 ac70b76d5fee
+Cost: none remaining for the lane; the item closes with the version that ships the measurement into the agent file, because `Closed:` names a shipped version
+Pairs: 102
+Verified: 2026-09-13 246807fcdd4b
 
 Opened by 0.24.0, which deliberately did not answer it. Item 11's security
 contract stays partially open on this point while the rest of item 11
@@ -1202,48 +1203,44 @@ print-mode writes as of agy 1.1.7"
 (`docs/superpowers/plans/2026-07-25-flash-implementer.md:590-603`). That is
 a real measurement, and it is BOUND TO AGY 1.1.7. The lane now runs 1.2.2.
 
-**Measured 2026-09-13 on agy 1.2.2, and it moves the ground under
-question 1.** With `true` set, unchanged, print mode soft-denied a
-trusted-workspace edit (`ReplaceFileContent`) until the dispatch line
-carried `--mode accept-edits`, and under that flag the edit landed while
-a `run_command` call was still auto-denied. So on 1.2.2 `true` is NOT
-SUFFICIENT for the lane's writes; the flag is. Whether `true` is still
-NECESSARY alongside the flag is the open half of question 1, and one
-run with `false` plus `--mode accept-edits` settles it. Record:
+**Measured 2026-09-13 on agy 1.2.2, and it answers both questions.** Four
+headless runs, each `--mode accept-edits --add-dir <dir>` with an
+in-place edit as the task, all landed: (a) a listed directory
+(`trustedWorkspaces` entry for the worktrees parent, unlisted worktree
+beneath it, key `true`); (b) `C:\Temp\agy-untrusted-probe`, which has NO
+listed ancestor, key `true`; (c) the same directory with the key set to
+`false` by the user; and on that run agy rewrote `settings.json` and
+DROPPED the `false` key, so a fourth state, absent, is what the file
+holds now. Without the flag, the same edit was soft-denied on a listed
+directory with the key `true` (the 2026-09-12 block on 1.2.0, and a
+2026-09-13 control on 1.2.2). So on 1.2.2 the key is neither necessary
+nor a restriction: the flag is the one switch, and the trust list is not
+consulted for the write either, which is item 102. Record:
 `C:/Users/Brandon/Documents/KitnDev/KitnEssentials/dev/docs/handoffs/agy-accept-edits-probe-2026-09-13.md`
-(outside this repo). The flag itself shipped into
-`agents/flash-implementer.md` on the same day; that is a lane contract
-change and does not close this item.
+for the first control, and the session's retained probe logs under
+`docs/superpowers/plans/rounds/2026-09-13-flash-accept-edits/` for the
+other three.
 
-**The residual is TWO questions, not one.** An earlier draft of this item
-named only the second, and in naming only it quietly promoted a
-version-bounded measurement into a present-tense requirement:
+**The two questions, answered.**
 
-1. Does `false` STILL soft-deny the lane's intended trusted-workspace
-   writes when the dispatch line carries `--mode accept-edits`? The 1.1.7
-   result does not answer it, and the 1.2.2 measurement ran with `true`
-   only. If it no longer denies, `true` is not required and the setting
-   can simply go.
-2. What does `true` permit OUTSIDE the workspace, on the current version?
-   Also unmeasured under `--mode accept-edits`: whether the flag permits
-   NEW files and deletes, not only in-place edits (the 1.2.2 run was one
-   in-place edit).
+1. Does `false` still soft-deny the lane's writes? No: with the flag on
+   the dispatch line the edit landed under `false`, and agy then removed
+   the key. `true` is not required and the setting is gone from the
+   user's file by agy's own hand.
+2. What does `true` permit outside the workspace? Nothing that `false`
+   does not: the unlisted-directory edit landed under both. The key is
+   not a control of anything the lane does.
 
-**What 0.24.0 did instead.** `tools/check-drift.ps1` now RECORDS the value
-in the snapshot and reports a change to it as a drift note that names this
-item. Recording a value answers neither question and must never be
-presented as closing them: a watched setting is not an understood one.
+Still unmeasured under the flag, by choice rather than omission: new-file
+writes and deletes (every run above was one in-place edit).
 
-**Shape of a fix, not decided.** Re-run the 1.1.7 experiment on the
-current version with the flag on the dispatch line, for question 1.
-Question 2 needs a positive probe - a write attempt at a path outside
-every trusted workspace - and its result is a security finding either
-way, so the probe design belongs in a plan rather than in an ad-hoc run.
-
-Nothing is known to be broken; what is missing is the basis for a setting
-the lane has carried for four releases. Whether this survives at all depends
-on what item 45 decides about the agy lane, so do not build it before that
-is settled.
+**What 0.24.0 did instead.** `tools/check-drift.ps1` RECORDS the value in
+the snapshot and reports a change to it as a drift note that names this
+item; a removal is carried forward from last week's value rather than
+reported (Fable review of 0.24.0, finding 6). With the key now absent
+that carry-forward will report `true` indefinitely, which is a recorded
+value and not a measured one; the snapshot row can go when item 102 is
+built.
 
 ## 37. No documented step REQUIRES promoting an adjudicated rule
 Status: OPEN
@@ -4522,3 +4519,46 @@ they need not change anything, a "What changed for you" list, and a
 "Details for maintainers" list with the records. `CHANGELOG.md`'s own
 preamble names the reader. `test_check_changelog.py` proves the three
 refusals fire and that the rule stops at the first blank line.
+
+## 102. agy 1.2.2 does not consult `trustedWorkspaces` for a print-mode write under `--mode accept-edits`
+Status: OPEN
+Cost: the only thing keeping Flash inside a directory the user trusted is a preflight the Haiku wrapper follows as prose; nothing mechanical refuses an `--add-dir` outside the list
+Pairs: 36
+Verified: 2026-09-13 8ebba8f76bba
+
+**Filed 2026-09-13 on the Fable review of branch `flash-accept-edits`**,
+finding 2, which asked for the control run; the run answered in the
+unsafe direction.
+
+**Measured 2026-09-13 on agy 1.2.2.** With `trustedWorkspaces` holding
+two entries and `C:\Temp\agy-untrusted-probe` under neither, a headless
+`agy -p ... --model gemini-3.8-flash-high --mode accept-edits --add-dir
+C:/Temp/agy-untrusted-probe` landed an in-place edit, with
+`allowNonWorkspaceAccess` at `true` and again at `false` (item 36). The
+log carries `Print mode: applying agent mode accept-edits` and no trust
+line at all; the client's `--help` names no trust flag. So under the
+lane's mode the client writes wherever `--add-dir` points, and the
+0.12.0 design's reading of the trust list as a permission control
+(`docs/superpowers/specs/2026-07-25-flash-implementer-design.md:57-61`)
+does not hold on this version. Whether it held on 1.1.7 is not
+re-measured.
+
+**What holds the line now.** `agents/flash-implementer.md` preflight 2:
+the wrapper reads the list, accepts the workspace or an ancestor of it,
+and blocks otherwise. That is a prose rule followed by a Haiku agent,
+and every other control in that file (the write_file rule-class ban, the
+clean-tree check, the brain-transcript corroboration) is the same kind.
+The doctor's workspace-trust row and `tools/check-drift.ps1`'s
+`trustedWorkspaces` checks still describe the list as what lets the lane
+write ("the Flash lane cannot write in any workspace",
+`tools/check-drift.ps1:359`); the doctor text was corrected on the same
+branch, the drift string was not, so the two instruments disagree until
+this is built.
+
+**Shape of a fix, not decided.** Either a mechanical guard the dispatch
+line goes through (a script that refuses to invoke agy when `--add-dir`
+is not under a listed entry, in the shape of `tools/dispatch-round.ps1`
+for the reviewer lanes), or an explicit statement in the agent file and
+the doctor that the lane's write boundary is a prose control and the
+user's trust list is advisory to agy. The drift string moves with either.
+Whether the lane survives at all depends on item 45.

@@ -49,6 +49,11 @@ def test_flash_dispatch_contract():
     # where every reader sees it, unlike a persisted allow rule.
     assert "--mode accept-edits" in body
     assert body.count("--mode accept-edits") >= 2
+    # Fable R1 finding 1 (2026-09-13): the two pins above are satisfied
+    # by the prose alone, so the flag must be locked to the ONE physical
+    # dispatch line, between the model and the workspace binding
+    assert ("--model " + CANONICAL_ID + " --mode accept-edits --add-dir"
+            ) in body
     assert "command execution stays denied" in body
     # a Git-Bash /c/... log path produced NO log file (measured
     # 2026-09-13); the log is where the route evidence lives
@@ -120,6 +125,15 @@ def test_flash_preflight_pins():
     # accept an ancestor or it blocks the configuration that works
     assert "the workspace directory or an ancestor of it" in body
     assert "a worktree needs its own entry" not in body
+    # Fable R1 findings 2 and 3 (2026-09-13): the trust list is the LANE's
+    # allow-list and preflight 2 is its only enforcement, because agy does
+    # not consult it for the write (edit landed in a directory with no
+    # listed ancestor, with allowNonWorkspaceAccess true and again false);
+    # and the comparison rule is stated so a Bash-only wrapper cannot pick
+    # a bare string-prefix test
+    assert "agy itself does not consult it" in body
+    assert "case-insensitive" in body
+    assert "plus a separator" in body
     assert "Task 6" not in body
 
 
@@ -139,6 +153,9 @@ def test_flash_forbidden_bypass_class():
     # the same section, so a reader of the ban cannot mistake the
     # dispatch line for a violation of it
     assert "`--mode accept-edits` is not a member of that class" in body
+    # Fable R1 finding 6: the narrowing clause is what keeps the carve-out
+    # from becoming a general --mode allowance
+    assert "No other `--mode` value is used in this lane" in body
 
 
 def test_flash_report_headings():
