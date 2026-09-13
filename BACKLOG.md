@@ -94,7 +94,7 @@ The full previous text of every closed item is in git history at
 Status: OPEN
 Cost: every debate writes its rounds, SDD ledger and mirror to whichever root the calling skill inherited from Superpowers, so one repo accumulates `plans/rounds/`, `rounds/` and `.superpowers/sdd/` side by side; a retention check cannot state one rule, a later session cannot find the record for a gate without searching all three, and a repo-side path override (KitnEssentials maps `docs/superpowers` to `dev/docs/superpowers`) is honoured by some writers and not others
 Pairs: none
-Verified: 2026-09-12 b57a16c64aba
+Verified: 2026-09-12 03039f073fcb
 
 **Filed 2026-09-12 from the KitnEssentials artifact cleanup.** Measured
 there on that date: 76 gate folders under `dev/docs/superpowers/plans/rounds/`,
@@ -113,14 +113,24 @@ Nothing in the plugin states the full set of paths a debate creates, so
 nothing can check them.
 
 **What closing it means.** One declaration of every path a round writes
-(rounds, SDD ledger, review mirror, attestation), resolved through one
-repo-override rule, with the mirror and ledger roots gitignored by the
-same entry as the rounds. A preflight step that prints the resolved set,
-and an eval that fails when a round writes outside it. The declaration
-belongs next to the canonical model declarations in
-references/model-prompting-notes.md so a swap edits one file. Migration
-of existing repos is the consumer's job (KitnEssentials archives by hand);
-the plugin only has to stop adding to the spread.
+(frozen plan, rounds, SDD ledger, review mirror, attestation,
+checkpoint), resolved through one repo-override rule by one tool, a
+preflight step that prints the resolved set, and an eval that fails
+when a writer or a skill sentence names a root outside it. The
+declaration sits next to the canonical model declarations in
+references/model-prompting-notes.md so a swap edits one file.
+Amended 2026-09-12, at brainstorming: the ledger and mirror roots are
+declared FIXED rather than gitignored beside the rounds. The ledger
+root belongs to Superpowers, whose sdd-workspace script hard-codes it
+and reads it back; the mirror must sit outside the repository, which
+the mirror tool already refuses to violate. The same date's survey also
+found that two of the four KitnEssentials roots were not parallax
+writers: the bare rounds directory has no source in this repo's
+history, and the 54 MB copy was written by a Codex controller session
+on 2026-09-08. The plugin binds its own tools and the Claude
+controller's prose; a foreign controller is outside the contract.
+Migration of existing repos is the consumer's job (KitnEssentials
+archives by hand); the plugin only has to stop adding to the spread.
 
 ## 1. Replace the pin mechanism
 Status: DONE
