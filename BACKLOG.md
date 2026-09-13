@@ -15,6 +15,7 @@ The full previous text of every closed item is in git history at
 ## Ranking
 
 ### First - breaks the repo's own review process
+- 100
 - 75
 - 49
 - 59
@@ -88,6 +89,38 @@ The full previous text of every closed item is in git history at
 - 84
 - 85
 - 86
+
+## 100. Round artifacts land in three roots per consumer repo
+Status: OPEN
+Cost: every debate writes its rounds, SDD ledger and mirror to whichever root the calling skill inherited from Superpowers, so one repo accumulates `plans/rounds/`, `rounds/` and `.superpowers/sdd/` side by side; a retention check cannot state one rule, a later session cannot find the record for a gate without searching all three, and a repo-side path override (KitnEssentials maps `docs/superpowers` to `dev/docs/superpowers`) is honoured by some writers and not others
+Pairs: none
+Verified: 2026-09-12 b57a16c64aba
+
+**Filed 2026-09-12 from the KitnEssentials artifact cleanup.** Measured
+there on that date: 76 gate folders under `dev/docs/superpowers/plans/rounds/`,
+4 under `dev/docs/superpowers/rounds/`, 16 SDD ledgers under
+`.superpowers/sdd/` and a 54 MB mirror under `.superpowers/review-sources/`,
+all written by parallax rounds across plugin versions. The new
+`dev/scripts/check-artifact-retention.ps1` there reports the split as its
+`[G]` note and will keep reporting it until this closes.
+
+**What is wrong.** references/frozen-plan-format.md names
+`docs/superpowers/plans/rounds/<date>-<topic>/` as the round root, but the
+SDD ledger and the review mirror are placed by Superpowers conventions
+the skill inherited rather than by that declaration, and the repo-level
+`docs/superpowers -> dev/docs/superpowers` override is applied per writer.
+Nothing in the plugin states the full set of paths a debate creates, so
+nothing can check them.
+
+**What closing it means.** One declaration of every path a round writes
+(rounds, SDD ledger, review mirror, attestation), resolved through one
+repo-override rule, with the mirror and ledger roots gitignored by the
+same entry as the rounds. A preflight step that prints the resolved set,
+and an eval that fails when a round writes outside it. The declaration
+belongs next to the canonical model declarations in
+references/model-prompting-notes.md so a swap edits one file. Migration
+of existing repos is the consumer's job (KitnEssentials archives by hand);
+the plugin only has to stop adding to the spread.
 
 ## 1. Replace the pin mechanism
 Status: DONE
