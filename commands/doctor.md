@@ -166,13 +166,21 @@ substate observed is still named in the detail text.
   file is BROKEN, because the lane blocks on it at dispatch. A file that
   does not parse as JSON is BROKEN, and an unreadable settings file is
   never reported as an empty one. A parsed file with no
-  `trustedWorkspaces` key is BROKEN, because the lane cannot write in any
-  workspace. A `trustedWorkspaces` that is present but NOT an array is
+  `trustedWorkspaces` key is BROKEN, because the lane's preflight reads
+  it as its allow-list and blocks without it. A `trustedWorkspaces` that
+  is present but NOT an array is
   BROKEN: the lane's preflight reads it positionally, so a changed shape
   is not a shorter list. Report `allowNonWorkspaceAccess` in the detail
   when the key is present, as an informational VALUE and never as a
-  verdict, and say plainly that what it permits outside the workspace is
-  UNMEASURED (backlog item 36).
+  verdict. Measured 2026-09-13 on agy 1.2.2 (backlog item 36): the
+  lane's in-place edit under `--mode accept-edits` landed in a listed
+  directory with the key `true`, and in a directory with no listed
+  ancestor with the key `true` and again with it `false`; the `false`
+  run ended with the key removed from the file by agy. So the key did
+  not gate that edit, and the trust list did not either: the lane's own
+  preflight is what enforces the list. Without the flag the same edit
+  was denied on a listed directory with the key `true`. The agent file
+  owns the flag, and this check does not assert it.
 
 - **Authorship evidence root.** Verify
   `$env:USERPROFILE\.gemini\antigravity-cli\brain` exists. Missing is

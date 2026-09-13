@@ -38,6 +38,61 @@ debate. Cite backlog items and round records, not commits, because a
 reader can follow a record. Versions before 0.34.0 have no section and
 no release; their records are the merge commits on main.
 
+## v0.35.0 (2026-09-13)
+
+The Flash implementer lane can write files again. Since Antigravity CLI
+1.1.28, the lane refused each task because the client denied each file
+edit in headless mode. The lane now asks the client for its edit mode on
+each dispatch, and the client applies the edits. The client still denies
+each command, and the wrapper runs all verification itself. Update the
+Antigravity CLI to 1.2.2 or later, and approve trust for your worktrees
+folder once in an interactive session. You do not have to change a
+setting.
+
+### What changed for you
+
+- **The lane writes files under the client's own edit mode.** The dispatch
+  line carries `--mode accept-edits`. Without the flag, the client denied
+  the lane's edit on 1.2.0 and on 1.2.2. With the flag, the edit landed and
+  a command call stayed denied. The flag adds no rule to the client's
+  settings file.
+- **One trust entry for a folder of worktrees is sufficient.** The wrapper
+  accepts a workspace when the trust list holds the workspace or a parent
+  folder of it. Approve the parent folder once, and each worktree under it
+  can run.
+- **The trust list is the lane's own limit, not the client's.** Measured
+  on 1.2.2, the client wrote the edit in a folder with no trust entry, with
+  `allowNonWorkspaceAccess` at `true` and again at `false`. The wrapper's
+  preflight is what keeps Flash inside a folder you trust. Backlog item
+  105 holds the open work for a mechanical guard.
+- **The authorship check reads the correct log line.** The startup line of
+  the client log carries an empty conversation id on 1.2.0 and on 1.2.2.
+  The wrapper now reads the id from the line that carries it. A good run
+  no longer fails as a run with no transcript.
+- **The `allowNonWorkspaceAccess` setting is not necessary.** The client
+  removed a `false` value from the settings file on its own. The doctor and
+  the drift watch report the value as information only.
+
+### Details for maintainers
+
+- `agents/flash-implementer.md` carries each measurement with its date and
+  client version. The pins in `test_flash_implementer.py` lock the dispatch
+  line as one fragment, the carve-out sentence, the ancestor comparison
+  rule and the route checks.
+- `commands/doctor.md` check 7 and the three agy strings in
+  `tools/check-drift.ps1` state the same fact about the trust list.
+- The 0.12.0 design spec has three dated corrections at the sentences that
+  said the flag does not apply in print mode.
+- The record is
+  `docs/superpowers/plans/rounds/2026-09-13-flash-accept-edits/`, which
+  retains the Fable review, one Astra round and the three probe logs. The
+  Astra round found six of ten claims wider than their evidence. Each
+  sentence now describes only the edit that the session measured.
+
+### Backlog
+
+**This version closes item 36 and opens item 105.**
+
 ## v0.34.0 (2026-09-13)
 
 The plugin now keeps all the files that a review writes in one folder
