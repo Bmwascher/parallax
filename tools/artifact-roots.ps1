@@ -42,8 +42,17 @@ function Fail($message) {
 }
 
 # ---- the command line --------------------------------------------------
-# Hand-parsed from $args: every fault is script-seen and exits 2 with an
-# ERROR: line, identically on both hosts.
+# Hand-parsed from the RAW process command line, not $args: -File
+# preprocessing drops an empty inline value (`-Assert:` as the last
+# token vanishes, `-Json:` loses its colon) on both hosts before $args
+# exists, so an intended assertion could answer 0 with no assertion at
+# all (measured 2026-09-13 by the diff-debate R4 reviewer).
+# [Environment]::GetCommandLineArgs() still carries every token on both
+# hosts; the tokens after this script's own path are what is parsed.
+# When the script is not the -File target (dot-sourced, or run from a
+# host whose command line does not name it), $args is the fallback.
+# Every fault is script-seen and exits 2 with an ERROR: line,
+# identically on both hosts.
 $RepoRoot = ""
 $DocsRoot = ""
 $Assert = ""
@@ -52,6 +61,21 @@ $Json = $false
 $bound = @{}
 $valueNames = @("RepoRoot", "DocsRoot", "Assert", "Expect")
 $argv = @($args)
+$rawArgs = @([Environment]::GetCommandLineArgs())
+$self = $PSCommandPath
+for ($ri = 0; $ri -lt $rawArgs.Count; $ri++) {
+    $candidate = [string]$rawArgs[$ri]
+    $same = $false
+    try {
+        $same = [System.IO.Path]::GetFullPath($candidate).Equals(
+            [System.IO.Path]::GetFullPath($self), [System.StringComparison]::OrdinalIgnoreCase)
+    } catch { $same = $false }
+    if ($same) {
+        $argv = @()
+        if (($ri + 1) -lt $rawArgs.Count) { $argv = @($rawArgs[($ri + 1)..($rawArgs.Count - 1)]) }
+        break
+    }
+}
 $ai = 0
 while ($ai -lt $argv.Count) {
     $tok = [string]$argv[$ai]
@@ -68,6 +92,7 @@ while ($ai -lt $argv.Count) {
     if ($name -eq "Json") {
         if ($m.Groups[2].Success) {
             $flag = $m.Groups[3].Value
+            if (-not $flag) { Fail "-Json: has no value; write -Json, -Json:true or -Json:false" }
             if ($flag -match '^\$?true$') { $Json = $true }
             elseif ($flag -match '^\$?false$') { $Json = $false }
             else { Fail ("-Json takes true or false, not: " + $flag) }
@@ -87,6 +112,7 @@ while ($ai -lt $argv.Count) {
     }
     if ($m.Groups[2].Success) {
         $value = $m.Groups[3].Value
+        if (-not $value) { Fail ("-" + $name + " is missing its value") }
     } else {
         $ai++
         if ($ai -ge $argv.Count) { Fail ("-" + $name + " is missing its value") }

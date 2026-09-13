@@ -294,15 +294,38 @@ def test_a_forbidden_character_in_temp_is_a_parameter_fault(tmp_path):
     ("-RepoRoot", "{repo}", "-Json:invalid"),
     ("-RepoRoot", "{repo}", "-ErrorAction", "invalid"),
     ("-Repo", "{repo}"),
+    # An EMPTY inline value: -File preprocessing drops `-Assert:` as the
+    # last token and strips the colon from `-Json:` before $args exists,
+    # on both hosts, so an intended assertion answered 0 with no
+    # assertion line (measured 2026-09-13 by the diff-debate R4
+    # reviewer). The parser reads the raw process command line instead.
+    ("-RepoRoot", "{repo}", "-Assert:"),
+    ("-RepoRoot", "{repo}", "-DocsRoot:"),
+    ("-RepoRoot", "{repo}", "-Json:"),
+    ("-RepoRoot", "{repo}", "-Assert:", "-Json"),
 ])
 def test_every_command_line_fault_is_a_script_fault(tmp_path, args):
-    # The script has no param block: every token reaches its own parser
-    # as a string on both hosts, so there is no binding residual. Each
-    # case exits 2 with an ERROR: line.
+    # The script has no param block and parses the raw process command
+    # line: every token reaches its own parser as a string on both
+    # hosts, so there is no binding residual. Each case exits 2 with an
+    # ERROR: line.
     repo = make_repo(tmp_path)
     proc = run_resolver(*[a.replace("{repo}", str(repo)) for a in args])
     assert proc.returncode == 2, proc.stdout + proc.stderr
     assert proc.stdout.startswith("ERROR:"), proc.stdout
+
+
+@needs_host
+def test_raw_command_line_keeps_a_path_with_spaces_whole(tmp_path):
+    # The raw command line is split by the host's own rules; a quoted
+    # path with spaces must arrive as one token, or the parser would
+    # read its second word as a stray argument.
+    repo = make_repo(tmp_path, name="repo with space")
+    proc = run_resolver("-RepoRoot", str(repo), "-Assert",
+                        str(repo / "docs" / "superpowers" / "plans" / "rounds" / "2026-09-13-x" / "r.md"),
+                        "-Expect", "rounds")
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "assert: inside rounds root" in proc.stdout
 
 
 @needs_host

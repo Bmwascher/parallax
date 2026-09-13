@@ -227,18 +227,23 @@ a retained root other than the one `-Expect` names, 2 for a parameter
 fault, an unreadable declaration, or a `-RepoRoot` that is not a git
 working tree. The map mirrors `tools/dispatch-round.ps1`'s so a
 caller reads one convention. The tool has NO `param` block (amended
-2026-09-13 from the diff debate's rounds 1 and 3): it parses `$args`
-itself, so every command-line fault is script-seen and exits 2 with an
-`ERROR:` line on both hosts: a missing `-RepoRoot`, an unknown,
-abbreviated or bare token, a missing value, a duplicate, a bad `-Json`
-value, a common parameter, and a forbidden character in `-DocsRoot`,
-`-Assert` or the `TEMP` variable, which is screened with the same set
-before any path API because it is the one input that is neither a
-parameter nor git's answer. Typed binding was tried first and could not
-deliver one exit map: a missing value and a duplicate exited 1 from
-`-File` binding on both hosts, and `-Json:$true` exited 1 on 5.1 and 0
-on 7; earlier drafts of this paragraph named "one" and then "two"
-residuals before the third class was measured.
+2026-09-13 from the diff debate's rounds 1, 3 and 4): it parses the RAW
+process command line (`[Environment]::GetCommandLineArgs()`, the tokens
+after its own path; `$args` only when its path is not on that line), so
+every command-line fault is script-seen and exits 2 with an `ERROR:`
+line on both hosts: a missing `-RepoRoot`, an unknown, abbreviated or
+bare token, a missing or EMPTY value (`-Assert:`), a duplicate, a bad
+`-Json` value, a common parameter, and a forbidden character in
+`-DocsRoot`, `-Assert` or the `TEMP` variable, which is screened with
+the same set before any path API because it is the one input that is
+neither a parameter nor git's answer. Typed binding was tried first and
+could not deliver one exit map: a missing value and a duplicate exited 1
+from `-File` binding on both hosts, and `-Json:$true` exited 1 on 5.1
+and 0 on 7; then `$args` proved lossy, because `-File` preprocessing
+drops an empty inline value on both hosts before any script runs, so an
+intended `-Assert:` answered 0 with no assertion. Earlier drafts of this
+paragraph named "one" and then "two" residuals before those classes were
+measured.
 
 ## Skill and agent edits
 

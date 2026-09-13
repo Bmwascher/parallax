@@ -354,3 +354,29 @@ Windows PowerShell 5.1 and PowerShell 7. Regressions:
 `test_every_command_line_fault_is_a_script_fault` (nine cases) and
 `test_json_switch_forms_select_the_format_on_both_hosts` (five forms).
 Applied under checkpoint amendment 3.
+
+## Astra diff R4 - COUNTED, verdict ESCALATE (budget exhausted, then extended)
+
+Dispatched 2026-09-13 against head `8556599`, mirror rebuilt at the same
+path with `-Force` (mirror head = source head, probe clean, same override
+sha256), resumed session `01a09943-2bbd-7442-bfb6-0692f161fe36`,
+background task `Astra R4 debate round`. Wrapper exit 0, `reply-present`.
+Route confirmed. Bound with `-Resume` (prior state = R3 binder's
+`nextState`): `status: clean`, `sealed: sealed` (`binder-diff-r4.json`).
+
+Artifacts: `brief-astra-diff-r4.md`, `astra-diff-r4-reply.md`,
+`astra-diff-r4-transcript.txt`, `receipt-diff-r4.json`,
+`binder-diff-r4.json`, `mirror-build-diff-r4.txt`.
+
+**Reviewer verdict: ESCALATE.** Claim 3 PASS (scope; the sweep still finds
+zero offenders). Claims 1 and 2: one NEW substantive finding at exchange
+4 of 4, which paused the debate under the budget rule:
+
+| Claim | Finding | Adjudication |
+|-------|---------|--------------|
+| 1 | an EMPTY inline value is dropped by `-File` preprocessing before `$args` exists, on both hosts: `-Assert:` as the last token vanishes, `-Json:` loses its colon; the resolver then exits 0 with no assertion line, a false clean against the spec's missing-value clause | accepted, reproduced with exact `ArgumentList` on both hosts. The parser now reads the RAW process command line (`[Environment]::GetCommandLineArgs()`, tokens after the script's own path; `$args` only as a fallback when the path is not on that line), which carries every token on both hosts; an empty inline value exits 2 with `ERROR:`. Four regressions plus one that a quoted path with spaces survives the raw split |
+| 2 | the "every fault reaches the parser" claim was contradicted by claim 1 | accepted: header, spec and test comment now name the raw command line and record why `$args` was not enough |
+
+The user extended the budget by two exchanges (6 in total) on the
+session's recommendation; the fix is applied under checkpoint amendment
+4 and R5 is the confirming round.
