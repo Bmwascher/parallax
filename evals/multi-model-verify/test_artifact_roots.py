@@ -677,7 +677,7 @@ def test_declaration_exemption_covers_only_the_marked_region():
 
 
 MIRROR_ROW = re.compile(r"^Canonical review mirror root: `([^`<]+)<short-name>/`$", re.M)
-PARENT_SPELLING = re.compile(r"[A-Za-z]:[/\\]pxm(?![A-Za-z0-9_-])", re.I)
+PARENT_SPELLING = re.compile(r"[A-Za-z]:[/\\]+pxm(?![A-Za-z0-9_.-])", re.I)
 
 
 def declared_mirror_parent():
@@ -703,10 +703,10 @@ def test_every_parent_spelling_on_the_surface_is_the_declared_one():
             for lineno, line in enumerate(read(f).splitlines(), 1):
                 for m in PARENT_SPELLING.finditer(line):
                     seen += 1
-                    assert norm(m.group(0)) == parent, (
+                    assert re.sub(r"[/\\]+", "/", m.group(0)).lower() == parent, (
                         f"{f.relative_to(REPO).as_posix()}:{lineno} names "
                         f"{m.group(0)}, not the declared parent")
-    assert seen >= 3, "the prose examples and the doctor should name the parent"
+    assert seen >= 4, "the notes, the prose examples and the doctor should name the parent"
 
 
 def test_parent_spelling_regex_can_fail():
@@ -715,6 +715,8 @@ def test_parent_spelling_regex_can_fail():
     assert not PARENT_SPELLING.search(r"C:\pxmx\kv-t")
     assert not PARENT_SPELLING.search("the pxm parent")
     assert norm(PARENT_SPELLING.search(r"D:\PXM\x").group(0)) == "d:/pxm"
+    assert not PARENT_SPELLING.search(r"C:\pxm.old")
+    assert PARENT_SPELLING.search(r"C:\\pxm\\x")
 
 
 # ---------------------------------------------------------------------

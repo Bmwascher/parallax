@@ -434,8 +434,12 @@ def test_preflight_mirror_reference_states_the_end_of_life_rule():
         "HEAD is the attested head",
         "a `.git` FILE",
         "kv-<tag>-2",
+        "declared review mirror parent",
+        "-Expect reviewMirror",
     ):
         assert anchor in body, "end-of-life anchor missing: " + anchor
+    assert "directly under the temp directory" not in body
+    assert r"C:\pxm\kv-<tag>" in body
 
 
 def test_doctor_inventories_the_mirrors_and_never_deletes():
@@ -450,12 +454,26 @@ def test_doctor_inventories_the_mirrors_and_never_deletes():
         "LastWriteTime",
         "-ReapMirror",
         "backlog item 106",
+        "artifact-roots.ps1",
+        "reviewMirror",
+        "legacy",
+        "backlog item 107",
     ):
         assert anchor in body, "doctor inventory anchor missing: " + anchor
     section = body.split("## 10. Review mirror inventory", 1)[1]
     assert re.search(r"never delete", section, re.IGNORECASE), (
         "the inventory is observation, not action")
     assert "Remove-Item" not in section
+    # The declared parent is the inventory; the drive-root name sweep is
+    # the legacy line, and the text says which is which.
+    assert section.index("reviewMirror") < section.index("legacy")
+
+
+def test_skill_and_backup_lane_name_the_parent_not_the_temp_directory():
+    for path in (SKILL, REPO / "skills" / "multi-model-verify" / "references" / "backup-lane.md"):
+        body = read(path)
+        assert "directly under the temp directory" not in body, path
+        assert "declared review mirror parent" in body, path
 
 
 def test_mirror_tool_refusal_and_emitter_agree_on_the_parameter_name():
@@ -667,6 +685,36 @@ def test_an_unreadable_parent_refuses_every_reap(tmp_path, pxm):
                   "-Participants", "session/reviewer")
     assert proc.returncode == 0, proc.stdout + proc.stderr
     assert att_file(repo, head).is_file()
+
+
+def test_a_roots_tool_that_exits_nonzero_refuses_every_reap(tmp_path, pxm):
+    # The other failure direction of the parent read: the doctored notes
+    # have NO review mirror row, so artifact-roots.ps1 itself exits 2, and
+    # the emitter reports that exit rather than treating an empty answer
+    # as a parent. Record unwritten, tree untouched.
+    fake = tmp_path / "plugin"
+    (fake / "tools").mkdir(parents=True)
+    notes_dir = fake / "skills" / "multi-model-verify" / "references"
+    notes_dir.mkdir(parents=True)
+    for name in ("write-attestation.ps1", "artifact-roots.ps1", "review-tree-removal.ps1"):
+        shutil.copy(REPO / "tools" / name, fake / "tools" / name)
+    notes = REPO / "skills" / "multi-model-verify" / "references" / "model-prompting-notes.md"
+    doctored = read(notes).replace(
+        "Canonical review mirror root: `C:/pxm/<short-name>/`\n", "")
+    assert doctored != read(notes)
+    (notes_dir / "model-prompting-notes.md").write_text(doctored, encoding="utf-8")
+    repo, base, head = make_repo(tmp_path)
+    mirror = make_mirror(repo, pxm / "kv-t")
+    proc = run_ps(fake / "tools" / "write-attestation.ps1",
+                  "-RepoRoot", str(repo), "-BaseSha", base, "-HeadSha", head,
+                  "-Verdict", "PASS", "-VerificationStatus", "FULL",
+                  "-RouteNote", "effective route confirmed", "-Rounds", "1",
+                  "-Participants", "session/reviewer", "-ReapMirror", str(mirror))
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "ERROR: the declared review mirror parent could not be read: artifact-roots.ps1 exited 2" in proc.stdout, proc.stdout
+    assert "Canonical review mirror root" in proc.stdout, proc.stdout
+    assert not att_file(repo, head).exists()
+    assert mirror.exists()
 
 
 # ---------------------------------------------------------------------

@@ -814,8 +814,9 @@ The other rows are FIXED, each for a reason the row cannot carry:
   hold one, which is how 78 mirror directories came to sit at the
   drive root (backlog item 107). The row is a declaration, not a
   derivation: a machine whose system drive is not `C:` edits it. The
-  guard accepts any depth below the parent and never the parent
-  itself; the declared SHAPE is one segment, so build `C:\pxm\<tag>`.
+  attestation emitter's reap guard accepts any depth below the parent
+  and never the parent itself; the declared SHAPE is one segment, so
+  build `C:\pxm\<tag>`.
   `tools/new-review-mirror.ps1` still refuses a path equal to, inside,
   or containing the repo and does not read this row; run
   `tools/artifact-roots.ps1 -Assert <mirror-path> -Expect reviewMirror`

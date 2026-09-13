@@ -97,7 +97,7 @@ requesting-code-review. Explicit project review gates remain applicable.
    <!-- contract:end -->
    Run
    `tools/new-review-mirror.ps1 -RepoRoot <repo> -MirrorPath <scratch>`
-   at a SHORT `<scratch>` directly under the temp directory, never inside
+   at a SHORT `<scratch>` directly under the declared review mirror parent, never inside
    the session scratchpad, to build the **review mirror**, remediate the
    offending entries there, re-run the enumeration and the client probe
    below against it, and print the record block; empty enumeration

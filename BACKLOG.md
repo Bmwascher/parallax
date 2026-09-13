@@ -90,10 +90,10 @@ The full previous text of every closed item is in git history at
 - 86
 
 ## 107. The reap guard cannot tell a debate's trees from any clone at the attested head, and the mirror parent is the drive root
-Status: OPEN
+Status: PARTIAL
 Cost: a session that names the wrong tree at the right head has it removed, and every mirror a KitnEssentials session builds lands directly under the drive root because the canonical temp root blows the path budget, so the doctor has to find them by a name pattern rather than a declared parent
 Pairs: none
-Verified: 2026-09-13 cfa01c8b8229
+Verified: 2026-09-13 005c3dbecf19
 
 **Filed 2026-09-13 from the whole-branch review of the mirror reaper
 (item 106).** The emitter's identity guard refuses a tree that is not
@@ -118,18 +118,24 @@ event recorded mechanically is a further follow-up, not numbered below.
    so the same rule does not apply to it without a marker the mirror
    tool would have to write, and the tool writes nothing identifying
    inside the mirror by design (the fingerprint covers every byte).
-2. The location. The canonical review mirror root is `<TEMP>/<short-name>/`,
-   but the DT review packets put the deepest file 243 characters below
-   the repo root, so the mirror root must be 15 characters or fewer and
-   the 36-character temp directory cannot hold one; the sessions build
-   at `C:\kv-<tag>` instead, which is why the 2026-09-13 measurement
-   found 78 directories at the drive root. A declared short parent such
-   as `C:\pxm\<tag>` would satisfy the budget, keep the drive root clear,
-   turn the doctor's `kv*` name pattern into a fixed directory, and give
-   the reap guard one more cheap rule: a reap path must sit under the
-   declared parent. That edits the round-artifact-roots region and its
-   pin, `tools/artifact-roots.ps1`, doctor check 10 and the KitnEssentials
-   memory that names `C:\kv-<tag>`; the user picks the name.
+2. The location. DECIDED 2026-09-13, shipped by the mirror-parent
+   branch: the canonical review mirror root is `C:/pxm/<short-name>/`,
+   a fixed drive-rooted parent the user chose, seven characters with
+   its separator, so a mirror root fits the 15 characters the DT
+   review packets leave. The four edits: the round-artifact-roots row
+   and its pin; `tools/artifact-roots.ps1`, which no longer substitutes
+   the temp directory and answers `-Assert <path> -Expect reviewMirror`;
+   `tools/write-attestation.ps1`, whose `Resolve-ReapPath` refuses, as
+   its LAST rule and for the bridge as well as the mirror, a tree that
+   is not under the parent, reading the parent through the roots tool
+   rather than a literal of its own; and doctor check 10, which
+   inventories the parent as a directory and keeps the `kv*` drive-root
+   sweep as a legacy line until the eight `C:\kv-bl-*` and `kvs-bl-*`
+   directories are gone. The mirror tool itself does not enforce the
+   parent; the session's `-Expect reviewMirror` check before the build
+   and the emitter's guard at the reap are the two checks. The
+   KitnEssentials memory that names `C:\kv-<tag>` is the consumer side
+   and is updated after the release.
 3. The post-delete sidecar read-back has no driving test. The failure
    branches `tools/write-attestation.ps1` takes after
    `[System.IO.File]::Delete` on the sidecar - "the sidecar still exists
@@ -142,11 +148,11 @@ event recorded mechanically is a further follow-up, not numbered below.
    refactor could satisfy without a runtime read-back. Named by the diff
    debate's round 2.
 
-**What closing it means.** The bridge origin rule shipped with a test
-that drives a foreign clone at the attested head and sees it refused,
-and a decision recorded on the mirror parent, either a new declared
-root with the four edits above or a stated reason to keep the drive
-root.
+**What remains.** Follow-up 1, the bridge origin rule, shipped with a
+test that drives a foreign clone at the attested head and sees it
+refused; and follow-up 3, a driving test for the two post-delete
+sidecar read-back branches, or a recorded reason none can be built
+without administrator rights. Follow-up 2 is closed above.
 
 ## 106. Review mirrors are never reaped, so a review day costs about 3 GB of drive root
 Status: DONE
