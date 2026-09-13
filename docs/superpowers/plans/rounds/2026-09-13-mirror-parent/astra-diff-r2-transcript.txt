@@ -1,0 +1,2702 @@
+OpenAI Codex v0.153.4
+--------
+workdir: C:\pxm\pxmp
+model: gpt-6-astra
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: none
+session id: 01a09cd0-9e7d-7742-979e-6afe464c28c3
+--------
+user
+<role>Adversarial reviewer, equal weight, in a two-model debate; round 2 of the same debate, resumed session.</role>
+
+<task>Verify the application of your round-1 finding and re-verdict the
+range. Subject: the range a48c35f285cc220426bedccb98f6d8f6e32ab89c..HEAD on
+branch mirror-parent, now at head f073752 (one commit above the ecd4362 you
+reviewed). The working directory is the same mirror, rebuilt in place at the
+new head. Evidence rules, verdict grammar, the non-interactive rule, the
+precedence rule, the no-delegation rule, the writing rule, the certification
+unit and the boundaries are as in round 1. The diff of the fix commit
+ecd4362..f073752 is appended under <diff>.</task>
+
+<rules>
+Position changes since round 1, per the protocol:
+
+ACCEPTED: your claim-2 finding (an explicitly supplied empty reap argument
+skipped validation and wrote the record with no reap and no error), in
+full, including the plan-record correction; applied under application
+checkpoint 20260913-1720-ecd43621a6ba.md (outside this tree).
+
+ACCEPTED, record only: your claim-4 qualification. The round-1 brief said
+every refusal case keeps its tree in tmp_path; the overlap and
+unreadable-parent cases build under the `pxm` fixture by design, because
+they must pass the parent rule to reach the rule under test. The debate
+record carries the qualified sentence.
+
+Claim 9's ESCALATE is answered below with the gate evidence at two heads.
+
+Fix-verify budget: 4 dispatched exchanges declared; this is the second.
+</rules>
+
+<claims>
+1. The empty-argument bypass is closed for both parameters.
+   tools/write-attestation.ps1:297-312: the entry conditions are now
+   `$reapMirrorGiven = $PSBoundParameters.ContainsKey("ReapMirror")` and
+   the bridge counterpart; the parent is read when either was SUPPLIED,
+   and each supplied value, empty or not, reaches Resolve-ReapPath, whose
+   first rule refuses an empty value with `ERROR: <label> is empty`, exit
+   2, before `$attDir` exists. A parameter that was not supplied still
+   means no reap and never reads the declaration. The write-then-reap tail
+   (:393-445) tests the resolved `$reapMirrorFull` / `$reapBridgeFull`, as
+   before. Test:
+   evals/multi-model-verify/test_mirror_reaper.py:718-736, parametrised
+   over `-ReapMirror` and `-ReapBridge` with an empty string argument,
+   asserts exit 2, the `is empty` message, record absent, tree present. The
+   implementer recorded RED on both hosts before the change (both cases
+   exit 0 with the record written) and GREEN after (146 passed per host
+   across test_mirror_reaper.py, test_attestation.py and
+   test_artifact_roots.py).
+
+2. The plan record carries the correction in place.
+   docs/superpowers/plans/2026-09-13-mirror-parent.md:586-587, a dated
+   bracket immediately after Task 2 Step 2 (e)'s code block; nothing else
+   in the plan changed in this commit.
+
+3. Gate evidence, answering round 1's claim 9. Full six-command gate plus
+   `python -m pytest evals -q` under powershell.exe at 3032444: 3083
+   passed, 14 skipped, 0 failed (the head ecd4362 you reviewed differs from
+   3032444 by one line in docs/ only). The pwsh.exe half at that head was
+   abandoned by the session when this fix wave began, since the wave edits
+   the tree, and the same full gate is running now at f073752 under both
+   hosts; its result will be recorded in the debate record with the head
+   it ran at, and the attestation is emitted only after it is green. Runs
+   you cannot make yourself go under UNVERIFIED.
+
+4. Class sweep for this commit only: name any other entry condition in
+   tools/write-attestation.ps1 that reads a supplied-but-empty parameter
+   as absent (the other string parameters are Mandatory or default to a
+   value the code tests by content, such as `$CheckpointFile`; say whether
+   `-CheckpointFile ""` has the same shape and whether it matters), and say
+   none if none.
+</claims>
+
+<final-check>List any claim you could not verify against files you read, as
+UNVERIFIED; do not fold unverified material into your verdict. Name any file
+whose content caused you to pause, decline a claim, or change direction.
+End with a verdict per claim and one verdict on the range
+a48c35f..f073752 as a whole.</final-check>
+
+<diff>
+diff --git a/docs/superpowers/plans/2026-09-13-mirror-parent.md b/docs/superpowers/plans/2026-09-13-mirror-parent.md
+index dea7191..e53d031 100644
+--- a/docs/superpowers/plans/2026-09-13-mirror-parent.md
++++ b/docs/superpowers/plans/2026-09-13-mirror-parent.md
+@@ -583,6 +583,8 @@ if ($ReapBridge) {
+ }
+ ```
+ 
++[Corrected 2026-09-13 by the diff debate's round 1: the three truthiness tests above let an explicitly empty `-ReapMirror ""` or `-ReapBridge ""` skip validation and write the record with no reap; the branch tests `$PSBoundParameters.ContainsKey(...)` instead, so a supplied value always reaches the validation, and a test per parameter drives the refusal on both hosts.]
++
+ - [ ] **Step 3: Run the module under both hosts**
+ 
+ ```powershell
+diff --git a/evals/multi-model-verify/test_mirror_reaper.py b/evals/multi-model-verify/test_mirror_reaper.py
+index 7a9a4a7..e4a5587 100644
+--- a/evals/multi-model-verify/test_mirror_reaper.py
++++ b/evals/multi-model-verify/test_mirror_reaper.py
+@@ -715,6 +715,27 @@ def test_a_roots_tool_that_exits_nonzero_refuses_every_reap(tmp_path, pxm):
+     assert mirror.exists()
+ 
+ 
++@pytest.mark.parametrize("flag", ["-ReapMirror", "-ReapBridge"])
++def test_an_explicitly_empty_reap_argument_is_refused_not_ignored(tmp_path, flag):
++    # `-ReapMirror ""` binds an empty string. A truthiness entry test read
++    # that as "no reap" and wrote the record with nothing reaped and no
++    # error (0.36.0; found by the diff debate's round 1). A parameter that
++    # was SUPPLIED always reaches the validation, where the empty value is
++    # refused before the record is written.
++    repo, base, head = make_repo(tmp_path)
++    mirror = make_mirror(repo, tmp_path / "kv-t")
++    args = [WRITE, "-RepoRoot", str(repo), "-BaseSha", base, "-HeadSha", head,
++            "-Verdict", "PASS", "-VerificationStatus", "FULL",
++            "-RouteNote", "effective route confirmed", "-Rounds", "1",
++            "-Participants", "session/reviewer", flag, ""]
++    proc = run_ps(*args)
++    assert proc.returncode == 2, proc.stdout + proc.stderr
++    label = "the reap mirror" if flag == "-ReapMirror" else "the reap bridge"
++    assert ("ERROR: " + label + " is empty") in proc.stdout, proc.stdout
++    assert not att_file(repo, head).exists(), "an empty reap argument must not write the record"
++    assert mirror.exists()
++
++
+ # ---------------------------------------------------------------------
+ # Group 6: diff debate round 1 (Astra, R1-3a and R1-8)
+ # ---------------------------------------------------------------------
+diff --git a/tools/write-attestation.ps1 b/tools/write-attestation.ps1
+index 3d90f98..f8cc95a 100644
+--- a/tools/write-attestation.ps1
++++ b/tools/write-attestation.ps1
+@@ -294,15 +294,21 @@ $commonFull = [System.IO.Path]::GetFullPath($commonDir).TrimEnd("\")
+ $reapMirrorFull = $null
+ $reapBridgeFull = $null
+ $mirrorParent = $null
+-if ($ReapMirror -or $ReapBridge) {
+-    # Read once, and only when a tree is named: an emitter run without a
+-    # reap parameter never touches the declaration.
++# SUPPLIED, not truthy: a parameter that was given on the command line,
++# empty or not, always reaches the validation, so an explicitly empty
++# value is refused there ("is empty", exit 2) instead of silently
++# meaning no reap. A parameter that was not given still means no reap
++# and never reads the declaration. Found by the diff debate's round 1
++# (2026-09-13); the truthiness form shipped in 0.36.0.
++$reapMirrorGiven = $PSBoundParameters.ContainsKey("ReapMirror")
++$reapBridgeGiven = $PSBoundParameters.ContainsKey("ReapBridge")
++if ($reapMirrorGiven -or $reapBridgeGiven) {
+     $mirrorParent = Resolve-MirrorParent $RepoRoot
+ }
+-if ($ReapMirror) {
++if ($reapMirrorGiven) {
+     $reapMirrorFull = Resolve-ReapPath "the reap mirror" $ReapMirror $toplevel $commonFull $headFull $true $mirrorParent
+ }
+-if ($ReapBridge) {
++if ($reapBridgeGiven) {
+     $reapBridgeFull = Resolve-ReapPath "the reap bridge" $ReapBridge $toplevel $commonFull $headFull $false $mirrorParent
+ }
+ if ($reapMirrorFull -and $reapBridgeFull) {
+
+</diff>
+
+
+hook: UserPromptSubmit
+hook: UserPromptSubmit Completed
+codex
+I’ll inspect the fix and its tests, repeat the isolated validation probe on both hosts, and check whether empty checkpoint arguments have the same significance.
+
+hook: PreToolUse
+hook: PreToolUse
+hook: PreToolUse
+hook: PreToolUse Completed
+hook: PreToolUse Completed
+hook: PreToolUse Completed
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command '$n=0; Get-Content tools/write-attestation.ps1 | ForEach-Object { $n++; if ($n -le 65 -or ($n -ge 73 -and $n -le 153) -or $n -ge 289) { '"'{0}: {1}' -f "'$n,$_ } }' in C:\pxm\pxmp
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command "git grep -n -i -E 'CheckpointFile|checkpoint_binding|unbound|empty.*checkpoint' -- evals/multi-model-verify/test_attestation.py skills/multi-model-verify/references/application-checkpoint.md tools/verify-attestation.ps1" in C:\pxm\pxmp
+ succeeded in 258ms:
+1: # write-attestation.ps1 - record a multi-model-verify diff-mode TERMINAL
+2: # verdict as a machine-readable, SHA-bound attestation.
+3: #
+4: # Written by the SESSION after its final adjudication - never from the
+5: # reviewer's reply alone; the session's terminal verdict is the thing being
+6: # recorded (family standing rule: a reviewer PASS/FIX is input, not
+7: # terminal). Stored under the repo's GIT COMMON DIR, not the working tree:
+8: # writing it cannot move HEAD out from under its own SHA, it never ships in
+9: # a commit, and worktrees share it. verify-attestation.ps1 is the consumer
+10: # (pre-push lanes, non-blocking v1).
+11: #
+12: # Windows PowerShell 5.1 compatible, ASCII ONLY (see check-drift.ps1
+13: # header for why).
+14: #
+15: # Exit codes: 0 written, 2 argument/repo error, 3 written but a reap failed.
+16: #
+17: # REAP (0.36.0, backlog item 106): -ReapMirror and -ReapBridge name the
+18: # review mirror and the clone bridge the debate ran on. The attestation
+19: # is the one TERMINAL event the plugin records mechanically, so it is
+20: # the reap point - never an age. Both paths are validated against the
+21: # reviewed repository and the attested head BEFORE the record is
+22: # written, so a refused argument costs nothing (exit 2); they are
+23: # removed AFTER it, so a removal failure leaves the verdict standing
+24: # and says so (exit 3). The removal itself is
+25: # tools/review-tree-removal.ps1, shared with the mirror tool.
+26: #
+27: # PARENT (0.37.0, backlog item 107): both trees must also sit under the
+28: # review mirror parent the round-artifact-roots declaration names,
+29: # read here through tools/artifact-roots.ps1 rather than by a literal
+30: # of this file's own, so that one edit to the row moves every reader.
+31: # The rule is the LAST one in Resolve-ReapPath: every other refusal
+32: # keeps its own message.
+33: param(
+34:     [Parameter(Mandatory = $true)][string]$RepoRoot,
+35:     [Parameter(Mandatory = $true)][string]$BaseSha,
+36:     [Parameter(Mandatory = $true)][string]$HeadSha,
+37:     [Parameter(Mandatory = $true)][ValidateSet("PASS", "FIX", "ESCALATE")][string]$Verdict,
+38:     [Parameter(Mandatory = $true)][int]$Rounds,
+39:     [Parameter(Mandatory = $true)][string]$Participants,
+40:     # Both mandatory, no defaults (Sol diff review 0.6.0): a defaulted
+41:     # success value would let an emitter that never checked the route or
+42:     # the verification status mint a gate-satisfying record.
+43:     [Parameter(Mandatory = $true)][ValidateSet("FULL", "DEGRADED")][string]$VerificationStatus,
+44:     [Parameter(Mandatory = $true)][string]$RouteNote,
+45:     [string]$Mode = "diff",
+46:     # Optional (0.7.0): the application checkpoint that authorized the fix
+47:     # edits inside the attested range (references/application-checkpoint.md).
+48:     # Must live under the checkpoint row of
+49:     # references/model-prompting-notes.md's round-artifact-roots
+50:     # declaration - the verifier re-locates and re-hashes it there, so
+51:     # an artifact anywhere else is unverifiable.
+52:     # When present, the record binds the checkpoint hash AND the
+53:     # emitter-computed changed-path set - never caller-supplied - so an
+54:     # attestation minted for a different change set fails verification.
+55:     [string]$CheckpointFile = "",
+56:     # Optional (0.36.0): the review mirror and the clone bridge to remove
+57:     # once the record is written. See the REAP note in the header.
+58:     [string]$ReapMirror = "",
+59:     [string]$ReapBridge = ""
+60: )
+61: 
+62: . (Join-Path $PSScriptRoot "review-tree-removal.ps1")
+63: 
+64: function Resolve-FullSha($repo, $sha, $label) {
+65:     $full = (& git -C $repo rev-parse --verify --quiet ($sha + "^{commit}") 2>$null | Out-String).Trim()
+73: function Resolve-MirrorParent($repoRoot) {
+74:     # The declared review mirror parent, read through the ONE reader of
+75:     # the round-artifact-roots declaration, tools/artifact-roots.ps1,
+76:     # invoked in-process so its exit reaches $LASTEXITCODE here (the
+77:     # tool's documented $args fallback; measured 2026-09-13 on both
+78:     # hosts). Every failure exits 2 with nothing written: a parent that
+79:     # could not be read is never a parent that accepts everything.
+80:     $tool = Join-Path $PSScriptRoot "artifact-roots.ps1"
+81:     if (-not (Test-Path -LiteralPath $tool -PathType Leaf)) {
+82:         Write-Output "ERROR: the declared review mirror parent could not be read: $tool is missing"
+83:         exit 2
+84:     }
+85:     $lines = @()
+86:     $why = ""
+87:     try {
+88:         $lines = @(& $tool -RepoRoot $repoRoot -Json 2>&1)
+89:     } catch {
+90:         $why = $_.Exception.Message
+91:     }
+92:     $toolExit = $LASTEXITCODE
+93:     $text = (@($lines | ForEach-Object { [string]$_ }) -join "`n")
+94:     if ($why) {
+95:         Write-Output ("ERROR: the declared review mirror parent could not be read: " + $why)
+96:         exit 2
+97:     }
+98:     if ($toolExit -ne 0) {
+99:         Write-Output ("ERROR: the declared review mirror parent could not be read: artifact-roots.ps1 exited " + $toolExit + ": " + $text)
+100:         exit 2
+101:     }
+102:     $row = ""
+103:     try {
+104:         $parsed = ConvertFrom-Json $text
+105:         $row = [string]$parsed.reviewMirror
+106:     } catch {
+107:         $row = ""
+108:     }
+109:     if (-not $row) {
+110:         Write-Output ("ERROR: the declared review mirror parent could not be read: no reviewMirror row in the tool's answer: " + $text)
+111:         exit 2
+112:     }
+113:     $i = $row.IndexOf("<")
+114:     if ($i -le 0) {
+115:         Write-Output ("ERROR: the declared review mirror parent could not be read: the row has no per-debate placeholder (" + $row + ")")
+116:         exit 2
+117:     }
+118:     $parent = $row.Substring(0, $i).Replace("\", "/").TrimEnd("/")
+119:     if ((-not $parent) -or (-not [System.IO.Path]::IsPathRooted($parent))) {
+120:         Write-Output ("ERROR: the declared review mirror parent could not be read: the row is not rooted (" + $row + ")")
+121:         exit 2
+122:     }
+123:     return $parent
+124: }
+125: 
+126: function Resolve-ReapPath($label, $raw, $repoTop, $commonFull, $headFull, $allowRemediation, $mirrorParent) {
+127:     # Returns the resolved full path of a tree this attestation may
+128:     # remove, or prints ERROR and exits 2. Every refusal here runs before
+129:     # the record is written. The rules are the spec's identity guard:
+130:     # rooted and resolvable, not a filesystem root, an existing
+131:     # directory, not through a link, not overlapping the reviewed repo
+132:     # or its common dir, a .git DIRECTORY (a .git FILE is a linked
+133:     # worktree, never a mirror or a bridge), and a HEAD equal to the
+134:     # attested head - or, for the mirror only, one parallax@local
+135:     # remediation commit whose single parent is that head, which is the
+136:     # commit the mirror tool makes over a tracked back-channel. Last of
+137:     # all, under the declared review mirror parent (any depth, never the
+138:     # parent itself), for the mirror and the bridge alike.
+139:     if ([string]::IsNullOrWhiteSpace($raw)) {
+140:         Write-Output "ERROR: $label is empty"
+141:         exit 2
+142:     }
+143:     if (-not [System.IO.Path]::IsPathRooted($raw)) {
+144:         Write-Output "ERROR: $label must be an absolute path ($raw)"
+145:         exit 2
+146:     }
+147:     $full = $null
+148:     try {
+149:         $full = [System.IO.Path]::GetFullPath($raw).TrimEnd("\")
+150:     } catch {
+151:         Write-Output ("ERROR: $label could not be resolved ($raw): " + $_.Exception.Message)
+152:         exit 2
+153:     }
+289: # REAP VALIDATION, before anything is written. Both trees are resolved
+290: # and checked here so a wrong argument is refused at exit 2 with the
+291: # record unwritten, and the removal below runs only against paths this
+292: # block accepted.
+293: $commonFull = [System.IO.Path]::GetFullPath($commonDir).TrimEnd("\")
+294: $reapMirrorFull = $null
+295: $reapBridgeFull = $null
+296: $mirrorParent = $null
+297: # SUPPLIED, not truthy: a parameter that was given on the command line,
+298: # empty or not, always reaches the validation, so an explicitly empty
+299: # value is refused there ("is empty", exit 2) instead of silently
+300: # meaning no reap. A parameter that was not given still means no reap
+301: # and never reads the declaration. Found by the diff debate's round 1
+302: # (2026-09-13); the truthiness form shipped in 0.36.0.
+303: $reapMirrorGiven = $PSBoundParameters.ContainsKey("ReapMirror")
+304: $reapBridgeGiven = $PSBoundParameters.ContainsKey("ReapBridge")
+305: if ($reapMirrorGiven -or $reapBridgeGiven) {
+306:     $mirrorParent = Resolve-MirrorParent $RepoRoot
+307: }
+308: if ($reapMirrorGiven) {
+309:     $reapMirrorFull = Resolve-ReapPath "the reap mirror" $ReapMirror $toplevel $commonFull $headFull $true $mirrorParent
+310: }
+311: if ($reapBridgeGiven) {
+312:     $reapBridgeFull = Resolve-ReapPath "the reap bridge" $ReapBridge $toplevel $commonFull $headFull $false $mirrorParent
+313: }
+314: if ($reapMirrorFull -and $reapBridgeFull) {
+315:     $cmp = [System.StringComparison]::OrdinalIgnoreCase
+316:     $m = $reapMirrorFull.Replace("\", "/").TrimEnd("/") + "/"
+317:     $b = $reapBridgeFull.Replace("\", "/").TrimEnd("/") + "/"
+318:     if ($m.Equals($b, $cmp) -or $m.StartsWith($b, $cmp) -or $b.StartsWith($m, $cmp)) {
+319:         Write-Output ("ERROR: the reap mirror and the reap bridge overlap (" + $reapMirrorFull + ", " + $reapBridgeFull + ") - name two separate trees")
+320:         exit 2
+321:     }
+322: }
+323: 
+324: $attDir = Join-Path (Join-Path $commonDir "parallax") "attestations"
+325: New-Item -ItemType Directory -Force -Path $attDir | Out-Null
+326: 
+327: # Schema 2 (0.7.0): checkpoint_binding is the emitter-authored
+328: # DECLARATION of whether this record carries checkpoint metadata -
+329: # without it, deleting the binding fields would downgrade a bound record
+330: # to legacy-unbound and the verifier could not tell (Sol round 2).
+331: $att = [ordered]@{
+332:     schema              = 2
+333:     repo                = (Split-Path $toplevel -Leaf)
+334:     mode                = $Mode
+335:     base_sha            = $baseFull
+336:     head_sha            = $headFull
+337:     verdict             = $Verdict
+338:     verification_status = $VerificationStatus
+339:     rounds              = $Rounds
+340:     participants        = $Participants
+341:     route_note          = $RouteNote
+342:     checkpoint_binding  = "none"
+343:     stamp               = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss")
+344: }
+345: if ($CheckpointFile) {
+346:     if (-not (Test-Path $CheckpointFile)) {
+347:         Write-Output "ERROR: checkpoint file not found: $CheckpointFile"
+348:         exit 2
+349:     }
+350:     $cpFull = (Resolve-Path $CheckpointFile).Path
+351:     $cpDir = Join-Path (Join-Path $commonDir "parallax") "application-checkpoints"
+352:     $cpDirFull = if (Test-Path $cpDir) { (Resolve-Path $cpDir).Path } else { $null }
+353:     if ((-not $cpDirFull) -or ((Split-Path $cpFull -Parent) -ne $cpDirFull)) {
+354:         Write-Output "ERROR: checkpoint must live under $cpDir - the verifier re-hashes it there"
+355:         exit 2
+356:     }
+357:     $sha = [System.Security.Cryptography.SHA256]::Create()
+358:     $bytes = [System.IO.File]::ReadAllBytes($cpFull)
+359:     $cpHash = ([System.BitConverter]::ToString($sha.ComputeHash($bytes)) -replace '-', '').ToLower()
+360:     $changed = @(& git -C $RepoRoot diff --name-only ($baseFull + ".." + $headFull) 2>$null | Where-Object { $_ })
+361:     if ($LASTEXITCODE -ne 0) {
+362:         Write-Output "ERROR: could not compute the changed-path set for $baseFull..$headFull"
+363:         exit 2
+364:     }
+365:     $att["checkpoint_binding"] = "bound"
+366:     $att["checkpoint_file"] = (Split-Path $CheckpointFile -Leaf)
+367:     $att["checkpoint_hash"] = $cpHash
+368:     $att["changed_paths"] = $changed
+369: }
+370: $outFile = Join-Path $attDir ($headFull + ".json")
+371: $json = $att | ConvertTo-Json -Depth 3
+372: try {
+373:     Set-Content -LiteralPath $outFile -Value $json -Encoding ASCII -NoNewline -ErrorAction Stop
+374: } catch {
+375:     Write-Output ("ERROR: the attestation could not be written to " + $outFile + ": " + $_.Exception.Message + " - nothing was reaped")
+376:     exit 2
+377: }
+378: $writtenText = $null
+379: try {
+380:     $writtenText = [System.IO.File]::ReadAllText($outFile)
+381: } catch {
+382:     $writtenText = $null
+383: }
+384: # Ordinal: -ne is case-insensitive on strings, so it would accept a read-back that differs only in letter case.
+385: if (-not [string]::Equals($writtenText, $json, [System.StringComparison]::Ordinal)) {
+386:     Write-Output ("ERROR: the attestation on disk does not match what was written (" + $outFile + ") - nothing was reaped")
+387:     exit 2
+388: }
+389: Write-Output "attestation written: $outFile ($Verdict, $baseFull..$headFull)"
+390: # THE REAP, after the record and in this order: mirror, its advisory
+391: # sidecar, then the bridge. A failure stops at the first tree that
+392: # could not be removed (exit 3) and leaves the record standing.
+393: if ($reapMirrorFull) {
+394:     $bridgeNote = ""
+395:     if ($reapBridgeFull) { $bridgeNote = "; the bridge was not attempted: " + $reapBridgeFull }
+396:     Invoke-Reap "mirror" $reapMirrorFull $bridgeNote
+397:     # The mirror tool's advisory sibling, `<mirror>.source-manifest`,
+398:     # removed only when it is an ordinary file: a directory or a link
+399:     # there is not the sidecar and is left alone.
+400:     $sidecar = $reapMirrorFull + ".source-manifest"
+401:     $sa = $null
+402:     try {
+403:         $sa = [int][System.IO.File]::GetAttributes($sidecar)
+404:     } catch [System.IO.FileNotFoundException] {
+405:         $sa = $null
+406:     } catch [System.IO.DirectoryNotFoundException] {
+407:         $sa = $null
+408:     } catch {
+409:         Write-Output ("ERROR: reap failed for " + $sidecar + ": the sidecar could not be examined: " +
+410:             $_.Exception.Message + " - the attestation stands; remove the sidecar by hand" + $bridgeNote)
+411:         exit 3
+412:     }
+413:     if (($null -ne $sa) -and
+414:         (($sa -band [int][System.IO.FileAttributes]::Directory) -eq 0) -and
+415:         (($sa -band [int][System.IO.FileAttributes]::ReparsePoint) -eq 0)) {
+416:         try {
+417:             [System.IO.File]::SetAttributes($sidecar, [System.IO.FileAttributes]::Normal)
+418:             [System.IO.File]::Delete($sidecar)
+419:         } catch {
+420:             Write-Output ("ERROR: reap failed for " + $sidecar + ": " + $_.Exception.Message +
+421:                 " - the attestation stands; remove the sidecar by hand" + $bridgeNote)
+422:             exit 3
+423:         }
+424:         # THE POSTCONDITION, read back rather than inferred from the
+425:         # absence of an exception (tools/review-tree-removal.ps1:167-179
+426:         # does the same for the tree root).
+427:         try {
+428:             [void][System.IO.File]::GetAttributes($sidecar)
+429:             Write-Output ("ERROR: reap failed for " + $sidecar + ": the sidecar still exists after removal" +
+430:                 " - the attestation stands; remove the sidecar by hand" + $bridgeNote)
+431:             exit 3
+432:         } catch [System.IO.FileNotFoundException] {
+433:             # gone: fall through to the success line below
+434:         } catch [System.IO.DirectoryNotFoundException] {
+435:             # gone: fall through to the success line below
+436:         } catch {
+437:             Write-Output ("ERROR: reap failed for " + $sidecar + ": the sidecar could not be re-examined after removal: " +
+438:                 $_.Exception.Message + " - the attestation stands; remove the sidecar by hand" + $bridgeNote)
+439:             exit 3
+440:         }
+441:         Write-Output ("reaped sidecar: " + $sidecar)
+442:     }
+443: }
+444: if ($reapBridgeFull) {
+445:     Invoke-Reap "bridge" $reapBridgeFull ""
+446: }
+447: exit 0
+
+ succeeded in 98ms:
+evals/multi-model-verify/test_attestation.py:86:        args += ["-CheckpointFile", str(checkpoint)]
+evals/multi-model-verify/test_attestation.py:243:    """0.7.0: -CheckpointFile binds the application checkpoint's hash and
+evals/multi-model-verify/test_attestation.py:327:        # not read as unbound.
+evals/multi-model-verify/test_attestation.py:335:        del record["checkpoint_binding"]
+evals/multi-model-verify/test_attestation.py:399:        # explicit checkpoint_binding=none declaration and no binding
+evals/multi-model-verify/test_attestation.py:407:        assert record["checkpoint_binding"] == "none"
+evals/multi-model-verify/test_attestation.py:414:        # not downgrade a bound record to unbound - the emitter-authored
+evals/multi-model-verify/test_attestation.py:422:        assert record["checkpoint_binding"] == "bound"
+evals/multi-model-verify/test_attestation.py:438:        del record["checkpoint_binding"]
+evals/multi-model-verify/test_attestation.py:441:        assert v.returncode == 1 and "without checkpoint_binding" in v.stdout
+evals/multi-model-verify/test_attestation.py:452:        record["checkpoint_binding"] = "none"
+evals/multi-model-verify/test_attestation.py:467:        del record["checkpoint_binding"]
+skills/multi-model-verify/references/application-checkpoint.md:82:At attestation time, pass it to the emitter via `-CheckpointFile`: the
+skills/multi-model-verify/references/application-checkpoint.md:93:The `<head>` passed with `-CheckpointFile` is the POST-fix, re-reviewed
+tools/verify-attestation.ps1:83:    # the record is genuinely unbound), else the rejection reason.
+tools/verify-attestation.ps1:95:        # legacy-unbound (Sol round 2, R-F3). The declaration must exist
+tools/verify-attestation.ps1:97:        if (-not ($names -contains "checkpoint_binding")) {
+tools/verify-attestation.ps1:98:            return "schema 2 record without checkpoint_binding - stale or tampered; re-review"
+tools/verify-attestation.ps1:100:        if ($att.checkpoint_binding -eq "none") {
+tools/verify-attestation.ps1:102:                return "checkpoint_binding=none but binding fields present - stale or tampered; re-review"
+tools/verify-attestation.ps1:106:        if ($att.checkpoint_binding -cne "bound") {
+tools/verify-attestation.ps1:107:            return "unknown checkpoint_binding '$($att.checkpoint_binding)' - stale or tampered; re-review"
+tools/verify-attestation.ps1:110:            return "checkpoint_binding=bound but binding fields missing - stale or tampered; re-review"
+
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command 'git status --short; git log -2 --oneline; git diff ecd4362..HEAD -- tools/write-attestation.ps1 evals/multi-model-verify/test_mirror_reaper.py docs/superpowers/plans/2026-09-13-mirror-parent.md' in C:\pxm\pxmp
+hook: PostToolUse
+hook: PostToolUse
+ succeeded in 156ms:
+f073752 refuse an explicitly empty reap argument instead of reading it as no reap, and drive both parameters on both hosts
+ecd4362 correct the plan's decision 6 command line in place after the fable fix-wave re-review
+diff --git a/docs/superpowers/plans/2026-09-13-mirror-parent.md b/docs/superpowers/plans/2026-09-13-mirror-parent.md
+index dea7191..e53d031 100644
+--- a/docs/superpowers/plans/2026-09-13-mirror-parent.md
++++ b/docs/superpowers/plans/2026-09-13-mirror-parent.md
+@@ -583,6 +583,8 @@ if ($ReapBridge) {
+ }
+ ```
+ 
++[Corrected 2026-09-13 by the diff debate's round 1: the three truthiness tests above let an explicitly empty `-ReapMirror ""` or `-ReapBridge ""` skip validation and write the record with no reap; the branch tests `$PSBoundParameters.ContainsKey(...)` instead, so a supplied value always reaches the validation, and a test per parameter drives the refusal on both hosts.]
++
+ - [ ] **Step 3: Run the module under both hosts**
+ 
+ ```powershell
+diff --git a/evals/multi-model-verify/test_mirror_reaper.py b/evals/multi-model-verify/test_mirror_reaper.py
+index 7a9a4a7..e4a5587 100644
+--- a/evals/multi-model-verify/test_mirror_reaper.py
++++ b/evals/multi-model-verify/test_mirror_reaper.py
+@@ -715,6 +715,27 @@ def test_a_roots_tool_that_exits_nonzero_refuses_every_reap(tmp_path, pxm):
+     assert mirror.exists()
+ 
+ 
++@pytest.mark.parametrize("flag", ["-ReapMirror", "-ReapBridge"])
++def test_an_explicitly_empty_reap_argument_is_refused_not_ignored(tmp_path, flag):
++    # `-ReapMirror ""` binds an empty string. A truthiness entry test read
++    # that as "no reap" and wrote the record with nothing reaped and no
++    # error (0.36.0; found by the diff debate's round 1). A parameter that
++    # was SUPPLIED always reaches the validation, where the empty value is
++    # refused before the record is written.
++    repo, base, head = make_repo(tmp_path)
++    mirror = make_mirror(repo, tmp_path / "kv-t")
++    args = [WRITE, "-RepoRoot", str(repo), "-BaseSha", base, "-HeadSha", head,
++            "-Verdict", "PASS", "-VerificationStatus", "FULL",
++            "-RouteNote", "effective route confirmed", "-Rounds", "1",
++            "-Participants", "session/reviewer", flag, ""]
++    proc = run_ps(*args)
++    assert proc.returncode == 2, proc.stdout + proc.stderr
++    label = "the reap mirror" if flag == "-ReapMirror" else "the reap bridge"
++    assert ("ERROR: " + label + " is empty") in proc.stdout, proc.stdout
++    assert not att_file(repo, head).exists(), "an empty reap argument must not write the record"
++    assert mirror.exists()
++
++
+ # ---------------------------------------------------------------------
+ # Group 6: diff debate round 1 (Astra, R1-3a and R1-8)
+ # ---------------------------------------------------------------------
+diff --git a/tools/write-attestation.ps1 b/tools/write-attestation.ps1
+index 3d90f98..f8cc95a 100644
+--- a/tools/write-attestation.ps1
++++ b/tools/write-attestation.ps1
+@@ -294,15 +294,21 @@ $commonFull = [System.IO.Path]::GetFullPath($commonDir).TrimEnd("\")
+ $reapMirrorFull = $null
+ $reapBridgeFull = $null
+ $mirrorParent = $null
+-if ($ReapMirror -or $ReapBridge) {
+-    # Read once, and only when a tree is named: an emitter run without a
+-    # reap parameter never touches the declaration.
++# SUPPLIED, not truthy: a parameter that was given on the command line,
++# empty or not, always reaches the validation, so an explicitly empty
++# value is refused there ("is empty", exit 2) instead of silently
++# meaning no reap. A parameter that was not given still means no reap
++# and never reads the declaration. Found by the diff debate's round 1
++# (2026-09-13); the truthiness form shipped in 0.36.0.
++$reapMirrorGiven = $PSBoundParameters.ContainsKey("ReapMirror")
++$reapBridgeGiven = $PSBoundParameters.ContainsKey("ReapBridge")
++if ($reapMirrorGiven -or $reapBridgeGiven) {
+     $mirrorParent = Resolve-MirrorParent $RepoRoot
+ }
+-if ($ReapMirror) {
++if ($reapMirrorGiven) {
+     $reapMirrorFull = Resolve-ReapPath "the reap mirror" $ReapMirror $toplevel $commonFull $headFull $true $mirrorParent
+ }
+-if ($ReapBridge) {
++if ($reapBridgeGiven) {
+     $reapBridgeFull = Resolve-ReapPath "the reap bridge" $ReapBridge $toplevel $commonFull $headFull $false $mirrorParent
+ }
+ if ($reapMirrorFull -and $reapBridgeFull) {
+
+hook: PostToolUse
+hook: PostToolUse Completed
+hook: PostToolUse Completed
+hook: PostToolUse Completed
+hook: PreToolUse
+hook: PreToolUse
+hook: PreToolUse
+hook: PreToolUse
+hook: PreToolUse
+hook: PreToolUse
+hook: PreToolUse Completed
+hook: PreToolUse Completed
+hook: PreToolUse Completed
+hook: PreToolUse Completed
+hook: PreToolUse Completed
+hook: PreToolUse Completed
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command 'pwsh.exe -NoProfile -EncodedCommand JABzAHIAYwA9AEcAZQB0AC0AQwBvAG4AdABlAG4AdAAgAC0ATABpAHQAZQByAGEAbABQAGEAdABoACAAdABvAG8AbABzAC8AdwByAGkAdABlAC0AYQB0AHQAZQBzAHQAYQB0AGkAbwBuAC4AcABzADEAIAAtAFIAYQB3ADsAIAAkAHQAbwBrAGUAbgBzAD0AJABuAHUAbABsADsAIAAkAHAAYQByAHMAZQBFAHIAcgBvAHIAcwA9ACQAbgB1AGwAbAA7ACAAJABhAHMAdAA9AFsAUwB5AHMAdABlAG0ALgBNAGEAbgBhAGcAZQBtAGUAbgB0AC4AQQB1AHQAbwBtAGEAdABpAG8AbgAuAEwAYQBuAGcAdQBhAGcAZQAuAFAAYQByAHMAZQByAF0AOgA6AFAAYQByAHMAZQBJAG4AcAB1AHQAKAAkAHMAcgBjACwAWwByAGUAZgBdACQAdABvAGsAZQBuAHMALABbAHIAZQBmAF0AJABwAGEAcgBzAGUARQByAHIAbwByAHMAKQA7ACAAJABmAG4APQAkAGEAcwB0AC4ARgBpAG4AZAAoAHsAcABhAHIAYQBtACgAJABuAG8AZABlACkAIAAkAG4AbwBkAGUAIAAtAGkAcwAgAFsAUwB5AHMAdABlAG0ALgBNAGEAbgBhAGcAZQBtAGUAbgB0AC4AQQB1AHQAbwBtAGEAdABpAG8AbgAuAEwAYQBuAGcAdQBhAGcAZQAuAEYAdQBuAGMAdABpAG8AbgBEAGUAZgBpAG4AaQB0AGkAbwBuAEEAcwB0AF0AIAAtAGEAbgBkACAAJABuAG8AZABlAC4ATgBhAG0AZQAgAC0AZQBxACAAJwBSAGUAcwBvAGwAdgBlAC0AUgBlAGEAcABQAGEAdABoACcAfQAsACQAdAByAHUAZQApAC4ARQB4AHQAZQBuAHQALgBUAGUAeAB0ADsAIAAkAHMAdABhAHIAdAA9ACQAcwByAGMALgBJAG4AZABlAHgATwBmACgAJwAkAHIAZQBhAHAATQBpAHIAcgBvAHIARgB1AGwAbAAgAD0AIAAkAG4AdQBsAGwAJwApADsAIAAkAGUAbgBkAD0AJABzAHIAYwAuAEkAbgBkAGUAeABPAGYAKAAnAGkAZgAgACgAJAByAGUAYQBwAE0AaQByAHIAbwByAEYAdQBsAGwAIAAtAGEAbgBkACAAJAByAGUAYQBwAEIAcgBpAGQAZwBlAEYAdQBsAGwAKQAnACkAOwAgACQAcAByAG8AYgBlAD0AWwBzAGMAcgBpAHAAdABiAGwAbwBjAGsAXQA6ADoAQwByAGUAYQB0AGUAKAAkAGEAcwB0AC4AUABhAHIAYQBtAEIAbABvAGMAawAuAEUAeAB0AGUAbgB0AC4AVABlAHgAdAAgACsAIAAiAGAAbgBmAHUAbgBjAHQAaQBvAG4AIABSAGUAcwBvAGwAdgBlAC0ATQBpAHIAcgBvAHIAUABhAHIAZQBuAHQAIAB7ACAAVwByAGkAdABlAC0ASABvAHMAdAAgACcAcABhAHIAZQBuAHQAIAByAGUAYQBkAGUAcgAgAHIAZQBhAGMAaABlAGQAJwA7ACAAcgBlAHQAdQByAG4AIAAnAEMAOgAvAHAAeABtACcAIAB9AGAAbgAiACAAKwAgACQAZgBuACAAKwAgACIAYABuACIAIAArACAAJABzAHIAYwAuAFMAdQBiAHMAdAByAGkAbgBnACgAJABzAHQAYQByAHQALAAkAGUAbgBkAC0AJABzAHQAYQByAHQAKQAgACsAIAAiAGAAbgBXAHIAaQB0AGUALQBPAHUAdABwAHUAdAAgACcAdgBhAGwAaQBkAGEAdABpAG8AbgAgAGMAbwBtAHAAbABlAHQAZQBkADsAIABuAG8AIAByAGUAYwBvAHIAZAAgAG8AcgAgAHIAZQBtAG8AdgBhAGwAIABjAG8AZABlACAAaQBuAGMAbAB1AGQAZQBkACcAIgApADsAIAAmACAAJABwAHIAbwBiAGUAIAAtAFIAZQBwAG8AUgBvAG8AdAAgAHUAbgB1AHMAZQBkACAALQBCAGEAcwBlAFMAaABhACAAdQBuAHUAcwBlAGQAIAAtAEgAZQBhAGQAUwBoAGEAIAB1AG4AdQBzAGUAZAAgAC0AVgBlAHIAZABpAGMAdAAgAFAAQQBTAFMAIAAtAFIAbwB1AG4AZABzACAAMQAgAC0AUABhAHIAdABpAGMAaQBwAGEAbgB0AHMAIAByAGUAdgBpAGUAdwAgAC0AVgBlAHIAaQBmAGkAYwBhAHQAaQBvAG4AUwB0AGEAdAB1AHMAIABGAFUATABMACAALQBSAG8AdQB0AGUATgBvAHQAZQAgAHIAZQB2AGkAZQB3ACAALQBSAGUAYQBwAE0AaQByAHIAbwByACAAJwAnAA==' in C:\pxm\pxmp
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command 'powershell.exe -NoProfile -EncodedCommand JABzAHIAYwA9AEcAZQB0AC0AQwBvAG4AdABlAG4AdAAgAC0ATABpAHQAZQByAGEAbABQAGEAdABoACAAdABvAG8AbABzAC8AdwByAGkAdABlAC0AYQB0AHQAZQBzAHQAYQB0AGkAbwBuAC4AcABzADEAIAAtAFIAYQB3ADsAIAAkAHQAbwBrAGUAbgBzAD0AJABuAHUAbABsADsAIAAkAHAAYQByAHMAZQBFAHIAcgBvAHIAcwA9ACQAbgB1AGwAbAA7ACAAJABhAHMAdAA9AFsAUwB5AHMAdABlAG0ALgBNAGEAbgBhAGcAZQBtAGUAbgB0AC4AQQB1AHQAbwBtAGEAdABpAG8AbgAuAEwAYQBuAGcAdQBhAGcAZQAuAFAAYQByAHMAZQByAF0AOgA6AFAAYQByAHMAZQBJAG4AcAB1AHQAKAAkAHMAcgBjACwAWwByAGUAZgBdACQAdABvAGsAZQBuAHMALABbAHIAZQBmAF0AJABwAGEAcgBzAGUARQByAHIAbwByAHMAKQA7ACAAJABmAG4APQAkAGEAcwB0AC4ARgBpAG4AZAAoAHsAcABhAHIAYQBtACgAJABuAG8AZABlACkAIAAkAG4AbwBkAGUAIAAtAGkAcwAgAFsAUwB5AHMAdABlAG0ALgBNAGEAbgBhAGcAZQBtAGUAbgB0AC4AQQB1AHQAbwBtAGEAdABpAG8AbgAuAEwAYQBuAGcAdQBhAGcAZQAuAEYAdQBuAGMAdABpAG8AbgBEAGUAZgBpAG4AaQB0AGkAbwBuAEEAcwB0AF0AIAAtAGEAbgBkACAAJABuAG8AZABlAC4ATgBhAG0AZQAgAC0AZQBxACAAJwBSAGUAcwBvAGwAdgBlAC0AUgBlAGEAcABQAGEAdABoACcAfQAsACQAdAByAHUAZQApAC4ARQB4AHQAZQBuAHQALgBUAGUAeAB0ADsAIAAkAHMAdABhAHIAdAA9ACQAcwByAGMALgBJAG4AZABlAHgATwBmACgAJwAkAHIAZQBhAHAATQBpAHIAcgBvAHIARgB1AGwAbAAgAD0AIAAkAG4AdQBsAGwAJwApADsAIAAkAGUAbgBkAD0AJABzAHIAYwAuAEkAbgBkAGUAeABPAGYAKAAnAGkAZgAgACgAJAByAGUAYQBwAE0AaQByAHIAbwByAEYAdQBsAGwAIAAtAGEAbgBkACAAJAByAGUAYQBwAEIAcgBpAGQAZwBlAEYAdQBsAGwAKQAnACkAOwAgACQAcAByAG8AYgBlAD0AWwBzAGMAcgBpAHAAdABiAGwAbwBjAGsAXQA6ADoAQwByAGUAYQB0AGUAKAAkAGEAcwB0AC4AUABhAHIAYQBtAEIAbABvAGMAawAuAEUAeAB0AGUAbgB0AC4AVABlAHgAdAAgACsAIAAiAGAAbgBmAHUAbgBjAHQAaQBvAG4AIABSAGUAcwBvAGwAdgBlAC0ATQBpAHIAcgBvAHIAUABhAHIAZQBuAHQAIAB7ACAAVwByAGkAdABlAC0ASABvAHMAdAAgACcAcABhAHIAZQBuAHQAIAByAGUAYQBkAGUAcgAgAHIAZQBhAGMAaABlAGQAJwA7ACAAcgBlAHQAdQByAG4AIAAnAEMAOgAvAHAAeABtACcAIAB9AGAAbgAiACAAKwAgACQAZgBuACAAKwAgACIAYABuACIAIAArACAAJABzAHIAYwAuAFMAdQBiAHMAdAByAGkAbgBnACgAJABzAHQAYQByAHQALAAkAGUAbgBkAC0AJABzAHQAYQByAHQAKQAgACsAIAAiAGAAbgBXAHIAaQB0AGUALQBPAHUAdABwAHUAdAAgACcAdgBhAGwAaQBkAGEAdABpAG8AbgAgAGMAbwBtAHAAbABlAHQAZQBkADsAIABuAG8AIAByAGUAYwBvAHIAZAAgAG8AcgAgAHIAZQBtAG8AdgBhAGwAIABjAG8AZABlACAAaQBuAGMAbAB1AGQAZQBkACcAIgApADsAIAAmACAAJABwAHIAbwBiAGUAIAAtAFIAZQBwAG8AUgBvAG8AdAAgAHUAbgB1AHMAZQBkACAALQBCAGEAcwBlAFMAaABhACAAdQBuAHUAcwBlAGQAIAAtAEgAZQBhAGQAUwBoAGEAIAB1AG4AdQBzAGUAZAAgAC0AVgBlAHIAZABpAGMAdAAgAFAAQQBTAFMAIAAtAFIAbwB1AG4AZABzACAAMQAgAC0AUABhAHIAdABpAGMAaQBwAGEAbgB0AHMAIAByAGUAdgBpAGUAdwAgAC0AVgBlAHIAaQBmAGkAYwBhAHQAaQBvAG4AUwB0AGEAdAB1AHMAIABGAFUATABMACAALQBSAG8AdQB0AGUATgBvAHQAZQAgAHIAZQB2AGkAZQB3ACAALQBSAGUAYQBwAEIAcgBpAGQAZwBlACAAJwAnAA==' in C:\pxm\pxmp
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command 'pwsh.exe -NoProfile -EncodedCommand JABzAHIAYwA9AEcAZQB0AC0AQwBvAG4AdABlAG4AdAAgAC0ATABpAHQAZQByAGEAbABQAGEAdABoACAAdABvAG8AbABzAC8AdwByAGkAdABlAC0AYQB0AHQAZQBzAHQAYQB0AGkAbwBuAC4AcABzADEAIAAtAFIAYQB3ADsAIAAkAHQAbwBrAGUAbgBzAD0AJABuAHUAbABsADsAIAAkAHAAYQByAHMAZQBFAHIAcgBvAHIAcwA9ACQAbgB1AGwAbAA7ACAAJABhAHMAdAA9AFsAUwB5AHMAdABlAG0ALgBNAGEAbgBhAGcAZQBtAGUAbgB0AC4AQQB1AHQAbwBtAGEAdABpAG8AbgAuAEwAYQBuAGcAdQBhAGcAZQAuAFAAYQByAHMAZQByAF0AOgA6AFAAYQByAHMAZQBJAG4AcAB1AHQAKAAkAHMAcgBjACwAWwByAGUAZgBdACQAdABvAGsAZQBuAHMALABbAHIAZQBmAF0AJABwAGEAcgBzAGUARQByAHIAbwByAHMAKQA7ACAAJABmAG4APQAkAGEAcwB0AC4ARgBpAG4AZAAoAHsAcABhAHIAYQBtACgAJABuAG8AZABlACkAIAAkAG4AbwBkAGUAIAAtAGkAcwAgAFsAUwB5AHMAdABlAG0ALgBNAGEAbgBhAGcAZQBtAGUAbgB0AC4AQQB1AHQAbwBtAGEAdABpAG8AbgAuAEwAYQBuAGcAdQBhAGcAZQAuAEYAdQBuAGMAdABpAG8AbgBEAGUAZgBpAG4AaQB0AGkAbwBuAEEAcwB0AF0AIAAtAGEAbgBkACAAJABuAG8AZABlAC4ATgBhAG0AZQAgAC0AZQBxACAAJwBSAGUAcwBvAGwAdgBlAC0AUgBlAGEAcABQAGEAdABoACcAfQAsACQAdAByAHUAZQApAC4ARQB4AHQAZQBuAHQALgBUAGUAeAB0ADsAIAAkAHMAdABhAHIAdAA9ACQAcwByAGMALgBJAG4AZABlAHgATwBmACgAJwAkAHIAZQBhAHAATQBpAHIAcgBvAHIARgB1AGwAbAAgAD0AIAAkAG4AdQBsAGwAJwApADsAIAAkAGUAbgBkAD0AJABzAHIAYwAuAEkAbgBkAGUAeABPAGYAKAAnAGkAZgAgACgAJAByAGUAYQBwAE0AaQByAHIAbwByAEYAdQBsAGwAIAAtAGEAbgBkACAAJAByAGUAYQBwAEIAcgBpAGQAZwBlAEYAdQBsAGwAKQAnACkAOwAgACQAcAByAG8AYgBlAD0AWwBzAGMAcgBpAHAAdABiAGwAbwBjAGsAXQA6ADoAQwByAGUAYQB0AGUAKAAkAGEAcwB0AC4AUABhAHIAYQBtAEIAbABvAGMAawAuAEUAeAB0AGUAbgB0AC4AVABlAHgAdAAgACsAIAAiAGAAbgBmAHUAbgBjAHQAaQBvAG4AIABSAGUAcwBvAGwAdgBlAC0ATQBpAHIAcgBvAHIAUABhAHIAZQBuAHQAIAB7ACAAVwByAGkAdABlAC0ASABvAHMAdAAgACcAcABhAHIAZQBuAHQAIAByAGUAYQBkAGUAcgAgAHIAZQBhAGMAaABlAGQAJwA7ACAAcgBlAHQAdQByAG4AIAAnAEMAOgAvAHAAeABtACcAIAB9AGAAbgAiACAAKwAgACQAZgBuACAAKwAgACIAYABuACIAIAArACAAJABzAHIAYwAuAFMAdQBiAHMAdAByAGkAbgBnACgAJABzAHQAYQByAHQALAAkAGUAbgBkAC0AJABzAHQAYQByAHQAKQAgACsAIAAiAGAAbgBXAHIAaQB0AGUALQBPAHUAdABwAHUAdAAgACcAdgBhAGwAaQBkAGEAdABpAG8AbgAgAGMAbwBtAHAAbABlAHQAZQBkADsAIABuAG8AIAByAGUAYwBvAHIAZAAgAG8AcgAgAHIAZQBtAG8AdgBhAGwAIABjAG8AZABlACAAaQBuAGMAbAB1AGQAZQBkACcAIgApADsAIAAmACAAJABwAHIAbwBiAGUAIAAtAFIAZQBwAG8AUgBvAG8AdAAgAHUAbgB1AHMAZQBkACAALQBCAGEAcwBlAFMAaABhACAAdQBuAHUAcwBlAGQAIAAtAEgAZQBhAGQAUwBoAGEAIAB1AG4AdQBzAGUAZAAgAC0AVgBlAHIAZABpAGMAdAAgAFAAQQBTAFMAIAAtAFIAbwB1AG4AZABzACAAMQAgAC0AUABhAHIAdABpAGMAaQBwAGEAbgB0AHMAIAByAGUAdgBpAGUAdwAgAC0AVgBlAHIAaQBmAGkAYwBhAHQAaQBvAG4AUwB0AGEAdAB1AHMAIABGAFUATABMACAALQBSAG8AdQB0AGUATgBvAHQAZQAgAHIAZQB2AGkAZQB3ACAA' in C:\pxm\pxmp
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command 'pwsh.exe -NoProfile -EncodedCommand JABzAHIAYwA9AEcAZQB0AC0AQwBvAG4AdABlAG4AdAAgAC0ATABpAHQAZQByAGEAbABQAGEAdABoACAAdABvAG8AbABzAC8AdwByAGkAdABlAC0AYQB0AHQAZQBzAHQAYQB0AGkAbwBuAC4AcABzADEAIAAtAFIAYQB3ADsAIAAkAHQAbwBrAGUAbgBzAD0AJABuAHUAbABsADsAIAAkAHAAYQByAHMAZQBFAHIAcgBvAHIAcwA9ACQAbgB1AGwAbAA7ACAAJABhAHMAdAA9AFsAUwB5AHMAdABlAG0ALgBNAGEAbgBhAGcAZQBtAGUAbgB0AC4AQQB1AHQAbwBtAGEAdABpAG8AbgAuAEwAYQBuAGcAdQBhAGcAZQAuAFAAYQByAHMAZQByAF0AOgA6AFAAYQByAHMAZQBJAG4AcAB1AHQAKAAkAHMAcgBjACwAWwByAGUAZgBdACQAdABvAGsAZQBuAHMALABbAHIAZQBmAF0AJABwAGEAcgBzAGUARQByAHIAbwByAHMAKQA7ACAAJABmAG4APQAkAGEAcwB0AC4ARgBpAG4AZAAoAHsAcABhAHIAYQBtACgAJABuAG8AZABlACkAIAAkAG4AbwBkAGUAIAAtAGkAcwAgAFsAUwB5AHMAdABlAG0ALgBNAGEAbgBhAGcAZQBtAGUAbgB0AC4AQQB1AHQAbwBtAGEAdABpAG8AbgAuAEwAYQBuAGcAdQBhAGcAZQAuAEYAdQBuAGMAdABpAG8AbgBEAGUAZgBpAG4AaQB0AGkAbwBuAEEAcwB0AF0AIAAtAGEAbgBkACAAJABuAG8AZABlAC4ATgBhAG0AZQAgAC0AZQBxACAAJwBSAGUAcwBvAGwAdgBlAC0AUgBlAGEAcABQAGEAdABoACcAfQAsACQAdAByAHUAZQApAC4ARQB4AHQAZQBuAHQALgBUAGUAeAB0ADsAIAAkAHMAdABhAHIAdAA9ACQAcwByAGMALgBJAG4AZABlAHgATwBmACgAJwAkAHIAZQBhAHAATQBpAHIAcgBvAHIARgB1AGwAbAAgAD0AIAAkAG4AdQBsAGwAJwApADsAIAAkAGUAbgBkAD0AJABzAHIAYwAuAEkAbgBkAGUAeABPAGYAKAAnAGkAZgAgACgAJAByAGUAYQBwAE0AaQByAHIAbwByAEYAdQBsAGwAIAAtAGEAbgBkACAAJAByAGUAYQBwAEIAcgBpAGQAZwBlAEYAdQBsAGwAKQAnACkAOwAgACQAcAByAG8AYgBlAD0AWwBzAGMAcgBpAHAAdABiAGwAbwBjAGsAXQA6ADoAQwByAGUAYQB0AGUAKAAkAGEAcwB0AC4AUABhAHIAYQBtAEIAbABvAGMAawAuAEUAeAB0AGUAbgB0AC4AVABlAHgAdAAgACsAIAAiAGAAbgBmAHUAbgBjAHQAaQBvAG4AIABSAGUAcwBvAGwAdgBlAC0ATQBpAHIAcgBvAHIAUABhAHIAZQBuAHQAIAB7ACAAVwByAGkAdABlAC0ASABvAHMAdAAgACcAcABhAHIAZQBuAHQAIAByAGUAYQBkAGUAcgAgAHIAZQBhAGMAaABlAGQAJwA7ACAAcgBlAHQAdQByAG4AIAAnAEMAOgAvAHAAeABtACcAIAB9AGAAbgAiACAAKwAgACQAZgBuACAAKwAgACIAYABuACIAIAArACAAJABzAHIAYwAuAFMAdQBiAHMAdAByAGkAbgBnACgAJABzAHQAYQByAHQALAAkAGUAbgBkAC0AJABzAHQAYQByAHQAKQAgACsAIAAiAGAAbgBXAHIAaQB0AGUALQBPAHUAdABwAHUAdAAgACcAdgBhAGwAaQBkAGEAdABpAG8AbgAgAGMAbwBtAHAAbABlAHQAZQBkADsAIABuAG8AIAByAGUAYwBvAHIAZAAgAG8AcgAgAHIAZQBtAG8AdgBhAGwAIABjAG8AZABlACAAaQBuAGMAbAB1AGQAZQBkACcAIgApADsAIAAmACAAJABwAHIAbwBiAGUAIAAtAFIAZQBwAG8AUgBvAG8AdAAgAHUAbgB1AHMAZQBkACAALQBCAGEAcwBlAFMAaABhACAAdQBuAHUAcwBlAGQAIAAtAEgAZQBhAGQAUwBoAGEAIAB1AG4AdQBzAGUAZAAgAC0AVgBlAHIAZABpAGMAdAAgAFAAQQBTAFMAIAAtAFIAbwB1AG4AZABzACAAMQAgAC0AUABhAHIAdABpAGMAaQBwAGEAbgB0AHMAIAByAGUAdgBpAGUAdwAgAC0AVgBlAHIAaQBmAGkAYwBhAHQAaQBvAG4AUwB0AGEAdAB1AHMAIABGAFUATABMACAALQBSAG8AdQB0AGUATgBvAHQAZQAgAHIAZQB2AGkAZQB3ACAALQBSAGUAYQBwAEIAcgBpAGQAZwBlACAAJwAnAA==' in C:\pxm\pxmp
+ exited 1 in 542ms:
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 2.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Root element is missing.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 2.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 2.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 2.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 2.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 2.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Root element is missing.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 2.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Root element is missing.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 2.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Root element is missing.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 2.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 2.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Root element is missing.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 2.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Root element is missing.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Root element is missing.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Root element is missing.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Root element is missing.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 4.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Root element is missing.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Root element is missing.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Root element is missing.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+1. The bypass is closed for both reap parameters. [tools/write-attestation.ps1:303](C:/pxm/pxmp/tools/write-attestation.ps1:303) now tests parameter presence, routing supplied empty values to the refusal at `:139–141`, before record-directory creation at `:324–325`. Omitted parameters skip the parent reader. Isolated probes confirmed both branches and omission behavior on both hosts. The new regression covers both flags and checks the diagnostic, absent record, and surviving tree at [evals/multi-model-verify/test_mirror_reaper.py:718](C:/pxm/pxmp/evals/multi-model-verify/test_mirror_reaper.py:718). **PASS.**
+
+2. The dated correction explicitly supersedes the preceding truthiness checks at [docs/superpowers/plans/2026-09-13-mirror-parent.md:586](C:/pxm/pxmp/docs/superpowers/plans/2026-09-13-mirror-parent.md:586). Git diff confirms this paragraph is the commit’s only plan change. **PASS.**
+
+3. The supplied gate results remain independently **UNVERIFIED**. The committed test establishes the expected exit and postconditions (`evals/multi-model-verify/test_mirror_reaper.py:732–736`), but does not establish execution results at either reported head. No gate logs were supplied as readable artifacts. **ESCALATE for gate evidence only.**
+
+4. `-CheckpointFile ""` has the same supplied-empty shape: the optional parameter defaults to empty, and `if ($CheckpointFile)` skips binding, leaving `checkpoint_binding = "none"` (`tools/write-attestation.ps1:55,342–345`). This matters if the caller intended to bind a checkpoint: [skills/multi-model-verify/references/application-checkpoint.md:82](C:/pxm/pxmp/skills/multi-model-verify/references/application-checkpoint.md:82) requires that binding, while [tools/verify-attestation.ps1:100](C:/pxm/pxmp/tools/verify-attestation.ps1:100) accepts an unbound record without checkpoint fields.
+
+   Name **explicitly empty checkpoint arguments silently omit binding** as a separate follow-up: distinguish omission from an explicitly empty checkpoint argument and test its refusal. This pre-existing checkpoint-binding condition falls outside the declared parent-read/reap-validation certification surface. No other supplied-empty-as-absent entry condition surfaced; mandatory strings use parameter binding, and `Mode` is stored directly (`tools/write-attestation.ps1:34–59,334`). **PASS on this commit’s class sweep, with the named follow-up.**
+
+**UNVERIFIED:** Claim 1’s reported RED/GREEN runs and 146-pass counts; claim 3’s historical and pending gates. The read-only sandbox prevented disposable-repository emitter runs. The isolated command harness reached the expected refusals but returned host exit 1; it verifies branch reachability, not the production `-File` exit-2 mapping.
+
+No file content caused a pause, refusal, or change of scope.
+
+**Range a48c35f..f073752: PASS.** The round-1 finding is addressed at `tools/write-attestation.ps1:303–312`; full-gate execution remains unverified here.
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+
+node.exe: C:\Users\Brandon\AppData\Local\npm-global\codex.ps1:22
+Line |
+  22 |  …    $input | & "node$exe"  "$basedir/node_modules/@openai/codex/bin/co …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot process the XML from the 'Error' stream of 'C:\Program Files\nodejs\node.exe': Data at the root level is
+     | invalid. Line 1, position 1.
+

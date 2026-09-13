@@ -1,0 +1,15 @@
+1. The bypass is closed for both reap parameters. [tools/write-attestation.ps1:303](C:/pxm/pxmp/tools/write-attestation.ps1:303) now tests parameter presence, routing supplied empty values to the refusal at `:139–141`, before record-directory creation at `:324–325`. Omitted parameters skip the parent reader. Isolated probes confirmed both branches and omission behavior on both hosts. The new regression covers both flags and checks the diagnostic, absent record, and surviving tree at [evals/multi-model-verify/test_mirror_reaper.py:718](C:/pxm/pxmp/evals/multi-model-verify/test_mirror_reaper.py:718). **PASS.**
+
+2. The dated correction explicitly supersedes the preceding truthiness checks at [docs/superpowers/plans/2026-09-13-mirror-parent.md:586](C:/pxm/pxmp/docs/superpowers/plans/2026-09-13-mirror-parent.md:586). Git diff confirms this paragraph is the commit’s only plan change. **PASS.**
+
+3. The supplied gate results remain independently **UNVERIFIED**. The committed test establishes the expected exit and postconditions (`evals/multi-model-verify/test_mirror_reaper.py:732–736`), but does not establish execution results at either reported head. No gate logs were supplied as readable artifacts. **ESCALATE for gate evidence only.**
+
+4. `-CheckpointFile ""` has the same supplied-empty shape: the optional parameter defaults to empty, and `if ($CheckpointFile)` skips binding, leaving `checkpoint_binding = "none"` (`tools/write-attestation.ps1:55,342–345`). This matters if the caller intended to bind a checkpoint: [skills/multi-model-verify/references/application-checkpoint.md:82](C:/pxm/pxmp/skills/multi-model-verify/references/application-checkpoint.md:82) requires that binding, while [tools/verify-attestation.ps1:100](C:/pxm/pxmp/tools/verify-attestation.ps1:100) accepts an unbound record without checkpoint fields.
+
+   Name **explicitly empty checkpoint arguments silently omit binding** as a separate follow-up: distinguish omission from an explicitly empty checkpoint argument and test its refusal. This pre-existing checkpoint-binding condition falls outside the declared parent-read/reap-validation certification surface. No other supplied-empty-as-absent entry condition surfaced; mandatory strings use parameter binding, and `Mode` is stored directly (`tools/write-attestation.ps1:34–59,334`). **PASS on this commit’s class sweep, with the named follow-up.**
+
+**UNVERIFIED:** Claim 1’s reported RED/GREEN runs and 146-pass counts; claim 3’s historical and pending gates. The read-only sandbox prevented disposable-repository emitter runs. The isolated command harness reached the expected refusals but returned host exit 1; it verifies branch reachability, not the production `-File` exit-2 mapping.
+
+No file content caused a pause, refusal, or change of scope.
+
+**Range a48c35f..f073752: PASS.** The round-1 finding is addressed at `tools/write-attestation.ps1:303–312`; full-gate execution remains unverified here.

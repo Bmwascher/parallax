@@ -871,3 +871,38 @@ git commit -m "name the declared mirror parent in the doctor inventory and the s
 - Follow-ups 1 and 3 of item 107, the plan-mode terminal event, and the KitnEssentials memory edit (consumer side, after the release).
 - Deleting the eight `C:\kv-bl-*` / `kvs-bl-*` directories and the three pre-existing directories under `C:\pxm`.
 - Making `tools/new-review-mirror.ps1` refuse a path outside the parent (decision 6).
+
+---
+
+## Debate record (mode diff)
+
+**Participants:** Opus 5 (session) / GPT-6 Astra (codex exec, session 01a09cd0-9e7d-7742-979e-6afe464c28c3, resumed across all rounds)
+**Range:** a48c35f..f073752 at close (branch mirror-parent; R1 reviewed a48c35f..ecd4362); fable-reviewer whole-branch review on a48c35f..2df3d45, retained
+**Rounds used:** 3 of 4 (declared 4; all counted, all bound clean and sealed; none void; the third a confirming round)
+**Outcome:** converged
+**Verification status:** FULL
+**Degradation:** none
+**Authorized by:** user, 2026-09-13 ("Small branch off main: declare a fixed short parent for review mirrors, C:\pxm\<tag>, and make every reader use it, per the handoff. Fable review, then the mode-diff debate, pytest on both PowerShell hosts.")
+**Attestation:** PASS at f073752, bound to application checkpoint 20260913-1720-ecd43621a6ba.md; the attestation reaped this debate's mirror (C:\pxm\pxmp) and bridge (C:\pxm\kvs-pxmp) through the reap parameters, the first reap under the declared parent
+**Raw rounds:** docs/superpowers/plans/rounds/2026-09-13-mirror-parent/ (fable-diff-r1-*, brief/reply/transcript/receipt/binder for astra-diff-r1 to r3, mirror-build r1 and r2, the fix briefs and reports, the two gate logs, README.md)
+
+### Resolved points
+| # | Claim | Raised by | Outcome | Evidence |
+|---|-------|-----------|---------|----------|
+| 1 | The notes' own `-Assert` command omitted `-RepoRoot <repo>`, which the tool requires | Fable review (Important) | accepted; corrected and pinned | model-prompting-notes.md "Review mirror:" bullet; test_artifact_roots.py `test_fixed_rows_state_their_reason_outside_the_region` |
+| 2 | The resolver accepted the parent itself for the mirror row while the emitter refused it | Fable review (Minor) | accepted as a code fix: the mirror row refuses equality, the two readers agree | tools/artifact-roots.ps1 `$mayEqual`; `test_expect_review_mirror_answers_for_the_declared_parent` |
+| 3 | Group 7 duplicated the fake-plugin setup | Fable review (Minor) | accepted; helper | test_mirror_reaper.py `doctored_plugin` |
+| 4 | Skill reference files may carry no backslash; the prose examples were spelled `C:\pxm\...` | session gate at 2df3d45 | accepted; `C:/pxm/...` in skills/, `C:\pxm` in the doctor | test_no_backslash_paths_anywhere, test_backup_files_no_backslash_paths; PARENT_SPELLING binds both |
+| 5 | The plan file was untracked | session | accepted; committed at 3032444 | git log |
+| 6 | An explicitly empty `-ReapMirror ""` / `-ReapBridge ""` skipped validation and wrote the record with no reap | reviewer R1 (claim 2) | accepted; presence tests, refusal before the write, a test per flag on both hosts | tools/write-attestation.ps1:297-312; `test_an_explicitly_empty_reap_argument_is_refused_not_ignored` |
+| 7 | The plan's Task 2 (e) block prescribed the truthiness tests | reviewer R1 | accepted, record; dated in-place correction | this plan, Task 2 Step 2 (e) |
+| 8 | `-CheckpointFile ""` has the same supplied-empty shape and the verifier accepts the unbound record | reviewer R2 (claim 4) | accepted as a follow-up outside the certification unit | BACKLOG.md item 108 |
+| 9 | Gate evidence cannot be verified by a read-only reviewer | reviewer R1, R2 (ESCALATE for evidence) | answered in R3 with the full gate at f073752, both hosts; stated UNVERIFIED by the reviewer | rounds/gate-f073752.txt |
+
+### Escalated points (user-decided)
+| # | Question | Session position | Reviewer position | Owner's call |
+|---|----------|------------------|-------------------|--------------|
+| - | none | | | |
+
+### Degraded-mode note
+n/a

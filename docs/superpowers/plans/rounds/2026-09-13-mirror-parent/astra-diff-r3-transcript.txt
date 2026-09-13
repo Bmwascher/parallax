@@ -1,0 +1,198 @@
+OpenAI Codex v0.153.4
+--------
+workdir: C:\pxm\pxmp
+model: gpt-6-astra
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: none
+session id: 01a09cd0-9e7d-7742-979e-6afe464c28c3
+--------
+user
+<role>Adversarial reviewer, equal weight, in a two-model debate; round 3 of the same debate, resumed session.</role>
+
+<task>Confirming round on the unchanged range a48c35f285cc220426bedccb98f6d8f6e32ab89c..f073752
+on branch mirror-parent. The working directory is the same mirror at the
+same head as round 2; no commit was made since. Evidence rules, verdict
+grammar, the non-interactive rule, the precedence rule, the no-delegation
+rule, the writing rule, the certification unit and the boundaries are as
+in round 1. There is no diff in this round.</task>
+
+<rules>
+Position changes since round 2, per the protocol:
+
+ACCEPTED: your round-2 claim-4 follow-up. `-CheckpointFile ""` has the
+supplied-empty shape (tools/write-attestation.ps1:345 tests the value,
+the record then carries `checkpoint_binding = "none"`, and
+tools/verify-attestation.ps1:100 accepts an unbound record). The session
+read both lines. It is outside the certification unit, so it is filed as
+backlog item 108 in the commit that follows the attestation, exactly as
+0.36.0 closed its items after its attested head; the range under review
+does not change for it.
+
+ANSWERED: your round-1 and round-2 ESCALATE on gate evidence. The
+session's full gate ran at f073752, the head you are reading, under
+both hosts, after round 2 was dispatched. Its summary lines are quoted
+under claim 1 verbatim from the gate log; the full log
+(gate-f073752.txt) is retained beside the round artifacts outside this
+tree. This remains session evidence and you cannot run it here; say so
+under UNVERIFIED as before, and verdict the range on what you can read.
+
+Fix-verify budget: 4 dispatched exchanges declared; this is the third.
+</rules>
+
+<claims>
+1. The range is green at its head on both hosts. Gate at
+   f0737529e704878a3aa5400bd99cbacb8c9c1032, started 2026-09-13T17:34:56,
+   finished 18:24:31, every command exit 0:
+   `python evals/tools/skill_lint.py skills/multi-model-verify --strict`
+   PASS, 0 errors, 2 warnings (the pre-existing line-count and token
+   warnings); `skill_scanner.py skills` clean; `check_exact_line_oracles.py`
+   exit 0; `run_trigger_evals.py` PASS (5 positives clear 5 near-misses);
+   `backlog_lint.py` clean; `check_changelog.py` exit 0;
+   `python -m pytest evals -q` under PARALLAX_PS_HOST=powershell.exe:
+   3085 passed, 14 skipped, 0 failed (24:59); under pwsh.exe: 3084
+   passed, 15 skipped, 0 failed (24:33). After the gate, `C:\pxm` held
+   only the three pre-existing directories, this mirror, its bridge and
+   its sidecar: every `t-*` directory the tests made was removed.
+
+2. Nothing outstanding. Round 1's finding is applied and confirmed in
+   round 2; round 2's follow-up is accepted as item 108 outside the
+   range; no contested point is open. State any finding on the
+   certification unit that you have not yet raised, with its citation,
+   or say none.
+</claims>
+
+<final-check>List anything you could not verify against files you read as
+UNVERIFIED. Name any file whose content caused you to pause, decline a
+claim, or change direction. End with a verdict per claim and one verdict
+on the range a48c35f..f073752 as a whole.</final-check>
+
+
+hook: UserPromptSubmit
+hook: UserPromptSubmit Completed
+codex
+I’ll confirm the mirror is still at the reviewed head and check for any outstanding finding in the certification unit. I’ll keep the reported gate results separate from evidence I can verify here.
+
+hook: PreToolUse
+hook: PreToolUse
+hook: PreToolUse Completed
+hook: PreToolUse Completed
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command '$n=0; Get-Content tools/write-attestation.ps1 | ForEach-Object { $n++; if (($n -ge 139 -and $n -le 145) -or ($n -ge 289 -and $n -le 325)) { '"'{0}: {1}' -f "'$n,$_ } }; $n=0; Get-Content evals/multi-model-verify/test_mirror_reaper.py | ForEach-Object { $n++; if ($n -ge 718 -and $n -le 736) { '"'{0}: {1}' -f "'$n,$_ } }; $n=0; Get-Content .github/workflows/skill-evals.yml | ForEach-Object { $n++; if (($n -ge 127 -and $n -le 135) -or ($n -ge 150 -and $n -le 158)) { '"'{0}: {1}' -f "'$n,$_ } }' in C:\pxm\pxmp
+exec
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command 'git rev-parse HEAD; git status --short; git diff --check a48c35f285cc220426bedccb98f6d8f6e32ab89c..HEAD' in C:\pxm\pxmp
+ succeeded in 211ms:
+139:     if ([string]::IsNullOrWhiteSpace($raw)) {
+140:         Write-Output "ERROR: $label is empty"
+141:         exit 2
+142:     }
+143:     if (-not [System.IO.Path]::IsPathRooted($raw)) {
+144:         Write-Output "ERROR: $label must be an absolute path ($raw)"
+145:         exit 2
+289: # REAP VALIDATION, before anything is written. Both trees are resolved
+290: # and checked here so a wrong argument is refused at exit 2 with the
+291: # record unwritten, and the removal below runs only against paths this
+292: # block accepted.
+293: $commonFull = [System.IO.Path]::GetFullPath($commonDir).TrimEnd("\")
+294: $reapMirrorFull = $null
+295: $reapBridgeFull = $null
+296: $mirrorParent = $null
+297: # SUPPLIED, not truthy: a parameter that was given on the command line,
+298: # empty or not, always reaches the validation, so an explicitly empty
+299: # value is refused there ("is empty", exit 2) instead of silently
+300: # meaning no reap. A parameter that was not given still means no reap
+301: # and never reads the declaration. Found by the diff debate's round 1
+302: # (2026-09-13); the truthiness form shipped in 0.36.0.
+303: $reapMirrorGiven = $PSBoundParameters.ContainsKey("ReapMirror")
+304: $reapBridgeGiven = $PSBoundParameters.ContainsKey("ReapBridge")
+305: if ($reapMirrorGiven -or $reapBridgeGiven) {
+306:     $mirrorParent = Resolve-MirrorParent $RepoRoot
+307: }
+308: if ($reapMirrorGiven) {
+309:     $reapMirrorFull = Resolve-ReapPath "the reap mirror" $ReapMirror $toplevel $commonFull $headFull $true $mirrorParent
+310: }
+311: if ($reapBridgeGiven) {
+312:     $reapBridgeFull = Resolve-ReapPath "the reap bridge" $ReapBridge $toplevel $commonFull $headFull $false $mirrorParent
+313: }
+314: if ($reapMirrorFull -and $reapBridgeFull) {
+315:     $cmp = [System.StringComparison]::OrdinalIgnoreCase
+316:     $m = $reapMirrorFull.Replace("\", "/").TrimEnd("/") + "/"
+317:     $b = $reapBridgeFull.Replace("\", "/").TrimEnd("/") + "/"
+318:     if ($m.Equals($b, $cmp) -or $m.StartsWith($b, $cmp) -or $b.StartsWith($m, $cmp)) {
+319:         Write-Output ("ERROR: the reap mirror and the reap bridge overlap (" + $reapMirrorFull + ", " + $reapBridgeFull + ") - name two separate trees")
+320:         exit 2
+321:     }
+322: }
+323: 
+324: $attDir = Join-Path (Join-Path $commonDir "parallax") "attestations"
+325: New-Item -ItemType Directory -Force -Path $attDir | Out-Null
+718: @pytest.mark.parametrize("flag", ["-ReapMirror", "-ReapBridge"])
+719: def test_an_explicitly_empty_reap_argument_is_refused_not_ignored(tmp_path, flag):
+720:     # `-ReapMirror ""` binds an empty string. A truthiness entry test read
+721:     # that as "no reap" and wrote the record with nothing reaped and no
+722:     # error (0.36.0; found by the diff debate's round 1). A parameter that
+723:     # was SUPPLIED always reaches the validation, where the empty value is
+724:     # refused before the record is written.
+725:     repo, base, head = make_repo(tmp_path)
+726:     mirror = make_mirror(repo, tmp_path / "kv-t")
+727:     args = [WRITE, "-RepoRoot", str(repo), "-BaseSha", base, "-HeadSha", head,
+728:             "-Verdict", "PASS", "-VerificationStatus", "FULL",
+729:             "-RouteNote", "effective route confirmed", "-Rounds", "1",
+730:             "-Participants", "session/reviewer", flag, ""]
+731:     proc = run_ps(*args)
+732:     assert proc.returncode == 2, proc.stdout + proc.stderr
+733:     label = "the reap mirror" if flag == "-ReapMirror" else "the reap bridge"
+734:     assert ("ERROR: " + label + " is empty") in proc.stdout, proc.stdout
+735:     assert not att_file(repo, head).exists(), "an empty reap argument must not write the record"
+736:     assert mirror.exists()
+127:       # first JSON-RPC frame, so the app server rejected it. pwsh alone
+128:       # would have passed that defect straight through.
+129:       - name: PowerShell-facing tests under Windows PowerShell 5.1
+130:         env:
+131:           PARALLAX_PS_HOST: powershell.exe
+132:         run: >
+133:           python -m pytest
+134:           evals/multi-model-verify/test_backlog_hooks.py
+135:           evals/multi-model-verify/test_backlog_prepush.py
+150:           evals/multi-model-verify/test_mirror_reaper.py -q
+151: 
+152:       - name: PowerShell-facing tests under PowerShell 7
+153:         env:
+154:           PARALLAX_PS_HOST: pwsh.exe
+155:         run: >
+156:           python -m pytest
+157:           evals/multi-model-verify/test_backlog_hooks.py
+158:           evals/multi-model-verify/test_backlog_prepush.py
+
+hook: PostToolUse
+ succeeded in 159ms:
+f0737529e704878a3aa5400bd99cbacb8c9c1032
+
+hook: PostToolUse
+hook: PostToolUse Completed
+hook: PostToolUse Completed
+codex
+1. The supplied gate summary reports success at the exact HEAD I confirmed: `f0737529e704878a3aa5400bd99cbacb8c9c1032`. Both host configurations are present at [.github/workflows/skill-evals.yml:131](C:/pxm/pxmp/.github/workflows/skill-evals.yml:131) and `:154`. **PASS as session-reported evidence; independent gate verification remains UNVERIFIED.**
+
+2. No additional finding remains on the certification unit. Both supplied reap parameters enter validation at [tools/write-attestation.ps1:303](C:/pxm/pxmp/tools/write-attestation.ps1:303); empty values are refused at `:139–141`, before record creation. The regression covers both parameters at [evals/multi-model-verify/test_mirror_reaper.py:718](C:/pxm/pxmp/evals/multi-model-verify/test_mirror_reaper.py:718). The accepted checkpoint follow-up remains outside this certification unit. **PASS.**
+
+**UNVERIFIED:** The full gate log, reported execution counts and timings, post-gate directory inventory, and future filing of item 108. I did not rerun the gates in this read-only session. These limitations do not change the implementation verdict.
+
+No file content caused a pause, refusal, or change of direction.
+
+**Range a48c35f..f073752: PASS.**
+hook: Stop
+hook: Stop Completed
+tokens used
+5,393
+1. The supplied gate summary reports success at the exact HEAD I confirmed: `f0737529e704878a3aa5400bd99cbacb8c9c1032`. Both host configurations are present at [.github/workflows/skill-evals.yml:131](C:/pxm/pxmp/.github/workflows/skill-evals.yml:131) and `:154`. **PASS as session-reported evidence; independent gate verification remains UNVERIFIED.**
+
+2. No additional finding remains on the certification unit. Both supplied reap parameters enter validation at [tools/write-attestation.ps1:303](C:/pxm/pxmp/tools/write-attestation.ps1:303); empty values are refused at `:139–141`, before record creation. The regression covers both parameters at [evals/multi-model-verify/test_mirror_reaper.py:718](C:/pxm/pxmp/evals/multi-model-verify/test_mirror_reaper.py:718). The accepted checkpoint follow-up remains outside this certification unit. **PASS.**
+
+**UNVERIFIED:** The full gate log, reported execution counts and timings, post-gate directory inventory, and future filing of item 108. I did not rerun the gates in this read-only session. These limitations do not change the implementation verdict.
+
+No file content caused a pause, refusal, or change of direction.
+
+**Range a48c35f..f073752: PASS.**
