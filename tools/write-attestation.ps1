@@ -284,14 +284,21 @@ if ($CheckpointFile) {
     $att["changed_paths"] = $changed
 }
 $outFile = Join-Path $attDir ($headFull + ".json")
+$json = $att | ConvertTo-Json -Depth 3
 try {
-    $att | ConvertTo-Json -Depth 3 | Set-Content -Path $outFile -Encoding ASCII -ErrorAction Stop
+    Set-Content -LiteralPath $outFile -Value $json -Encoding ASCII -NoNewline -ErrorAction Stop
 } catch {
     Write-Output ("ERROR: the attestation could not be written to " + $outFile + ": " + $_.Exception.Message + " - nothing was reaped")
     exit 2
 }
-if (-not [System.IO.File]::Exists($outFile)) {
-    Write-Output ("ERROR: the attestation is not on disk after the write (" + $outFile + ") - nothing was reaped")
+$writtenText = $null
+try {
+    $writtenText = [System.IO.File]::ReadAllText($outFile)
+} catch {
+    $writtenText = $null
+}
+if ($writtenText -ne $json) {
+    Write-Output ("ERROR: the attestation on disk does not match what was written (" + $outFile + ") - nothing was reaped")
     exit 2
 }
 Write-Output "attestation written: $outFile ($Verdict, $baseFull..$headFull)"
@@ -309,8 +316,14 @@ if ($reapMirrorFull) {
     $sa = $null
     try {
         $sa = [int][System.IO.File]::GetAttributes($sidecar)
-    } catch {
+    } catch [System.IO.FileNotFoundException] {
         $sa = $null
+    } catch [System.IO.DirectoryNotFoundException] {
+        $sa = $null
+    } catch {
+        Write-Output ("ERROR: reap failed for " + $sidecar + ": the sidecar could not be examined: " +
+            $_.Exception.Message + " - the attestation stands; remove the sidecar by hand" + $bridgeNote)
+        exit 3
     }
     if (($null -ne $sa) -and
         (($sa -band [int][System.IO.FileAttributes]::Directory) -eq 0) -and
@@ -321,6 +334,23 @@ if ($reapMirrorFull) {
         } catch {
             Write-Output ("ERROR: reap failed for " + $sidecar + ": " + $_.Exception.Message +
                 " - the attestation stands; remove the sidecar by hand" + $bridgeNote)
+            exit 3
+        }
+        # THE POSTCONDITION, read back rather than inferred from the
+        # absence of an exception (tools/review-tree-removal.ps1:167-179
+        # does the same for the tree root).
+        try {
+            [void][System.IO.File]::GetAttributes($sidecar)
+            Write-Output ("ERROR: reap failed for " + $sidecar + ": the sidecar still exists after removal" +
+                " - the attestation stands; remove the sidecar by hand" + $bridgeNote)
+            exit 3
+        } catch [System.IO.FileNotFoundException] {
+            # gone: fall through to the success line below
+        } catch [System.IO.DirectoryNotFoundException] {
+            # gone: fall through to the success line below
+        } catch {
+            Write-Output ("ERROR: reap failed for " + $sidecar + ": the sidecar could not be re-examined after removal: " +
+                $_.Exception.Message + " - the attestation stands; remove the sidecar by hand" + $bridgeNote)
             exit 3
         }
         Write-Output ("reaped sidecar: " + $sidecar)

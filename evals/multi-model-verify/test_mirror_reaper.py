@@ -16,6 +16,7 @@ semantics, and the mirror tool is a Windows tool. The powershell-hosts
 CI job runs this module under BOTH powershell.exe and pwsh.exe; a green
 run on one host proves ONE interpreter.
 """
+import json
 import os
 import re
 import shutil
@@ -560,3 +561,44 @@ def test_a_relative_reap_path_is_refused(tmp_path):
     assert proc.returncode == 2, proc.stdout + proc.stderr
     assert "absolute path" in proc.stdout, proc.stdout
     assert not att_file(repo, head).exists()
+
+
+# ---------------------------------------------------------------------
+# Group 6: diff debate round 1 (Astra, R1-3a and R1-8)
+# ---------------------------------------------------------------------
+def test_the_record_lands_in_the_bracketed_repo_and_the_sibling_is_untouched(tmp_path):
+    # Set-Content -Path expands wildcard characters, so a repo named
+    # `repo[1]` with a matching plain-named sibling `repo1` could have its
+    # record land in the sibling while the literal File.Exists read-back
+    # accepted whatever old record already sat there. -LiteralPath plus a
+    # content read-back closes that.
+    repo, base, head = make_repo(tmp_path, name="repo[1]")
+    sib = make_mirror(repo, tmp_path / "repo1")
+    decoy_dir = sib / ".git" / "parallax" / "attestations"
+    decoy_dir.mkdir(parents=True)
+    decoy_file = decoy_dir / (head + ".json")
+    decoy_file.write_text(json.dumps({"decoy": True}), encoding="utf-8")
+    mirror = make_mirror(repo, tmp_path / "kv-t")
+    proc = attest(repo, base, head, mirror=mirror)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert att_file(repo, head).is_file()
+    record = json.loads(att_file(repo, head).read_text(encoding="utf-8"))
+    assert record["head_sha"] == head
+    assert "decoy" not in record
+    assert json.loads(decoy_file.read_text(encoding="utf-8")) == {"decoy": True}
+    assert not mirror.exists()
+
+
+def test_sidecar_success_is_read_back(tmp_path):
+    repo, base, head = make_repo(tmp_path)
+    mirror = make_mirror(repo, tmp_path / "kv-t")
+    sidecar = tmp_path / "kv-t.source-manifest"
+    sidecar.write_text("advisory\n", encoding="utf-8")
+    proc = attest(repo, base, head, mirror=mirror)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "reaped sidecar: " + str(sidecar) in proc.stdout
+    assert not sidecar.exists()
+    # Pins that the success line comes AFTER the read-back: the read-back
+    # failure text must appear earlier in the source than the print.
+    body = read(WRITE)
+    assert body.index("still exists after removal") < body.index('"reaped sidecar: "')

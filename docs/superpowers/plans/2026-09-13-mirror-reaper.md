@@ -965,6 +965,8 @@ if ($reapMirrorFull -and $reapBridgeFull -and ($reapMirrorFull -ieq $reapBridgeF
 }
 ```
 
+Superseded 2026-09-13 by the diff debate's round 1 (Astra): the sidecar block below catches every inspection exception as absence and announces the reap without reading the sidecar back; the shipped emitter names an inspection failure and reads the sidecar back after the delete (both exit 3 with the record standing), and writes the record with -LiteralPath and a content read-back. The block is kept as the plan's history, not as the contract.
+
 (f) Replace the final two lines
 
 ```powershell
