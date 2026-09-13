@@ -27,8 +27,6 @@ The full previous text of every closed item is in git history at
 - 92
 - 94
 - 95
-- 98
-- 106
 - 107
 - 99
 
@@ -94,8 +92,8 @@ The full previous text of every closed item is in git history at
 ## 107. The reap guard cannot tell a debate's trees from any clone at the attested head, and the mirror parent is the drive root
 Status: OPEN
 Cost: a session that names the wrong tree at the right head has it removed, and every mirror a KitnEssentials session builds lands directly under the drive root because the canonical temp root blows the path budget, so the doctor has to find them by a name pattern rather than a declared parent
-Pairs: 106
-Verified: 2026-09-13 8e1e6d54c939
+Pairs: none
+Verified: 2026-09-13 cfa01c8b8229
 
 **Filed 2026-09-13 from the whole-branch review of the mirror reaper
 (item 106).** The emitter's identity guard refuses a tree that is not
@@ -151,10 +149,9 @@ root with the four edits above or a stated reason to keep the drive
 root.
 
 ## 106. Review mirrors are never reaped, so a review day costs about 3 GB of drive root
-Status: OPEN
-Cost: 78 mirror and bridge directories totalling 13.4 GB accumulated at the drive root in four review days, and the only removal is a hand sweep that has to guess which of them a live debate can still resume
-Pairs: 98, 107
-Verified: 2026-09-13 56bcc3bca1ea
+Status: DONE
+Closed: 0.36.0
+Verified: 2026-09-13 bc2580f1e611
 
 **Filed 2026-09-13 from the KitnEssentials handoff**
 `dev/docs/handoffs/parallax-mirror-reaper-handoff.md` (outside this
@@ -202,6 +199,8 @@ no attestation, so its mirror keeps the hand route; that residual is
 item 107's. Item 98 closes with it,
 because the mirror tool's `-Force` removal goes through the same
 function. Design: `docs/superpowers/specs/2026-09-13-mirror-reaper-design.md`.
+
+Record: docs/superpowers/plans/rounds/2026-09-13-mirror-reaper/README.md
 
 ## 100. Round artifacts land in three roots per consumer repo
 Status: DONE
@@ -4262,8 +4261,8 @@ narrows the digest without opening that hole, argued in the
 ## 95. Stated properties of the mirror tools that the code does not hold
 Status: OPEN
 Cost: each one is a promise a reader relies on, and one of them can leave an extra input missing from a mirror the digest then certifies
-Pairs: 94, 98
-Verified: 2026-09-05 90e593a1c0e4
+Pairs: 94
+Verified: 2026-09-13 f1bf98605067
 
 **Filed 2026-09-05 from the plan debate for item 94's cycle**, whose
 reviewer was asked to sweep for stated properties the code does not hold.
@@ -4456,10 +4455,9 @@ work it describes happened.
 Record: docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window
 
 ## 98. The mirror's own removal is unchecked, so a failed one builds over a stale tree
-Status: OPEN
-Cost: a build that fails to empty its destination copies over whatever survived, and the fingerprint then measures the resulting directory rather than proving it was freshly emptied, so a stale mirror can be certified as a fresh one
-Pairs: 95, 99, 106
-Verified: 2026-09-13 6147ccd5fb41
+Status: DONE
+Closed: 0.36.0
+Verified: 2026-09-13 2dfe5484924f
 
 **Filed 2026-09-06 from the mode-diff debate for the identity window
 branch**, round 3, which asked whether refusing alias spellings was
@@ -4499,11 +4497,13 @@ inability to distinguish a fresh directory from a merged one is the
 second half and may deserve its own treatment: it measures the result,
 which is exactly what a stale mirror also produces.
 
+Record: docs/superpowers/plans/rounds/2026-09-13-mirror-reaper/README.md
+
 ## 99. A short name alias does not have to contain a tilde, so no spelling rule can find one
 Status: OPEN
 Cost: every overlap and containment check in the mirror tool compares spellings, and an assigned short alias is an ordinary-looking name that names another directory, so the destination guards can be walked past by a spelling no pattern can recognise
-Pairs: 98
-Verified: 2026-09-06 403b219b4301
+Pairs: none
+Verified: 2026-09-13 649c4ada3a37
 
 **Filed 2026-09-06 on the round-5 reviewer's own adjudication**, which
 was to defer the implementation but file it rather than leave it in a

@@ -789,7 +789,7 @@ In `tools/write-attestation.ps1`:
 ```powershell
 # Exit codes: 0 written, 2 argument/repo error, 3 written but a reap failed.
 #
-# REAP (0.35.0, backlog item 106): -ReapMirror and -ReapBridge name the
+# REAP (0.36.0, backlog item 106): -ReapMirror and -ReapBridge name the
 # review mirror and the clone bridge the debate ran on. The attestation
 # is the one TERMINAL event the plugin records mechanically, so it is
 # the reap point - never an age. Both paths are validated against the
@@ -804,7 +804,7 @@ In `tools/write-attestation.ps1`:
 
 ```powershell
     [string]$CheckpointFile = "",
-    # Optional (0.35.0): the review mirror and the clone bridge to remove
+    # Optional (0.36.0): the review mirror and the clone bridge to remove
     # once the record is written. See the REAP note in the header.
     [string]$ReapMirror = "",
     [string]$ReapBridge = ""
