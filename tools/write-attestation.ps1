@@ -294,15 +294,21 @@ $commonFull = [System.IO.Path]::GetFullPath($commonDir).TrimEnd("\")
 $reapMirrorFull = $null
 $reapBridgeFull = $null
 $mirrorParent = $null
-if ($ReapMirror -or $ReapBridge) {
-    # Read once, and only when a tree is named: an emitter run without a
-    # reap parameter never touches the declaration.
+# SUPPLIED, not truthy: a parameter that was given on the command line,
+# empty or not, always reaches the validation, so an explicitly empty
+# value is refused there ("is empty", exit 2) instead of silently
+# meaning no reap. A parameter that was not given still means no reap
+# and never reads the declaration. Found by the diff debate's round 1
+# (2026-09-13); the truthiness form shipped in 0.36.0.
+$reapMirrorGiven = $PSBoundParameters.ContainsKey("ReapMirror")
+$reapBridgeGiven = $PSBoundParameters.ContainsKey("ReapBridge")
+if ($reapMirrorGiven -or $reapBridgeGiven) {
     $mirrorParent = Resolve-MirrorParent $RepoRoot
 }
-if ($ReapMirror) {
+if ($reapMirrorGiven) {
     $reapMirrorFull = Resolve-ReapPath "the reap mirror" $ReapMirror $toplevel $commonFull $headFull $true $mirrorParent
 }
-if ($ReapBridge) {
+if ($reapBridgeGiven) {
     $reapBridgeFull = Resolve-ReapPath "the reap bridge" $ReapBridge $toplevel $commonFull $headFull $false $mirrorParent
 }
 if ($reapMirrorFull -and $reapBridgeFull) {

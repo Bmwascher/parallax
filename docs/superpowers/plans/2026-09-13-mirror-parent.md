@@ -583,6 +583,8 @@ if ($ReapBridge) {
 }
 ```
 
+[Corrected 2026-09-13 by the diff debate's round 1: the three truthiness tests above let an explicitly empty `-ReapMirror ""` or `-ReapBridge ""` skip validation and write the record with no reap; the branch tests `$PSBoundParameters.ContainsKey(...)` instead, so a supplied value always reaches the validation, and a test per parameter drives the refusal on both hosts.]
+
 - [ ] **Step 3: Run the module under both hosts**
 
 ```powershell

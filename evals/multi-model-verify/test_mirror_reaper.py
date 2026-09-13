@@ -715,6 +715,27 @@ def test_a_roots_tool_that_exits_nonzero_refuses_every_reap(tmp_path, pxm):
     assert mirror.exists()
 
 
+@pytest.mark.parametrize("flag", ["-ReapMirror", "-ReapBridge"])
+def test_an_explicitly_empty_reap_argument_is_refused_not_ignored(tmp_path, flag):
+    # `-ReapMirror ""` binds an empty string. A truthiness entry test read
+    # that as "no reap" and wrote the record with nothing reaped and no
+    # error (0.36.0; found by the diff debate's round 1). A parameter that
+    # was SUPPLIED always reaches the validation, where the empty value is
+    # refused before the record is written.
+    repo, base, head = make_repo(tmp_path)
+    mirror = make_mirror(repo, tmp_path / "kv-t")
+    args = [WRITE, "-RepoRoot", str(repo), "-BaseSha", base, "-HeadSha", head,
+            "-Verdict", "PASS", "-VerificationStatus", "FULL",
+            "-RouteNote", "effective route confirmed", "-Rounds", "1",
+            "-Participants", "session/reviewer", flag, ""]
+    proc = run_ps(*args)
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    label = "the reap mirror" if flag == "-ReapMirror" else "the reap bridge"
+    assert ("ERROR: " + label + " is empty") in proc.stdout, proc.stdout
+    assert not att_file(repo, head).exists(), "an empty reap argument must not write the record"
+    assert mirror.exists()
+
+
 # ---------------------------------------------------------------------
 # Group 6: diff debate round 1 (Astra, R1-3a and R1-8)
 # ---------------------------------------------------------------------
