@@ -8,9 +8,10 @@ update, not for the person who maintains it. Each section starts with
 
 Open each section with a lead paragraph in plain words that says what
 changed for the user and what they must do. The lead paragraph has no
-code, no file name and no link; the checker refuses those. After the
-lead, one bold line names the backlog items that the version closes. Put the
+code, no file name and no link; the checker refuses those. Put the
 maintainer detail, the file names and the records under a later title.
+End each section with a `### Backlog` title and one bold line that names
+the backlog items that the version closes.
 
 Write each section in ASD-STE100 Simplified Technical English.
 `evals/tools/ste_lint.py` refuses these shapes, which STE forbids:
@@ -45,8 +46,6 @@ different folders, and it was hard to find a review or to clean up. You
 do not have to change anything when you update. New reviews go to the
 one folder, and old files stay where they are.
 
-**Backlog: this version closes item 100.**
-
 ### What changed for you
 
 - **One folder for each project.** A review writes its debate rounds,
@@ -80,3 +79,7 @@ one folder, and old files stay where they are.
   retains five diff-debate rounds and the Fable review of the full
   branch. A write into the reviewed tree during round 2 voided that
   round.
+
+### Backlog
+
+**This version closes item 100.**
