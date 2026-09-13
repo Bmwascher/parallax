@@ -4402,3 +4402,25 @@ is about to delete, so this is a design change rather than a patch - or
 an enforceable restriction that makes the alias case unreachable, or a
 recorded decision that the residual risk is accepted with the reasoning
 written down.
+
+## 101. The public repository shows no releases, so a version has no page
+Status: DONE
+Closed: record
+Verified: 2026-09-13 9559b4db34b1
+
+**Filed and closed 2026-09-13.** The repository had no git tags at all,
+so GitHub's Releases box read "No releases published" after 32 version
+bumps, while the version in `.claude-plugin/plugin.json` was the only
+thing `claude plugin update` ever keyed on. A version therefore had no
+page to point at: no tag, no notes, no download.
+
+Record: .github/workflows/release.yml
+
+The record is the workflow itself. On a push to main that touches
+`.claude-plugin/plugin.json`, it reads the version and, when no
+`v<version>` tag exists, tags the pushed main head and publishes a release
+there with notes generated from the range since the previous tag. An
+already-tagged version is a no-op, so a re-run cannot move a tag, and a
+`workflow_dispatch` trigger cuts the first release by hand. History was
+NOT backfilled by decision: the first tag is 0.34.0 at the head this item
+merged onto, and the 31 earlier bumps stay in git history only.
