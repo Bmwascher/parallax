@@ -249,6 +249,8 @@ def test_docsroot_refuses_escapes_and_rooted_values(tmp_path, bad):
     ("-RepoRoot", "{repo}", "-Assert", "NoSuchArtifactDrive:/x"),
     ("-RepoRoot", "{repo}", "-DocsRoot", "bad|root"),
     ("-RepoRoot", "{repo}", "-DocsRoot", "bad<root"),
+    ("-RepoRoot", "{repo}", "-Assert", "bad|x"),
+    ("-RepoRoot", "{repo}", "-Assert", "{repo}/docs/superpowers/plans/rounds/<date>-<topic>/r1.md"),
 ])
 def test_unresolvable_paths_are_parameter_faults_not_throws(tmp_path, args):
     # The exit contract: 2 for a parameter fault, with an ERROR: line.

@@ -208,6 +208,15 @@ $assertResult = $null
 $exitCode = 0
 if ($PSBoundParameters.ContainsKey("Assert")) {
     if (-not $Assert) { Fail "-Assert is empty" }
+    # Same forbidden-character rule as -DocsRoot, minus the drive colon:
+    # .NET Core's GetFullPath accepts `<`, `>` and `|`, so on PowerShell 7
+    # an unsubstituted `<date>-<topic>` placeholder would resolve and could
+    # answer inside (measured 2026-09-12 by the Task 2 review), while 5.1
+    # throws. One explicit set, both hosts.
+    $assertBody = $Assert -replace '^[A-Za-z]:', ''
+    if ($assertBody -match '[<>:"|?*\x00-\x1f]') {
+        Fail ("-Assert contains a character Windows paths forbid: " + $Assert)
+    }
     $target = Resolve-Absolute $Assert
     $cmp = [System.StringComparison]::OrdinalIgnoreCase
     # Rounds before the plan parent: the rounds root sits under it and
