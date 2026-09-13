@@ -28,8 +28,8 @@ The full previous text of every closed item is in git history at
 - 94
 - 95
 - 98
-- 101
-- 102
+- 106
+- 107
 - 99
 
 ### Second - taxes every cycle
@@ -91,14 +91,14 @@ The full previous text of every closed item is in git history at
 - 85
 - 86
 
-## 102. The reap guard cannot tell a debate's trees from any clone at the attested head, and the mirror parent is the drive root
+## 107. The reap guard cannot tell a debate's trees from any clone at the attested head, and the mirror parent is the drive root
 Status: OPEN
 Cost: a session that names the wrong tree at the right head has it removed, and every mirror a KitnEssentials session builds lands directly under the drive root because the canonical temp root blows the path budget, so the doctor has to find them by a name pattern rather than a declared parent
-Pairs: 101
-Verified: 2026-09-13 1524f48584c9
+Pairs: 106
+Verified: 2026-09-13 8e1e6d54c939
 
 **Filed 2026-09-13 from the whole-branch review of the mirror reaper
-(item 101).** The emitter's identity guard refuses a tree that is not
+(item 106).** The emitter's identity guard refuses a tree that is not
 at the attested head, that overlaps the reviewed repository or its
 common dir, that is reached through a link, or whose `.git` is a file,
 and it pins each git read to the tree's own git dir. What it cannot do
@@ -108,7 +108,7 @@ with unpushed branches passes every rule if the session names it. The
 prose in references/preflight-mirror.md states the residual instead of
 hiding it. A plan-mode debate ends with a frozen plan and no attestation,
 so its mirror has no mechanical reap point either; a plan-mode terminal
-event recorded mechanically is the third follow-up.
+event recorded mechanically is a further follow-up, not numbered below.
 
 **Three follow-ups, decisions for the first two, a test gap for the third.**
 
@@ -150,11 +150,11 @@ and a decision recorded on the mirror parent, either a new declared
 root with the four edits above or a stated reason to keep the drive
 root.
 
-## 101. Review mirrors are never reaped, so a review day costs about 3 GB of drive root
+## 106. Review mirrors are never reaped, so a review day costs about 3 GB of drive root
 Status: OPEN
 Cost: 78 mirror and bridge directories totalling 13.4 GB accumulated at the drive root in four review days, and the only removal is a hand sweep that has to guess which of them a live debate can still resume
-Pairs: 98, 102
-Verified: 2026-09-13 e0cdbd57d4f3
+Pairs: 98, 107
+Verified: 2026-09-13 56bcc3bca1ea
 
 **Filed 2026-09-13 from the KitnEssentials handoff**
 `dev/docs/handoffs/parallax-mirror-reaper-handoff.md` (outside this
@@ -199,7 +199,7 @@ at another head is refused by name. The mirror tool's existing-path
 refusal names that route instead of `-Force`. `/parallax:doctor` reports
 the `kv*` inventory as a note and never deletes. A plan-mode debate has
 no attestation, so its mirror keeps the hand route; that residual is
-item 102's. Item 98 closes with it,
+item 107's. Item 98 closes with it,
 because the mirror tool's `-Force` removal goes through the same
 function. Design: `docs/superpowers/specs/2026-09-13-mirror-reaper-design.md`.
 
@@ -4440,8 +4440,8 @@ Record: docs/superpowers/plans/rounds/2026-09-05-mirror-identity-window
 ## 98. The mirror's own removal is unchecked, so a failed one builds over a stale tree
 Status: OPEN
 Cost: a build that fails to empty its destination copies over whatever survived, and the fingerprint then measures the resulting directory rather than proving it was freshly emptied, so a stale mirror can be certified as a fresh one
-Pairs: 95, 99, 101
-Verified: 2026-09-13 02ee31a946e0
+Pairs: 95, 99, 106
+Verified: 2026-09-13 6147ccd5fb41
 
 **Filed 2026-09-06 from the mode-diff debate for the identity window
 branch**, round 3, which asked whether refusing alias spellings was
@@ -4516,3 +4516,105 @@ is about to delete, so this is a design change rather than a patch - or
 an enforceable restriction that makes the alias case unreachable, or a
 recorded decision that the residual risk is accepted with the reasoning
 written down.
+
+## 101. The public repository shows no releases, so a version has no page
+Status: DONE
+Closed: record
+Verified: 2026-09-13 9559b4db34b1
+
+**Filed and closed 2026-09-13.** The repository had no git tags at all,
+so GitHub's Releases box read "No releases published" after 32 version
+bumps, while the version in `.claude-plugin/plugin.json` was the only
+thing `claude plugin update` ever keyed on. A version therefore had no
+page to point at: no tag, no notes, no download.
+
+Record: .github/workflows/release.yml
+
+The record is the workflow itself. On a push to main that touches
+`.claude-plugin/plugin.json`, it reads the version and, when no
+`v<version>` tag exists, tags the pushed main head and publishes a release
+there with notes generated from the range since the previous tag. An
+already-tagged version is a no-op, so a re-run cannot move a tag, and a
+`workflow_dispatch` trigger cuts the first release by hand. History was
+NOT backfilled by decision: the first tag is 0.34.0 at the head this item
+merged onto, and the 31 earlier bumps stay in git history only.
+
+## 102. A release page had nothing to say about the version
+Status: DONE
+Closed: record
+Verified: 2026-09-13 7f744ade776f
+
+**Filed and closed 2026-09-13, the same day as item 101.** The first
+release that workflow cut carried GitHub's generated notes, and with no
+pull requests and no earlier tag those were one "Full Changelog" link:
+a page that named the version and said nothing about what changed. The
+repository had no changelog at all; every version's record was its merge
+commit subject and the round directory under `docs/superpowers/plans/`.
+
+Record: CHANGELOG.md
+
+`CHANGELOG.md` holds one `## vX.Y.Z (YYYY-MM-DD)` section per version,
+newest first, starting at 0.34.0. `evals/tools/check_changelog.py` is the
+one reader: bare, it fails when the newest section does not name the
+`plugin.json` version, and CI runs it on every push as tier 1d, so a bump
+without notes fails on the branch. With `--version X --print` it emits
+that section's body, and the release workflow publishes exactly that as
+the release page, so a version with no section fails the release rather
+than shipping blank. `test_check_changelog.py` proves every refusal can
+fire and runs the repository check under pytest. The dev-loop rule in
+`CLAUDE.md` names the entry as part of the bump commit.
+
+## 103. A changelog entry had no style rule a gate could hold
+Status: DONE
+Closed: record
+Verified: 2026-09-13 937983ae2505
+
+**Filed and closed 2026-09-13, after items 101 and 102.** The first
+changelog entry was written in ordinary prose: passive sentences,
+sentences over 40 words, "-ing" verb forms, and nothing in the gate to
+say which of those the next entry could repeat. The user asked for
+ASD-STE100 Simplified Technical English, which is a controlled language
+with two halves, the writing rules and a licensed dictionary that this
+repository cannot carry.
+
+Record: evals/tools/ste_lint.py
+
+`evals/tools/ste_lint.py` enforces the rule half a program can decide:
+sentence length (25 words), paragraph length (6 sentences), active
+voice, no "-ing" verb form, no contraction, no unapproved modal, and a
+denylist of unapproved words with their STE alternative. A project
+allowlist, `evals/tools/ste_allow.txt`, names the technical names and
+state adjectives the checker must not question. `check_changelog.py`
+runs it over the whole file, so CI tier 1d and the release workflow both
+refuse an entry the checker refuses. The 0.34.0 entry was rewritten to
+pass, which is the proof the rules are usable; the checker found 15
+defects in the first draft. Noun clusters and one-meaning-per-word stay
+with the writer, and the checker's docstring says so.
+
+## 104. The changelog entry passed the style rules and still read as maintainer text
+Status: DONE
+Closed: record
+Verified: 2026-09-13 d1288beb31d9
+
+**Filed and closed 2026-09-13, after item 103.** The 0.34.0 entry passed
+every mechanical STE rule and still opened with "resolver", "retention
+copy", "typed binding" and "exit map". The rules bound the sentence
+shape and not the reader: STE exists so that a non-native speaker can
+follow a maintenance manual, and the user's stated aim for the
+changelog is the same, a page the average user can read, not a page
+for the maintainer. Nothing in the gate said what a section must open
+with.
+
+Record: evals/tools/check_changelog.py
+
+`check_changelog.py` now holds a structure rule beside the version tie:
+each version section must open with a plain-language paragraph, not a
+heading or a list item, and that paragraph may carry no code span, no
+file name or path, and no URL. That is the mechanical proxy for "say
+what changed for the user first"; the maintainer detail goes under a
+later heading, where names and paths are fine. The 0.34.0 entry was
+rewritten in that shape: a lead that says what the user gets and that
+they need not change anything, a "What changed for you" list, and a
+"Details for maintainers" list with the records. `CHANGELOG.md`'s own
+preamble names the reader. `test_check_changelog.py` proves the three
+refusals fire and that the rule stops at the first blank line.

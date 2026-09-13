@@ -97,7 +97,7 @@ param(
 [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
 
 # The directory-link guard and the tree removal are shared with the
-# attestation emitter's reap (backlog item 101) and live in one file so
+# attestation emitter's reap (backlog item 106) and live in one file so
 # the two tools cannot drift apart on either. Functions only; nothing
 # runs at dot-source time.
 . (Join-Path $PSScriptRoot "review-tree-removal.ps1")

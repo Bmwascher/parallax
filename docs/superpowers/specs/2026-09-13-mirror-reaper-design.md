@@ -2,7 +2,7 @@
 
 Written 2026-09-13 from the KitnEssentials handoff
 `dev/docs/handoffs/parallax-mirror-reaper-handoff.md` (outside this
-repo). Backlog item 101 holds the measurement; item 98 is the paired
+repo). Backlog item 106 holds the measurement; item 98 is the paired
 defect this design closes alongside.
 
 ## The problem

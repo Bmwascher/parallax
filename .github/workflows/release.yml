@@ -1,0 +1,119 @@
+name: Release
+
+# One GitHub release per plugin version. The version string in
+# `.claude-plugin/plugin.json` is the ONLY thing `claude plugin update`
+# keys on (CLAUDE.md, "Dev loop"), so it is also the only thing a release
+# should key on: when a push to main carries a version that has no
+# `v<version>` tag yet, this tags the pushed head and publishes a release
+# there. A version that is already tagged is left alone, so a re-run
+# cannot move a tag, and a push that touches the file without changing
+# the version (a description edit, say) is a no-op.
+#
+# The tag lands on the MAIN head that carries the version, not on the
+# branch commit that bumped it: the bump is made after the diff debate and
+# arrives on main inside a merge commit, and the release should point at
+# what a fresh install actually copies.
+#
+# The release body is the version's section of CHANGELOG.md, printed by
+# `evals/tools/check_changelog.py`, which is the same checker CI runs on
+# every push (Tier 1d). A version with no section FAILS the release
+# rather than publishing a blank page; the fix is a changelog commit,
+# after which `workflow_dispatch` cuts the release by hand.
+#
+# `workflow_dispatch` also exists so the first release could be cut
+# without a version bump, and so a missed one can be recovered.
+
+on:
+  push:
+    branches: [main]
+    paths: ['.claude-plugin/plugin.json']
+  workflow_dispatch:
+
+# Two pushes in quick succession must not both try to create the same
+# release; the second waits and then finds the tag already present.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Read the plugin version
+        id: version
+        run: |
+          set -eu
+          version="$(jq -r '.version' .claude-plugin/plugin.json)"
+          case "$version" in
+            [0-9]*.[0-9]*.[0-9]*) ;;
+            *) echo "::error::plugin.json version is not MAJOR.MINOR.PATCH: '$version'"; exit 1 ;;
+          esac
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+
+      - name: Skip if this version is already released
+        id: existing
+        run: |
+          set -eu
+          tag="${{ steps.version.outputs.tag }}"
+          if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+            echo "::notice::$tag already exists at $(git rev-parse "$tag"); nothing to release"
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up Python
+        if: steps.existing.outputs.present == 'false'
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      # Fail-closed: the checker exits non-zero and prints nothing when
+      # the section is missing or empty, and `set -e` stops the job before
+      # any tag or release exists.
+      - name: Read the release notes from CHANGELOG.md
+        if: steps.existing.outputs.present == 'false'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -eu
+          python evals/tools/check_changelog.py --version "$VERSION" --print > "$RUNNER_TEMP/notes.md"
+          [ -s "$RUNNER_TEMP/notes.md" ] || { echo "::error::CHANGELOG.md has no section for v$VERSION"; exit 1; }
+
+      # `gh release create` creates the tag at --target when it does not
+      # exist, so there is no separate tag push. The previous tag, when
+      # there is one, gives the notes a compare link for the full range.
+      - name: Create the tag and release
+        if: steps.existing.outputs.present == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -eu
+          previous="$(git tag --list 'v*' --sort=-v:refname | head -n 1 || true)"
+          notes="$RUNNER_TEMP/notes.md"
+          {
+            echo
+            echo '---'
+            echo
+            if [ -n "$previous" ]; then
+              echo "Plugin version $VERSION: \`.claude-plugin/plugin.json\` at $GITHUB_SHA. Full changelog: https://github.com/$GITHUB_REPOSITORY/compare/$previous...$TAG"
+            else
+              echo "Plugin version $VERSION: \`.claude-plugin/plugin.json\` at $GITHUB_SHA."
+            fi
+          } >> "$notes"
+          gh release create "$TAG" \
+            --target "$GITHUB_SHA" \
+            --title "$TAG" \
+            --notes-file "$notes"
+          echo "::notice::released $TAG at $GITHUB_SHA (previous: ${previous:-none})"

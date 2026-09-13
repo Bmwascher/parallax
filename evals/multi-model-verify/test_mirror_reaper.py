@@ -1,4 +1,4 @@
-"""The review mirror reaper (BACKLOG items 101 and 98; spec
+"""The review mirror reaper (BACKLOG items 106 and 98; spec
 docs/superpowers/specs/2026-09-13-mirror-reaper-design.md).
 
 Four groups. REMOVAL: tools/review-tree-removal.ps1's Remove-ReviewTree,
@@ -416,7 +416,7 @@ def test_doctor_inventories_the_mirrors_and_never_deletes():
         "3 days",
         "LastWriteTime",
         "-ReapMirror",
-        "backlog item 101",
+        "backlog item 106",
     ):
         assert anchor in body, "doctor inventory anchor missing: " + anchor
     section = body.split("## 10. Review mirror inventory", 1)[1]

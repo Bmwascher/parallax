@@ -5,7 +5,7 @@
 #   . (Join-Path $PSScriptRoot "review-tree-removal.ps1")
 # from tools/new-review-mirror.ps1 (the -Force rebuild, backlog item 98)
 # and tools/write-attestation.ps1 (the reap after a terminal verdict,
-# backlog item 101). It defines functions and executes nothing else, so
+# backlog item 106). It defines functions and executes nothing else, so
 # dot-sourcing it has no effect until a caller calls one.
 #
 # Windows PowerShell 5.1 compatible, ASCII ONLY.

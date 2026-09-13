@@ -183,6 +183,28 @@ moves the tree after the final build task, so "last" means after it; a
 bump consumed before the branch is finished recovers only by another bump
 (that is what 0.26.1 is).
 
+WRITE THE CHANGELOG ENTRY IN THE SAME COMMIT AS THE BUMP, IN SIMPLIFIED
+TECHNICAL ENGLISH. `CHANGELOG.md` has one `## vX.Y.Z (YYYY-MM-DD)`
+section per version, newest first, and `evals/tools/check_changelog.py`
+(CI tier 1d, and `test_check_changelog.py` locally) fails when the newest
+section does not name the `plugin.json` version OR when
+`evals/tools/ste_lint.py` finds a shape ASD-STE100 forbids anywhere in
+the file: a sentence over 25 words, a paragraph over 6 sentences, passive
+voice, an "-ing" verb form, a contraction, `should`/`would`/`might`/
+`may`/`shall`, or a word on its denylist. The STE dictionary is licensed
+and NOT in the repo, so the checker is the rule half only; technical
+names the checker must not question go in `evals/tools/ste_allow.txt`,
+and the rules it cannot decide (noun clusters, one meaning per word) stay
+with the writer. Each section must OPEN with a lead paragraph in plain
+words, written for the person who USES the plugin: what changed for them
+and what they must do, with no code span, file name or URL in it; the
+checker refuses those, and the maintainer detail goes under a later
+heading. The release workflow (`.github/workflows/release.yml`) tags the
+main head that carries a new version and publishes that section as the
+release body; a version with no section, or one the checker refuses,
+fails the release rather than shipping it. Items 101 to 104 hold the
+record.
+
 VERIFY THE INSTALL BY CONTENT, never by the cache directory's name: a
 directory named `0.26.0` held code from five commits before the shipped
 head. The cheap check is `gitCommitSha` in

@@ -112,7 +112,7 @@ commit construction makes over a tracked back-channel; the bridge must
 match exactly, so a bridge left unfetched after a fix commit is refused
 rather than deleted under a stale head. Measured 2026-09-13: 78 mirror
 and bridge directories, 13.4 GB, in four review days, with nothing but
-memory saying which of them a live chat could still resume. Another chat's mirror at another head is refused by name; the guard cannot tell two trees at the SAME head apart, so the session names only the trees it built, and the residual is backlog item 102.
+memory saying which of them a live chat could still resume. Another chat's mirror at another head is refused by name; the guard cannot tell two trees at the SAME head apart, so the session names only the trees it built, and the residual is backlog item 107.
 
 The removal never recurses through a link: `tools/review-tree-removal.ps1`
 walks the tree itself, removes each link as a link, clears the read-only
@@ -133,7 +133,7 @@ recognise one by shape, so the session that built it names it; the rule
 
 Two limits, stated. A plan-mode debate ends with a frozen plan and no
 attestation, so its mirror has no mechanical reap point and keeps the
-hand route until one exists (backlog item 102). And an ESCALATE the user
+hand route until one exists (backlog item 107). And an ESCALATE the user
 may still extend is not yet terminal: emit the attestation, and with it
 the reap, only once the user has declined to extend, because a reaped
 mirror turns the extension's `resume` into a transport failure.

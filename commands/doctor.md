@@ -385,7 +385,7 @@ and counted; it never reads as empty.
   attestation emitter, `write-attestation.ps1 -ReapMirror <mirror>
   [-ReapBridge <bridge>]`, and one whose debate is over without an
   attestation is removed by hand; the rule and its measurement are
-  backlog item 101. Never name a directory as safe to delete: the
+  backlog item 106. Never name a directory as safe to delete: the
   doctor cannot tell which of them a live chat can still resume, and a
   `resume` against a deleted mirror is a transport failure.
 

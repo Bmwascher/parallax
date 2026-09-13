@@ -3226,7 +3226,7 @@ def test_a_mirror_whose_current_state_cannot_be_measured_is_refused(tmp_path):
 
 
 def test_an_existing_mirror_refusal_names_the_reap_route_not_force_first(tmp_path):
-    # Backlog item 101: the count grew because this refusal suggested
+    # Backlog item 106: the count grew because this refusal suggested
     # -Force and a session that did not want an in-place rebuild built
     # kv-<tag>-2 beside the first. The reap route comes first now, and
     # -Force is named as the mid-debate rebuild it is.

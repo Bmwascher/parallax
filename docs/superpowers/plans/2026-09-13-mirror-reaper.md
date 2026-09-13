@@ -8,7 +8,7 @@
 
 **Tech Stack:** PowerShell 5.1 and 7 (ASCII-only tools), Python 3 pytest evals, GitHub Actions `powershell-hosts` job.
 
-**Spec:** `docs/superpowers/specs/2026-09-13-mirror-reaper-design.md`. Backlog items 101 (filed) and 98 (paired).
+**Spec:** `docs/superpowers/specs/2026-09-13-mirror-reaper-design.md`. Backlog items 106 (filed) and 98 (paired).
 
 ## Global Constraints
 
@@ -39,7 +39,7 @@
 Create `evals/multi-model-verify/test_mirror_reaper.py`:
 
 ```python
-"""The review mirror reaper (BACKLOG items 101 and 98; spec
+"""The review mirror reaper (BACKLOG items 106 and 98; spec
 docs/superpowers/specs/2026-09-13-mirror-reaper-design.md).
 
 Four groups. REMOVAL: tools/review-tree-removal.ps1's Remove-ReviewTree,
@@ -278,7 +278,7 @@ Create `tools/review-tree-removal.ps1` with exactly this content. The `Test-Path
 #   . (Join-Path $PSScriptRoot "review-tree-removal.ps1")
 # from tools/new-review-mirror.ps1 (the -Force rebuild, backlog item 98)
 # and tools/write-attestation.ps1 (the reap after a terminal verdict,
-# backlog item 101). It defines functions and executes nothing else, so
+# backlog item 106). It defines functions and executes nothing else, so
 # dot-sourcing it has no effect until a caller calls one.
 #
 # Windows PowerShell 5.1 compatible, ASCII ONLY.
@@ -479,7 +479,7 @@ Append to `evals/multi-model-verify/test_review_mirror.py`:
 
 ```python
 def test_an_existing_mirror_refusal_names_the_reap_route_not_force_first(tmp_path):
-    # Backlog item 101: the count grew because this refusal suggested
+    # Backlog item 106: the count grew because this refusal suggested
     # -Force and a session that did not want an in-place rebuild built
     # kv-<tag>-2 beside the first. The reap route comes first now, and
     # -Force is named as the mid-debate rebuild it is.
@@ -533,7 +533,7 @@ insert:
 ```powershell
 
 # The directory-link guard and the tree removal are shared with the
-# attestation emitter's reap (backlog item 101) and live in one file so
+# attestation emitter's reap (backlog item 106) and live in one file so
 # the two tools cannot drift apart on either. Functions only; nothing
 # runs at dot-source time.
 . (Join-Path $PSScriptRoot "review-tree-removal.ps1")
@@ -789,7 +789,7 @@ In `tools/write-attestation.ps1`:
 ```powershell
 # Exit codes: 0 written, 2 argument/repo error, 3 written but a reap failed.
 #
-# REAP (0.35.0, backlog item 101): -ReapMirror and -ReapBridge name the
+# REAP (0.35.0, backlog item 106): -ReapMirror and -ReapBridge name the
 # review mirror and the clone bridge the debate ran on. The attestation
 # is the one TERMINAL event the plugin records mechanically, so it is
 # the reap point - never an age. Both paths are validated against the
@@ -1079,7 +1079,7 @@ def test_doctor_inventories_the_mirrors_and_never_deletes():
         "3 days",
         "LastWriteTime",
         "-ReapMirror",
-        "backlog item 101",
+        "backlog item 106",
     ):
         assert anchor in body, "doctor inventory anchor missing: " + anchor
     section = body.split("## 10. Review mirror inventory", 1)[1]
@@ -1205,7 +1205,7 @@ and counted; it never reads as empty.
   attestation emitter, `write-attestation.ps1 -ReapMirror <mirror>
   [-ReapBridge <bridge>]`, and one whose debate is over without an
   attestation is removed by hand; the rule and its measurement are
-  backlog item 101. Never name a directory as safe to delete: the
+  backlog item 106. Never name a directory as safe to delete: the
   doctor cannot tell which of them a live chat can still resume, and a
   `resume` against a deleted mirror is a transport failure.
 
@@ -1231,6 +1231,6 @@ git commit -m "state the reap point in the skill and the reference, and inventor
 
 ## Not in this plan
 
-- The version bump and the closing edits to items 98 and 101 in `BACKLOG.md`: they follow the diff debate, per `CLAUDE.md`'s dev loop.
+- The version bump and the closing edits to items 98 and 106 in `BACKLOG.md`: they follow the diff debate, per `CLAUDE.md`'s dev loop.
 - The KitnEssentials memory edit that tells the bridge builder to pass `-ReapBridge`.
 - Deleting the ten `C:\kv*` directories that exist today.
