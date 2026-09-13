@@ -41,6 +41,27 @@ def test_flash_dispatch_contract():
     assert "--model " + CANONICAL_ID in body
     assert "--add-dir" in body
     assert "--log-file" in body
+    # agy's own scoped mode opens file edits in print mode and leaves
+    # command execution denied (measured 2026-09-13 on agy 1.2.2: without
+    # it every write is soft-denied, with it a run_command call still
+    # is). It is the ONE switch between a lane that blocks on every
+    # dispatch and one that lands edits, and it is on the dispatch line
+    # where every reader sees it, unlike a persisted allow rule.
+    assert "--mode accept-edits" in body
+    assert body.count("--mode accept-edits") >= 2
+    # Fable R1 finding 1 (2026-09-13): the two pins above are satisfied
+    # by the prose alone, so the flag must be locked to the ONE physical
+    # dispatch line, between the model and the workspace binding
+    assert ("--model " + CANONICAL_ID + " --mode accept-edits --add-dir"
+            ) in body
+    assert "command execution stays denied" in body
+    # a Git-Bash /c/... log path produced NO log file (measured
+    # 2026-09-13); the log is where the route evidence lives. Astra R1
+    # claim 6: "Windows spelling" alone is also satisfied by preflight 2's
+    # path rule, so the trap sentence itself is pinned
+    assert "Windows spelling" in body
+    assert "a Git-Bash `/c/...` spelling produced NO log" in body
+    assert "one run with `false` ended with the key removed" in body
     # unique-suffix brief name + full lifecycle, pinned by exact sentence
     # fragments so a regression cannot pass on loose keywords
     # (Sol check-off round 2, finding 3)
@@ -63,13 +84,29 @@ def test_flash_route_check_strings():
     assert 'Print mode: starting' in body
     assert 'model="' + CANONICAL_ID + '"' in body
     assert "Propagating selected model override" in body
+    # the mode the dispatch line asks for, echoed by the client
+    # (measured 2026-09-13 on agy 1.2.2, P2 log line 98)
+    assert "Print mode: applying agent mode accept-edits" in body
     assert "requested and propagated" in body
     assert "used and confirmed" not in body.replace(
         'never "used and confirmed"', "")
     # transcript/tree corroboration (Sol check-off F1: the log carries no
     # file actions; evidence lives in the brain transcript)
     assert "transcript_full.jsonl" in body
-    assert "conversationID" in body
+    # the id is on the session.go "Print mode: conversation=<uuid>, sending
+    # message" line; the starting line's conversationID field is EMPTY on
+    # agy 1.2.0 and 1.2.2 (both logs measured 2026-09-13), so a wrapper
+    # parsing the starting line gets no id and blocks a good run
+    assert "Print mode: conversation=<uuid>" in body
+    assert 'conversationID=""' in body
+    assert "parse `conversationID=" not in body
+    # Astra R1 claims 5 and 6: the two log tokens alone survive dropping
+    # the empty-id rule or the one-uuid rule, so both are pinned; and the
+    # missing-mode-line outcome names what the log fails to show, never a
+    # cause the log cannot establish
+    assert "an empty id is a missing transcript, not a wildcard" in body
+    assert "exactly one distinct uuid" in body
+    assert "the requested mode is not corroborated by the log" in body
     assert ("every path git status reports changed must appear in the "
             "brain transcript as a successful file-changing action"
             ) in body.lower()
@@ -87,8 +124,32 @@ def test_flash_preflight_pins():
     assert "allow rule" in body
     assert "git status --porcelain" in body
     assert "No file matching `AGY-TASK-BRIEF-*`" in body
-    # main-checkout scope with its one declared carve-out (Sol round 3)
-    assert "sole live-verification exception" in body
+    # scope is the trust list itself, not a named checkout: preflight 2
+    # is the mechanical gate and a worktree needs its own entry (measured
+    # 2026-09-12: preflight passed in a trusted worktree on agy 1.2.0).
+    # The 0.12.0 "main checkout only" carve-out named a plan task that no
+    # longer exists.
+    assert "any directory listed in `trustedWorkspaces`" in body
+    # a parent entry covers a child worktree (measured 2026-09-13 on agy
+    # 1.2.2: one entry for the worktrees parent, an edit landed in a
+    # worktree under it that was not listed itself); preflight 2 must
+    # accept an ancestor or it blocks the configuration that works
+    assert "the workspace directory or an ancestor of it" in body
+    assert "a worktree needs its own entry" not in body
+    # Fable R1 findings 2 and 3 (2026-09-13): the trust list is the LANE's
+    # allow-list and preflight 2 is its only enforcement, because agy does
+    # not consult it for the write (edit landed in a directory with no
+    # listed ancestor, with allowNonWorkspaceAccess true and again false);
+    # and the comparison rule is stated so a Bash-only wrapper cannot pick
+    # a bare string-prefix test
+    assert "agy itself does not consult it" in body
+    assert "case-insensitive" in body
+    assert "plus a separator" in body
+    # Astra R1 claim 6: normalization and equality survive the two pins
+    # above, so the rule's other clauses are pinned too
+    assert "no trailing separator" in body
+    assert "must equal the workspace path or" in body
+    assert "Task 6" not in body
 
 
 def test_flash_route_report_carries_transcript():
@@ -103,6 +164,13 @@ def test_flash_forbidden_bypass_class():
     window = body[max(0, idx - 200):idx + 200].lower()
     assert "never" in window or "forbidden" in window
     assert "persisted" in body and "settings" in body
+    # the scoped mode is named as NOT a member of the banned class, in
+    # the same section, so a reader of the ban cannot mistake the
+    # dispatch line for a violation of it
+    assert "`--mode accept-edits` is not a member of that class" in body
+    # Fable R1 finding 6: the narrowing clause is what keeps the carve-out
+    # from becoming a general --mode allowance
+    assert "No other `--mode` value is used in this lane" in body
 
 
 def test_flash_report_headings():
