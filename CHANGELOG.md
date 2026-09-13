@@ -1,9 +1,15 @@
 # Changelog
 
 This file has one section for each plugin version, newest first. Write
-each section for the person who must decide if they update. Each
-section starts with `## vX.Y.Z (YYYY-MM-DD)`, and the newest one must
-name the version in `.claude-plugin/plugin.json`.
+each section for the person who uses the plugin and must decide if they
+update, not for the person who maintains it. Each section starts with
+`## vX.Y.Z (YYYY-MM-DD)`, and the newest one must name the version in
+`.claude-plugin/plugin.json`.
+
+Open each section with a lead paragraph in plain words that says what
+changed for the user and what they must do. The lead paragraph has no
+code, no file name and no link; the checker refuses those. Put the
+maintainer detail, the file names and the records under a later title.
 
 Write each section in ASD-STE100 Simplified Technical English.
 `evals/tools/ste_lint.py` refuses these shapes, which STE forbids:
@@ -32,34 +38,42 @@ no release; their records are the merge commits on main.
 
 ## v0.34.0 (2026-09-13)
 
-### Artifact roots (item 100)
+The plugin now keeps all the files that a review writes in one folder
+for each project. Before this version, those files went to three
+different folders, and it was hard to find a review or to clean up. You
+do not have to change anything when you update. New reviews go to the
+one folder, and old files stay where they are.
 
-- **One declaration names each path that a round writes.** Before this
-  version, a round put its rounds, ledgers and mirrors in three roots
-  for each consumer repository. Each writer had resolved the repository
-  override on its own. A cleanup of one consumer found 76 gate
-  folders under the wrong root. The declaration now lives in one
-  contract region of `references/model-prompting-notes.md`, and
-  `tools/artifact-roots.ps1` is its only reader.
-- **The resolver answers a membership question.** `-Assert` tells you
-  if a path is in the retained root that a retention copy expects. The
-  resolver refuses a copy next to the rounds root before the copy
-  starts.
-- **The exit map is the same on both hosts.** The resolver has no
-  `param` block and parses its own command line, because typed binding
-  did not give one exit map. A parameter with no value exited 1 from
-  `-File` binding. `-Json:$true` exited 1 on Windows PowerShell 5.1 and
-  0 on PowerShell 7. Each command-line fault now exits 2 on both
-  hosts. The resolver refuses an empty inline value; it does not read
-  the value as a default.
-- **A sweep and an eval with real writers.** `test_artifact_roots.py`
-  runs the three round writers in a disposable repository on both
-  hosts. It also sweeps the skill for a root that a sentence names by
-  hand and not through the declaration. The sweep includes the three
-  placeholder roots that the guidance cites.
+### What changed for you
 
-### Records
+- **One folder for each project.** A review writes its debate rounds,
+  its ledger and its review mirror under one root. The skill declares
+  that root in one place, and each tool reads that one declaration.
+- **A tool shows you where the files are.** `tools/artifact-roots.ps1`
+  prints the folders that a review uses in your project. It also refuses
+  to copy a file to the wrong folder.
+- **The same result on both PowerShell versions.** The tool gives the
+  same exit code for the same error on Windows PowerShell 5.1 and on
+  PowerShell 7. Before, the two versions gave different codes for the
+  same mistake.
 
-- `docs/superpowers/plans/rounds/2026-09-12-artifact-roots/` retains
-  five diff-debate rounds and the Fable review of the full branch. A
-  write into the reviewed tree during round 2 voided that round.
+### Details for maintainers
+
+- The declaration is one contract region of
+  `references/model-prompting-notes.md`, and `tools/artifact-roots.ps1`
+  is its only reader. `-Assert` answers if a path is inside the retained
+  root that a retention copy expects.
+- The resolver has no `param` block and parses its own command line,
+  because typed binding did not give one exit map. A parameter with no
+  value exited 1 from `-File` binding, and `-Json:$true` exited 1 on
+  Windows PowerShell 5.1 and 0 on PowerShell 7. Each command-line fault
+  now exits 2 on both hosts, and an empty inline value is a fault, not a
+  default.
+- `test_artifact_roots.py` runs the three round writers in a disposable
+  repository on both hosts. It also sweeps the skill for a root that a
+  sentence names by hand and not through the declaration.
+- Backlog item 100. The record is
+  `docs/superpowers/plans/rounds/2026-09-12-artifact-roots/`, which
+  retains five diff-debate rounds and the Fable review of the full
+  branch. A write into the reviewed tree during round 2 voided that
+  round.

@@ -162,7 +162,7 @@ def test_check_changelog_fails_on_an_ste_finding_and_skips_with_no_ste(tmp_path)
     (tmp_path / ".claude-plugin" / "plugin.json").write_text(
         '{"version": "0.1.0"}', encoding="utf-8")
     (tmp_path / "CHANGELOG.md").write_text(
-        "# Changelog\n\n## v0.1.0 (2026-09-13)\n\n- The file should be checked.\n",
+        "# Changelog\n\n## v0.1.0 (2026-09-13)\n\nThe file should be checked.\n",
         encoding="utf-8")
     checker = str(TOOLS / "check_changelog.py")
     proc = subprocess.run([sys.executable, checker, "--repo-root", str(tmp_path)],

@@ -4476,3 +4476,31 @@ refuse an entry the checker refuses. The 0.34.0 entry was rewritten to
 pass, which is the proof the rules are usable; the checker found 15
 defects in the first draft. Noun clusters and one-meaning-per-word stay
 with the writer, and the checker's docstring says so.
+
+## 104. The changelog entry passed the style rules and still read as maintainer text
+Status: DONE
+Closed: record
+Verified: 2026-09-13 d1288beb31d9
+
+**Filed and closed 2026-09-13, after item 103.** The 0.34.0 entry passed
+every mechanical STE rule and still opened with "resolver", "retention
+copy", "typed binding" and "exit map". The rules bound the sentence
+shape and not the reader: STE exists so that a non-native speaker can
+follow a maintenance manual, and the user's stated aim for the
+changelog is the same, a page the average user can read, not a page
+for the maintainer. Nothing in the gate said what a section must open
+with.
+
+Record: evals/tools/check_changelog.py
+
+`check_changelog.py` now holds a structure rule beside the version tie:
+each version section must open with a plain-language paragraph, not a
+heading or a list item, and that paragraph may carry no code span, no
+file name or path, and no URL. That is the mechanical proxy for "say
+what changed for the user first"; the maintainer detail goes under a
+later heading, where names and paths are fine. The 0.34.0 entry was
+rewritten in that shape: a lead that says what the user gets and that
+they need not change anything, a "What changed for you" list, and a
+"Details for maintainers" list with the records. `CHANGELOG.md`'s own
+preamble names the reader. `test_check_changelog.py` proves the three
+refusals fire and that the rule stops at the first blank line.
