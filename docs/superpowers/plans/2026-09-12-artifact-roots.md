@@ -1433,3 +1433,49 @@ under the dispatch flags; a mitigation, never proof of removal).
 
 ### Degraded-mode note
 n/a
+
+---
+
+## Debate record (mode diff)
+
+**Participants:** Opus 5 (session) / GPT-6 Astra (codex exec, session 01a09943-2bbd-7442-bfb6-0692f161fe36)
+**Range:** cd0e863..5186b9e (branch artifact-roots); fable-reviewer whole-branch review on cd0e863..f12b703, retained
+**Rounds used:** 5 of 6 (declared 4, extended by 2 by the user after R4's ESCALATE; R2 counted and VOID on a session-side `workdir-mismatch`)
+**Outcome:** converged
+**Verification status:** FULL
+**Degradation:** none
+**Authorized by:** user, 2026-09-13 ("Apply fixes, then finish the pipeline"; "Extend by 2 exchanges")
+**Attestation:** PASS at 5186b9e, bound to application checkpoint 20260913-0110-aabab8133365.md
+**Raw rounds:** docs/superpowers/plans/rounds/2026-09-12-artifact-roots/ (fable-diff-r1-*, brief/reply/transcript/receipt/binder for astra-diff-r1, r3, r4, r5; brief/receipt for the void r2; README.md sections "Mode diff" onward)
+
+Every counted round's transcript header read `model: gpt-6-astra`,
+`provider: openai`, `reasoning effort: high`, `sandbox: read-only`,
+`workdir: C:\Users\Brandon\AppData\Local\Temp\pxar2`; rounds 3 to 5 echoed the
+resumed session id. Every counted round was bound to its brief with
+`tools/read-codex-round-evidence.ps1` and the receipt's sealed prior-state
+hash: `status: clean`, `sealed: sealed`. Preflight: `tools/artifact-roots.ps1`
+run against the real repository (retained as `artifact-roots.txt`); mirror at
+the declaration's temp root; enumeration empty in the mirror; client probe
+clean (31 home-scoped skills before the override, 0 after); tool-surface
+probe clean (147 calibration tools, 0 under the dispatch flags).
+
+### Resolved points
+| # | Claim | Raised by | Outcome | Evidence |
+|---|-------|-----------|---------|----------|
+| 1 | A forbidden character in TEMP splits the hosts; three conversions bypass the helper; the declaration read is unhandled | reviewer R1 | accepted; every conversion through `Resolve-Absolute`, TEMP screened | tools/artifact-roots.ps1 (temp root block) |
+| 2 | Missing `-RepoRoot`, bare token, unknown parameter exit 1 without `ERROR:` | reviewer R1 | accepted; later subsumed by point 6 | test_artifact_roots.py `test_every_command_line_fault_is_a_script_fault` |
+| 3 | `<git-common-dir>/parallax/...` spellings escape the sweep; one is a writing instruction | reviewer R1 | accepted as FIX (same class, swept surface); seventh shape, three citations | test_artifact_roots.py FORBIDDEN_SHAPES; application-checkpoint.md |
+| 4 | The fresh-parent writer case was dropped | reviewer R1 | accepted; two cases, one driver | test_artifact_roots.py Group 3b |
+| 5 | Record: 25,985 characters, shifted SKILL citations | reviewer R1 | accepted, record only | README R1 section |
+| 6 | Switch conversion diverges by host (`-Json:$true`); the residual count was false twice | reviewer R3 | accepted; no param block, hand parser | tools/artifact-roots.ps1 "the command line" |
+| 7 | An empty inline value is dropped by `-File` before `$args` exists; `-Assert:` answered 0 with no assertion | reviewer R4 (ESCALATE at budget) | accepted after the user extended the budget; raw process command line parsed | tools/artifact-roots.ps1; spec exit map |
+| 8 | Bare token bound positionally to `-DocsRoot` | session (new regression, R1 fix wave) | accepted; predates the round; closed by point 6 | README R1 section |
+| 9 | A parameter given twice is a second binder residual | session probe after the void R2 | accepted; closed by point 6 | README R2 section |
+
+### Escalated points (user-decided)
+| # | Question | Session position | Reviewer position | Owner's call |
+|---|----------|------------------|-------------------|--------------|
+| 1 | Budget exhausted at R4 with one new substantive finding | fix is known (raw command line); extend by 2 | ESCALATE: authorization needed beyond the budget | extended by 2; fix applied; R5 PASS |
+
+### Degraded-mode note
+n/a

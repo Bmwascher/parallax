@@ -380,3 +380,51 @@ zero offenders). Claims 1 and 2: one NEW substantive finding at exchange
 The user extended the budget by two exchanges (6 in total) on the
 session's recommendation; the fix is applied under checkpoint amendment
 4 and R5 is the confirming round.
+
+## Astra diff R5 - COUNTED, verdict PASS (terminal)
+
+Dispatched 2026-09-13 against head `5186b9e` (the R4 fix commit), mirror
+rebuilt at the same path with `-Force` (mirror head = source head, probe
+clean, same override sha256), resumed session
+`01a09943-2bbd-7442-bfb6-0692f161fe36`, background task
+`Astra R5 debate round`. Wrapper exit 0, `reply-present`. Route confirmed.
+Bound with `-Resume` (prior state = R4 binder's `nextState`):
+`status: clean`, `sealed: sealed` (`binder-diff-r5.json`).
+
+Artifacts: `brief-astra-diff-r5.md`, `astra-diff-r5-reply.md`,
+`astra-diff-r5-transcript.txt`, `receipt-diff-r5.json`,
+`binder-diff-r5.json`, `mirror-build-diff-r5.txt`.
+
+**Reviewer verdict: PASS.** Claims 1, 2, 3 PASS. The reviewer ran 18
+exact-token cases per host (empty inline values, empty string arguments,
+spaces, trailing backslashes, embedded quotes, the JSON Boolean forms,
+duplicates, common parameters) and found no divergence; its independent
+sweep found zero offenders; the declaration region and SKILL.md are
+unchanged. UNVERIFIED on its side: execution totals, which the session's
+runs are the evidence for.
+
+### Final adjudication (session)
+
+An adjudicated dry round: no new substantive finding and no outstanding
+contested point. The reviewer's UNVERIFIED items are the pass totals it
+could not run; the session ran the module on both hosts (333 passed on
+Windows PowerShell 5.1 across four modules, 67 on PowerShell 7) and the
+full suite at `5186b9e` (2999 passed, 14 skipped). Terminal verdict:
+**PASS** at head `5186b9e`, `Verification status: FULL`. Budget: 5 of 6
+exchanges used (the declared 4, extended by 2 at the user's decision after
+R4's ESCALATE; R2 is counted and void). Attestation written by
+`tools/write-attestation.ps1` at that head, bound to checkpoint
+`20260913-0110-aabab8133365.md`; `tools/verify-attestation.ps1` reports
+`direct`.
+
+Status line: GPT-6 Astra (codex exec, session 01a09943) with Opus 5
+(session); 5 rounds (1 void); converged, 0 escalated; Verification status
+FULL; effective route confirmed.
+
+What the debate found, in one paragraph: every counted round found a real
+defect inside the previous fix, none was contested, and four of them were
+the same class, a host-divergent or silently-lost command-line fault in
+the resolver (typed binding, positional binding, switch conversion, empty
+inline values). The declaration, the sweep and the writer test held from
+R1 on; the tool's argument handling is what the debate rewrote, and it
+now reads the raw process command line so that PowerShell binds nothing.
