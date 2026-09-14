@@ -1,0 +1,11 @@
+mirror: C:\pxm\pxmp
+source_head: ecd43621a6ba204a4cd2b20dfc05ead2b318c719
+mirror_head: ecd43621a6ba204a4cd2b20dfc05ead2b318c719
+source_status_sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+mirror_state_sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+baseline:
+manifest:
+links:
+probe: {"global_agents_md_path":"C:\\Users\\Brandon\\.codex\\AGENTS.md","reason":"","project_agents_md":false,"plugin_cache_scoped":0,"skills_after":0,"override_sha256":"84d160071238a9f8a0ec350f9f2b938d8ba3bf0b3e7cfd20eb17cde827579bb1","unknown_scoped":0,"override_file":"C:\\Temp\\parallax-scratch\\2026-09-13-mirror-parent\\override-r1.toml","home_scoped":31,"status":"clean","repo_scoped":0,"global_agents_md":true,"skills_before":31}
+override: C:\Temp\parallax-scratch\2026-09-13-mirror-parent\override-r1.toml
+source_manifest: C:\pxm\pxmp.source-manifest

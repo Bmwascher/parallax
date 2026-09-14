@@ -662,10 +662,11 @@ proceed; do not infer either key's value.
 ## Workspace isolation and the brief
 
 - Reviews run in a THROWAWAY REVIEW MIRROR — never the real tree. Build
-  it at a SHORT path directly under the temp directory (the
+  it at a SHORT path directly under the declared review mirror parent (the
   `Canonical review mirror root` row of model-prompting-notes.md's
-  round-artifact-roots declaration), such as a
-  `kv-<tag>` folder, and never inside the session scratchpad, whose own
+  round-artifact-roots declaration), such as
+  `C:/pxm/kv-<tag>`, never under the temp directory and never inside
+  the session scratchpad, whose own
   path is long enough to consume most of the budget before the copy
   starts. This sentence used to say "in the session scratchpad" and
   SKILL.md said the opposite, a contradiction 0.21.0 introduced and the

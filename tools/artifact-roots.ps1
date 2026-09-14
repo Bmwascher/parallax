@@ -17,7 +17,7 @@
 # any retained root when -Expect is absent), 1 -Assert outside every
 # retained root or inside a retained root other than the one -Expect
 # names, 2 parameter fault (anything wrong on the command line, a
-# forbidden character in -DocsRoot, -Assert or the TEMP variable),
+# forbidden character in -DocsRoot or -Assert),
 # unreadable declaration, or -RepoRoot not a git working tree. There is
 # NO binding residual: this script has no param block, so PowerShell
 # binds nothing, and every token reaches the parser below as a string
@@ -134,7 +134,8 @@ $expectMap = @(
     @{ Key = "rounds";      Name = "rounds root" },
     @{ Key = "frozenPlan";  Name = "frozen plan parent" },
     @{ Key = "attestation"; Name = "attestation root" },
-    @{ Key = "checkpoint";  Name = "checkpoint root" }
+    @{ Key = "checkpoint";  Name = "checkpoint root" },
+    @{ Key = "reviewMirror"; Name = "review mirror root" }
 )
 $expectedName = ""
 if ($bound.ContainsKey("Expect")) {
@@ -145,7 +146,7 @@ if ($bound.ContainsKey("Expect")) {
         if ($Expect -ceq $e.Key) { $expectedName = $e.Name }
     }
     if (-not $expectedName) {
-        Fail ("-Expect must be one of rounds, frozenPlan, attestation, checkpoint: " + $Expect)
+        Fail ("-Expect must be one of rounds, frozenPlan, attestation, checkpoint, reviewMirror: " + $Expect)
     }
 }
 
@@ -288,20 +289,8 @@ if ($bound.ContainsKey("DocsRoot")) {
     $source = "default"
 }
 
-$tempRoot = $env:TEMP
-if (-not $tempRoot) { $tempRoot = [System.IO.Path]::GetTempPath() }
-# The one input that is neither a parameter nor git's answer: screen it
-# with the same set as -DocsRoot and -Assert before any path API, or a
-# `|` in TEMP throws on 5.1 and prints on 7 (measured 2026-09-13 by the
-# diff-debate R1 reviewer). Same exit on both hosts.
-if (($tempRoot -replace '^[A-Za-z]:', '') -match '[<>:"|?*\x00-\x1f]') {
-    Fail ("TEMP contains a character Windows paths forbid: " + $tempRoot)
-}
-$tempRoot = Resolve-Absolute $tempRoot
-
 function Resolve-Row($value) {
     $v = $value.Replace("<docs-root>", $docsRel)
-    $v = $v.Replace("<TEMP>", $tempRoot)
     $v = $v.Replace("<git-common-dir>", $common)
     # Split off the per-debate placeholder tail BEFORE any path API sees
     # the string: on Windows PowerShell 5.1, IsPathRooted and GetFullPath
@@ -359,16 +348,27 @@ if ($bound.ContainsKey("Assert")) {
     $target = Resolve-Absolute $Assert
     $cmp = [System.StringComparison]::OrdinalIgnoreCase
     # Rounds before the plan parent: the rounds root sits under it and
-    # the more specific name is the useful answer.
+    # the more specific name is the useful answer. The review mirror
+    # parent is last: it is outside the repository, and it is in the set
+    # so that -Expect reviewMirror answers for a mirror path before the
+    # build (backlog item 107) and a retention copy aimed at it is
+    # refused by name. The SDD ledger row stays out: nothing copies
+    # into it.
     $retained = @(
-        @{ Name = "rounds root";        Root = Strip-Placeholder $resolved.rounds },
-        @{ Name = "frozen plan parent"; Root = Strip-Placeholder $resolved.frozenPlan },
-        @{ Name = "attestation root";   Root = Strip-Placeholder $resolved.attestation },
-        @{ Name = "checkpoint root";    Root = Strip-Placeholder $resolved.checkpoint }
+        @{ Name = "rounds root";         Root = Strip-Placeholder $resolved.rounds },
+        @{ Name = "frozen plan parent";  Root = Strip-Placeholder $resolved.frozenPlan },
+        @{ Name = "attestation root";    Root = Strip-Placeholder $resolved.attestation },
+        @{ Name = "checkpoint root";     Root = Strip-Placeholder $resolved.checkpoint },
+        @{ Name = "review mirror root";  Root = Strip-Placeholder $resolved.reviewMirror }
     )
     $inside = $null
     foreach ($r in $retained) {
-        if ($target.Equals($r.Root, $cmp) -or $target.StartsWith($r.Root + "/", $cmp)) {
+        # The review mirror parent is the one root a path may never EQUAL:
+        # a mirror is a tree under it, and the parent itself is never a
+        # tree (the emitter refuses it too), so the answer for the
+        # parent is outside, and the two readers agree.
+        $mayEqual = ($r.Name -ne "review mirror root")
+        if (($mayEqual -and $target.Equals($r.Root, $cmp)) -or $target.StartsWith($r.Root + "/", $cmp)) {
             $inside = $r.Name
             break
         }

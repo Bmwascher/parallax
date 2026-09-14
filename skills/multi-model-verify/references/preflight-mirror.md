@@ -9,13 +9,20 @@ how, not the whether.
 
 Run
 `tools/new-review-mirror.ps1 -RepoRoot <repo> -MirrorPath <scratch>`.
-Build at a SHORT `<scratch>` directly under the temp directory, such
-as a `kv-<tag>` folder, never inside the session scratchpad: the
-mirror re-roots every path, and the tool refuses before creating
-anything when the budget is blown. That location is the
-`Canonical review mirror root` row of references/model-prompting-notes.md's
-round-artifact-roots declaration, fixed there because the tool refuses a
-mirror inside the reviewed repository.
+Build at a SHORT `<scratch>` directly under the declared review mirror parent,
+such as `C:/pxm/kv-<tag>`, never under the temp directory and never
+inside the session scratchpad: the mirror re-roots every path, and the
+tool refuses before creating anything when the budget is blown. That
+location is the `Canonical review mirror root` row of
+references/model-prompting-notes.md's round-artifact-roots declaration,
+fixed there because the tool refuses a mirror inside the reviewed
+repository and because the KitnEssentials packets leave a mirror root
+15 characters at most, which the temp directory could never hold. The
+mirror tool does not read the row, so run
+`tools/artifact-roots.ps1 -RepoRoot <repo> -Assert <scratch> -Expect reviewMirror`
+first; exit 0 is the only clean answer, the parent itself answers
+outside because it is never a tree, and a mirror built anywhere else
+is refused at the reap and removed by hand.
 It builds the **review mirror** (references/backup-lane.md owns its
 construction, its baseline, and its identity fields — a file copy
 preserving `.git`, NOT a clone), deletes the offending entries THERE,
@@ -105,8 +112,10 @@ AFTER, so a removal that fails leaves the verdict standing and exits 3
 naming the entry that stopped it. A path is accepted only when it
 exists as a directory not reached through a link, does not overlap the
 reviewed repository or its git common dir, holds a `.git` DIRECTORY
-(a `.git` FILE marks a linked worktree, never a mirror or a bridge), and
-its HEAD is the attested head. The mirror may instead sit exactly one
+(a `.git` FILE marks a linked worktree, never a mirror or a bridge),
+its HEAD is the attested head, and, last of all, it sits under the
+declared review mirror parent, mirror and bridge alike, at any depth
+below it and never the parent itself. The mirror may instead sit exactly one
 `parallax@local` remediation commit above that head, because that is the
 commit construction makes over a tracked back-channel; the bridge must
 match exactly, so a bridge left unfetched after a fix commit is refused
@@ -121,7 +130,7 @@ mirror tool's `-Force` rebuild uses the same function, which is what
 closed backlog item 98.
 
 An existing `-MirrorPath` without `-Force` is refused with the reap
-route named. Build `kv-<tag>-2` beside a finished debate's mirror and
+route named. Build `C:/pxm/kv-<tag>-2` beside a finished debate's mirror and
 the count grows by one for every debate; reap the finished one instead,
 and rebuild in place with `-Force` only for a debate that is still
 running, because a resumed round needs the mirror at the path its

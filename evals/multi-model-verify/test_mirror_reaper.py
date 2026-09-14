@@ -20,7 +20,9 @@ import json
 import os
 import re
 import shutil
+import stat
 import subprocess
+import uuid
 from pathlib import Path
 
 import pytest
@@ -99,6 +101,32 @@ def junction(link, target):
 def read(path):
     assert path.is_file(), f"missing file: {path}"
     return path.read_text(encoding="utf-8")
+
+
+# The DECLARED review mirror parent (model-prompting-notes.md,
+# round-artifact-roots, `Canonical review mirror root`). The emitter reaps
+# nothing outside it, so every tree a success case names is built under
+# a per-test directory here and removed afterwards. The literal is a pin:
+# test_artifact_roots.py binds the resolver's answer to the row.
+PARENT = Path(r"C:\pxm")
+
+
+def _clear_readonly_and_retry(func, path, exc):
+    os.chmod(path, stat.S_IWRITE)
+    func(path)
+
+
+@pytest.fixture
+def pxm():
+    """A fresh `C:\\pxm\\t-<8 hex>` for one test, removed on the way out
+    whatever the test left behind (a held-handle case leaves its trees).
+    Git's read-only object files are made writable as they are hit.
+    Nothing else under the parent is ever touched."""
+    d = PARENT / ("t-" + uuid.uuid4().hex[:8])
+    d.mkdir(parents=True)
+    yield d
+    if d.exists():
+        shutil.rmtree(d, onexc=_clear_readonly_and_retry)
 
 
 # ---------------------------------------------------------------------
@@ -241,11 +269,11 @@ def att_file(repo, head):
     return repo / ".git" / "parallax" / "attestations" / (head + ".json")
 
 
-def test_reaps_mirror_bridge_and_sidecar_after_writing(tmp_path):
+def test_reaps_mirror_bridge_and_sidecar_after_writing(tmp_path, pxm):
     repo, base, head = make_repo(tmp_path)
-    bridge = make_bridge(repo, tmp_path / "kvs-t")
-    mirror = make_mirror(bridge, tmp_path / "kv-t")
-    sidecar = tmp_path / "kv-t.source-manifest"
+    bridge = make_bridge(repo, pxm / "kvs-t")
+    mirror = make_mirror(bridge, pxm / "kv-t")
+    sidecar = pxm / "kv-t.source-manifest"
     sidecar.write_text("advisory\n", encoding="utf-8")
     target = tmp_path / "reference"
     target.mkdir()
@@ -264,12 +292,12 @@ def test_reaps_mirror_bridge_and_sidecar_after_writing(tmp_path):
     assert (repo / "b.txt").is_file(), "the reviewed repo is untouched"
 
 
-def test_a_remediation_commit_above_the_head_is_still_the_mirror(tmp_path):
+def test_a_remediation_commit_above_the_head_is_still_the_mirror(tmp_path, pxm):
     # The mirror tool commits its back-channel removal as parallax@local
     # with the source head as the single parent, so a mirror of a repo
     # with a TRACKED back-channel sits one commit above the attested head.
     repo, base, head = make_repo(tmp_path)
-    mirror = make_mirror(repo, tmp_path / "kv-t")
+    mirror = make_mirror(repo, pxm / "kv-t")
     (mirror / "AGENTS.md").write_text("planted\n", encoding="utf-8")
     git(mirror, "add", "AGENTS.md")
     git(mirror, "commit", "-q", "-m", "planted")
@@ -284,7 +312,7 @@ def test_a_remediation_commit_above_the_head_is_still_the_mirror(tmp_path):
     assert not att_file(repo, head).exists(), "a refused argument writes nothing"
     assert mirror.exists()
     # Exactly one parallax@local commit whose parent is the head: accepted.
-    mirror2 = make_mirror(repo, tmp_path / "kv-u")
+    mirror2 = make_mirror(repo, pxm / "kv-u")
     (mirror2 / "AGENTS.md").write_text("planted\n", encoding="utf-8")
     git(mirror2, "add", "AGENTS.md")
     subprocess.run(["git", "-C", str(mirror2), "-c", "user.email=parallax@local",
@@ -310,7 +338,8 @@ def test_a_bridge_at_a_stale_head_is_refused_by_name(tmp_path):
 
 
 @pytest.mark.parametrize("shape", ["missing", "file", "inside-repo", "repo-itself",
-                                   "contains-repo", "worktree", "no-git", "link"])
+                                   "contains-repo", "worktree", "no-git", "link",
+                                   "outside-parent"])
 def test_every_wrong_tree_is_refused_before_the_record_is_written(tmp_path, shape):
     repo, base, head = make_repo(tmp_path)
     keep = None
@@ -333,6 +362,10 @@ def test_every_wrong_tree_is_refused_before_the_record_is_written(tmp_path, shap
     elif shape == "no-git":
         path = tmp_path / "bare"
         path.mkdir()
+    elif shape == "outside-parent":
+        # Passes every earlier rule (a real mirror at the attested head)
+        # and sits where the 78 directories of 2026-09-13 sat.
+        path = make_mirror(repo, tmp_path / "kv-t")
     else:
         keep = make_mirror(repo, tmp_path / "real")
         path = tmp_path / "link"
@@ -349,10 +382,10 @@ def test_every_wrong_tree_is_refused_before_the_record_is_written(tmp_path, shap
         assert (keep / "b.txt").is_file(), "the link's target survives"
 
 
-def test_a_held_handle_leaves_the_attestation_and_exits_three(tmp_path):
+def test_a_held_handle_leaves_the_attestation_and_exits_three(tmp_path, pxm):
     repo, base, head = make_repo(tmp_path)
-    mirror = make_mirror(repo, tmp_path / "kv-t")
-    bridge = make_bridge(repo, tmp_path / "kvs-t")
+    mirror = make_mirror(repo, pxm / "kv-t")
+    bridge = make_bridge(repo, pxm / "kvs-t")
     held = mirror / "held.txt"
     held.write_text("open\n", encoding="utf-8")
     with open(held, "r", encoding="utf-8"):
@@ -401,8 +434,12 @@ def test_preflight_mirror_reference_states_the_end_of_life_rule():
         "HEAD is the attested head",
         "a `.git` FILE",
         "kv-<tag>-2",
+        "declared review mirror parent",
+        "-Expect reviewMirror",
     ):
         assert anchor in body, "end-of-life anchor missing: " + anchor
+    assert "directly under the temp directory" not in body
+    assert "C:/pxm/kv-<tag>" in body
 
 
 def test_doctor_inventories_the_mirrors_and_never_deletes():
@@ -417,12 +454,26 @@ def test_doctor_inventories_the_mirrors_and_never_deletes():
         "LastWriteTime",
         "-ReapMirror",
         "backlog item 106",
+        "artifact-roots.ps1",
+        "reviewMirror",
+        "legacy",
+        "backlog item 107",
     ):
         assert anchor in body, "doctor inventory anchor missing: " + anchor
     section = body.split("## 10. Review mirror inventory", 1)[1]
     assert re.search(r"never delete", section, re.IGNORECASE), (
         "the inventory is observation, not action")
     assert "Remove-Item" not in section
+    # The declared parent is the inventory; the drive-root name sweep is
+    # the legacy line, and the text says which is which.
+    assert section.index("reviewMirror") < section.index("legacy")
+
+
+def test_skill_and_backup_lane_name_the_parent_not_the_temp_directory():
+    for path in (SKILL, REPO / "skills" / "multi-model-verify" / "references" / "backup-lane.md"):
+        body = read(path)
+        assert "directly under the temp directory" not in body, path
+        assert "declared review mirror parent" in body, path
 
 
 def test_mirror_tool_refusal_and_emitter_agree_on_the_parameter_name():
@@ -437,9 +488,9 @@ def test_mirror_tool_refusal_and_emitter_agree_on_the_parameter_name():
 # ---------------------------------------------------------------------
 # Group 4: the final-review fix wave (I1, I2, M1, M2)
 # ---------------------------------------------------------------------
-def test_a_failed_record_write_reaps_nothing(tmp_path):
+def test_a_failed_record_write_reaps_nothing(tmp_path, pxm):
     repo, base, head = make_repo(tmp_path)
-    mirror = make_mirror(repo, tmp_path / "kv-t")
+    mirror = make_mirror(repo, pxm / "kv-t")
     # A DIRECTORY at the record's path: Set-Content cannot write there,
     # so the write must be refused before anything is reaped.
     att_file(repo, head).mkdir(parents=True)
@@ -475,14 +526,14 @@ def test_a_read_only_directory_is_removed(tmp_path):
 
 
 @pytest.mark.parametrize("shape", ["same", "nested"])
-def test_overlapping_mirror_and_bridge_are_refused(tmp_path, shape):
+def test_overlapping_mirror_and_bridge_are_refused(tmp_path, shape, pxm):
     repo, base, head = make_repo(tmp_path)
     if shape == "same":
-        one = make_bridge(repo, tmp_path / "kvs-t")
+        one = make_bridge(repo, pxm / "kvs-t")
         mirror = one
         bridge = one
     else:
-        mirror = make_mirror(repo, tmp_path / "kv-t")
+        mirror = make_mirror(repo, pxm / "kv-t")
         bridge = make_bridge(repo, mirror / "kvs-inner")
     proc = attest(repo, base, head, mirror=mirror, bridge=bridge)
     assert proc.returncode == 2, shape + ": " + proc.stdout + proc.stderr
@@ -494,11 +545,11 @@ def test_overlapping_mirror_and_bridge_are_refused(tmp_path, shape):
 # ---------------------------------------------------------------------
 # Group 5: pre-round-1 fable fix wave (2026-09-13)
 # ---------------------------------------------------------------------
-def test_a_sidecar_failure_names_the_unattempted_bridge(tmp_path):
+def test_a_sidecar_failure_names_the_unattempted_bridge(tmp_path, pxm):
     repo, base, head = make_repo(tmp_path)
-    mirror = make_mirror(repo, tmp_path / "kv-t")
-    bridge = make_bridge(repo, tmp_path / "kvs-t")
-    sidecar = tmp_path / "kv-t.source-manifest"
+    mirror = make_mirror(repo, pxm / "kv-t")
+    bridge = make_bridge(repo, pxm / "kvs-t")
+    sidecar = pxm / "kv-t.source-manifest"
     sidecar.write_text("advisory\n", encoding="utf-8")
     with open(sidecar, "r", encoding="utf-8"):
         proc = attest(repo, base, head, mirror=mirror, bridge=bridge)
@@ -563,10 +614,132 @@ def test_a_relative_reap_path_is_refused(tmp_path):
     assert not att_file(repo, head).exists()
 
 
+def doctored_plugin(tmp_path, replacement):
+    """A copy of the three attestation-side tools beside a doctored notes
+    file, so a parent-read failure can be driven without touching the real
+    declaration. `replacement` is what the review mirror row becomes; an
+    empty string removes the row."""
+    fake = tmp_path / "plugin"
+    (fake / "tools").mkdir(parents=True)
+    notes_dir = fake / "skills" / "multi-model-verify" / "references"
+    notes_dir.mkdir(parents=True)
+    for name in ("write-attestation.ps1", "artifact-roots.ps1", "review-tree-removal.ps1"):
+        shutil.copy(REPO / "tools" / name, fake / "tools" / name)
+    notes = REPO / "skills" / "multi-model-verify" / "references" / "model-prompting-notes.md"
+    row = "Canonical review mirror root: `C:/pxm/<short-name>/`\n"
+    assert row in read(notes)
+    (notes_dir / "model-prompting-notes.md").write_text(
+        read(notes).replace(row, replacement), encoding="utf-8")
+    return fake / "tools" / "write-attestation.ps1"
+
+
+# ---------------------------------------------------------------------
+# Group 7: the declared mirror parent (item 107, follow-up 2)
+# ---------------------------------------------------------------------
+def test_a_tree_outside_the_declared_parent_is_refused_for_mirror_and_bridge(tmp_path):
+    # The LAST rule of the identity guard: a mirror and a bridge that
+    # pass every other rule, built under the host temp directory as every
+    # tree was until 2026-09-13, are refused by name with the record
+    # unwritten. The message names the declared parent.
+    repo, base, head = make_repo(tmp_path)
+    mirror = make_mirror(repo, tmp_path / "kv-t")
+    bridge = make_bridge(repo, tmp_path / "kvs-t")
+    for kwargs, label in (({"mirror": mirror}, "the reap mirror"),
+                          ({"bridge": bridge}, "the reap bridge")):
+        proc = attest(repo, base, head, **kwargs)
+        assert proc.returncode == 2, label + ": " + proc.stdout + proc.stderr
+        assert ("ERROR: " + label + " is not under the declared review mirror parent C:/pxm (") in proc.stdout, proc.stdout
+        assert not att_file(repo, head).exists()
+    assert mirror.exists() and bridge.exists()
+
+
+def test_the_parent_itself_is_never_a_reap_path():
+    # Source pin: the comparison is StartsWith on the parent WITH its
+    # separator, never Equals, so `C:\pxm` can never be named as a tree.
+    body = read(WRITE)
+    guard = body[body.index("function Resolve-ReapPath"):body.index("function Invoke-Reap")]
+    assert '$parentSlash = $mirrorParent.TrimEnd("/") + "/"' in guard
+    assert "$p.StartsWith($parentSlash, $cmp)" in guard
+    assert "$p.Equals($parentSlash, $cmp)" in guard
+    # And it is the LAST rule: the head comparison precedes it.
+    assert guard.index("not the attested head") < guard.index("not under the declared review mirror parent")
+
+
+def test_an_unreadable_parent_refuses_every_reap(tmp_path, pxm):
+    # The emitter reads the parent through artifact-roots.ps1, the one
+    # reader of the declaration. A copy of the three tools beside a
+    # doctored notes file whose mirror row has no placeholder cannot
+    # resolve a parent, and a parent that cannot be read accepts
+    # NOTHING: exit 2, record unwritten, tree untouched - even for a tree
+    # that sits under the real parent.
+    emitter = doctored_plugin(tmp_path, "Canonical review mirror root: `C:/pxm/`\n")
+    repo, base, head = make_repo(tmp_path)
+    mirror = make_mirror(repo, pxm / "kv-t")
+    proc = run_ps(emitter,
+                  "-RepoRoot", str(repo), "-BaseSha", base, "-HeadSha", head,
+                  "-Verdict", "PASS", "-VerificationStatus", "FULL",
+                  "-RouteNote", "effective route confirmed", "-Rounds", "1",
+                  "-Participants", "session/reviewer", "-ReapMirror", str(mirror))
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "ERROR: the declared review mirror parent could not be read" in proc.stdout, proc.stdout
+    assert not att_file(repo, head).exists()
+    assert mirror.exists()
+    # Without a reap parameter the same doctored copy never reads the
+    # parent and writes the record as before.
+    proc = run_ps(emitter,
+                  "-RepoRoot", str(repo), "-BaseSha", base, "-HeadSha", head,
+                  "-Verdict", "PASS", "-VerificationStatus", "FULL",
+                  "-RouteNote", "effective route confirmed", "-Rounds", "1",
+                  "-Participants", "session/reviewer")
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert att_file(repo, head).is_file()
+
+
+def test_a_roots_tool_that_exits_nonzero_refuses_every_reap(tmp_path, pxm):
+    # The other failure direction of the parent read: the doctored notes
+    # have NO review mirror row, so artifact-roots.ps1 itself exits 2, and
+    # the emitter reports that exit rather than treating an empty answer
+    # as a parent. Record unwritten, tree untouched.
+    emitter = doctored_plugin(tmp_path, "")
+    repo, base, head = make_repo(tmp_path)
+    mirror = make_mirror(repo, pxm / "kv-t")
+    proc = run_ps(emitter,
+                  "-RepoRoot", str(repo), "-BaseSha", base, "-HeadSha", head,
+                  "-Verdict", "PASS", "-VerificationStatus", "FULL",
+                  "-RouteNote", "effective route confirmed", "-Rounds", "1",
+                  "-Participants", "session/reviewer", "-ReapMirror", str(mirror))
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "ERROR: the declared review mirror parent could not be read: artifact-roots.ps1 exited 2" in proc.stdout, proc.stdout
+    assert "Canonical review mirror root" in proc.stdout, proc.stdout
+    assert not att_file(repo, head).exists()
+    assert mirror.exists()
+
+
+@pytest.mark.parametrize("flag", ["-ReapMirror", "-ReapBridge"])
+def test_an_explicitly_empty_reap_argument_is_refused_not_ignored(tmp_path, flag):
+    # `-ReapMirror ""` binds an empty string. A truthiness entry test read
+    # that as "no reap" and wrote the record with nothing reaped and no
+    # error (0.36.0; found by the diff debate's round 1). A parameter that
+    # was SUPPLIED always reaches the validation, where the empty value is
+    # refused before the record is written.
+    repo, base, head = make_repo(tmp_path)
+    mirror = make_mirror(repo, tmp_path / "kv-t")
+    args = [WRITE, "-RepoRoot", str(repo), "-BaseSha", base, "-HeadSha", head,
+            "-Verdict", "PASS", "-VerificationStatus", "FULL",
+            "-RouteNote", "effective route confirmed", "-Rounds", "1",
+            "-Participants", "session/reviewer", flag, ""]
+    proc = run_ps(*args)
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    label = "the reap mirror" if flag == "-ReapMirror" else "the reap bridge"
+    assert ("ERROR: " + label + " is empty") in proc.stdout, proc.stdout
+    assert not att_file(repo, head).exists(), "an empty reap argument must not write the record"
+    assert mirror.exists()
+
+
 # ---------------------------------------------------------------------
 # Group 6: diff debate round 1 (Astra, R1-3a and R1-8)
 # ---------------------------------------------------------------------
-def test_the_record_lands_in_the_bracketed_repo_and_the_sibling_is_untouched(tmp_path):
+def test_the_record_lands_in_the_bracketed_repo_and_the_sibling_is_untouched(tmp_path, pxm):
     # Set-Content -Path expands wildcard characters, so a repo named
     # `repo[1]` with a matching plain-named sibling `repo1` could have its
     # record land in the sibling while the literal File.Exists read-back
@@ -584,7 +757,7 @@ def test_the_record_lands_in_the_bracketed_repo_and_the_sibling_is_untouched(tmp
     # check passed whatever record already sat there.
     att_file(repo, head).parent.mkdir(parents=True, exist_ok=True)
     att_file(repo, head).write_text(json.dumps({"stale": True}), encoding="utf-8")
-    mirror = make_mirror(repo, tmp_path / "kv-t")
+    mirror = make_mirror(repo, pxm / "kv-t")
     proc = attest(repo, base, head, mirror=mirror)
     assert proc.returncode == 0, proc.stdout + proc.stderr
     assert att_file(repo, head).is_file()
@@ -596,10 +769,10 @@ def test_the_record_lands_in_the_bracketed_repo_and_the_sibling_is_untouched(tmp
     assert not mirror.exists()
 
 
-def test_sidecar_success_is_read_back(tmp_path):
+def test_sidecar_success_is_read_back(tmp_path, pxm):
     repo, base, head = make_repo(tmp_path)
-    mirror = make_mirror(repo, tmp_path / "kv-t")
-    sidecar = tmp_path / "kv-t.source-manifest"
+    mirror = make_mirror(repo, pxm / "kv-t")
+    sidecar = pxm / "kv-t.source-manifest"
     sidecar.write_text("advisory\n", encoding="utf-8")
     proc = attest(repo, base, head, mirror=mirror)
     assert proc.returncode == 0, proc.stdout + proc.stderr

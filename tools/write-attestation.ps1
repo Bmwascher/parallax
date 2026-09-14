@@ -23,6 +23,13 @@
 # removed AFTER it, so a removal failure leaves the verdict standing
 # and says so (exit 3). The removal itself is
 # tools/review-tree-removal.ps1, shared with the mirror tool.
+#
+# PARENT (0.37.0, backlog item 107): both trees must also sit under the
+# review mirror parent the round-artifact-roots declaration names,
+# read here through tools/artifact-roots.ps1 rather than by a literal
+# of this file's own, so that one edit to the row moves every reader.
+# The rule is the LAST one in Resolve-ReapPath: every other refusal
+# keeps its own message.
 param(
     [Parameter(Mandatory = $true)][string]$RepoRoot,
     [Parameter(Mandatory = $true)][string]$BaseSha,
@@ -63,7 +70,60 @@ function Resolve-FullSha($repo, $sha, $label) {
     return $full
 }
 
-function Resolve-ReapPath($label, $raw, $repoTop, $commonFull, $headFull, $allowRemediation) {
+function Resolve-MirrorParent($repoRoot) {
+    # The declared review mirror parent, read through the ONE reader of
+    # the round-artifact-roots declaration, tools/artifact-roots.ps1,
+    # invoked in-process so its exit reaches $LASTEXITCODE here (the
+    # tool's documented $args fallback; measured 2026-09-13 on both
+    # hosts). Every failure exits 2 with nothing written: a parent that
+    # could not be read is never a parent that accepts everything.
+    $tool = Join-Path $PSScriptRoot "artifact-roots.ps1"
+    if (-not (Test-Path -LiteralPath $tool -PathType Leaf)) {
+        Write-Output "ERROR: the declared review mirror parent could not be read: $tool is missing"
+        exit 2
+    }
+    $lines = @()
+    $why = ""
+    try {
+        $lines = @(& $tool -RepoRoot $repoRoot -Json 2>&1)
+    } catch {
+        $why = $_.Exception.Message
+    }
+    $toolExit = $LASTEXITCODE
+    $text = (@($lines | ForEach-Object { [string]$_ }) -join "`n")
+    if ($why) {
+        Write-Output ("ERROR: the declared review mirror parent could not be read: " + $why)
+        exit 2
+    }
+    if ($toolExit -ne 0) {
+        Write-Output ("ERROR: the declared review mirror parent could not be read: artifact-roots.ps1 exited " + $toolExit + ": " + $text)
+        exit 2
+    }
+    $row = ""
+    try {
+        $parsed = ConvertFrom-Json $text
+        $row = [string]$parsed.reviewMirror
+    } catch {
+        $row = ""
+    }
+    if (-not $row) {
+        Write-Output ("ERROR: the declared review mirror parent could not be read: no reviewMirror row in the tool's answer: " + $text)
+        exit 2
+    }
+    $i = $row.IndexOf("<")
+    if ($i -le 0) {
+        Write-Output ("ERROR: the declared review mirror parent could not be read: the row has no per-debate placeholder (" + $row + ")")
+        exit 2
+    }
+    $parent = $row.Substring(0, $i).Replace("\", "/").TrimEnd("/")
+    if ((-not $parent) -or (-not [System.IO.Path]::IsPathRooted($parent))) {
+        Write-Output ("ERROR: the declared review mirror parent could not be read: the row is not rooted (" + $row + ")")
+        exit 2
+    }
+    return $parent
+}
+
+function Resolve-ReapPath($label, $raw, $repoTop, $commonFull, $headFull, $allowRemediation, $mirrorParent) {
     # Returns the resolved full path of a tree this attestation may
     # remove, or prints ERROR and exits 2. Every refusal here runs before
     # the record is written. The rules are the spec's identity guard:
@@ -73,7 +133,9 @@ function Resolve-ReapPath($label, $raw, $repoTop, $commonFull, $headFull, $allow
     # worktree, never a mirror or a bridge), and a HEAD equal to the
     # attested head - or, for the mirror only, one parallax@local
     # remediation commit whose single parent is that head, which is the
-    # commit the mirror tool makes over a tracked back-channel.
+    # commit the mirror tool makes over a tracked back-channel. Last of
+    # all, under the declared review mirror parent (any depth, never the
+    # parent itself), for the mirror and the bridge alike.
     if ([string]::IsNullOrWhiteSpace($raw)) {
         Write-Output "ERROR: $label is empty"
         exit 2
@@ -160,21 +222,31 @@ function Resolve-ReapPath($label, $raw, $repoTop, $commonFull, $headFull, $allow
         Write-Output "ERROR: $label has no readable HEAD ($full)"
         exit 2
     }
-    if ($treeHead -eq $headFull) {
-        return $full
-    }
-    if ($allowRemediation) {
+    $identityOk = ($treeHead -eq $headFull)
+    if ((-not $identityOk) -and $allowRemediation) {
         $author = (& git --git-dir "$dotGit" log -1 --format=%ae HEAD 2>$null | Out-String).Trim()
         $authorExit = $LASTEXITCODE
         $parents = @(((& git --git-dir "$dotGit" rev-list --parents -n 1 HEAD 2>$null | Out-String).Trim()) -split "\s+")
         if (($authorExit -eq 0) -and ($LASTEXITCODE -eq 0) -and ($author -eq "parallax@local") -and
             ($parents.Count -eq 2) -and ($parents[1] -eq $headFull)) {
-            return $full
+            $identityOk = $true
         }
     }
-    Write-Output ("ERROR: $label is at $treeHead, not the attested head $headFull" +
-        " - it is not the tree this verdict was issued on ($full)")
-    exit 2
+    if (-not $identityOk) {
+        Write-Output ("ERROR: $label is at $treeHead, not the attested head $headFull" +
+            " - it is not the tree this verdict was issued on ($full)")
+        exit 2
+    }
+    # LAST: the declared parent. StartsWith on the parent WITH its
+    # separator, so a sibling whose name merely begins with the parent's
+    # (C:/pxmx) is outside, and never Equals, so the parent itself is
+    # never a tree. $p already carries the trailing separator.
+    $parentSlash = $mirrorParent.TrimEnd("/") + "/"
+    if ($p.Equals($parentSlash, $cmp) -or -not $p.StartsWith($parentSlash, $cmp)) {
+        Write-Output ("ERROR: $label is not under the declared review mirror parent " + $mirrorParent + " ($full)")
+        exit 2
+    }
+    return $full
 }
 
 function Invoke-Reap($label, $full, $notAttempted) {
@@ -221,11 +293,23 @@ if ($baseFull -eq $headFull) {
 $commonFull = [System.IO.Path]::GetFullPath($commonDir).TrimEnd("\")
 $reapMirrorFull = $null
 $reapBridgeFull = $null
-if ($ReapMirror) {
-    $reapMirrorFull = Resolve-ReapPath "the reap mirror" $ReapMirror $toplevel $commonFull $headFull $true
+$mirrorParent = $null
+# SUPPLIED, not truthy: a parameter that was given on the command line,
+# empty or not, always reaches the validation, so an explicitly empty
+# value is refused there ("is empty", exit 2) instead of silently
+# meaning no reap. A parameter that was not given still means no reap
+# and never reads the declaration. Found by the diff debate's round 1
+# (2026-09-13); the truthiness form shipped in 0.36.0.
+$reapMirrorGiven = $PSBoundParameters.ContainsKey("ReapMirror")
+$reapBridgeGiven = $PSBoundParameters.ContainsKey("ReapBridge")
+if ($reapMirrorGiven -or $reapBridgeGiven) {
+    $mirrorParent = Resolve-MirrorParent $RepoRoot
 }
-if ($ReapBridge) {
-    $reapBridgeFull = Resolve-ReapPath "the reap bridge" $ReapBridge $toplevel $commonFull $headFull $false
+if ($reapMirrorGiven) {
+    $reapMirrorFull = Resolve-ReapPath "the reap mirror" $ReapMirror $toplevel $commonFull $headFull $true $mirrorParent
+}
+if ($reapBridgeGiven) {
+    $reapBridgeFull = Resolve-ReapPath "the reap bridge" $ReapBridge $toplevel $commonFull $headFull $false $mirrorParent
 }
 if ($reapMirrorFull -and $reapBridgeFull) {
     $cmp = [System.StringComparison]::OrdinalIgnoreCase

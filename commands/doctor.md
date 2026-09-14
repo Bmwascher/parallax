@@ -375,15 +375,20 @@ and calls no model.
 ## 10. Review mirror inventory
 
 Observation only: this check reports and never deletes, whatever it
-finds. List every DIRECTORY whose name matches `kv*` sitting directly
-under `$env:SystemDrive\` and directly under `$env:TEMP` - the two
-places a review mirror or its clone bridge is built (the canonical
-review mirror root is the temp directory; a session whose packets blow
-the path budget builds at the drive root instead, and both are outside
-every checkout). Measure the count, the total size in GB (sum of file
-lengths, reparse points NOT followed), and the oldest `LastWriteTime`
-among them. A directory that cannot be measured is named as unmeasured
-and counted; it never reads as empty.
+finds. The place every review mirror and clone bridge is built is the
+`Canonical review mirror root` row of model-prompting-notes.md's
+round-artifact-roots declaration, read through its one reader: run
+`<installPath>\tools\artifact-roots.ps1 -RepoRoot . -Json` from a git
+working tree (the row is fixed, so any working tree serves; when the
+current directory is not one, pass the checkout from check 1) and take
+the `reviewMirror` value up to its `<short-name>` placeholder - today
+that is `C:\pxm`. List every DIRECTORY directly under that parent.
+Measure the count, the total size in GB (sum of file lengths, reparse
+points NOT followed), and the oldest `LastWriteTime` among them. A
+directory that cannot be measured is named as unmeasured and counted;
+it never reads as empty. A parent that does not exist is OK with
+`no review mirrors present`; a resolver that exits non-zero is BROKEN
+with its `ERROR:` line, never an empty inventory.
 
 - Nothing found: OK, `no review mirrors present`.
 - Found, total under 5 GB AND oldest under 3 days: OK, reported as a
@@ -391,12 +396,24 @@ and counted; it never reads as empty.
 - Total 5 GB or more, OR oldest 3 days or more: STALE, with the three
   numbers and this fix: a finished debate's mirror is removed by the
   attestation emitter, `write-attestation.ps1 -ReapMirror <mirror>
-  [-ReapBridge <bridge>]`, and one whose debate is over without an
-  attestation is removed by hand; the rule and its measurement are
-  backlog item 106. Never name a directory as safe to delete: the
-  doctor cannot tell which of them a live chat can still resume, and a
-  `resume` against a deleted mirror is a transport failure.
+  [-ReapBridge <bridge>]`, which accepts only a tree under the declared
+  parent, and one whose debate is over without an attestation is
+  removed by hand; the rule and its measurement are backlog item 106,
+  the parent is backlog item 107. Never name a directory as safe to
+  delete: the doctor cannot tell which of them a live chat can still
+  resume, and a `resume` against a deleted mirror is a transport
+  failure.
 
 The thresholds are the ones the 2026-09-13 measurement would have
 tripped on day two: 13.4 GB across 78 directories accumulated in four
 review days, about 3 GB per active day.
+
+A second, legacy line, reported as a NOTE that never changes the
+verdict: list every DIRECTORY whose name matches `kv*` sitting directly
+under `$env:SystemDrive\` and directly under `$env:TEMP`, with the same
+three numbers. Those are the two places mirrors were built before the
+parent was declared (the temp directory was the canonical root, and a
+session whose packets blew the path budget built at the drive root
+instead). Eight `C:\kv-bl-*` and `C:\kvs-bl-*` directories other chats
+own were still present on 2026-09-13; once this line finds nothing,
+remove it from this check.

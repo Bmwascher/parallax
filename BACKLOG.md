@@ -62,6 +62,7 @@ The full previous text of every closed item is in git history at
 - 89
 
 ### Fifth - correctness not currently biting
+- 108
 - 53
 - 80
 - 29
@@ -89,11 +90,40 @@ The full previous text of every closed item is in git history at
 - 85
 - 86
 
-## 107. The reap guard cannot tell a debate's trees from any clone at the attested head, and the mirror parent is the drive root
+## 108. An explicitly empty checkpoint argument silently omits the binding
 Status: OPEN
-Cost: a session that names the wrong tree at the right head has it removed, and every mirror a KitnEssentials session builds lands directly under the drive root because the canonical temp root blows the path budget, so the doctor has to find them by a name pattern rather than a declared parent
+Cost: a caller who names the checkpoint and passes an empty value gets an attestation with `checkpoint_binding` of `none` and no message, and the verifier accepts that record, so a fix wave the checkpoint governed can be attested as if no checkpoint governed it
 Pairs: none
-Verified: 2026-09-13 cfa01c8b8229
+Verified: 2026-09-13 fd5d5a189d29
+
+**Filed 2026-09-13 from the mirror-parent diff debate (round 2, Astra).**
+`tools/write-attestation.ps1` tests `if ($CheckpointFile)` before it
+binds a checkpoint, so `-CheckpointFile ""` is read as no checkpoint: the
+record carries `checkpoint_binding = "none"`, the emitter prints no
+message, and `tools/verify-attestation.ps1` accepts an unbound record
+without checkpoint fields. references/application-checkpoint.md requires
+the binding whenever a checkpoint governed the fixes, so a caller whose
+argument came through empty (an unset variable in a wrapper, a
+substitution that produced nothing) mints a record that says the
+opposite of what happened. The same shape on `-ReapMirror` and
+`-ReapBridge` shipped in 0.36.0 and was fixed in 0.37.0 by testing
+`$PSBoundParameters.ContainsKey(...)`: a parameter that was supplied,
+empty or not, reaches the validation, where an empty value is refused
+with exit 2 and nothing written. The checkpoint parameter sits outside
+that debate's certification unit, which is why it is filed rather than
+fixed.
+
+**What closing it means.** The emitter distinguishes an omitted
+`-CheckpointFile` from a supplied empty one, refuses the empty one before
+the record is written, and a test on both hosts drives the refusal; a
+sweep of the emitter's other optional parameters states the shapes it
+searched for and names any further instance or an explicit none.
+
+## 107. The reap guard cannot tell a debate's trees from any clone at the attested head, and the mirror parent is the drive root
+Status: PARTIAL
+Cost: a session that names the wrong tree at the right head has it removed, and the two post-delete sidecar read-back branches are locked only by a source-position pin a refactor could satisfy without a runtime read-back
+Pairs: none
+Verified: 2026-09-13 fb0b98b97df3
 
 **Filed 2026-09-13 from the whole-branch review of the mirror reaper
 (item 106).** The emitter's identity guard refuses a tree that is not
@@ -118,18 +148,24 @@ event recorded mechanically is a further follow-up, not numbered below.
    so the same rule does not apply to it without a marker the mirror
    tool would have to write, and the tool writes nothing identifying
    inside the mirror by design (the fingerprint covers every byte).
-2. The location. The canonical review mirror root is `<TEMP>/<short-name>/`,
-   but the DT review packets put the deepest file 243 characters below
-   the repo root, so the mirror root must be 15 characters or fewer and
-   the 36-character temp directory cannot hold one; the sessions build
-   at `C:\kv-<tag>` instead, which is why the 2026-09-13 measurement
-   found 78 directories at the drive root. A declared short parent such
-   as `C:\pxm\<tag>` would satisfy the budget, keep the drive root clear,
-   turn the doctor's `kv*` name pattern into a fixed directory, and give
-   the reap guard one more cheap rule: a reap path must sit under the
-   declared parent. That edits the round-artifact-roots region and its
-   pin, `tools/artifact-roots.ps1`, doctor check 10 and the KitnEssentials
-   memory that names `C:\kv-<tag>`; the user picks the name.
+2. The location. DECIDED 2026-09-13, shipped by the mirror-parent
+   branch: the canonical review mirror root is `C:/pxm/<short-name>/`,
+   a fixed drive-rooted parent the user chose, seven characters with
+   its separator, so a mirror root fits the 15 characters the DT
+   review packets leave. The four edits: the round-artifact-roots row
+   and its pin; `tools/artifact-roots.ps1`, which no longer substitutes
+   the temp directory and answers `-Assert <path> -Expect reviewMirror`;
+   `tools/write-attestation.ps1`, whose `Resolve-ReapPath` refuses, as
+   its LAST rule and for the bridge as well as the mirror, a tree that
+   is not under the parent, reading the parent through the roots tool
+   rather than a literal of its own; and doctor check 10, which
+   inventories the parent as a directory and keeps the `kv*` drive-root
+   sweep as a legacy line until the eight `C:\kv-bl-*` and `kvs-bl-*`
+   directories are gone. The mirror tool itself does not enforce the
+   parent; the session's `-Expect reviewMirror` check before the build
+   and the emitter's guard at the reap are the two checks. The
+   KitnEssentials memory that names `C:\kv-<tag>` is the consumer side
+   and is updated after the release.
 3. The post-delete sidecar read-back has no driving test. The failure
    branches `tools/write-attestation.ps1` takes after
    `[System.IO.File]::Delete` on the sidecar - "the sidecar still exists
@@ -142,11 +178,11 @@ event recorded mechanically is a further follow-up, not numbered below.
    refactor could satisfy without a runtime read-back. Named by the diff
    debate's round 2.
 
-**What closing it means.** The bridge origin rule shipped with a test
-that drives a foreign clone at the attested head and sees it refused,
-and a decision recorded on the mirror parent, either a new declared
-root with the four edits above or a stated reason to keep the drive
-root.
+**What remains.** Follow-up 1, the bridge origin rule, shipped with a
+test that drives a foreign clone at the attested head and sees it
+refused; and follow-up 3, a driving test for the two post-delete
+sidecar read-back branches, or a recorded reason none can be built
+without administrator rights. Follow-up 2 is closed above.
 
 ## 106. Review mirrors are never reaped, so a review day costs about 3 GB of drive root
 Status: DONE

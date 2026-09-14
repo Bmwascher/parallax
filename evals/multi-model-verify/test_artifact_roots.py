@@ -61,7 +61,7 @@ def test_declaration_region_is_pinned_whole():
         "Canonical frozen plan path: `<docs-root>/plans/<date>-<topic>.md`\n"
         "Canonical rounds root: `<docs-root>/plans/rounds/<date>-<topic>/`\n"
         "Canonical SDD ledger root: `.superpowers/sdd/<plan-basename>/`\n"
-        "Canonical review mirror root: `<TEMP>/<short-name>/`\n"
+        "Canonical review mirror root: `C:/pxm/<short-name>/`\n"
         "Canonical attestation root: `<git-common-dir>/parallax/attestations/`\n"
         "Canonical checkpoint root: `<git-common-dir>/parallax/application-checkpoints/`\n"
         "<!-- contract:end -->"
@@ -82,6 +82,8 @@ def test_fixed_rows_state_their_reason_outside_the_region():
     tail = notes[notes.index("contract:start id=round-artifact-roots"):]
     assert "Superpowers owns it" in tail
     assert "never inside the reviewed repository" in tail
+    assert "never under the controller host's temp directory" in tail
+    assert "-RepoRoot <repo> -Assert <mirror-path> -Expect reviewMirror" in tail
     assert "git rev-parse --git-common-dir" in tail
 
 
@@ -142,8 +144,9 @@ def test_resolver_prints_the_default_set(tmp_path):
         repo / ".git/parallax/attestations")
     assert norm(got["checkpoint"]) == norm(
         repo / ".git/parallax/application-checkpoints")
-    # The mirror row resolves OUTSIDE the repo, under the host temp dir.
-    assert norm(got["reviewMirror"]).endswith("/<short-name>")
+    # The mirror row is FIXED and drive-rooted: the declared parent with
+    # the per-debate placeholder appended, nowhere near the repo or TEMP.
+    assert norm(got["reviewMirror"]) == "c:/pxm/<short-name>"
     assert not norm(got["reviewMirror"]).startswith(norm(repo) + "/")
 
 
@@ -261,21 +264,6 @@ def test_unresolvable_paths_are_parameter_faults_not_throws(tmp_path, args):
     proc = run_resolver(*[a.replace("{repo}", str(repo)) for a in args])
     assert proc.returncode == 2, proc.stdout + proc.stderr
     assert proc.stdout.startswith("ERROR:"), proc.stdout
-
-
-@needs_host
-def test_a_forbidden_character_in_temp_is_a_parameter_fault(tmp_path):
-    # TEMP is the one input that is neither a parameter nor git's answer.
-    # Unscreened, `|` in it threw on 5.1 (exit 1) and printed on 7 (exit
-    # 0): measured 2026-09-13 by the diff-debate R1 reviewer. Same exit
-    # and prefix on both hosts now.
-    import os
-    repo = make_repo(tmp_path)
-    env = dict(os.environ)
-    env["TEMP"] = r"C:\bad|temp"
-    proc = run_resolver("-RepoRoot", str(repo), env=env)
-    assert proc.returncode == 2, proc.stdout + proc.stderr
-    assert proc.stdout.startswith("ERROR: TEMP contains a character"), proc.stdout
 
 
 @needs_host
@@ -458,6 +446,7 @@ def test_expect_accepts_the_expected_root_and_reports_it(tmp_path):
 @pytest.mark.parametrize("args", [
     # An unknown value, and a case variant: the values are exact.
     ("-RepoRoot", "{repo}", "-Assert", "{repo}/x", "-Expect", "ledger"),
+    ("-RepoRoot", "{repo}", "-Assert", "{repo}/x", "-Expect", "review-mirror"),
     ("-RepoRoot", "{repo}", "-Assert", "{repo}/x", "-Expect", "Rounds"),
     # -Expect without -Assert has nothing to check against.
     ("-RepoRoot", "{repo}", "-Expect", "rounds"),
@@ -488,6 +477,51 @@ def test_assert_follows_the_override(tmp_path):
     stale = run_resolver("-RepoRoot", str(repo), "-Assert",
                          str(repo / "docs/superpowers/plans/rounds/2026-09-12-x/r1.md"))
     assert stale.returncode == 1, stale.stdout
+
+
+@needs_host
+def test_expect_review_mirror_answers_for_the_declared_parent(tmp_path):
+    # The check a session runs BEFORE building a mirror (preflight-mirror.md):
+    # the declared parent accepts a direct child and a deeper path, and
+    # refuses the two places mirrors used to be built, the host temp
+    # directory and the drive root. The paths need not exist.
+    repo = make_repo(tmp_path)
+    for inside in (r"C:\pxm\kv-t", "C:/pxm/kvs-t", r"C:\pxm\t-1\kv-t"):
+        proc = run_resolver("-RepoRoot", str(repo), "-Assert", inside,
+                            "-Expect", "reviewMirror")
+        assert proc.returncode == 0, inside + ": " + proc.stdout + proc.stderr
+        assert "assert: inside review mirror root:" in proc.stdout, proc.stdout
+    temp_root = os.environ.get("TEMP") or tmp_path
+    for outside in (str(Path(temp_root) / "kv-t"), r"C:\kv-t", r"C:\pxmx\kv-t"):
+        proc = run_resolver("-RepoRoot", str(repo), "-Assert", outside,
+                            "-Expect", "reviewMirror")
+        assert proc.returncode == 1, outside + ": " + proc.stdout + proc.stderr
+        assert "outside every retained root" in proc.stdout, proc.stdout
+    # The parent itself is never a tree: outside for the mirror row, the
+    # same answer the emitter's reap guard gives, so the pre-build check
+    # and the reap agree.
+    for parent in (r"C:\pxm", "C:/pxm/"):
+        proc = run_resolver("-RepoRoot", str(repo), "-Assert", parent,
+                            "-Expect", "reviewMirror")
+        assert proc.returncode == 1, parent + ": " + proc.stdout + proc.stderr
+        assert "outside every retained root" in proc.stdout, proc.stdout
+    got = json.loads(run_resolver("-RepoRoot", str(repo), "-Assert", r"C:\pxm\kv-t",
+                                  "-Expect", "reviewMirror", "-Json").stdout)
+    assert got["assert"] == {"path": "C:/pxm/kv-t", "inside": True,
+                             "root": "review mirror root",
+                             "expected": "review mirror root"}
+
+
+@needs_host
+def test_a_mirror_path_asserted_for_another_root_is_refused(tmp_path):
+    # The mirror row is in the -Assert set, so a rounds retention copy
+    # aimed at the mirror parent is refused by name, like one aimed at
+    # the frozen plan parent.
+    repo = make_repo(tmp_path)
+    proc = run_resolver("-RepoRoot", str(repo), "-Assert", r"C:\pxm\kv-t",
+                        "-Expect", "rounds")
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "assert: inside review mirror root, expected rounds root" in proc.stdout
 
 
 # ---------------------------------------------------------------------
@@ -544,6 +578,8 @@ FORBIDDEN_SHAPES = [
      re.compile(r"docs[/\\]superpowers(?![/\\](plans[/\\](rounds[/\\])?|specs[/\\])\d{4}-\d{2}-\d{2}-)")),
     ("a common-dir row spelled by placeholder instead of cited",
      re.compile(r"<git-common-dir>[/\\]parallax[/\\]")),
+    ("the retired temp-directory mirror root",
+     re.compile(r"<TEMP>")),
 ]
 
 
@@ -622,6 +658,18 @@ def test_sweep_can_fail(tmp_path):
     hits = [label for label, rx in FORBIDDEN_SHAPES
             if rx.search("`<git-common-dir>` is what `git rev-parse --git-common-dir` prints")]
     assert hits == []
+    # The eighth shape: the mirror row's form until 2026-09-13, when the
+    # parent became C:/pxm (backlog item 107); the resolver no longer
+    # substitutes it, so a row or a sentence that brings it back names a
+    # root nothing resolves.
+    hits = [label for label, rx in FORBIDDEN_SHAPES
+            if rx.search("Canonical review mirror root: `<TEMP>/<short-name>/`")]
+    assert hits == ["the retired temp-directory mirror root"]
+    hits = [label for label, rx in FORBIDDEN_SHAPES
+            if rx.search(r"$v = $v.Replace(" + '"<TEMP>"' + ", $tempRoot)")]
+    assert hits == ["the retired temp-directory mirror root"]
+    assert not [label for label, rx in FORBIDDEN_SHAPES
+                if rx.search("Canonical review mirror root: `C:/pxm/<short-name>/`")]
 
 
 def test_declaration_exemption_covers_only_the_marked_region():
@@ -634,6 +682,49 @@ def test_declaration_exemption_covers_only_the_marked_region():
     end = lines.index(REGION_END, start) + 1
     assert all(start < n < end for n in exempt), sorted(exempt)
     assert all(DECLARATION_LINE.match(lines[n - 1]) for n in exempt)
+
+
+MIRROR_ROW = re.compile(r"^Canonical review mirror root: `([^`<]+)<short-name>/`$", re.M)
+PARENT_SPELLING = re.compile(r"[A-Za-z]:[/\\]+pxm(?![A-Za-z0-9_.-])", re.I)
+
+
+def declared_mirror_parent():
+    """The parent the declaration names, normalized: `C:/pxm/<short-name>/`
+    gives `c:/pxm`."""
+    m = MIRROR_ROW.search(read(NOTES))
+    assert m, "the review mirror row is not in the declared shape"
+    return norm(m.group(1))
+
+
+def test_every_parent_spelling_on_the_surface_is_the_declared_one():
+    # Prose and the doctor NAME the parent as an example (`C:\pxm\kv-<tag>`).
+    # An example is not a second declaration only while it agrees with
+    # the row: every drive-rooted `pxm` spelling on the plugin surface is
+    # the declared parent, so a renamed row turns each stale example red.
+    parent = declared_mirror_parent()
+    assert parent == "c:/pxm", parent
+    seen = 0
+    for pattern in PLUGIN_SURFACE:
+        for f in sorted(REPO.glob(pattern)):
+            if not f.is_file():
+                continue
+            for lineno, line in enumerate(read(f).splitlines(), 1):
+                for m in PARENT_SPELLING.finditer(line):
+                    seen += 1
+                    assert re.sub(r"[/\\]+", "/", m.group(0)).lower() == parent, (
+                        f"{f.relative_to(REPO).as_posix()}:{lineno} names "
+                        f"{m.group(0)}, not the declared parent")
+    assert seen >= 4, "the notes, the prose examples and the doctor should name the parent"
+
+
+def test_parent_spelling_regex_can_fail():
+    assert PARENT_SPELLING.search(r"build at C:\pxm\kv-<tag>")
+    assert PARENT_SPELLING.search("C:/pxm/<short-name>/")
+    assert not PARENT_SPELLING.search(r"C:\pxmx\kv-t")
+    assert not PARENT_SPELLING.search("the pxm parent")
+    assert norm(PARENT_SPELLING.search(r"D:\PXM\x").group(0)) == "d:/pxm"
+    assert not PARENT_SPELLING.search(r"C:\pxm.old")
+    assert PARENT_SPELLING.search(r"C:\\pxm\\x")
 
 
 # ---------------------------------------------------------------------
