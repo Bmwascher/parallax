@@ -111,9 +111,10 @@ ahead of the reviewer fingerprint:
   to a lane other than the build lane. "During a build" is made
   mechanical as exactly this: an implementer dispatch IS the build, and
   no other state is consulted.
-- Exemption: the prompt carries, on one line, `Lane:` followed by that
-  exact `subagent_type` (`^\s*Lane:\s*<subagent_type>\b`, multiline, case
-  sensitive on the type). The plan's task text carries that line at
+- Exemption: the prompt carries, on ONE line, the field `**Lane:**`
+  followed by that exact `subagent_type`, matched case-sensitively and
+  ending at a blank or the end of the line, with nothing in the pattern
+  able to cross a line break. The plan's task text carries that line at
   freeze time; a consented reroute pastes the ledger's line at build
   time. Silent.
 - Otherwise inject `additionalContext` naming the rule: the build lane is
@@ -149,9 +150,13 @@ the warning reaches the session.
   envelope is empty.
 
 `evals/multi-model-verify/test_multi_model_verify.py` `TestHook` gains
-four cases through the existing `run_hook` helper: escalation dispatch
+six cases through the existing `run_hook` helper, which returns raw
+stdout so a silent case means byte-empty output: escalation dispatch
 without a `Lane:` line warns; the same prompt with the line is silent;
-`parallax:implementer` warns; `parallax:flash-implementer` is silent.
+the ledger's consent line is silent; a Lane line naming another agent,
+a field split across a line break, a suffixed agent name and an empty
+prompt all warn; `parallax:implementer` warns on the failure event;
+`parallax:flash-implementer` is silent.
 The existing reviewer-fingerprint cases stay unchanged and must stay
 green, which is what proves the new check sits ahead of them without
 swallowing them.

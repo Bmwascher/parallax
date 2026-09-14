@@ -252,14 +252,17 @@ def test_shared_contract_parity():
         _read(ESCALATION), ESCALATION)
 
 
-def test_flash_lane_is_the_declared_default():
+def test_agent_frontmatter_routes():
     # 0.38.0: a build session told "use parallax implementers" dispatched
     # parallax:implementer four times and the Flash lane never, because
     # both descriptions said "use when executing tasks from a
     # debate-frozen implementation plan". The description is the ONLY
     # text a session reads when it picks a subagent, so the default is
-    # declared there and in the plan format. Item 110 deleted the second
-    # file, so the Flash description names no other implementer by name.
+    # declared there. Item 110 deleted the second file, so the Flash
+    # description names no other implementer by name. Agent-file pins
+    # and plan-format pins are separate tests so a broken agent edit
+    # cannot hide behind a plan-format failure the build expects
+    # (Astra plan R1, finding 11).
     flash_fm = _frontmatter(_read(FLASH))
     assert "THE build lane for every frozen-plan task" in flash_fm
     assert "dispatch this agent, and no other implementer," in flash_fm
@@ -267,6 +270,11 @@ def test_flash_lane_is_the_declared_default():
     escalation_fm = _frontmatter(_read(ESCALATION))
     assert "consent-gated reroutes of blocked tasks" in escalation_fm
     assert "which is EMPTY for a reroute" in escalation_fm
+
+
+def test_flash_lane_is_the_declared_default():
+    # the plan format declares the same default and the two routes away
+    # from it
     fpf = _read(FPF)
     assert "Build lane: parallax:flash-implementer" in fpf
     assert "no `ROUTE:` line is a lane violation" in fpf
@@ -279,10 +287,14 @@ def test_flash_lane_is_the_declared_default():
 def test_empty_envelope_is_zero_judgment():
     # item 110: a consented reroute of a task the Flash lane blocked goes
     # to the escalation lane with an EMPTY envelope, and mode diff must
-    # adjudicate it as zero-judgment. Both the plan format and the agent
-    # file carry the rule, each on one physical line.
+    # adjudicate it as zero-judgment. The plan format carries the rule on
+    # one physical line.
     fpf = _read(FPF)
     assert "Any DECISIONS entry on an empty envelope is drift" in fpf
+
+
+def test_escalation_empty_envelope_is_zero_judgment():
+    # the agent file carries the same rule, each pin on one physical line
     body = _read(ESCALATION)
     assert "its envelope is EMPTY by construction" in body
     assert "any DECISIONS entry you write on it is drift" in body
@@ -351,9 +363,23 @@ def test_sonnet_implementer_literals_removed():
     assert "the pinned lane in `agents/`" in fpf
 ```
 
-- [ ] **Step 2: Insert six methods into `TestHook` in `evals/multi-model-verify/test_multi_model_verify.py`**
+- [ ] **Step 2: Make `run_hook` return raw stdout, then insert six methods into `TestHook` in `evals/multi-model-verify/test_multi_model_verify.py`**
 
-Find this existing method (it ends at the line `assert out == ""`):
+First, in the existing `run_hook` helper (the method that starts `def run_hook(self, payload):`), replace this exact line:
+
+```python
+        return proc.stdout.strip(), proc.returncode
+```
+
+with:
+
+```python
+        return proc.stdout, proc.returncode
+```
+
+The silent cases assert `out == ""` and a stripped stdout would let whitespace-only output pass them (Astra plan R1, finding 5); `json.loads` tolerates the trailing newline the warning cases carry.
+
+Then find this existing method (it ends at the line `assert out == ""`):
 
 ```python
     def test_silent_on_other_dispatch(self):
@@ -394,9 +420,14 @@ Immediately after its last line, and before the existing `def test_failure_event
         assert rc == 0
         data = json.loads(out)
         assert data["hookSpecificOutput"]["hookEventName"] == "PostToolUse"
+        self.assert_lane_warning(data, "parallax:escalation-implementer")
+
+    def assert_lane_warning(self, data, agent):
+        # every warning names the dispatched agent, the build lane and
+        # the field that would have silenced it (Astra plan R1, finding 5)
         ctx = data["hookSpecificOutput"]["additionalContext"]
+        assert agent in ctx
         assert "parallax:flash-implementer" in ctx
-        assert "parallax:escalation-implementer" in ctx
         assert "Lane:" in ctx
 
     def test_plan_named_lane_is_silent(self):
@@ -424,16 +455,25 @@ Immediately after its last line, and before the existing `def test_failure_event
         assert out == ""
 
     def test_lane_line_naming_another_agent_still_warns(self):
-        out, rc = self.run_hook({
-            "tool_name": "Agent",
-            "tool_input": {"description": "Task 3",
-                           "subagent_type": "parallax:escalation-implementer",
-                           "prompt": ("**Lane:** parallax:flash-implementer\n"
-                                      + self.ESCALATION_TASK)},
-        })
-        assert rc == 0
-        ctx = json.loads(out)["hookSpecificOutput"]["additionalContext"]
-        assert "parallax:escalation-implementer" in ctx
+        # four prompts that must NOT silence the hook: a Lane line naming
+        # a different agent; the field split across a line break; the
+        # agent name with a suffix; and no prompt at all (Astra plan R1,
+        # findings 4 and 5)
+        for prompt in (
+            "**Lane:** parallax:flash-implementer\n" + self.ESCALATION_TASK,
+            "**Lane:**\nparallax:escalation-implementer\n" + self.ESCALATION_TASK,
+            "**Lane:** parallax:escalation-implementer:other\n" + self.ESCALATION_TASK,
+            "",
+        ):
+            out, rc = self.run_hook({
+                "tool_name": "Agent",
+                "tool_input": {"description": "Task 3",
+                               "subagent_type": "parallax:escalation-implementer",
+                               "prompt": prompt},
+            })
+            assert rc == 0, prompt
+            self.assert_lane_warning(json.loads(out),
+                                     "parallax:escalation-implementer")
 
     def test_deleted_claude_lane_warns_on_the_failure_event(self):
         # after 0.39.0 a plan that still names parallax:implementer fails
@@ -448,8 +488,7 @@ Immediately after its last line, and before the existing `def test_failure_event
         assert rc == 0
         data = json.loads(out)
         assert data["hookSpecificOutput"]["hookEventName"] == "PostToolUseFailure"
-        assert "parallax:flash-implementer" in (
-            data["hookSpecificOutput"]["additionalContext"])
+        self.assert_lane_warning(data, "parallax:implementer")
 
     def test_flash_lane_dispatch_is_silent(self):
         out, rc = self.run_hook({
@@ -466,8 +505,8 @@ Immediately after its last line, and before the existing `def test_failure_event
 
 Run: `python -m pytest evals/multi-model-verify/test_flash_implementer.py -q 2>&1 | grep -E "passed|failed|FAILED"`
 
-Expected: FAILED lines naming exactly these six, and no other failure:
-`test_shared_contract_parity`, `test_flash_lane_is_the_declared_default`, `test_empty_envelope_is_zero_judgment`, `test_direct_typing_claude_lane_is_gone`, `test_retired_lane_paths_swept_from_live_surfaces`, `test_sonnet_implementer_literals_removed`. (`test_flash_report_headings` passes: the escalation file's numbered report list already carries the four heading words. `test_flash_literal_single_source` passes: `agents/implementer.md` carries no Flash literal.)
+Expected: FAILED lines naming exactly these eight, and no other failure:
+`test_shared_contract_parity`, `test_agent_frontmatter_routes`, `test_flash_lane_is_the_declared_default`, `test_empty_envelope_is_zero_judgment`, `test_escalation_empty_envelope_is_zero_judgment`, `test_direct_typing_claude_lane_is_gone`, `test_retired_lane_paths_swept_from_live_surfaces`, `test_sonnet_implementer_literals_removed`. (`test_flash_report_headings` passes: the escalation file's numbered report list already carries the four heading words. `test_flash_literal_single_source` passes: `agents/implementer.md` carries no Flash literal.)
 
 Run: `python -m pytest evals/multi-model-verify/test_multi_model_verify.py -q -k TestHook 2>&1 | grep -E "passed|failed|FAILED"`
 
@@ -492,7 +531,7 @@ git commit -m "pin the single implementer contract first: escalation lane as par
 
 **Interfaces:**
 - Consumes: the shared block between `<!-- shared-contract:start -->` and `<!-- shared-contract:end -->` in `agents/flash-implementer.md:19-36`, reproduced byte for byte.
-- Produces: the pins `test_flash_report_headings`, `test_shared_contract_parity`, `test_empty_envelope_is_zero_judgment` (agent half), `test_direct_typing_claude_lane_is_gone`, and the frontmatter half of `test_flash_lane_is_the_declared_default` read.
+- Produces: the pins `test_flash_report_headings`, `test_shared_contract_parity`, `test_agent_frontmatter_routes`, `test_escalation_empty_envelope_is_zero_judgment` and `test_direct_typing_claude_lane_is_gone` read.
 
 - [ ] **Step 1: Replace `agents/escalation-implementer.md` with this exact content**
 
@@ -569,8 +608,7 @@ Never claim completion without re-running verification.
 2. FILES CHANGED - actual paths from `git status`.
 3. VERIFICATION - each command you ran, with its real output.
 4. DECISIONS - one entry per enumerated decision point: the choice,
-   why, and the evidence behind it. An empty envelope means an empty
-   section, stated explicitly.
+   why, and the evidence behind it. An empty envelope means an empty section, stated explicitly.
 5. DEVIATIONS - must be `none`: anything outside the enumerated
    envelope is a deviation, exactly as in the Flash lane, and a
    deviation is a defect even when it looks better.
@@ -637,7 +675,7 @@ judgment seat, not a typing lane):
 
 Run: `python -m pytest evals/multi-model-verify/test_flash_implementer.py evals/multi-model-verify/test_seat_reshuffle.py -q 2>&1 | grep -E "passed|failed|FAILED"`
 
-Expected: `test_seat_reshuffle.py` fully green; in `test_flash_implementer.py` exactly these still fail, and nothing else: `test_flash_lane_is_the_declared_default` (the `frozen-plan-format.md` pins), `test_empty_envelope_is_zero_judgment` (its `fpf` half), `test_retired_lane_paths_swept_from_live_surfaces` (README and `frozen-plan-format.md` still name the file), `test_sonnet_implementer_literals_removed` (README).
+Expected: `test_seat_reshuffle.py` fully green; in `test_flash_implementer.py` the five agent-file tests named under Interfaces now PASS, and exactly these still fail, nothing else: `test_flash_lane_is_the_declared_default` (the `frozen-plan-format.md` pins), `test_empty_envelope_is_zero_judgment` (`frozen-plan-format.md`), `test_retired_lane_paths_swept_from_live_surfaces` (README, `frozen-plan-format.md` and the two contract-coverage files still name the deleted file), `test_sonnet_implementer_literals_removed` (README).
 
 - [ ] **Step 5: Commit**
 
@@ -654,6 +692,7 @@ git commit -m "make the escalation lane the shared-contract twin with an empty e
 - Modify: `skills/multi-model-verify/references/frozen-plan-format.md:10-28`
 - Modify: `README.md:32`, `README.md:98-99`, `README.md:279-286`
 - Modify: `docs/superpowers/specs/2026-07-25-flash-implementer-design.md:3-4`
+- Modify: `evals/multi-model-verify/contract_coverage.py:28` and `evals/multi-model-verify/test_contract_coverage.py:189` (one comment fragment each)
 
 **Interfaces:**
 - Produces: the `fpf` and README pins in `test_flash_lane_is_the_declared_default`, `test_empty_envelope_is_zero_judgment`, `test_retired_lane_paths_swept_from_live_surfaces`, `test_sonnet_implementer_literals_removed`; `test_seat_reshuffle.py::test_plan_format_panel_and_envelope_pins` and `::test_readme_reshuffle_pins` stay green.
@@ -757,16 +796,32 @@ After line 4 (the line ending `advisory-review amendments folded same day (see R
 **Superseded in part, 2026-09-13:** Decision A below kept `agents/implementer.md` as the direct-typing lane; backlog item 110 (0.39.0) deleted that file, and the escalation lane takes consent-gated reroutes with an empty envelope. See `docs/superpowers/specs/2026-09-13-single-implementer-design.md`.
 ```
 
-- [ ] **Step 4: Run the pins**
+- [ ] **Step 4: Retire the deleted file's name from the two contract-coverage comments**
+
+In `evals/multi-model-verify/contract_coverage.py` (line 28, a `#` comment) and in `evals/multi-model-verify/test_contract_coverage.py` (line 189, inside a docstring), replace the exact fragment:
+
+```
+agents/implementer.md and agents/flash-implementer.md already carry
+```
+
+with:
+
+```
+agents/escalation-implementer.md and agents/flash-implementer.md already carry
+```
+
+One occurrence in each file; nothing else on those lines changes. (Astra plan R1, finding 6: the session's sweep dropped these two lines because each also names `flash-implementer.md`.)
+
+- [ ] **Step 5: Run the pins**
 
 Run: `python -m pytest evals/multi-model-verify/test_flash_implementer.py evals/multi-model-verify/test_seat_reshuffle.py evals/multi-model-verify/test_contract_coverage.py -q 2>&1 | grep -E "passed|failed|FAILED"`
 
 Expected: all three modules green, `0 failed`.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add skills/multi-model-verify/references/frozen-plan-format.md README.md docs/superpowers/specs/2026-07-25-flash-implementer-design.md
+git add skills/multi-model-verify/references/frozen-plan-format.md README.md docs/superpowers/specs/2026-07-25-flash-implementer-design.md evals/multi-model-verify/contract_coverage.py evals/multi-model-verify/test_contract_coverage.py
 git commit -m "route every reroute to the escalation lane with an empty envelope, name the per-task lane field, and sweep the deleted file from the live surfaces"
 ```
 
@@ -819,10 +874,13 @@ if (-not $eventName) { $eventName = 'PostToolUse' }
 
 $subagent = [string]$payload.tool_input.subagent_type
 if ($subagent -and $subagent -imatch 'implementer' -and $subagent -cne 'parallax:flash-implementer') {
-    # The field is written as `**Lane:** <agent>` on its own line in the
+    # The field is written as `**Lane:** <agent>` on ONE line in the
     # frozen task text; leading list or emphasis markers are tolerated,
-    # the agent name is matched exactly and must end there.
-    $laneLine = '(?m)^[\s*_>-]*Lane:\**\s*' + [regex]::Escape($subagent) + '(?![\w-])'
+    # nothing crosses a line break, and the agent name is matched exactly
+    # and must end at a blank or the end of that line (Astra plan R1,
+    # finding 4: `\s*` crossed a newline and `(?![\w-])` accepted
+    # `parallax:escalation-implementer:other`).
+    $laneLine = '(?m)^[ \t*_>-]*Lane:\**[ \t]*' + [regex]::Escape($subagent) + '(?=[ \t]|\r?$)'
     $promptText = [string]$payload.tool_input.prompt
     if ($promptText -cmatch $laneLine) { exit 0 }
     $warn = @{
@@ -914,7 +972,7 @@ git commit -m "warn from the hook on any implementer dispatch other than the fla
 ## After the tasks (session, not a task)
 
 1. Full gate: the six `CLAUDE.md` commands, then `python evals/tools/run_behavioral_evals.py --changed --head`.
-2. Sweep report in the diff-debate brief: shapes searched (`implementer.md` not preceded by `flash-` or `escalation-`; `parallax:implementer`; bare `implementer` in `commands/`, `tools/`, `hooks/`, `README.md`, `skills/`), the edited surfaces, the explicit none for doctor check 7 and `tools/check-drift.ps1`, and the records left as written.
+2. Sweep report in the diff-debate brief: shapes searched (`implementer.md` with a lookbehind that excludes `flash-` and `escalation-`, applied per MATCH and never by dropping whole lines, because a line-level exclusion dropped `contract_coverage.py:28` and `test_contract_coverage.py:189`, which name both files; `parallax:implementer`; bare `implementer` in `commands/`, `tools/`, `hooks/`, `README.md`, `skills/`), the edited surfaces including those two, the explicit none for doctor check 7 and `tools/check-drift.ps1`, and the records left as written.
 3. Fable whole-branch review, diff debate on the Astra lane, attestation.
 4. Bump to 0.39.0 with the changelog section in the same commit; close backlog item 110 (header to `Status: DONE` / `Closed: 0.39.0`, ranking line removed, `Verified` refreshed with the lint's digest) in that commit too.
 5. Doctor check 7b: the Gemini weekly figure read before Task 1 and after Task 4 is the cheap proof the build used the Flash lane.
