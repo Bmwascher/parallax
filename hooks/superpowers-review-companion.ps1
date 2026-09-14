@@ -1,11 +1,21 @@
-# PostToolUse hook (Task): when the superpowers requesting-code-review skill
-# dispatches its code-reviewer subagent, inject a reminder to run the
-# multi-model-verify skill's diff mode on the same commit range.
-# Fingerprint: the rendered code-reviewer.md template (superpowers 6.3.0)
-# always contains the literals "Senior Code Reviewer" and "Git Range to
-# Review"; both must be present. Re-check the template after superpowers
-# updates - if the fingerprint rots, this hook silently stops firing (fails
-# open, never blocks).
+# PostToolUse hook (Task|Agent), two checks, both warn and never block.
+#
+# 1. Build lane (backlog item 110): every frozen-plan task is built by
+#    parallax:flash-implementer unless the plan, or a consent the session
+#    recorded in the SDD ledger, names another lane for THAT task. The
+#    evidence is a `Lane:` line in the dispatch prompt carrying the
+#    dispatched subagent_type (references/frozen-plan-format.md). An
+#    implementer dispatch IS the build, so no other state is consulted;
+#    a payload with no subagent_type falls through.
+# 2. Review companion: when the superpowers requesting-code-review skill
+#    dispatches its code-reviewer subagent, inject a reminder to run the
+#    multi-model-verify skill's diff mode on the same commit range.
+#    Fingerprint: the rendered code-reviewer.md template (superpowers
+#    6.3.0) always contains the literals "Senior Code Reviewer" and "Git
+#    Range to Review"; both must be present. Re-check the template after
+#    superpowers updates - if the fingerprint rots, this check silently
+#    stops firing (fails open, never blocks).
+#
 # Output contract: silent exit 0 = nothing to add; JSON additionalContext =
 # non-blocking context injection.
 
@@ -15,14 +25,44 @@ try {
     exit 0
 }
 
-$prompt = $payload.tool_input.prompt
-if (-not $prompt) { exit 0 }
-
 # Echo the INCOMING event name: this script serves PostToolUse and
 # PostToolUseFailure, and the output contract requires hookSpecificOutput
 # to name the actual event (Sol holistic MAJOR, 2026-07-13).
 $eventName = $payload.hook_event_name
 if (-not $eventName) { $eventName = 'PostToolUse' }
+
+$subagent = [string]$payload.tool_input.subagent_type
+if ($subagent -and $subagent -imatch 'implementer' -and $subagent -cne 'parallax:flash-implementer') {
+    # The field is written as `**Lane:** <agent>` on ONE line in the
+    # frozen task text; leading list or emphasis markers are tolerated,
+    # nothing crosses a line break, and the agent name is matched exactly
+    # and must end at a blank or the end of that line (Astra plan R1,
+    # finding 4: `\s*` crossed a newline and `(?![\w-])` accepted
+    # `parallax:escalation-implementer:other`).
+    $laneLine = '(?m)^[ \t*_>-]*Lane:\**[ \t]*' + [regex]::Escape($subagent) + '(?=[ \t]|\r?$)'
+    $promptText = [string]$payload.tool_input.prompt
+    if ($promptText -cmatch $laneLine) { exit 0 }
+    $warn = @{
+        hookSpecificOutput = @{
+            hookEventName     = $eventName
+            additionalContext = ("parallax: this dispatch went to $subagent, and the " +
+                "build lane for every frozen-plan task is parallax:flash-implementer. " +
+                "A task the plan routes elsewhere carries the field " +
+                "'**Lane:** $subagent' in its task text; a consented reroute of a " +
+                "task the Flash lane blocked carries the SDD ledger's line " +
+                "'**Lane:** $subagent (consented reroute, <ledger path>)'. This " +
+                "prompt carried neither. Either add the line from the plan or the " +
+                "ledger, or route the task to parallax:flash-implementer. " +
+                "Measured 2026-09-13: 122 of 128 build dispatches in five days went " +
+                "to a lane the plan never named (backlog item 110).")
+        }
+    }
+    $warn | ConvertTo-Json -Compress -Depth 5
+    exit 0
+}
+
+$prompt = $payload.tool_input.prompt
+if (-not $prompt) { exit 0 }
 
 $hasReviewer = $prompt -match 'Senior Code Reviewer'
 $hasRange = $prompt -match 'Git Range to Review'
