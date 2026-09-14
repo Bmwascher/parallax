@@ -3209,6 +3209,26 @@ class TestDoctorCommand:
         ):
             assert anchor in body, "agy contract anchor missing: " + anchor
 
+    def test_flash_quota_row_is_nonfailing_and_powershell_only(self):
+        # Measured 2026-09-13 on agy 1.2.2: `agy -p "/usage"` answers in
+        # one second with four tab-separated rows and NO model call (the
+        # log says "running slash command /usage" and never "sending
+        # message"). The same string typed in Git Bash reaches agy as
+        # `C:/Program Files/Git/usage` (MSYS path conversion), which the
+        # model then treats as a file path and lists a directory for:
+        # the probe is PowerShell-only and the doctor must say so. Like
+        # 4b, the row is best effort: N/A, never BROKEN.
+        body = read(self.DOCTOR)
+        assert "## 7b. Flash quota headroom (best effort, experimental)" in body
+        assert '& <agy> -p "/usage"' in body   # resolved path, never bare
+        assert "running slash command /usage" in body
+        assert "MSYS" in body and "Program Files/Git/usage" in body
+        assert "NEVER BROKEN from this row" in body
+        assert "Weekly Limit Remaining" in body
+        # 7 no longer calls the quota opaque; 7b reads it
+        assert "agy free-tier quota is opaque" not in body
+        assert "quota is read by 7b" in body
+
     def test_an_absent_agy_client_is_not_a_broken_row(self):
         # The Flash lane is OPTIONAL and the drift run records its absence
         # as a NOTE, not a finding. A doctor that calls the same machine

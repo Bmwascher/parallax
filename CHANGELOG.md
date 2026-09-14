@@ -38,6 +38,35 @@ debate. Cite backlog items and round records, not commits, because a
 reader can follow a record. Versions before 0.34.0 have no section and
 no release; their records are the merge commits on main.
 
+## v0.38.1 (2026-09-13)
+
+The doctor now reads the Flash lane's quota. Before this version, the
+doctor said that the quota was opaque. A person who watched the Gemini
+usage page saw nothing move, because the Antigravity CLI keeps its own
+pools. Run the doctor to see the percent that remains in each
+pool and the time it resets. If the weekly Gemini figure does not move
+across a build, the build did not go through Flash.
+
+### What changed for you
+
+- **Check 7b reads the quota.** The doctor runs the `/usage` slash
+  command through print mode. The answer arrives in about one second,
+  with no model call. It has four rows: the Gemini pool and the Claude
+  and GPT pool, each with a weekly and a five-hour limit. The row is
+  best effort, like 4b: an absent answer is N/A and never BROKEN.
+- **Run it from PowerShell.** Git Bash rewrites the argument `/usage`
+  to a path under its own install folder before the client sees it. The
+  model then lists a directory. The doctor says so.
+
+### Details for maintainers
+
+- Measured 2026-09-13 on agy 1.2.2. The log line is `Print mode:
+  running slash command /usage`, and no `sending message` line follows.
+- `test_multi_model_verify.py` pins the section, the PowerShell form,
+  the MSYS trap, and the N/A rule. It also pins that check 7 no longer
+  calls the quota opaque.
+- Backlog item 11 corrects its sentence about the quota in place.
+
 ## v0.38.0 (2026-09-13)
 
 The Flash implementer is now the declared build lane for every task in a

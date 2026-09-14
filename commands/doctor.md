@@ -159,7 +159,7 @@ substate observed is still named in the detail text.
   could not be made. Output that does not contain the parsed literal is
   also BROKEN, with the actual output, and the reading is that the model
   was renamed or the account cannot see it. No generation probe: this is
-  a reachability check, and agy free-tier quota is opaque.
+  a reachability check, and the quota is read by 7b.
 
 - **Workspace trust.** Read
   `$env:USERPROFILE\.gemini\antigravity-cli\settings.json`. A missing
@@ -193,6 +193,49 @@ whether `agy models` listed it, the trustedWorkspaces verdict with
 `allowNonWorkspaceAccess` when present, and the brain root. Report the
 route language as declared in the agent file: evidence is client-side,
 requested and propagated only.
+
+## 7b. Flash quota headroom (best effort, experimental)
+
+Skipped when 7 short-circuited to N/A. agy has no `usage` or `quota`
+subcommand, but print mode runs its slash commands without a model call
+(measured 2026-09-13 on agy 1.2.2: the log line is
+`Print mode: running slash command /usage`, no `sending message` line
+follows, and the answer arrives in about one second). Run it from
+PowerShell, with the resolved `<agy>` path from 7:
+
+```powershell
+& <agy> -p "/usage" 2>&1
+```
+
+NEVER from Git Bash or any MSYS shell: MSYS path conversion rewrites the
+argument `/usage` to `C:/Program Files/Git/usage` before agy sees it,
+agy then sends that path to the model as a prompt, and the model lists
+a directory. A probe made that way spends a conversation and reads
+nothing. The workspace does not matter; the current directory need not
+be trusted.
+
+The answer is tab-separated rows, `<pool> <limit> <percent remaining>
+<reset time UTC>`, four on the measured account:
+
+```
+Gemini Models	Weekly Limit Remaining	98%	2026-09-16T16:34:27Z
+Gemini Models	Five Hour Limit Remaining	100%	2026-09-14T07:59:11Z
+Claude and GPT models	Weekly Limit Remaining	100%	2026-09-21T02:59:41Z
+Claude and GPT models	Five Hour Limit Remaining	100%	2026-09-14T07:59:41Z
+```
+
+The `Gemini Models` rows are the Flash lane's pool. Report both of them
+in the state column, percent remaining and reset time as local time,
+with the other pool's rows as informational detail. Verdict OK when at
+least one `Gemini Models` row parsed, whatever the percentage: a low
+number is information for the person, not a lane defect. Non-zero exit,
+empty output, or no row with four tab-separated fields: verdict
+`N/A (experimental surface unavailable)`, with the actual output, and
+NEVER BROKEN from this row alone; never retry in a loop. This row
+reads account state only and sends no model traffic. It is also the
+answer to "is the Flash lane being used at all": a `Gemini Models`
+weekly figure that does not move across a build means the build did
+not go through Flash, whatever the build session reported.
 
 ## 8. Backup reviewer transport (kimi-code)
 

@@ -93,9 +93,9 @@ The full previous text of every closed item is in git history at
 
 ## 110. Two zero-judgment implementer files are one file too many, and nothing mechanical sees a dispatch to the wrong one
 Status: OPEN
-Cost: every build session must read two near-identical agent descriptions and pick the right one from prose; item 109 measured the prose losing, and the same shape can lose again on the next harness change
+Cost: 122 of 128 build dispatches between 2026-09-09 and 2026-09-13 went to the Claude lane, across this repo (54 of 54) and KitnEssentials (68 of 74), and no gate could see it; a file whose only remaining job is a rare consent-gated reroute silently took 95 percent of the builds
 Pairs: none
-Verified: 2026-09-13 9ae5969b3cf1
+Verified: 2026-09-13 fa2b05431a79
 
 **Filed 2026-09-13, the user's decision on the item 109 fix, ranked
 first.** `agents/implementer.md` exists so a Claude tier can type a
@@ -134,7 +134,7 @@ asserts silence. The sweep names every surface that still says
 ## 109. The Flash lane was not the declared build lane, so a build session picked the Claude lane
 Status: DONE
 Closed: 0.38.0
-Verified: 2026-09-13 33893c127038
+Verified: 2026-09-13 2e7f562b31bc
 
 **Filed and closed 2026-09-13 from a KitnEssentials build session.** The
 user told the session "make sure to use parallax implementers"; it
@@ -149,6 +149,18 @@ transcription lane, but no agent file and no plan-format rule said
 which one is the default, so the harness's first match won. The newest
 Flash brain transcript on the machine was sixteen hours old at the time
 the session was said to be building.
+
+**The scale, counted 2026-09-13 from the session transcripts.** Between
+2026-09-09 and 2026-09-13, `parallax:implementer` was dispatched 54
+times from this repo and 68 times from KitnEssentials;
+`parallax:flash-implementer` was dispatched 0 and 6 times. Every
+parallax release that week (0.34.0 to 0.37.0) was built on the wrong
+lane by the same session model that maintains the plugin. The
+`/usage` figure the doctor now reads (item 11, check 7b) showed the
+Gemini pool at 98 percent weekly remaining with three days left, which
+is how the scale was noticed. The SDD ledgers name the implementer per
+task and no gate compared that name to the plan. Item 110 carries the
+count as its cost.
 
 **What closed it (0.38.0).** `agents/flash-implementer.md`'s description
 opens with the rule that it is THE build lane for every frozen-plan
@@ -560,7 +572,7 @@ Record: 6a462f9
 Status: PARTIAL
 Cost: uncosted: the remainder was never designed and the agy lane's future depends on what item 45 decides
 Pairs: none
-Verified: 2026-09-04 a516fa126398
+Verified: 2026-09-13 ed7c73c9eefa
 
 **Problem.** Drift watching records `agy` as a version string and stops
 there. `tools/drift-snapshot.json` carries `"agy": "1.1.8"` beside claude,
@@ -587,8 +599,11 @@ and `commands/doctor.md`:
 plugin has something stronger. The Fable panel lane has a hard harness
 FLOOR, Claude Code 2.1.216, below which the lane is UNAVAILABLE rather
 than degraded. The backup lane has per-round route evidence. The agy lane
-has a reachability probe and a version string, and the doctor's own note
-says agy free-tier quota is opaque, so even reachability is partial.
+has a reachability probe and a version string. Until 0.38.1 the
+doctor's own note said agy free-tier quota is opaque; measured
+2026-09-13 on agy 1.2.2, `agy -p "/usage"` from PowerShell prints the
+four quota rows in one second with no model call, and doctor check 7b
+now reads them. Reachability is still a reachability check.
 
 **The failure this invites.** A renamed model, a moved transcript path, or
 a changed settings shape turns into a lane that either fails confusingly
