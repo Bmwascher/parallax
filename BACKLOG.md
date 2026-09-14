@@ -95,7 +95,7 @@ The full previous text of every closed item is in git history at
 Status: OPEN
 Cost: 122 of 128 build dispatches between 2026-09-09 and 2026-09-13 went to the Claude lane, across this repo (54 of 54) and KitnEssentials (68 of 74), and no gate could see it; a file whose only remaining job is a rare consent-gated reroute silently took 95 percent of the builds
 Pairs: none
-Verified: 2026-09-13 fa2b05431a79
+Verified: 2026-09-13 72857902e3f3
 
 **Filed 2026-09-13, the user's decision on the item 109 fix, ranked
 first.** `agents/implementer.md` exists so a Claude tier can type a
@@ -130,6 +130,12 @@ hook with a `parallax:escalation-implementer` dispatch and an unnamed
 task and asserts the warning; the same dispatch with the task named
 asserts silence. The sweep names every surface that still says
 `implementer.md` or an explicit none.
+
+**In progress 2026-09-13** on branch `item110-single-implementer`: spec
+`docs/superpowers/specs/2026-09-13-single-implementer-design.md`, plan
+`docs/superpowers/plans/2026-09-13-single-implementer.md` frozen after an
+Astra plan debate (2 rounds, FULL; round 1 found four plan defects, all
+applied), and the tests-first task landed on the Flash lane.
 
 ## 109. The Flash lane was not the declared build lane, so a build session picked the Claude lane
 Status: DONE
