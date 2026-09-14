@@ -38,6 +38,57 @@ debate. Cite backlog items and round records, not commits, because a
 reader can follow a record. Versions before 0.34.0 have no section and
 no release; their records are the merge commits on main.
 
+## v0.39.0 (2026-09-14)
+
+The plugin no longer ships the Claude implementer that typed frozen-plan
+tasks directly, because a session picked it for 122 of 128 builds. When
+the Flash lane blocks a task and you agree to a reroute, the task goes
+to the escalation lane with an empty envelope. A task the plan sends to
+that lane now carries a lane field in its text. The plugin warns you
+when a build dispatch goes to another implementer without that field.
+Update the plugin and restart the session, because a hook and the agent
+set changed.
+
+### What changed for you
+
+- **The plugin deletes the direct Claude implementer.** A plan that
+  still names it fails at dispatch, and the warning names the two
+  routes that remain.
+- **A consented reroute is zero-judgment.** The escalation lane accepts
+  a task the Flash lane blocked with an empty envelope. Any decision
+  entry on an empty envelope is drift, and the diff debate fails it.
+- **The lane field.** A task the plan routes to the escalation lane
+  carries `**Lane:** parallax:escalation-implementer` on one line. A
+  consented reroute carries the ledger's line with the ledger path. The
+  hook reads that field and stays silent when it names the dispatched
+  agent.
+- **The hook warns on every other implementer dispatch.** The warning
+  names the agent, the build lane, and the field that silences it. It
+  fires on the failure event too, so a stale plan sees it.
+
+### Details for maintainers
+
+- This version deletes `agents/implementer.md`.
+  `agents/escalation-implementer.md` carries the shared-contract block
+  and is the parity twin in `test_flash_implementer.py`. Its entry
+  route 2 states the empty envelope and names the ledger's lane line.
+- `references/frozen-plan-format.md` names the two routes away from the
+  Flash lane, the lane field, and the empty-envelope rule.
+- `hooks/superpowers-review-companion.ps1` checks `subagent_type` ahead
+  of the reviewer fingerprint. Six new hook cases drive it under pwsh;
+  `run_hook` returns raw stdout, so a silent case means empty output.
+- The vendor-swap note moved into `agents/flash-implementer.md`. The
+  Flash model literal has two homes: that file and its test.
+- Record: `docs/superpowers/plans/2026-09-13-single-implementer.md`
+  and its rounds root. Astra plan debate two rounds, Astra diff debate
+  two rounds, both FULL. The plan's debate record holds the Fable
+  review's two accepted findings as post-freeze amendments.
+- Every build task went through the Flash lane. The Gemini weekly
+  figure moved from 98 percent to 97 percent across the build. Task 1's
+  first pass lost every inline comment and the wrapper's checks did not
+  see it; backlog item 111 records that gap.
+- Backlog item 110 is closed. Item 111 is new.
+
 ## v0.38.1 (2026-09-13)
 
 The doctor now reads the Flash lane's quota. Before this version, the
