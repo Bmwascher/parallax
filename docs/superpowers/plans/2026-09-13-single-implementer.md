@@ -1014,3 +1014,27 @@ Preflight 2026-09-13: codex-cli 0.153.4, `Logged in using ChatGPT` in a sanitize
 
 ### Degraded-mode note
 Not applicable. UNVERIFIED by the reviewer in both rounds: pytest totals (Python is not on the reviewer's PATH inside the sandbox) and the installed-superpowers canary, which reads outside the reviewed tree; the session's own gate run covers both.
+
+### Post-freeze amendments (reopened by the diff debate)
+
+The plan format's Freezing rule: after freezing, changes require reopening
+the debate as a new round appended to this record. The Fable whole-branch
+review of 65f70c2..1ab7426 (retained as `fable-diff-r1-reply.md` in the
+rounds root) raised two Minor findings on Task 2 Step 1's text; the session
+accepted both and applied them at 76e90e8 through the Flash lane
+(`fable-fix-brief.md`), and Astra diff round 1 (session 01a09e72) escalated
+the pair as post-freeze drift needing an explicit ruling. Session ruling,
+2026-09-14: the two exact replacements in `fable-fix-brief.md` are
+authorized amendments to Task 2 Step 1, and the plan's quoted block is read
+with them applied.
+
+| # | Task 2 Step 1 text (frozen) | Amendment (applied at 76e90e8) | Source |
+|---|---|---|---|
+| A1 | `The frozen plan (or the consented reroute record) ENUMERATES this` / `task's open decision points, each with the constraints that bound it.` / `That list is the whole of your delegated judgment, and it is the one` / `place the contract above is suspended:` | `The frozen plan ENUMERATES this task's open decision points, each with` / `the constraints that bound it; a consented reroute record enumerates` / `none. That list is the whole of your delegated judgment, and it is the` / `one place the contract above is suspended:` | Fable Minor 1: the parenthetical said a reroute record can carry decision points, contradicting the file's own empty-envelope rule |
+| A2 | route 2: `you start, and its envelope is EMPTY by construction: the task was` | `you start; the dispatch prompt carries the ledger's line` / `` `**Lane:** parallax:escalation-implementer (consented reroute, <ledger path>)`, `` / `and its envelope is EMPTY by construction: the task was` | Fable Minor 2: route 1 named its field, route 2 did not name the ledger's line the hook reads |
+
+Every pin the frozen tests read stays on one physical line under both
+amendments (test_seat_reshuffle.py::test_escalation_implementer_exists_and_pins
+and test_flash_implementer.py::test_escalation_empty_envelope_is_zero_judgment,
+green at 76e90e8). Astra diff round 2 is the confirming round on this
+ruling; its outcome is in the diff-debate record under the rounds root.
