@@ -2764,6 +2764,8 @@ class TestHook:
         self.assert_lane_warning(data, "parallax:escalation-implementer")
 
     def assert_lane_warning(self, data, agent):
+        # every warning names the dispatched agent, the build lane and
+        # the field that would have silenced it (Astra plan R1, finding 5)
         ctx = data["hookSpecificOutput"]["additionalContext"]
         assert agent in ctx
         assert "parallax:flash-implementer" in ctx
@@ -2794,6 +2796,10 @@ class TestHook:
         assert out == ""
 
     def test_lane_line_naming_another_agent_still_warns(self):
+        # four prompts that must NOT silence the hook: a Lane line naming
+        # a different agent; the field split across a line break; the
+        # agent name with a suffix; and no prompt at all (Astra plan R1,
+        # findings 4 and 5)
         for prompt in (
             "**Lane:** parallax:flash-implementer\n" + self.ESCALATION_TASK,
             "**Lane:**\nparallax:escalation-implementer\n" + self.ESCALATION_TASK,
@@ -2811,6 +2817,8 @@ class TestHook:
                                      "parallax:escalation-implementer")
 
     def test_deleted_claude_lane_warns_on_the_failure_event(self):
+        # after 0.39.0 a plan that still names parallax:implementer fails
+        # at dispatch; PostToolUseFailure is where the warning reaches it
         out, rc = self.run_hook({
             "hook_event_name": "PostToolUseFailure",
             "tool_name": "Agent",
