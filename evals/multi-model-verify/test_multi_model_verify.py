@@ -2705,7 +2705,7 @@ class TestHook:
             input=json.dumps(payload), capture_output=True, text=True,
             timeout=60,
         )
-        return proc.stdout.strip(), proc.returncode
+        return proc.stdout, proc.returncode
 
     def test_emits_context_on_review_dispatch(self):
         payload = {
@@ -2734,6 +2734,102 @@ class TestHook:
                            "prompt": "Find all uses of FramePool."},
         }
         out, rc = self.run_hook(payload)
+        assert rc == 0
+        assert out == ""
+
+    # --- build-lane check (backlog item 110) ---
+    # Between 2026-09-09 and 2026-09-13, 122 of 128 build dispatches went
+    # to parallax:implementer and no gate saw it. The hook reads
+    # tool_input.subagent_type on every Agent call: any implementer other
+    # than parallax:flash-implementer warns unless the prompt carries a
+    # `Lane:` line naming that agent, which the frozen plan's task text
+    # carries at freeze time and the SDD ledger's consent line carries at
+    # build time (references/frozen-plan-format.md).
+
+    ESCALATION_TASK = (
+        "### Task 3: The reap guard\n\n**Files:**\n- Modify: `tools/x.ps1`\n\n"
+        "Decision envelope:\n- D1: the refusal text, bounded to one line.\n"
+    )
+
+    def test_implementer_off_the_build_lane_warns(self):
+        out, rc = self.run_hook({
+            "tool_name": "Agent",
+            "tool_input": {"description": "Task 3",
+                           "subagent_type": "parallax:escalation-implementer",
+                           "prompt": self.ESCALATION_TASK},
+        })
+        assert rc == 0
+        data = json.loads(out)
+        assert data["hookSpecificOutput"]["hookEventName"] == "PostToolUse"
+        self.assert_lane_warning(data, "parallax:escalation-implementer")
+
+    def assert_lane_warning(self, data, agent):
+        ctx = data["hookSpecificOutput"]["additionalContext"]
+        assert agent in ctx
+        assert "parallax:flash-implementer" in ctx
+        assert "Lane:" in ctx
+
+    def test_plan_named_lane_is_silent(self):
+        out, rc = self.run_hook({
+            "tool_name": "Agent",
+            "tool_input": {"description": "Task 3",
+                           "subagent_type": "parallax:escalation-implementer",
+                           "prompt": ("**Lane:** parallax:escalation-implementer\n"
+                                      + self.ESCALATION_TASK)},
+        })
+        assert rc == 0
+        assert out == ""
+
+    def test_consented_reroute_line_is_silent(self):
+        ledger = ".superpowers/sdd/2026-09-13-single-implementer/task-3-consent.md"
+        out, rc = self.run_hook({
+            "tool_name": "Agent",
+            "tool_input": {"description": "Task 3",
+                           "subagent_type": "parallax:escalation-implementer",
+                           "prompt": (self.ESCALATION_TASK
+                                      + "**Lane:** parallax:escalation-implementer"
+                                      + " (consented reroute, " + ledger + ")\n")},
+        })
+        assert rc == 0
+        assert out == ""
+
+    def test_lane_line_naming_another_agent_still_warns(self):
+        for prompt in (
+            "**Lane:** parallax:flash-implementer\n" + self.ESCALATION_TASK,
+            "**Lane:**\nparallax:escalation-implementer\n" + self.ESCALATION_TASK,
+            "**Lane:** parallax:escalation-implementer:other\n" + self.ESCALATION_TASK,
+            "",
+        ):
+            out, rc = self.run_hook({
+                "tool_name": "Agent",
+                "tool_input": {"description": "Task 3",
+                               "subagent_type": "parallax:escalation-implementer",
+                               "prompt": prompt},
+            })
+            assert rc == 0, prompt
+            self.assert_lane_warning(json.loads(out),
+                                     "parallax:escalation-implementer")
+
+    def test_deleted_claude_lane_warns_on_the_failure_event(self):
+        out, rc = self.run_hook({
+            "hook_event_name": "PostToolUseFailure",
+            "tool_name": "Agent",
+            "tool_input": {"description": "Task 1",
+                           "subagent_type": "parallax:implementer",
+                           "prompt": "### Task 1: Tests first\n"},
+        })
+        assert rc == 0
+        data = json.loads(out)
+        assert data["hookSpecificOutput"]["hookEventName"] == "PostToolUseFailure"
+        self.assert_lane_warning(data, "parallax:implementer")
+
+    def test_flash_lane_dispatch_is_silent(self):
+        out, rc = self.run_hook({
+            "tool_name": "Agent",
+            "tool_input": {"description": "Task 1",
+                           "subagent_type": "parallax:flash-implementer",
+                           "prompt": "### Task 1: Tests first\n"},
+        })
         assert rc == 0
         assert out == ""
 
