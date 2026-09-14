@@ -134,7 +134,7 @@ asserts silence. The sweep names every surface that still says
 ## 109. The Flash lane was not the declared build lane, so a build session picked the Claude lane
 Status: DONE
 Closed: 0.38.0
-Verified: 2026-09-13 711c418cd5e0
+Verified: 2026-09-13 33893c127038
 
 **Filed and closed 2026-09-13 from a KitnEssentials build session.** The
 user told the session "make sure to use parallax implementers"; it
@@ -157,11 +157,14 @@ the only two routes to it (a task the plan routes there by name, or a
 task the Flash lane blocked and the user consented to reroute).
 `references/frozen-plan-format.md` adds the header line `Build lane:
 parallax:flash-implementer` and the rule that a task report with no
-`ROUTE:` line is a lane violation. The wrapper seat moved from Haiku to
+`ROUTE:` line is a lane violation unless the plan or a recorded consent
+routed that task elsewhere. The wrapper seat moved from Haiku to
 Sonnet at the same time, by the user's decision: every control in the
-lane is a prose rule the wrapper follows (item 105), and agy changed
-behaviour three times in seven weeks, so the seat must block on a lost
-log line rather than explain a landed edit away.
+lane is a prose rule the wrapper follows (item 105); agy print mode
+changed between 1.1.7 and 1.2.x (the Dispatch step of
+`agents/flash-implementer.md`) and 1.2.2 does not consult the trust
+list (item 105), so the seat must block on a lost log line rather than
+explain a landed edit away.
 `test_flash_implementer.py` pins the seat, both descriptions and the
 plan-format rule. No debate ran; the user directed an immediate fix,
 and the change is descriptions, one frontmatter line and one reference
@@ -4755,9 +4758,9 @@ refusals fire and that the rule stops at the first blank line.
 
 ## 105. agy 1.2.2 does not consult `trustedWorkspaces` for a print-mode write under `--mode accept-edits`
 Status: OPEN
-Cost: the only thing keeping Flash inside a directory the user trusted is a preflight the Haiku wrapper follows as prose; nothing mechanical refuses an `--add-dir` outside the list
+Cost: the only thing keeping Flash inside a directory the user trusted is a preflight the wrapper follows as prose; nothing mechanical refuses an `--add-dir` outside the list
 Pairs: none
-Verified: 2026-09-13 f526a8ecf1f1
+Verified: 2026-09-13 e0e051c08251
 
 **Filed 2026-09-13 on the Fable review of branch `flash-accept-edits`**,
 finding 2, which asked for the control run; the run answered in the
@@ -4781,7 +4784,8 @@ root named in item 36.
 
 **What holds the line now.** `agents/flash-implementer.md` preflight 2:
 the wrapper reads the list, accepts the workspace or an ancestor of it,
-and blocks otherwise. That is a prose rule followed by a Haiku agent,
+and blocks otherwise. That is a prose rule followed by a Claude agent
+(Haiku when filed, Sonnet since 0.38.0),
 and every other control in that file (the write_file rule-class ban, the
 clean-tree check, the brain-transcript corroboration) is the same kind.
 The doctor's workspace-trust row and `tools/check-drift.ps1`'s

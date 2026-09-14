@@ -10,12 +10,17 @@ mode `diff` as drift.
 **The build lane is `agents/flash-implementer.md`, by default and by
 name.** The plan header carries the line
 `Build lane: parallax:flash-implementer` and the session dispatches that
-agent for every task. The only exceptions are tasks the plan itself routes
-elsewhere, one per task with the reason in the task text: the escalation
-lane for an enumerated decision envelope, or `agents/implementer.md` for a
-task the Flash lane blocked and the user consented to reroute, recorded
-under Escalated points. A task report with no `ROUTE:` line is a lane violation, because only the Flash lane's report carries one; the session
-names it in the SDD ledger and reroutes nothing without the user.
+agent for every task. Two kinds of exception exist. At freeze time the
+plan itself routes a task elsewhere, one per task with the reason in the
+task text: the escalation lane for an enumerated decision envelope, or
+`agents/implementer.md` by name, for a task such as verbatim
+transcription that the plan assigns to it. At build time the Flash lane
+blocks a task and the user consents to reroute it to `agents/implementer.md`;
+the session records that consent in the SDD ledger, because the plan is
+frozen and the implementer never edits it. A task report with no `ROUTE:` line is a lane violation unless the plan
+or a recorded consent routed that task elsewhere, because only the Flash
+lane's report carries one; the session names it in the SDD ledger and
+reroutes nothing without the user.
 Measured 2026-09-13: a build session told "use parallax implementers"
 dispatched `agents/implementer.md` four times and the Flash lane never,
 because both agent descriptions then read the same. The lane is declared
@@ -32,7 +37,7 @@ only envelope overruns are drift.
 ## Base format
 
 Follow the superpowers writing-plans template exactly (header with Goal /
-Architecture / Tech Stack / Global Constraints; bite-sized checkbox tasks
+Architecture / Tech Stack / Global Constraints / Build lane; bite-sized checkbox tasks
 with exact Files / Interfaces / complete code / exact commands / expected
 output; no placeholders). Every task's verification command must be able
 to FAIL: the debate checks each one for oracle adequacy — a proof that

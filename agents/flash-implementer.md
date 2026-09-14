@@ -147,8 +147,8 @@ settings. `--mode accept-edits` is not a member of that class: it is the
 lane's declared mode, on the dispatch line where every reader sees it, it
 opens file edits only, and command execution stays denied under it.
 No other `--mode` value is used in this lane. Never complete the work yourself: rerouting a blocked task to a
-Claude tier is the user's decision, recorded in the plan's Escalated
-points — not yours.
+Claude tier is the user's decision, recorded in the SDD ledger — not
+yours; the plan is frozen and no implementer edits it.
 
 ## Report format (your final message)
 

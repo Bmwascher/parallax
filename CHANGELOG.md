@@ -57,13 +57,14 @@ each task, and put the build lane on the plan header.
   the Flash lane blocked the task and the user agreed to reroute it.
 - **The plan header names the lane.** A frozen plan now carries the
   line `Build lane: parallax:flash-implementer`. A task report with no
-  `ROUTE:` line is a lane violation, because only the Flash lane writes
-  one.
+  `ROUTE:` line is a lane violation, unless the plan or a recorded
+  consent routed that task elsewhere. Only the Flash lane writes one.
 - **Sonnet supervises the Flash lane.** The wrapper seat moved from
   Haiku to Sonnet. Every control in that lane is a prose rule that the
-  wrapper follows, and the Antigravity CLI changed its behaviour three
-  times in seven weeks. The seat must block on a lost log line and not
-  explain a landed edit away.
+  wrapper follows. The Antigravity CLI print mode changed between 1.1.7
+  and 1.2.x, and 1.2.2 does not consult the trust list. The agent file
+  and backlog item 105 record both. The seat must block on a lost log line
+  and not explain a landed edit away.
 
 ### Details for maintainers
 

@@ -30,9 +30,10 @@ def _frontmatter(text):
 def test_flash_frontmatter_pins_model_and_tools():
     fm = _frontmatter(_read(FLASH))
     # sonnet since 0.38.0: every control in this lane is a prose rule the
-    # wrapper follows (backlog item 105), and agy has drifted three times
-    # in seven weeks, so the seat needs to block on a missing log line
-    # rather than rationalize a landed edit
+    # wrapper follows (backlog item 105); agy print mode changed between
+    # 1.1.7 and 1.2.x (the Dispatch step of the agent file) and 1.2.2
+    # does not consult the trust list (item 105), so the seat needs to
+    # block on a missing log line rather than rationalize a landed edit
     assert re.search(r"^model: sonnet$", fm, re.MULTILINE)
     m = re.search(r"^tools: (.+)$", fm, re.MULTILINE)
     assert m, "tools allowlist missing"
