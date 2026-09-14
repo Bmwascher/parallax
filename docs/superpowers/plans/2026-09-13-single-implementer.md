@@ -976,3 +976,41 @@ git commit -m "warn from the hook on any implementer dispatch other than the fla
 3. Fable whole-branch review, diff debate on the Astra lane, attestation.
 4. Bump to 0.39.0 with the changelog section in the same commit; close backlog item 110 (header to `Status: DONE` / `Closed: 0.39.0`, ranking line removed, `Verified` refreshed with the lint's digest) in that commit too.
 5. Doctor check 7b: the Gemini weekly figure read before Task 1 and after Task 4 is the cheap proof the build used the Flash lane.
+
+---
+
+## Debate record
+
+**Participants:** Claude Opus 5 (session) / GPT-6 Astra (codex exec, session 01a09e23-c7b2-7f33-a661-774281556eff)
+**Rounds used:** 2 of 4 (fix-verify budget 4 dispatched exchanges, declared before round 1; round cap 4 consecutive contested exchanges; contested counter never left zero)
+**Outcome:** converged with amendments
+**Verification status:** FULL
+**Degradation:** none
+**Authorized by:** n/a
+**Raw rounds:** docs/superpowers/plans/rounds/2026-09-13-single-implementer/ (briefs, replies, transcripts, binders, receipts, mirror builds, tool-surface probe, artifact roots)
+
+Preflight 2026-09-13: codex-cli 0.153.4, `Logged in using ChatGPT` in a sanitized environment, host `pwsh`. Enumeration on the reviewed repo found one back-channel, an ignored untracked `AGENTS.md` at the repo root; the mirror at `C:\pxm\px110` was built with it removed (no commit, untracked), enumeration on the mirror empty, context probe `clean` (31 skills before, 0 after, `repo_scoped 0`, `plugin_cache_scoped 0`; the user's global `C:\Users\Brandon\.codex\AGENTS.md` exists and is recorded, not a stop), tool-surface probe `clean` (pass 1 four servers and 147 tools, pass 2 zero tools, `node_repl` silent; a mitigation, never proof of removal). Round 1 at head 888ce51, round 2 at 5e3d50d after an in-place `-Force` rebuild; both rounds wrapper exit 0 (`reply-present`), header `model: gpt-6-astra`, `provider: openai`, `reasoning effort: high`, `sandbox: read-only`, `workdir: C:\pxm\px110`, binder `clean` and `sealed` on both, round 2 resumed the round-1 session id. Effective route confirmed.
+
+### Resolved points
+| # | Claim | Raised by | Outcome | Evidence |
+|---|-------|-----------|---------|----------|
+| 1 | Deleting `agents/implementer.md` removes no capability a live surface needs; the delete is a session act because a Flash delete is unmeasured | session | PASS R1 | agents/escalation-implementer.md:3; agents/flash-implementer.md:102-103 |
+| 2 | Empty-envelope rule makes mode diff adjudicate a reroute as zero-judgment without editing SKILL.md | session | PASS R1 | skills/multi-model-verify/SKILL.md:340-343 |
+| 3 | Escalation file as parity twin keeps every test_seat_reshuffle.py pin | session | PASS R1 | evals/multi-model-verify/test_seat_reshuffle.py:101-110 |
+| 4 | Hook exemption regex | session | FIX R1, accepted into Task 4: `\s*` crossed a newline and `(?![\w-])` accepted `parallax:escalation-implementer:other`; replaced with `(?m)^[ \t*_>-]*Lane:\**[ \t]*<agent>(?=[ \t]|\r?$)` | reviewer ran the quoted hook under pwsh; confirmed by reading the pattern |
+| 5 | Six hook cases as oracles | session | FIX R1, accepted into Task 1: `run_hook` stripped stdout so whitespace-only output passed silent cases; every warning case now asserts agent, build lane and `Lane:`; four must-warn prompts added in one method | evals/multi-model-verify/test_multi_model_verify.py:2708 |
+| 6 | Post-build sweep leaves no bare `implementer.md` under the test globs | session | FIX R1, accepted into Task 3 Step 4: `contract_coverage.py:28` and `test_contract_coverage.py:189` name the file; the session's sweep dropped those lines because each also names `flash-implementer.md` | evals/multi-model-verify/contract_coverage.py:28; test_contract_coverage.py:189 |
+| 7 | frozen-plan-format.md rewrite keeps every raw-text pin on one physical line; no contract region touched | session | PASS R1 | frozen-plan-format.md:4,30; test_contract_coverage.py:793-801 |
+| 8 | Lane note move keeps check-drift's literal parse | session | PASS R1 | tools/check-drift.ps1:295 |
+| 9 | Sweep complete for live surfaces | session | FIX R1 (same two files as 6), accepted; doctor and drift explicit-none confirmed | commands/doctor.md:152-157; tools/check-drift.ps1:291-300 |
+| 10 | README edits keep test_readme_reshuffle_pins | session | PASS R1 | test_seat_reshuffle.py:336-347 |
+| 11 | Task 2's oracle masked broken agent edits behind an expected plan-format failure, and the DECISIONS pin was split across two lines in the plan's own text | reviewer | FIX R1, accepted into Task 1 (tests split: `test_agent_frontmatter_routes`, `test_escalation_empty_envelope_is_zero_judgment`) and Task 2 (one physical line) | plan text at 888ce51, Task 1 and Task 2 Step 1 |
+| 12 | All four fixes applied as specified; hook behaviour under the amended regex; raw stdout keeps the nine existing cases green; failure sets eight then four | session | PASS R2 (confirming round, no new finding) | astra-plan-r2-reply.md |
+
+### Escalated points (user-decided)
+| # | Question | Session position | Reviewer position | Owner's call |
+|---|----------|------------------|-------------------|--------------|
+| none | | | | |
+
+### Degraded-mode note
+Not applicable. UNVERIFIED by the reviewer in both rounds: pytest totals (Python is not on the reviewer's PATH inside the sandbox) and the installed-superpowers canary, which reads outside the reviewed tree; the session's own gate run covers both.
