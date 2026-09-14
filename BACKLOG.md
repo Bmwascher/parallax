@@ -15,6 +15,7 @@ The full previous text of every closed item is in git history at
 ## Ranking
 
 ### First - breaks the repo's own review process
+- 110
 - 75
 - 49
 - 59
@@ -89,6 +90,85 @@ The full previous text of every closed item is in git history at
 - 84
 - 85
 - 86
+
+## 110. Two zero-judgment implementer files are one file too many, and nothing mechanical sees a dispatch to the wrong one
+Status: OPEN
+Cost: every build session must read two near-identical agent descriptions and pick the right one from prose; item 109 measured the prose losing, and the same shape can lose again on the next harness change
+Pairs: none
+Verified: 2026-09-13 9ae5969b3cf1
+
+**Filed 2026-09-13, the user's decision on the item 109 fix, ranked
+first.** `agents/implementer.md` exists so a Claude tier can type a
+frozen-plan task directly. Its two remaining uses are a cheap
+consent-gated reroute of a task the Flash lane blocked, and
+transcription tasks under a Haiku override. Neither needs a separate
+zero-judgment file: `agents/escalation-implementer.md` already accepts
+"consent-gated reroutes of blocked tasks" by its own description, and
+the Flash lane types verbatim code at least as well as a Claude tier
+and leaves route evidence while it does so. The fallback cannot move
+INTO `flash-implementer.md`: that wrapper's tool grant has no Edit or
+Write, and the grant is what makes the authorship check mean anything.
+A fallback branch on the same agent would need Edit and Write, and a
+"Flash" run that fell back to Claude would then produce the same diff
+with no route line.
+
+**What closing it means.** Two implementer seats remain, the Flash
+build lane and the Fable escalation lane, and `agents/implementer.md`
+is deleted. A consent-gated reroute goes to the escalation lane with an
+EMPTY envelope, and `references/frozen-plan-format.md` says that any
+DECISIONS entry on an empty envelope is drift, so mode diff adjudicates
+a rerouted task as zero-judgment. `test_flash_implementer.py` takes
+`escalation-implementer.md` as the shared-contract parity twin and
+pins the empty-envelope rule; README lane rows, the doctor's lane
+check, and `implementer.md`'s vendor-swap Lane note move or go. Second
+half, the mechanical part: the PostToolUse hook in `hooks/hooks.json`
+already runs on every `Task|Agent` call and can read `subagent_type`,
+so it injects a warning when a session dispatches any implementer
+other than `parallax:flash-implementer` while a frozen plan is being
+built, unless the plan names that lane for that task. A test drives the
+hook with a `parallax:escalation-implementer` dispatch and an unnamed
+task and asserts the warning; the same dispatch with the task named
+asserts silence. The sweep names every surface that still says
+`implementer.md` or an explicit none.
+
+## 109. The Flash lane was not the declared build lane, so a build session picked the Claude lane
+Status: DONE
+Closed: 0.38.0
+Verified: 2026-09-13 711c418cd5e0
+
+**Filed and closed 2026-09-13 from a KitnEssentials build session.** The
+user told the session "make sure to use parallax implementers"; it
+dispatched `parallax:implementer` four times and
+`parallax:flash-implementer` never, and reported that it would. The
+user caught it because their Gemini usage did not move. The cause is
+in the two agent files: both `description` fields read "use when
+executing tasks from a debate-frozen implementation plan", and the
+description is the only text a session reads when it picks a subagent.
+README.md called Flash the mechanical lane and the Claude tier the
+transcription lane, but no agent file and no plan-format rule said
+which one is the default, so the harness's first match won. The newest
+Flash brain transcript on the machine was sixteen hours old at the time
+the session was said to be building.
+
+**What closed it (0.38.0).** `agents/flash-implementer.md`'s description
+opens with the rule that it is THE build lane for every frozen-plan
+task; `agents/implementer.md`'s says it is NEVER the default and names
+the only two routes to it (a task the plan routes there by name, or a
+task the Flash lane blocked and the user consented to reroute).
+`references/frozen-plan-format.md` adds the header line `Build lane:
+parallax:flash-implementer` and the rule that a task report with no
+`ROUTE:` line is a lane violation. The wrapper seat moved from Haiku to
+Sonnet at the same time, by the user's decision: every control in the
+lane is a prose rule the wrapper follows (item 105), and agy changed
+behaviour three times in seven weeks, so the seat must block on a lost
+log line rather than explain a landed edit away.
+`test_flash_implementer.py` pins the seat, both descriptions and the
+plan-format rule. No debate ran; the user directed an immediate fix,
+and the change is descriptions, one frontmatter line and one reference
+paragraph. What stays open is item 105's mechanical route check, which
+is what would make the wrapper tier irrelevant.
+
+Record: evals/multi-model-verify/test_flash_implementer.py
 
 ## 108. An explicitly empty checkpoint argument silently omits the binding
 Status: OPEN

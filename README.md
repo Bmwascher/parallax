@@ -28,8 +28,8 @@ the agent files:
 | Cross-vendor reviewer (backup, consent-gated) | Kimi K3 | kimi-code, contained agent-file, read-only |
 | Panel reviewer (Claude lane, panels only) | Fable | `agents/fable-panel-reviewer.md`, read-only subagent |
 | Whole-branch reviewer (required before mode diff) | Fable | `agents/fable-reviewer.md`, read-only subagent |
-| Implementer (mechanical) | Gemini 3.8 Flash | Antigravity CLI (`agy`) via haiku wrapper, `agents/flash-implementer.md` |
-| Implementer (transcription) | Claude tier | `agents/implementer.md` (frontmatter default `sonnet`; haiku per dispatch) |
+| Implementer (mechanical, the default build lane) | Gemini 3.8 Flash | Antigravity CLI (`agy`) via sonnet wrapper, `agents/flash-implementer.md` |
+| Implementer (transcription, fallback only) | Claude tier | `agents/implementer.md` (frontmatter default `sonnet`; haiku per dispatch) |
 | Implementer (escalation, judgment inside an envelope) | Fable | `agents/escalation-implementer.md` |
 
 ## How it works
@@ -96,8 +96,8 @@ The debate rules that keep this honest
 | `tools/read-kimi-round-evidence.ps1` | Executable round-evidence validator: reads a debate round's OWN session files and decides whether it can be attributed to the declared model, agent and tool set at all |
 | `skills/multi-model-verify/references/panels.md` | Multi-reviewer panels: any lane combination with at least one cross-vendor seat; hub-and-spoke blind relay; subject-revision binding |
 | `hooks/` | PostToolUse + PostToolUseFailure hook (matcher `Task\|Agent`): fingerprints the superpowers code-reviewer dispatch, injects the mode-`diff` reminder with matching SHAs; inert everywhere else |
-| `agents/implementer.md` | Zero-judgment direct-typing executor for frozen-plan tasks (model pinned in the file's frontmatter) |
-| `agents/flash-implementer.md` | Zero-judgment Flash lane: haiku wrapper drives Gemini Flash through the Antigravity CLI headlessly; route + authorship evidence checked every run (model literal pinned in the file) |
+| `agents/implementer.md` | Zero-judgment direct-typing fallback for frozen-plan tasks the plan routes to it by name, never the default (model pinned in the file's frontmatter) |
+| `agents/flash-implementer.md` | Zero-judgment Flash lane, the default build lane: sonnet wrapper drives Gemini Flash through the Antigravity CLI headlessly; route + authorship evidence checked every run (model literal pinned in the file) |
 | `agents/escalation-implementer.md` | Fable escalation lane: implementation judgment ONLY inside a plan-enumerated decision envelope, every decision logged for the diff debate to adjudicate |
 | `agents/fable-reviewer.md` | The required whole-branch review before every mode-diff debate — read-only, raw reply retained as a range-bound artifact |
 | `agents/fable-panel-reviewer.md` | The Claude-side panel reviewer lane — read-only, resumable, dispatch-metadata evidence class |
@@ -281,8 +281,8 @@ lineup is one configuration:
   report) stays identical whoever fills it.
 - **Implementer, cross-vendor** (the fable-advisor v3 Grok pattern) —
   agent frontmatter only accepts Claude tiers, so a vendor swap uses the
-  supervisor pattern `agents/flash-implementer.md` implements (documented in `agents/implementer.md`'s Lane note): a cheap Claude
-  model supervises, delegates the body of work to the vendor CLI, and
+  supervisor pattern `agents/flash-implementer.md` implements (documented in `agents/implementer.md`'s Lane note): a Claude
+  tier supervises, delegates the body of work to the vendor CLI, and
   re-runs verification itself.
 - **Implementer, escalation** — `agents/escalation-implementer.md`: the
   judgment-heavy lane; its authority comes from the frozen plan's

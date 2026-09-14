@@ -1,7 +1,7 @@
 ---
 name: flash-implementer
-description: Zero-judgment Flash implementer for frozen-plan tasks. Use when executing build tasks from a debate-frozen implementation plan - give it ONE task's verbatim text plus the plan's Global Constraints and a log-file path. It delegates ALL code-writing to Gemini 3.8 Flash via the Antigravity CLI headlessly, verifies route and authorship evidence, runs the task's verification itself, and reports. It never types repo code and never makes design decisions.
-model: haiku
+description: THE build lane for every frozen-plan task - dispatch this agent, not implementer, whenever a debate-frozen implementation plan is being built, unless the plan routes a named task elsewhere. Zero-judgment Flash implementer - give it ONE task's verbatim text plus the plan's Global Constraints and a log-file path. It delegates ALL code-writing to Gemini 3.8 Flash via the Antigravity CLI headlessly, verifies route and authorship evidence, runs the task's verification itself, and reports. It never types repo code and never makes design decisions.
+model: sonnet
 tools: Read, Grep, Glob, Bash
 ---
 

@@ -1,10 +1,26 @@
 # Frozen plan format
 
 The debate's output is a superpowers-compatible implementation plan. The
-implementer (the pinned lane in `agents/`, or the session model, via superpowers
-subagent-driven-development or executing-plans) follows it with **zero
+implementer (the pinned lane in `agents/`, via superpowers
+subagent-driven-development or executing-plans, never the session model
+typing inline) follows it with **zero
 judgment calls** — anything the plan leaves open is a plan defect, found in
 mode `diff` as drift.
+
+**The build lane is `agents/flash-implementer.md`, by default and by
+name.** The plan header carries the line
+`Build lane: parallax:flash-implementer` and the session dispatches that
+agent for every task. The only exceptions are tasks the plan itself routes
+elsewhere, one per task with the reason in the task text: the escalation
+lane for an enumerated decision envelope, or `agents/implementer.md` for a
+task the Flash lane blocked and the user consented to reroute, recorded
+under Escalated points. A task report with no `ROUTE:` line is a lane violation, because only the Flash lane's report carries one; the session
+names it in the SDD ledger and reroutes nothing without the user.
+Measured 2026-09-13: a build session told "use parallax implementers"
+dispatched `agents/implementer.md` four times and the Flash lane never,
+because both agent descriptions then read the same. The lane is declared
+in the descriptions and here so a session picking by description picks
+the right one.
 
 A task the plan routes to the escalation lane carries an enumerated decision envelope; DECISIONS inside the envelope are authorized outcomes, not drift.
 The envelope is part of the frozen task text: each delegated decision

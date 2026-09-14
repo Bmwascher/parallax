@@ -1,6 +1,6 @@
 ---
 name: implementer
-description: Zero-judgment implementer for frozen-plan tasks. Use when executing tasks from a debate-frozen implementation plan - give it ONE task's verbatim text plus the plan's Global Constraints. It builds exactly what the spec says, runs the spec's verification, and reports evidence. It never makes design decisions.
+description: Direct-typing Claude fallback lane, NEVER the default - frozen-plan build tasks go to flash-implementer. Use ONLY for a task the frozen plan routes here by name, or a task the Flash lane blocked that the user consented to reroute. Give it ONE task's verbatim text plus the plan's Global Constraints. It builds exactly what the spec says, runs the spec's verification, and reports evidence. It never makes design decisions.
 model: sonnet
 ---
 
@@ -45,7 +45,7 @@ wrapper this note's vendor-swap path describes. Two swap paths:
 - **Another Claude tier** (sonnet/haiku/opus): edit the `model:` line in
   this file's frontmatter — done.
 - **Another vendor's model** (a Grok or Codex lane, fable-advisor style):
-  the `model:` frontmatter only takes Claude models, so keep a cheap Claude
+  the `model:` frontmatter only takes Claude models, so keep a Claude
   tier here as the SUPERVISOR and change the body to delegate the typing to
   that vendor's CLI — spec to a temp file, pipe to the CLI in a
   workspace-write sandbox, then re-run the task's verification yourself
