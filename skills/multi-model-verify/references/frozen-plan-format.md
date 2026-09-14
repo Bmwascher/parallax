@@ -1,10 +1,31 @@
 # Frozen plan format
 
 The debate's output is a superpowers-compatible implementation plan. The
-implementer (the pinned lane in `agents/`, or the session model, via superpowers
-subagent-driven-development or executing-plans) follows it with **zero
+implementer (the pinned lane in `agents/`, via superpowers
+subagent-driven-development or executing-plans, never the session model
+typing inline) follows it with **zero
 judgment calls** — anything the plan leaves open is a plan defect, found in
 mode `diff` as drift.
+
+**The build lane is `agents/flash-implementer.md`, by default and by
+name.** The plan header carries the line
+`Build lane: parallax:flash-implementer` and the session dispatches that
+agent for every task. Two kinds of exception exist. At freeze time the
+plan itself routes a task elsewhere, one per task with the reason in the
+task text: the escalation lane for an enumerated decision envelope, or
+`agents/implementer.md` by name, for a task such as verbatim
+transcription that the plan assigns to it. At build time the Flash lane
+blocks a task and the user consents to reroute it to `agents/implementer.md`;
+the session records that consent in the SDD ledger, because the plan is
+frozen and the implementer never edits it. A task report with no `ROUTE:` line is a lane violation unless the plan
+or a recorded consent routed that task elsewhere, because only the Flash
+lane's report carries one; the session names it in the SDD ledger and
+reroutes nothing without the user.
+Measured 2026-09-13: a build session told "use parallax implementers"
+dispatched `agents/implementer.md` four times and the Flash lane never,
+because both agent descriptions then read the same. The lane is declared
+in the descriptions and here so a session picking by description picks
+the right one.
 
 A task the plan routes to the escalation lane carries an enumerated decision envelope; DECISIONS inside the envelope are authorized outcomes, not drift.
 The envelope is part of the frozen task text: each delegated decision
@@ -16,7 +37,7 @@ only envelope overruns are drift.
 ## Base format
 
 Follow the superpowers writing-plans template exactly (header with Goal /
-Architecture / Tech Stack / Global Constraints; bite-sized checkbox tasks
+Architecture / Tech Stack / Global Constraints / Build lane; bite-sized checkbox tasks
 with exact Files / Interfaces / complete code / exact commands / expected
 output; no placeholders). Every task's verification command must be able
 to FAIL: the debate checks each one for oracle adequacy — a proof that

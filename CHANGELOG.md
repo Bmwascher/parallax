@@ -38,6 +38,48 @@ debate. Cite backlog items and round records, not commits, because a
 reader can follow a record. Versions before 0.34.0 have no section and
 no release; their records are the merge commits on main.
 
+## v0.38.0 (2026-09-13)
+
+The Flash implementer is now the declared build lane for every task in a
+frozen plan, and a Sonnet wrapper supervises it. Before this version,
+both implementer agents described the same job, so a build session
+picked the Claude lane and never touched Flash. You do not need to
+change anything. When you start a build, dispatch the Flash lane for
+each task, and put the build lane on the plan header.
+
+### What changed for you
+
+- **The Flash lane is the default by name.** The description of
+  `agents/flash-implementer.md` now opens with the rule that it is the
+  build lane for every frozen-plan task. The description of
+  `agents/implementer.md` now says that it is never the default. Two
+  cases route a task to it. The plan routes the task there by name, or
+  the Flash lane blocked the task and the user agreed to reroute it.
+- **The plan header names the lane.** A frozen plan now carries the
+  line `Build lane: parallax:flash-implementer`. A task report with no
+  `ROUTE:` line is a lane violation, unless the plan or a recorded
+  consent routed that task elsewhere. Only the Flash lane writes one.
+- **Sonnet supervises the Flash lane.** The wrapper seat moved from
+  Haiku to Sonnet. Every control in that lane is a prose rule that the
+  wrapper follows. The Antigravity CLI print mode changed between 1.1.7
+  and 1.2.x, and 1.2.2 does not consult the trust list. The agent file
+  and backlog item 105 record both. The seat must block on a lost log line
+  and not explain a landed edit away.
+
+### Details for maintainers
+
+- `test_flash_implementer.py` pins the Sonnet seat, the two descriptions
+  and the plan-format rule.
+- The lane rule lives in `references/frozen-plan-format.md`, next to the
+  escalation-lane envelope rule.
+- The measurement: on 2026-09-13 a build session, told to use the
+  parallax implementers, dispatched `parallax:implementer` four times
+  and the Flash lane never. The newest Flash transcript on the machine
+  was sixteen hours old.
+- Backlog item 109 holds the record. Item 110, ranked first, retires the
+  second implementer file and adds a hook that sees a dispatch to the
+  wrong lane.
+
 ## v0.37.0 (2026-09-13)
 
 The plugin now builds every review mirror under one short, fixed folder

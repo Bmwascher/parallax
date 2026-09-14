@@ -29,7 +29,12 @@ def _frontmatter(text):
 
 def test_flash_frontmatter_pins_model_and_tools():
     fm = _frontmatter(_read(FLASH))
-    assert re.search(r"^model: haiku$", fm, re.MULTILINE)
+    # sonnet since 0.38.0: every control in this lane is a prose rule the
+    # wrapper follows (backlog item 105); agy print mode changed between
+    # 1.1.7 and 1.2.x (the Dispatch step of the agent file) and 1.2.2
+    # does not consult the trust list (item 105), so the seat needs to
+    # block on a missing log line rather than rationalize a landed edit
+    assert re.search(r"^model: sonnet$", fm, re.MULTILINE)
     m = re.search(r"^tools: (.+)$", fm, re.MULTILINE)
     assert m, "tools allowlist missing"
     tools = [t.strip() for t in m.group(1).split(",")]
@@ -198,6 +203,24 @@ def test_shared_contract_parity():
     # outside the block (spec section 1)
     assert _shared_block(_read(FLASH), FLASH) == _shared_block(
         _read(CLASSIC), CLASSIC)
+
+
+def test_flash_lane_is_the_declared_default():
+    # 0.38.0: a build session told "use parallax implementers" dispatched
+    # parallax:implementer four times and the Flash lane never, because
+    # both descriptions said "use when executing tasks from a
+    # debate-frozen implementation plan". The description is the ONLY
+    # text a session reads when it picks a subagent, so the default is
+    # declared there, in both files, and in the plan format.
+    flash_fm = _frontmatter(_read(FLASH))
+    assert "THE build lane for every frozen-plan task" in flash_fm
+    classic_fm = _frontmatter(_read(CLASSIC))
+    assert "NEVER the default" in classic_fm
+    assert "flash-implementer" in classic_fm
+    fpf = _read(REPO / "skills" / "multi-model-verify" / "references"
+                / "frozen-plan-format.md")
+    assert "Build lane: parallax:flash-implementer" in fpf
+    assert "no `ROUTE:` line is a lane violation" in fpf
 
 
 def test_classic_lane_note_retired_stale_claim():
