@@ -1,0 +1,11 @@
+SKIPPED(unchanged surface) plan-mode-debate-runs
+SKIPPED(unchanged surface) diff-mode-spec-fidelity
+SKIPPED(unchanged surface) degraded-consent-gate
+SKIPPED(unchanged surface) missing-reference-refusal
+SKIPPED(unchanged surface) fix-application-checkpoint
+SKIPPED(unchanged surface) fix-checkpoint-attended-stop
+SKIPPED(unchanged surface) no-manufactured-objections
+SKIPPED(unchanged surface) backup-lane-consented-substitution
+SKIPPED(unchanged surface) panel-blind-relay
+no behavioral surface touched
+exit: 0
