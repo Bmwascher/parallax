@@ -1,0 +1,3 @@
+attestation written: C:\Users\Brandon\Documents\parallax\.git\parallax\attestations\ef5bb5dfce38f423e944c47a8b247edeae25d9ae.json (PASS, 65f70c2ad0241b178ddadd62abff9d37358b6f8f..ef5bb5dfce38f423e944c47a8b247edeae25d9ae)
+reaped mirror: C:\pxm\px110
+reaped sidecar: C:\pxm\px110.source-manifest

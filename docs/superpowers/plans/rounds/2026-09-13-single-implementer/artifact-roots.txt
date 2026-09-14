@@ -1,0 +1,9 @@
+repo: C:/Users/Brandon/Documents/parallax
+docs-root: C:/Users/Brandon/Documents/parallax/docs/superpowers
+docs-root source: default
+frozen-plan: C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/<date>-<topic>.md
+rounds: C:/Users/Brandon/Documents/parallax/docs/superpowers/plans/rounds/<date>-<topic>/
+sdd-ledger: C:/Users/Brandon/Documents/parallax/.superpowers/sdd/<plan-basename>/
+review-mirror: C:/pxm/<short-name>/
+attestation: C:/Users/Brandon/Documents/parallax/.git/parallax/attestations
+checkpoint: C:/Users/Brandon/Documents/parallax/.git/parallax/application-checkpoints

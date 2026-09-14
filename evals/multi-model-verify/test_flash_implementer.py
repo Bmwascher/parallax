@@ -3,15 +3,19 @@
 Amended by design spec 2026-07-25 (advisory review B1-B8): these tests pin
 the agent file's contract text so drift in the dispatch recipe, route
 check, forbidden-bypass class, or report format fails offline with zero
-CLI calls. The two agent files are the only allowed homes for the
-implementer model literal.
+CLI calls. Since backlog item 110 the Flash agent file is the only allowed
+home for the implementer model literal, and the escalation lane
+(agents/escalation-implementer.md) is the shared-contract parity twin:
+the direct-typing Claude implementer was deleted in 0.39.0.
 """
 import re
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
 FLASH = REPO / "agents" / "flash-implementer.md"
-CLASSIC = REPO / "agents" / "implementer.md"
+ESCALATION = REPO / "agents" / "escalation-implementer.md"
+RETIRED = REPO / "agents" / "implementer.md"
+FPF = REPO / "skills" / "multi-model-verify" / "references" / "frozen-plan-format.md"
 CANONICAL_ID = "gemini-3.8-flash-high"
 SHARED_START = "<!-- shared-contract:start -->"
 SHARED_END = "<!-- shared-contract:end -->"
@@ -184,12 +188,13 @@ def test_flash_report_headings():
                     "**VERIFICATION:**", "**DEVIATIONS:**"):
         assert heading in body, heading
     # the four shared headings are pinned in BOTH files so a unilateral
-    # rename in implementer.md cannot pass the suite (ROUTE is
-    # lane-specific to the flash file)
-    classic = _read(CLASSIC)
-    for heading in ("**STATUS:**", "**FILES CHANGED:**",
-                    "**VERIFICATION:**", "**DEVIATIONS:**"):
-        assert heading in classic, heading
+    # rename in either cannot pass the suite (ROUTE is lane-specific to
+    # the flash file). The escalation file keeps its numbered report
+    # list, so its pins are the heading words in that shape.
+    twin = _read(ESCALATION)
+    for heading in ("STATUS - ", "FILES CHANGED - ", "VERIFICATION - ",
+                    "DEVIATIONS - "):
+        assert heading in twin, heading
 
 
 def _shared_block(text, path):
@@ -200,33 +205,73 @@ def _shared_block(text, path):
 
 def test_shared_contract_parity():
     # byte-identical shared block; ROUTE is lane-specific and lives
-    # outside the block (spec section 1)
+    # outside the block (spec section 1). Since item 110 the twin is the
+    # escalation lane: outside its envelope the same zero-judgment
+    # contract applies, and the block is that contract.
     assert _shared_block(_read(FLASH), FLASH) == _shared_block(
-        _read(CLASSIC), CLASSIC)
+        _read(ESCALATION), ESCALATION)
 
 
-def test_flash_lane_is_the_declared_default():
+def test_agent_frontmatter_routes():
     # 0.38.0: a build session told "use parallax implementers" dispatched
     # parallax:implementer four times and the Flash lane never, because
     # both descriptions said "use when executing tasks from a
     # debate-frozen implementation plan". The description is the ONLY
     # text a session reads when it picks a subagent, so the default is
-    # declared there, in both files, and in the plan format.
+    # declared there. Item 110 deleted the second file, so the Flash
+    # description names no other implementer by name. Agent-file pins
+    # and plan-format pins are separate tests so a broken agent edit
+    # cannot hide behind a plan-format failure the build expects
+    # (Astra plan R1, finding 11).
     flash_fm = _frontmatter(_read(FLASH))
     assert "THE build lane for every frozen-plan task" in flash_fm
-    classic_fm = _frontmatter(_read(CLASSIC))
-    assert "NEVER the default" in classic_fm
-    assert "flash-implementer" in classic_fm
-    fpf = _read(REPO / "skills" / "multi-model-verify" / "references"
-                / "frozen-plan-format.md")
+    assert "dispatch this agent, and no other implementer," in flash_fm
+    assert "not implementer," not in flash_fm
+    escalation_fm = _frontmatter(_read(ESCALATION))
+    assert "consent-gated reroutes of blocked tasks" in escalation_fm
+    assert "which is EMPTY for a reroute" in escalation_fm
+
+
+def test_flash_lane_is_the_declared_default():
+    # the plan format declares the same default and the two routes away
+    # from it
+    fpf = _read(FPF)
     assert "Build lane: parallax:flash-implementer" in fpf
     assert "no `ROUTE:` line is a lane violation" in fpf
+    # the per-task field the hook reads, and the two routes that carry it
+    assert "**Lane:** parallax:escalation-implementer" in fpf
+    assert "(consented reroute, <ledger path>)" in fpf
+    assert "agents/implementer.md" not in fpf
 
 
-def test_classic_lane_note_retired_stale_claim():
-    body = _read(CLASSIC)
-    assert "Nothing else in the plugin references" not in body
-    assert "flash-implementer" in body
+def test_empty_envelope_is_zero_judgment():
+    # item 110: a consented reroute of a task the Flash lane blocked goes
+    # to the escalation lane with an EMPTY envelope, and mode diff must
+    # adjudicate it as zero-judgment. The plan format carries the rule on
+    # one physical line.
+    fpf = _read(FPF)
+    assert "Any DECISIONS entry on an empty envelope is drift" in fpf
+
+
+def test_escalation_empty_envelope_is_zero_judgment():
+    # the agent file carries the same rule, each pin on one physical line
+    body = _read(ESCALATION)
+    assert "its envelope is EMPTY by construction" in body
+    assert "any DECISIONS entry you write on it is drift" in body
+    assert "An empty envelope means an empty section" in body
+
+
+def test_direct_typing_claude_lane_is_gone():
+    # the file whose only remaining job was a rare reroute took 122 of
+    # 128 build dispatches in five days (item 110's Cost line)
+    assert not RETIRED.exists()
+    # the vendor-swap Lane note moved into the Flash file, the supervisor
+    # pattern it described
+    body = _read(FLASH)
+    assert "Two swap paths" in body
+    assert "stays the SUPERVISOR" in body
+    assert "`implementer.md` pins its own lane's model" not in body
+    assert "every other surface points at this file" in body
 
 
 SWEEP_GLOBS = [
@@ -234,10 +279,9 @@ SWEEP_GLOBS = [
     "evals/**/*.py", "evals/**/*.json", "evals/**/*.ps1",
     "README.md", "CLAUDE.md", "agents/*.md",
 ]
-# The two agent files are the contract homes; this test file necessarily
+# The Flash agent file is the contract home; this test file necessarily
 # carries the literal as its enforcement pin.
-ALLOWED = {FLASH.resolve(), CLASSIC.resolve(),
-           Path(__file__).resolve()}
+ALLOWED = {FLASH.resolve(), Path(__file__).resolve()}
 
 
 def test_flash_literal_single_source():
@@ -252,6 +296,20 @@ def test_flash_literal_single_source():
     assert offenders == []
 
 
+def test_retired_lane_paths_swept_from_live_surfaces():
+    # the sweep item 110 asks for, as a gate: no live surface names the
+    # deleted file. Records under docs/ and .superpowers/ are not live.
+    offenders = []
+    for pattern in SWEEP_GLOBS:
+        for p in REPO.glob(pattern):
+            if p.resolve() == Path(__file__).resolve():
+                continue
+            text = p.read_text(encoding="utf-8", errors="replace")
+            if re.search(r"(?<![\w-])implementer\.md", text):
+                offenders.append(str(p))
+    assert offenders == []
+
+
 def test_sonnet_implementer_literals_removed():
     readme = _read(REPO / "README.md")
     assert "currently `model: sonnet`" not in readme
@@ -259,7 +317,7 @@ def test_sonnet_implementer_literals_removed():
     # presence pins below are the real oracles for Task 3's rewrites
     assert "`haiku`/`opus` are drop-ins" not in readme
     assert "any Claude tier is a drop-in" in readme
-    fpf = _read(REPO / "skills" / "multi-model-verify" / "references"
-                / "frozen-plan-format.md")
+    assert "its Lane note carries the two swap paths" in readme
+    fpf = _read(FPF)
     assert "Sonnet 5" not in fpf
     assert "the pinned lane in `agents/`" in fpf

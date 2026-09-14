@@ -15,7 +15,6 @@ The full previous text of every closed item is in git history at
 ## Ranking
 
 ### First - breaks the repo's own review process
-- 110
 - 75
 - 49
 - 59
@@ -32,6 +31,7 @@ The full previous text of every closed item is in git history at
 - 99
 
 ### Second - taxes every cycle
+- 111
 - 44
 - 69
 - 77
@@ -91,11 +91,48 @@ The full previous text of every closed item is in git history at
 - 85
 - 86
 
-## 110. Two zero-judgment implementer files are one file too many, and nothing mechanical sees a dispatch to the wrong one
+## 111. The Flash wrapper's evidence checks prove who typed, never what was typed
 Status: OPEN
-Cost: 122 of 128 build dispatches between 2026-09-09 and 2026-09-13 went to the Claude lane, across this repo (54 of 54) and KitnEssentials (68 of 74), and no gate could see it; a file whose only remaining job is a rare consent-gated reroute silently took 95 percent of the builds
+Cost: on 2026-09-13 the first pass of a tests-first task landed a 9,087-byte file where the plan quoted 15,227 bytes, every inline rationale comment gone, and the wrapper reported the route, the transcript corroboration and "DEVIATIONS: none"; a task review and a hand byte comparison caught it, and the fix cost one more Flash dispatch and one re-review
 Pairs: none
-Verified: 2026-09-13 fa2b05431a79
+Verified: 2026-09-14 73daca783485
+
+**Filed 2026-09-14 from the 0.39.0 build (item 110), Task 1.**
+`agents/flash-implementer.md`'s route and authorship checks establish
+that Gemini Flash typed every changed path: the log's model and mode
+lines, exactly one conversation uuid, and a brain transcript action for
+each path `git status` names. None of them compares what landed with
+what the plan quoted. The wrapper's own report named the cause: it
+built the agy brief by hand, chunked through heredocs, and paraphrased
+the comment blocks while doing so, so Flash typed faithfully from an
+abridged brief and every evidence check passed. The Fable review of the
+branch named this as the real finding under the session's copy-the-bytes
+ruling: "the wrapper's route and authorship checks proved a Flash-typed
+file that had silently lost 6 KB of mandated comments, so a byte check
+by hand is what caught it and nothing mechanical did."
+
+**What held the line.** The task review compared the diff against the
+brief's quoted blocks and failed the task; the session then ran a byte
+comparison of every fenced block in the task brief against the files,
+and every later dispatch in the cycle carried that check as a mandated
+verification step (`.superpowers/sdd/2026-09-13-single-implementer/`,
+Tasks 2 to 4 and the Fable fix wave, all byte-identical on the first
+pass once the wrapper copied the brief's bytes instead of retyping
+them).
+
+**Shape of a fix, not decided.** Either the wrapper's Dispatch step
+says the agy brief is the task file's bytes, copied and never retyped,
+and its evidence checks gain a mandatory comparison of every fenced
+block in the task text against the files it names (a verification
+command the wrapper already may run); or the controller's dispatch
+prompt carries that comparison as it did from Task 2 on, which is a
+prose rule in the same class as item 105. The first form is mechanical
+inside the lane and is the one this item argues for.
+
+## 110. Two zero-judgment implementer files are one file too many, and nothing mechanical sees a dispatch to the wrong one
+Status: DONE
+Closed: 0.39.0
+Verified: 2026-09-14 ffeb845dabd3
 
 **Filed 2026-09-13, the user's decision on the item 109 fix, ranked
 first.** `agents/implementer.md` exists so a Claude tier can type a
@@ -130,6 +167,34 @@ hook with a `parallax:escalation-implementer` dispatch and an unnamed
 task and asserts the warning; the same dispatch with the task named
 asserts silence. The sweep names every surface that still says
 `implementer.md` or an explicit none.
+
+**What closed it (0.39.0, 2026-09-14).** `agents/implementer.md` is
+deleted; `agents/escalation-implementer.md` is the shared-contract
+parity twin and states that a consented reroute carries an EMPTY
+envelope, on which any DECISIONS entry is drift;
+`references/frozen-plan-format.md` names the two routes away from the
+Flash lane and the per-task field `**Lane:** parallax:escalation-implementer`
+(a consented reroute carries the ledger's line with the ledger path);
+`hooks/superpowers-review-companion.ps1` warns on any `*implementer*`
+dispatch other than `parallax:flash-implementer` whose prompt carries no
+one-line Lane field naming that agent, on PostToolUse and
+PostToolUseFailure alike, and six TestHook cases drive it (two silent
+shapes, four must-warn shapes including a field split across a line
+break and a suffixed agent name). Sweep: `test_flash_implementer.py`
+gates the live surfaces with a per-match lookbehind; the hand sweep
+had dropped two comment lines that named both files, which is recorded
+in the plan's debate record. Records were left as written except one
+dated superseded line on the 2026-07-25 spec. Spec
+`docs/superpowers/specs/2026-09-13-single-implementer-design.md`; plan
+`docs/superpowers/plans/2026-09-13-single-implementer.md` (Astra plan
+debate 2 rounds, FULL, four plan defects fixed in round 1; Astra diff
+debate 2 rounds, FULL, the Fable review's two amendments recorded
+post-freeze). Every task built on the Flash lane; the Gemini weekly
+figure moved 98 to 97 percent. The live installed-hook payload is
+measured by the first escalation dispatch after install. Item 111 holds
+the gap the build exposed.
+
+Record: docs/superpowers/plans/rounds/2026-09-13-single-implementer/
 
 ## 109. The Flash lane was not the declared build lane, so a build session picked the Claude lane
 Status: DONE

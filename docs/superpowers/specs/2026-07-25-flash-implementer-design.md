@@ -2,6 +2,7 @@
 
 **Date:** 2026-07-25 · **Cycle:** 0.12.0 · **Status:** approved (Brandon, 2026-07-25);
 advisory-review amendments folded same day (see Review provenance)
+**Superseded in part, 2026-09-13:** Decision A below kept `agents/implementer.md` as the direct-typing lane; backlog item 110 (0.39.0) deleted that file, and the escalation lane takes consent-gated reroutes with an empty envelope. See `docs/superpowers/specs/2026-09-13-single-implementer-design.md`.
 
 ## Problem
 

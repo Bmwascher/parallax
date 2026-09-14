@@ -25,7 +25,7 @@ END = re.compile(r"<!--\s*contract:end\s*-->")
 # one outcome this checker may never produce.
 #
 # The keyword is anchored to the start of the comment on purpose.
-# agents/implementer.md and agents/flash-implementer.md already carry
+# agents/escalation-implementer.md and agents/flash-implementer.md already carry
 # <!-- shared-contract:start --> markers - the 0.12.0 parity mechanism,
 # pinned by test_shared_contract_parity - and both files are inside the
 # tree this checker scans. An unanchored search would call every one of
