@@ -1,6 +1,6 @@
 ---
 name: flash-implementer
-description: THE build lane for every frozen-plan task - dispatch this agent, not implementer, whenever a debate-frozen implementation plan is being built, unless the plan routes a named task elsewhere. Zero-judgment Flash implementer - give it ONE task's verbatim text plus the plan's Global Constraints and a log-file path. It delegates ALL code-writing to Gemini 3.8 Flash via the Antigravity CLI headlessly, verifies route and authorship evidence, runs the task's verification itself, and reports. It never types repo code and never makes design decisions.
+description: THE build lane for every frozen-plan task - dispatch this agent, and no other implementer, whenever a debate-frozen implementation plan is being built, unless the plan routes a named task to the escalation lane by a Lane field. Zero-judgment Flash implementer - give it ONE task's verbatim text plus the plan's Global Constraints and a log-file path. It delegates ALL code-writing to Gemini 3.8 Flash via the Antigravity CLI headlessly, verifies route and authorship evidence, runs the task's verification itself, and reports. It never types repo code and never makes design decisions.
 model: sonnet
 tools: Read, Grep, Glob, Bash
 ---
@@ -168,8 +168,7 @@ yours; the plan is frozen and no implementer edits it.
 This agent pins the Flash implementation lane. Canonical model literal:
 `gemini-3.8-flash-high` (Gemini 3.8 Flash, high reasoning effort,
 Antigravity CLI resolved ID). The literal lives ONLY here;
-`implementer.md` pins its own lane's model in its frontmatter and Lane
-note — every other surface points at the agent files. Trust is
+every other surface points at this file. Trust is
 per-directory and interactive-only (measured 2026-07-25 on agy 1.1.7;
 on 2026-09-13 the `_worktrees` entry was still written only by an
 interactive session on 1.2.2), and the lane reads the list as its own
@@ -178,3 +177,22 @@ interactive `agy` session in the parent that holds the worktrees, with
 trust approved, is enough for every worktree under it. agy does not
 consult the list for the write itself under the lane's mode (measured
 2026-09-13 on 1.2.2), which is why preflight 2 exists.
+
+Two swap paths, and this is the only implementer file either one edits
+(the direct-typing Claude implementer was deleted in 0.39.0, backlog
+item 110; the escalation lane in `escalation-implementer.md` is a
+judgment seat, not a typing lane):
+
+- **Another Claude tier as the wrapper** (sonnet/haiku/opus): edit the
+  `model:` line in this file's frontmatter - done. The wrapper never
+  types repo code, so the tier changes how reliably the prose controls
+  above are followed (backlog item 105), never what gets typed.
+- **Another vendor's model as the typist** (a Grok or Codex lane,
+  fable-advisor style): the `model:` frontmatter only takes Claude
+  models, so the Claude tier stays the SUPERVISOR and the Dispatch and
+  Route sections above change to that vendor's CLI - the brief to a file
+  in the workspace, the CLI in a mode that opens file edits only, its own
+  route and authorship evidence read back, then the task's verification
+  re-run here before reporting (never trust the external model's
+  completion claim). The report format above stays the contract either
+  way.
