@@ -186,7 +186,7 @@ def test_a_marker_sharing_a_line_with_prose_is_rejected():
 
 
 def test_a_different_marker_family_is_ignored_not_rejected():
-    """agents/implementer.md and agents/flash-implementer.md already carry
+    """agents/escalation-implementer.md and agents/flash-implementer.md already carry
     shared-contract markers, the 0.12.0 parity mechanism. Both files are
     inside the tree this checker scans, so the keyword is anchored to the
     start of the comment: shared-contract: is not our marker at all."""

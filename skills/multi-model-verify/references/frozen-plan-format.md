@@ -10,22 +10,33 @@ mode `diff` as drift.
 **The build lane is `agents/flash-implementer.md`, by default and by
 name.** The plan header carries the line
 `Build lane: parallax:flash-implementer` and the session dispatches that
-agent for every task. Two kinds of exception exist. At freeze time the
-plan itself routes a task elsewhere, one per task with the reason in the
-task text: the escalation lane for an enumerated decision envelope, or
-`agents/implementer.md` by name, for a task such as verbatim
-transcription that the plan assigns to it. At build time the Flash lane
-blocks a task and the user consents to reroute it to `agents/implementer.md`;
+agent for every task. Two kinds of exception exist, and both name the
+same second lane, `agents/escalation-implementer.md`, because it is the
+only other implementer the plugin ships. At freeze time the plan itself
+routes a task there with an enumerated decision envelope, one per task
+with the reason in the task text, and that task carries the field
+`**Lane:** parallax:escalation-implementer`
+on its own line beside `**Files:**`, so the dispatch prompt carries it
+verbatim. At build time the Flash lane blocks a task and the user
+consents to reroute it to the escalation lane with an EMPTY envelope;
 the session records that consent in the SDD ledger, because the plan is
-frozen and the implementer never edits it. A task report with no `ROUTE:` line is a lane violation unless the plan
+frozen and the implementer never edits it, and the dispatch prompt
+carries the ledger's line
+`**Lane:** parallax:escalation-implementer (consented reroute, <ledger path>)`.
+Any DECISIONS entry on an empty envelope is drift, so mode diff
+adjudicates a rerouted task as zero-judgment. A task report with no `ROUTE:` line is a lane violation unless the plan
 or a recorded consent routed that task elsewhere, because only the Flash
 lane's report carries one; the session names it in the SDD ledger and
-reroutes nothing without the user.
+reroutes nothing without the user. The plugin's PostToolUse hook warns
+on any implementer dispatch other than `parallax:flash-implementer`
+whose prompt carries no `Lane:` line naming that agent; the warning is a
+reminder, and the ledger and mode diff stay the gates.
 Measured 2026-09-13: a build session told "use parallax implementers"
-dispatched `agents/implementer.md` four times and the Flash lane never,
-because both agent descriptions then read the same. The lane is declared
-in the descriptions and here so a session picking by description picks
-the right one.
+dispatched the direct-typing Claude implementer four times and the
+Flash lane never, because both agent descriptions then read the same;
+that file, `parallax:implementer`, was deleted in 0.39.0 (backlog item
+110). The lane is declared in the descriptions and here so a session
+picking by description picks the right one.
 
 A task the plan routes to the escalation lane carries an enumerated decision envelope; DECISIONS inside the envelope are authorized outcomes, not drift.
 The envelope is part of the frozen task text: each delegated decision
