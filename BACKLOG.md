@@ -560,7 +560,7 @@ Record: 6a462f9
 Status: PARTIAL
 Cost: uncosted: the remainder was never designed and the agy lane's future depends on what item 45 decides
 Pairs: none
-Verified: 2026-09-04 a516fa126398
+Verified: 2026-09-13 ed7c73c9eefa
 
 **Problem.** Drift watching records `agy` as a version string and stops
 there. `tools/drift-snapshot.json` carries `"agy": "1.1.8"` beside claude,
@@ -587,8 +587,11 @@ and `commands/doctor.md`:
 plugin has something stronger. The Fable panel lane has a hard harness
 FLOOR, Claude Code 2.1.216, below which the lane is UNAVAILABLE rather
 than degraded. The backup lane has per-round route evidence. The agy lane
-has a reachability probe and a version string, and the doctor's own note
-says agy free-tier quota is opaque, so even reachability is partial.
+has a reachability probe and a version string. Until 0.38.1 the
+doctor's own note said agy free-tier quota is opaque; measured
+2026-09-13 on agy 1.2.2, `agy -p "/usage"` from PowerShell prints the
+four quota rows in one second with no model call, and doctor check 7b
+now reads them. Reachability is still a reachability check.
 
 **The failure this invites.** A renamed model, a moved transcript path, or
 a changed settings shape turns into a lane that either fails confusingly
