@@ -82,4 +82,4 @@ Files: `brief-astra-diff-r*`, `astra-diff-r*-reply.md`,
 Bump to 0.39.0 with the changelog section and the backlog close in one
 commit (4fab97b); item 111 filed for the wrapper evidence gap. The
 attestation and the gate at the final head are retained beside this file
-as `attestation-<head>.txt` and `gate-<head>.txt`.
+as `attestation-ef5bb5d.txt` (the debate head, mirror reaped) and `gate-5ff14d2.txt` (the final head after the bump and this retention).
