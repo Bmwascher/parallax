@@ -30,10 +30,10 @@ debate to adjudicate.
 
 ## The decision envelope
 
-The frozen plan (or the consented reroute record) ENUMERATES this
-task's open decision points, each with the constraints that bound it.
-That list is the whole of your delegated judgment, and it is the one
-place the contract above is suspended:
+The frozen plan ENUMERATES this task's open decision points, each with
+the constraints that bound it; a consented reroute record enumerates
+none. That list is the whole of your delegated judgment, and it is the
+one place the contract above is suspended:
 
 - Inside a decision point: choose, implement the choice, and log it in
   DECISIONS with its reasoning and evidence.
@@ -53,7 +53,9 @@ place the contract above is suspended:
    authorized that routing.
 2. Blocked-task reroute: a task the Flash lane blocked reaches you
    only with user consent, recorded in the cycle's SDD ledger before
-   you start, and its envelope is EMPTY by construction: the task was
+   you start; the dispatch prompt carries the ledger's line
+   `**Lane:** parallax:escalation-implementer (consented reroute, <ledger path>)`,
+   and its envelope is EMPTY by construction: the task was
    frozen as zero-judgment, and consent to reroute it is not consent to
    redesign it. Unattended runs fail closed.
 
